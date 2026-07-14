@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import type { KnowledgeScope, KnowledgeStorage, SearchKnowledgeResult } from '@mastra/core/storage';
 import { canonicalizeKnowledgeScope } from '@mastra/core/storage';
 
 import { Extractor } from '../extractor';
@@ -33,6 +34,44 @@ function resolveScope(context: {
   ]);
 }
 
+const REMINDER_QUERY_STOP_WORDS = new Set([
+  'about',
+  'after',
+  'before',
+  'current',
+  'from',
+  'have',
+  'observations',
+  'that',
+  'their',
+  'there',
+  'they',
+  'this',
+  'user',
+  'what',
+  'when',
+  'where',
+  'which',
+  'with',
+]);
+
+async function findReminderSources(
+  store: KnowledgeStorage,
+  scope: KnowledgeScope,
+  observations: string,
+): Promise<SearchKnowledgeResult[]> {
+  const terms = [
+    ...new Set(
+      observations
+        .match(/[A-Za-z0-9][A-Za-z0-9_-]{3,}/g)
+        ?.map(term => term.toLowerCase())
+        .filter(term => !REMINDER_QUERY_STOP_WORDS.has(term)) ?? [],
+    ),
+  ].slice(0, 12);
+  const results = (await Promise.all(terms.map(query => store.search({ query, scope, limit: 5 })))).flat();
+  return [...new Map(results.map(result => [`${result.type}:${result.id}`, result])).values()].slice(0, 10);
+}
+
 export class SubconsciousRemindExtractor extends Extractor<string> {
   constructor(config: ResolvedSubconsciousAgent) {
     super({
@@ -44,8 +83,13 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
           return;
         }
 
-        const scope = resolveScope(context);
+        let scope: KnowledgeScope | undefined;
+        let store: KnowledgeStorage | undefined;
         try {
+          scope = resolveScope(context);
+          store = await context.memory.storage.getStore('knowledge');
+          if (!store) throw new Error('Subconscious remind requires a configured knowledge storage domain.');
+          const sources = await findReminderSources(store, scope, context.rawObservations);
           const model = await context.mainAgent.getModel({
             requestContext: context.requestContext,
             ...(config.model ? { modelConfig: config.model } : {}),
@@ -58,32 +102,39 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
             tools: createKnowledgeTools(context.memory, scope),
           });
           const result = await agent.generate(
-            `Current time: ${new Date().toISOString()}\n\nCurrent observations:\n${context.rawObservations}`,
+            `Current time: ${new Date().toISOString()}\n\nScoped source candidates:\n${JSON.stringify(sources)}\n\nCurrent observations:\n${context.rawObservations}`,
             {
               requestContext: context.requestContext,
               maxSteps: config.maxSteps,
             },
           );
           const reminder = result.text.trim();
-          if (!reminder || reminder === NO_REMINDER || reminder === '<no-reminder/>') {
+          if (!reminder || /^<no-reminder\s*\/>$/i.test(reminder)) {
             return;
           }
 
+          const candidateIds = [...new Set(sources.flatMap(source => [source.id, source.recordId]))];
+          const referencedIds = candidateIds.filter(id => reminder.includes(id));
+          const sourceIds = (referencedIds.length ? referencedIds : candidateIds).slice(0, 5);
+          if (sourceIds.length === 0) {
+            return;
+          }
+          const contents = `${reminder}\n\nSources: ${sourceIds.join(', ')}`;
           await context.sendSignal({
             id: `__subconscious_remembered_${crypto.randomUUID()}`,
             type: 'reactive',
             tagName: 'remembered',
-            contents: reminder,
+            contents,
             createdAt: new Date(),
             attributes: {
               source: 'subconscious',
+              sourceIds: sourceIds.join(','),
               agent: 'remind',
               threadId: context.threadId,
             },
           });
         } catch (error) {
-          const store = await context.memory.storage.getStore('knowledge');
-          if (store) {
+          if (store && scope) {
             await publishSubconsciousActivity({
               store,
               scope,

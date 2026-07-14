@@ -84,7 +84,21 @@ describe('Subconscious remind', () => {
       maxSteps: 3,
       builtIn: true,
     });
-    const context = createContext('Project Atlas launches January 15. Source fact: fact-123.');
+    const context = createContext('Project Atlas launches January 15.');
+    const store = await context.memory.storage.getStore('knowledge');
+    const entity = await store.createEntity({
+      name: 'Project Atlas',
+      kind: 'project',
+      scope: ['org:acme', 'resource:user-42'],
+    });
+    const fact = await store.appendFact({
+      parentEntityId: entity.id,
+      text: 'Project Atlas launches January 15.',
+      scope: ['org:acme', 'resource:user-42'],
+      sourceThreadId: 'alpha',
+      resolutionScope: ['org:acme', 'resource:user-42', 'thread:alpha'],
+      defaultScope: ['org:acme', 'resource:user-42'],
+    });
 
     const result = await applyExtractorHooks({
       source: 'observer',
@@ -99,8 +113,13 @@ describe('Subconscious remind', () => {
       expect.objectContaining({
         type: 'reactive',
         tagName: 'remembered',
-        contents: expect.stringContaining('fact-123'),
-        attributes: expect.objectContaining({ source: 'subconscious', agent: 'remind', threadId: 'alpha' }),
+        contents: expect.stringContaining(fact.id),
+        attributes: expect.objectContaining({
+          source: 'subconscious',
+          sourceIds: expect.stringContaining(fact.id),
+          agent: 'remind',
+          threadId: 'alpha',
+        }),
       }),
     );
   });
