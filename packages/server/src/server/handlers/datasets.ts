@@ -635,13 +635,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
     'Triggers a new experiment on the dataset against the specified target. Returns immediately with pending status; execution happens in background.',
   tags: ['Datasets'],
   requiresAuth: true,
-  handler: async ({
-    mastra,
-    datasetId,
-    requestContext: serverRequestContext,
-    bodyRequestContext,
-    ...params
-  }) => {
+  handler: async ({ mastra, datasetId, requestContext: serverRequestContext, bodyRequestContext, ...params }) => {
     assertDatasetsAvailable();
     try {
       const { targetType, targetId, scorerIds, version, agentVersion, maxConcurrency, versions } = params as {
