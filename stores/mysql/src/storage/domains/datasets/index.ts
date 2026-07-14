@@ -13,6 +13,7 @@ import {
   DatasetsStorage,
   calculatePagination,
   normalizePerPage,
+  hasErrorCode,
 } from '@mastra/core/storage';
 import type {
   CreateIndexOptions,
@@ -274,10 +275,15 @@ export class DatasetsMySQL extends DatasetsStorage {
 
   async createDataset(input: CreateDatasetInput): Promise<DatasetRecord> {
     try {
-      const id = randomUUID();
+      const id = input.id ?? randomUUID();
+      if (input.id !== undefined) this.validateCallerDefinedDatasetId(input.id);
       const now = new Date();
 
-      await this.operations.insert({
+      const insert =
+        input.id === undefined
+          ? this.operations.insert.bind(this.operations)
+          : this.operations.insertOnly.bind(this.operations);
+      await insert({
         tableName: TABLE_DATASETS,
         record: {
           id,
@@ -320,6 +326,11 @@ export class DatasetsMySQL extends DatasetsStorage {
         updatedAt: now,
       };
     } catch (error) {
+      if (input.id !== undefined && hasErrorCode(error, new Set([1062, 'ER_DUP_ENTRY']))) {
+        const existing = await this.getDatasetById({ id: input.id });
+        if (existing) return this.resolveExistingDataset(existing, { ...input, id: input.id });
+      }
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: 'MYSQL_CREATE_DATASET_FAILED',

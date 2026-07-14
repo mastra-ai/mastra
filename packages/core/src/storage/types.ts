@@ -2508,6 +2508,11 @@ export interface DatasetVersion {
 // Dataset CRUD Input/Output Types
 
 export interface CreateDatasetInput {
+  /**
+   * Optional caller-defined durable identity. When provided, storage adapters atomically create
+   * the dataset or return the compatible dataset that already owns this ID.
+   */
+  id?: string;
   name: string;
   description?: string;
   metadata?: Record<string, unknown>;

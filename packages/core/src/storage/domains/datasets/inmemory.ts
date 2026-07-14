@@ -85,7 +85,15 @@ export class DatasetsInMemory extends DatasetsStorage {
 
   // Dataset CRUD
   async createDataset(input: CreateDatasetInput): Promise<DatasetRecord> {
-    const id = crypto.randomUUID();
+    const id = input.id ?? crypto.randomUUID();
+    if (input.id !== undefined) {
+      this.validateCallerDefinedDatasetId(input.id);
+      const existing = this.db.datasets.get(input.id);
+      if (existing) {
+        return this.resolveExistingDataset(toDatasetRecord(existing), { ...input, id: input.id });
+      }
+    }
+
     const now = new Date();
     const dataset = {
       id,

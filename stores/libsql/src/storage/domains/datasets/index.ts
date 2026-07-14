@@ -15,6 +15,7 @@ import {
   normalizePerPage,
   safelyParseJSON,
   ensureDate,
+  hasErrorCode,
 } from '@mastra/core/storage';
 import type {
   DatasetRecord,
@@ -226,11 +227,12 @@ export class DatasetsLibSQL extends DatasetsStorage {
 
   async createDataset(input: CreateDatasetInput): Promise<DatasetRecord> {
     try {
-      const id = crypto.randomUUID();
+      const id = input.id ?? crypto.randomUUID();
+      if (input.id !== undefined) this.validateCallerDefinedDatasetId(input.id);
       const now = new Date();
       const nowIso = now.toISOString();
 
-      await this.#db.insert({
+      await this.#db.insertOnly({
         tableName: TABLE_DATASETS,
         record: {
           id,
@@ -273,6 +275,14 @@ export class DatasetsLibSQL extends DatasetsStorage {
         updatedAt: now,
       };
     } catch (error) {
+      if (
+        input.id !== undefined &&
+        hasErrorCode(error, new Set(['SQLITE_CONSTRAINT', 'SQLITE_CONSTRAINT_PRIMARYKEY', 'SQLITE_CONSTRAINT_UNIQUE']))
+      ) {
+        const existing = await this.getDatasetById({ id: input.id });
+        if (existing) return this.resolveExistingDataset(existing, { ...input, id: input.id });
+      }
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'CREATE_DATASET', 'FAILED'),

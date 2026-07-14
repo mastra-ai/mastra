@@ -12,6 +12,7 @@ import {
   TABLE_EXPERIMENTS,
   TABLE_EXPERIMENT_RESULTS,
   TABLE_SCHEMAS,
+  hasErrorCode,
 } from '@mastra/core/storage';
 import type {
   AddDatasetItemInput,
@@ -227,7 +228,8 @@ export class DatasetsSpanner extends DatasetsStorage {
   async createDataset(input: CreateDatasetInput): Promise<DatasetRecord> {
     try {
       const now = new Date();
-      const id = randomUUID();
+      const id = input.id ?? randomUUID();
+      if (input.id !== undefined) this.validateCallerDefinedDatasetId(input.id);
       const record: DatasetRecord = {
         id,
         name: input.name,
@@ -273,6 +275,11 @@ export class DatasetsSpanner extends DatasetsStorage {
       });
       return record;
     } catch (error) {
+      if (input.id !== undefined && hasErrorCode(error, new Set([6, 'ALREADY_EXISTS']))) {
+        const existing = await this.getDatasetById({ id: input.id });
+        if (existing) return this.resolveExistingDataset(existing, { ...input, id: input.id });
+      }
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('SPANNER', 'CREATE_DATASET', 'FAILED'),
