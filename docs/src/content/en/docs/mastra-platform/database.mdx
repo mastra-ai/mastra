@@ -45,7 +45,7 @@ A database is attached at one of two scopes:
 
 The scope is set when you attach the database and shown in `mastra env db list`.
 
-The two scopes can't overlap for the same provider. Because a project-scoped database already injects its variables into every environment, attaching an environment-scoped database of the same provider is rejected with a variable name conflict. To move from a shared database to per-environment databases, detach the project-scoped database first, then attach one database per environment. Environment-scoped databases on different environments never conflict — each deploy only receives the variables for its own environment.
+The two scopes can't overlap for the same provider. Because a project-scoped database already injects its variables into every environment, attaching an environment-scoped database of the same provider is rejected with a variable name conflict. To move from a shared database to per-environment databases, delete the project-scoped database first, then attach one database per environment. Deleting a database destroys it with the provider along with all of its data — export anything you need to keep before switching scopes. Environment-scoped databases on different environments never conflict — each deploy only receives the variables for its own environment.
 
 ## Attach with the CLI
 
@@ -71,10 +71,10 @@ Inspect and manage attached databases:
 ```bash
 mastra env db list
 mastra env db show <database>
-mastra env db detach <database>
+mastra env db delete <database>
 ```
 
-`mastra env db list` shows each database's kind, status, scope, and injected variable names. `mastra env db show` prints connection instructions with secret values masked; pass `--show-secrets` to reveal them. Creating and detaching databases requires the admin role in your organization.
+`mastra env db list` shows each database's kind, status, scope, and injected variable names. `mastra env db show` prints connection instructions with secret values masked; pass `--show-secrets` to reveal them. `mastra env db delete` permanently deletes the database and all of its data with the provider. Creating and deleting databases requires the admin role in your organization.
 
 ## Attach from project settings
 
@@ -173,4 +173,4 @@ Treat connection credentials as secrets. The auth token (`TURSO_AUTH_TOKEN`) and
 ## Manage a database
 
 - **View connection details**: Open a `ready` database in your project settings to see its environment variables and a copy-pasteable code snippet.
-- **Detach**: Removing a database from a project deletes it with the provider and clears its injected environment variables. This is irreversible, so ensure you no longer need the data.
+- **Delete**: Removing a database from a project deletes it with the provider and clears its injected environment variables. This is irreversible, so ensure you no longer need the data.

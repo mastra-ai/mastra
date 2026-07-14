@@ -83,7 +83,7 @@ mastra env db create staging --kind turso --name my-project-staging-db
 
 Each environment then reads and writes only its own database.
 
-An environment can only use one database per provider. If the project already has a shared project-scoped database of the same provider, attaching an environment-scoped one is rejected with a variable name conflict — detach the shared database with `mastra env db detach` first. See [Hosted databases](/docs/mastra-platform/database) for the full scoping model.
+An environment can only use one database per provider. If the project already has a shared project-scoped database of the same provider, attaching an environment-scoped one is rejected with a variable name conflict — delete the shared database with `mastra env db delete` first. Deleting a database destroys it with the provider along with all of its data, so export anything you need to keep. See [Hosted databases](/docs/mastra-platform/database) for the full scoping model.
 
 ## Delete an environment
 
