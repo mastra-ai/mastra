@@ -321,6 +321,7 @@ describe('zod-v4 standard-schema adapter', () => {
     // now applies the same patch so both entry points behave consistently.
 
     it('does not crash on z.record(z.boolean())', () => {
+      // @ts-expect-error single-arg z.record() is invalid in zod 4 types, but it's the runtime form that triggered #17051
       const schema = z.object({ flags: z.record(z.boolean()) });
       const standardSchema = toStandardSchema(schema);
 
@@ -328,6 +329,7 @@ describe('zod-v4 standard-schema adapter', () => {
     });
 
     it('produces a usable JSON Schema for z.record(z.boolean())', () => {
+      // @ts-expect-error single-arg z.record() is invalid in zod 4 types, but it's the runtime form that triggered #17051
       const schema = z.object({ flags: z.record(z.boolean()) });
       const standardSchema = toStandardSchema(schema);
 
@@ -340,6 +342,7 @@ describe('zod-v4 standard-schema adapter', () => {
     });
 
     it('handles z.record() nested inside z.object().nullable()', () => {
+      // @ts-expect-error single-arg z.record() is invalid in zod 4 types, but it's the runtime form that triggered #17051
       const schema = z.object({ tags: z.record(z.string()).nullable() });
       const standardSchema = toStandardSchema(schema);
 
