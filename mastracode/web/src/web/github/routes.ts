@@ -36,6 +36,7 @@ import {
   buildInstallUrl,
   buildOAuthIdentifyUrl,
   exchangeOAuthCode,
+  addIssueLabels,
   getInstallationRepo,
   listInstallationRepos,
   listRepoOpenIssues,
@@ -51,6 +52,7 @@ import type { GithubIssueTriageRunInput, GithubIssueTriageRunResult } from './we
 import {
   commitAll,
   computeSandboxWorkdir,
+  computeWorktreePath,
   createPullRequest,
   ensureProjectSandbox,
   ensureWorktree,
@@ -243,13 +245,33 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
   }
 
   const { runIssueTriage } = options;
+  const runBoardIssueTriage = runIssueTriage
+    ? async (input: GithubIssueTriageRunInput): Promise<GithubIssueTriageRunResult> => {
+        const branch = `factory/issue-${input.issueNumber}`;
+        const [project] = await getAppDb()
+          .select()
+          .from(githubProjects)
+          .where(
+            and(eq(githubProjects.installationId, input.installationId), eq(githubProjects.repoFullName, input.repository)),
+          );
+        if (!project) throw new Error(`GitHub project not found for ${input.repository}`);
+        const projectPath = input.projectPath ?? computeWorktreePath(project.sandboxWorkdir, branch);
+        await addIssueLabels(input.installationId, input.repository, input.issueNumber, ['auto-triaged']);
+        return runIssueTriage({
+          ...input,
+          projectPath,
+          branch,
+          labels: input.labels.includes('auto-triaged') ? input.labels : [...input.labels, 'auto-triaged'],
+        });
+      }
+    : undefined;
 
   routes.push(
     registerApiRoute('/web/github/webhook', {
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
-        const result = await handleGithubWebhook(loose(c), { runIssueTriage });
+        const result = await handleGithubWebhook(loose(c), { runIssueTriage: runBoardIssueTriage });
         return c.json(result.body, result.status);
       },
     }),
@@ -576,8 +598,9 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
-        const loaded = await loadOrgProject(loose(c));
-        if ('response' in loaded) return loaded.response;
+        const owned = await loadOwnedProject(loose(c));
+        if ('response' in owned) return owned.response;
+        const { project, sandboxRow } = owned;
         const issueNumber = parseIssueNumberParam(c.req.param('number'));
         if (issueNumber === null) return c.json({ error: 'invalid_issue_number' }, 400);
 
@@ -595,15 +618,23 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         }
 
         if (!runIssueTriage) return c.json({ error: 'triage_unavailable' }, 503);
+        const branch = `factory/issue-${issueNumber}`;
+        const projectPath = computeWorktreePath(sandboxRow.sandboxWorkdir, branch);
+        await addIssueLabels(project.installationId, project.repoFullName, issueNumber, ['auto-triaged']);
         const result = await runIssueTriage({
-          repository: loaded.project.repoFullName,
+          repository: project.repoFullName,
           issueNumber,
           issueTitle: body.title,
           issueUrl: body.url,
           labels: parseStringList(body.labels),
-          installationId: loaded.project.installationId,
+          installationId: project.installationId,
+          projectPath,
+          branch,
         });
-        return c.json({ ok: true, threadId: result.threadId }, 202);
+        return c.json(
+          { ok: true, threadId: result.threadId, projectPath: result.projectPath ?? projectPath, branch: result.branch ?? branch },
+          202,
+        );
       },
     }),
   );

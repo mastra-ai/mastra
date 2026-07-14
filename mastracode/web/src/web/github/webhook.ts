@@ -10,10 +10,14 @@ export interface GithubIssueTriageRunInput {
   labels: string[];
   sender?: string;
   installationId: number;
+  projectPath?: string;
+  branch?: string;
 }
 
 export interface GithubIssueTriageRunResult {
   threadId?: string;
+  projectPath?: string;
+  branch?: string;
 }
 
 export interface GithubWebhookHandlerOptions {

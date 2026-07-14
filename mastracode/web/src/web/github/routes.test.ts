@@ -173,6 +173,8 @@ vi.mock('./sandbox', () => {
   }
   return {
     computeSandboxWorkdir: (repo: string) => `/workspace/${repo.split('/').pop()}`,
+    computeWorktreePath: (repoWorkdir: string, branch: string) =>
+      `${repoWorkdir.replace(/\/+$/, '').split('/').slice(0, -1).join('/')}/worktrees/${branch.replace('/', '-')}-aeab418d`,
     getSandboxProvider: () => 'railway',
     isSandboxEnabled: () => sandboxEnabled,
     ensureProjectSandbox: (row: any, onProgress?: any) => ensureProjectSandbox(row, onProgress),
@@ -321,7 +323,7 @@ sandboxesRef = githubProjectSandboxes;
 // ── Test harness ─────────────────────────────────────────────────────────
 function buildApp(
   user: { workosId: string; organizationId?: string } | null,
-  options: { runIssueTriage?: (input: any) => Promise<{ threadId?: string }> } = {},
+  options: { runIssueTriage?: (input: any) => Promise<{ threadId?: string; projectPath?: string; branch?: string }> } = {},
 ) {
   const app = new Hono();
   app.use('*', async (c, next) => {
@@ -383,7 +385,8 @@ function signedGithubWebhookRequest(event: string, payload: Record<string, unkno
 }
 
 describe('webhook route', () => {
-  it('accepts a valid signed issues event, logs normalized metadata, and runs issue triage', async () => {
+  it('accepts a valid signed issues event, labels it, and runs issue triage with board session identity', async () => {
+    seedMaterializedProject();
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     const runIssueTriage = vi.fn(async () => ({ threadId: 'thread-triage' }));
     const res = await buildApp(null, { runIssueTriage }).request(
@@ -394,10 +397,10 @@ describe('webhook route', () => {
           number: 12,
           title: 'Fix flaky test',
           html_url: 'https://github.com/octo/hello/issues/12',
-          labels: [{ name: 'bug' }, { name: 'auto-triaged' }],
+          labels: [{ name: 'bug' }],
         },
         sender: { login: 'ada' },
-        installation: { id: 99 },
+        installation: { id: 7 },
       }),
     );
 
@@ -411,8 +414,9 @@ describe('webhook route', () => {
       issueNumber: 12,
       pullRequestNumber: undefined,
       sender: 'ada',
-      installationId: 99,
+      installationId: 7,
     });
+    await vi.waitFor(() => expect(addIssueLabels).toHaveBeenCalledWith(7, 'octo/hello', 12, ['auto-triaged']));
     expect(runIssueTriage).toHaveBeenCalledWith({
       repository: 'octo/hello',
       issueNumber: 12,
@@ -420,7 +424,9 @@ describe('webhook route', () => {
       issueUrl: 'https://github.com/octo/hello/issues/12',
       labels: ['bug', 'auto-triaged'],
       sender: 'ada',
-      installationId: 99,
+      installationId: 7,
+      projectPath: '/workspace/worktrees/factory-issue-12-aeab418d',
+      branch: 'factory/issue-12',
     });
   });
 
@@ -1009,7 +1015,13 @@ describe('issues route', () => {
       },
     );
     expect(res.status).toBe(202);
-    expect(await res.json()).toEqual({ ok: true, threadId: 'thread-triage' });
+    expect(await res.json()).toEqual({
+      ok: true,
+      threadId: 'thread-triage',
+      projectPath: '/workspace/worktrees/factory-issue-12-aeab418d',
+      branch: 'factory/issue-12',
+    });
+    expect(addIssueLabels).toHaveBeenCalledWith(7, 'octo/hello', 12, ['auto-triaged']);
     expect(runIssueTriage).toHaveBeenCalledWith({
       repository: 'octo/hello',
       issueNumber: 12,
@@ -1017,6 +1029,8 @@ describe('issues route', () => {
       issueUrl: 'https://github.com/octo/hello/issues/12',
       labels: ['bug', 'auto-triaged'],
       installationId: 7,
+      projectPath: '/workspace/worktrees/factory-issue-12-aeab418d',
+      branch: 'factory/issue-12',
     });
   });
 

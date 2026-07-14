@@ -7,9 +7,11 @@
  * fail-soft GitHub gating in every environment.
  */
 
+import type { AgentController } from '@mastra/core/agent-controller';
 import type { ApiRoute } from '@mastra/core/server';
 
-import type { MountedMastraCode } from '@mastra/code-sdk';
+import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
+import type { MastraCodeState } from '@mastra/code-sdk/schema';
 
 import { buildConfigRoutes } from './config-routes.js';
 import { buildFsRoutes } from './fs-routes.js';
@@ -19,6 +21,8 @@ import {
   hasExplicitStateSecret,
   isGithubFeatureEnabled,
 } from './github/config.js';
+import { ensureFactoryDbReady } from './factory/db.js';
+import { buildFactoryRoutes } from './factory/routes.js';
 import { ensureAppDbReady } from './github/db.js';
 import { buildGithubRoutes } from './github/routes.js';
 import type { GithubIssueTriageRunInput, GithubIssueTriageRunResult } from './github/webhook.js';
@@ -34,8 +38,8 @@ import { registerSandboxReattach } from './sandbox-reattach-registration.js';
 registerSandboxReattach();
 
 export interface WebApiRoutesDeps {
-  controller: MountedMastraCode['controller'];
-  authStorage: MountedMastraCode['authStorage'];
+  controller: AgentController<MastraCodeState>;
+  authStorage: AuthStorage;
   /** Root directory the project picker may browse. Defaults to the user's home. */
   fsRoot?: string;
   /** Public origin used to build GitHub OAuth/install callback URLs. */
@@ -55,6 +59,30 @@ export interface WebApiRoutesDeps {
    * time via {@link resolveIntakeReady} so this stays synchronous.
    */
   intakeReady: boolean;
+  /**
+   * Whether the Factory work-item (kanban board) routes should be included.
+   * Resolved ahead of time via {@link resolveFactoryReady} so this stays
+   * synchronous.
+   */
+  factoryReady: boolean;
+}
+
+/**
+ * Resolve whether the Factory work-item routes are ready to serve. The board
+ * hangs off GitHub projects, so it requires the GitHub feature; the table
+ * lives in the same app DB. Fails soft like {@link resolveGithubReady}.
+ */
+export async function resolveFactoryReady(githubReady: boolean): Promise<boolean> {
+  if (!githubReady) return false;
+  try {
+    await ensureFactoryDbReady();
+    return true;
+  } catch (err) {
+    process.stderr.write(
+      `MastraCode Web: factory work-item routes disabled (app DB unreachable — ${err instanceof Error ? err.message : String(err)})\n`,
+    );
+    return false;
+  }
 }
 
 /**
@@ -188,23 +216,38 @@ export async function resolveGithubReady(): Promise<boolean> {
 }
 
 const ISSUE_TRIAGE_PURPOSE = 'issue-triage';
+const ISSUE_TRIAGE_ROLE = 'triage';
 
-function buildIssueTriageTags(input: GithubIssueTriageRunInput): Record<string, string> {
+function issueBranch(issueNumber: number): string {
+  return `factory/issue-${issueNumber}`;
+}
+
+function buildIssueTriageTags(input: GithubIssueTriageRunInput, projectPath: string): Record<string, string> {
   return {
+    projectPath,
+    role: ISSUE_TRIAGE_ROLE,
+    source: 'github-issue',
     purpose: ISSUE_TRIAGE_PURPOSE,
     repository: input.repository,
     issueNumber: String(input.issueNumber),
   };
 }
 
-type ControllerCreateSessionInput = NonNullable<Parameters<WebApiRoutesDeps['controller']['createSession']>[0]>;
+type IssueTriageSessionInput = {
+  id: string;
+  ownerId: string;
+  resourceId: string;
+  scope: string;
+  tags: Record<string, string>;
+};
+
 type ControllerCreateSessionWithScope = (
-  input: ControllerCreateSessionInput & { scope?: string },
+  input: IssueTriageSessionInput,
 ) => ReturnType<WebApiRoutesDeps['controller']['createSession']>;
 
 function createScopedSession(
   controller: WebApiRoutesDeps['controller'],
-  input: ControllerCreateSessionInput & { scope: string },
+  input: IssueTriageSessionInput,
 ): ReturnType<WebApiRoutesDeps['controller']['createSession']> {
   return (controller.createSession as ControllerCreateSessionWithScope)(input);
 }
@@ -229,16 +272,21 @@ async function runIssueTriage(
   deps: Pick<WebApiRoutesDeps, 'controller'>,
   input: GithubIssueTriageRunInput,
 ): Promise<GithubIssueTriageRunResult> {
-  const resourceId = `github:${input.repository}`;
-  const scope = `github-issue-triage:${input.repository}#${input.issueNumber}`;
-  const tags = buildIssueTriageTags(input);
+  const branch = input.branch ?? issueBranch(input.issueNumber);
+  if (!input.projectPath) {
+    throw new Error('Issue triage requires a board project path');
+  }
+  const projectPath = input.projectPath;
+  const resourceId = projectPath;
+  const scope = projectPath;
+  const tags = buildIssueTriageTags(input, projectPath);
   const title = `Triage #${input.issueNumber}: ${input.issueTitle}`;
   const session = await createScopedSession(deps.controller, {
     id: scope,
     ownerId: `github-installation-${input.installationId}`,
     resourceId,
     scope,
-    tags,
+    tags: { projectPath },
   });
 
   const matchingThreads = await session.thread.list({ metadata: tags });
@@ -249,6 +297,7 @@ async function runIssueTriage(
   } else {
     await session.thread.create({ title });
   }
+  await Promise.all(Object.entries(tags).map(([key, value]) => session.thread.setSetting({ key, value })));
 
   const threadId = session.thread.requireId();
   void session.sendMessage({ content: buildIssueTriagePrompt(input) }).catch((error: unknown) => {
@@ -259,7 +308,7 @@ async function runIssueTriage(
       error: error instanceof Error ? error.message : String(error),
     });
   });
-  return { threadId };
+  return { threadId, projectPath, branch };
 }
 
 /**
@@ -281,5 +330,6 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
       : []),
     ...(deps.linearReady ? buildLinearRoutes({ baseUrl: deps.publicOrigin }) : []),
     ...(deps.intakeReady ? buildIntakeRoutes() : []),
+    ...(deps.factoryReady ? buildFactoryRoutes() : []),
   ];
 }
