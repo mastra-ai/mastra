@@ -128,7 +128,7 @@ export function createGithubSubscriptionTools(requestContext: RequestContext) {
 export function parseCreatedPullRequest(context: { toolName: string; input: unknown; output?: unknown; error?: unknown }) {
   if (context.toolName !== 'execute_command' || context.error) return undefined;
   const command = (context.input as { command?: unknown } | undefined)?.command;
-  if (typeof command !== 'string' || !/^\s*gh\s+pr\s+create(?:\s|$)/.test(command) || /(?:&&|\|\||[;|`])/.test(command)) {
+  if (typeof command !== 'string' || !/(?:^|\n|;|&&|\|\|)\s*gh\s+pr\s+create(?:\s|$)/.test(command)) {
     return undefined;
   }
   const output = context.output as { stdout?: unknown; result?: unknown } | undefined;
