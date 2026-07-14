@@ -210,6 +210,7 @@ test.describe('Trace detail page', () => {
       await expect
         .poll(() => spanDetailsContent.evaluate(element => element.scrollHeight > element.clientHeight))
         .toBe(true);
+      await expect.poll(() => pageLayout.evaluate(element => element.scrollHeight === element.clientHeight)).toBe(true);
 
       const [pageLayoutBox, timelinePanelBox, spanDetailsPanelBox] = await Promise.all([
         pageLayout.boundingBox(),
