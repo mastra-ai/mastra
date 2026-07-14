@@ -1,4 +1,4 @@
-import { APICallError, JSONParseError, TypeValidationError } from '@internal/ai-sdk-v5';
+import { APICallError, JSONParseError, NoObjectGeneratedError, TypeValidationError } from '@internal/ai-sdk-v5';
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import type { Agent } from './agent';
@@ -46,6 +46,25 @@ describe('agent/utils', () => {
       const generate = vi
         .fn()
         .mockRejectedValueOnce(new JSONParseError({ text: 'not json', cause: new SyntaxError('Unexpected token') }))
+        .mockResolvedValueOnce({ object: { decision: 'continue' } });
+
+      const result = await tryGenerateWithJsonFallback(makeAgent(generate), 'prompt', baseOptions);
+
+      expect(result).toEqual({ object: { decision: 'continue' } });
+      expect(generate).toHaveBeenCalledTimes(2);
+      expect(generate.mock.calls[1][1].structuredOutput.jsonPromptInjection).toBe(true);
+    });
+
+    it('retries with jsonPromptInjection when no object is generated', async () => {
+      const generate = vi
+        .fn()
+        .mockRejectedValueOnce(
+          new NoObjectGeneratedError({
+            response: { id: 'response-1', timestamp: new Date(), modelId: 'test-model' },
+            usage: { inputTokens: 1, outputTokens: 0, totalTokens: 1 },
+            finishReason: 'other',
+          }),
+        )
         .mockResolvedValueOnce({ object: { decision: 'continue' } });
 
       const result = await tryGenerateWithJsonFallback(makeAgent(generate), 'prompt', baseOptions);
