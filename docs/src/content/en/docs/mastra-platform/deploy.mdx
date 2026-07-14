@@ -38,13 +38,22 @@ A local `.env` file is optional. Environment variables stored on the platform ar
   </StepItem>
 
   <StepItem>
-    The CLI runs a preflight check before anything ships. Storage that points at a local file path blocks the deploy, because local files don't survive on the platform's ephemeral filesystem:
+    The CLI runs a preflight check before anything ships. Storage that would fall back to a local file path blocks the deploy, because local files don't survive on the platform's ephemeral filesystem:
 
     ```
-    [LOCAL_STORAGE_PATH] Build contains a host-local storage URL: file:./mastra.db
+    [LOCAL_STORAGE_PATH] file:./mastra.db will be used at runtime because TURSO_DATABASE_URL is not set
     ```
 
-    Fix it in two steps. First, guard the local path with an environment variable so the file is only used during local development:
+    Attach a [hosted database](/docs/mastra-platform/database) that provides the missing variables:
+
+    ```bash
+    mastra env db create --kind turso
+    ```
+
+    Provisioning takes a few seconds. The database's connection variables are injected into your deploys automatically, with nothing to copy into an `.env` file.
+
+    :::note
+    If preflight reports a hard-coded local path instead (`Build contains a host-local storage URL`), guard it with an environment variable first so the file is only used during local development:
 
     ```ts title="src/mastra/index.ts"
     new LibSQLStore({
@@ -54,13 +63,7 @@ A local `.env` file is optional. Environment variables stored on the platform ar
     })
     ```
 
-    Then attach a [hosted database](/docs/mastra-platform/database) that provides those variables:
-
-    ```bash
-    mastra env db create --kind turso
-    ```
-
-    Provisioning takes a few seconds. The database's connection variables are injected into your deploys automatically, with nothing to copy into an `.env` file.
+    :::
   </StepItem>
 
   <StepItem>
