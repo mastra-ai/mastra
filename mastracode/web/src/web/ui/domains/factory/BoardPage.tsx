@@ -28,6 +28,7 @@ import type { WorkItem, WorkItemSource } from './services/workItems';
 /** Board columns. Stages are plain strings server-side; these are the UI's vocabulary. */
 const BOARD_STAGES = [
   { id: 'intake', label: 'Intake' },
+  { id: 'triage', label: 'Triage' },
   { id: 'execute', label: 'In progress' },
   { id: 'review', label: 'Review' },
   { id: 'done', label: 'Done' },
@@ -60,6 +61,17 @@ function stagesAfterMove(stages: string[], from: string | null, to: string): str
   if (to === 'done') return ['done'];
   const rest = stages.filter(stage => stage !== from && stage !== to && stage !== 'done');
   return [...rest, to];
+}
+
+/** Pre-work stages a card exits when a run starts on it. */
+const PRE_RUN_STAGES: string[] = ['intake', 'triage'];
+
+function stagesAfterRunStart(stages: string[], to: string): string[] {
+  return stagesAfterMove(
+    stages.filter(stage => !PRE_RUN_STAGES.includes(stage)),
+    null,
+    to,
+  );
 }
 
 /**
@@ -191,7 +203,7 @@ function itemRunSpec(item: WorkItem): ItemRunSpec | null {
     return {
       actionLabel: 'Start work',
       role: 'work',
-      stages: stagesAfterMove(item.stages, 'intake', 'execute'),
+      stages: stagesAfterRunStart(item.stages, 'execute'),
       branch: `factory/issue-${meta.number}`,
       threadTitle: `Issue #${meta.number}: ${item.title}`,
       prompt: `Use the understand-issue skill to investigate ${ref}.`,
@@ -202,7 +214,7 @@ function itemRunSpec(item: WorkItem): ItemRunSpec | null {
     return {
       actionLabel: 'Start work',
       role: 'work',
-      stages: stagesAfterMove(item.stages, 'intake', 'execute'),
+      stages: stagesAfterRunStart(item.stages, 'execute'),
       branch: `factory/linear-${meta.identifier.toLowerCase()}`,
       threadTitle: `${meta.identifier}: ${item.title}`,
       prompt: `Use the understand-issue skill to investigate ${ref}. Start by fetching the issue's full details (description and comments) with the linear_get_issue tool.`,
@@ -213,7 +225,7 @@ function itemRunSpec(item: WorkItem): ItemRunSpec | null {
     return {
       actionLabel: 'Start review',
       role: 'review',
-      stages: stagesAfterMove(item.stages, 'intake', 'review'),
+      stages: stagesAfterRunStart(item.stages, 'review'),
       branch: `factory/pr-${meta.number}`,
       threadTitle: `PR #${meta.number}: ${item.title}`,
       prompt: `Use the understand-pr skill to review ${ref}. The PR head branch is ${meta.headBranch}; check it out in this worktree first (e.g. \`gh pr checkout ${meta.number}\`).`,

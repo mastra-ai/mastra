@@ -545,6 +545,48 @@ describe('Factory Board — persisted cards', () => {
     expect(within(card).getByRole('link', { name: /work thread/ })).toHaveAttribute('href', '/threads/thread-work');
   });
 
+  it('given a card in Intake, when Move to Triage is chosen from the menu, then the card lands in the Triage swimlane', async () => {
+    const state = useBoardHandlers({
+      workItems: [
+        makeWorkItem({ id: 'wi-1', title: 'Fix flaky test', source: 'github-issue', sourceKey: 'github-issue:12' }),
+      ],
+    });
+    renderAt('/factory/board');
+
+    await screen.findByTestId('board-column-intake');
+    await userEvent.click(within(column('intake')).getByRole('button', { name: 'Actions for Fix flaky test' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Move to Triage' }));
+
+    await waitFor(() => expect(state.patches).toEqual([{ id: 'wi-1', stages: ['triage'] }]));
+    expect(within(column('triage')).getByText('Fix flaky test')).toBeInTheDocument();
+    expect(within(column('intake')).queryByTestId('work-item-card')).not.toBeInTheDocument();
+  });
+
+  it('given a card in Triage, when Start work is chosen, then triage exits and the card moves to In progress', async () => {
+    const state = useBoardHandlers({
+      workItems: [
+        makeWorkItem({
+          id: 'wi-1',
+          title: 'Fix flaky test',
+          source: 'github-issue',
+          sourceKey: 'github-issue:12',
+          stages: ['triage'],
+          metadata: { number: 12 },
+        }),
+      ],
+    });
+    const captured = useFactoryRunHandlers('factory-issue-12');
+    const { router } = renderAt('/factory/board');
+
+    await screen.findByTestId('board-column-triage');
+    await userEvent.click(within(column('triage')).getByRole('button', { name: 'Actions for Fix flaky test' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Start work' }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
+    expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
+    expect(state.patches).toMatchObject([{ id: 'wi-1', stages: ['execute'] }]);
+  });
+
   it('given a card in Intake, when Mark done is chosen from the menu, then the stages PATCH to done and the card moves', async () => {
     const state = useBoardHandlers({
       workItems: [
