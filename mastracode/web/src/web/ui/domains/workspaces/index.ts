@@ -3,6 +3,7 @@ export { EmptyProjectState } from './components/EmptyProjectState';
 export { GithubConnectModal } from './components/GithubConnectModal';
 export { ProjectsModal } from './components/ProjectsModal';
 export { ProjectSwitcher } from './components/ProjectSwitcher';
+export { UserSessionsSection } from './components/UserSessionsSection';
 export { WorkspacesSection } from './components/WorkspacesSection';
 export { useActiveProject } from './hooks/useActiveProject';
 export { ActiveProjectProvider, useActiveProjectContext } from './context/ActiveProjectProvider';

@@ -339,7 +339,10 @@ describe('Factory sidebar section', () => {
 
     const nav = await screen.findByRole('navigation', { name: 'Factory' });
     expect(within(nav).getByText('Factory')).toBeInTheDocument();
-    expect(within(nav).getByRole('link', { name: /Board/ })).toHaveAttribute('href', '/factory/board');
+    // The Board link appears once the GitHub status query resolves as connected.
+    expect(await within(nav).findByRole('link', { name: /Board/ })).toHaveAttribute('href', '/factory/board');
+    // The factory Sessions list is nested under the same menu.
+    expect(within(nav).getByRole('region', { name: 'Factory sessions' })).toBeInTheDocument();
   });
 
   it('given a local project, when the app renders, then the Factory section is hidden', async () => {
@@ -349,11 +352,14 @@ describe('Factory sidebar section', () => {
     expect(screen.queryByRole('navigation', { name: 'Factory' })).not.toBeInTheDocument();
   });
 
-  it('given GitHub is not connected, when the app renders, then the Factory section is hidden', async () => {
+  it('given GitHub is not connected, when the app renders, then the Board link is hidden but Sessions remain', async () => {
     renderAt('/new', githubProject, notConnectedStatus);
 
-    expect(await screen.findByText('What do you want to work on?')).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByRole('navigation', { name: 'Factory' })).not.toBeInTheDocument());
+    // Sessions work off the project's own worktrees, so the Factory menu stays;
+    // only the Board (which needs the GitHub integration) disappears.
+    const nav = await screen.findByRole('navigation', { name: 'Factory' });
+    expect(within(nav).getByRole('region', { name: 'Factory sessions' })).toBeInTheDocument();
+    await waitFor(() => expect(within(nav).queryByRole('link', { name: /Board/ })).not.toBeInTheDocument());
   });
 });
 
