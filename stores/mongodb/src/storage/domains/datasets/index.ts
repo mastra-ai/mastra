@@ -13,6 +13,7 @@ import {
   calculatePagination,
   safelyParseJSON,
   ensureDate,
+  hasErrorCode,
 } from '@mastra/core/storage';
 import type {
   DatasetRecord,
@@ -43,15 +44,6 @@ import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
 import { applyTenancyFilter } from '../utils';
 
 const MANAGED_COLLECTIONS = [TABLE_DATASETS, TABLE_DATASET_ITEMS, TABLE_DATASET_VERSIONS] as const;
-
-function hasErrorCode(error: unknown, codes: ReadonlySet<string | number>): boolean {
-  let current: unknown = error;
-  while (current && typeof current === 'object') {
-    if ('code' in current && codes.has((current as { code: string | number }).code)) return true;
-    current = 'cause' in current ? (current as { cause?: unknown }).cause : undefined;
-  }
-  return false;
-}
 
 export class MongoDBDatasetsStorage extends DatasetsStorage {
   #connector: MongoDBConnector;

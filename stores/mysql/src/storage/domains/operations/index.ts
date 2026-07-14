@@ -361,6 +361,30 @@ export class StoreOperationsMySQL extends StoreOperations {
     }
   }
 
+  async insertOnly({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
+    try {
+      const statement = prepareStatement({ tableName, record, database: this.database });
+      const duplicateClause = ' ON DUPLICATE KEY UPDATE ';
+      const duplicateClauseIndex = statement.sql.indexOf(duplicateClause);
+      if (duplicateClauseIndex === -1) {
+        throw new Error(`Unexpected insert statement generated for table ${tableName}`);
+      }
+      statement.sql = statement.sql.slice(0, duplicateClauseIndex);
+      statement.args = statement.args.slice(0, Object.keys(record).length);
+      await this.pool.execute(statement.sql, statement.args);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MYSQL_STORE_INSERT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName },
+        },
+        error,
+      );
+    }
+  }
+
   async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
     if (records.length === 0) return;
     try {

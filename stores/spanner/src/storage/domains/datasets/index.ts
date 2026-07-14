@@ -12,6 +12,7 @@ import {
   TABLE_EXPERIMENTS,
   TABLE_EXPERIMENT_RESULTS,
   TABLE_SCHEMAS,
+  hasErrorCode,
 } from '@mastra/core/storage';
 import type {
   AddDatasetItemInput,
@@ -119,15 +120,6 @@ function rowToVersion(row: Record<string, any>): DatasetVersion {
  * Spanner read-write transaction so the version counter, row close-out, and new
  * row never drift.
  */
-function hasErrorCode(error: unknown, codes: ReadonlySet<string | number>): boolean {
-  let current: unknown = error;
-  while (current && typeof current === 'object') {
-    if ('code' in current && codes.has((current as { code: string | number }).code)) return true;
-    current = 'cause' in current ? (current as { cause?: unknown }).cause : undefined;
-  }
-  return false;
-}
-
 export class DatasetsSpanner extends DatasetsStorage {
   private database: Database;
   private db: SpannerDB;

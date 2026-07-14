@@ -13,6 +13,7 @@ import {
   DatasetsStorage,
   calculatePagination,
   normalizePerPage,
+  hasErrorCode,
 } from '@mastra/core/storage';
 import type {
   CreateIndexOptions,
@@ -60,15 +61,6 @@ function parseJSON<T>(value: unknown): T | undefined {
 
 function jsonArg(value: unknown): string | null {
   return value === undefined || value === null ? null : JSON.stringify(value);
-}
-
-function hasErrorCode(error: unknown, codes: ReadonlySet<string | number>): boolean {
-  let current: unknown = error;
-  while (current && typeof current === 'object') {
-    if ('code' in current && codes.has((current as { code: string | number }).code)) return true;
-    current = 'cause' in current ? (current as { cause?: unknown }).cause : undefined;
-  }
-  return false;
 }
 
 export class DatasetsMySQL extends DatasetsStorage {
@@ -287,7 +279,11 @@ export class DatasetsMySQL extends DatasetsStorage {
       if (input.id !== undefined) this.validateCallerDefinedDatasetId(input.id);
       const now = new Date();
 
-      await this.operations.insert({
+      const insert =
+        input.id === undefined
+          ? this.operations.insert.bind(this.operations)
+          : this.operations.insertOnly.bind(this.operations);
+      await insert({
         tableName: TABLE_DATASETS,
         record: {
           id,

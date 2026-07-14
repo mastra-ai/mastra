@@ -16,6 +16,7 @@ import {
   normalizePerPage,
   safelyParseJSON,
   ensureDate,
+  hasErrorCode,
 } from '@mastra/core/storage';
 import type {
   DatasetRecord,
@@ -46,15 +47,6 @@ import { getTableName, getSchemaName, tenancyWhere } from '../utils';
 /** Serialize a value for a jsonb column. Returns null for null/undefined. */
 function jsonbArg(value: unknown): string | null {
   return value === undefined || value === null ? null : JSON.stringify(value);
-}
-
-function hasErrorCode(error: unknown, codes: ReadonlySet<string | number>): boolean {
-  let current: unknown = error;
-  while (current && typeof current === 'object') {
-    if ('code' in current && codes.has((current as { code: string | number }).code)) return true;
-    current = 'cause' in current ? (current as { cause?: unknown }).cause : undefined;
-  }
-  return false;
 }
 
 export class DatasetsPG extends DatasetsStorage {
