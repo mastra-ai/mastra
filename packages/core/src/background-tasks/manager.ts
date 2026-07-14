@@ -223,6 +223,16 @@ export class BackgroundTaskManager {
     // with id __background-task not found"). Await readiness up front.
     if (this.initPromise) await this.initPromise;
 
+    // Library-mode users (`new Mastra(...)` without `mastra start`) never call
+    // startWorkers(), so a dispatched task would be picked up but hang in
+    // `running` forever — the workers that drive it to completion were never
+    // started. enqueue() is the choke point every producer goes through (agent
+    // delegation, createBackgroundTask, direct enqueue), so lazily start them
+    // here. startWorkers() is idempotent — safe if already started.
+    if (this.#mastra && !this.#mastra.__workersStarted) {
+      await this.#mastra.startWorkers();
+    }
+
     const task: BackgroundTask = {
       id: this.#mastra?.generateId() ?? randomUUID(),
       status: 'pending',

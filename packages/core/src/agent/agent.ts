@@ -6837,16 +6837,6 @@ export class Agent<
       // but skip pubsub workers and internal workflow registration (not needed
       // without events). Avoids requestContext serialisation loss.
       executionWorkflow.__registerMastra(effectiveMastra);
-
-      // Library-mode users who instantiate Mastra directly (without `mastra start`)
-      // never call startWorkers(). When background tasks are configured, dispatched
-      // tasks get picked up by the manager but hang in `running` forever because
-      // the workers that drive them to completion were never started. Lazily start
-      // them here, mirroring the evented path above. startWorkers() is idempotent —
-      // safe to call if already started.
-      if (effectiveMastra?.backgroundTaskManager && !effectiveMastra.__workersStarted) {
-        await effectiveMastra.startWorkers();
-      }
     }
 
     const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });

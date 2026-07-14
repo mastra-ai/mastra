@@ -1,22 +1,24 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, describe, expect, it } from 'vitest';
+import { createBackgroundTask } from '../../background-tasks';
 import { Mastra } from '../../mastra';
 import { MockStore } from '../../storage';
 import { Agent } from '../agent';
 
 /**
- * Regression test for background sub-agents in library mode.
+ * Regression test for background tasks in library mode.
  *
  * When Mastra is used as a library (`new Mastra(...)` without `mastra start`),
- * nothing calls `startWorkers()`. A backgrounded sub-agent delegation would be
- * dispatched and picked up (status `running`) but never complete, because the
- * workers that drive execution to completion were never started.
+ * nothing calls `startWorkers()`. A dispatched background task — whether a
+ * backgrounded sub-agent delegation or a direct `createBackgroundTask()` — would
+ * be picked up (status `running`) but never complete, because the workers that
+ * drive execution to completion were never started.
  *
- * The fix lazily starts workers in the agent execution path when a background
- * task manager exists, so dispatched tasks complete without the user ever
- * calling `startWorkers()` themselves.
+ * The fix lazily starts workers in `BackgroundTaskManager.enqueue()`, the choke
+ * point every producer goes through, so dispatched tasks complete without the
+ * user ever calling `startWorkers()` themselves.
  */
-describe('background sub-agents in library mode (no explicit startWorkers)', () => {
+describe('background tasks in library mode (no explicit startWorkers)', () => {
   let mastra: Mastra | undefined;
 
   afterEach(async () => {
@@ -118,6 +120,39 @@ describe('background sub-agents in library mode (no explicit startWorkers)', () 
 
     // The dispatched task must reach a terminal state without anyone calling
     // startWorkers(). Before the fix it stayed `running` forever.
+    let status: string | undefined;
+    for (let i = 0; i < 50; i++) {
+      const { tasks } = await manager!.listTasks({});
+      status = tasks[0]?.status;
+      if (status === 'completed' || status === 'failed') break;
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    expect(status).toBe('completed');
+  }, 15000);
+
+  it('runs a directly-enqueued task to completion', async () => {
+    mastra = new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      backgroundTasks: { enabled: true },
+    });
+
+    const manager = mastra.backgroundTaskManager;
+    expect(manager).toBeDefined();
+
+    // Direct producer: no agent involved, so the fix must live in the
+    // manager's enqueue() choke point rather than the agent execution path.
+    const bgTask = createBackgroundTask(manager!, {
+      toolName: 'my-tool',
+      toolCallId: 'call-1',
+      args: {},
+      agentId: 'a1',
+      runId: 'r1',
+      context: { executor: { execute: async () => ({ data: 'hello' }) } },
+    });
+    await bgTask.dispatch();
+
     let status: string | undefined;
     for (let i = 0; i < 50; i++) {
       const { tasks } = await manager!.listTasks({});
