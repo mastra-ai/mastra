@@ -721,9 +721,23 @@ function MessageBubble({ entry }: { entry: MessageEntry }) {
     File: (part: FilePart) => <pre className={resultBlock}>{stringify(part)}</pre>,
   };
 
-  const notification = notificationMetadata(entry);
-  if (notification?.kind === 'notification') return <NotificationCard entry={notification} />;
-  if (notification?.kind === 'notification_summary') return <NotificationSummaryCard entry={notification} />;
+  const notifications = notificationMetadata(entry);
+  if (notifications.length > 0) {
+    return (
+      <div className="flex flex-col gap-2">
+        {notifications.map(notification =>
+          notification.kind === 'notification' ? (
+            <NotificationCard key={notification.id} entry={notification} />
+          ) : (
+            <NotificationSummaryCard key={notification.id} entry={notification} />
+          ),
+        )}
+        {hasRenderablePart && (
+          <MessageFactory message={entry.message} roles={roles} {...renderers} fallback={() => null} />
+        )}
+      </div>
+    );
+  }
 
   const status = statusMetadata(entry);
   // Some harness status parts (e.g. om_* markers) carry no text; skip them
@@ -749,50 +763,48 @@ function toolFromInvocationPart(part: ToolInvocationPart, runtime?: ToolCall): T
   };
 }
 
-function notificationMetadata(entry: MessageEntry): NotificationEntry | NotificationSummaryEntry | undefined {
+function notificationMetadata(entry: MessageEntry): Array<NotificationEntry | NotificationSummaryEntry> {
   const harnessContent = entry.message.content.metadata?.harnessContent;
-  if (!Array.isArray(harnessContent)) return undefined;
+  if (!Array.isArray(harnessContent)) return [];
 
-  const part = harnessContent.find(
-    candidate =>
-      typeof candidate === 'object' &&
-      candidate !== null &&
-      'type' in candidate &&
-      (candidate.type === 'notification' || candidate.type === 'notification_summary'),
-  );
-  if (!part || typeof part !== 'object' || !('type' in part)) return undefined;
+  const notifications: Array<NotificationEntry | NotificationSummaryEntry> = [];
+  for (const [index, part] of harnessContent.entries()) {
+    if (typeof part !== 'object' || part === null || !('type' in part)) continue;
+    if (!('message' in part) || typeof part.message !== 'string') continue;
 
-  if (part.type === 'notification') {
-    if (!('message' in part) || typeof part.message !== 'string') return undefined;
-    return {
-      kind: 'notification',
-      id: `${entry.id}-notification`,
-      notificationId:
-        'notificationId' in part && typeof part.notificationId === 'string' ? part.notificationId : undefined,
+    if (part.type === 'notification') {
+      notifications.push({
+        kind: 'notification',
+        id: `${entry.id}-notification-${index}`,
+        notificationId:
+          'notificationId' in part && typeof part.notificationId === 'string' ? part.notificationId : undefined,
+        message: part.message,
+        source: 'source' in part && typeof part.source === 'string' ? part.source : undefined,
+        notifKind: 'kind' in part && typeof part.kind === 'string' ? part.kind : undefined,
+        priority: 'priority' in part && typeof part.priority === 'string' ? part.priority : undefined,
+      });
+      continue;
+    }
+
+    if (part.type !== 'notification_summary') continue;
+    const pending = 'pending' in part && typeof part.pending === 'number' ? part.pending : 0;
+    const bySource = 'bySource' in part && isNumberRecord(part.bySource) ? part.bySource : {};
+    const byPriority = 'byPriority' in part && isNumberRecord(part.byPriority) ? part.byPriority : {};
+    const notificationIds =
+      'notificationIds' in part && Array.isArray(part.notificationIds)
+        ? part.notificationIds.filter((id: unknown): id is string => typeof id === 'string')
+        : [];
+    notifications.push({
+      kind: 'notification_summary',
+      id: `${entry.id}-notification-summary-${index}`,
       message: part.message,
-      source: 'source' in part && typeof part.source === 'string' ? part.source : undefined,
-      notifKind: 'kind' in part && typeof part.kind === 'string' ? part.kind : undefined,
-      priority: 'priority' in part && typeof part.priority === 'string' ? part.priority : undefined,
-    };
+      pending,
+      bySource,
+      byPriority,
+      notificationIds,
+    });
   }
-
-  if (!('message' in part) || typeof part.message !== 'string') return undefined;
-  const pending = 'pending' in part && typeof part.pending === 'number' ? part.pending : 0;
-  const bySource = 'bySource' in part && isNumberRecord(part.bySource) ? part.bySource : {};
-  const byPriority = 'byPriority' in part && isNumberRecord(part.byPriority) ? part.byPriority : {};
-  const notificationIds =
-    'notificationIds' in part && Array.isArray(part.notificationIds)
-      ? part.notificationIds.filter((id: unknown): id is string => typeof id === 'string')
-      : [];
-  return {
-    kind: 'notification_summary',
-    id: `${entry.id}-notification-summary`,
-    message: part.message,
-    pending,
-    bySource,
-    byPriority,
-    notificationIds,
-  };
+  return notifications;
 }
 
 function isNumberRecord(value: unknown): value is Record<string, number> {

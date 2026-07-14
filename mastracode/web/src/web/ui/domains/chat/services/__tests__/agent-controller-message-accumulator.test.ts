@@ -44,7 +44,7 @@ describe('agent controller message accumulator', () => {
     ]);
   });
 
-  it('stores structured status content as harness metadata with readable fallback text', () => {
+  it('stores structured status content as harness metadata without duplicating notification text', () => {
     const message: AgentControllerMessage = {
       id: 'status-1',
       role: 'system',
@@ -58,7 +58,6 @@ describe('agent controller message accumulator', () => {
 
     expect(converted.content.metadata?.harnessContent).toEqual(message.content);
     expect(converted.content.parts).toEqual([
-      { type: 'text', text: 'Review pending notifications' },
       { type: 'text', text: 'Thread title updated: Refactor transcript renderer' },
     ]);
   });

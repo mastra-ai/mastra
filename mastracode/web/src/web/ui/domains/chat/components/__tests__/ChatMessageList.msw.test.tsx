@@ -148,6 +148,7 @@ describe('ChatMessageList', () => {
           id: 'notification-message-1',
           role: 'assistant',
           content: [
+            { type: 'text', text: 'I will inspect the updated pull request.' },
             {
               type: 'notification',
               notificationId: 'notification-1',
@@ -156,6 +157,14 @@ describe('ChatMessageList', () => {
               kind: 'pull-request-comment',
               priority: 'high',
             },
+            {
+              type: 'notification',
+              notificationId: 'notification-2',
+              message: 'octo/repo#42 received a review',
+              source: 'github',
+              kind: 'pull-request-review',
+              priority: 'urgent',
+            },
           ],
         },
       },
@@ -163,8 +172,11 @@ describe('ChatMessageList', () => {
     renderMessageList();
 
     await waitFor(() => expect(screen.getByText('octo/repo#42 received a new comment')).toBeInTheDocument());
-    expect(screen.getByText('github')).toBeInTheDocument();
+    expect(screen.getByText('octo/repo#42 received a review')).toBeInTheDocument();
+    expect(screen.getByText('I will inspect the updated pull request.')).toBeInTheDocument();
+    expect(screen.getAllByText('github')).toHaveLength(2);
     expect(screen.getByText('high')).toBeInTheDocument();
+    expect(screen.getByText('urgent')).toBeInTheDocument();
   });
 
   it('given a persisted notification signal, then it remains visible after transcript hydration', async () => {
