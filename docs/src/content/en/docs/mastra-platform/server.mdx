@@ -13,6 +13,10 @@ Server on Mastra platform is a production deployment target that runs your Mastr
 You get a stable API endpoint, environment variable management, custom domain support, and deploy history out of the box.
 
 :::note
+`mastra server deploy` is the earlier split deploy path. New projects should use the unified [`mastra deploy`](/docs/mastra-platform/deploy) command, which adds preflight validation, environments, and CLI-managed databases.
+:::
+
+:::note
 
 Server deploy provisions hosted storage automatically. If you override storage with [LibSQLStore](/reference/storage/libsql) and a file URL, switch to a remotely hosted database because Mastra platform uses an ephemeral filesystem.
 

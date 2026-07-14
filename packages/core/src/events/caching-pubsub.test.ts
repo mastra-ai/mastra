@@ -439,6 +439,30 @@ describe('CachingPubSub', () => {
       expect(history1).toHaveLength(0);
       expect(history2).toHaveLength(1);
     });
+
+    it('forwards clearTopic to an inner transport that implements it', async () => {
+      // A persistent inner (e.g. Redis Streams) must be told to delete its
+      // underlying stream — otherwise wrapping it in CachingPubSub turns
+      // clearTopic into a cache-only no-op and the inner storage leaks.
+      class ClearableInner extends PubSub {
+        clearTopic = vi.fn(async (_topic: string) => {});
+        async publish(): Promise<void> {}
+        async subscribe(): Promise<void> {}
+        async unsubscribe(): Promise<void> {}
+        async flush(): Promise<void> {}
+      }
+      const inner = new ClearableInner();
+      const wrapped = new CachingPubSub(inner, cache);
+
+      await wrapped.clearTopic('some-topic');
+
+      expect(inner.clearTopic).toHaveBeenCalledWith('some-topic');
+    });
+
+    it('does not throw when the inner transport has no clearTopic', async () => {
+      // EventEmitterPubSub has no clearTopic; the probe must skip it cleanly.
+      await expect(cachingPubsub.clearTopic('no-inner-hook')).resolves.toBeUndefined();
+    });
   });
 
   describe('flush', () => {

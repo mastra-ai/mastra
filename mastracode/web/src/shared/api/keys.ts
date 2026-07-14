@@ -19,6 +19,7 @@ export const queryKeys = {
   linearProjects: () => ['linear', 'projects'] as const,
   linearIssues: () => ['linear', 'issues'] as const,
   intakeConfig: () => ['intake', 'config'] as const,
+  workItems: (githubProjectId: string | undefined) => ['factory', 'work-items', githubProjectId ?? null] as const,
   workspaces: (projectId: string | undefined) => ['workspaces', projectId ?? null] as const,
   providers: () => ['providers'] as const,
   customProviders: () => ['custom-providers'] as const,
