@@ -4,16 +4,20 @@ import { MastraVoice } from '@internal/voice';
 import { Speechify } from '@speechify/api-sdk';
 import type { AudioStreamRequest, VoiceModelName } from '@speechify/api-sdk';
 
-import { SPEECHIFY_VOICES } from './voices';
+import { SIMBA_3_VOICES, SPEECHIFY_VOICES } from './voices';
 import type { SpeechifyVoiceId } from './voices';
 
 /**
  * Models accepted by the Speechify API. Extends the SDK's `VoiceModelName`
  * with the Simba 3 generation models, which the API accepts but the SDK's
  * type union does not yet include. `simba-3.0` and `simba-3.2` are
- * currently English only.
+ * currently English only and serve only the curated `SIMBA_3_VOICES`
+ * (plus, on `simba-3.2`, cloned voices approved by Speechify) — the
+ * classic catalog voices return an error on them.
  */
 type SpeechifyModel = VoiceModelName | 'simba-3.0' | 'simba-3.2';
+
+const isSimba3Model = (model: string | undefined) => model === 'simba-3.0' || model === 'simba-3.2';
 
 interface SpeechifyConfig {
   name?: SpeechifyModel;
@@ -24,12 +28,15 @@ export class SpeechifyVoice extends MastraVoice {
   private client: Speechify;
 
   constructor({ speechModel, speaker }: { speechModel?: SpeechifyConfig; speaker?: SpeechifyVoiceId } = {}) {
+    const modelName = speechModel?.name ?? 'simba-english';
     super({
       speechModel: {
-        name: speechModel?.name ?? 'simba-english',
+        name: modelName,
         apiKey: speechModel?.apiKey ?? process.env.SPEECHIFY_API_KEY,
       },
-      speaker: speaker ?? 'george',
+      // The Simba 3 models serve only the curated SIMBA_3_VOICES, so the
+      // default speaker has to follow the configured model.
+      speaker: speaker ?? (isSimba3Model(modelName) ? 'harper_32' : 'george'),
     });
 
     const apiKey = speechModel?.apiKey ?? process.env.SPEECHIFY_API_KEY;
@@ -41,7 +48,7 @@ export class SpeechifyVoice extends MastraVoice {
   }
 
   async getSpeakers() {
-    return SPEECHIFY_VOICES.map(voice => ({
+    return [...SIMBA_3_VOICES, ...SPEECHIFY_VOICES].map(voice => ({
       voiceId: voice,
       name: voice,
     }));

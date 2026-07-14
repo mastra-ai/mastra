@@ -1,3 +1,20 @@
+/**
+ * Curated voices served by the Simba 3 generation models (`simba-3.0` and
+ * `simba-3.2`). The classic catalog voices in `SPEECHIFY_VOICES` are not
+ * served by those models and return an error. `simba-3.2` additionally
+ * accepts cloned voices manually approved by Speechify.
+ */
+export const SIMBA_3_VOICES = [
+  'beatrice_32',
+  'dominic_32',
+  'edmund_32',
+  'geffen_32',
+  'harper_32',
+  'hugh_32',
+  'imogen_32',
+  'wyatt_32',
+] as const;
+
 export const SPEECHIFY_VOICES = [
   'henry',
   'bwyneth',
@@ -708,4 +725,4 @@ export const SPEECHIFY_VOICES = [
   'michal',
 ] as const;
 
-export type SpeechifyVoiceId = (typeof SPEECHIFY_VOICES)[number];
+export type SpeechifyVoiceId = (typeof SPEECHIFY_VOICES)[number] | (typeof SIMBA_3_VOICES)[number];
