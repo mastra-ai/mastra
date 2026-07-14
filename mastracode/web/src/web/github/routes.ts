@@ -36,6 +36,7 @@ import {
   buildInstallUrl,
   buildOAuthIdentifyUrl,
   exchangeOAuthCode,
+  addIssueLabels,
   getInstallationRepo,
   listInstallationRepos,
   listRepoOpenIssues,
@@ -47,9 +48,11 @@ import { getGithubFeatureDiagnostics, isGithubFeatureEnabled, signState, verifyS
 import { getAppDb } from './db';
 import { withProjectLock } from './project-lock';
 import { handleGithubWebhook } from './webhook';
+import type { GithubIssueTriageRunInput, GithubIssueTriageRunResult } from './webhook';
 import {
   commitAll,
   computeSandboxWorkdir,
+  computeWorktreePath,
   createPullRequest,
   ensureProjectSandbox,
   ensureWorktree,
@@ -78,11 +81,29 @@ export interface MountGithubRoutesOptions {
   baseUrl?: string;
   /** Explicit OAuth callback URI; defaults to `<baseUrl>/auth/github/callback`. */
   redirectUri?: string;
+  /** Run seam used by GitHub webhooks and manual Intake triage. */
+  runIssueTriage?: (input: GithubIssueTriageRunInput) => Promise<GithubIssueTriageRunResult>;
 }
 
 /** Validate an `owner/name` repo full name. */
 function isValidRepoFullName(value: unknown): value is string {
   return typeof value === 'string' && value.length <= 256 && /^[\w.-]+\/[\w.-]+$/.test(value);
+}
+
+function isCanonicalGithubIssueUrl(value: string, repoFullName: string, issueNumber: number): boolean {
+  try {
+    const url = new URL(value);
+    const [owner, repo] = repoFullName.split('/');
+    return (
+      url.protocol === 'https:' &&
+      url.hostname === 'github.com' &&
+      url.pathname === `/${owner}/${repo}/issues/${issueNumber}` &&
+      url.search === '' &&
+      url.hash === ''
+    );
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -137,6 +158,25 @@ function parseListPage(raw: string | undefined): number | null {
   if (!/^\d{1,5}$/.test(raw)) return null;
   const page = Number(raw);
   return page >= 1 ? page : null;
+}
+
+const VALID_ISSUE_LABEL_FILTERS = new Set(['auto-triaged', 'needs-approval']);
+
+function parseIssueLabelFilter(raw: string | undefined): string | undefined | null {
+  if (raw === undefined || raw === '') return undefined;
+  if (VALID_ISSUE_LABEL_FILTERS.has(raw)) return raw;
+  return null;
+}
+
+function parseIssueNumberParam(raw: string | undefined): number | null {
+  if (!raw || !/^\d{1,10}$/.test(raw)) return null;
+  const issueNumber = Number(raw);
+  return Number.isSafeInteger(issueNumber) && issueNumber > 0 ? issueNumber : null;
+}
+
+function parseStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === 'string' && item.length > 0);
 }
 
 /**
@@ -220,12 +260,38 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
     return routes;
   }
 
+  const { runIssueTriage } = options;
+  const runBoardIssueTriage = runIssueTriage
+    ? async (input: GithubIssueTriageRunInput): Promise<GithubIssueTriageRunResult> => {
+        const branch = `factory/issue-${input.issueNumber}`;
+        const [project] = await getAppDb()
+          .select()
+          .from(githubProjects)
+          .where(
+            and(
+              eq(githubProjects.installationId, input.installationId),
+              eq(githubProjects.repoFullName, input.repository),
+            ),
+          );
+        if (!project) throw new Error(`GitHub project not found for ${input.repository}`);
+        const projectPath = input.projectPath ?? computeWorktreePath(project.sandboxWorkdir, branch);
+        await addIssueLabels(input.installationId, input.repository, input.issueNumber, ['auto-triaged']);
+        return runIssueTriage({
+          ...input,
+          resourceId: project.id,
+          projectPath,
+          branch,
+          labels: input.labels.includes('auto-triaged') ? input.labels : [...input.labels, 'auto-triaged'],
+        });
+      }
+    : undefined;
+
   routes.push(
     registerApiRoute('/web/github/webhook', {
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
-        const result = await handleGithubWebhook(loose(c));
+        const result = await handleGithubWebhook(loose(c), { runIssueTriage: runBoardIssueTriage });
         return c.json(result.body, result.status);
       },
     }),
@@ -526,11 +592,14 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         if ('response' in loaded) return loaded.response;
         const page = parseListPage(c.req.query('page'));
         if (page === null) return c.json({ error: 'invalid_page' }, 400);
+        const label = parseIssueLabelFilter(c.req.query('label'));
+        if (label === null) return c.json({ error: 'invalid_label' }, 400);
         try {
           const { issues, nextPage } = await listRepoOpenIssues(
             loaded.project.installationId,
             loaded.project.repoFullName,
             page,
+            { label },
           );
           return c.json({ issues, nextPage });
         } catch (err) {
@@ -539,6 +608,64 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
             502,
           );
         }
+      },
+    }),
+  );
+
+  // ── Manually run issue triage using the same run seam as webhooks ──
+  routes.push(
+    registerApiRoute('/web/github/projects/:id/issues/:number/triage', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const owned = await loadOwnedProject(loose(c));
+        if ('response' in owned) return owned.response;
+        const { project, sandboxRow } = owned;
+        const issueNumber = parseIssueNumberParam(c.req.param('number'));
+        if (issueNumber === null) return c.json({ error: 'invalid_issue_number' }, 400);
+
+        let body: { title?: unknown; url?: unknown; labels?: unknown };
+        try {
+          body = await c.req.json();
+        } catch {
+          return c.json({ error: 'Invalid JSON body' }, 400);
+        }
+        if (typeof body.title !== 'string' || body.title.trim().length === 0 || body.title.length > 5000) {
+          return c.json({ error: 'invalid_title' }, 400);
+        }
+        if (
+          typeof body.url !== 'string' ||
+          body.url.trim().length === 0 ||
+          body.url.length > 2048 ||
+          !isCanonicalGithubIssueUrl(body.url, project.repoFullName, issueNumber)
+        ) {
+          return c.json({ error: 'invalid_url' }, 400);
+        }
+
+        if (!runIssueTriage) return c.json({ error: 'triage_unavailable' }, 503);
+        const branch = `factory/issue-${issueNumber}`;
+        const projectPath = computeWorktreePath(sandboxRow.sandboxWorkdir, branch);
+        await addIssueLabels(project.installationId, project.repoFullName, issueNumber, ['auto-triaged']);
+        const result = await runIssueTriage({
+          repository: project.repoFullName,
+          issueNumber,
+          issueTitle: body.title,
+          issueUrl: body.url,
+          labels: parseStringList(body.labels),
+          installationId: project.installationId,
+          resourceId: project.id,
+          projectPath,
+          branch,
+        });
+        return c.json(
+          {
+            ok: true,
+            threadId: result.threadId,
+            projectPath: result.projectPath ?? projectPath,
+            branch: result.branch ?? branch,
+          },
+          202,
+        );
       },
     }),
   );
