@@ -172,7 +172,8 @@ describe('ChatMessageList', () => {
     renderMessageList();
 
     await waitFor(() => expect(screen.getByText('octo/repo#42 received a new comment')).toBeInTheDocument());
-    expect(screen.getByText('octo/repo#42 received a review')).toBeInTheDocument();
+    expect(screen.getAllByText('octo/repo#42 received a new comment')).toHaveLength(1);
+    expect(screen.getAllByText('octo/repo#42 received a review')).toHaveLength(1);
     expect(screen.getByText('I will inspect the updated pull request.')).toBeInTheDocument();
     expect(screen.getAllByText('github')).toHaveLength(2);
     expect(screen.getByText('high')).toBeInTheDocument();
