@@ -539,8 +539,8 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     }));
     if (results.length < (input.limit ?? 20)) {
       const items = await this.#client.execute({
-        sql: `SELECT f.*,json(f.scope) AS scopeJson,r.name FROM "${TABLE_KNOWLEDGE_ITEMS}" f JOIN "${TABLE_KNOWLEDGE_RECORDS}" r ON r.id=f.parentNodeId AND r.type='node' AND r.mergedInto IS NULL WHERE f.deletedAt IS NULL AND ${visibleSql.replaceAll('scopeKey', 'f.scopeKey')} AND ${visibleSql.replaceAll('scopeKey', 'r.scopeKey')} AND lower(f.text) LIKE ? ORDER BY f.id DESC LIMIT ?`,
-        args: [key, key, key, key, query, (input.limit ?? 20) - results.length],
+        sql: `SELECT f.*,json(f.scope) AS scopeJson,r.name FROM "${TABLE_KNOWLEDGE_ITEMS}" f JOIN "${TABLE_KNOWLEDGE_RECORDS}" r ON r.id=f.parentNodeId AND r.type='node' AND r.mergedInto IS NULL WHERE f.deletedAt IS NULL AND ${visibleSql.replaceAll('scopeKey', 'f.scopeKey')} AND lower(f.text) LIKE ? ORDER BY f.id DESC LIMIT ?`,
+        args: [key, key, query, (input.limit ?? 20) - results.length],
       });
       results.push(
         ...items.rows.map(row => ({
@@ -820,7 +820,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   async #listItems(input: ListKnowledgeItemsInput, touching: boolean): Promise<ListKnowledgeItemsOutput> {
     const scope = canonicalizeKnowledgeScope(input.scope);
     const node = await this.#resolveTerminalNode(this.#client, input.nodeId);
-    if (!node || !isKnowledgeScopeVisible(node.scope, scope)) return { items: [] };
+    if (!node) return { items: [] };
     const key = knowledgeScopeKey(scope);
     const args: InValue[] = [node.id, ...(touching ? [node.id] : []), key, key];
     if (input.after) args.push(input.after);

@@ -75,6 +75,9 @@ describe('Subconscious configuration', () => {
     expect(() => new Subconscious({ observation: [{ name: 'ticket', schema: z.string() } as any] })).toThrow(
       /requires schema and onExtracted/,
     );
+    expect(
+      () => new Subconscious({ observation: [{ name: 'capture', schema: z.object({ value: z.string() }) }] }),
+    ).toThrow(/custom capture schema requires an onExtracted hook/i);
     expect(() => new Subconscious({ reflection: [{ name: 'audit' }] })).toThrow(/requires instructions or agent/);
     expect(() => new Subconscious({ activity: { recentUpdates: 101 } })).toThrow(/between 1 and 100/);
     expect(() => new Subconscious({ maxSteps: 0 })).toThrow(/between 1 and 25/);
@@ -107,6 +110,20 @@ describe('Subconscious configuration', () => {
           options: { observationalMemory: { model, subconscious: new Subconscious() } },
         }),
     ).toThrow(/requires a vector store/);
+  });
+
+  it('fails OM initialization when the storage adapter has no knowledge domain', async () => {
+    const memory = new Memory({
+      storage: new InMemoryStore(),
+      ...semanticInfrastructure,
+      options: { observationalMemory: { model, subconscious: new Subconscious() } },
+    });
+    const originalGetStore = memory.storage.getStore.bind(memory.storage);
+    vi.spyOn(memory.storage, 'getStore').mockImplementation(async name =>
+      name === 'knowledge' ? undefined : originalGetStore(name),
+    );
+
+    await expect(memory.omEngine).rejects.toThrow(/Knowledge storage domain is not available/);
   });
 
   it('does not alter observational memory when Subconscious is absent', () => {

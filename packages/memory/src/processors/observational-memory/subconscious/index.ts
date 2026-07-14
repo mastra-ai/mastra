@@ -126,7 +126,12 @@ export class Subconscious {
       if (!BUILT_IN_OBSERVATION.has(name)) throw new Error(`Unknown Subconscious observation agent: ${name}`);
       return;
     }
-    if (BUILT_IN_OBSERVATION.has(name)) return;
+    if (BUILT_IN_OBSERVATION.has(name)) {
+      if (name === 'capture' && entry.schema && typeof entry.onExtracted !== 'function') {
+        throw new Error('A custom capture schema requires an onExtracted hook that handles its output.');
+      }
+      return;
+    }
     if (!entry.schema || typeof entry.onExtracted !== 'function') {
       throw new Error(`Custom Subconscious observation agent "${name}" requires schema and onExtracted.`);
     }

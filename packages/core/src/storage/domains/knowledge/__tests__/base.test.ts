@@ -69,7 +69,7 @@ describe('InMemoryKnowledgeStorage', () => {
     expect((await store.itemsTouching({ nodeId: marco!.id, scope: sibling })).items).toHaveLength(0);
   });
 
-  it('does not expose items through a scope that cannot see their parent node', async () => {
+  it('applies item visibility independently from parent node identity scope', async () => {
     const store = createStore();
     const node = await store.createNode({ name: 'Resource Secret', kind: 'task', scope: resource });
     await store.appendItem({
@@ -81,8 +81,10 @@ describe('InMemoryKnowledgeStorage', () => {
       defaultScope: resource,
     });
 
-    expect((await store.itemsAbout({ nodeId: node.id, scope: org })).items).toEqual([]);
-    expect(await store.search({ query: 'org-visible', scope: org })).toEqual([]);
+    expect((await store.itemsAbout({ nodeId: node.id, scope: org })).items).toHaveLength(1);
+    expect(await store.search({ query: 'org-visible', scope: org })).toEqual([
+      expect.objectContaining({ type: 'item', recordId: node.id, scope: org }),
+    ]);
     expect((await store.itemsAbout({ nodeId: node.id, scope: thread })).items).toHaveLength(1);
   });
 
@@ -164,8 +166,8 @@ describe('InMemoryKnowledgeStorage', () => {
 
   it('serializes semantic work for successive versions of one document', async () => {
     const store = createStore();
-    const entity = await store.createEntity({ name: 'Atlas', kind: 'task', scope: resource });
-    await store.updateEntity({ id: entity.id, version: entity.version, kind: 'project' });
+    const node = await store.createNode({ name: 'Atlas', kind: 'task', scope: resource });
+    await store.updateNode({ id: node.id, version: node.version, kind: 'project' });
 
     const first = await store.claimSemanticOutbox({ workerId: 'first', limit: 10 });
     expect(first).toHaveLength(1);

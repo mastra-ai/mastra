@@ -40,6 +40,23 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       expect(await store.listNodes({ scope: ['org:acmeX', 'resource:secret'] })).toEqual([]);
     });
 
+    it('applies item visibility independently from parent node identity scope', async () => {
+      const node = await store.createNode({ name: 'Resource node', kind: 'task', scope: resource });
+      await store.appendItem({
+        parentNodeId: node.id,
+        text: 'organization-visible item',
+        scope: ['org:acme'],
+        sourceThreadId: 't1',
+        resolutionScope: thread,
+        defaultScope: resource,
+      });
+
+      expect((await store.itemsAbout({ nodeId: node.id, scope: ['org:acme'] })).items).toHaveLength(1);
+      expect(await store.search({ query: 'organization-visible', scope: ['org:acme'] })).toEqual([
+        expect.objectContaining({ type: 'item', recordId: node.id, scope: ['org:acme'] }),
+      ]);
+    });
+
     it('maintains mentions and soft deletes without losing them', async () => {
       const jane = await store.createNode({ name: 'Jane', kind: 'person', scope: resource });
       const marco = await store.createNode({ name: 'Marco', kind: 'person', scope: resource });
@@ -180,12 +197,12 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
     });
 
     it('serializes semantic work for successive versions of the same document', async () => {
-      const entity = await store.createEntity({ name: 'Atlas', kind: 'task', scope: resource });
-      await store.updateEntity({ id: entity.id, version: entity.version, kind: 'project' });
+      const node = await store.createNode({ name: 'Atlas', kind: 'task', scope: resource });
+      await store.updateNode({ id: node.id, version: node.version, kind: 'project' });
 
       const first = await store.claimSemanticOutbox({ workerId: 'first', limit: 10 });
       expect(first).toHaveLength(1);
-      expect(first[0]?.documentId).toBe(`knowledge:entity:${entity.id}`);
+      expect(first[0]?.documentId).toBe(`knowledge:node:${node.id}`);
       expect(await store.claimSemanticOutbox({ workerId: 'second', limit: 10 })).toEqual([]);
 
       await store.completeSemanticOutbox({ ids: [first[0]!.id], workerId: 'first' });

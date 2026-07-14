@@ -280,7 +280,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   async itemsAbout(input: ListKnowledgeItemsInput): Promise<ListKnowledgeItemsOutput> {
     const queryScope = canonicalizeKnowledgeScope(input.scope);
     const terminal = this.#resolveTerminalNode(input.nodeId);
-    if (!terminal || !isKnowledgeScopeVisible(terminal.scope, queryScope)) return { items: [] };
+    if (!terminal) return { items: [] };
     return this.#paginateItems(
       [...this.#db.knowledgeItems.values()].filter(item => item.parentNodeId === terminal.id),
       { ...input, scope: queryScope },
@@ -290,7 +290,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   async itemsTouching(input: ListKnowledgeItemsInput): Promise<ListKnowledgeItemsOutput> {
     const queryScope = canonicalizeKnowledgeScope(input.scope);
     const terminal = this.#resolveTerminalNode(input.nodeId);
-    if (!terminal || !isKnowledgeScopeVisible(terminal.scope, queryScope)) return { items: [] };
+    if (!terminal) return { items: [] };
     return this.#paginateItems(
       [...this.#db.knowledgeItems.values()].filter(
         item =>
@@ -377,7 +377,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
         continue;
       }
       const parent = this.#resolveTerminalNode(item.parentNodeId);
-      if (!parent || !isKnowledgeScopeVisible(parent.scope, queryScope)) continue;
+      if (!parent) continue;
       results.push({
         type: 'item',
         id: item.id,

@@ -1818,6 +1818,10 @@ ${workingMemory}`;
       );
     }
 
+    if (omConfig.subconscious) {
+      await this.getKnowledgeStore();
+    }
+
     const { ObservationalMemory: OMClass } = await import('./processors/observational-memory');
 
     const onIndexObservations = this.hasRetrievalSearch(omConfig.retrieval)
