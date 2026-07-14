@@ -1,5 +1,32 @@
 # @mastra/redis-streams
 
+## 0.3.0-alpha.0
+
+### Minor Changes
+
+- Make `RedisStreamsPubSub` survive Redis connection drops, and add topic cleanup to bound memory. ([#19138](https://github.com/mastra-ai/mastra/pull/19138))
+
+  **Fixed** — a dropped Redis connection (restart, failover, idle reset) no longer wedges the client. The clients were missing the `'error'` listener node-redis requires, so a socket drop threw an uncaughtException and left the client unable to reconnect, hanging every later publish. It now reconnects on its own. The read loop also recovers when a stream's consumer group disappears, instead of retrying forever.
+
+  **Added** — `clearTopic(topic)` deletes a topic's stream so finished runs release their memory instead of accumulating. The durable-agent runtime calls it during cleanup.
+
+  **Added** — an opt-in `streamIdleTtlMs` option puts a rolling time-to-live on each stream. Active streams keep refreshing it and never expire mid-flight; abandoned ones (e.g. a crashed run) are removed after they go quiet.
+
+  ```ts
+  const pubsub = new RedisStreamsPubSub({
+    url: 'redis://localhost:6379',
+    streamIdleTtlMs: 24 * 60 * 60 * 1000, // remove streams idle for 24h
+  });
+
+  // free a finished topic's stream immediately
+  await pubsub.clearTopic('workflow.events.run-123');
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`4adc391`](https://github.com/mastra-ai/mastra/commit/4adc3911075249c352bb4832d2471922826344de), [`b486abf`](https://github.com/mastra-ai/mastra/commit/b486abfa2a7528c6f527e4015c819ea9fa54aaad)]:
+  - @mastra/core@1.51.0-alpha.10
+
 ## 0.2.0
 
 ### Minor Changes
