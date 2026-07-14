@@ -296,7 +296,6 @@ async function runIssueTriage(
   const thread = [...matchingThreads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0];
   if (thread) {
     await session.thread.switch({ threadId: thread.id });
-    if (thread.title !== title) await session.thread.rename({ title });
   } else {
     await session.thread.create({ title });
   }
