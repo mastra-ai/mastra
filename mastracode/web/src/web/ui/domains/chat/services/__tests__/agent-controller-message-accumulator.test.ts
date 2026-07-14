@@ -44,6 +44,27 @@ describe('agent controller message accumulator', () => {
     ]);
   });
 
+  it('converts image and file content into Mastra file parts', () => {
+    const message: AgentControllerMessage = {
+      id: 'message-2',
+      role: 'user',
+      content: [
+        { type: 'text', text: 'What is in this screenshot?' },
+        { type: 'image', data: 'aW1hZ2UtYnl0ZXM=', mimeType: 'image/png' },
+        { type: 'file', data: 'ZmlsZS1ieXRlcw==', mediaType: 'application/pdf', filename: 'doc.pdf' },
+      ],
+    };
+
+    const converted = toMastraDBMessage(message);
+
+    expect(converted.content.parts).toEqual([
+      { type: 'text', text: 'What is in this screenshot?' },
+      { type: 'file', data: 'aW1hZ2UtYnl0ZXM=', mimeType: 'image/png' },
+      { type: 'file', data: 'ZmlsZS1ieXRlcw==', mimeType: 'application/pdf', filename: 'doc.pdf' },
+    ]);
+    expect(converted.content.metadata?.harnessContent).toBeUndefined();
+  });
+
   it('stores structured status content as harness metadata without duplicating notification text', () => {
     const message: AgentControllerMessage = {
       id: 'status-1',

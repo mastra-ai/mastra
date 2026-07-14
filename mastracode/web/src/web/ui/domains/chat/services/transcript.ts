@@ -2,6 +2,7 @@ import type {
   AgentControllerEvent,
   KnownAgentControllerEvent,
   AgentControllerMessage,
+  AgentControllerMessageContent,
   AgentControllerTaskSnapshot,
   AgentControllerOMProgress,
 } from '@mastra/client-js';
@@ -195,9 +196,16 @@ export const initialTranscript: TranscriptState = {
 
 let noticeSeq = 0;
 
+/** A file attached to an outgoing message (base64-encoded, mirrors the client-js `sendMessage` files option). */
+export interface OutgoingFile {
+  data: string;
+  mediaType: string;
+  filename?: string;
+}
+
 type Action =
   | { type: 'event'; event: AgentControllerEvent }
-  | { type: 'localUser'; text: string; steer?: boolean }
+  | { type: 'localUser'; text: string; steer?: boolean; files?: OutgoingFile[] }
   | { type: 'localNotice'; text: string; level: 'info' | 'error' }
   | { type: 'resolvePrompt'; id: string }
   | {
@@ -223,6 +231,17 @@ type Action =
        */
       running?: boolean;
     };
+
+/**
+ * Mirror the server's signal → controller-content split (stream-content.ts):
+ * images surface as `image` content, everything else as `file` content.
+ */
+function toOutgoingFileContent(file: OutgoingFile): AgentControllerMessageContent {
+  if (file.mediaType.startsWith('image/')) {
+    return { type: 'image', data: file.data, mimeType: file.mediaType };
+  }
+  return { type: 'file', data: file.data, mediaType: file.mediaType, filename: file.filename };
+}
 
 export function transcriptReducer(state: TranscriptState, action: Action): TranscriptState {
   switch (action.type) {
@@ -253,7 +272,7 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
             toMastraDBMessage({
               id: `local-${Date.now()}-${noticeSeq++}`,
               role: 'user',
-              content: [{ type: 'text', text: action.text }],
+              content: [{ type: 'text', text: action.text }, ...(action.files ?? []).map(toOutgoingFileContent)],
             }),
             { steer: action.steer },
           ),

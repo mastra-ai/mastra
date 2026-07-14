@@ -10,6 +10,30 @@ import {
 } from './subscriptions';
 import { getGithubWebhookSecret } from './config';
 
+export interface GithubIssueTriageRunInput {
+  repository: string;
+  issueNumber: number;
+  issueTitle: string;
+  issueUrl: string;
+  labels: string[];
+  sender?: string;
+  installationId: number;
+  /** Active project resource id used by chat thread queries; projectPath remains the worktree scope. */
+  resourceId?: string;
+  projectPath?: string;
+  branch?: string;
+}
+
+export interface GithubIssueTriageRunResult {
+  threadId?: string;
+  projectPath?: string;
+  branch?: string;
+}
+
+export interface GithubWebhookHandlerOptions {
+  runIssueTriage?: (input: GithubIssueTriageRunInput) => Promise<GithubIssueTriageRunResult>;
+}
+
 const SUPPORTED_GITHUB_WEBHOOK_EVENTS = new Set([
   'issues',
   'issue_comment',
@@ -128,6 +152,34 @@ function getBoolean(value: unknown): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined;
 }
 
+function getLabels(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map(label => (typeof label === 'string' ? label : getString(getObject(label)?.name)))
+    .filter((label): label is string => Boolean(label));
+}
+
+function getIssueTriageRunInput(parsed: ParsedGithubWebhook): GithubIssueTriageRunInput | null {
+  if (parsed.event !== 'issues' || getString(parsed.payload.action) !== 'opened') return null;
+  const repository = getString(getObject(parsed.payload.repository)?.full_name);
+  const issue = getObject(parsed.payload.issue);
+  const sender = getString(getObject(parsed.payload.sender)?.login);
+  const installationId = getNumber(getObject(parsed.payload.installation)?.id);
+  const issueNumber = getNumber(issue?.number);
+  const issueTitle = getString(issue?.title);
+  const issueUrl = getString(issue?.html_url);
+  if (!repository || !installationId || !issueNumber || !issueTitle || !issueUrl) return null;
+  return {
+    repository,
+    issueNumber,
+    issueTitle,
+    issueUrl,
+    labels: getLabels(issue?.labels),
+    sender,
+    installationId,
+  };
+}
+
 export function normalizeGithubWebhookMetadata(parsed: ParsedGithubWebhook): GithubWebhookMetadata {
   const { event, deliveryId, payload } = parsed;
   const repository = getObject(payload.repository);
@@ -145,7 +197,8 @@ export function normalizeGithubWebhookMetadata(parsed: ParsedGithubWebhook): Git
     repositoryId: getNumber(repository?.id),
     issueNumber: getNumber(issue?.number),
     pullRequestNumber:
-      getNumber(pullRequest?.number) ?? (event === 'issue_comment' && issuePullRequest ? getNumber(issue?.number) : undefined),
+      getNumber(pullRequest?.number) ??
+      (event === 'issue_comment' && issuePullRequest ? getNumber(issue?.number) : undefined),
     sender: getString(sender?.login),
     installationId: getNumber(installation?.id),
   };
@@ -170,7 +223,13 @@ export function classifyGithubWebhook(parsed: ParsedGithubWebhook): GithubWebhoo
   const metadata = normalizeGithubWebhookMetadata(parsed);
   const { event, payload } = parsed;
   const action = metadata.action;
-  if (!action || !metadata.repositoryId || !metadata.installationId || !metadata.pullRequestNumber || !metadata.repository) {
+  if (
+    !action ||
+    !metadata.repositoryId ||
+    !metadata.installationId ||
+    !metadata.pullRequestNumber ||
+    !metadata.repository
+  ) {
     return undefined;
   }
 
@@ -182,8 +241,18 @@ export function classifyGithubWebhook(parsed: ParsedGithubWebhook): GithubWebhoo
   if (event === 'pull_request_review' && action === 'submitted') {
     const state = getString(getObject(payload.review)?.state)?.toLowerCase().replaceAll('_', '-');
     priority = state === 'approved' || state === 'changes-requested' ? 'urgent' : 'high';
-    kind = state === 'approved' ? 'review-approved' : state === 'changes-requested' ? 'review-changes-requested' : 'review-submitted';
-    label = state === 'approved' ? 'approved the pull request' : state === 'changes-requested' ? 'requested changes' : 'submitted a review';
+    kind =
+      state === 'approved'
+        ? 'review-approved'
+        : state === 'changes-requested'
+          ? 'review-changes-requested'
+          : 'review-submitted';
+    label =
+      state === 'approved'
+        ? 'approved the pull request'
+        : state === 'changes-requested'
+          ? 'requested changes'
+          : 'submitted a review';
   } else if (event === 'pull_request' && action === 'closed') {
     const merged = getBoolean(getObject(payload.pull_request)?.merged) === true;
     priority = 'urgent';
@@ -208,9 +277,15 @@ export function classifyGithubWebhook(parsed: ParsedGithubWebhook): GithubWebhoo
     label = 'dismissed a review';
   } else if (
     event === 'pull_request' &&
-    ['synchronize', 'ready_for_review', 'converted_to_draft', 'assigned', 'unassigned', 'review_requested', 'review_request_removed'].includes(
-      action,
-    )
+    [
+      'synchronize',
+      'ready_for_review',
+      'converted_to_draft',
+      'assigned',
+      'unassigned',
+      'review_requested',
+      'review_request_removed',
+    ].includes(action)
   ) {
     priority = 'medium';
     kind = `pull-request-${action.replaceAll('_', '-')}`;
@@ -328,7 +403,7 @@ export async function dispatchGithubWebhook(
 
 export async function handleGithubWebhook(
   c: Context,
-  dependencies?: GithubWebhookDispatchDependencies,
+  options: GithubWebhookHandlerOptions & Partial<GithubWebhookDispatchDependencies> = {},
 ): Promise<GithubWebhookResult> {
   const parsed = await parseGithubWebhook(c);
   if ('status' in parsed) return parsed;
@@ -337,12 +412,26 @@ export async function handleGithubWebhook(
     return { status: 202, body: { ok: true, ignored: true } };
   }
 
-  if (!dependencies) {
-    console.log('[GitHub Webhook]', normalizeGithubWebhookMetadata(parsed));
+  const metadata = normalizeGithubWebhookMetadata(parsed);
+  console.log('[GitHub Webhook]', metadata);
+
+  const issueTriageRun = getIssueTriageRunInput(parsed);
+  if (issueTriageRun && options.runIssueTriage) {
+    void options.runIssueTriage(issueTriageRun).catch((error: unknown) => {
+      console.error('[GitHub Webhook] Failed to run issue triage', {
+        deliveryId: metadata.deliveryId,
+        repository: metadata.repository,
+        issueNumber: metadata.issueNumber,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }
+
+  if (!options.controller) {
     return { status: 202, body: { ok: true } };
   }
 
-  const result = await dispatchGithubWebhook(parsed, dependencies);
+  const result = await dispatchGithubWebhook(parsed, options as GithubWebhookDispatchDependencies);
   if (result.failed > 0) {
     console.warn(`[GitHub Webhook] ${result.failed} subscribed target(s) failed for delivery ${parsed.deliveryId}.`);
   }

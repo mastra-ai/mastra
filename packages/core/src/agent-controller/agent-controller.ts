@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { Agent } from '../agent';
+import { resolveFilePartMediaTypeAndData } from '../agent/message-list/prompt/image-utils';
 import type { MastraDBMessage } from '../agent/message-list/state/types';
 import { mastraDBMessageToSignal } from '../agent/signals';
 import type { AgentInstructions, ToolsInput, ToolsetsInput } from '../agent/types';
@@ -1947,21 +1948,22 @@ export class AgentController<TState = {}> {
           }
           break;
         }
-        case 'file':
-          if (typeof part.data !== 'string') {
-            console.warn('[Harness] Skipping file part with non-string data:', typeof part.data);
+        case 'file': {
+          // Stored file parts can be v4- (`mimeType`/`data`) or v5-shaped (`mediaType`/`url`);
+          // resolve both so a v5 part's `url` payload isn't dropped as "non-string data".
+          const { mediaType, data } = resolveFilePartMediaTypeAndData(part);
+          if (typeof data !== 'string') {
+            console.warn('[Harness] Skipping file part with non-string data:', typeof data);
             break;
           }
           content.push({
             type: 'file',
-            data: part.data,
-            mediaType:
-              (part as { mediaType?: string }).mediaType ??
-              (part as { mimeType?: string }).mimeType ??
-              'application/octet-stream',
+            data,
+            mediaType: mediaType ?? 'application/octet-stream',
             ...((part as { filename?: string }).filename ? { filename: (part as { filename?: string }).filename } : {}),
           });
           break;
+        }
         case 'image': {
           const imgData =
             typeof part.data === 'string'

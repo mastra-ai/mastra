@@ -173,10 +173,12 @@ export interface MastraCodeConfig {
   modes?: AgentControllerMode[];
   /** Override or extend subagent definitions. Default: explore/plan/execute */
   subagents?: AgentControllerSubagent[];
-  /** Extra tools merged into the dynamic tool set. Can be a static record or a function that receives requestContext. */
+  /** Extra tools merged into the dynamic tool set. Can be a static record or a (sync or async) function that receives requestContext. */
   extraTools?:
     | Record<string, ToolLike | undefined>
-    | ((ctx: { requestContext: RequestContext }) => Record<string, ToolLike | undefined>);
+    | ((ctx: {
+        requestContext: RequestContext;
+      }) => Record<string, ToolLike | undefined> | Promise<Record<string, ToolLike | undefined>>);
   /** Observe completed tool calls without replacing or modifying the built-in tool implementation. */
   postToolObserver?: PostToolObserver;
   /** Tools removed from the dynamic tool set before exposure to the model */
@@ -1060,6 +1062,12 @@ export async function prepareAgentControllerMount(
   const mastraArgs = {
     agentControllers: { [controllerId]: controller },
     storage,
+    // Mirror the controller's internal-Mastra construction (which passes
+    // `config.pubsub` through): the server-owned Mastra must run its event
+    // bus on the same transport so streams/workflows/signals stay
+    // cross-process when a distributed PubSub (e.g. Redis Streams) is
+    // configured.
+    ...(base.signalsPubSub ? { pubsub: base.signalsPubSub } : {}),
     ...(Object.keys(serverConfig).length ? { server: serverConfig } : {}),
   };
 

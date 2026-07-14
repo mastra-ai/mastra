@@ -367,14 +367,17 @@ describe('scoreTrace', () => {
       await expect(testContext.scoreTraceTarget(target)).rejects.toThrow();
     });
 
-    it('throws when scorer execution fails', async () => {
+    it('does not retry or persist a failed scorer execution', async () => {
       const target = { traceId: 'trace-1' };
       await testContext.setupErrorScenario('scorer-failure', {
         target,
         error: new Error('Scorer execution failed'),
       });
 
-      await expect(testContext.scoreTraceTarget(target)).rejects.toThrow();
+      await expect(testContext.scoreTraceTarget(target)).rejects.toThrow('Scorer execution failed');
+      expect(testContext.mockScorerRun).toHaveBeenCalledTimes(1);
+      expect(testContext.mockScoresStore.saveScore).not.toHaveBeenCalled();
+      expect(testContext.mockObservabilityStore.updateSpan).not.toHaveBeenCalled();
     });
 
     it('throws when loading the trace fails', async () => {
@@ -666,5 +669,35 @@ describe('scoreTraceBatch', () => {
       expect(result.results[1].error.message).toContain('Span not found for scoring');
     }
     expect(testContext.mockScoresStore.saveScore).toHaveBeenCalledTimes(2);
+  });
+
+  it('isolates a failed scorer target without retrying or duplicating sibling targets', async () => {
+    const targets: ScoreTraceBatchTarget[] = [{ traceId: 'trace-1' }, { traceId: 'trace-2' }, { traceId: 'trace-3' }];
+    await testContext.setupSuccessfulBatchScenario(targets);
+    testContext.mockScorerRun.mockImplementation(async ({ targetTraceId }: { targetTraceId: string }) => {
+      if (targetTraceId === 'trace-2') throw new Error('Scorer execution failed for trace-2');
+      return createMockScorerResult({
+        runId: `run-${targetTraceId}`,
+        input: { test: 'input' },
+        output: { test: 'output' },
+      });
+    });
+
+    const result = await testContext.scoreTraceBatchTargets(targets, { concurrency: 1 });
+
+    expect(testContext.mockScorerRun).toHaveBeenCalledTimes(3);
+    expect(testContext.mockScorerRun.mock.calls.map(([run]) => run.targetTraceId)).toEqual([
+      'trace-1',
+      'trace-2',
+      'trace-3',
+    ]);
+    expect(testContext.mockScoresStore.saveScore).toHaveBeenCalledTimes(2);
+    expect(testContext.mockObservabilityStore.updateSpan).toHaveBeenCalledTimes(2);
+    expect(result).toMatchObject({ scoredCount: 2, failedCount: 1 });
+    expect(result.results[1]).toMatchObject({
+      ok: false,
+      traceId: 'trace-2',
+      error: expect.objectContaining({ message: 'Scorer execution failed for trace-2' }),
+    });
   });
 });
