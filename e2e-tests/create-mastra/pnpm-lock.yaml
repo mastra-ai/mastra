@@ -31,7 +31,7 @@ importers:
         specifier: ^10.3.3
         version: 10.3.3
       vitest:
-        specifier: ^4.1.8
+        specifier: ^4.1.10
         version: 4.1.10(@types/node@26.1.1)(vite@8.1.4(@types/node@26.1.1))
 
 packages:

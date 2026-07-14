@@ -87,7 +87,7 @@
     "@internal/lint": "workspace:*",
     "@internal/test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
-    "@types/node": "22.19.15",
+    "@types/node": "22.20.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^10.2.1",

@@ -15,7 +15,7 @@
     "tinyglobby": "^0.2.17",
     "verdaccio": "^6.7.4",
     "verdaccio-auth-memory": "^10.3.3",
-    "vitest": "4.1.8",
+    "vitest": "4.1.10",
     "typescript": "^6.0.3"
   }
 }
