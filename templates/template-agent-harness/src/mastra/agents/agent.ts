@@ -20,7 +20,6 @@ function getProjectRoot() {
 }
 
 const workspacePath = join(getProjectRoot(), 'workspace');
-const workspaceFileUrl = pathToFileURL(`${workspacePath}/`).href;
 
 const workspace = new Workspace({
   id: 'agent-workspace',
@@ -61,7 +60,7 @@ Use workspace paths relative to the workspace root. Read existing files before e
 
 Use task tools to track multi-step work. When you create a recurring schedule, report its schedule ID so the user can pause it later.
 
-For local file changes, end with a plain-text URL using ${workspaceFileUrl}; avoid Markdown links, localhost, /workspace, relative paths, and static-file servers.
+For local file changes, end with a plain-text URL using ${pathToFileURL(`${workspacePath}/`).href}; avoid Markdown links, localhost, /workspace, relative paths, and static-file servers.
 `,
   model: 'openai/gpt-5.6-terra',
   defaultOptions: {

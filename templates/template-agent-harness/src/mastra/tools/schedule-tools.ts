@@ -8,34 +8,21 @@ export const startScheduleTool = createTool({
     schedule: z.string().describe('Cron expression for when to run.'),
     prompt: z.string().describe('Prompt to run on the schedule.'),
   }),
-  execute: async ({ schedule, prompt }, { mastra, agent }) => {
-    if (!mastra) {
-      throw new Error('Mastra is required to create a schedule.');
-    }
-
-    const threadContext =
-      agent?.threadId && agent.resourceId ? { threadId: agent.threadId, resourceId: agent.resourceId } : {};
-
-    return mastra.schedules.create({
+  execute: async ({ schedule, prompt }, { mastra, agent }) =>
+    mastra!.schedules.create({
       agentId: 'agent',
       cron: schedule,
       prompt,
-      ...threadContext,
-    });
-  },
+      threadId: agent!.threadId!,
+      resourceId: agent!.resourceId!,
+    }),
 });
 
 export const stopScheduleTool = createTool({
   id: 'stop_schedule',
-  description: 'Pause a recurring schedule by ID.',
+  description: 'Stop a schedule by pausing it.',
   inputSchema: z.object({
     scheduleId: z.string().describe('Schedule id returned by start_schedule.'),
   }),
-  execute: async ({ scheduleId }, { mastra }) => {
-    if (!mastra) {
-      throw new Error('Mastra is required to pause a schedule.');
-    }
-
-    return mastra.schedules.pause(scheduleId);
-  },
+  execute: async ({ scheduleId }, { mastra }) => mastra!.schedules.pause(scheduleId),
 });
