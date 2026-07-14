@@ -317,6 +317,20 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       });
       if (result.rowsAffected === 0) throw new KnowledgeConflictError(input.id);
       await this.#activity(tx, 'entity-updated', 'entity', input.id, scope);
+      if (knowledgeScopeKey(existing.scope) !== knowledgeScopeKey(scope)) {
+        await this.#outbox(tx, 'entity', input.id, 'delete', createKnowledgeUlid(), existing.scope);
+        const facts = await tx.execute({
+          sql: `SELECT id,json(scope) AS scopeJson,deletedAt FROM "${TABLE_KNOWLEDGE_FACTS}" WHERE parentEntityId=?`,
+          args: [input.id],
+        });
+        for (const row of facts.rows) {
+          const factScope = parseJson<KnowledgeScope>(row.scopeJson);
+          await this.#outbox(tx, 'fact', String(row.id), 'delete', createKnowledgeUlid(), factScope);
+          if (row.deletedAt == null) {
+            await this.#outbox(tx, 'fact', String(row.id), 'upsert', createKnowledgeUlid(), factScope);
+          }
+        }
+      }
       await this.#outbox(tx, 'entity', input.id, 'upsert', input.version + 1, scope);
       return {
         ...existing,
@@ -495,6 +509,9 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
           scope,
         );
       await this.#activity(tx, 'page-updated', 'page', input.id, scope);
+      if (knowledgeScopeKey(existing.scope) !== knowledgeScopeKey(scope)) {
+        await this.#outbox(tx, 'page', input.id, 'delete', createKnowledgeUlid(), existing.scope);
+      }
       await this.#outbox(tx, 'page', input.id, 'upsert', input.version + 1, scope);
       return { ...existing, name, body, scope, version: input.version + 1, updatedAt: now };
     });
