@@ -152,7 +152,7 @@ await pubsub.flush()
 
 ### `clearTopic(topic)`
 
-Deletes a topic's stream and every consumer group on it, freeing the memory a finished topic would otherwise hold. The durable-agent runtime calls this automatically when a run's cleanup fires; call it yourself only once nothing will read the topic again. It's best-effort and never throws — failures are logged at warn level. A subscriber still attached when the stream is deleted recovers on its own but misses the deleted entries.
+Deletes a topic's stream and every consumer group on it, freeing the memory a finished topic would otherwise hold. Mastra's run lifecycles — durable agents and the evented workflow engine — call this automatically when a run reaches a terminal state; call it yourself only once nothing will read the topic again. It's best-effort and never throws — failures are logged at warn level. A subscriber still attached when the stream is deleted recovers on its own but misses the deleted entries.
 
 Automatic cleanup requires `@mastra/core` and `@mastra/redis-streams` versions that both support `clearTopic`: the runtime routes the call through its caching layer, so upgrade the two packages together to get end-of-run stream deletion.
 
