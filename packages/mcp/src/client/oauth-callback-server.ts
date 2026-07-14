@@ -109,6 +109,7 @@ export interface OAuthCallbackServer {
 
   /**
    * Stops the server and releases the port. Rejects any pending waitForCode.
+   * Idempotent: closing an already-closed server resolves immediately.
    */
   close(): Promise<void>;
 }
@@ -295,7 +296,15 @@ export async function createOAuthCallbackServer(options: OAuthCallbackServerOpti
     close() {
       settle({ error: new Error('OAuth callback server closed before receiving an authorization code') });
       return new Promise<void>((resolve, reject) => {
-        server.close(error => (error ? reject(error) : resolve()));
+        server.close(error => {
+          // Closing twice is fine (e.g. an explicit cancel followed by the
+          // flow's own cleanup); only real errors propagate.
+          if (error && (error as NodeJS.ErrnoException).code !== 'ERR_SERVER_NOT_RUNNING') {
+            reject(error);
+          } else {
+            resolve();
+          }
+        });
       });
     },
   };

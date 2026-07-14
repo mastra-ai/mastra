@@ -20,6 +20,7 @@ import { InternalMastraMCPClient } from './client';
 import type { MastraMCPServerDefinition, MCPServerAuthState } from './client';
 import { isReconnectableMCPError } from './error-utils';
 import { createOAuthCallbackServer, getCallbackUrlCandidates } from './oauth-callback-server';
+import type { OAuthCallbackServer } from './oauth-callback-server';
 import { MCPOAuthClientProvider } from './oauth-provider';
 import { MCPClientServerProxy } from './server-proxy';
 
@@ -82,6 +83,7 @@ export class MCPClient extends MastraBase {
   private mcpClientsById = new Map<string, InternalMastraMCPClient>();
   private disconnectPromise: Promise<void> | null = null;
   private authFlowsByServer = new Map<string, Promise<void>>();
+  private authCallbackServersByServer = new Map<string, OAuthCallbackServer>();
 
   /**
    * Creates a new MCPClient instance for managing MCP server connections.
@@ -868,6 +870,7 @@ To fix this you have three different options:
 
     const state = await provider.beginAuthorizationSession();
     const callbackServer = await createOAuthCallbackServer({ redirectUrl, state });
+    this.authCallbackServersByServer.set(serverName, callbackServer);
     try {
       // Point the authorization request at the callback URL that actually
       // bound, and register every fallback candidate during dynamic client
@@ -902,9 +905,33 @@ To fix this you have three different options:
         throw error instanceof UnauthorizedError ? error : this.handleConnectError(serverName, error);
       }
     } finally {
+      this.authCallbackServersByServer.delete(serverName);
       provider.endAuthorizationSession();
       await callbackServer.close();
     }
+  }
+
+  /**
+   * Cancels a pending {@link authenticate} flow for a server.
+   *
+   * Tears down the loopback callback server immediately — the pending
+   * authenticate() call rejects, and the server remains in the `needs-auth`
+   * state so the flow can be retried right away. Useful when the user closed
+   * the browser without completing consent, which the host cannot observe.
+   *
+   * @param serverName - The name of the server whose flow to cancel
+   * @returns `true` if a pending flow was cancelled, `false` when no flow was pending
+   */
+  public async cancelAuthentication(serverName: string): Promise<boolean> {
+    const callbackServer = this.authCallbackServersByServer.get(serverName);
+    const pendingFlow = this.authFlowsByServer.get(serverName);
+    if (!callbackServer || !pendingFlow) {
+      return false;
+    }
+
+    await callbackServer.close();
+    await pendingFlow.catch(() => undefined);
+    return true;
   }
 
   /**

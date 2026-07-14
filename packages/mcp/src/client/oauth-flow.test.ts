@@ -465,6 +465,70 @@ describe('MCPClient OAuth authorization flow', () => {
     expect(mcp.getServerAuthState('fixture')).toBe('needs-auth');
   });
 
+  it('cancels a pending flow: the authenticate call rejects and the server returns to needs-auth', async () => {
+    const { mcpServer, callbackUrl } = await setup();
+    // The "browser" reaches the authorization URL but the redirect never comes
+    // back (the user closed the tab), so the flow is left waiting for the code.
+    let authorizationReached: (() => void) | undefined;
+    const reachedAuthorization = new Promise<void>(resolve => {
+      authorizationReached = resolve;
+    });
+    const provider = createProvider({
+      callbackUrl,
+      onRedirectToAuthorization: () => {
+        authorizationReached?.();
+      },
+    });
+    const mcp = track(createClient(mcpServer.url, provider));
+
+    const flow = mcp.authenticate('fixture');
+    await reachedAuthorization;
+
+    const cancelled = await mcp.cancelAuthentication('fixture');
+    expect(cancelled).toBe(true);
+
+    await expect(flow).rejects.toThrow(/closed before receiving an authorization code/);
+    expect(mcp.getServerAuthState('fixture')).toBe('needs-auth');
+  });
+
+  it('cancelAuthentication returns false when no flow is pending', async () => {
+    const { mcpServer, callbackUrl } = await setup();
+    const provider = createProvider({ callbackUrl, onRedirectToAuthorization: driveBrowser });
+    const mcp = track(createClient(mcpServer.url, provider));
+
+    await expect(mcp.cancelAuthentication('fixture')).resolves.toBe(false);
+  });
+
+  it('can authenticate again after a cancelled flow', async () => {
+    const { mcpServer, callbackUrl } = await setup();
+    let authorizationReached: (() => void) | undefined;
+    const reachedAuthorization = new Promise<void>(resolve => {
+      authorizationReached = resolve;
+    });
+    // First attempt stalls at the authorization URL; the retry drives the
+    // browser through to completion.
+    let driveOnRedirect = false;
+    const provider = createProvider({
+      callbackUrl,
+      onRedirectToAuthorization: url => {
+        if (driveOnRedirect) {
+          return driveBrowser(url);
+        }
+        authorizationReached?.();
+      },
+    });
+    const mcp = track(createClient(mcpServer.url, provider));
+
+    const stalledFlow = mcp.authenticate('fixture');
+    await reachedAuthorization;
+    await mcp.cancelAuthentication('fixture');
+    await expect(stalledFlow).rejects.toThrow(/closed before receiving an authorization code/);
+
+    driveOnRedirect = true;
+    await mcp.authenticate('fixture');
+    expect(mcp.getServerAuthState('fixture')).toBe('authorized');
+  });
+
   it('rejects authenticate for servers without an MCPOAuthClientProvider', async () => {
     const mcp = track(
       new MCPClient({
