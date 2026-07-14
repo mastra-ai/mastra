@@ -21,10 +21,10 @@ export const Default: Story = {
       <CollapsibleTrigger asChild>
         <Button variant="outline" className="w-full justify-between">
           Click to expand
-          <ChevronDown className="h-4 w-4" />
+          <ChevronDown className="size-4" />
         </Button>
       </CollapsibleTrigger>
-      <CollapsibleContent className="mt-2 p-4 rounded-md border border-border1 bg-surface2">
+      <CollapsibleContent className="mt-2 rounded-md border border-border1 bg-surface2 p-4">
         <p className="text-sm text-neutral5">This is the collapsible content. It can contain any elements.</p>
       </CollapsibleContent>
     </Collapsible>
@@ -37,10 +37,10 @@ export const DefaultOpen: Story = {
       <CollapsibleTrigger asChild>
         <Button variant="outline" className="w-full justify-between">
           Section Title
-          <ChevronDown className="h-4 w-4" />
+          <ChevronDown className="size-4" />
         </Button>
       </CollapsibleTrigger>
-      <CollapsibleContent className="mt-2 p-4 rounded-md border border-border1 bg-surface2">
+      <CollapsibleContent className="mt-2 rounded-md border border-border1 bg-surface2 p-4">
         <p className="text-sm text-neutral5">This section is open by default.</p>
       </CollapsibleContent>
     </Collapsible>
@@ -49,12 +49,12 @@ export const DefaultOpen: Story = {
 
 export const SettingsSection: Story = {
   render: () => (
-    <div className="w-[400px] space-y-2">
+    <div className="w-100 space-y-2">
       <Collapsible>
         <CollapsibleTrigger asChild>
           <button className="flex w-full items-center justify-between py-2 text-sm font-medium text-neutral6 hover:text-white">
             Advanced Settings
-            <ChevronDown className="h-4 w-4" />
+            <ChevronDown className="size-4" />
           </button>
         </CollapsibleTrigger>
         <CollapsibleContent className="space-y-3 pt-2">
@@ -83,7 +83,7 @@ export const MultipleCollapsibles: Story = {
         <CollapsibleTrigger asChild>
           <Button variant="ghost" className="w-full justify-between">
             Section 1
-            <ChevronDown className="h-4 w-4" />
+            <ChevronDown className="size-4" />
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent className="p-2">
@@ -94,7 +94,7 @@ export const MultipleCollapsibles: Story = {
         <CollapsibleTrigger asChild>
           <Button variant="ghost" className="w-full justify-between">
             Section 2
-            <ChevronDown className="h-4 w-4" />
+            <ChevronDown className="size-4" />
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent className="p-2">
@@ -105,7 +105,7 @@ export const MultipleCollapsibles: Story = {
         <CollapsibleTrigger asChild>
           <Button variant="ghost" className="w-full justify-between">
             Section 3
-            <ChevronDown className="h-4 w-4" />
+            <ChevronDown className="size-4" />
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent className="p-2">

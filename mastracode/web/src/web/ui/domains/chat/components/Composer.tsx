@@ -2,9 +2,9 @@ import type { AgentControllerMessage } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowUp, Square } from 'lucide-react';
+import { ArrowUp, ImagePlus, Square, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import type { KeyboardEvent } from 'react';
+import type { ChangeEvent, ClipboardEvent, DragEvent, KeyboardEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
 import { queryKeys } from '../../../../../shared/api/keys';
@@ -32,6 +32,33 @@ type ComposerProps = {
   variant?: ComposerVariant;
 };
 
+interface PendingImage {
+  id: string;
+  /** Raw base64 payload (no `data:` prefix). */
+  data: string;
+  mediaType: string;
+  filename?: string;
+}
+
+let pendingImageSeq = 0;
+
+/** Per-image cap; base64 adds ~33% and attachments travel in a JSON POST body. */
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+/** Aggregate cap across all pending images on a single message. */
+const MAX_TOTAL_IMAGE_BYTES = 20 * 1024 * 1024;
+
+function readFileAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result);
+      resolve(result.slice(result.indexOf(',') + 1));
+    };
+    reader.onerror = () => reject(reader.error ?? new Error('Failed to read file'));
+    reader.readAsDataURL(file);
+  });
+}
+
 export function Composer({ variant = 'inline' }: ComposerProps) {
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const location = useLocation();
@@ -41,14 +68,22 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const { busy, localUser, reset } = useChatTranscript();
   const { composerCommandName, clearComposerCommand, runComposerCommand } = useChatCommands();
 
-  const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, baseUrl, enabled: sessionEnabled };
-  const createThreadMutation = useCreateAgentControllerThreadMutation({ ...hookArgs, projectPath });
+  const hookArgs = {
+    agentControllerId: AGENT_CONTROLLER_ID,
+    resourceId,
+    projectPath,
+    baseUrl,
+    enabled: sessionEnabled,
+  };
+  const createThreadMutation = useCreateAgentControllerThreadMutation(hookArgs);
   const sendMutation = useSendAgentControllerMessageMutation(hookArgs);
   const steerMutation = useSteerAgentControllerMutation(hookArgs);
   const abortMutation = useAbortAgentControllerMutation(hookArgs);
 
   const [draft, setDraft] = useState('');
+  const [images, setImages] = useState<PendingImage[]>([]);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const appliedCommandNameRef = useRef<string | null>(null);
   const suggestions = matchCommands(draft);
   const showSuggestions = suggestions.length > 0;
@@ -86,29 +121,83 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     return thread.id;
   };
 
-  const seedThreadMessageCache = (threadId: string, text: string) => {
+  const seedThreadMessageCache = (threadId: string, text: string, files: PendingImage[]) => {
     const message: AgentControllerMessage = {
       id: `local-${Date.now()}`,
       role: 'user',
-      content: [{ type: 'text', text }],
+      content: [
+        { type: 'text', text },
+        ...files.map(f => ({ type: 'image' as const, data: f.data, mimeType: f.mediaType })),
+      ],
     };
     queryClient.setQueryData(queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, threadId), [
       message,
     ]);
   };
 
-  const send = async (text: string) => {
-    if (!text.trim()) return;
+  const addImageFiles = async (fileList: Iterable<File>) => {
+    const imageFiles = Array.from(fileList).filter(
+      file => file.type.startsWith('image/') && file.size <= MAX_IMAGE_BYTES,
+    );
+    if (imageFiles.length === 0) return;
+    // Enforce the aggregate cap across already-pending images plus new selections.
+    let budget = MAX_TOTAL_IMAGE_BYTES - images.reduce((sum, img) => sum + Math.floor(img.data.length * 0.75), 0);
+    const accepted = imageFiles.filter(file => {
+      if (file.size > budget) return false;
+      budget -= file.size;
+      return true;
+    });
+    if (accepted.length === 0) return;
+    const additions = await Promise.all(
+      accepted.map(
+        async (file): Promise<PendingImage> => ({
+          id: `pending-image-${pendingImageSeq++}`,
+          data: await readFileAsBase64(file),
+          mediaType: file.type,
+          filename: file.name || undefined,
+        }),
+      ),
+    );
+    setImages(prev => [...prev, ...additions]);
+  };
+
+  const removeImage = (id: string) => {
+    setImages(prev => prev.filter(img => img.id !== id));
+  };
+
+  const onPaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = Array.from(e.clipboardData?.files ?? []).filter(file => file.type.startsWith('image/'));
+    if (files.length === 0) return;
+    e.preventDefault();
+    void addImageFiles(files);
+  };
+
+  const onDrop = (e: DragEvent<HTMLFormElement>) => {
+    // Always cancel the default action so dropped files never navigate the page away.
+    e.preventDefault();
+    const files = Array.from(e.dataTransfer?.files ?? []).filter(file => file.type.startsWith('image/'));
+    if (files.length === 0) return;
+    void addImageFiles(files);
+  };
+
+  const onFileInputChange = (e: ChangeEvent<HTMLInputElement>) => {
+    void addImageFiles(e.target.files ?? []);
+    e.target.value = '';
+  };
+
+  const send = async (text: string, files: PendingImage[]) => {
+    if (!text.trim() && files.length === 0) return;
+    const outgoing = files.map(f => ({ data: f.data, mediaType: f.mediaType, filename: f.filename }));
     if (location.pathname === '/new') {
       const threadId = await createThread();
-      localUser(text);
-      await sendMutation.mutateAsync(text);
-      seedThreadMessageCache(threadId, text);
+      localUser(text, false, outgoing);
+      await sendMutation.mutateAsync({ text, files: outgoing });
+      seedThreadMessageCache(threadId, text, files);
       void navigate(`/threads/${threadId}`, { replace: true });
       return;
     }
-    localUser(text);
-    await sendMutation.mutateAsync(text);
+    localUser(text, false, outgoing);
+    await sendMutation.mutateAsync({ text, files: outgoing });
   };
 
   const steer = async (text: string) => {
@@ -120,7 +209,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const onSubmit = (e: { preventDefault: () => void }) => {
     e.preventDefault();
     const text = draft.trim();
-    if (!text) return;
+    if (!text && images.length === 0) return;
     updateDraft('');
     void handleInput(text);
   };
@@ -165,19 +254,58 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   async function handleInput(text: string) {
     if (await runComposerCommand(text)) return;
-    if (busy) await steer(text);
-    else await send(text);
+    // Steering is text-only; attached images stay pending until the next send.
+    if (busy) {
+      await steer(text);
+      return;
+    }
+    const files = images;
+    setImages([]);
+    try {
+      await send(text, files);
+    } catch (error) {
+      // Requeue the attachments so a failed send can be retried without re-selecting them.
+      setImages(current => [...files, ...current]);
+      throw error;
+    }
   }
 
   const disabled = status !== 'ready';
 
   return (
-    <form onSubmit={onSubmit} className="relative flex w-full flex-col gap-2">
+    <form
+      onSubmit={onSubmit}
+      onDrop={onDrop}
+      onDragOver={e => e.preventDefault()}
+      className="relative flex w-full flex-col gap-2"
+    >
+      {images.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {images.map(img => (
+            <div key={img.id} className="group relative">
+              <img
+                src={`data:${img.mediaType};base64,${img.data}`}
+                alt={img.filename ?? 'Attached image'}
+                className="h-14 w-14 rounded-md border border-border1 object-cover"
+              />
+              <button
+                type="button"
+                onClick={() => removeImage(img.id)}
+                aria-label="Remove image"
+                className="absolute -right-1.5 -top-1.5 rounded-full border border-border1 bg-surface4 p-0.5 text-icon3 hover:text-icon6"
+              >
+                <X size={10} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
       <Textarea
         ref={inputRef}
         value={draft}
         onChange={e => updateDraft(e.target.value)}
         onKeyDown={onComposerKeyDown}
+        onPaste={onPaste}
         placeholder={busy ? 'Steer the agent…' : 'Ask Mastra Code…'}
         disabled={disabled}
         className={composerVariantClass[variant]}
@@ -201,7 +329,26 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
           ))}
         </div>
       )}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        onChange={onFileInputChange}
+        className="hidden"
+        aria-label="Attach images"
+      />
       <div className="absolute bottom-2 right-2 flex items-center gap-1">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          disabled={disabled}
+          onClick={() => fileInputRef.current?.click()}
+          aria-label="Attach image"
+        >
+          <ImagePlus size={14} />
+        </Button>
         {busy && (
           <Button
             type="button"
@@ -213,7 +360,12 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
             <Square size={14} />
           </Button>
         )}
-        <Button type="submit" size="icon-sm" disabled={disabled || !draft.trim()} aria-label="Send message">
+        <Button
+          type="submit"
+          size="icon-sm"
+          disabled={disabled || (!draft.trim() && images.length === 0)}
+          aria-label="Send message"
+        >
           <ArrowUp size={16} />
         </Button>
       </div>

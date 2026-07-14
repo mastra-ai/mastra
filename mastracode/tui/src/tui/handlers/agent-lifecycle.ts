@@ -10,6 +10,7 @@ import { JudgeDisplayComponent } from '../components/judge-display.js';
 import { GradientAnimator } from '../components/obi-loader.js';
 import { pruneChatContainer } from '../prune-chat.js';
 import { clearPendingUserMessages, removePendingUserMessage } from '../render-messages.js';
+import { flushRender, requestRender } from '../render-scheduler.js';
 
 import type { EventHandlerContext } from './types.js';
 
@@ -28,6 +29,7 @@ export function handleAgentStart(ctx: EventHandlerContext): void {
   if (!state.gradientAnimator) {
     state.gradientAnimator = new GradientAnimator(() => {
       ctx.updateStatusLine();
+      requestRender(state);
     });
   }
   state.gradientAnimator.start();
@@ -64,7 +66,7 @@ export function handleAgentEnd(ctx: EventHandlerContext): void {
   state.pendingTaskToolIds?.clear();
   pruneChatContainer(state);
   ctx.updateStatusLine();
-  state.ui.requestRender();
+  flushRender(state);
 
   ctx.notify('agent_done');
 
@@ -112,7 +114,7 @@ function drainQueuedAction(ctx: EventHandlerContext): boolean {
     const key = nextMessage.content.trim();
     const counts = (state.firedQueuedMessageTexts ??= new Map<string, number>());
     counts.set(key, (counts.get(key) ?? 0) + 1);
-    state.ui.requestRender();
+    flushRender(state);
     ctx.fireMessage(nextMessage.content, nextMessage.images);
     return true;
   }
@@ -173,7 +175,7 @@ export function handleAgentAborted(ctx: EventHandlerContext): void {
   state.pendingTaskToolIds?.clear();
   pruneChatContainer(state);
   ctx.updateStatusLine();
-  state.ui.requestRender();
+  flushRender(state);
 }
 
 export function handleAgentError(ctx: EventHandlerContext): void {
@@ -202,7 +204,7 @@ export function handleAgentError(ctx: EventHandlerContext): void {
   state.pendingTaskToolIds?.clear();
   pruneChatContainer(state);
   ctx.updateStatusLine();
-  state.ui.requestRender();
+  flushRender(state);
 }
 
 // =============================================================================
@@ -265,7 +267,7 @@ export function handleGoalEvaluation(ctx: EventHandlerContext, payload: GoalEval
   // when result is null) and wait for the follow-up chunk with the result.
   if (payload.pending) {
     ctx.updateStatusLine();
-    state.ui.requestRender();
+    flushRender(state);
     return;
   }
 
@@ -276,7 +278,7 @@ export function handleGoalEvaluation(ctx: EventHandlerContext, payload: GoalEval
   state.goalManager.applyEvaluation({ runsUsed: payload.iteration, status: payload.status });
 
   ctx.updateStatusLine();
-  state.ui.requestRender();
+  flushRender(state);
 
   // A final (non-pending) goal chunk completes this judge display. Keep the
   // rendered component in history, but drop the live reference so an in-loop

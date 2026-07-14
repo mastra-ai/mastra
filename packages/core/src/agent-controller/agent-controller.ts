@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { Agent } from '../agent';
+import { resolveFilePartMediaTypeAndData } from '../agent/message-list/prompt/image-utils';
 import type { MastraDBMessage } from '../agent/message-list/state/types';
 import { mastraDBMessageToSignal } from '../agent/signals';
 import type { AgentInstructions, ToolsInput, ToolsetsInput } from '../agent/types';
@@ -55,6 +56,16 @@ import type {
   ModelAuthStatus,
   ToolCategory,
 } from './types';
+
+/**
+ * Registry key for the session map. JSON-encodes the (resourceId, scope) pair
+ * so the key is collision-proof for arbitrary strings: a scoped session can
+ * never collide with an unscoped one or with a different resource/scope split
+ * (e.g. `("a\0b", "c")` vs `("a", "b\0c")`).
+ */
+function sessionRegistryKey(resourceId: string, scope?: string): string {
+  return JSON.stringify([resourceId, scope ?? null]);
+}
 
 function validateModes(modes: AgentControllerMode[]): void {
   const modeIds = new Set<string>();
@@ -189,14 +200,20 @@ export class AgentController<TState = {}> {
    */
   readonly #defaultMode: AgentControllerMode;
   /**
-   * Live sessions created by {@link createSession}, keyed by resourceId. A
-   * resourceId maps to exactly one session per AgentController (get-or-create). Stores
-   * the in-flight creation promise so concurrent calls share one session. Lets
-   * AgentController-external callers (e.g. notification delivery) resolve "the session
-   * that owns this resource" so a woken run uses that session's model/mode/state
-   * instead of an arbitrary one.
+   * Live sessions created by {@link createSession}, keyed by resourceId plus an
+   * optional caller-provided scope (see {@link sessionRegistryKey}). A
+   * (resourceId, scope) pair maps to exactly one session per AgentController
+   * (get-or-create). Stores the in-flight creation promise so concurrent calls
+   * share one session. Lets AgentController-external callers (e.g. notification
+   * delivery) resolve "the session that owns this resource" so a woken run uses
+   * that session's model/mode/state instead of an arbitrary one.
    */
   readonly #sessionsByResource = new Map<string, Promise<Session<TState>>>();
+  /**
+   * The scope each live session was created under, so re-keying operations
+   * (e.g. {@link setResourceId}) preserve the session's registry scope.
+   */
+  readonly #sessionScopes = new WeakMap<Session<TState>, string>();
   private availableModelsCache: AvailableModel[] | null = null;
   private availableModelsCacheTime: number = 0;
   readonly #instructions?: string;
@@ -333,6 +350,7 @@ export class AgentController<TState = {}> {
     resourceId,
     ownerId,
     id,
+    scope,
     tags,
     workspace,
     browser,
@@ -341,6 +359,15 @@ export class AgentController<TState = {}> {
     resourceId?: string;
     id?: string;
     ownerId?: string;
+    /**
+     * Optional isolation scope within a resourceId. Two `createSession` calls
+     * with the same resourceId but different scopes get two independent
+     * sessions (own run loop, thread binding, mode/model/state) instead of
+     * resolving to the same one. Memory/threads still belong to the shared
+     * resourceId. Used by hosts that run parallel sessions over one resource —
+     * e.g. one session per git worktree, with the worktree path as the scope.
+     */
+    scope?: string;
     /**
      * Arbitrary string tags that scope this session. Each tag is seeded into the
      * session's state and used to filter initial thread selection: a thread is a
@@ -357,13 +384,15 @@ export class AgentController<TState = {}> {
     const effectiveResourceId = resourceId ?? this.config.resourceId ?? this.config.id;
     const effectiveSessionId = id ?? this.config.id;
     const effectiveOwnerId = ownerId ?? this.config.id;
+    const registryKey = sessionRegistryKey(effectiveResourceId, scope);
 
-    // Get-or-create: a resourceId maps to exactly one durable session per
-    // AgentController. Asking for the same resource twice returns the same session, so
-    // a user/thread always resumes their own session and notification delivery
-    // reuses it rather than spawning a split-brain duplicate. Cache the in-flight
-    // promise so concurrent calls for the same resource resolve to one session.
-    const existing = this.#sessionsByResource.get(effectiveResourceId);
+    // Get-or-create: a (resourceId, scope) pair maps to exactly one durable
+    // session per AgentController. Asking for the same resource+scope twice returns
+    // the same session, so a user/thread always resumes their own session and
+    // notification delivery reuses it rather than spawning a split-brain
+    // duplicate. Cache the in-flight promise so concurrent calls for the same
+    // resource+scope resolve to one session.
+    const existing = this.#sessionsByResource.get(registryKey);
     if (existing) {
       return existing;
     }
@@ -373,13 +402,15 @@ export class AgentController<TState = {}> {
       browser,
       requestContext,
     });
-    this.#sessionsByResource.set(effectiveResourceId, creation);
+    this.#sessionsByResource.set(registryKey, creation);
     try {
-      return await creation;
+      const session = await creation;
+      if (scope !== undefined) this.#sessionScopes.set(session, scope);
+      return session;
     } catch (error) {
       // Don't cache a failed creation — let the next call retry.
-      if (this.#sessionsByResource.get(effectiveResourceId) === creation) {
-        this.#sessionsByResource.delete(effectiveResourceId);
+      if (this.#sessionsByResource.get(registryKey) === creation) {
+        this.#sessionsByResource.delete(registryKey);
       }
       throw error;
     }
@@ -531,13 +562,14 @@ export class AgentController<TState = {}> {
   }
 
   /**
-   * Resolve a live session by resourceId, if one was created for it via
-   * {@link createSession}. Returns `undefined` when no session owns the
-   * resource. Used by notification delivery to run woken signals as the session
-   * that owns the target thread, rather than an arbitrary session.
+   * Resolve a live session by resourceId (and optional scope), if one was
+   * created for it via {@link createSession}. Returns `undefined` when no
+   * session owns the resource. Used by notification delivery to run woken
+   * signals as the session that owns the target thread, rather than an
+   * arbitrary session.
    */
-  async getSessionByResource(resourceId: string): Promise<Session<TState> | undefined> {
-    return this.#sessionsByResource.get(resourceId);
+  async getSessionByResource(resourceId: string, scope?: string): Promise<Session<TState> | undefined> {
+    return this.#sessionsByResource.get(sessionRegistryKey(resourceId, scope));
   }
 
   // ===========================================================================
@@ -1239,20 +1271,22 @@ export class AgentController<TState = {}> {
     // Re-key the resource registry so this session is the one resolved for its
     // new resourceId (and is no longer resolved for the old one). This session
     // becomes the authoritative owner of the target resource, replacing any
-    // prior session registered there.
-    const dropPreviousResource = this.#dropSessionFromRegistry(previousResourceId, session);
-    this.#sessionsByResource.set(resourceId, Promise.resolve(session));
+    // prior session registered there. The session keeps its creation scope, so
+    // a scoped session re-keys under the same scope on the new resource.
+    const scope = this.#sessionScopes.get(session);
+    const dropPreviousResource = this.#dropSessionFromRegistry(sessionRegistryKey(previousResourceId, scope), session);
+    this.#sessionsByResource.set(sessionRegistryKey(resourceId, scope), Promise.resolve(session));
     await releasePreviousThreadLock;
     await dropPreviousResource;
   }
 
-  /** Remove `resourceId` from the registry only if it still resolves to `session`. */
-  async #dropSessionFromRegistry(resourceId: string, session: Session<TState>): Promise<void> {
-    const pending = this.#sessionsByResource.get(resourceId);
+  /** Remove `registryKey` from the registry only if it still resolves to `session`. */
+  async #dropSessionFromRegistry(registryKey: string, session: Session<TState>): Promise<void> {
+    const pending = this.#sessionsByResource.get(registryKey);
     if (!pending) return;
     const resolved = await pending.catch(() => undefined);
-    if (resolved === session && this.#sessionsByResource.get(resourceId) === pending) {
-      this.#sessionsByResource.delete(resourceId);
+    if (resolved === session && this.#sessionsByResource.get(registryKey) === pending) {
+      this.#sessionsByResource.delete(registryKey);
     }
   }
 
@@ -1911,21 +1945,22 @@ export class AgentController<TState = {}> {
           }
           break;
         }
-        case 'file':
-          if (typeof part.data !== 'string') {
-            console.warn('[Harness] Skipping file part with non-string data:', typeof part.data);
+        case 'file': {
+          // Stored file parts can be v4- (`mimeType`/`data`) or v5-shaped (`mediaType`/`url`);
+          // resolve both so a v5 part's `url` payload isn't dropped as "non-string data".
+          const { mediaType, data } = resolveFilePartMediaTypeAndData(part);
+          if (typeof data !== 'string') {
+            console.warn('[Harness] Skipping file part with non-string data:', typeof data);
             break;
           }
           content.push({
             type: 'file',
-            data: part.data,
-            mediaType:
-              (part as { mediaType?: string }).mediaType ??
-              (part as { mimeType?: string }).mimeType ??
-              'application/octet-stream',
+            data,
+            mediaType: mediaType ?? 'application/octet-stream',
             ...((part as { filename?: string }).filename ? { filename: (part as { filename?: string }).filename } : {}),
           });
           break;
+        }
         case 'image': {
           const imgData =
             typeof part.data === 'string'

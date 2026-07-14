@@ -283,6 +283,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'guide/coding-agent',
+          label: 'Building a Coding Agent',
+        },
+        {
+          type: 'doc',
           id: 'guide/github-actions-pr-description',
           label: 'GitHub Actions: PR Description',
         },

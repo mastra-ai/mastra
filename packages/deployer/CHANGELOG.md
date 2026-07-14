@@ -1,5 +1,89 @@
 # @mastra/deployer
 
+## 1.51.0-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [[`4adc391`](https://github.com/mastra-ai/mastra/commit/4adc3911075249c352bb4832d2471922826344de), [`b486abf`](https://github.com/mastra-ai/mastra/commit/b486abfa2a7528c6f527e4015c819ea9fa54aaad)]:
+  - @mastra/core@1.51.0-alpha.10
+  - @mastra/server@1.51.0-alpha.10
+
+## 1.51.0-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [[`edce8d2`](https://github.com/mastra-ai/mastra/commit/edce8d2769f19e27a05737c627af2d765472a4f8)]:
+  - @mastra/core@1.51.0-alpha.9
+  - @mastra/server@1.51.0-alpha.9
+
+## 1.51.0-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [[`bd6d240`](https://github.com/mastra-ai/mastra/commit/bd6d2402db93dddaef0721667e7e8a030e7c6e16), [`0111486`](https://github.com/mastra-ai/mastra/commit/01114867612593eef5cfa2fda6a1194dfedda841), [`96a3749`](https://github.com/mastra-ai/mastra/commit/96a37492235f5b8076b3e3177d83ed5a5e44a640), [`02c2bd9`](https://github.com/mastra-ai/mastra/commit/02c2bd906b145ab806287712e1796d92bfc32c2a), [`3e26c87`](https://github.com/mastra-ai/mastra/commit/3e26c87de0c5bc2583b795ce6ca5889b6b161acb), [`a5008f2`](https://github.com/mastra-ai/mastra/commit/a5008f22ae710ad9402ea9f2547d8c02f74d384b)]:
+  - @mastra/core@1.51.0-alpha.8
+  - @mastra/server@1.51.0-alpha.8
+
+## 1.51.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`25e7c12`](https://github.com/mastra-ai/mastra/commit/25e7c126a770069ae7fb7ecf1d2adb40e017b009), [`1ce5121`](https://github.com/mastra-ai/mastra/commit/1ce512155d122bb21f47d98383e82ffbf84b39e8), [`3cfc47a`](https://github.com/mastra-ai/mastra/commit/3cfc47a6b89940aadd0f46fb01ae9624a73a865d), [`2bb7817`](https://github.com/mastra-ai/mastra/commit/2bb78176112fde628483de2830528f7eee911e56), [`51d9870`](https://github.com/mastra-ai/mastra/commit/51d987032c689c2855374d0f244f5d654da809d1), [`5cab274`](https://github.com/mastra-ai/mastra/commit/5cab2744250e22d12fefa7b32637dce224233cee), [`7fa27d3`](https://github.com/mastra-ai/mastra/commit/7fa27d3b6f5ed68cd34e454a4d3ad9c482a0cfbc), [`a58dcbb`](https://github.com/mastra-ai/mastra/commit/a58dcbb546d7e1d65ebdc1f39e55f0908fcd9391), [`153bd3b`](https://github.com/mastra-ai/mastra/commit/153bd3b396bdfed6b74cf43de12db8fd2d83c04a), [`07bb863`](https://github.com/mastra-ai/mastra/commit/07bb8631919c6f7cf377dccd45b096e0f17fbed0), [`8a586ec`](https://github.com/mastra-ai/mastra/commit/8a586eca9a4914f31dff6140d0d45ac375b00669), [`3927473`](https://github.com/mastra-ai/mastra/commit/392747323ddb10c643d12be7b9ae913159dfaeed), [`25e7c12`](https://github.com/mastra-ai/mastra/commit/25e7c126a770069ae7fb7ecf1d2adb40e017b009), [`dce50dc`](https://github.com/mastra-ai/mastra/commit/dce50dc9a1c1fcd0f427bb5f6250ec74910cb04b), [`634caff`](https://github.com/mastra-ai/mastra/commit/634caff29a9200ad058b67d53f96d9e5832fb8a2), [`25e7c12`](https://github.com/mastra-ai/mastra/commit/25e7c126a770069ae7fb7ecf1d2adb40e017b009)]:
+  - @mastra/core@1.51.0-alpha.7
+  - @mastra/server@1.51.0-alpha.7
+
+## 1.51.0-alpha.6
+
+### Patch Changes
+
+- Added durable-agent recovery for orphaned RUNNING runs after process restart. ([#19191](https://github.com/mastra-ai/mastra/pull/19191))
+
+  **What changed**
+  - `DurableAgent.listActiveRuns()` — discover in-flight durable runs for an agent from persistent storage, filtered by agentId, threadId, and resourceId (mirrors `listSuspendedRuns` but for `running` status).
+  - `DurableAgent.recover(runId, options?)` — rehydrate a single orphaned run's non-serializable state (`MessageList`, model, tools, memory, `SaveQueueManager`, processors, request context, agent span, `BackgroundTaskManager` + agent background-tasks config) from its persisted workflow snapshot, re-subscribe to the pubsub topic, and re-drive the workflow in the background. Returns the same `{ output, fullStream, runId, threadId, resourceId, cleanup, abort }` shape as `stream()`/`resume()`, so callers can stream the recovered response or attach later via `observe(runId)`. Memory writes flow through the rebuilt `SaveQueueManager` exactly like a fresh run.
+  - `DurableAgent.recoverActiveRuns(options?)` — bulk recovery hook that delegates to `recover(runId)` for each in-flight run discovered via `listActiveRuns()` (or a caller-supplied `runId`), awaits each workflow settlement, and returns `{ recovered, succeeded, failed }` counts. Use this on boot to drain the backlog; use `recover()` when you want to stream a specific run.
+  - The default workflow engine now persists `running` snapshots for the durable agentic loop, with a guard that prevents a `running` write from overwriting an already-`suspended` snapshot for the same run. Without this, `listActiveRuns()` would never see a live durable run in storage.
+  - Background-task state is re-wired on recovery so the `bg-task-check` step waits for pre-crash in-flight tasks (still tracked in `BackgroundTaskManager` storage), the `tool-call` step can still dispatch new tools as background tasks, and `llm-execution` still injects the background-task system prompt. Without this, the recovered segment would silently run with background-tasks disabled and could end before storage-backed tasks delivered their tool-result chunks.
+  - Snapshot rows are now deleted after a durable run reaches any non-suspended terminal status — this applies to `stream`/`generate` (the initial `run.start()`), `resume()`, `recover()`, and `recoverActiveRuns()`. Suspended terminals still keep their snapshots so a later resume/recover can find them. Mirrors the existing loop-stream cleanup so snapshot storage doesn't grow one stale row per completed durable run.
+  - `Mastra.recoverAllDurableAgents()` — new server-level fan-out that walks every registered agent, filters those exposing `recoverActiveRuns()` (default-engine `DurableAgent` only — Inngest and other externally-executed durable wrappers run their own recovery), and aggregates `{ agents, recovered, succeeded, failed }` counts. A per-agent failure is logged and skipped so one bad agent doesn't stop the rest.
+  - New `MastraConfig.recovery` option: `recovery?: { durableAgents?: 'auto' | 'off' }` (default `'off'`). When set to `'auto'`, the deployer's `/__restart-active-workflow-runs` boot handler will invoke `mastra.recoverAllDurableAgents()` right after `restartAllActiveWorkflowRuns()`, so both user workflows and durable-agent runs are re-driven from the same boot hook the CLI/deployer already call. Also exposed as `mastra.recoveryConfig` for callers who want to gate their own recovery pipelines on it.
+  - Recovery is opt-in on purpose. Auto-recovery re-runs the agentic loop from the last persisted snapshot, so it re-issues LLM calls (real cost) and re-executes tool calls (must be idempotent); in multi-instance deploys every replica will race to recover the same runs until a lease/lock is added. Leave `'off'` and call `mastra.recoverAllDurableAgents()` (or the per-agent APIs) from a cron, a leader-elected worker, or an admin endpoint if you need finer control.
+
+  **Why**
+
+  Previously, the durable agent's agentic loop was an awaited in-process Promise and `globalRunRegistry` was an in-memory TTLCache, so any RUNNING run silently died on process restart with no boot-time recovery or re-drive API (see issue #19056). Suspended runs already had `prepare`/`resume`/`listSuspendedRuns`; RUNNING runs now have the equivalent discover-and-recover pair.
+
+  **Usage**
+
+  ```ts
+  // Opt into boot-time recovery for every durable agent on this Mastra instance.
+  // The deployer will call `mastra.recoverAllDurableAgents()` automatically
+  // after restarting active workflow runs.
+  const mastra = new Mastra({
+    agents: { support: supportDurableAgent },
+    storage,
+    recovery: { durableAgents: 'auto' },
+  });
+
+  // Or drive it yourself (cron, leader election, admin endpoint, etc.):
+  const { agents, recovered, succeeded, failed } = await mastra.recoverAllDurableAgents();
+
+  // Per-agent: drain all orphaned RUNNING runs on one agent.
+  const agent = mastra.getAgent('support') as DurableAgent;
+  await agent.recoverActiveRuns();
+
+  // Per-run: recover a specific run and stream its output to the caller.
+  const { fullStream, runId, cleanup } = await agent.recover('run-abc123');
+  for await (const chunk of fullStream) {
+    // forward chunks to the client, log them, etc.
+  }
+  cleanup();
+  ```
+
+- Updated dependencies [[`e2d5f37`](https://github.com/mastra-ai/mastra/commit/e2d5f373bd289be534d5f8694d34465010533df6), [`e2d5f37`](https://github.com/mastra-ai/mastra/commit/e2d5f373bd289be534d5f8694d34465010533df6)]:
+  - @mastra/server@1.51.0-alpha.6
+  - @mastra/core@1.51.0-alpha.6
+
 ## 1.51.0-alpha.5
 
 ### Patch Changes

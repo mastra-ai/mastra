@@ -1,5 +1,61 @@
 # @mastra/playground-ui
 
+## 41.0.0-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [[`4adc391`](https://github.com/mastra-ai/mastra/commit/4adc3911075249c352bb4832d2471922826344de), [`b486abf`](https://github.com/mastra-ai/mastra/commit/b486abfa2a7528c6f527e4015c819ea9fa54aaad)]:
+  - @mastra/core@1.51.0-alpha.10
+  - @mastra/client-js@1.32.0-alpha.10
+  - @mastra/memory@1.23.0-alpha.4
+  - @mastra/react@1.2.5-alpha.10
+
+## 41.0.0-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [[`edce8d2`](https://github.com/mastra-ai/mastra/commit/edce8d2769f19e27a05737c627af2d765472a4f8)]:
+  - @mastra/core@1.51.0-alpha.9
+  - @mastra/client-js@1.32.0-alpha.9
+  - @mastra/react@1.2.5-alpha.9
+
+## 41.0.0-alpha.8
+
+### Patch Changes
+
+- dependencies updates: ([#19205](https://github.com/mastra-ai/mastra/pull/19205))
+  - Updated dependency [`@codemirror/view@^6.43.6` ↗︎](https://www.npmjs.com/package/@codemirror/view/v/6.43.6) (from `^6.43.5`, in `dependencies`)
+- Updated dependencies [[`bd6d240`](https://github.com/mastra-ai/mastra/commit/bd6d2402db93dddaef0721667e7e8a030e7c6e16), [`0111486`](https://github.com/mastra-ai/mastra/commit/01114867612593eef5cfa2fda6a1194dfedda841), [`96a3749`](https://github.com/mastra-ai/mastra/commit/96a37492235f5b8076b3e3177d83ed5a5e44a640), [`02c2bd9`](https://github.com/mastra-ai/mastra/commit/02c2bd906b145ab806287712e1796d92bfc32c2a), [`3e26c87`](https://github.com/mastra-ai/mastra/commit/3e26c87de0c5bc2583b795ce6ca5889b6b161acb), [`a5008f2`](https://github.com/mastra-ai/mastra/commit/a5008f22ae710ad9402ea9f2547d8c02f74d384b)]:
+  - @mastra/core@1.51.0-alpha.8
+  - @mastra/client-js@1.32.0-alpha.8
+  - @mastra/react@1.2.5-alpha.8
+
+## 41.0.0-alpha.7
+
+### Patch Changes
+
+- Add a paste hint to `EnvironmentVariablesEditor` letting users know they can paste a whole `.env` into any field. The hint renders bottom-right by default (hidden in read-only mode, opt out via `hidePasteHint`) and is also exposed as the composable `EnvironmentVariablesEditor.PasteHint` part for custom placement/copy. ([#19061](https://github.com/mastra-ai/mastra/pull/19061))
+
+- Improved Tailwind utility consistency across Playground UI components. ([#19318](https://github.com/mastra-ai/mastra/pull/19318))
+
+- Added PROVIDER_TOOL_CALL span type rendering so provider-executed tool spans display with a distinct label and color in Studio traces. ([#19261](https://github.com/mastra-ai/mastra/pull/19261))
+
+- Improved side panel resizing so programmatic layout changes animate smoothly and respect reduced-motion preferences. ([#19337](https://github.com/mastra-ai/mastra/pull/19337))
+
+- Updated dependencies [[`25e7c12`](https://github.com/mastra-ai/mastra/commit/25e7c126a770069ae7fb7ecf1d2adb40e017b009), [`1ce5121`](https://github.com/mastra-ai/mastra/commit/1ce512155d122bb21f47d98383e82ffbf84b39e8), [`3cfc47a`](https://github.com/mastra-ai/mastra/commit/3cfc47a6b89940aadd0f46fb01ae9624a73a865d), [`2bb7817`](https://github.com/mastra-ai/mastra/commit/2bb78176112fde628483de2830528f7eee911e56), [`51d9870`](https://github.com/mastra-ai/mastra/commit/51d987032c689c2855374d0f244f5d654da809d1), [`5cab274`](https://github.com/mastra-ai/mastra/commit/5cab2744250e22d12fefa7b32637dce224233cee), [`7fa27d3`](https://github.com/mastra-ai/mastra/commit/7fa27d3b6f5ed68cd34e454a4d3ad9c482a0cfbc), [`a58dcbb`](https://github.com/mastra-ai/mastra/commit/a58dcbb546d7e1d65ebdc1f39e55f0908fcd9391), [`153bd3b`](https://github.com/mastra-ai/mastra/commit/153bd3b396bdfed6b74cf43de12db8fd2d83c04a), [`07bb863`](https://github.com/mastra-ai/mastra/commit/07bb8631919c6f7cf377dccd45b096e0f17fbed0), [`8a586ec`](https://github.com/mastra-ai/mastra/commit/8a586eca9a4914f31dff6140d0d45ac375b00669), [`3927473`](https://github.com/mastra-ai/mastra/commit/392747323ddb10c643d12be7b9ae913159dfaeed), [`25e7c12`](https://github.com/mastra-ai/mastra/commit/25e7c126a770069ae7fb7ecf1d2adb40e017b009), [`dce50dc`](https://github.com/mastra-ai/mastra/commit/dce50dc9a1c1fcd0f427bb5f6250ec74910cb04b), [`634caff`](https://github.com/mastra-ai/mastra/commit/634caff29a9200ad058b67d53f96d9e5832fb8a2), [`25e7c12`](https://github.com/mastra-ai/mastra/commit/25e7c126a770069ae7fb7ecf1d2adb40e017b009)]:
+  - @mastra/core@1.51.0-alpha.7
+  - @mastra/client-js@1.32.0-alpha.7
+  - @mastra/react@1.2.5-alpha.7
+
+## 40.1.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`e2d5f37`](https://github.com/mastra-ai/mastra/commit/e2d5f373bd289be534d5f8694d34465010533df6), [`e2d5f37`](https://github.com/mastra-ai/mastra/commit/e2d5f373bd289be534d5f8694d34465010533df6)]:
+  - @mastra/client-js@1.31.2-alpha.6
+  - @mastra/core@1.51.0-alpha.6
+  - @mastra/react@1.2.5-alpha.6
+
 ## 40.1.0-alpha.5
 
 ### Patch Changes

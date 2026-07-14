@@ -307,14 +307,26 @@ export class CachingPubSub extends PubSub {
   }
 
   /**
-   * Clear cached events for a specific topic.
-   * Call this when a stream completes to free memory.
-   * Also clears the index counter.
+   * Clear cached events for a specific topic (and the index counter), and
+   * forward the clear to the inner transport.
+   *
+   * Call this when a stream completes to free memory. The forward matters for
+   * persistent inner transports (e.g. Redis Streams): without it, wrapping a
+   * pubsub in `CachingPubSub` silently turns `clearTopic` into a cache-only
+   * no-op and the inner stream leaks forever.
    */
-  async clearTopic(topic: string): Promise<void> {
+  override async clearTopic(topic: string): Promise<void> {
     const cacheKey = this.getCacheKey(topic);
     const counterKey = this.getCounterKey(topic);
-    await Promise.all([this.cache.delete(cacheKey), this.cache.delete(counterKey)]);
+    try {
+      await Promise.all([this.cache.delete(cacheKey), this.cache.delete(counterKey), this.inner.clearTopic(topic)]);
+    } catch (error) {
+      // Honor the base-class contract: clearTopic is best-effort and callers
+      // invoke it fire-and-forget, so a cache failure must not become an
+      // unhandled rejection. A failed delete means retained state may leak
+      // until the transport-level TTL backstop, so make it visible.
+      this.logError(`[CachingPubSub] Failed to clear topic ${topic}`, error);
+    }
   }
 
   /**

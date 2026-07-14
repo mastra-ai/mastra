@@ -13,10 +13,13 @@ export const queryKeys = {
   githubRepos: (query: string | undefined) => ['github', 'repos', query ?? null] as const,
   githubIssues: (githubProjectId: string | undefined) => ['github', 'issues', githubProjectId ?? null] as const,
   githubPulls: (githubProjectId: string | undefined) => ['github', 'prs', githubProjectId ?? null] as const,
+  githubProjectSettings: (githubProjectId: string | undefined) =>
+    ['github', 'project-settings', githubProjectId ?? null] as const,
   linearStatus: () => ['linear', 'status'] as const,
   linearProjects: () => ['linear', 'projects'] as const,
   linearIssues: () => ['linear', 'issues'] as const,
   intakeConfig: () => ['intake', 'config'] as const,
+  workItems: (githubProjectId: string | undefined) => ['factory', 'work-items', githubProjectId ?? null] as const,
   workspaces: (projectId: string | undefined) => ['workspaces', projectId ?? null] as const,
   providers: () => ['providers'] as const,
   customProviders: () => ['custom-providers'] as const,
@@ -29,8 +32,14 @@ export const queryKeys = {
     ['agent-controller', agentControllerId ?? null, 'models'] as const,
   agentControllerModes: (agentControllerId: string | undefined) =>
     ['agent-controller', agentControllerId ?? null, 'modes'] as const,
-  agentControllerSession: (agentControllerId: string | undefined, resourceId: string | undefined) =>
-    ['agent-controller', agentControllerId ?? null, 'sessions', resourceId ?? null] as const,
+  // Sessions are scoped per worktree (projectPath), so every session-derived key
+  // includes the projectPath — two worktrees over the same resourceId are
+  // independent sessions with independent state.
+  agentControllerSession: (
+    agentControllerId: string | undefined,
+    resourceId: string | undefined,
+    projectPath: string | undefined,
+  ) => ['agent-controller', agentControllerId ?? null, 'sessions', resourceId ?? null, projectPath ?? null] as const,
   // Keep connection state outside agentControllerSession: mutation hooks invalidate that prefix,
   // and a sync refetch would bump dataUpdatedAt and wipe the live transcript.
   agentControllerConnection: (
@@ -38,22 +47,39 @@ export const queryKeys = {
     resourceId: string | undefined,
     projectPath: string | undefined,
   ) => ['agent-controller', agentControllerId ?? null, 'connection', resourceId ?? null, projectPath ?? null] as const,
-  agentControllerSettings: (agentControllerId: string | undefined, resourceId: string | undefined) =>
-    [...queryKeys.agentControllerSession(agentControllerId, resourceId), 'settings'] as const,
-  agentControllerPermissions: (agentControllerId: string | undefined, resourceId: string | undefined) =>
-    [...queryKeys.agentControllerSession(agentControllerId, resourceId), 'permissions'] as const,
+  // Kept outside agentControllerSession for the same reason as connection:
+  // this is a lightweight activity poll, not session state to invalidate. One
+  // entry covers every worktree sharing the resource (single thread listing).
+  agentControllerActivity: (agentControllerId: string | undefined, resourceId: string | undefined) =>
+    ['agent-controller', agentControllerId ?? null, 'activity', resourceId ?? null] as const,
+  agentControllerSettings: (
+    agentControllerId: string | undefined,
+    resourceId: string | undefined,
+    projectPath: string | undefined,
+  ) => [...queryKeys.agentControllerSession(agentControllerId, resourceId, projectPath), 'settings'] as const,
+  agentControllerPermissions: (
+    agentControllerId: string | undefined,
+    resourceId: string | undefined,
+    projectPath: string | undefined,
+  ) => [...queryKeys.agentControllerSession(agentControllerId, resourceId, projectPath), 'permissions'] as const,
   agentControllerThreads: (
     agentControllerId: string | undefined,
     resourceId: string | undefined,
     projectPath: string | undefined,
-  ) => [...queryKeys.agentControllerSession(agentControllerId, resourceId), 'threads', projectPath ?? null] as const,
+  ) => [...queryKeys.agentControllerSession(agentControllerId, resourceId, projectPath), 'threads'] as const,
+  // Thread ids are unique across the resource, so messages are keyed by threadId
+  // alone (no projectPath) — caches survive worktree switches and seeding does
+  // not need to know the thread's scope.
   agentControllerThreadMessages: (
     agentControllerId: string | undefined,
     resourceId: string | undefined,
     threadId: string | undefined,
   ) =>
     [
-      ...queryKeys.agentControllerSession(agentControllerId, resourceId),
+      'agent-controller',
+      agentControllerId ?? null,
+      'sessions',
+      resourceId ?? null,
       'threads',
       threadId ?? null,
       'messages',

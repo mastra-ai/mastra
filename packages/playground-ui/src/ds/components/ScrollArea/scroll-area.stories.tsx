@@ -14,7 +14,7 @@ type Story = StoryObj<typeof ScrollArea>;
 
 export const Default: Story = {
   render: () => (
-    <ScrollArea className="h-[200px] w-dropdown-max-height rounded-md border border-border1 p-4">
+    <ScrollArea className="h-50 w-dropdown-max-height rounded-md border border-border1 p-4">
       <div className="space-y-4">
         {Array.from({ length: 20 }).map((_, i) => (
           <p key={i} className="text-sm text-neutral5">
@@ -42,13 +42,10 @@ export const WithMaxHeight: Story = {
 
 export const HorizontalScroll: Story = {
   render: () => (
-    <ScrollArea
-      orientation="horizontal"
-      className="h-[100px] w-dropdown-max-height rounded-md border border-border1 p-4"
-    >
-      <div className="flex gap-4 w-[800px]">
+    <ScrollArea orientation="horizontal" className="h-25 w-dropdown-max-height rounded-md border border-border1 p-4">
+      <div className="w-200 flex gap-4">
         {Array.from({ length: 20 }).map((_, i) => (
-          <div key={i} className="h-16 w-16 shrink-0 rounded-md bg-surface4 flex items-center justify-center">
+          <div key={i} className="flex size-16 shrink-0 items-center justify-center rounded-md bg-surface4">
             <span className="text-sm text-neutral5">{i + 1}</span>
           </div>
         ))}
@@ -62,11 +59,11 @@ export const HorizontalScrollButtons: Story = {
     <ScrollArea
       orientation="horizontal"
       scrollButtons
-      className="h-[100px] w-dropdown-max-height rounded-md border border-border1 p-4"
+      className="h-25 w-dropdown-max-height rounded-md border border-border1 p-4"
     >
-      <div className="flex gap-4 w-[800px]">
+      <div className="w-200 flex gap-4">
         {Array.from({ length: 20 }).map((_, i) => (
-          <div key={i} className="h-16 w-16 shrink-0 rounded-md bg-surface4 flex items-center justify-center">
+          <div key={i} className="flex size-16 shrink-0 items-center justify-center rounded-md bg-surface4">
             <span className="text-sm text-neutral5">{i + 1}</span>
           </div>
         ))}
@@ -93,7 +90,7 @@ export const Badges: Story = {
           'Next.js',
           'Tailwind',
         ].map(tech => (
-          <span key={tech} className="shrink-0 px-3 py-1 text-xs rounded-full bg-surface4 text-neutral5">
+          <span key={tech} className="shrink-0 rounded-full bg-surface4 px-3 py-1 text-xs text-neutral5">
             {tech}
           </span>
         ))}
@@ -104,8 +101,8 @@ export const Badges: Story = {
 
 export const CodeBlock: Story = {
   render: () => (
-    <ScrollArea orientation="both" className="h-[200px] w-[400px] rounded-md border border-border1 bg-surface2">
-      <pre className="p-4 text-sm font-mono text-neutral5">
+    <ScrollArea orientation="both" className="h-50 w-100 rounded-md border border-border1 bg-surface2">
+      <pre className="p-4 font-mono text-sm text-neutral5">
         {`function example() {
   const data = fetchData();
 
@@ -144,7 +141,7 @@ export const ChatMessages: Story = {
     <ScrollArea className="h-dropdown-max-height w-[350px] rounded-md border border-border1 p-4">
       <div className="space-y-4">
         {Array.from({ length: 10 }).map((_, i) => (
-          <div key={i} className={`p-3 rounded-lg ${i % 2 === 0 ? 'bg-surface3 ml-8' : 'bg-surface4 mr-8'}`}>
+          <div key={i} className={`rounded-lg p-3 ${i % 2 === 0 ? 'ml-8 bg-surface3' : 'mr-8 bg-surface4'}`}>
             <p className="text-sm text-neutral5">
               {i % 2 === 0
                 ? 'This is a user message with some content'
@@ -170,7 +167,7 @@ const MaskItems = () => (
 export const MaskDisabled: Story = {
   name: 'Mask / disabled',
   render: () => (
-    <ScrollArea mask={false} className="h-[200px] w-[260px] rounded-md border border-border1 p-4">
+    <ScrollArea mask={false} className="h-50 w-65 rounded-md border border-border1 p-4">
       <MaskItems />
     </ScrollArea>
   ),
@@ -179,7 +176,7 @@ export const MaskDisabled: Story = {
 export const MaskTopOnly: Story = {
   name: 'Mask / top only',
   render: () => (
-    <ScrollArea mask={{ bottom: false }} className="h-[200px] w-[260px] rounded-md border border-border1 p-4">
+    <ScrollArea mask={{ bottom: false }} className="h-50 w-65 rounded-md border border-border1 p-4">
       <MaskItems />
     </ScrollArea>
   ),
@@ -188,10 +185,10 @@ export const MaskTopOnly: Story = {
 export const MaskBothAxes: Story = {
   name: 'Mask / both axes (orientation=both)',
   render: () => (
-    <ScrollArea orientation="both" className="h-[200px] w-[260px] rounded-md border border-border1 p-4">
-      <div className="w-[600px] space-y-3">
+    <ScrollArea orientation="both" className="h-50 w-65 rounded-md border border-border1 p-4">
+      <div className="w-150 space-y-3">
         {Array.from({ length: 20 }).map((_, i) => (
-          <p key={i} className="text-sm text-neutral5 whitespace-nowrap">
+          <p key={i} className="text-sm whitespace-nowrap text-neutral5">
             Row {i + 1} — long horizontal content stretching past the viewport for x-axis overflow
           </p>
         ))}
@@ -203,14 +200,10 @@ export const MaskBothAxes: Story = {
 export const MaskYOnly: Story = {
   name: 'Mask / y axis only (no horizontal fade)',
   render: () => (
-    <ScrollArea
-      orientation="both"
-      mask={{ x: false }}
-      className="h-[200px] w-[260px] rounded-md border border-border1 p-4"
-    >
-      <div className="w-[600px] space-y-3">
+    <ScrollArea orientation="both" mask={{ x: false }} className="h-50 w-65 rounded-md border border-border1 p-4">
+      <div className="w-150 space-y-3">
         {Array.from({ length: 20 }).map((_, i) => (
-          <p key={i} className="text-sm text-neutral5 whitespace-nowrap">
+          <p key={i} className="text-sm whitespace-nowrap text-neutral5">
             Row {i + 1} — long horizontal content
           </p>
         ))}

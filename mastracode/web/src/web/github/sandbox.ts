@@ -719,7 +719,7 @@ export async function commitAll(
 export class WorktreeError extends Error {
   constructor(
     message: string,
-    readonly code: 'invalid-branch' | 'worktree-failed',
+    readonly code: 'invalid-branch' | 'worktree-failed' | 'setup-failed',
   ) {
     super(message);
     this.name = 'WorktreeError';
@@ -769,17 +769,26 @@ export interface EnsureWorktreeResult {
 /**
  * Create (or reuse) a git worktree + branch inside the sandbox for a unit of
  * work. Idempotent: if a worktree already exists at the computed path it is
- * reused. The branch is created from `baseBranch` when it does not yet exist.
+ * reused. The branch is created from the freshly fetched `origin/<baseBranch>`
+ * — never the sandbox's possibly stale local ref — so new worktrees always
+ * start from the latest remote state.
  *
- * @param sandbox      live sandbox containing the base checkout
- * @param repoWorkdir  the base repo checkout path inside the sandbox
- * @param branch       the feature branch (ref-validated server-side)
- * @param baseBranch   the branch to fork from (ref-validated; default's repo branch)
+ * @param sandbox       live sandbox containing the base checkout
+ * @param repoWorkdir   the base repo checkout path inside the sandbox
+ * @param branch        the feature branch (ref-validated server-side)
+ * @param baseBranch    the branch to fork from (ref-validated; defaults to the repo's default branch)
+ * @param token         short-lived installation token used only for the base-branch fetch
+ * @param repoFullName  `owner/repo` used to build the tokenized remote URL
  */
 export async function ensureWorktree(
   sandbox: MaterializationSandbox,
   repoWorkdir: string,
-  { branch, baseBranch }: { branch: string; baseBranch: string },
+  {
+    branch,
+    baseBranch,
+    token,
+    repoFullName,
+  }: { branch: string; baseBranch: string; token: string; repoFullName: string },
 ): Promise<EnsureWorktreeResult> {
   if (!isValidGitRef(branch)) {
     throw new WorktreeError(`Invalid branch name '${branch}'.`, 'invalid-branch');
@@ -797,22 +806,112 @@ export async function ensureWorktree(
     return { worktreePath, branch, baseBranch, reused: true };
   }
 
-  // Make sure the base ref is present locally before forking from it.
-  await sh(sandbox, `git -C ${shellQuote(repoWorkdir)} fetch origin ${shellQuote(baseBranch)}`);
+  // Fetch the latest base ref from origin before forking. The explicit refspec
+  // updates `refs/remotes/origin/<base>` even when the checkout was created as
+  // a single-branch clone. The fetch needs the install token (the resting
+  // remote is tokenless), and a failure is a hard error — silently forking a
+  // stale local ref is worse than failing the request.
+  const baseRef = `origin/${baseBranch}`;
+  await withInstallToken(sandbox, repoWorkdir, repoFullName, token, async () => {
+    const fetch = await sh(
+      sandbox,
+      `git -C ${shellQuote(repoWorkdir)} fetch origin ${shellQuote(`+refs/heads/${baseBranch}:refs/remotes/${baseRef}`)}`,
+    );
+    if (fetch.exitCode !== 0) {
+      throw classifyGitFailure(fetch, 'pull-failed');
+    }
+  });
 
   // Create the worktree. If the branch already exists, check it out into the
-  // worktree; otherwise create it from the base branch. `git worktree add -B`
+  // worktree; otherwise create it from the fetched base. `git worktree add -B`
   // creates-or-resets the branch to the base, which keeps this idempotent for a
   // fresh worktree while still working when the branch already exists remotely.
+  // `--no-track` keeps the feature branch from tracking origin/<base>; pushes
+  // set their own upstream via `push -u`.
   const add = await sh(
     sandbox,
-    `git -C ${shellQuote(repoWorkdir)} worktree add -B ${shellQuote(branch)} ${shellQuote(worktreePath)} ${shellQuote(baseBranch)}`,
+    `git -C ${shellQuote(repoWorkdir)} worktree add --no-track -B ${shellQuote(branch)} ${shellQuote(worktreePath)} ${shellQuote(baseRef)}`,
   );
   if (add.exitCode !== 0) {
     throw new WorktreeError(`git worktree add failed: ${add.stderr.trim() || add.stdout.trim()}`, 'worktree-failed');
   }
 
   return { worktreePath, branch, baseBranch, reused: false };
+}
+
+/**
+ * Run the project's setup command (e.g. `pnpm i && pnpm build`) inside a
+ * freshly created worktree. Called before the worktree is handed to any agent
+ * run so the checkout is ready to build/test. A non-zero exit is a hard error —
+ * starting agent work in a half-set-up tree is worse than failing the request.
+ *
+ * Security model: the command is intentionally arbitrary shell — that is the
+ * feature (install deps, build, seed fixtures). It is only configurable by
+ * authenticated org members (the settings route is gated by
+ * `resolveOrgTenant` + org-scoped project lookup, with length and
+ * control-character validation), and it executes exclusively inside the
+ * project's isolated sandbox — the same environment where org members already
+ * run arbitrary shell via the agent's command tool. It never runs on the web
+ * server host, so it grants no privilege beyond what sandbox access already
+ * provides.
+ *
+ * @param sandbox       live sandbox containing the worktree
+ * @param worktreePath  the server-computed worktree path the command runs in
+ * @param command       the org-configured setup shell command
+ */
+export async function runWorktreeSetup(
+  sandbox: MaterializationSandbox,
+  worktreePath: string,
+  command: string,
+): Promise<void> {
+  const result = await sh(sandbox, `cd ${shellQuote(worktreePath)} && { ${command}\n}`);
+  if (result.exitCode !== 0) {
+    const detail = (result.stderr.trim() || result.stdout.trim()).slice(-2000);
+    throw new WorktreeError(`Setup command failed (exit ${result.exitCode}): ${detail}`, 'setup-failed');
+  }
+}
+
+/**
+ * Remove a worktree (and its local feature branch) from the sandbox. The
+ * checkout is removed with `--force` — the caller owns confirming that any
+ * uncommitted work in it can be discarded. Idempotent: a worktree whose
+ * directory is already gone only has its metadata pruned.
+ *
+ * @param sandbox       live sandbox containing the base checkout
+ * @param repoWorkdir   the base repo checkout path inside the sandbox
+ * @param branch        the worktree's feature branch (ref-validated)
+ * @param worktreePath  the persisted, server-computed worktree path
+ */
+export async function removeWorktree(
+  sandbox: MaterializationSandbox,
+  repoWorkdir: string,
+  { branch, worktreePath }: { branch: string; worktreePath: string },
+): Promise<void> {
+  if (!isValidGitRef(branch)) {
+    throw new WorktreeError(`Invalid branch name '${branch}'.`, 'invalid-branch');
+  }
+
+  const remove = await sh(
+    sandbox,
+    `git -C ${shellQuote(repoWorkdir)} worktree remove --force ${shellQuote(worktreePath)}`,
+  );
+  if (remove.exitCode !== 0) {
+    // Tolerate a checkout that's already gone (e.g. a fresh sandbox after
+    // re-provisioning): prune stale metadata and only fail when the directory
+    // still exists, meaning git genuinely refused to remove it.
+    await sh(sandbox, `git -C ${shellQuote(repoWorkdir)} worktree prune`);
+    const exists = await sh(sandbox, `test -e ${shellQuote(worktreePath)}`);
+    if (exists.exitCode === 0) {
+      throw new WorktreeError(
+        `git worktree remove failed: ${remove.stderr.trim() || remove.stdout.trim()}`,
+        'worktree-failed',
+      );
+    }
+  }
+
+  // Best-effort local branch cleanup; the branch may not exist locally anymore
+  // or may still be pushed remotely — neither should fail the removal.
+  await sh(sandbox, `git -C ${shellQuote(repoWorkdir)} branch -D ${shellQuote(branch)}`);
 }
 
 // ---------------------------------------------------------------------------

@@ -14,7 +14,7 @@ import { Tab, TabContent, TabList, Tabs } from '@/ds/components/Tabs';
 function buildDialogTitle(sectionTitle: string, icon: ReactNode, span: { spanId: string; traceId: string }) {
   return (
     <>
-      <span className="flex items-center gap-1.5 text-neutral2 uppercase tracking-widest [&>svg]:size-3.5">
+      <span className="flex items-center gap-1.5 tracking-widest text-neutral2 uppercase [&>svg]:size-3.5">
         {icon}
         {sectionTitle}
       </span>
@@ -291,7 +291,7 @@ function SpanDataPanelContent({
         )}
       </DataKeysAndValues>
 
-      <div className="grid gap-3 mt-3">
+      <div className="mt-3 grid gap-3">
         <DataPanel.CodeSection
           title="Input"
           dialogTitle={buildDialogTitle('Input', <FileInputIcon />, { spanId, traceId })}

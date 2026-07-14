@@ -34,10 +34,12 @@ function createTextStreamModel(text: string) {
 describe('DurableAgent observability tracing', () => {
   let pubsub: EventEmitterPubSub;
   let spanIdCounter = 0;
+  let createdSpans: any[] = [];
 
   beforeEach(() => {
     pubsub = new EventEmitterPubSub();
     spanIdCounter = 0;
+    createdSpans = [];
   });
 
   afterEach(async () => {
@@ -76,7 +78,7 @@ describe('DurableAgent observability tracing', () => {
         return 'mock-trace-id';
       },
       createTracker: vi.fn(() => ({
-        getTracingContext: vi.fn(() => ({})),
+        getTracingContext: vi.fn(() => ({ currentSpan: span })),
         reportGenerationError: vi.fn(),
         endGeneration: vi.fn(),
         updateGeneration: vi.fn(),
@@ -95,6 +97,7 @@ describe('DurableAgent observability tracing', () => {
       getCorrelationContext: vi.fn(),
       observabilityInstance: {},
     };
+    createdSpans.push(span);
     return span;
   }
 
@@ -230,6 +233,56 @@ describe('DurableAgent observability tracing', () => {
           call[0]?.type === 'processor_run' && call[0]?.name === 'output processor: test-output-processor',
       );
       expect(outputProcessorSpanCall).toBeDefined();
+
+      cleanup();
+    } finally {
+      spy.mockRestore();
+    }
+  }, 30000);
+
+  it('parents agent-level output STEP processor spans to AGENT_RUN', async () => {
+    // Regression for #19312: the per-step `runProcessOutputStep` call in the durable
+    // llm-execution step omitted `tracingContext`, so `output step processor` spans were
+    // created parentless (one orphan root per LLM step). This asserts they nest under
+    // AGENT_RUN like the input-step and non-durable paths do.
+    const { spy, agentSpans } = await spyOnSpans();
+
+    try {
+      const processOutputStep = vi.fn(async () => undefined);
+      const outputStepProcessor = {
+        id: 'test-output-step-processor',
+        processOutputStep,
+      };
+
+      const baseAgent = new Agent({
+        id: 'trace-agent-output-step-proc',
+        name: 'Trace Agent (output step proc)',
+        instructions: 'You are a test assistant',
+        model: createTextStreamModel('Hello') as LanguageModelV2,
+        outputProcessors: [outputStepProcessor as any],
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const { output, cleanup } = await durableAgent.stream('Hi');
+      await output.consumeStream();
+
+      expect(agentSpans.length).toBe(1);
+      // The per-step output processor runs inside the durable workflow step, so the span
+      // may be an indirect descendant of AGENT_RUN. The regression was an orphan root span.
+      expect(processOutputStep).toHaveBeenCalled();
+      let outputStepProcessorSpan: any;
+      for (const span of createdSpans) {
+        const callIndex = span.createChildSpan.mock.calls.findIndex(
+          (call: any[]) =>
+            call[0]?.type === 'processor_run' && call[0]?.name === 'output step processor: test-output-step-processor',
+        );
+        if (callIndex !== -1) {
+          outputStepProcessorSpan = span.createChildSpan.mock.results[callIndex]?.value;
+          break;
+        }
+      }
+      expect(outputStepProcessorSpan).toBeDefined();
+      expect(outputStepProcessorSpan.findParent('agent_run')).toBe(agentSpans[0]);
 
       cleanup();
     } finally {
