@@ -1,4 +1,4 @@
-import { throwApiError } from '../auth/client.js';
+import { extractApiErrorDetail, throwApiError } from '../auth/client.js';
 
 export interface Project {
   id: string;
@@ -71,7 +71,7 @@ export async function fetchProjects(token: string, orgId: string): Promise<Proje
 
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
-    throwApiError('Failed to fetch projects', resp.status, (err as { detail?: string }).detail);
+    throwApiError('Failed to fetch projects', resp.status, extractApiErrorDetail(err));
   }
 
   const data = (await resp.json()) as { projects: Project[] };
@@ -88,7 +88,7 @@ export async function fetchEnvironments(token: string, orgId: string, projectId:
 
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
-    throwApiError('Failed to fetch environments', resp.status, (err as { detail?: string }).detail);
+    throwApiError('Failed to fetch environments', resp.status, extractApiErrorDetail(err));
   }
 
   const data = (await resp.json()) as { environments: Environment[] };
@@ -109,7 +109,7 @@ export async function fetchEnvironmentDeploys(
 
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
-    throwApiError('Failed to fetch deploys', resp.status, (err as { detail?: string }).detail);
+    throwApiError('Failed to fetch deploys', resp.status, extractApiErrorDetail(err));
   }
 
   const data = (await resp.json()) as { deploys: EnvironmentDeploy[] };
@@ -134,7 +134,7 @@ export async function createEnvironment(
 
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
-    throwApiError('Failed to create environment', resp.status, (err as { detail?: string }).detail);
+    throwApiError('Failed to create environment', resp.status, extractApiErrorDetail(err));
   }
 
   const data = (await resp.json()) as { environment: Environment };
@@ -161,7 +161,7 @@ export async function restartEnvironment(
 
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
-    throwApiError('Failed to restart environment', resp.status, (err as { detail?: string }).detail);
+    throwApiError('Failed to restart environment', resp.status, extractApiErrorDetail(err));
   }
 }
 
@@ -176,7 +176,7 @@ export async function deleteEnvironment(token: string, orgId: string, projectId:
 
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
-    throwApiError('Failed to delete environment', resp.status, (err as { detail?: string }).detail);
+    throwApiError('Failed to delete environment', resp.status, extractApiErrorDetail(err));
   }
 }
 
