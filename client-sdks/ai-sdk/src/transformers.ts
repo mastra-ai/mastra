@@ -675,23 +675,37 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
       hasChanged = true;
       break;
     }
-    case 'finish':
+    case 'finish': {
+      // Not all sub-agent streams emit a `start` chunk before their first
+      // content chunk (e.g. A2AAgent remote streams), so the run state may
+      // not exist yet.
+      const finishRun = ensureAgentRunState(bufferedSteps, payload.runId!);
+      // Regular Agent streams emit `{ stepResult, output }`; A2AAgent remote
+      // streams emit a flat `{ finishReason, usage }` payload.
+      const finishPayload = payload.payload as {
+        stepResult?: { reason?: string; warnings?: unknown };
+        output?: { usage?: unknown };
+        finishReason?: string;
+        usage?: unknown;
+        response?: Record<string, unknown>;
+      };
       bufferedSteps.set(payload.runId!, {
-        ...bufferedSteps.get(payload.runId!),
-        finishReason: payload.payload.stepResult.reason,
-        usage: payload.payload?.output?.usage,
-        warnings: payload.payload?.stepResult?.warnings,
-        steps: bufferedSteps.get(payload.runId!)!.steps,
+        ...finishRun,
+        finishReason: finishPayload.stepResult?.reason ?? finishPayload.finishReason ?? null,
+        usage: finishPayload.output?.usage ?? finishPayload.usage,
+        warnings: finishPayload.stepResult?.warnings,
+        steps: finishRun.steps,
         status: 'finished',
         response: {
-          ...bufferedSteps.get(payload.runId!).response,
-          ...(payload.payload.response || {}),
+          ...finishRun.response,
+          ...(finishPayload.response || {}),
         },
       });
       hasChanged = true;
       break;
+    }
     case 'text-delta': {
-      const prevData = bufferedSteps.get(payload.runId!)!;
+      const prevData = ensureAgentRunState(bufferedSteps, payload.runId!);
       bufferedSteps.set(payload.runId!, {
         ...prevData,
         text: `${prevData.text}${payload.payload.text}`,
@@ -699,27 +713,33 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
       hasChanged = true;
       break;
     }
-    case 'reasoning-delta':
+    case 'reasoning-delta': {
+      const reasoningRun = ensureAgentRunState(bufferedSteps, payload.runId!);
       bufferedSteps.set(payload.runId!, {
-        ...bufferedSteps.get(payload.runId!),
-        reasoning: [...bufferedSteps.get(payload.runId)!.reasoning, payload.payload.text],
+        ...reasoningRun,
+        reasoning: [...reasoningRun.reasoning, payload.payload.text],
       });
       hasChanged = true;
       break;
-    case 'source':
+    }
+    case 'source': {
+      const sourceRun = ensureAgentRunState(bufferedSteps, payload.runId!);
       bufferedSteps.set(payload.runId!, {
-        ...bufferedSteps.get(payload.runId!),
-        sources: [...bufferedSteps.get(payload.runId)!.sources, payload.payload],
+        ...sourceRun,
+        sources: [...sourceRun.sources, payload.payload],
       });
       hasChanged = true;
       break;
-    case 'file':
+    }
+    case 'file': {
+      const fileRun = ensureAgentRunState(bufferedSteps, payload.runId!);
       bufferedSteps.set(payload.runId!, {
-        ...bufferedSteps.get(payload.runId!),
-        files: [...bufferedSteps.get(payload.runId)!.files, payload.payload],
+        ...fileRun,
+        files: [...fileRun.files, payload.payload],
       });
       hasChanged = true;
       break;
+    }
     case 'tool-call':
       bufferedSteps.set(payload.runId!, {
         ...bufferedSteps.get(payload.runId!),
