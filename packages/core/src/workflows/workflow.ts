@@ -763,7 +763,7 @@ function parseTemplatePlaceholder(rawExpr: string): { scope: string; rest: strin
 /**
  * Validates a `{ template }` source's syntax at workflow-definition time.
  * Throws if any placeholder is empty, whitespace-padded, references an unknown
- * namespace, or is a malformed `stepResults.<stepId>.<path>` shape.
+ * namespace, or is a malformed `stepResults.<stepId>` / `stepResults.<stepId>.<path>` shape.
  *
  * Run-time concerns (does the step actually exist, does the path resolve, is
  * the value a primitive) stay in {@link resolveTemplate}.
@@ -783,10 +783,9 @@ function validateTemplate(template: string): void {
     if (scope === 'stepResults') {
       const innerDot = rest.indexOf('.');
       const stepId = innerDot === -1 ? rest : rest.slice(0, innerDot);
-      const subPath = innerDot === -1 ? '' : rest.slice(innerDot + 1);
-      if (!stepId || !subPath) {
+      if (!stepId) {
         throw new Error(
-          `${describeBadPlaceholder(template, idx, rawExpr)} must be of the form \${stepResults.<stepId>.<path>}.`,
+          `${describeBadPlaceholder(template, idx, rawExpr)} must be of the form \${stepResults.<stepId>} or \${stepResults.<stepId>.<path>}.`,
         );
       }
       continue;

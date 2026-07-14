@@ -1652,7 +1652,7 @@ export function createVariableResolutionTests(ctx: WorkflowTestContext, registry
         ).toThrow(/unknown namespace "nope"/);
       });
 
-      it('throws at workflow-definition time on a malformed stepResults placeholder', () => {
+      it('accepts a bare ${stepResults.<stepId>} placeholder at workflow-definition time (scalar path)', () => {
         const stepA = createStep({
           id: 'stepA',
           execute: async () => ({ x: '1' }),
@@ -1661,13 +1661,31 @@ export function createVariableResolutionTests(ctx: WorkflowTestContext, registry
         });
         expect(() =>
           createWorkflow({
-            id: 'var-template-defn-stepresults',
+            id: 'var-template-defn-stepresults-bare',
             inputSchema: z.object({}),
             outputSchema: z.any(),
           })
             .then(stepA)
-            .map({ bad: { template: '${stepResults.justAnId}' } }),
-        ).toThrow(/stepResults\.<stepId>\.<path>/);
+            .map({ ok: { template: '${stepResults.stepA}' } }),
+        ).not.toThrow();
+      });
+
+      it('throws at workflow-definition time when stepResults placeholder has no step id', () => {
+        const stepA = createStep({
+          id: 'stepA',
+          execute: async () => ({ x: '1' }),
+          inputSchema: z.object({}),
+          outputSchema: z.object({ x: z.string() }),
+        });
+        expect(() =>
+          createWorkflow({
+            id: 'var-template-defn-stepresults-empty',
+            inputSchema: z.object({}),
+            outputSchema: z.any(),
+          })
+            .then(stepA)
+            .map({ bad: { template: '${stepResults.}' } }),
+        ).toThrow(/stepResults\.<stepId>/);
       });
     });
   });
