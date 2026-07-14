@@ -197,6 +197,17 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
         next.delete(source.id);
         next.add(target.id);
         this.#db.knowledgeMentions.set(key, next);
+        const separator = key.indexOf(':');
+        const sourceType = key.slice(0, separator);
+        const sourceId = key.slice(separator + 1);
+        if (sourceType === 'fact') {
+          const fact = this.#db.knowledgeFacts.get(sourceId);
+          if (fact)
+            this.#enqueue('fact', sourceId, fact.deletedAt ? 'delete' : 'upsert', createKnowledgeUlid(), fact.scope);
+        } else {
+          const page = this.#db.knowledgePages.get(sourceId);
+          if (page) this.#enqueue('page', sourceId, 'upsert', createKnowledgeUlid(), page.scope);
+        }
       }
     }
     const updatedSource: KnowledgeEntity = {
@@ -208,7 +219,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     this.#db.knowledgeEntities.set(source.id, updatedSource);
     this.#recordActivity('entity-merged', 'entity', source.id, source.scope);
     this.#enqueue('entity', source.id, 'delete', updatedSource.version, source.scope);
-    this.#enqueue('entity', target.id, 'upsert', target.version, target.scope);
+    this.#enqueue('entity', target.id, 'upsert', createKnowledgeUlid(), target.scope);
     return cloneEntity(target);
   }
 
@@ -330,7 +341,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
 
   async factsAbout(input: ListKnowledgeFactsInput): Promise<ListKnowledgeFactsOutput> {
     const terminal = this.#resolveTerminalEntity(input.entityId);
-    if (!terminal) return { facts: [] };
+    if (!terminal || !isKnowledgeScopeVisible(terminal.scope, input.scope)) return { facts: [] };
     return this.#paginateFacts(
       [...this.#db.knowledgeFacts.values()].filter(fact => fact.parentEntityId === terminal.id),
       input,
@@ -339,7 +350,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
 
   async factsTouching(input: ListKnowledgeFactsInput): Promise<ListKnowledgeFactsOutput> {
     const terminal = this.#resolveTerminalEntity(input.entityId);
-    if (!terminal) return { facts: [] };
+    if (!terminal || !isKnowledgeScopeVisible(terminal.scope, input.scope)) return { facts: [] };
     return this.#paginateFacts(
       [...this.#db.knowledgeFacts.values()].filter(
         fact =>
@@ -379,7 +390,12 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     const updated = { ...fact, scope: canonical };
     this.#db.knowledgeFacts.set(id, updated);
     this.#recordActivity('fact-rescoped', 'fact', id, canonical, fact.sourceThreadId);
-    this.#enqueue('fact', id, fact.deletedAt ? 'delete' : 'upsert', createKnowledgeUlid(), canonical);
+    if (knowledgeScopeKey(fact.scope) !== knowledgeScopeKey(canonical)) {
+      this.#enqueue('fact', id, 'delete', createKnowledgeUlid(), fact.scope);
+    }
+    if (!fact.deletedAt) {
+      this.#enqueue('fact', id, 'upsert', createKnowledgeUlid(), canonical);
+    }
     return cloneFact(updated);
   }
 
@@ -426,7 +442,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
         fact.text.toLocaleLowerCase().includes(query)
       ) {
         const entity = this.#db.knowledgeEntities.get(fact.parentEntityId);
-        if (entity && !entity.mergedInto) {
+        if (entity && !entity.mergedInto && isKnowledgeScopeVisible(entity.scope, input.scope)) {
           results.push({
             type: 'fact',
             id: fact.id,
@@ -483,7 +499,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     return [...this.#db.knowledgeSemanticOutbox.values()]
       .filter(entry => !input.status || entry.status === input.status)
       .filter(entry => !input.scope || isKnowledgeScopeVisible(entry.scope, input.scope))
-      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id))
       .slice(0, input.limit ?? 100)
       .map(entry => ({ ...entry, scope: [...entry.scope] }));
   }
@@ -499,7 +515,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       )
       .filter(entry => entry.availableAt <= now)
       .filter(entry => !input.scope || isKnowledgeScopeVisible(entry.scope, input.scope))
-      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id))
       .slice(0, input.limit ?? 100);
     for (const entry of claimed) {
       entry.status = 'processing';
@@ -613,7 +629,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     if (this.#db.knowledgeSemanticIdempotency.has(idempotencyKey)) return;
     const now = new Date();
     const entry: KnowledgeSemanticOutboxEntry = {
-      id: crypto.randomUUID(),
+      id: createKnowledgeUlid(),
       idempotencyKey,
       documentId,
       documentType,

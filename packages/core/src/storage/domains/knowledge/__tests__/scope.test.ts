@@ -29,6 +29,14 @@ describe('knowledge scopes', () => {
     expect(isKnowledgeScopeVisible(['org:o1', 'resource:r2'], context)).toBe(false);
   });
 
+  it('rejects malformed, partial, and cross-chain scopes', () => {
+    expect(() => canonicalizeKnowledgeScope([])).toThrow('cannot be empty');
+    expect(() => canonicalizeKnowledgeScope(['thread:t1'])).toThrow('requires resource and org');
+    expect(() => canonicalizeKnowledgeScope(['resource:r1'])).toThrow('requires an org');
+    expect(() => canonicalizeKnowledgeScope(['org:o1', 'org:o2'])).toThrow('multiple org');
+    expect(() => canonicalizeKnowledgeScope(['tenant:t1'])).toThrow('Invalid knowledge scope entry');
+  });
+
   it('enforces scope ceilings using the narrowest reserved level', () => {
     expect(() => assertKnowledgeScopeWithinCeiling(['org:o1', 'resource:r1'], 'resource')).not.toThrow();
     expect(() => assertKnowledgeScopeWithinCeiling(context, 'resource')).not.toThrow();

@@ -64,6 +64,23 @@ describe('InMemoryKnowledgeStorage', () => {
     expect((await store.factsTouching({ entityId: marco!.id, scope: sibling })).facts).toHaveLength(0);
   });
 
+  it('does not expose facts through a scope that cannot see their parent entity', async () => {
+    const store = createStore();
+    const entity = await store.createEntity({ name: 'Resource Secret', kind: 'task', scope: resource });
+    await store.appendFact({
+      parentEntityId: entity.id,
+      text: 'org-visible wording',
+      scope: org,
+      sourceThreadId: 't1',
+      resolutionScope: thread,
+      defaultScope: resource,
+    });
+
+    expect((await store.factsAbout({ entityId: entity.id, scope: org })).facts).toEqual([]);
+    expect(await store.search({ query: 'org-visible', scope: org })).toEqual([]);
+    expect((await store.factsAbout({ entityId: entity.id, scope: thread })).facts).toHaveLength(1);
+  });
+
   it('soft deletes and restores facts without losing mention relationships', async () => {
     const store = createStore();
     const jane = await store.createEntity({ name: 'Jane', kind: 'person', scope: resource });
@@ -107,6 +124,37 @@ describe('InMemoryKnowledgeStorage', () => {
     expect(await store.getEntity(duplicate.id)).toEqual(expect.objectContaining({ mergedInto: jane.id }));
     expect(await store.getEntity(third.id)).toEqual(expect.objectContaining({ mergedInto: jane.id }));
     expect((await store.resolveEntity({ name: updated.name, scope: thread }))?.kind).toBe('customer');
+  });
+
+  it('reindexes documents affected by merges and deletes the old semantic scope on rescope', async () => {
+    const store = createStore();
+    const target = await store.createEntity({ name: 'Jane', kind: 'person', scope: resource });
+    const duplicate = await store.createEntity({ name: 'Jane Doe', kind: 'person', scope: resource });
+    await store.createPage({ name: 'People', body: 'Contact [[Jane Doe]]', scope: resource });
+    const parent = await store.createEntity({ name: 'Project', kind: 'task', scope: resource });
+    const fact = await store.appendFact({
+      parentEntityId: parent.id,
+      text: 'Owned by [[Jane Doe]]',
+      scope: resource,
+      sourceThreadId: 't1',
+      resolutionScope: thread,
+      defaultScope: resource,
+      maxScope: 'org',
+    });
+    const beforeMerge = (await store.listSemanticOutbox()).length;
+
+    await store.mergeEntities({ sourceId: duplicate.id, targetId: target.id, sourceVersion: duplicate.version });
+
+    const mergeEntries = (await store.listSemanticOutbox()).slice(beforeMerge);
+    expect(mergeEntries.map(entry => entry.documentType)).toEqual(expect.arrayContaining(['page', 'fact', 'entity']));
+
+    const beforeRescope = (await store.listSemanticOutbox()).length;
+    await store.rescopeFact({ id: fact.id, scope: org });
+    const rescopeEntries = (await store.listSemanticOutbox()).slice(beforeRescope);
+    expect(rescopeEntries).toEqual([
+      expect.objectContaining({ operation: 'delete', scope: resource }),
+      expect.objectContaining({ operation: 'upsert', scope: org }),
+    ]);
   });
 
   it('enforces ceilings and monotonic curation cursors', async () => {
