@@ -10,6 +10,7 @@ import { EventEmitterPubSub } from '../../events';
 import { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
 import { Agent } from '../agent';
+import { createDurableAgent } from '../durable/create-durable-agent';
 
 function createMockFGAProvider(authorized = true): IFGAProvider {
   return {
@@ -205,5 +206,47 @@ describe('Agent FGA checks', () => {
 
       await expect(agent.stream('test', { requestContext: requestContext as any })).rejects.toThrow(FGADeniedError);
     });
+  });
+});
+
+describe('DurableAgent FGA checks', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // DurableAgent overrides stream()/generate() and runs a workflow; it must
+  // still enforce agents:execute before execution (regression for the durable
+  // bypass). Denial happens before the model runs.
+  async function expectDurableDenial(method: 'generate' | 'stream') {
+    const fgaProvider = createMockFGAProvider(false);
+    const model = createMockModel();
+    const pubsub = new EventEmitterPubSub();
+    const base = new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'test', model });
+    const durableAgent = createDurableAgent({ agent: base, pubsub });
+    const mastra = new Mastra({ agents: {}, logger: false, pubsub, server: { fga: fgaProvider } });
+    (durableAgent as any).__registerMastra(mastra);
+
+    const requestContext = new RequestContext();
+    requestContext.set('user', { id: 'user-1' });
+    requestContext.set('organizationId', 'org-1');
+
+    try {
+      await expect((durableAgent as any)[method]('test', { requestContext: requestContext as any })).rejects.toThrow(
+        FGADeniedError,
+      );
+      expect(fgaProvider.require).toHaveBeenCalled();
+      expect(model.doGenerateCalls).toHaveLength(0);
+    } finally {
+      await mastra.stopWorkers?.();
+      await pubsub.close();
+    }
+  }
+
+  it('generate() denies before durable execution when agents:execute is denied', async () => {
+    await expectDurableDenial('generate');
+  });
+
+  it('stream() denies before durable execution when agents:execute is denied', async () => {
+    await expectDurableDenial('stream');
   });
 });

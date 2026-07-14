@@ -697,6 +697,30 @@ describe('Agent Routes Authorization', () => {
       ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
     });
 
+    it('strips a client-supplied actor before forwarding to agent.generate', async () => {
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+
+      let capturedOptions: any;
+      vi.spyOn(mockAgent, 'generate').mockImplementation(async (_messages, options) => {
+        capturedOptions = options;
+        return { text: 'ok' } as any;
+      });
+
+      await GENERATE_AGENT_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        messages: [{ role: 'user', content: 'test' }],
+        // A client attempting to forge a privileged system actor over HTTP.
+        actor: { actorKind: 'system', agentId: 'privileged-agent', permissions: ['*'] },
+      } as any);
+
+      // The forged actor must be stripped and never reach agent.generate.
+      expect(capturedOptions).toBeDefined();
+      expect(capturedOptions).not.toHaveProperty('actor');
+    });
+
     it('should override client-provided resource with context value', async () => {
       // Create a thread owned by user-a
       await mockMemory.createThread({
