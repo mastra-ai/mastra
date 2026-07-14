@@ -90,7 +90,13 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     const scope = canonicalizeKnowledgeScope(input.scope);
     const key = recordKey(input.name, scope);
     const existingId = this.#db.knowledgeEntityKeys.get(key);
-    if (existingId) return cloneEntity(this.#resolveTerminalEntity(existingId)!);
+    if (existingId) {
+      const terminal = this.#resolveTerminalEntity(existingId)!;
+      if (!isKnowledgeScopeVisible(terminal.scope, scope)) {
+        throw new Error(`Merged knowledge entity is not visible from scope: ${input.name}`);
+      }
+      return cloneEntity(terminal);
+    }
 
     const now = new Date();
     const entity: KnowledgeEntity = {
@@ -127,7 +133,10 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     const canonical = canonicalizeKnowledgeScope(scope);
     for (let length = canonical.length; length > 0; length--) {
       const entity = await this.getEntityByName({ name, scope: canonical.slice(0, length) });
-      if (entity) return cloneEntity(this.#resolveTerminalEntity(entity.id)!);
+      if (entity) {
+        const terminal = this.#resolveTerminalEntity(entity.id)!;
+        if (isKnowledgeScopeVisible(terminal.scope, canonical)) return cloneEntity(terminal);
+      }
     }
     return null;
   }
@@ -194,6 +203,9 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     if (source.version !== input.sourceVersion) throw new KnowledgeConflictError(input.sourceId);
     const target = this.#resolveTerminalEntity(input.targetId);
     if (!target) throw new KnowledgeNotFoundError('entity', input.targetId);
+    if (!isKnowledgeScopeVisible(target.scope, source.scope)) {
+      throw new Error('Cannot merge a knowledge entity into a target that is narrower than its source scope');
+    }
 
     for (const [id, fact] of this.#db.knowledgeFacts) {
       if (fact.parentEntityId === source.id) {
