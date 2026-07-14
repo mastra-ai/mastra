@@ -340,34 +340,41 @@ function Board({ githubProjectId }: { githubProjectId: string }) {
   const mutationError = [start, upsert, update, remove].find(m => m.isError)?.error;
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
       {mutationError !== undefined && (
         <Notice variant="destructive">
           {mutationError instanceof Error ? mutationError.message : 'Board action failed'}
         </Notice>
       )}
-      <div className="flex gap-3 overflow-x-auto pb-2" aria-label="Board columns">
+      <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-2" aria-label="Board columns">
         {BOARD_STAGES.map(stage => (
-          <BoardColumn key={stage.id} stage={stage.id} label={stage.label} onDrop={handleDrop}>
-            {stage.id === 'intake' && showIntakeSourceSwitch && (
-              <div role="group" aria-label="Intake source" className="flex items-center gap-1 pb-1">
-                {INTAKE_SOURCES.map(source => (
-                  <button
-                    key={source.id}
-                    type="button"
-                    aria-pressed={intakeSource === source.id}
-                    onClick={() => setIntakeSource(source.id)}
-                    className={`rounded-full border px-2.5 py-0.5 text-ui-xs transition ${
-                      intakeSource === source.id
-                        ? 'border-accent1 bg-surface4 text-icon6'
-                        : 'border-border1 bg-transparent text-icon3 hover:text-icon5'
-                    }`}
-                  >
-                    {source.label}
-                  </button>
-                ))}
-              </div>
-            )}
+          <BoardColumn
+            key={stage.id}
+            stage={stage.id}
+            label={stage.label}
+            onDrop={handleDrop}
+            headerExtras={
+              stage.id === 'intake' && showIntakeSourceSwitch ? (
+                <div role="group" aria-label="Intake source" className="flex items-center gap-1 pb-1">
+                  {INTAKE_SOURCES.map(source => (
+                    <button
+                      key={source.id}
+                      type="button"
+                      aria-pressed={intakeSource === source.id}
+                      onClick={() => setIntakeSource(source.id)}
+                      className={`rounded-full border px-2.5 py-0.5 text-ui-xs transition ${
+                        intakeSource === source.id
+                          ? 'border-accent1 bg-surface4 text-icon6'
+                          : 'border-border1 bg-transparent text-icon3 hover:text-icon5'
+                      }`}
+                    >
+                      {source.label}
+                    </button>
+                  ))}
+                </div>
+              ) : undefined
+            }
+          >
             {workItems
               .filter(item => item.stages.includes(stage.id))
               .map(item => (
@@ -440,11 +447,14 @@ function BoardColumn({
   stage,
   label,
   onDrop,
+  headerExtras,
   children,
 }: {
   stage: BoardStageId;
   label: string;
   onDrop: (payload: DragPayload, toStage: BoardStageId) => void;
+  /** Pinned below the column title, outside the scrolling card list. */
+  headerExtras?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const [dragOver, setDragOver] = useState(false);
@@ -453,7 +463,7 @@ function BoardColumn({
     <section
       aria-label={label}
       data-testid={`board-column-${stage}`}
-      className={`flex w-72 shrink-0 flex-col gap-2 rounded-lg border p-2 transition ${
+      className={`flex min-h-0 w-72 shrink-0 flex-col gap-2 rounded-lg border p-2 transition ${
         dragOver ? 'border-accent1 bg-surface3' : 'border-border1 bg-surface2'
       }`}
       onDragOver={event => {
@@ -473,7 +483,9 @@ function BoardColumn({
       <Txt as="h2" variant="ui-xs" className="m-0 px-1 uppercase tracking-wide text-icon3">
         {label}
       </Txt>
-      <div className="flex min-h-16 flex-col gap-1.5">{children}</div>
+      {headerExtras}
+      {/* Cards scroll inside the swimlane; the page stays fixed. */}
+      <div className="flex min-h-16 flex-1 flex-col gap-1.5 overflow-y-auto">{children}</div>
     </section>
   );
 }
