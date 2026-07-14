@@ -239,6 +239,7 @@ describe('ChatMessageList', () => {
     await waitFor(() => expect(screen.getByText('The pull request is ready for review.')).toBeInTheDocument());
     expect(screen.getByText('Notification summary')).toBeInTheDocument();
     expect(screen.getByText('github: 1')).toBeInTheDocument();
+    expect(screen.queryByText('1 pending')).not.toBeInTheDocument();
     expect(screen.getByText('The pull request is ready for review.').closest('.bg-notice-info\\/20')).toBeNull();
   });
 

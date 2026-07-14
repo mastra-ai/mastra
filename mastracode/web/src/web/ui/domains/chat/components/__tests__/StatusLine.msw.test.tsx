@@ -231,6 +231,53 @@ describe('StatusLine', () => {
       expect(link).toHaveTextContent('PR #42');
       expect(link).toHaveAttribute('href', 'https://github.com/octo/hello/pull/42');
     });
+
+    it('refreshes the pull request status when a notification arrives', async () => {
+      seedProject('github');
+      useAgentControllerHandlers([], [
+        {
+          type: 'message_update',
+          message: {
+            id: 'notification-message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'notification',
+                notificationId: 'notification-merged',
+                message: 'octo/hello#42 was merged',
+                source: 'github',
+                kind: 'pull-request-merged',
+                priority: 'urgent',
+              },
+            ],
+          },
+        },
+      ]);
+      let requests = 0;
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => {
+          requests += 1;
+          return HttpResponse.json({
+            subscriptions: [
+              {
+                id: 'subscription-1',
+                repoFullName: 'octo/hello',
+                pullRequestNumber: 42,
+                status: requests > 1 ? 'merged' : 'open',
+                url: 'https://github.com/octo/hello/pull/42',
+              },
+            ],
+          });
+        }),
+      );
+      renderStatusLine();
+
+      await screen.findByRole('link', { name: 'Open open octo/hello pull request 42' });
+      await waitFor(() =>
+        expect(screen.getByRole('link', { name: 'Open merged octo/hello pull request 42' })).toBeInTheDocument(),
+      );
+      expect(requests).toBeGreaterThan(1);
+    });
   });
 
   describe('when display state carries observational memory budgets', () => {

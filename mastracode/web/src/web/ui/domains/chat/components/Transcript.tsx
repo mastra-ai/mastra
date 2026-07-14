@@ -604,7 +604,6 @@ function NotificationSummaryCard({ entry }: { entry: NotificationSummaryEntry })
         <Txt variant="ui-sm" font="mono">
           Notification summary
         </Txt>
-        <Badge variant="info">{entry.pending} pending</Badge>
       </div>
       <Txt variant="ui-sm" className="py-1">
         {entry.message}
