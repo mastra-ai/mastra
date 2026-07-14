@@ -82,6 +82,17 @@ const factoryReady = await resolveFactoryReady(githubReady);
 // in-process default applies.
 const redisUrl = process.env.REDIS_URL;
 const pubsub = redisUrl ? new RedisStreamsPubSub({ url: redisUrl }) : undefined;
+if (redisUrl) {
+  // Redact credentials before logging (REDIS_URL may embed a password).
+  let redisTarget = 'redis';
+  try {
+    const parsed = new URL(redisUrl);
+    redisTarget = `${parsed.protocol}//${parsed.host}`;
+  } catch {
+    // Unparseable URL — RedisStreamsPubSub will surface the real error; keep the log generic.
+  }
+  console.log(`[PubSub] REDIS_URL set — event bus on Redis Streams (${redisTarget}), cross-process leases enabled.`);
+}
 
 const webAuthEnabled = isWebAuthEnabled();
 
