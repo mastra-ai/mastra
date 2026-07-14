@@ -26,6 +26,7 @@ const LINKED_PACKAGES = {
   '@mastra/playground-ui': '../../packages/playground-ui',
   '@mastra/railway': '../../workspaces/railway',
   '@mastra/react': '../../client-sdks/react',
+  '@mastra/redis-streams': '../../pubsub/redis-streams',
   mastra: '../../packages/cli',
 };
 

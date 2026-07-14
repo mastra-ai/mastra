@@ -289,6 +289,34 @@ describe('preflightBuildOutput', () => {
       expect(issue?.message).toContain('TURSO_DATABASE_URL is not set');
     });
 
+    it('names the exact db create command in the hard-error fix (kind-specific)', async () => {
+      writeBundle(`export {};`);
+      writeMetadata({ localPaths: [guardedDetection] });
+
+      const issues = await preflightBuildOutput(tmpDir, {}, { hasEnvFile: false, managedEnvVarNames: [] });
+      const issue = issues.find(i => i.code === 'LOCAL_STORAGE_PATH');
+      expect(issue?.fix).toContain('mastra env db create --kind turso');
+    });
+
+    it('names the exact db create command when preflight runs without platform context (lint path)', async () => {
+      writeBundle(`export {};`);
+      writeMetadata({ localPaths: [{ ...guardedDetection, guardedBy: 'DATABASE_URL' }] });
+
+      const issues = await preflightBuildOutput(tmpDir, {}, { hasEnvFile: true });
+      const issue = issues.find(i => i.code === 'LOCAL_STORAGE_PATH');
+      expect(issue?.fix).toContain('mastra env db create --kind neon');
+    });
+
+    it('falls back to a bare db create command for unmapped guard vars', async () => {
+      writeBundle(`export {};`);
+      writeMetadata({ localPaths: [{ ...guardedDetection, guardedBy: 'MY_CUSTOM_DB_URL' }] });
+
+      const issues = await preflightBuildOutput(tmpDir, {}, { hasEnvFile: true });
+      const issue = issues.find(i => i.code === 'LOCAL_STORAGE_PATH');
+      expect(issue?.fix).toContain('mastra env db create');
+      expect(issue?.fix).not.toContain('--kind');
+    });
+
     it('warns (not errors) on guarded misses when platform context lacks managedEnvVarNames (older platform)', async () => {
       writeBundle(`export {};`);
       writeMetadata({ localPaths: [guardedDetection] });
