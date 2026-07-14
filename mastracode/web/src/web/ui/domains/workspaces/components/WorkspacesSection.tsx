@@ -11,25 +11,28 @@ import { useLocation, useNavigate } from 'react-router';
 
 import { useApiConfig } from '../../../../../shared/api/config';
 import { queryKeys } from '../../../../../shared/api/keys';
-import { useSetAgentControllerStateMutation } from '../../chat/hooks/useAgentControllerStateMutations';
 import { AGENT_CONTROLLER_THREAD_PAGE_SIZE } from '../../chat/hooks/useAgentControllerThreads';
 import { createAgentControllerClient, requireAgentControllerSession } from '../../chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { useActiveProjectContext } from '../context/ActiveProjectProvider';
 import {
+  deriveProjectPath,
   useCreateWorkspaceMutation,
   useDeleteWorkspaceMutation,
   useSelectWorkspaceMutation,
   useWorkspacesQuery,
 } from '../hooks/useWorkspaces';
+import { useWorkspaceActivity } from '../hooks/useWorkspaceActivity';
 import type { Worktree } from '../services/projects';
 
 /**
  * Sidebar section listing a GitHub project's worktrees.
  *
  * Threads are scoped to the worktree they run in, so callers can pass the
- * thread list as `children`: it renders nested under the active worktree row
- * (or after the list when no worktree is selected yet).
+ * thread list as `children`; it renders nested under the active worktree row
+ * (or after the list when no worktree is selected yet). Feature worktrees
+ * hold a single conversation, so the thread list renders read-only for them
+ * (title only — no rename/clone/delete or new-thread controls).
  */
 export function WorkspacesSection({ children }: { children?: ReactNode }) {
   const { baseUrl } = useApiConfig();
@@ -37,31 +40,34 @@ export function WorkspacesSection({ children }: { children?: ReactNode }) {
   const [creating, setCreating] = useState(false);
   const [branch, setBranch] = useState('');
   const workspaces = useWorkspacesQuery(activeProject);
+  const projectPath = deriveProjectPath(activeProject);
   const scope = { agentControllerId: AGENT_CONTROLLER_ID, resourceId };
-  const setStateMutation = useSetAgentControllerStateMutation({
-    agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    baseUrl,
-    enabled: sessionEnabled,
-  });
-  const workspaceSession = { setState: (updates: Record<string, unknown>) => setStateMutation.mutateAsync(updates) };
-  const selectWorkspace = useSelectWorkspaceMutation(activeProject, workspaceSession, scope);
-  const createWorkspace = useCreateWorkspaceMutation(activeProject, workspaceSession, scope);
+  const selectWorkspace = useSelectWorkspaceMutation(activeProject, scope);
+  const createWorkspace = useCreateWorkspaceMutation(activeProject, scope);
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
   const { session } = createAgentControllerClient({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
+    scope: projectPath || undefined,
     baseUrl,
     enabled: sessionEnabled,
   });
-  const deleteWorkspace = useDeleteWorkspaceMutation(activeProject, workspaceSession, session, scope);
+  const deleteWorkspace = useDeleteWorkspaceMutation(activeProject, session, scope);
   const [confirmDelete, setConfirmDelete] = useState<Worktree | null>(null);
+  const worktrees = workspaces.data?.worktrees ?? [];
+  const runningByPath = useWorkspaceActivity({
+    agentControllerId: AGENT_CONTROLLER_ID,
+    resourceId,
+    projectPath: projectPath || undefined,
+    worktreePaths: worktrees.map(worktree => worktree.worktreePath),
+    baseUrl,
+    enabled: sessionEnabled && activeProject?.source === 'github',
+  });
 
   if (activeProject?.source !== 'github') return null;
 
-  const worktrees = workspaces.data?.worktrees ?? [];
   const selectedPath = workspaces.data?.selected?.worktreePath;
   const pending = createWorkspace.isPending || selectWorkspace.isPending || deleteWorkspace.isPending;
 
@@ -71,7 +77,18 @@ export function WorkspacesSection({ children }: { children?: ReactNode }) {
   const openWorktreeThread = async (worktreePath: string) => {
     if (location.pathname.startsWith('/factory')) return;
     try {
-      const chatSession = requireAgentControllerSession(session);
+      // Address the target worktree's own session (sessions are scoped per
+      // worktree). Create it up front so a brand-new scope is seeded with its
+      // projectPath tag before any thread is created in it.
+      const { session: targetSession } = createAgentControllerClient({
+        agentControllerId: AGENT_CONTROLLER_ID,
+        resourceId,
+        scope: worktreePath,
+        baseUrl,
+        enabled: sessionEnabled,
+      });
+      const chatSession = requireAgentControllerSession(targetSession);
+      await chatSession.create({ tags: { projectPath: worktreePath } });
       const threadsKey = queryKeys.agentControllerThreads(AGENT_CONTROLLER_ID, resourceId, worktreePath);
       const threads = await queryClient.fetchQuery({
         queryKey: threadsKey,
@@ -101,8 +118,8 @@ export function WorkspacesSection({ children }: { children?: ReactNode }) {
       }
       // Empty worktree: leave the stale thread route before creating, so the
       // route-thread sync can't race the create call and error on the old
-      // thread. The workspace switch already rebound the session to this
-      // worktree, so the new thread is tagged with its projectPath.
+      // thread. The scoped session is pinned to this worktree, so the new
+      // thread is tagged with its projectPath.
       if (location.pathname.startsWith('/threads/')) void navigate('/new', { replace: true });
       const created = await chatSession.createThread();
       // A fresh thread has no messages; seed the cache to skip the skeleton.
@@ -191,6 +208,7 @@ export function WorkspacesSection({ children }: { children?: ReactNode }) {
               <WorkspaceRow
                 worktree={worktree}
                 active={active}
+                running={runningByPath[worktree.worktreePath] === true}
                 disabled={pending}
                 onSelect={() =>
                   selectWorkspace.mutate(worktree.worktreePath, {
@@ -266,12 +284,14 @@ export function WorkspacesSection({ children }: { children?: ReactNode }) {
 function WorkspaceRow({
   worktree,
   active,
+  running,
   disabled,
   onSelect,
   onDelete,
 }: {
   worktree: Worktree;
   active: boolean;
+  running: boolean;
   disabled: boolean;
   onSelect: () => void;
   onDelete?: () => void;
@@ -288,6 +308,14 @@ function WorkspaceRow({
       >
         <GitBranch size={13} />
         <span className="truncate">{worktree.branch}</span>
+        {running && (
+          <span
+            role="status"
+            aria-label={`Agent working in ${worktree.branch}`}
+            title="Agent working"
+            className="ml-auto size-2 shrink-0 animate-pulse rounded-full bg-accent1 group-hover:opacity-0"
+          />
+        )}
       </button>
       {onDelete && (
         <DropdownMenu>

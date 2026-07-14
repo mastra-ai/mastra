@@ -13,7 +13,6 @@
 
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
-import { eq } from 'drizzle-orm';
 import type { Context } from 'hono';
 
 import { ensureWebAuthUser, webAuthTenant } from '../auth';
@@ -26,13 +25,16 @@ import {
   fetchLinearWorkspace,
   listActiveLinearIssues,
   listLinearProjects,
-  refreshLinearAccessToken,
 } from './client';
-import type { LinearTokenSet } from './client';
 import { getIntakeConfig } from '../intake/store';
+import { invalidateLinearConnectionCache } from './agent-tools';
 import { getLinearFeatureDiagnostics, isLinearFeatureEnabled } from './config';
+import {
+  getFreshLinearAccessToken as getFreshAccessToken,
+  LinearReauthRequiredError,
+  loadLinearConnection as loadConnection,
+} from './connection';
 import { linearConnections } from './schema';
-import type { LinearConnectionRow } from './schema';
 
 type RouteContext = Context;
 
@@ -85,80 +87,6 @@ function parseAfterCursor(raw: string | undefined): string | undefined | null {
   if (raw === undefined || raw === '') return undefined;
   if (raw.length > 512 || !/^[\w+/=.:-]+$/.test(raw)) return null;
   return raw;
-}
-
-/** Load the org's Linear connection, or `null` when not connected. */
-async function loadConnection(orgId: string): Promise<LinearConnectionRow | null> {
-  const [row] = await getAppDb().select().from(linearConnections).where(eq(linearConnections.orgId, orgId));
-  return row ?? null;
-}
-
-/** Refresh this many ms before the recorded expiry to absorb clock skew. */
-const TOKEN_REFRESH_SKEW_MS = 60_000;
-
-/**
- * In-flight refreshes keyed by org. Linear rotates refresh tokens, so two
- * concurrent refreshes with the same token would invalidate each other —
- * single-flight ensures one exchange per org and shares the result.
- */
-const inflightRefreshes = new Map<string, Promise<string>>();
-
-/** Thrown when the org's Linear authorization can no longer be renewed. */
-class LinearReauthRequiredError extends Error {
-  constructor() {
-    super('Linear authorization expired. Reconnect Linear to keep syncing intake issues.');
-  }
-}
-
-/** Persist a rotated token set on the org's connection row. */
-async function persistTokens(orgId: string, tokens: LinearTokenSet): Promise<void> {
-  await getAppDb()
-    .update(linearConnections)
-    .set({
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
-      expiresAt: tokens.expiresAt,
-      updatedAt: new Date(),
-    })
-    .where(eq(linearConnections.orgId, orgId));
-}
-
-/**
- * Return a usable access token for the connection, proactively refreshing it
- * when the recorded expiry is past (or imminent). Throws
- * `LinearReauthRequiredError` when the token is expired and cannot be
- * refreshed — the org has to go through the OAuth flow again.
- */
-async function getFreshAccessToken(connection: LinearConnectionRow): Promise<string> {
-  const expired = connection.expiresAt !== null && connection.expiresAt.getTime() - TOKEN_REFRESH_SKEW_MS <= Date.now();
-  if (!expired) return connection.accessToken;
-
-  if (!connection.refreshToken) {
-    // Legacy row from before refresh-token support: nothing to renew with.
-    throw new LinearReauthRequiredError();
-  }
-
-  const existing = inflightRefreshes.get(connection.orgId);
-  if (existing) return existing;
-
-  const refreshToken = connection.refreshToken;
-  const refresh = (async () => {
-    try {
-      const tokens = await refreshLinearAccessToken(refreshToken);
-      await persistTokens(connection.orgId, tokens);
-      return tokens.accessToken;
-    } catch (err) {
-      const status = (err as { status?: number }).status;
-      // invalid_grant surfaces as 400/401: the refresh token was revoked or
-      // already rotated away. Terminal for this connection.
-      if (status === 400 || status === 401) throw new LinearReauthRequiredError();
-      throw err;
-    } finally {
-      inflightRefreshes.delete(connection.orgId);
-    }
-  })();
-  inflightRefreshes.set(connection.orgId, refresh);
-  return refresh;
 }
 
 /** Map a Linear read failure to the API response for the SPA. */
@@ -273,6 +201,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
               accessToken: tokens.accessToken,
               refreshToken: tokens.refreshToken,
               expiresAt: tokens.expiresAt,
+              scope: tokens.scope,
               workspaceName: workspace.name,
               workspaceUrlKey: workspace.urlKey,
             })
@@ -283,6 +212,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
                 accessToken: tokens.accessToken,
                 refreshToken: tokens.refreshToken,
                 expiresAt: tokens.expiresAt,
+                scope: tokens.scope,
                 workspaceName: workspace.name,
                 workspaceUrlKey: workspace.urlKey,
                 updatedAt: new Date(),
@@ -293,6 +223,8 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
           return c.redirect('/?linear=error');
         }
 
+        // Let the agent tools see the new connection immediately.
+        invalidateLinearConnectionCache(orgId);
         return c.redirect('/?linear=connected');
       },
     }),

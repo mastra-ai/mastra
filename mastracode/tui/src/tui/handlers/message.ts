@@ -21,6 +21,7 @@ import { TemporalGapComponent } from '../components/temporal-gap.js';
 import { ToolExecutionComponentEnhanced } from '../components/tool-execution-enhanced.js';
 import { UserMessageComponent } from '../components/user-message.js';
 import { addChildBeforeMessageOrFollowUps } from '../render-messages.js';
+import { flushRender, requestRender } from '../render-scheduler.js';
 import { getMarkdownTheme } from '../theme.js';
 
 import { createStaticSubagentComponent } from './tool.js';
@@ -354,7 +355,7 @@ export function handleMessageStart(ctx: EventHandlerContext, message: AgentContr
       });
       reconcileChatBoundarySpacers(state.chatContainer);
     }
-    state.ui.requestRender();
+    flushRender(state);
   }
 }
 
@@ -440,7 +441,7 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: AgentCont
         notificationSummaryParts.length > 0 ||
         notificationParts.length > 0
       ) {
-        state.ui.requestRender();
+        requestRender(state);
       }
       return;
     }
@@ -543,7 +544,7 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: AgentCont
     }
   }
 
-  state.ui.requestRender();
+  requestRender(state);
 }
 
 export function handleMessageEnd(ctx: EventHandlerContext, message: AgentControllerMessage): void {
@@ -584,5 +585,5 @@ export function handleMessageEnd(ctx: EventHandlerContext, message: AgentControl
     state.subagentToolCallIds.clear();
     state.currentRunSystemReminderKeys.clear();
   }
-  state.ui.requestRender();
+  flushRender(state);
 }

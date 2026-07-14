@@ -31,6 +31,7 @@ import {
   pushBranch,
   resetSandboxFactory,
   resolveGitIdentity,
+  runWorktreeSetup,
   safeBranchDir,
   setSandboxFactory,
   shellQuote,
@@ -745,6 +746,27 @@ describe('ensureWorktree', () => {
     const err = await ensureWorktree(sandbox, '/workspace/hello', WT_OPTS).catch(e => e);
     expect(err).toBeInstanceOf(WorktreeError);
     expect(err.code).toBe('worktree-failed');
+  });
+});
+
+describe('runWorktreeSetup', () => {
+  it('runs the command inside the worktree directory', async () => {
+    const sandbox = new FakeSandbox();
+    await runWorktreeSetup(sandbox, '/workspace/worktrees/feat-x', 'pnpm i && pnpm build');
+
+    expect(sandbox.calls).toHaveLength(1);
+    expect(sandbox.calls[0]).toContain("cd '/workspace/worktrees/feat-x'");
+    expect(sandbox.calls[0]).toContain('pnpm i && pnpm build');
+  });
+
+  it('throws a setup-failed WorktreeError with the command output on a non-zero exit', async () => {
+    const sandbox = new FakeSandbox(() => ({ exitCode: 1, stdout: '', stderr: 'ERR_PNPM_NO_LOCKFILE' }));
+    const err = await runWorktreeSetup(sandbox, '/workspace/worktrees/feat-x', 'pnpm i').catch(e => e);
+
+    expect(err).toBeInstanceOf(WorktreeError);
+    expect(err.code).toBe('setup-failed');
+    expect(err.message).toContain('exit 1');
+    expect(err.message).toContain('ERR_PNPM_NO_LOCKFILE');
   });
 });
 
