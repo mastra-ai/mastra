@@ -163,6 +163,7 @@ export class MCPOAuthClientProvider implements OAuthClientProvider {
 
   private _clientInfo?: OAuthClientInformation;
   private _sessionState?: string;
+  private _sessionRedirectUrl?: string | URL;
 
   constructor(options: MCPOAuthClientProviderOptions) {
     this._redirectUrl = options.redirectUrl;
@@ -209,14 +210,22 @@ export class MCPOAuthClientProvider implements OAuthClientProvider {
    */
   async beginAuthorizationSession(): Promise<string> {
     this._sessionState = await this.generateState();
+    this._sessionRedirectUrl = this._redirectUrl;
     return this._sessionState;
   }
 
   /**
-   * Clears the pinned authorization state (see beginAuthorizationSession).
+   * Clears the pinned authorization state (see beginAuthorizationSession) and
+   * restores the configured redirect URL if applyResolvedRedirectUrl rebased
+   * it to a fallback port during the session, so the next flow starts from
+   * the preferred port again.
    */
   endAuthorizationSession(): void {
     this._sessionState = undefined;
+    if (this._sessionRedirectUrl !== undefined) {
+      this._redirectUrl = this._sessionRedirectUrl;
+      this._sessionRedirectUrl = undefined;
+    }
   }
 
   /**

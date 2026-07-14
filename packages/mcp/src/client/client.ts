@@ -471,7 +471,8 @@ export class InternalMastraMCPClient extends MastraBase {
 
         // A 401 means the flow continues on this transport via finishAuth, not on a
         // fallback: the SDK has already run discovery and redirected to authorization.
-        if (error instanceof UnauthorizedError) {
+        // Guarded on authProvider so servers without one never carry an auth state.
+        if (authProvider && error instanceof UnauthorizedError) {
           this.markNeedsAuth(streamableTransport);
           throw error;
         }
@@ -504,7 +505,7 @@ export class InternalMastraMCPClient extends MastraBase {
         this.transport = sseTransport;
         this.log('debug', 'Successfully connected using deprecated HTTP+SSE transport.');
       } catch (sseError) {
-        if (sseError instanceof UnauthorizedError) {
+        if (authProvider && sseError instanceof UnauthorizedError) {
           this.markNeedsAuth(sseTransport);
           throw sseError;
         }

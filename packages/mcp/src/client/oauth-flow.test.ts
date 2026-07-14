@@ -426,12 +426,10 @@ describe('MCPClient OAuth authorization flow', () => {
     const secondMcpServer = await startProtectedMcpServer(ports.secondMcpPort, authServer);
     cleanups.push(() => secondMcpServer.close());
 
-    const firstMcp = track(
-      createClient(mcpServer.url, createProvider({ callbackUrl, onRedirectToAuthorization: driveBrowser })),
-    );
-    const secondMcp = track(
-      createClient(secondMcpServer.url, createProvider({ callbackUrl, onRedirectToAuthorization: driveBrowser })),
-    );
+    const firstProvider = createProvider({ callbackUrl, onRedirectToAuthorization: driveBrowser });
+    const secondProvider = createProvider({ callbackUrl, onRedirectToAuthorization: driveBrowser });
+    const firstMcp = track(createClient(mcpServer.url, firstProvider));
+    const secondMcp = track(createClient(secondMcpServer.url, secondProvider));
 
     await Promise.all([firstMcp.authenticate('fixture'), secondMcp.authenticate('fixture')]);
 
@@ -441,6 +439,10 @@ describe('MCPClient OAuth authorization flow', () => {
     // bound two different ports.
     const boundPorts = authServer.authorizeRedirectUris.map(uri => new URL(uri).port);
     expect(new Set(boundPorts).size).toBe(2);
+    // Fallback binding must not drift the providers' preferred redirect URL:
+    // the next flow starts from the preferred port again.
+    expect(firstProvider.redirectUrl.toString()).toBe(callbackUrl);
+    expect(secondProvider.redirectUrl.toString()).toBe(callbackUrl);
   });
 
   it('returns to needs-auth when the user denies authorization', async () => {

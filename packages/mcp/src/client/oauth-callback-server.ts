@@ -47,7 +47,10 @@ export interface OAuthCallbackServerOptions {
   /**
    * The redirect URL the authorization server will send the browser back to.
    * Its port is the preferred port to bind; if that port is in use, the next
-   * sequential ports are tried (see getCallbackUrlCandidates).
+   * sequential ports are tried (see getCallbackUrlCandidates). The server
+   * binds the URL's hostname — prefer the literal `127.0.0.1` over
+   * `localhost` (RFC 8252 §8.3) so the browser and server agree on the
+   * address family.
    *
    * @example 'http://127.0.0.1:5533/oauth/callback'
    */
@@ -55,8 +58,10 @@ export interface OAuthCallbackServerOptions {
 
   /**
    * The OAuth state parameter issued for this authorization request.
-   * Callback requests with a different state are rejected (CSRF protection
-   * per OAuth 2.1).
+   * The state authenticates the redirect (CSRF protection per OAuth 2.1):
+   * callback requests without a matching state receive an error response and
+   * never settle the flow, so a stray local request cannot abort or spoof a
+   * pending authorization.
    */
   state: string;
 }
@@ -95,9 +100,9 @@ export interface OAuthCallbackServer {
   /**
    * Waits for the browser to deliver the authorization code.
    *
-   * Resolves once with the code and state from the first callback request.
-   * Rejects on timeout, on an OAuth error response (`error` /
-   * `error_description` query params), on a state mismatch, or when the
+   * Resolves once with the code and state from the first state-matching
+   * callback request. Rejects on timeout, on a state-matching OAuth error
+   * response (`error` / `error_description` query params), or when the
    * server is closed before a code arrives.
    */
   waitForCode(options?: { timeoutMs?: number }): Promise<OAuthCallbackResult>;
@@ -130,7 +135,7 @@ export function getCallbackUrlCandidates(redirectUrl: string | URL): URL[] {
   return candidates;
 }
 
-function listen(server: HttpServer, port: number): Promise<NodeJS.ErrnoException | null> {
+function listen(server: HttpServer, port: number, hostname: string): Promise<NodeJS.ErrnoException | null> {
   return new Promise((resolve, reject) => {
     const onError = (error: NodeJS.ErrnoException) => {
       server.off('listening', onListening);
@@ -147,7 +152,7 @@ function listen(server: HttpServer, port: number): Promise<NodeJS.ErrnoException
 
     server.once('error', onError);
     server.once('listening', onListening);
-    server.listen(port, '127.0.0.1');
+    server.listen(port, hostname);
   });
 }
 
@@ -155,10 +160,12 @@ function listen(server: HttpServer, port: number): Promise<NodeJS.ErrnoException
  * Starts a one-shot loopback HTTP server that captures the OAuth
  * authorization code.
  *
- * The server binds 127.0.0.1 on the redirect URL's port, falling back to the
- * next sequential ports when it is in use (see getCallbackUrlCandidates).
- * The first request on the callback path settles the outcome; subsequent
- * requests receive 410 Gone. The response pages never echo the
+ * The server binds the redirect URL's hostname on its port, falling back to
+ * the next sequential ports when it is in use (see getCallbackUrlCandidates).
+ * The first state-matching request on the callback path settles the outcome;
+ * subsequent requests receive 410 Gone. Requests whose state does not match
+ * receive an error response without settling, so only the genuine redirect
+ * can complete or abort the flow. The response pages never echo the
  * authorization code.
  *
  * @example
@@ -220,17 +227,22 @@ export async function createOAuthCallbackServer(options: OAuthCallbackServerOpti
       res.end(html);
     };
 
+    // The state authenticates the redirect: the callback port is predictable,
+    // so anything local can reach it, and the authorization server echoes the
+    // state on both success and error redirects (RFC 6749 §4.1.2). Requests
+    // without the expected state are not this flow's redirect and must not
+    // settle the one-shot outcome.
+    const state = url.searchParams.get('state');
+    if (state !== options.state) {
+      respond(400, ERROR_HTML);
+      return;
+    }
+
     const error = url.searchParams.get('error');
     if (error) {
       const description = url.searchParams.get('error_description');
       respond(400, ERROR_HTML);
       settle({ error: new Error(`Authorization failed: ${error}${description ? ` (${description})` : ''}`) });
-      return;
-    }
-
-    if (url.searchParams.get('state') !== options.state) {
-      respond(400, ERROR_HTML);
-      settle({ error: new Error('Authorization failed: state mismatch') });
       return;
     }
 
@@ -242,12 +254,17 @@ export async function createOAuthCallbackServer(options: OAuthCallbackServerOpti
     }
 
     respond(200, SUCCESS_HTML);
-    settle({ result: { code, state: options.state } });
+    settle({ result: { code, state } });
   });
+
+  // Bind the hostname the redirect URL names (brackets stripped for IPv6
+  // literals) so e.g. http://localhost or http://[::1] redirects actually
+  // reach the server rather than an unbound 127.0.0.1 socket.
+  const hostname = candidates[0]!.hostname.replace(/^\[|\]$/g, '');
 
   let boundUrl: URL | undefined;
   for (const candidate of candidates) {
-    const error = await listen(server, Number(candidate.port));
+    const error = await listen(server, Number(candidate.port), hostname);
     if (!error) {
       boundUrl = candidate;
       break;

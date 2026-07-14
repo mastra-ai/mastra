@@ -808,10 +808,13 @@ To fix this you have three different options:
    * 3. Waits for the browser to deliver the authorization code, validates the
    *    OAuth state, exchanges the code for tokens, and reconnects
    *
-   * Concurrent calls for the same server join the pending flow; different
-   * servers authenticate independently. Hosts with custom redirect handling
-   * (e.g. a web app with an HTTPS redirect URL) should drive
-   * MCPOAuthClientProvider directly instead.
+   * Concurrent calls for the same server join the pending flow (the joiner's
+   * options are ignored — the pending flow keeps its own timeout); different
+   * servers authenticate independently. Each server needs its own provider
+   * instance: the flow pins session state on the provider, so sharing one
+   * MCPOAuthClientProvider across servers is not supported. Hosts with custom
+   * redirect handling (e.g. a web app with an HTTPS redirect URL) should
+   * drive MCPOAuthClientProvider directly instead.
    *
    * @param serverName - The name of the server to authenticate (must match a key in `servers`)
    * @param options.timeoutMs - How long to wait for the browser callback (default 5 minutes)

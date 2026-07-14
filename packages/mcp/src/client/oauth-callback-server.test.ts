@@ -92,22 +92,28 @@ describe('createOAuthCallbackServer', () => {
     await expect(pending).resolves.toEqual({ code: 'auth-code-123', state: STATE });
   });
 
-  it('rejects on state mismatch', async () => {
+  it('ignores requests without a matching state so they cannot settle the flow', async () => {
     const server = await startCallbackServer();
+    const pending = server.waitForCode();
 
-    const pending = expect(server.waitForCode()).rejects.toThrow(/state mismatch/);
-    const response = await fetch(`${server.url}?code=auth-code-123&state=wrong-state`);
+    // Neither a forged code nor a forged denial (the state authenticates the
+    // redirect) may settle the pending flow.
+    const forgedCode = await fetch(`${server.url}?code=forged-code&state=wrong-state`);
+    expect(forgedCode.status).toBe(400);
+    const forgedDenial = await fetch(`${server.url}?error=access_denied`);
+    expect(forgedDenial.status).toBe(400);
 
-    expect(response.status).toBe(400);
-    await pending;
+    const genuine = await fetch(`${server.url}?code=auth-code-123&state=${STATE}`);
+    expect(genuine.status).toBe(200);
+    await expect(pending).resolves.toEqual({ code: 'auth-code-123', state: STATE });
   });
 
-  it('rejects on an OAuth error response, including the description', async () => {
+  it('rejects on a state-matching OAuth error response, including the description', async () => {
     const server = await startCallbackServer();
 
     const pending = expect(server.waitForCode()).rejects.toThrow(/access_denied.*User denied the request/);
     const response = await fetch(
-      `${server.url}?error=access_denied&error_description=${encodeURIComponent('User denied the request')}`,
+      `${server.url}?error=access_denied&error_description=${encodeURIComponent('User denied the request')}&state=${STATE}`,
     );
 
     expect(response.status).toBe(400);
@@ -155,6 +161,20 @@ describe('createOAuthCallbackServer', () => {
     } finally {
       await closeServer(blocker);
     }
+  });
+
+  it('binds the hostname from the redirect URL', async () => {
+    const port = await getFreePort();
+    callbackServer = await createOAuthCallbackServer({
+      redirectUrl: `http://localhost:${port}/oauth/callback`,
+      state: STATE,
+    });
+
+    const pending = callbackServer.waitForCode();
+    const response = await fetch(`http://localhost:${port}/oauth/callback?code=auth-code-123&state=${STATE}`);
+
+    expect(response.status).toBe(200);
+    await expect(pending).resolves.toEqual({ code: 'auth-code-123', state: STATE });
   });
 
   it('releases the port on close', async () => {
