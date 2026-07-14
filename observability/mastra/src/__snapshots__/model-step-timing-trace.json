@@ -51,7 +51,6 @@
               "parameters": {},
               "finishReason": "stop",
               "responseId": "resp-1",
-              "responseModel": "",
               "completionStartTime": "<date>",
               "usage": {
                 "inputTokens": 10,
@@ -62,7 +61,8 @@
                 "outputDetails": {
                   "text": 5
                 }
-              }
+              },
+              "responseModel": ""
             },
             "metadata": {
               "runId": "<runId-1>",

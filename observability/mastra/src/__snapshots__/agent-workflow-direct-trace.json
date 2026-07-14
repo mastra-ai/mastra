@@ -35,7 +35,9 @@
         },
         "input": "Execute the simpleWorkflow with test input",
         "output": {
-          "text": "Mock V2 stream response",
+          "text": {
+            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+          },
           "files": []
         }
       },
@@ -97,7 +99,9 @@
               "files": [],
               "reasoning": [],
               "sources": [],
-              "text": "Mock V2 stream response",
+              "text": {
+                "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+              },
               "warnings": []
             }
           },
@@ -422,11 +426,13 @@
                   },
                   {
                     "role": "tool",
-                    "content": "[tool-result: workflow-simpleWorkflow]"
+                    "content": { "__any__": "string" }
                   }
                 ],
                 "output": {
-                  "text": "Mock V2 stream response",
+                  "text": {
+                    "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+                  },
                   "toolCalls": []
                 }
               },
@@ -469,7 +475,9 @@
                       "environment": "test"
                     },
                     "output": {
-                      "text": "Mock V2 stream response",
+                      "text": {
+                        "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+                      },
                       "toolCalls": []
                     }
                   },
@@ -495,7 +503,9 @@
                           "environment": "test"
                         },
                         "output": {
-                          "text": "Mock V2 stream response"
+                          "text": {
+                            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+                          }
                         }
                       }
                     }

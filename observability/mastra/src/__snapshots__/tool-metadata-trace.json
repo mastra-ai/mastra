@@ -33,7 +33,9 @@
         },
         "input": "Use metadata tool to process some data",
         "output": {
-          "text": "Mock V2 stream response",
+          "text": {
+            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+          },
           "files": []
         }
       },
@@ -95,7 +97,9 @@
               "files": [],
               "reasoning": [],
               "sources": [],
-              "text": "Mock V2 stream response",
+              "text": {
+                "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+              },
               "warnings": []
             }
           },
@@ -359,7 +363,9 @@
                   }
                 ],
                 "output": {
-                  "text": "Mock V2 stream response",
+                  "text": {
+                    "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+                  },
                   "toolCalls": []
                 }
               },
@@ -402,7 +408,9 @@
                       "environment": "test"
                     },
                     "output": {
-                      "text": "Mock V2 stream response",
+                      "text": {
+                        "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+                      },
                       "toolCalls": []
                     }
                   },
@@ -428,7 +436,9 @@
                           "environment": "test"
                         },
                         "output": {
-                          "text": "Mock V2 stream response"
+                          "text": {
+                            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+                          }
                         }
                       }
                     }
