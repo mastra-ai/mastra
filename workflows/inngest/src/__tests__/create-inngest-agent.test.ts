@@ -691,6 +691,121 @@ describe('InngestAgent parity surface', () => {
     }
   });
 
+  it('forwards actor into the workflow trigger event', async () => {
+    const durableAgent = makeIsolatedAgent('parity-actor-trigger');
+    const sendSpy = stubInngestSend();
+    const actor = { actorKind: 'system', sourceWorkflow: 'investigate' };
+
+    const result = await durableAgent.stream([{ role: 'user', content: 'hi' }], {
+      actor: actor as any,
+    });
+    try {
+      const deadline = Date.now() + 1_000;
+      let entry = globalRunRegistry.get(result.runId);
+      while (!entry?.workflowExecution && Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+        entry = globalRunRegistry.get(result.runId);
+      }
+      await expect(entry?.workflowExecution).resolves.toBeUndefined();
+
+      expect(sendSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ actor }),
+        }),
+      );
+    } finally {
+      result.cleanup();
+      sendSpy.mockRestore();
+    }
+  });
+
+  it('forwards actor into the workflow resume event', async () => {
+    const durableAgent = makeIsolatedAgent('parity-actor-resume');
+    const sendSpy = stubInngestSend();
+    const runId = 'actor-resume-run';
+    const actor = { actorKind: 'system', sourceWorkflow: 'investigate' };
+    const loadWorkflowSnapshot = vi.fn().mockResolvedValue({
+      value: { retainedState: true },
+      context: {},
+      suspendedPaths: { 'agentic-loop': ['agentic-loop'] },
+      requestContext: {},
+    });
+    const mastra = {
+      getStorage: () => ({
+        getStore: async () => ({ loadWorkflowSnapshot }),
+      }),
+    };
+    (durableAgent as any).__setMastra(mastra);
+
+    const result = await durableAgent.resume(runId, { answer: 'approved' }, { actor: actor as any });
+    try {
+      const deadline = Date.now() + 1_000;
+      let entry = globalRunRegistry.get(runId);
+      while (!entry?.workflowExecution && Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+        entry = globalRunRegistry.get(runId);
+      }
+      await expect(entry?.workflowExecution).resolves.toBeUndefined();
+
+      expect(sendSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ actor }),
+        }),
+      );
+    } finally {
+      result.cleanup();
+      sendSpy.mockRestore();
+    }
+  });
+
+  it('merges fresh requestContext into persisted context on resume, fresh values winning', async () => {
+    const durableAgent = makeIsolatedAgent('parity-request-context-resume-merge');
+    const sendSpy = stubInngestSend();
+    const runId = 'request-context-resume-merge-run';
+    const loadWorkflowSnapshot = vi.fn().mockResolvedValue({
+      value: { retainedState: true },
+      context: {},
+      suspendedPaths: { 'agentic-loop': ['agentic-loop'] },
+      requestContext: { userId: 'user-1', organizationId: 'org-1' },
+    });
+    const mastra = {
+      getStorage: () => ({
+        getStore: async () => ({ loadWorkflowSnapshot }),
+      }),
+    };
+    (durableAgent as any).__setMastra(mastra);
+
+    const freshRequestContext = new RequestContext();
+    freshRequestContext.set('organizationId', 'org-2');
+    freshRequestContext.set('sessionId', 'session-1');
+
+    const result = await durableAgent.resume(runId, { answer: 'approved' }, { requestContext: freshRequestContext });
+    try {
+      const deadline = Date.now() + 1_000;
+      let entry = globalRunRegistry.get(runId);
+      while (!entry?.workflowExecution && Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+        entry = globalRunRegistry.get(runId);
+      }
+      await expect(entry?.workflowExecution).resolves.toBeUndefined();
+
+      expect(sendSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            requestContext: {
+              userId: 'user-1',
+              organizationId: 'org-2',
+              sessionId: 'session-1',
+            },
+          }),
+        }),
+      );
+    } finally {
+      result.cleanup();
+      sendSpy.mockRestore();
+    }
+  });
+
   it('exposes generate() and resumeGenerate() with durable signatures', () => {
     // Slice 5 surface check. The Proxy used to forward both methods to the
     // underlying Agent; after parity work generate() must be the durable
