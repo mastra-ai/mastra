@@ -8,8 +8,10 @@
  */
 
 import { and, eq } from 'drizzle-orm';
+import type { SQL } from 'drizzle-orm';
 
 import { getAppDb } from '../github/db';
+import type { AppDb } from '../github/db';
 import { workItems } from './schema';
 import type { WorkItemRow, WorkItemSessionRef, WorkItemSource, WorkItemStageEntry } from './schema';
 
@@ -235,15 +237,21 @@ export async function upsertWorkItem(params: {
   const { orgId, userId, githubProjectId, input } = params;
   const now = new Date();
 
-  if (input.sourceKey !== null) {
-    const [existing] = await getAppDb()
-      .select()
-      .from(workItems)
-      .where(and(eq(workItems.githubProjectId, githubProjectId), eq(workItems.sourceKey, input.sourceKey)));
-    if (existing) {
-      return applyUpdate(existing, input, userId, now);
-    }
-  }
+  const reuseExisting = (): Promise<WorkItemRow | null> => {
+    if (input.sourceKey === null) return Promise.resolve(null);
+    return getAppDb().transaction(tx =>
+      applyUpdateLocked(
+        tx,
+        and(eq(workItems.githubProjectId, githubProjectId), eq(workItems.sourceKey, input.sourceKey!)),
+        input,
+        userId,
+        now,
+      ),
+    );
+  };
+
+  const reused = await reuseExisting();
+  if (reused) return reused;
 
   const row = {
     orgId,
@@ -267,24 +275,31 @@ export async function upsertWorkItem(params: {
   } catch (err) {
     // Concurrent create for the same sourceKey: the partial unique index won
     // the race — fall back to updating the row it protected.
-    if (input.sourceKey !== null) {
-      const [existing] = await getAppDb()
-        .select()
-        .from(workItems)
-        .where(and(eq(workItems.githubProjectId, githubProjectId), eq(workItems.sourceKey, input.sourceKey)));
-      if (existing) return applyUpdate(existing, input, userId, now);
-    }
+    const fallback = await reuseExisting();
+    if (fallback) return fallback;
     throw err;
   }
 }
 
-/** Shared update path for upsert-reuse and PATCH: stage diff + merges. */
-async function applyUpdate(
-  existing: WorkItemRow,
+/** The transaction client drizzle hands to `db.transaction` callbacks. */
+type DbTx = Parameters<Parameters<AppDb['transaction']>[0]>[0];
+
+/**
+ * Shared update path for upsert-reuse and PATCH: stage diff + merges. Must run
+ * inside a transaction — the row is read with `FOR UPDATE` so concurrent
+ * read-modify-writes of `stageHistory`/`sessions`/`metadata` serialize instead
+ * of silently dropping each other's merges. Returns `null` when no row
+ * matches `where`.
+ */
+async function applyUpdateLocked(
+  tx: DbTx,
+  where: SQL | undefined,
   patch: UpdateWorkItemInput,
   userId: string,
   now: Date,
-): Promise<WorkItemRow> {
+): Promise<WorkItemRow | null> {
+  const [existing] = await tx.select().from(workItems).where(where).for('update');
+  if (!existing) return null;
   const set: Partial<WorkItemRow> = { updatedAt: now };
   if (patch.title !== undefined) set.title = patch.title;
   if (patch.url !== undefined) set.url = patch.url;
@@ -298,7 +313,7 @@ async function applyUpdate(
   if (patch.metadata !== undefined && Object.keys(patch.metadata).length > 0) {
     set.metadata = { ...existing.metadata, ...patch.metadata };
   }
-  const [updated] = await getAppDb().update(workItems).set(set).where(eq(workItems.id, existing.id)).returning();
+  const [updated] = await tx.update(workItems).set(set).where(eq(workItems.id, existing.id)).returning();
   return updated ?? { ...existing, ...set };
 }
 
@@ -313,12 +328,9 @@ export async function updateWorkItem(
   userId: string,
   patch: UpdateWorkItemInput,
 ): Promise<WorkItemRow | null> {
-  const [existing] = await getAppDb()
-    .select()
-    .from(workItems)
-    .where(and(eq(workItems.id, id), eq(workItems.orgId, orgId)));
-  if (!existing) return null;
-  return applyUpdate(existing, patch, userId, new Date());
+  return getAppDb().transaction(tx =>
+    applyUpdateLocked(tx, and(eq(workItems.id, id), eq(workItems.orgId, orgId)), patch, userId, new Date()),
+  );
 }
 
 /** Delete an org's work item. Returns `false` when it doesn't exist in the org. */

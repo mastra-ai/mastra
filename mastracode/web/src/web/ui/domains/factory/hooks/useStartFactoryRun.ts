@@ -113,24 +113,31 @@ export function useStartFactoryRun() {
       });
 
       // File the board card now that the run is underway, hanging the run's
-      // session ref off the requested role.
+      // session ref off the requested role. Best-effort: the run itself
+      // (worktree + session + thread + prompt) already succeeded, so a filing
+      // failure must not reject the mutation and strand the user off the
+      // thread that is actively running.
       const githubProjectId = activeProject?.githubProjectId;
       if (workItem && githubProjectId) {
-        const sessions = { [workItem.role]: { projectPath, branch, threadId } };
-        if (workItem.id) {
-          await updateWorkItem(baseUrl, workItem.id, { stages: workItem.stages, sessions });
-        } else {
-          await createWorkItem(baseUrl, githubProjectId, {
-            source: workItem.source,
-            sourceKey: workItem.sourceKey,
-            title: workItem.title,
-            url: workItem.url ?? null,
-            stages: workItem.stages,
-            sessions,
-            metadata: workItem.metadata,
-          });
+        try {
+          const sessions = { [workItem.role]: { projectPath, branch, threadId } };
+          if (workItem.id) {
+            await updateWorkItem(baseUrl, workItem.id, { stages: workItem.stages, sessions });
+          } else {
+            await createWorkItem(baseUrl, githubProjectId, {
+              source: workItem.source,
+              sourceKey: workItem.sourceKey,
+              title: workItem.title,
+              url: workItem.url ?? null,
+              stages: workItem.stages,
+              sessions,
+              metadata: workItem.metadata,
+            });
+          }
+          void queryClient.invalidateQueries({ queryKey: queryKeys.workItems(githubProjectId) });
+        } catch (err) {
+          console.error('Failed to file the board card for this run', err);
         }
-        void queryClient.invalidateQueries({ queryKey: queryKeys.workItems(githubProjectId) });
       }
       return threadId;
     },

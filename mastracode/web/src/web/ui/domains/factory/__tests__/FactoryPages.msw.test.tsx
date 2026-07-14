@@ -12,7 +12,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/web-ui/render';
@@ -779,6 +779,32 @@ describe('Factory Board — investigate flow', () => {
         },
       },
     ]);
+  });
+
+  it('given board-card filing that fails, when Investigate is clicked, then the run still succeeds and navigates to the thread', async () => {
+    useBoardHandlers({ issues });
+    const captured = useFactoryRunHandlers('factory-issue-12');
+    // The card filing endpoint blows up, but the run itself already succeeded.
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${GITHUB_PROJECT_ID}/work-items`, () =>
+        HttpResponse.json({ error: 'boom' }, { status: 500 }),
+      ),
+    );
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const { router } = renderAt('/factory/board');
+
+      const intake = await screen.findByTestId('board-column-intake');
+      await within(intake).findByText('Fix flaky test');
+      await userEvent.click(within(intake).getByRole('button', { name: 'Investigate Fix flaky test' }));
+
+      // Filing is best-effort: the user still lands on the running thread.
+      await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
+      expect(captured.messages).toHaveLength(1);
+      expect(errorSpy).toHaveBeenCalledWith('Failed to file the board card for this run', expect.anything());
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 
   it('given a PR candidate, when Review is clicked, then the review prompt runs and a work item materializes into Review with a review session', async () => {

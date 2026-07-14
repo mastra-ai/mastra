@@ -41,11 +41,25 @@ function rowsOf(table: any): Array<Record<string, any>> {
   return (tables['unknown'] ??= []);
 }
 
-vi.mock('../github/db', () => ({
-  getAppDb: () => ({
+// Serialize transactions the way row locks would: each `db.transaction` waits
+// for the previous one to finish, so a locked read always sees prior writes.
+let txTail: Promise<unknown> = Promise.resolve();
+
+vi.mock('../github/db', () => {
+  const makeDbClient = (): any => ({
     select: () => ({
       from: (table: any) => ({
-        where: async (cond: any) => rowsOf(table).filter(row => matches(table, row, cond)),
+        where: (cond: any) => {
+          const result = (async () => {
+            // Yield a macrotask so unlocked concurrent read-modify-writes
+            // genuinely interleave (regression coverage for the row lock).
+            await new Promise(resolve => setTimeout(resolve, 0));
+            return rowsOf(table).filter(row => matches(table, row, cond));
+          })();
+          // Support the chained `.for('update')` row lock as a no-op; locking
+          // is emulated by the serialized `transaction` queue below.
+          return Object.assign(result, { for: () => result });
+        },
       }),
     }),
     insert: (table: any) => ({
@@ -66,6 +80,9 @@ vi.mock('../github/db', () => ({
       set: (set: any) => ({
         where: (cond: any) => ({
           returning: async () => {
+            // Yield like the select does so read-modify-write pairs from
+            // concurrent callers interleave unless serialized by transaction.
+            await new Promise(resolve => setTimeout(resolve, 0));
             const updated: any[] = [];
             for (const row of rowsOf(table)) {
               if (matches(table, row, cond)) {
@@ -86,8 +103,14 @@ vi.mock('../github/db', () => ({
         rows.push(...remaining);
       },
     }),
-  }),
-}));
+    transaction: (fn: (tx: any) => Promise<unknown>) => {
+      const run = txTail.then(() => fn(makeDbClient()));
+      txTail = run.catch(() => undefined);
+      return run;
+    },
+  });
+  return { getAppDb: () => makeDbClient() };
+});
 
 import { mountApiRoutes } from '../test-utils';
 import { buildFactoryRoutes } from './routes';
@@ -131,6 +154,7 @@ const createBody = (overrides: Record<string, unknown> = {}) => ({
 beforeEach(() => {
   tables = {};
   nextId = 1;
+  txTail = Promise.resolve();
   seedProject();
 });
 
@@ -290,6 +314,28 @@ describe('PATCH /web/factory/work-items/:id', () => {
     const { workItem } = await res.json();
     expect(Object.keys(workItem.sessions).sort()).toEqual(['review', 'work']);
     expect(workItem.metadata).toEqual({ number: 42, labels: ['bug'], prNumber: 7 });
+  });
+
+  it('serializes concurrent patches so neither session merge is dropped', async () => {
+    const item = await createItem();
+    // Two runs file their session refs on the same card at once (e.g. a work
+    // run and a review run finishing kickoff together). Each merge reads the
+    // current `sessions` and writes it back — without the row lock the last
+    // write would silently drop the other role.
+    const [workRes, reviewRes] = await Promise.all([
+      json('PATCH', `/web/factory/work-items/${item.id}`, {
+        sessions: { work: { projectPath: '/sb/wt/a', branch: 'b-a', threadId: 't-a' } },
+      }),
+      json('PATCH', `/web/factory/work-items/${item.id}`, {
+        sessions: { review: { projectPath: '/sb/wt/r', branch: 'b-r', threadId: 't-r' } },
+      }),
+    ]);
+    expect(workRes.status).toBe(200);
+    expect(reviewRes.status).toBe(200);
+
+    const list = await json('GET', `/web/factory/projects/${PROJECT_ID}/work-items`);
+    const [workItem] = (await list.json()).workItems;
+    expect(Object.keys(workItem.sessions).sort()).toEqual(['review', 'work']);
   });
 
   it('404s for items in another org', async () => {
