@@ -107,7 +107,8 @@ function toStatusText(part: AgentControllerMessageContent): string | null {
     return `Thread title updated: ${part.text}`;
   }
 
-  return part.text ?? null;
+  if (part.text) return part.text;
+  return 'message' in part && typeof part.message === 'string' ? part.message : null;
 }
 
 function createdAtForMessage(messageId: string): Date {

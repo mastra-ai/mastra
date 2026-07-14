@@ -139,6 +139,66 @@ describe('ChatMessageList', () => {
     await waitFor(() => expect(screen.getByText('Hello from the agent')).toBeInTheDocument());
   });
 
+  it('given a streamed notification signal, then it renders the notification provenance in the transcript', async () => {
+    seedProject();
+    useAgentControllerHandlers([
+      {
+        type: 'message_update',
+        message: {
+          id: 'notification-message-1',
+          role: 'assistant',
+          content: [
+            {
+              type: 'notification',
+              notificationId: 'notification-1',
+              message: 'octo/repo#42 received a new comment',
+              source: 'github',
+              kind: 'pull-request-comment',
+              priority: 'high',
+            },
+          ],
+        },
+      },
+    ]);
+    renderMessageList();
+
+    await waitFor(() => expect(screen.getByText('octo/repo#42 received a new comment')).toBeInTheDocument());
+    expect(screen.getByText('github')).toBeInTheDocument();
+    expect(screen.getByText('high')).toBeInTheDocument();
+  });
+
+  it('given a persisted notification signal, then it remains visible after transcript hydration', async () => {
+    seedProject();
+    useAgentControllerHandlers();
+    server.use(
+      http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () =>
+        HttpResponse.json({
+          messages: [
+            {
+              id: 'notification-message-1',
+              role: 'user',
+              content: [
+                {
+                  type: 'notification',
+                  notificationId: 'notification-1',
+                  message: 'octo/repo#42 was approved',
+                  source: 'github',
+                  kind: 'pull-request-review',
+                  priority: 'urgent',
+                },
+              ],
+            },
+          ],
+        }),
+      ),
+    );
+    renderMessageList();
+
+    await waitFor(() => expect(screen.getByText('octo/repo#42 was approved')).toBeInTheDocument());
+    expect(screen.getByText('github')).toBeInTheDocument();
+    expect(screen.getByText('urgent')).toBeInTheDocument();
+  });
+
   it('given a running turn without streamed assistant text, then it shows the working indicator', async () => {
     seedProject();
     useAgentControllerHandlers([{ type: 'agent_start' }]);

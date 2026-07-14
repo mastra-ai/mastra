@@ -49,7 +49,7 @@ describe('agent controller message accumulator', () => {
       id: 'status-1',
       role: 'system',
       content: [
-        { type: 'notification_summary', text: 'Review pending notifications' },
+        { type: 'notification_summary', message: 'Review pending notifications' },
         { type: 'om_thread_title_updated', text: 'Refactor transcript renderer' },
       ],
     };

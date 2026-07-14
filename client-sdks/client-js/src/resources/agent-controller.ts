@@ -31,6 +31,19 @@ export interface AgentControllerMessageContent {
   args?: unknown;
   result?: unknown;
   isError?: boolean;
+  /** Structured notification and notification-summary fields. */
+  notificationId?: string;
+  message?: string;
+  source?: string;
+  kind?: string;
+  priority?: string;
+  status?: string;
+  attributes?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  pending?: number;
+  bySource?: Record<string, number>;
+  byPriority?: Record<string, number>;
+  notificationIds?: string[];
 }
 
 export interface AgentControllerMessage {

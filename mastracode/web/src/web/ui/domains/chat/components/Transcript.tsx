@@ -721,6 +721,10 @@ function MessageBubble({ entry }: { entry: MessageEntry }) {
     File: (part: FilePart) => <pre className={resultBlock}>{stringify(part)}</pre>,
   };
 
+  const notification = notificationMetadata(entry);
+  if (notification?.kind === 'notification') return <NotificationCard entry={notification} />;
+  if (notification?.kind === 'notification_summary') return <NotificationSummaryCard entry={notification} />;
+
   const status = statusMetadata(entry);
   // Some harness status parts (e.g. om_* markers) carry no text; skip them
   // entirely instead of rendering an empty notice bubble.
@@ -743,6 +747,60 @@ function toolFromInvocationPart(part: ToolInvocationPart, runtime?: ToolCall): T
     result: runtime?.result ?? persistedResult ?? invocation.errorText,
     output: runtime?.output ?? '',
   };
+}
+
+function notificationMetadata(entry: MessageEntry): NotificationEntry | NotificationSummaryEntry | undefined {
+  const harnessContent = entry.message.content.metadata?.harnessContent;
+  if (!Array.isArray(harnessContent)) return undefined;
+
+  const part = harnessContent.find(
+    candidate =>
+      typeof candidate === 'object' &&
+      candidate !== null &&
+      'type' in candidate &&
+      (candidate.type === 'notification' || candidate.type === 'notification_summary'),
+  );
+  if (!part || typeof part !== 'object' || !('type' in part)) return undefined;
+
+  if (part.type === 'notification') {
+    if (!('message' in part) || typeof part.message !== 'string') return undefined;
+    return {
+      kind: 'notification',
+      id: `${entry.id}-notification`,
+      notificationId:
+        'notificationId' in part && typeof part.notificationId === 'string' ? part.notificationId : undefined,
+      message: part.message,
+      source: 'source' in part && typeof part.source === 'string' ? part.source : undefined,
+      notifKind: 'kind' in part && typeof part.kind === 'string' ? part.kind : undefined,
+      priority: 'priority' in part && typeof part.priority === 'string' ? part.priority : undefined,
+    };
+  }
+
+  if (!('message' in part) || typeof part.message !== 'string') return undefined;
+  const pending = 'pending' in part && typeof part.pending === 'number' ? part.pending : 0;
+  const bySource = 'bySource' in part && isNumberRecord(part.bySource) ? part.bySource : {};
+  const byPriority = 'byPriority' in part && isNumberRecord(part.byPriority) ? part.byPriority : {};
+  const notificationIds =
+    'notificationIds' in part && Array.isArray(part.notificationIds)
+      ? part.notificationIds.filter((id: unknown): id is string => typeof id === 'string')
+      : [];
+  return {
+    kind: 'notification_summary',
+    id: `${entry.id}-notification-summary`,
+    message: part.message,
+    pending,
+    bySource,
+    byPriority,
+    notificationIds,
+  };
+}
+
+function isNumberRecord(value: unknown): value is Record<string, number> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    Object.values(value).every(candidate => typeof candidate === 'number')
+  );
 }
 
 interface StatusMetadata {
