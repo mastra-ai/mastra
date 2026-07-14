@@ -436,6 +436,51 @@
   padding: 1rem var(--ifm-spacing-horizontal) 2rem;
 }
 
+.doc-chat-interface__send {
+  background: #fff !important;
+}
+
+.doc-chat-interface__send:hover {
+  background: #c4c4c4 !important;
+}
+
+.doc-chat-interface__send svg {
+  color: #000 !important;
+}
+
+.doc-chat-scroll-to-bottom svg {
+  color: #fff !important;
+}
+
+[data-theme='dark'] .doc-chat-scroll-to-bottom svg {
+  color: #000 !important;
+}
+
+[data-theme='dark'] .doc-chat-interface__send {
+  background: #000 !important;
+}
+
+[data-theme='dark'] .doc-chat-interface__send:hover {
+  background: #3c3c3c !important;
+}
+
+[data-theme='dark'] .doc-chat-interface__send svg {
+  color: #fff !important;
+}
+
+[data-streamdown='table'] {
+  margin-bottom: 0;
+}
+
+[data-streamdown='code-block-body'] pre {
+  margin-bottom: 0;
+  padding: var(--ifm-pre-padding) !important;
+}
+
+[data-streamdown='code-block-body'] pre > code > span {
+  display: block;
+}
+
 /* Themed aliases + plugin overrides for dark mode */
 [data-theme='dark'] {
   --mastra-color-surface-bg: var(--mastra-color-dark-surface-bg);
