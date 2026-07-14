@@ -27,6 +27,7 @@ import type {
   KnowledgeSemanticDocumentType,
   KnowledgeSemanticOperation,
   KnowledgeSemanticOutboxEntry,
+  ListKnowledgeItemsBySourceInput,
   ListKnowledgeItemsInput,
   ListKnowledgeItemsOutput,
   ListKnowledgeNodesInput,
@@ -317,6 +318,25 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       ),
       { ...input, scope: queryScope },
     );
+  }
+
+  async listItemsBySource(input: ListKnowledgeItemsBySourceInput): Promise<ListKnowledgeItemsOutput> {
+    const scope = canonicalizeKnowledgeScope(input.scope);
+    const limit = input.limit ?? 100;
+    const items = [...this.#db.knowledgeItems.values()]
+      .filter(
+        item =>
+          item.sourceThreadId === input.sourceThreadId &&
+          isKnowledgeScopeVisible(item.scope, scope) &&
+          (input.includeDeleted || !item.deletedAt) &&
+          (!input.after || item.id > input.after),
+      )
+      .sort((left, right) => left.id.localeCompare(right.id))
+      .slice(0, limit + 1);
+    return {
+      items: items.slice(0, limit).map(cloneItem),
+      nextCursor: items.length > limit ? items[limit - 1]?.id : undefined,
+    };
   }
 
   async removeItem({ id, deletedBy }: { id: string; deletedBy: string }): Promise<KnowledgeItem> {

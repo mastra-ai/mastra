@@ -205,6 +205,15 @@ export interface ListKnowledgeItemsOutput {
   nextCursor?: string;
 }
 
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface ListKnowledgeItemsBySourceInput {
+  sourceThreadId: string;
+  scope: KnowledgeScope;
+  after?: string;
+  limit?: number;
+  includeDeleted?: boolean;
+}
+
 export interface SearchKnowledgeInput {
   query: string;
   scope: KnowledgeScope;
@@ -391,6 +400,7 @@ export abstract class KnowledgeStorage extends StorageDomain {
   abstract getItem(input: { id: string; includeDeleted?: boolean }): Promise<KnowledgeItem | null>;
   abstract itemsAbout(input: ListKnowledgeItemsInput): Promise<ListKnowledgeItemsOutput>;
   abstract itemsTouching(input: ListKnowledgeItemsInput): Promise<ListKnowledgeItemsOutput>;
+  abstract listItemsBySource(input: ListKnowledgeItemsBySourceInput): Promise<ListKnowledgeItemsOutput>;
   abstract removeItem(input: { id: string; deletedBy: string }): Promise<KnowledgeItem>;
   abstract restoreItem(input: { id: string }): Promise<KnowledgeItem>;
   abstract rescopeItem(input: { id: string; scope: KnowledgeScope }): Promise<KnowledgeItem>;
