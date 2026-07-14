@@ -903,6 +903,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       let entity = await this.#resolveEntity(tx, name, resolutionScope);
       if (!entity) {
         entity = await this.#getEntityByName(tx, name, defaultScope);
+        if (entity) entity = await this.#resolveTerminalEntity(tx, entity.id);
         if (!entity) {
           const now = new Date();
           entity = {
