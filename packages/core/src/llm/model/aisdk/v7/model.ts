@@ -1,8 +1,11 @@
-import type { LanguageModelV4, LanguageModelV4CallOptions } from '@ai-sdk/provider-v7';
+import type { LanguageModelV4, LanguageModelV4CallOptions, LanguageModelV4FilePart } from '@ai-sdk/provider-v7';
+import { convertToDataContent } from '../../../../stream/aisdk/v5/compat/content';
 import type { MastraLanguageModelV4 } from '../../shared.types';
 import { createStreamFromGenerateResult } from '../generate-to-stream';
 
 type StreamResult = Awaited<ReturnType<LanguageModelV4['doStream']>>;
+type LegacyFileData = string | URL | Uint8Array | ArrayBuffer;
+type FileData = LegacyFileData | LanguageModelV4FilePart['data'];
 
 /**
  * Remaps tool types from V2 format ('provider-defined') to V4 format ('provider').
@@ -28,6 +31,79 @@ function remapToolsToV4(options: LanguageModelV4CallOptions): LanguageModelV4Cal
     ...options,
     tools: remappedTools as typeof options.tools,
   };
+}
+
+function isTaggedV4FileData(data: unknown): data is LanguageModelV4FilePart['data'] {
+  if (typeof data !== 'object' || data === null || !('type' in data)) {
+    return false;
+  }
+
+  const type = data.type;
+  return type === 'data' || type === 'url' || type === 'reference' || type === 'text';
+}
+
+/**
+ * The Agent loop calls V4 providers directly, bypassing AI SDK v7's prompt
+ * conversion. Agent prompts may therefore still contain V2/V3 flat file data.
+ * Convert that legacy shape while preserving already-normalized V4 data.
+ */
+function normalizeFileDataForV4(data: FileData): {
+  data: LanguageModelV4FilePart['data'];
+  mediaType?: string;
+} {
+  if (isTaggedV4FileData(data)) {
+    return { data };
+  }
+
+  const { data: convertedData, mediaType } = convertToDataContent(data);
+
+  return {
+    data: convertedData instanceof URL ? { type: 'url', url: convertedData } : { type: 'data', data: convertedData },
+    mediaType,
+  };
+}
+
+function remapFilePartsToV4(options: LanguageModelV4CallOptions): LanguageModelV4CallOptions {
+  let promptModified = false;
+  const prompt = options.prompt.map(message => {
+    if (message.role !== 'user' && message.role !== 'assistant') {
+      return message;
+    }
+
+    let contentModified = false;
+    const content = message.content.map(part => {
+      if (part.type !== 'file') {
+        return part;
+      }
+
+      const { data, mediaType } = normalizeFileDataForV4(part.data);
+      if (data === part.data && mediaType == null) {
+        return part;
+      }
+
+      contentModified = true;
+      return {
+        ...part,
+        data,
+        mediaType: mediaType ?? part.mediaType,
+      };
+    });
+
+    if (!contentModified) {
+      return message;
+    }
+
+    promptModified = true;
+    return { ...message, content };
+  });
+
+  // The map only replaces file parts with file parts, but TS widens the
+  // mapped message union across roles, so restore the prompt type.
+  return promptModified ? { ...options, prompt: prompt as typeof options.prompt } : options;
+}
+
+function remapCallOptionsToV4(options: LanguageModelV4CallOptions): LanguageModelV4CallOptions {
+  return remapToolsToV4(remapFilePartsToV4(options));
 }
 
 /**
@@ -68,7 +144,7 @@ export class AISDKV7LanguageModel implements MastraLanguageModelV4 {
   }
 
   async doGenerate(options: LanguageModelV4CallOptions) {
-    const result = await this.#model.doGenerate(remapToolsToV4(options));
+    const result = await this.#model.doGenerate(remapCallOptionsToV4(options));
 
     return {
       ...result,
@@ -79,7 +155,7 @@ export class AISDKV7LanguageModel implements MastraLanguageModelV4 {
   }
 
   async doStream(options: LanguageModelV4CallOptions) {
-    return await this.#model.doStream(remapToolsToV4(options));
+    return await this.#model.doStream(remapCallOptionsToV4(options));
   }
 
   /**
