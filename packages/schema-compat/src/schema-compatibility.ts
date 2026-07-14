@@ -350,11 +350,11 @@ export abstract class SchemaCompatLayer {
 
     traverse(jsonSchema, {
       cb: {
-        pre: schema => {
-          this.preProcessJSONNode(schema);
+        pre: (schema, _jsonPtr, _rootSchema, _parentJsonPtr, _parentKeyword, parentSchema) => {
+          this.preProcessJSONNode(schema, parentSchema);
         },
-        post: schema => {
-          this.postProcessJSONNode(schema);
+        post: (schema, _jsonPtr, _rootSchema, _parentJsonPtr, _parentKeyword, parentSchema) => {
+          this.postProcessJSONNode(schema, parentSchema);
         },
       },
     });
@@ -706,11 +706,11 @@ export abstract class SchemaCompatLayer {
 
     traverse(jsonSchema, {
       cb: {
-        pre: schema => {
-          this.preProcessJSONNode(schema);
+        pre: (schema, _jsonPtr, _rootSchema, _parentJsonPtr, _parentKeyword, parentSchema) => {
+          this.preProcessJSONNode(schema, parentSchema);
         },
-        post: schema => {
-          this.postProcessJSONNode(schema);
+        post: (schema, _jsonPtr, _rootSchema, _parentJsonPtr, _parentKeyword, parentSchema) => {
+          this.postProcessJSONNode(schema, parentSchema);
         },
       },
     });

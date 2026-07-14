@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
+import { z as zV3 } from 'zod/v3';
 import type { ModelInformation } from '../types';
 import { isZodType } from '../utils';
 import { zodToJsonSchema } from '../zod-to-json';
@@ -70,7 +71,7 @@ describe('OpenAISchemaCompatLayer', () => {
   // be stripped, exactly as the Google layer already does. See google.test.ts.
   // =============================================================================
 
-  describe('propertyNames stripping (OpenAI strict mode)', () => {
+  describe('z.record handling (OpenAI strict mode)', () => {
     it('strips propertyNames emitted by z.record', () => {
       const schema = z.object({ metadata: z.record(z.string(), z.string()) });
 
@@ -90,6 +91,133 @@ describe('OpenAISchemaCompatLayer', () => {
       const json = JSON.stringify(reasoning.processToJSONSchema(schema));
 
       expect(json).not.toContain('"propertyNames"');
+    });
+
+    it('rewrites string-keyed records as key/value pair arrays', () => {
+      const schema = z.object({ metadata: z.record(z.string(), z.string()) });
+
+      const json = compat.processToJSONSchema(schema) as Record<string, any>;
+      const metadata = json.properties.metadata;
+
+      expect(metadata.type).toBe('array');
+      expect(metadata['x-record']).toBe(true);
+      expect(metadata.items).toMatchObject({
+        type: 'object',
+        properties: {
+          key: { type: 'string' },
+          value: { type: 'string' },
+        },
+        required: ['key', 'value'],
+        additionalProperties: false,
+      });
+      expect(allPropsRequired(json).valid).toBe(true);
+    });
+
+    it('preserves the record value schema in the pair items', () => {
+      const schema = z.object({ m: z.record(z.string(), z.object({ a: z.number() })) });
+
+      const json = compat.processToJSONSchema(schema) as Record<string, any>;
+
+      expect(json.properties.m.items.properties.value).toMatchObject({
+        type: 'object',
+        properties: { a: { type: 'number' } },
+        required: ['a'],
+        additionalProperties: false,
+      });
+    });
+
+    it('folds pair arrays back into records during validation', async () => {
+      const schema = z.object({ metadata: z.record(z.string(), z.string()) });
+
+      const compatSchema = compat.processToCompatSchema(schema);
+      const result = await compatSchema['~standard'].validate({
+        metadata: [
+          { key: 'a', value: '1' },
+          { key: 'b', value: '2' },
+        ],
+      });
+
+      expect(result).toEqual({ value: { metadata: { a: '1', b: '2' } } });
+    });
+
+    it('folds nested records back through multiple levels', async () => {
+      const schema = z.object({ m: z.record(z.string(), z.record(z.string(), z.number())) });
+
+      const compatSchema = compat.processToCompatSchema(schema);
+      const result = await compatSchema['~standard'].validate({
+        m: [{ key: 'outer', value: [{ key: 'inner', value: 1 }] }],
+      });
+
+      expect(result).toEqual({ value: { m: { outer: { inner: 1 } } } });
+    });
+
+    it('expands enum-keyed records into closed objects', async () => {
+      const schema = z.object({ m: z.record(z.enum(['a', 'b']), z.string()) });
+
+      const json = compat.processToJSONSchema(schema) as Record<string, any>;
+      const m = json.properties.m;
+
+      expect(m.properties).toEqual({ a: { type: 'string' }, b: { type: 'string' } });
+      expect(m.required).toEqual(['a', 'b']);
+      expect(m.additionalProperties).toBe(false);
+      expect(JSON.stringify(json)).not.toContain('"propertyNames"');
+
+      // No wire-format change, so the value validates without any fold-back.
+      const compatSchema = compat.processToCompatSchema(schema);
+      const result = await compatSchema['~standard'].validate({ m: { a: 'x', b: 'y' } });
+      expect(result).toEqual({ value: { m: { a: 'x', b: 'y' } } });
+    });
+
+    it('handles optional records', async () => {
+      const schema = z.object({ m: z.record(z.string(), z.string()).optional() });
+
+      const json = compat.processToJSONSchema(schema) as Record<string, any>;
+      const variants = json.properties.m.anyOf;
+
+      expect(variants).toContainEqual({ type: 'null' });
+      expect(variants.find((v: any) => v.type === 'array')?.['x-record']).toBe(true);
+
+      const compatSchema = compat.processToCompatSchema(schema);
+      const present = await compatSchema['~standard'].validate({ m: [{ key: 'a', value: 'b' }] });
+      expect(present).toEqual({ value: { m: { a: 'b' } } });
+      const absent = await compatSchema['~standard'].validate({ m: null });
+      expect(absent).toEqual({ value: {} });
+    });
+
+    it('rewrites zod v3 records too', async () => {
+      const schema = zV3.object({ metadata: zV3.record(zV3.string(), zV3.string()) });
+
+      const json = compat.processToJSONSchema(schema) as Record<string, any>;
+      expect(json.properties.metadata['x-record']).toBe(true);
+
+      const compatSchema = compat.processToCompatSchema(schema);
+      const result = await compatSchema['~standard'].validate({ metadata: [{ key: 'a', value: '1' }] });
+      expect(result).toEqual({ value: { metadata: { a: '1' } } });
+    });
+
+    it('rewrites records on the reasoning layer', async () => {
+      const reasoning = new OpenAIReasoningSchemaCompatLayer({
+        provider: 'openai',
+        modelId: 'o3-mini',
+        supportsStructuredOutputs: true,
+      });
+      const schema = z.object({ metadata: z.record(z.string(), z.string()) });
+
+      const json = reasoning.processToJSONSchema(schema) as Record<string, any>;
+      expect(json.properties.metadata['x-record']).toBe(true);
+
+      const compatSchema = reasoning.processToCompatSchema(schema);
+      const result = await compatSchema['~standard'].validate({ metadata: [{ key: 'a', value: '1' }] });
+      expect(result).toEqual({ value: { metadata: { a: '1' } } });
+    });
+
+    it('falls back to stripping propertyNames for top-level records', () => {
+      const schema = z.record(z.string(), z.string());
+
+      const json = compat.processToJSONSchema(schema) as Record<string, any>;
+
+      expect(JSON.stringify(json)).not.toContain('"propertyNames"');
+      expect(json.additionalProperties).toBe(false);
     });
   });
 
