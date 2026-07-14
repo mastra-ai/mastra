@@ -603,6 +603,7 @@ describe('Tool Tracing Context Injection', () => {
       name: "tool: 'tracing-test-tool'",
       input: { message: 'test' },
       attributes: {
+        toolCallId: 'test-call-id',
         toolDescription: 'Test tool that captures tracing context',
         toolType: 'tool',
       },
@@ -712,6 +713,7 @@ describe('Tool Tracing Context Injection', () => {
       name: "tool: 'vercel-tool'",
       input: { input: 'test' },
       attributes: {
+        toolCallId: 'test-call-id',
         toolDescription: 'Vercel tool test',
         toolType: 'tool',
       },
@@ -1010,6 +1012,7 @@ describe('Tool Tracing Context Injection', () => {
       name: "tool: 'toolset-tool'",
       input: { message: 'test' },
       attributes: {
+        toolCallId: 'test-call-id',
         toolDescription: 'Tool from a toolset',
         toolType: 'toolset',
       },
