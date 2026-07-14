@@ -212,6 +212,24 @@ describe('Knowledge semantic indexing', () => {
     expect(deleteVectors).toHaveBeenCalled();
   });
 
+  it('keeps concurrent drains isolated by visible scope', async () => {
+    const memory = new Memory({ storage: new InMemoryStore() });
+    const knowledge = (await memory.storage.getStore('knowledge'))!;
+    await knowledge.createEntity({ name: 'Atlas', kind: 'project', scope: ['org:acme'] });
+    await knowledge.createEntity({ name: 'Beacon', kind: 'project', scope: ['org:beta'] });
+    const { vector } = createVector();
+    const embedder = {
+      doEmbed: vi.fn(async () => {
+        await new Promise(resolve => setTimeout(resolve, 5));
+        return { embeddings: [[0.1, 0.2]] };
+      }),
+    } as unknown as MastraEmbeddingModel<string>;
+    const coordinator = new KnowledgeSemanticIndexCoordinator({ knowledge, vector, embedder, workerId: 'scoped' });
+
+    await Promise.all([coordinator.drain(['org:acme']), coordinator.drain(['org:beta'])]);
+    expect(await knowledge.listSemanticOutbox({ status: 'completed' })).toHaveLength(2);
+  });
+
   it('releases failed rows and resumes them idempotently after a crash-like failure', async () => {
     const memory = new Memory({ storage: new InMemoryStore() });
     const knowledge = (await memory.storage.getStore('knowledge'))!;

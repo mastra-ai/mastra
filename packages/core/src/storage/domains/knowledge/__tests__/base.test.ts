@@ -64,7 +64,7 @@ describe('InMemoryKnowledgeStorage', () => {
     expect((await store.factsTouching({ entityId: marco!.id, scope: sibling })).facts).toHaveLength(0);
   });
 
-  it('does not expose facts through a scope that cannot see their parent entity', async () => {
+  it('applies fact visibility independently from parent entity identity scope', async () => {
     const store = createStore();
     const entity = await store.createEntity({ name: 'Resource Secret', kind: 'task', scope: resource });
     await store.appendFact({
@@ -76,8 +76,10 @@ describe('InMemoryKnowledgeStorage', () => {
       defaultScope: resource,
     });
 
-    expect((await store.factsAbout({ entityId: entity.id, scope: org })).facts).toEqual([]);
-    expect(await store.search({ query: 'org-visible', scope: org })).toEqual([]);
+    expect((await store.factsAbout({ entityId: entity.id, scope: org })).facts).toHaveLength(1);
+    expect(await store.search({ query: 'org-visible', scope: org })).toEqual([
+      expect.objectContaining({ type: 'fact', recordId: entity.id, scope: org }),
+    ]);
     expect((await store.factsAbout({ entityId: entity.id, scope: thread })).facts).toHaveLength(1);
   });
 
