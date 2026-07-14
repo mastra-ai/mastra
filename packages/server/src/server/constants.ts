@@ -42,6 +42,10 @@ const RESERVED_CONTEXT_KEYS = new Set([
   MASTRA_AUTH_TOKEN_KEY,
   MASTRA_IS_STUDIO_KEY,
   MASTRA_AUTH_MODE_KEY,
+  // Tenant scope must be established server-side, never self-asserted by a
+  // client. The trusted-actor FGA gate keys off `organizationId`, so a
+  // body-supplied value must not be merged into the request context.
+  'organizationId',
 ]);
 
 export function isReservedRequestContextKey(key: string): boolean {

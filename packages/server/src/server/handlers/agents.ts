@@ -1238,7 +1238,7 @@ export const GENERATE_AGENT_ROUTE = createRoute({
     try {
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
 
       const { messages, memory: memoryOption, requestContext: bodyRequestContext, versions, ...rest } = params;
 
@@ -1346,7 +1346,7 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
 
       const { messages, resourceId, resourceid, threadId, ...rest } = params;
       // Use resourceId if provided, fall back to resourceid (deprecated)
@@ -1416,7 +1416,7 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
 
       const { messages, resourceId, resourceid, threadId, ...rest } = params;
       // Use resourceId if provided, fall back to resourceid (deprecated)
@@ -1622,7 +1622,7 @@ export const STREAM_GENERATE_ROUTE = createRoute({
     try {
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
 
       const { messages, memory: memoryOption, requestContext: bodyRequestContext, versions, ...rest } = params;
       validateBody({ messages });
@@ -2159,7 +2159,7 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
     try {
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
 
       const { messages, memory: memoryOption, requestContext: bodyRequestContext, ...rest } = params;
       validateBody({ messages });
@@ -2385,7 +2385,7 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
 
       const streamResult = await agent.approveToolCall({
         ...params,
@@ -2458,7 +2458,7 @@ export const SEND_TOOL_APPROVAL_ROUTE = createRoute({
       }
 
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
       const { effectiveResourceId, effectiveThreadId } = await validateSubscriptionToolCallThreadAccess({
         agent,
         requestContext: serverRequestContext,
@@ -2573,7 +2573,7 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
 
       const streamResult = await agent.declineToolCall({
         ...params,
@@ -2607,7 +2607,7 @@ export const RESUME_STREAM_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Run id is required' });
       }
 
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
 
       const {
         resumeData,
@@ -2794,7 +2794,7 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Run id is required' });
       }
 
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
 
       const {
         resumeData,
@@ -2924,7 +2924,7 @@ export const APPROVE_TOOL_CALL_GENERATE_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
 
       const result = await agent.approveToolCallGenerate({
         ...params,
@@ -2968,7 +2968,7 @@ export const DECLINE_TOOL_CALL_GENERATE_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
 
       const result = await agent.declineToolCallGenerate({
         ...params,
@@ -3005,7 +3005,7 @@ export const STREAM_NETWORK_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
 
       validateBody({ messages });
 
@@ -3055,7 +3055,7 @@ export const APPROVE_NETWORK_TOOL_CALL_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
 
       const streamResult = await agent.approveNetworkToolCall({
         ...params,
@@ -3094,7 +3094,7 @@ export const DECLINE_NETWORK_TOOL_CALL_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
 
       const streamResult = await agent.declineNetworkToolCall({
         ...params,
