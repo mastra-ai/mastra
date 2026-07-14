@@ -1,6 +1,7 @@
 import type { LanguageModelV4, LanguageModelV4CallOptions } from '@ai-sdk/provider-v7';
 import { describe, expect, it, vi } from 'vitest';
 import { MessageList } from '../../../../agent/message-list';
+import { MastraError } from '../../../../error';
 import { AISDKV7LanguageModel } from './model';
 
 function createMockV4Model() {
@@ -186,6 +187,25 @@ describe('AISDKV7LanguageModel', () => {
         data: { type: 'data', data: 'YXNzaXN0YW50' },
         mediaType: 'text/plain',
       });
+    });
+
+    it('throws a MastraError client-side for malformed data URIs instead of sending them to the provider', async () => {
+      const model = createMockV4Model();
+      const wrapped = new AISDKV7LanguageModel(model);
+
+      const options = {
+        prompt: [
+          {
+            role: 'user',
+            content: [{ type: 'file', data: 'data:image/png', mediaType: 'image/png' }],
+          },
+        ],
+      } as unknown as LanguageModelV4CallOptions;
+
+      await expect(wrapped.doGenerate(options)).rejects.toSatisfy(
+        error => error instanceof MastraError && error.id === 'INVALID_DATA_URL_FORMAT',
+      );
+      expect(model.doGenerate).not.toHaveBeenCalled();
     });
   });
 });
