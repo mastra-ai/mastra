@@ -99,6 +99,33 @@ export async function loadPluginFromEntry(entryPath: string): Promise<MastraCode
   return validatePluginExport(await importPluginModule(entryPath));
 }
 
+export type ResolvedStandalonePlugin = {
+  plugin: MastraCodePlugin;
+  tools: MastraCodePluginTools;
+  configSchema?: MastraCodePluginConfigSchema;
+  configValues: MastraCodePluginConfigValues;
+};
+
+export async function resolveStandalonePlugin(options: {
+  entryPath: string;
+  cwd: string;
+  scope?: 'global' | 'project';
+  pluginDir: string;
+  config?: MastraCodePluginConfigValues;
+}): Promise<ResolvedStandalonePlugin> {
+  const plugin = await loadPluginFromEntry(options.entryPath);
+  const configSchema = validatePluginConfigSchema(plugin.config);
+  const configValues = resolveStandaloneConfigValues(configSchema, options.config);
+  const context: MastraCodePluginContext = {
+    cwd: options.cwd,
+    scope: options.scope ?? 'project',
+    pluginDir: options.pluginDir,
+    config: configValues,
+  };
+  const { tools } = await resolvePluginTools(plugin, context);
+  return { plugin, tools, configSchema, configValues };
+}
+
 export function resolvePluginRoot(record: ScopedInstalledPluginRecord, options: PluginPathOptions): string {
   const scopeRoot = path.resolve(getPluginRoot(record.scope, options));
   const pluginRoot = path.resolve(path.isAbsolute(record.path) ? record.path : path.join(scopeRoot, record.path));
@@ -227,6 +254,30 @@ function validatePluginConfigSchema(schema: unknown): MastraCodePluginConfigSche
     };
   }
   return Object.keys(validated).length > 0 ? validated : undefined;
+}
+
+function resolveStandaloneConfigValues(
+  schema: MastraCodePluginConfigSchema | undefined,
+  input: MastraCodePluginConfigValues | undefined,
+): MastraCodePluginConfigValues {
+  if (!schema) {
+    if (input && Object.keys(input).length > 0) throw new Error('Plugin does not define configuration options');
+    return {};
+  }
+  for (const [key, value] of Object.entries(input ?? {})) {
+    const option = schema[key];
+    if (!option) throw new Error(`Unknown plugin configuration key: ${key}`);
+    if (option.type === 'boolean' ? typeof value !== 'boolean' : typeof value !== 'string') {
+      throw new Error(`Invalid value for plugin configuration key: ${key}`);
+    }
+  }
+  const values = resolvePluginConfigValues(schema, input);
+  for (const [key, option] of Object.entries(schema)) {
+    if (values[key] === undefined && option.default === undefined) {
+      throw new Error(`Missing required plugin configuration key: ${key}`);
+    }
+  }
+  return values;
 }
 
 function resolvePluginConfigValues(

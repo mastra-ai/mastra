@@ -14,6 +14,7 @@ import { setupDebugLogging } from '@mastra/code-sdk/utils/debug-log';
 import { drainPipedStdin, reopenStdinFromTTY } from '@mastra/code-sdk/utils/stdin-pipe';
 import { releaseAllThreadLocks } from '@mastra/code-sdk/utils/thread-lock';
 import { getCurrentVersion } from '@mastra/code-sdk/utils/update-check';
+import { PLUGIN_MCP_USAGE, startPluginMCPCommand } from './plugin-mcp.js';
 import { detectTerminalTheme } from './tui/detect-theme.js';
 import { MastraTUI } from './tui/index.js';
 import { applyThemeMode, restoreTerminalForeground } from './tui/theme.js';
@@ -38,17 +39,21 @@ function resolveInitialStateFromEnv() {
   return Object.keys(initialState).length > 0 ? initialState : undefined;
 }
 
+const isPluginMCPCommand = process.argv[2] === 'plugin' && process.argv[3] === 'mcp';
+
 // Global safety nets — catch any uncaught errors from storage init, etc.
-process.on('uncaughtException', error => {
-  // ERR_STREAM_DESTROYED is non-fatal — happens routinely when streams close
-  // during shutdown, cancelled LLM requests, or LSP/subprocess exits (#13548, #13549)
-  if (isStreamDestroyedError(error)) return;
-  handleFatalError(error);
-});
-process.on('unhandledRejection', reason => {
-  if (isStreamDestroyedError(reason)) return;
-  handleFatalError(reason instanceof Error ? reason : new Error(String(reason)));
-});
+if (!isPluginMCPCommand) {
+  process.on('uncaughtException', error => {
+    // ERR_STREAM_DESTROYED is non-fatal — happens routinely when streams close
+    // during shutdown, cancelled LLM requests, or LSP/subprocess exits (#13548, #13549)
+    if (isStreamDestroyedError(error)) return;
+    handleFatalError(error);
+  });
+  process.on('unhandledRejection', reason => {
+    if (isStreamDestroyedError(reason)) return;
+    handleFatalError(reason instanceof Error ? reason : new Error(String(reason)));
+  });
+}
 
 async function tuiMain(pipedInput?: string | null) {
   const settings = loadSettings();
@@ -160,57 +165,59 @@ const asyncCleanup = async () => {
   ]);
 };
 
-process.on('beforeExit', () => {
-  void asyncCleanup();
-});
-process.on('exit', () => {
-  // Ensure terminal protocols (kitty keyboard, modifyOtherKeys, bracketed paste,
-  // raw mode) are disabled on ANY exit path. Without this, killing the process
-  // via SIGINT/SIGTERM leaves the terminal in a corrupted state where keypresses
-  // produce escape sequences like "5;99~" instead of normal characters.
-  try {
-    tui?.stop();
-  } catch {
-    // Failsafe: even if MastraTUI.stop() throws, write raw terminal reset
-    // sequences to disable Kitty keyboard protocol, bracketed paste, and
-    // modifyOtherKeys. These are the exact sequences pi-tui's terminal.stop()
-    // would write.
-  }
-  // Belt-and-suspenders: always write terminal reset sequences directly,
-  // regardless of whether tui.stop() succeeded. Writing them twice is harmless
-  // but missing them leaves the terminal in a corrupted state.
-  try {
-    process.stdout.write(
-      '\x1b[?2004l' + // disable bracketed paste
-        '\x1b[<u' + // pop kitty keyboard protocol
-        '\x1b[>4;0m' + // disable modifyOtherKeys
-        '\x1b[?25h', // show cursor
-    );
-    if (process.stdin.setRawMode) {
-      process.stdin.setRawMode(false);
+if (!isPluginMCPCommand) {
+  process.on('beforeExit', () => {
+    void asyncCleanup();
+  });
+  process.on('exit', () => {
+    // Ensure terminal protocols (kitty keyboard, modifyOtherKeys, bracketed paste,
+    // raw mode) are disabled on ANY exit path. Without this, killing the process
+    // via SIGINT/SIGTERM leaves the terminal in a corrupted state where keypresses
+    // produce escape sequences like "5;99~" instead of normal characters.
+    try {
+      tui?.stop();
+    } catch {
+      // Failsafe: even if MastraTUI.stop() throws, write raw terminal reset
+      // sequences to disable Kitty keyboard protocol, bracketed paste, and
+      // modifyOtherKeys. These are the exact sequences pi-tui's terminal.stop()
+      // would write.
     }
-  } catch {
-    // stdout may already be closed during exit
-  }
-  restoreTerminalForeground();
-  releaseAllThreadLocks();
-});
+    // Belt-and-suspenders: always write terminal reset sequences directly,
+    // regardless of whether tui.stop() succeeded. Writing them twice is harmless
+    // but missing them leaves the terminal in a corrupted state.
+    try {
+      process.stdout.write(
+        '\x1b[?2004l' + // disable bracketed paste
+          '\x1b[<u' + // pop kitty keyboard protocol
+          '\x1b[>4;0m' + // disable modifyOtherKeys
+          '\x1b[?25h', // show cursor
+      );
+      if (process.stdin.setRawMode) {
+        process.stdin.setRawMode(false);
+      }
+    } catch {
+      // stdout may already be closed during exit
+    }
+    restoreTerminalForeground();
+    releaseAllThreadLocks();
+  });
 
-// For all termination signals: stop the TUI FIRST (synchronous, disables keyboard
-// protocol immediately) before doing any async cleanup. This ensures the terminal
-// escape sequences are written even if asyncCleanup hangs or the process is killed
-// during cleanup.
-const handleTermSignal = () => {
-  try {
-    tui?.stop();
-  } catch {
-    // ignored — exit handler has failsafe reset
-  }
-  void asyncCleanup().finally(() => process.exit(0));
-};
-process.on('SIGINT', handleTermSignal);
-process.on('SIGTERM', handleTermSignal);
-process.on('SIGHUP', handleTermSignal);
+  // For all termination signals: stop the TUI FIRST (synchronous, disables keyboard
+  // protocol immediately) before doing any async cleanup. This ensures the terminal
+  // escape sequences are written even if asyncCleanup hangs or the process is killed
+  // during cleanup.
+  const handleTermSignal = () => {
+    try {
+      tui?.stop();
+    } catch {
+      // ignored — exit handler has failsafe reset
+    }
+    void asyncCleanup().finally(() => process.exit(0));
+  };
+  process.on('SIGINT', handleTermSignal);
+  process.on('SIGTERM', handleTermSignal);
+  process.on('SIGHUP', handleTermSignal);
+}
 
 function hasEconnrefused(err: unknown, depth = 0): boolean {
   if (!err || depth > 5) return false;
@@ -222,7 +229,18 @@ function hasEconnrefused(err: unknown, depth = 0): boolean {
   return false;
 }
 
-function pluginMain(args: string[]): void {
+async function pluginMain(args: string[]): Promise<void> {
+  if (args[0] === 'mcp') {
+    try {
+      await startPluginMCPCommand(args.slice(1));
+    } catch (error) {
+      process.stderr.write(
+        `Plugin MCP error: ${error instanceof Error ? error.message : String(error)}\n${PLUGIN_MCP_USAGE}\n`,
+      );
+      process.exitCode = 1;
+    }
+    return;
+  }
   if (args[0] !== 'scaffold') {
     process.stderr.write('Usage: mastracode plugin scaffold <dir> [--id acme.foo] [--name "Foo Tools"]\n');
     process.exit(1);

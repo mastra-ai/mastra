@@ -74,6 +74,7 @@ export function ensureMastraCodePackageLink(pluginDir: string): void {
     fs.rmSync(linkPath, { recursive: true, force: true });
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    fs.rmSync(linkPath, { recursive: true, force: true });
   }
 
   fs.mkdirSync(nodeModulesDir, { recursive: true });

@@ -56,6 +56,18 @@ describe('ensureMastraCodePackageLink', () => {
     );
   });
 
+  it('replaces a dangling mastracode package link', () => {
+    const pluginRoot = makePluginRoot();
+    const linkPath = path.join(pluginRoot, 'node_modules', 'mastracode');
+    fs.writeFileSync(path.join(pluginRoot, 'package.json'), JSON.stringify({ peerDependencies: { mastracode: '*' } }));
+    fs.mkdirSync(path.dirname(linkPath), { recursive: true });
+    fs.symlinkSync(path.join(pluginRoot, 'missing-mastracode'), linkPath, 'dir');
+
+    ensureMastraCodePackageLink(pluginRoot);
+
+    expect(fs.realpathSync(linkPath)).toBe(fs.realpathSync(mastracodePackageRoot));
+  });
+
   it('does not link mastracode when the plugin declares a package dependency', () => {
     const pluginRoot = makePluginRoot();
     fs.writeFileSync(path.join(pluginRoot, 'package.json'), JSON.stringify({ dependencies: { mastracode: '^1.0.0' } }));
