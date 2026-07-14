@@ -5260,71 +5260,7 @@ export class Mastra<
     // OrchestrationWorker pulling events — wire handleWorkflowEvent directly
     // to the pubsub so workflow events still get processed in-process.
     if (!name) {
-      const modes = this.#pubsub.supportedModes ?? ['pull'];
-      const pushOnly = modes.includes('push') && !modes.includes('pull');
-      if (pushOnly && !this.#pushSubscription) {
-        const cb: EventCallback = (event, ack, nack) => {
-          // In cross-process push environments (e.g. UnixSocketPubSub),
-          // every subscriber receives every event — including events for
-          // internal workflows registered on a different process. Skip
-          // events whose workflow exists in neither the internal nor the
-          // public registry so only the owning process handles them.
-          // Without this guard the WEP would publish workflow.fail,
-          // propagating through workflows-finish and erroneously
-          // terminating the correct process's run.
-          const data = event.data as Record<string, unknown> | undefined;
-          const wfId = data?.workflowId as string | undefined;
-          const rId = data?.runId as string | undefined;
-          if (wfId && rId && !this.#ownsWorkflow(wfId, rId, data?.parentWorkflow)) {
-            if (ack) {
-              void ack().catch(err => this.#logger?.error?.('Error acking skipped workflow event', err));
-            }
-            return;
-          }
-
-          void this.handleWorkflowEvent(event)
-            .then(result => {
-              if (result.ok) {
-                if (ack) {
-                  return ack().catch(err =>
-                    this.#logger?.error?.('Error acking workflow event in push subscription', err),
-                  );
-                }
-                return;
-              }
-              // Non-ok result: ask the transport to redeliver (nack) when the
-              // handle layer says retry. The WEP tracks per-event delivery
-              // attempts and eventually returns `retry: false` to break the
-              // loop and surface a terminal workflow.fail. For terminal
-              // failures we ack so the event is dropped from the transport.
-              if (result.retry) {
-                if (nack) {
-                  return nack().catch(err =>
-                    this.#logger?.error?.('Error nacking workflow event in push subscription', err),
-                  );
-                }
-                // Transport does not support nack. Do NOT ack — acking a
-                // retryable failure would drop the event and silently lose
-                // the workflow run. Log and let the transport's own delivery
-                // semantics decide (most non-ack transports redeliver until
-                // explicitly acked).
-                this.#logger?.error?.('Retryable workflow event cannot be requeued because nack is unavailable', {
-                  type: event.type,
-                  runId: event.runId,
-                });
-                return;
-              }
-              if (ack) {
-                return ack().catch(err =>
-                  this.#logger?.error?.('Error acking terminal workflow event in push subscription', err),
-                );
-              }
-            })
-            .catch(err => this.#logger?.error?.('Unhandled error in workflow event push subscription', err));
-        };
-        await this.#pubsub.subscribe('workflows', cb);
-        this.#pushSubscription = { topic: 'workflows', cb };
-      }
+      await this.#wirePushWorkflowSubscription();
     }
 
     // Subscribe user-defined event listeners (non-workflow topics, or legacy inline WEP)
@@ -5352,6 +5288,124 @@ export class Mastra<
     // runtime signals (e.g. `mastra.schedules.create()`) know whether they need
     // to lazily inject + start additional workers themselves.
     this.#workersStarted = true;
+  }
+
+  /**
+   * For push-only pubsubs (e.g. GCP Pub/Sub push subscriptions) there is no
+   * OrchestrationWorker pulling events — wire handleWorkflowEvent directly
+   * to the pubsub so workflow events still get processed in-process.
+   * Idempotent: a single subscription is kept in `#pushSubscription`.
+   */
+  async #wirePushWorkflowSubscription(): Promise<void> {
+    const modes = this.#pubsub.supportedModes ?? ['pull'];
+    const pushOnly = modes.includes('push') && !modes.includes('pull');
+    if (pushOnly && !this.#pushSubscription) {
+      const cb: EventCallback = (event, ack, nack) => {
+        // In cross-process push environments (e.g. UnixSocketPubSub),
+        // every subscriber receives every event — including events for
+        // internal workflows registered on a different process. Skip
+        // events whose workflow exists in neither the internal nor the
+        // public registry so only the owning process handles them.
+        // Without this guard the WEP would publish workflow.fail,
+        // propagating through workflows-finish and erroneously
+        // terminating the correct process's run.
+        const data = event.data as Record<string, unknown> | undefined;
+        const wfId = data?.workflowId as string | undefined;
+        const rId = data?.runId as string | undefined;
+        if (wfId && rId && !this.#ownsWorkflow(wfId, rId, data?.parentWorkflow)) {
+          if (ack) {
+            void ack().catch(err => this.#logger?.error?.('Error acking skipped workflow event', err));
+          }
+          return;
+        }
+
+        void this.handleWorkflowEvent(event)
+          .then(result => {
+            if (result.ok) {
+              if (ack) {
+                return ack().catch(err =>
+                  this.#logger?.error?.('Error acking workflow event in push subscription', err),
+                );
+              }
+              return;
+            }
+            // Non-ok result: ask the transport to redeliver (nack) when the
+            // handle layer says retry. The WEP tracks per-event delivery
+            // attempts and eventually returns `retry: false` to break the
+            // loop and surface a terminal workflow.fail. For terminal
+            // failures we ack so the event is dropped from the transport.
+            if (result.retry) {
+              if (nack) {
+                return nack().catch(err =>
+                  this.#logger?.error?.('Error nacking workflow event in push subscription', err),
+                );
+              }
+              // Transport does not support nack. Do NOT ack — acking a
+              // retryable failure would drop the event and silently lose
+              // the workflow run. Log and let the transport's own delivery
+              // semantics decide (most non-ack transports redeliver until
+              // explicitly acked).
+              this.#logger?.error?.('Retryable workflow event cannot be requeued because nack is unavailable', {
+                type: event.type,
+                runId: event.runId,
+              });
+              return;
+            }
+            if (ack) {
+              return ack().catch(err =>
+                this.#logger?.error?.('Error acking terminal workflow event in push subscription', err),
+              );
+            }
+          })
+          .catch(err => this.#logger?.error?.('Unhandled error in workflow event push subscription', err));
+      };
+      await this.#pubsub.subscribe('workflows', cb);
+      this.#pushSubscription = { topic: 'workflows', cb };
+    }
+  }
+
+  /**
+   * Start only the execution machinery background tasks depend on: the
+   * BackgroundTaskWorker plus workflow-event processing (OrchestrationWorker
+   * on pull-capable pubsubs, or the direct push subscription on push-only
+   * ones). Used by BackgroundTaskManager to lazily start execution in
+   * library mode, where nothing calls `startWorkers()`.
+   *
+   * Deliberately narrower than `startWorkers()`: dispatching a background
+   * task must not, as a side effect, inject and start scheduler /
+   * agent-schedule workers or subscribe user event listeners. Mirror of
+   * `#startSchedulingWorkers()`, which lazily starts only scheduling workers.
+   *
+   * @internal
+   */
+  async __startBackgroundTaskWorkers(): Promise<void> {
+    // Honour the explicit `workers: false` opt-out — the user disabled all
+    // event processing in this instance.
+    if (this.#workersDisabled) return;
+
+    // Initialize storage before any worker reads from it (same rationale as
+    // startWorkers()).
+    if (this.#storage) {
+      await this.#storage.init();
+    }
+
+    const deps: WorkerDeps = {
+      pubsub: this.#pubsub,
+      storage: this.#storage!,
+      logger: this.#logger as unknown as IMastraLogger,
+      mastra: this,
+    };
+
+    let targets = this.#workers.filter(w => w.name === 'orchestration' || w.name === 'backgroundTasks');
+    if (this.#workerFilter) {
+      targets = targets.filter(w => this.#workerFilter!.has(w.name));
+    }
+    for (const worker of targets) {
+      await worker.init(deps);
+      await worker.start();
+    }
+
+    await this.#wirePushWorkflowSubscription();
   }
 
   /**

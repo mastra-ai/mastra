@@ -30,8 +30,13 @@ export class BackgroundTaskManager {
   #mastra?: Mastra;
 
   // Single-flight guard for #ensureWorkersStarted — concurrent first
-  // dispatches share one in-flight startWorkers() run.
+  // dispatches share one in-flight worker-start run.
   #workersStartPromise?: Promise<void>;
+
+  // Set once __startBackgroundTaskWorkers() has succeeded, so later
+  // dispatches skip the lazy-start path. Mastra's own __workersStarted flag
+  // covers the explicit startWorkers() boot path (`mastra start`).
+  #workersStarted = false;
 
   // Per-task contexts — keyed by task ID, holds closures from the caller's stream.
   /** @internal — read by the workflow-engine step bodies in workflow.ts */
@@ -743,21 +748,31 @@ export class BackgroundTaskManager {
    * `running` forever — the workers that drive it to completion were never
    * started. Called from every dispatch-like publish (enqueue/recovery/restart
    * via dispatch(), plus resume()) so all producers are covered.
-   * startWorkers() is idempotent — safe if already started. Safe to call from
-   * within #doInit() (stale-task recovery): no worker start path awaits the
-   * manager's own initPromise when sharing Mastra's manager.
+   *
+   * Starts only the background-task execution machinery
+   * (`__startBackgroundTaskWorkers()`), not the full `startWorkers()` boot
+   * path — dispatching a task must not, as a side effect, start scheduler /
+   * agent-schedule workers or subscribe user event listeners. Worker starts
+   * are idempotent, and it is safe to call from within #doInit() (stale-task
+   * recovery): no worker start path awaits the manager's own initPromise
+   * when sharing Mastra's manager.
    *
    * Single-flight: concurrent first dispatches (e.g. two simultaneous requests
-   * on a cold Express app) share one in-flight startWorkers() run instead of
-   * each starting workers — mirrors Mastra's #schedulingWorkersStartPromise
+   * on a cold Express app) share one in-flight start run instead of each
+   * starting workers — mirrors Mastra's #schedulingWorkersStartPromise
    * pattern. Cleared on settle so a failed start is retried by the next
-   * dispatch; a successful one flips __workersStarted, short-circuiting here.
+   * dispatch; a successful one flips #workersStarted, short-circuiting here.
    */
   async #ensureWorkersStarted(): Promise<void> {
-    if (!this.#mastra || this.#mastra.__workersStarted) return;
-    this.#workersStartPromise ??= this.#mastra.startWorkers().finally(() => {
-      this.#workersStartPromise = undefined;
-    });
+    if (!this.#mastra || this.#workersStarted || this.#mastra.__workersStarted) return;
+    this.#workersStartPromise ??= this.#mastra
+      .__startBackgroundTaskWorkers()
+      .then(() => {
+        this.#workersStarted = true;
+      })
+      .finally(() => {
+        this.#workersStartPromise = undefined;
+      });
     await this.#workersStartPromise;
   }
 

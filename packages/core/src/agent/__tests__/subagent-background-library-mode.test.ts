@@ -213,11 +213,11 @@ describe('background tasks in library mode (no explicit startWorkers)', () => {
     });
 
     const manager = mastra.backgroundTaskManager!;
-    const startSpy = vi.spyOn(mastra, 'startWorkers');
+    const startSpy = vi.spyOn(mastra, '__startBackgroundTaskWorkers');
 
     // Two producers dispatch at the same time on a cold instance (e.g. two
     // simultaneous requests hitting an Express app). The single-flight guard
-    // must funnel both through one startWorkers() run.
+    // must funnel both through one worker-start run.
     const makeTask = (n: number) =>
       createBackgroundTask(manager, {
         toolName: `my-tool-${n}`,
@@ -240,5 +240,40 @@ describe('background tasks in library mode (no explicit startWorkers)', () => {
     }
 
     expect(statuses).toEqual(['completed', 'completed']);
+  }, 15000);
+
+  it('does not start the scheduler as a side effect of a dispatch', async () => {
+    mastra = new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      backgroundTasks: { enabled: true },
+      // Scheduler explicitly enabled: the lazy start must still only boot the
+      // background-task execution machinery, never the scheduler tick loop —
+      // otherwise a library-mode process would silently begin running
+      // scheduled jobs just because it dispatched a background task.
+      scheduler: { enabled: true },
+    });
+
+    const manager = mastra.backgroundTaskManager!;
+    const bgTask = createBackgroundTask(manager, {
+      toolName: 'my-tool',
+      toolCallId: 'call-1',
+      args: {},
+      agentId: 'a1',
+      runId: 'r1',
+      context: { executor: { execute: async () => ({ data: 'hello' }) } },
+    });
+    await bgTask.dispatch();
+
+    let status: string | undefined;
+    for (let i = 0; i < 50; i++) {
+      const { tasks } = await manager.listTasks({});
+      status = tasks[0]?.status;
+      if (status === 'completed' || status === 'failed') break;
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    expect(status).toBe('completed');
+    expect(mastra.scheduler).toBeUndefined();
   }, 15000);
 });
