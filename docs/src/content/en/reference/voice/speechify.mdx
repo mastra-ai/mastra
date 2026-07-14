@@ -20,7 +20,7 @@ const voice = new SpeechifyVoice()
 // Initialize with custom configuration
 const voice = new SpeechifyVoice({
   speechModel: {
-    name: 'simba-english',
+    name: 'simba-3.2',
     apiKey: 'your-api-key',
   },
   speaker: 'george', // Default voice
@@ -48,8 +48,9 @@ const audioStream = await voice.speak('Hello, world!', {
         parameters: [
           {
             name: 'name',
-            type: 'VoiceModelName',
-            description: 'The Speechify model to use',
+            type: 'SpeechifyModel',
+            description:
+              "The Speechify model to use ('simba-3.2', 'simba-3.0', 'simba-english', or 'simba-multilingual')",
             isOptional: true,
             defaultValue: "'simba-english'",
           },
@@ -105,7 +106,7 @@ Converts text to speech using the configured speech model and voice.
           },
           {
             name: 'model',
-            type: 'VoiceModelName',
+            type: 'SpeechifyModel',
             description: 'Override the default model for this request',
             isOptional: true,
             defaultValue: "Constructor's model value",
@@ -156,5 +157,7 @@ This method isn't supported by Speechify and will throw an error. Speechify does
 
 - Speechify requires an API key for authentication
 - The default model is 'simba-english'
+- 'simba-3.2' is Speechify's latest streaming model with the lowest latency and richest expressivity, and the recommended model for English
+- 'simba-3.2' and 'simba-3.0' are currently English only; use 'simba-multilingual' for non-English or mixed-language input
 - Speech-to-text functionality isn't supported
 - Additional audio stream options can be passed through the speak() method's options parameter
