@@ -309,6 +309,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
         values: result.extractedValues,
         failures: result.extractionFailures,
         previousValues,
+        rawObservations: result.observations,
         threadId,
         resourceId: this.resourceId,
         mainAgent: this.opts.agent,
