@@ -2,7 +2,7 @@
 '@mastra/core': minor
 ---
 
-Added `maxRetryAfterMs` to `StreamErrorRetryProcessor`, with a default of 30 seconds, so provider `Retry-After` waits can't exceed a configured limit.
+Added `maxRetryAfterMs` to `StreamErrorRetryProcessor`, with a default of 30 seconds, so provider `Retry-After` waits can't exceed a configured limit. Aborting during the wait now stops the processor retry before another model request.
 
 Improved structured-output recovery so transport and provider failures don't trigger JSON prompt injection. Scorer judges that use Mastra's current generation API can use existing error processors for a coordinated retry budget. Legacy model adapters keep their separate `generateLegacy()` retry settings.
 
