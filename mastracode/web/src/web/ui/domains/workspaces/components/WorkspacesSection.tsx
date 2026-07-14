@@ -23,6 +23,7 @@ import {
   useWorkspacesQuery,
 } from '../hooks/useWorkspaces';
 import { useWorkspaceActivity } from '../hooks/useWorkspaceActivity';
+import { useWorkspaceAttention } from '../hooks/useWorkspaceAttention';
 import type { Worktree } from '../services/projects';
 
 /**
@@ -65,6 +66,7 @@ export function WorkspacesSection({ children }: { children?: ReactNode }) {
     baseUrl,
     enabled: sessionEnabled && activeProject?.source === 'github',
   });
+  const { attentionByPath, clearAttention } = useWorkspaceAttention(runningByPath);
 
   if (activeProject?.source !== 'github') return null;
 
@@ -209,12 +211,15 @@ export function WorkspacesSection({ children }: { children?: ReactNode }) {
                 worktree={worktree}
                 active={active}
                 running={runningByPath[worktree.worktreePath] === true}
+                attention={attentionByPath[worktree.worktreePath] === true}
                 disabled={pending}
-                onSelect={() =>
+                onSeen={() => clearAttention(worktree.worktreePath)}
+                onSelect={() => {
+                  clearAttention(worktree.worktreePath);
                   selectWorkspace.mutate(worktree.worktreePath, {
                     onSuccess: () => void openWorktreeThread(worktree.worktreePath),
-                  })
-                }
+                  });
+                }}
                 onDelete={
                   worktree.worktreePath === activeProject.sandboxWorkdir ? undefined : () => setConfirmDelete(worktree)
                 }
@@ -285,37 +290,53 @@ function WorkspaceRow({
   worktree,
   active,
   running,
+  attention,
   disabled,
   onSelect,
+  onSeen,
   onDelete,
 }: {
   worktree: Worktree;
   active: boolean;
   running: boolean;
+  /** A run finished here and the user hasn't opened the workspace since. */
+  attention: boolean;
   disabled: boolean;
   onSelect: () => void;
+  onSeen: () => void;
   onDelete?: () => void;
 }) {
+  // Selecting a row marks it seen (the parent clears attention in onSelect);
+  // the already-active row can't be re-selected, so clicking it just clears
+  // the done indicator.
+  const onClick = active ? (attention ? onSeen : undefined) : onSelect;
   return (
     <div className={`group relative rounded-md ${active ? 'bg-surface4' : 'hover:bg-surface3'}`}>
       <button
         type="button"
         aria-current={active ? 'true' : undefined}
-        aria-disabled={active || undefined}
+        aria-disabled={(active && !attention) || undefined}
         disabled={disabled}
-        onClick={active ? undefined : onSelect}
+        onClick={onClick}
         className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition ${active ? 'text-icon6' : 'text-icon3 hover:text-icon5'} disabled:cursor-default disabled:opacity-70`}
       >
         <GitBranch size={13} />
         <span className="truncate">{worktree.branch}</span>
-        {running && (
+        {running ? (
           <span
             role="status"
             aria-label={`Agent working in ${worktree.branch}`}
             title="Agent working"
             className="ml-auto size-2 shrink-0 animate-pulse rounded-full bg-accent1 group-hover:opacity-0"
           />
-        )}
+        ) : attention ? (
+          <span
+            role="status"
+            aria-label={`Agent finished in ${worktree.branch}`}
+            title="Agent finished — open to dismiss"
+            className="ml-auto size-2 shrink-0 rounded-full bg-accent1 group-hover:opacity-0"
+          />
+        ) : null}
       </button>
       {onDelete && (
         <DropdownMenu>
