@@ -8,14 +8,19 @@ export const startScheduleTool = createTool({
     schedule: z.string().describe('Cron expression for when to run.'),
     prompt: z.string().describe('Prompt to run on the schedule.'),
   }),
-  execute: async ({ schedule, prompt }, { mastra, agent }) =>
-    mastra!.schedules.create({
+  execute: async ({ schedule, prompt }, { mastra, agent }) => {
+    if (!agent?.threadId || !agent.resourceId) {
+      throw new Error('A threadId and resourceId are required to create a schedule.');
+    }
+
+    return mastra!.schedules.create({
       agentId: 'agent',
       cron: schedule,
       prompt,
-      threadId: agent!.threadId!,
-      resourceId: agent!.resourceId!,
-    }),
+      threadId: agent.threadId,
+      resourceId: agent.resourceId,
+    });
+  },
 });
 
 export const stopScheduleTool = createTool({
