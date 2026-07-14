@@ -245,6 +245,12 @@ export interface ResolveToolsOpts {
    * invoker, not just the author. Falsy = fall back to request context.
    */
   authorId?: string;
+  /**
+   * Identity bucketing for this connection. Providers may use it to decide
+   * whether to pin a specific account or let the backend auto-resolve within
+   * the user bucket. Absent = treat as `'per-author'` (back-compat).
+   */
+  scope?: ToolProviderConnectionScope;
   /** Per-request context (auth, tenant, currentUser, ...). */
   requestContext?: Record<string, unknown>;
 }
@@ -380,6 +386,16 @@ export interface ToolProvider {
    * legacy providers may omit it.
    */
   readonly capabilities?: ToolProviderCapabilities;
+
+  /**
+   * Default identity-bucketing scope for connections authorized against this
+   * provider. Set by the app author at construction time — this is a tenancy
+   * architecture decision, not an end-user choice. The authorize flow uses it
+   * when the request does not specify a `scope`, so a provider configured with
+   * `defaultScope: 'caller-supplied'` produces per-tenant connections without
+   * any UI control. Falls back to `'per-author'` when absent.
+   */
+  readonly defaultScope?: ToolProviderConnectionScope;
 
   // ── Legacy surface (kept for back-compat) ─────────────────────────────
 

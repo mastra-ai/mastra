@@ -163,7 +163,7 @@ export interface RunLoopScenarioOptions {
    * Useful for testing tool merging scenarios where tools are defined at the call site rather than
    * at agent construction time.
    */
-  clientTools?: import('../../../agent/types').ToolsInput;
+  clientTools?: ToolsInput;
   /**
    * Controls how the model uses tools. Forwarded to `agent.stream({ toolChoice })`.
    * - 'auto': Model decides whether to call tools (default)
@@ -190,6 +190,12 @@ export interface RunLoopScenarioOptions {
    * and observing error propagation. Fires after errorProcessors (if any).
    */
   onError?: ({ error }: { error: Error | string }) => Promise<void> | void;
+  /**
+   * Callback fired for stream chunks. Forwarded to `agent.stream({ onChunk })`.
+   * Useful for asserting server-side chunk observability separately from
+   * chunks collected from `fullStream`.
+   */
+  onChunk?: (chunk: ChunkType) => Promise<void> | void;
   /**
    * Callback fired after each execution step (including intermediate tool-call steps).
    * Forwarded to `agent.stream({ onStepFinish })`. Useful for asserting step-level

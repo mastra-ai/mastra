@@ -11,7 +11,7 @@ const SURFACES: { token: string; label: string; className: string }[] = [
 function SurfaceFrame({ className, label, children }: { className: string; label: string; children: React.ReactNode }) {
   return (
     <div className={`rounded-2xl border border-border1 p-6 ${className}`}>
-      <p className="mb-4 text-ui-xs uppercase tracking-wide text-neutral3">{label}</p>
+      <p className="mb-4 text-ui-xs tracking-wide text-neutral3 uppercase">{label}</p>
       {children}
     </div>
   );
@@ -76,7 +76,7 @@ export const Danger: Story = {
 
 export const FillHeight: Story = {
   render: () => (
-    <div className="grid h-[420px] grid-cols-2 gap-4">
+    <div className="h-105 grid grid-cols-2 gap-4">
       <SectionCard fillHeight title="Left" description="Stretches to grid row height">
         <div className="h-full rounded-md bg-surface3" />
       </SectionCard>

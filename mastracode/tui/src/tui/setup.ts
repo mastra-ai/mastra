@@ -325,7 +325,8 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'models', description: 'Switch model pack' },
     { name: 'custom-providers', description: 'Manage custom providers and models' },
     { name: 'subagents', description: 'Configure subagent model defaults' },
-    { name: 'om', description: 'Configure Observational Memory models' },
+    { name: 'memory', description: 'Configure Observational Memory' },
+    { name: 'om', description: 'Alias for /memory' },
     { name: 'think', description: 'Set thinking (off|low|medium|high|xhigh|status)' },
     { name: 'login', description: 'Login with OAuth provider' },
     { name: 'skills', description: 'List available skills' },
@@ -394,6 +395,15 @@ export function setupAutocomplete(state: TUIState): void {
           { value: 'resume', label: 'resume', description: 'Resume the current goal' },
           { value: 'clear', label: 'clear', description: 'Clear the current goal' },
           { value: 'judge', label: 'judge', description: 'Set the goal judge model and max attempts' },
+        ].filter(command => command.value.startsWith(argumentPrefix.toLowerCase())),
+    },
+    {
+      name: 'prune',
+      description: 'Prune old storage data (closes the TUI, shows progress)',
+      getArgumentCompletions: (argumentPrefix: string) =>
+        [
+          { value: 'vacuum', label: 'vacuum', description: 'Prune, then VACUUM to reclaim disk space' },
+          { value: 'keep-memory', label: 'keep-memory', description: 'Keep chat history (messages/threads)' },
         ].filter(command => command.value.startsWith(argumentPrefix.toLowerCase())),
     },
     { name: 'exit', description: 'Exit the TUI' },

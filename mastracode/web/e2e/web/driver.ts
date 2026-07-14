@@ -1,7 +1,11 @@
 import { MastraClient } from '@mastra/client-js';
-import type { PlanResume, SendNotificationInput } from '@mastra/client-js';
+import type { KnownAgentControllerEvent, PlanResume, SendNotificationInput } from '@mastra/client-js';
 
-import { initialTranscript, transcriptReducer } from '../../src/web/ui/domains/chat/services/transcript';
+import {
+  createInitialTranscript,
+  initialTranscript,
+  transcriptReducer,
+} from '../../src/web/ui/domains/chat/services/transcript';
 import type {
   ApprovalPrompt,
   NotificationEntry,
@@ -27,6 +31,13 @@ import type {
 export interface ScenarioDriver {
   /** Current folded transcript (what the UI would render). */
   state: () => TranscriptState;
+  /**
+   * Session-level mode/model, mirroring what the app's session-state layer
+   * (ChatModes/ChatModels providers) renders in the status line. Kept in sync
+   * from the initial `session.state()` fetch plus mode_changed/model_changed
+   * events — mode/model intentionally no longer live on the transcript.
+   */
+  sessionState: () => { modeId?: string; modelId?: string };
   /** Flattened visible text of the transcript, for substring assertions. */
   text: () => string;
   /** Resolve once `pattern` appears in the transcript text (or throw on timeout). */
@@ -90,17 +101,24 @@ export async function createDriver(opts: {
 
   await session.create();
   const initial = await session.state();
-  apply(
-    transcriptReducer(state, {
-      type: 'reset',
-      modeId: initial.modeId,
-      modelId: initial.modelId,
-      threadId: initial.threadId,
-    }),
-  );
+  let sessionState: { modeId?: string; modelId?: string } = {
+    modeId: initial.modeId,
+    modelId: initial.modelId,
+  };
+  apply(transcriptReducer(state, { type: 'reset', threadId: initial.threadId }));
 
   const sub = await session.subscribe({
-    onEvent: event => apply(transcriptReducer(state, { type: 'event', event })),
+    onEvent: event => {
+      // Mirror the app: mode/model changes update the session-state layer
+      // (query invalidation → refetch in React), not the transcript.
+      const known = event as KnownAgentControllerEvent;
+      if (known.type === 'mode_changed') {
+        sessionState = { ...sessionState, modeId: known.modeId };
+      } else if (known.type === 'model_changed') {
+        sessionState = { ...sessionState, modelId: known.modelId };
+      }
+      apply(transcriptReducer(state, { type: 'event', event }));
+    },
     onError: () => {},
   });
 
@@ -119,6 +137,7 @@ export async function createDriver(opts: {
 
   return {
     state: () => state,
+    sessionState: () => sessionState,
     text,
     waitForText: (pattern, timeoutMs) =>
       waitFor(() => (matches(text(), pattern) ? true : undefined), `text ${pattern}`, timeoutMs).then(() => undefined),
@@ -168,13 +187,12 @@ export async function createDriver(opts: {
     },
     switchThread: async threadId => {
       await session.switchThread(threadId);
-      // Mirror the hook: load the thread's history and hydrate the transcript
-      // (its messages aren't replayed over the event stream).
+      // Mirror the hook: rebuild the transcript from the thread's persisted
+      // history (its messages aren't replayed over the event stream).
       try {
         const [messages, snap] = await Promise.all([session.listMessages(threadId), session.state()]);
-        apply(
-          transcriptReducer(state, { type: 'hydrate', messages, modeId: snap.modeId, modelId: snap.modelId, threadId }),
-        );
+        sessionState = { modeId: snap.modeId, modelId: snap.modelId };
+        apply(createInitialTranscript({ messages, threadId }));
       } catch {
         apply(transcriptReducer(state, { type: 'reset', threadId }));
       }

@@ -15,6 +15,7 @@ import type { PluginManager } from '@mastra/code-sdk/plugins/manager';
 import { detectProject } from '@mastra/code-sdk/utils/project';
 import type { ProjectInfo } from '@mastra/code-sdk/utils/project';
 import type { SlashCommandMetadata } from '@mastra/code-sdk/utils/slash-command-loader';
+import type { StorageMaintenance } from '@mastra/code-sdk/utils/storage-maintenance';
 import type { AgentController, AgentControllerMessage, Session } from '@mastra/core/agent-controller';
 import type { SkillMetadata, Workspace } from '@mastra/core/workspace';
 import type { GithubSignals } from '@mastra/github-signals';
@@ -39,6 +40,7 @@ import { showError, showInfo } from './display.js';
 
 import { GoalManager } from './goal-manager.js';
 import type { OnboardingInlineComponent } from './onboarding-inline.js';
+import { RenderScheduler } from './render-scheduler.js';
 import { getEditorTheme, mastra, TERM_WIDTH_BUFFER } from './theme.js';
 import { VoiceController } from './voice/voice-controller.js';
 
@@ -139,6 +141,9 @@ export interface MastraTUIOptions {
   /** GitHub PR signal processor used for status-line polling state. */
   githubSignals?: GithubSignals;
 
+  /** Storage maintenance handle for /prune (retention pruning + disk reclamation). */
+  storageMaintenance?: StorageMaintenance;
+
   /** Optional terminal injection for in-process tests. Defaults to ProcessTerminal. */
   terminal?: Terminal;
 }
@@ -161,6 +166,7 @@ export interface TUIState {
 
   // ── TUI framework (set once) ──────────────────────────────────────────
   ui: TUI;
+  renderScheduler?: RenderScheduler;
   chatContainer: Container;
   editorContainer: Container;
   idleCounter?: IdleCounterComponent;
@@ -338,6 +344,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     });
   }
   const ui = new TUI(terminal);
+  const renderScheduler = new RenderScheduler(() => ui.requestRender());
 
   // Perf profiling removed
 
@@ -345,6 +352,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
   const editorContainer = new Container();
   const footer = new Container();
   const editor = new CustomEditor(ui, getEditorTheme());
+  editor.requestRender = () => renderScheduler.request();
   const result: TUIState = {
     // Core dependencies
     controller: options.controller,
@@ -359,6 +367,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
 
     // TUI framework
     ui,
+    renderScheduler,
     chatContainer,
     editorContainer,
     editor,

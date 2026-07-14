@@ -1,5 +1,26 @@
 # @mastra/spanner
 
+## 1.2.4-alpha.1
+
+### Patch Changes
+
+- dependencies updates: ([#19038](https://github.com/mastra-ai/mastra/pull/19038))
+  - Updated dependency [`@google-cloud/spanner@^8.8.0` ↗︎](https://www.npmjs.com/package/@google-cloud/spanner/v/8.8.0) (from `^8.7.1`, in `dependencies`)
+
+- dependencies updates: ([#19390](https://github.com/mastra-ai/mastra/pull/19390))
+  - Updated dependency [`@google-cloud/spanner@^8.8.1` ↗︎](https://www.npmjs.com/package/@google-cloud/spanner/v/8.8.1) (from `^8.8.0`, in `dependencies`)
+- Updated dependencies [[`bd6d240`](https://github.com/mastra-ai/mastra/commit/bd6d2402db93dddaef0721667e7e8a030e7c6e16), [`0111486`](https://github.com/mastra-ai/mastra/commit/01114867612593eef5cfa2fda6a1194dfedda841), [`96a3749`](https://github.com/mastra-ai/mastra/commit/96a37492235f5b8076b3e3177d83ed5a5e44a640), [`3e26c87`](https://github.com/mastra-ai/mastra/commit/3e26c87de0c5bc2583b795ce6ca5889b6b161acb), [`a5008f2`](https://github.com/mastra-ai/mastra/commit/a5008f22ae710ad9402ea9f2547d8c02f74d384b)]:
+  - @mastra/core@1.51.0-alpha.8
+
+## 1.2.4-alpha.0
+
+### Patch Changes
+
+- resolve silent exception swallowing in rollback handlers ([#18606](https://github.com/mastra-ai/mastra/pull/18606))
+
+- Updated dependencies [[`e955965`](https://github.com/mastra-ai/mastra/commit/e955965dce575a903e37cf054d28ea99aa48785e), [`860ef7e`](https://github.com/mastra-ai/mastra/commit/860ef7e77d92b63469cbe5857aa1e626197e43e9), [`17e818c`](https://github.com/mastra-ai/mastra/commit/17e818c51a958ba90641b1a959dc38faf8c034e9), [`4451dfe`](https://github.com/mastra-ai/mastra/commit/4451dfe857428e7abcc0261a507a2e186dae6d47), [`1d39058`](https://github.com/mastra-ai/mastra/commit/1d39058e548efd691799985d5c8af2737f1c3bd2)]:
+  - @mastra/core@1.51.0-alpha.2
+
 ## 1.2.3
 
 ### Patch Changes

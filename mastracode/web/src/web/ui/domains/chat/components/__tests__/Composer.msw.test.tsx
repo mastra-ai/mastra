@@ -9,7 +9,10 @@ import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import type { Project } from '../../../workspaces';
 import { ActiveProjectProvider } from '../../../workspaces';
-import { ChatSessionProvider, useChatSession } from '../../context/ChatSessionProvider';
+import { ChatCommandsProvider, useChatCommands } from '../../context/ChatCommandsProvider';
+import { ChatSessionProvider } from '../../context/ChatSessionProvider';
+import { useChatTranscript } from '../../context/useChatTranscript';
+import { SLASH_COMMANDS } from '../../services/commands';
 import { Composer } from '../Composer';
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
@@ -55,7 +58,8 @@ function useAgentControllerHandlers() {
     http.post(`${API}/sessions`, () =>
       HttpResponse.json({ controllerId: 'code', resourceId: RESOURCE_ID, threadId: THREAD_ID }),
     ),
-    http.get(`${API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', label: 'Build' }] })),
+    http.get(`${API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', name: 'Build' }] })),
+    http.get(`${API}/models`, () => HttpResponse.json({ models: [] })),
     http.get(SESSION, () => HttpResponse.json(sessionState())),
     http.put(`${SESSION}/state`, () => HttpResponse.json(sessionState())),
     http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () => HttpResponse.json({ messages: [] })),
@@ -86,11 +90,24 @@ function useAgentControllerHandlers() {
 }
 
 function NoticeProbe() {
-  const { transcript } = useChatSession();
+  const { transcript } = useChatTranscript();
   return (
     <output aria-label="Notices">
       {transcript.entries.map(entry => (entry.kind === 'notice' ? <div key={entry.id}>{entry.text}</div> : null))}
     </output>
+  );
+}
+
+function PaletteCommandProbe() {
+  const { composerCommandName, run } = useChatCommands();
+  const modelCommand = SLASH_COMMANDS.find(command => command.name === 'model');
+  return (
+    <>
+      <output aria-label="Composer command state">{composerCommandName ?? 'none'}</output>
+      <button type="button" onClick={() => modelCommand && run(modelCommand)}>
+        Run model command
+      </button>
+    </>
   );
 }
 
@@ -102,9 +119,12 @@ function renderComposer(props: Partial<React.ComponentProps<typeof Composer>> = 
           path="/threads/:threadId"
           element={
             <ActiveProjectProvider>
-              <ChatSessionProvider>
-                <Composer commandNameToApply={null} onCommandApplied={() => undefined} {...props} />
-                <NoticeProbe />
+              <ChatSessionProvider threadId={THREAD_ID}>
+                <ChatCommandsProvider>
+                  <Composer {...props} />
+                  <PaletteCommandProbe />
+                  <NoticeProbe />
+                </ChatCommandsProvider>
               </ChatSessionProvider>
             </ActiveProjectProvider>
           }
@@ -141,17 +161,16 @@ describe('Composer', () => {
       const { onSend, onPermissions } = useAgentControllerHandlers();
       renderComposer();
 
-      const input = await screen.findByRole('textbox');
-      await waitFor(() => expect(input).toBeEnabled());
+      await waitFor(() => expect(screen.getByRole('textbox')).toBeEnabled());
       await waitFor(() => expect(onPermissions).toHaveBeenCalled());
       const permissionsRequestsBeforeYolo = onPermissions.mock.calls.length;
 
-      await userEvent.type(input, '/yolo{Enter}');
+      await userEvent.type(screen.getByRole('textbox'), '/yolo{Enter}');
 
       await waitFor(() => expect(screen.getByLabelText('Notices')).toHaveTextContent('YOLO mode'));
       await waitFor(() => expect(onPermissions.mock.calls.length).toBeGreaterThan(permissionsRequestsBeforeYolo));
       const permissionsRequestsBeforeCommand = onPermissions.mock.calls.length;
-      await userEvent.type(input, '/permissions{Enter}');
+      await userEvent.type(screen.getByRole('textbox'), '/permissions{Enter}');
 
       await waitFor(() => expect(onPermissions).toHaveBeenCalledTimes(permissionsRequestsBeforeCommand));
       expect(screen.getByLabelText('Notices')).toHaveTextContent('execute: allow');
@@ -166,27 +185,124 @@ describe('Composer', () => {
       const { onSend, onPermissions } = useAgentControllerHandlers();
       renderComposer();
 
-      const input = await screen.findByRole('textbox');
-      await waitFor(() => expect(input).toBeEnabled());
+      await waitFor(() => expect(screen.getByRole('textbox')).toBeEnabled());
       await waitFor(() => expect(onPermissions).toHaveBeenCalled());
       const permissionsRequestsBeforeCompletion = onPermissions.mock.calls.length;
-      await userEvent.type(input, '/he{Enter}');
+      await userEvent.type(screen.getByRole('textbox'), '/he{Enter}');
 
-      expect(input).toHaveValue('/help ');
+      expect(screen.getByRole('textbox')).toHaveValue('/help ');
       expect(onPermissions).toHaveBeenCalledTimes(permissionsRequestsBeforeCompletion);
       expect(onSend).not.toHaveBeenCalled();
     });
   });
 
   describe('when a palette command is applied', () => {
-    it('prefills the composer and acknowledges the handoff', async () => {
+    it('prefills the composer once and clears the command state', async () => {
       seedProject();
       useAgentControllerHandlers();
-      const onCommandApplied = vi.fn();
-      renderComposer({ commandNameToApply: 'model', onCommandApplied });
+      renderComposer();
+
+      await waitFor(() => expect(screen.getByRole('textbox')).toBeEnabled());
+      await userEvent.click(screen.getByRole('button', { name: 'Run model command' }));
 
       await waitFor(() => expect(screen.getByRole('textbox')).toHaveValue('/model '));
-      expect(onCommandApplied).toHaveBeenCalled();
+      await waitFor(() => expect(screen.getByLabelText('Composer command state')).toHaveTextContent('none'));
+
+      await userEvent.click(screen.getByRole('button', { name: 'Run model command' }));
+
+      await waitFor(() => expect(screen.getByRole('textbox')).toHaveValue('/model '));
+      await waitFor(() => expect(screen.getByLabelText('Composer command state')).toHaveTextContent('none'));
+    });
+  });
+
+  describe('when attaching images', () => {
+    const pngFile = () => new File(['png-bytes'], 'shot.png', { type: 'image/png' });
+    const pngBase64 = 'cG5nLWJ5dGVz'; // btoa('png-bytes')
+
+    it('previews the image, sends it as a file, and clears the pending list', async () => {
+      seedProject();
+      const { onSend } = useAgentControllerHandlers();
+      renderComposer();
+
+      const input = await screen.findByRole('textbox');
+      await waitFor(() => expect(input).toBeEnabled());
+      await userEvent.upload(screen.getByLabelText('Attach images'), pngFile());
+
+      const preview = await screen.findByRole('img', { name: 'shot.png' });
+      expect(preview).toHaveAttribute('src', `data:image/png;base64,${pngBase64}`);
+
+      await userEvent.type(input, 'look at this{Enter}');
+
+      await waitFor(() =>
+        expect(onSend).toHaveBeenCalledWith({
+          message: 'look at this',
+          files: [{ data: pngBase64, mediaType: 'image/png', filename: 'shot.png' }],
+        }),
+      );
+      expect(screen.queryByRole('img', { name: 'shot.png' })).not.toBeInTheDocument();
+    });
+
+    it('sends an image without any text', async () => {
+      seedProject();
+      const { onSend } = useAgentControllerHandlers();
+      renderComposer();
+
+      await waitFor(() => expect(screen.getByRole('textbox')).toBeEnabled());
+      await userEvent.upload(screen.getByLabelText('Attach images'), pngFile());
+      await screen.findByRole('img', { name: 'shot.png' });
+
+      await userEvent.click(screen.getByRole('button', { name: 'Send message' }));
+
+      await waitFor(() =>
+        expect(onSend).toHaveBeenCalledWith({
+          message: '',
+          files: [{ data: pngBase64, mediaType: 'image/png', filename: 'shot.png' }],
+        }),
+      );
+    });
+
+    it('removes a pending image before sending', async () => {
+      seedProject();
+      const { onSend } = useAgentControllerHandlers();
+      renderComposer();
+
+      const input = await screen.findByRole('textbox');
+      await waitFor(() => expect(input).toBeEnabled());
+      await userEvent.upload(screen.getByLabelText('Attach images'), pngFile());
+      await screen.findByRole('img', { name: 'shot.png' });
+
+      await userEvent.click(screen.getByRole('button', { name: 'Remove image' }));
+      expect(screen.queryByRole('img', { name: 'shot.png' })).not.toBeInTheDocument();
+
+      await userEvent.type(input, 'text only{Enter}');
+      await waitFor(() => expect(onSend).toHaveBeenCalledWith({ message: 'text only' }));
+    });
+  });
+
+  describe('when composing a multi-line draft', () => {
+    it('grows with content via CSS instead of inline styles', async () => {
+      seedProject();
+      useAgentControllerHandlers();
+      renderComposer();
+
+      const input = await screen.findByRole('textbox');
+      await waitFor(() => expect(input).toBeEnabled());
+      await userEvent.type(input, 'first line{Shift>}{Enter}{/Shift}second line{Shift>}{Enter}{/Shift}third line');
+
+      expect(input).toHaveValue('first line\nsecond line\nthird line');
+      expect(input).toHaveClass('field-sizing-content');
+      expect((input as HTMLTextAreaElement).style.height).toBe('');
+    });
+
+    it('sizes the textarea variant with CSS classes only', async () => {
+      seedProject();
+      useAgentControllerHandlers();
+      renderComposer({ variant: 'textarea' });
+
+      const input = await screen.findByRole('textbox');
+      await waitFor(() => expect(input).toBeEnabled());
+      expect(input).toHaveClass('field-sizing-content', 'min-h-28');
+      expect((input as HTMLTextAreaElement).style.height).toBe('');
     });
   });
 });

@@ -14,6 +14,7 @@ const { composioInstances, makeFakeComposio } = vi.hoisted(() => {
     tools: { get: ReturnType<typeof vi.fn>; getRawComposioTools: ReturnType<typeof vi.fn> };
     connectedAccounts: {
       initiate: ReturnType<typeof vi.fn>;
+      link: ReturnType<typeof vi.fn>;
       get: ReturnType<typeof vi.fn>;
       list: ReturnType<typeof vi.fn>;
       delete: ReturnType<typeof vi.fn>;
@@ -29,7 +30,7 @@ const { composioInstances, makeFakeComposio } = vi.hoisted(() => {
       hasProvider: Boolean(opts.provider),
       toolkits: { get: vi.fn(), getConnectedAccountInitiationFields: vi.fn() },
       tools: { get: vi.fn(), getRawComposioTools: vi.fn() },
-      connectedAccounts: { initiate: vi.fn(), get: vi.fn(), list: vi.fn(), delete: vi.fn() },
+      connectedAccounts: { initiate: vi.fn(), link: vi.fn(), get: vi.fn(), list: vi.fn(), delete: vi.fn() },
       authConfigs: { list: vi.fn() },
     };
     instances.push(inst);
@@ -79,6 +80,16 @@ describe('ComposioToolProvider — identity & capabilities', () => {
       reauthorizeReusesConnectionId: true,
       supportsRevoke: true,
     });
+  });
+
+  it('has no defaultScope unless configured', () => {
+    const integration = new ComposioToolProvider({ apiKey: 'k' });
+    expect(integration.defaultScope).toBeUndefined();
+  });
+
+  it('exposes the configured defaultScope', () => {
+    const integration = new ComposioToolProvider({ apiKey: 'k', defaultScope: 'caller-supplied' });
+    expect(integration.defaultScope).toBe('caller-supplied');
   });
 });
 
@@ -235,6 +246,34 @@ describe('ComposioToolProvider — resolveTools', () => {
     expect(params.connectedAccountId).toBe('ca_1');
   });
 
+  it('does not pin connectedAccountId under caller-supplied scope (lets Composio auto-resolve)', async () => {
+    const integration = new ComposioToolProvider({ apiKey: 'k' });
+
+    await integration
+      .resolveToolsVNext({ toolSlugs: ['a'], toolMeta: {}, connectionId: 'ca_1' })
+      .catch(() => undefined);
+    const mastra = getMastraInstance();
+    mastra.tools.get.mockClear();
+    mastra.tools.get.mockResolvedValue({ 'gmail.fetch_emails': { id: 'gmail.fetch_emails' } });
+
+    await integration.resolveToolsVNext({
+      toolSlugs: ['gmail.fetch_emails'],
+      toolMeta: {},
+      connectionId: 'ca_1',
+      scope: 'caller-supplied',
+      requestContext: { [MASTRA_RESOURCE_ID_KEY]: 'tenant_7' },
+    });
+
+    // User bucket is the resolved resourceId, not the pinned connection id.
+    expect(mastra.tools.get.mock.calls[0]![0]).toBe('tenant_7');
+    const modifiers = mastra.tools.get.mock.calls[0]![2] as {
+      beforeExecute: (a: { params: { connectedAccountId?: string } }) => unknown;
+    };
+    const params: { connectedAccountId?: string } = {};
+    modifiers.beforeExecute({ params });
+    expect(params.connectedAccountId).toBeUndefined();
+  });
+
   it('falls back to "default" internalUserId when MASTRA_RESOURCE_ID_KEY missing', async () => {
     const integration = new ComposioToolProvider({ apiKey: 'k' });
 
@@ -309,12 +348,13 @@ describe('ComposioToolProvider — authorize', () => {
         { id: 'ac_2', status: 'DISABLED' },
       ],
     });
-    raw.connectedAccounts.initiate.mockResolvedValue({ id: 'ca_new', redirectUrl: 'https://oauth' });
+    raw.connectedAccounts.link.mockResolvedValue({ id: 'ca_new', redirectUrl: 'https://oauth' });
 
     const result = await integration.authorize({ toolkit: 'gmail', connectionId: 'author_1' });
 
     expect(raw.authConfigs.list).toHaveBeenCalledWith({ toolkit: 'gmail' });
-    expect(raw.connectedAccounts.initiate).toHaveBeenCalledWith('author_1', 'ac_1', { allowMultiple: true });
+    expect(raw.connectedAccounts.link).toHaveBeenCalledWith('author_1', 'ac_1');
+    expect(raw.connectedAccounts.initiate).not.toHaveBeenCalled();
     expect(result).toEqual({ url: 'https://oauth', authId: 'ca_new' });
   });
 
@@ -367,7 +407,7 @@ describe('ComposioToolProvider — authorize', () => {
     });
   });
 
-  it('omits config when an empty object is supplied', async () => {
+  it('uses link (no config) when an empty config object is supplied', async () => {
     const integration = new ComposioToolProvider({ apiKey: 'k' });
     await integration.authorize({ toolkit: 'gmail', connectionId: 'a' }).catch(() => undefined);
     const raw = getRawInstance();
@@ -375,11 +415,12 @@ describe('ComposioToolProvider — authorize', () => {
     raw.authConfigs.list.mockResolvedValue({
       items: [{ id: 'ac_1', status: 'ENABLED', authScheme: 'OAUTH2' }],
     });
-    raw.connectedAccounts.initiate.mockResolvedValue({ id: 'ca_new', redirectUrl: 'https://oauth' });
+    raw.connectedAccounts.link.mockResolvedValue({ id: 'ca_new', redirectUrl: 'https://oauth' });
 
     await integration.authorize({ toolkit: 'gmail', connectionId: 'a', config: {} });
 
-    expect(raw.connectedAccounts.initiate).toHaveBeenCalledWith('a', 'ac_1', { allowMultiple: true });
+    expect(raw.connectedAccounts.link).toHaveBeenCalledWith('a', 'ac_1');
+    expect(raw.connectedAccounts.initiate).not.toHaveBeenCalled();
   });
 });
 

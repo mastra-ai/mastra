@@ -1,5 +1,24 @@
 # @mastra/rag
 
+## 2.4.1-alpha.0
+
+### Patch Changes
+
+- Fixed token chunking to reject overlaps that cannot advance. ([#19213](https://github.com/mastra-ai/mastra/pull/19213))
+
+- Fixed RAG rerank observability spans to record scoring failures before rethrowing. ([#19246](https://github.com/mastra-ai/mastra/pull/19246))
+
+- Fixed RAG filter parsing to reject JSON string filters that parse to non-object values. ([#19244](https://github.com/mastra-ai/mastra/pull/19244))
+
+- Fixed Mastra agent relevance scoring to reject invalid model score output. ([#19251](https://github.com/mastra-ai/mastra/pull/19251))
+
+- Fixed character chunking to preserve content with custom length functions. ([#19214](https://github.com/mastra-ai/mastra/pull/19214))
+
+- Fixed Cohere relevance scoring to use COHERE_API_KEY by default and accept zero relevance scores. ([#19238](https://github.com/mastra-ai/mastra/pull/19238))
+
+- Updated dependencies [[`a5c6337`](https://github.com/mastra-ai/mastra/commit/a5c6337d23c7686c81a32ce62f550f610543a240), [`8b97958`](https://github.com/mastra-ai/mastra/commit/8b979589f9aa59ba67cac565949475f2ffeb4ac3), [`8410541`](https://github.com/mastra-ai/mastra/commit/84105412c60ecd3bb33a9838146f59c4b588228f), [`01b338c`](https://github.com/mastra-ai/mastra/commit/01b338c56271f0219606710e3e8b26dee27ac6c2), [`8b7361d`](https://github.com/mastra-ai/mastra/commit/8b7361d35de68b80d05d30a74e0c69e7218fd612), [`c43f3a9`](https://github.com/mastra-ai/mastra/commit/c43f3a9d1efde99b38789364ba4d0ba670f430e3)]:
+  - @mastra/core@1.51.0-alpha.4
+
 ## 2.4.0
 
 ### Minor Changes

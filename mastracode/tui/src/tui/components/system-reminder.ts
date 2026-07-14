@@ -4,11 +4,12 @@
  */
 
 import process from 'node:process';
-import { Container, Text } from '@earendil-works/pi-tui';
+import { Text } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import stripAnsi from 'strip-ansi';
-import { BOX_INDENT, getTermWidth, mastraBrand, theme } from '../theme.js';
+import { BOX_INDENT, mastraBrand, theme } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
+import { WidthAwareContainer } from './width-aware-container.js';
 
 const MAX_COLLAPSED_LINES = 10;
 const LOADED_INSTRUCTION_INDENT = BOX_INDENT + 2;
@@ -21,7 +22,7 @@ export interface SystemReminderOptions {
   judgeModelId?: string;
 }
 
-export class SystemReminderComponent extends Container {
+export class SystemReminderComponent extends WidthAwareContainer {
   private messageLines: string[];
   private readonly reminderType?: string;
   private readonly path?: string;
@@ -62,7 +63,7 @@ export class SystemReminderComponent extends Container {
     return 'system';
   }
 
-  private rebuild(): void {
+  protected rebuildForWidth(termWidth: number): void {
     this.clear();
 
     if (isLoadedInstructionPathReminder(this.reminderType, this.path)) {
@@ -81,7 +82,6 @@ export class SystemReminderComponent extends Container {
     const metadataColor = (text: string) => theme.fg('dim', text);
     const bodyColor = (text: string) => theme.fg('text', text);
     const hintColor = (text: string) => theme.fg('dim', text);
-    const termWidth = getTermWidth();
     const innerWidth = Math.max(20, termWidth - BOX_INDENT * 2 - 4);
     const horizontal = '─'.repeat(innerWidth + 1);
 

@@ -1,0 +1,42 @@
+---
+title: "Studio | File-based Agents"
+description: Configure Mastra Studio by file convention with studio.ts.
+packages:
+  - "@mastra/core"
+  - "@mastra/auth-workos"
+---
+
+# Studio
+
+Mastra configures [Studio](/docs/studio/overview) from a `studio.ts` file directly under `src/mastra/`. The file default-exports a `StudioConfig` object for Studio authentication and authorization: who can access Studio, and what authenticated users can do.
+
+Use this page for the file-based convention. For auth providers, role-based access control (RBAC), and fine-grained authorization (FGA), see [Studio auth](/docs/studio/auth).
+
+## Quickstart
+
+For local development, you don't need `studio.ts`. Start the dev server and open Studio:
+
+```bash npm2yarn
+npm run dev
+```
+
+Studio opens without authentication in local development. Add `studio.ts` when you're ready to secure a shared or production deployment.
+
+## Add authentication
+
+Use an auth provider to require sign-in before users can access Studio. This example uses [WorkOS](/docs/server/auth/workos):
+
+```typescript title="src/mastra/studio.ts"
+import { MastraAuthWorkos } from '@mastra/auth-workos'
+import type { StudioConfig } from '@mastra/core/server'
+
+export default {
+  auth: new MastraAuthWorkos(),
+} satisfies StudioConfig
+```
+
+The auth provider handles who the user is. For what the user can do after sign-in, add RBAC or FGA in the same config. See [Studio auth](/docs/studio/auth) for full examples.
+
+## Precedence with code
+
+Code-registered Studio config wins over `studio.ts`. Use `studio.ts` when one project-wide Studio config is enough; use code registration when auth depends on runtime wiring in `src/mastra/index.ts`.

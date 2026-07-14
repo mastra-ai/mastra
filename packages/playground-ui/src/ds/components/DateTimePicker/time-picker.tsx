@@ -62,7 +62,7 @@ export function TimePicker({ defaultValue, onValueChange, className }: TimePicke
   };
 
   return (
-    <div className={cn('flex gap-2 items-center', className)}>
+    <div className={cn('flex items-center gap-2', className)}>
       <Select name="hour" value={hourOptions.indexOf(hour).toString()} onValueChange={handleHourChange}>
         <SelectTrigger size="sm">
           <SelectValue placeholder="Select..." />

@@ -92,6 +92,34 @@ const scorer = createScorer({
             description:
               "When true, inject the JSON schema into the prompt instead of using the provider's native `response_format` API. Set this for models that don't support native structured output (e.g. some Groq Llama models) to avoid a wasted 400 call.",
           },
+          {
+            name: 'inputProcessors',
+            type: 'Processor[]',
+            isOptional: true,
+            description:
+              'Input processors applied to the internal judge agent before its messages reach the model (e.g. redaction, validation).',
+          },
+          {
+            name: 'outputProcessors',
+            type: 'Processor[]',
+            isOptional: true,
+            description:
+              "Output processors applied to the internal judge agent's output before it is returned (e.g. moderation, transformation).",
+          },
+          {
+            name: 'errorProcessors',
+            type: 'Processor[]',
+            isOptional: true,
+            description:
+              'Error processors for the internal judge agent. These implement `processAPIError` and can inspect LLM API rejections and signal a retry, e.g. `StreamErrorRetryProcessor`. Requires `maxProcessorRetries` to be set for retry-based processors to take effect.',
+          },
+          {
+            name: 'maxProcessorRetries',
+            type: 'number',
+            isOptional: true,
+            description:
+              'Maximum number of times processors can trigger a retry per judge generation. Required for retry-based error processors (e.g. `StreamErrorRetryProcessor`) to take effect.',
+          },
         ],
       },
     ],
