@@ -135,6 +135,22 @@ const agent = new Agent({
 
 The generated code for `sales_code` can't call an inventory tool, and the reverse holds too. Use this for least-privilege scoping and to keep each tool's prompt surface small.
 
+## Remote sandboxes
+
+By default, code mode uses a transport that writes the program to the host filesystem and runs `node` against it. That works for `LocalSandbox`, which shares the host, but not for remote sandboxes that run in their own micro-VM (such as [E2B](/reference/workspace/e2b-sandbox)), where the host paths don't exist.
+
+Remote sandboxes need a transport that writes the program into the sandbox filesystem. For E2B, pass the shipped `E2BCodeModeTransport` as the second argument to `createCodeMode`:
+
+```typescript
+import { createCodeMode } from '@mastra/core/tools'
+import { E2BSandbox, E2BCodeModeTransport } from '@mastra/e2b'
+
+const { tool, instructions } = createCodeMode(
+  { tools, sandbox: new E2BSandbox() },
+  new E2BCodeModeTransport(),
+)
+```
+
 ## Related
 
 - [createCodeMode() reference](/reference/tools/create-code-mode)

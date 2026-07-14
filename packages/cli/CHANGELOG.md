@@ -1,5 +1,41 @@
 # mastra
 
+## 1.19.0-alpha.11
+
+### Patch Changes
+
+- Updated dependencies [[`4adc391`](https://github.com/mastra-ai/mastra/commit/4adc3911075249c352bb4832d2471922826344de), [`b486abf`](https://github.com/mastra-ai/mastra/commit/b486abfa2a7528c6f527e4015c819ea9fa54aaad)]:
+  - @mastra/core@1.51.0-alpha.10
+  - @mastra/deployer@1.51.0-alpha.10
+
+## 1.19.0-alpha.10
+
+### Patch Changes
+
+- Fixed the default project scaffold failing the deploy preflight check. New projects now read the database URL from TURSO_DATABASE_URL when it is set (for example from a hosted database created with `mastra env db create`) and fall back to a local file during development, so the first `mastra deploy` is no longer blocked by a local storage path error. ([#19395](https://github.com/mastra-ai/mastra/pull/19395))
+
+## 1.19.0-alpha.9
+
+### Minor Changes
+
+- Added `mastra env vars pull [environment]` to download the full set of env vars an environment actually deploys with — vars stored on the environment (for example, added in the dashboard's environment editor) merged with project-level vars. Managed vars from attached databases are listed as comments (names only) since their values are platform-managed secrets. ([#19400](https://github.com/mastra-ai/mastra/pull/19400))
+
+  ```bash
+  mastra env vars pull staging --output .env.staging
+  ```
+
+  Previously the only pull command, `mastra server env pull`, silently read project-level vars only, so vars added through the dashboard were missing from the pulled file. That command now prints a note about its scope and points to `mastra env vars pull`.
+
+### Patch Changes
+
+- Rename `mastra env db detach` to `mastra env db delete` and make the confirmation prompt state that the database and all of its data are permanently deleted with the provider. The old name described a non-destructive unlink, but the operation deprovisions the Turso/Neon database — data included. The `detach` name is reserved for a future true non-destructive detach. ([#19402](https://github.com/mastra-ai/mastra/pull/19402))
+
+- Fix three deploy/env usability papercuts: `mastra deploy staging` now fails fast with "Did you mean: mastra deploy --env staging" instead of silently deploying to production, the preflight block message names the exact unblock command (`mastra env db create --kind turso`/`neon` based on the missing variable), and 400 validation errors now show the field name and valid options instead of a bare "invalid fields". ([#19403](https://github.com/mastra-ai/mastra/pull/19403))
+
+- Updated dependencies [[`edce8d2`](https://github.com/mastra-ai/mastra/commit/edce8d2769f19e27a05737c627af2d765472a4f8)]:
+  - @mastra/core@1.51.0-alpha.9
+  - @mastra/deployer@1.51.0-alpha.9
+
 ## 1.19.0-alpha.8
 
 ### Patch Changes

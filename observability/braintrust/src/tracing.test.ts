@@ -537,6 +537,119 @@ describe('BraintrustExporter', () => {
     });
   });
 
+  describe('Tool span chat shaping (unknown_tool fix)', () => {
+    it('shapes TOOL_CALL input/output as OpenAI messages with the real tool name', async () => {
+      const toolSpan = createMockSpan({
+        id: 'tool-span-1',
+        name: "tool: 'getWeather'",
+        type: SpanType.TOOL_CALL,
+        isRoot: true,
+        entityName: 'getWeather',
+        input: { city: 'Paris' },
+        output: { temperatureC: 21, conditions: 'Sunny' },
+        attributes: { toolId: 'getWeather' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: toolSpan,
+      });
+
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: expect.objectContaining({
+            input: [
+              {
+                role: 'assistant',
+                content: '',
+                tool_calls: [
+                  {
+                    id: 'tool-span-1',
+                    type: 'function',
+                    function: { name: 'getWeather', arguments: '{"city":"Paris"}' },
+                  },
+                ],
+              },
+            ],
+            output: {
+              role: 'tool',
+              content: '{"temperatureC":21,"conditions":"Sunny"}',
+              tool_call_id: 'tool-span-1',
+            },
+          }),
+        }),
+      );
+    });
+
+    it('falls back to the name inside the span name when entityName is missing', async () => {
+      const toolSpan = createMockSpan({
+        id: 'tool-span-3',
+        name: "tool: 'searchDocs'",
+        type: SpanType.TOOL_CALL,
+        isRoot: true,
+        input: { q: 'mastra' },
+        attributes: {},
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: toolSpan,
+      });
+
+      const call = mockLogger.startSpan.mock.calls.at(-1)![0];
+      expect(call.event.input[0].tool_calls[0].function.name).toBe('searchDocs');
+    });
+
+    it('chat-shapes MCP_TOOL_CALL spans and pairs call/result with the same id', async () => {
+      const mcpSpan = createMockSpan({
+        id: 'mcp-span-1',
+        name: "mcp_tool: 'read_file' on 'fs-server'",
+        type: SpanType.MCP_TOOL_CALL,
+        isRoot: true,
+        entityName: 'read_file',
+        input: { path: '/tmp/a.txt' },
+        output: 'file contents',
+        attributes: { mcpServer: 'fs-server' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: mcpSpan,
+      });
+
+      const call = mockLogger.startSpan.mock.calls.at(-1)![0];
+      expect(call.event.input[0].tool_calls[0].function.name).toBe('read_file');
+      expect(call.event.output).toEqual({
+        role: 'tool',
+        content: 'file contents',
+        tool_call_id: 'mcp-span-1',
+      });
+    });
+
+    it('chat-shapes PROVIDER_TOOL_CALL spans', async () => {
+      const providerSpan = createMockSpan({
+        id: 'provider-span-1',
+        name: "provider_tool: 'code_execution'",
+        type: SpanType.PROVIDER_TOOL_CALL,
+        isRoot: true,
+        entityName: 'code_execution',
+        input: { code: 'print("hello")' },
+        output: { stdout: 'hello' },
+        attributes: { toolType: 'provider-tool', toolCallId: 'srvtoolu_123' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: providerSpan,
+      });
+
+      const call = mockLogger.startSpan.mock.calls.at(-1)![0];
+      expect(call.event.input[0].tool_calls[0].function.name).toBe('code_execution');
+      expect(call.event.input[0].tool_calls[0].id).toBe('srvtoolu_123');
+      expect(call.event.output.tool_call_id).toBe('srvtoolu_123');
+    });
+  });
+
   describe('LLM Generation Attributes', () => {
     it('should handle LLM generation with full attributes', async () => {
       const traceId = 'trace-id';
@@ -1429,7 +1542,7 @@ describe('BraintrustExporter', () => {
       });
 
       expect(mockSpan.log).toHaveBeenCalledWith({
-        output: { result: 42 },
+        output: { role: 'tool', content: '{"result":42}', tool_call_id: 'tool-span' },
         metadata: {
           spanType: 'tool_call',
           toolId: 'calc',
@@ -2692,6 +2805,8 @@ function createMockSpan({
   errorInfo,
   tags,
   traceId,
+  entityName,
+  entityId,
 }: {
   id: string;
   name: string;
@@ -2704,6 +2819,8 @@ function createMockSpan({
   errorInfo?: any;
   tags?: string[];
   traceId?: string;
+  entityName?: string;
+  entityId?: string;
 }): AnyExportedSpan {
   const mockSpan = {
     id,
@@ -2715,6 +2832,8 @@ function createMockSpan({
     output,
     errorInfo,
     tags,
+    entityName,
+    entityId,
     startTime: new Date(),
     endTime: undefined,
     traceId: traceId ?? (isRoot ? id : 'parent-trace-id'),
