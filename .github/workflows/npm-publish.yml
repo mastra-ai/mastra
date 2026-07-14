@@ -457,7 +457,7 @@ jobs:
 
       - name: Update workspace dependencies
         run: |
-          for file in $(find . -type f -name package.json -not -path "./node_modules/*" -not -path "./package.json"); do
+          for file in $(find . -type f -name package.json -not -path "./node_modules/*" -not -path "./docs/*" -not -path "./package.json"); do
             content="$(< "$file")"
             updated="$(echo "$content" | sed -E 's/"workspace:\^"/"workspace:*"/g')"
             updated="$(echo "$updated" | sed 's/"@mastra\/\([^"]*\)":[[:space:]]"[^"]*"/"@mastra\/\1": "workspace:*"/g')"
