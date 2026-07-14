@@ -24,7 +24,7 @@ const CollapsibleTrigger = React.forwardRef<HTMLButtonElement, CollapsibleTrigge
           transitions.colors,
           focusRing.visible,
           'hover:text-neutral5',
-          '[&>svg]:transition-transform [&>svg]:duration-normal [&>svg]:ease-out-custom',
+          '[&>svg]:duration-normal [&>svg]:transition-transform [&>svg]:ease-out-custom',
           '[&[data-panel-open]>svg]:rotate-90',
           className,
         )}
@@ -52,8 +52,8 @@ const CollapsibleContent = React.forwardRef<HTMLDivElement, CollapsibleContentPr
       data-slot="collapsible-content"
       className={cn(
         'overflow-hidden',
-        'h-[var(--collapsible-panel-height)] transition-[height] duration-normal ease-out-custom',
-        'data-[starting-style]:h-0 data-[ending-style]:h-0',
+        'duration-normal h-[var(--collapsible-panel-height)] transition-[height] ease-out-custom',
+        'data-[ending-style]:h-0 data-[starting-style]:h-0',
       )}
       {...props}
     >

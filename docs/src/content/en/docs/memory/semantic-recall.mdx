@@ -6,16 +6,20 @@ packages:
   - "@mastra/fastembed"
   - "@mastra/libsql"
   - "@mastra/memory"
+  - "@mastra/mongodb"
   - "@mastra/pg"
 ---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
 
 # Semantic recall
 
 If you ask your friend what they did last weekend, they will search in their memory for events associated with "last weekend" and then tell you what they did. That's sort of like how semantic recall works in Mastra.
 
-:::tip[Watch 📹]
+:::tip[📹 Watch]
 
-What semantic recall is, how it works, and how to configure it in Mastra → [YouTube (5 minutes)](https://youtu.be/UVZtK8cK8xQ)
+Watch [Mastra semantic recall](https://www.youtube.com/watch?v=UVZtK8cK8xQ\&pp=ygUVbWFzdHJhIHdvcmtpbmcgbWVtb3J5) to see how agents retrieve relevant messages from past conversations.
 
 :::
 
@@ -35,33 +39,69 @@ After getting a response from the LLM, all new messages (user, assistant, and to
 
 Semantic recall is disabled by default. To enable it, set `semanticRecall: true` in `options` and provide a `vector` store and `embedder`:
 
-```typescript title="src/mastra/agents/index.ts"
-import { Agent } from '@mastra/core/agent'
-import { Memory } from '@mastra/memory'
-import { LibSQLStore, LibSQLVector } from '@mastra/libsql'
-import { ModelRouterEmbeddingModel } from '@mastra/core/llm'
+<Tabs>
+  <TabItem value="libsql" label="LibSQL" default>
+    ```typescript title="src/mastra/agents/index.ts"
+    import { Agent } from '@mastra/core/agent'
+    import { Memory } from '@mastra/memory'
+    import { LibSQLStore, LibSQLVector } from '@mastra/libsql'
+    import { ModelRouterEmbeddingModel } from '@mastra/core/llm'
 
-const agent = new Agent({
-  id: 'support-agent',
-  name: 'SupportAgent',
-  instructions: 'You are a helpful support agent.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  memory: new Memory({
-    storage: new LibSQLStore({
-      id: 'agent-storage',
-      url: 'file:./local.db',
-    }),
-    vector: new LibSQLVector({
-      id: 'agent-vector',
-      url: 'file:./local.db',
-    }),
-    embedder: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
-    options: {
-      semanticRecall: true,
-    },
-  }),
-})
-```
+    const agent = new Agent({
+      id: 'support-agent',
+      name: 'SupportAgent',
+      instructions: 'You are a helpful support agent.',
+      model: '__GATEWAY_OPENAI_MODEL__',
+      memory: new Memory({
+        storage: new LibSQLStore({
+          id: 'agent-storage',
+          url: 'file:./local.db',
+        }),
+        vector: new LibSQLVector({
+          id: 'agent-vector',
+          url: 'file:./local.db',
+        }),
+        embedder: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
+        options: {
+          semanticRecall: true,
+        },
+      }),
+    })
+    ```
+  </TabItem>
+
+  <TabItem value="mongodb" label="MongoDB">
+    ```typescript title="src/mastra/agents/index.ts"
+    import { Agent } from '@mastra/core/agent'
+    import { Memory } from '@mastra/memory'
+    import { MongoDBStore, MongoDBVector } from '@mastra/mongodb'
+    import { ModelRouterEmbeddingModel } from '@mastra/core/llm'
+
+    const agent = new Agent({
+      id: 'support-agent',
+      name: 'SupportAgent',
+      instructions: 'You are a helpful support agent.',
+      model: '__GATEWAY_OPENAI_MODEL__',
+      memory: new Memory({
+        storage: new MongoDBStore({
+          id: 'agent-storage',
+          uri: process.env.MONGODB_URI,
+          dbName: process.env.MONGODB_DB_NAME,
+        }),
+        vector: new MongoDBVector({
+          id: 'agent-vector',
+          uri: process.env.MONGODB_URI,
+          dbName: process.env.MONGODB_DB_NAME,
+        }),
+        embedder: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
+        options: {
+          semanticRecall: true,
+        },
+      }),
+    })
+    ```
+  </TabItem>
+</Tabs>
 
 ## Using the `recall()` method
 
@@ -161,7 +201,7 @@ const agent = new Agent({
 
 :::note
 
-`scope: 'resource'` is supported by the LibSQL, PostgreSQL, and Upstash storage adapters.
+`scope: 'resource'` is supported by the LibSQL, PostgreSQL, MongoDB, and Upstash storage adapters.
 
 :::
 

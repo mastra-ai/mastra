@@ -100,7 +100,7 @@ export function MainSidebarNavLink({
   }
 
   return (
-    <li {...props} className={cn('flex flex-col relative min-w-0', className)}>
+    <li {...props} className={cn('relative flex min-w-0 flex-col', className)}>
       {link && needsTooltip && React.isValidElement(interactiveEl) ? (
         <Tooltip>
           <TooltipTrigger render={interactiveEl} />

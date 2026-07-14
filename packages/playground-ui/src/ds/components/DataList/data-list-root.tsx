@@ -122,7 +122,7 @@ const borderlessTableStyles = [
 ] as const;
 
 const dataListFitClasses: Record<DataListFit, string> = {
-  content: 'w-max min-w-full max-w-none',
+  content: 'w-max max-w-none min-w-full',
   container: 'w-full max-w-full',
 };
 
@@ -136,7 +136,7 @@ const dataListRootVariants = cva(cn('grid content-start'), {
       ),
       lined: cn(
         ...borderlessTableStyles,
-        '[&_.data-list-row]:after:absolute [&_.data-list-row]:after:h-px [&_.data-list-row]:after:content-[""] [&_.data-list-row]:after:pointer-events-none',
+        '[&_.data-list-row]:after:pointer-events-none [&_.data-list-row]:after:absolute [&_.data-list-row]:after:h-px [&_.data-list-row]:after:content-[""]',
         '[&_.data-list-row]:after:inset-x-2 [&_.data-list-row]:after:-bottom-px [&_.data-list-row]:after:bg-neutral6/10',
       ),
     },
@@ -189,7 +189,7 @@ export function DataListRoot({
       mask={getDataListMask(mask)}
       viewportRef={scrollRef}
       viewPortClassName="max-h-[inherit]"
-      className={cn('h-full w-full rounded-t-xl', className)}
+      className={cn('size-full rounded-t-xl', className)}
     >
       {grid}
     </ScrollArea>

@@ -36,14 +36,12 @@ const barColor = (percent: number): string => {
 
 type ConfigBadgeProps = {
   icon: LucideIcon;
-  label: string;
   tooltip: string;
   enabled: boolean;
   value?: number;
-  expanded: boolean;
 };
 
-function ConfigBadge({ icon: Icon, label, tooltip, enabled, value, expanded }: ConfigBadgeProps) {
+function ConfigBadge({ icon: Icon, tooltip, enabled, value }: ConfigBadgeProps) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -57,11 +55,6 @@ function ConfigBadge({ icon: Icon, label, tooltip, enabled, value, expanded }: C
           {value !== undefined && (
             <Txt as="span" variant="ui-xs" className="font-medium tabular-nums leading-none">
               {value}
-            </Txt>
-          )}
-          {expanded && (
-            <Txt as="span" variant="ui-xs" className="whitespace-nowrap leading-none">
-              {label}
             </Txt>
           )}
         </span>
@@ -252,56 +245,50 @@ function MemorySidebarBody({ agentId, threadId, threads, onDelete }: MemorySideb
                 )}
               </span>
 
-              {/* Memory setup at a glance: filled badge = on, faded = off */}
-              <TooltipProvider delay={150} timeout={400}>
-                <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                  <ConfigBadge
-                    icon={MessageSquare}
-                    label="recent messages"
-                    tooltip={
-                      lastMessages !== undefined
-                        ? `Keeps the last ${lastMessages} messages in context`
-                        : 'Recent message history is off'
-                    }
-                    enabled={lastMessages !== undefined}
-                    value={lastMessages}
-                    expanded={showMemory}
-                  />
-                  <ConfigBadge
-                    icon={Search}
-                    label="Semantic recall"
-                    tooltip={
-                      semanticRecallOn
-                        ? 'Semantic recall is on - retrieves relevant past messages'
-                        : 'Semantic recall is off'
-                    }
-                    enabled={semanticRecallOn}
-                    expanded={showMemory}
-                  />
-                  <ConfigBadge
-                    icon={NotebookPen}
-                    label="Working memory"
-                    tooltip={
-                      workingMemoryOn
-                        ? 'Working memory is on - persists notes across the conversation'
-                        : 'Working memory is off'
-                    }
-                    enabled={workingMemoryOn}
-                    expanded={showMemory}
-                  />
-                  <ConfigBadge
-                    icon={Eye}
-                    label="Observational"
-                    tooltip={
-                      observationalOn
-                        ? 'Observational memory is on - learns from the conversation'
-                        : 'Observational memory is off'
-                    }
-                    enabled={observationalOn}
-                    expanded={showMemory}
-                  />
-                </span>
-              </TooltipProvider>
+              {!showMemory ? (
+                <TooltipProvider delay={150} timeout={400}>
+                  {/* Memory setup at a glance: filled badge = on, faded = off */}
+                  <span data-testid="memory-config-badges" className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                    <ConfigBadge
+                      icon={MessageSquare}
+                      tooltip={
+                        lastMessages !== undefined
+                          ? `Keeps the last ${lastMessages} messages in context`
+                          : 'Recent message history is off'
+                      }
+                      enabled={lastMessages !== undefined}
+                      value={lastMessages}
+                    />
+                    <ConfigBadge
+                      icon={Search}
+                      tooltip={
+                        semanticRecallOn
+                          ? 'Semantic recall is on - retrieves relevant past messages'
+                          : 'Semantic recall is off'
+                      }
+                      enabled={semanticRecallOn}
+                    />
+                    <ConfigBadge
+                      icon={NotebookPen}
+                      tooltip={
+                        workingMemoryOn
+                          ? 'Working memory is on - persists notes across the conversation'
+                          : 'Working memory is off'
+                      }
+                      enabled={workingMemoryOn}
+                    />
+                    <ConfigBadge
+                      icon={Eye}
+                      tooltip={
+                        observationalOn
+                          ? 'Observational memory is on - learns from the conversation'
+                          : 'Observational memory is off'
+                      }
+                      enabled={observationalOn}
+                    />
+                  </span>
+                </TooltipProvider>
+              ) : null}
 
               {observationPercent !== undefined ? (
                 <span className="mt-2 block h-1 w-full overflow-hidden rounded-full bg-surface5">
