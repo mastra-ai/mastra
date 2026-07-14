@@ -130,7 +130,7 @@ function issueCandidate(issue: GithubIssue): BoardCandidate {
   const labels = issue.labels;
   const autoTriaged = hasLabel(labels, AUTO_TRIAGED_LABEL);
   const needsApproval = hasLabel(labels, NEEDS_APPROVAL_LABEL);
-  const ref = `GitHub issue #${issue.number}: "${issue.title}" (${issue.url})`;
+  const ref = `GitHub issue #${issue.number} (${issue.url})`;
   const investigateBase = `Investigate ${ref}.`;
   const approvalBase = `Prepare approval for ${ref}.`;
   return {
@@ -158,8 +158,8 @@ function issueCandidate(issue: GithubIssue): BoardCandidate {
 }
 
 function pullRequestCandidate(pr: GithubPullRequest): BoardCandidate {
-  const ref = `GitHub pull request #${pr.number}: "${pr.title}" (${pr.url})`;
-  const checkout = `The PR head branch is ${pr.headBranch}; check it out in this worktree first (e.g. \`gh pr checkout ${pr.number}\`).`;
+  const ref = `GitHub pull request #${pr.number} (${pr.url})`;
+  const checkout = `Check out the PR in this worktree first with \`gh pr checkout ${pr.number}\`.`;
   const base = `Review ${ref}. ${checkout}`;
   return {
     sourceKey: `github-pr:${pr.number}`,
@@ -182,7 +182,7 @@ function pullRequestCandidate(pr: GithubPullRequest): BoardCandidate {
 }
 
 function linearCandidate(issue: LinearIssue): BoardCandidate {
-  const ref = `Linear issue ${issue.identifier}: "${issue.title}" (${issue.url})`;
+  const ref = `Linear issue ${issue.identifier} (${issue.url})`;
   const fetchHint = `Start by fetching the issue's full details (description and comments) with the linear_get_issue tool.`;
   const base = `Investigate ${ref}. ${fetchHint}`;
   return {
@@ -227,7 +227,7 @@ function itemRunSpec(item: WorkItem): ItemRunSpec | null {
   if (item.source === 'github-issue' && typeof meta.number === 'number') {
     const labels = metadataLabels(meta);
     const needsApproval = hasLabel(labels, NEEDS_APPROVAL_LABEL);
-    const ref = `GitHub issue #${meta.number}: "${item.title}"${item.url ? ` (${item.url})` : ''}`;
+    const ref = `GitHub issue #${meta.number}${item.url ? ` (${item.url})` : ''}`;
     return {
       actionLabel: needsApproval ? 'Prepare approval' : 'Investigate',
       role: needsApproval ? 'triage' : 'work',
@@ -241,7 +241,7 @@ function itemRunSpec(item: WorkItem): ItemRunSpec | null {
     };
   }
   if (item.source === 'linear-issue' && typeof meta.identifier === 'string') {
-    const ref = `Linear issue ${meta.identifier}: "${item.title}"${item.url ? ` (${item.url})` : ''}`;
+    const ref = `Linear issue ${meta.identifier}${item.url ? ` (${item.url})` : ''}`;
     return {
       actionLabel: 'Start work',
       role: 'work',
@@ -252,14 +252,14 @@ function itemRunSpec(item: WorkItem): ItemRunSpec | null {
     };
   }
   if (item.source === 'github-pr' && typeof meta.number === 'number' && typeof meta.headBranch === 'string') {
-    const ref = `GitHub pull request #${meta.number}: "${item.title}"${item.url ? ` (${item.url})` : ''}`;
+    const ref = `GitHub pull request #${meta.number}${item.url ? ` (${item.url})` : ''}`;
     return {
       actionLabel: 'Start review',
       role: 'review',
       stages: stagesAfterRunStart(item.stages, 'review'),
       branch: `factory/pr-${meta.number}`,
       threadTitle: `PR #${meta.number}: ${item.title}`,
-      prompt: `Use the understand-pr skill to review ${ref}. The PR head branch is ${meta.headBranch}; check it out in this worktree first (e.g. \`gh pr checkout ${meta.number}\`).`,
+      prompt: `Use the understand-pr skill to review ${ref}. Check out the PR in this worktree first with \`gh pr checkout ${meta.number}\`.`,
     };
   }
   return null;
