@@ -1,15 +1,14 @@
 import fsSync from 'node:fs';
-import fs from 'node:fs/promises';
 import path from 'node:path';
+
 import * as p from '@clack/prompts';
 import color from 'picocolors';
+
 import type { PosthogAnalytics } from '../../analytics/index';
 import { getAnalytics } from '../../analytics/index';
 import { cloneTemplate, installDependencies } from '../../utils/clone-template';
 import { findTemplateByName, loadTemplates, selectTemplate } from '../../utils/template-utils';
 import type { Template } from '../../utils/template-utils';
-import { init } from '../init/init';
-import type { LLMProvider } from '../init/utils';
 import { getPackageManager } from '../utils.js';
 
 import {
@@ -24,7 +23,13 @@ import {
   validateProjectName,
 } from './command';
 import type { CreateCommandOptions, CreateLLMProvider, CreateMode, NormalizedCreateOptions } from './command';
-import { createMastraProject } from './utils';
+import { adaptManagedAgentHarness } from './provider-adapter';
+import {
+  cleanupOwnedStagingDirectory,
+  createOwnedStagingDirectory,
+  publishStagedProject,
+  writeEmptyScaffold,
+} from './utils';
 
 export {
   CREATE_LLM_PROVIDERS,
@@ -38,6 +43,17 @@ export {
   validateProjectName,
 };
 export type { CreateCommandOptions, CreateLLMProvider, CreateMode, NormalizedCreateOptions };
+
+const MANAGED_AGENT_HARNESS_TEMPLATE: Template = {
+  githubUrl: 'https://github.com/mastra-ai/template-agent-harness',
+  title: 'Agent Harness',
+  slug: 'template-agent-harness',
+  agents: ['agent'],
+  mcp: [],
+  tools: ['web-fetch'],
+  networks: [],
+  workflows: [],
+};
 
 export class CreateCancelledError extends Error {
   constructor() {
@@ -178,12 +194,13 @@ export async function runCreateCommand(
 export const create = async (args: CreateOptions): Promise<void> => {
   const options = normalizeDirectCreateOptions(args);
   const mode = validateCreateOptionConflicts(options);
+  const invocationCwd = process.cwd();
 
   const rawProjectName = options.projectName ?? (await promptForProjectName());
   const projectName = validateProjectName(rawProjectName);
-  const projectPath = path.resolve(process.cwd(), projectName);
+  const targetPath = path.resolve(invocationCwd, projectName);
 
-  if (fsSync.existsSync(projectPath)) {
+  if (fsSync.existsSync(targetPath)) {
     throw new Error(`A file or directory named "${projectName}" already exists. Please choose a different name.`);
   }
 
@@ -207,10 +224,11 @@ export const create = async (args: CreateOptions): Promise<void> => {
     }
   }
 
+  const selectedTemplate = mode === 'empty' ? undefined : await resolveTemplate(mode, options.template);
   const analytics = args.analytics ?? getAnalytics();
   analytics?.trackEvent('cli_create_mode_selected', {
     mode,
-    template_slug: typeof options.template === 'string' ? options.template : undefined,
+    template_slug: mode === 'template' ? selectedTemplate?.slug : undefined,
     skills: options.skills,
     git: options.git,
   });
@@ -220,61 +238,78 @@ export const create = async (args: CreateOptions): Promise<void> => {
       selection_method: providerSelectionMethod,
     });
   }
+  if (selectedTemplate) {
+    analytics?.trackEvent('cli_template_used', {
+      template_slug: selectedTemplate.slug,
+      template_title: selectedTemplate.title,
+    });
+  }
 
-  const createVersionTag = mode === 'template' ? undefined : ((await args.resolveVersionTag?.()) ?? 'latest');
+  const versionTag = mode === 'template' ? undefined : ((await args.resolveVersionTag?.()) ?? 'latest');
+  const packageManager = getPackageManager();
+  const staging = await createOwnedStagingDirectory(invocationCwd, projectName);
+  let selectedApiKeyEnv: string | undefined;
+
+  try {
+    if (mode === 'empty') {
+      await writeEmptyScaffold({
+        projectPath: staging.projectPath,
+        projectName,
+        versionTag: versionTag ?? 'latest',
+        packageManager,
+      });
+    } else {
+      const isManaged = mode === 'managed';
+      const branch = isManaged && versionTag === 'beta' ? 'beta' : undefined;
+      await cloneTemplate({
+        template: selectedTemplate!,
+        projectName,
+        targetDir: staging.rootPath,
+        branch,
+      });
+
+      if (isManaged) {
+        const providerConfig = await adaptManagedAgentHarness({
+          projectPath: staging.projectPath,
+          provider: llmProvider!,
+          apiKey: llmApiKey,
+          versionTag: versionTag ?? 'latest',
+        });
+        selectedApiKeyEnv = providerConfig.apiKeyEnv;
+      }
+    }
+
+    await installDependencies(staging.projectPath, packageManager, options.timeout);
+    await publishStagedProject({ projectPath: staging.projectPath, targetPath, projectName });
+  } finally {
+    if (process.cwd() !== invocationCwd) {
+      process.chdir(invocationCwd);
+    }
+    try {
+      await cleanupOwnedStagingDirectory(staging.rootPath);
+    } catch (cleanupError) {
+      console.error(
+        `Warning: Failed to clean up staging directory: ${cleanupError instanceof Error ? cleanupError.message : 'Unknown error'}`,
+      );
+    }
+  }
 
   if (mode === 'managed') {
-    await createFromTemplate({
-      projectName,
-      template: 'agent-harness',
-      timeout: options.timeout,
-      injectedAnalytics: analytics ?? undefined,
-      llmProvider,
-      createVersionTag,
-    });
-    return;
+    p.note(
+      llmApiKey
+        ? `${color.green('Mastra agent harness installed!')}\n\nYour ${selectedApiKeyEnv} value was written to ${color.cyan('.env')}.`
+        : `${color.green('Mastra agent harness installed!')}\n\nSet ${selectedApiKeyEnv} in your ${color.cyan('.env')} file before starting.`,
+    );
+  } else if (mode === 'template') {
+    p.note(
+      `${color.green('Mastra template installed!')}\n\nAdd any required environment variables in your ${color.cyan('.env')} file.`,
+    );
   }
 
-  if (mode === 'template') {
-    await createFromTemplate({
-      projectName,
-      template: options.template,
-      timeout: options.timeout,
-      injectedAnalytics: analytics ?? undefined,
-    });
-    return;
-  }
-
-  await createEmptyWithLegacyScaffold({
-    projectName,
-    timeout: options.timeout,
-    createVersionTag: createVersionTag ?? 'latest',
-  });
+  postCreate({ projectName, packageManager });
 };
 
-async function createEmptyWithLegacyScaffold(args: {
-  projectName: string;
-  timeout: number;
-  createVersionTag: string;
-}): Promise<void> {
-  const { projectName } = await createMastraProject({
-    projectName: args.projectName,
-    createVersionTag: args.createVersionTag,
-    timeout: args.timeout,
-    needsInteractive: false,
-  });
-
-  await init({
-    directory: 'src/',
-    components: [],
-    addExample: false,
-    versionTag: args.createVersionTag,
-  });
-  postCreate({ projectName });
-}
-
-const postCreate = ({ projectName }: { projectName: string }) => {
-  const packageManager = getPackageManager();
+const postCreate = ({ projectName, packageManager }: { projectName: string; packageManager: string }) => {
   p.outro(`
    ${color.green('To start your project:')}
 
@@ -372,87 +407,42 @@ function createFromGitHubUrl(url: string): Template {
   };
 }
 
-async function createFromTemplate(args: {
-  projectName: string;
-  template?: string | boolean;
-  timeout: number;
-  injectedAnalytics?: PosthogAnalytics;
-  llmProvider?: CreateLLMProvider;
-  createVersionTag?: string;
-}) {
-  let selectedTemplate: Template | undefined;
+async function resolveTemplate(mode: Exclude<CreateMode, 'empty'>, template?: string | boolean): Promise<Template> {
+  if (mode === 'managed') return MANAGED_AGENT_HARNESS_TEMPLATE;
 
-  if (args.template === true) {
+  if (template === true) {
     const templates = await loadTemplates();
     const selected = await runCreatePrompt(signal => selectTemplate(templates, { signal }));
     if (!selected) cancelCreate();
-    selectedTemplate = selected;
-  } else if (typeof args.template === 'string') {
-    if (isGitHubUrl(args.template)) {
-      const spinner = p.spinner();
-      spinner.start('Validating GitHub repository...');
-      const validation = await validateGitHubProject(args.template);
-      if (!validation.isValid) {
-        spinner.stop('Validation failed');
-        p.log.error('This does not appear to be a valid Mastra project:');
-        validation.errors.forEach(error => p.log.error(`  - ${error}`));
-        throw new Error('Invalid Mastra project');
-      }
-      spinner.stop('Valid Mastra project ✓');
-      selectedTemplate = createFromGitHubUrl(args.template);
-    } else {
-      const templates = await loadTemplates();
-      const found = findTemplateByName(templates, args.template);
-      if (!found) {
-        p.log.error(`Template "${args.template}" not found. Available templates:`);
-        templates.forEach(template =>
-          p.log.info(`  - ${template.title} (use: ${template.slug.replace('template-', '')})`),
-        );
-        throw new Error(`Template "${args.template}" not found`);
-      }
-      selectedTemplate = found;
-    }
+    return selected;
   }
 
-  if (!selectedTemplate) throw new Error('No template selected');
-
-  let projectPath: string | null = null;
-  try {
-    const analytics = args.injectedAnalytics ?? getAnalytics();
-    analytics?.trackEvent('cli_template_used', {
-      template_slug: selectedTemplate.slug,
-      template_title: selectedTemplate.title,
-    });
-
-    const isMastraTemplate = selectedTemplate.githubUrl.includes('github.com/mastra-ai/');
-    const branch = args.createVersionTag === 'beta' && isMastraTemplate ? 'beta' : undefined;
-
-    projectPath = await cloneTemplate({
-      template: selectedTemplate,
-      projectName: args.projectName,
-      branch,
-      llmProvider: args.llmProvider as LLMProvider | undefined,
-    });
-    await installDependencies(projectPath);
-
-    p.note(`
-      ${color.green('Mastra template installed!')}
-
-      Add the necessary environment
-      variables in your ${color.cyan('.env')} file
-      `);
-    postCreate({ projectName: args.projectName });
-  } catch (error) {
-    if (projectPath && fsSync.existsSync(projectPath)) {
-      try {
-        await fs.rm(projectPath, { recursive: true, force: true });
-      } catch (cleanupError) {
-        console.error(
-          `Warning: Failed to clean up project directory: ${cleanupError instanceof Error ? cleanupError.message : 'Unknown error'}`,
-        );
-      }
-    }
-    p.log.error(`Failed to create project from template: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    throw error;
+  if (typeof template !== 'string') {
+    throw new Error('No template selected');
   }
+
+  if (isGitHubUrl(template)) {
+    const spinner = p.spinner();
+    spinner.start('Validating GitHub repository...');
+    const validation = await validateGitHubProject(template);
+    if (!validation.isValid) {
+      spinner.stop('Validation failed');
+      p.log.error('This does not appear to be a valid Mastra project:');
+      validation.errors.forEach(error => p.log.error(`  - ${error}`));
+      throw new Error('Invalid Mastra project');
+    }
+    spinner.stop('Valid Mastra project ✓');
+    return createFromGitHubUrl(template);
+  }
+
+  const templates = await loadTemplates();
+  const found = findTemplateByName(templates, template);
+  if (!found) {
+    p.log.error(`Template "${template}" not found. Available templates:`);
+    templates.forEach(availableTemplate =>
+      p.log.info(`  - ${availableTemplate.title} (use: ${availableTemplate.slug.replace('template-', '')})`),
+    );
+    throw new Error(`Template "${template}" not found`);
+  }
+  return found;
 }

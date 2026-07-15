@@ -294,13 +294,24 @@ describe('clone-template', () => {
       });
     });
 
-    it('should update MODEL in .env when llmProvider is specified', async () => {
+    it('preserves arbitrary template provider content while copying .env.example', async () => {
+      const packageJson = {
+        name: 'old-name',
+        dependencies: {
+          '@ai-sdk/anthropic': '^3.0.1',
+          '@mastra/core': 'custom-channel',
+        },
+      };
+      const agent = "import { anthropic } from '@ai-sdk/anthropic';\nconst model = 'anthropic/custom-model';\n";
+      const readme = 'Use ANTHROPIC_API_KEY with this provider-owned template.';
+      const envExample = 'MODEL=anthropic/custom-model\nANTHROPIC_API_KEY=\n';
       const mockExec = vi.fn(async (cmd: string) => {
-        // Simulate degit creating the directory and files
         if (cmd.includes('degit')) {
           vol.fromJSON({
-            '/test-project/package.json': JSON.stringify({ name: 'old-name', version: '1.0.0' }),
-            '/test-project/.env.example': 'MODEL=openai/gpt-4o-mini\nOPENAI_API_KEY=\nANTHROPIC_API_KEY=',
+            '/test-project/package.json': JSON.stringify(packageJson),
+            '/test-project/src/mastra/agent.ts': agent,
+            '/test-project/README.md': readme,
+            '/test-project/.env.example': envExample,
           });
         }
         return { stdout: '', stderr: '' };
@@ -308,39 +319,17 @@ describe('clone-template', () => {
       vi.mocked(child_process.exec).mockImplementation(mockExec);
 
       const { cloneTemplate } = await import('./clone-template');
-      await cloneTemplate({
-        template: mockTemplate,
-        projectName: 'test-project',
-        llmProvider: 'anthropic',
-      });
+      await cloneTemplate({ template: mockTemplate, projectName: 'test-project' });
 
       const fs = await import('node:fs/promises');
-      const envContent = await fs.readFile('/test-project/.env', 'utf-8');
-
-      expect(envContent).toContain('MODEL=anthropic/claude-sonnet-4-5');
-      expect(envContent).not.toContain('MODEL=openai/gpt-4o-mini');
-    });
-
-    it('should not fail when llmProvider is specified but .env.example does not exist', async () => {
-      const mockExec = vi.fn(async (cmd: string) => {
-        // Simulate degit creating the directory without .env.example
-        if (cmd.includes('degit')) {
-          vol.fromJSON({
-            '/test-project/package.json': JSON.stringify({ name: 'old-name', version: '1.0.0' }),
-          });
-        }
-        return { stdout: '', stderr: '' };
+      expect(await fs.readFile('/test-project/src/mastra/agent.ts', 'utf8')).toBe(agent);
+      expect(await fs.readFile('/test-project/README.md', 'utf8')).toBe(readme);
+      expect(await fs.readFile('/test-project/.env.example', 'utf8')).toBe(envExample);
+      expect(await fs.readFile('/test-project/.env', 'utf8')).toBe(envExample);
+      expect(JSON.parse(await fs.readFile('/test-project/package.json', 'utf8'))).toEqual({
+        ...packageJson,
+        name: 'test-project',
       });
-      vi.mocked(child_process.exec).mockImplementation(mockExec);
-
-      const { cloneTemplate } = await import('./clone-template');
-      const result = await cloneTemplate({
-        template: mockTemplate,
-        projectName: 'test-project',
-        llmProvider: 'anthropic',
-      });
-
-      expect(result).toBe('/test-project');
     });
   });
 
@@ -355,6 +344,8 @@ describe('clone-template', () => {
       // Should use the mocked getPackageManager which returns 'npm'
       expect(mockExec).toHaveBeenCalledWith('npm install', {
         cwd: '/test-project',
+        timeout: undefined,
+        killSignal: 'SIGTERM',
       });
     });
 
@@ -367,6 +358,8 @@ describe('clone-template', () => {
 
       expect(mockExec).toHaveBeenCalledWith('yarn install', {
         cwd: '/test-project',
+        timeout: undefined,
+        killSignal: 'SIGTERM',
       });
     });
 
@@ -379,6 +372,8 @@ describe('clone-template', () => {
 
       expect(mockExec).toHaveBeenCalledWith('npm install', {
         cwd: '/test-project',
+        timeout: undefined,
+        killSignal: 'SIGTERM',
       });
     });
 
@@ -395,6 +390,8 @@ describe('clone-template', () => {
 
       expect(mockExec).toHaveBeenCalledWith('yarn install', {
         cwd: '/test-project',
+        timeout: undefined,
+        killSignal: 'SIGTERM',
       });
     });
 
@@ -408,6 +405,8 @@ describe('clone-template', () => {
 
       expect(mockExec).toHaveBeenCalledWith('npm install', {
         cwd: '/test-project',
+        timeout: undefined,
+        killSignal: 'SIGTERM',
       });
     });
 

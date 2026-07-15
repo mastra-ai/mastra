@@ -5,11 +5,10 @@ import util from 'node:util';
 import shellQuote from 'shell-quote';
 import yoctoSpinner from 'yocto-spinner';
 
-import type { LLMProvider } from '../commands/init/utils';
-import { getModelIdentifier } from '../commands/init/utils';
 import { getPackageManager } from '../commands/utils';
 
 import { logger } from './logger';
+import type { PackageManager } from './package-manager';
 import type { Template } from './template-utils';
 
 const exec = util.promisify(child_process.exec);
@@ -19,11 +18,10 @@ export interface CloneTemplateOptions {
   projectName: string;
   targetDir?: string;
   branch?: string;
-  llmProvider?: LLMProvider;
 }
 
 export async function cloneTemplate(options: CloneTemplateOptions): Promise<string> {
-  const { template, projectName, targetDir, branch, llmProvider } = options;
+  const { template, projectName, targetDir, branch } = options;
   const projectPath = targetDir ? path.resolve(targetDir, projectName) : path.resolve(projectName);
 
   const spinner = yoctoSpinner({ text: `Cloning template "${template.title}"...` }).start();
@@ -41,16 +39,11 @@ export async function cloneTemplate(options: CloneTemplateOptions): Promise<stri
     // Update package.json with new project name
     await updatePackageJson(projectPath, projectName);
 
-    // Copy .env.example to .env if it exists, and update MODEL if llmProvider is specified
+    // Preserve the existing generic behavior of copying the template's environment example.
     const envExamplePath = path.join(projectPath, '.env.example');
     if (await fileExists(envExamplePath)) {
       const envPath = path.join(projectPath, '.env');
       await fs.copyFile(envExamplePath, envPath);
-
-      // Update MODEL in .env if llmProvider is specified
-      if (llmProvider) {
-        await updateEnvFile(envPath, llmProvider);
-      }
     }
 
     spinner.success(`Template "${template.title}" cloned successfully to ${projectName}`);
@@ -136,31 +129,11 @@ async function updatePackageJson(projectPath: string, projectName: string): Prom
   }
 }
 
-async function updateEnvFile(envPath: string, llmProvider: LLMProvider): Promise<void> {
-  try {
-    const envContent = await fs.readFile(envPath, 'utf-8');
-    const modelString = getModelIdentifier(llmProvider);
-
-    if (!modelString) {
-      logger.warn('Could not get model identifier for provider', { provider: llmProvider });
-      return;
-    }
-
-    // Remove quotes from modelString (it comes as 'provider/model')
-    const modelValue = modelString.replace(/'/g, '');
-
-    // Replace the MODEL line with the selected provider's model
-    const updatedContent = envContent.replace(/^MODEL=.*/m, `MODEL=${modelValue}`);
-
-    await fs.writeFile(envPath, updatedContent, 'utf-8');
-    logger.info('Updated MODEL in .env', { model: modelValue });
-  } catch (error) {
-    // It's okay if .env can't be updated
-    logger.warn('Could not update .env file', { error: error instanceof Error ? error.message : 'Unknown error' });
-  }
-}
-
-export async function installDependencies(projectPath: string, packageManager?: string): Promise<void> {
+export async function installDependencies(
+  projectPath: string,
+  packageManager?: PackageManager,
+  timeout?: number,
+): Promise<void> {
   const spinner = yoctoSpinner({ text: 'Installing dependencies...' }).start();
 
   try {
@@ -171,6 +144,8 @@ export async function installDependencies(projectPath: string, packageManager?: 
 
     await exec(installCommand, {
       cwd: projectPath,
+      timeout,
+      killSignal: 'SIGTERM',
     });
 
     spinner.success('Dependencies installed successfully');
