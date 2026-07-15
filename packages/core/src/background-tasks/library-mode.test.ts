@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { EventEmitterPubSub } from '../events/event-emitter';
 import { Mastra } from '../mastra';
 import { MockStore } from '../storage';
 import { createTool } from '../tools';
@@ -188,6 +189,51 @@ describe('background tasks in library mode (no startWorkers)', () => {
 
     expect(completed.status).toBe('completed');
     expect(executeFn).toHaveBeenCalledTimes(1);
+
+    await mastra.stopWorkers();
+  });
+
+  it('tears down workers started by a lazy start still in flight when stopWorkers() is called', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const mastra = makeLibraryModeMastra({ pubsub });
+    const manager = mastra.backgroundTaskManager!;
+
+    // Gate the orchestration worker's subscription so the lazy start is
+    // reliably still in flight when stopWorkers() runs.
+    const originalSubscribe = pubsub.subscribe.bind(pubsub);
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => (release = resolve));
+    const subscribeSpy = vi.spyOn(pubsub, 'subscribe').mockImplementation(async (topic, cb, options) => {
+      if (options?.group === 'mastra-orchestration') await gate;
+      return originalSubscribe(topic, cb, options);
+    });
+    const unsubscribeSpy = vi.spyOn(pubsub, 'unsubscribe');
+
+    const enqueued = manager.enqueue(
+      { toolName: 't', toolCallId: 'c1', args: {}, agentId: 'a1', runId: 'r1' },
+      ctx(vi.fn().mockResolvedValue('x')),
+    );
+    await vi.waitFor(() => {
+      expect(subscribeSpy.mock.calls.some(call => call[2]?.group === 'mastra-orchestration')).toBe(true);
+    });
+
+    // Stop while the lazy start is parked on the gated subscribe, then let
+    // the start finish. stopWorkers() must not leave the freshly started
+    // workers running behind its back.
+    const stopping = mastra.stopWorkers();
+    release();
+    await stopping;
+    await enqueued;
+    await tick();
+
+    const orchestrationCbs = subscribeSpy.mock.calls
+      .filter(call => call[2]?.group === 'mastra-orchestration')
+      .map(call => call[1]);
+    expect(orchestrationCbs.length).toBeGreaterThan(0);
+    const unsubscribed = unsubscribeSpy.mock.calls.map(call => call[1]);
+    for (const cb of orchestrationCbs) {
+      expect(unsubscribed).toContain(cb);
+    }
 
     await mastra.stopWorkers();
   });

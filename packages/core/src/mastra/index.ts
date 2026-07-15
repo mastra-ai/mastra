@@ -5466,6 +5466,16 @@ export class Mastra<
    * Stop all running workers and unsubscribe event listeners.
    */
   public async stopWorkers(): Promise<void> {
+    // A background-task dispatch may have kicked off a lazy execution-worker
+    // start (`__ensureExecutionWorkersStarted`) that is still in flight. Wait
+    // for it so the teardown below covers what it started — otherwise the
+    // start finishes after this method returns, leaving workers running and
+    // subscriptions wired behind a "stopped" instance. Failures are already
+    // logged by the start path; here they just mean there is less to stop.
+    while (this.#executionWorkersStartPromise) {
+      await this.#executionWorkersStartPromise.catch(() => {});
+    }
+
     // Stop registered workers in reverse order
     for (const worker of [...this.#workers].reverse()) {
       if (worker.isRunning) {
