@@ -3,6 +3,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SankeyChart } from './sankey-chart';
+import { Sankey, useSankey } from './sankey-context';
 import { buildSankeyHueMap, nodeColor, nodeColorVivid } from './sankeyColor';
 
 afterEach(() => {
@@ -29,26 +30,71 @@ const columns = [
   { id: 'outcome', label: 'Outcome' },
 ];
 
-function getColumnCheckbox(label: string) {
-  const labelElement = screen.getByText(label, { selector: 'span' }).closest('label');
-  const checkbox = labelElement?.querySelector<HTMLElement>('[role="checkbox"]');
-  if (!checkbox) throw new Error(`Missing ${label} checkbox`);
-  return checkbox;
+function TestControls() {
+  const { columns: controlColumns, toggleColumn, reorderColumns } = useSankey();
+
+  return (
+    <div>
+      {controlColumns.map(column => (
+        <button key={column.id} type="button" onClick={() => toggleColumn(column.id)}>
+          {column.visible ? 'Hide' : 'Show'} {column.label}
+        </button>
+      ))}
+      <button type="button" onClick={() => reorderColumns(1, 0)}>
+        Move second column first
+      </button>
+    </div>
+  );
 }
 
 function Example({
   onCurveClick,
   columnOrder,
+  onColumnOrderChange,
+  visibleColumnIds,
+  onVisibleColumnIdsChange,
 }: {
   onCurveClick?: (selection: unknown) => void;
   columnOrder?: Array<string>;
+  onColumnOrderChange?: (columnOrder: Array<string>) => void;
+  visibleColumnIds?: Array<string>;
+  onVisibleColumnIdsChange?: (columnIds: Array<string>) => void;
 }) {
-  return <SankeyChart data={data} columns={columns} onCurveClick={onCurveClick} columnOrder={columnOrder} />;
+  return (
+    <Sankey
+      data={data}
+      columns={columns}
+      columnOrder={columnOrder}
+      onColumnOrderChange={onColumnOrderChange}
+      visibleColumnIds={visibleColumnIds}
+      onVisibleColumnIdsChange={onVisibleColumnIdsChange}
+    >
+      <TestControls />
+      <SankeyChart onCurveClick={onCurveClick} />
+    </Sankey>
+  );
 }
 
 describe('SankeyChart', () => {
+  it('reports when the renderer is used outside its provider', () => {
+    expect(() => render(<SankeyChart />)).toThrow('SankeyChart must be used within Sankey');
+  });
+
+  it('reports when the controls hook is used outside its provider', () => {
+    function InvalidControls() {
+      useSankey();
+      return undefined;
+    }
+
+    expect(() => render(<InvalidControls />)).toThrow('useSankey must be used within Sankey');
+  });
+
   it('renders the supplied columns', async () => {
-    render(<SankeyChart data={data} columns={columns} />);
+    render(
+      <Sankey data={data} columns={columns}>
+        <SankeyChart />
+      </Sankey>,
+    );
 
     expect(await screen.findAllByText('Channel')).not.toHaveLength(0);
     expect(screen.queryByText('Select at least two columns with data to display a flow')).toBeNull();
@@ -129,23 +175,33 @@ describe('SankeyChart', () => {
     expect(curves[2]?.getAttribute('fill-opacity')).toBe('0.32');
   });
 
-  it('shows an empty state when fewer than two columns are enabled', () => {
+  it('lets user-land controls toggle columns and recomputes the rendered flow', async () => {
     render(<Example />);
 
-    fireEvent.click(getColumnCheckbox('Region'));
-    fireEvent.click(getColumnCheckbox('Outcome'));
+    fireEvent.click(screen.getByRole('button', { name: 'Hide Region' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Hide Outcome' }));
 
     expect(screen.getByText('Select at least two columns with data to display a flow')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Show Region' })).toBeDefined();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show Region' }));
+    await waitFor(() =>
+      expect(screen.queryByText('Select at least two columns with data to display a flow')).toBeNull(),
+    );
   });
 
-  it('keeps excluded columns available to enable again', async () => {
-    render(<Example />);
-    const regionCheckbox = getColumnCheckbox('Region');
+  it('reports the next visible columns from controlled user-land controls', () => {
+    const onVisibleColumnIdsChange = vi.fn();
+    render(
+      <Example
+        visibleColumnIds={['channel', 'region', 'outcome']}
+        onVisibleColumnIdsChange={onVisibleColumnIdsChange}
+      />,
+    );
 
-    fireEvent.click(regionCheckbox);
-    await waitFor(() => expect(getColumnCheckbox('Region').getAttribute('data-checked')).toBeNull());
-    fireEvent.click(getColumnCheckbox('Region'));
-    await waitFor(() => expect(getColumnCheckbox('Region').getAttribute('data-checked')).not.toBeNull());
+    fireEvent.click(screen.getByRole('button', { name: 'Hide Region' }));
+
+    expect(onVisibleColumnIdsChange).toHaveBeenCalledWith(['channel', 'outcome']);
   });
 
   it('lifts the selected link metadata and contributing records by mouse and keyboard', async () => {
@@ -165,11 +221,11 @@ describe('SankeyChart', () => {
     await waitFor(() => expect(onCurveClick).toHaveBeenCalledTimes(2));
   });
 
-  it('renders drag handles and recomputes the flow for a controlled column order', async () => {
+  it('lets user-land controls reorder columns and recomputes curve metadata', async () => {
     const onCurveClick = vi.fn();
-    render(<Example onCurveClick={onCurveClick} columnOrder={['region', 'channel', 'outcome']} />);
+    render(<Example onCurveClick={onCurveClick} />);
 
-    expect(screen.getAllByRole('button', { name: /^Reorder / })[0].getAttribute('aria-label')).toBe('Reorder Region');
+    fireEvent.click(screen.getByRole('button', { name: 'Move second column first' }));
     const curves = await screen.findAllByRole('button', { name: 'Select Sankey curve' });
     fireEvent.click(curves[0]);
 
@@ -179,5 +235,14 @@ describe('SankeyChart', () => {
         target: expect.objectContaining({ column: { id: 'channel', label: 'Channel' } }),
       }),
     );
+  });
+
+  it('reports the next column order from controlled user-land controls', () => {
+    const onColumnOrderChange = vi.fn();
+    render(<Example columnOrder={['channel', 'region', 'outcome']} onColumnOrderChange={onColumnOrderChange} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Move second column first' }));
+
+    expect(onColumnOrderChange).toHaveBeenCalledWith(['region', 'channel', 'outcome']);
   });
 });
