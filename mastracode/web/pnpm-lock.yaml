@@ -65,6 +65,9 @@ importers:
       pg:
         specifier: ^8.21.0
         version: 8.22.0
+      railway:
+        specifier: ^3.5.7
+        version: 3.5.7
       react:
         specifier: 19.2.7
         version: 19.2.7
@@ -617,6 +620,11 @@ packages:
     engines: {node: '>=18'}
     cpu: [x64]
     os: [win32]
+
+  '@graphql-typed-document-node/core@3.2.0':
+    resolution: {integrity: sha512-mB9oAsNCm9aM3/SOv4YtBMqZbYj10R7dkq8byBqxGY/ncFwhf2oQzMV+LCRlWoDSEBJ3COiR1yeDvMtsoOsuFQ==}
+    peerDependencies:
+      graphql: ^0.8.0 || ^0.9.0 || ^0.10.0 || ^0.11.0 || ^0.12.0 || ^0.13.0 || ^14.0.0 || ^15.0.0 || ^16.0.0 || ^17.0.0
 
   '@inquirer/ansi@2.0.7':
     resolution: {integrity: sha512-3eTuUO1vH2cZm2ZKHeQxnOqlTi9EfZDGgIe3BL3I4u+rJHocr9Fz86M4fjYABPvFnQG/gGK551HqDiIcETwU6Q==}
@@ -1791,6 +1799,11 @@ packages:
     resolution: {integrity: sha512-vYt7UD1U9Wg6138shLtLOvdAu+8DsC/ilFtEVHcH+wydcSpNE20AfSOduf6MkRFahL5FY7X1oU7nKVZFtfq8Fg==}
     engines: {node: '>=6'}
 
+  railway@3.5.7:
+    resolution: {integrity: sha512-2DdaAw2eSQuCtSn+/VuPNOdnbynxTVmRIQlefhc0maULZTr16Uy/5/FjumnI1lONZgflKG/WMGm9QmUdnApZFw==}
+    engines: {node: '>=22'}
+    hasBin: true
+
   react-dom@19.2.7:
     resolution: {integrity: sha512-t0BRVXvbiE/o20Hfw669rLbMCDWtYZLvmJigy2f0MxsXF+71pxhR3xOkspmsO8h3ZlNzyibAmtCa3l4lYKk6gQ==}
     peerDependencies:
@@ -2540,6 +2553,10 @@ snapshots:
 
   '@esbuild/win32-x64@0.28.1':
     optional: true
+
+  '@graphql-typed-document-node/core@3.2.0(graphql@16.14.2)':
+    dependencies:
+      graphql: 16.14.2
 
   '@inquirer/ansi@2.0.7': {}
 
@@ -3600,6 +3617,12 @@ snapshots:
   property-information@7.2.0: {}
 
   punycode@2.3.1: {}
+
+  railway@3.5.7:
+    dependencies:
+      '@graphql-typed-document-node/core': 3.2.0(graphql@16.14.2)
+      graphql: 16.14.2
+      tsx: 4.23.0
 
   react-dom@19.2.7(react@19.2.7):
     dependencies:

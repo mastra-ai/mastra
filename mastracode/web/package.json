@@ -18,6 +18,7 @@
     "deps:pin": "node scripts/monorepo-deps.mjs pin",
     "deps:link": "node scripts/monorepo-deps.mjs link",
     "web:start": "varlock run -- mastra start",
+    "smoke:railway": "node scripts/smoke-railway-sandbox.mjs",
     "web:test": "vitest run --config e2e/web/vitest.config.ts",
     "web:ui:test": "vitest run --config e2e/web-ui/vitest.config.ts",
     "test": "vitest run && vitest run --config e2e/web/vitest.config.ts && vitest run --config e2e/web-ui/vitest.config.ts"
@@ -45,6 +46,7 @@
     "lucide-react": "^0.474.0",
     "marked": "^15.0.0",
     "pg": "^8.21.0",
+    "railway": "^3.5.7",
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "react-router": "^7.13.1",
