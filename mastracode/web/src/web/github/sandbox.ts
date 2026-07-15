@@ -372,6 +372,24 @@ export async function reattachProjectSandbox(input: string | { sandboxId: string
 }
 
 /**
+ * Provision a brand-new sandbox via the active `sandboxFactory` and start it.
+ * Uses the same idle-timeout wiring as `ensureProjectSandbox`'s fresh-provision
+ * branch, but takes no DB row — intended for smoke tests and diagnostics that
+ * need to exercise the exact production factory shape (Railway template,
+ * checkpoint, etc.) without touching persistent state.
+ */
+export async function provisionFreshSandbox(
+  opts: { checkpointName?: string } = {},
+): Promise<MaterializationSandbox> {
+  const sandbox = sandboxFactory({
+    idleTimeoutMinutes: getSandboxIdleMinutes(),
+    ...(opts.checkpointName ? { checkpointName: opts.checkpointName } : {}),
+  });
+  await sandbox.start();
+  return sandbox;
+}
+
+/**
  * Single-quote a string for safe POSIX shell interpolation. Wraps the value in
  * single quotes and escapes any embedded single quote using the canonical
  * close-quote / escaped-quote / reopen-quote sequence (`'\''`). This is the
@@ -1007,7 +1025,7 @@ export interface CreatePullRequestResult {
  * from it (the Debian community `gh` is unreliable across Debian releases and
  * upstream regressed against deprecated GitHub APIs).
  */
-async function ensureGhInstalled(sandbox: MaterializationSandbox): Promise<void> {
+export async function ensureGhInstalled(sandbox: MaterializationSandbox): Promise<void> {
   const existing = await sh(sandbox, 'gh --version');
   if (existing.exitCode === 0) return;
 

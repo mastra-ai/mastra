@@ -18,7 +18,7 @@
     "deps:pin": "node scripts/monorepo-deps.mjs pin",
     "deps:link": "node scripts/monorepo-deps.mjs link",
     "web:start": "varlock run -- mastra start",
-    "smoke:railway": "node scripts/smoke-railway-sandbox.mjs",
+    "smoke:railway": "tsx scripts/smoke-railway-sandbox.ts",
     "web:test": "vitest run --config e2e/web/vitest.config.ts",
     "web:ui:test": "vitest run --config e2e/web-ui/vitest.config.ts",
     "test": "vitest run && vitest run --config e2e/web/vitest.config.ts && vitest run --config e2e/web-ui/vitest.config.ts"
