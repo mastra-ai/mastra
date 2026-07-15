@@ -38,7 +38,7 @@ permissions:
 
 jobs:
   announce:
-    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    if: ${{ github.repository == 'mastra-ai/mastra' && (github.event_name == 'workflow_dispatch' || !github.event.release.prerelease) }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout notification script
