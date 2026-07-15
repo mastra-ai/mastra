@@ -222,13 +222,18 @@ const InlineBlockContent = ({
             />
 
             {onConvertToRef && block.content.trim().length > 0 && (
-              <Button variant="ghost" size="sm" onClick={() => setSaveDialogOpen(true)} tooltip="Save as prompt block">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => setSaveDialogOpen(true)}
+                tooltip="Save as prompt block"
+              >
                 <BookmarkPlus />
               </Button>
             )}
 
             {onDelete && (
-              <Button variant="ghost" size="sm" onClick={onDelete} tooltip="Delete block">
+              <Button variant="ghost" size="icon-sm" onClick={onDelete} tooltip="Delete block">
                 <X />
               </Button>
             )}
