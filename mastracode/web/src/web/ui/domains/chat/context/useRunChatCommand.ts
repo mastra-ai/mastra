@@ -22,7 +22,7 @@ const TOOL_CATEGORIES: ToolCategory[] = ['read', 'edit', 'execute', 'mcp', 'othe
 export function useRunChatCommand() {
   const { activeProject } = useActiveProjectContext();
   const { resourceId, sessionEnabled, baseUrl } = useChatSessionContext();
-  const { transcript, pushNotice } = useChatTranscript();
+  const { busy, pushNotice } = useChatTranscript();
   const { usage, omPhase } = useChatRuntime();
   const { threadId } = useChatConnection();
   const { activeModeId } = useChatModes();
@@ -90,7 +90,7 @@ export function useRunChatCommand() {
             `Mode: ${activeModeId ?? '—'}`,
             `Model: ${activeModelId ?? '—'}`,
             `Thread: ${threadId ?? '—'}`,
-            `Running: ${transcript.running}`,
+            `Running: ${busy}`,
           ].join('\n'),
         );
         return;

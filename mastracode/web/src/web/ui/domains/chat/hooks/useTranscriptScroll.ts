@@ -52,7 +52,7 @@ export function useTranscriptScroll(transcript: TranscriptState, threadId?: stri
     if (!el) return;
     const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 160;
     if (nearBottom) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
-  }, [transcript.entries.length, transcript.running, transcript.pending, streamingLen]);
+  }, [transcript.entries.length, transcript.pending, streamingLen]);
 
   return { threadRef, showScrollDown, scrollToBottom };
 }

@@ -14,10 +14,11 @@ import type {
   PermissionRules,
 } from '@mastra/client-js';
 import type { ReactNode } from 'react';
+import { Profiler } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
@@ -98,7 +99,12 @@ function sse(events: AgentControllerEvent[] = []): Response {
   );
 }
 
-function useAgentControllerHandlers(events: AgentControllerEvent[] = [], requests: string[] = [], stateStatus = 200) {
+function useAgentControllerHandlers(
+  events: AgentControllerEvent[] = [],
+  requests: string[] = [],
+  stateStatus = 200,
+  state: AgentControllerSessionState = sessionState(),
+) {
   server.use(
     http.post(`${API}/sessions`, () => {
       requests.push('create');
@@ -108,7 +114,7 @@ function useAgentControllerHandlers(events: AgentControllerEvent[] = [], request
     http.get(`${API}/models`, () => HttpResponse.json({ models: [] })),
     http.get(SESSION, () => {
       requests.push('state');
-      return HttpResponse.json(sessionState());
+      return HttpResponse.json(state);
     }),
     http.get(NEXT_SESSION, () => {
       requests.push('state:next');
@@ -136,7 +142,7 @@ function useAgentControllerHandlers(events: AgentControllerEvent[] = [], request
 
 function Probe() {
   const { status, threadId } = useChatConnection();
-  const { transcript, busy, showWorkingIndicator } = useChatTranscript();
+  const { transcript, busy, showWorkingIndicator, localUser } = useChatTranscript();
   const { usage, followUpCount, omPhase, goal } = useChatRuntime();
   const { selectProject } = useActiveProjectContext();
   const messageText = transcript.entries
@@ -158,6 +164,7 @@ function Probe() {
       <span data-testid="follow-up-count">{followUpCount}</span>
       <span data-testid="om-phase">{omPhase}</span>
       <span data-testid="goal-objective">{goal?.objective ?? '(none)'}</span>
+      <button onClick={() => localUser('Hello')}>send local message</button>
       <button onClick={() => void selectProject(nextProject)}>switch project</button>
     </div>
   );
@@ -734,6 +741,27 @@ describe('ChatSessionProvider', () => {
     expect(screen.getByTestId('working')).toHaveTextContent('no');
   });
 
+  it('given the session snapshot is running, when chat mounts, then it stays busy and shows working without a render loop', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const onRender = vi.fn();
+    seedProject();
+    useAgentControllerHandlers([], [], 200, { ...sessionState(), running: true });
+
+    renderFocusedProbe(
+      <Profiler id="chat-probe" onRender={onRender}>
+        <Probe />
+      </Profiler>,
+    );
+
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('ready'));
+    expect(screen.getByTestId('busy')).toHaveTextContent('yes');
+    expect(screen.getByTestId('working')).toHaveTextContent('yes');
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(onRender.mock.calls.length).toBeLessThan(20);
+    expect(consoleError.mock.calls.flat().join(' ')).not.toContain('Maximum update depth exceeded');
+    consoleError.mockRestore();
+  });
+
   it('given a reconnect re-sync returns a new state without a route thread, then the draft transcript remains empty', async () => {
     const requests: string[] = [];
     seedProject();
@@ -749,7 +777,8 @@ describe('ChatSessionProvider', () => {
         requests.push('state');
         const threadId =
           requests.filter(request => request === 'state').length === 1 ? 'thread-before-drop' : 'thread-after-drop';
-        return HttpResponse.json({ ...sessionState(), threadId });
+        const running = requests.filter(request => request === 'state').length > 1;
+        return HttpResponse.json({ ...sessionState(), threadId, running });
       }),
       http.put(`${SESSION}/state`, () => HttpResponse.json(sessionState())),
       http.get(`${SESSION}/threads/thread-before-drop/messages`, () => {
@@ -786,6 +815,20 @@ describe('ChatSessionProvider', () => {
     expect(requests).not.toContain('messages:before');
     expect(requests).not.toContain('messages:after');
     expect(screen.getByTestId('entries-count')).toHaveTextContent('0');
+    expect(screen.getByTestId('busy')).toHaveTextContent('yes');
+    expect(screen.getByTestId('working')).toHaveTextContent('yes');
+  });
+
+  it('given an idle connection, when a local message is sent before the start event, then pending keeps busy on', async () => {
+    seedProject();
+    useAgentControllerHandlers();
+    renderProbe();
+
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('ready'));
+    await userEvent.click(screen.getByRole('button', { name: 'send local message' }));
+
+    expect(screen.getByTestId('busy')).toHaveTextContent('yes');
+    expect(screen.getByTestId('working')).toHaveTextContent('yes');
   });
 
   it('given a run started without streamed assistant text, then busy is on and the working indicator shows', async () => {
@@ -796,6 +839,35 @@ describe('ChatSessionProvider', () => {
     await waitFor(() => expect(screen.getByTestId('busy')).toHaveTextContent('yes'));
     expect(screen.getByTestId('working')).toHaveTextContent('yes');
   });
+
+  it('given a running snapshot, when an agent end event arrives, then busy turns off', async () => {
+    seedProject();
+    useAgentControllerHandlers([{ type: 'agent_end' }], [], 200, { ...sessionState(), running: true });
+    renderProbe();
+
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('ready'));
+    await waitFor(() => expect(screen.getByTestId('busy')).toHaveTextContent('no'));
+  });
+
+  it.each([
+    { initialRunning: false, eventRunning: true, expectedBusy: 'yes' },
+    { initialRunning: true, eventRunning: false, expectedBusy: 'no' },
+  ])(
+    'given running is $initialRunning, when display state changes running to $eventRunning, then busy is $expectedBusy',
+    async ({ initialRunning, eventRunning, expectedBusy }) => {
+      seedProject();
+      useAgentControllerHandlers(
+        [{ type: 'display_state_changed', displayState: { isRunning: eventRunning } }],
+        [],
+        200,
+        { ...sessionState(), running: initialRunning },
+      );
+      renderProbe();
+
+      await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('ready'));
+      await waitFor(() => expect(screen.getByTestId('busy')).toHaveTextContent(expectedBusy));
+    },
+  );
 
   it('given a running turn whose last entry is a streaming assistant message with text, then the working indicator hides while busy stays on', async () => {
     seedProject();

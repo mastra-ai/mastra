@@ -9,7 +9,6 @@ export interface ChatConnectionApi {
   state?: ChatConnectionState;
   threadId?: string;
   createdThreadId?: string;
-  stateUpdatedAt: number;
 }
 
 export const ChatConnectionContext = createContext<ChatConnectionApi | null>(null);

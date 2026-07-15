@@ -26,7 +26,7 @@ const TOOL_CATEGORIES: ToolCategory[] = ['read', 'edit', 'execute', 'mcp', 'othe
 export function useRunPaletteCommand(setComposerCommandName: Dispatch<SetStateAction<string | undefined>>) {
   const { activeProject } = useActiveProjectContext();
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
-  const { transcript, localUser, pushNotice } = useChatTranscript();
+  const { transcript, busy, localUser, pushNotice } = useChatTranscript();
   const { activeModeId } = useChatModes();
   const { activeModelId, setModel } = useChatModels();
 
@@ -100,7 +100,7 @@ export function useRunPaletteCommand(setComposerCommandName: Dispatch<SetStateAc
             `Mode: ${activeModeId ?? '—'}`,
             `Model: ${activeModelId ?? '—'}`,
             `Thread: ${transcript.threadId ?? '—'}`,
-            `Running: ${transcript.running}`,
+            `Running: ${busy}`,
           ].join('\n'),
         );
         return;

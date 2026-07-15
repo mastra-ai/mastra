@@ -1,6 +1,6 @@
 import type { AgentControllerMessage } from '@mastra/client-js';
 import type { ReactNode } from 'react';
-import { useEffect, useReducer } from 'react';
+import { useReducer } from 'react';
 
 import { useAgentControllerTranscript } from '../hooks/useAgentControllerTranscript';
 import { initialChatRuntime, runtimeReducer } from '../services/runtime';
@@ -57,13 +57,7 @@ function ChatTranscriptValueProvider({ children, threadId, transcriptApi }: {
   transcriptApi: ReturnType<typeof useAgentControllerTranscript>;
 }) {
   const connection = useChatConnection();
-  const { transcript, reset, syncState, localUser, resolvePrompt, pushNotice } = transcriptApi;
-  const stateRunning = connection.state?.running;
-  const stateUpdatedAt = connection.stateUpdatedAt;
-  useEffect(() => {
-    if (typeof stateRunning !== 'boolean') return;
-    syncState({ running: stateRunning });
-  }, [stateRunning, stateUpdatedAt, syncState]);
+  const { transcript, reset, localUser, resolvePrompt, pushNotice } = transcriptApi;
 
   const effectiveTranscript: TranscriptState = {
     ...transcript,
@@ -71,7 +65,7 @@ function ChatTranscriptValueProvider({ children, threadId, transcriptApi }: {
     omProgress: transcript.omProgress ?? connection.state?.omProgress,
     usage: transcript.usage ?? connection.state?.tokenUsage,
   };
-  const busy = effectiveTranscript.running || effectiveTranscript.pending;
+  const busy = connection.state?.running === true || effectiveTranscript.pending;
   const lastEntry = effectiveTranscript.entries.at(-1);
   const showWorkingIndicator = busy && !(lastEntry?.kind === 'message' && lastEntry.streaming);
   const transcriptValue: ChatTranscriptApi = {
@@ -79,7 +73,6 @@ function ChatTranscriptValueProvider({ children, threadId, transcriptApi }: {
     busy,
     showWorkingIndicator,
     localUser,
-    syncState,
     reset,
     resolvePrompt,
     pushNotice,

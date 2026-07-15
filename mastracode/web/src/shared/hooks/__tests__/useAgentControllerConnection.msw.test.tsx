@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { AgentControllerEvent } from '@mastra/client-js';
 import { waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useEffect } from 'react';
@@ -174,6 +175,51 @@ describe('useAgentControllerConnection', () => {
     rerender();
 
     await new Promise(resolve => setTimeout(resolve, 50));
+    expect(onStream).toHaveBeenCalledTimes(1);
+  });
+
+  it('given an active stream, when a run event updates connection state, then the stream stays connected', async () => {
+    const encoder = new TextEncoder();
+    const onStream = vi.fn();
+    const onEvent = vi.fn();
+    let emit: (event: AgentControllerEvent) => void = () => {};
+
+    server.use(
+      http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, () =>
+        HttpResponse.json({ controllerId, resourceId, threadId: 'created-thread' }),
+      ),
+      http.get(sessionUrl, () =>
+        HttpResponse.json({
+          controllerId,
+          resourceId,
+          modeId: 'build',
+          modelId: 'openai/gpt-4o-mini',
+          threadId: 'state-thread',
+          running: false,
+          settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
+        }),
+      ),
+      http.get(`${sessionUrl}/stream`, () => {
+        onStream();
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              emit = event => controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+            },
+            cancel() {},
+          }),
+          { headers: { 'content-type': 'text/event-stream' } },
+        );
+      }),
+    );
+
+    const { result } = renderHookWithProviders(() => useAgentControllerConnection({ ...hookArgs, onEvent }));
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+
+    emit({ type: 'agent_start' });
+
+    await waitFor(() => expect(result.current.state?.running).toBe(true));
+    expect(result.current.status).toBe('ready');
     expect(onStream).toHaveBeenCalledTimes(1);
   });
 
