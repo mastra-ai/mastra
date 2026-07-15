@@ -1,0 +1,27 @@
+extends: existence
+message: "AI-typical vocabulary detected: '%s'"
+level: suggestion
+link: https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing
+tokens:
+  - '\bdelves?\b'
+  - 'delving'
+  - 'delved'
+  - '\btapestry\b'
+  - '\bvibrant\b'
+  - 'multifaceted'
+  - 'intricate(ly)?'
+  - 'meticulous(ly)?'
+  - '\bmyriad\b'
+  - 'showcases?'
+  - 'showcased'
+  - 'showcasing'
+  - 'boasts?'
+  - 'boasted'
+  - 'boasting'
+  - 'rich (tapestry|history|array)'
+  - 'complex (landscape|tapestry)'
+  - 'dynamic landscape'
+  - 'comprehensive understanding'
+  - '\bcornerstone\b'
+  - 'multitude of'
+  - 'plethora of'

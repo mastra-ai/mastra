@@ -1,0 +1,23 @@
+extends: existence
+message: "AI-typical symbolic language detected: '%s'"
+level: suggestion
+link: https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing
+tokens:
+  - '(stands|serves) as'
+  - 'testament to'
+  - 'reminder of'
+  - 'plays a (vital|crucial|pivotal|central) role'
+  - '(underscores|highlights) (the )?significance'
+  - 'reflects broader'
+  - 'symbolizing its ongoing'
+  - '(enduring|lasting) impact'
+  - 'key turning point'
+  - 'indelible mark'
+  - 'deeply rooted'
+  - 'profound heritage'
+  - 'steadfast dedication'
+  - 'prominent fixture'
+  - 'contributes to (the )?significance'
+  - 'enhancing (the )?significance'
+  - 'dynamic hub of'
+  - 'rich tapestry'

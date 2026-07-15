@@ -1,0 +1,17 @@
+extends: existence
+message: "Intensifier detected: '%s'"
+level: suggestion
+link: https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing
+tokens:
+  - 'remarkably'
+  - 'notably'
+  - 'significantly'
+  - 'particularly'
+  - 'especially'
+  - 'exceptionally'
+  - 'extraordinarily'
+  - 'impressively'
+  - 'strikingly'
+  - 'notably significant'
+  - 'highly significant'
+  - 'particularly important'

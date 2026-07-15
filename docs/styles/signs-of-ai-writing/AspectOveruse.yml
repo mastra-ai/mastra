@@ -1,0 +1,13 @@
+extends: existence
+message: "Overuse of 'aspect' language: '%s'"
+level: warning
+link: https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing
+tokens:
+  - 'multifaceted'
+  - 'various aspects'
+  - 'different aspects'
+  - 'multiple aspects'
+  - 'key aspects'
+  - 'important aspects'
+  - 'various facets'
+  - 'many dimensions'
