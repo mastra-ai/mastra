@@ -1,27 +1,13 @@
-import { randomUUID } from 'node:crypto';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '../mastra';
 import { MockStore } from '../storage/mock';
 import { createWorkflow } from './create';
 import { createStep } from './workflow';
 
-vi.mock('crypto', () => {
-  return {
-    randomUUID: vi.fn(() => 'mock-uuid-1'),
-  };
-});
-
+// UUID determinism comes from @internal/test-utils/setup, which stubs the
+// global crypto.randomUUID with a per-test counter.
 describe('Branch with Map Bug - Issue #10407', () => {
-  beforeEach(() => {
-    vi.resetAllMocks();
-
-    let counter = 0;
-    (randomUUID as vi.Mock).mockImplementation(() => {
-      return `mock-uuid-${++counter}`;
-    });
-  });
-
   it('should pass inputData to nested workflow with map inside branch', async () => {
     const commonInputSchema = z.object({
       value: z.number(),

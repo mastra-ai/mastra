@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import slugify from '@sindresorhus/slugify';
 import type { ToolsInput } from '../agent';
 import { MastraBase } from '../base';
@@ -180,7 +179,7 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
       this._id = slugify(config.id) as TId;
       this.idWasSet = true;
     } else {
-      this._id = (this.mastra?.generateId() || randomUUID()) as TId;
+      this._id = (this.mastra?.generateId() || crypto.randomUUID()) as TId;
     }
 
     this.description = config.description;

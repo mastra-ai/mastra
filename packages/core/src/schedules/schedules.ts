@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import slugify from '@sindresorhus/slugify';
 import type { AgentSignalAttributes, AgentSignalType } from '../agent/signals';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
@@ -312,7 +311,7 @@ export class Schedules {
     const id =
       input.id !== undefined
         ? normalizeScheduleId(input.id, AGENT_SCHEDULE_PREFIX)
-        : `${AGENT_SCHEDULE_PREFIX}${randomUUID()}`;
+        : `${AGENT_SCHEDULE_PREFIX}${crypto.randomUUID()}`;
     await this.#assertIdAvailable(store, id, input.id !== undefined);
     const now = Date.now();
     const nextFireAt = computeNextFireAt(input.cron, { timezone: input.timezone, after: now });
@@ -361,7 +360,7 @@ export class Schedules {
     const id =
       input.id !== undefined
         ? normalizeScheduleId(input.id, WORKFLOW_SCHEDULE_PREFIX)
-        : `${WORKFLOW_SCHEDULE_PREFIX}${randomUUID()}`;
+        : `${WORKFLOW_SCHEDULE_PREFIX}${crypto.randomUUID()}`;
     await this.#assertIdAvailable(store, id, input.id !== undefined);
     const now = Date.now();
     const nextFireAt = computeNextFireAt(input.cron, { timezone: input.timezone, after: now });

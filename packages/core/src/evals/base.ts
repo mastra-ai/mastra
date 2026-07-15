@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { z } from 'zod/v4';
 import { Agent, isSupportedLanguageModel } from '../agent';
 import type { MastraDBMessage, MastraMessagePart, MastraToolInvocationPart } from '../agent/message-list';
@@ -580,7 +579,7 @@ class MastraScorer<
 
     let runId = prepared.runId;
     if (!runId) {
-      runId = randomUUID();
+      runId = crypto.randomUUID();
     }
 
     const normalizedRequestContext = this.normalizeRunRequestContext(prepared.requestContext);
