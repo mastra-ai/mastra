@@ -86,13 +86,6 @@ const scorer = createScorer({
             description: 'System prompt/instructions for the LLM.',
           },
           {
-            name: 'jsonPromptInjection',
-            type: 'boolean',
-            isOptional: true,
-            description:
-              "When true, inject the JSON schema into the prompt instead of using the provider's native `response_format` API. Set this for models that don't support native structured output (e.g. some Groq Llama models) to avoid a wasted 400 call.",
-          },
-          {
             name: 'inputProcessors',
             type: 'Processor[]',
             isOptional: true,
