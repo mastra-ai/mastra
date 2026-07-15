@@ -9,6 +9,7 @@
  * @see https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization
  */
 
+import { timingSafeEqual } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { Server as HttpServer } from 'node:http';
 
@@ -129,11 +130,27 @@ export function getCallbackUrlCandidates(redirectUrl: string | URL): URL[] {
 
   const candidates: URL[] = [];
   for (let offset = 0; offset <= CALLBACK_PORT_FALLBACK_RANGE; offset++) {
+    const port = preferredPort + offset;
+    // Assigning an out-of-range port to URL.port is silently ignored, which
+    // would leave the candidate on the previous port — stop at the valid max.
+    if (port > 65535) break;
     const candidate = new URL(base.toString());
-    candidate.port = String(preferredPort + offset);
+    candidate.port = String(port);
     candidates.push(candidate);
   }
   return candidates;
+}
+
+/**
+ * Constant-time comparison of the callback's state parameter against the
+ * expected state, so response timing does not leak how much of the state a
+ * forged local request matched. (Length is still observable, which is fine —
+ * the state's entropy is what protects it.)
+ */
+function stateMatches(receivedState: string, expectedState: string): boolean {
+  const received = Buffer.from(receivedState);
+  const expected = Buffer.from(expectedState);
+  return received.length === expected.length && timingSafeEqual(received, expected);
 }
 
 function listen(server: HttpServer, port: number, hostname: string): Promise<NodeJS.ErrnoException | null> {
@@ -234,7 +251,7 @@ export async function createOAuthCallbackServer(options: OAuthCallbackServerOpti
     // without the expected state are not this flow's redirect and must not
     // settle the one-shot outcome.
     const state = url.searchParams.get('state');
-    if (state !== options.state) {
+    if (state === null || !stateMatches(state, options.state)) {
       respond(400, ERROR_HTML);
       return;
     }
@@ -309,6 +326,10 @@ export async function createOAuthCallbackServer(options: OAuthCallbackServerOpti
 
     close() {
       settle({ error: new Error('OAuth callback server closed before receiving an authorization code') });
+      // Browsers keep the callback connection alive after the response, and
+      // server.close() waits for every socket to end — without this the port
+      // stays held until the keep-alive timeout expires.
+      server.closeIdleConnections();
       return new Promise<void>((resolve, reject) => {
         server.close(error => {
           // Closing twice is fine (e.g. an explicit cancel followed by the

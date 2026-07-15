@@ -9,6 +9,8 @@
 import { createServer } from 'node:http';
 import type * as NodeHttp from 'node:http';
 import type { Server as HttpServer } from 'node:http';
+import { connect } from 'node:net';
+import type { Socket } from 'node:net';
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
 
@@ -75,6 +77,14 @@ describe('getCallbackUrlCandidates', () => {
       5533, 5534, 5535, 5536, 5537, 5538, 5539, 5540, 5541, 5542, 5543,
     ]);
     expect(candidates.every(url => url.pathname === '/oauth/callback')).toBe(true);
+  });
+
+  it('stops the fallback range at the maximum valid port', () => {
+    // URL.port silently ignores out-of-range assignments, so without the cap
+    // the overflowing candidates would keep the previous (duplicate) port.
+    const candidates = getCallbackUrlCandidates('http://127.0.0.1:65533/oauth/callback');
+
+    expect(candidates.map(url => Number(url.port))).toEqual([65533, 65534, 65535]);
   });
 });
 
@@ -202,6 +212,35 @@ describe('createOAuthCallbackServer', () => {
 
     const reclaimed = await occupyPort(port);
     await closeServer(reclaimed);
+  });
+
+  it('releases the port on close despite an idle keep-alive connection', async () => {
+    const server = await startCallbackServer();
+    const { port } = server;
+
+    // Complete the flow over a raw socket that stays open afterwards, the way
+    // a browser holds the callback connection alive after the response.
+    const socket = await new Promise<Socket>((resolve, reject) => {
+      const client = connect(port, '127.0.0.1', () => resolve(client));
+      client.once('error', reject);
+    });
+    try {
+      const pending = server.waitForCode();
+      socket.write(
+        `GET /oauth/callback?code=auth-code-123&state=${STATE} HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\nConnection: keep-alive\r\n\r\n`,
+      );
+      await pending;
+
+      // close() must not wait for the keep-alive socket's timeout to release
+      // the port; without closeIdleConnections this close() hangs.
+      await server.close();
+      callbackServer = undefined;
+
+      const reclaimed = await occupyPort(port);
+      await closeServer(reclaimed);
+    } finally {
+      socket.destroy();
+    }
   });
 
   it('settles the flow instead of crashing when the server errors after binding', async () => {
