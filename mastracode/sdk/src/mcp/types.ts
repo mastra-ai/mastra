@@ -33,8 +33,8 @@ export interface McpHttpServerConfig {
  * OAuth client configuration for an HTTP MCP server.
  */
 export interface McpHttpOAuthConfig {
-  /** Redirect URL for OAuth callbacks. Defaults to a stable loopback URL when omitted. */
-  redirectUrl: string;
+  /** Redirect URL for OAuth callbacks. Defaults to DEFAULT_OAUTH_REDIRECT_URL when omitted. */
+  redirectUrl?: string;
   /** Human-readable OAuth client name */
   clientName?: string;
   /** Optional scopes requested during OAuth */

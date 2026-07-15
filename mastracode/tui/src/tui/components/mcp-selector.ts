@@ -180,7 +180,10 @@ export class McpSelectorComponent extends Box implements Focusable {
       if (this._reloading) {
         icon = theme.fg('warning', '⟳');
         stateText = theme.fg('warning', 'reconnecting...');
-      } else if (status.connecting && this._authenticating.has(status.name)) {
+      } else if (this._authenticating.has(status.name)) {
+        // A flow is in flight for this server. This is authoritative even if a
+        // polled status refresh from the manager no longer reports `connecting`,
+        // so the "Enter to cancel" affordance never disappears mid-flow.
         icon = theme.fg('warning', '⟳');
         stateText = theme.fg('warning', 'authenticating — Enter to cancel');
       } else if (status.connecting) {
@@ -243,10 +246,13 @@ export class McpSelectorComponent extends Box implements Focusable {
     this.tui.requestRender();
   }
 
+  private isBusy(): boolean {
+    return this.statuses.some(s => s.connecting) || this._authenticating.size > 0;
+  }
+
   private startPollingIfNeeded(): void {
     if (this.pollTimer) return;
-    const hasConnecting = this.statuses.some(s => s.connecting);
-    if (!hasConnecting) return;
+    if (!this.isBusy()) return;
 
     this.pollTimer = setInterval(() => {
       // Don't refresh while in a detail view or mid-reload
@@ -264,8 +270,8 @@ export class McpSelectorComponent extends Box implements Focusable {
 
       this.updateList();
 
-      // Stop polling when nothing is connecting anymore
-      if (!this.statuses.some(s => s.connecting)) {
+      // Stop polling only when nothing is connecting and no auth flow is pending
+      if (!this.isBusy()) {
         this.stopPolling();
       }
     }, 500);
@@ -343,10 +349,12 @@ export class McpSelectorComponent extends Box implements Focusable {
     const status = this.statuses[this.selectedIndex];
     if (!status) return;
 
-    if (status.connecting) {
+    if (this._authenticating.has(status.name)) {
       // A server mid-OAuth shows a cancel path (the user may have closed the
-      // browser); other connecting servers just wait.
-      this.subMenuActions = this._authenticating.has(status.name) ? AUTHENTICATING_ACTIONS : CONNECTING_ACTIONS;
+      // browser). Authoritative even if a polled refresh cleared `connecting`.
+      this.subMenuActions = AUTHENTICATING_ACTIONS;
+    } else if (status.connecting) {
+      this.subMenuActions = CONNECTING_ACTIONS;
     } else if (status.connected) {
       this.subMenuActions = CONNECTED_ACTIONS;
     } else if (status.needsAuth) {
@@ -430,6 +438,13 @@ export class McpSelectorComponent extends Box implements Focusable {
       .then((result: { statuses: McpServerStatus[]; skipped: McpSkippedServer[] }) => {
         this.statuses = result.statuses;
         this.skipped = result.skipped;
+        // Reload disconnects the client, which cancels any pending auth flow
+        // server-side. Drop authenticating markers for servers that no longer
+        // exist so isBusy() can settle and polling can stop.
+        const liveNames = new Set(result.statuses.map(s => s.name));
+        for (const name of this._authenticating) {
+          if (!liveNames.has(name)) this._authenticating.delete(name);
+        }
         // Clamp selected index in case server count changed
         const total = this.getTotalItems();
         if (this.selectedIndex >= total) {

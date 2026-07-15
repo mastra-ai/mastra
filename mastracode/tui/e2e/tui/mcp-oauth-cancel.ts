@@ -90,6 +90,14 @@ export const mcpOauthCancelScenario = {
     // "Cancel authentication" sub-menu, pre-selected, so Enter backs out.
     await runtime.waitForScreenText(/oauth_server \[http\] authenticating — Enter to cancel/i, terminal, 8_000);
     await runtime.waitForScreenText(/Cancel authentication/i, terminal, 8_000);
+
+    // Hold long enough to span several 500ms selector poll cycles. The
+    // authenticating affordance is derived from the in-flight flow, not the
+    // polled `connecting` flag, so it must survive status refreshes from the
+    // manager without reverting the row to needs-auth or dropping the sub-menu.
+    await new Promise(resolve => setTimeout(resolve, 1_600));
+    await runtime.waitForScreenText(/oauth_server \[http\] authenticating — Enter to cancel/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Cancel authentication/i, terminal, 8_000);
     terminal.write('\r');
 
     // Cancelling aborts the pending flow and returns the server to needs-auth.
