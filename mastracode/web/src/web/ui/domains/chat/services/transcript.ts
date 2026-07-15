@@ -89,6 +89,7 @@ export interface NotificationEntry {
   source?: string;
   notifKind?: string;
   priority?: string;
+  metadata?: Record<string, unknown>;
 }
 
 /** A notification summary batching multiple pending notifications. */
@@ -387,6 +388,7 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent): Transcri
             source: event.source,
             notifKind: event.kind,
             priority: event.priority,
+            metadata: event.metadata,
           },
         ],
       };

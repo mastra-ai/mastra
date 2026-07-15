@@ -28,11 +28,17 @@
  */
 
 import { Mastra } from '@mastra/core/mastra';
+import type { RequestContext } from '@mastra/core/request-context';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { buildAuthRoutes, createWebAuthGate, createWebAuthProvider, isWebAuthEnabled } from '../web/auth.js';
 import { buildLinearAgentTools } from '../web/linear/agent-tools.js';
 import { handleServerError } from '../web/server-error.js';
+import {
+  createGithubSubscriptionTools,
+  parseCreatedPullRequest,
+  subscribeCurrentSessionToPullRequest,
+} from '../web/github/session-subscriptions.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from '../web/spa-static.js';
 import {
   assembleWebApiRoutes,
@@ -117,12 +123,35 @@ const authProvider = webAuthEnabled ? createWebAuthProvider(redirectUri) : undef
 // (local libSQL file).
 const prepared = await prepareAgentControllerMount({
   controllerId: CONTROLLER_ID,
+  disableGithubSignals: true,
   ...(process.env.APP_DATABASE_URL
     ? { storage: { backend: 'pg', connectionString: process.env.APP_DATABASE_URL } }
     : {}),
-  // Linear tools are resolved per session: exposed only when the session's
-  // project belongs to an org with an active Linear connection.
-  ...(linearReady ? { extraTools: buildLinearAgentTools } : {}),
+  ...(githubReady || linearReady
+    ? {
+        extraTools: async ({ requestContext }: { requestContext: RequestContext }) => ({
+          ...(linearReady ? await buildLinearAgentTools({ requestContext }) : {}),
+          ...(githubReady ? createGithubSubscriptionTools(requestContext) : {}),
+        }),
+      }
+    : {}),
+  ...(githubReady
+    ? {
+        postToolObserver: async (context: {
+          toolName: string;
+          input: unknown;
+          output?: unknown;
+          error?: unknown;
+          context: unknown;
+        }) => {
+          const pullRequestUrl = parseCreatedPullRequest(context);
+          const requestContext = (context.context as { requestContext?: RequestContext } | undefined)?.requestContext;
+          if (pullRequestUrl && requestContext) {
+            await subscribeCurrentSessionToPullRequest(requestContext, pullRequestUrl, 'auto-gh-pr-create');
+          }
+        },
+      }
+    : {}),
   ...(pubsub ? { pubsub, crossProcessPubSub: true } : {}),
   buildApiRoutes: ({ controller, authStorage }: BuildApiRoutesDeps) => [
     // Public WorkOS `/auth/*` routes (login/callback/logout/me). Folded in as

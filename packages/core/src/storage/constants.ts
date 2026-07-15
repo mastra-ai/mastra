@@ -544,6 +544,7 @@ export const DATASET_ITEMS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false },
   datasetId: { type: 'text', nullable: false, references: { table: 'mastra_datasets', column: 'id' } },
   datasetVersion: { type: 'integer', nullable: false },
+  externalId: { type: 'text', nullable: true },
   organizationId: { type: 'text', nullable: true },
   projectId: { type: 'text', nullable: true },
   validTo: { type: 'integer', nullable: true },
