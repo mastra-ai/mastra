@@ -5525,7 +5525,7 @@ export class Mastra<
    *
    * @example
    * ```typescript
-   * import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
+   * import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v6';
    * import { MastraModelGateway, type MastraModelGatewayInterface } from '@mastra/core/llm';
    *
    * const plainGateway: MastraModelGatewayInterface = {
