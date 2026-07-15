@@ -567,6 +567,12 @@ export function createMcpManager(
       // Zero-config provisioning: a bare `url` entry gets a provider with the
       // default redirect URL the first time the user authenticates. Dynamic
       // client registration takes care of the client credentials.
+      //
+      // NOTE: `serverDefs[name]` is the same object reference the MCPClient was
+      // constructed with, and connectHttp reads `authProvider` live off it at
+      // connect time, so mutating it here reaches the already-created client.
+      // If MCPClient ever defensively copies its server config, zero-config auth
+      // would need an explicit "set this server's provider" API instead.
       const def = serverDefs[name];
       if (def?.url && !def.authProvider) {
         def.authProvider = createOAuthProvider(name, { ...(cfg as McpHttpServerConfig), oauth: DEFAULT_OAUTH_CONFIG });
