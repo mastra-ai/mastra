@@ -635,6 +635,19 @@ async function executeAgentMultiTurn(
   const threadId = randomUUID();
   const inputs: AgentInputType[] = item.inputs!;
 
+  // Multi-turn recall requires a configured memory store: the shared threadId is
+  // what lets turn N see turns 1..N-1. Without memory each turn runs in isolation.
+  const memory = await agent.getMemory({ requestContext: item.requestContext });
+  if (!memory) {
+    agent
+      .getMastraInstance()
+      ?.getLogger()
+      ?.warn?.(
+        `runEvals multi-turn: agent "${agent.id}" has no memory configured, so turns will not share conversation history. ` +
+          `Each input runs in isolation. Configure a memory store on the agent for the agent to recall earlier turns.`,
+      );
+  }
+
   // Accumulate all output messages and the last result's metadata
   const allOutputMessages: any[] = [];
   let lastResult: any = undefined;

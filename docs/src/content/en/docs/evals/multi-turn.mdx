@@ -40,6 +40,12 @@ const result = await runEvals({
 
 Each turn runs `agent.generate()` with the same thread ID, so the agent sees the full conversation history. Scorers receive the accumulated output messages from all turns.
 
+## Memory is required for cross-turn recall
+
+Multi-turn recall depends on the agent having a **memory store configured**. The shared thread ID is what lets each turn see the earlier ones — but a thread only persists history when the agent has memory. If the agent has no memory configured, the turns still run sequentially and their outputs still accumulate for scoring, but the agent will not recall earlier turns (each input runs in isolation). `runEvals` logs a warning when you use `inputs` on an agent without memory.
+
+See [Memory](/docs/memory/overview) for how to configure a memory store.
+
 ## How it works
 
 When a data item has an `inputs` array, `runEvals`:
@@ -49,16 +55,22 @@ When a data item has an `inputs` array, `runEvals`:
 1. Accumulates all output messages across turns
 1. Passes the full accumulated output to scorers for evaluation
 
-Scorers see the complete conversation output, not just the last turn. The first input is used as the `run.input` context for scorers that inspect it.
+Scorers see the complete conversation output, not just the last turn.
+
+## Scoring semantics
+
+Two details matter when writing scorers for multi-turn items:
+
+- **`run.output` is the accumulated output from every turn.** Output-based scorers — `checks.includes`, `checks.calledTool`, `checks.similarity`, and similar — evaluate the whole conversation. For example, `checks.calledTool('get_weather', { times: 2 })` counts calls across all turns.
+- **`run.input` is only the first turn's input.** Scorers that compare input against output (faithfulness, answer relevancy, and other input-relative LLM scorers) only see the first user message, not the full conversation. Prefer output-based checks for multi-turn, or build scorers that read the accumulated `run.output` directly.
 
 ## Combining with gates and thresholds
 
-Multi-turn data items work with [gates and verdicts](/docs/evals/gates-and-verdicts):
+Multi-turn data items work with [gates and verdicts](/docs/evals/gates-and-verdicts). Use output-based scorers so gating reflects the full conversation:
 
 ```typescript title="src/evals/memory-eval.ts"
 import { runEvals } from '@mastra/core/evals'
 import { checks } from '@mastra/evals/checks'
-import { faithfulnessScorer } from '../scorers'
 
 const result = await runEvals({
   data: [
@@ -68,7 +80,7 @@ const result = await runEvals({
   ],
   target: weatherAgent,
   gates: [checks.calledTool('get_weather')],
-  scorers: [{ scorer: faithfulnessScorer, threshold: 0.7 }],
+  scorers: [{ scorer: checks.similarity('Brooklyn weather forecast'), threshold: 0.5 }],
 })
 
 result.verdict // 'passed' | 'scored' | 'failed'

@@ -144,9 +144,9 @@ result.thresholdResults // [{ id, passed, averageScore, threshold }]
   },
   {
     name: 'inputs',
-    type: 'string[]',
+    type: '(string | string[] | CoreMessage[] | any)[]',
     description:
-      'Multi-turn inputs. Each entry is sent sequentially to the agent on the same thread. Scorers see the accumulated output from all turns. Only supported for Agent targets. When provided, `input` can be omitted.',
+      'Multi-turn inputs. Each entry is one turn (same shape as `input`) sent sequentially to the agent on the same thread. Scorers see the accumulated output from all turns. Only supported for Agent targets. When provided, `input` can be omitted.',
     isOptional: true,
   },
   {
@@ -505,13 +505,15 @@ const result = await runEvals({
     },
   ],
   gates: [checks.calledTool('get_weather')],
-  scorers: [{ scorer: faithfulnessScorer, threshold: 0.7 }],
+  scorers: [{ scorer: checks.similarity('Brooklyn weather forecast'), threshold: 0.5 }],
 })
 
 // result.verdict: 'passed' | 'scored' | 'failed'
 ```
 
-Each turn runs `agent.generate()` with the same `threadId`, so the agent sees the full conversation history. Mix single-turn (`input`) and multi-turn (`inputs`) items in the same `data` array. When using `inputs`, `input` can be omitted.
+Each turn runs `agent.generate()` with the same `threadId`, so the agent sees the full conversation history. Cross-turn recall requires the agent to have a memory store configured; otherwise turns run in isolation. Mix single-turn (`input`) and multi-turn (`inputs`) items in the same `data` array. When using `inputs`, `input` can be omitted.
+
+Scoring uses the accumulated output from all turns as `run.output`, but only the first turn as `run.input`. Prefer output-based scorers (`checks.includes`, `checks.calledTool`, `checks.similarity`) for multi-turn; input-relative scorers (e.g. faithfulness) only see the first turn's input. Trajectory scorers that read from the trace (`AgentScorerConfig.trajectory`) resolve against the last turn's span; tool-call checks that read `run.output` (like `checks.calledTool`) still see every turn.
 
 ## Related
 
