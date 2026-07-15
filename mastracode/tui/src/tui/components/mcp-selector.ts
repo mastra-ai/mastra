@@ -180,10 +180,12 @@ export class McpSelectorComponent extends Box implements Focusable {
       if (this._reloading) {
         icon = theme.fg('warning', '⟳');
         stateText = theme.fg('warning', 'reconnecting...');
-      } else if (this._authenticating.has(status.name)) {
+      } else if (this.isAuthenticating(status)) {
         // A flow is in flight for this server. This is authoritative even if a
         // polled status refresh from the manager no longer reports `connecting`,
-        // so the "Enter to cancel" affordance never disappears mid-flow.
+        // so the "Enter to cancel" affordance never disappears mid-flow. The
+        // manager-owned `authenticating` flag also survives close/reopen of the
+        // selector, when the local set has been discarded with the old instance.
         icon = theme.fg('warning', '⟳');
         stateText = theme.fg('warning', 'authenticating — Enter to cancel');
       } else if (status.connecting) {
@@ -246,8 +248,17 @@ export class McpSelectorComponent extends Box implements Focusable {
     this.tui.requestRender();
   }
 
+  /**
+   * Whether an OAuth flow is in flight for this server. True if either the local
+   * set (this selector instance started the flow) or the manager-owned status
+   * flag (survives close/reopen) says so.
+   */
+  private isAuthenticating(status: McpServerStatus): boolean {
+    return status.authenticating === true || this._authenticating.has(status.name);
+  }
+
   private isBusy(): boolean {
-    return this.statuses.some(s => s.connecting) || this._authenticating.size > 0;
+    return this.statuses.some(s => s.connecting || this.isAuthenticating(s)) || this._authenticating.size > 0;
   }
 
   private startPollingIfNeeded(): void {
@@ -349,9 +360,10 @@ export class McpSelectorComponent extends Box implements Focusable {
     const status = this.statuses[this.selectedIndex];
     if (!status) return;
 
-    if (this._authenticating.has(status.name)) {
+    if (this.isAuthenticating(status)) {
       // A server mid-OAuth shows a cancel path (the user may have closed the
-      // browser). Authoritative even if a polled refresh cleared `connecting`.
+      // browser). Authoritative even if a polled refresh cleared `connecting`,
+      // and after a close/reopen via the manager-owned status flag.
       this.subMenuActions = AUTHENTICATING_ACTIONS;
     } else if (status.connecting) {
       this.subMenuActions = CONNECTING_ACTIONS;
@@ -599,7 +611,9 @@ export class McpSelectorComponent extends Box implements Focusable {
   private doCancelAuthentication(status: McpServerStatus): void {
     const name = status.name;
     // Nothing to cancel unless a flow is actually in flight for this server.
-    if (!this._authenticating.has(name)) return;
+    // Accept the manager-owned flag too, so a reopened selector (whose local
+    // set was discarded with the previous instance) can still cancel.
+    if (!this.isAuthenticating(status)) return;
 
     this.showInfoCallback(`MCP: Cancelling authentication for "${name}"...`);
     this.onCancelAuthenticateServerCallback(name)

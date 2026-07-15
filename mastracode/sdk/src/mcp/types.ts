@@ -90,4 +90,10 @@ export interface McpServerStatus {
   error?: string;
   /** Whether the server rejected the connection pending OAuth authorization */
   needsAuth?: boolean;
+  /**
+   * Whether an OAuth authorization flow is currently in flight for this server.
+   * Owned by the manager so the state survives a selector being closed/reopened;
+   * the UI uses it to keep offering "Cancel authentication" while auth is pending.
+   */
+  authenticating?: boolean;
 }

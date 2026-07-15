@@ -98,6 +98,22 @@ export const mcpOauthCancelScenario = {
     await new Promise(resolve => setTimeout(resolve, 1_600));
     await runtime.waitForScreenText(/oauth_server \[http\] authenticating — Enter to cancel/i, terminal, 8_000);
     await runtime.waitForScreenText(/Cancel authentication/i, terminal, 8_000);
+
+    // Close the selector entirely (Esc closes the sub-menu, Esc closes the
+    // overlay) while the flow is still pending, then reopen /mcp. The reopened
+    // selector is a fresh instance with an empty local set, so it can only know
+    // the flow is still in flight from the manager-owned `authenticating` status
+    // — it must still surface the cancel affordance.
+    terminal.write('\x1b');
+    terminal.write('\x1b');
+    await runtime.waitForScreenTextAbsent(/Manage MCP servers/i, terminal, 8_000);
+    terminal.submit('/mcp');
+    await runtime.waitForScreenText(/Manage MCP servers/i, terminal, 8_000);
+    await runtime.waitForScreenText(/oauth_server \[http\] authenticating — Enter to cancel/i, terminal, 8_000);
+
+    // Open the sub-menu on the still-authenticating server and cancel.
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Cancel authentication/i, terminal, 8_000);
     terminal.write('\r');
 
     // Cancelling aborts the pending flow and returns the server to needs-auth.
