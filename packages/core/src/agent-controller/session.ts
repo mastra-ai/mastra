@@ -1051,6 +1051,25 @@ export class SessionSuspensions {
     this.#pending.delete(toolCallId);
   }
 
+  /**
+   * Drop every suspension parked on `runId`, returning the dropped toolCallIds.
+   * Used when a run reaches a terminal failure after emitting `tool_suspended`
+   * (e.g. persisting the suspended snapshot failed): those suspensions can never
+   * be resumed, so keeping them parked would leave the user with prompts whose
+   * answers fail with a misleading "could not find a suspended run" error.
+   * Suspensions parked on other runs are left intact.
+   */
+  deleteForRun({ runId }: { runId: string }): Array<{ toolCallId: string; toolName: string }> {
+    const dropped: Array<{ toolCallId: string; toolName: string }> = [];
+    for (const [toolCallId, suspension] of this.#pending) {
+      if (suspension.runId === runId) {
+        this.#pending.delete(toolCallId);
+        dropped.push({ toolCallId, toolName: suspension.toolName });
+      }
+    }
+    return dropped;
+  }
+
   /** Drop all parked suspensions (e.g. on abort or thread switch). */
   clear(): void {
     this.#pending.clear();
@@ -2270,6 +2289,10 @@ export class SessionDisplayState {
           suspendPayload: event.suspendPayload,
           resumeSchema: event.resumeSchema,
         });
+        break;
+
+      case 'tool_suspension_cancelled':
+        ds.pendingSuspensions.delete(event.toolCallId);
         break;
 
       // ── Subagent tracking ──────────────────────────────────────────────

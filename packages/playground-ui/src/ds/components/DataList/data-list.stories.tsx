@@ -613,7 +613,7 @@ const SAMPLE_SCORES = Array.from({ length: 25 }, (_, i) => ({
 function buildScoresColumns(visible: Set<ToggleableColumn>): string {
   const parts = ['auto', 'auto', 'minmax(0, 10rem)'];
   if (visible.has('entity')) parts.push('minmax(0, 14rem)');
-  if (visible.has('input')) parts.push('minmax(0, 100rem)');
+  if (visible.has('input')) parts.push('minmax(0, 40rem)');
   return parts.join(' ');
 }
 

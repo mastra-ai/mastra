@@ -1686,7 +1686,7 @@ ${workingMemory}`;
     if (omConfig.observation?.bufferTokens !== false && !coreFeatures.has('asyncBuffering')) {
       throw new Error(
         'Observational memory async buffering is enabled by default but the installed version of @mastra/core does not support it. ' +
-          'Either upgrade @mastra/core, @mastra/memory, and your storage adapter (@mastra/libsql, @mastra/pg, or @mastra/mongodb) to the latest version, ' +
+          'Either upgrade @mastra/core, @mastra/memory, and your storage adapter (@mastra/libsql, @mastra/pg, @mastra/mongodb, or @mastra/convex) to the latest version, ' +
           'or explicitly disable async buffering by setting `observation: { bufferTokens: false }` in your observationalMemory config.',
       );
     }

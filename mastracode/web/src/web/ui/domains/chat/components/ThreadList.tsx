@@ -41,11 +41,11 @@ export function ThreadList() {
 
   if (!activeProject) return null;
 
-  // Feature worktrees hold a single conversation: show its title for context,
-  // but no "Threads" header/count, no rename/clone/delete actions, and no way
-  // to create more threads.
-  const readOnly =
-    activeProject.source === 'github' && Boolean(projectPath) && projectPath !== activeProject.sandboxWorkdir;
+  // Worktrees hold a single conversation: show its title for context, but no
+  // "Threads" header/count, no rename/clone/delete actions, and no way to
+  // create more threads. Every GitHub chat target is a worktree (the repo
+  // root is not a workspace), so any GitHub project path is read-only here.
+  const readOnly = activeProject.source === 'github' && Boolean(projectPath);
 
   const threads = threadsQuery.data ?? [];
   const activeThreadId = routeThreadId;

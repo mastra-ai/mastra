@@ -798,6 +798,19 @@ describe('createMastraCode', () => {
     expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toContain('provider-history-compat');
   });
 
+  it('does not configure the polling GitHub provider when the embedding disables it', async () => {
+    loadSettingsMock.mockReturnValue({
+      ...createMockSettings(),
+      signals: { unixSocketPubSub: false, experimentalGithubSignals: true },
+    });
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode({ disableGithubSignals: true });
+
+    const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as { signals?: Array<{ id?: string }> } | undefined;
+    expect(agentConfig?.signals?.map(signal => signal.id)).not.toContain('github-signals');
+  });
+
   it('configures GitHubSignals as a signal provider for local PR subscriptions', async () => {
     loadSettingsMock.mockReturnValue({
       ...createMockSettings(),

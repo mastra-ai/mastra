@@ -162,7 +162,7 @@ overrides:
   form-data@>=4.0.0 <4.0.6: 4.0.6
   brace-expansion@<1.1.13: 1.1.13
   brace-expansion@>=2.0.0 <2.0.3: 2.0.3
-  '@clerk/shared@>=3.0.0 <3.47.5': 3.47.5
+  '@clerk/shared@>=3.0.0 <3.47.5': 3.47.7
   js-cookie@>=3.0.0 <3.0.7: 3.0.7
   path-to-regexp@<0.1.13: 0.1.13
   joi@>=17.0.0 <17.13.4: 17.13.4
@@ -322,3 +322,4 @@ allowBuilds:
   '@mongodb-js/zstd': false
   node-liblzma: false
   workerd: false
+  braintrust: false

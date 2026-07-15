@@ -1,0 +1,85 @@
+---
+extends: existence
+message: "AI hedge: '%s'. Delete this throat-clearing and state your point directly."
+level: error
+ignorecase: true
+tokens:
+  - It's important to note that
+  - It is important to note that
+  - It is important to understand
+  - It is important to consider
+  - It is important to recognize
+  - It is important to acknowledge
+  - It is important to emphasize
+  - It is important to highlight
+  - It is important to mention
+  - It's worth noting that
+  - It is worth noting that
+  - It's worth mentioning that
+  - It is worth mentioning that
+  - It is worth emphasizing that
+  - It is worth highlighting that
+  - It is worth pointing out that
+  - It is worth remembering that
+  - It is essential to note
+  - It is essential to understand
+  - It is essential to recognize
+  - It is essential to acknowledge
+  - It is essential to emphasize
+  - It is crucial to note
+  - It is crucial to understand
+  - It is crucial to recognize
+  - It is critical to note
+  - It is critical to understand
+  - It is critical to recognize
+  - It is necessary to note
+  - It is necessary to understand
+  - It is necessary to recognize
+  - It should be noted that
+  - It should be emphasized that
+  - It should be mentioned that
+  - It bears mentioning
+  - It goes without saying
+  - Needless to say
+  - Generally speaking
+  - Broadly speaking
+  - For the most part
+  - By and large
+  - All things considered
+  - That being said
+  - That said
+  - With that said
+  - Having said that
+  - On the other hand
+  - At the same time
+  - To be sure
+  - To some extent
+  - In some ways
+  - In many ways
+  - In a sense
+  - As such
+  - As it were
+  - One thing is clear
+  - One thing is certain
+  - One thing is for sure
+  - One thing is for certain
+  - This much is clear
+  - This much is certain
+  - raises important questions
+  - raises serious questions
+  - raises questions about
+  - begs the question
+  - forces us to ask
+  - forces us to consider
+  - invites us to consider
+  - invites us to ask
+  - invites us to reflect
+  - prompts us to ask
+  - prompts us to consider
+  - calls into question
+  - calls on us to
+  - reminds us that
+  - reminds us of the importance
+  - as you might expect
+  - as you'd expect
+  - as one might expect

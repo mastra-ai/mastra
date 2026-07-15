@@ -4873,7 +4873,7 @@ export type PostAgentsAgentIdGenerate_Body = {
               id: string;
               [x: string]: unknown;
             };
-        resource: string;
+        resource?: string | undefined;
         options?:
           | {
               [key: string]: any;
@@ -5048,7 +5048,7 @@ export type PostAgentsAgentIdGenerateVnext_Body = {
               id: string;
               [x: string]: unknown;
             };
-        resource: string;
+        resource?: string | undefined;
         options?:
           | {
               [key: string]: any;
@@ -5225,7 +5225,7 @@ export type PostAgentsAgentIdStream_Body = {
               id: string;
               [x: string]: unknown;
             };
-        resource: string;
+        resource?: string | undefined;
         options?:
           | {
               [key: string]: any;
@@ -5400,7 +5400,7 @@ export type PostAgentsAgentIdStreamUntilIdle_Body = {
               id: string;
               [x: string]: unknown;
             };
-        resource: string;
+        resource?: string | undefined;
         options?:
           | {
               [key: string]: any;
@@ -5580,7 +5580,7 @@ export type PostAgentsAgentIdStreamVnext_Body = {
               id: string;
               [x: string]: unknown;
             };
-        resource: string;
+        resource?: string | undefined;
         options?:
           | {
               [key: string]: any;
@@ -5915,7 +5915,7 @@ export type PostAgentsAgentIdSendMessage_Body =
                               id: string;
                               [x: string]: unknown;
                             };
-                        resource: string;
+                        resource?: string | undefined;
                         options?:
                           | {
                               [key: string]: any;
@@ -6301,7 +6301,7 @@ export type PostAgentsAgentIdQueueMessage_Body =
                               id: string;
                               [x: string]: unknown;
                             };
-                        resource: string;
+                        resource?: string | undefined;
                         options?:
                           | {
                               [key: string]: any;
@@ -6661,7 +6661,7 @@ export type PostAgentsAgentIdSignals_Body =
                               id: string;
                               [x: string]: unknown;
                             };
-                        resource: string;
+                        resource?: string | undefined;
                         options?:
                           | {
                               [key: string]: any;
@@ -7206,7 +7206,7 @@ export type PostAgentsAgentIdResumeStream_Body = {
               id: string;
               [x: string]: unknown;
             };
-        resource: string;
+        resource?: string | undefined;
         options?:
           | {
               [key: string]: any;
@@ -7602,7 +7602,7 @@ export type PostAgentsAgentIdResumeStreamUntilIdle_Body = {
               id: string;
               [x: string]: unknown;
             };
-        resource: string;
+        resource?: string | undefined;
         options?:
           | {
               [key: string]: any;
@@ -7782,7 +7782,7 @@ export type PostAgentsAgentIdNetwork_Body = {
               id: string;
               [x: string]: unknown;
             };
-        resource: string;
+        resource?: string | undefined;
         options?:
           | {
               [key: string]: any;
@@ -8433,7 +8433,7 @@ export type PostAgentsAgentIdStreamVNext_Body = {
               id: string;
               [x: string]: unknown;
             };
-        resource: string;
+        resource?: string | undefined;
         options?:
           | {
               [key: string]: any;
@@ -8613,7 +8613,7 @@ export type PostAgentsAgentIdStreamVnextUi_Body = {
               id: string;
               [x: string]: unknown;
             };
-        resource: string;
+        resource?: string | undefined;
         options?:
           | {
               [key: string]: any;
@@ -8795,7 +8795,7 @@ export type PostAgentsAgentIdStreamUi_Body = {
               id: string;
               [x: string]: unknown;
             };
-        resource: string;
+        resource?: string | undefined;
         options?:
           | {
               [key: string]: any;
@@ -13390,6 +13390,7 @@ export type GetObservabilityTraces_QueryParams = {
             | 'processor_run'
             | 'tool_call'
             | 'client_tool_call'
+            | 'provider_tool_call'
             | 'workflow_run'
             | 'workflow_step'
             | 'workflow_conditional'
@@ -13599,6 +13600,7 @@ export type GetObservabilityTraces_Response = {
       | 'processor_run'
       | 'tool_call'
       | 'client_tool_call'
+      | 'provider_tool_call'
       | 'workflow_run'
       | 'workflow_step'
       | 'workflow_conditional'
@@ -13808,6 +13810,7 @@ export type GetObservabilityTracesLight_QueryParams = {
             | 'processor_run'
             | 'tool_call'
             | 'client_tool_call'
+            | 'provider_tool_call'
             | 'workflow_run'
             | 'workflow_step'
             | 'workflow_conditional'
@@ -13981,6 +13984,7 @@ export type GetObservabilityTracesLight_Response = {
       | 'processor_run'
       | 'tool_call'
       | 'client_tool_call'
+      | 'provider_tool_call'
       | 'workflow_run'
       | 'workflow_step'
       | 'workflow_conditional'
@@ -14106,6 +14110,7 @@ export type GetObservabilityBranches_QueryParams = {
             | 'processor_run'
             | 'tool_call'
             | 'client_tool_call'
+            | 'provider_tool_call'
             | 'workflow_run'
             | 'workflow_step'
             | 'workflow_conditional'
@@ -14295,6 +14300,7 @@ export type GetObservabilityBranches_Response = {
       | 'processor_run'
       | 'tool_call'
       | 'client_tool_call'
+      | 'provider_tool_call'
       | 'workflow_run'
       | 'workflow_step'
       | 'workflow_conditional'
@@ -14488,6 +14494,7 @@ export type GetObservabilityTracesTraceIdBranchesSpanId_Response = {
       | 'processor_run'
       | 'tool_call'
       | 'client_tool_call'
+      | 'provider_tool_call'
       | 'workflow_run'
       | 'workflow_step'
       | 'workflow_conditional'
@@ -14674,6 +14681,7 @@ export type GetObservabilityTracesTraceId_Response = {
       | 'processor_run'
       | 'tool_call'
       | 'client_tool_call'
+      | 'provider_tool_call'
       | 'workflow_run'
       | 'workflow_step'
       | 'workflow_conditional'
@@ -14854,6 +14862,7 @@ export type GetObservabilityTracesTraceIdLight_Response = {
       | 'processor_run'
       | 'tool_call'
       | 'client_tool_call'
+      | 'provider_tool_call'
       | 'workflow_run'
       | 'workflow_step'
       | 'workflow_conditional'
@@ -14955,6 +14964,7 @@ export type GetObservabilityTracesTraceIdSpansSpanId_Response = {
       | 'processor_run'
       | 'tool_call'
       | 'client_tool_call'
+      | 'provider_tool_call'
       | 'workflow_run'
       | 'workflow_step'
       | 'workflow_conditional'
@@ -15265,6 +15275,7 @@ export type GetObservabilityTracesTraceIdSpanIdScores_Response = {
           | 'processor_run'
           | 'tool_call'
           | 'client_tool_call'
+          | 'provider_tool_call'
           | 'workflow_run'
           | 'workflow_step'
           | 'workflow_conditional'
@@ -21111,7 +21122,7 @@ export type PostAgentsAgentIdGenerateLegacy_Body = {
               id: string;
               [x: string]: unknown;
             };
-        resource: string;
+        resource?: string | undefined;
         options?:
           | {
               [key: string]: any;
@@ -21291,7 +21302,7 @@ export type PostAgentsAgentIdStreamLegacy_Body = {
               id: string;
               [x: string]: unknown;
             };
-        resource: string;
+        resource?: string | undefined;
         options?:
           | {
               [key: string]: any;
@@ -86237,6 +86248,7 @@ export type GetDatasetsDatasetIdItems_Response = {
     id: string;
     datasetId: string;
     datasetVersion: number;
+    externalId?: (string | undefined) | null;
     input: unknown;
     groundTruth?: unknown | undefined;
     expectedTrajectory?: unknown | undefined;
@@ -86313,6 +86325,8 @@ export type PostDatasetsDatasetIdItems_PathParams = {
 };
 
 export type PostDatasetsDatasetIdItems_Body = {
+  /** Caller-defined, dataset-local item identity */
+  externalId?: (string | undefined) | null;
   /** Input data for the dataset item */
   input: unknown;
   /** Expected output for comparison */
@@ -86609,6 +86623,7 @@ export type PostDatasetsDatasetIdItems_Response = {
   id: string;
   datasetId: string;
   datasetVersion: number;
+  externalId?: (string | undefined) | null;
   input: unknown;
   groundTruth?: unknown | undefined;
   expectedTrajectory?: unknown | undefined;
@@ -86679,6 +86694,7 @@ export type PostDatasetsDatasetIdItemsBatch_PathParams = {
 
 export type PostDatasetsDatasetIdItemsBatch_Body = {
   items: {
+    externalId?: (string | undefined) | null;
     input: unknown;
     groundTruth?: unknown | undefined;
     /** Expected trajectory configuration for trajectory scoring */
@@ -86973,6 +86989,7 @@ export type PostDatasetsDatasetIdItemsBatch_Response = {
     id: string;
     datasetId: string;
     datasetVersion: number;
+    externalId?: (string | undefined) | null;
     input: unknown;
     groundTruth?: unknown | undefined;
     expectedTrajectory?: unknown | undefined;
@@ -87089,6 +87106,7 @@ export type GetDatasetsDatasetIdItemsItemId_Response = {
   id: string;
   datasetId: string;
   datasetVersion: number;
+  externalId?: (string | undefined) | null;
   input: unknown;
   groundTruth?: unknown | undefined;
   expectedTrajectory?: unknown | undefined;
@@ -87454,6 +87472,7 @@ export type PatchDatasetsDatasetIdItemsItemId_Response = {
   id: string;
   datasetId: string;
   datasetVersion: number;
+  externalId?: (string | undefined) | null;
   input: unknown;
   groundTruth?: unknown | undefined;
   expectedTrajectory?: unknown | undefined;
@@ -87672,6 +87691,7 @@ export type GetDatasetsDatasetIdItemsItemIdVersionsDatasetVersion_Response = {
   id: string;
   datasetId: string;
   datasetVersion: number;
+  externalId?: (string | undefined) | null;
   input: unknown;
   groundTruth?: unknown | undefined;
   expectedTrajectory?: unknown | undefined;

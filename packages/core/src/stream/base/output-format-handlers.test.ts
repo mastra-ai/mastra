@@ -1,8 +1,8 @@
-import { convertArrayToReadableStream, convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v5/test';
 import { asSchema } from '@internal/ai-sdk-v5';
 import type { JSONSchema7 } from '@internal/ai-sdk-v5';
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { convertArrayToReadableStream, convertAsyncIterableToArray } from '../../loop/test-utils/stream-helpers';
 import type { PublicSchema } from '../../schema';
 import type { ChunkType } from '../types';
 import { ChunkFrom } from '../types';

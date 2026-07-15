@@ -352,13 +352,28 @@ mastra env restart <env>
 
 `<env>` can be an environment name, slug, or ID. Fails with a conflict error if the environment has never been deployed.
 
+### `mastra env vars pull`
+
+Pulls an environment's env vars into a local env file (default: `.env`). The file contains the merged set a deploy actually runs with: vars stored on the environment (for example, added in the dashboard's environment editor) plus project-level vars, with project values winning on conflict. Managed vars injected by attached databases are listed as comments (names only) since their values are platform-managed secrets.
+
+```bash
+mastra env vars pull
+mastra env vars pull <env> --output .env.staging
+```
+
+`<env>` can be an environment name, slug, or ID, and can be omitted when the project has exactly one environment. The file is written with `0600` permissions.
+
+#### `-o, --output`
+
+File to write. Defaults to `.env`.
+
 ### `mastra env db`
 
 Manages databases attached to a project on Mastra platform. Databases are provisioned from a managed provider (for example Turso or Neon) and inject their connection env vars into deploys automatically.
 
 A database is either **environment-scoped** (its env vars only go to one environment) or **shared** (project-scoped: its env vars go to all environments). Pass the environment argument to work with environment-scoped databases; omit it for shared databases.
 
-Creating and detaching databases requires the `admin` role in the organization.
+Creating and deleting databases requires the `admin` role in the organization.
 
 ### `mastra env db list`
 
@@ -422,12 +437,12 @@ Print secret connection values instead of masking them.
 
 Emit machine-readable JSON. Secret values are masked unless `--show-secrets` is passed.
 
-### `mastra env db detach`
+### `mastra env db delete`
 
-Detaches a database from the project. The CLI prompts for confirmation unless `--yes` is passed. After detaching, deploys no longer receive the database's env vars.
+Permanently deletes a database with the provider, including all of its data. This can't be undone. The CLI prompts for confirmation unless `--yes` is passed. After deletion, deploys no longer receive the database's env vars.
 
 ```bash
-mastra env db detach <database>
+mastra env db delete <database>
 ```
 
 #### `-y, --yes`

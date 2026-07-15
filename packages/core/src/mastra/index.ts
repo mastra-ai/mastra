@@ -588,6 +588,23 @@ export interface Config<
    * @default { durableAgents: 'off' }
    */
   recovery?: MastraRecoveryConfig;
+
+  /**
+   * Marks this instance as an internally-owned ephemeral Mastra — e.g. the
+   * fallback instance a standalone `Agent` lazily creates so its
+   * prepare-stream workflow has a pubsub-equipped Mastra to run on.
+   *
+   * Ephemeral instances skip module-level scorer-hook registration: they have
+   * no agent/scorer/editor registries for the hook to resolve against, so the
+   * hook could never persist a score — but the module-level emitter would
+   * retain the instance (and everything it references) for the lifetime of
+   * the process, leaking one Mastra graph per discarded standalone Agent
+   * (#19404).
+   *
+   * @internal Not part of the public API — do not set this on application
+   * Mastra instances; it silently disables scorer persistence.
+   */
+  __ephemeral?: boolean;
 }
 
 /**
@@ -739,6 +756,20 @@ export class Mastra<
    * worker-existence checks and double-subscribe to the scheduling topics.
    */
   #schedulingWorkersStartPromise?: Promise<void>;
+  /**
+   * In-flight promise for `__ensureExecutionWorkersStarted()`. Serializes
+   * concurrent lazy startups triggered by background-task dispatches so two
+   * first dispatches on a cold instance can't both init/start the same
+   * workers.
+   */
+  #executionWorkersStartPromise?: Promise<void>;
+  /**
+   * Fast path for `__ensureExecutionWorkersStarted()`. Set once the execution
+   * workers + push wiring are confirmed running; reset by `stopWorkers()`.
+   * Kept separate from `#workersStarted`, which partial `startWorkers(name)`
+   * calls also set without starting the workflow consumer.
+   */
+  #executionWorkersStarted = false;
   // Lazily-constructed processor used by handleWorkflowEvent(). Shared between
   // pull-mode workers (OrchestrationWorker) and push-mode entry points
   // (in-process EventEmitter listener, the /api/workers/events HTTP route).
@@ -1635,11 +1666,16 @@ export class Mastra<
     }
 
     // `registerHook` adds to a module-level emitter that never drops handlers on
-    // its own. Keep the reference so short-lived internal/ephemeral Mastras can
-    // release it on teardown (see `__unregisterHooks`); otherwise their handler
-    // fires on every scorer run for the lifetime of the process.
-    this.#onScorerHook = createOnScorerHook(this);
-    registerHook(AvailableHooks.ON_SCORER_RUN, this.#onScorerHook);
+    // its own. Keep the reference so short-lived internal Mastras can release it
+    // on teardown (see `__unregisterHooks`); otherwise their handler fires on
+    // every scorer run for the lifetime of the process. Ephemeral instances
+    // (standalone-Agent fallbacks) skip registration entirely: their hook can
+    // never resolve a scorer, and the emitter would pin the instance against GC
+    // for the process lifetime (#19404).
+    if (!config?.__ephemeral) {
+      this.#onScorerHook = createOnScorerHook(this);
+      registerHook(AvailableHooks.ON_SCORER_RUN, this.#onScorerHook);
+    }
 
     /*
       Initialize observability with Mastra context (after storage configured)
@@ -5255,71 +5291,7 @@ export class Mastra<
     // OrchestrationWorker pulling events — wire handleWorkflowEvent directly
     // to the pubsub so workflow events still get processed in-process.
     if (!name) {
-      const modes = this.#pubsub.supportedModes ?? ['pull'];
-      const pushOnly = modes.includes('push') && !modes.includes('pull');
-      if (pushOnly && !this.#pushSubscription) {
-        const cb: EventCallback = (event, ack, nack) => {
-          // In cross-process push environments (e.g. UnixSocketPubSub),
-          // every subscriber receives every event — including events for
-          // internal workflows registered on a different process. Skip
-          // events whose workflow exists in neither the internal nor the
-          // public registry so only the owning process handles them.
-          // Without this guard the WEP would publish workflow.fail,
-          // propagating through workflows-finish and erroneously
-          // terminating the correct process's run.
-          const data = event.data as Record<string, unknown> | undefined;
-          const wfId = data?.workflowId as string | undefined;
-          const rId = data?.runId as string | undefined;
-          if (wfId && rId && !this.#ownsWorkflow(wfId, rId, data?.parentWorkflow)) {
-            if (ack) {
-              void ack().catch(err => this.#logger?.error?.('Error acking skipped workflow event', err));
-            }
-            return;
-          }
-
-          void this.handleWorkflowEvent(event)
-            .then(result => {
-              if (result.ok) {
-                if (ack) {
-                  return ack().catch(err =>
-                    this.#logger?.error?.('Error acking workflow event in push subscription', err),
-                  );
-                }
-                return;
-              }
-              // Non-ok result: ask the transport to redeliver (nack) when the
-              // handle layer says retry. The WEP tracks per-event delivery
-              // attempts and eventually returns `retry: false` to break the
-              // loop and surface a terminal workflow.fail. For terminal
-              // failures we ack so the event is dropped from the transport.
-              if (result.retry) {
-                if (nack) {
-                  return nack().catch(err =>
-                    this.#logger?.error?.('Error nacking workflow event in push subscription', err),
-                  );
-                }
-                // Transport does not support nack. Do NOT ack — acking a
-                // retryable failure would drop the event and silently lose
-                // the workflow run. Log and let the transport's own delivery
-                // semantics decide (most non-ack transports redeliver until
-                // explicitly acked).
-                this.#logger?.error?.('Retryable workflow event cannot be requeued because nack is unavailable', {
-                  type: event.type,
-                  runId: event.runId,
-                });
-                return;
-              }
-              if (ack) {
-                return ack().catch(err =>
-                  this.#logger?.error?.('Error acking terminal workflow event in push subscription', err),
-                );
-              }
-            })
-            .catch(err => this.#logger?.error?.('Unhandled error in workflow event push subscription', err));
-        };
-        await this.#pubsub.subscribe('workflows', cb);
-        this.#pushSubscription = { topic: 'workflows', cb };
-      }
+      await this.#wirePushWorkflowSubscription();
     }
 
     // Subscribe user-defined event listeners (non-workflow topics, or legacy inline WEP)
@@ -5350,9 +5322,160 @@ export class Mastra<
   }
 
   /**
+   * Wire `handleWorkflowEvent` directly to the pubsub when it is push-only
+   * (no pull mode for an OrchestrationWorker to drive). Idempotent — no-op
+   * when the pubsub supports pull or the subscription already exists.
+   * Shared by `startWorkers()` and `__ensureExecutionWorkersStarted()`.
+   */
+  async #wirePushWorkflowSubscription(): Promise<void> {
+    const modes = this.#pubsub.supportedModes ?? ['pull'];
+    const pushOnly = modes.includes('push') && !modes.includes('pull');
+    if (pushOnly && !this.#pushSubscription) {
+      const cb: EventCallback = (event, ack, nack) => {
+        // In cross-process push environments (e.g. UnixSocketPubSub),
+        // every subscriber receives every event — including events for
+        // internal workflows registered on a different process. Skip
+        // events whose workflow exists in neither the internal nor the
+        // public registry so only the owning process handles them.
+        // Without this guard the WEP would publish workflow.fail,
+        // propagating through workflows-finish and erroneously
+        // terminating the correct process's run.
+        const data = event.data as Record<string, unknown> | undefined;
+        const wfId = data?.workflowId as string | undefined;
+        const rId = data?.runId as string | undefined;
+        if (wfId && rId && !this.#ownsWorkflow(wfId, rId, data?.parentWorkflow)) {
+          if (ack) {
+            void ack().catch(err => this.#logger?.error?.('Error acking skipped workflow event', err));
+          }
+          return;
+        }
+
+        void this.handleWorkflowEvent(event)
+          .then(result => {
+            if (result.ok) {
+              if (ack) {
+                return ack().catch(err =>
+                  this.#logger?.error?.('Error acking workflow event in push subscription', err),
+                );
+              }
+              return;
+            }
+            // Non-ok result: ask the transport to redeliver (nack) when the
+            // handle layer says retry. The WEP tracks per-event delivery
+            // attempts and eventually returns `retry: false` to break the
+            // loop and surface a terminal workflow.fail. For terminal
+            // failures we ack so the event is dropped from the transport.
+            if (result.retry) {
+              if (nack) {
+                return nack().catch(err =>
+                  this.#logger?.error?.('Error nacking workflow event in push subscription', err),
+                );
+              }
+              // Transport does not support nack. Do NOT ack — acking a
+              // retryable failure would drop the event and silently lose
+              // the workflow run. Log and let the transport's own delivery
+              // semantics decide (most non-ack transports redeliver until
+              // explicitly acked).
+              this.#logger?.error?.('Retryable workflow event cannot be requeued because nack is unavailable', {
+                type: event.type,
+                runId: event.runId,
+              });
+              return;
+            }
+            if (ack) {
+              return ack().catch(err =>
+                this.#logger?.error?.('Error acking terminal workflow event in push subscription', err),
+              );
+            }
+          })
+          .catch(err => this.#logger?.error?.('Unhandled error in workflow event push subscription', err));
+      };
+      await this.#pubsub.subscribe('workflows', cb);
+      this.#pushSubscription = { topic: 'workflows', cb };
+    }
+  }
+
+  /**
+   * Ensure the execution-side machinery — the `orchestration` and
+   * `backgroundTasks` workers, plus the push-mode workflow subscription —
+   * is running. Called lazily by {@link BackgroundTaskManager} when a task
+   * is dispatched or resumed, so background tasks execute in "library mode"
+   * where nothing ever calls `startWorkers()` (no server, no `mastra dev`;
+   * see #19339).
+   *
+   * Deliberately narrower than `startWorkers()`: it never injects or starts
+   * the scheduler/agent-schedule workers and never subscribes user event
+   * listeners — dispatching a background task must not boot cron machinery
+   * as a side effect.
+   *
+   * Honors the same opt-outs as the rest of the worker lifecycle:
+   * `workers: false` / `MASTRA_WORKERS=false` (standalone-worker topologies
+   * run their own worker processes, so this instance must not start local
+   * ones) and the `MASTRA_WORKERS` name filter.
+   *
+   * The fast path is its own `#executionWorkersStarted` flag, NOT
+   * `#workersStarted` — the latter is set by any `startWorkers(name)` call,
+   * including partial named starts (e.g. `startWorkers('backgroundTasks')`)
+   * that never start the orchestration worker or push wiring, which would
+   * leave dispatched tasks stuck again. The pass itself is idempotent
+   * (per-worker `isRunning` checks, idempotent push wiring), so running it
+   * once after a full `startWorkers()` boot is a cheap no-op.
+   *
+   * @internal
+   */
+  async __ensureExecutionWorkersStarted(): Promise<void> {
+    if (this.#executionWorkersStarted) return;
+    if (this.#workersDisabled) return;
+    // Memoize the in-flight startup so concurrent first dispatches on a cold
+    // instance share one start instead of racing worker.init()/start().
+    // Cleared on settle so a dispatch after stopWorkers() can start again.
+    if (!this.#executionWorkersStartPromise) {
+      this.#executionWorkersStartPromise = this.#startExecutionWorkers().finally(() => {
+        this.#executionWorkersStartPromise = undefined;
+      });
+    }
+    await this.#executionWorkersStartPromise;
+  }
+
+  async #startExecutionWorkers(): Promise<void> {
+    // Storage init is memoized (see augmentWithInit) — cheap when already run.
+    if (this.#storage) {
+      await this.#storage.init();
+    }
+
+    const deps: WorkerDeps = {
+      pubsub: this.#pubsub,
+      storage: this.#storage!,
+      logger: this.#logger as unknown as IMastraLogger,
+      mastra: this,
+    };
+
+    for (const worker of this.#workers) {
+      if (worker.name !== 'orchestration' && worker.name !== 'backgroundTasks') continue;
+      if (this.#workerFilter && !this.#workerFilter.has(worker.name)) continue;
+      if (worker.isRunning) continue;
+      await worker.init(deps);
+      await worker.start();
+    }
+
+    await this.#wirePushWorkflowSubscription();
+    this.#executionWorkersStarted = true;
+  }
+
+  /**
    * Stop all running workers and unsubscribe event listeners.
    */
   public async stopWorkers(): Promise<void> {
+    // A background-task dispatch may have kicked off a lazy execution-worker
+    // start (`__ensureExecutionWorkersStarted`) that is still in flight. Wait
+    // for it so the teardown below covers what it started — otherwise the
+    // start finishes after this method returns, leaving workers running and
+    // subscriptions wired behind a "stopped" instance. Failures are already
+    // logged by the start path; here they just mean there is less to stop.
+    while (this.#executionWorkersStartPromise) {
+      await this.#executionWorkersStartPromise.catch(() => {});
+    }
+
     // Stop registered workers in reverse order
     for (const worker of [...this.#workers].reverse()) {
       if (worker.isRunning) {
@@ -5376,6 +5499,7 @@ export class Mastra<
 
     await this.#pubsub.flush();
     this.#workersStarted = false;
+    this.#executionWorkersStarted = false;
   }
 
   /**

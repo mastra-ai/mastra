@@ -377,7 +377,15 @@ export interface PullRequestResult {
 export async function openPullRequest(
   baseUrl: string,
   githubProjectId: string,
-  args: { branch: string; title: string; body?: string; base?: string; worktreePath?: string },
+  args: {
+    branch: string;
+    title: string;
+    body?: string;
+    base?: string;
+    worktreePath?: string;
+    sessionId?: string;
+    threadId?: string;
+  },
 ): Promise<PullRequestResult> {
   return postProjectGitOp<PullRequestResult>(baseUrl, githubProjectId, 'pr', args);
 }
