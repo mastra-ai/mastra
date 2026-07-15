@@ -308,19 +308,22 @@ describe('Scheduler', () => {
     // workerd's setInterval returns a number, which has no .unref method
     const setIntervalSpy = vi.spyOn(globalThis, 'setInterval').mockImplementation((() => 123) as any);
 
-    const { store } = makeStore();
-    const pubsub = new EventEmitterPubSub();
-    const scheduler = new Scheduler({
-      schedulesStore: store,
-      pubsub,
-      config: { tickIntervalMs: 60_000 },
-    });
+    try {
+      const { store } = makeStore();
+      const pubsub = new EventEmitterPubSub();
+      const scheduler = new Scheduler({
+        schedulesStore: store,
+        pubsub,
+        config: { tickIntervalMs: 60_000 },
+      });
 
-    await expect(scheduler.start()).resolves.toBeUndefined();
-    expect(scheduler.isRunning).toBe(true);
+      await expect(scheduler.start()).resolves.toBeUndefined();
+      expect(scheduler.isRunning).toBe(true);
 
-    await scheduler.stop();
-    setIntervalSpy.mockRestore();
+      await scheduler.stop();
+    } finally {
+      setIntervalSpy.mockRestore();
+    }
   });
 
   it('skips firing when the target workflow is not registered', async () => {
