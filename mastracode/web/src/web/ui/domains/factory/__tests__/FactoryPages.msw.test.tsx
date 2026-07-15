@@ -463,12 +463,7 @@ describe('Factory Board — Intake candidates', () => {
       http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues`, ({ request }) => {
         const label = new URL(request.url).searchParams.get('label');
         state.issueRequests.push(label);
-        if (label === 'queued') {
-          return HttpResponse.json({
-            issues: triageResolved ? [{ ...issues[0]!, labels: ['bug', 'queued'] }] : [],
-            nextPage: null,
-          });
-        }
+        if (label === 'queued') return HttpResponse.json({ issues: [], nextPage: null });
         if (label === 'auto-triaged') return HttpResponse.json({ issues: [], nextPage: null });
         return HttpResponse.json({
           issues: triageResolved ? [{ ...issues[1]!, labels: [] }] : issues,
@@ -506,7 +501,7 @@ describe('Factory Board — Intake candidates', () => {
       },
     ]);
     const unfilteredRequestsBeforeResolve = state.issueRequests.filter(label => label === null).length;
-    const queuedRequestsBeforeResolve = state.issueRequests.filter(label => label === 'queued').length;
+    const triageRequestsBeforeResolve = state.issueRequests.filter(label => label === 'auto-triaged').length;
     triageResolved = true;
     resolveTriage();
     await waitFor(() => expect(router.state.location.pathname).toBe('/factory/board'));
@@ -514,8 +509,8 @@ describe('Factory Board — Intake candidates', () => {
       expect(state.issueRequests.filter(label => label === null).length).toBeGreaterThan(
         unfilteredRequestsBeforeResolve,
       );
-      expect(state.issueRequests.filter(label => label === 'queued').length).toBeGreaterThan(
-        queuedRequestsBeforeResolve,
+      expect(state.issueRequests.filter(label => label === 'auto-triaged').length).toBeGreaterThan(
+        triageRequestsBeforeResolve,
       );
     });
 
