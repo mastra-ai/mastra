@@ -57,8 +57,36 @@ beforeEach(async c => {
       serialized = serialized.replace(/(\\*"startedAt\\*":\s*)\d{10,}/g, '$10');
       serialized = serialized.replace(/(\\*"completedAt\\*":\s*)\d{10,}/g, '$10');
       serialized = serialized.replace(/(\\*"endedAt\\*":\s*)\d{10,}/g, '$10');
+      // Normalize wall-clock durations embedded in network completion-check feedback
+      // (e.g. "Duration: 3649ms") — replay is much faster than the recorded run.
+      serialized = serialized.replace(/Duration: \d+ms/g, 'Duration: NORMALIZEDms');
 
       const parsed = JSON.parse(serialized);
+
+      // Normalize client-generated tool call ids echoed back in Gemini
+      // functionCall/functionResponse parts — the AI SDK generates a fresh
+      // random id per run, so they can never match the recorded request.
+      const normalizeFunctionCallIds = (value: unknown): void => {
+        if (Array.isArray(value)) {
+          for (const item of value) normalizeFunctionCallIds(item);
+          return;
+        }
+        if (value && typeof value === 'object') {
+          const obj = value as Record<string, unknown>;
+          for (const [key, child] of Object.entries(obj)) {
+            if (
+              (key === 'functionCall' || key === 'functionResponse') &&
+              child &&
+              typeof child === 'object' &&
+              'id' in (child as Record<string, unknown>)
+            ) {
+              (child as Record<string, unknown>).id = 'NORMALIZED';
+            }
+            normalizeFunctionCallIds(child);
+          }
+        }
+      };
+      normalizeFunctionCallIds(parsed);
 
       return { url, body: parsed };
     },
@@ -68,8 +96,10 @@ beforeEach(async c => {
 afterEach(() => mockGateway.saveAndStop());
 
 describe('Gemini Model Compatibility Tests', () => {
-  const MODEL = 'google/gemini-2.0-flash';
-  const GEMINI_3_PRO = 'google/gemini-3-pro-preview';
+  // gemini-2.0-flash was shut down 2026-06-01 and gemini-3-pro-preview was shut
+  // down 2026-03-09, so recordings can no longer be refreshed against them.
+  const MODEL = 'google/gemini-2.5-flash';
+  const GEMINI_3_PRO = 'google/gemini-3.1-pro-preview';
 
   describe('Direct generate() method - Gemini basic functionality', () => {
     it('should handle basic generation with Gemini', async () => {

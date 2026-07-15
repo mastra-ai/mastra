@@ -403,4 +403,28 @@ describe('AgentController session registry', () => {
     expect(await controller.getSessionByResource('user-a-renamed', '/worktrees/a')).toBe(a);
     expect(await controller.getSessionByResource('user-a', '/worktrees/a')).toBeUndefined();
   });
+
+  it('exposes the authoritative scope through the session request context', async () => {
+    let observedScope: string | undefined;
+    const agent = new Agent({
+      name: 'test-agent',
+      instructions: 'You are a test agent.',
+      model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
+    });
+    const controller = new AgentController({
+      id: 'test-controller',
+      storage: new InMemoryStore(),
+      initialState: {},
+      workspace: ({ requestContext }) => {
+        observedScope = requestContext.get('controller')?.scope;
+        return createMockWorkspace();
+      },
+      modes: [{ id: 'build', name: 'Build', default: true, agent, defaultModelId: 'openai/gpt-4o' }],
+    });
+    await controller.init();
+
+    await controller.createSession({ resourceId: 'user-a', scope: '/worktrees/a' });
+
+    expect(observedScope).toBe('/worktrees/a');
+  });
 });
