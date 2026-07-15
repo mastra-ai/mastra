@@ -1,5 +1,6 @@
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Files } from '@mastra/playground-ui/components/Files';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
@@ -405,22 +406,16 @@ export function FileBrowser({
   const renderFolderActions = (node: FileTreeNode) => (
     <>
       {onCreateDirectory && (
-        <button
-          onClick={event => {
-            event.stopPropagation();
+        <DropdownMenu.Item
+          onClick={() => {
             setNewFolderName('');
             setCreateParent(node.path);
           }}
           disabled={isCreatingDirectory}
-          aria-label={`Create folder in ${node.name}`}
-          className="p-1 opacity-0 group-hover:opacity-100 hover:text-neutral6 text-neutral3 transition-all disabled:opacity-50"
         >
-          {isCreatingDirectory ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <FolderPlus className="h-3.5 w-3.5" />
-          )}
-        </button>
+          {isCreatingDirectory ? <Loader2 className="animate-spin" /> : <FolderPlus />}
+          Create folder in {node.name}
+        </DropdownMenu.Item>
       )}
       {renderDeleteAction(node)}
     </>
@@ -429,16 +424,10 @@ export function FileBrowser({
   const renderDeleteAction = (node: FileTreeNode) =>
     onDelete &&
     !node.entry.mount && (
-      <button
-        onClick={event => {
-          event.stopPropagation();
-          handleDelete(node.path);
-        }}
-        aria-label={`Delete ${node.name}`}
-        className="p-1 opacity-0 group-hover:opacity-100 hover:text-red-400 text-neutral3 transition-all"
-      >
-        <Trash2 className="h-3.5 w-3.5" />
-      </button>
+      <DropdownMenu.Item onClick={() => handleDelete(node.path)} variant="destructive">
+        <Trash2 />
+        Delete {node.name}
+      </DropdownMenu.Item>
     );
 
   const isSkillsPath = (path: string) => path === '.agents/skills' || path.startsWith('.agents/skills/');
@@ -491,62 +480,50 @@ export function FileBrowser({
         </div>
       }
       actions={
-        <div className="flex items-center gap-1">
-          {onToggleSearch && (
-            <Button
-              variant="ghost"
-              size="icon-md"
-              onClick={onToggleSearch}
-              tooltip={isSearchActive ? 'Close search' : 'Search workspace'}
-              aria-label={isSearchActive ? 'Close search' : 'Search workspace'}
-              aria-pressed={isSearchActive}
-            >
-              {isSearchActive ? <X className="h-4 w-4" /> : <Search className="h-4 w-4" />}
-            </Button>
-          )}
-          {onAddSkill && (
-            <Button variant="ghost" size="icon-md" onClick={onAddSkill} tooltip="Add skill" aria-label="Add skill">
-              <Wand2 className="h-4 w-4" />
-            </Button>
-          )}
-          {onCreateDirectory && (
-            <Button
-              variant="ghost"
-              size="icon-md"
-              onClick={() => {
-                setNewFolderName('');
-                setCreateParent('.');
-              }}
-              disabled={isCreatingDirectory}
-              tooltip="Create folder"
-              aria-label="Create folder at workspace root"
-            >
-              {isCreatingDirectory ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderPlus className="h-4 w-4" />}
-            </Button>
-          )}
-          {onRefresh && (
-            <Button
-              variant="ghost"
-              size="icon-md"
-              onClick={onRefresh}
-              disabled={isLoading}
-              tooltip="Refresh files"
-              aria-label="Refresh files"
-            >
-              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-            </Button>
-          )}
-          {onUpload && (
-            <Button variant="ghost" size="icon-md" onClick={onUpload} tooltip="Upload files" aria-label="Upload files">
-              <Upload className="h-4 w-4" />
-            </Button>
-          )}
-        </div>
+        onToggleSearch || onAddSkill || onCreateDirectory || onRefresh || onUpload ? (
+          <>
+            {onToggleSearch && (
+              <DropdownMenu.Item onClick={onToggleSearch}>
+                {isSearchActive ? <X /> : <Search />}
+                {isSearchActive ? 'Close search' : 'Search workspace'}
+              </DropdownMenu.Item>
+            )}
+            {onAddSkill && (
+              <DropdownMenu.Item onClick={onAddSkill}>
+                <Wand2 />
+                Add skill
+              </DropdownMenu.Item>
+            )}
+            {onCreateDirectory && (
+              <DropdownMenu.Item
+                onClick={() => {
+                  setNewFolderName('');
+                  setCreateParent('.');
+                }}
+                disabled={isCreatingDirectory}
+              >
+                {isCreatingDirectory ? <Loader2 className="animate-spin" /> : <FolderPlus />}
+                Create folder at workspace root
+              </DropdownMenu.Item>
+            )}
+            {onRefresh && (
+              <DropdownMenu.Item onClick={onRefresh} disabled={isLoading}>
+                <RefreshCw className={isLoading ? 'animate-spin' : undefined} />
+                Refresh files
+              </DropdownMenu.Item>
+            )}
+            {onUpload && (
+              <DropdownMenu.Item onClick={onUpload}>
+                <Upload />
+                Upload files
+              </DropdownMenu.Item>
+            )}
+          </>
+        ) : undefined
       }
       collapsible
       id="workspace-file-tree"
       minSize={200}
-      maxSize="50%"
       defaultSize={320}
       collapsedSize={60}
       footer={footer}

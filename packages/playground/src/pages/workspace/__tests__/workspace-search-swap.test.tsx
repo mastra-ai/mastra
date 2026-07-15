@@ -123,125 +123,126 @@ const renderEditor = (workspaceId = 'fs-ws') => {
 
 afterEach(() => cleanup());
 
+async function clickFileTreeAction(name: string) {
+  fireEvent.click(await screen.findByRole('button', { name: 'File tree actions' }));
+  fireEvent.click(await screen.findByRole('menuitem', { name }));
+}
+
 describe('Workspace search swap (Finder-style)', () => {
   describe('when the workspace has searchable files', () => {
     it('shows the editor by default and not the search view', async () => {
-    useSearchableWorkspaceHandlers();
+      useSearchableWorkspaceHandlers();
 
-    renderEditor();
+      renderEditor();
 
-    // The editor file-preview empty state proves the editor split is mounted.
-    expect(await screen.findByText('Select a file to preview its contents')).not.toBeNull();
-    // The search view is not mounted yet.
-    expect(screen.queryByPlaceholderText('Search workspace files...')).toBeNull();
-    // The toggle offers to open search.
-    expect(screen.getByLabelText('Search workspace')).not.toBeNull();
-  });
+      // The editor file-preview empty state proves the editor split is mounted.
+      expect(await screen.findByText('Select a file to preview its contents')).not.toBeNull();
+      // The search view is not mounted yet.
+      expect(screen.queryByPlaceholderText('Search workspace files...')).toBeNull();
+      // Search remains available from the file-tree action menu.
+      fireEvent.click(screen.getByRole('button', { name: 'File tree actions' }));
+      expect(await screen.findByRole('menuitem', { name: 'Search workspace' })).not.toBeNull();
+    });
 
-  it('opens the search view in the rail while the editor pane stays mounted', async () => {
-    useSearchableWorkspaceHandlers();
+    it('opens the search view in the rail while the editor pane stays mounted', async () => {
+      useSearchableWorkspaceHandlers();
 
-    renderEditor();
+      renderEditor();
 
-    const searchButton = await screen.findByLabelText('Search workspace');
-    fireEvent.click(searchButton);
+      await clickFileTreeAction('Search workspace');
 
-    // Search view (initial state) is now shown with its input...
-    expect(await screen.findByPlaceholderText('Search workspace files...')).not.toBeNull();
-    // ...while the preview pane (right side) stays mounted.
-    expect(screen.getByText('Select a file to preview its contents')).not.toBeNull();
-    // The toggle now offers to close search.
-    expect(screen.getByLabelText('Close search')).not.toBeNull();
-  });
+      // Search view (initial state) is now shown with its input...
+      expect(await screen.findByPlaceholderText('Search workspace files...')).not.toBeNull();
+      // ...while the preview pane (right side) stays mounted.
+      expect(screen.getByText('Select a file to preview its contents')).not.toBeNull();
+      // The toggle now offers to close search.
+      expect(screen.getByLabelText('Close search')).not.toBeNull();
+    });
 
-  it('restores the editor when search is toggled off', async () => {
-    useSearchableWorkspaceHandlers();
+    it('restores the editor when search is toggled off', async () => {
+      useSearchableWorkspaceHandlers();
 
-    renderEditor();
+      renderEditor();
 
-    const searchButton = await screen.findByLabelText('Search workspace');
-    fireEvent.click(searchButton);
+      await clickFileTreeAction('Search workspace');
 
-    const closeButton = await screen.findByLabelText('Close search');
-    fireEvent.click(closeButton);
+      const closeButton = await screen.findByLabelText('Close search');
+      fireEvent.click(closeButton);
 
-    // Editor is back and the search view is unmounted.
-    await waitFor(() => expect(screen.getByText('Select a file to preview its contents')).not.toBeNull());
-    expect(screen.queryByPlaceholderText('Search workspace files...')).toBeNull();
-  });
+      // Editor is back and the search view is unmounted.
+      await waitFor(() => expect(screen.getByText('Select a file to preview its contents')).not.toBeNull());
+      expect(screen.queryByPlaceholderText('Search workspace files...')).toBeNull();
+    });
 
-  it('swaps the file tree out for the search view in the rail (VS Code style)', async () => {
-    useSearchableWorkspaceHandlers();
+    it('swaps the file tree out for the search view in the rail (VS Code style)', async () => {
+      useSearchableWorkspaceHandlers();
 
-    renderEditor();
+      renderEditor();
 
-    // The file tree header is shown by default.
-    expect(await screen.findByText('Files')).not.toBeNull();
+      // The file tree header is shown by default.
+      expect(await screen.findByText('Files')).not.toBeNull();
 
-    const searchButton = await screen.findByLabelText('Search workspace');
-    fireEvent.click(searchButton);
+      await clickFileTreeAction('Search workspace');
 
-    // Opening search swaps the rail: the search input replaces the file tree.
-    expect(await screen.findByPlaceholderText('Search workspace files...')).not.toBeNull();
-    expect(screen.queryByText('Files')).toBeNull();
-  });
-
+      // Opening search swaps the rail: the search input replaces the file tree.
+      expect(await screen.findByPlaceholderText('Search workspace files...')).not.toBeNull();
+      expect(screen.queryByText('Files')).toBeNull();
+    });
   });
 
   describe('when the workspace is attached to an agent', () => {
     it('renders the attached agent as a badge linking back to the agent', async () => {
-    server.use(
-      http.get(`${BASE_URL}/api/workspaces`, () => HttpResponse.json(agentWorkspacesList)),
-      http.get(`${BASE_URL}/api/workspaces/agent-ws`, () => HttpResponse.json(agentWorkspaceInfo)),
-      http.get(`${BASE_URL}/api/workspaces/agent-ws/skills`, () => HttpResponse.json(emptySkills)),
-      http.get(`${BASE_URL}/api/workspaces/agent-ws/fs/list`, () => HttpResponse.json(workspaceFsListing)),
-    );
+      server.use(
+        http.get(`${BASE_URL}/api/workspaces`, () => HttpResponse.json(agentWorkspacesList)),
+        http.get(`${BASE_URL}/api/workspaces/agent-ws`, () => HttpResponse.json(agentWorkspaceInfo)),
+        http.get(`${BASE_URL}/api/workspaces/agent-ws/skills`, () => HttpResponse.json(emptySkills)),
+        http.get(`${BASE_URL}/api/workspaces/agent-ws/fs/list`, () => HttpResponse.json(workspaceFsListing)),
+      );
 
-    renderEditor('agent-ws');
+      renderEditor('agent-ws');
 
-    const badgeLink = await screen.findByRole('link', { name: /Weather Agent/ });
-    expect(badgeLink.getAttribute('href')).toBe('/agents/weather-agent/chat/new');
-  });
-
+      const badgeLink = await screen.findByRole('link', { name: /Weather Agent/ });
+      expect(badgeLink.getAttribute('href')).toBe('/agents/weather-agent/chat/new');
+    });
   });
 
   describe('when the workspace has searchable skills', () => {
     it('opens a skill search result as the rich skill view instead of navigating away', async () => {
-    server.use(
-      http.get(`${BASE_URL}/api/workspaces`, () => HttpResponse.json(skillsSearchWorkspacesList)),
-      http.get(`${BASE_URL}/api/workspaces/skills-ws`, () => HttpResponse.json(skillsSearchWorkspaceInfo)),
-      http.get(`${BASE_URL}/api/workspaces/skills-ws/skills`, () => HttpResponse.json(configuredSkills)),
-      http.get(`${BASE_URL}/api/workspaces/skills-ws/fs/list`, () => HttpResponse.json(workspaceFsListing)),
-      http.get(`${BASE_URL}/api/workspaces/skills-ws/skills/search`, () => HttpResponse.json(skillsSearchResponse)),
-      http.get(`${BASE_URL}/api/workspaces/skills-ws/fs/read`, () => HttpResponse.json(skillFileContent)),
-      http.get(`${BASE_URL}/api/workspaces/skills-ws/skills/code-review`, () =>
-        HttpResponse.json(codeReviewSkillDetails),
-      ),
-    );
+      server.use(
+        http.get(`${BASE_URL}/api/workspaces`, () => HttpResponse.json(skillsSearchWorkspacesList)),
+        http.get(`${BASE_URL}/api/workspaces/skills-ws`, () => HttpResponse.json(skillsSearchWorkspaceInfo)),
+        http.get(`${BASE_URL}/api/workspaces/skills-ws/skills`, () => HttpResponse.json(configuredSkills)),
+        http.get(`${BASE_URL}/api/workspaces/skills-ws/fs/list`, () => HttpResponse.json(workspaceFsListing)),
+        http.get(`${BASE_URL}/api/workspaces/skills-ws/skills/search`, () => HttpResponse.json(skillsSearchResponse)),
+        http.get(`${BASE_URL}/api/workspaces/skills-ws/fs/read`, () => HttpResponse.json(skillFileContent)),
+        http.get(`${BASE_URL}/api/workspaces/skills-ws/skills/code-review`, () =>
+          HttpResponse.json(codeReviewSkillDetails),
+        ),
+      );
 
-    renderEditor('skills-ws');
+      renderEditor('skills-ws');
 
-    const searchButton = await screen.findByLabelText('Search workspace');
-    fireEvent.click(searchButton);
+      await clickFileTreeAction('Search workspace');
 
-    // Before selecting, the preview pane shows its empty state.
-    expect(screen.getByText('Select a file to preview its contents')).not.toBeNull();
+      // Before selecting, the preview pane shows its empty state.
+      expect(screen.getByText('Select a file to preview its contents')).not.toBeNull();
 
-    // Run a skills search to surface a result.
-    const skillsInput = await screen.findByPlaceholderText('Search across skills...');
-    fireEvent.change(skillsInput, { target: { value: 'review' } });
+      // Run a skills search to surface a result.
+      const skillsInput = await screen.findByPlaceholderText('Search across skills...');
+      fireEvent.change(skillsInput, { target: { value: 'review' } });
 
-    const resultName = await screen.findByText('code-review', {}, { timeout: 2000 });
-    fireEvent.click(resultName.closest('button')!);
+      const resultName = await screen.findByText('code-review', {}, { timeout: 2000 });
+      fireEvent.click(resultName.closest('button')!);
 
-    // Clicking the SKILL.md result opens the rich skill view (its heading),
-    // rather than navigating away or showing the plain file viewer.
-    await waitFor(() => expect(screen.queryByText('Select a file to preview its contents')).toBeNull());
-    expect(await screen.findByRole('heading', { name: 'code-review' })).not.toBeNull();
+      // Clicking the SKILL.md result opens the rich skill view (its heading),
+      // rather than navigating away or showing the plain file viewer.
+      await waitFor(() => expect(screen.queryByText('Select a file to preview its contents')).toBeNull());
+      expect(await screen.findByRole('heading', { name: 'code-review' })).not.toBeNull();
 
-    // The search panel stays open and the typed query is preserved.
-    const stillOpen = screen.getByPlaceholderText('Search across skills...') as HTMLInputElement;
-    expect(stillOpen).not.toBeNull();
-    expect(stillOpen.value).toBe('review');
-  });  });
+      // The search panel stays open and the typed query is preserved.
+      const stillOpen = screen.getByPlaceholderText('Search across skills...') as HTMLInputElement;
+      expect(stillOpen).not.toBeNull();
+      expect(stillOpen.value).toBe('review');
+    });
+  });
 });

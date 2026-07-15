@@ -2,7 +2,7 @@
 import type { ListWorkspacesResponse, WorkspaceInfoResponse } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { forwardRef } from 'react';
 import { Link as RouterLink, Outlet, RouterProvider, createMemoryRouter } from 'react-router';
@@ -123,9 +123,7 @@ describe('WorkspacePage read-only gating', () => {
 
       // The file tree renders once fs/list resolves.
       expect(await screen.findByText('README.md')).not.toBeNull();
-      await waitFor(() =>
-        expect(screen.queryByLabelText('Create folder at workspace root')).toBeNull(),
-      );
+      await waitFor(() => expect(screen.queryByLabelText('Create folder at workspace root')).toBeNull());
     });
 
     it('does not render the delete action', async () => {
@@ -155,9 +153,13 @@ describe('WorkspacePage read-only gating', () => {
 
       // Wait for the file tree to resolve before asserting the write controls.
       expect(await screen.findByText('README.md')).not.toBeNull();
-      expect(await screen.findByLabelText('Create folder at workspace root')).not.toBeNull();
-      expect(await screen.findByLabelText('Add skill')).not.toBeNull();
-      expect(await screen.findByLabelText('Delete README.md')).not.toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'File tree actions' }));
+      expect(await screen.findByRole('menuitem', { name: 'Create folder at workspace root' })).not.toBeNull();
+      expect(screen.getByRole('menuitem', { name: 'Add skill' })).not.toBeNull();
+
+      fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+      fireEvent.click(screen.getByRole('button', { name: 'Actions for README.md' }));
+      expect(await screen.findByRole('menuitem', { name: 'Delete README.md' })).not.toBeNull();
     });
   });
 

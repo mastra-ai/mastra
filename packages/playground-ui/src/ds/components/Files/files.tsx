@@ -1,11 +1,24 @@
 /* eslint-disable react-refresh/only-export-components -- compound component implementation intentionally co-locates its public parts */
-import { ChevronRight, FileIcon, FolderIcon, Loader2 } from 'lucide-react';
+import {
+  ChevronRight,
+  FileCode2,
+  FileIcon,
+  FileJson,
+  FileText,
+  FolderIcon,
+  ImageIcon,
+  Loader2,
+  MoreHorizontal,
+} from 'lucide-react';
 import * as React from 'react';
 import { Panel } from 'react-resizable-panels';
 import type { PanelProps } from 'react-resizable-panels';
+import { Button } from '@/ds/components/Button';
+import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { Code } from '@/ds/components/Code';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { CopyButton } from '@/ds/components/CopyButton';
+import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { Tree } from '@/ds/components/Tree';
 import { CollapsiblePanel } from '@/lib/resize/collapsible-panel';
@@ -88,9 +101,9 @@ function FilesFileTree({
   collapsible,
   collapsedSize,
   id,
-  defaultSize = 30,
-  minSize = 15,
-  maxSize = 60,
+  defaultSize = '30%',
+  minSize = '15%',
+  maxSize,
   ...props
 }: FilesFileTreeProps) {
   const files = React.useContext(FilesContext);
@@ -117,8 +130,8 @@ function FilesFileTree({
     <div className="flex h-full min-h-0 flex-col bg-surface2" {...props}>
       {!hideHeader ? (
         <div className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-border1 bg-surface3 px-3">
-          <div className="min-w-0 truncate text-sm font-medium text-neutral6">{header ?? title}</div>
-          {actions ? <div className="flex shrink-0 items-center gap-1">{actions}</div> : null}
+          <div className="min-w-0 truncate text-xs font-semibold text-neutral6">{header ?? title}</div>
+          {actions ? <FilesActionMenu label="File tree actions">{actions}</FilesActionMenu> : null}
         </div>
       ) : null}
       <div className="min-h-0 flex-1 overflow-auto">{content}</div>
@@ -202,7 +215,11 @@ const FilesFolder = React.forwardRef<HTMLLIElement, FilesFolderProps>(
         className={className}
         {...props}
       >
-        <Tree.FolderTrigger actions={actions}>
+        <Tree.FolderTrigger
+          actions={
+            actions ? <FilesActionMenu label={`Actions for ${String(label)}`}>{actions}</FilesActionMenu> : undefined
+          }
+        >
           <Tree.Icon>
             {loading || isLoading ? (
               <Loader2 aria-label={`Loading ${String(label)}`} className="animate-spin" />
@@ -210,7 +227,7 @@ const FilesFolder = React.forwardRef<HTMLLIElement, FilesFolderProps>(
               (icon ?? <FolderIcon />)
             )}
           </Tree.Icon>
-          <Tree.Label>{label}</Tree.Label>
+          <Tree.Label className="text-xs font-semibold">{label}</Tree.Label>
           {metadata ? <span className="ml-auto shrink-0 text-xs text-neutral3">{metadata}</span> : null}
         </Tree.FolderTrigger>
         <Tree.FolderContent>{children}</Tree.FolderContent>
@@ -219,6 +236,79 @@ const FilesFolder = React.forwardRef<HTMLLIElement, FilesFolderProps>(
   },
 );
 FilesFolder.displayName = 'Files.Folder';
+
+function FilesActionMenu({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenu.Trigger
+        aria-label={label}
+        className="flex size-7 items-center justify-center rounded-md text-neutral3 transition-colors hover:bg-surface4 hover:text-neutral6"
+        onClick={event => event.stopPropagation()}
+        onPointerDown={event => event.stopPropagation()}
+      >
+        <MoreHorizontal className="size-4" />
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Content align="end" sideOffset={4} className="flex flex-col gap-0.5">
+        {children}
+      </DropdownMenu.Content>
+    </DropdownMenu>
+  );
+}
+
+const imageExtensions = new Set(['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp']);
+const codeExtensions = new Set([
+  'ts',
+  'tsx',
+  'js',
+  'jsx',
+  'py',
+  'rb',
+  'go',
+  'rs',
+  'java',
+  'c',
+  'cpp',
+  'css',
+  'scss',
+  'html',
+  'xml',
+  'yaml',
+  'yml',
+  'toml',
+  'sh',
+  'bash',
+  'zsh',
+  'sql',
+  'graphql',
+  'gql',
+  'vue',
+  'svelte',
+]);
+
+function getFileTypeIcon(path: string) {
+  const fileName = path.split('/').pop()?.toLowerCase() ?? path.toLowerCase();
+  const extension = fileName.split('.').pop() ?? '';
+
+  if (extension === 'ts' || extension === 'tsx') {
+    return <FileCode2 data-testid="file-icon-typescript" className="text-blue-400" />;
+  }
+  if (extension === 'js' || extension === 'jsx') {
+    return <FileCode2 data-testid="file-icon-javascript" className="text-yellow-400" />;
+  }
+  if (extension === 'json' || fileName === 'package.json' || fileName === 'tsconfig.json') {
+    return <FileJson data-testid="file-icon-json" className="text-yellow-500" />;
+  }
+  if (extension === 'md' || extension === 'mdx') {
+    return <FileText data-testid="file-icon-markdown" className="text-sky-400" />;
+  }
+  if (imageExtensions.has(extension)) {
+    return <ImageIcon data-testid="file-icon-image" className="text-purple-400" />;
+  }
+  if (codeExtensions.has(extension)) {
+    return <FileCode2 data-testid="file-icon-code" className="text-emerald-400" />;
+  }
+  return <FileIcon data-testid="file-icon-generic" className="text-neutral3" />;
+}
 
 export interface FilesFileProps extends Omit<React.HTMLAttributes<HTMLLIElement>, 'id' | 'children'> {
   id: string;
@@ -231,12 +321,12 @@ export interface FilesFileProps extends Omit<React.HTMLAttributes<HTMLLIElement>
 const FilesFile = React.forwardRef<HTMLLIElement, FilesFileProps>(
   ({ id, label, icon, metadata, actions, className, ...props }, ref) => (
     <Tree.File ref={ref} id={id} className={cn('relative', className)} {...props}>
-      <Tree.Icon>{icon ?? <FileIcon />}</Tree.Icon>
-      <Tree.Label>{label}</Tree.Label>
-      {metadata ? <span className="ml-auto shrink-0 text-xs text-neutral3">{metadata}</span> : null}
-      {actions ? (
-        <span className="ml-auto shrink-0" onClick={event => event.stopPropagation()}>
-          {actions}
+      <Tree.Icon>{icon ?? getFileTypeIcon(id)}</Tree.Icon>
+      <Tree.Label className="text-xs font-semibold">{label}</Tree.Label>
+      {metadata || actions ? (
+        <span className="ml-auto flex shrink-0 items-center gap-1">
+          {metadata ? <span className="text-xs text-neutral3">{metadata}</span> : null}
+          {actions ? <FilesActionMenu label={`Actions for ${String(label)}`}>{actions}</FilesActionMenu> : null}
         </span>
       ) : null}
     </Tree.File>
@@ -263,21 +353,23 @@ const codeLanguages: Record<string, string> = {
 };
 
 function FilePathBreadcrumb({ path }: { path: string }) {
+  const segments = path.split('/').filter(Boolean);
+  const hasFolders = segments.length > 1;
+
   return (
-    <div className="flex min-w-0 items-center gap-1 text-sm">
-      {path
-        .split('/')
-        .filter(Boolean)
-        .map((segment, index, segments) => (
-          <span key={`${segment}-${index}`} className="flex min-w-0 items-center gap-1">
-            {index > 0 ? <ChevronRight className="size-3.5 shrink-0 text-neutral3" /> : null}
-            <span
-              className={cn('truncate', index === segments.length - 1 ? 'font-medium text-neutral6' : 'text-neutral4')}
-            >
-              {segment}
-            </span>
+    <div aria-label="File path" className="flex min-w-max items-center gap-1 text-xs whitespace-nowrap">
+      {hasFolders ? (
+        <FolderIcon data-testid="file-breadcrumb-folder-icon" className="mr-0.5 size-3.5 shrink-0 text-neutral4" />
+      ) : null}
+      {segments.map((segment, index) => {
+        const isFile = index === segments.length - 1;
+        return (
+          <span key={`${segment}-${index}`} className="flex items-center gap-1">
+            {index > 0 ? <ChevronRight className="size-3 shrink-0 text-neutral3" /> : null}
+            <span className={isFile ? 'font-semibold text-neutral6' : 'text-neutral4'}>{segment}</span>
           </span>
-        ))}
+        );
+      })}
     </div>
   );
 }
@@ -293,8 +385,9 @@ export interface FilesFilePreviewProps {
   actions?: React.ReactNode;
   className?: string;
   children?: React.ReactNode;
-  defaultSize?: number;
-  minSize?: number;
+  id?: string;
+  defaultSize?: PanelProps['defaultSize'];
+  minSize?: PanelProps['minSize'];
 }
 
 function FilesFilePreview({
@@ -308,8 +401,9 @@ function FilesFilePreview({
   actions,
   className,
   children,
-  defaultSize = 70,
-  minSize = 30,
+  id,
+  defaultSize = '70%',
+  minSize = '30%',
 }: FilesFilePreviewProps) {
   const fileName = path.split('/').pop() || path;
   const extension = fileName.split('.').pop()?.toLowerCase();
@@ -370,42 +464,43 @@ function FilesFilePreview({
   }
 
   return (
-    <Panel defaultSize={defaultSize} minSize={minSize} className={cn('min-w-0', className)}>
+    <Panel id={id} defaultSize={defaultSize} minSize={minSize} className={cn('min-w-0', className)}>
       <div className="h-full min-w-0 overflow-auto bg-surface1">
-        <div className="sticky top-0 z-10 flex h-12 items-center justify-between gap-3 border-b border-border1 bg-surface3 px-4">
-          <div className="flex min-w-0 items-center gap-2">
-            {icon ?? <FileIcon className="size-4 text-neutral4" />}
-            <FilePathBreadcrumb path={path} />
+        <div className="sticky top-0 z-10 flex h-12 items-center gap-3 border-b border-border1 bg-surface3 px-4">
+          <div className="min-w-0 flex-1 overflow-x-auto">
+            <div className="flex min-w-max items-center gap-2">
+              {icon}
+              <FilePathBreadcrumb path={path} />
+            </div>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
-            {isMarkdown ? (
-              <div className="flex rounded-md border border-border1 bg-surface4 p-0.5">
-                {(['rendered', 'source'] as const).map(option => (
-                  <button
-                    key={option}
-                    type="button"
-                    aria-pressed={markdownView === option}
-                    onClick={() => setMarkdownView(option)}
-                    className={cn(
-                      'rounded-sm px-2 py-0.5 text-xs capitalize',
-                      markdownView === option && 'bg-surface2 text-neutral6',
-                    )}
+          {isMarkdown || actions || children === undefined ? (
+            <div className="flex shrink-0 items-center gap-1">
+              {isMarkdown ? (
+                <ButtonsGroup spacing="close">
+                  <Button
+                    variant={markdownView === 'rendered' ? 'default' : 'ghost'}
+                    size="xs"
+                    aria-pressed={markdownView === 'rendered'}
+                    onClick={() => setMarkdownView('rendered')}
                   >
-                    {option === 'rendered' ? 'Rendered' : 'Source'}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-            {actions}
-            {children === undefined ? (
-              <CopyButton
-                content={content}
-                copyMessage="Copied file content"
-                tooltip="Copy file content"
-                variant="ghost"
-              />
-            ) : null}
-          </div>
+                    Rendered
+                  </Button>
+                  <Button
+                    variant={markdownView === 'source' ? 'default' : 'ghost'}
+                    size="xs"
+                    aria-pressed={markdownView === 'source'}
+                    onClick={() => setMarkdownView('source')}
+                  >
+                    Source
+                  </Button>
+                </ButtonsGroup>
+              ) : null}
+              {actions}
+              {children === undefined ? (
+                <CopyButton content={content} tooltip="Copy file content" copyMessage="Copied file content" size="sm" />
+              ) : null}
+            </div>
+          ) : null}
         </div>
         {body}
       </div>

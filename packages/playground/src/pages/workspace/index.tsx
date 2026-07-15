@@ -454,7 +454,6 @@ export default function Workspace() {
                 collapsible
                 id="workspace-file-tree"
                 minSize={200}
-                maxSize="50%"
                 defaultSize={320}
                 collapsedSize={60}
                 footer={attachedEntity}
@@ -493,6 +492,7 @@ export default function Workspace() {
               />
             )}
             <Files.FilePreview
+              id="workspace-file-preview"
               path={selectedFile ?? undefined}
               content={fileContent?.content ?? ''}
               loading={isLoadingFileContent || (selectedSkill ? isLoadingSkillDetail : false)}

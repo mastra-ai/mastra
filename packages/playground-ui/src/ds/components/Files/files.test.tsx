@@ -86,8 +86,51 @@ describe('Files', () => {
     });
   });
 
-  describe('when callers decorate tree rows', () => {
-    it('renders custom icons, metadata, and actions without triggering selection', async () => {
+  describe('when file rows are presented', () => {
+    it('uses compact semibold labels', () => {
+      renderFiles();
+
+      expect(screen.getByText('Files').parentElement?.className).toContain('text-xs');
+      expect(within(getTreeItem('Button.tsx')).getByText('Button.tsx').className).toContain('text-xs');
+      expect(within(getTreeItem('Button.tsx')).getByText('Button.tsx').className).toContain('font-semibold');
+    });
+
+    it('automatically distinguishes known and unknown file types with colored and neutral icons', () => {
+      render(
+        <Files>
+          <Files.FileTree>
+            <Files.File id="src/index.ts" label="index.ts" />
+            <Files.File id="archive.custom" label="archive.custom" />
+          </Files.FileTree>
+          <Files.FilePreview />
+        </Files>,
+      );
+
+      expect(within(getTreeItem('index.ts')).getByTestId('file-icon-typescript').getAttribute('class')).toMatch(
+        /text-blue/,
+      );
+      expect(within(getTreeItem('archive.custom')).getByTestId('file-icon-generic').getAttribute('class')).toMatch(
+        /text-neutral/,
+      );
+    });
+
+    it('preserves an explicit caller-provided icon', () => {
+      render(
+        <Files>
+          <Files.FileTree>
+            <Files.File id="package.json" label="package.json" icon={<span>Custom JSON icon</span>} />
+          </Files.FileTree>
+          <Files.FilePreview />
+        </Files>,
+      );
+
+      expect(screen.getByText('Custom JSON icon')).not.toBeNull();
+      expect(screen.queryByTestId('file-icon-json')).toBeNull();
+    });
+  });
+
+  describe('when callers provide tree row actions', () => {
+    it('hides actions behind an accessible menu and does not select the row when an action is used', async () => {
       const onSelect = vi.fn();
       const onAction = vi.fn();
 
@@ -97,7 +140,6 @@ describe('Files', () => {
             <Files.File
               id="package.json"
               label="package.json"
-              icon={<span>JSON icon</span>}
               metadata={<span>2 KB</span>}
               actions={<button onClick={onAction}>Delete package.json</button>}
             />
@@ -106,11 +148,35 @@ describe('Files', () => {
         </Files>,
       );
 
-      expect(screen.getByText('JSON icon')).not.toBeNull();
-      expect(screen.getByText('2 KB')).not.toBeNull();
-      fireEvent.click(screen.getByRole('button', { name: 'Delete package.json' }));
+      const metadata = screen.getByText('2 KB');
+      const actionTrigger = screen.getByRole('button', { name: 'Actions for package.json' });
+      expect(metadata.parentElement?.parentElement).toBe(actionTrigger.parentElement);
+      expect(metadata.parentElement?.parentElement?.className).toContain('gap-1');
+      expect(screen.queryByRole('button', { name: 'Delete package.json' })).toBeNull();
+
+      fireEvent.click(actionTrigger);
+      fireEvent.click(await screen.findByRole('button', { name: 'Delete package.json' }));
+
       expect(onAction).toHaveBeenCalledTimes(1);
       expect(onSelect).not.toHaveBeenCalled();
+    });
+
+    it('does not collapse a folder when its action menu is opened', () => {
+      render(
+        <Files>
+          <Files.FileTree>
+            <Files.Folder id="src" label="src" defaultOpen actions={<button>Delete src</button>}>
+              <Files.File id="src/index.ts" label="index.ts" />
+            </Files.Folder>
+          </Files.FileTree>
+          <Files.FilePreview />
+        </Files>,
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Actions for src' }));
+
+      expect(getTreeItem('src').getAttribute('aria-expanded')).toBe('true');
+      expect(screen.getByText('index.ts')).not.toBeNull();
     });
   });
 
@@ -159,6 +225,51 @@ describe('Files', () => {
 
       expect(screen.getByRole('separator')).not.toBeNull();
     });
+
+    it('preserves caller-defined panel IDs for persisted resize layouts', () => {
+      render(
+        <Files>
+          <Files.FileTree id="file-tree-panel" />
+          <Files.FilePreview id="file-preview-panel" />
+        </Files>,
+      );
+
+      expect(document.getElementById('file-tree-panel')).not.toBeNull();
+      expect(document.getElementById('file-preview-panel')).not.toBeNull();
+    });
+  });
+
+  describe('when a file is previewed', () => {
+    it('does not show an automatic file-type icon for a root file', () => {
+      render(
+        <Files>
+          <Files.FileTree />
+          <Files.FilePreview path="README.md" content="# Project" />
+        </Files>,
+      );
+
+      expect(screen.queryByTestId('file-icon-markdown')).toBeNull();
+    });
+
+    it('shows every nested path segment with stronger folder hierarchy and a leading folder icon', () => {
+      render(
+        <Files>
+          <Files.FileTree />
+          <Files.FilePreview path="src/components/forms/Button.tsx" content="export const Button = () => null;" />
+        </Files>,
+      );
+
+      const breadcrumb = screen.getByLabelText('File path');
+      expect(within(breadcrumb).getByTestId('file-breadcrumb-folder-icon')).not.toBeNull();
+      expect(within(breadcrumb).getByText('src').className).toContain('text-neutral4');
+      expect(within(breadcrumb).getByText('components').className).toContain('text-neutral4');
+      expect(within(breadcrumb).getByText('forms').className).toContain('text-neutral4');
+      expect(within(breadcrumb).getByText('Button.tsx').className).toContain('text-neutral6');
+      expect(within(breadcrumb).getByText('Button.tsx').className).toContain('font-semibold');
+      expect(breadcrumb.textContent).toContain('srccomponentsformsButton.tsx');
+      expect(breadcrumb.className).toContain('text-xs');
+      expect(breadcrumb.querySelector('.truncate')).toBeNull();
+    });
   });
 
   describe('when markdown content is previewed', () => {
@@ -174,7 +285,10 @@ describe('Files', () => {
       expect(screen.queryByText('title: Hidden metadata')).toBeNull();
     });
 
-    it('switches to the complete markdown source', async () => {
+    it('shows markdown view switching and copy directly in the breadcrumb line', () => {
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+
       render(
         <Files selectedPath="guide.md" onSelect={() => {}}>
           <Files.FileTree />
@@ -182,9 +296,18 @@ describe('Files', () => {
         </Files>,
       );
 
+      expect(screen.queryByRole('button', { name: 'Preview actions' })).toBeNull();
+      expect(screen.getByRole('button', { name: 'Rendered' }).getAttribute('aria-pressed')).toBe('true');
+      expect(screen.getByRole('button', { name: 'Source' }).getAttribute('aria-pressed')).toBe('false');
+
       fireEvent.click(screen.getByRole('button', { name: 'Source' }));
 
+      expect(screen.getByRole('button', { name: 'Rendered' }).getAttribute('aria-pressed')).toBe('false');
+      expect(screen.getByRole('button', { name: 'Source' }).getAttribute('aria-pressed')).toBe('true');
       expect(screen.getByText(/title: Metadata/)).not.toBeNull();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Copy file content' }));
+      expect(writeText).toHaveBeenCalledWith('---\ntitle: Metadata\n---\n# Guide');
     });
   });
 
@@ -227,7 +350,7 @@ describe('Files', () => {
         </Files>,
       );
 
-      fireEvent.click(screen.getByRole('button', { name: /copy/i }));
+      fireEvent.click(screen.getByRole('button', { name: 'Copy file content' }));
 
       expect(writeText).toHaveBeenCalledWith('copy me');
     });

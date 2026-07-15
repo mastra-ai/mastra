@@ -53,241 +53,255 @@ function getTreeItemById(id: string) {
   return item;
 }
 
+function getFolderTriggerById(id: string) {
+  const trigger = getTreeItemById(id).querySelector('[data-tree-folder-trigger]');
+  if (!(trigger instanceof HTMLElement)) {
+    throw new Error(`Missing folder trigger ${id}`);
+  }
+  return trigger;
+}
+
 describe('FileBrowser', () => {
   describe('when recursive workspace entries are rendered', () => {
     it('renders a recursive root tree without breadcrumb or parent-directory navigation', () => {
-    renderFileBrowser();
+      renderFileBrowser();
 
-    expect(screen.queryByLabelText('Workspace root')).toBeNull();
-    expect(screen.queryByRole('button', { name: '..' })).toBeNull();
-    expect(getTreeItemById('src')).not.toBeNull();
-    expect(getTreeItemById('src/components')).not.toBeNull();
-    expect(getTreeItemById('src/components/Button.tsx')).not.toBeNull();
-    expect(getTreeItemById('README.md')).not.toBeNull();
-  });
+      expect(screen.queryByLabelText('Workspace root')).toBeNull();
+      expect(screen.queryByRole('button', { name: '..' })).toBeNull();
+      expect(getTreeItemById('src')).not.toBeNull();
+      expect(getTreeItemById('src/components')).not.toBeNull();
+      expect(getTreeItemById('src/components/Button.tsx')).not.toBeNull();
+      expect(getTreeItemById('README.md')).not.toBeNull();
+    });
 
-  it('expands and collapses nested folders in place without navigating', () => {
-    const { onNavigate, onFileSelect } = renderFileBrowser();
-    const src = getTreeItemById('src');
+    it('expands and collapses nested folders in place without navigating', () => {
+      const { onNavigate, onFileSelect } = renderFileBrowser();
+      const src = getTreeItemById('src');
 
-    expect(src.getAttribute('aria-expanded')).toBe('true');
-    fireEvent.click(within(src).getByRole('button', { name: /src/i }));
+      expect(src.getAttribute('aria-expanded')).toBe('true');
+      fireEvent.click(getFolderTriggerById('src'));
 
-    expect(src.getAttribute('aria-expanded')).toBe('false');
-    expect(onNavigate).not.toHaveBeenCalled();
-    expect(onFileSelect).not.toHaveBeenCalled();
-  });
+      expect(src.getAttribute('aria-expanded')).toBe('false');
+      expect(onNavigate).not.toHaveBeenCalled();
+      expect(onFileSelect).not.toHaveBeenCalled();
+    });
 
-  it('selects nested files by full path without navigating', () => {
-    const { onFileSelect, onNavigate } = renderFileBrowser();
+    it('selects nested files by full path without navigating', () => {
+      const { onFileSelect, onNavigate } = renderFileBrowser();
 
-    fireEvent.click(within(getTreeItemById('src/components/Button.tsx')).getByText('Button.tsx'));
+      fireEvent.click(within(getTreeItemById('src/components/Button.tsx')).getByText('Button.tsx'));
 
-    expect(onFileSelect).toHaveBeenCalledWith('src/components/Button.tsx');
-    expect(onNavigate).not.toHaveBeenCalled();
-  });
+      expect(onFileSelect).toHaveBeenCalledWith('src/components/Button.tsx');
+      expect(onNavigate).not.toHaveBeenCalled();
+    });
 
-  it('selects files with the keyboard without navigating', () => {
-    const { onFileSelect, onNavigate } = renderFileBrowser();
-    const file = getTreeItemById('README.md');
+    it('selects files with the keyboard without navigating', () => {
+      const { onFileSelect, onNavigate } = renderFileBrowser();
+      const file = getTreeItemById('README.md');
 
-    file.focus();
-    fireEvent.keyDown(within(file).getByText('README.md'), { key: 'Enter' });
+      file.focus();
+      fireEvent.keyDown(within(file).getByText('README.md'), { key: 'Enter' });
 
-    expect(onFileSelect).toHaveBeenCalledWith('README.md');
-    expect(onNavigate).not.toHaveBeenCalled();
-  });
+      expect(onFileSelect).toHaveBeenCalledWith('README.md');
+      expect(onNavigate).not.toHaveBeenCalled();
+    });
 
-  it('marks skills folders and files as a distinct tree location', () => {
-    renderFileBrowser();
+    it('marks skills folders and files as a distinct tree location', () => {
+      renderFileBrowser();
 
-    expect(getTreeItemById('.agents/skills').dataset.workspaceTreeLocation).toBe('skills');
-    expect(getTreeItemById('.agents/skills/code-review').dataset.workspaceTreeLocation).toBe('skills');
-    expect(getTreeItemById('.agents/skills/code-review/SKILL.md').dataset.workspaceTreeLocation).toBe('skills');
-    expect(getTreeItemById('src').dataset.workspaceTreeLocation).toBeUndefined();
-  });
+      expect(getTreeItemById('.agents/skills').dataset.workspaceTreeLocation).toBe('skills');
+      expect(getTreeItemById('.agents/skills/code-review').dataset.workspaceTreeLocation).toBe('skills');
+      expect(getTreeItemById('.agents/skills/code-review/SKILL.md').dataset.workspaceTreeLocation).toBe('skills');
+      expect(getTreeItemById('src').dataset.workspaceTreeLocation).toBeUndefined();
+    });
 
-  it('reserves the accent skill icon for skill roots, not the whole .agents/skills subtree', () => {
-    renderFileBrowser({ skillPaths: new Set(['.agents/skills/code-review']) });
+    it('reserves the accent skill icon for skill roots, not the whole .agents/skills subtree', () => {
+      renderFileBrowser({ skillPaths: new Set(['.agents/skills/code-review']) });
 
-    // The skill root folder carries the accent skill icon.
-    const skillRootTrigger = getTreeItemById('.agents/skills/code-review').querySelector('[data-tree-folder-trigger]');
-    expect(skillRootTrigger?.querySelector('svg[class*="text-accent1"]')).not.toBeNull();
+      // The skill root folder carries the accent skill icon.
+      const skillRootTrigger =
+        getTreeItemById('.agents/skills/code-review').querySelector('[data-tree-folder-trigger]');
+      expect(skillRootTrigger?.querySelector('svg[class*="text-accent1"]')).not.toBeNull();
 
-    // Container folders and files inside the skill are NOT accent-colored (no spray).
-    const containerTrigger = getTreeItemById('.agents/skills').querySelector('[data-tree-folder-trigger]');
-    expect(containerTrigger?.querySelector('svg[class*="text-accent1"]')).toBeNull();
-    expect(
-      getTreeItemById('.agents/skills/code-review/SKILL.md').querySelector('svg[class*="text-accent1"]'),
-    ).toBeNull();
-  });
+      // Container folders and files inside the skill are NOT accent-colored (no spray).
+      const containerTrigger = getTreeItemById('.agents/skills').querySelector('[data-tree-folder-trigger]');
+      expect(containerTrigger?.querySelector('svg[class*="text-accent1"]')).toBeNull();
+      expect(
+        getTreeItemById('.agents/skills/code-review/SKILL.md').querySelector('svg[class*="text-accent1"]'),
+      ).toBeNull();
+    });
 
-  it('creates a folder at the workspace root from the header action', async () => {
-    const user = userEvent.setup();
-    const onCreateDirectory = vi.fn();
+    it('creates a folder at the workspace root from the header action', async () => {
+      const user = userEvent.setup();
+      const onCreateDirectory = vi.fn();
 
-    renderFileBrowser({ onCreateDirectory });
+      renderFileBrowser({ onCreateDirectory });
 
-    await user.click(screen.getByRole('button', { name: /create folder at workspace root/i }));
-    await user.type(screen.getByLabelText('Folder name'), 'packages');
-    await user.click(screen.getByRole('button', { name: /^create$/i }));
+      await user.click(screen.getByRole('button', { name: 'File tree actions' }));
+      await user.click(await screen.findByRole('menuitem', { name: /create folder at workspace root/i }));
+      await user.type(screen.getByLabelText('Folder name'), 'packages');
+      await user.click(screen.getByRole('button', { name: /^create$/i }));
 
-    expect(onCreateDirectory).toHaveBeenCalledWith('packages');
-  });
+      expect(onCreateDirectory).toHaveBeenCalledWith('packages');
+    });
 
-  it('shows an add-skill action in the header only when onAddSkill is provided', () => {
-    const { rerender } = render(
-      <FileBrowser entries={recursiveEntries} currentPath="." isLoading={false} onNavigate={() => {}} />,
-    );
-    expect(screen.queryByRole('button', { name: /add skill/i })).toBeNull();
+    it('shows an add-skill action in the header menu only when onAddSkill is provided', async () => {
+      const user = userEvent.setup();
+      const { rerender } = render(
+        <FileBrowser entries={recursiveEntries} currentPath="." isLoading={false} onNavigate={() => {}} />,
+      );
+      expect(screen.queryByRole('button', { name: 'File tree actions' })).toBeNull();
 
-    const onAddSkill = vi.fn();
-    rerender(
-      <FileBrowser
-        entries={recursiveEntries}
-        currentPath="."
-        isLoading={false}
-        onNavigate={() => {}}
-        onAddSkill={onAddSkill}
-      />,
-    );
+      const onAddSkill = vi.fn();
+      rerender(
+        <FileBrowser
+          entries={recursiveEntries}
+          currentPath="."
+          isLoading={false}
+          onNavigate={() => {}}
+          onAddSkill={onAddSkill}
+        />,
+      );
 
-    fireEvent.click(screen.getByRole('button', { name: /add skill/i }));
-    expect(onAddSkill).toHaveBeenCalledTimes(1);
-  });
+      await user.click(screen.getByRole('button', { name: 'File tree actions' }));
+      await user.click(await screen.findByRole('menuitem', { name: /add skill/i }));
+      expect(onAddSkill).toHaveBeenCalledTimes(1);
+    });
 
-  it('shows a search toggle in the header that reflects the active state', () => {
-    const onToggleSearch = vi.fn();
-    const { rerender } = render(
-      <FileBrowser
-        entries={recursiveEntries}
-        currentPath="."
-        isLoading={false}
-        onNavigate={() => {}}
-        onToggleSearch={onToggleSearch}
-      />,
-    );
+    it('shows a search toggle in the header menu that reflects the active state', async () => {
+      const user = userEvent.setup();
+      const onToggleSearch = vi.fn();
+      const { rerender } = render(
+        <FileBrowser
+          entries={recursiveEntries}
+          currentPath="."
+          isLoading={false}
+          onNavigate={() => {}}
+          onToggleSearch={onToggleSearch}
+        />,
+      );
 
-    fireEvent.click(screen.getByRole('button', { name: /search workspace/i }));
-    expect(onToggleSearch).toHaveBeenCalledTimes(1);
+      await user.click(screen.getByRole('button', { name: 'File tree actions' }));
+      await user.click(await screen.findByRole('menuitem', { name: /search workspace/i }));
+      expect(onToggleSearch).toHaveBeenCalledTimes(1);
 
-    rerender(
-      <FileBrowser
-        entries={recursiveEntries}
-        currentPath="."
-        isLoading={false}
-        onNavigate={() => {}}
-        onToggleSearch={onToggleSearch}
-        isSearchActive
-      />,
-    );
+      rerender(
+        <FileBrowser
+          entries={recursiveEntries}
+          currentPath="."
+          isLoading={false}
+          onNavigate={() => {}}
+          onToggleSearch={onToggleSearch}
+          isSearchActive
+        />,
+      );
 
-    expect(screen.getByRole('button', { name: /close search/i })).not.toBeNull();
-  });
-
+      await user.click(screen.getByRole('button', { name: 'File tree actions' }));
+      expect(await screen.findByRole('menuitem', { name: /close search/i })).not.toBeNull();
+    });
   });
 
   describe('when folders are loaded lazily', () => {
     it('lazily loads folder children on expand and keeps folders collapsed by default', () => {
-    const onLoadFolder = vi.fn();
-    renderFileBrowser({
-      entries: [{ name: 'src', type: 'directory' }],
-      onLoadFolder,
+      const onLoadFolder = vi.fn();
+      renderFileBrowser({
+        entries: [{ name: 'src', type: 'directory' }],
+        onLoadFolder,
+      });
+
+      const src = getTreeItemById('src');
+      expect(src.getAttribute('aria-expanded')).toBe('false');
+      expect(onLoadFolder).not.toHaveBeenCalled();
+
+      fireEvent.click(getFolderTriggerById('src'));
+
+      expect(src.getAttribute('aria-expanded')).toBe('true');
+      expect(onLoadFolder).toHaveBeenCalledWith('src');
     });
-
-    const src = getTreeItemById('src');
-    expect(src.getAttribute('aria-expanded')).toBe('false');
-    expect(onLoadFolder).not.toHaveBeenCalled();
-
-    fireEvent.click(within(src).getByRole('button', { name: /src/i }));
-
-    expect(src.getAttribute('aria-expanded')).toBe('true');
-    expect(onLoadFolder).toHaveBeenCalledWith('src');
-  });
-
   });
 
   describe('when directory creation is available', () => {
     it('creates directories inside the selected folder tree item', async () => {
-    const user = userEvent.setup();
-    const onCreateDirectory = vi.fn();
+      const user = userEvent.setup();
+      const onCreateDirectory = vi.fn();
 
-    renderFileBrowser({ onCreateDirectory });
+      renderFileBrowser({ onCreateDirectory });
 
-    expect(screen.queryByRole('button', { name: /^create directory$/i })).toBeNull();
-    await user.click(
-      within(getTreeItemById('src/components')).getByRole('button', { name: /create folder in components/i }),
-    );
+      expect(screen.queryByRole('menuitem', { name: /create folder in components/i })).toBeNull();
+      await user.click(
+        within(getTreeItemById('src/components')).getByRole('button', { name: /actions for components/i }),
+      );
+      await user.click(await screen.findByRole('menuitem', { name: /create folder in components/i }));
 
-    await user.type(screen.getByLabelText('Folder name'), 'docs');
-    await user.click(screen.getByRole('button', { name: /^create$/i }));
+      await user.type(screen.getByLabelText('Folder name'), 'docs');
+      await user.click(screen.getByRole('button', { name: /^create$/i }));
 
-    expect(onCreateDirectory).toHaveBeenCalledWith('src/components/docs');
-  });
-
+      expect(onCreateDirectory).toHaveBeenCalledWith('src/components/docs');
+    });
   });
 
   describe('when delete actions are available', () => {
-    it('opens delete confirmation for nested entries without navigating or selecting', () => {
-    const onDelete = vi.fn();
-    const { onNavigate, onFileSelect } = renderFileBrowser({ onDelete });
+    it('opens delete confirmation for nested entries without navigating or selecting', async () => {
+      const user = userEvent.setup();
+      const onDelete = vi.fn();
+      const { onNavigate, onFileSelect } = renderFileBrowser({ onDelete });
 
-    fireEvent.click(screen.getByRole('button', { name: /delete Button\.tsx/i }));
+      await user.click(
+        within(getTreeItemById('src/components/Button.tsx')).getByRole('button', { name: /actions for Button\.tsx/i }),
+      );
+      await user.click(await screen.findByRole('menuitem', { name: /delete Button\.tsx/i }));
 
-    expect(screen.getByText(/Are you sure you want to delete "src\/components\/Button\.tsx"\?/i)).not.toBeNull();
-    expect(onNavigate).not.toHaveBeenCalled();
-    expect(onFileSelect).not.toHaveBeenCalled();
-  });
-
+      expect(screen.getByText(/Are you sure you want to delete "src\/components\/Button\.tsx"\?/i)).not.toBeNull();
+      expect(onNavigate).not.toHaveBeenCalled();
+      expect(onFileSelect).not.toHaveBeenCalled();
+    });
   });
 
   describe('when a path is selected', () => {
     it('marks the selected path as selected in the tree', () => {
-    renderFileBrowser({ selectedPath: 'README.md' });
+      renderFileBrowser({ selectedPath: 'README.md' });
 
-    expect(getTreeItemById('README.md').getAttribute('aria-selected')).toBe('true');
-    expect(getTreeItemById('src').getAttribute('aria-selected')).toBeNull();
-  });
-
+      expect(getTreeItemById('README.md').getAttribute('aria-selected')).toBe('true');
+      expect(getTreeItemById('src').getAttribute('aria-selected')).toBeNull();
+    });
   });
 
   describe('when a skill folder is present', () => {
     it('expands a skill folder on click without selecting a file (rich view lives on SKILL.md)', () => {
-    const { onFileSelect } = renderFileBrowser({
-      skillPaths: new Set(['.agents/skills/code-review']),
+      const { onFileSelect } = renderFileBrowser({
+        skillPaths: new Set(['.agents/skills/code-review']),
+      });
+
+      const skillFolder = getTreeItemById('.agents/skills/code-review');
+      expect(skillFolder.getAttribute('aria-expanded')).toBe('true');
+      fireEvent.click(getFolderTriggerById('.agents/skills/code-review'));
+
+      // Collapses like any folder; selecting the skill itself is not a thing.
+      expect(skillFolder.getAttribute('aria-expanded')).toBe('false');
+      expect(onFileSelect).not.toHaveBeenCalled();
     });
-
-    const skillFolder = getTreeItemById('.agents/skills/code-review');
-    expect(skillFolder.getAttribute('aria-expanded')).toBe('true');
-    fireEvent.click(within(skillFolder).getByRole('button', { name: /code-review/i }));
-
-    // Collapses like any folder; selecting the skill itself is not a thing.
-    expect(skillFolder.getAttribute('aria-expanded')).toBe('false');
-    expect(onFileSelect).not.toHaveBeenCalled();
-  });
-
   });
 
   describe('when a mount entry errors', () => {
     it('renders mount error metadata for mount entries', () => {
-    renderFileBrowser({
-      entries: [
-        {
-          name: 'cloud-drive',
-          type: 'directory',
-          mount: {
-            provider: 's3',
-            displayName: 'S3',
-            description: 'Production bucket',
-            status: 'error',
-            error: 'Credentials expired',
+      renderFileBrowser({
+        entries: [
+          {
+            name: 'cloud-drive',
+            type: 'directory',
+            mount: {
+              provider: 's3',
+              displayName: 'S3',
+              description: 'Production bucket',
+              status: 'error',
+              error: 'Credentials expired',
+            },
           },
-        },
-      ],
-    });
+        ],
+      });
 
-    expect(screen.getByText('S3')).not.toBeNull();
-    expect(getTreeItemById('cloud-drive')).not.toBeNull();
+      expect(screen.getByText('S3')).not.toBeNull();
+      expect(getTreeItemById('cloud-drive')).not.toBeNull();
     });
   });
 });

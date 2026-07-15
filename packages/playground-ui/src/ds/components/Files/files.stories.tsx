@@ -1,7 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { FileJson, FolderGit2, Trash2 } from 'lucide-react';
+import { Download, FolderGit2, Pencil, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { Files } from './files';
+import { Button } from '@/ds/components/Button';
+import { DropdownMenu } from '@/ds/components/DropdownMenu';
 
 const meta: Meta<typeof Files> = {
   title: 'DataDisplay/Files',
@@ -20,34 +22,56 @@ export default meta;
 type Story = StoryObj<typeof Files>;
 
 const contents: Record<string, string> = {
-  'src/index.ts': "export const greeting = 'Hello, world';",
+  'src/features/workspace/index.ts': "export const greeting = 'Hello, world';",
   'package.json': '{\n  "name": "example"\n}',
   'README.md': '---\ntitle: Example\n---\n# Example project\n\nSelect a file to preview it.',
+  'archive.custom': 'Unknown file types use a neutral generic icon.',
 };
 
 function BasicFiles() {
-  const [selectedPath, setSelectedPath] = useState('README.md');
+  const [selectedPath, setSelectedPath] = useState('src/features/workspace/index.ts');
 
   return (
     <Files selectedPath={selectedPath} onSelect={setSelectedPath}>
       <Files.FileTree header={<span>Project files</span>}>
-        <Files.Folder id="src" label="src" defaultOpen>
-          <Files.File id="src/index.ts" label="index.ts" metadata="1 KB" />
+        <Files.Folder
+          id="src"
+          label="src"
+          defaultOpen
+          actions={
+            <DropdownMenu.Item>
+              <Pencil /> Rename folder
+            </DropdownMenu.Item>
+          }
+        >
+          <Files.Folder id="src/features" label="features" defaultOpen>
+            <Files.Folder id="src/features/workspace" label="workspace" defaultOpen>
+              <Files.File id="src/features/workspace/index.ts" label="index.ts" metadata="1 KB" />
+            </Files.Folder>
+          </Files.Folder>
         </Files.Folder>
         <Files.File
           id="package.json"
           label="package.json"
-          icon={<FileJson />}
           metadata="2 KB"
           actions={
-            <button type="button" aria-label="Delete package.json">
-              <Trash2 className="size-3.5" />
-            </button>
+            <DropdownMenu.Item>
+              <Trash2 /> Delete package.json
+            </DropdownMenu.Item>
           }
         />
         <Files.File id="README.md" label="README.md" />
+        <Files.File id="archive.custom" label="archive.custom" />
       </Files.FileTree>
-      <Files.FilePreview path={selectedPath} content={contents[selectedPath] ?? ''} />
+      <Files.FilePreview
+        path={selectedPath}
+        content={contents[selectedPath] ?? ''}
+        actions={
+          <Button variant="ghost" size="icon-sm" tooltip="Download file">
+            <Download />
+          </Button>
+        }
+      />
     </Files>
   );
 }

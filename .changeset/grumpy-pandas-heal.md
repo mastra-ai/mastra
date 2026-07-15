@@ -2,7 +2,7 @@
 '@mastra/playground-ui': minor
 ---
 
-Added reusable `Files` compound components for building controlled file trees and previews.
+Added reusable `Files` compound components with compact file trees, recognizable file-type icons, complete preview breadcrumbs, and accessible action menus.
 
 ```tsx
 <Files selectedPath={selectedPath} onSelect={setSelectedPath}>

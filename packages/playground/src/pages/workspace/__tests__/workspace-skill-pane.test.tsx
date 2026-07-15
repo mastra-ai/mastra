@@ -136,8 +136,8 @@ describe('Workspace skill overview pane', () => {
 
       renderEditor('/workspaces/skills-ws?file=README.md');
 
-      // A regular file shows the file viewer (its copy-content action).
-      expect(await screen.findByLabelText('Copy file content')).not.toBeNull();
+      // A regular file exposes the file viewer's icon-only copy action.
+      expect(await screen.findByRole('button', { name: 'Copy file content' })).not.toBeNull();
     });
   });
 });

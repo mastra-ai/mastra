@@ -15,6 +15,10 @@ export const TreeFile = React.forwardRef<HTMLLIElement, TreeFileProps>(({ id, cl
   const isSelected = id != null && treeCtx?.selectedId === id;
 
   const handleClick = (e: React.MouseEvent<HTMLLIElement>) => {
+    if (e.target instanceof Element && e.target.closest('button, a, input, select, textarea, [role="menuitem"]')) {
+      return;
+    }
+
     treeCtx?.focusItem?.(e.currentTarget);
     if (id != null && treeCtx?.onSelect) {
       treeCtx.onSelect(id);
