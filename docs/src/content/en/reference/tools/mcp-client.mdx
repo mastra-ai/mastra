@@ -327,6 +327,14 @@ Returns the OAuth authorization state of a configured server: `'needs-auth'` aft
 getServerAuthState(serverName: string): 'needs-auth' | 'authorized' | undefined
 ```
 
+### `cancelAuthentication()`
+
+Cancels an in-progress `authenticate()` flow for a server, so an abandoned browser authorization does not leave the client waiting indefinitely. It aborts the flow (including its setup phase, before the callback server binds), closes the local callback server if one is listening, and returns the server to `'needs-auth'`. The pending `authenticate()` call rejects. Returns `true` if a flow was cancelled, or `false` when no flow was in progress.
+
+```typescript prettier:false
+async cancelAuthentication(serverName: string): Promise<boolean>
+```
+
 ### `disconnect()`
 
 Disconnects from all MCP servers and cleans up resources.
@@ -981,7 +989,7 @@ try {
 
 Concurrent `authenticate()` calls for the same server join the pending flow; different servers authenticate independently. With valid stored tokens the call simply reconnects without opening a browser.
 
-Hosts with custom redirect handling (for example a web app with an HTTPS redirect URL) can capture the authorization code themselves with the exported `createOAuthCallbackServer` helper, which binds a one-shot loopback server, validates the OAuth `state` parameter, and resolves with the code:
+Hosts that drive the flow themselves can capture the authorization code with the exported `createOAuthCallbackServer` helper, which binds a one-shot loopback server, validates the OAuth `state` parameter, and resolves with the code. It creates a plain HTTP server, so it is only for local loopback redirects. Web applications that use an HTTPS redirect URL must host their own callback endpoint and drive the provider directly rather than using this helper:
 
 ```typescript
 import { createOAuthCallbackServer, getCallbackUrlCandidates } from '@mastra/mcp'
@@ -994,8 +1002,12 @@ const server = await createOAuthCallbackServer({
 // server.url reflects any port fallback — use it as the redirect_uri.
 // getCallbackUrlCandidates() lists every URL the helper may bind, so all
 // of them can be registered as redirect_uris during client registration.
-const { code } = await server.waitForCode()
-await server.close()
+try {
+  const { code } = await server.waitForCode()
+  // Exchange the code here.
+} finally {
+  await server.close()
+}
 ```
 
 ### Quick Token Provider
