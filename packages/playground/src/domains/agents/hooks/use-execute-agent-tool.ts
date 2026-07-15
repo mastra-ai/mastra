@@ -1,4 +1,5 @@
 import { RequestContext } from '@mastra/core/di';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import { useMutation } from '@tanstack/react-query';
 
@@ -23,6 +24,7 @@ export const useExecuteAgentTool = () => {
 
         return response;
       } catch (error) {
+        toast.error('Error executing agent tool');
         console.error('Error executing tool:', error);
         throw error;
       }

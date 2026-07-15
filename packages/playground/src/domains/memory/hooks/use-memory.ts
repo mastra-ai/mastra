@@ -1,4 +1,5 @@
 import type { GetObservationalMemoryResponse, GetMemoryStatusResponse } from '@mastra/client-js';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, useEffect } from 'react';
@@ -92,6 +93,10 @@ export const useDeleteThread = () => {
       if (agentId) {
         void queryClient.invalidateQueries({ queryKey: ['memory', 'threads', agentId, agentId] });
       }
+      toast.success('Chat deleted successfully');
+    },
+    onError: () => {
+      toast.error('Failed to delete chat');
     },
   });
 };
@@ -129,6 +134,10 @@ export const useCloneThread = () => {
       if (agentId) {
         void queryClient.invalidateQueries({ queryKey: ['memory', 'threads', agentId, agentId] });
       }
+      toast.success('Thread cloned successfully');
+    },
+    onError: () => {
+      toast.error('Failed to clone thread');
     },
   });
 };

@@ -1,7 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { toast } from '@mastra/playground-ui/utils/toast';
 import { ExternalLink, GitFork } from 'lucide-react';
 import { useCallback } from 'react';
 import { AgentObservationalMemory } from './agent-observational-memory';
@@ -71,15 +70,10 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
   const handleCloneThread = useCallback(async () => {
     if (!threadId || !agentId) return;
 
-    try {
-      const result = await cloneThread({ threadId, agentId });
-      toast.success('Thread cloned successfully');
-      // Navigate to the cloned thread
-      if (result?.thread?.id) {
-        navigate(paths.agentThreadLink(agentId, result.thread.id));
-      }
-    } catch {
-      toast.error('Failed to clone thread');
+    const result = await cloneThread({ threadId, agentId });
+    // Navigate to the cloned thread
+    if (result?.thread?.id) {
+      navigate(paths.agentThreadLink(agentId, result.thread.id));
     }
   }, [threadId, agentId, cloneThread, navigate, paths]);
 

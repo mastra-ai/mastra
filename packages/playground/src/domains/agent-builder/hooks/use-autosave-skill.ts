@@ -34,7 +34,7 @@ export function useAutosaveSkill({
   savedDisplayMs = DEFAULT_SAVED_DISPLAY_MS,
 }: UseAutosaveSkillArgs) {
   const formMethods = useFormContext<SkillEditFormValues>();
-  const updateSkill = useUpdateSkill();
+  const updateSkill = useUpdateSkill({ silent: true });
 
   const [status, setStatus] = useState<AutosaveStatus>('idle');
   const [lastError, setLastError] = useState<Error | null>(null);

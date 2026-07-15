@@ -9,7 +9,6 @@ import {
 } from '@mastra/playground-ui/components/ThreadList';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { toast } from '@mastra/playground-ui/utils/toast';
 import { formatDate } from 'date-fns';
 import { useState } from 'react';
 import { WorkflowRunStatusIcon } from '../components/workflow-run-status-icon';
@@ -59,11 +58,9 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
   const handleDelete = async (runId: string) => {
     try {
       await deleteRun({ runId });
-      toast.success('Workflow run deleted successfully');
       setDeleteRunId(null);
       navigate(paths.workflowLink(workflowId));
     } catch {
-      toast.error('Failed to delete workflow run');
       setDeleteRunId(null);
     }
   };

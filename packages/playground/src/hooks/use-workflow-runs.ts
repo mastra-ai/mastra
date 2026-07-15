@@ -1,5 +1,6 @@
 import type { WorkflowRuns } from '@mastra/core/storage';
 import { useInView } from '@mastra/playground-ui/hooks/use-in-view';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
@@ -70,6 +71,10 @@ export const useDeleteWorkflowRun = (workflowId: string) => {
     mutationFn: ({ runId }: { runId: string }) => client.getWorkflow(workflowId).deleteRunById(runId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['workflow-runs', workflowId] });
+      toast.success('Workflow run deleted successfully');
+    },
+    onError: () => {
+      toast.error('Failed to delete workflow run');
     },
   });
 };

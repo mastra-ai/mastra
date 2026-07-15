@@ -163,7 +163,6 @@ function installHandlers() {
           : { messages: [] },
       ),
     ),
-    http.post(`${BASE_URL}/api/agents/${AGENT_ID}/threads/subscribe`, () => HttpResponse.json({ ok: true })),
   );
 }
 

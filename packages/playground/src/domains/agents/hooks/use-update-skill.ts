@@ -1,4 +1,5 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
@@ -30,12 +31,18 @@ function flattenFiles(nodes: InMemoryFileNode[], basePath: string): { path: stri
   return results;
 }
 
-export function useUpdateSkill() {
+interface UseUpdateSkillOptions {
+  /** When true, suppresses success and error toasts. Used by autosave flows. */
+  silent?: boolean;
+}
+
+export function useUpdateSkill(options: UseUpdateSkillOptions = {}) {
   const client = useMastraClient();
   const queryClient = useQueryClient();
   const writeFile = useWriteWorkspaceFile();
   const { hasPermission } = usePermissions();
   const canWriteWorkspace = hasPermission('workspaces:write');
+  const { silent = false } = options;
 
   return useMutation({
     mutationFn: async (params: UpdateSkillParams): Promise<StoredSkillResponse> => {
@@ -80,6 +87,14 @@ export function useUpdateSkill() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['stored-skills'] });
       void queryClient.invalidateQueries({ queryKey: ['stored-skill'] });
+      if (!silent) {
+        toast.success('Skill updated');
+      }
+    },
+    onError: error => {
+      if (!silent) {
+        toast.error(`Failed to update skill: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
     },
   });
 }

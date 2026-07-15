@@ -206,7 +206,6 @@ export function SkillEditDialog({
         toast.error(`Failed to update skill: ${error instanceof Error ? error.message : 'Unknown error'}`);
         return;
       }
-      toast.success('Skill updated');
       onSkillUpdated?.(result);
       onClose();
     } else {

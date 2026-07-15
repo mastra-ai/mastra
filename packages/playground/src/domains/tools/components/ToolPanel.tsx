@@ -62,15 +62,11 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
       ...(schemaRequestContext ?? {}),
     };
 
-    try {
-      return await executeTool({
-        toolId: tool.id,
-        input: data,
-        requestContext,
-      });
-    } catch {
-      toast.error('Error executing dev tool');
-    }
+    return executeTool({
+      toolId: tool.id,
+      input: data,
+      requestContext,
+    });
   };
 
   const zodInputSchema = tool?.inputSchema

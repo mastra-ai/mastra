@@ -3,11 +3,22 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useUpdateSkill } from '../use-update-skill';
 import { writeAllowedCapabilities } from './fixtures/auth';
 import { server } from '@/test/msw-server';
+
+// `toast` is a third-party presentational util from @mastra/playground-ui, not
+// one of our data hooks/services/auth gating, so spying on it is allowed.
+const { toastSuccess, toastError } = vi.hoisted(() => ({
+  toastSuccess: vi.fn(),
+  toastError: vi.fn(),
+}));
+
+vi.mock('@mastra/playground-ui/utils/toast', () => ({
+  toast: { success: toastSuccess, error: toastError },
+}));
 
 const BASE_URL = 'http://localhost:4111';
 
@@ -21,8 +32,14 @@ const wrapper = () => {
 };
 
 beforeEach(() => {
+  toastSuccess.mockReset();
+  toastError.mockReset();
   // The real `usePermissions` inside the hook fetches auth capabilities.
   server.use(http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(writeAllowedCapabilities)));
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 describe('useUpdateSkill', () => {
@@ -66,8 +83,8 @@ describe('useUpdateSkill', () => {
     });
   });
 
-  describe('when the update succeeds', () => {
-    it('returns the updated skill', async () => {
+  describe('when the update succeeds in default (non-silent) mode', () => {
+    it('shows a success toast', async () => {
       server.use(
         http.patch(`${BASE_URL}/api/stored/skills/skill-1`, () =>
           HttpResponse.json({ id: 'skill-1', status: 'active', createdAt: '', updatedAt: '' }),
@@ -75,28 +92,45 @@ describe('useUpdateSkill', () => {
       );
 
       const { result } = renderHook(() => useUpdateSkill(), { wrapper: wrapper() });
-      let updated;
       await act(async () => {
-        updated = await result.current.mutateAsync({ id: 'skill-1', name: 'A' });
+        await result.current.mutateAsync({ id: 'skill-1', name: 'A' });
       });
 
-      expect(updated).toMatchObject({ id: 'skill-1', status: 'active' });
+      expect(toastSuccess).toHaveBeenCalledTimes(1);
     });
   });
 
-  describe('when the update fails', () => {
-    it('rejects with the request error', async () => {
+  describe('when the update succeeds in silent mode', () => {
+    it('does not show a success toast', async () => {
+      server.use(
+        http.patch(`${BASE_URL}/api/stored/skills/skill-1`, () =>
+          HttpResponse.json({ id: 'skill-1', status: 'active', createdAt: '', updatedAt: '' }),
+        ),
+      );
+
+      const { result } = renderHook(() => useUpdateSkill({ silent: true }), { wrapper: wrapper() });
+      await act(async () => {
+        await result.current.mutateAsync({ id: 'skill-1', name: 'B' });
+      });
+
+      expect(toastSuccess).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when the update fails in silent mode', () => {
+    it('rejects without showing an error toast', async () => {
       server.use(
         http.patch(`${BASE_URL}/api/stored/skills/skill-1`, () =>
           HttpResponse.json({ error: 'boom' }, { status: 500 }),
         ),
       );
 
-      const { result } = renderHook(() => useUpdateSkill(), { wrapper: wrapper() });
+      const { result } = renderHook(() => useUpdateSkill({ silent: true }), { wrapper: wrapper() });
 
       await act(async () => {
         await expect(result.current.mutateAsync({ id: 'skill-1', name: 'X' })).rejects.toThrow();
       });
+      expect(toastError).not.toHaveBeenCalled();
     });
   });
 });
