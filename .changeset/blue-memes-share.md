@@ -1,5 +1,4 @@
 ---
-'mastracode': patch
 '@mastra/github-signals': patch
 ---
 
