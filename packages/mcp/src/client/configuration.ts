@@ -27,12 +27,18 @@ import { MCPClientServerProxy } from './server-proxy';
 const mcpClientInstances = new Map<string, InstanceType<typeof MCPClient>>();
 const TOOL_DISCOVERY_MAX_ATTEMPTS = 2;
 
+// Matches the entire 127.0.0.0/8 range in dotted-quad form. `URL` normalizes
+// IPv4 hosts to four octets (so `127.1` becomes `127.0.0.1`), so anchoring the
+// pattern is enough — and it rejects lookalikes like `127.evil.com` that a
+// prefix check would wrongly accept and leak the authorization code to.
+const LOOPBACK_IPV4 = /^127\.(?:\d{1,3})\.(?:\d{1,3})\.(?:\d{1,3})$/;
+
 // Whether a hostname is a loopback address authenticate() accepts for the
 // provider's redirect URL (RFC 8252 loopback redirection). Kept in sync with the
 // mastracode config parser, which accepts any 127.0.0.0/8 host, so a config that
 // parses (e.g. 127.0.0.2) does not later fail here.
 function isLoopbackHostname(hostname: string): boolean {
-  return hostname === 'localhost' || hostname === '[::1]' || hostname.startsWith('127.');
+  return hostname === 'localhost' || hostname === '[::1]' || hostname === '::1' || LOOPBACK_IPV4.test(hostname);
 }
 
 /**
@@ -89,6 +95,13 @@ export class MCPClient extends MastraBase {
   private disconnectPromise: Promise<void> | null = null;
   private authFlowsByServer = new Map<string, Promise<void>>();
   private authCallbackServersByServer = new Map<string, OAuthCallbackServer>();
+  /**
+   * Per-server abort controllers for in-flight authorization flows. Created
+   * synchronously at the start of {@link runAuthorizationFlow} — before the
+   * callback server exists — so cancel/disconnect can interrupt the setup phase
+   * (discovery, registration, port binding) and not just the waitForCode wait.
+   */
+  private authAbortControllersByServer = new Map<string, AbortController>();
 
   /**
    * Creates a new MCPClient instance for managing MCP server connections.
@@ -771,10 +784,17 @@ To fix this you have three different options:
         // the flow settlements so a disconnect during authentication does not leave
         // a bound port or a dangling promise keeping the process alive.
         const pendingFlows = Array.from(this.authFlowsByServer.values());
+        // Abort first so flows still in their setup phase (no callback server
+        // bound yet) unblock instead of parking on waitForCode and deadlocking
+        // the awaited settlement below.
+        for (const controller of this.authAbortControllersByServer.values()) {
+          controller.abort();
+        }
         await Promise.allSettled(
           Array.from(this.authCallbackServersByServer.values()).map(server => server.close()),
         );
         await Promise.allSettled(pendingFlows);
+        this.authAbortControllersByServer.clear();
         this.authCallbackServersByServer.clear();
         this.authFlowsByServer.clear();
 
@@ -870,9 +890,21 @@ To fix this you have three different options:
   }
 
   private async runAuthorizationFlow(serverName: string, options?: { timeoutMs?: number }): Promise<void> {
+    // Register the abort controller synchronously, before the first await, so a
+    // cancel/disconnect during the setup phase (discovery, registration, port
+    // binding) can interrupt the flow rather than letting it park on waitForCode.
+    const abortController = new AbortController();
+    this.authAbortControllersByServer.set(serverName, abortController);
+    const throwIfAborted = () => {
+      if (abortController.signal.aborted) {
+        throw new Error(`Authentication for MCP server ${serverName} was cancelled.`);
+      }
+    };
+
     const config = this.getServerConfig(serverName);
     const provider = config.authProvider;
     if (!(provider instanceof MCPOAuthClientProvider)) {
+      this.authAbortControllersByServer.delete(serverName);
       throw new Error(
         `Cannot authenticate MCP server ${serverName}: it is not configured with an MCPOAuthClientProvider.`,
       );
@@ -880,13 +912,29 @@ To fix this you have three different options:
 
     const redirectUrl = new URL(provider.redirectUrl.toString());
     if (redirectUrl.protocol !== 'http:' || !isLoopbackHostname(redirectUrl.hostname)) {
+      this.authAbortControllersByServer.delete(serverName);
       throw new Error(
         `Cannot authenticate MCP server ${serverName}: the provider's redirect URL must be a loopback address, got ${redirectUrl.origin}.`,
       );
     }
 
     const state = await provider.beginAuthorizationSession();
+    // A cancel that arrived during beginAuthorizationSession() has no callback
+    // server to close yet, so bail here before binding a port and parking.
+    if (abortController.signal.aborted) {
+      provider.endAuthorizationSession();
+      this.authAbortControllersByServer.delete(serverName);
+      throwIfAborted();
+    }
     const callbackServer = await createOAuthCallbackServer({ redirectUrl, state });
+    // A cancel during port binding: close the freshly-bound server and bail
+    // before we ever wait for a code that will never arrive.
+    if (abortController.signal.aborted) {
+      provider.endAuthorizationSession();
+      this.authAbortControllersByServer.delete(serverName);
+      await callbackServer.close();
+      throwIfAborted();
+    }
     this.authCallbackServersByServer.set(serverName, callbackServer);
     try {
       // Point the authorization request at the callback URL that actually
@@ -923,6 +971,7 @@ To fix this you have three different options:
       }
     } finally {
       this.authCallbackServersByServer.delete(serverName);
+      this.authAbortControllersByServer.delete(serverName);
       provider.endAuthorizationSession();
       await callbackServer.close();
     }
@@ -940,13 +989,16 @@ To fix this you have three different options:
    * @returns `true` if a pending flow was cancelled, `false` when no flow was pending
    */
   public async cancelAuthentication(serverName: string): Promise<boolean> {
-    const callbackServer = this.authCallbackServersByServer.get(serverName);
     const pendingFlow = this.authFlowsByServer.get(serverName);
-    if (!callbackServer || !pendingFlow) {
+    if (!pendingFlow) {
       return false;
     }
 
-    await callbackServer.close();
+    // Abort first so a flow still in its setup phase (no callback server bound
+    // yet) is interrupted before it can park on waitForCode; then close the
+    // callback server if one exists, which rejects an in-progress waitForCode.
+    this.authAbortControllersByServer.get(serverName)?.abort();
+    await this.authCallbackServersByServer.get(serverName)?.close();
     await pendingFlow.catch(() => undefined);
     return true;
   }

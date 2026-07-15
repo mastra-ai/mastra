@@ -552,6 +552,83 @@ describe('MCPClient OAuth authorization flow', () => {
     await expect(flow).rejects.toThrow(/closed before receiving an authorization code/);
   });
 
+  it('cancels a flow still in its setup phase before the callback server binds', async () => {
+    const { mcpServer, callbackUrl } = await setup();
+    const provider = createProvider({ callbackUrl, onRedirectToAuthorization: driveBrowser });
+
+    // Gate beginAuthorizationSession so the flow parks in setup — before the
+    // callback server is created and stored — which is the window CodeRabbit
+    // flagged as a deadlock/missed-cancellation risk.
+    let reachSetup: (() => void) | undefined;
+    const inSetup = new Promise<void>(resolve => {
+      reachSetup = resolve;
+    });
+    let releaseSetup: (() => void) | undefined;
+    const setupGate = new Promise<void>(resolve => {
+      releaseSetup = resolve;
+    });
+    const originalBegin = provider.beginAuthorizationSession.bind(provider);
+    provider.beginAuthorizationSession = async () => {
+      reachSetup?.();
+      await setupGate;
+      return originalBegin();
+    };
+
+    const mcp = track(createClient(mcpServer.url, provider));
+    const flow = mcp.authenticate('fixture');
+    await inSetup;
+
+    // Cancel while still in setup: no callback server exists yet, but abort must
+    // be recorded so that once setup unblocks the flow bails at the signal check
+    // instead of proceeding to park on waitForCode.
+    const cancelPromise = mcp.cancelAuthentication('fixture');
+    releaseSetup?.();
+    const cancelled = await Promise.race([
+      cancelPromise.then(() => 'cancelled' as const),
+      new Promise<'timeout'>(resolve => setTimeout(() => resolve('timeout'), 2_000)),
+    ]);
+    expect(cancelled).toBe('cancelled');
+    await expect(flow).rejects.toThrow(/cancelled/);
+    // Cancellation during setup happens before the 401 handshake runs, so the
+    // auth state was never advanced — the only guarantee is it is not authorized.
+    expect(mcp.getServerAuthState('fixture')).not.toBe('authorized');
+  });
+
+  it('disconnect does not deadlock on a flow still in its setup phase', async () => {
+    const { mcpServer, callbackUrl } = await setup();
+    const provider = createProvider({ callbackUrl, onRedirectToAuthorization: driveBrowser });
+
+    let reachSetup: (() => void) | undefined;
+    const inSetup = new Promise<void>(resolve => {
+      reachSetup = resolve;
+    });
+    let releaseSetup: (() => void) | undefined;
+    const setupGate = new Promise<void>(resolve => {
+      releaseSetup = resolve;
+    });
+    const originalBegin = provider.beginAuthorizationSession.bind(provider);
+    provider.beginAuthorizationSession = async () => {
+      reachSetup?.();
+      await setupGate;
+      return originalBegin();
+    };
+
+    const mcp = createClient(mcpServer.url, provider);
+    const flow = mcp.authenticate('fixture');
+    await inSetup;
+
+    // disconnect() aborts the setup-phase flow first, then awaits its settlement.
+    // Without the abort it would block forever on waitForCode.
+    const disconnectPromise = mcp.disconnect();
+    releaseSetup?.();
+    const disconnected = await Promise.race([
+      disconnectPromise.then(() => 'done' as const),
+      new Promise<'timeout'>(resolve => setTimeout(() => resolve('timeout'), 2_000)),
+    ]);
+    expect(disconnected).toBe('done');
+    await expect(flow).rejects.toThrow();
+  });
+
   it('rejects authenticate for servers without an MCPOAuthClientProvider', async () => {
     const mcp = track(
       new MCPClient({
@@ -563,5 +640,16 @@ describe('MCPClient OAuth authorization flow', () => {
     );
 
     await expect(mcp.authenticate('fixture')).rejects.toThrow(/not configured with an MCPOAuthClientProvider/);
+  });
+
+  it('rejects a redirect URL whose hostname only looks like loopback', async () => {
+    const { mcpServer } = await setup();
+    // 127.evil.com is not a loopback address; a naive startsWith('127.') check
+    // would wrongly accept it and bind the callback server for an attacker host.
+    const provider = createProvider({ callbackUrl: 'http://127.evil.com:9999/oauth/callback' });
+    const mcp = track(createClient(mcpServer.url, provider));
+
+    await expect(mcp.authenticate('fixture')).rejects.toThrow(/loopback address/);
+    expect(mcp.getServerAuthState('fixture')).not.toBe('authorized');
   });
 });
