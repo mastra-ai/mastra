@@ -285,7 +285,7 @@ export default function Page() {
 
 Inside `StepsFeedback`, let the user toggle steps and then call `respond({ accepted: true, steps })` to resume the agent, or `respond({ accepted: false })` to reject. The agent reads the returned value and continues accordingly. See the full component in the [UI Dojo](https://ui-dojo.mastra.ai/).
 
-The example above uses a client tool: the agent calls `generate_task_steps` and the frontend fulfills it through `respond`. Mastra can also pause on the server, suspending a tool call before it executes so a human approves or supplies input. For that path, see Mastra's [Agent approval](/docs/agents/agent-approval) guide for the backend side and CopilotKit's [`useHumanInTheLoop`](https://docs.copilotkit.ai/reference/hooks/useHumanInTheLoop) reference for the frontend.
+The example above uses a client tool: the agent calls `generate_task_steps` and the frontend fulfills it through `respond`. Mastra can also pause on the server, suspending a tool call before it executes so a human approves or supplies input. For that path, see Mastra's [Human-in-the-loop](/docs/agents/human-in-the-loop) guide for the backend side and CopilotKit's [`useHumanInTheLoop`](https://docs.copilotkit.ai/reference/hooks/useHumanInTheLoop) reference for the frontend.
 
 ## Configuration options
 

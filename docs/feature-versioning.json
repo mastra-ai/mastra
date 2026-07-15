@@ -1,5 +1,5 @@
 {
-  "/docs/agents/agent-approval": "v1",
+  "/docs/agents/human-in-the-loop": "v1",
   "/docs/agents/processors": "v1",
   "/docs/evals/built-in-scorers": "v1",
   "/docs/getting-started/manual-install": "v1",

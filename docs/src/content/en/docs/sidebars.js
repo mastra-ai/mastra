@@ -89,8 +89,8 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'agents/agent-approval',
-              label: 'Agent Approval',
+              id: 'agents/human-in-the-loop',
+              label: 'Human-in-the-loop',
             },
             {
               type: 'doc',
