@@ -499,6 +499,7 @@ describe('A2AAgent', () => {
       metadata: {},
       messages: { all: [], user: [], nonUser: [] },
       finishReason: 'stop',
+      usage: {},
     });
     expect(await stream.text).toBe('Buffered remote response');
     const result = await stream.getResult();
@@ -560,6 +561,7 @@ describe('A2AAgent', () => {
       metadata: {},
       messages: { all: [], user: [], nonUser: [] },
       finishReason: 'stop',
+      usage: {},
     });
     expect(await stream.text).toBe('Hello from stream');
     expect((await stream.task)?.status.state).toBe('completed');
