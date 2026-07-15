@@ -180,6 +180,9 @@ export class McpSelectorComponent extends Box implements Focusable {
       if (this._reloading) {
         icon = theme.fg('warning', '⟳');
         stateText = theme.fg('warning', 'reconnecting...');
+      } else if (status.connecting && this._authenticating.has(status.name)) {
+        icon = theme.fg('warning', '⟳');
+        stateText = theme.fg('warning', 'authenticating — Enter to cancel');
       } else if (status.connecting) {
         icon = theme.fg('warning', '⟳');
         stateText = theme.fg('warning', 'connecting...');
@@ -521,7 +524,14 @@ export class McpSelectorComponent extends Box implements Focusable {
       };
     }
     this._authenticating.add(name);
-    this.updateList();
+    // Surface the cancel path immediately: keep this server selected and open
+    // its sub-menu with "Cancel authentication" pre-selected, so a user who
+    // abandons the browser sign-in can just press Enter to back out.
+    if (idx >= 0) {
+      this.selectedIndex = idx;
+    }
+    this.openSubMenu();
+    this.startPollingIfNeeded();
     this.showInfoCallback(`MCP: Authenticating "${name}" — complete the sign-in in your browser.`);
 
     this.onAuthenticateServerCallback(name)
@@ -558,6 +568,9 @@ export class McpSelectorComponent extends Box implements Focusable {
       })
       .finally(() => {
         this._authenticating.delete(name);
+        // The auth flow has ended (connected, failed, or cancelled); close the
+        // auto-opened cancel sub-menu so the row shows its resolved state.
+        this.subMenuOpen = false;
         if (!this._reloading) {
           this.updateList();
         }

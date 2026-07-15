@@ -87,7 +87,11 @@ export const mcpOauthAuthenticateScenario = {
     await runtime.waitForScreenText(/Authenticate/i, terminal, 8_000);
     terminal.write('\r');
 
-    // Close the overlay so the printed authorization URL is visible on screen.
+    // Starting the flow auto-opens the "Cancel authentication" sub-menu; the
+    // first Esc closes that sub-menu, the second closes the selector overlay so
+    // the printed authorization URL is visible on screen.
+    await runtime.waitForScreenText(/Cancel authentication/i, terminal, 8_000);
+    terminal.write('\x1b');
     terminal.write('\x1b');
     await runtime.waitForScreenTextAbsent(/Manage MCP servers/i, terminal, 8_000);
     await runtime.waitForScreenText(/MCP: To authenticate "oauth_server", open:/i, terminal, 15_000);
