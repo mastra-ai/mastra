@@ -194,12 +194,7 @@ const InlineBlockContent = ({
 
   return (
     <>
-      <div
-        className={cn(
-          'relative group rounded-md transition-colors duration-150 hover:bg-surface2/50',
-          !readOnly && 'pr-20',
-        )}
-      >
+      <div className="relative group rounded-md transition-colors duration-150 hover:bg-surface2/50">
         {/* Left gutter — drag handle (visible on hover/focus-within) */}
         {!readOnly && (
           <div className="absolute -left-8 top-1 flex flex-col items-center transition-opacity duration-150 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100">
@@ -227,18 +222,13 @@ const InlineBlockContent = ({
             />
 
             {onConvertToRef && block.content.trim().length > 0 && (
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={() => setSaveDialogOpen(true)}
-                tooltip="Save as prompt block"
-              >
+              <Button variant="ghost" size="sm" onClick={() => setSaveDialogOpen(true)} tooltip="Save as prompt block">
                 <BookmarkPlus />
               </Button>
             )}
 
             {onDelete && (
-              <Button variant="ghost" size="icon-sm" onClick={onDelete} tooltip="Delete block">
+              <Button variant="ghost" size="sm" onClick={onDelete} tooltip="Delete block">
                 <X />
               </Button>
             )}
