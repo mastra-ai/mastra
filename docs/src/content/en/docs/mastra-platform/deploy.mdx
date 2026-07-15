@@ -105,7 +105,7 @@ The region is fixed when the environment is created. Databases attached to an en
 
 Preflight validates the built output before anything ships, and only flags issues in your own code:
 
-- **Local storage paths**: A hard block. File-backed storage (for example `file:./mastra.db`) is lost on every deploy. Preflight passes when the path is guarded by an environment variable that is set locally, stored on the platform, or provided by a managed database:
+- **Local storage paths**: A hard block. File-backed storage (for example `file:./mastra.db`) is lost on every deploy. Preflight passes when the path is guarded by an environment variable that's set locally, stored on the platform, or provided by a managed database:
 
   ```ts title="src/mastra/storage.ts"
   import { LibSQLStore } from '@mastra/libsql'

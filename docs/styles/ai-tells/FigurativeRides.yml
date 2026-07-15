@@ -1,0 +1,44 @@
+---
+extends: existence
+message: "AI overused verb: '%s'. Name the dependency or the mechanism directly. Disable this rule for transit or equestrian prose."
+level: error
+nonword: true
+ignorecase: true
+# "Rides" is an AI fingerprint for dependence and piggybacking: an outcome
+# "rides on" an assumption, a fix "rides along" in a release, a launch
+# "rides the wave" of a trend. Like FigurativeSits, literal riding is
+# common (people ride buses, bikes, and horses), so the complement after
+# the verb is the discriminator; each token curates a figurative sense and
+# "she rides the bus to work" stays quiet. Transit or equestrian writing
+# disables the whole rule.
+tokens:
+  # --- Dependence: an outcome staked on an abstraction ("everything rides
+  # on this migration," "the plan rides on whether CI stays green"). The
+  # sibling of the "hangs on" arm in AnthropomorphicJustification.
+  - "\\brid(?:es|ing)? on (?:whether|a single|(?:this |that )?one \\w+|the (?:assumption|premise|hope|outcome|answer|result|success)|an assumption)\\b"
+  - "\\b(?:everything|it all|a lot|much|the whole \\w+) rid(?:es|ing)? on\\b"
+
+  # --- Piggybacking: a change that travels inside another vehicle of work
+  # ("the fix rides along with the release," "the flag rides along in the
+  # config"). Agents adore this one; carpooling prose disables the rule.
+  - "\\brid(?:es|ing)? along\\b"
+  - "\\brid(?:es|ing)? shotgun\\b"
+  - "\\bhitch(?:es|ed|ing)? a ride\\b"
+  - "\\balong for the ride\\b"
+  - "\\bfree ride\\b"
+
+  # --- Layering: a component stacked on another ("the cache rides on top
+  # of Redis"). FigurativeSits owns the "sits on top of" twin.
+  - "\\brid(?:es|ing)? on top of\\b"
+
+  # --- Momentum and opportunism ("riding the wave of adoption," "riding
+  # the coattails of the rewrite," "riding high after the launch").
+  - "\\brid(?:es|ing)? (?:the|a|that) wave\\b"
+  - "\\brid(?:es|ing)? (?:on the |the )?coattails\\b"
+  - "\\brid(?:es|ing)? the momentum\\b"
+  - "\\brid(?:es|ing)? high\\b"
+
+  # --- Supervision and gambling idioms ("riding herd on the linters,"
+  # "let it ride until the next release").
+  - "\\brid(?:es|ing)? herd on\\b"
+  - "\\blet it ride\\b"
