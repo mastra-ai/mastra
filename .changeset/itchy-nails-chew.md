@@ -1,5 +1,5 @@
 ---
-'@mastra/braintrust': major
+'@mastra/braintrust': minor
 ---
 
 **Breaking change**
@@ -10,6 +10,6 @@ Braintrust v3 uses a separate W3C trace ID for `root_span_id`. Mastra's returned
 
 **Migration**
 
-No `BraintrustExporter` configuration changes are required.
+The `BraintrustExporterConfig` interface changed, so if you were using the `braintrustLogger` field or the `getCurrentSpan()` method, those now hold narrower types that are no longer tied to the Braintrust SDK. It is unlikely that this is affecting you but technically a breaking change, which is why it is outlined.
 
 Applications that independently upgrade Braintrust and use Nunjucks prompt templates should follow the Braintrust v2 to v3 migration guide: https://www.braintrust.dev/docs/sdks/typescript/migrations/v2-to-v3
