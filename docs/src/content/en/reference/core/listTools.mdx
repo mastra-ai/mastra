@@ -1,0 +1,52 @@
+---
+title: "Reference: Mastra.listTools() | Core"
+description: "Documentation for the `Mastra.listTools()` method, which returns the Mastra-level tool registry."
+packages:
+  - "@mastra/core"
+---
+
+# Mastra.listTools()
+
+The `.listTools()` method returns the tools configured on a Mastra instance. The returned record uses Mastra registration keys and tool instances as values.
+
+## Usage example
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { weatherTool } from './tools/weather-tool'
+
+export const mastra = new Mastra({
+  tools: {
+    weather: weatherTool,
+  },
+})
+
+const tools = mastra.listTools()
+const weather = tools?.weather
+```
+
+## Parameters
+
+This method doesn't accept any parameters.
+
+## Returns
+
+<PropertiesTable
+  content={[
+  {
+    name: 'tools',
+    type: 'TTools | undefined',
+    description:
+      'The Mastra-level tool registry, where each key is a registration key and each value is a tool instance. Returns `undefined` when no registry is available.',
+  },
+]}
+/>
+
+This method lists the Mastra-level registry. It doesn't include tools that exist only in a function-based Agent `tools` callback.
+
+## Related
+
+- [Share tools across agents](/docs/agents/using-tools#share-tools-across-agents)
+- [Mastra class](/reference/core/mastra-class)
+- [Mastra.getTool()](/reference/core/getTool)
+- [Mastra.getToolById()](/reference/core/getToolById)
