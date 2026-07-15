@@ -33,6 +33,12 @@ describe('Subconscious knowledge write tools', () => {
       {} as any,
     )) as any;
     expect(updated).toMatchObject({ name: 'Project Atlas Prime', version: 2 });
+    expect(
+      await tools.knowledge_update_entity!.execute?.(
+        { entityId: target.id, expectedVersion: updated.version, kind: ' page ' },
+        {} as any,
+      ),
+    ).toMatchObject({ error: true, message: expect.stringMatching(/pattern/) });
 
     const merged = (await tools.knowledge_merge_entities!.execute?.(
       { sourceId: source.id, targetId: target.id, sourceVersion: source.version },

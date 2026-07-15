@@ -8,6 +8,7 @@ import {
   KnowledgeSemanticIndexCoordinator,
   StaleKnowledgeSemanticIndexError,
   SubconsciousCaptureExtractor,
+  subconsciousCaptureSchema,
 } from '../subconscious';
 import type { SubconsciousCaptureHook, SubconsciousCaptureOutput } from '../subconscious';
 
@@ -25,6 +26,12 @@ function createContext(memory: Memory, current: SubconsciousCaptureOutput) {
 }
 
 describe('Subconscious capture', () => {
+  it('rejects page entity kinds case-insensitively', () => {
+    expect(() =>
+      subconsciousCaptureSchema.parse({ entities: [{ name: 'Page-like entity', kind: '\tPAGE\n', facts: [] }] }),
+    ).toThrow(/reserved/);
+  });
+
   it('deterministically writes scoped entities, facts, mentions, provenance, and ceilings', async () => {
     const memory = new Memory({ storage: new InMemoryStore() });
     const extractor = new SubconsciousCaptureExtractor({

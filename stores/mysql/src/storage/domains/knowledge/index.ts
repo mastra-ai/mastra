@@ -1,4 +1,3 @@
-import type { Client, InValue, ResultSet, Transaction } from '@libsql/client';
 import {
   assertKnowledgeScopeWithinCeiling,
   canonicalizeKnowledgeScope,
@@ -49,15 +48,44 @@ import type {
   UpdateKnowledgeEntityInput,
   UpdateKnowledgePageInput,
 } from '@mastra/core/storage';
-import { LibSQLDB, resolveClient } from '../../db';
-import type { LibSQLDomainConfig } from '../../db';
-import { withClientWriteLock } from '../../db/write-lock';
+import type { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 
-interface Executor {
-  execute(statement: string | { sql: string; args?: InValue[] }): Promise<ResultSet>;
+import { generateTableSQL } from '../operations';
+import type { StoreOperationsMySQL } from '../operations';
+
+interface QueryResult {
+  rows: Record<string, unknown>[];
+  rowsAffected: number;
 }
 
-const visibleSql = `(scopeKey = ? OR ? LIKE scopeKey || char(31) || '%')`;
+interface Executor {
+  execute(statement: string | { sql: string; args?: unknown[] }): Promise<QueryResult>;
+}
+
+function mysqlSql(sql: string): string {
+  return sql
+    .replaceAll('jsonb(?)', 'CAST(? AS JSON)')
+    .replaceAll('INSERT OR IGNORE', 'INSERT IGNORE')
+    .replaceAll('"', '`');
+}
+
+function createExecutor(client: Pick<Pool, 'query'> | Pick<PoolConnection, 'query'>): Executor {
+  return {
+    async execute(statement) {
+      const sql = typeof statement === 'string' ? statement : statement.sql;
+      const args = (typeof statement === 'string' ? [] : (statement.args ?? [])).map(value =>
+        typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)
+          ? value.replace('T', ' ').replace('Z', '')
+          : value,
+      );
+      const [result] = await client.query(mysqlSql(sql), args);
+      if (Array.isArray(result)) return { rows: result as RowDataPacket[], rowsAffected: 0 };
+      return { rows: [], rowsAffected: (result as ResultSetHeader).affectedRows };
+    },
+  };
+}
+
+const visibleSql = `(scopeKey = ? OR ? LIKE CONCAT(scopeKey, char(31), '%'))`;
 
 function parseJson<T>(value: unknown): T {
   if (typeof value === 'string') return JSON.parse(value) as T;
@@ -67,11 +95,16 @@ function parseJson<T>(value: unknown): T {
 }
 
 function toDate(value: unknown): Date {
-  return new Date(String(value));
+  return value instanceof Date ? new Date(value) : new Date(String(value));
 }
 
 function optionalDate(value: unknown): Date | undefined {
   return value == null ? undefined : toDate(value);
+}
+
+function databaseTimestamp(value: Date): string {
+  const pad = (part: number, width = 2) => String(part).padStart(width, '0');
+  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())} ${pad(value.getHours())}:${pad(value.getMinutes())}:${pad(value.getSeconds())}.${pad(value.getMilliseconds(), 3)}`;
 }
 
 function canonicalName(name: string): string {
@@ -138,75 +171,72 @@ function parseOutbox(row: Record<string, unknown>): KnowledgeSemanticOutboxEntry
   };
 }
 
-export class KnowledgeLibSQL extends KnowledgeStorage {
-  readonly #client: Client;
-  readonly #db: LibSQLDB;
+const KNOWLEDGE_INDEX_DDL = [
+  `CREATE UNIQUE INDEX idx_knowledge_records_identity ON "${TABLE_KNOWLEDGE_RECORDS}" (type(32), scopeKey(255), canonicalName(255))`,
+  `CREATE INDEX idx_knowledge_records_scope ON "${TABLE_KNOWLEDGE_RECORDS}" (scopeKey(255), type(32))`,
+  `CREATE INDEX idx_knowledge_facts_parent_latest ON "${TABLE_KNOWLEDGE_FACTS}" (parentEntityId(191), id(26) DESC)`,
+  `CREATE INDEX idx_knowledge_facts_thread_latest ON "${TABLE_KNOWLEDGE_FACTS}" (sourceThreadId(191), id(26) DESC)`,
+  `CREATE INDEX idx_knowledge_mentions_record ON "${TABLE_KNOWLEDGE_MENTIONS}" (recordId(191), sourceType(32), sourceId(191))`,
+  `CREATE INDEX idx_knowledge_activity_latest ON "${TABLE_KNOWLEDGE_ACTIVITY}" (id(26) DESC)`,
+  `CREATE UNIQUE INDEX idx_knowledge_outbox_idempotency ON "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" (idempotencyKey(255))`,
+  `CREATE INDEX idx_knowledge_outbox_claim ON "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" (status(32), availableAt, createdAt)`,
+];
 
-  constructor(config: LibSQLDomainConfig) {
+export class KnowledgeMySQL extends KnowledgeStorage {
+  static getExportDDL(): string[] {
+    return [
+      generateTableSQL({ tableName: TABLE_KNOWLEDGE_RECORDS, schema: KNOWLEDGE_RECORDS_SCHEMA }),
+      generateTableSQL({ tableName: TABLE_KNOWLEDGE_FACTS, schema: KNOWLEDGE_FACTS_SCHEMA }),
+      generateTableSQL({
+        tableName: TABLE_KNOWLEDGE_MENTIONS,
+        schema: KNOWLEDGE_MENTIONS_SCHEMA,
+        compositePrimaryKey: ['sourceType', 'sourceId', 'recordId'],
+      }),
+      generateTableSQL({
+        tableName: TABLE_KNOWLEDGE_CURSORS,
+        schema: KNOWLEDGE_CURSORS_SCHEMA,
+        compositePrimaryKey: ['sourceThreadId', 'agent'],
+      }),
+      generateTableSQL({ tableName: TABLE_KNOWLEDGE_ACTIVITY, schema: KNOWLEDGE_ACTIVITY_SCHEMA }),
+      generateTableSQL({ tableName: TABLE_KNOWLEDGE_SEMANTIC_OUTBOX, schema: KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA }),
+      ...KNOWLEDGE_INDEX_DDL.map(mysqlSql),
+    ];
+  }
+
+  readonly #pool: Pool;
+  readonly #client: Executor;
+  readonly #operations: StoreOperationsMySQL;
+
+  constructor({ pool, operations }: { pool: Pool; operations: StoreOperationsMySQL }) {
     super();
-    this.#client = resolveClient(config);
-    this.#db = new LibSQLDB({
-      client: this.#client,
-      maxRetries: config.maxRetries,
-      initialBackoffMs: config.initialBackoffMs,
-    });
+    this.#pool = pool;
+    this.#client = createExecutor(pool);
+    this.#operations = operations;
   }
 
   async init(): Promise<void> {
-    await this.#db.createTable({ tableName: TABLE_KNOWLEDGE_RECORDS, schema: KNOWLEDGE_RECORDS_SCHEMA });
-    await this.#db.createTable({ tableName: TABLE_KNOWLEDGE_FACTS, schema: KNOWLEDGE_FACTS_SCHEMA });
-    await this.#db.createTable({
+    await this.#operations.createTable({ tableName: TABLE_KNOWLEDGE_RECORDS, schema: KNOWLEDGE_RECORDS_SCHEMA });
+    await this.#operations.createTable({ tableName: TABLE_KNOWLEDGE_FACTS, schema: KNOWLEDGE_FACTS_SCHEMA });
+    await this.#operations.createTable({
       tableName: TABLE_KNOWLEDGE_MENTIONS,
       schema: KNOWLEDGE_MENTIONS_SCHEMA,
-      compositePrimaryKey: ['sourceType', 'sourceId', 'recordId'],
     });
-    await this.#db.createTable({
+    await this.#operations.createTable({
       tableName: TABLE_KNOWLEDGE_CURSORS,
       schema: KNOWLEDGE_CURSORS_SCHEMA,
-      compositePrimaryKey: ['sourceThreadId', 'agent'],
     });
-    await this.#db.createTable({ tableName: TABLE_KNOWLEDGE_ACTIVITY, schema: KNOWLEDGE_ACTIVITY_SCHEMA });
-    await this.#db.createTable({
+    await this.#operations.createTable({ tableName: TABLE_KNOWLEDGE_ACTIVITY, schema: KNOWLEDGE_ACTIVITY_SCHEMA });
+    await this.#operations.createTable({
       tableName: TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
       schema: KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA,
     });
-    await this.#client.batch(
-      [
-        {
-          sql: `CREATE UNIQUE INDEX IF NOT EXISTS idx_knowledge_records_identity ON "${TABLE_KNOWLEDGE_RECORDS}" (type, scopeKey, canonicalName)`,
-          args: [],
-        },
-        {
-          sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_records_scope ON "${TABLE_KNOWLEDGE_RECORDS}" (scopeKey, type)`,
-          args: [],
-        },
-        {
-          sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_facts_parent_latest ON "${TABLE_KNOWLEDGE_FACTS}" (parentEntityId, id DESC)`,
-          args: [],
-        },
-        {
-          sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_facts_thread_latest ON "${TABLE_KNOWLEDGE_FACTS}" (sourceThreadId, id DESC)`,
-          args: [],
-        },
-        {
-          sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_mentions_record ON "${TABLE_KNOWLEDGE_MENTIONS}" (recordId, sourceType, sourceId)`,
-          args: [],
-        },
-        {
-          sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_activity_latest ON "${TABLE_KNOWLEDGE_ACTIVITY}" (id DESC)`,
-          args: [],
-        },
-        {
-          sql: `CREATE UNIQUE INDEX IF NOT EXISTS idx_knowledge_outbox_idempotency ON "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" (idempotencyKey)`,
-          args: [],
-        },
-        {
-          sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_outbox_claim ON "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" (status, availableAt, createdAt)`,
-          args: [],
-        },
-      ],
-      'write',
-    );
+    for (const sql of KNOWLEDGE_INDEX_DDL) {
+      try {
+        await this.#client.execute(sql);
+      } catch (error) {
+        if ((error as { code?: string }).code !== 'ER_DUP_KEYNAME') throw error;
+      }
+    }
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -285,7 +315,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     const scope = canonicalizeKnowledgeScope(input.scope);
     const key = knowledgeScopeKey(scope);
     const clauses = [`type = 'entity'`, 'mergedInto IS NULL', visibleSql];
-    const args: InValue[] = [key, key];
+    const args: unknown[] = [key, key];
     if (input.namePrefix) {
       clauses.push('canonicalName LIKE ?');
       args.push(`${canonicalName(input.namePrefix)}%`);
@@ -300,13 +330,13 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         namePrefix: input.namePrefix,
         kind: input.kind,
       });
-      const updatedAt = cursor.updatedAt.toISOString();
+      const updatedAt = databaseTimestamp(cursor.updatedAt);
       clauses.push('(updatedAt < ? OR (updatedAt = ? AND (name > ? OR (name = ? AND id > ?))))');
       args.push(updatedAt, updatedAt, cursor.name, cursor.name, cursor.id);
     }
     args.push(input.limit ?? 100);
     const result = await this.#client.execute({
-      sql: `SELECT *, json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE ${clauses.join(' AND ')} ORDER BY updatedAt DESC, name ASC, id ASC LIMIT ?`,
+      sql: `SELECT *, scope AS scopeJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE ${clauses.join(' AND ')} ORDER BY updatedAt DESC, name ASC, id ASC LIMIT ?`,
       args,
     });
     return result.rows.map(parseEntity);
@@ -340,7 +370,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       if (knowledgeScopeKey(existing.scope) !== knowledgeScopeKey(scope)) {
         await this.#outbox(tx, 'entity', input.id, 'delete', createKnowledgeUlid(), existing.scope);
         const facts = await tx.execute({
-          sql: `SELECT id,json(scope) AS scopeJson,deletedAt FROM "${TABLE_KNOWLEDGE_FACTS}" WHERE parentEntityId=?`,
+          sql: `SELECT id,scope AS scopeJson,deletedAt FROM "${TABLE_KNOWLEDGE_FACTS}" WHERE parentEntityId=?`,
           args: [input.id],
         });
         for (const row of facts.rows) {
@@ -375,11 +405,11 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         throw new Error('Cannot merge a knowledge entity into a target that is narrower than its source scope');
       }
       const affected = await tx.execute({
-        sql: `SELECT DISTINCT m.sourceType,m.sourceId,json(COALESCE(f.scope,r.scope)) AS scopeJson,CASE WHEN f.deletedAt IS NULL THEN 0 ELSE 1 END AS deleted FROM "${TABLE_KNOWLEDGE_MENTIONS}" m LEFT JOIN "${TABLE_KNOWLEDGE_FACTS}" f ON m.sourceType='fact' AND f.id=m.sourceId LEFT JOIN "${TABLE_KNOWLEDGE_RECORDS}" r ON m.sourceType='page' AND r.id=m.sourceId WHERE m.recordId=?`,
+        sql: `SELECT DISTINCT m.sourceType,m.sourceId,COALESCE(f.scope,r.scope) AS scopeJson,CASE WHEN f.deletedAt IS NULL THEN 0 ELSE 1 END AS deleted FROM "${TABLE_KNOWLEDGE_MENTIONS}" m LEFT JOIN "${TABLE_KNOWLEDGE_FACTS}" f ON m.sourceType='fact' AND f.id=m.sourceId LEFT JOIN "${TABLE_KNOWLEDGE_RECORDS}" r ON m.sourceType='page' AND r.id=m.sourceId WHERE m.recordId=?`,
         args: [source.id],
       });
       const movedFacts = await tx.execute({
-        sql: `SELECT id,json(scope) AS scopeJson,deletedAt FROM "${TABLE_KNOWLEDGE_FACTS}" WHERE parentEntityId=?`,
+        sql: `SELECT id,scope AS scopeJson,deletedAt FROM "${TABLE_KNOWLEDGE_FACTS}" WHERE parentEntityId=?`,
         args: [source.id],
       });
       const updated = await tx.execute({
@@ -392,7 +422,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         args: [target.id, source.id],
       });
       await tx.execute({
-        sql: `DELETE FROM "${TABLE_KNOWLEDGE_MENTIONS}" WHERE recordId=? AND EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_MENTIONS}" target WHERE target.sourceType="${TABLE_KNOWLEDGE_MENTIONS}".sourceType AND target.sourceId="${TABLE_KNOWLEDGE_MENTIONS}".sourceId AND target.recordId=?)`,
+        sql: `DELETE source FROM "${TABLE_KNOWLEDGE_MENTIONS}" source JOIN "${TABLE_KNOWLEDGE_MENTIONS}" target ON target.sourceType=source.sourceType AND target.sourceId=source.sourceId WHERE source.recordId=? AND target.recordId=?`,
         args: [source.id, target.id],
       });
       await tx.execute({
@@ -464,7 +494,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
 
   async getPage(id: string): Promise<KnowledgePage | null> {
     const result = await this.#client.execute({
-      sql: `SELECT *,json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE id=? AND type='page'`,
+      sql: `SELECT *,scope AS scopeJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE id=? AND type='page'`,
       args: [id],
     });
     return result.rows[0] ? parsePage(result.rows[0]) : null;
@@ -483,20 +513,20 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     const scope = canonicalizeKnowledgeScope(input.scope);
     const key = knowledgeScopeKey(scope);
     const clauses = [`type='page'`, visibleSql];
-    const args: InValue[] = [key, key];
+    const args: unknown[] = [key, key];
     if (input.namePrefix) {
       clauses.push('canonicalName LIKE ?');
       args.push(`${canonicalName(input.namePrefix)}%`);
     }
     if (input.cursor) {
       const cursor = parseKnowledgeRecordCursor(input.cursor, { type: 'page', namePrefix: input.namePrefix });
-      const updatedAt = cursor.updatedAt.toISOString();
+      const updatedAt = databaseTimestamp(cursor.updatedAt);
       clauses.push('(updatedAt < ? OR (updatedAt = ? AND (name > ? OR (name = ? AND id > ?))))');
       args.push(updatedAt, updatedAt, cursor.name, cursor.name, cursor.id);
     }
     args.push(input.limit ?? 100);
     const result = await this.#client.execute({
-      sql: `SELECT *,json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE ${clauses.join(' AND ')} ORDER BY updatedAt DESC,name ASC,id ASC LIMIT ?`,
+      sql: `SELECT *,scope AS scopeJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE ${clauses.join(' AND ')} ORDER BY updatedAt DESC,name ASC,id ASC LIMIT ?`,
       args,
     });
     return result.rows.map(parsePage);
@@ -505,7 +535,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   async updatePage(input: UpdateKnowledgePageInput): Promise<KnowledgePage> {
     return this.#transaction(async tx => {
       const result = await tx.execute({
-        sql: `SELECT *,json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE id=? AND type='page'`,
+        sql: `SELECT *,scope AS scopeJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE id=? AND type='page'`,
         args: [input.id],
       });
       if (!result.rows[0]) throw new KnowledgeNotFoundError('page', input.id);
@@ -587,7 +617,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
 
   async getFact(input: { id: string; includeDeleted?: boolean }): Promise<KnowledgeFact | null> {
     const result = await this.#client.execute({
-      sql: `SELECT *,json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_FACTS}" WHERE id=?${input.includeDeleted ? '' : ' AND deletedAt IS NULL'}`,
+      sql: `SELECT *,scope AS scopeJson FROM "${TABLE_KNOWLEDGE_FACTS}" WHERE id=?${input.includeDeleted ? '' : ' AND deletedAt IS NULL'}`,
       args: [input.id],
     });
     return result.rows[0] ? parseFact(result.rows[0]) : null;
@@ -603,12 +633,12 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   async listFactsBySource(input: ListKnowledgeFactsBySourceInput): Promise<ListKnowledgeFactsOutput> {
     const scope = canonicalizeKnowledgeScope(input.scope);
     const key = knowledgeScopeKey(scope);
-    const args: InValue[] = [input.sourceThreadId, key, key];
+    const args: unknown[] = [input.sourceThreadId, key, key];
     if (input.after) args.push(input.after);
     const limit = input.limit ?? 100;
     args.push(limit + 1);
     const result = await this.#client.execute({
-      sql: `SELECT *,json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_FACTS}" WHERE sourceThreadId=? AND ${visibleSql}${input.includeDeleted ? '' : ' AND deletedAt IS NULL'}${input.after ? ' AND id > ?' : ''} ORDER BY id ASC LIMIT ?`,
+      sql: `SELECT *,scope AS scopeJson FROM "${TABLE_KNOWLEDGE_FACTS}" WHERE sourceThreadId=? AND ${visibleSql}${input.includeDeleted ? '' : ' AND deletedAt IS NULL'}${input.after ? ' AND id > ?' : ''} ORDER BY id ASC LIMIT ?`,
       args,
     });
     const facts = result.rows.map(parseFact);
@@ -682,7 +712,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     const query = `%${input.query.trim().toLocaleLowerCase()}%`;
     if (query === '%%') return [];
     const records = await this.#client.execute({
-      sql: `SELECT *,json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE mergedInto IS NULL AND ${visibleSql} AND (canonicalName LIKE ? OR lower(COALESCE(kind,'')) LIKE ? OR lower(COALESCE(body,'')) LIKE ?) ORDER BY updatedAt DESC LIMIT ?`,
+      sql: `SELECT *,scope AS scopeJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE mergedInto IS NULL AND ${visibleSql} AND (canonicalName LIKE ? OR lower(COALESCE(kind,'')) LIKE ? OR lower(COALESCE(body,'')) LIKE ?) ORDER BY updatedAt DESC LIMIT ?`,
       args: [key, key, query, query, query, input.limit ?? 20],
     });
     const results: SearchKnowledgeResult[] = records.rows.map(row => ({
@@ -695,7 +725,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     }));
     if (results.length < (input.limit ?? 20)) {
       const facts = await this.#client.execute({
-        sql: `SELECT f.*,json(f.scope) AS scopeJson,r.name,json(r.scope) AS parentScopeJson FROM "${TABLE_KNOWLEDGE_FACTS}" f JOIN "${TABLE_KNOWLEDGE_RECORDS}" r ON r.id=f.parentEntityId AND r.type='entity' AND r.mergedInto IS NULL WHERE f.deletedAt IS NULL AND ${visibleSql.replaceAll('scopeKey', 'f.scopeKey')} AND lower(f.text) LIKE ? ORDER BY f.id DESC LIMIT ?`,
+        sql: `SELECT f.*,f.scope AS scopeJson,r.name,r.scope AS parentScopeJson FROM "${TABLE_KNOWLEDGE_FACTS}" f JOIN "${TABLE_KNOWLEDGE_RECORDS}" r ON r.id=f.parentEntityId AND r.type='entity' AND r.mergedInto IS NULL WHERE f.deletedAt IS NULL AND ${visibleSql.replaceAll('scopeKey', 'f.scopeKey')} AND lower(f.text) LIKE ? ORDER BY f.id DESC LIMIT ?`,
         args: [key, key, query, (input.limit ?? 20) - results.length],
       });
       results.push(
@@ -738,7 +768,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }): Promise<KnowledgeCurationCursor> {
     const updatedAt = new Date();
     const result = await this.#client.execute({
-      sql: `INSERT INTO "${TABLE_KNOWLEDGE_CURSORS}" (sourceThreadId,agent,lastFactId,updatedAt) VALUES (?,?,?,?) ON CONFLICT(sourceThreadId,agent) DO UPDATE SET lastFactId=excluded.lastFactId,updatedAt=excluded.updatedAt WHERE excluded.lastFactId >= "${TABLE_KNOWLEDGE_CURSORS}".lastFactId`,
+      sql: `INSERT INTO "${TABLE_KNOWLEDGE_CURSORS}" (sourceThreadId,agent,lastFactId,updatedAt) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE lastFactId=IF(VALUES(lastFactId) >= lastFactId, VALUES(lastFactId), lastFactId),updatedAt=IF(VALUES(lastFactId) >= lastFactId, VALUES(updatedAt), updatedAt)`,
       args: [input.sourceThreadId, input.agent, input.lastFactId, updatedAt.toISOString()],
     });
     if (result.rowsAffected === 0) throw new Error('Knowledge curation cursor cannot move backwards');
@@ -753,7 +783,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     const scope = canonicalizeKnowledgeScope(input.scope);
     const key = knowledgeScopeKey(scope);
     const result = await this.#client.execute({
-      sql: `SELECT *,json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_ACTIVITY}" WHERE ${visibleSql}${input.after ? ' AND id > ?' : ''} ORDER BY id DESC LIMIT ?`,
+      sql: `SELECT *,scope AS scopeJson FROM "${TABLE_KNOWLEDGE_ACTIVITY}" WHERE ${visibleSql}${input.after ? ' AND id > ?' : ''} ORDER BY id DESC LIMIT ?`,
       args: [key, key, ...(input.after ? [input.after] : []), input.limit ?? 100],
     });
     return result.rows.map(row => ({
@@ -771,7 +801,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     input: { status?: KnowledgeSemanticOutboxEntry['status']; scope?: KnowledgeScope; limit?: number } = {},
   ): Promise<KnowledgeSemanticOutboxEntry[]> {
     const clauses: string[] = [];
-    const args: InValue[] = [];
+    const args: unknown[] = [];
     if (input.status) {
       clauses.push('status=?');
       args.push(input.status);
@@ -783,7 +813,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     }
     args.push(input.limit ?? 100);
     const result = await this.#client.execute({
-      sql: `SELECT *,json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}"${clauses.length ? ` WHERE ${clauses.join(' AND ')}` : ''} ORDER BY createdAt ASC,id ASC LIMIT ?`,
+      sql: `SELECT *,scope AS scopeJson FROM "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}"${clauses.length ? ` WHERE ${clauses.join(' AND ')}` : ''} ORDER BY createdAt ASC,id ASC LIMIT ?`,
       args,
     });
     return result.rows.map(parseOutbox);
@@ -798,7 +828,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         `(status='pending' OR (status='processing' AND claimedAt <= ?))`,
         `NOT EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" AS earlier WHERE earlier.documentId = "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}".documentId AND earlier.status != 'completed' AND (earlier.createdAt < "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}".createdAt OR (earlier.createdAt = "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}".createdAt AND earlier.id < "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}".id)))`,
       ];
-      const args: InValue[] = [now.toISOString(), stale.toISOString()];
+      const args: unknown[] = [now.toISOString(), stale.toISOString()];
       if (input.scope) {
         const key = knowledgeScopeKey(canonicalizeKnowledgeScope(input.scope));
         clauses.push(visibleSql);
@@ -806,7 +836,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       }
       args.push(input.limit ?? 100);
       const selected = await tx.execute({
-        sql: `SELECT id FROM "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" WHERE ${clauses.join(' AND ')} ORDER BY createdAt ASC,id ASC LIMIT ?`,
+        sql: `SELECT id FROM "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" WHERE ${clauses.join(' AND ')} ORDER BY createdAt ASC,id ASC LIMIT ? FOR UPDATE SKIP LOCKED`,
         args,
       });
       const ids = selected.rows.map(row => String(row.id));
@@ -817,7 +847,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         });
       if (!ids.length) return [];
       const result = await tx.execute({
-        sql: `SELECT *,json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" WHERE id IN (${ids.map(() => '?').join(',')}) ORDER BY createdAt ASC,id ASC`,
+        sql: `SELECT *,scope AS scopeJson FROM "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" WHERE id IN (${ids.map(() => '?').join(',')}) ORDER BY createdAt ASC,id ASC`,
         args: ids,
       });
       return result.rows.map(parseOutbox);
@@ -846,33 +876,30 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     });
   }
 
-  async #transaction<T>(operation: (tx: Transaction) => Promise<T>): Promise<T> {
-    return this.#db.executeWriteOperationWithRetry(
-      () =>
-        withClientWriteLock(this.#client, async () => {
-          const tx = await this.#client.transaction('write');
-          try {
-            const result = await operation(tx);
-            await tx.commit();
-            return result;
-          } catch (error) {
-            if (!tx.closed) await tx.rollback();
-            throw error;
-          }
-        }),
-      'write knowledge state',
-    );
+  async #transaction<T>(operation: (tx: Executor) => Promise<T>): Promise<T> {
+    const connection = await this.#pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const result = await operation(createExecutor(connection));
+      await connection.commit();
+      return result;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
   }
   async #getEntity(executor: Executor, id: string): Promise<KnowledgeEntity | null> {
     const result = await executor.execute({
-      sql: `SELECT *,json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE id=? AND type='entity'`,
+      sql: `SELECT *,scope AS scopeJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE id=? AND type='entity'`,
       args: [id],
     });
     return result.rows[0] ? parseEntity(result.rows[0]) : null;
   }
   async #getEntityByName(executor: Executor, name: string, scope: KnowledgeScope): Promise<KnowledgeEntity | null> {
     const result = await executor.execute({
-      sql: `SELECT *,json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE type='entity' AND scopeKey=? AND canonicalName=?`,
+      sql: `SELECT *,scope AS scopeJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE type='entity' AND scopeKey=? AND canonicalName=?`,
       args: [knowledgeScopeKey(scope), canonicalName(name)],
     });
     return result.rows[0] ? parseEntity(result.rows[0]) : null;
@@ -899,14 +926,14 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
   async #getPageByExactName(executor: Executor, name: string, scope: KnowledgeScope): Promise<KnowledgePage | null> {
     const result = await executor.execute({
-      sql: `SELECT *,json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE type='page' AND scopeKey=? AND canonicalName=?`,
+      sql: `SELECT *,scope AS scopeJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE type='page' AND scopeKey=? AND canonicalName=?`,
       args: [knowledgeScopeKey(scope), canonicalName(name)],
     });
     return result.rows[0] ? parsePage(result.rows[0]) : null;
   }
   async #getFact(executor: Executor, id: string, includeDeleted: boolean): Promise<KnowledgeFact | null> {
     const result = await executor.execute({
-      sql: `SELECT *,json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_FACTS}" WHERE id=?${includeDeleted ? '' : ' AND deletedAt IS NULL'}`,
+      sql: `SELECT *,scope AS scopeJson FROM "${TABLE_KNOWLEDGE_FACTS}" WHERE id=?${includeDeleted ? '' : ' AND deletedAt IS NULL'}`,
       args: [id],
     });
     return result.rows[0] ? parseFact(result.rows[0]) : null;
@@ -917,11 +944,11 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     const entity = await this.#resolveTerminalEntity(this.#client, input.entityId);
     if (!entity) return { facts: [] };
     const key = knowledgeScopeKey(scope);
-    const args: InValue[] = [entity.id, ...(touching ? [entity.id] : []), key, key];
+    const args: unknown[] = [entity.id, ...(touching ? [entity.id] : []), key, key];
     if (input.after) args.push(input.after);
     args.push((input.limit ?? 100) + 1);
     const result = await this.#client.execute({
-      sql: `SELECT DISTINCT f.*,json(f.scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_FACTS}" f${touching ? ` LEFT JOIN "${TABLE_KNOWLEDGE_MENTIONS}" m ON m.sourceType='fact' AND m.sourceId=f.id` : ''} WHERE ${touching ? '(f.parentEntityId=? OR m.recordId=?)' : 'f.parentEntityId=?'} AND ${visibleSql.replaceAll('scopeKey', 'f.scopeKey')}${input.includeDeleted ? '' : ' AND f.deletedAt IS NULL'}${input.after ? ' AND f.id < ?' : ''} ORDER BY f.id DESC LIMIT ?`,
+      sql: `SELECT DISTINCT f.*,f.scope AS scopeJson FROM "${TABLE_KNOWLEDGE_FACTS}" f${touching ? ` LEFT JOIN "${TABLE_KNOWLEDGE_MENTIONS}" m ON m.sourceType='fact' AND m.sourceId=f.id` : ''} WHERE ${touching ? '(f.parentEntityId=? OR m.recordId=?)' : 'f.parentEntityId=?'} AND ${visibleSql.replaceAll('scopeKey', 'f.scopeKey')}${input.includeDeleted ? '' : ' AND f.deletedAt IS NULL'}${input.after ? ' AND f.id < ?' : ''} ORDER BY f.id DESC LIMIT ?`,
       args,
     });
     const facts = result.rows.map(parseFact);
@@ -930,7 +957,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   async #replaceMentions(
-    tx: Transaction,
+    tx: Executor,
     sourceType: 'fact' | 'page',
     sourceId: string,
     text: string,

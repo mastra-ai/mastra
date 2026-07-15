@@ -5,11 +5,7 @@ import { z } from 'zod';
 import { Extractor } from '../extractor';
 import type { ExtractorOnExtractedContext, ExtractorRuntimeContext } from '../extractor';
 import { publishSubconsciousActivity } from './activity';
-import type {
-  SubconsciousBuiltInObservationConfig,
-  SubconsciousCaptureOutput,
-  SubconsciousDefaultCapture,
-} from './types';
+import type { SubconsciousCaptureConfig, SubconsciousCaptureOutput, SubconsciousDefaultCapture } from './types';
 
 const CAPTURE_GUIDANCE_PAGE = 'capture-guidance';
 const MAX_CAPTURE_GUIDANCE_LENGTH = 4_000;
@@ -23,7 +19,7 @@ export const subconsciousCaptureSchema = z.object({
         .string()
         .trim()
         .min(1)
-        .refine(kind => kind !== 'page', 'Entity kind "page" is reserved'),
+        .refine(kind => kind.trim().toLocaleLowerCase() !== 'page', 'Entity kind "page" is reserved'),
       scope: z.enum(['org', 'resource', 'thread']).optional(),
       facts: z.array(
         z.object({
@@ -85,7 +81,7 @@ function parseWhen(value: string | undefined): Date | undefined {
 }
 
 export interface CaptureExtractorOptions {
-  config?: SubconsciousBuiltInObservationConfig;
+  config?: SubconsciousCaptureConfig;
   defaultScope: KnowledgeScopeLevel;
   maxScope?: KnowledgeScopeLevel;
   learnedGuidance: boolean;
