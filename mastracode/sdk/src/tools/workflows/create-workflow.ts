@@ -15,9 +15,27 @@ interface AgentLike {
     input: string,
     options?: { requestContext?: unknown },
   ) => Promise<{
-    fullStream: ReadableStream<{ type: string; payload?: { toolName?: string; result?: unknown } }>;
+    fullStream: ReadableStream<{
+      type: string;
+      payload?: { toolName?: string; result?: unknown; error?: unknown; args?: unknown };
+    }>;
     text: Promise<string>;
   }>;
+}
+
+/**
+ * Coerce an unknown thrown value into a readable string. Sub-agent tool errors
+ * come through the stream in various shapes (Error, plain object, string) —
+ * normalise so the parent tool's error message is always useful.
+ */
+function stringifyError(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === 'string') return err;
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return String(err);
+  }
 }
 
 export const createWorkflowTool = createTool({
@@ -48,20 +66,70 @@ export const createWorkflowTool = createTool({
     // has /models configured for the main code-agent.
     const stream = await builder.stream(request, { requestContext });
 
-    // Sub-agent runs its own tool loop. Watch the stream for the save-workflow
-    // tool-result so we can surface the workflow id alongside the summary.
+    // Sub-agent runs its own tool loop. We MUST verify save-workflow actually
+    // ran and returned ok — otherwise the sub-agent's natural-language "summary"
+    // is worthless (it will happily claim success without ever calling the tool,
+    // or claim success after save-workflow threw). Surface every error the
+    // sub-agent's tools produce so the caller sees them instead of a fake ok.
     let workflowId: string | undefined;
+    let saveAttempted = false;
+    let saveSucceeded = false;
+    const toolErrors: Array<{ toolName: string; error: string }> = [];
+
     const reader = stream.fullStream.getReader();
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
-      if (value?.type === 'tool-result' && value.payload?.toolName === 'save-workflow') {
-        const result = value.payload.result as { id?: string } | undefined;
-        if (typeof result?.id === 'string') workflowId = result.id;
+      const toolName = value?.payload?.toolName;
+      if (value?.type === 'tool-call' && toolName === 'save-workflow') {
+        saveAttempted = true;
+      }
+      if (value?.type === 'tool-result' && toolName === 'save-workflow') {
+        const result = value.payload?.result as { id?: string; ok?: boolean } | undefined;
+        if (result && result.ok === true && typeof result.id === 'string') {
+          workflowId = result.id;
+          saveSucceeded = true;
+        }
+      }
+      if (value?.type === 'tool-error' && typeof toolName === 'string') {
+        toolErrors.push({ toolName, error: stringifyError(value.payload?.error) });
       }
     }
 
     const summary = await stream.text;
+
+    // If save-workflow errored, surface that error explicitly — do NOT return
+    // the sub-agent's summary as if things were fine.
+    const saveErrors = toolErrors.filter(e => e.toolName === 'save-workflow');
+    if (saveErrors.length > 0 && !saveSucceeded) {
+      throw new Error(
+        `create-workflow failed: save-workflow threw ${saveErrors.length} error(s):\n- ${saveErrors
+          .map(e => e.error)
+          .join('\n- ')}\n\nSub-agent summary (unreliable, save did not succeed):\n${summary}`,
+      );
+    }
+
+    // If save-workflow was never called, the sub-agent gave up (or hallucinated
+    // success). Fail loudly so the caller doesn't think a workflow exists.
+    if (!saveAttempted) {
+      const otherErrors = toolErrors.length
+        ? `\n\nOther sub-agent tool errors:\n- ${toolErrors.map(e => `${e.toolName}: ${e.error}`).join('\n- ')}`
+        : '';
+      throw new Error(
+        `create-workflow failed: the workflow-builder sub-agent never called save-workflow. No workflow was persisted.${otherErrors}\n\nSub-agent summary:\n${summary}`,
+      );
+    }
+
+    // Save was attempted but never returned ok (no tool-result with { ok: true, id }).
+    if (!saveSucceeded) {
+      const otherErrors = toolErrors.length
+        ? `\n\nSub-agent tool errors:\n- ${toolErrors.map(e => `${e.toolName}: ${e.error}`).join('\n- ')}`
+        : '';
+      throw new Error(
+        `create-workflow failed: save-workflow was called but did not return { ok: true }.${otherErrors}\n\nSub-agent summary:\n${summary}`,
+      );
+    }
+
     return { summary, workflowId };
   },
 });

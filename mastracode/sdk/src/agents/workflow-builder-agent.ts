@@ -276,6 +276,7 @@ Every build runs through these five steps in order:
 - ❌ Adding a no-op step-1 mapping that just renames \`inputData\` keys. Step 1 receives the workflow input object directly. (Past step 1, if you need workflow input again, use \`\${initData.…}\` — not a rename mapping.)
 - ❌ \`mapConfig\` as an object (\`"mapConfig": { ... }\`). It MUST be a JSON-encoded string (\`"mapConfig": "{...}"\`).
 - ❌ Refusing to use \`foreach\` because no upstream tool returns an array, and falling back to a single agent step that "loops internally". The engine has NO array→iteration workaround that beats \`foreach\`. The correct move is ALWAYS to insert a bridge agent step whose \`outputSchema\` is an array (typically \`Array<{ prompt: string }>\` when the inner \`foreach\` step is an agent), between the string/object-returning upstream and the \`foreach\`. "The tool doesn't return an array" is never a reason to skip \`foreach\` — it is the reason to add the bridge agent.
+- ❌ Writing a bridge mapping that pipes ONLY the previous step's output when the downstream agent needs ADDITIONAL context from the workflow input to be useful. Classic case: \`find_files\` returns bare basenames (e.g. \`app-tools.ts\\nserver.ts\`) — no path prefix — so a downstream agent asked to "read and summarize each file" has no idea what folder they live in. Fix: combine both scopes in the mapping template. \`\${initData.<workflowInputField>}\` is available in EVERY mapping; use it to thread the workflow's original input (folder path, repo name, target branch, ticket id, etc.) into the prompt alongside \`\${stepResults.<upstream>}\`. See the "combining upstream output with workflow input" worked example below.
 
 # Worked example: list files → review each
 
@@ -343,7 +344,7 @@ The tree string isn't iterable. We need to (a) turn it into an array whose eleme
   {
     "type": "mapping",
     "id": "to-extract-prompt",
-    "mapConfig": "{\\"prompt\\":{\\"template\\":\\"For every .ts file in this listing, emit an object { prompt: <a request to summarise that file, embedding the file path> }. Return the array only, no prose.\\\\n\\\\n\${stepResults.list}\\"}}"
+    "mapConfig": "{\\"prompt\\":{\\"template\\":\\"The listing below contains BARE filenames (no path prefix) inside the folder \${initData.path}. For every .ts entry, emit an object { prompt: <a request to summarise the file at ABSOLUTE PATH \${initData.path}/<filename>> }. Return the array only, no prose.\\\\n\\\\nListing:\\\\n\${stepResults.list}\\"}}"
   },
   {
     "type": "agent",
@@ -368,13 +369,15 @@ The tree string isn't iterable. We need to (a) turn it into an array whose eleme
 \`\`\`
 
 Walk the shapes:
-- \`list\` outputs a string.
-- \`to-extract-prompt\` (mapping) turns the string into \`{ prompt: <instructions + file listing> }\` — matches \`prep-summarise-prompts\`'s required \`{ prompt: string }\`.
-- \`prep-summarise-prompts\` (agent with \`outputSchema\`) emits \`Array<{ prompt: string }>\`.
+- \`list\` outputs a string (bare filenames relative to the listed folder, no path prefix).
+- \`to-extract-prompt\` (mapping) combines the bare listing with \`\${initData.path}\` so the bridge agent gets both. Result matches \`prep-summarise-prompts\`'s required \`{ prompt: string }\`.
+- \`prep-summarise-prompts\` (agent with \`outputSchema\`) emits \`Array<{ prompt: string }>\` where each prompt embeds the ABSOLUTE path — so \`summarise-one\` can actually read the file.
 - \`foreach\` iterates that array; each element \`{ prompt: string }\` matches \`summarise-one\`'s required input exactly.
 - \`summarise-one\` returns \`{ text }\`; foreach's output is \`{ text }[]\`.
 
-**The general pattern for fanning out to an agent from an unstructured upstream:** tool-string → mapping-to-prompt → agent-with-array-of-prompt-objects → foreach-over-agent. If the foreach's inner is a \`tool\` instead of an agent, the bridge agent should emit \`Array<{...that tool's inputSchema}>\` instead of \`Array<{ prompt }>\`.
+**The general pattern for fanning out to an agent from an unstructured upstream:** tool-string → mapping-to-prompt-that-combines-tool-output-with-\`initData\` → agent-with-array-of-prompt-objects → foreach-over-agent. If the foreach's inner is a \`tool\` instead of an agent, the bridge agent should emit \`Array<{...that tool's inputSchema}>\` instead of \`Array<{ prompt }>\`.
+
+**The critical thing to notice:** the bridge agent CANNOT invent context that isn't in its prompt. If the upstream tool strips context (like \`find_files\` stripping the folder path from each entry), the mapping MUST re-thread that context via \`\${initData.…}\`. Missing this is the #1 cause of downstream steps failing with "file not found", "invalid id", "no such record", etc.
 
 # Worked example: feeding a foreach's output into a synthesis agent
 
@@ -396,6 +399,20 @@ The output of a \`foreach(agent)\` step is \`Array<{ text: string }>\`, one entr
 \`\`\`
 
 \`\${stepResults.summarise-one}\` becomes a JSON-encoded string like \`[{"text":"..."},{"text":"..."}]\`, which the synthesis agent can read directly. This scales to any number of foreach iterations — no fixed slot count.
+
+# Worked example: combining upstream output with workflow input in a mapping
+
+Very common pattern: an upstream tool returns a value that's only meaningful IN CONTEXT of the workflow's original input, and a downstream agent needs both. Example: \`find_files\` returns \`app-tools.ts\\nserver.ts\` (bare basenames), but the workflow input has the folder path (\`{ path: "/repo/src/agents" }\`). A downstream agent asked to summarise each file needs the absolute path — combine both scopes in the mapping:
+
+\`\`\`json
+{
+  "type": "mapping",
+  "id": "to-summary-prompt",
+  "mapConfig": "{\\"prompt\\":{\\"template\\":\\"Files in \${initData.path}:\\\\n\${stepResults.list-files}\\\\n\\\\nFor each file above, read it at absolute path \${initData.path}/<filename> and write a summary.\\"}}"
+}
+\`\`\`
+
+The mapping template can reference AS MANY scopes AS YOU NEED. \`initData\` is always the workflow's original input; \`stepResults.<id>\` is any prior step's output. Use both together whenever the upstream step alone doesn't carry enough context for the downstream to act.
 
 # Worked example: reusing the workflow's original input past step 1
 
