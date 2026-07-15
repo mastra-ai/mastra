@@ -4245,6 +4245,9 @@ importers:
       '@openrouter/ai-sdk-provider-v5':
         specifier: npm:@openrouter/ai-sdk-provider@1.5.4
         version: '@openrouter/ai-sdk-provider@1.5.4(zod@4.4.3)'
+      '@openrouter/ai-sdk-provider-v6':
+        specifier: npm:@openrouter/ai-sdk-provider@2.10.0
+        version: '@openrouter/ai-sdk-provider@2.10.0(zod@4.4.3)'
       '@types/babel__core':
         specifier: ^7.20.5
         version: 7.20.5
@@ -14894,6 +14897,13 @@ packages:
     peerDependencies:
       ai: ^5.0.0
       zod: ^3.24.1 || ^v4
+
+  '@openrouter/ai-sdk-provider@2.10.0':
+    resolution: {integrity: sha512-FMsAEjLUt5pWuRE2LDC/LCvVrFjLlrEzUITH5+5SZtfq7KZ2wrOHjQVxzz92sju8S9ltpzW87CLW8/b0oBXVCw==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      ai: ^6.0.0
+      zod: ^3.25.0 || ^4.0.0
 
   '@openrouter/sdk@0.1.27':
     resolution: {integrity: sha512-RH//L10bSmc81q25zAZudiI4kNkLgxF2E+WU42vghp3N6TEvZ6F0jK7uT3tOxkEn91gzmMw9YVmDENy7SJsajQ==}
@@ -37064,6 +37074,10 @@ snapshots:
   '@openrouter/ai-sdk-provider@1.5.4(zod@4.4.3)':
     dependencies:
       '@openrouter/sdk': 0.1.27
+      zod: 4.4.3
+
+  '@openrouter/ai-sdk-provider@2.10.0(zod@4.4.3)':
+    dependencies:
       zod: 4.4.3
 
   '@openrouter/sdk@0.1.27':
