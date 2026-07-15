@@ -373,6 +373,70 @@ describe('DELETE /web/factory/work-items/:id', () => {
   });
 });
 
+// ── Metrics ──────────────────────────────────────────────────────────────
+describe('GET /web/factory/projects/:id/metrics', () => {
+  it('401s without a user and 404s for projects outside the org', async () => {
+    expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/metrics`, undefined, null)).status).toBe(401);
+
+    tables = {};
+    seedProject('other-org');
+    expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/metrics`)).status).toBe(404);
+  });
+
+  it('clamps the days param to a supported window', async () => {
+    const bodyFor = async (query: string) =>
+      (await (await json('GET', `/web/factory/projects/${PROJECT_ID}/metrics${query}`)).json()).metrics;
+
+    expect((await bodyFor('')).windowDays).toBe(30);
+    expect((await bodyFor('?days=7')).windowDays).toBe(7);
+    expect((await bodyFor('?days=90')).windowDays).toBe(90);
+    expect((await bodyFor('?days=17')).windowDays).toBe(30);
+    expect((await bodyFor('?days=evil')).windowDays).toBe(30);
+  });
+
+  it('aggregates the project board: throughput, WIP, transitions, and source mix', async () => {
+    // One card completed today (intake → done), one still in intake.
+    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
+    const { workItem } = await created.json();
+    await json('PATCH', `/web/factory/work-items/${workItem.id}`, { stages: ['done'] });
+    await json(
+      'POST',
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      createBody({ source: 'manual', sourceKey: null, title: 'Manual card' }),
+    );
+
+    const res = await json('GET', `/web/factory/projects/${PROJECT_ID}/metrics?days=7`);
+    expect(res.status).toBe(200);
+    const { metrics } = await res.json();
+
+    expect(metrics.windowDays).toBe(7);
+    expect(metrics.throughput).toHaveLength(7);
+    expect(metrics.throughput.reduce((sum: number, p: any) => sum + p.count, 0)).toBe(1);
+    expect(metrics.cycleTime.samples).toBe(1);
+    expect(Object.fromEntries(metrics.wip.map((w: any) => [w.stage, w.count]))).toEqual({ done: 1, intake: 1 });
+    expect(metrics.wipTotal).toBe(1);
+    expect(metrics.agingWip).toHaveLength(1);
+    expect(metrics.agingWip[0]).toMatchObject({ title: 'Manual card', stage: 'intake' });
+    // intake entered (x2) + done entered = 3 stage moves, all by the test user.
+    expect(metrics.transitions).toEqual({ human: 3, total: 3 });
+    expect(metrics.sourceMix).toEqual(
+      expect.arrayContaining([
+        { source: 'github-issue', count: 1 },
+        { source: 'manual', count: 1 },
+      ]),
+    );
+  });
+
+  it('returns zeroed metrics for an empty board', async () => {
+    const res = await json('GET', `/web/factory/projects/${PROJECT_ID}/metrics`);
+    const { metrics } = await res.json();
+    expect(metrics.throughput).toHaveLength(30);
+    expect(metrics.cycleTime).toEqual({ medianMs: null, p90Ms: null, samples: 0 });
+    expect(metrics.wip).toEqual([]);
+    expect(metrics.agingWip).toEqual([]);
+  });
+});
+
 // ── Validation units ─────────────────────────────────────────────────────
 describe('parseCreateWorkItem', () => {
   it('accepts a minimal valid body and defaults sessions/metadata', () => {

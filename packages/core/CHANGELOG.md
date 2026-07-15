@@ -1,5 +1,27 @@
 # @mastra/core
 
+## 1.51.1-alpha.1
+
+## 1.51.1-alpha.0
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`8a0d145`](https://github.com/mastra-ai/mastra/commit/8a0d145aadbdf7278665aceaaec364b35dd9bd94))
+
+- Fixed model router requests through OpenRouter failing with a 400 "thinking blocks cannot be modified" error when an Anthropic model (e.g. openrouter/anthropic/claude-sonnet-4-6) used extended thinking together with parallel tool calls. The bundled OpenRouter provider was updated from 1.5.4 to 2.10.0, which no longer duplicates reasoning details on each tool call when sending conversation history back to the API. Fixes #19436 ([#19493](https://github.com/mastra-ai/mastra/pull/19493))
+
+- Updated the unsupported-adapter error for resource-scoped message listing to include convex in the list of storage adapters that support Observational Memory. ([#19474](https://github.com/mastra-ai/mastra/pull/19474))
+
+- Fixed `onIterationComplete` callbacks receiving empty `toolResults` after successful tool execution. Tool results now include the matching call ID, tool name, and output from the completed iteration. Fixes [#19453](https://github.com/mastra-ai/mastra/issues/19453). ([#19454](https://github.com/mastra-ai/mastra/pull/19454))
+
+- Fixed generated files from AI SDK v7 models (e.g. gpt-image-1 image output) being corrupted in stream output and saved message history. The tagged V4 file data is now converted to the flat shape Mastra's stream pipeline and message storage expect. This covers both `file` and `reasoning-file` response parts. ([#19430](https://github.com/mastra-ai/mastra/pull/19430))
+
+  Also fixed handling of URL-backed generated files: the URL is no longer mislabeled as base64 in file chunks, UI message streams now emit the URL directly instead of a broken data URI, and reading `.uint8Array` on a URL-backed generated file now throws a descriptive error instead of returning garbage.
+
+- Fixed background tasks never executing when Mastra is used as a library without a Mastra server. Previously, background-eligible tool calls (including background subagent delegations) were dispatched but stayed in the `running` state forever because the task workers only started with a Mastra server (`mastra dev` or a deployed server). Now the workers start automatically on the first background task dispatch or resume, so background tasks complete in apps that embed Mastra directly (for example Express or Next.js servers). Fixes [#19339](https://github.com/mastra-ai/mastra/issues/19339). ([#19476](https://github.com/mastra-ai/mastra/pull/19476))
+
+- Fixed a crash on Cloudflare Workers where calling generate() on an Agent not registered to a Mastra instance threw `TypeError: this.#intervalHandle.unref is not a function`. The scheduler now only calls unref() on its polling interval when the runtime provides it (Node.js); on runtimes where setInterval returns a number (workerd) the call is skipped. Fixes [#19462](https://github.com/mastra-ai/mastra/issues/19462). ([#19471](https://github.com/mastra-ai/mastra/pull/19471))
+
 ## 1.51.0
 
 ### Minor Changes
