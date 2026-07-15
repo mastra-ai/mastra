@@ -283,7 +283,9 @@ describe('WorkspacesSection', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'feat-ui' }));
 
     await waitFor(() =>
-      expect(stateUpdates).toContainEqual({ state: { projectPath: '/sandbox/mastra-worktrees/feat-ui' } }),
+      expect(stateUpdates).toContainEqual({
+        state: { projectPath: '/sandbox/mastra-worktrees/feat-ui', githubProjectId: GITHUB_PROJECT_ID },
+      }),
     );
     await waitFor(() => expect(loadProjects()[0]?.selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-ui'));
     // Let the open-thread flow settle so its requests can't leak into later tests.
@@ -386,7 +388,9 @@ describe('WorkspacesSection', () => {
       expect(screen.getByRole('button', { name: 'feat-new' })).toHaveAttribute('aria-current', 'true'),
     );
     await waitFor(() =>
-      expect(stateUpdates).toContainEqual({ state: { projectPath: '/sandbox/mastra-worktrees/feat-new' } }),
+      expect(stateUpdates).toContainEqual({
+        state: { projectPath: '/sandbox/mastra-worktrees/feat-new', githubProjectId: GITHUB_PROJECT_ID },
+      }),
     );
     // Let the open-thread flow settle so its requests can't leak into later tests.
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-generic'));
