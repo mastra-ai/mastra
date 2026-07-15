@@ -1,6 +1,6 @@
 {
   "name": "@mastra/nestjs",
-  "version": "0.2.7-alpha.10",
+  "version": "0.2.7",
   "description": "Mastra NestJS adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -56,7 +56,7 @@
     "@types/supertest": "^6.0.2",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
-    "vitest": "^4.1.8",
+    "vitest": "^4.1.10",
     "zod": "^3.25.0"
   },
   "peerDependencies": {

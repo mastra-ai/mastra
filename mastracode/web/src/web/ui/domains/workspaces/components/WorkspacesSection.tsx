@@ -6,7 +6,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useQueryClient } from '@tanstack/react-query';
 import { GitBranch, MoreHorizontal, Plus } from 'lucide-react';
 import { useState } from 'react';
-import type { FormEvent, KeyboardEvent, ReactNode } from 'react';
+import type { FormEvent, KeyboardEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
 import { useApiConfig } from '../../../../../shared/api/config';
@@ -27,15 +27,12 @@ import { useWorkspaceAttention } from '../hooks/useWorkspaceAttention';
 import type { Worktree } from '../services/projects';
 
 /**
- * Sidebar section listing a GitHub project's worktrees.
- *
- * Threads are scoped to the worktree they run in, so callers can pass the
- * thread list as `children`; it renders nested under the active worktree row
- * (or after the list when no worktree is selected yet). Feature worktrees
- * hold a single conversation, so the thread list renders read-only for them
- * (title only — no rename/clone/delete or new-thread controls).
+ * Factory sessions: a GitHub project's feature worktrees, rendered as the
+ * "Sessions" subsection of the Factory menu. Each worktree holds a single
+ * factory-run conversation, so selecting one opens its thread directly —
+ * there is no nested thread list.
  */
-export function WorkspacesSection({ children }: { children?: ReactNode }) {
+export function WorkspacesSection() {
   const { baseUrl } = useApiConfig();
   const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
   const [creating, setCreating] = useState(false);
@@ -185,10 +182,10 @@ export function WorkspacesSection({ children }: { children?: ReactNode }) {
   };
 
   return (
-    <section className="flex flex-col gap-2" aria-label="Workspaces">
+    <section className="flex flex-col gap-2" aria-label="Factory sessions">
       <div className="flex items-center justify-between px-1">
         <Txt as="span" variant="ui-xs" className="text-icon3 uppercase tracking-wide">
-          Workspaces
+          Sessions
         </Txt>
         <Button
           variant="ghost"
@@ -204,28 +201,23 @@ export function WorkspacesSection({ children }: { children?: ReactNode }) {
       <div className="flex flex-col gap-1">
         {worktrees.map(worktree => {
           const active = worktree.worktreePath === selectedPath;
-          const nested = active && Boolean(children);
           return (
-            <div key={worktree.worktreePath} className="flex flex-col gap-1">
-              <WorkspaceRow
-                worktree={worktree}
-                active={active}
-                running={runningByPath[worktree.worktreePath] === true}
-                attention={attentionByPath[worktree.worktreePath] === true}
-                disabled={pending}
-                onSeen={() => clearAttention(worktree.worktreePath)}
-                onSelect={() => {
-                  clearAttention(worktree.worktreePath);
-                  selectWorkspace.mutate(worktree.worktreePath, {
-                    onSuccess: () => void openWorktreeThread(worktree.worktreePath),
-                  });
-                }}
-                onDelete={
-                  worktree.worktreePath === activeProject.sandboxWorkdir ? undefined : () => setConfirmDelete(worktree)
-                }
-              />
-              {nested && <div className="ml-[15px] flex flex-col border-l border-border1 pl-2">{children}</div>}
-            </div>
+            <WorkspaceRow
+              key={worktree.worktreePath}
+              worktree={worktree}
+              active={active}
+              running={runningByPath[worktree.worktreePath] === true}
+              attention={attentionByPath[worktree.worktreePath] === true}
+              disabled={pending}
+              onSeen={() => clearAttention(worktree.worktreePath)}
+              onSelect={() => {
+                clearAttention(worktree.worktreePath);
+                selectWorkspace.mutate(worktree.worktreePath, {
+                  onSuccess: () => void openWorktreeThread(worktree.worktreePath),
+                });
+              }}
+              onDelete={() => setConfirmDelete(worktree)}
+            />
           );
         })}
 
@@ -247,10 +239,6 @@ export function WorkspacesSection({ children }: { children?: ReactNode }) {
               </Txt>
             )}
           </form>
-        )}
-
-        {Boolean(children) && !worktrees.some(worktree => worktree.worktreePath === selectedPath) && (
-          <div className="flex flex-col">{children}</div>
         )}
       </div>
 
@@ -286,8 +274,9 @@ export function WorkspacesSection({ children }: { children?: ReactNode }) {
   );
 }
 
-function WorkspaceRow({
+export function WorkspaceRow({
   worktree,
+  label,
   active,
   running,
   attention,
@@ -297,6 +286,8 @@ function WorkspaceRow({
   onDelete,
 }: {
   worktree: Worktree;
+  /** Display name; defaults to the worktree's branch. */
+  label?: string;
   active: boolean;
   running: boolean;
   /** A run finished here and the user hasn't opened the workspace since. */
@@ -310,6 +301,7 @@ function WorkspaceRow({
   // the already-active row can't be re-selected, so clicking it just clears
   // the done indicator.
   const onClick = active ? (attention ? onSeen : undefined) : onSelect;
+  const name = label ?? worktree.branch;
   return (
     <div className={`group relative rounded-md ${active ? 'bg-surface4' : 'hover:bg-surface3'}`}>
       <button
@@ -321,18 +313,18 @@ function WorkspaceRow({
         className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition ${active ? 'text-icon6' : 'text-icon3 hover:text-icon5'} disabled:cursor-default disabled:opacity-70`}
       >
         <GitBranch size={13} />
-        <span className="truncate">{worktree.branch}</span>
+        <span className="truncate">{name}</span>
         {running ? (
           <span
             role="status"
-            aria-label={`Agent working in ${worktree.branch}`}
+            aria-label={`Agent working in ${name}`}
             title="Agent working"
             className="ml-auto size-2 shrink-0 animate-pulse rounded-full bg-accent1 group-hover:opacity-0"
           />
         ) : attention ? (
           <span
             role="status"
-            aria-label={`Agent finished in ${worktree.branch}`}
+            aria-label={`Agent finished in ${name}`}
             title="Agent finished — open to dismiss"
             className="ml-auto size-2 shrink-0 rounded-full bg-accent1 group-hover:opacity-0"
           />

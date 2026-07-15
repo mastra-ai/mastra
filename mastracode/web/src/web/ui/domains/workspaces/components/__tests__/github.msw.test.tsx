@@ -64,9 +64,28 @@ describe('github git-op helpers', () => {
     expect(result.pushed).toBe(true);
   });
 
-  it('openPullRequest returns the PR url', async () => {
-    server.use(http.post(gitOpUrl('pr'), () => HttpResponse.json({ url: 'https://github.com/o/r/pull/7' })));
-    const result = await openPullRequest(TEST_BASE_URL, PROJECT, { branch: 'feat-x', title: 'My PR' });
+  it('openPullRequest carries the originating session so the created PR is subscribed', async () => {
+    let received: unknown;
+    server.use(
+      http.post(gitOpUrl('pr'), async ({ request }) => {
+        received = await request.json();
+        return HttpResponse.json({ url: 'https://github.com/o/r/pull/7' });
+      }),
+    );
+    const result = await openPullRequest(TEST_BASE_URL, PROJECT, {
+      branch: 'feat-x',
+      title: 'My PR',
+      worktreePath: '/workspace/worktrees/feat-x',
+      sessionId: 'session-1',
+      threadId: 'thread-1',
+    });
+    expect(received).toEqual({
+      branch: 'feat-x',
+      title: 'My PR',
+      worktreePath: '/workspace/worktrees/feat-x',
+      sessionId: 'session-1',
+      threadId: 'thread-1',
+    });
     expect(result.url).toBe('https://github.com/o/r/pull/7');
   });
 
