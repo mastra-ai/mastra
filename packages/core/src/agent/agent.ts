@@ -41,7 +41,14 @@ import { ModelRouterLanguageModel } from '../llm/model/router';
 import type { MastraLanguageModel, MastraLegacyLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
 import { RegisteredLogger } from '../logger';
 import { networkLoop } from '../loop/network';
+// `Mastra` is imported type-only here: a runtime import would create an ESM
+// init cycle (agent → mastra → agent/durable → agent) that breaks
+// `class DurableAgent extends Agent` with a TDZ error. The constructor is read
+// from `mastraCtorHolder` (populated by `mastra/index.ts` at load), with an
+// `await import('../mastra')` fallback for the standalone-agent case where the
+// Mastra module was never loaded. See `#getOrCreateEphemeralMastra`.
 import type { Mastra } from '../mastra';
+import { mastraCtorHolder } from '../mastra/mastra-ctor-holder';
 import type { VersionOverrides } from '../mastra/types';
 import { mergeVersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
@@ -6568,7 +6575,12 @@ export class Agent<
     if (this.#ephemeralMastra) {
       return this.#ephemeralMastra;
     }
-    const { Mastra: MastraClass } = await import('../mastra');
+    // Resolve the Mastra constructor without a static `agent → mastra` runtime
+    // edge (see the type-only import at the top of this file). In any app that
+    // constructed a Mastra, the holder is already populated and no dynamic
+    // import runs; the `await import` is a fallback for standalone agents that
+    // never loaded the Mastra module.
+    const MastraClass = mastraCtorHolder.ctor ?? (await import('../mastra')).Mastra;
     const ephemeral = new MastraClass({
       logger: false,
       storage: new InMemoryStore(),
