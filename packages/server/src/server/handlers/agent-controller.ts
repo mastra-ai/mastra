@@ -94,7 +94,27 @@ const createSessionBodySchema = z.object({
   tags: z.record(z.string(), z.string()).optional(),
   sessionScope: z.string().optional(),
 });
-const sendMessageBodySchema = z.object({ message: z.string() });
+// Server-side attachment limits mirroring the web composer caps (10MB per
+// file, 20MB total), adjusted for base64 overhead (~4/3x).
+const MAX_FILE_DATA_LENGTH = 14 * 1024 * 1024;
+const MAX_TOTAL_FILE_DATA_LENGTH = 28 * 1024 * 1024;
+const sendMessageBodySchema = z.object({
+  message: z.string(),
+  // Optional attachments (e.g. pasted images). `data` is base64-encoded.
+  files: z
+    .array(
+      z.object({
+        data: z.string().max(MAX_FILE_DATA_LENGTH),
+        mediaType: z.string(),
+        filename: z.string().optional(),
+      }),
+    )
+    .max(20)
+    .refine(files => files.reduce((total, file) => total + file.data.length, 0) <= MAX_TOTAL_FILE_DATA_LENGTH, {
+      message: 'Total attachment size exceeds limit',
+    })
+    .optional(),
+});
 const steerBodySchema = z.object({ message: z.string() });
 const toolApprovalBodySchema = z.object({
   toolCallId: z.string(),
@@ -448,14 +468,14 @@ export const SEND_AGENT_CONTROLLER_MESSAGE_ROUTE = createRoute({
   tags: ['AgentController', 'Streaming'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
-  handler: async ({ mastra, controllerId, resourceId, sessionScope, message, requestContext }) => {
+  handler: async ({ mastra, controllerId, resourceId, sessionScope, message, files, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope });
       // Forward the server middleware's requestContext so identity injected in
       // `server.middleware` reaches dynamic instructions and tools (same as the
       // plain agent message route).
-      void session.sendMessage({ content: message, requestContext });
+      void session.sendMessage({ content: message, files, requestContext });
       return { ok: true };
     } catch (error) {
       return handleError(error, 'error sending controller message');
@@ -635,7 +655,9 @@ export const SWITCH_AGENT_CONTROLLER_THREAD_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope });
-      await session.thread.switch({ threadId });
+      if (session.thread.getId() !== threadId) {
+        await session.thread.switch({ threadId });
+      }
       return { ok: true };
     } catch (error) {
       return handleError(error, 'error switching controller thread');

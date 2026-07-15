@@ -202,6 +202,26 @@ export async function listInstallationRepos(installationId: number): Promise<Rep
  * accessible to the installation (so a client can't create a project for an
  * arbitrary repo under an installation id it merely owns).
  */
+export type GithubRepositoryPermission = 'admin' | 'maintain' | 'write' | 'triage' | 'read' | 'none';
+
+export async function getRepositoryCollaboratorPermission(
+  installationId: number,
+  repoFullName: string,
+  username: string,
+): Promise<GithubRepositoryPermission | undefined> {
+  const parts = splitRepoFullName(repoFullName);
+  if (!parts) return undefined;
+  try {
+    const { data } = await getInstallationOctokit(installationId).repos.getCollaboratorPermissionLevel({
+      ...parts,
+      username,
+    });
+    return data.permission as GithubRepositoryPermission;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function getInstallationRepo(installationId: number, repoFullName: string): Promise<RepoSummary | null> {
   const slash = repoFullName.indexOf('/');
   if (slash <= 0) return null;
@@ -251,6 +271,29 @@ export interface IssuePage {
   nextPage: number | null;
 }
 
+export interface ListRepoOpenIssuesOptions {
+  label?: string;
+}
+
+export async function addIssueLabels(
+  installationId: number,
+  repoFullName: string,
+  issueNumber: number,
+  labels: string[],
+): Promise<void> {
+  const parts = splitRepoFullName(repoFullName);
+  if (!parts) return;
+  const uniqueLabels = [...new Set(labels.map(label => label.trim()).filter(Boolean))];
+  if (uniqueLabels.length === 0) return;
+  const octokit = getInstallationOctokit(installationId);
+  await octokit.issues.addLabels({
+    owner: parts.owner,
+    repo: parts.repo,
+    issue_number: issueNumber,
+    labels: uniqueLabels,
+  });
+}
+
 /**
  * List one page of a repo's open issues through an installation token. The
  * issues API also returns pull requests, so those are filtered out (the filter
@@ -261,6 +304,7 @@ export async function listRepoOpenIssues(
   installationId: number,
   repoFullName: string,
   page: number,
+  options: ListRepoOpenIssuesOptions = {},
 ): Promise<IssuePage> {
   const parts = splitRepoFullName(repoFullName);
   if (!parts) return { issues: [], nextPage: null };
@@ -269,6 +313,7 @@ export async function listRepoOpenIssues(
     owner: parts.owner,
     repo: parts.repo,
     state: 'open',
+    labels: options.label,
     per_page: LIST_PAGE_SIZE,
     page,
   });

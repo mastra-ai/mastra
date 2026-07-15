@@ -411,7 +411,7 @@ export function registerAuthRoutes(app: Hono<any>, provider: MastraAuthWorkos, r
     }
     return c.json({
       authenticated: true,
-      user: { email: user.email, name: user.name, organizationId: user.organizationId },
+      user: { userId: getWebAuthUserId(user), email: user.email, name: user.name, organizationId: user.organizationId },
     });
   });
 }
@@ -488,7 +488,12 @@ export function buildAuthRoutes(provider: MastraAuthWorkos, redirectUri: string 
         }
         return c.json({
           authenticated: true,
-          user: { email: user.email, name: user.name, organizationId: user.organizationId },
+          user: {
+            userId: getWebAuthUserId(user),
+            email: user.email,
+            name: user.name,
+            organizationId: user.organizationId,
+          },
         });
       },
     }),
@@ -533,6 +538,7 @@ export function createWebAuthGate(provider: MastraAuthWorkos) {
         if (orgId) user.organizationId = orgId;
       }
       c.set(WEB_AUTH_USER_KEY, user);
+      c.get('requestContext')?.set('user', user);
       return next();
     }
 

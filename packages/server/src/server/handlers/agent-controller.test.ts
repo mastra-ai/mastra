@@ -186,6 +186,27 @@ describe('agent-controller routes', () => {
     });
   });
 
+  describe('SWITCH_AGENT_CONTROLLER_THREAD_ROUTE', () => {
+    it('does not interrupt the session when the requested thread is already active', async () => {
+      const controller = mastra.getAgentController('code');
+      if (!controller) throw new Error('Expected the code agent controller');
+      await controller.init();
+      const session = await controller.createSession({ resourceId: 'user-1', id: 'user-1', ownerId: controller.id });
+      const threadId = session.thread.requireId();
+      const switchThread = vi.spyOn(session.thread, 'switch');
+
+      const response = await SWITCH_AGENT_CONTROLLER_THREAD_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-1',
+        threadId,
+      });
+
+      expect(response).toEqual({ ok: true });
+      expect(switchThread).not.toHaveBeenCalled();
+    });
+  });
+
   describe('SEND_AGENT_CONTROLLER_MESSAGE_ROUTE', () => {
     it('acks a send (reply streams over SSE, not this response)', async () => {
       const res = await SEND_AGENT_CONTROLLER_MESSAGE_ROUTE.handler({
@@ -231,6 +252,37 @@ describe('agent-controller routes', () => {
       } as any);
 
       expect(spy).toHaveBeenCalledWith({ content: 'hello', requestContext });
+    });
+
+    it('forwards files to session.sendMessage', async () => {
+      const session = await getRouteSession('user-rc');
+      const spy = vi.spyOn(session, 'sendMessage').mockResolvedValue(undefined);
+      const files = [{ data: 'aGVsbG8=', mediaType: 'image/png', filename: 'shot.png' }];
+
+      await SEND_AGENT_CONTROLLER_MESSAGE_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-rc',
+        message: 'see attached',
+        files,
+      } as any);
+
+      expect(spy).toHaveBeenCalledWith({ content: 'see attached', files, requestContext: undefined });
+    });
+
+    it('rejects oversized file attachments in the body schema', () => {
+      const schema = SEND_AGENT_CONTROLLER_MESSAGE_ROUTE.bodySchema!;
+
+      const okFile = { data: 'aGVsbG8=', mediaType: 'image/png' };
+      expect(schema.safeParse({ message: 'hi', files: [okFile] }).success).toBe(true);
+
+      // Single file over the 14MB base64 cap (10MB binary).
+      const oversized = { data: 'a'.repeat(14 * 1024 * 1024 + 1), mediaType: 'image/png' };
+      expect(schema.safeParse({ message: 'hi', files: [oversized] }).success).toBe(false);
+
+      // Individually valid files whose combined size exceeds the 28MB total cap.
+      const large = { data: 'a'.repeat(10 * 1024 * 1024), mediaType: 'image/png' };
+      expect(schema.safeParse({ message: 'hi', files: [large, large, large] }).success).toBe(false);
     });
 
     it('forwards requestContext to session.steer', async () => {

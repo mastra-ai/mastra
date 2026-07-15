@@ -9,7 +9,21 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { MessageFactory } from '@mastra/react';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react';
-import { Bell, ChevronDown, Eye, Globe, ListChecks, Pencil, Search, Terminal, Wrench } from 'lucide-react';
+import {
+  Bell,
+  ChevronDown,
+  CircleDot,
+  CircleX,
+  ExternalLink,
+  Eye,
+  GitMerge,
+  Globe,
+  ListChecks,
+  Pencil,
+  Search,
+  Terminal,
+  Wrench,
+} from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 
@@ -526,36 +540,70 @@ function SubagentCard({ entry }: { entry: SubagentEntry }) {
 // Notification cards
 // ---------------------------------------------------------------------------
 
+function notificationUrl(entry: NotificationEntry): string | undefined {
+  const targetUrl = entry.metadata?.targetUrl;
+  if (typeof targetUrl === 'string' && /^https:\/\/github\.com\//.test(targetUrl)) return targetUrl;
+
+  const repository = entry.metadata?.repository;
+  if (typeof repository !== 'string' || !/^[^/]+\/[^/]+$/.test(repository)) return undefined;
+  const pullRequestNumber = entry.metadata?.pullRequestNumber;
+  if (typeof pullRequestNumber === 'number') return `https://github.com/${repository}/pull/${pullRequestNumber}`;
+  const issueNumber = entry.metadata?.issueNumber;
+  if (typeof issueNumber === 'number') return `https://github.com/${repository}/issues/${issueNumber}`;
+  return undefined;
+}
+
+function notificationPresentation(entry: NotificationEntry) {
+  const action = entry.metadata?.action;
+  if (entry.notifKind === 'pull-request-merged') {
+    return { state: 'merged', icon: <GitMerge size={13} />, className: 'border-accent3/30 text-accent3' };
+  }
+  if (entry.notifKind === 'pull-request-closed') {
+    return { state: 'closed', icon: <CircleX size={13} />, className: 'border-error/30 text-error' };
+  }
+  if (action === 'opened' || action === 'reopened') {
+    return { state: 'open', icon: <CircleDot size={13} />, className: 'border-accent1/30 text-accent1' };
+  }
+  return { state: 'notification', icon: <Bell size={13} />, className: 'border-accent3/30 text-icon3' };
+}
+
 function NotificationCard({ entry }: { entry: NotificationEntry }) {
-  return (
-    <div className="rounded-lg border border-l-4 border-border1 border-l-accent3 bg-surface2 px-3 py-2 shadow-sm">
+  const url = notificationUrl(entry);
+  const presentation = notificationPresentation(entry);
+  const content = (
+    <div
+      data-notification-state={presentation.state}
+      className={`rounded-lg border bg-surface2 px-3 py-2 shadow-sm ${presentation.className}`}
+    >
       <div className="flex items-center gap-2">
-        <Bell size={13} />
+        {presentation.icon}
         <Txt variant="ui-sm" font="mono">
           {entry.source ?? 'notification'}
         </Txt>
-        {entry.priority && (
-          <Badge variant={entry.priority === 'high' || entry.priority === 'urgent' ? 'error' : 'default'}>
-            {entry.priority}
-          </Badge>
-        )}
+        {url && <ExternalLink size={12} className="ml-auto" aria-hidden />}
       </div>
       <Txt variant="ui-sm" className="py-1">
         {entry.message}
       </Txt>
     </div>
   );
+
+  if (!url) return content;
+  return (
+    <a href={url} target="_blank" rel="noreferrer" aria-label={`Open notification target: ${entry.message}`}>
+      {content}
+    </a>
+  );
 }
 
 function NotificationSummaryCard({ entry }: { entry: NotificationSummaryEntry }) {
   return (
-    <div className="rounded-lg border border-l-4 border-border1 border-l-accent3 bg-surface2 px-3 py-2 shadow-sm">
+    <div className="rounded-lg border border-accent3/30 bg-surface2 px-3 py-2 shadow-sm">
       <div className="flex items-center gap-2">
         <Bell size={13} />
         <Txt variant="ui-sm" font="mono">
           Notification summary
         </Txt>
-        <Badge variant="info">{entry.pending} pending</Badge>
       </div>
       <Txt variant="ui-sm" className="py-1">
         {entry.message}
@@ -718,16 +766,44 @@ function MessageBubble({ entry }: { entry: MessageEntry }) {
       const groupPosition = toolGroupPositions.get(part.toolInvocation.toolCallId);
       return <ToolCard tool={tool} forceExpanded={allExpanded} groupPosition={groupPosition} />;
     },
-    File: (part: FilePart) => <pre className={resultBlock}>{stringify(part)}</pre>,
+    File: (part: FilePart) => <FileAttachment part={part} />,
   };
 
+  const notifications = notificationMetadata(entry);
+  if (notifications.length > 0) {
+    return (
+      <div className="flex flex-col gap-2">
+        {notifications.map(notification =>
+          notification.kind === 'notification' ? (
+            <NotificationCard key={notification.id} entry={notification} />
+          ) : (
+            <NotificationSummaryCard key={notification.id} entry={notification} />
+          ),
+        )}
+        {hasRenderablePart && (
+          <MessageFactory message={entry.message} roles={roles} {...renderers} fallback={() => null} />
+        )}
+      </div>
+    );
+  }
+
   const status = statusMetadata(entry);
-  // Some harness status parts (e.g. om_* markers) carry no text; skip them
-  // entirely instead of rendering an empty notice bubble.
-  if (status) return status.text.trim() ? <StatusMetadataCard status={status} /> : null;
+  // Some harness status parts (e.g. om_* markers) carry no text. Ignore the
+  // marker while preserving any ordinary assistant content in the message.
+  if (status?.text.trim()) return <StatusMetadataCard status={status} />;
   if (entry.message.role === 'assistant' && !hasRenderablePart) return null;
 
   return <MessageFactory message={entry.message} roles={roles} {...renderers} fallback={() => null} />;
+}
+
+function FileAttachment({ part }: { part: FilePart }) {
+  if (part.mimeType?.startsWith('image/')) {
+    const src = part.data.startsWith('data:') ? part.data : `data:${part.mimeType};base64,${part.data}`;
+    return (
+      <img src={src} alt="Attached image" className="my-1.5 max-h-80 max-w-full rounded-md border border-border1" />
+    );
+  }
+  return <pre className={resultBlock}>{stringify(part)}</pre>;
 }
 
 function toolFromInvocationPart(part: ToolInvocationPart, runtime?: ToolCall): ToolCall {
@@ -743,6 +819,63 @@ function toolFromInvocationPart(part: ToolInvocationPart, runtime?: ToolCall): T
     result: runtime?.result ?? persistedResult ?? invocation.errorText,
     output: runtime?.output ?? '',
   };
+}
+
+function notificationMetadata(entry: MessageEntry): Array<NotificationEntry | NotificationSummaryEntry> {
+  const harnessContent = entry.message.content.metadata?.harnessContent;
+  if (!Array.isArray(harnessContent)) return [];
+
+  const notifications: Array<NotificationEntry | NotificationSummaryEntry> = [];
+  for (const [index, part] of harnessContent.entries()) {
+    if (typeof part !== 'object' || part === null || !('type' in part)) continue;
+    if (!('message' in part) || typeof part.message !== 'string') continue;
+
+    if (part.type === 'notification') {
+      notifications.push({
+        kind: 'notification',
+        id: `${entry.id}-notification-${index}`,
+        notificationId:
+          'notificationId' in part && typeof part.notificationId === 'string' ? part.notificationId : undefined,
+        message: part.message,
+        source: 'source' in part && typeof part.source === 'string' ? part.source : undefined,
+        notifKind: 'kind' in part && typeof part.kind === 'string' ? part.kind : undefined,
+        priority: 'priority' in part && typeof part.priority === 'string' ? part.priority : undefined,
+        metadata: 'metadata' in part && isRecord(part.metadata) ? part.metadata : undefined,
+      });
+      continue;
+    }
+
+    if (part.type !== 'notification_summary') continue;
+    const pending = 'pending' in part && typeof part.pending === 'number' ? part.pending : 0;
+    const bySource = 'bySource' in part && isNumberRecord(part.bySource) ? part.bySource : {};
+    const byPriority = 'byPriority' in part && isNumberRecord(part.byPriority) ? part.byPriority : {};
+    const notificationIds =
+      'notificationIds' in part && Array.isArray(part.notificationIds)
+        ? part.notificationIds.filter((id: unknown): id is string => typeof id === 'string')
+        : [];
+    notifications.push({
+      kind: 'notification_summary',
+      id: `${entry.id}-notification-summary-${index}`,
+      message: part.message,
+      pending,
+      bySource,
+      byPriority,
+      notificationIds,
+    });
+  }
+  return notifications;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isNumberRecord(value: unknown): value is Record<string, number> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    Object.values(value).every(candidate => typeof candidate === 'number')
+  );
 }
 
 interface StatusMetadata {
@@ -765,16 +898,17 @@ function statusMetadata(entry: MessageEntry): StatusMetadata | undefined {
   );
   if (!statusPart || typeof statusPart !== 'object' || !('type' in statusPart)) return undefined;
 
-  const text = 'text' in statusPart && typeof statusPart.text === 'string' ? statusPart.text : messageText(entry);
+  const text =
+    'text' in statusPart && typeof statusPart.text === 'string'
+      ? statusPart.text
+      : 'message' in statusPart && typeof statusPart.message === 'string'
+        ? statusPart.message
+        : '';
   return {
     id: `${entry.id}-${String(statusPart.type)}`,
     text,
     level: statusPart.type === 'harness-error' ? 'error' : 'info',
   };
-}
-
-function messageText(entry: MessageEntry): string {
-  return entry.message.content.parts.flatMap(part => (part.type === 'text' ? [part.text] : [])).join('');
 }
 
 function StatusMetadataCard({ status }: { status: StatusMetadata }) {

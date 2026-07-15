@@ -19,7 +19,7 @@ interface FactoryPageShellProps {
 }
 
 /**
- * Shared frame for the Factory pages (Intake / Review): the standard app
+ * Shared frame for the Factory pages (the Board): the standard app
  * layout (sidebar + mobile header) around a titled content column. Factory data
  * comes from GitHub, so local projects and disconnected GitHub states get an
  * explanatory notice instead of a broken empty list.
@@ -43,8 +43,10 @@ export function FactoryPageShell({
       onSidebarClose={() => overlays.close('sidebar')}
       content={
         activeProject ? (
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 md:px-6">
-            <div className={`mx-auto flex w-full flex-col gap-4 ${maxWidthClassName}`}>
+          // The page itself doesn't scroll: the Board's swimlanes scroll
+          // internally, so the frame just hands its height down.
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-6 md:px-6">
+            <div className={`mx-auto flex min-h-0 w-full flex-1 flex-col gap-4 ${maxWidthClassName}`}>
               <header className="flex flex-col gap-1">
                 <h1 className="m-0 text-xl text-icon6">{title}</h1>
                 <Txt as="p" variant="ui-sm" className="m-0 text-icon3">

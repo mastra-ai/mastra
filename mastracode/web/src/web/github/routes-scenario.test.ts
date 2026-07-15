@@ -94,6 +94,11 @@ vi.mock('./client', () => ({
 
 let mintCount = 0;
 
+const subscribeToPullRequest = vi.fn(async (_input: unknown) => ({ created: true }));
+vi.mock('./subscriptions', () => ({
+  subscribeToPullRequest: (input: unknown) => subscribeToPullRequest(input),
+}));
+
 const ensureProjectSandbox = vi.fn(async (_row: any) => ({ id: 'sb' }));
 const materializeRepo = vi.fn(async () => {});
 const reattachProjectSandbox = vi.fn(async (_id: string) => ({ id: 'sb' }));
@@ -270,6 +275,7 @@ beforeEach(() => {
   commitAll.mockClear();
   pushBranch.mockClear();
   createPullRequest.mockClear();
+  subscribeToPullRequest.mockClear();
 });
 
 afterEach(() => {
@@ -369,6 +375,8 @@ describe('S1: full write-back journey through the real route handlers', () => {
       title: 'My PR',
       body: 'Adds a thing',
       worktreePath: persistedWorktreePath,
+      sessionId: 'session-1',
+      threadId: 'thread-1',
     });
     expect(prRes.status).toBe(200);
     expect(await prRes.json()).toMatchObject({ url: 'https://github.com/octo/hello/pull/1' });
@@ -377,6 +385,48 @@ describe('S1: full write-back journey through the real route handlers', () => {
     expect(prToken).toMatch(/^install-token-/);
     // The push and PR tokens are distinct mints (never reused across ops).
     expect(prToken).not.toBe(pushToken);
+    expect(subscribeToPullRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        githubProjectId: projectId,
+        pullRequestNumber: 1,
+        sessionId: 'session-1',
+        ownerId: 'u1',
+        resourceId: projectId,
+        threadId: 'thread-1',
+        sessionScope: persistedWorktreePath,
+        source: 'factory-pr-create',
+      }),
+    );
+  });
+
+  it('keeps PR creation compatible when no originating session is supplied', async () => {
+    const app = buildApp({ workosId: 'u1', organizationId: 'org1' });
+    const projectId = 'project-compat';
+    tables.projects.push({
+      id: projectId,
+      orgId: 'org1',
+      userId: 'u1',
+      installationId: 7,
+      repoFullName: 'octo/hello',
+      repoId: 99,
+      defaultBranch: 'main',
+    });
+    tables.sandboxes.push({
+      id: 'sbrow-compat',
+      githubProjectId: projectId,
+      userId: 'u1',
+      sandboxId: 'sb-compat',
+      sandboxWorkdir: '/workspace/hello',
+      materializedAt: new Date(),
+    });
+
+    const response = await postJson(app, `/web/github/projects/${projectId}/pr`, {
+      branch: 'feat/x',
+      title: 'My PR',
+    });
+
+    expect(response.status).toBe(200);
+    expect(subscribeToPullRequest).not.toHaveBeenCalled();
   });
 });
 

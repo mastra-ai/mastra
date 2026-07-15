@@ -24,6 +24,31 @@ describe('MongoDB storage — topology-aware transactions', () => {
     }
   });
 
+  test('identity-aware dataset item writes fail before mutation on standalone MongoDB', async () => {
+    const store = new MongoDBStore({ id: 'tx-identity-standalone', uri: STANDALONE_URI, dbName: DB });
+    try {
+      await store.init();
+      const datasets = await store.getStore('datasets');
+      if (!datasets) throw new Error('Datasets storage not found');
+      await datasets.dangerouslyClearAll();
+      const dataset = await datasets.createDataset({ name: 'identity-standalone' });
+
+      await expect(
+        datasets.batchInsertItems({
+          datasetId: dataset.id,
+          items: [{ externalId: 'item-1', input: { value: 'same' } }],
+        }),
+      ).rejects.toMatchObject({ id: 'DATASET_ITEM_IDENTITY_REQUIRES_TRANSACTIONS' });
+
+      expect((await datasets.getDatasetById({ id: dataset.id }))!.version).toBe(0);
+      expect((await datasets.listItems({ datasetId: dataset.id, pagination: { page: 0, perPage: 10 } })).items).toEqual(
+        [],
+      );
+    } finally {
+      await store.close();
+    }
+  });
+
   test('supportsTransactions() returns true on a replica set', async () => {
     const connector = MongoDBConnector.fromDatabaseConfig({ id: 'tx-rs', url: REPLICA_SET_URI, dbName: DB });
     try {
