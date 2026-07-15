@@ -2,8 +2,8 @@
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { stringToColor } from '../../../lib/colors';
 import { SankeyChart } from './sankey-chart';
+import { buildSankeyHueMap, nodeColor, nodeColorVivid } from './sankeyColor';
 
 afterEach(() => {
   cleanup();
@@ -19,6 +19,7 @@ beforeEach(() => {
 const data = [
   { channel: 'Search', region: 'EU', outcome: 'Won' },
   { channel: 'Search', region: 'EU', outcome: 'Lost' },
+  { channel: 'Search', region: 'US', outcome: 'Won' },
   { channel: 'Referral', region: 'US', outcome: 'Won' },
 ];
 
@@ -60,23 +61,72 @@ describe('SankeyChart', () => {
     const chartLabels = [...container.querySelectorAll('svg text')].map(element => element.textContent);
 
     expect(chartLabels).toEqual(expect.arrayContaining(['Channel', 'Region', 'Outcome']));
-    expect(container.querySelectorAll('svg rect[fill="var(--neutral1)"]').length).toBeGreaterThan(0);
+    const node = container.querySelector('svg rect[rx="3"]');
+    expect(node?.getAttribute('width')).toBe('7');
+    const searchLabel = [...container.querySelectorAll('svg text')].find(element => element.textContent === 'Search');
+    expect(searchLabel?.getAttribute('font-size')).toBe('12.5');
+    expect(searchLabel?.getAttribute('paint-order')).toBe('stroke');
+    const lostLabel = [...container.querySelectorAll('svg text')].find(element => element.textContent === 'Lost');
+    expect(lostLabel?.getAttribute('text-anchor')).toBe('end');
+    expect(container.querySelector('svg text[font-size="10.5"]')).not.toBeNull();
   });
 
-  it('colors each curve from its source value', async () => {
-    render(<Example onCurveClick={() => {}} />);
+  it('uses one repelled hue map for colored nodes and gradient ribbon links', async () => {
+    const { container } = render(<Example onCurveClick={() => {}} />);
+    const hueMap = buildSankeyHueMap(['Search', 'Referral', 'EU', 'US', 'Won', 'Lost']);
 
+    await screen.findAllByRole('button', { name: 'Select Sankey curve' });
+
+    expect(container.querySelector(`rect[fill="${nodeColor(hueMap.Search ?? 0)}"]`)).not.toBeNull();
+    expect(container.querySelector(`stop[stop-color="${nodeColor(hueMap.Search ?? 0)}"]`)).not.toBeNull();
+    expect(container.querySelector(`stop[stop-color="${nodeColorVivid(hueMap.EU ?? 0)}"]`)).not.toBeNull();
+  });
+
+  it('renders closed gradient ribbons without strokes, filters, or glow', async () => {
+    const { container } = render(<Example onCurveClick={() => {}} />);
     const curves = await screen.findAllByRole('button', { name: 'Select Sankey curve' });
-    const colors = curves.map(curve => curve.getAttribute('stroke'));
+    const firstCurve = curves[0];
 
-    expect(colors).toEqual(
-      expect.arrayContaining([
-        stringToColor('Search', 68, 55),
-        stringToColor('Referral', 68, 55),
-        stringToColor('EU', 68, 55),
-        stringToColor('US', 68, 55),
-      ]),
-    );
+    expect(firstCurve?.getAttribute('d')).toMatch(/^M.+ C.+ L.+ C.+ Z$/);
+    expect(firstCurve?.getAttribute('fill')).toBe('url(#sankey-grad-0)');
+    expect(firstCurve?.getAttribute('fill-opacity')).toBe('0.32');
+    expect(firstCurve?.getAttribute('stroke')).toBe('none');
+    expect(firstCurve?.getAttribute('filter')).toBeNull();
+    expect(container.querySelector('linearGradient[gradientUnits="userSpaceOnUse"]')).not.toBeNull();
+  });
+
+  it('brightens every ribbon with the same source and restores them on leave', async () => {
+    render(<Example onCurveClick={() => {}} />);
+    const curves = await screen.findAllByRole('button', { name: 'Select Sankey curve' });
+    const firstSearchBranch = curves[0];
+    const secondSearchBranch = curves[1];
+    const referralBranch = curves[2];
+    if (!firstSearchBranch || !secondSearchBranch || !referralBranch) {
+      throw new Error('Expected Search and Referral branch ribbons');
+    }
+
+    fireEvent.mouseEnter(firstSearchBranch);
+
+    expect(firstSearchBranch.getAttribute('fill-opacity')).toBe('0.75');
+    expect(secondSearchBranch.getAttribute('fill-opacity')).toBe('0.75');
+    expect(referralBranch.getAttribute('fill-opacity')).toBe('0.32');
+
+    fireEvent.mouseLeave(firstSearchBranch);
+
+    expect(firstSearchBranch.getAttribute('fill-opacity')).toBe('0.32');
+    expect(secondSearchBranch.getAttribute('fill-opacity')).toBe('0.32');
+  });
+
+  it('keeps every connected ribbon bright while hovering a node label', async () => {
+    render(<Example onCurveClick={() => {}} />);
+    const curves = await screen.findAllByRole('button', { name: 'Select Sankey curve' });
+    const searchLabel = screen.getByText('Search');
+
+    fireEvent.mouseEnter(searchLabel);
+
+    expect(curves[0]?.getAttribute('fill-opacity')).toBe('0.75');
+    expect(curves[1]?.getAttribute('fill-opacity')).toBe('0.75');
+    expect(curves[2]?.getAttribute('fill-opacity')).toBe('0.32');
   });
 
   it('shows an empty state when fewer than two columns are enabled', () => {

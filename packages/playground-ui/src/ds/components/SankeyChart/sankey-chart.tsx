@@ -1,15 +1,14 @@
 import type { DraggableProvided, DropResult, DroppableProvided } from '@hello-pangea/dnd';
 import { DragDropContext, Draggable, Droppable } from '@hello-pangea/dnd';
 import { GripVertical } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { CSSProperties, KeyboardEvent } from 'react';
-import type { SankeyLinkProps, SankeyNodeProps } from 'recharts';
 import { ResponsiveContainer, Sankey } from 'recharts';
 import { buildSankeyChartGraph, getSankeyChartCurveSelection, reorderSankeyChartColumns } from './sankey-chart-utils';
 import type { SankeyChartColumn, SankeyChartCurveSelection, SankeyChartRecord } from './sankey-chart-utils';
+import { buildSankeyHueMap, nodeColor, nodeColorVivid } from './sankeyColor';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { Colors } from '@/ds/tokens';
-import { stringToColor } from '@/lib/colors';
 import { cn } from '@/lib/utils';
 
 export type SankeyChartProps = {
@@ -38,10 +37,17 @@ export function SankeyChart({
   const columnIds = columns.map(column => column.id);
   const [internalOrder, setInternalOrder] = useState(columnIds);
   const [internalVisibleIds, setInternalVisibleIds] = useState(columnIds);
+  const [hoveredSourceName, setHoveredSourceName] = useState<string>();
   const orderedColumns = orderColumns(columns, columnOrder ?? internalOrder);
   const visibleIds = new Set(visibleColumnIds ?? internalVisibleIds);
   const enabledColumns = orderedColumns.filter(column => visibleIds.has(column.id));
   const graph = buildSankeyChartGraph(data, enabledColumns);
+  const nodeNamesKey = graph.nodes.map(node => String(node.value)).join('\u0000');
+  const hueMap = useMemo(
+    () => buildSankeyHueMap(nodeNamesKey === '' ? [] : nodeNamesKey.split('\u0000')),
+    [nodeNamesKey],
+  );
+  const lastColumnId = enabledColumns.at(-1)?.id;
 
   const setVisibleColumns = (nextIds: Array<string>) => {
     if (visibleColumnIds === undefined) setInternalVisibleIds(nextIds);
@@ -152,22 +158,33 @@ export function SankeyChart({
           >
             <Sankey
               data={graph}
-              nodeWidth={10}
+              nodeWidth={7}
               nodePadding={18}
               margin={{ top: 40, right: 120, bottom: 12, left: 120 }}
-              node={(props: SankeyNodeProps) => {
+              node={(props: SankeyNodeRendererProps) => {
                 const node = graph.nodes[props.index];
                 const showColumnLabel = node
                   ? graph.nodes.findIndex(candidate => candidate.column.id === node.column.id) === props.index
                   : false;
-                return <SankeyNode {...props} columnLabel={node?.column.label} showColumnLabel={showColumnLabel} />;
+                return (
+                  <SankeyNode
+                    {...props}
+                    hueMap={hueMap}
+                    columnLabel={node?.column.label}
+                    showColumnLabel={showColumnLabel}
+                    isLastColumn={node?.column.id === lastColumnId}
+                    onHoverChange={setHoveredSourceName}
+                  />
+                );
               }}
-              link={(props: SankeyLinkProps) => {
+              link={(props: SankeyLinkRendererProps) => {
                 const link = graph.links[props.index];
                 return (
                   <SankeyLink
                     {...props}
-                    color={stringToColor(String(link?.sourceNode.value ?? ''), 68, 55)}
+                    hueMap={hueMap}
+                    highlighted={String(props.payload.source.name ?? '') === hoveredSourceName}
+                    onHoverChange={setHoveredSourceName}
                     clickable={onCurveClick !== undefined}
                     onSelect={() => {
                       if (link) onCurveClick?.(getSankeyChartCurveSelection(link));
@@ -183,40 +200,89 @@ export function SankeyChart({
   );
 }
 
+type SankeyNodeRendererProps = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  index: number;
+  payload: { name?: string | number; value?: string | number };
+};
+
+type SankeyLinkRendererProps = {
+  sourceX: number;
+  targetX: number;
+  sourceY: number;
+  targetY: number;
+  sourceControlX: number;
+  targetControlX: number;
+  linkWidth: number;
+  index: number;
+  payload: { source: { name?: string | number }; target: { name?: string | number } };
+};
+
+type SankeyNodeProps = SankeyNodeRendererProps & {
+  hueMap: Record<string, number>;
+  columnLabel?: string;
+  showColumnLabel: boolean;
+  isLastColumn: boolean;
+  onHoverChange: (sourceName: string | undefined) => void;
+};
+
 function SankeyNode({
   x,
   y,
   width,
   height,
   payload,
+  hueMap,
   columnLabel,
   showColumnLabel,
-}: SankeyNodeProps & { columnLabel?: string; showColumnLabel: boolean }) {
+  isLastColumn,
+  onHoverChange,
+}: SankeyNodeProps) {
   const name = typeof payload.name === 'string' || typeof payload.name === 'number' ? String(payload.name) : '';
-  const labelOnRight = x < 200;
+  const value = typeof payload.value === 'string' || typeof payload.value === 'number' ? String(payload.value) : '';
+  const labelX = isLastColumn ? x - 8 : x + width + 8;
+  const textAnchor = isLastColumn ? 'end' : 'start';
+  const hue = hueMap[name] ?? 0;
 
   return (
-    <g>
+    <g onMouseEnter={() => onHoverChange(name)} onMouseLeave={() => onHoverChange(undefined)}>
       {showColumnLabel && columnLabel ? (
         <text x={x + width / 2} y={18} textAnchor="middle" fill={Colors.neutral5} fontSize={12} fontWeight={600}>
           {columnLabel}
         </text>
       ) : null}
-      <rect x={x} y={y} width={width} height={height} rx={2} fill={Colors.neutral1} />
+      <rect x={x} y={y} width={width} height={height} rx={3} fill={nodeColor(hue)} />
       <text
-        x={labelOnRight ? x + width + 8 : x - 8}
-        y={y + height / 2}
-        dy="0.35em"
-        textAnchor={labelOnRight ? 'start' : 'end'}
+        x={labelX}
+        y={y + height / 2 - 4}
+        textAnchor={textAnchor}
         fill={Colors.neutral5}
-        fontSize={11}
+        fontSize={12.5}
         fontFamily="var(--font-mono)"
+        paintOrder="stroke"
+        stroke={Colors.surface1}
+        strokeWidth={3}
+        strokeLinejoin="round"
       >
         {name}
+      </text>
+      <text x={labelX} y={y + height / 2 + 10} textAnchor={textAnchor} fill={Colors.neutral3} fontSize={10.5}>
+        {value}
       </text>
     </g>
   );
 }
+
+type SankeyLinkProps = SankeyLinkRendererProps & {
+  hueMap: Record<string, number>;
+  highlighted: boolean;
+  clickable: boolean;
+  onHoverChange: (sourceName: string | undefined) => void;
+  onSelect: () => void;
+};
 
 function SankeyLink({
   sourceX,
@@ -226,11 +292,26 @@ function SankeyLink({
   sourceControlX,
   targetControlX,
   linkWidth,
-  color,
+  index,
+  payload,
+  hueMap,
+  highlighted,
   clickable,
+  onHoverChange,
   onSelect,
-}: SankeyLinkProps & { color: string; clickable: boolean; onSelect: () => void }) {
-  const path = `M${sourceX},${sourceY} C${sourceControlX},${sourceY} ${targetControlX},${targetY} ${targetX},${targetY}`;
+}: SankeyLinkProps) {
+  const halfWidth = Math.max(0, linkWidth) / 2;
+  const path = [
+    `M${sourceX},${sourceY - halfWidth}`,
+    `C${sourceControlX},${sourceY - halfWidth} ${targetControlX},${targetY - halfWidth} ${targetX},${targetY - halfWidth}`,
+    `L${targetX},${targetY + halfWidth}`,
+    `C${targetControlX},${targetY + halfWidth} ${sourceControlX},${sourceY + halfWidth} ${sourceX},${sourceY + halfWidth}`,
+    'Z',
+  ].join(' ');
+  const sourceName = String(payload.source.name ?? '');
+  const targetName = String(payload.target.name ?? '');
+  const gradientId = `sankey-grad-${index}`;
+  const vividGradientId = `${gradientId}-vivid`;
   const handleKeyDown = (event: KeyboardEvent<SVGPathElement>) => {
     if (event.key !== 'Enter' && event.key !== ' ') return;
     event.preventDefault();
@@ -238,19 +319,32 @@ function SankeyLink({
   };
 
   return (
-    <path
-      d={path}
-      fill="none"
-      stroke={color}
-      strokeOpacity={0.55}
-      strokeWidth={Math.max(1, linkWidth)}
-      role={clickable ? 'button' : undefined}
-      tabIndex={clickable ? 0 : undefined}
-      aria-label={clickable ? 'Select Sankey curve' : undefined}
-      onClick={clickable ? onSelect : undefined}
-      onKeyDown={clickable ? handleKeyDown : undefined}
-      style={{ cursor: clickable ? 'pointer' : undefined }}
-    />
+    <g>
+      <defs>
+        <linearGradient id={gradientId} gradientUnits="userSpaceOnUse" x1={sourceX} x2={targetX}>
+          <stop offset="0%" stopColor={nodeColor(hueMap[sourceName] ?? 0)} />
+          <stop offset="100%" stopColor={nodeColor(hueMap[targetName] ?? 0)} />
+        </linearGradient>
+        <linearGradient id={vividGradientId} gradientUnits="userSpaceOnUse" x1={sourceX} x2={targetX}>
+          <stop offset="0%" stopColor={nodeColorVivid(hueMap[sourceName] ?? 0)} />
+          <stop offset="100%" stopColor={nodeColorVivid(hueMap[targetName] ?? 0)} />
+        </linearGradient>
+      </defs>
+      <path
+        d={path}
+        fill={`url(#${highlighted ? vividGradientId : gradientId})`}
+        fillOpacity={highlighted ? 0.75 : 0.32}
+        stroke="none"
+        role={clickable ? 'button' : undefined}
+        tabIndex={clickable ? 0 : undefined}
+        aria-label={clickable ? 'Select Sankey curve' : undefined}
+        onClick={clickable ? onSelect : undefined}
+        onKeyDown={clickable ? handleKeyDown : undefined}
+        onMouseEnter={() => onHoverChange(sourceName)}
+        onMouseLeave={() => onHoverChange(undefined)}
+        style={{ cursor: clickable ? 'pointer' : undefined, transition: 'fill-opacity 0.18s ease' }}
+      />
+    </g>
   );
 }
 

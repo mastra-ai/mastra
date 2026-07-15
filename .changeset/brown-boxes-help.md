@@ -2,4 +2,4 @@
 '@mastra/playground-ui': minor
 ---
 
-Improve Sankey chart flow colors and neutralize column nodes.
+Improved Sankey charts with deterministic node colors, source-to-target gradient ribbons, and isolated hover feedback.
