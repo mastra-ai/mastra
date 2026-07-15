@@ -52,7 +52,7 @@ await runEvals({
   data: [{ inputs: ['What is the weather in Brooklyn?', 'What about tomorrow?'] }],
   scorers: [checks.similarity('weather forecast')],
   targetOptions: { memory: { resource: 'user-42' } },
-});
+})
 ```
 
 See [Memory](/docs/memory/overview) for how to configure a memory store.
