@@ -129,7 +129,7 @@ Given the history and the PR's stated goal, does the approach make sense? Is it 
 
 ### Write the understanding artifact
 
-If a working file was provided, update that same file with what you learned and any requested outputs from its handoff instructions. Otherwise, write `.pr-review/HISTORY.md`.
+If a working file was provided, update that same file with what you learned and any requested outputs from its handoff instructions. Otherwise, write `.artifacts/understand-pr/HISTORY.md` in the workspace root.
 
 Capture what you learned:
 

@@ -30,6 +30,7 @@ export const queryKeys = {
   modelPacksAll: () => ['model-packs'] as const,
   om: (resourceId: string | undefined) => ['om', resourceId ?? null] as const,
   fsList: (path: string | undefined) => ['fs-list', path ?? null] as const,
+  artifactsList: (path: string | undefined) => ['artifacts-list', path ?? null] as const,
   agentControllerModels: (agentControllerId: string | undefined) =>
     ['agent-controller', agentControllerId ?? null, 'models'] as const,
   agentControllerModes: (agentControllerId: string | undefined) =>

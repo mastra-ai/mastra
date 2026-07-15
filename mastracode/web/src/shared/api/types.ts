@@ -10,10 +10,10 @@
  * into the shared/platform-agnostic bundle.
  */
 import type { CustomProviderInfo, ModelPackInfo, OMConfigInfo, ProviderInfo } from '../../web/config-routes.js';
-import type { DirectoryEntry, DirectoryListing } from '../../web/fs-routes.js';
+import type { ArtifactEntry, ArtifactListing, DirectoryEntry, DirectoryListing } from '../../web/fs-routes.js';
 
 export type { ProviderInfo, CustomProviderInfo, ModelPackInfo, OMConfigInfo };
-export type { DirectoryEntry, DirectoryListing };
+export type { ArtifactEntry, ArtifactListing, DirectoryEntry, DirectoryListing };
 
 // ── GET response envelopes ─────────────────────────────────────────────────
 

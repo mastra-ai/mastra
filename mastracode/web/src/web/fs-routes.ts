@@ -1,4 +1,4 @@
-import { readdir, realpath, stat } from 'node:fs/promises';
+import { lstat, readdir, realpath, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve, sep } from 'node:path';
 
@@ -37,6 +37,23 @@ export interface DirectoryListing {
   entries: DirectoryEntry[];
 }
 
+export interface ArtifactEntry {
+  name: string;
+  /** Path relative to the workspace `.artifacts` directory. */
+  path: string;
+  type: 'file' | 'directory';
+  size: number;
+  updatedAt: string;
+}
+
+export interface ArtifactListing {
+  /** The confined workspace/project root. */
+  rootPath: string;
+  /** The workspace artifact directory. */
+  artifactsPath: string;
+  entries: ArtifactEntry[];
+}
+
 /** Resolve the browsable root, defaulting to the user's home directory. */
 export function resolveFsRoot(root?: string): string {
   return resolve(root && root.trim() ? root : homedir());
@@ -47,6 +64,14 @@ function isWithinRoot(candidate: string, root: string): boolean {
   if (candidate === root) return true;
   const rootWithSep = root.endsWith(sep) ? root : root + sep;
   return candidate.startsWith(rootWithSep);
+}
+
+async function realOrResolved(path: string): Promise<string> {
+  try {
+    return await realpath(path);
+  } catch {
+    return path;
+  }
 }
 
 /**
@@ -72,7 +97,7 @@ async function realPathWithinRoot(candidate: string, root: string): Promise<stri
 export async function listDirectory(root: string, requestedPath?: string): Promise<DirectoryListing> {
   // Resolve the root through symlinks so all confinement checks compare real
   // paths; a symlink that escapes the root is then reliably detectable.
-  const resolvedRoot = (await realPathWithinRoot(resolveFsRoot(root), resolveFsRoot(root))) ?? resolveFsRoot(root);
+  const resolvedRoot = await realOrResolved(resolveFsRoot(root));
 
   let target = resolvedRoot;
   if (requestedPath && requestedPath.trim()) {
@@ -108,6 +133,61 @@ export async function listDirectory(root: string, requestedPath?: string): Promi
   const parent = target === resolvedRoot ? null : resolve(target, '..');
 
   return { root: resolvedRoot, path: target, parent, entries };
+}
+
+async function listArtifactEntries(artifactsPath: string, currentPath = artifactsPath): Promise<ArtifactEntry[]> {
+  const dirents = await readdir(currentPath, { withFileTypes: true });
+  const entries: ArtifactEntry[] = [];
+
+  for (const dirent of dirents) {
+    const entryPath = join(currentPath, dirent.name);
+    const info = await lstat(entryPath);
+    const relativePath = entryPath.slice(artifactsPath.length + 1);
+
+    if (info.isDirectory()) {
+      entries.push({
+        name: dirent.name,
+        path: relativePath,
+        type: 'directory',
+        size: info.size,
+        updatedAt: info.mtime.toISOString(),
+      });
+      entries.push(...(await listArtifactEntries(artifactsPath, entryPath)));
+      continue;
+    }
+
+    if (info.isFile()) {
+      entries.push({
+        name: dirent.name,
+        path: relativePath,
+        type: 'file',
+        size: info.size,
+        updatedAt: info.mtime.toISOString(),
+      });
+    }
+  }
+
+  return entries.sort((a, b) => a.path.localeCompare(b.path));
+}
+
+export async function listArtifacts(root: string, workspacePath: string): Promise<ArtifactListing> {
+  const resolvedRoot = await realOrResolved(resolveFsRoot(root));
+  const candidate = isAbsolute(workspacePath) ? resolve(workspacePath) : resolve(resolvedRoot, workspacePath);
+  const confinedWorkspace = await realPathWithinRoot(candidate, resolvedRoot);
+  if (!confinedWorkspace) throw new Error('Path is outside the browsable root');
+
+  const artifactsPath = join(confinedWorkspace, '.artifacts');
+  const confinedArtifactsPath = await realPathWithinRoot(artifactsPath, resolvedRoot);
+  if (!confinedArtifactsPath) return { rootPath: confinedWorkspace, artifactsPath, entries: [] };
+
+  const info = await stat(confinedArtifactsPath);
+  if (!info.isDirectory()) return { rootPath: confinedWorkspace, artifactsPath: confinedArtifactsPath, entries: [] };
+
+  return {
+    rootPath: confinedWorkspace,
+    artifactsPath: confinedArtifactsPath,
+    entries: await listArtifactEntries(confinedArtifactsPath),
+  };
 }
 
 export interface ResolvedProject {
@@ -162,6 +242,21 @@ export function buildFsRoutes(options: { root?: string } = {}): ApiRoute[] {
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           return c.json({ error: message }, 500);
+        }
+      },
+    }),
+    registerApiRoute('/web/artifacts/list', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const path = c.req.query('path');
+        if (!path) return c.json({ error: 'Missing required query param: path' }, 400);
+        try {
+          return c.json(await listArtifacts(root, path));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          const status = message === 'Path is outside the browsable root' ? 403 : 500;
+          return c.json({ error: message }, status);
         }
       },
     }),

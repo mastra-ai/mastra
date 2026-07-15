@@ -4,10 +4,11 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../e2e/web-ui/msw-server';
 import { TEST_BASE_URL, renderHookWithProviders } from '../../../../e2e/web-ui/render';
-import { useDirectoryListing } from '../use-fs';
+import { useArtifactListing, useDirectoryListing } from '../use-fs';
 import { listing } from './fixtures/fs';
 
 const URL = `${TEST_BASE_URL}/web/fs/list`;
+const ARTIFACTS_URL = `${TEST_BASE_URL}/web/artifacts/list`;
 
 describe('useDirectoryListing', () => {
   describe('when no path is provided', () => {
@@ -63,5 +64,42 @@ describe('useDirectoryListing', () => {
       await waitFor(() => expect(result.current.isError).toBe(true));
       expect(result.current.error).toBeInstanceOf(Error);
     });
+  });
+});
+
+describe('useArtifactListing', () => {
+  it('does not fetch until a workspace path is available', () => {
+    let called = false;
+    server.use(
+      http.get(ARTIFACTS_URL, () => {
+        called = true;
+        return HttpResponse.json({ rootPath: '', artifactsPath: '', entries: [] });
+      }),
+    );
+
+    const { result } = renderHookWithProviders(() => useArtifactListing(undefined));
+
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(called).toBe(false);
+  });
+
+  it('fetches artifacts for the workspace path', async () => {
+    let seenPath: string | null = null;
+    server.use(
+      http.get(ARTIFACTS_URL, ({ request }) => {
+        seenPath = new global.URL(request.url).searchParams.get('path');
+        return HttpResponse.json({
+          rootPath: '/home/user/project',
+          artifactsPath: '/home/user/project/.artifacts',
+          entries: [{ name: 'HISTORY.md', path: 'understand-pr/HISTORY.md', type: 'file', size: 5, updatedAt: '2026-07-15T00:00:00.000Z' }],
+        });
+      }),
+    );
+
+    const { result } = renderHookWithProviders(() => useArtifactListing('/home/user/project'));
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(seenPath).toBe('/home/user/project');
+    expect(result.current.data?.entries[0]?.path).toBe('understand-pr/HISTORY.md');
   });
 });
