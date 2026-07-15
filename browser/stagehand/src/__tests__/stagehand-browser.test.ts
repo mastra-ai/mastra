@@ -228,7 +228,7 @@ describe('StagehandBrowser', () => {
         scope: 'shared',
         experimental: true,
         disableAPI: true,
-      } as StagehandBrowserConfig);
+      });
       await customBrowser.launch();
       await customBrowser.close();
 
