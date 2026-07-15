@@ -67,15 +67,7 @@
           "data: {\"id\":\"chatcmpl-E1f9GzV5HeRWx1kootmzq3QV6Hp0t\",\"object\":\"chat.completion.chunk\",\"created\":1784065210,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_32ebcaec53\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"?\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"3LOYE4QnI1\"}\n\ndata: {\"id\":\"chatcmpl-E1f9GzV5HeRWx1kootmzq3QV6Hp0t\",\"object\":\"chat.completion.chunk\",\"created\":1784065210,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_32ebcaec53\",\"choices\":[{\"index\":0,\"delta\":{},\"logprobs\":null,\"finish_reason\":\"stop\"}],\"usage\":null,\"obfuscation\":\"q7ivK\"}\n\n",
           "data: {\"id\":\"chatcmpl-E1f9GzV5HeRWx1kootmzq3QV6Hp0t\",\"object\":\"chat.completion.chunk\",\"created\":1784065210,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_32ebcaec53\",\"choices\":[],\"usage\":{\"prompt_tokens\":15,\"completion_tokens\":9,\"total_tokens\":24,\"prompt_tokens_details\":{\"cached_tokens\":0,\"audio_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0,\"audio_tokens\":0,\"accepted_prediction_tokens\":0,\"rejected_prediction_tokens\":0}},\"obfuscation\":\"HivwPcdzqmT\"}\n\ndata: [DONE]\n\n"
         ],
-        "chunkTimings": [
-          0,
-          0,
-          0,
-          1,
-          0,
-          30,
-          5
-        ],
+        "chunkTimings": [0, 0, 0, 1, 0, 30, 5],
         "isStreaming": true
       }
     },
@@ -158,25 +150,7 @@
           "data: {\"id\":\"chatcmpl-E1f9G3tvvsRk8zk3g3HDeblnE7N3f\",\"object\":\"chat.completion.chunk\",\"created\":1784065210,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_844ddd95ff\",\"choices\":[{\"index\":0,\"delta\":{},\"logprobs\":null,\"finish_reason\":\"stop\"}],\"usage\":null,\"obfuscation\":\"tCoNb\"}\n\ndata: {\"id\":\"chatcmpl-E1f9G3tvvsRk8zk3g3HDeblnE7N3f\",\"object\":\"chat.completion.chunk\",\"created\":1784065210,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_844ddd95ff\",\"choices\":[],\"usage\":{\"prompt_tokens\":36,\"completion_tokens\":22,\"total_tokens\":58,\"prompt_tokens_details\":{\"cached_tokens\":0,\"audio_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0,\"audio_tokens\":0,\"accepted_prediction_tokens\":0,\"rejected_prediction_tokens\":0}},\"obfuscation\":\"aRVRiP9ZK5\"}\n\n",
           "data: [DONE]\n\n"
         ],
-        "chunkTimings": [
-          0,
-          1,
-          0,
-          8,
-          0,
-          15,
-          0,
-          22,
-          27,
-          25,
-          25,
-          32,
-          17,
-          10,
-          14,
-          14,
-          12
-        ],
+        "chunkTimings": [0, 1, 0, 8, 0, 15, 0, 22, 27, 25, 25, 32, 17, 10, 14, 14, 12],
         "isStreaming": true
       }
     },
@@ -262,28 +236,7 @@
           "mvTa0cIm2rpsy22Fykvx3W0s\",\"object\":\"chat.completion.chunk\",\"created\":1784065211,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_844ddd95ff\",\"choices\":[{\"index\":0,\"delta\":{},\"logprobs\":null,\"finish_reason\":\"stop\"}],\"usage\":null,\"obfuscation\":\"zS8aE\"}\n\ndata: {\"id\":\"chatcmpl-E1f9HmvTa0cIm2rpsy22Fykvx3W0s\",\"object\":\"chat.completion.chunk\",\"created\":1784065211,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_844ddd95ff\",\"choices\":[],\"usage\":{\"prompt_tokens\":36,\"completion_tokens\":22,\"total_tokens\":58,\"prompt_tokens_details\":{\"cached_tokens\":0,\"audio_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0,\"audio_tokens\":0,\"accepted_prediction_tokens\":0,\"rejected_prediction_tokens\":0}},\"obfuscation\":\"AxGr7a2S4p\"}\n\n",
           "data: [DONE]\n\n"
         ],
-        "chunkTimings": [
-          18,
-          0,
-          22,
-          17,
-          6,
-          28,
-          22,
-          0,
-          21,
-          15,
-          0,
-          8,
-          0,
-          33,
-          21,
-          0,
-          47,
-          41,
-          0,
-          10
-        ],
+        "chunkTimings": [18, 0, 22, 17, 6, 28, 22, 0, 21, 15, 0, 8, 0, 33, 21, 0, 47, 41, 0, 10],
         "isStreaming": true
       }
     },
@@ -320,9 +273,7 @@
                       "description": "The location to get the weather for"
                     }
                   },
-                  "required": [
-                    "postalCode"
-                  ],
+                  "required": ["postalCode"],
                   "additionalProperties": false
                 }
               }
@@ -460,9 +411,7 @@
                       "description": "The location to get the weather for"
                     }
                   },
-                  "required": [
-                    "postalCode"
-                  ],
+                  "required": ["postalCode"],
                   "additionalProperties": false
                 }
               }
@@ -579,9 +528,7 @@
                       "description": "The location to get the weather for"
                     }
                   },
-                  "required": [
-                    "postalCode"
-                  ],
+                  "required": ["postalCode"],
                   "additionalProperties": false
                 }
               }
@@ -725,28 +672,7 @@
           ".done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"msg_07e8e0f899b23cce006a56acc23224819db935ac81f26bca73\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Hello! How can I assist you today?\"}],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":15}\n\n",
           "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_07e8e0f899b23cce006a56acc1202c819da3eca02d83ff7cc2\",\"object\":\"response\",\"created_at\":1784065217,\"status\":\"completed\",\"background\":false,\"completed_at\":1784065218,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[{\"id\":\"msg_07e8e0f899b23cce006a56acc23224819db935ac81f26bca73\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Hello! How can I assist you today?\"}],\"role\":\"assistant\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":15,\"input_tokens_details\":{\"cache_write_tokens\":0,\"cached_tokens\":0},\"output_tokens\":10,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":25},\"user\":null,\"metadata\":{}},\"sequence_number\":16}\n\n"
         ],
-        "chunkTimings": [
-          0,
-          161,
-          376,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          1,
-          0,
-          0,
-          0,
-          0,
-          8,
-          41,
-          14,
-          5,
-          0,
-          74
-        ],
+        "chunkTimings": [0, 161, 376, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 8, 41, 14, 5, 0, 74],
         "isStreaming": true
       }
     },
@@ -842,34 +768,7 @@
           "ata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_0263c72abc0e6779006a56acc2c388819cbcd384c32e897490\",\"object\":\"response\",\"created_at\":1784065218,\"status\":\"completed\",\"background\":false,\"completed_at\":1784065219,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[{\"id\":\"msg_0263c72abc0e6779006a56acc32740819c9d8f7b1ef5eada91\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"I'm doing well, thanks! What’s on your mind today?\"}],\"role\":\"assistant\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":36,\"input_tokens_details\":{\"cach",
           "e_write_tokens\":0,\"cached_tokens\":0},\"output_tokens\":14,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":50},\"user\":null,\"metadata\":{}},\"sequence_number\":20}\n\n"
         ],
-        "chunkTimings": [
-          0,
-          9,
-          1,
-          396,
-          0,
-          0,
-          0,
-          0,
-          0,
-          70,
-          4,
-          43,
-          4,
-          52,
-          2,
-          44,
-          1,
-          7,
-          1,
-          101,
-          4,
-          0,
-          2,
-          98,
-          0,
-          0
-        ],
+        "chunkTimings": [0, 9, 1, 396, 0, 0, 0, 0, 0, 70, 4, 43, 4, 52, 2, 44, 1, 7, 1, 101, 4, 0, 2, 98, 0, 0],
         "isStreaming": true
       }
     },
@@ -964,33 +863,7 @@
           "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"msg_0b8d09db72c4dd95006a56acc4703c819c82eb2dff823f1e13\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"I'm doing well, thanks! What’s on your mind today?\"}],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":19}\n\n",
           "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_0b8d09db72c4dd95006a56acc3da5c819c8dce19f532efae54\",\"object\":\"response\",\"created_at\":1784065219,\"status\":\"completed\",\"background\":false,\"completed_at\":1784065220,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[{\"id\":\"msg_0b8d09db72c4dd95006a56acc4703c819c82eb2dff823f1e13\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"I'm doing well, thanks! What’s on your mind today?\"}],\"role\":\"assistant\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":36,\"input_tokens_details\":{\"cache_write_tokens\":0,\"cached_tokens\":0},\"output_tokens\":14,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":50},\"user\":null,\"metadata\":{}},\"sequence_number\":20}\n\n"
         ],
-        "chunkTimings": [
-          0,
-          406,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          1,
-          0,
-          0,
-          0,
-          0,
-          2,
-          127,
-          5,
-          0,
-          12,
-          82
-        ],
+        "chunkTimings": [0, 406, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 2, 127, 5, 0, 12, 82],
         "isStreaming": true
       }
     },
@@ -1030,9 +903,7 @@
                     "description": "The location to get the weather for"
                   }
                 },
-                "required": [
-                  "postalCode"
-                ],
+                "required": ["postalCode"],
                 "additionalProperties": false
               },
               "strict": false
@@ -1150,9 +1021,7 @@
                     "description": "The location to get the weather for"
                   }
                 },
-                "required": [
-                  "postalCode"
-                ],
+                "required": ["postalCode"],
                 "additionalProperties": false
               },
               "strict": false
@@ -1224,9 +1093,7 @@
                     "description": "The location to get the weather for"
                   }
                 },
-                "required": [
-                  "postalCode"
-                ],
+                "required": ["postalCode"],
                 "additionalProperties": false
               },
               "strict": false
@@ -1350,9 +1217,7 @@
                     "description": "The location to get the weather for"
                   }
                 },
-                "required": [
-                  "postalCode"
-                ],
+                "required": ["postalCode"],
                 "additionalProperties": false
               },
               "strict": false
@@ -1437,9 +1302,7 @@
                     "description": "The location to get the weather for"
                   }
                 },
-                "required": [
-                  "postalCode"
-                ],
+                "required": ["postalCode"],
                 "additionalProperties": false
               },
               "strict": false
@@ -1563,9 +1426,7 @@
                     "description": "The location to get the weather for"
                   }
                 },
-                "required": [
-                  "postalCode"
-                ],
+                "required": ["postalCode"],
                 "additionalProperties": false
               },
               "strict": false
@@ -1660,28 +1521,7 @@
           "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"msg_0d21e0c0117b928c006a56acc9878881a3bcf8873a64c4aa67\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Hello! How can I assist you today?\"}],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":15}\n\n",
           "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_0d21e0c0117b928c006a56acc91c6081a39e799d207058206f\",\"object\":\"response\",\"created_at\":1784065225,\"status\":\"completed\",\"background\":false,\"completed_at\":1784065225,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[{\"id\":\"msg_0d21e0c0117b928c006a56acc9878881a3bcf8873a64c4aa67\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Hello! How can I assist you today?\"}],\"role\":\"assistant\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":15,\"input_tokens_details\":{\"cache_write_tokens\":0,\"cached_tokens\":0},\"output_tokens\":10,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":25},\"user\":null,\"metadata\":{}},\"sequence_number\":16}\n\n"
         ],
-        "chunkTimings": [
-          1,
-          9,
-          375,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          26,
-          5,
-          0,
-          3,
-          106
-        ],
+        "chunkTimings": [1, 9, 375, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 26, 5, 0, 3, 106],
         "isStreaming": true
       }
     },
@@ -1777,34 +1617,7 @@
           "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_0ede9f70fbe4488d006a56acc9f8f08191899a4f0d7cfd2ef6\",\"object\":\"response\",\"created_at\":1784065226,\"status\":\"completed\",\"background\":false,\"completed_at\":1784065226,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[{\"id\":\"msg_0ede9f70fbe4488d006a56accaa31c8191a98a79731d2303f4\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"I’m doing great, thanks! What’s on your mind today?\"}],\"role\":\"assistant\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":36",
           ",\"input_tokens_details\":{\"cache_write_tokens\":0,\"cached_tokens\":0},\"output_tokens\":15,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":51},\"user\":null,\"metadata\":{}},\"sequence_number\":21}\n\n"
         ],
-        "chunkTimings": [
-          0,
-          0,
-          0,
-          0,
-          512,
-          0,
-          0,
-          0,
-          71,
-          2,
-          95,
-          0,
-          21,
-          0,
-          1,
-          7,
-          1,
-          10,
-          3,
-          9,
-          7,
-          44,
-          8,
-          5,
-          315,
-          8
-        ],
+        "chunkTimings": [0, 0, 0, 0, 512, 0, 0, 0, 71, 2, 95, 0, 21, 0, 1, 7, 1, 10, 3, 9, 7, 44, 8, 5, 315, 8],
         "isStreaming": true
       }
     },
@@ -1900,34 +1713,7 @@
           ".done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"msg_07c8968968d803b6006a56accbf074819fb7873ae184b86142\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"I’m doing well, thanks! What’s on your mind today?\"}],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":20}\n\n",
           "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_07c8968968d803b6006a56accb7f08819fbff588af4d14292e\",\"object\":\"response\",\"created_at\":1784065227,\"status\":\"completed\",\"background\":false,\"completed_at\":1784065228,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[{\"id\":\"msg_07c8968968d803b6006a56accbf074819fb7873ae184b86142\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"I’m doing well, thanks! What’s on your mind today?\"}],\"role\":\"assistant\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":36,\"input_tokens_details\":{\"cache_write_tokens\":0,\"cached_tokens\":0},\"output_tokens\":15,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":51},\"user\":null,\"metadata\":{}},\"sequence_number\":21}\n\n"
         ],
-        "chunkTimings": [
-          0,
-          0,
-          328,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          1,
-          0,
-          4,
-          1,
-          0,
-          52,
-          0,
-          5,
-          0,
-          43,
-          5,
-          0,
-          3,
-          0,
-          83
-        ],
+        "chunkTimings": [0, 0, 328, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 4, 1, 0, 52, 0, 5, 0, 43, 5, 0, 3, 0, 83],
         "isStreaming": true
       }
     },
@@ -1967,9 +1753,7 @@
                     "description": "The location to get the weather for"
                   }
                 },
-                "required": [
-                  "postalCode"
-                ],
+                "required": ["postalCode"],
                 "additionalProperties": false
               }
             }
@@ -2086,9 +1870,7 @@
                     "description": "The location to get the weather for"
                   }
                 },
-                "required": [
-                  "postalCode"
-                ],
+                "required": ["postalCode"],
                 "additionalProperties": false
               },
               "strict": true
@@ -2162,9 +1944,7 @@
                     "description": "The location to get the weather for"
                   }
                 },
-                "required": [
-                  "postalCode"
-                ],
+                "required": ["postalCode"],
                 "additionalProperties": false
               }
             }
@@ -2287,9 +2067,7 @@
                     "description": "The location to get the weather for"
                   }
                 },
-                "required": [
-                  "postalCode"
-                ],
+                "required": ["postalCode"],
                 "additionalProperties": false
               },
               "strict": true
@@ -2376,9 +2154,7 @@
                     "description": "The location to get the weather for"
                   }
                 },
-                "required": [
-                  "postalCode"
-                ],
+                "required": ["postalCode"],
                 "additionalProperties": false
               }
             }
@@ -2501,9 +2277,7 @@
                     "description": "The location to get the weather for"
                   }
                 },
-                "required": [
-                  "postalCode"
-                ],
+                "required": ["postalCode"],
                 "additionalProperties": false
               },
               "strict": true

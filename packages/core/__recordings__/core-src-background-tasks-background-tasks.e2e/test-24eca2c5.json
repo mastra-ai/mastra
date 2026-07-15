@@ -83,16 +83,8 @@
                       }
                     },
                     "additionalProperties": false,
-                    "required": [
-                      "enabled",
-                      "timeoutMs",
-                      "maxRetries"
-                    ],
-                    "x-optional": [
-                      "enabled",
-                      "timeoutMs",
-                      "maxRetries"
-                    ],
+                    "required": ["enabled", "timeoutMs", "maxRetries"],
+                    "x-optional": ["enabled", "timeoutMs", "maxRetries"],
                     "anyOf": [
                       {
                         "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
@@ -135,16 +127,8 @@
                           }
                         },
                         "additionalProperties": false,
-                        "required": [
-                          "enabled",
-                          "timeoutMs",
-                          "maxRetries"
-                        ],
-                        "x-optional": [
-                          "enabled",
-                          "timeoutMs",
-                          "maxRetries"
-                        ],
+                        "required": ["enabled", "timeoutMs", "maxRetries"],
+                        "x-optional": ["enabled", "timeoutMs", "maxRetries"],
                         "type": "object"
                       },
                       {
@@ -153,14 +137,9 @@
                     ]
                   }
                 },
-                "required": [
-                  "topic",
-                  "_background"
-                ],
+                "required": ["topic", "_background"],
                 "additionalProperties": false,
-                "x-optional": [
-                  "_background"
-                ]
+                "x-optional": ["_background"]
               }
             },
             {
@@ -216,16 +195,8 @@
                       }
                     },
                     "additionalProperties": false,
-                    "required": [
-                      "enabled",
-                      "timeoutMs",
-                      "maxRetries"
-                    ],
-                    "x-optional": [
-                      "enabled",
-                      "timeoutMs",
-                      "maxRetries"
-                    ],
+                    "required": ["enabled", "timeoutMs", "maxRetries"],
+                    "x-optional": ["enabled", "timeoutMs", "maxRetries"],
                     "anyOf": [
                       {
                         "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
@@ -268,16 +239,8 @@
                           }
                         },
                         "additionalProperties": false,
-                        "required": [
-                          "enabled",
-                          "timeoutMs",
-                          "maxRetries"
-                        ],
-                        "x-optional": [
-                          "enabled",
-                          "timeoutMs",
-                          "maxRetries"
-                        ],
+                        "required": ["enabled", "timeoutMs", "maxRetries"],
+                        "x-optional": ["enabled", "timeoutMs", "maxRetries"],
                         "type": "object"
                       },
                       {
@@ -286,14 +249,9 @@
                     ]
                   }
                 },
-                "required": [
-                  "name",
-                  "_background"
-                ],
+                "required": ["name", "_background"],
                 "additionalProperties": false,
-                "x-optional": [
-                  "_background"
-                ]
+                "x-optional": ["_background"]
               }
             }
           ],
@@ -375,56 +333,8 @@
           "es\":{\"enabled\":{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"anyOf\":[{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"type\":\"boolean\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"description\":\"Override timeout in milliseconds for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"description\":\"Override maximum retry attempts for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]}},\"additionalProperties\":false,\"required\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"x-optional\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"anyOf\":[{\"description\":\"Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.\",\"properties\":{\"enabled\":{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"anyOf\":[{\"description\":\"Force background (true) or foreground (false) execution for this call.\",\"type\":\"boolean\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"description\":\"Override timeout in milliseconds for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"description\":\"Override maximum retry attempts for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]}},\"additionalProperties\":false,\"required\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"x-optional\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"type\":\"object\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"_background\"],\"additionalProperties\":false,\"x-optional\":[\"_background\"]},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":691,\"input_tokens_details\":{\"cache_write_tokens\":0,\"cached_tokens\":0},\"output_tokens\":37,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":728},\"user\":null,\"metadata\":{}},\"sequence_number\":32}\n\n"
         ],
         "chunkTimings": [
-          1,
-          0,
-          0,
-          0,
-          0,
-          0,
-          71,
-          1,
-          1,
-          0,
-          0,
-          0,
-          598,
-          53,
-          9,
-          9,
-          4,
-          3,
-          0,
-          11,
-          1,
-          0,
-          0,
-          0,
-          0,
-          46,
-          0,
-          17,
-          0,
-          56,
-          2,
-          30,
-          2,
-          55,
-          2,
-          40,
-          2,
-          26,
-          5,
-          0,
-          94,
-          3,
-          3,
-          22,
-          34,
-          0,
-          3,
-          160,
-          1,
-          0
+          1, 0, 0, 0, 0, 0, 71, 1, 1, 0, 0, 0, 598, 53, 9, 9, 4, 3, 0, 11, 1, 0, 0, 0, 0, 46, 0, 17, 0, 56, 2, 30, 2,
+          55, 2, 40, 2, 26, 5, 0, 94, 3, 3, 22, 34, 0, 3, 160, 1, 0
         ],
         "isStreaming": true
       }
@@ -516,16 +426,8 @@
                       }
                     },
                     "additionalProperties": false,
-                    "required": [
-                      "enabled",
-                      "timeoutMs",
-                      "maxRetries"
-                    ],
-                    "x-optional": [
-                      "enabled",
-                      "timeoutMs",
-                      "maxRetries"
-                    ],
+                    "required": ["enabled", "timeoutMs", "maxRetries"],
+                    "x-optional": ["enabled", "timeoutMs", "maxRetries"],
                     "anyOf": [
                       {
                         "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
@@ -568,16 +470,8 @@
                           }
                         },
                         "additionalProperties": false,
-                        "required": [
-                          "enabled",
-                          "timeoutMs",
-                          "maxRetries"
-                        ],
-                        "x-optional": [
-                          "enabled",
-                          "timeoutMs",
-                          "maxRetries"
-                        ],
+                        "required": ["enabled", "timeoutMs", "maxRetries"],
+                        "x-optional": ["enabled", "timeoutMs", "maxRetries"],
                         "type": "object"
                       },
                       {
@@ -586,14 +480,9 @@
                     ]
                   }
                 },
-                "required": [
-                  "topic",
-                  "_background"
-                ],
+                "required": ["topic", "_background"],
                 "additionalProperties": false,
-                "x-optional": [
-                  "_background"
-                ]
+                "x-optional": ["_background"]
               }
             },
             {
@@ -649,16 +538,8 @@
                       }
                     },
                     "additionalProperties": false,
-                    "required": [
-                      "enabled",
-                      "timeoutMs",
-                      "maxRetries"
-                    ],
-                    "x-optional": [
-                      "enabled",
-                      "timeoutMs",
-                      "maxRetries"
-                    ],
+                    "required": ["enabled", "timeoutMs", "maxRetries"],
+                    "x-optional": ["enabled", "timeoutMs", "maxRetries"],
                     "anyOf": [
                       {
                         "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
@@ -701,16 +582,8 @@
                           }
                         },
                         "additionalProperties": false,
-                        "required": [
-                          "enabled",
-                          "timeoutMs",
-                          "maxRetries"
-                        ],
-                        "x-optional": [
-                          "enabled",
-                          "timeoutMs",
-                          "maxRetries"
-                        ],
+                        "required": ["enabled", "timeoutMs", "maxRetries"],
+                        "x-optional": ["enabled", "timeoutMs", "maxRetries"],
                         "type": "object"
                       },
                       {
@@ -719,14 +592,9 @@
                     ]
                   }
                 },
-                "required": [
-                  "name",
-                  "_background"
-                ],
+                "required": ["name", "_background"],
                 "additionalProperties": false,
-                "x-optional": [
-                  "_background"
-                ]
+                "x-optional": ["_background"]
               }
             }
           ],
@@ -796,44 +664,8 @@
           "\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"description\":\"Override timeout in milliseconds for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"description\":\"Override maximum retry attempts for this call.\",\"type\":\"number\"},{\"type\":\"null\"}]}},\"additionalProperties\":false,\"required\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"x-optional\":[\"enabled\",\"timeoutMs\",\"maxRetries\"],\"type\":\"object\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"_background\"],\"additionalProperties\":false,\"x-optional\":[\"_background\"]},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":777,\"input_tokens_details\":{\"cache_write_tokens\":0,\"cached_tokens\":0},\"output_tokens\":17,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":794},\"user\":null,\"metadata\":{}},\"sequence_number\":22}\n\n"
         ],
         "chunkTimings": [
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          343,
-          0,
-          0,
-          22,
-          1,
-          15,
-          1,
-          0,
-          18,
-          0,
-          1,
-          37,
-          0,
-          31,
-          2,
-          39,
-          1,
-          11,
-          0,
-          1,
-          1461,
-          3,
-          2,
-          113,
-          1,
-          0,
-          1,
-          0
+          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 343, 0, 0, 22, 1, 15, 1, 0, 18, 0, 1, 37, 0, 31, 2, 39, 1, 11, 0, 1, 1461, 3, 2,
+          113, 1, 0, 1, 0
         ],
         "isStreaming": true
       }

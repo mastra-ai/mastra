@@ -15,12 +15,7 @@
           "generationConfig": {
             "responseMimeType": "application/json",
             "responseSchema": {
-              "required": [
-                "primitiveId",
-                "primitiveType",
-                "prompt",
-                "selectionReason"
-              ],
+              "required": ["primitiveId", "primitiveType", "prompt", "selectionReason"],
               "type": "object",
               "properties": {
                 "primitiveId": {
@@ -30,12 +25,7 @@
                 "primitiveType": {
                   "description": "The type of the primitive to be called",
                   "type": "string",
-                  "enum": [
-                    "agent",
-                    "workflow",
-                    "none",
-                    "tool"
-                  ]
+                  "enum": ["agent", "workflow", "none", "tool"]
                 },
                 "prompt": {
                   "description": "The json string or text value to be sent to the primitive",
@@ -141,10 +131,7 @@
           "generationConfig": {
             "responseMimeType": "application/json",
             "responseSchema": {
-              "required": [
-                "isComplete",
-                "completionReason"
-              ],
+              "required": ["isComplete", "completionReason"],
               "type": "object",
               "properties": {
                 "isComplete": {
@@ -202,11 +189,7 @@
           "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" task is complete as no further action can be taken by primitives.\\\",\\n  \\\"finalResult\\\": \\\"That's great to hear! I'm here to help if you have any questions or tasks you'd like assistance with.\\\"\\n}\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 773,\"candidatesTokenCount\": 89,\"totalTokenCount\": 1176,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 773}],\"thoughtsTokenCount\": 314,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"225WauSFO8H_nsEPzoqawA8\"}\r\n\r\n",
           "data: {\"candidates\": [{\"content\": {\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 773,\"candidatesTokenCount\": 89,\"totalTokenCount\": 1176,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 773}],\"thoughtsTokenCount\": 314,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"225WauSFO8H_nsEPzoqawA8\"}\r\n\r\n"
         ],
-        "chunkTimings": [
-          0,
-          110,
-          0
-        ],
+        "chunkTimings": [0, 110, 0],
         "isStreaming": true
       }
     }

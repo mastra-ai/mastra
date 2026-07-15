@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.51.0-alpha.12",
+  "version": "1.51.0",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -887,7 +887,7 @@
     "@ai-sdk/google-v6": "npm:@ai-sdk/google@3.0.91",
     "@ai-sdk/google-v7": "npm:@ai-sdk/google@4.0.12",
     "@ai-sdk/groq-v5": "npm:@ai-sdk/groq@2.0.43",
-    "@ai-sdk/groq-v6": "npm:@ai-sdk/groq@3.0.50",
+    "@ai-sdk/groq-v6": "npm:@ai-sdk/groq@3.0.51",
     "@ai-sdk/mistral-v5": "npm:@ai-sdk/mistral@2.0.37",
     "@ai-sdk/mistral-v6": "npm:@ai-sdk/mistral@3.0.48",
     "@ai-sdk/openai": "^1.3.24",

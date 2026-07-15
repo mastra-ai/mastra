@@ -66,9 +66,7 @@
                   "name": "testTool",
                   "description": "Gets weather information",
                   "parameters": {
-                    "required": [
-                      "location"
-                    ],
+                    "required": ["location"],
                     "type": "object",
                     "properties": {
                       "location": {

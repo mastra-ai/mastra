@@ -11,6 +11,7 @@
  * so the SPA can cleanly hide all GitHub UI.
  */
 
+import type { MountedMastraCode } from '@mastra/code-sdk';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import { and, eq } from 'drizzle-orm';
@@ -72,6 +73,7 @@ import {
 import type { GitIdentity, MaterializationSandbox, PrepareProgress, ProgressFn } from './sandbox';
 import { githubInstallations, githubProjects, githubProjectSandboxes, githubWorktrees } from './schema';
 import type { GithubProjectRow, GithubProjectSandboxRow } from './schema';
+import { listPullRequestSubscriptionsForThread, subscribeToPullRequest } from './subscriptions';
 
 export interface MountGithubRoutesOptions {
   /**
@@ -81,8 +83,28 @@ export interface MountGithubRoutesOptions {
   baseUrl?: string;
   /** Explicit OAuth callback URI; defaults to `<baseUrl>/auth/github/callback`. */
   redirectUri?: string;
+  /** Controller used to route verified webhook notifications to exact subscribed sessions. */
+  controller?: MountedMastraCode['controller'];
   /** Run seam used by GitHub webhooks and manual Intake triage. */
   runIssueTriage?: (input: GithubIssueTriageRunInput) => Promise<GithubIssueTriageRunResult>;
+}
+
+function pullRequestNumberFromUrl(value: string, expectedRepo: string): number | undefined {
+  try {
+    const url = new URL(value);
+    const match = url.pathname.match(/^\/([^/]+\/[^/]+)\/pull\/(\d+)\/?$/);
+    if (
+      url.protocol !== 'https:' ||
+      url.hostname !== 'github.com' ||
+      match?.[1]?.toLowerCase() !== expectedRepo.toLowerCase()
+    ) {
+      return undefined;
+    }
+    const number = Number(match[2]);
+    return Number.isInteger(number) && number > 0 ? number : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Validate an `owner/name` repo full name. */
@@ -287,11 +309,53 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
     : undefined;
 
   routes.push(
+    registerApiRoute('/web/github/subscriptions', {
+      method: 'GET',
+      handler: async c => {
+        await ensureWebAuthUser(loose(c));
+        const tenant = webAuthTenant(loose(c));
+        if (!tenant?.orgId) return c.json({ error: 'unauthorized' }, 401);
+
+        const resourceId = c.req.query('resourceId');
+        const threadId = c.req.query('threadId');
+        const sessionScope = c.req.query('scope');
+        if (!resourceId || !threadId) return c.json({ error: 'resourceId and threadId are required' }, 400);
+
+        const subscriptions = await listPullRequestSubscriptionsForThread({
+          orgId: tenant.orgId,
+          resourceId,
+          threadId,
+          sessionScope,
+        });
+        return c.json({
+          subscriptions: subscriptions.map(subscription => ({
+            id: subscription.id,
+            repoFullName: subscription.repoFullName,
+            pullRequestNumber: subscription.pullRequestNumber,
+            status: subscription.status,
+            url: `https://github.com/${subscription.repoFullName}/pull/${subscription.pullRequestNumber}`,
+          })),
+        });
+      },
+    }),
     registerApiRoute('/web/github/webhook', {
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
-        const result = await handleGithubWebhook(loose(c), { runIssueTriage: runBoardIssueTriage });
+        const result = await handleGithubWebhook(loose(c), {
+          runIssueTriage: runBoardIssueTriage,
+          ...(options.controller
+            ? {
+                controller: options.controller,
+                onTargetError: (subscription, error) => {
+                  console.warn(
+                    `[GitHub Webhook] Delivery failed for subscription ${subscription.id} (${subscription.resourceId}/${subscription.threadId}).`,
+                    error,
+                  );
+                },
+              }
+            : {}),
+        });
         return c.json(result.body, result.status);
       },
     }),
@@ -1147,7 +1211,15 @@ function buildProjectGitRoutes(): ApiRoute[] {
         if ('response' in owned) return owned.response;
         const { userId, project, sandboxRow } = owned;
 
-        let body: { branch?: unknown; base?: unknown; title?: unknown; body?: unknown; worktreePath?: unknown };
+        let body: {
+          branch?: unknown;
+          base?: unknown;
+          title?: unknown;
+          body?: unknown;
+          worktreePath?: unknown;
+          sessionId?: unknown;
+          threadId?: unknown;
+        };
         try {
           body = await c.req.json();
         } catch {
@@ -1179,6 +1251,35 @@ function buildProjectGitRoutes(): ApiRoute[] {
             const sandbox = await resolveProjectSandbox(sandboxRow);
             const token = await mintInstallationToken(project.installationId);
             const result = await createPullRequest(sandbox, workdir, { token, base, head, title, body: prBody });
+            if (
+              typeof body.sessionId === 'string' &&
+              body.sessionId &&
+              typeof body.threadId === 'string' &&
+              body.threadId
+            ) {
+              const pullRequestNumber = pullRequestNumberFromUrl(result.url, project.repoFullName);
+              if (pullRequestNumber) {
+                await subscribeToPullRequest({
+                  orgId: project.orgId,
+                  installationId: project.installationId,
+                  githubProjectId: project.id,
+                  repoId: project.repoId,
+                  pullRequestNumber,
+                  sessionId: body.sessionId,
+                  ownerId: userId,
+                  resourceId: project.id,
+                  threadId: body.threadId,
+                  sessionScope: workdir,
+                  source: 'factory-pr-create',
+                  subscribedByUserId: userId,
+                }).catch(error => {
+                  console.warn(
+                    `[GitHub] Pull request ${result.url} was created but automatic subscription failed.`,
+                    error,
+                  );
+                });
+              }
+            }
             return c.json({ url: result.url });
           });
         } catch (err) {

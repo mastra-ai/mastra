@@ -15,12 +15,7 @@
           "generationConfig": {
             "responseMimeType": "application/json",
             "responseSchema": {
-              "required": [
-                "primitiveId",
-                "primitiveType",
-                "prompt",
-                "selectionReason"
-              ],
+              "required": ["primitiveId", "primitiveType", "prompt", "selectionReason"],
               "type": "object",
               "properties": {
                 "primitiveId": {
@@ -30,12 +25,7 @@
                 "primitiveType": {
                   "description": "The type of the primitive to be called",
                   "type": "string",
-                  "enum": [
-                    "agent",
-                    "workflow",
-                    "none",
-                    "tool"
-                  ]
+                  "enum": ["agent", "workflow", "none", "tool"]
                 },
                 "prompt": {
                   "description": "The json string or text value to be sent to the primitive",
@@ -162,10 +152,7 @@
           "generationConfig": {
             "responseMimeType": "application/json",
             "responseSchema": {
-              "required": [
-                "isComplete",
-                "completionReason"
-              ],
+              "required": ["isComplete", "completionReason"],
               "type": "object",
               "properties": {
                 "isComplete": {
@@ -222,10 +209,7 @@
           "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"{\\\"isComplete\\\":true,\\\"completionReason\\\":\\\"The weather information was successfully retrieved using the 'testTool' and the result has been summarized as per the system instructions. No further primitives are required to complete the task\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 825,\"candidatesTokenCount\": 42,\"totalTokenCount\": 1214,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 825}],\"thoughtsTokenCount\": 347,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"yG5WatT4J-WxkdUPzvOzkQY\"}\r\n\r\n",
           "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \".\\\",\\\"finalResult\\\":\\\"The weather query has been processed and summarized.\\\"}\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 825,\"candidatesTokenCount\": 57,\"totalTokenCount\": 1229,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 825}],\"thoughtsTokenCount\": 347,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"yG5WatT4J-WxkdUPzvOzkQY\"}\r\n\r\n"
         ],
-        "chunkTimings": [
-          0,
-          1
-        ],
+        "chunkTimings": [0, 1],
         "isStreaming": true
       }
     }

@@ -33,7 +33,6 @@ export function ChatSessionProvider({
   const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
   const auth = useWebAuth();
   const { baseUrl } = useApiConfig();
-
   let sessionContextValue: ChatSessionContextApi;
   if (userScoped) {
     // Personal session: resourceId is the logged-in user, scope is the
@@ -56,6 +55,7 @@ export function ChatSessionProvider({
       // worktree there is nothing to bind a session to.
       sessionEnabled: sessionEnabled && (!isGithubProject || Boolean(projectPath)),
       projectPath,
+      projectState: isGithubProject ? { githubProjectId: activeProject.githubProjectId } : undefined,
       baseUrl,
       kind: isGithubProject ? 'factory' : 'user',
       threadBasePath: '/threads',

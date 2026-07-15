@@ -15,12 +15,7 @@
           "generationConfig": {
             "responseMimeType": "application/json",
             "responseSchema": {
-              "required": [
-                "primitiveId",
-                "primitiveType",
-                "prompt",
-                "selectionReason"
-              ],
+              "required": ["primitiveId", "primitiveType", "prompt", "selectionReason"],
               "type": "object",
               "properties": {
                 "primitiveId": {
@@ -30,12 +25,7 @@
                 "primitiveType": {
                   "description": "The type of the primitive to be called",
                   "type": "string",
-                  "enum": [
-                    "agent",
-                    "workflow",
-                    "none",
-                    "tool"
-                  ]
+                  "enum": ["agent", "workflow", "none", "tool"]
                 },
                 "prompt": {
                   "description": "The json string or text value to be sent to the primitive",
@@ -193,9 +183,7 @@
         "chunks": [
           "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"8\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 43,\"candidatesTokenCount\": 1,\"totalTokenCount\": 86,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 43}],\"thoughtsTokenCount\": 42,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"s25WarqmCfm3nsEPpZO58QE\"}\r\n\r\n"
         ],
-        "chunkTimings": [
-          0
-        ],
+        "chunkTimings": [0],
         "isStreaming": true
       }
     },
@@ -208,10 +196,7 @@
           "generationConfig": {
             "responseMimeType": "application/json",
             "responseSchema": {
-              "required": [
-                "isComplete",
-                "completionReason"
-              ],
+              "required": ["isComplete", "completionReason"],
               "type": "object",
               "properties": {
                 "isComplete": {
@@ -268,10 +253,7 @@
           "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"{\\\"isComplete\\\": true, \\\"completionReason\\\": \\\"The helperAgent has performed the calculation and provided the result. The original task was to calculate something for the user,\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 756,\"candidatesTokenCount\": 34,\"totalTokenCount\": 1052,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 756}],\"thoughtsTokenCount\": 262,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"s25Wav-AL_6ensEPjJbEuAg\"}\r\n\r\n",
           "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" and this has been achieved.\\\", \\\"finalResult\\\": \\\"\\\"}\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 756,\"candidatesTokenCount\": 45,\"totalTokenCount\": 1063,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 756}],\"thoughtsTokenCount\": 262,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"s25Wav-AL_6ensEPjJbEuAg\"}\r\n\r\n"
         ],
-        "chunkTimings": [
-          0,
-          1
-        ],
+        "chunkTimings": [0, 1],
         "isStreaming": true
       }
     }

@@ -15,10 +15,7 @@
           "generationConfig": {
             "responseMimeType": "application/json",
             "responseSchema": {
-              "required": [
-                "selection",
-                "reason"
-              ],
+              "required": ["selection", "reason"],
               "type": "object",
               "properties": {
                 "selection": {

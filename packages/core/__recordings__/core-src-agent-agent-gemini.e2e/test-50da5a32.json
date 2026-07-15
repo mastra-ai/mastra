@@ -15,12 +15,7 @@
           "generationConfig": {
             "responseMimeType": "application/json",
             "responseSchema": {
-              "required": [
-                "primitiveId",
-                "primitiveType",
-                "prompt",
-                "selectionReason"
-              ],
+              "required": ["primitiveId", "primitiveType", "prompt", "selectionReason"],
               "type": "object",
               "properties": {
                 "primitiveId": {
@@ -30,12 +25,7 @@
                 "primitiveType": {
                   "description": "The type of the primitive to be called",
                   "type": "string",
-                  "enum": [
-                    "agent",
-                    "workflow",
-                    "none",
-                    "tool"
-                  ]
+                  "enum": ["agent", "workflow", "none", "tool"]
                 },
                 "prompt": {
                   "description": "The json string or text value to be sent to the primitive",
@@ -133,9 +123,7 @@
           "generationConfig": {
             "responseMimeType": "application/json",
             "responseSchema": {
-              "required": [
-                "summary"
-              ],
+              "required": ["summary"],
               "type": "object",
               "properties": {
                 "summary": {
@@ -222,10 +210,7 @@
           "generationConfig": {
             "responseMimeType": "application/json",
             "responseSchema": {
-              "required": [
-                "isComplete",
-                "completionReason"
-              ],
+              "required": ["isComplete", "completionReason"],
               "type": "object",
               "properties": {
                 "isComplete": {
@@ -284,12 +269,7 @@
           "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" to learn from data, identify patterns, and make decisions or predictions with minimal human intervention. It uses algorithms to analyze large datasets, build models, and improve their performance over time through experience, without being explicitly programmed for every task. Common applications\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 1729,\"candidatesTokenCount\": 98,\"totalTokenCount\": 1928,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 1729}],\"thoughtsTokenCount\": 101,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"2G5WaqeaLo7SnsEPzcy-kQ0\"}\r\n\r\n",
           "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" include image recognition, natural language processing, recommendation systems, and predictive analytics.\\\"}\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 1729,\"candidatesTokenCount\": 114,\"totalTokenCount\": 1944,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 1729}],\"thoughtsTokenCount\": 101,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"2G5WaqeaLo7SnsEPzcy-kQ0\"}\r\n\r\n"
         ],
-        "chunkTimings": [
-          0,
-          139,
-          178,
-          87
-        ],
+        "chunkTimings": [0, 139, 178, 87],
         "isStreaming": true
       }
     }

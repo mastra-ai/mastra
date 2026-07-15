@@ -15,12 +15,7 @@
           "generationConfig": {
             "responseMimeType": "application/json",
             "responseSchema": {
-              "required": [
-                "primitiveId",
-                "primitiveType",
-                "prompt",
-                "selectionReason"
-              ],
+              "required": ["primitiveId", "primitiveType", "prompt", "selectionReason"],
               "type": "object",
               "properties": {
                 "primitiveId": {
@@ -30,12 +25,7 @@
                 "primitiveType": {
                   "description": "The type of the primitive to be called",
                   "type": "string",
-                  "enum": [
-                    "agent",
-                    "workflow",
-                    "none",
-                    "tool"
-                  ]
+                  "enum": ["agent", "workflow", "none", "tool"]
                 },
                 "prompt": {
                   "description": "The json string or text value to be sent to the primitive",
@@ -170,10 +160,7 @@
           "generationConfig": {
             "responseMimeType": "application/json",
             "responseSchema": {
-              "required": [
-                "isComplete",
-                "completionReason"
-              ],
+              "required": ["isComplete", "completionReason"],
               "type": "object",
               "properties": {
                 "isComplete": {
@@ -231,11 +218,7 @@
           "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \",\\n  \\\"completionReason\\\": \\\"The weather information has been retrieved, and the system is ready to generate a summary for the user regarding whether it's good for a picnic. However, the final summary itself has not yet been provided.\\\",\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 857,\"candidatesTokenCount\": 57,\"totalTokenCount\": 3573,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 857}],\"thoughtsTokenCount\": 2659,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"tm5WasH7JKS2nsEP_aCTqAk\"}\r\n\r\n",
           "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\\n  \\\"finalResult\\\": \\\"\\\"\\n}\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 857,\"candidatesTokenCount\": 64,\"totalTokenCount\": 3580,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 857}],\"thoughtsTokenCount\": 2659,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"tm5WasH7JKS2nsEP_aCTqAk\"}\r\n\r\n"
         ],
-        "chunkTimings": [
-          0,
-          180,
-          58
-        ],
+        "chunkTimings": [0, 180, 58],
         "isStreaming": true
       }
     },
@@ -248,12 +231,7 @@
           "generationConfig": {
             "responseMimeType": "application/json",
             "responseSchema": {
-              "required": [
-                "primitiveId",
-                "primitiveType",
-                "prompt",
-                "selectionReason"
-              ],
+              "required": ["primitiveId", "primitiveType", "prompt", "selectionReason"],
               "type": "object",
               "properties": {
                 "primitiveId": {
@@ -263,12 +241,7 @@
                 "primitiveType": {
                   "description": "The type of the primitive to be called",
                   "type": "string",
-                  "enum": [
-                    "agent",
-                    "workflow",
-                    "none",
-                    "tool"
-                  ]
+                  "enum": ["agent", "workflow", "none", "tool"]
                 },
                 "prompt": {
                   "description": "The json string or text value to be sent to the primitive",
@@ -411,10 +384,7 @@
           "generationConfig": {
             "responseMimeType": "application/json",
             "responseSchema": {
-              "required": [
-                "isComplete",
-                "completionReason"
-              ],
+              "required": ["isComplete", "completionReason"],
               "type": "object",
               "properties": {
                 "isComplete": {
@@ -471,10 +441,7 @@
           "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"{\\\"isComplete\\\":true,\\\"completionReason\\\":\\\"The previous step indicates that weather information has been retrieved and the question regarding picnic suitability has\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 834,\"candidatesTokenCount\": 26,\"totalTokenCount\": 1081,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 834}],\"thoughtsTokenCount\": 221,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"xm5WasiIAYPl7M8P5_qRqA0\"}\r\n\r\n",
           "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" been answered. The agent is ready to provide the final answer.\\\",\\\"finalResult\\\":\\\"The weather is perfect for a picnic today! Enjoy your outing.\\\"}\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 834,\"candidatesTokenCount\": 57,\"totalTokenCount\": 1112,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 834}],\"thoughtsTokenCount\": 221,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"xm5WasiIAYPl7M8P5_qRqA0\"}\r\n\r\n"
         ],
-        "chunkTimings": [
-          0,
-          57
-        ],
+        "chunkTimings": [0, 57],
         "isStreaming": true
       }
     }

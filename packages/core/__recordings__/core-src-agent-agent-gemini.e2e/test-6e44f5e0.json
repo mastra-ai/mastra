@@ -37,15 +37,11 @@
                   "name": "workflow-findUserWorkflow",
                   "description": "This is a tool that returns name and age",
                   "parameters": {
-                    "required": [
-                      "inputData"
-                    ],
+                    "required": ["inputData"],
                     "type": "object",
                     "properties": {
                       "inputData": {
-                        "required": [
-                          "name"
-                        ],
+                        "required": ["name"],
                         "type": "object",
                         "properties": {
                           "name": {
@@ -189,15 +185,11 @@
                   "name": "workflow-findUserWorkflow",
                   "description": "This is a tool that returns name and age",
                   "parameters": {
-                    "required": [
-                      "inputData"
-                    ],
+                    "required": ["inputData"],
                     "type": "object",
                     "properties": {
                       "inputData": {
-                        "required": [
-                          "name"
-                        ],
+                        "required": ["name"],
                         "type": "object",
                         "properties": {
                           "name": {
@@ -388,15 +380,11 @@
                   "name": "workflow-findUserWorkflow",
                   "description": "This is a tool that returns name and age",
                   "parameters": {
-                    "required": [
-                      "inputData"
-                    ],
+                    "required": ["inputData"],
                     "type": "object",
                     "properties": {
                       "inputData": {
-                        "required": [
-                          "name"
-                        ],
+                        "required": ["name"],
                         "type": "object",
                         "properties": {
                           "name": {

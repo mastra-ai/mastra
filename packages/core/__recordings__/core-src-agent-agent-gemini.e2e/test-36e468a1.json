@@ -37,9 +37,7 @@
                   "name": "findUserTool",
                   "description": "This is a test tool that returns the name, email and age",
                   "parameters": {
-                    "required": [
-                      "name"
-                    ],
+                    "required": ["name"],
                     "type": "object",
                     "properties": {
                       "name": {
@@ -77,9 +75,7 @@
                   "name": "findUserProfessionTool",
                   "description": "This is a test tool that returns the profession of the user",
                   "parameters": {
-                    "required": [
-                      "name"
-                    ],
+                    "required": ["name"],
                     "type": "object",
                     "properties": {
                       "name": {
@@ -227,9 +223,7 @@
                   "name": "findUserTool",
                   "description": "This is a test tool that returns the name, email and age",
                   "parameters": {
-                    "required": [
-                      "name"
-                    ],
+                    "required": ["name"],
                     "type": "object",
                     "properties": {
                       "name": {
@@ -267,9 +261,7 @@
                   "name": "findUserProfessionTool",
                   "description": "This is a test tool that returns the profession of the user",
                   "parameters": {
-                    "required": [
-                      "name"
-                    ],
+                    "required": ["name"],
                     "type": "object",
                     "properties": {
                       "name": {
@@ -451,9 +443,7 @@
                   "name": "findUserTool",
                   "description": "This is a test tool that returns the name, email and age",
                   "parameters": {
-                    "required": [
-                      "name"
-                    ],
+                    "required": ["name"],
                     "type": "object",
                     "properties": {
                       "name": {
@@ -491,9 +481,7 @@
                   "name": "findUserProfessionTool",
                   "description": "This is a test tool that returns the profession of the user",
                   "parameters": {
-                    "required": [
-                      "name"
-                    ],
+                    "required": ["name"],
                     "type": "object",
                     "properties": {
                       "name": {
@@ -703,9 +691,7 @@
                   "name": "findUserTool",
                   "description": "This is a test tool that returns the name, email and age",
                   "parameters": {
-                    "required": [
-                      "name"
-                    ],
+                    "required": ["name"],
                     "type": "object",
                     "properties": {
                       "name": {
@@ -743,9 +729,7 @@
                   "name": "findUserProfessionTool",
                   "description": "This is a test tool that returns the profession of the user",
                   "parameters": {
-                    "required": [
-                      "name"
-                    ],
+                    "required": ["name"],
                     "type": "object",
                     "properties": {
                       "name": {
