@@ -10,7 +10,7 @@ import TabItem from "@theme/TabItem";
 
 # PlatformSandbox
 
-Executes commands inside a Mastra Platform sandbox tied to a Platform environment. Sessions run on the [workspace proxy](https://workspaces.mastra.ai) and boot from a pre-built recipe checkpoint with Python 3, Node 22, TypeScript, tsx, and common build tooling already installed.
+Executes commands inside a Mastra Platform sandbox tied to a Platform environment. Sandboxes boot from a pre-built recipe checkpoint with Python 3, Node 22, TypeScript, tsx, and common build tooling already installed.
 
 Use `PlatformSandbox` when your agent runs on a Mastra Platform deployment and you want the sandbox to be provisioned and managed by the platform. For self-hosted Railway sandboxes, see [`RailwaySandbox`](/reference/workspace/railway-sandbox). For a local sandbox during development, see [`LocalSandbox`](/reference/workspace/local-sandbox).
 
@@ -26,7 +26,7 @@ For interface details, see [WorkspaceSandbox interface](/reference/workspace/san
 npm install @mastra/platform-workspace
 ```
 
-Configure the platform credentials. All options fall back to environment variables, so a Mastra Platform deployment can pass zero constructor options.
+Configure the platform credentials. The access token, project ID, and environment ID fall back to environment variables, so a Mastra Platform deployment can pass zero constructor options.
 
 <Tabs>
   <TabItem value="env-file" label=".env file">
@@ -211,8 +211,6 @@ The `command` argument is a shell string and is concatenated verbatim into the r
 ]}
 />
 
-The proxy URL defaults to `https://workspaces.mastra.ai` and can be overridden with the `MASTRA_WORKSPACE_PROXY_URL` environment variable (useful for staging).
-
 ## Properties
 
 <PropertiesTable
@@ -249,7 +247,7 @@ The proxy URL defaults to `https://workspaces.mastra.ai` and can be overridden w
 
 ## Errors
 
-Failures from the workspace proxy raise `PlatformApiError`. Structured `{ error: { message, type } }` responses are parsed into `.code` (machine-readable kind) and `.proxyMessage` (human string); the raw response body stays available on `.body`:
+Platform API failures raise `PlatformApiError`. Structured `{ error: { message, type } }` responses are parsed into `.code` (machine-readable kind) and `.proxyMessage` (human string); the raw response body stays available on `.body`:
 
 ```typescript
 import { PlatformApiError } from '@mastra/platform-workspace'
@@ -268,7 +266,7 @@ try {
 }
 ```
 
-`code` and `proxyMessage` are `undefined` when the proxy returns a non-JSON body, for example an HTML 502 from a load balancer.
+`code` and `proxyMessage` are `undefined` when the response body is not JSON, for example an HTML 502 from a load balancer.
 
 ## Related
 

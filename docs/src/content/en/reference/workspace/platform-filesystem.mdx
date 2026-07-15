@@ -10,7 +10,7 @@ import TabItem from "@theme/TabItem";
 
 # PlatformFilesystem
 
-Stores files in a Mastra Platform workspace bucket through the [workspace proxy](https://workspaces.mastra.ai). Each Mastra Platform environment can have one bucket, and `PlatformFilesystem` gives agents `read`, `write`, `list`, `delete`, and `move` operations against it.
+Stores files in a Mastra Platform workspace bucket. Each Mastra Platform environment can have one bucket, and `PlatformFilesystem` gives agents `read`, `write`, `list`, `delete`, and `move` operations against it.
 
 Use `PlatformFilesystem` when your agent runs on a Mastra Platform deployment and you want the filesystem to be backed by the platform-provisioned bucket. For direct S3 access, see [`S3Filesystem`](/reference/workspace/s3-filesystem). For a local directory during development, see [`LocalFilesystem`](/reference/workspace/local-filesystem).
 
@@ -26,7 +26,7 @@ For interface details, see [WorkspaceFilesystem interface](/reference/workspace/
 npm install @mastra/platform-workspace
 ```
 
-Configure the platform credentials. All options fall back to environment variables, so a Mastra Platform deployment can pass zero constructor options.
+Configure the platform credentials. The access token, project ID, and bucket name fall back to environment variables, so a Mastra Platform deployment can pass zero constructor options.
 
 <Tabs>
   <TabItem value="env-file" label=".env file">
@@ -102,7 +102,7 @@ await fs.writeFile('/analyses/repo.md', 'x') // throws WorkspaceReadOnlyError
 
 `writeFile` supports `overwrite: false` and throws `FileExistsError` when the destination already exists.
 
-`copyFile` and `moveFile` always overwrite the destination. The workspace proxy has no conditional wire field to prevent overwrite, so passing `overwrite: false` to either method throws an error rather than silently overwriting.
+`copyFile` and `moveFile` always overwrite the destination. Passing `overwrite: false` to either method throws an error rather than silently overwriting.
 
 ### Appending files
 
@@ -179,8 +179,6 @@ await fs.writeFile('/analyses/repo.md', 'x') // throws WorkspaceReadOnlyError
 ]}
 />
 
-The proxy URL defaults to `https://workspaces.mastra.ai` and can be overridden with the `MASTRA_WORKSPACE_PROXY_URL` environment variable (useful for staging).
-
 ## Properties
 
 <PropertiesTable
@@ -216,7 +214,7 @@ Filesystem-specific errors match the standard workspace error types:
 - `FileExistsError`: `writeFile` was called with `overwrite: false` and the destination already exists.
 - `WorkspaceReadOnlyError`: A mutating call was made on a read-only filesystem.
 
-Non-filesystem failures from the workspace proxy raise `PlatformApiError`. Structured `{ error: { message, type } }` responses are parsed into `.code` (machine-readable kind) and `.proxyMessage` (human string):
+Other Platform API failures raise `PlatformApiError`. Structured `{ error: { message, type } }` responses are parsed into `.code` (machine-readable kind) and `.proxyMessage` (human string):
 
 ```typescript
 import { FileNotFoundError, PlatformApiError } from '@mastra/platform-workspace'
@@ -235,7 +233,7 @@ try {
 }
 ```
 
-`code` and `proxyMessage` are `undefined` when the proxy returns a non-JSON body, for example an HTML 502 from a load balancer.
+`code` and `proxyMessage` are `undefined` when the response body is not JSON, for example an HTML 502 from a load balancer.
 
 ## Related
 
