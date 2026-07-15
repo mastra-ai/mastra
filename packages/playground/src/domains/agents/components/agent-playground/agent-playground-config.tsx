@@ -1,9 +1,9 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
-import { HoverPopover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui/components/Popover';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -724,23 +724,18 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
               <div className="flex flex-col gap-3 pt-4 pb-2">
                 <Txt variant="ui-sm" className="font-normal text-neutral3">
                   Add instruction blocks to your agent. Blocks are combined in order to form the system prompt. You can{' '}
-                  <HoverPopover>
-                    <PopoverTrigger asChild>
-                      <button
-                        type="button"
-                        className="text-neutral3 underline decoration-dotted hover:text-neutral5 cursor-pointer inline"
-                      >
-                        use variables
-                      </button>
-                    </PopoverTrigger>{' '}
-                    as part of your instruction blocks.
-                    <PopoverContent side="bottom" align="start">
-                      <p className="text-ui-sm text-neutral5">
+                  <Tooltip>
+                    <TooltipTrigger className="text-neutral3 underline decoration-dotted hover:text-neutral5 cursor-pointer inline">
+                      use variables
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" align="start" className="max-w-72">
+                      <span>
                         Use <code className="text-accent1 font-medium">{'{{variableName}}'}</code> syntax to insert
                         dynamic values into your instruction blocks.
-                      </p>
-                    </PopoverContent>
-                  </HoverPopover>
+                      </span>
+                    </TooltipContent>
+                  </Tooltip>{' '}
+                  as part of your instruction blocks.
                 </Txt>
               </div>
 
