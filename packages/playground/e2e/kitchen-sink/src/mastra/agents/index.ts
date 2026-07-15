@@ -1,7 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
 import { createBuilderAgent } from '@mastra/editor/ee';
-import { Memory } from '@mastra/memory';
+import { Extractor, Memory } from '@mastra/memory';
 
 export { askUserAgent } from './ask-user-agent';
 
@@ -35,7 +35,8 @@ const observerText = `<observations>
 -  User mentioned they need assistance
 </observations>
 <current-task>Help the user with their request</current-task>
-<suggested-response>I can help you with that. What specifically do you need?</suggested-response>`;
+<suggested-response>I can help you with that. What specifically do you need?</suggested-response>
+<priority>high</priority>`;
 
 const reflectorText = `<observations>
 ## January 27, 2026
@@ -62,21 +63,35 @@ function createTextStream(text: string, modelId: string) {
   });
 }
 
+const shouldFailObservation = (prompt: unknown) => JSON.stringify(prompt).includes('failed observation');
+
 const mockObserverModel = new aiTest.MockLanguageModelV2({
   provider: 'mock',
   modelId: 'mock-observer',
-  doGenerate: async () => ({
-    rawCall: { rawPrompt: null, rawSettings: {} },
-    finishReason: 'stop' as const,
-    usage: { inputTokens: 50, outputTokens: 100, totalTokens: 150 },
-    content: [{ type: 'text' as const, text: observerText }],
-    warnings: [],
-  }),
-  doStream: async () => ({
-    stream: createTextStream(observerText, 'mock-observer'),
-    rawCall: { rawPrompt: null, rawSettings: {} },
-    warnings: [],
-  }),
+  doGenerate: async ({ prompt }) => {
+    if (shouldFailObservation(prompt)) {
+      throw new Error('Observer model rate limited');
+    }
+
+    return {
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop' as const,
+      usage: { inputTokens: 50, outputTokens: 100, totalTokens: 150 },
+      content: [{ type: 'text' as const, text: observerText }],
+      warnings: [],
+    };
+  },
+  doStream: async ({ prompt }) => {
+    if (shouldFailObservation(prompt)) {
+      throw new Error('Observer model rate limited');
+    }
+
+    return {
+      stream: createTextStream(observerText, 'mock-observer'),
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+    };
+  },
 });
 
 const mockReflectorModel = new aiTest.MockLanguageModelV2({
@@ -107,6 +122,12 @@ const omMemory = new Memory({
       observation: {
         model: mockObserverModel,
         messageTokens: 20, // Very low threshold for E2E tests
+        extract: [
+          new Extractor({
+            name: 'Priority',
+            instructions: 'Capture the user request priority when it is available.',
+          }),
+        ],
       },
       reflection: {
         model: mockReflectorModel,

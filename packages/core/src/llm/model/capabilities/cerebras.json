@@ -1,0 +1,4 @@
+{
+  "attachment": ["gemma-4-31b"],
+  "temperature": ["gemma-4-31b", "gpt-oss-120b", "zai-glm-4.7"]
+}

@@ -135,7 +135,7 @@ export type GetAgents_Response = {
           [key: string]: any;
         }
       | undefined;
-    source?: ('code' | 'stored') | undefined;
+    source?: ('code' | 'stored' | 'fs') | undefined;
     status?: ('draft' | 'published' | 'archived') | undefined;
     activeVersionId?: string | undefined;
     hasDraft?: boolean | undefined;
@@ -343,7 +343,7 @@ export type GetAgentsAgentId_Response = {
         [key: string]: any;
       }
     | undefined;
-  source?: ('code' | 'stored') | undefined;
+  source?: ('code' | 'stored' | 'fs') | undefined;
   status?: ('draft' | 'published' | 'archived') | undefined;
   activeVersionId?: string | undefined;
   hasDraft?: boolean | undefined;
@@ -4415,6 +4415,15 @@ export type PostAgentsAgentIdClone_Response = {
                   operationTimeout?: number | undefined;
                 };
               }
+            | {
+                type: 'provider';
+                /** Workspace provider identifier */
+                provider: string;
+                /** Provider-specific configuration */
+                config: {
+                  [key: string]: unknown;
+                };
+              }
           )
         | {
             value:
@@ -4529,6 +4538,15 @@ export type PostAgentsAgentIdClone_Response = {
                     autoSync?: boolean | undefined;
                     /** Operation timeout in milliseconds */
                     operationTimeout?: number | undefined;
+                  };
+                }
+              | {
+                  type: 'provider';
+                  /** Workspace provider identifier */
+                  provider: string;
+                  /** Provider-specific configuration */
+                  config: {
+                    [key: string]: unknown;
                   };
                 };
             rules?:
@@ -7071,6 +7089,60 @@ export interface PostAgentsAgentIdSendToolApproval_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /agents/:agentId/suspended-runs
+// ============================================================================
+export type GetAgentsAgentIdSuspendedRuns_PathParams = {
+  /** Unique identifier for the agent */
+  agentId: string;
+};
+
+export type GetAgentsAgentIdSuspendedRuns_QueryParams = {
+  threadId?: string | undefined;
+  resourceId?: string | undefined;
+  fromDate?: Date | undefined;
+  toDate?: Date | undefined;
+  perPage?: number | undefined;
+  page?: number | undefined;
+};
+
+export type GetAgentsAgentIdSuspendedRuns_Response = {
+  runs: {
+    runId: string;
+    status: 'suspended';
+    threadId?: string | undefined;
+    resourceId?: string | undefined;
+    suspendedAt: Date;
+    toolCalls: {
+      toolCallId?: string | undefined;
+      toolName?: string | undefined;
+      args?: unknown | undefined;
+      requiresApproval: boolean;
+      suspendPayload?: unknown | undefined;
+    }[];
+  }[];
+  total: number;
+};
+
+export type GetAgentsAgentIdSuspendedRuns_Request = Simplify<
+  (GetAgentsAgentIdSuspendedRuns_PathParams extends never ? {} : { params: GetAgentsAgentIdSuspendedRuns_PathParams }) &
+    (GetAgentsAgentIdSuspendedRuns_QueryParams extends never
+      ? {}
+      : {} extends GetAgentsAgentIdSuspendedRuns_QueryParams
+        ? { query?: GetAgentsAgentIdSuspendedRuns_QueryParams }
+        : { query: GetAgentsAgentIdSuspendedRuns_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentsAgentIdSuspendedRuns_RouteContract {
+  pathParams: GetAgentsAgentIdSuspendedRuns_PathParams;
+  queryParams: GetAgentsAgentIdSuspendedRuns_QueryParams;
+  body: never;
+  request: GetAgentsAgentIdSuspendedRuns_Request;
+  response: GetAgentsAgentIdSuspendedRuns_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: POST /agents/:agentId/decline-tool-call
 // ============================================================================
 export type PostAgentsAgentIdDeclineToolCall_PathParams = {
@@ -7287,6 +7359,60 @@ export interface PostAgentsAgentIdResumeStream_RouteContract {
   body: PostAgentsAgentIdResumeStream_Body;
   request: PostAgentsAgentIdResumeStream_Request;
   response: PostAgentsAgentIdResumeStream_Response;
+  responseType: 'stream';
+}
+
+// ============================================================================
+// Route: POST /agents/:agentId/recover
+// ============================================================================
+export type PostAgentsAgentIdRecover_PathParams = {
+  /** Unique identifier for the agent */
+  agentId: string;
+};
+
+export type PostAgentsAgentIdRecover_Body = {
+  runId: string;
+  requestContext?:
+    | {
+        [key: string]: any;
+      }
+    | undefined;
+  versions?:
+    | {
+        agents?:
+          | {
+              [key: string]:
+                | {
+                    versionId: string;
+                  }
+                | {
+                    status: 'draft' | 'published';
+                  };
+            }
+          | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
+      }
+    | undefined;
+};
+
+export type PostAgentsAgentIdRecover_Response = any;
+
+export type PostAgentsAgentIdRecover_Request = Simplify<
+  (PostAgentsAgentIdRecover_PathParams extends never ? {} : { params: PostAgentsAgentIdRecover_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentsAgentIdRecover_Body extends never
+      ? {}
+      : {} extends PostAgentsAgentIdRecover_Body
+        ? { body?: PostAgentsAgentIdRecover_Body }
+        : { body: PostAgentsAgentIdRecover_Body })
+>;
+
+export interface PostAgentsAgentIdRecover_RouteContract {
+  pathParams: PostAgentsAgentIdRecover_PathParams;
+  queryParams: never;
+  body: PostAgentsAgentIdRecover_Body;
+  request: PostAgentsAgentIdRecover_Request;
+  response: PostAgentsAgentIdRecover_Response;
   responseType: 'stream';
 }
 
@@ -11647,6 +11773,32 @@ export type GetMemoryObservationalMemory_Response = {
     threadId: string | null;
     activeObservations: string;
     bufferedObservations?: string | undefined;
+    bufferedObservationChunks?:
+      | {
+          id?: string | undefined;
+          cycleId: string;
+          observations: string;
+          tokenCount: number;
+          messageIds?: string[] | undefined;
+          messageTokens: number;
+          lastObservedAt?: Date | undefined;
+          createdAt?: Date | undefined;
+          suggestedContinuation?: string | undefined;
+          currentTask?: string | undefined;
+          threadTitle?: string | undefined;
+          extractedValues?:
+            | {
+                [key: string]: unknown;
+              }
+            | undefined;
+          extractionFailures?:
+            | {
+                slug: string;
+                error: string;
+              }[]
+            | undefined;
+        }[]
+      | undefined;
     bufferedReflection?: string | undefined;
     originType: 'initial' | 'observation' | 'reflection';
     generationCount: number;
@@ -11675,6 +11827,32 @@ export type GetMemoryObservationalMemory_Response = {
         threadId: string | null;
         activeObservations: string;
         bufferedObservations?: string | undefined;
+        bufferedObservationChunks?:
+          | {
+              id?: string | undefined;
+              cycleId: string;
+              observations: string;
+              tokenCount: number;
+              messageIds?: string[] | undefined;
+              messageTokens: number;
+              lastObservedAt?: Date | undefined;
+              createdAt?: Date | undefined;
+              suggestedContinuation?: string | undefined;
+              currentTask?: string | undefined;
+              threadTitle?: string | undefined;
+              extractedValues?:
+                | {
+                    [key: string]: unknown;
+                  }
+                | undefined;
+              extractionFailures?:
+                | {
+                    slug: string;
+                    error: string;
+                  }[]
+                | undefined;
+            }[]
+          | undefined;
         bufferedReflection?: string | undefined;
         originType: 'initial' | 'observation' | 'reflection';
         generationCount: number;
@@ -11734,6 +11912,32 @@ export type PostMemoryObservationalMemoryBufferStatus_Response = {
     threadId: string | null;
     activeObservations: string;
     bufferedObservations?: string | undefined;
+    bufferedObservationChunks?:
+      | {
+          id?: string | undefined;
+          cycleId: string;
+          observations: string;
+          tokenCount: number;
+          messageIds?: string[] | undefined;
+          messageTokens: number;
+          lastObservedAt?: Date | undefined;
+          createdAt?: Date | undefined;
+          suggestedContinuation?: string | undefined;
+          currentTask?: string | undefined;
+          threadTitle?: string | undefined;
+          extractedValues?:
+            | {
+                [key: string]: unknown;
+              }
+            | undefined;
+          extractionFailures?:
+            | {
+                slug: string;
+                error: string;
+              }[]
+            | undefined;
+        }[]
+      | undefined;
     bufferedReflection?: string | undefined;
     originType: 'initial' | 'observation' | 'reflection';
     generationCount: number;
@@ -12884,7 +13088,7 @@ export type GetScoresScorers_Response = {
     agentNames: string[];
     workflowIds: string[];
     isRegistered: boolean;
-    source: 'code' | 'stored';
+    source: 'code' | 'stored' | 'fs';
   };
 };
 
@@ -12926,7 +13130,7 @@ export type GetScoresScorersScorerId_Response = {
   agentNames: string[];
   workflowIds: string[];
   isRegistered: boolean;
-  source: 'code' | 'stored';
+  source: 'code' | 'stored' | 'fs';
 } | null;
 
 export type GetScoresScorersScorerId_Request = Simplify<
@@ -13161,6 +13365,7 @@ export type GetObservabilityTraces_QueryParams = {
             | 'processor_run'
             | 'tool_call'
             | 'client_tool_call'
+            | 'provider_tool_call'
             | 'workflow_run'
             | 'workflow_step'
             | 'workflow_conditional'
@@ -13370,6 +13575,7 @@ export type GetObservabilityTraces_Response = {
       | 'processor_run'
       | 'tool_call'
       | 'client_tool_call'
+      | 'provider_tool_call'
       | 'workflow_run'
       | 'workflow_step'
       | 'workflow_conditional'
@@ -13579,6 +13785,7 @@ export type GetObservabilityTracesLight_QueryParams = {
             | 'processor_run'
             | 'tool_call'
             | 'client_tool_call'
+            | 'provider_tool_call'
             | 'workflow_run'
             | 'workflow_step'
             | 'workflow_conditional'
@@ -13752,6 +13959,7 @@ export type GetObservabilityTracesLight_Response = {
       | 'processor_run'
       | 'tool_call'
       | 'client_tool_call'
+      | 'provider_tool_call'
       | 'workflow_run'
       | 'workflow_step'
       | 'workflow_conditional'
@@ -13877,6 +14085,7 @@ export type GetObservabilityBranches_QueryParams = {
             | 'processor_run'
             | 'tool_call'
             | 'client_tool_call'
+            | 'provider_tool_call'
             | 'workflow_run'
             | 'workflow_step'
             | 'workflow_conditional'
@@ -14066,6 +14275,7 @@ export type GetObservabilityBranches_Response = {
       | 'processor_run'
       | 'tool_call'
       | 'client_tool_call'
+      | 'provider_tool_call'
       | 'workflow_run'
       | 'workflow_step'
       | 'workflow_conditional'
@@ -14259,6 +14469,7 @@ export type GetObservabilityTracesTraceIdBranchesSpanId_Response = {
       | 'processor_run'
       | 'tool_call'
       | 'client_tool_call'
+      | 'provider_tool_call'
       | 'workflow_run'
       | 'workflow_step'
       | 'workflow_conditional'
@@ -14445,6 +14656,7 @@ export type GetObservabilityTracesTraceId_Response = {
       | 'processor_run'
       | 'tool_call'
       | 'client_tool_call'
+      | 'provider_tool_call'
       | 'workflow_run'
       | 'workflow_step'
       | 'workflow_conditional'
@@ -14625,6 +14837,7 @@ export type GetObservabilityTracesTraceIdLight_Response = {
       | 'processor_run'
       | 'tool_call'
       | 'client_tool_call'
+      | 'provider_tool_call'
       | 'workflow_run'
       | 'workflow_step'
       | 'workflow_conditional'
@@ -14726,6 +14939,7 @@ export type GetObservabilityTracesTraceIdSpansSpanId_Response = {
       | 'processor_run'
       | 'tool_call'
       | 'client_tool_call'
+      | 'provider_tool_call'
       | 'workflow_run'
       | 'workflow_step'
       | 'workflow_conditional'
@@ -15036,6 +15250,7 @@ export type GetObservabilityTracesTraceIdSpanIdScores_Response = {
           | 'processor_run'
           | 'tool_call'
           | 'client_tool_call'
+          | 'provider_tool_call'
           | 'workflow_run'
           | 'workflow_step'
           | 'workflow_conditional'
@@ -15059,6 +15274,11 @@ export type GetObservabilityTracesTraceIdSpanIdScores_Response = {
     spanId?: string | undefined;
     resourceId?: string | undefined;
     threadId?: string | undefined;
+    organizationId?: (string | null) | undefined;
+    projectId?: (string | null) | undefined;
+    batchId?: (string | null) | undefined;
+    datasetId?: (string | null) | undefined;
+    datasetItemId?: (string | null) | undefined;
     preprocessStepResult?:
       | {
           [key: string]: unknown;
@@ -25712,6 +25932,15 @@ export type GetStoredAgents_Response = {
                     operationTimeout?: number | undefined;
                   };
                 }
+              | {
+                  type: 'provider';
+                  /** Workspace provider identifier */
+                  provider: string;
+                  /** Provider-specific configuration */
+                  config: {
+                    [key: string]: unknown;
+                  };
+                }
             )
           | {
               value:
@@ -25826,6 +26055,15 @@ export type GetStoredAgents_Response = {
                       autoSync?: boolean | undefined;
                       /** Operation timeout in milliseconds */
                       operationTimeout?: number | undefined;
+                    };
+                  }
+                | {
+                    type: 'provider';
+                    /** Workspace provider identifier */
+                    provider: string;
+                    /** Provider-specific configuration */
+                    config: {
+                      [key: string]: unknown;
                     };
                   };
               rules?:
@@ -30260,6 +30498,15 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
                       operationTimeout?: number | undefined;
                     };
                   }
+                | {
+                    type: 'provider';
+                    /** Workspace provider identifier */
+                    provider: string;
+                    /** Provider-specific configuration */
+                    config: {
+                      [key: string]: unknown;
+                    };
+                  }
               )
             | {
                 value:
@@ -30374,6 +30621,15 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
                         autoSync?: boolean | undefined;
                         /** Operation timeout in milliseconds */
                         operationTimeout?: number | undefined;
+                      };
+                    }
+                  | {
+                      type: 'provider';
+                      /** Workspace provider identifier */
+                      provider: string;
+                      /** Provider-specific configuration */
+                      config: {
+                        [key: string]: unknown;
                       };
                     };
                 rules?:
@@ -34676,6 +34932,15 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
                       operationTimeout?: number | undefined;
                     };
                   }
+                | {
+                    type: 'provider';
+                    /** Workspace provider identifier */
+                    provider: string;
+                    /** Provider-specific configuration */
+                    config: {
+                      [key: string]: unknown;
+                    };
+                  }
               )
             | {
                 value:
@@ -34790,6 +35055,15 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
                         autoSync?: boolean | undefined;
                         /** Operation timeout in milliseconds */
                         operationTimeout?: number | undefined;
+                      };
+                    }
+                  | {
+                      type: 'provider';
+                      /** Workspace provider identifier */
+                      provider: string;
+                      /** Provider-specific configuration */
+                      config: {
+                        [key: string]: unknown;
                       };
                     };
                 rules?:
@@ -39077,6 +39351,15 @@ export type GetStoredAgentsStoredAgentId_Response = {
                   operationTimeout?: number | undefined;
                 };
               }
+            | {
+                type: 'provider';
+                /** Workspace provider identifier */
+                provider: string;
+                /** Provider-specific configuration */
+                config: {
+                  [key: string]: unknown;
+                };
+              }
           )
         | {
             value:
@@ -39191,6 +39474,15 @@ export type GetStoredAgentsStoredAgentId_Response = {
                     autoSync?: boolean | undefined;
                     /** Operation timeout in milliseconds */
                     operationTimeout?: number | undefined;
+                  };
+                }
+              | {
+                  type: 'provider';
+                  /** Workspace provider identifier */
+                  provider: string;
+                  /** Provider-specific configuration */
+                  config: {
+                    [key: string]: unknown;
                   };
                 };
             rules?:
@@ -43438,6 +43730,15 @@ export type PostStoredAgents_Body = {
                   operationTimeout?: number | undefined;
                 };
               }
+            | {
+                type: 'provider';
+                /** Workspace provider identifier */
+                provider: string;
+                /** Provider-specific configuration */
+                config: {
+                  [key: string]: unknown;
+                };
+              }
           )
         | {
             value:
@@ -43552,6 +43853,15 @@ export type PostStoredAgents_Body = {
                     autoSync?: boolean | undefined;
                     /** Operation timeout in milliseconds */
                     operationTimeout?: number | undefined;
+                  };
+                }
+              | {
+                  type: 'provider';
+                  /** Workspace provider identifier */
+                  provider: string;
+                  /** Provider-specific configuration */
+                  config: {
+                    [key: string]: unknown;
                   };
                 };
             rules?:
@@ -47788,6 +48098,15 @@ export type PostStoredAgents_Response = {
                   operationTimeout?: number | undefined;
                 };
               }
+            | {
+                type: 'provider';
+                /** Workspace provider identifier */
+                provider: string;
+                /** Provider-specific configuration */
+                config: {
+                  [key: string]: unknown;
+                };
+              }
           )
         | {
             value:
@@ -47902,6 +48221,15 @@ export type PostStoredAgents_Response = {
                     autoSync?: boolean | undefined;
                     /** Operation timeout in milliseconds */
                     operationTimeout?: number | undefined;
+                  };
+                }
+              | {
+                  type: 'provider';
+                  /** Workspace provider identifier */
+                  provider: string;
+                  /** Provider-specific configuration */
+                  config: {
+                    [key: string]: unknown;
                   };
                 };
             rules?:
@@ -52198,6 +52526,15 @@ export type PatchStoredAgentsStoredAgentId_Body = {
                       operationTimeout?: number | undefined;
                     };
                   }
+                | {
+                    type: 'provider';
+                    /** Workspace provider identifier */
+                    provider: string;
+                    /** Provider-specific configuration */
+                    config: {
+                      [key: string]: unknown;
+                    };
+                  }
               )
             | {
                 value:
@@ -52312,6 +52649,15 @@ export type PatchStoredAgentsStoredAgentId_Body = {
                         autoSync?: boolean | undefined;
                         /** Operation timeout in milliseconds */
                         operationTimeout?: number | undefined;
+                      };
+                    }
+                  | {
+                      type: 'provider';
+                      /** Workspace provider identifier */
+                      provider: string;
+                      /** Provider-specific configuration */
+                      config: {
+                        [key: string]: unknown;
                       };
                     };
                 rules?:
@@ -56573,6 +56919,15 @@ export type PatchStoredAgentsStoredAgentId_Response =
                       operationTimeout?: number | undefined;
                     };
                   }
+                | {
+                    type: 'provider';
+                    /** Workspace provider identifier */
+                    provider: string;
+                    /** Provider-specific configuration */
+                    config: {
+                      [key: string]: unknown;
+                    };
+                  }
               )
             | {
                 value:
@@ -56687,6 +57042,15 @@ export type PatchStoredAgentsStoredAgentId_Response =
                         autoSync?: boolean | undefined;
                         /** Operation timeout in milliseconds */
                         operationTimeout?: number | undefined;
+                      };
+                    }
+                  | {
+                      type: 'provider';
+                      /** Workspace provider identifier */
+                      provider: string;
+                      /** Provider-specific configuration */
+                      config: {
+                        [key: string]: unknown;
                       };
                     };
                 rules?:
@@ -85626,6 +85990,13 @@ export type GetDatasetsDatasetId_PathParams = {
   datasetId: string;
 };
 
+export type GetDatasetsDatasetId_QueryParams = {
+  /** Restrict lookup to the given organization */
+  organizationId?: string | undefined;
+  /** Restrict lookup to the given project */
+  projectId?: string | undefined;
+};
+
 export type GetDatasetsDatasetId_Response = {
   id: string;
   name: string;
@@ -85664,13 +86035,17 @@ export type GetDatasetsDatasetId_Response = {
 
 export type GetDatasetsDatasetId_Request = Simplify<
   (GetDatasetsDatasetId_PathParams extends never ? {} : { params: GetDatasetsDatasetId_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (GetDatasetsDatasetId_QueryParams extends never
+      ? {}
+      : {} extends GetDatasetsDatasetId_QueryParams
+        ? { query?: GetDatasetsDatasetId_QueryParams }
+        : { query: GetDatasetsDatasetId_QueryParams }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetDatasetsDatasetId_RouteContract {
   pathParams: GetDatasetsDatasetId_PathParams;
-  queryParams: never;
+  queryParams: GetDatasetsDatasetId_QueryParams;
   body: never;
   request: GetDatasetsDatasetId_Request;
   response: GetDatasetsDatasetId_Response;
@@ -85683,6 +86058,13 @@ export interface GetDatasetsDatasetId_RouteContract {
 export type PatchDatasetsDatasetId_PathParams = {
   /** Unique identifier for the dataset */
   datasetId: string;
+};
+
+export type PatchDatasetsDatasetId_QueryParams = {
+  /** Restrict lookup to the given organization */
+  organizationId?: string | undefined;
+  /** Restrict lookup to the given project */
+  projectId?: string | undefined;
 };
 
 export type PatchDatasetsDatasetId_Body = {
@@ -85762,7 +86144,11 @@ export type PatchDatasetsDatasetId_Response = {
 
 export type PatchDatasetsDatasetId_Request = Simplify<
   (PatchDatasetsDatasetId_PathParams extends never ? {} : { params: PatchDatasetsDatasetId_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PatchDatasetsDatasetId_QueryParams extends never
+      ? {}
+      : {} extends PatchDatasetsDatasetId_QueryParams
+        ? { query?: PatchDatasetsDatasetId_QueryParams }
+        : { query: PatchDatasetsDatasetId_QueryParams }) &
     (PatchDatasetsDatasetId_Body extends never
       ? {}
       : {} extends PatchDatasetsDatasetId_Body
@@ -85772,7 +86158,7 @@ export type PatchDatasetsDatasetId_Request = Simplify<
 
 export interface PatchDatasetsDatasetId_RouteContract {
   pathParams: PatchDatasetsDatasetId_PathParams;
-  queryParams: never;
+  queryParams: PatchDatasetsDatasetId_QueryParams;
   body: PatchDatasetsDatasetId_Body;
   request: PatchDatasetsDatasetId_Request;
   response: PatchDatasetsDatasetId_Response;
@@ -85787,19 +86173,30 @@ export type DeleteDatasetsDatasetId_PathParams = {
   datasetId: string;
 };
 
+export type DeleteDatasetsDatasetId_QueryParams = {
+  /** Restrict lookup to the given organization */
+  organizationId?: string | undefined;
+  /** Restrict lookup to the given project */
+  projectId?: string | undefined;
+};
+
 export type DeleteDatasetsDatasetId_Response = {
   success: boolean;
 };
 
 export type DeleteDatasetsDatasetId_Request = Simplify<
   (DeleteDatasetsDatasetId_PathParams extends never ? {} : { params: DeleteDatasetsDatasetId_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (DeleteDatasetsDatasetId_QueryParams extends never
+      ? {}
+      : {} extends DeleteDatasetsDatasetId_QueryParams
+        ? { query?: DeleteDatasetsDatasetId_QueryParams }
+        : { query: DeleteDatasetsDatasetId_QueryParams }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface DeleteDatasetsDatasetId_RouteContract {
   pathParams: DeleteDatasetsDatasetId_PathParams;
-  queryParams: never;
+  queryParams: DeleteDatasetsDatasetId_QueryParams;
   body: never;
   request: DeleteDatasetsDatasetId_Request;
   response: DeleteDatasetsDatasetId_Response;
@@ -85826,6 +86223,7 @@ export type GetDatasetsDatasetIdItems_Response = {
     id: string;
     datasetId: string;
     datasetVersion: number;
+    externalId?: (string | undefined) | null;
     input: unknown;
     groundTruth?: unknown | undefined;
     expectedTrajectory?: unknown | undefined;
@@ -85902,6 +86300,8 @@ export type PostDatasetsDatasetIdItems_PathParams = {
 };
 
 export type PostDatasetsDatasetIdItems_Body = {
+  /** Caller-defined, dataset-local item identity */
+  externalId?: (string | undefined) | null;
   /** Input data for the dataset item */
   input: unknown;
   /** Expected output for comparison */
@@ -86198,6 +86598,7 @@ export type PostDatasetsDatasetIdItems_Response = {
   id: string;
   datasetId: string;
   datasetVersion: number;
+  externalId?: (string | undefined) | null;
   input: unknown;
   groundTruth?: unknown | undefined;
   expectedTrajectory?: unknown | undefined;
@@ -86268,6 +86669,7 @@ export type PostDatasetsDatasetIdItemsBatch_PathParams = {
 
 export type PostDatasetsDatasetIdItemsBatch_Body = {
   items: {
+    externalId?: (string | undefined) | null;
     input: unknown;
     groundTruth?: unknown | undefined;
     /** Expected trajectory configuration for trajectory scoring */
@@ -86562,6 +86964,7 @@ export type PostDatasetsDatasetIdItemsBatch_Response = {
     id: string;
     datasetId: string;
     datasetVersion: number;
+    externalId?: (string | undefined) | null;
     input: unknown;
     groundTruth?: unknown | undefined;
     expectedTrajectory?: unknown | undefined;
@@ -86678,6 +87081,7 @@ export type GetDatasetsDatasetIdItemsItemId_Response = {
   id: string;
   datasetId: string;
   datasetVersion: number;
+  externalId?: (string | undefined) | null;
   input: unknown;
   groundTruth?: unknown | undefined;
   expectedTrajectory?: unknown | undefined;
@@ -87043,6 +87447,7 @@ export type PatchDatasetsDatasetIdItemsItemId_Response = {
   id: string;
   datasetId: string;
   datasetVersion: number;
+  externalId?: (string | undefined) | null;
   input: unknown;
   groundTruth?: unknown | undefined;
   expectedTrajectory?: unknown | undefined;
@@ -87261,6 +87666,7 @@ export type GetDatasetsDatasetIdItemsItemIdVersionsDatasetVersion_Response = {
   id: string;
   datasetId: string;
   datasetVersion: number;
+  externalId?: (string | undefined) | null;
   input: unknown;
   groundTruth?: unknown | undefined;
   expectedTrajectory?: unknown | undefined;
@@ -89656,62 +90062,126 @@ export interface PostAgentBuilderActionIdRunsRunIdCancel_RouteContract {
 // Route: GET /schedules
 // ============================================================================
 export type GetSchedules_QueryParams = {
+  agentId?: string | undefined;
   workflowId?: string | undefined;
   status?: ('active' | 'paused') | undefined;
-  ownerType?: string | undefined;
-  ownerId?: string | undefined;
+  threadId?: string | undefined;
+  resourceId?: string | undefined;
+  name?: string | undefined;
 };
 
 export type GetSchedules_Response = {
-  schedules: {
-    id: string;
-    target: {
-      type: 'workflow';
-      workflowId: string;
-      inputData?: unknown | undefined;
-      initialState?: unknown | undefined;
-      requestContext?:
-        | {
-            [key: string]: unknown;
-          }
-        | undefined;
-    };
-    cron: string;
-    timezone?: string | undefined;
-    status: 'active' | 'paused';
-    nextFireAt: number;
-    lastFireAt?: number | undefined;
-    lastRunId?: string | undefined;
-    lastRun?:
-      | {
-          status:
-            | 'running'
-            | 'success'
-            | 'failed'
-            | 'tripwire'
-            | 'suspended'
-            | 'waiting'
-            | 'pending'
-            | 'canceled'
-            | 'bailed'
-            | 'paused'
-            | 'skipped';
-          startedAt?: number | undefined;
-          completedAt?: number | undefined;
-          durationMs?: number | undefined;
-          error?: string | undefined;
-        }
-      | undefined;
-    metadata?:
-      | {
-          [key: string]: unknown;
-        }
-      | undefined;
-    ownerType?: string | undefined;
-    ownerId?: string | undefined;
-    createdAt: number;
-    updatedAt: number;
-  }[];
+  schedules: (
+    | {
+        id: string;
+        agentId: string;
+        workflowId?: undefined | undefined;
+        lastRun?: undefined | undefined;
+        name?: string | undefined;
+        threadId?: string | undefined;
+        resourceId?: string | undefined;
+        prompt: string;
+        cron: string;
+        timezone?: string | undefined;
+        status: 'active' | 'paused';
+        nextFireAt: number;
+        lastFireAt?: number | undefined;
+        lastRunId?: string | undefined;
+        signalType?: ('user' | 'state' | 'reactive' | 'notification' | 'user-message' | 'system-reminder') | undefined;
+        tagName?: string | undefined;
+        attributes?:
+          | {
+              [key: string]: (string | number | boolean | null) | undefined;
+            }
+          | undefined;
+        ifActive?:
+          | {
+              behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+              attributes?:
+                | {
+                    [key: string]: (string | number | boolean | null) | undefined;
+                  }
+                | undefined;
+            }
+          | undefined;
+        ifIdle?:
+          | {
+              behavior?: ('wake' | 'persist' | 'discard') | undefined;
+              attributes?:
+                | {
+                    [key: string]: (string | number | boolean | null) | undefined;
+                  }
+                | undefined;
+              streamOptions?:
+                | {
+                    requestContext?:
+                      | {
+                          [key: string]: unknown;
+                        }
+                      | undefined;
+                  }
+                | undefined;
+            }
+          | undefined;
+        providerOptions?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+        metadata?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+        createdAt: number;
+        updatedAt: number;
+      }
+    | {
+        id: string;
+        workflowId: string;
+        agentId?: undefined | undefined;
+        cron: string;
+        timezone?: string | undefined;
+        status: 'active' | 'paused';
+        nextFireAt: number;
+        lastFireAt?: number | undefined;
+        lastRunId?: string | undefined;
+        lastRun?:
+          | {
+              status:
+                | 'running'
+                | 'success'
+                | 'failed'
+                | 'tripwire'
+                | 'suspended'
+                | 'waiting'
+                | 'pending'
+                | 'canceled'
+                | 'bailed'
+                | 'paused'
+                | 'skipped';
+              startedAt?: number | undefined;
+              completedAt?: number | undefined;
+              durationMs?: number | undefined;
+              error?: string | undefined;
+            }
+          | undefined;
+        inputData?: unknown | undefined;
+        initialState?: unknown | undefined;
+        requestContext?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+        metadata?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+        createdAt: number;
+        updatedAt: number;
+      }
+  )[];
 };
 
 export type GetSchedules_Request = Simplify<
@@ -89740,55 +90210,116 @@ export type GetSchedulesScheduleId_PathParams = {
   scheduleId: string;
 };
 
-export type GetSchedulesScheduleId_Response = {
-  id: string;
-  target: {
-    type: 'workflow';
-    workflowId: string;
-    inputData?: unknown | undefined;
-    initialState?: unknown | undefined;
-    requestContext?:
-      | {
-          [key: string]: unknown;
-        }
-      | undefined;
-  };
-  cron: string;
-  timezone?: string | undefined;
-  status: 'active' | 'paused';
-  nextFireAt: number;
-  lastFireAt?: number | undefined;
-  lastRunId?: string | undefined;
-  lastRun?:
-    | {
-        status:
-          | 'running'
-          | 'success'
-          | 'failed'
-          | 'tripwire'
-          | 'suspended'
-          | 'waiting'
-          | 'pending'
-          | 'canceled'
-          | 'bailed'
-          | 'paused'
-          | 'skipped';
-        startedAt?: number | undefined;
-        completedAt?: number | undefined;
-        durationMs?: number | undefined;
-        error?: string | undefined;
-      }
-    | undefined;
-  metadata?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
-  ownerType?: string | undefined;
-  ownerId?: string | undefined;
-  createdAt: number;
-  updatedAt: number;
-};
+export type GetSchedulesScheduleId_Response =
+  | {
+      id: string;
+      agentId: string;
+      workflowId?: undefined | undefined;
+      lastRun?: undefined | undefined;
+      name?: string | undefined;
+      threadId?: string | undefined;
+      resourceId?: string | undefined;
+      prompt: string;
+      cron: string;
+      timezone?: string | undefined;
+      status: 'active' | 'paused';
+      nextFireAt: number;
+      lastFireAt?: number | undefined;
+      lastRunId?: string | undefined;
+      signalType?: ('user' | 'state' | 'reactive' | 'notification' | 'user-message' | 'system-reminder') | undefined;
+      tagName?: string | undefined;
+      attributes?:
+        | {
+            [key: string]: (string | number | boolean | null) | undefined;
+          }
+        | undefined;
+      ifActive?:
+        | {
+            behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+            attributes?:
+              | {
+                  [key: string]: (string | number | boolean | null) | undefined;
+                }
+              | undefined;
+          }
+        | undefined;
+      ifIdle?:
+        | {
+            behavior?: ('wake' | 'persist' | 'discard') | undefined;
+            attributes?:
+              | {
+                  [key: string]: (string | number | boolean | null) | undefined;
+                }
+              | undefined;
+            streamOptions?:
+              | {
+                  requestContext?:
+                    | {
+                        [key: string]: unknown;
+                      }
+                    | undefined;
+                }
+              | undefined;
+          }
+        | undefined;
+      providerOptions?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      metadata?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      createdAt: number;
+      updatedAt: number;
+    }
+  | {
+      id: string;
+      workflowId: string;
+      agentId?: undefined | undefined;
+      cron: string;
+      timezone?: string | undefined;
+      status: 'active' | 'paused';
+      nextFireAt: number;
+      lastFireAt?: number | undefined;
+      lastRunId?: string | undefined;
+      lastRun?:
+        | {
+            status:
+              | 'running'
+              | 'success'
+              | 'failed'
+              | 'tripwire'
+              | 'suspended'
+              | 'waiting'
+              | 'pending'
+              | 'canceled'
+              | 'bailed'
+              | 'paused'
+              | 'skipped';
+            startedAt?: number | undefined;
+            completedAt?: number | undefined;
+            durationMs?: number | undefined;
+            error?: string | undefined;
+          }
+        | undefined;
+      inputData?: unknown | undefined;
+      initialState?: unknown | undefined;
+      requestContext?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      metadata?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      createdAt: number;
+      updatedAt: number;
+    };
 
 export type GetSchedulesScheduleId_Request = Simplify<
   (GetSchedulesScheduleId_PathParams extends never ? {} : { params: GetSchedulesScheduleId_PathParams }) &
@@ -89802,6 +90333,439 @@ export interface GetSchedulesScheduleId_RouteContract {
   body: never;
   request: GetSchedulesScheduleId_Request;
   response: GetSchedulesScheduleId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /schedules
+// ============================================================================
+export type PostSchedules_Body =
+  | {
+      id?: string | undefined;
+      agentId: string;
+      cron: string;
+      timezone?: string | undefined;
+      prompt: string;
+      name?: string | undefined;
+      threadId?: string | undefined;
+      resourceId?: string | undefined;
+      signalType?: ('user' | 'state' | 'reactive' | 'notification' | 'user-message' | 'system-reminder') | undefined;
+      tagName?: string | undefined;
+      attributes?:
+        | {
+            [key: string]: (string | number | boolean | null) | undefined;
+          }
+        | undefined;
+      ifActive?:
+        | {
+            behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+            attributes?:
+              | {
+                  [key: string]: (string | number | boolean | null) | undefined;
+                }
+              | undefined;
+          }
+        | undefined;
+      ifIdle?:
+        | {
+            behavior?: ('wake' | 'persist' | 'discard') | undefined;
+            attributes?:
+              | {
+                  [key: string]: (string | number | boolean | null) | undefined;
+                }
+              | undefined;
+            streamOptions?:
+              | {
+                  requestContext?:
+                    | {
+                        [key: string]: unknown;
+                      }
+                    | undefined;
+                }
+              | undefined;
+          }
+        | undefined;
+      providerOptions?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      metadata?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+    }
+  | {
+      id?: string | undefined;
+      workflowId: string;
+      cron: string;
+      timezone?: string | undefined;
+      inputData?: unknown | undefined;
+      initialState?: unknown | undefined;
+      requestContext?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      metadata?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+    };
+
+export type PostSchedules_Response =
+  | {
+      id: string;
+      agentId: string;
+      workflowId?: undefined | undefined;
+      lastRun?: undefined | undefined;
+      name?: string | undefined;
+      threadId?: string | undefined;
+      resourceId?: string | undefined;
+      prompt: string;
+      cron: string;
+      timezone?: string | undefined;
+      status: 'active' | 'paused';
+      nextFireAt: number;
+      lastFireAt?: number | undefined;
+      lastRunId?: string | undefined;
+      signalType?: ('user' | 'state' | 'reactive' | 'notification' | 'user-message' | 'system-reminder') | undefined;
+      tagName?: string | undefined;
+      attributes?:
+        | {
+            [key: string]: (string | number | boolean | null) | undefined;
+          }
+        | undefined;
+      ifActive?:
+        | {
+            behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+            attributes?:
+              | {
+                  [key: string]: (string | number | boolean | null) | undefined;
+                }
+              | undefined;
+          }
+        | undefined;
+      ifIdle?:
+        | {
+            behavior?: ('wake' | 'persist' | 'discard') | undefined;
+            attributes?:
+              | {
+                  [key: string]: (string | number | boolean | null) | undefined;
+                }
+              | undefined;
+            streamOptions?:
+              | {
+                  requestContext?:
+                    | {
+                        [key: string]: unknown;
+                      }
+                    | undefined;
+                }
+              | undefined;
+          }
+        | undefined;
+      providerOptions?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      metadata?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      createdAt: number;
+      updatedAt: number;
+    }
+  | {
+      id: string;
+      workflowId: string;
+      agentId?: undefined | undefined;
+      cron: string;
+      timezone?: string | undefined;
+      status: 'active' | 'paused';
+      nextFireAt: number;
+      lastFireAt?: number | undefined;
+      lastRunId?: string | undefined;
+      lastRun?:
+        | {
+            status:
+              | 'running'
+              | 'success'
+              | 'failed'
+              | 'tripwire'
+              | 'suspended'
+              | 'waiting'
+              | 'pending'
+              | 'canceled'
+              | 'bailed'
+              | 'paused'
+              | 'skipped';
+            startedAt?: number | undefined;
+            completedAt?: number | undefined;
+            durationMs?: number | undefined;
+            error?: string | undefined;
+          }
+        | undefined;
+      inputData?: unknown | undefined;
+      initialState?: unknown | undefined;
+      requestContext?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      metadata?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      createdAt: number;
+      updatedAt: number;
+    };
+
+export type PostSchedules_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostSchedules_Body extends never
+      ? {}
+      : {} extends PostSchedules_Body
+        ? { body?: PostSchedules_Body }
+        : { body: PostSchedules_Body })
+>;
+
+export interface PostSchedules_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: PostSchedules_Body;
+  request: PostSchedules_Request;
+  response: PostSchedules_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: PATCH /schedules/:scheduleId
+// ============================================================================
+export type PatchSchedulesScheduleId_PathParams = {
+  scheduleId: string;
+};
+
+export type PatchSchedulesScheduleId_Body = {
+  cron?: string | undefined;
+  timezone?: string | undefined;
+  status?: ('active' | 'paused') | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  prompt?: string | undefined;
+  name?: string | undefined;
+  signalType?: ('user' | 'state' | 'reactive' | 'notification' | 'user-message' | 'system-reminder') | undefined;
+  tagName?: string | undefined;
+  attributes?:
+    | {
+        [key: string]: (string | number | boolean | null) | undefined;
+      }
+    | undefined;
+  ifActive?:
+    | {
+        behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+        attributes?:
+          | {
+              [key: string]: (string | number | boolean | null) | undefined;
+            }
+          | undefined;
+      }
+    | undefined;
+  ifIdle?:
+    | {
+        behavior?: ('wake' | 'persist' | 'discard') | undefined;
+        attributes?:
+          | {
+              [key: string]: (string | number | boolean | null) | undefined;
+            }
+          | undefined;
+        streamOptions?:
+          | {
+              requestContext?:
+                | {
+                    [key: string]: unknown;
+                  }
+                | undefined;
+            }
+          | undefined;
+      }
+    | undefined;
+  providerOptions?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  inputData?: unknown | undefined;
+  initialState?: unknown | undefined;
+  requestContext?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+};
+
+export type PatchSchedulesScheduleId_Response =
+  | {
+      id: string;
+      agentId: string;
+      workflowId?: undefined | undefined;
+      lastRun?: undefined | undefined;
+      name?: string | undefined;
+      threadId?: string | undefined;
+      resourceId?: string | undefined;
+      prompt: string;
+      cron: string;
+      timezone?: string | undefined;
+      status: 'active' | 'paused';
+      nextFireAt: number;
+      lastFireAt?: number | undefined;
+      lastRunId?: string | undefined;
+      signalType?: ('user' | 'state' | 'reactive' | 'notification' | 'user-message' | 'system-reminder') | undefined;
+      tagName?: string | undefined;
+      attributes?:
+        | {
+            [key: string]: (string | number | boolean | null) | undefined;
+          }
+        | undefined;
+      ifActive?:
+        | {
+            behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+            attributes?:
+              | {
+                  [key: string]: (string | number | boolean | null) | undefined;
+                }
+              | undefined;
+          }
+        | undefined;
+      ifIdle?:
+        | {
+            behavior?: ('wake' | 'persist' | 'discard') | undefined;
+            attributes?:
+              | {
+                  [key: string]: (string | number | boolean | null) | undefined;
+                }
+              | undefined;
+            streamOptions?:
+              | {
+                  requestContext?:
+                    | {
+                        [key: string]: unknown;
+                      }
+                    | undefined;
+                }
+              | undefined;
+          }
+        | undefined;
+      providerOptions?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      metadata?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      createdAt: number;
+      updatedAt: number;
+    }
+  | {
+      id: string;
+      workflowId: string;
+      agentId?: undefined | undefined;
+      cron: string;
+      timezone?: string | undefined;
+      status: 'active' | 'paused';
+      nextFireAt: number;
+      lastFireAt?: number | undefined;
+      lastRunId?: string | undefined;
+      lastRun?:
+        | {
+            status:
+              | 'running'
+              | 'success'
+              | 'failed'
+              | 'tripwire'
+              | 'suspended'
+              | 'waiting'
+              | 'pending'
+              | 'canceled'
+              | 'bailed'
+              | 'paused'
+              | 'skipped';
+            startedAt?: number | undefined;
+            completedAt?: number | undefined;
+            durationMs?: number | undefined;
+            error?: string | undefined;
+          }
+        | undefined;
+      inputData?: unknown | undefined;
+      initialState?: unknown | undefined;
+      requestContext?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      metadata?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      createdAt: number;
+      updatedAt: number;
+    };
+
+export type PatchSchedulesScheduleId_Request = Simplify<
+  (PatchSchedulesScheduleId_PathParams extends never ? {} : { params: PatchSchedulesScheduleId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PatchSchedulesScheduleId_Body extends never
+      ? {}
+      : {} extends PatchSchedulesScheduleId_Body
+        ? { body?: PatchSchedulesScheduleId_Body }
+        : { body: PatchSchedulesScheduleId_Body })
+>;
+
+export interface PatchSchedulesScheduleId_RouteContract {
+  pathParams: PatchSchedulesScheduleId_PathParams;
+  queryParams: never;
+  body: PatchSchedulesScheduleId_Body;
+  request: PatchSchedulesScheduleId_Request;
+  response: PatchSchedulesScheduleId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: DELETE /schedules/:scheduleId
+// ============================================================================
+export type DeleteSchedulesScheduleId_PathParams = {
+  scheduleId: string;
+};
+
+export type DeleteSchedulesScheduleId_Response = {
+  message: string;
+};
+
+export type DeleteSchedulesScheduleId_Request = Simplify<
+  (DeleteSchedulesScheduleId_PathParams extends never ? {} : { params: DeleteSchedulesScheduleId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface DeleteSchedulesScheduleId_RouteContract {
+  pathParams: DeleteSchedulesScheduleId_PathParams;
+  queryParams: never;
+  body: never;
+  request: DeleteSchedulesScheduleId_Request;
+  response: DeleteSchedulesScheduleId_Response;
   responseType: 'json';
 }
 
@@ -89827,8 +90791,13 @@ export type GetSchedulesScheduleIdTriggers_Response = {
     actualFireAt: number;
     outcome:
       | 'published'
-      | 'failed'
+      | 'succeeded'
+      | 'delivered'
+      | 'persisted'
+      | 'discarded'
       | 'skipped'
+      | 'aborted'
+      | 'failed'
       | 'acked'
       | 'alerted'
       | 'deferred'
@@ -89837,7 +90806,7 @@ export type GetSchedulesScheduleIdTriggers_Response = {
       | 'dropped-superseded'
       | 'dropped-busy';
     error?: string | undefined;
-    triggerKind?: ('schedule-fire' | 'queue-drain') | undefined;
+    triggerKind?: ('schedule-fire' | 'queue-drain' | 'manual') | undefined;
     parentTriggerId?: string | undefined;
     metadata?:
       | {
@@ -89895,55 +90864,116 @@ export type PostSchedulesScheduleIdPause_PathParams = {
   scheduleId: string;
 };
 
-export type PostSchedulesScheduleIdPause_Response = {
-  id: string;
-  target: {
-    type: 'workflow';
-    workflowId: string;
-    inputData?: unknown | undefined;
-    initialState?: unknown | undefined;
-    requestContext?:
-      | {
-          [key: string]: unknown;
-        }
-      | undefined;
-  };
-  cron: string;
-  timezone?: string | undefined;
-  status: 'active' | 'paused';
-  nextFireAt: number;
-  lastFireAt?: number | undefined;
-  lastRunId?: string | undefined;
-  lastRun?:
-    | {
-        status:
-          | 'running'
-          | 'success'
-          | 'failed'
-          | 'tripwire'
-          | 'suspended'
-          | 'waiting'
-          | 'pending'
-          | 'canceled'
-          | 'bailed'
-          | 'paused'
-          | 'skipped';
-        startedAt?: number | undefined;
-        completedAt?: number | undefined;
-        durationMs?: number | undefined;
-        error?: string | undefined;
-      }
-    | undefined;
-  metadata?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
-  ownerType?: string | undefined;
-  ownerId?: string | undefined;
-  createdAt: number;
-  updatedAt: number;
-};
+export type PostSchedulesScheduleIdPause_Response =
+  | {
+      id: string;
+      agentId: string;
+      workflowId?: undefined | undefined;
+      lastRun?: undefined | undefined;
+      name?: string | undefined;
+      threadId?: string | undefined;
+      resourceId?: string | undefined;
+      prompt: string;
+      cron: string;
+      timezone?: string | undefined;
+      status: 'active' | 'paused';
+      nextFireAt: number;
+      lastFireAt?: number | undefined;
+      lastRunId?: string | undefined;
+      signalType?: ('user' | 'state' | 'reactive' | 'notification' | 'user-message' | 'system-reminder') | undefined;
+      tagName?: string | undefined;
+      attributes?:
+        | {
+            [key: string]: (string | number | boolean | null) | undefined;
+          }
+        | undefined;
+      ifActive?:
+        | {
+            behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+            attributes?:
+              | {
+                  [key: string]: (string | number | boolean | null) | undefined;
+                }
+              | undefined;
+          }
+        | undefined;
+      ifIdle?:
+        | {
+            behavior?: ('wake' | 'persist' | 'discard') | undefined;
+            attributes?:
+              | {
+                  [key: string]: (string | number | boolean | null) | undefined;
+                }
+              | undefined;
+            streamOptions?:
+              | {
+                  requestContext?:
+                    | {
+                        [key: string]: unknown;
+                      }
+                    | undefined;
+                }
+              | undefined;
+          }
+        | undefined;
+      providerOptions?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      metadata?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      createdAt: number;
+      updatedAt: number;
+    }
+  | {
+      id: string;
+      workflowId: string;
+      agentId?: undefined | undefined;
+      cron: string;
+      timezone?: string | undefined;
+      status: 'active' | 'paused';
+      nextFireAt: number;
+      lastFireAt?: number | undefined;
+      lastRunId?: string | undefined;
+      lastRun?:
+        | {
+            status:
+              | 'running'
+              | 'success'
+              | 'failed'
+              | 'tripwire'
+              | 'suspended'
+              | 'waiting'
+              | 'pending'
+              | 'canceled'
+              | 'bailed'
+              | 'paused'
+              | 'skipped';
+            startedAt?: number | undefined;
+            completedAt?: number | undefined;
+            durationMs?: number | undefined;
+            error?: string | undefined;
+          }
+        | undefined;
+      inputData?: unknown | undefined;
+      initialState?: unknown | undefined;
+      requestContext?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      metadata?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      createdAt: number;
+      updatedAt: number;
+    };
 
 export type PostSchedulesScheduleIdPause_Request = Simplify<
   (PostSchedulesScheduleIdPause_PathParams extends never ? {} : { params: PostSchedulesScheduleIdPause_PathParams }) &
@@ -89967,55 +90997,116 @@ export type PostSchedulesScheduleIdResume_PathParams = {
   scheduleId: string;
 };
 
-export type PostSchedulesScheduleIdResume_Response = {
-  id: string;
-  target: {
-    type: 'workflow';
-    workflowId: string;
-    inputData?: unknown | undefined;
-    initialState?: unknown | undefined;
-    requestContext?:
-      | {
-          [key: string]: unknown;
-        }
-      | undefined;
-  };
-  cron: string;
-  timezone?: string | undefined;
-  status: 'active' | 'paused';
-  nextFireAt: number;
-  lastFireAt?: number | undefined;
-  lastRunId?: string | undefined;
-  lastRun?:
-    | {
-        status:
-          | 'running'
-          | 'success'
-          | 'failed'
-          | 'tripwire'
-          | 'suspended'
-          | 'waiting'
-          | 'pending'
-          | 'canceled'
-          | 'bailed'
-          | 'paused'
-          | 'skipped';
-        startedAt?: number | undefined;
-        completedAt?: number | undefined;
-        durationMs?: number | undefined;
-        error?: string | undefined;
-      }
-    | undefined;
-  metadata?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
-  ownerType?: string | undefined;
-  ownerId?: string | undefined;
-  createdAt: number;
-  updatedAt: number;
-};
+export type PostSchedulesScheduleIdResume_Response =
+  | {
+      id: string;
+      agentId: string;
+      workflowId?: undefined | undefined;
+      lastRun?: undefined | undefined;
+      name?: string | undefined;
+      threadId?: string | undefined;
+      resourceId?: string | undefined;
+      prompt: string;
+      cron: string;
+      timezone?: string | undefined;
+      status: 'active' | 'paused';
+      nextFireAt: number;
+      lastFireAt?: number | undefined;
+      lastRunId?: string | undefined;
+      signalType?: ('user' | 'state' | 'reactive' | 'notification' | 'user-message' | 'system-reminder') | undefined;
+      tagName?: string | undefined;
+      attributes?:
+        | {
+            [key: string]: (string | number | boolean | null) | undefined;
+          }
+        | undefined;
+      ifActive?:
+        | {
+            behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+            attributes?:
+              | {
+                  [key: string]: (string | number | boolean | null) | undefined;
+                }
+              | undefined;
+          }
+        | undefined;
+      ifIdle?:
+        | {
+            behavior?: ('wake' | 'persist' | 'discard') | undefined;
+            attributes?:
+              | {
+                  [key: string]: (string | number | boolean | null) | undefined;
+                }
+              | undefined;
+            streamOptions?:
+              | {
+                  requestContext?:
+                    | {
+                        [key: string]: unknown;
+                      }
+                    | undefined;
+                }
+              | undefined;
+          }
+        | undefined;
+      providerOptions?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      metadata?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      createdAt: number;
+      updatedAt: number;
+    }
+  | {
+      id: string;
+      workflowId: string;
+      agentId?: undefined | undefined;
+      cron: string;
+      timezone?: string | undefined;
+      status: 'active' | 'paused';
+      nextFireAt: number;
+      lastFireAt?: number | undefined;
+      lastRunId?: string | undefined;
+      lastRun?:
+        | {
+            status:
+              | 'running'
+              | 'success'
+              | 'failed'
+              | 'tripwire'
+              | 'suspended'
+              | 'waiting'
+              | 'pending'
+              | 'canceled'
+              | 'bailed'
+              | 'paused'
+              | 'skipped';
+            startedAt?: number | undefined;
+            completedAt?: number | undefined;
+            durationMs?: number | undefined;
+            error?: string | undefined;
+          }
+        | undefined;
+      inputData?: unknown | undefined;
+      initialState?: unknown | undefined;
+      requestContext?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      metadata?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      createdAt: number;
+      updatedAt: number;
+    };
 
 export type PostSchedulesScheduleIdResume_Request = Simplify<
   (PostSchedulesScheduleIdResume_PathParams extends never ? {} : { params: PostSchedulesScheduleIdResume_PathParams }) &
@@ -90029,6 +91120,34 @@ export interface PostSchedulesScheduleIdResume_RouteContract {
   body: never;
   request: PostSchedulesScheduleIdResume_Request;
   response: PostSchedulesScheduleIdResume_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /schedules/:scheduleId/run
+// ============================================================================
+export type PostSchedulesScheduleIdRun_PathParams = {
+  scheduleId: string;
+};
+
+export type PostSchedulesScheduleIdRun_Response = {
+  scheduleId: string;
+  claimId: string;
+  scheduledFireAt: number;
+};
+
+export type PostSchedulesScheduleIdRun_Request = Simplify<
+  (PostSchedulesScheduleIdRun_PathParams extends never ? {} : { params: PostSchedulesScheduleIdRun_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface PostSchedulesScheduleIdRun_RouteContract {
+  pathParams: PostSchedulesScheduleIdRun_PathParams;
+  queryParams: never;
+  body: never;
+  request: PostSchedulesScheduleIdRun_Request;
+  response: PostSchedulesScheduleIdRun_Response;
   responseType: 'json';
 }
 
@@ -90199,66 +91318,68 @@ export interface PostChannelsPlatformAgentIdDisconnect_RouteContract {
 }
 
 // ============================================================================
-// Route: GET /harness
+// Route: GET /agent-controller
 // ============================================================================
-export type GetHarness_Response = {
-  harnesses: {
+export type GetAgentController_Response = {
+  agentControllers: {
     id: string;
   }[];
 };
 
-export type GetHarness_Request = Simplify<
+export type GetAgentController_Request = Simplify<
   (never extends never ? {} : { params: never }) &
     (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
-export interface GetHarness_RouteContract {
+export interface GetAgentController_RouteContract {
   pathParams: never;
   queryParams: never;
   body: never;
-  request: GetHarness_Request;
-  response: GetHarness_Response;
+  request: GetAgentController_Request;
+  response: GetAgentController_Response;
   responseType: 'json';
 }
 
 // ============================================================================
-// Route: GET /harness/:harnessId/modes
+// Route: GET /agent-controller/:controllerId/modes
 // ============================================================================
-export type GetHarnessHarnessIdModes_PathParams = {
-  harnessId: string;
+export type GetAgentControllerControllerIdModes_PathParams = {
+  controllerId: string;
 };
 
-export type GetHarnessHarnessIdModes_Response = {
+export type GetAgentControllerControllerIdModes_Response = {
   modes: {
     id: string;
     name?: string | undefined;
   }[];
 };
 
-export type GetHarnessHarnessIdModes_Request = Simplify<
-  (GetHarnessHarnessIdModes_PathParams extends never ? {} : { params: GetHarnessHarnessIdModes_PathParams }) &
+export type GetAgentControllerControllerIdModes_Request = Simplify<
+  (GetAgentControllerControllerIdModes_PathParams extends never
+    ? {}
+    : { params: GetAgentControllerControllerIdModes_PathParams }) &
     (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
-export interface GetHarnessHarnessIdModes_RouteContract {
-  pathParams: GetHarnessHarnessIdModes_PathParams;
+export interface GetAgentControllerControllerIdModes_RouteContract {
+  pathParams: GetAgentControllerControllerIdModes_PathParams;
   queryParams: never;
   body: never;
-  request: GetHarnessHarnessIdModes_Request;
-  response: GetHarnessHarnessIdModes_Response;
+  request: GetAgentControllerControllerIdModes_Request;
+  response: GetAgentControllerControllerIdModes_Response;
   responseType: 'json';
 }
 
 // ============================================================================
-// Route: GET /harness/:harnessId/models
+// Route: GET /agent-controller/:controllerId/models
 // ============================================================================
-export type GetHarnessHarnessIdModels_PathParams = {
-  harnessId: string;
+export type GetAgentControllerControllerIdModels_PathParams = {
+  controllerId: string;
 };
 
-export type GetHarnessHarnessIdModels_Response = {
+export type GetAgentControllerControllerIdModels_Response = {
   models: {
     id: string;
     provider: string;
@@ -90268,76 +91389,86 @@ export type GetHarnessHarnessIdModels_Response = {
   }[];
 };
 
-export type GetHarnessHarnessIdModels_Request = Simplify<
-  (GetHarnessHarnessIdModels_PathParams extends never ? {} : { params: GetHarnessHarnessIdModels_PathParams }) &
+export type GetAgentControllerControllerIdModels_Request = Simplify<
+  (GetAgentControllerControllerIdModels_PathParams extends never
+    ? {}
+    : { params: GetAgentControllerControllerIdModels_PathParams }) &
     (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
-export interface GetHarnessHarnessIdModels_RouteContract {
-  pathParams: GetHarnessHarnessIdModels_PathParams;
+export interface GetAgentControllerControllerIdModels_RouteContract {
+  pathParams: GetAgentControllerControllerIdModels_PathParams;
   queryParams: never;
   body: never;
-  request: GetHarnessHarnessIdModels_Request;
-  response: GetHarnessHarnessIdModels_Response;
+  request: GetAgentControllerControllerIdModels_Request;
+  response: GetAgentControllerControllerIdModels_Response;
   responseType: 'json';
 }
 
 // ============================================================================
-// Route: POST /harness/:harnessId/sessions
+// Route: POST /agent-controller/:controllerId/sessions
 // ============================================================================
-export type PostHarnessHarnessIdSessions_PathParams = {
-  harnessId: string;
+export type PostAgentControllerControllerIdSessions_PathParams = {
+  controllerId: string;
 };
 
-export type PostHarnessHarnessIdSessions_Body = {
+export type PostAgentControllerControllerIdSessions_Body = {
   resourceId: string;
   tags?:
     | {
         [key: string]: string;
       }
     | undefined;
+  sessionScope?: string | undefined;
 };
 
-export type PostHarnessHarnessIdSessions_Response = {
-  harnessId: string;
+export type PostAgentControllerControllerIdSessions_Response = {
+  controllerId: string;
   resourceId: string;
   threadId?: string | undefined;
 };
 
-export type PostHarnessHarnessIdSessions_Request = Simplify<
-  (PostHarnessHarnessIdSessions_PathParams extends never ? {} : { params: PostHarnessHarnessIdSessions_PathParams }) &
+export type PostAgentControllerControllerIdSessions_Request = Simplify<
+  (PostAgentControllerControllerIdSessions_PathParams extends never
+    ? {}
+    : { params: PostAgentControllerControllerIdSessions_PathParams }) &
     (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (PostHarnessHarnessIdSessions_Body extends never
+    (PostAgentControllerControllerIdSessions_Body extends never
       ? {}
-      : {} extends PostHarnessHarnessIdSessions_Body
-        ? { body?: PostHarnessHarnessIdSessions_Body }
-        : { body: PostHarnessHarnessIdSessions_Body })
+      : {} extends PostAgentControllerControllerIdSessions_Body
+        ? { body?: PostAgentControllerControllerIdSessions_Body }
+        : { body: PostAgentControllerControllerIdSessions_Body })
 >;
 
-export interface PostHarnessHarnessIdSessions_RouteContract {
-  pathParams: PostHarnessHarnessIdSessions_PathParams;
+export interface PostAgentControllerControllerIdSessions_RouteContract {
+  pathParams: PostAgentControllerControllerIdSessions_PathParams;
   queryParams: never;
-  body: PostHarnessHarnessIdSessions_Body;
-  request: PostHarnessHarnessIdSessions_Request;
-  response: PostHarnessHarnessIdSessions_Response;
+  body: PostAgentControllerControllerIdSessions_Body;
+  request: PostAgentControllerControllerIdSessions_Request;
+  response: PostAgentControllerControllerIdSessions_Response;
   responseType: 'json';
 }
 
 // ============================================================================
-// Route: GET /harness/:harnessId/sessions/:resourceId
+// Route: GET /agent-controller/:controllerId/sessions/:resourceId
 // ============================================================================
-export type GetHarnessHarnessIdSessionsResourceId_PathParams = {
-  harnessId: string;
+export type GetAgentControllerControllerIdSessionsResourceId_PathParams = {
+  controllerId: string;
   resourceId: string;
 };
 
-export type GetHarnessHarnessIdSessionsResourceId_Response = {
-  harnessId: string;
+export type GetAgentControllerControllerIdSessionsResourceId_QueryParams = {
+  sessionScope?: string | undefined;
+};
+
+export type GetAgentControllerControllerIdSessionsResourceId_Response = {
+  controllerId: string;
   resourceId: string;
   threadId?: string | undefined;
   modeId: string;
   modelId: string;
+  running?: boolean | undefined;
   omProgress?:
     | {
         status: string;
@@ -90366,33 +91497,38 @@ export type GetHarnessHarnessIdSessionsResourceId_Response = {
     | undefined;
 };
 
-export type GetHarnessHarnessIdSessionsResourceId_Request = Simplify<
-  (GetHarnessHarnessIdSessionsResourceId_PathParams extends never
+export type GetAgentControllerControllerIdSessionsResourceId_Request = Simplify<
+  (GetAgentControllerControllerIdSessionsResourceId_PathParams extends never
     ? {}
-    : { params: GetHarnessHarnessIdSessionsResourceId_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    : { params: GetAgentControllerControllerIdSessionsResourceId_PathParams }) &
+    (GetAgentControllerControllerIdSessionsResourceId_QueryParams extends never
+      ? {}
+      : {} extends GetAgentControllerControllerIdSessionsResourceId_QueryParams
+        ? { query?: GetAgentControllerControllerIdSessionsResourceId_QueryParams }
+        : { query: GetAgentControllerControllerIdSessionsResourceId_QueryParams }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
-export interface GetHarnessHarnessIdSessionsResourceId_RouteContract {
-  pathParams: GetHarnessHarnessIdSessionsResourceId_PathParams;
-  queryParams: never;
+export interface GetAgentControllerControllerIdSessionsResourceId_RouteContract {
+  pathParams: GetAgentControllerControllerIdSessionsResourceId_PathParams;
+  queryParams: GetAgentControllerControllerIdSessionsResourceId_QueryParams;
   body: never;
-  request: GetHarnessHarnessIdSessionsResourceId_Request;
-  response: GetHarnessHarnessIdSessionsResourceId_Response;
+  request: GetAgentControllerControllerIdSessionsResourceId_Request;
+  response: GetAgentControllerControllerIdSessionsResourceId_Response;
   responseType: 'json';
 }
 
 // ============================================================================
-// Route: GET /harness/:harnessId/sessions/:resourceId/threads
+// Route: GET /agent-controller/:controllerId/sessions/:resourceId/threads
 // ============================================================================
-export type GetHarnessHarnessIdSessionsResourceIdThreads_PathParams = {
-  harnessId: string;
+export type GetAgentControllerControllerIdSessionsResourceIdThreads_PathParams = {
+  controllerId: string;
   resourceId: string;
 };
 
-export type GetHarnessHarnessIdSessionsResourceIdThreads_QueryParams = {
+export type GetAgentControllerControllerIdSessionsResourceIdThreads_QueryParams = {
   limit?: number | undefined;
+  sessionScope?: string | undefined;
   tags?:
     | (
         | {
@@ -90403,7 +91539,7 @@ export type GetHarnessHarnessIdSessionsResourceIdThreads_QueryParams = {
     | undefined;
 };
 
-export type GetHarnessHarnessIdSessionsResourceIdThreads_Response = {
+export type GetAgentControllerControllerIdSessionsResourceIdThreads_Response = {
   threads: {
     id: string;
     title?: string | undefined;
@@ -90413,43 +91549,48 @@ export type GetHarnessHarnessIdSessionsResourceIdThreads_Response = {
           [key: string]: string;
         }
       | undefined;
+    state?: ('active' | 'idle') | undefined;
   }[];
 };
 
-export type GetHarnessHarnessIdSessionsResourceIdThreads_Request = Simplify<
-  (GetHarnessHarnessIdSessionsResourceIdThreads_PathParams extends never
+export type GetAgentControllerControllerIdSessionsResourceIdThreads_Request = Simplify<
+  (GetAgentControllerControllerIdSessionsResourceIdThreads_PathParams extends never
     ? {}
-    : { params: GetHarnessHarnessIdSessionsResourceIdThreads_PathParams }) &
-    (GetHarnessHarnessIdSessionsResourceIdThreads_QueryParams extends never
+    : { params: GetAgentControllerControllerIdSessionsResourceIdThreads_PathParams }) &
+    (GetAgentControllerControllerIdSessionsResourceIdThreads_QueryParams extends never
       ? {}
-      : {} extends GetHarnessHarnessIdSessionsResourceIdThreads_QueryParams
-        ? { query?: GetHarnessHarnessIdSessionsResourceIdThreads_QueryParams }
-        : { query: GetHarnessHarnessIdSessionsResourceIdThreads_QueryParams }) &
+      : {} extends GetAgentControllerControllerIdSessionsResourceIdThreads_QueryParams
+        ? { query?: GetAgentControllerControllerIdSessionsResourceIdThreads_QueryParams }
+        : { query: GetAgentControllerControllerIdSessionsResourceIdThreads_QueryParams }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
-export interface GetHarnessHarnessIdSessionsResourceIdThreads_RouteContract {
-  pathParams: GetHarnessHarnessIdSessionsResourceIdThreads_PathParams;
-  queryParams: GetHarnessHarnessIdSessionsResourceIdThreads_QueryParams;
+export interface GetAgentControllerControllerIdSessionsResourceIdThreads_RouteContract {
+  pathParams: GetAgentControllerControllerIdSessionsResourceIdThreads_PathParams;
+  queryParams: GetAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
   body: never;
-  request: GetHarnessHarnessIdSessionsResourceIdThreads_Request;
-  response: GetHarnessHarnessIdSessionsResourceIdThreads_Response;
+  request: GetAgentControllerControllerIdSessionsResourceIdThreads_Request;
+  response: GetAgentControllerControllerIdSessionsResourceIdThreads_Response;
   responseType: 'json';
 }
 
 // ============================================================================
-// Route: POST /harness/:harnessId/sessions/:resourceId/threads
+// Route: POST /agent-controller/:controllerId/sessions/:resourceId/threads
 // ============================================================================
-export type PostHarnessHarnessIdSessionsResourceIdThreads_PathParams = {
-  harnessId: string;
+export type PostAgentControllerControllerIdSessionsResourceIdThreads_PathParams = {
+  controllerId: string;
   resourceId: string;
 };
 
-export type PostHarnessHarnessIdSessionsResourceIdThreads_Body = {
+export type PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams = {
+  sessionScope?: string | undefined;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdThreads_Body = {
   title?: string | undefined;
 };
 
-export type PostHarnessHarnessIdSessionsResourceIdThreads_Response = {
+export type PostAgentControllerControllerIdSessionsResourceIdThreads_Response = {
   id: string;
   title?: string | undefined;
   resourceId?: string | undefined;
@@ -90457,109 +91598,133 @@ export type PostHarnessHarnessIdSessionsResourceIdThreads_Response = {
   updatedAt?: string | undefined;
 };
 
-export type PostHarnessHarnessIdSessionsResourceIdThreads_Request = Simplify<
-  (PostHarnessHarnessIdSessionsResourceIdThreads_PathParams extends never
+export type PostAgentControllerControllerIdSessionsResourceIdThreads_Request = Simplify<
+  (PostAgentControllerControllerIdSessionsResourceIdThreads_PathParams extends never
     ? {}
-    : { params: PostHarnessHarnessIdSessionsResourceIdThreads_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (PostHarnessHarnessIdSessionsResourceIdThreads_Body extends never
+    : { params: PostAgentControllerControllerIdSessionsResourceIdThreads_PathParams }) &
+    (PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams extends never
       ? {}
-      : {} extends PostHarnessHarnessIdSessionsResourceIdThreads_Body
-        ? { body?: PostHarnessHarnessIdSessionsResourceIdThreads_Body }
-        : { body: PostHarnessHarnessIdSessionsResourceIdThreads_Body })
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams
+        ? { query?: PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams }
+        : { query: PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams }) &
+    (PostAgentControllerControllerIdSessionsResourceIdThreads_Body extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdThreads_Body
+        ? { body?: PostAgentControllerControllerIdSessionsResourceIdThreads_Body }
+        : { body: PostAgentControllerControllerIdSessionsResourceIdThreads_Body })
 >;
 
-export interface PostHarnessHarnessIdSessionsResourceIdThreads_RouteContract {
-  pathParams: PostHarnessHarnessIdSessionsResourceIdThreads_PathParams;
-  queryParams: never;
-  body: PostHarnessHarnessIdSessionsResourceIdThreads_Body;
-  request: PostHarnessHarnessIdSessionsResourceIdThreads_Request;
-  response: PostHarnessHarnessIdSessionsResourceIdThreads_Response;
+export interface PostAgentControllerControllerIdSessionsResourceIdThreads_RouteContract {
+  pathParams: PostAgentControllerControllerIdSessionsResourceIdThreads_PathParams;
+  queryParams: PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
+  body: PostAgentControllerControllerIdSessionsResourceIdThreads_Body;
+  request: PostAgentControllerControllerIdSessionsResourceIdThreads_Request;
+  response: PostAgentControllerControllerIdSessionsResourceIdThreads_Response;
   responseType: 'json';
 }
 
 // ============================================================================
-// Route: DELETE /harness/:harnessId/sessions/:resourceId/threads/:threadId
+// Route: DELETE /agent-controller/:controllerId/sessions/:resourceId/threads/:threadId
 // ============================================================================
-export type DeleteHarnessHarnessIdSessionsResourceIdThreadsThreadId_PathParams = {
-  harnessId: string;
+export type DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_PathParams = {
+  controllerId: string;
   resourceId: string;
   threadId: string;
 };
 
-export type DeleteHarnessHarnessIdSessionsResourceIdThreadsThreadId_Response = {
+export type DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_QueryParams = {
+  sessionScope?: string | undefined;
+};
+
+export type DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Response = {
   ok: boolean;
 };
 
-export type DeleteHarnessHarnessIdSessionsResourceIdThreadsThreadId_Request = Simplify<
-  (DeleteHarnessHarnessIdSessionsResourceIdThreadsThreadId_PathParams extends never
+export type DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Request = Simplify<
+  (DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_PathParams extends never
     ? {}
-    : { params: DeleteHarnessHarnessIdSessionsResourceIdThreadsThreadId_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    : { params: DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_PathParams }) &
+    (DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_QueryParams extends never
+      ? {}
+      : {} extends DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_QueryParams
+        ? { query?: DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_QueryParams }
+        : { query: DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_QueryParams }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
-export interface DeleteHarnessHarnessIdSessionsResourceIdThreadsThreadId_RouteContract {
-  pathParams: DeleteHarnessHarnessIdSessionsResourceIdThreadsThreadId_PathParams;
-  queryParams: never;
+export interface DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_RouteContract {
+  pathParams: DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_PathParams;
+  queryParams: DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_QueryParams;
   body: never;
-  request: DeleteHarnessHarnessIdSessionsResourceIdThreadsThreadId_Request;
-  response: DeleteHarnessHarnessIdSessionsResourceIdThreadsThreadId_Response;
+  request: DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Request;
+  response: DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Response;
   responseType: 'json';
 }
 
 // ============================================================================
-// Route: PUT /harness/:harnessId/sessions/:resourceId/threads/:threadId
+// Route: PUT /agent-controller/:controllerId/sessions/:resourceId/threads/:threadId
 // ============================================================================
-export type PutHarnessHarnessIdSessionsResourceIdThreadsThreadId_PathParams = {
-  harnessId: string;
+export type PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_PathParams = {
+  controllerId: string;
   resourceId: string;
   threadId: string;
 };
 
-export type PutHarnessHarnessIdSessionsResourceIdThreadsThreadId_Body = {
+export type PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_QueryParams = {
+  sessionScope?: string | undefined;
+};
+
+export type PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Body = {
   title: string;
 };
 
-export type PutHarnessHarnessIdSessionsResourceIdThreadsThreadId_Response = {
+export type PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Response = {
   ok: boolean;
 };
 
-export type PutHarnessHarnessIdSessionsResourceIdThreadsThreadId_Request = Simplify<
-  (PutHarnessHarnessIdSessionsResourceIdThreadsThreadId_PathParams extends never
+export type PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Request = Simplify<
+  (PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_PathParams extends never
     ? {}
-    : { params: PutHarnessHarnessIdSessionsResourceIdThreadsThreadId_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (PutHarnessHarnessIdSessionsResourceIdThreadsThreadId_Body extends never
+    : { params: PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_PathParams }) &
+    (PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_QueryParams extends never
       ? {}
-      : {} extends PutHarnessHarnessIdSessionsResourceIdThreadsThreadId_Body
-        ? { body?: PutHarnessHarnessIdSessionsResourceIdThreadsThreadId_Body }
-        : { body: PutHarnessHarnessIdSessionsResourceIdThreadsThreadId_Body })
+      : {} extends PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_QueryParams
+        ? { query?: PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_QueryParams }
+        : { query: PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_QueryParams }) &
+    (PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Body extends never
+      ? {}
+      : {} extends PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Body
+        ? { body?: PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Body }
+        : { body: PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Body })
 >;
 
-export interface PutHarnessHarnessIdSessionsResourceIdThreadsThreadId_RouteContract {
-  pathParams: PutHarnessHarnessIdSessionsResourceIdThreadsThreadId_PathParams;
-  queryParams: never;
-  body: PutHarnessHarnessIdSessionsResourceIdThreadsThreadId_Body;
-  request: PutHarnessHarnessIdSessionsResourceIdThreadsThreadId_Request;
-  response: PutHarnessHarnessIdSessionsResourceIdThreadsThreadId_Response;
+export interface PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_RouteContract {
+  pathParams: PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_PathParams;
+  queryParams: PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_QueryParams;
+  body: PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Body;
+  request: PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Request;
+  response: PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Response;
   responseType: 'json';
 }
 
 // ============================================================================
-// Route: POST /harness/:harnessId/sessions/:resourceId/threads/clone
+// Route: POST /agent-controller/:controllerId/sessions/:resourceId/threads/clone
 // ============================================================================
-export type PostHarnessHarnessIdSessionsResourceIdThreadsClone_PathParams = {
-  harnessId: string;
+export type PostAgentControllerControllerIdSessionsResourceIdThreadsClone_PathParams = {
+  controllerId: string;
   resourceId: string;
 };
 
-export type PostHarnessHarnessIdSessionsResourceIdThreadsClone_Body = {
+export type PostAgentControllerControllerIdSessionsResourceIdThreadsClone_QueryParams = {
+  sessionScope?: string | undefined;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdThreadsClone_Body = {
   sourceThreadId?: string | undefined;
   title?: string | undefined;
 };
 
-export type PostHarnessHarnessIdSessionsResourceIdThreadsClone_Response = {
+export type PostAgentControllerControllerIdSessionsResourceIdThreadsClone_Response = {
   id: string;
   title?: string | undefined;
   resourceId?: string | undefined;
@@ -90567,41 +91732,46 @@ export type PostHarnessHarnessIdSessionsResourceIdThreadsClone_Response = {
   updatedAt?: string | undefined;
 };
 
-export type PostHarnessHarnessIdSessionsResourceIdThreadsClone_Request = Simplify<
-  (PostHarnessHarnessIdSessionsResourceIdThreadsClone_PathParams extends never
+export type PostAgentControllerControllerIdSessionsResourceIdThreadsClone_Request = Simplify<
+  (PostAgentControllerControllerIdSessionsResourceIdThreadsClone_PathParams extends never
     ? {}
-    : { params: PostHarnessHarnessIdSessionsResourceIdThreadsClone_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (PostHarnessHarnessIdSessionsResourceIdThreadsClone_Body extends never
+    : { params: PostAgentControllerControllerIdSessionsResourceIdThreadsClone_PathParams }) &
+    (PostAgentControllerControllerIdSessionsResourceIdThreadsClone_QueryParams extends never
       ? {}
-      : {} extends PostHarnessHarnessIdSessionsResourceIdThreadsClone_Body
-        ? { body?: PostHarnessHarnessIdSessionsResourceIdThreadsClone_Body }
-        : { body: PostHarnessHarnessIdSessionsResourceIdThreadsClone_Body })
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdThreadsClone_QueryParams
+        ? { query?: PostAgentControllerControllerIdSessionsResourceIdThreadsClone_QueryParams }
+        : { query: PostAgentControllerControllerIdSessionsResourceIdThreadsClone_QueryParams }) &
+    (PostAgentControllerControllerIdSessionsResourceIdThreadsClone_Body extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdThreadsClone_Body
+        ? { body?: PostAgentControllerControllerIdSessionsResourceIdThreadsClone_Body }
+        : { body: PostAgentControllerControllerIdSessionsResourceIdThreadsClone_Body })
 >;
 
-export interface PostHarnessHarnessIdSessionsResourceIdThreadsClone_RouteContract {
-  pathParams: PostHarnessHarnessIdSessionsResourceIdThreadsClone_PathParams;
-  queryParams: never;
-  body: PostHarnessHarnessIdSessionsResourceIdThreadsClone_Body;
-  request: PostHarnessHarnessIdSessionsResourceIdThreadsClone_Request;
-  response: PostHarnessHarnessIdSessionsResourceIdThreadsClone_Response;
+export interface PostAgentControllerControllerIdSessionsResourceIdThreadsClone_RouteContract {
+  pathParams: PostAgentControllerControllerIdSessionsResourceIdThreadsClone_PathParams;
+  queryParams: PostAgentControllerControllerIdSessionsResourceIdThreadsClone_QueryParams;
+  body: PostAgentControllerControllerIdSessionsResourceIdThreadsClone_Body;
+  request: PostAgentControllerControllerIdSessionsResourceIdThreadsClone_Request;
+  response: PostAgentControllerControllerIdSessionsResourceIdThreadsClone_Response;
   responseType: 'json';
 }
 
 // ============================================================================
-// Route: GET /harness/:harnessId/sessions/:resourceId/threads/:threadId/messages
+// Route: GET /agent-controller/:controllerId/sessions/:resourceId/threads/:threadId/messages
 // ============================================================================
-export type GetHarnessHarnessIdSessionsResourceIdThreadsThreadIdMessages_PathParams = {
-  harnessId: string;
+export type GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_PathParams = {
+  controllerId: string;
   resourceId: string;
   threadId: string;
 };
 
-export type GetHarnessHarnessIdSessionsResourceIdThreadsThreadIdMessages_QueryParams = {
+export type GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_QueryParams = {
   limit?: number | undefined;
+  sessionScope?: string | undefined;
 };
 
-export type GetHarnessHarnessIdSessionsResourceIdThreadsThreadIdMessages_Response = {
+export type GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_Response = {
   messages: {
     id: string;
     role: 'user' | 'assistant' | 'system';
@@ -90613,390 +91783,481 @@ export type GetHarnessHarnessIdSessionsResourceIdThreadsThreadIdMessages_Respons
   }[];
 };
 
-export type GetHarnessHarnessIdSessionsResourceIdThreadsThreadIdMessages_Request = Simplify<
-  (GetHarnessHarnessIdSessionsResourceIdThreadsThreadIdMessages_PathParams extends never
+export type GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_Request = Simplify<
+  (GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_PathParams extends never
     ? {}
-    : { params: GetHarnessHarnessIdSessionsResourceIdThreadsThreadIdMessages_PathParams }) &
-    (GetHarnessHarnessIdSessionsResourceIdThreadsThreadIdMessages_QueryParams extends never
+    : { params: GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_PathParams }) &
+    (GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_QueryParams extends never
       ? {}
-      : {} extends GetHarnessHarnessIdSessionsResourceIdThreadsThreadIdMessages_QueryParams
-        ? { query?: GetHarnessHarnessIdSessionsResourceIdThreadsThreadIdMessages_QueryParams }
-        : { query: GetHarnessHarnessIdSessionsResourceIdThreadsThreadIdMessages_QueryParams }) &
+      : {} extends GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_QueryParams
+        ? { query?: GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_QueryParams }
+        : { query: GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_QueryParams }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
-export interface GetHarnessHarnessIdSessionsResourceIdThreadsThreadIdMessages_RouteContract {
-  pathParams: GetHarnessHarnessIdSessionsResourceIdThreadsThreadIdMessages_PathParams;
-  queryParams: GetHarnessHarnessIdSessionsResourceIdThreadsThreadIdMessages_QueryParams;
+export interface GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_RouteContract {
+  pathParams: GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_PathParams;
+  queryParams: GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_QueryParams;
   body: never;
-  request: GetHarnessHarnessIdSessionsResourceIdThreadsThreadIdMessages_Request;
-  response: GetHarnessHarnessIdSessionsResourceIdThreadsThreadIdMessages_Response;
+  request: GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_Request;
+  response: GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_Response;
   responseType: 'json';
 }
 
 // ============================================================================
-// Route: GET /harness/:harnessId/sessions/:resourceId/stream
+// Route: GET /agent-controller/:controllerId/sessions/:resourceId/stream
 // ============================================================================
-export type GetHarnessHarnessIdSessionsResourceIdStream_PathParams = {
-  harnessId: string;
+export type GetAgentControllerControllerIdSessionsResourceIdStream_PathParams = {
+  controllerId: string;
   resourceId: string;
 };
 
-export type GetHarnessHarnessIdSessionsResourceIdStream_Request = Simplify<
-  (GetHarnessHarnessIdSessionsResourceIdStream_PathParams extends never
+export type GetAgentControllerControllerIdSessionsResourceIdStream_QueryParams = {
+  sessionScope?: string | undefined;
+};
+
+export type GetAgentControllerControllerIdSessionsResourceIdStream_Request = Simplify<
+  (GetAgentControllerControllerIdSessionsResourceIdStream_PathParams extends never
     ? {}
-    : { params: GetHarnessHarnessIdSessionsResourceIdStream_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    : { params: GetAgentControllerControllerIdSessionsResourceIdStream_PathParams }) &
+    (GetAgentControllerControllerIdSessionsResourceIdStream_QueryParams extends never
+      ? {}
+      : {} extends GetAgentControllerControllerIdSessionsResourceIdStream_QueryParams
+        ? { query?: GetAgentControllerControllerIdSessionsResourceIdStream_QueryParams }
+        : { query: GetAgentControllerControllerIdSessionsResourceIdStream_QueryParams }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
-export interface GetHarnessHarnessIdSessionsResourceIdStream_RouteContract {
-  pathParams: GetHarnessHarnessIdSessionsResourceIdStream_PathParams;
-  queryParams: never;
+export interface GetAgentControllerControllerIdSessionsResourceIdStream_RouteContract {
+  pathParams: GetAgentControllerControllerIdSessionsResourceIdStream_PathParams;
+  queryParams: GetAgentControllerControllerIdSessionsResourceIdStream_QueryParams;
   body: never;
-  request: GetHarnessHarnessIdSessionsResourceIdStream_Request;
+  request: GetAgentControllerControllerIdSessionsResourceIdStream_Request;
   response: unknown;
   responseType: 'stream';
 }
 
 // ============================================================================
-// Route: POST /harness/:harnessId/sessions/:resourceId/messages
+// Route: POST /agent-controller/:controllerId/sessions/:resourceId/messages
 // ============================================================================
-export type PostHarnessHarnessIdSessionsResourceIdMessages_PathParams = {
-  harnessId: string;
+export type PostAgentControllerControllerIdSessionsResourceIdMessages_PathParams = {
+  controllerId: string;
   resourceId: string;
 };
 
-export type PostHarnessHarnessIdSessionsResourceIdMessages_Body = {
-  message: string;
+export type PostAgentControllerControllerIdSessionsResourceIdMessages_QueryParams = {
+  sessionScope?: string | undefined;
 };
 
-export type PostHarnessHarnessIdSessionsResourceIdMessages_Response = {
+export type PostAgentControllerControllerIdSessionsResourceIdMessages_Body = {
+  message: string;
+  files?:
+    | {
+        data: string;
+        mediaType: string;
+        filename?: string | undefined;
+      }[]
+    | undefined;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdMessages_Response = {
   ok: boolean;
 };
 
-export type PostHarnessHarnessIdSessionsResourceIdMessages_Request = Simplify<
-  (PostHarnessHarnessIdSessionsResourceIdMessages_PathParams extends never
+export type PostAgentControllerControllerIdSessionsResourceIdMessages_Request = Simplify<
+  (PostAgentControllerControllerIdSessionsResourceIdMessages_PathParams extends never
     ? {}
-    : { params: PostHarnessHarnessIdSessionsResourceIdMessages_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (PostHarnessHarnessIdSessionsResourceIdMessages_Body extends never
+    : { params: PostAgentControllerControllerIdSessionsResourceIdMessages_PathParams }) &
+    (PostAgentControllerControllerIdSessionsResourceIdMessages_QueryParams extends never
       ? {}
-      : {} extends PostHarnessHarnessIdSessionsResourceIdMessages_Body
-        ? { body?: PostHarnessHarnessIdSessionsResourceIdMessages_Body }
-        : { body: PostHarnessHarnessIdSessionsResourceIdMessages_Body })
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdMessages_QueryParams
+        ? { query?: PostAgentControllerControllerIdSessionsResourceIdMessages_QueryParams }
+        : { query: PostAgentControllerControllerIdSessionsResourceIdMessages_QueryParams }) &
+    (PostAgentControllerControllerIdSessionsResourceIdMessages_Body extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdMessages_Body
+        ? { body?: PostAgentControllerControllerIdSessionsResourceIdMessages_Body }
+        : { body: PostAgentControllerControllerIdSessionsResourceIdMessages_Body })
 >;
 
-export interface PostHarnessHarnessIdSessionsResourceIdMessages_RouteContract {
-  pathParams: PostHarnessHarnessIdSessionsResourceIdMessages_PathParams;
-  queryParams: never;
-  body: PostHarnessHarnessIdSessionsResourceIdMessages_Body;
-  request: PostHarnessHarnessIdSessionsResourceIdMessages_Request;
-  response: PostHarnessHarnessIdSessionsResourceIdMessages_Response;
+export interface PostAgentControllerControllerIdSessionsResourceIdMessages_RouteContract {
+  pathParams: PostAgentControllerControllerIdSessionsResourceIdMessages_PathParams;
+  queryParams: PostAgentControllerControllerIdSessionsResourceIdMessages_QueryParams;
+  body: PostAgentControllerControllerIdSessionsResourceIdMessages_Body;
+  request: PostAgentControllerControllerIdSessionsResourceIdMessages_Request;
+  response: PostAgentControllerControllerIdSessionsResourceIdMessages_Response;
   responseType: 'json';
 }
 
 // ============================================================================
-// Route: POST /harness/:harnessId/sessions/:resourceId/steer
+// Route: POST /agent-controller/:controllerId/sessions/:resourceId/steer
 // ============================================================================
-export type PostHarnessHarnessIdSessionsResourceIdSteer_PathParams = {
-  harnessId: string;
+export type PostAgentControllerControllerIdSessionsResourceIdSteer_PathParams = {
+  controllerId: string;
   resourceId: string;
 };
 
-export type PostHarnessHarnessIdSessionsResourceIdSteer_Body = {
+export type PostAgentControllerControllerIdSessionsResourceIdSteer_QueryParams = {
+  sessionScope?: string | undefined;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdSteer_Body = {
   message: string;
 };
 
-export type PostHarnessHarnessIdSessionsResourceIdSteer_Response = {
+export type PostAgentControllerControllerIdSessionsResourceIdSteer_Response = {
   ok: boolean;
 };
 
-export type PostHarnessHarnessIdSessionsResourceIdSteer_Request = Simplify<
-  (PostHarnessHarnessIdSessionsResourceIdSteer_PathParams extends never
+export type PostAgentControllerControllerIdSessionsResourceIdSteer_Request = Simplify<
+  (PostAgentControllerControllerIdSessionsResourceIdSteer_PathParams extends never
     ? {}
-    : { params: PostHarnessHarnessIdSessionsResourceIdSteer_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (PostHarnessHarnessIdSessionsResourceIdSteer_Body extends never
+    : { params: PostAgentControllerControllerIdSessionsResourceIdSteer_PathParams }) &
+    (PostAgentControllerControllerIdSessionsResourceIdSteer_QueryParams extends never
       ? {}
-      : {} extends PostHarnessHarnessIdSessionsResourceIdSteer_Body
-        ? { body?: PostHarnessHarnessIdSessionsResourceIdSteer_Body }
-        : { body: PostHarnessHarnessIdSessionsResourceIdSteer_Body })
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdSteer_QueryParams
+        ? { query?: PostAgentControllerControllerIdSessionsResourceIdSteer_QueryParams }
+        : { query: PostAgentControllerControllerIdSessionsResourceIdSteer_QueryParams }) &
+    (PostAgentControllerControllerIdSessionsResourceIdSteer_Body extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdSteer_Body
+        ? { body?: PostAgentControllerControllerIdSessionsResourceIdSteer_Body }
+        : { body: PostAgentControllerControllerIdSessionsResourceIdSteer_Body })
 >;
 
-export interface PostHarnessHarnessIdSessionsResourceIdSteer_RouteContract {
-  pathParams: PostHarnessHarnessIdSessionsResourceIdSteer_PathParams;
-  queryParams: never;
-  body: PostHarnessHarnessIdSessionsResourceIdSteer_Body;
-  request: PostHarnessHarnessIdSessionsResourceIdSteer_Request;
-  response: PostHarnessHarnessIdSessionsResourceIdSteer_Response;
+export interface PostAgentControllerControllerIdSessionsResourceIdSteer_RouteContract {
+  pathParams: PostAgentControllerControllerIdSessionsResourceIdSteer_PathParams;
+  queryParams: PostAgentControllerControllerIdSessionsResourceIdSteer_QueryParams;
+  body: PostAgentControllerControllerIdSessionsResourceIdSteer_Body;
+  request: PostAgentControllerControllerIdSessionsResourceIdSteer_Request;
+  response: PostAgentControllerControllerIdSessionsResourceIdSteer_Response;
   responseType: 'json';
 }
 
 // ============================================================================
-// Route: POST /harness/:harnessId/sessions/:resourceId/follow-up
+// Route: POST /agent-controller/:controllerId/sessions/:resourceId/follow-up
 // ============================================================================
-export type PostHarnessHarnessIdSessionsResourceIdFollowUp_PathParams = {
-  harnessId: string;
+export type PostAgentControllerControllerIdSessionsResourceIdFollowUp_PathParams = {
+  controllerId: string;
   resourceId: string;
 };
 
-export type PostHarnessHarnessIdSessionsResourceIdFollowUp_Body = {
+export type PostAgentControllerControllerIdSessionsResourceIdFollowUp_QueryParams = {
+  sessionScope?: string | undefined;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdFollowUp_Body = {
   message: string;
 };
 
-export type PostHarnessHarnessIdSessionsResourceIdFollowUp_Response = {
+export type PostAgentControllerControllerIdSessionsResourceIdFollowUp_Response = {
   ok: boolean;
 };
 
-export type PostHarnessHarnessIdSessionsResourceIdFollowUp_Request = Simplify<
-  (PostHarnessHarnessIdSessionsResourceIdFollowUp_PathParams extends never
+export type PostAgentControllerControllerIdSessionsResourceIdFollowUp_Request = Simplify<
+  (PostAgentControllerControllerIdSessionsResourceIdFollowUp_PathParams extends never
     ? {}
-    : { params: PostHarnessHarnessIdSessionsResourceIdFollowUp_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (PostHarnessHarnessIdSessionsResourceIdFollowUp_Body extends never
+    : { params: PostAgentControllerControllerIdSessionsResourceIdFollowUp_PathParams }) &
+    (PostAgentControllerControllerIdSessionsResourceIdFollowUp_QueryParams extends never
       ? {}
-      : {} extends PostHarnessHarnessIdSessionsResourceIdFollowUp_Body
-        ? { body?: PostHarnessHarnessIdSessionsResourceIdFollowUp_Body }
-        : { body: PostHarnessHarnessIdSessionsResourceIdFollowUp_Body })
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdFollowUp_QueryParams
+        ? { query?: PostAgentControllerControllerIdSessionsResourceIdFollowUp_QueryParams }
+        : { query: PostAgentControllerControllerIdSessionsResourceIdFollowUp_QueryParams }) &
+    (PostAgentControllerControllerIdSessionsResourceIdFollowUp_Body extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdFollowUp_Body
+        ? { body?: PostAgentControllerControllerIdSessionsResourceIdFollowUp_Body }
+        : { body: PostAgentControllerControllerIdSessionsResourceIdFollowUp_Body })
 >;
 
-export interface PostHarnessHarnessIdSessionsResourceIdFollowUp_RouteContract {
-  pathParams: PostHarnessHarnessIdSessionsResourceIdFollowUp_PathParams;
-  queryParams: never;
-  body: PostHarnessHarnessIdSessionsResourceIdFollowUp_Body;
-  request: PostHarnessHarnessIdSessionsResourceIdFollowUp_Request;
-  response: PostHarnessHarnessIdSessionsResourceIdFollowUp_Response;
+export interface PostAgentControllerControllerIdSessionsResourceIdFollowUp_RouteContract {
+  pathParams: PostAgentControllerControllerIdSessionsResourceIdFollowUp_PathParams;
+  queryParams: PostAgentControllerControllerIdSessionsResourceIdFollowUp_QueryParams;
+  body: PostAgentControllerControllerIdSessionsResourceIdFollowUp_Body;
+  request: PostAgentControllerControllerIdSessionsResourceIdFollowUp_Request;
+  response: PostAgentControllerControllerIdSessionsResourceIdFollowUp_Response;
   responseType: 'json';
 }
 
 // ============================================================================
-// Route: POST /harness/:harnessId/sessions/:resourceId/abort
+// Route: POST /agent-controller/:controllerId/sessions/:resourceId/abort
 // ============================================================================
-export type PostHarnessHarnessIdSessionsResourceIdAbort_PathParams = {
-  harnessId: string;
+export type PostAgentControllerControllerIdSessionsResourceIdAbort_PathParams = {
+  controllerId: string;
   resourceId: string;
 };
 
-export type PostHarnessHarnessIdSessionsResourceIdAbort_Response = {
+export type PostAgentControllerControllerIdSessionsResourceIdAbort_QueryParams = {
+  sessionScope?: string | undefined;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdAbort_Response = {
   ok: boolean;
 };
 
-export type PostHarnessHarnessIdSessionsResourceIdAbort_Request = Simplify<
-  (PostHarnessHarnessIdSessionsResourceIdAbort_PathParams extends never
+export type PostAgentControllerControllerIdSessionsResourceIdAbort_Request = Simplify<
+  (PostAgentControllerControllerIdSessionsResourceIdAbort_PathParams extends never
     ? {}
-    : { params: PostHarnessHarnessIdSessionsResourceIdAbort_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    : { params: PostAgentControllerControllerIdSessionsResourceIdAbort_PathParams }) &
+    (PostAgentControllerControllerIdSessionsResourceIdAbort_QueryParams extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdAbort_QueryParams
+        ? { query?: PostAgentControllerControllerIdSessionsResourceIdAbort_QueryParams }
+        : { query: PostAgentControllerControllerIdSessionsResourceIdAbort_QueryParams }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
-export interface PostHarnessHarnessIdSessionsResourceIdAbort_RouteContract {
-  pathParams: PostHarnessHarnessIdSessionsResourceIdAbort_PathParams;
-  queryParams: never;
+export interface PostAgentControllerControllerIdSessionsResourceIdAbort_RouteContract {
+  pathParams: PostAgentControllerControllerIdSessionsResourceIdAbort_PathParams;
+  queryParams: PostAgentControllerControllerIdSessionsResourceIdAbort_QueryParams;
   body: never;
-  request: PostHarnessHarnessIdSessionsResourceIdAbort_Request;
-  response: PostHarnessHarnessIdSessionsResourceIdAbort_Response;
+  request: PostAgentControllerControllerIdSessionsResourceIdAbort_Request;
+  response: PostAgentControllerControllerIdSessionsResourceIdAbort_Response;
   responseType: 'json';
 }
 
 // ============================================================================
-// Route: POST /harness/:harnessId/sessions/:resourceId/tool-approval
+// Route: POST /agent-controller/:controllerId/sessions/:resourceId/tool-approval
 // ============================================================================
-export type PostHarnessHarnessIdSessionsResourceIdToolApproval_PathParams = {
-  harnessId: string;
+export type PostAgentControllerControllerIdSessionsResourceIdToolApproval_PathParams = {
+  controllerId: string;
   resourceId: string;
 };
 
-export type PostHarnessHarnessIdSessionsResourceIdToolApproval_Body = {
+export type PostAgentControllerControllerIdSessionsResourceIdToolApproval_QueryParams = {
+  sessionScope?: string | undefined;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdToolApproval_Body = {
   toolCallId: string;
   approved: boolean;
 };
 
-export type PostHarnessHarnessIdSessionsResourceIdToolApproval_Response = {
+export type PostAgentControllerControllerIdSessionsResourceIdToolApproval_Response = {
   ok: boolean;
 };
 
-export type PostHarnessHarnessIdSessionsResourceIdToolApproval_Request = Simplify<
-  (PostHarnessHarnessIdSessionsResourceIdToolApproval_PathParams extends never
+export type PostAgentControllerControllerIdSessionsResourceIdToolApproval_Request = Simplify<
+  (PostAgentControllerControllerIdSessionsResourceIdToolApproval_PathParams extends never
     ? {}
-    : { params: PostHarnessHarnessIdSessionsResourceIdToolApproval_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (PostHarnessHarnessIdSessionsResourceIdToolApproval_Body extends never
+    : { params: PostAgentControllerControllerIdSessionsResourceIdToolApproval_PathParams }) &
+    (PostAgentControllerControllerIdSessionsResourceIdToolApproval_QueryParams extends never
       ? {}
-      : {} extends PostHarnessHarnessIdSessionsResourceIdToolApproval_Body
-        ? { body?: PostHarnessHarnessIdSessionsResourceIdToolApproval_Body }
-        : { body: PostHarnessHarnessIdSessionsResourceIdToolApproval_Body })
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdToolApproval_QueryParams
+        ? { query?: PostAgentControllerControllerIdSessionsResourceIdToolApproval_QueryParams }
+        : { query: PostAgentControllerControllerIdSessionsResourceIdToolApproval_QueryParams }) &
+    (PostAgentControllerControllerIdSessionsResourceIdToolApproval_Body extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdToolApproval_Body
+        ? { body?: PostAgentControllerControllerIdSessionsResourceIdToolApproval_Body }
+        : { body: PostAgentControllerControllerIdSessionsResourceIdToolApproval_Body })
 >;
 
-export interface PostHarnessHarnessIdSessionsResourceIdToolApproval_RouteContract {
-  pathParams: PostHarnessHarnessIdSessionsResourceIdToolApproval_PathParams;
-  queryParams: never;
-  body: PostHarnessHarnessIdSessionsResourceIdToolApproval_Body;
-  request: PostHarnessHarnessIdSessionsResourceIdToolApproval_Request;
-  response: PostHarnessHarnessIdSessionsResourceIdToolApproval_Response;
+export interface PostAgentControllerControllerIdSessionsResourceIdToolApproval_RouteContract {
+  pathParams: PostAgentControllerControllerIdSessionsResourceIdToolApproval_PathParams;
+  queryParams: PostAgentControllerControllerIdSessionsResourceIdToolApproval_QueryParams;
+  body: PostAgentControllerControllerIdSessionsResourceIdToolApproval_Body;
+  request: PostAgentControllerControllerIdSessionsResourceIdToolApproval_Request;
+  response: PostAgentControllerControllerIdSessionsResourceIdToolApproval_Response;
   responseType: 'json';
 }
 
 // ============================================================================
-// Route: POST /harness/:harnessId/sessions/:resourceId/tool-suspension
+// Route: POST /agent-controller/:controllerId/sessions/:resourceId/tool-suspension
 // ============================================================================
-export type PostHarnessHarnessIdSessionsResourceIdToolSuspension_PathParams = {
-  harnessId: string;
+export type PostAgentControllerControllerIdSessionsResourceIdToolSuspension_PathParams = {
+  controllerId: string;
   resourceId: string;
 };
 
-export type PostHarnessHarnessIdSessionsResourceIdToolSuspension_Body = {
+export type PostAgentControllerControllerIdSessionsResourceIdToolSuspension_QueryParams = {
+  sessionScope?: string | undefined;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdToolSuspension_Body = {
   toolCallId: string;
   resumeData: any;
 };
 
-export type PostHarnessHarnessIdSessionsResourceIdToolSuspension_Response = {
+export type PostAgentControllerControllerIdSessionsResourceIdToolSuspension_Response = {
   ok: boolean;
 };
 
-export type PostHarnessHarnessIdSessionsResourceIdToolSuspension_Request = Simplify<
-  (PostHarnessHarnessIdSessionsResourceIdToolSuspension_PathParams extends never
+export type PostAgentControllerControllerIdSessionsResourceIdToolSuspension_Request = Simplify<
+  (PostAgentControllerControllerIdSessionsResourceIdToolSuspension_PathParams extends never
     ? {}
-    : { params: PostHarnessHarnessIdSessionsResourceIdToolSuspension_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (PostHarnessHarnessIdSessionsResourceIdToolSuspension_Body extends never
+    : { params: PostAgentControllerControllerIdSessionsResourceIdToolSuspension_PathParams }) &
+    (PostAgentControllerControllerIdSessionsResourceIdToolSuspension_QueryParams extends never
       ? {}
-      : {} extends PostHarnessHarnessIdSessionsResourceIdToolSuspension_Body
-        ? { body?: PostHarnessHarnessIdSessionsResourceIdToolSuspension_Body }
-        : { body: PostHarnessHarnessIdSessionsResourceIdToolSuspension_Body })
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdToolSuspension_QueryParams
+        ? { query?: PostAgentControllerControllerIdSessionsResourceIdToolSuspension_QueryParams }
+        : { query: PostAgentControllerControllerIdSessionsResourceIdToolSuspension_QueryParams }) &
+    (PostAgentControllerControllerIdSessionsResourceIdToolSuspension_Body extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdToolSuspension_Body
+        ? { body?: PostAgentControllerControllerIdSessionsResourceIdToolSuspension_Body }
+        : { body: PostAgentControllerControllerIdSessionsResourceIdToolSuspension_Body })
 >;
 
-export interface PostHarnessHarnessIdSessionsResourceIdToolSuspension_RouteContract {
-  pathParams: PostHarnessHarnessIdSessionsResourceIdToolSuspension_PathParams;
-  queryParams: never;
-  body: PostHarnessHarnessIdSessionsResourceIdToolSuspension_Body;
-  request: PostHarnessHarnessIdSessionsResourceIdToolSuspension_Request;
-  response: PostHarnessHarnessIdSessionsResourceIdToolSuspension_Response;
+export interface PostAgentControllerControllerIdSessionsResourceIdToolSuspension_RouteContract {
+  pathParams: PostAgentControllerControllerIdSessionsResourceIdToolSuspension_PathParams;
+  queryParams: PostAgentControllerControllerIdSessionsResourceIdToolSuspension_QueryParams;
+  body: PostAgentControllerControllerIdSessionsResourceIdToolSuspension_Body;
+  request: PostAgentControllerControllerIdSessionsResourceIdToolSuspension_Request;
+  response: PostAgentControllerControllerIdSessionsResourceIdToolSuspension_Response;
   responseType: 'json';
 }
 
 // ============================================================================
-// Route: POST /harness/:harnessId/sessions/:resourceId/mode
+// Route: POST /agent-controller/:controllerId/sessions/:resourceId/mode
 // ============================================================================
-export type PostHarnessHarnessIdSessionsResourceIdMode_PathParams = {
-  harnessId: string;
+export type PostAgentControllerControllerIdSessionsResourceIdMode_PathParams = {
+  controllerId: string;
   resourceId: string;
 };
 
-export type PostHarnessHarnessIdSessionsResourceIdMode_Body = {
+export type PostAgentControllerControllerIdSessionsResourceIdMode_QueryParams = {
+  sessionScope?: string | undefined;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdMode_Body = {
   modeId: string;
 };
 
-export type PostHarnessHarnessIdSessionsResourceIdMode_Response = {
+export type PostAgentControllerControllerIdSessionsResourceIdMode_Response = {
   ok: boolean;
 };
 
-export type PostHarnessHarnessIdSessionsResourceIdMode_Request = Simplify<
-  (PostHarnessHarnessIdSessionsResourceIdMode_PathParams extends never
+export type PostAgentControllerControllerIdSessionsResourceIdMode_Request = Simplify<
+  (PostAgentControllerControllerIdSessionsResourceIdMode_PathParams extends never
     ? {}
-    : { params: PostHarnessHarnessIdSessionsResourceIdMode_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (PostHarnessHarnessIdSessionsResourceIdMode_Body extends never
+    : { params: PostAgentControllerControllerIdSessionsResourceIdMode_PathParams }) &
+    (PostAgentControllerControllerIdSessionsResourceIdMode_QueryParams extends never
       ? {}
-      : {} extends PostHarnessHarnessIdSessionsResourceIdMode_Body
-        ? { body?: PostHarnessHarnessIdSessionsResourceIdMode_Body }
-        : { body: PostHarnessHarnessIdSessionsResourceIdMode_Body })
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdMode_QueryParams
+        ? { query?: PostAgentControllerControllerIdSessionsResourceIdMode_QueryParams }
+        : { query: PostAgentControllerControllerIdSessionsResourceIdMode_QueryParams }) &
+    (PostAgentControllerControllerIdSessionsResourceIdMode_Body extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdMode_Body
+        ? { body?: PostAgentControllerControllerIdSessionsResourceIdMode_Body }
+        : { body: PostAgentControllerControllerIdSessionsResourceIdMode_Body })
 >;
 
-export interface PostHarnessHarnessIdSessionsResourceIdMode_RouteContract {
-  pathParams: PostHarnessHarnessIdSessionsResourceIdMode_PathParams;
-  queryParams: never;
-  body: PostHarnessHarnessIdSessionsResourceIdMode_Body;
-  request: PostHarnessHarnessIdSessionsResourceIdMode_Request;
-  response: PostHarnessHarnessIdSessionsResourceIdMode_Response;
+export interface PostAgentControllerControllerIdSessionsResourceIdMode_RouteContract {
+  pathParams: PostAgentControllerControllerIdSessionsResourceIdMode_PathParams;
+  queryParams: PostAgentControllerControllerIdSessionsResourceIdMode_QueryParams;
+  body: PostAgentControllerControllerIdSessionsResourceIdMode_Body;
+  request: PostAgentControllerControllerIdSessionsResourceIdMode_Request;
+  response: PostAgentControllerControllerIdSessionsResourceIdMode_Response;
   responseType: 'json';
 }
 
 // ============================================================================
-// Route: POST /harness/:harnessId/sessions/:resourceId/model
+// Route: POST /agent-controller/:controllerId/sessions/:resourceId/model
 // ============================================================================
-export type PostHarnessHarnessIdSessionsResourceIdModel_PathParams = {
-  harnessId: string;
+export type PostAgentControllerControllerIdSessionsResourceIdModel_PathParams = {
+  controllerId: string;
   resourceId: string;
 };
 
-export type PostHarnessHarnessIdSessionsResourceIdModel_Body = {
+export type PostAgentControllerControllerIdSessionsResourceIdModel_QueryParams = {
+  sessionScope?: string | undefined;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdModel_Body = {
   modelId: string;
   scope?: ('global' | 'thread') | undefined;
   modeId?: string | undefined;
 };
 
-export type PostHarnessHarnessIdSessionsResourceIdModel_Response = {
+export type PostAgentControllerControllerIdSessionsResourceIdModel_Response = {
   ok: boolean;
 };
 
-export type PostHarnessHarnessIdSessionsResourceIdModel_Request = Simplify<
-  (PostHarnessHarnessIdSessionsResourceIdModel_PathParams extends never
+export type PostAgentControllerControllerIdSessionsResourceIdModel_Request = Simplify<
+  (PostAgentControllerControllerIdSessionsResourceIdModel_PathParams extends never
     ? {}
-    : { params: PostHarnessHarnessIdSessionsResourceIdModel_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (PostHarnessHarnessIdSessionsResourceIdModel_Body extends never
+    : { params: PostAgentControllerControllerIdSessionsResourceIdModel_PathParams }) &
+    (PostAgentControllerControllerIdSessionsResourceIdModel_QueryParams extends never
       ? {}
-      : {} extends PostHarnessHarnessIdSessionsResourceIdModel_Body
-        ? { body?: PostHarnessHarnessIdSessionsResourceIdModel_Body }
-        : { body: PostHarnessHarnessIdSessionsResourceIdModel_Body })
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdModel_QueryParams
+        ? { query?: PostAgentControllerControllerIdSessionsResourceIdModel_QueryParams }
+        : { query: PostAgentControllerControllerIdSessionsResourceIdModel_QueryParams }) &
+    (PostAgentControllerControllerIdSessionsResourceIdModel_Body extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdModel_Body
+        ? { body?: PostAgentControllerControllerIdSessionsResourceIdModel_Body }
+        : { body: PostAgentControllerControllerIdSessionsResourceIdModel_Body })
 >;
 
-export interface PostHarnessHarnessIdSessionsResourceIdModel_RouteContract {
-  pathParams: PostHarnessHarnessIdSessionsResourceIdModel_PathParams;
-  queryParams: never;
-  body: PostHarnessHarnessIdSessionsResourceIdModel_Body;
-  request: PostHarnessHarnessIdSessionsResourceIdModel_Request;
-  response: PostHarnessHarnessIdSessionsResourceIdModel_Response;
+export interface PostAgentControllerControllerIdSessionsResourceIdModel_RouteContract {
+  pathParams: PostAgentControllerControllerIdSessionsResourceIdModel_PathParams;
+  queryParams: PostAgentControllerControllerIdSessionsResourceIdModel_QueryParams;
+  body: PostAgentControllerControllerIdSessionsResourceIdModel_Body;
+  request: PostAgentControllerControllerIdSessionsResourceIdModel_Request;
+  response: PostAgentControllerControllerIdSessionsResourceIdModel_Response;
   responseType: 'json';
 }
 
 // ============================================================================
-// Route: POST /harness/:harnessId/sessions/:resourceId/thread
+// Route: POST /agent-controller/:controllerId/sessions/:resourceId/thread
 // ============================================================================
-export type PostHarnessHarnessIdSessionsResourceIdThread_PathParams = {
-  harnessId: string;
+export type PostAgentControllerControllerIdSessionsResourceIdThread_PathParams = {
+  controllerId: string;
   resourceId: string;
 };
 
-export type PostHarnessHarnessIdSessionsResourceIdThread_Body = {
+export type PostAgentControllerControllerIdSessionsResourceIdThread_QueryParams = {
+  sessionScope?: string | undefined;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdThread_Body = {
   threadId: string;
 };
 
-export type PostHarnessHarnessIdSessionsResourceIdThread_Response = {
+export type PostAgentControllerControllerIdSessionsResourceIdThread_Response = {
   ok: boolean;
 };
 
-export type PostHarnessHarnessIdSessionsResourceIdThread_Request = Simplify<
-  (PostHarnessHarnessIdSessionsResourceIdThread_PathParams extends never
+export type PostAgentControllerControllerIdSessionsResourceIdThread_Request = Simplify<
+  (PostAgentControllerControllerIdSessionsResourceIdThread_PathParams extends never
     ? {}
-    : { params: PostHarnessHarnessIdSessionsResourceIdThread_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (PostHarnessHarnessIdSessionsResourceIdThread_Body extends never
+    : { params: PostAgentControllerControllerIdSessionsResourceIdThread_PathParams }) &
+    (PostAgentControllerControllerIdSessionsResourceIdThread_QueryParams extends never
       ? {}
-      : {} extends PostHarnessHarnessIdSessionsResourceIdThread_Body
-        ? { body?: PostHarnessHarnessIdSessionsResourceIdThread_Body }
-        : { body: PostHarnessHarnessIdSessionsResourceIdThread_Body })
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdThread_QueryParams
+        ? { query?: PostAgentControllerControllerIdSessionsResourceIdThread_QueryParams }
+        : { query: PostAgentControllerControllerIdSessionsResourceIdThread_QueryParams }) &
+    (PostAgentControllerControllerIdSessionsResourceIdThread_Body extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdThread_Body
+        ? { body?: PostAgentControllerControllerIdSessionsResourceIdThread_Body }
+        : { body: PostAgentControllerControllerIdSessionsResourceIdThread_Body })
 >;
 
-export interface PostHarnessHarnessIdSessionsResourceIdThread_RouteContract {
-  pathParams: PostHarnessHarnessIdSessionsResourceIdThread_PathParams;
-  queryParams: never;
-  body: PostHarnessHarnessIdSessionsResourceIdThread_Body;
-  request: PostHarnessHarnessIdSessionsResourceIdThread_Request;
-  response: PostHarnessHarnessIdSessionsResourceIdThread_Response;
+export interface PostAgentControllerControllerIdSessionsResourceIdThread_RouteContract {
+  pathParams: PostAgentControllerControllerIdSessionsResourceIdThread_PathParams;
+  queryParams: PostAgentControllerControllerIdSessionsResourceIdThread_QueryParams;
+  body: PostAgentControllerControllerIdSessionsResourceIdThread_Body;
+  request: PostAgentControllerControllerIdSessionsResourceIdThread_Request;
+  response: PostAgentControllerControllerIdSessionsResourceIdThread_Response;
   responseType: 'json';
 }
 
 // ============================================================================
-// Route: POST /harness/:harnessId/sessions/:resourceId/notifications
+// Route: POST /agent-controller/:controllerId/sessions/:resourceId/notifications
 // ============================================================================
-export type PostHarnessHarnessIdSessionsResourceIdNotifications_PathParams = {
-  harnessId: string;
+export type PostAgentControllerControllerIdSessionsResourceIdNotifications_PathParams = {
+  controllerId: string;
   resourceId: string;
 };
 
-export type PostHarnessHarnessIdSessionsResourceIdNotifications_Body = {
+export type PostAgentControllerControllerIdSessionsResourceIdNotifications_QueryParams = {
+  sessionScope?: string | undefined;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdNotifications_Body = {
   source: string;
   kind: string;
   summary: string;
@@ -91017,165 +92278,199 @@ export type PostHarnessHarnessIdSessionsResourceIdNotifications_Body = {
     | undefined;
 };
 
-export type PostHarnessHarnessIdSessionsResourceIdNotifications_Response = {
+export type PostAgentControllerControllerIdSessionsResourceIdNotifications_Response = {
   accepted: boolean;
   notificationId?: string | undefined;
   decision?: string | undefined;
   runId?: string | undefined;
 };
 
-export type PostHarnessHarnessIdSessionsResourceIdNotifications_Request = Simplify<
-  (PostHarnessHarnessIdSessionsResourceIdNotifications_PathParams extends never
+export type PostAgentControllerControllerIdSessionsResourceIdNotifications_Request = Simplify<
+  (PostAgentControllerControllerIdSessionsResourceIdNotifications_PathParams extends never
     ? {}
-    : { params: PostHarnessHarnessIdSessionsResourceIdNotifications_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (PostHarnessHarnessIdSessionsResourceIdNotifications_Body extends never
+    : { params: PostAgentControllerControllerIdSessionsResourceIdNotifications_PathParams }) &
+    (PostAgentControllerControllerIdSessionsResourceIdNotifications_QueryParams extends never
       ? {}
-      : {} extends PostHarnessHarnessIdSessionsResourceIdNotifications_Body
-        ? { body?: PostHarnessHarnessIdSessionsResourceIdNotifications_Body }
-        : { body: PostHarnessHarnessIdSessionsResourceIdNotifications_Body })
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdNotifications_QueryParams
+        ? { query?: PostAgentControllerControllerIdSessionsResourceIdNotifications_QueryParams }
+        : { query: PostAgentControllerControllerIdSessionsResourceIdNotifications_QueryParams }) &
+    (PostAgentControllerControllerIdSessionsResourceIdNotifications_Body extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdNotifications_Body
+        ? { body?: PostAgentControllerControllerIdSessionsResourceIdNotifications_Body }
+        : { body: PostAgentControllerControllerIdSessionsResourceIdNotifications_Body })
 >;
 
-export interface PostHarnessHarnessIdSessionsResourceIdNotifications_RouteContract {
-  pathParams: PostHarnessHarnessIdSessionsResourceIdNotifications_PathParams;
-  queryParams: never;
-  body: PostHarnessHarnessIdSessionsResourceIdNotifications_Body;
-  request: PostHarnessHarnessIdSessionsResourceIdNotifications_Request;
-  response: PostHarnessHarnessIdSessionsResourceIdNotifications_Response;
+export interface PostAgentControllerControllerIdSessionsResourceIdNotifications_RouteContract {
+  pathParams: PostAgentControllerControllerIdSessionsResourceIdNotifications_PathParams;
+  queryParams: PostAgentControllerControllerIdSessionsResourceIdNotifications_QueryParams;
+  body: PostAgentControllerControllerIdSessionsResourceIdNotifications_Body;
+  request: PostAgentControllerControllerIdSessionsResourceIdNotifications_Request;
+  response: PostAgentControllerControllerIdSessionsResourceIdNotifications_Response;
   responseType: 'json';
 }
 
 // ============================================================================
-// Route: GET /harness/:harnessId/workspace
+// Route: GET /agent-controller/:controllerId/workspace
 // ============================================================================
-export type GetHarnessHarnessIdWorkspace_PathParams = {
-  harnessId: string;
+export type GetAgentControllerControllerIdWorkspace_PathParams = {
+  controllerId: string;
 };
 
-export type GetHarnessHarnessIdWorkspace_Response = {
+export type GetAgentControllerControllerIdWorkspace_Response = {
   hasWorkspace: boolean;
   isReady: boolean;
 };
 
-export type GetHarnessHarnessIdWorkspace_Request = Simplify<
-  (GetHarnessHarnessIdWorkspace_PathParams extends never ? {} : { params: GetHarnessHarnessIdWorkspace_PathParams }) &
+export type GetAgentControllerControllerIdWorkspace_Request = Simplify<
+  (GetAgentControllerControllerIdWorkspace_PathParams extends never
+    ? {}
+    : { params: GetAgentControllerControllerIdWorkspace_PathParams }) &
     (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
-export interface GetHarnessHarnessIdWorkspace_RouteContract {
-  pathParams: GetHarnessHarnessIdWorkspace_PathParams;
+export interface GetAgentControllerControllerIdWorkspace_RouteContract {
+  pathParams: GetAgentControllerControllerIdWorkspace_PathParams;
   queryParams: never;
   body: never;
-  request: GetHarnessHarnessIdWorkspace_Request;
-  response: GetHarnessHarnessIdWorkspace_Response;
+  request: GetAgentControllerControllerIdWorkspace_Request;
+  response: GetAgentControllerControllerIdWorkspace_Response;
   responseType: 'json';
 }
 
 // ============================================================================
-// Route: GET /harness/:harnessId/sessions/:resourceId/om
+// Route: GET /agent-controller/:controllerId/sessions/:resourceId/om
 // ============================================================================
-export type GetHarnessHarnessIdSessionsResourceIdOm_PathParams = {
-  harnessId: string;
+export type GetAgentControllerControllerIdSessionsResourceIdOm_PathParams = {
+  controllerId: string;
   resourceId: string;
 };
 
-export type GetHarnessHarnessIdSessionsResourceIdOm_Response = {
+export type GetAgentControllerControllerIdSessionsResourceIdOm_QueryParams = {
+  sessionScope?: string | undefined;
+};
+
+export type GetAgentControllerControllerIdSessionsResourceIdOm_Response = {
   record?: any | undefined;
 };
 
-export type GetHarnessHarnessIdSessionsResourceIdOm_Request = Simplify<
-  (GetHarnessHarnessIdSessionsResourceIdOm_PathParams extends never
+export type GetAgentControllerControllerIdSessionsResourceIdOm_Request = Simplify<
+  (GetAgentControllerControllerIdSessionsResourceIdOm_PathParams extends never
     ? {}
-    : { params: GetHarnessHarnessIdSessionsResourceIdOm_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    : { params: GetAgentControllerControllerIdSessionsResourceIdOm_PathParams }) &
+    (GetAgentControllerControllerIdSessionsResourceIdOm_QueryParams extends never
+      ? {}
+      : {} extends GetAgentControllerControllerIdSessionsResourceIdOm_QueryParams
+        ? { query?: GetAgentControllerControllerIdSessionsResourceIdOm_QueryParams }
+        : { query: GetAgentControllerControllerIdSessionsResourceIdOm_QueryParams }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
-export interface GetHarnessHarnessIdSessionsResourceIdOm_RouteContract {
-  pathParams: GetHarnessHarnessIdSessionsResourceIdOm_PathParams;
-  queryParams: never;
+export interface GetAgentControllerControllerIdSessionsResourceIdOm_RouteContract {
+  pathParams: GetAgentControllerControllerIdSessionsResourceIdOm_PathParams;
+  queryParams: GetAgentControllerControllerIdSessionsResourceIdOm_QueryParams;
   body: never;
-  request: GetHarnessHarnessIdSessionsResourceIdOm_Request;
-  response: GetHarnessHarnessIdSessionsResourceIdOm_Response;
+  request: GetAgentControllerControllerIdSessionsResourceIdOm_Request;
+  response: GetAgentControllerControllerIdSessionsResourceIdOm_Response;
   responseType: 'json';
 }
 
 // ============================================================================
-// Route: POST /harness/:harnessId/sessions/:resourceId/resource
+// Route: POST /agent-controller/:controllerId/sessions/:resourceId/resource
 // ============================================================================
-export type PostHarnessHarnessIdSessionsResourceIdResource_PathParams = {
-  harnessId: string;
+export type PostAgentControllerControllerIdSessionsResourceIdResource_PathParams = {
+  controllerId: string;
   resourceId: string;
 };
 
-export type PostHarnessHarnessIdSessionsResourceIdResource_Body = {
+export type PostAgentControllerControllerIdSessionsResourceIdResource_QueryParams = {
+  sessionScope?: string | undefined;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdResource_Body = {
   newResourceId: string;
 };
 
-export type PostHarnessHarnessIdSessionsResourceIdResource_Response = {
+export type PostAgentControllerControllerIdSessionsResourceIdResource_Response = {
   ok: boolean;
 };
 
-export type PostHarnessHarnessIdSessionsResourceIdResource_Request = Simplify<
-  (PostHarnessHarnessIdSessionsResourceIdResource_PathParams extends never
+export type PostAgentControllerControllerIdSessionsResourceIdResource_Request = Simplify<
+  (PostAgentControllerControllerIdSessionsResourceIdResource_PathParams extends never
     ? {}
-    : { params: PostHarnessHarnessIdSessionsResourceIdResource_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (PostHarnessHarnessIdSessionsResourceIdResource_Body extends never
+    : { params: PostAgentControllerControllerIdSessionsResourceIdResource_PathParams }) &
+    (PostAgentControllerControllerIdSessionsResourceIdResource_QueryParams extends never
       ? {}
-      : {} extends PostHarnessHarnessIdSessionsResourceIdResource_Body
-        ? { body?: PostHarnessHarnessIdSessionsResourceIdResource_Body }
-        : { body: PostHarnessHarnessIdSessionsResourceIdResource_Body })
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdResource_QueryParams
+        ? { query?: PostAgentControllerControllerIdSessionsResourceIdResource_QueryParams }
+        : { query: PostAgentControllerControllerIdSessionsResourceIdResource_QueryParams }) &
+    (PostAgentControllerControllerIdSessionsResourceIdResource_Body extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdResource_Body
+        ? { body?: PostAgentControllerControllerIdSessionsResourceIdResource_Body }
+        : { body: PostAgentControllerControllerIdSessionsResourceIdResource_Body })
 >;
 
-export interface PostHarnessHarnessIdSessionsResourceIdResource_RouteContract {
-  pathParams: PostHarnessHarnessIdSessionsResourceIdResource_PathParams;
-  queryParams: never;
-  body: PostHarnessHarnessIdSessionsResourceIdResource_Body;
-  request: PostHarnessHarnessIdSessionsResourceIdResource_Request;
-  response: PostHarnessHarnessIdSessionsResourceIdResource_Response;
+export interface PostAgentControllerControllerIdSessionsResourceIdResource_RouteContract {
+  pathParams: PostAgentControllerControllerIdSessionsResourceIdResource_PathParams;
+  queryParams: PostAgentControllerControllerIdSessionsResourceIdResource_QueryParams;
+  body: PostAgentControllerControllerIdSessionsResourceIdResource_Body;
+  request: PostAgentControllerControllerIdSessionsResourceIdResource_Request;
+  response: PostAgentControllerControllerIdSessionsResourceIdResource_Response;
   responseType: 'json';
 }
 
 // ============================================================================
-// Route: GET /harness/:harnessId/sessions/:resourceId/resources
+// Route: GET /agent-controller/:controllerId/sessions/:resourceId/resources
 // ============================================================================
-export type GetHarnessHarnessIdSessionsResourceIdResources_PathParams = {
-  harnessId: string;
+export type GetAgentControllerControllerIdSessionsResourceIdResources_PathParams = {
+  controllerId: string;
   resourceId: string;
 };
 
-export type GetHarnessHarnessIdSessionsResourceIdResources_Response = {
+export type GetAgentControllerControllerIdSessionsResourceIdResources_QueryParams = {
+  sessionScope?: string | undefined;
+};
+
+export type GetAgentControllerControllerIdSessionsResourceIdResources_Response = {
   resourceIds: string[];
 };
 
-export type GetHarnessHarnessIdSessionsResourceIdResources_Request = Simplify<
-  (GetHarnessHarnessIdSessionsResourceIdResources_PathParams extends never
+export type GetAgentControllerControllerIdSessionsResourceIdResources_Request = Simplify<
+  (GetAgentControllerControllerIdSessionsResourceIdResources_PathParams extends never
     ? {}
-    : { params: GetHarnessHarnessIdSessionsResourceIdResources_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    : { params: GetAgentControllerControllerIdSessionsResourceIdResources_PathParams }) &
+    (GetAgentControllerControllerIdSessionsResourceIdResources_QueryParams extends never
+      ? {}
+      : {} extends GetAgentControllerControllerIdSessionsResourceIdResources_QueryParams
+        ? { query?: GetAgentControllerControllerIdSessionsResourceIdResources_QueryParams }
+        : { query: GetAgentControllerControllerIdSessionsResourceIdResources_QueryParams }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
-export interface GetHarnessHarnessIdSessionsResourceIdResources_RouteContract {
-  pathParams: GetHarnessHarnessIdSessionsResourceIdResources_PathParams;
-  queryParams: never;
+export interface GetAgentControllerControllerIdSessionsResourceIdResources_RouteContract {
+  pathParams: GetAgentControllerControllerIdSessionsResourceIdResources_PathParams;
+  queryParams: GetAgentControllerControllerIdSessionsResourceIdResources_QueryParams;
   body: never;
-  request: GetHarnessHarnessIdSessionsResourceIdResources_Request;
-  response: GetHarnessHarnessIdSessionsResourceIdResources_Response;
+  request: GetAgentControllerControllerIdSessionsResourceIdResources_Request;
+  response: GetAgentControllerControllerIdSessionsResourceIdResources_Response;
   responseType: 'json';
 }
 
 // ============================================================================
-// Route: GET /harness/:harnessId/sessions/:resourceId/goal
+// Route: GET /agent-controller/:controllerId/sessions/:resourceId/goal
 // ============================================================================
-export type GetHarnessHarnessIdSessionsResourceIdGoal_PathParams = {
-  harnessId: string;
+export type GetAgentControllerControllerIdSessionsResourceIdGoal_PathParams = {
+  controllerId: string;
   resourceId: string;
 };
 
-export type GetHarnessHarnessIdSessionsResourceIdGoal_Response = {
+export type GetAgentControllerControllerIdSessionsResourceIdGoal_QueryParams = {
+  sessionScope?: string | undefined;
+};
+
+export type GetAgentControllerControllerIdSessionsResourceIdGoal_Response = {
   goal?:
     | {
         id?: string | undefined;
@@ -91191,38 +92486,46 @@ export type GetHarnessHarnessIdSessionsResourceIdGoal_Response = {
     | undefined;
 };
 
-export type GetHarnessHarnessIdSessionsResourceIdGoal_Request = Simplify<
-  (GetHarnessHarnessIdSessionsResourceIdGoal_PathParams extends never
+export type GetAgentControllerControllerIdSessionsResourceIdGoal_Request = Simplify<
+  (GetAgentControllerControllerIdSessionsResourceIdGoal_PathParams extends never
     ? {}
-    : { params: GetHarnessHarnessIdSessionsResourceIdGoal_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    : { params: GetAgentControllerControllerIdSessionsResourceIdGoal_PathParams }) &
+    (GetAgentControllerControllerIdSessionsResourceIdGoal_QueryParams extends never
+      ? {}
+      : {} extends GetAgentControllerControllerIdSessionsResourceIdGoal_QueryParams
+        ? { query?: GetAgentControllerControllerIdSessionsResourceIdGoal_QueryParams }
+        : { query: GetAgentControllerControllerIdSessionsResourceIdGoal_QueryParams }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
-export interface GetHarnessHarnessIdSessionsResourceIdGoal_RouteContract {
-  pathParams: GetHarnessHarnessIdSessionsResourceIdGoal_PathParams;
-  queryParams: never;
+export interface GetAgentControllerControllerIdSessionsResourceIdGoal_RouteContract {
+  pathParams: GetAgentControllerControllerIdSessionsResourceIdGoal_PathParams;
+  queryParams: GetAgentControllerControllerIdSessionsResourceIdGoal_QueryParams;
   body: never;
-  request: GetHarnessHarnessIdSessionsResourceIdGoal_Request;
-  response: GetHarnessHarnessIdSessionsResourceIdGoal_Response;
+  request: GetAgentControllerControllerIdSessionsResourceIdGoal_Request;
+  response: GetAgentControllerControllerIdSessionsResourceIdGoal_Response;
   responseType: 'json';
 }
 
 // ============================================================================
-// Route: POST /harness/:harnessId/sessions/:resourceId/goal
+// Route: POST /agent-controller/:controllerId/sessions/:resourceId/goal
 // ============================================================================
-export type PostHarnessHarnessIdSessionsResourceIdGoal_PathParams = {
-  harnessId: string;
+export type PostAgentControllerControllerIdSessionsResourceIdGoal_PathParams = {
+  controllerId: string;
   resourceId: string;
 };
 
-export type PostHarnessHarnessIdSessionsResourceIdGoal_Body = {
+export type PostAgentControllerControllerIdSessionsResourceIdGoal_QueryParams = {
+  sessionScope?: string | undefined;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdGoal_Body = {
   objective: string;
   judgeModelId?: string | undefined;
   maxRuns?: number | undefined;
 };
 
-export type PostHarnessHarnessIdSessionsResourceIdGoal_Response = {
+export type PostAgentControllerControllerIdSessionsResourceIdGoal_Response = {
   goal?:
     | {
         id?: string | undefined;
@@ -91238,42 +92541,50 @@ export type PostHarnessHarnessIdSessionsResourceIdGoal_Response = {
     | undefined;
 };
 
-export type PostHarnessHarnessIdSessionsResourceIdGoal_Request = Simplify<
-  (PostHarnessHarnessIdSessionsResourceIdGoal_PathParams extends never
+export type PostAgentControllerControllerIdSessionsResourceIdGoal_Request = Simplify<
+  (PostAgentControllerControllerIdSessionsResourceIdGoal_PathParams extends never
     ? {}
-    : { params: PostHarnessHarnessIdSessionsResourceIdGoal_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (PostHarnessHarnessIdSessionsResourceIdGoal_Body extends never
+    : { params: PostAgentControllerControllerIdSessionsResourceIdGoal_PathParams }) &
+    (PostAgentControllerControllerIdSessionsResourceIdGoal_QueryParams extends never
       ? {}
-      : {} extends PostHarnessHarnessIdSessionsResourceIdGoal_Body
-        ? { body?: PostHarnessHarnessIdSessionsResourceIdGoal_Body }
-        : { body: PostHarnessHarnessIdSessionsResourceIdGoal_Body })
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdGoal_QueryParams
+        ? { query?: PostAgentControllerControllerIdSessionsResourceIdGoal_QueryParams }
+        : { query: PostAgentControllerControllerIdSessionsResourceIdGoal_QueryParams }) &
+    (PostAgentControllerControllerIdSessionsResourceIdGoal_Body extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdGoal_Body
+        ? { body?: PostAgentControllerControllerIdSessionsResourceIdGoal_Body }
+        : { body: PostAgentControllerControllerIdSessionsResourceIdGoal_Body })
 >;
 
-export interface PostHarnessHarnessIdSessionsResourceIdGoal_RouteContract {
-  pathParams: PostHarnessHarnessIdSessionsResourceIdGoal_PathParams;
-  queryParams: never;
-  body: PostHarnessHarnessIdSessionsResourceIdGoal_Body;
-  request: PostHarnessHarnessIdSessionsResourceIdGoal_Request;
-  response: PostHarnessHarnessIdSessionsResourceIdGoal_Response;
+export interface PostAgentControllerControllerIdSessionsResourceIdGoal_RouteContract {
+  pathParams: PostAgentControllerControllerIdSessionsResourceIdGoal_PathParams;
+  queryParams: PostAgentControllerControllerIdSessionsResourceIdGoal_QueryParams;
+  body: PostAgentControllerControllerIdSessionsResourceIdGoal_Body;
+  request: PostAgentControllerControllerIdSessionsResourceIdGoal_Request;
+  response: PostAgentControllerControllerIdSessionsResourceIdGoal_Response;
   responseType: 'json';
 }
 
 // ============================================================================
-// Route: PUT /harness/:harnessId/sessions/:resourceId/goal
+// Route: PUT /agent-controller/:controllerId/sessions/:resourceId/goal
 // ============================================================================
-export type PutHarnessHarnessIdSessionsResourceIdGoal_PathParams = {
-  harnessId: string;
+export type PutAgentControllerControllerIdSessionsResourceIdGoal_PathParams = {
+  controllerId: string;
   resourceId: string;
 };
 
-export type PutHarnessHarnessIdSessionsResourceIdGoal_Body = {
+export type PutAgentControllerControllerIdSessionsResourceIdGoal_QueryParams = {
+  sessionScope?: string | undefined;
+};
+
+export type PutAgentControllerControllerIdSessionsResourceIdGoal_Body = {
   judgeModelId?: string | undefined;
   maxRuns?: number | undefined;
   status?: ('active' | 'paused' | 'done') | undefined;
 };
 
-export type PutHarnessHarnessIdSessionsResourceIdGoal_Response = {
+export type PutAgentControllerControllerIdSessionsResourceIdGoal_Response = {
   goal?:
     | {
         id?: string | undefined;
@@ -91289,65 +92600,81 @@ export type PutHarnessHarnessIdSessionsResourceIdGoal_Response = {
     | undefined;
 };
 
-export type PutHarnessHarnessIdSessionsResourceIdGoal_Request = Simplify<
-  (PutHarnessHarnessIdSessionsResourceIdGoal_PathParams extends never
+export type PutAgentControllerControllerIdSessionsResourceIdGoal_Request = Simplify<
+  (PutAgentControllerControllerIdSessionsResourceIdGoal_PathParams extends never
     ? {}
-    : { params: PutHarnessHarnessIdSessionsResourceIdGoal_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (PutHarnessHarnessIdSessionsResourceIdGoal_Body extends never
+    : { params: PutAgentControllerControllerIdSessionsResourceIdGoal_PathParams }) &
+    (PutAgentControllerControllerIdSessionsResourceIdGoal_QueryParams extends never
       ? {}
-      : {} extends PutHarnessHarnessIdSessionsResourceIdGoal_Body
-        ? { body?: PutHarnessHarnessIdSessionsResourceIdGoal_Body }
-        : { body: PutHarnessHarnessIdSessionsResourceIdGoal_Body })
+      : {} extends PutAgentControllerControllerIdSessionsResourceIdGoal_QueryParams
+        ? { query?: PutAgentControllerControllerIdSessionsResourceIdGoal_QueryParams }
+        : { query: PutAgentControllerControllerIdSessionsResourceIdGoal_QueryParams }) &
+    (PutAgentControllerControllerIdSessionsResourceIdGoal_Body extends never
+      ? {}
+      : {} extends PutAgentControllerControllerIdSessionsResourceIdGoal_Body
+        ? { body?: PutAgentControllerControllerIdSessionsResourceIdGoal_Body }
+        : { body: PutAgentControllerControllerIdSessionsResourceIdGoal_Body })
 >;
 
-export interface PutHarnessHarnessIdSessionsResourceIdGoal_RouteContract {
-  pathParams: PutHarnessHarnessIdSessionsResourceIdGoal_PathParams;
-  queryParams: never;
-  body: PutHarnessHarnessIdSessionsResourceIdGoal_Body;
-  request: PutHarnessHarnessIdSessionsResourceIdGoal_Request;
-  response: PutHarnessHarnessIdSessionsResourceIdGoal_Response;
+export interface PutAgentControllerControllerIdSessionsResourceIdGoal_RouteContract {
+  pathParams: PutAgentControllerControllerIdSessionsResourceIdGoal_PathParams;
+  queryParams: PutAgentControllerControllerIdSessionsResourceIdGoal_QueryParams;
+  body: PutAgentControllerControllerIdSessionsResourceIdGoal_Body;
+  request: PutAgentControllerControllerIdSessionsResourceIdGoal_Request;
+  response: PutAgentControllerControllerIdSessionsResourceIdGoal_Response;
   responseType: 'json';
 }
 
 // ============================================================================
-// Route: DELETE /harness/:harnessId/sessions/:resourceId/goal
+// Route: DELETE /agent-controller/:controllerId/sessions/:resourceId/goal
 // ============================================================================
-export type DeleteHarnessHarnessIdSessionsResourceIdGoal_PathParams = {
-  harnessId: string;
+export type DeleteAgentControllerControllerIdSessionsResourceIdGoal_PathParams = {
+  controllerId: string;
   resourceId: string;
 };
 
-export type DeleteHarnessHarnessIdSessionsResourceIdGoal_Response = {
+export type DeleteAgentControllerControllerIdSessionsResourceIdGoal_QueryParams = {
+  sessionScope?: string | undefined;
+};
+
+export type DeleteAgentControllerControllerIdSessionsResourceIdGoal_Response = {
   ok: boolean;
 };
 
-export type DeleteHarnessHarnessIdSessionsResourceIdGoal_Request = Simplify<
-  (DeleteHarnessHarnessIdSessionsResourceIdGoal_PathParams extends never
+export type DeleteAgentControllerControllerIdSessionsResourceIdGoal_Request = Simplify<
+  (DeleteAgentControllerControllerIdSessionsResourceIdGoal_PathParams extends never
     ? {}
-    : { params: DeleteHarnessHarnessIdSessionsResourceIdGoal_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    : { params: DeleteAgentControllerControllerIdSessionsResourceIdGoal_PathParams }) &
+    (DeleteAgentControllerControllerIdSessionsResourceIdGoal_QueryParams extends never
+      ? {}
+      : {} extends DeleteAgentControllerControllerIdSessionsResourceIdGoal_QueryParams
+        ? { query?: DeleteAgentControllerControllerIdSessionsResourceIdGoal_QueryParams }
+        : { query: DeleteAgentControllerControllerIdSessionsResourceIdGoal_QueryParams }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
-export interface DeleteHarnessHarnessIdSessionsResourceIdGoal_RouteContract {
-  pathParams: DeleteHarnessHarnessIdSessionsResourceIdGoal_PathParams;
-  queryParams: never;
+export interface DeleteAgentControllerControllerIdSessionsResourceIdGoal_RouteContract {
+  pathParams: DeleteAgentControllerControllerIdSessionsResourceIdGoal_PathParams;
+  queryParams: DeleteAgentControllerControllerIdSessionsResourceIdGoal_QueryParams;
   body: never;
-  request: DeleteHarnessHarnessIdSessionsResourceIdGoal_Request;
-  response: DeleteHarnessHarnessIdSessionsResourceIdGoal_Response;
+  request: DeleteAgentControllerControllerIdSessionsResourceIdGoal_Request;
+  response: DeleteAgentControllerControllerIdSessionsResourceIdGoal_Response;
   responseType: 'json';
 }
 
 // ============================================================================
-// Route: GET /harness/:harnessId/sessions/:resourceId/permissions
+// Route: GET /agent-controller/:controllerId/sessions/:resourceId/permissions
 // ============================================================================
-export type GetHarnessHarnessIdSessionsResourceIdPermissions_PathParams = {
-  harnessId: string;
+export type GetAgentControllerControllerIdSessionsResourceIdPermissions_PathParams = {
+  controllerId: string;
   resourceId: string;
 };
 
-export type GetHarnessHarnessIdSessionsResourceIdPermissions_Response = {
+export type GetAgentControllerControllerIdSessionsResourceIdPermissions_QueryParams = {
+  sessionScope?: string | undefined;
+};
+
+export type GetAgentControllerControllerIdSessionsResourceIdPermissions_Response = {
   categories?:
     | {
         [key: string]: 'allow' | 'ask' | 'deny';
@@ -91360,135 +92687,163 @@ export type GetHarnessHarnessIdSessionsResourceIdPermissions_Response = {
     | undefined;
 };
 
-export type GetHarnessHarnessIdSessionsResourceIdPermissions_Request = Simplify<
-  (GetHarnessHarnessIdSessionsResourceIdPermissions_PathParams extends never
+export type GetAgentControllerControllerIdSessionsResourceIdPermissions_Request = Simplify<
+  (GetAgentControllerControllerIdSessionsResourceIdPermissions_PathParams extends never
     ? {}
-    : { params: GetHarnessHarnessIdSessionsResourceIdPermissions_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    : { params: GetAgentControllerControllerIdSessionsResourceIdPermissions_PathParams }) &
+    (GetAgentControllerControllerIdSessionsResourceIdPermissions_QueryParams extends never
+      ? {}
+      : {} extends GetAgentControllerControllerIdSessionsResourceIdPermissions_QueryParams
+        ? { query?: GetAgentControllerControllerIdSessionsResourceIdPermissions_QueryParams }
+        : { query: GetAgentControllerControllerIdSessionsResourceIdPermissions_QueryParams }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
-export interface GetHarnessHarnessIdSessionsResourceIdPermissions_RouteContract {
-  pathParams: GetHarnessHarnessIdSessionsResourceIdPermissions_PathParams;
-  queryParams: never;
+export interface GetAgentControllerControllerIdSessionsResourceIdPermissions_RouteContract {
+  pathParams: GetAgentControllerControllerIdSessionsResourceIdPermissions_PathParams;
+  queryParams: GetAgentControllerControllerIdSessionsResourceIdPermissions_QueryParams;
   body: never;
-  request: GetHarnessHarnessIdSessionsResourceIdPermissions_Request;
-  response: GetHarnessHarnessIdSessionsResourceIdPermissions_Response;
+  request: GetAgentControllerControllerIdSessionsResourceIdPermissions_Request;
+  response: GetAgentControllerControllerIdSessionsResourceIdPermissions_Response;
   responseType: 'json';
 }
 
 // ============================================================================
-// Route: PUT /harness/:harnessId/sessions/:resourceId/permissions/category
+// Route: PUT /agent-controller/:controllerId/sessions/:resourceId/permissions/category
 // ============================================================================
-export type PutHarnessHarnessIdSessionsResourceIdPermissionsCategory_PathParams = {
-  harnessId: string;
+export type PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_PathParams = {
+  controllerId: string;
   resourceId: string;
 };
 
-export type PutHarnessHarnessIdSessionsResourceIdPermissionsCategory_Body = {
+export type PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_QueryParams = {
+  sessionScope?: string | undefined;
+};
+
+export type PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_Body = {
   category: 'read' | 'edit' | 'execute' | 'mcp' | 'other';
   policy: 'allow' | 'ask' | 'deny';
 };
 
-export type PutHarnessHarnessIdSessionsResourceIdPermissionsCategory_Response = {
+export type PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_Response = {
   ok: boolean;
 };
 
-export type PutHarnessHarnessIdSessionsResourceIdPermissionsCategory_Request = Simplify<
-  (PutHarnessHarnessIdSessionsResourceIdPermissionsCategory_PathParams extends never
+export type PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_Request = Simplify<
+  (PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_PathParams extends never
     ? {}
-    : { params: PutHarnessHarnessIdSessionsResourceIdPermissionsCategory_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (PutHarnessHarnessIdSessionsResourceIdPermissionsCategory_Body extends never
+    : { params: PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_PathParams }) &
+    (PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_QueryParams extends never
       ? {}
-      : {} extends PutHarnessHarnessIdSessionsResourceIdPermissionsCategory_Body
-        ? { body?: PutHarnessHarnessIdSessionsResourceIdPermissionsCategory_Body }
-        : { body: PutHarnessHarnessIdSessionsResourceIdPermissionsCategory_Body })
+      : {} extends PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_QueryParams
+        ? { query?: PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_QueryParams }
+        : { query: PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_QueryParams }) &
+    (PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_Body extends never
+      ? {}
+      : {} extends PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_Body
+        ? { body?: PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_Body }
+        : { body: PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_Body })
 >;
 
-export interface PutHarnessHarnessIdSessionsResourceIdPermissionsCategory_RouteContract {
-  pathParams: PutHarnessHarnessIdSessionsResourceIdPermissionsCategory_PathParams;
-  queryParams: never;
-  body: PutHarnessHarnessIdSessionsResourceIdPermissionsCategory_Body;
-  request: PutHarnessHarnessIdSessionsResourceIdPermissionsCategory_Request;
-  response: PutHarnessHarnessIdSessionsResourceIdPermissionsCategory_Response;
+export interface PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_RouteContract {
+  pathParams: PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_PathParams;
+  queryParams: PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_QueryParams;
+  body: PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_Body;
+  request: PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_Request;
+  response: PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_Response;
   responseType: 'json';
 }
 
 // ============================================================================
-// Route: PUT /harness/:harnessId/sessions/:resourceId/permissions/tool
+// Route: PUT /agent-controller/:controllerId/sessions/:resourceId/permissions/tool
 // ============================================================================
-export type PutHarnessHarnessIdSessionsResourceIdPermissionsTool_PathParams = {
-  harnessId: string;
+export type PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_PathParams = {
+  controllerId: string;
   resourceId: string;
 };
 
-export type PutHarnessHarnessIdSessionsResourceIdPermissionsTool_Body = {
+export type PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_QueryParams = {
+  sessionScope?: string | undefined;
+};
+
+export type PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_Body = {
   toolName: string;
   policy: 'allow' | 'ask' | 'deny';
 };
 
-export type PutHarnessHarnessIdSessionsResourceIdPermissionsTool_Response = {
+export type PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_Response = {
   ok: boolean;
 };
 
-export type PutHarnessHarnessIdSessionsResourceIdPermissionsTool_Request = Simplify<
-  (PutHarnessHarnessIdSessionsResourceIdPermissionsTool_PathParams extends never
+export type PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_Request = Simplify<
+  (PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_PathParams extends never
     ? {}
-    : { params: PutHarnessHarnessIdSessionsResourceIdPermissionsTool_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (PutHarnessHarnessIdSessionsResourceIdPermissionsTool_Body extends never
+    : { params: PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_PathParams }) &
+    (PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_QueryParams extends never
       ? {}
-      : {} extends PutHarnessHarnessIdSessionsResourceIdPermissionsTool_Body
-        ? { body?: PutHarnessHarnessIdSessionsResourceIdPermissionsTool_Body }
-        : { body: PutHarnessHarnessIdSessionsResourceIdPermissionsTool_Body })
+      : {} extends PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_QueryParams
+        ? { query?: PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_QueryParams }
+        : { query: PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_QueryParams }) &
+    (PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_Body extends never
+      ? {}
+      : {} extends PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_Body
+        ? { body?: PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_Body }
+        : { body: PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_Body })
 >;
 
-export interface PutHarnessHarnessIdSessionsResourceIdPermissionsTool_RouteContract {
-  pathParams: PutHarnessHarnessIdSessionsResourceIdPermissionsTool_PathParams;
-  queryParams: never;
-  body: PutHarnessHarnessIdSessionsResourceIdPermissionsTool_Body;
-  request: PutHarnessHarnessIdSessionsResourceIdPermissionsTool_Request;
-  response: PutHarnessHarnessIdSessionsResourceIdPermissionsTool_Response;
+export interface PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_RouteContract {
+  pathParams: PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_PathParams;
+  queryParams: PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_QueryParams;
+  body: PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_Body;
+  request: PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_Request;
+  response: PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_Response;
   responseType: 'json';
 }
 
 // ============================================================================
-// Route: PUT /harness/:harnessId/sessions/:resourceId/state
+// Route: PUT /agent-controller/:controllerId/sessions/:resourceId/state
 // ============================================================================
-export type PutHarnessHarnessIdSessionsResourceIdState_PathParams = {
-  harnessId: string;
+export type PutAgentControllerControllerIdSessionsResourceIdState_PathParams = {
+  controllerId: string;
   resourceId: string;
 };
 
-export type PutHarnessHarnessIdSessionsResourceIdState_Body = {
+export type PutAgentControllerControllerIdSessionsResourceIdState_QueryParams = {
+  sessionScope?: string | undefined;
+};
+
+export type PutAgentControllerControllerIdSessionsResourceIdState_Body = {
   state: {
     [key: string]: unknown;
   };
 };
 
-export type PutHarnessHarnessIdSessionsResourceIdState_Response = {
+export type PutAgentControllerControllerIdSessionsResourceIdState_Response = {
   ok: boolean;
 };
 
-export type PutHarnessHarnessIdSessionsResourceIdState_Request = Simplify<
-  (PutHarnessHarnessIdSessionsResourceIdState_PathParams extends never
+export type PutAgentControllerControllerIdSessionsResourceIdState_Request = Simplify<
+  (PutAgentControllerControllerIdSessionsResourceIdState_PathParams extends never
     ? {}
-    : { params: PutHarnessHarnessIdSessionsResourceIdState_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (PutHarnessHarnessIdSessionsResourceIdState_Body extends never
+    : { params: PutAgentControllerControllerIdSessionsResourceIdState_PathParams }) &
+    (PutAgentControllerControllerIdSessionsResourceIdState_QueryParams extends never
       ? {}
-      : {} extends PutHarnessHarnessIdSessionsResourceIdState_Body
-        ? { body?: PutHarnessHarnessIdSessionsResourceIdState_Body }
-        : { body: PutHarnessHarnessIdSessionsResourceIdState_Body })
+      : {} extends PutAgentControllerControllerIdSessionsResourceIdState_QueryParams
+        ? { query?: PutAgentControllerControllerIdSessionsResourceIdState_QueryParams }
+        : { query: PutAgentControllerControllerIdSessionsResourceIdState_QueryParams }) &
+    (PutAgentControllerControllerIdSessionsResourceIdState_Body extends never
+      ? {}
+      : {} extends PutAgentControllerControllerIdSessionsResourceIdState_Body
+        ? { body?: PutAgentControllerControllerIdSessionsResourceIdState_Body }
+        : { body: PutAgentControllerControllerIdSessionsResourceIdState_Body })
 >;
 
-export interface PutHarnessHarnessIdSessionsResourceIdState_RouteContract {
-  pathParams: PutHarnessHarnessIdSessionsResourceIdState_PathParams;
-  queryParams: never;
-  body: PutHarnessHarnessIdSessionsResourceIdState_Body;
-  request: PutHarnessHarnessIdSessionsResourceIdState_Request;
-  response: PutHarnessHarnessIdSessionsResourceIdState_Response;
+export interface PutAgentControllerControllerIdSessionsResourceIdState_RouteContract {
+  pathParams: PutAgentControllerControllerIdSessionsResourceIdState_PathParams;
+  queryParams: PutAgentControllerControllerIdSessionsResourceIdState_QueryParams;
+  body: PutAgentControllerControllerIdSessionsResourceIdState_Body;
+  request: PutAgentControllerControllerIdSessionsResourceIdState_Request;
+  response: PutAgentControllerControllerIdSessionsResourceIdState_Response;
   responseType: 'json';
 }
 
@@ -91516,8 +92871,10 @@ export interface RouteTypes {
   'POST /agents/:agentId/tools/:toolId/execute': PostAgentsAgentIdToolsToolIdExecute_RouteContract;
   'POST /agents/:agentId/approve-tool-call': PostAgentsAgentIdApproveToolCall_RouteContract;
   'POST /agents/:agentId/send-tool-approval': PostAgentsAgentIdSendToolApproval_RouteContract;
+  'GET /agents/:agentId/suspended-runs': GetAgentsAgentIdSuspendedRuns_RouteContract;
   'POST /agents/:agentId/decline-tool-call': PostAgentsAgentIdDeclineToolCall_RouteContract;
   'POST /agents/:agentId/resume-stream': PostAgentsAgentIdResumeStream_RouteContract;
+  'POST /agents/:agentId/recover': PostAgentsAgentIdRecover_RouteContract;
   'POST /agents/:agentId/approve-tool-call-generate': PostAgentsAgentIdApproveToolCallGenerate_RouteContract;
   'POST /agents/:agentId/decline-tool-call-generate': PostAgentsAgentIdDeclineToolCallGenerate_RouteContract;
   'POST /agents/:agentId/approve-network-tool-call': PostAgentsAgentIdApproveNetworkToolCall_RouteContract;
@@ -91840,47 +93197,51 @@ export interface RouteTypes {
   'POST /agent-builder/:actionId/runs/:runId/cancel': PostAgentBuilderActionIdRunsRunIdCancel_RouteContract;
   'GET /schedules': GetSchedules_RouteContract;
   'GET /schedules/:scheduleId': GetSchedulesScheduleId_RouteContract;
+  'POST /schedules': PostSchedules_RouteContract;
+  'PATCH /schedules/:scheduleId': PatchSchedulesScheduleId_RouteContract;
+  'DELETE /schedules/:scheduleId': DeleteSchedulesScheduleId_RouteContract;
   'GET /schedules/:scheduleId/triggers': GetSchedulesScheduleIdTriggers_RouteContract;
   'POST /schedules/:scheduleId/pause': PostSchedulesScheduleIdPause_RouteContract;
   'POST /schedules/:scheduleId/resume': PostSchedulesScheduleIdResume_RouteContract;
+  'POST /schedules/:scheduleId/run': PostSchedulesScheduleIdRun_RouteContract;
   'GET /channels/platforms': GetChannelsPlatforms_RouteContract;
   'GET /channels/:platform/installations': GetChannelsPlatformInstallations_RouteContract;
   'POST /channels/:platform/connect': PostChannelsPlatformConnect_RouteContract;
   'POST /channels/:platform/:agentId/disconnect': PostChannelsPlatformAgentIdDisconnect_RouteContract;
-  'GET /harness': GetHarness_RouteContract;
-  'GET /harness/:harnessId/modes': GetHarnessHarnessIdModes_RouteContract;
-  'GET /harness/:harnessId/models': GetHarnessHarnessIdModels_RouteContract;
-  'POST /harness/:harnessId/sessions': PostHarnessHarnessIdSessions_RouteContract;
-  'GET /harness/:harnessId/sessions/:resourceId': GetHarnessHarnessIdSessionsResourceId_RouteContract;
-  'GET /harness/:harnessId/sessions/:resourceId/threads': GetHarnessHarnessIdSessionsResourceIdThreads_RouteContract;
-  'POST /harness/:harnessId/sessions/:resourceId/threads': PostHarnessHarnessIdSessionsResourceIdThreads_RouteContract;
-  'DELETE /harness/:harnessId/sessions/:resourceId/threads/:threadId': DeleteHarnessHarnessIdSessionsResourceIdThreadsThreadId_RouteContract;
-  'PUT /harness/:harnessId/sessions/:resourceId/threads/:threadId': PutHarnessHarnessIdSessionsResourceIdThreadsThreadId_RouteContract;
-  'POST /harness/:harnessId/sessions/:resourceId/threads/clone': PostHarnessHarnessIdSessionsResourceIdThreadsClone_RouteContract;
-  'GET /harness/:harnessId/sessions/:resourceId/threads/:threadId/messages': GetHarnessHarnessIdSessionsResourceIdThreadsThreadIdMessages_RouteContract;
-  'GET /harness/:harnessId/sessions/:resourceId/stream': GetHarnessHarnessIdSessionsResourceIdStream_RouteContract;
-  'POST /harness/:harnessId/sessions/:resourceId/messages': PostHarnessHarnessIdSessionsResourceIdMessages_RouteContract;
-  'POST /harness/:harnessId/sessions/:resourceId/steer': PostHarnessHarnessIdSessionsResourceIdSteer_RouteContract;
-  'POST /harness/:harnessId/sessions/:resourceId/follow-up': PostHarnessHarnessIdSessionsResourceIdFollowUp_RouteContract;
-  'POST /harness/:harnessId/sessions/:resourceId/abort': PostHarnessHarnessIdSessionsResourceIdAbort_RouteContract;
-  'POST /harness/:harnessId/sessions/:resourceId/tool-approval': PostHarnessHarnessIdSessionsResourceIdToolApproval_RouteContract;
-  'POST /harness/:harnessId/sessions/:resourceId/tool-suspension': PostHarnessHarnessIdSessionsResourceIdToolSuspension_RouteContract;
-  'POST /harness/:harnessId/sessions/:resourceId/mode': PostHarnessHarnessIdSessionsResourceIdMode_RouteContract;
-  'POST /harness/:harnessId/sessions/:resourceId/model': PostHarnessHarnessIdSessionsResourceIdModel_RouteContract;
-  'POST /harness/:harnessId/sessions/:resourceId/thread': PostHarnessHarnessIdSessionsResourceIdThread_RouteContract;
-  'POST /harness/:harnessId/sessions/:resourceId/notifications': PostHarnessHarnessIdSessionsResourceIdNotifications_RouteContract;
-  'GET /harness/:harnessId/workspace': GetHarnessHarnessIdWorkspace_RouteContract;
-  'GET /harness/:harnessId/sessions/:resourceId/om': GetHarnessHarnessIdSessionsResourceIdOm_RouteContract;
-  'POST /harness/:harnessId/sessions/:resourceId/resource': PostHarnessHarnessIdSessionsResourceIdResource_RouteContract;
-  'GET /harness/:harnessId/sessions/:resourceId/resources': GetHarnessHarnessIdSessionsResourceIdResources_RouteContract;
-  'GET /harness/:harnessId/sessions/:resourceId/goal': GetHarnessHarnessIdSessionsResourceIdGoal_RouteContract;
-  'POST /harness/:harnessId/sessions/:resourceId/goal': PostHarnessHarnessIdSessionsResourceIdGoal_RouteContract;
-  'PUT /harness/:harnessId/sessions/:resourceId/goal': PutHarnessHarnessIdSessionsResourceIdGoal_RouteContract;
-  'DELETE /harness/:harnessId/sessions/:resourceId/goal': DeleteHarnessHarnessIdSessionsResourceIdGoal_RouteContract;
-  'GET /harness/:harnessId/sessions/:resourceId/permissions': GetHarnessHarnessIdSessionsResourceIdPermissions_RouteContract;
-  'PUT /harness/:harnessId/sessions/:resourceId/permissions/category': PutHarnessHarnessIdSessionsResourceIdPermissionsCategory_RouteContract;
-  'PUT /harness/:harnessId/sessions/:resourceId/permissions/tool': PutHarnessHarnessIdSessionsResourceIdPermissionsTool_RouteContract;
-  'PUT /harness/:harnessId/sessions/:resourceId/state': PutHarnessHarnessIdSessionsResourceIdState_RouteContract;
+  'GET /agent-controller': GetAgentController_RouteContract;
+  'GET /agent-controller/:controllerId/modes': GetAgentControllerControllerIdModes_RouteContract;
+  'GET /agent-controller/:controllerId/models': GetAgentControllerControllerIdModels_RouteContract;
+  'POST /agent-controller/:controllerId/sessions': PostAgentControllerControllerIdSessions_RouteContract;
+  'GET /agent-controller/:controllerId/sessions/:resourceId': GetAgentControllerControllerIdSessionsResourceId_RouteContract;
+  'GET /agent-controller/:controllerId/sessions/:resourceId/threads': GetAgentControllerControllerIdSessionsResourceIdThreads_RouteContract;
+  'POST /agent-controller/:controllerId/sessions/:resourceId/threads': PostAgentControllerControllerIdSessionsResourceIdThreads_RouteContract;
+  'DELETE /agent-controller/:controllerId/sessions/:resourceId/threads/:threadId': DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_RouteContract;
+  'PUT /agent-controller/:controllerId/sessions/:resourceId/threads/:threadId': PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_RouteContract;
+  'POST /agent-controller/:controllerId/sessions/:resourceId/threads/clone': PostAgentControllerControllerIdSessionsResourceIdThreadsClone_RouteContract;
+  'GET /agent-controller/:controllerId/sessions/:resourceId/threads/:threadId/messages': GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_RouteContract;
+  'GET /agent-controller/:controllerId/sessions/:resourceId/stream': GetAgentControllerControllerIdSessionsResourceIdStream_RouteContract;
+  'POST /agent-controller/:controllerId/sessions/:resourceId/messages': PostAgentControllerControllerIdSessionsResourceIdMessages_RouteContract;
+  'POST /agent-controller/:controllerId/sessions/:resourceId/steer': PostAgentControllerControllerIdSessionsResourceIdSteer_RouteContract;
+  'POST /agent-controller/:controllerId/sessions/:resourceId/follow-up': PostAgentControllerControllerIdSessionsResourceIdFollowUp_RouteContract;
+  'POST /agent-controller/:controllerId/sessions/:resourceId/abort': PostAgentControllerControllerIdSessionsResourceIdAbort_RouteContract;
+  'POST /agent-controller/:controllerId/sessions/:resourceId/tool-approval': PostAgentControllerControllerIdSessionsResourceIdToolApproval_RouteContract;
+  'POST /agent-controller/:controllerId/sessions/:resourceId/tool-suspension': PostAgentControllerControllerIdSessionsResourceIdToolSuspension_RouteContract;
+  'POST /agent-controller/:controllerId/sessions/:resourceId/mode': PostAgentControllerControllerIdSessionsResourceIdMode_RouteContract;
+  'POST /agent-controller/:controllerId/sessions/:resourceId/model': PostAgentControllerControllerIdSessionsResourceIdModel_RouteContract;
+  'POST /agent-controller/:controllerId/sessions/:resourceId/thread': PostAgentControllerControllerIdSessionsResourceIdThread_RouteContract;
+  'POST /agent-controller/:controllerId/sessions/:resourceId/notifications': PostAgentControllerControllerIdSessionsResourceIdNotifications_RouteContract;
+  'GET /agent-controller/:controllerId/workspace': GetAgentControllerControllerIdWorkspace_RouteContract;
+  'GET /agent-controller/:controllerId/sessions/:resourceId/om': GetAgentControllerControllerIdSessionsResourceIdOm_RouteContract;
+  'POST /agent-controller/:controllerId/sessions/:resourceId/resource': PostAgentControllerControllerIdSessionsResourceIdResource_RouteContract;
+  'GET /agent-controller/:controllerId/sessions/:resourceId/resources': GetAgentControllerControllerIdSessionsResourceIdResources_RouteContract;
+  'GET /agent-controller/:controllerId/sessions/:resourceId/goal': GetAgentControllerControllerIdSessionsResourceIdGoal_RouteContract;
+  'POST /agent-controller/:controllerId/sessions/:resourceId/goal': PostAgentControllerControllerIdSessionsResourceIdGoal_RouteContract;
+  'PUT /agent-controller/:controllerId/sessions/:resourceId/goal': PutAgentControllerControllerIdSessionsResourceIdGoal_RouteContract;
+  'DELETE /agent-controller/:controllerId/sessions/:resourceId/goal': DeleteAgentControllerControllerIdSessionsResourceIdGoal_RouteContract;
+  'GET /agent-controller/:controllerId/sessions/:resourceId/permissions': GetAgentControllerControllerIdSessionsResourceIdPermissions_RouteContract;
+  'PUT /agent-controller/:controllerId/sessions/:resourceId/permissions/category': PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_RouteContract;
+  'PUT /agent-controller/:controllerId/sessions/:resourceId/permissions/tool': PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_RouteContract;
+  'PUT /agent-controller/:controllerId/sessions/:resourceId/state': PutAgentControllerControllerIdSessionsResourceIdState_RouteContract;
 }
 
 export type RouteKey = keyof RouteTypes;
@@ -91949,6 +93310,98 @@ export interface Client {
   '/agent-builder/:actionId/stream-legacy': {
     POST: PostAgentBuilderActionIdStreamLegacy_RouteContract;
   };
+  '/agent-controller': {
+    GET: GetAgentController_RouteContract;
+  };
+  '/agent-controller/:controllerId/models': {
+    GET: GetAgentControllerControllerIdModels_RouteContract;
+  };
+  '/agent-controller/:controllerId/modes': {
+    GET: GetAgentControllerControllerIdModes_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions': {
+    POST: PostAgentControllerControllerIdSessions_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId': {
+    GET: GetAgentControllerControllerIdSessionsResourceId_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/abort': {
+    POST: PostAgentControllerControllerIdSessionsResourceIdAbort_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/follow-up': {
+    POST: PostAgentControllerControllerIdSessionsResourceIdFollowUp_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/goal': {
+    DELETE: DeleteAgentControllerControllerIdSessionsResourceIdGoal_RouteContract;
+    GET: GetAgentControllerControllerIdSessionsResourceIdGoal_RouteContract;
+    POST: PostAgentControllerControllerIdSessionsResourceIdGoal_RouteContract;
+    PUT: PutAgentControllerControllerIdSessionsResourceIdGoal_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/messages': {
+    POST: PostAgentControllerControllerIdSessionsResourceIdMessages_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/mode': {
+    POST: PostAgentControllerControllerIdSessionsResourceIdMode_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/model': {
+    POST: PostAgentControllerControllerIdSessionsResourceIdModel_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/notifications': {
+    POST: PostAgentControllerControllerIdSessionsResourceIdNotifications_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/om': {
+    GET: GetAgentControllerControllerIdSessionsResourceIdOm_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/permissions': {
+    GET: GetAgentControllerControllerIdSessionsResourceIdPermissions_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/permissions/category': {
+    PUT: PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/permissions/tool': {
+    PUT: PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/resource': {
+    POST: PostAgentControllerControllerIdSessionsResourceIdResource_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/resources': {
+    GET: GetAgentControllerControllerIdSessionsResourceIdResources_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/state': {
+    PUT: PutAgentControllerControllerIdSessionsResourceIdState_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/steer': {
+    POST: PostAgentControllerControllerIdSessionsResourceIdSteer_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/stream': {
+    GET: GetAgentControllerControllerIdSessionsResourceIdStream_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/thread': {
+    POST: PostAgentControllerControllerIdSessionsResourceIdThread_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/threads': {
+    GET: GetAgentControllerControllerIdSessionsResourceIdThreads_RouteContract;
+    POST: PostAgentControllerControllerIdSessionsResourceIdThreads_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/threads/:threadId': {
+    DELETE: DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_RouteContract;
+    PUT: PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/threads/:threadId/messages': {
+    GET: GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/threads/clone': {
+    POST: PostAgentControllerControllerIdSessionsResourceIdThreadsClone_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/tool-approval': {
+    POST: PostAgentControllerControllerIdSessionsResourceIdToolApproval_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/tool-suspension': {
+    POST: PostAgentControllerControllerIdSessionsResourceIdToolSuspension_RouteContract;
+  };
+  '/agent-controller/:controllerId/workspace': {
+    GET: GetAgentControllerControllerIdWorkspace_RouteContract;
+  };
   '/agents': {
     GET: GetAgents_RouteContract;
   };
@@ -92012,6 +93465,9 @@ export interface Client {
   '/agents/:agentId/queue-message': {
     POST: PostAgentsAgentIdQueueMessage_RouteContract;
   };
+  '/agents/:agentId/recover': {
+    POST: PostAgentsAgentIdRecover_RouteContract;
+  };
   '/agents/:agentId/resume-stream': {
     POST: PostAgentsAgentIdResumeStream_RouteContract;
   };
@@ -92056,6 +93512,9 @@ export interface Client {
   };
   '/agents/:agentId/streamVNext': {
     POST: PostAgentsAgentIdStreamVNext_RouteContract;
+  };
+  '/agents/:agentId/suspended-runs': {
+    GET: GetAgentsAgentIdSuspendedRuns_RouteContract;
   };
   '/agents/:agentId/threads/abort': {
     POST: PostAgentsAgentIdThreadsAbort_RouteContract;
@@ -92220,98 +93679,6 @@ export interface Client {
   };
   '/experiments/review-summary': {
     GET: GetExperimentsReviewSummary_RouteContract;
-  };
-  '/harness': {
-    GET: GetHarness_RouteContract;
-  };
-  '/harness/:harnessId/models': {
-    GET: GetHarnessHarnessIdModels_RouteContract;
-  };
-  '/harness/:harnessId/modes': {
-    GET: GetHarnessHarnessIdModes_RouteContract;
-  };
-  '/harness/:harnessId/sessions': {
-    POST: PostHarnessHarnessIdSessions_RouteContract;
-  };
-  '/harness/:harnessId/sessions/:resourceId': {
-    GET: GetHarnessHarnessIdSessionsResourceId_RouteContract;
-  };
-  '/harness/:harnessId/sessions/:resourceId/abort': {
-    POST: PostHarnessHarnessIdSessionsResourceIdAbort_RouteContract;
-  };
-  '/harness/:harnessId/sessions/:resourceId/follow-up': {
-    POST: PostHarnessHarnessIdSessionsResourceIdFollowUp_RouteContract;
-  };
-  '/harness/:harnessId/sessions/:resourceId/goal': {
-    DELETE: DeleteHarnessHarnessIdSessionsResourceIdGoal_RouteContract;
-    GET: GetHarnessHarnessIdSessionsResourceIdGoal_RouteContract;
-    POST: PostHarnessHarnessIdSessionsResourceIdGoal_RouteContract;
-    PUT: PutHarnessHarnessIdSessionsResourceIdGoal_RouteContract;
-  };
-  '/harness/:harnessId/sessions/:resourceId/messages': {
-    POST: PostHarnessHarnessIdSessionsResourceIdMessages_RouteContract;
-  };
-  '/harness/:harnessId/sessions/:resourceId/mode': {
-    POST: PostHarnessHarnessIdSessionsResourceIdMode_RouteContract;
-  };
-  '/harness/:harnessId/sessions/:resourceId/model': {
-    POST: PostHarnessHarnessIdSessionsResourceIdModel_RouteContract;
-  };
-  '/harness/:harnessId/sessions/:resourceId/notifications': {
-    POST: PostHarnessHarnessIdSessionsResourceIdNotifications_RouteContract;
-  };
-  '/harness/:harnessId/sessions/:resourceId/om': {
-    GET: GetHarnessHarnessIdSessionsResourceIdOm_RouteContract;
-  };
-  '/harness/:harnessId/sessions/:resourceId/permissions': {
-    GET: GetHarnessHarnessIdSessionsResourceIdPermissions_RouteContract;
-  };
-  '/harness/:harnessId/sessions/:resourceId/permissions/category': {
-    PUT: PutHarnessHarnessIdSessionsResourceIdPermissionsCategory_RouteContract;
-  };
-  '/harness/:harnessId/sessions/:resourceId/permissions/tool': {
-    PUT: PutHarnessHarnessIdSessionsResourceIdPermissionsTool_RouteContract;
-  };
-  '/harness/:harnessId/sessions/:resourceId/resource': {
-    POST: PostHarnessHarnessIdSessionsResourceIdResource_RouteContract;
-  };
-  '/harness/:harnessId/sessions/:resourceId/resources': {
-    GET: GetHarnessHarnessIdSessionsResourceIdResources_RouteContract;
-  };
-  '/harness/:harnessId/sessions/:resourceId/state': {
-    PUT: PutHarnessHarnessIdSessionsResourceIdState_RouteContract;
-  };
-  '/harness/:harnessId/sessions/:resourceId/steer': {
-    POST: PostHarnessHarnessIdSessionsResourceIdSteer_RouteContract;
-  };
-  '/harness/:harnessId/sessions/:resourceId/stream': {
-    GET: GetHarnessHarnessIdSessionsResourceIdStream_RouteContract;
-  };
-  '/harness/:harnessId/sessions/:resourceId/thread': {
-    POST: PostHarnessHarnessIdSessionsResourceIdThread_RouteContract;
-  };
-  '/harness/:harnessId/sessions/:resourceId/threads': {
-    GET: GetHarnessHarnessIdSessionsResourceIdThreads_RouteContract;
-    POST: PostHarnessHarnessIdSessionsResourceIdThreads_RouteContract;
-  };
-  '/harness/:harnessId/sessions/:resourceId/threads/:threadId': {
-    DELETE: DeleteHarnessHarnessIdSessionsResourceIdThreadsThreadId_RouteContract;
-    PUT: PutHarnessHarnessIdSessionsResourceIdThreadsThreadId_RouteContract;
-  };
-  '/harness/:harnessId/sessions/:resourceId/threads/:threadId/messages': {
-    GET: GetHarnessHarnessIdSessionsResourceIdThreadsThreadIdMessages_RouteContract;
-  };
-  '/harness/:harnessId/sessions/:resourceId/threads/clone': {
-    POST: PostHarnessHarnessIdSessionsResourceIdThreadsClone_RouteContract;
-  };
-  '/harness/:harnessId/sessions/:resourceId/tool-approval': {
-    POST: PostHarnessHarnessIdSessionsResourceIdToolApproval_RouteContract;
-  };
-  '/harness/:harnessId/sessions/:resourceId/tool-suspension': {
-    POST: PostHarnessHarnessIdSessionsResourceIdToolSuspension_RouteContract;
-  };
-  '/harness/:harnessId/workspace': {
-    GET: GetHarnessHarnessIdWorkspace_RouteContract;
   };
   '/logs': {
     GET: GetLogs_RouteContract;
@@ -92537,15 +93904,21 @@ export interface Client {
   };
   '/schedules': {
     GET: GetSchedules_RouteContract;
+    POST: PostSchedules_RouteContract;
   };
   '/schedules/:scheduleId': {
+    DELETE: DeleteSchedulesScheduleId_RouteContract;
     GET: GetSchedulesScheduleId_RouteContract;
+    PATCH: PatchSchedulesScheduleId_RouteContract;
   };
   '/schedules/:scheduleId/pause': {
     POST: PostSchedulesScheduleIdPause_RouteContract;
   };
   '/schedules/:scheduleId/resume': {
     POST: PostSchedulesScheduleIdResume_RouteContract;
+  };
+  '/schedules/:scheduleId/run': {
+    POST: PostSchedulesScheduleIdRun_RouteContract;
   };
   '/schedules/:scheduleId/triggers': {
     GET: GetSchedulesScheduleIdTriggers_RouteContract;

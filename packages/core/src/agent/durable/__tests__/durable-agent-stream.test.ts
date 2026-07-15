@@ -554,7 +554,7 @@ describe('DurableAgent streaming execution', () => {
         },
       });
 
-      let errorReceived: Error | null = null;
+      let errorReceived: Error | string | null = null;
 
       const baseAgent = new Agent({
         id: 'error-callback-agent',
@@ -566,7 +566,7 @@ describe('DurableAgent streaming execution', () => {
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
       const { output, cleanup } = await durableAgent.stream('Test', {
-        onError: error => {
+        onError: ({ error }) => {
           errorReceived = error;
         },
       });
@@ -817,7 +817,7 @@ describe('DurableAgent error handling', () => {
       },
     });
 
-    let errorReceived: Error | null = null;
+    let errorReceived: Error | string | null = null;
 
     const baseAgent = new Agent({
       id: 'error-model-agent',
@@ -829,7 +829,7 @@ describe('DurableAgent error handling', () => {
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
     const { output, cleanup } = await durableAgent.stream('Test', {
-      onError: error => {
+      onError: ({ error }) => {
         errorReceived = error;
       },
     });

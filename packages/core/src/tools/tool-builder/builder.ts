@@ -49,18 +49,19 @@ import { validateToolInput, validateToolOutput, validateToolSuspendData } from '
  *
  * The evented engine serialises the RequestContext via `toJSON()` when
  * publishing workflow events.  Values that fail `JSON.stringify` (functions,
- * objects with circular references — e.g. the `harness` context) are silently
+ * objects with circular references — e.g. the `controller` context) are silently
  * dropped.  The reconstructed RC handed to steps is therefore *degraded*.
  *
  * Tools, however, also hold a reference to the *original* RC captured during
  * tool conversion (the "closure" RC).  By merging both — exec first, then
  * closure on top — keys that survived serialisation are preserved while
- * non-serializable keys from the closure (like `harness`) are restored.
+ * non-serializable keys from the closure (like `controller`) are restored.
  */
 function mergeRequestContexts(
   closureRC: RequestContext | undefined,
   execRC: RequestContext | undefined,
 ): RequestContext {
+  if (closureRC && closureRC === execRC) return closureRC;
   if (!closureRC && !execRC) return new RequestContext();
   if (!closureRC) return execRC instanceof RequestContext ? execRC : new RequestContext();
   if (!execRC || !(execRC instanceof RequestContext) || execRC.size() === 0) return closureRC;
@@ -649,7 +650,7 @@ export class CoreToolBuilder extends MastraBase {
                 resumeData,
                 threadId,
                 resourceId,
-                outputWriter: execOptions.outputWriter,
+                outputWriter: options.outputWriter || execOptions.outputWriter,
                 flushMessages: execOptions.flushMessages,
               },
             };

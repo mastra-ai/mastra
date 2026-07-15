@@ -1,10 +1,10 @@
-import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { ArrowLeftIcon, PauseIcon, PlayIcon } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 import { ScheduleStatusText } from '@/domains/schedules/components/schedule-status-badge';
@@ -64,7 +64,8 @@ export default function SchedulePage() {
     );
   }
 
-  const workflowId = schedule?.target.type === 'workflow' ? schedule.target.workflowId : undefined;
+  const workflowId = schedule?.workflowId;
+  const agentId = schedule?.agentId;
 
   return (
     <PageLayout>
@@ -106,10 +107,14 @@ export default function SchedulePage() {
       {schedule ? (
         <div className="grid gap-6 h-full overflow-hidden grid-cols-[minmax(0,20rem)_1fr]">
           <div className="flex flex-col gap-4 border border-border1 rounded-md p-4 h-fit">
-            <MetaItem label="Workflow">
+            <MetaItem label={agentId ? 'Agent' : 'Workflow'}>
               {workflowId ? (
                 <Link to={paths.workflowLink(workflowId)} className="text-accent1 hover:underline">
                   {workflowId}
+                </Link>
+              ) : agentId ? (
+                <Link to={paths.agentLink(agentId)} className="text-accent1 hover:underline">
+                  {agentId}
                 </Link>
               ) : (
                 '—'

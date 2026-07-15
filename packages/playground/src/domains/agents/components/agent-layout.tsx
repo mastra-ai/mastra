@@ -1,9 +1,11 @@
-import { PanelDrawer, PanelSeparator } from '@mastra/playground-ui';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
+import { PanelDrawer } from '@mastra/playground-ui/resize/panel-drawer';
+import { PanelGroup } from '@mastra/playground-ui/resize/panel-group';
+import { PanelSeparator } from '@mastra/playground-ui/resize/separator';
 import { useEffect, useRef } from 'react';
-import { Panel, useDefaultLayout, Group } from 'react-resizable-panels';
+import { Panel, useDefaultLayout } from 'react-resizable-panels';
 import type { PanelImperativeHandle } from 'react-resizable-panels';
-import { useMemoryTimeline } from '../context';
+import { useMemoryTimeline } from '../context/memory-timeline-context';
 
 export interface AgentLayoutProps {
   agentId: string;
@@ -81,7 +83,11 @@ export const AgentLayout = ({
 
   return (
     <div className="relative h-full w-full overflow-hidden">
-      <Group className="h-full min-h-0 w-full min-w-0" defaultLayout={defaultLayout} onLayoutChange={onLayoutChange}>
+      <PanelGroup
+        className="h-full min-h-0 w-full min-w-0"
+        defaultLayout={defaultLayout}
+        onLayoutChange={onLayoutChange}
+      >
         {leftSlot && (
           <Panel
             id="left-slot"
@@ -107,7 +113,7 @@ export const AgentLayout = ({
             </Panel>
           </>
         )}
-      </Group>
+      </PanelGroup>
       {/* Browser modal overlay - center view mode */}
       {browserOverlay}
     </div>

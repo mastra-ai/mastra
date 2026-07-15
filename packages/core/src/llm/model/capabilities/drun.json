@@ -1,0 +1,3 @@
+{
+  "temperature": ["public/deepseek-r1", "public/deepseek-v3", "public/minimax-m25"]
+}

@@ -1,0 +1,4 @@
+{
+  "attachment": ["step-3.7-flash"],
+  "temperature": ["step-3.5-flash", "step-3.5-flash-2603", "step-3.7-flash", "step-router-v1"]
+}

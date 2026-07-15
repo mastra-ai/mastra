@@ -1,3 +1,5 @@
+import { JSONParseError, NoObjectGeneratedError, TypeValidationError } from '@internal/ai-sdk-v5';
+
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type { MastraLegacyLanguageModel, MastraLanguageModel } from '../llm/model/shared.types';
 import type { StorageThreadType } from '../memory';
@@ -14,6 +16,15 @@ export const isSupportedLanguageModel = (
 ): model is MastraLanguageModel => {
   return supportedLanguageModelSpecifications.includes(model.specificationVersion);
 };
+
+function isStructuredOutputFormatError(error: unknown): boolean {
+  return (
+    JSONParseError.isInstance(error) ||
+    NoObjectGeneratedError.isInstance(error) ||
+    TypeValidationError.isInstance(error) ||
+    (error instanceof MastraError && error.id === 'STRUCTURED_OUTPUT_OBJECT_UNDEFINED')
+  );
+}
 
 export async function tryGenerateWithJsonFallback<
   SCHEMA extends StandardSchemaWithJSON,
@@ -54,10 +65,19 @@ export async function tryGenerateWithJsonFallback<OUTPUT>(
     }
     return result;
   } catch (error) {
+    if (!isStructuredOutputFormatError(error)) throw error;
+
     console.warn('Error in tryGenerateWithJsonFallback. Attempting fallback.', error);
     return await agent.generate(prompt, {
       ...options,
-      structuredOutput: { ...options.structuredOutput, jsonPromptInjection: true },
+      structuredOutput: {
+        ...options.structuredOutput,
+        jsonPromptInjection:
+          options.structuredOutput.jsonPromptInjection === 'inline' ||
+          options.structuredOutput.jsonPromptInjection === 'system'
+            ? options.structuredOutput.jsonPromptInjection
+            : true,
+      },
     });
   }
 }
@@ -95,10 +115,19 @@ export async function tryStreamWithJsonFallback<OUTPUT extends {}>(
     }
     return result;
   } catch (error) {
+    if (!isStructuredOutputFormatError(error)) throw error;
+
     console.warn('Error in tryStreamWithJsonFallback. Attempting fallback.', error);
     const result = await agent.stream(prompt, {
       ...streamOptions,
-      structuredOutput: { ...streamOptions.structuredOutput, jsonPromptInjection: true },
+      structuredOutput: {
+        ...streamOptions.structuredOutput,
+        jsonPromptInjection:
+          streamOptions.structuredOutput.jsonPromptInjection === 'inline' ||
+          streamOptions.structuredOutput.jsonPromptInjection === 'system'
+            ? streamOptions.structuredOutput.jsonPromptInjection
+            : true,
+      },
     });
     void onStream?.(result as unknown as Awaited<ReturnType<Agent['stream']>>);
     return result;

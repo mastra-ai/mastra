@@ -1,11 +1,8 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "37.0.0-alpha.5",
+  "version": "41.0.0",
   "description": "Mastra Playground components",
-  "main": "dist/index.umd.js",
-  "module": "dist/index.es.js",
-  "types": "dist/index.d.ts",
   "sideEffects": [
     "**/*.css"
   ],
@@ -15,13 +12,7 @@
     "CHANGELOG.md"
   ],
   "exports": {
-    ".": {
-      "import": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.es.js"
-      }
-    },
-    "./style.css": "./dist/index.css",
+    "./style.css": "./dist/style.css",
     "./theme.css": "./theme.css",
     "./tokens": {
       "import": {
@@ -33,16 +24,6 @@
         "default": "./dist/tokens.cjs.js"
       }
     },
-    "./utils": {
-      "import": {
-        "types": "./dist/utils.d.ts",
-        "default": "./dist/utils.es.js"
-      },
-      "require": {
-        "types": "./dist/utils.d.ts",
-        "default": "./dist/utils.cjs.js"
-      }
-    },
     "./utils/*": {
       "import": {
         "types": "./dist/utils/*.d.ts",
@@ -51,6 +32,56 @@
       "require": {
         "types": "./dist/utils/*.d.ts",
         "default": "./dist/utils/*.cjs.js"
+      }
+    },
+    "./domains/*": {
+      "import": {
+        "types": "./dist/domains/*.d.ts",
+        "default": "./dist/domains/*.es.js"
+      },
+      "require": {
+        "types": "./dist/domains/*.d.ts",
+        "default": "./dist/domains/*.cjs.js"
+      }
+    },
+    "./ee/*": {
+      "import": {
+        "types": "./dist/ee/*.d.ts",
+        "default": "./dist/ee/*.es.js"
+      },
+      "require": {
+        "types": "./dist/ee/*.d.ts",
+        "default": "./dist/ee/*.cjs.js"
+      }
+    },
+    "./primitives/*": {
+      "import": {
+        "types": "./dist/primitives/*.d.ts",
+        "default": "./dist/primitives/*.es.js"
+      },
+      "require": {
+        "types": "./dist/primitives/*.d.ts",
+        "default": "./dist/primitives/*.cjs.js"
+      }
+    },
+    "./resize/*": {
+      "import": {
+        "types": "./dist/resize/*.d.ts",
+        "default": "./dist/resize/*.es.js"
+      },
+      "require": {
+        "types": "./dist/resize/*.d.ts",
+        "default": "./dist/resize/*.cjs.js"
+      }
+    },
+    "./store/*": {
+      "import": {
+        "types": "./dist/store/*.d.ts",
+        "default": "./dist/store/*.es.js"
+      },
+      "require": {
+        "types": "./dist/store/*.d.ts",
+        "default": "./dist/store/*.cjs.js"
       }
     },
     "./hooks/*": {
@@ -97,18 +128,18 @@
     "@codemirror/lang-javascript": "^6.2.5",
     "@codemirror/lang-json": "^6.0.2",
     "@codemirror/lang-markdown": "^6.5.0",
-    "@codemirror/language": "^6.12.3",
+    "@codemirror/language": "^6.12.4",
     "@codemirror/legacy-modes": "^6.5.3",
     "@codemirror/merge": "^6.12.2",
-    "@codemirror/search": "^6.7.0",
-    "@codemirror/state": "^6.6.0",
-    "@codemirror/view": "^6.43.1",
+    "@codemirror/search": "^6.7.1",
+    "@codemirror/state": "^6.7.1",
+    "@codemirror/view": "^6.43.6",
     "@hello-pangea/dnd": "^18.0.1",
     "@lezer/highlight": "^1.2.3",
     "@radix-ui/react-visually-hidden": "^1.2.4",
     "@tanstack/react-virtual": "^3.13.22",
-    "@uiw/codemirror-theme-dracula": "^4.25.10",
-    "@uiw/react-codemirror": "^4.25.10",
+    "@uiw/codemirror-theme-dracula": "^4.25.11",
+    "@uiw/react-codemirror": "^4.25.11",
     "cmdk": "^1.1.1",
     "date-fns": "catalog:",
     "prettier": "^3.8.3",
@@ -149,7 +180,7 @@
     "@tanstack/react-query": "^5.90.21",
     "@testing-library/react": "^16.3.2",
     "@types/json-schema": "^7.0.15",
-    "@types/node": "22.19.21",
+    "@types/node": "22.20.1",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.2.0",
@@ -159,6 +190,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "eslint-plugin-storybook": "^10.4.2",
+    "eslint-plugin-tailwindcss": "^4.1.0",
     "jsdom": "^26.1.0",
     "msw": "^2.12.11",
     "react": "catalog:",

@@ -26,8 +26,8 @@ import type {
 /**
  * Scans a v6 UIMessage array for the most recent 'approval-responded' tool
  * part in the last trailing assistant message only. When found, splits the
- * composite approvalId ("${runId}::${toolCallId}") to recover the runId
- * needed for resumeStream.
+ * composite approvalId ("${runId}::${toolCallId}") to recover the runId and
+ * toolCallId needed for a targeted resumeStream.
  *
  * Only the last trailing assistant message is inspected so that approval
  * responses from earlier turns are never re-processed. Within that message,
@@ -39,7 +39,7 @@ import type {
  */
 export function extractV6NativeApproval(
   messages: V6UIMessage[],
-): { resumeData: Record<string, unknown>; runId: string } | null {
+): { resumeData: Record<string, unknown>; runId: string; toolCallId: string } | null {
   // Only inspect the actual trailing message. If a user has already sent a
   // follow-up turn after an approval response, we must treat that as a normal
   // chat submission rather than replaying the stale approval response.
@@ -54,7 +54,8 @@ export function extractV6NativeApproval(
     const lastSep = part.approval.id.lastIndexOf(APPROVAL_ID_SEPARATOR);
     if (lastSep === -1) continue;
     const runId = part.approval.id.slice(0, lastSep);
-    if (!runId) continue;
+    const toolCallId = part.approval.id.slice(lastSep + APPROVAL_ID_SEPARATOR.length);
+    if (!runId || !toolCallId) continue;
 
     return {
       resumeData: {
@@ -62,6 +63,7 @@ export function extractV6NativeApproval(
         ...(part.approval.reason != null ? { reason: part.approval.reason } : {}),
       },
       runId,
+      toolCallId,
     };
   }
 
@@ -167,9 +169,29 @@ export async function handleChatStream<OUTPUT = undefined>({
     throw new Error('runId is required when resumeData is provided');
   }
 
-  const agentObj = agentVersion ? await mastra.getAgentById(agentId, agentVersion) : mastra.getAgentById(agentId);
-  if (!agentObj) {
+  const baseAgent = mastra.getAgentById(agentId);
+  if (!baseAgent) {
     throw new Error(`Agent ${agentId} not found`);
+  }
+
+  // When an editor is configured, an agent's runtime config (instructions, tools,
+  // model, ...) can live in stored config rather than the code definition. Studio
+  // resolves these stored overrides before every run, so this endpoint must do the
+  // same or it would execute a stale/empty code-defined agent (issue #18574). An
+  // explicit agentVersion (from query params or route options) wins; otherwise we
+  // default to the published version, matching the built-in agent handlers.
+  let agentObj = baseAgent;
+  const editorAgent = mastra.getEditor?.()?.agent;
+  if (editorAgent) {
+    agentObj = await editorAgent.applyStoredOverrides(
+      baseAgent,
+      agentVersion ?? { status: 'published' },
+      requestContext as RequestContext | undefined,
+    );
+  } else if (agentVersion) {
+    // No editor configured: preserve the prior behavior of surfacing the
+    // "editor required for versioned agent lookup" error for explicit versions.
+    agentObj = await mastra.getAgentById(agentId, agentVersion);
   }
 
   if (!Array.isArray(messages)) {
@@ -214,6 +236,7 @@ export async function handleChatStream<OUTPUT = undefined>({
     ...defaultOptionsRest,
     ...restOptions,
     ...(effectiveRunId && { runId: effectiveRunId }),
+    ...(nativeApproval?.toolCallId && { toolCallId: nativeApproval.toolCallId }),
     requestContext: requestContext || defaultOptions?.requestContext,
     ...(Object.keys(mergedProviderOptions).length > 0 && { providerOptions: mergedProviderOptions }),
   };

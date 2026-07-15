@@ -12,6 +12,7 @@ export function createDatasetsTests({
   // Skip tests if storage doesn't have datasets domain
   const describeDatasets = storage.stores?.datasets ? describe : describe.skip;
   const supportsToolMocks = capabilities.toolMocks !== false;
+  const itItemIdentity = capabilities.datasetItemIdentity === false ? it.skip : it;
 
   let datasetsStorage: DatasetsStorage;
 
@@ -40,6 +41,85 @@ export function createDatasetsTests({
         expect(ds.name).toBe('test-ds');
         expect(ds.version).toBe(0);
         expect(ds.createdAt).toBeInstanceOf(Date);
+      });
+
+      it('createDataset atomically resolves compatible caller-defined IDs', async () => {
+        const input = {
+          id: 'caller-defined-dataset',
+          name: 'first-write-wins',
+          organizationId: 'org_1',
+          projectId: null,
+        };
+        const results = await Promise.all(Array.from({ length: 20 }, () => datasetsStorage.createDataset(input)));
+        const listed = await datasetsStorage.listDatasets({ pagination: { page: 0, perPage: 100 } });
+
+        expect(results.every(dataset => dataset.id === input.id)).toBe(true);
+        expect(results.every(dataset => dataset.createdAt.getTime() === results[0]!.createdAt.getTime())).toBe(true);
+        expect(listed.datasets.filter(dataset => dataset.id === input.id)).toHaveLength(1);
+      });
+
+      it('createDataset returns the current record for a compatible retry without mutation', async () => {
+        await datasetsStorage.createDataset({
+          id: 'retry-dataset',
+          name: 'original',
+          organizationId: 'org_1',
+        });
+        const updated = await datasetsStorage.updateDataset({ id: 'retry-dataset', name: 'updated' });
+        const retried = await datasetsStorage.createDataset({
+          id: 'retry-dataset',
+          name: 'ignored',
+          organizationId: 'org_1',
+          projectId: null,
+        });
+
+        expect(retried.name).toBe('updated');
+        expect(retried.updatedAt.getTime()).toBe(updated.updatedAt.getTime());
+        expect(retried.version).toBe(0);
+      });
+
+      it('createDataset treats omitted and null immutable fields as compatible', async () => {
+        const created = await datasetsStorage.createDataset({
+          id: 'normalized-dataset',
+          name: 'original',
+          organizationId: undefined,
+          projectId: null,
+        });
+        const retried = await datasetsStorage.createDataset({
+          id: 'normalized-dataset',
+          name: 'ignored',
+          organizationId: null,
+          projectId: undefined,
+        });
+
+        expect(retried.createdAt.getTime()).toBe(created.createdAt.getTime());
+        expect(retried.name).toBe('original');
+      });
+
+      it('createDataset rejects incompatible caller-defined ID reuse', async () => {
+        await datasetsStorage.createDataset({
+          id: 'conflicting-dataset',
+          name: 'original',
+          organizationId: 'org_1',
+          candidateId: 'candidate_1',
+        });
+
+        await expect(
+          datasetsStorage.createDataset({
+            id: 'conflicting-dataset',
+            name: 'retry',
+            organizationId: 'org_2',
+            candidateId: 'candidate_1',
+          }),
+        ).rejects.toMatchObject({ id: 'DATASET_ID_CONFLICT' });
+      });
+
+      it('createDataset releases a caller-defined ID after deletion', async () => {
+        const first = await datasetsStorage.createDataset({ id: 'reusable-dataset', name: 'first' });
+        await datasetsStorage.deleteDataset({ id: first.id });
+        const second = await datasetsStorage.createDataset({ id: first.id, name: 'second' });
+
+        expect(second.name).toBe('second');
+        expect(second.version).toBe(0);
       });
 
       it('getDatasetById returns record or null', async () => {
@@ -77,6 +157,235 @@ export function createDatasetsTests({
         expect(await datasetsStorage.getDatasetById({ id: ds.id })).toBeNull();
       });
 
+      // -----------------------------------------------------------------------
+      // Tenancy scoping — getDatasetById + deleteDataset MUST push tenancy
+      // predicates into the query.
+      // -----------------------------------------------------------------------
+      describe('tenancy scoping', () => {
+        it('getDatasetById returns null when organizationId does not match', async () => {
+          const ds = await datasetsStorage.createDataset({
+            name: 'org-scoped',
+            organizationId: 'org_a',
+            projectId: 'proj_1',
+          });
+
+          const wrongOrg = await datasetsStorage.getDatasetById({
+            id: ds.id,
+            filters: { organizationId: 'org_b' },
+          });
+          expect(wrongOrg).toBeNull();
+
+          const rightOrg = await datasetsStorage.getDatasetById({
+            id: ds.id,
+            filters: { organizationId: 'org_a' },
+          });
+          expect(rightOrg).not.toBeNull();
+          expect(rightOrg!.id).toBe(ds.id);
+        });
+
+        it('getDatasetById returns null when projectId does not match', async () => {
+          const ds = await datasetsStorage.createDataset({
+            name: 'proj-scoped',
+            organizationId: 'org_a',
+            projectId: 'proj_1',
+          });
+
+          const wrongProject = await datasetsStorage.getDatasetById({
+            id: ds.id,
+            filters: { organizationId: 'org_a', projectId: 'proj_2' },
+          });
+          expect(wrongProject).toBeNull();
+
+          const rightProject = await datasetsStorage.getDatasetById({
+            id: ds.id,
+            filters: { organizationId: 'org_a', projectId: 'proj_1' },
+          });
+          expect(rightProject).not.toBeNull();
+          expect(rightProject!.id).toBe(ds.id);
+        });
+
+        it('getDatasetById does not throw on tenancy mismatch (no info leak via error)', async () => {
+          const ds = await datasetsStorage.createDataset({
+            name: 'silent-scope',
+            organizationId: 'org_a',
+          });
+
+          // Should return null, not throw. If it threw, the error timing/text
+          // could be used to distinguish "exists but not yours" from "does not
+          // exist at all" — leaking existence across tenants.
+          await expect(
+            datasetsStorage.getDatasetById({ id: ds.id, filters: { organizationId: 'org_b' } }),
+          ).resolves.toBeNull();
+        });
+
+        it('deleteDataset is a silent no-op when organizationId does not match', async () => {
+          const ds = await datasetsStorage.createDataset({
+            name: 'delete-scoped',
+            organizationId: 'org_a',
+          });
+
+          await expect(
+            datasetsStorage.deleteDataset({ id: ds.id, filters: { organizationId: 'org_b' } }),
+          ).resolves.toBeUndefined();
+
+          // Dataset must still exist.
+          const stillThere = await datasetsStorage.getDatasetById({ id: ds.id });
+          expect(stillThere).not.toBeNull();
+          expect(stillThere!.id).toBe(ds.id);
+        });
+
+        it('deleteDataset is a silent no-op when projectId does not match', async () => {
+          const ds = await datasetsStorage.createDataset({
+            name: 'delete-proj-scoped',
+            organizationId: 'org_a',
+            projectId: 'proj_1',
+          });
+
+          await datasetsStorage.deleteDataset({
+            id: ds.id,
+            filters: { organizationId: 'org_a', projectId: 'proj_2' },
+          });
+
+          expect(await datasetsStorage.getDatasetById({ id: ds.id })).not.toBeNull();
+        });
+
+        it('deleteDataset with matching tenancy removes the dataset', async () => {
+          const ds = await datasetsStorage.createDataset({
+            name: 'delete-match',
+            organizationId: 'org_a',
+            projectId: 'proj_1',
+          });
+          await datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'hi' } });
+
+          await datasetsStorage.deleteDataset({
+            id: ds.id,
+            filters: { organizationId: 'org_a', projectId: 'proj_1' },
+          });
+
+          expect(await datasetsStorage.getDatasetById({ id: ds.id })).toBeNull();
+        });
+
+        it('mixed-tenancy: deleting scoped to org A does not touch org B rows', async () => {
+          const dsA = await datasetsStorage.createDataset({
+            name: 'ds-a',
+            organizationId: 'org_a',
+          });
+          const dsB = await datasetsStorage.createDataset({
+            name: 'ds-b',
+            organizationId: 'org_b',
+          });
+          await datasetsStorage.addItem({ datasetId: dsA.id, input: { v: 'a' } });
+          await datasetsStorage.addItem({ datasetId: dsB.id, input: { v: 'b' } });
+
+          // Attempt to delete dsB using org A tenancy — must no-op.
+          await datasetsStorage.deleteDataset({
+            id: dsB.id,
+            filters: { organizationId: 'org_a' },
+          });
+
+          // dsB must be intact.
+          const foundB = await datasetsStorage.getDatasetById({ id: dsB.id });
+          expect(foundB).not.toBeNull();
+          const itemsB = await datasetsStorage.listItems({
+            datasetId: dsB.id,
+            pagination: { page: 0, perPage: 10 },
+          });
+          expect(itemsB.items).toHaveLength(1);
+
+          // Now delete dsA with correct tenancy — must succeed.
+          await datasetsStorage.deleteDataset({
+            id: dsA.id,
+            filters: { organizationId: 'org_a' },
+          });
+          expect(await datasetsStorage.getDatasetById({ id: dsA.id })).toBeNull();
+
+          // dsB is still untouched.
+          expect(await datasetsStorage.getDatasetById({ id: dsB.id })).not.toBeNull();
+        });
+
+        it('getDatasetById with undefined filters returns the record regardless of tenancy (legacy behavior)', async () => {
+          const ds = await datasetsStorage.createDataset({
+            name: 'unscoped-lookup',
+            organizationId: 'org_a',
+          });
+
+          // No filters => no predicate => legacy OSS behavior preserved.
+          const found = await datasetsStorage.getDatasetById({ id: ds.id });
+          expect(found).not.toBeNull();
+          expect(found!.id).toBe(ds.id);
+        });
+
+        it('updateDataset throws NOT_FOUND when tenancy does not match (does not mutate row)', async () => {
+          const ds = await datasetsStorage.createDataset({
+            name: 'update-scoped',
+            organizationId: 'org_a',
+            projectId: 'proj_1',
+          });
+
+          // Wrong org — must NOT_FOUND and must NOT mutate.
+          await expect(
+            datasetsStorage.updateDataset({
+              id: ds.id,
+              name: 'renamed-by-attacker',
+              filters: { organizationId: 'org_b' },
+            }),
+          ).rejects.toThrow();
+
+          const after = await datasetsStorage.getDatasetById({ id: ds.id });
+          expect(after).not.toBeNull();
+          expect(after!.name).toBe('update-scoped');
+          expect(after!.organizationId).toBe('org_a');
+        });
+
+        it('updateDataset with matching tenancy applies the update', async () => {
+          const ds = await datasetsStorage.createDataset({
+            name: 'update-scoped-ok',
+            organizationId: 'org_a',
+            projectId: 'proj_1',
+          });
+
+          const updated = await datasetsStorage.updateDataset({
+            id: ds.id,
+            name: 'renamed',
+            filters: { organizationId: 'org_a', projectId: 'proj_1' },
+          });
+
+          expect(updated.name).toBe('renamed');
+          expect(updated.organizationId).toBe('org_a');
+        });
+
+        it('mixed-tenancy: updating scoped to org A does not touch org B rows', async () => {
+          const dsA = await datasetsStorage.createDataset({
+            name: 'A-original',
+            organizationId: 'org_a',
+          });
+          const dsB = await datasetsStorage.createDataset({
+            name: 'B-original',
+            organizationId: 'org_b',
+          });
+
+          // Cross-tenant attempt on dsB using org A tenancy — must NOT_FOUND.
+          await expect(
+            datasetsStorage.updateDataset({
+              id: dsB.id,
+              name: 'B-hijacked',
+              filters: { organizationId: 'org_a' },
+            }),
+          ).rejects.toThrow();
+
+          const afterB = await datasetsStorage.getDatasetById({ id: dsB.id });
+          expect(afterB!.name).toBe('B-original');
+
+          // Legitimate scoped update on dsA — must succeed.
+          const updatedA = await datasetsStorage.updateDataset({
+            id: dsA.id,
+            name: 'A-renamed',
+            filters: { organizationId: 'org_a' },
+          });
+          expect(updatedA.name).toBe('A-renamed');
+        });
+      });
+
       it('listDatasets with pagination', async () => {
         await datasetsStorage.createDataset({ name: 'ds-1' });
         await datasetsStorage.createDataset({ name: 'ds-2' });
@@ -90,6 +399,102 @@ export function createDatasetsTests({
         const page1 = await datasetsStorage.listDatasets({ pagination: { page: 1, perPage: 2 } });
         expect(page1.datasets).toHaveLength(1);
         expect(page1.pagination.hasMore).toBe(false);
+      });
+
+      it('listDatasets filters by targetType', async () => {
+        await datasetsStorage.createDataset({ name: 'agent-ds', targetType: 'agent' });
+        await datasetsStorage.createDataset({ name: 'workflow-ds', targetType: 'workflow' });
+        await datasetsStorage.createDataset({ name: 'untyped-ds' });
+
+        const agentOnly = await datasetsStorage.listDatasets({
+          filters: { targetType: 'agent' },
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(agentOnly.datasets).toHaveLength(1);
+        expect(agentOnly.datasets[0]!.name).toBe('agent-ds');
+
+        const workflowOnly = await datasetsStorage.listDatasets({
+          filters: { targetType: 'workflow' },
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(workflowOnly.datasets).toHaveLength(1);
+        expect(workflowOnly.datasets[0]!.name).toBe('workflow-ds');
+      });
+
+      it('listDatasets filters by targetIds with overlap semantics', async () => {
+        await datasetsStorage.createDataset({ name: 'ds-a', targetType: 'agent', targetIds: ['a1', 'a2'] });
+        await datasetsStorage.createDataset({ name: 'ds-b', targetType: 'agent', targetIds: ['a2', 'a3'] });
+        await datasetsStorage.createDataset({ name: 'ds-c', targetType: 'agent', targetIds: ['a4'] });
+        await datasetsStorage.createDataset({ name: 'ds-d' });
+
+        // Single id matches any dataset whose targetIds contain it
+        const matchA2 = await datasetsStorage.listDatasets({
+          filters: { targetIds: ['a2'] },
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(matchA2.datasets.map(d => d.name).sort()).toEqual(['ds-a', 'ds-b']);
+
+        // Multiple ids match any dataset whose targetIds overlap with the filter (union)
+        const matchA1OrA4 = await datasetsStorage.listDatasets({
+          filters: { targetIds: ['a1', 'a4'] },
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(matchA1OrA4.datasets.map(d => d.name).sort()).toEqual(['ds-a', 'ds-c']);
+
+        // No overlap returns empty
+        const noMatch = await datasetsStorage.listDatasets({
+          filters: { targetIds: ['zzz'] },
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(noMatch.datasets).toHaveLength(0);
+      });
+
+      it('listDatasets filters by name substring case-insensitively', async () => {
+        await datasetsStorage.createDataset({ name: 'Production Tickets' });
+        await datasetsStorage.createDataset({ name: 'production-logs' });
+        await datasetsStorage.createDataset({ name: 'staging-tickets' });
+
+        const prod = await datasetsStorage.listDatasets({
+          filters: { name: 'PROD' },
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(prod.datasets.map(d => d.name).sort()).toEqual(['Production Tickets', 'production-logs']);
+
+        const tickets = await datasetsStorage.listDatasets({
+          filters: { name: 'tickets' },
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(tickets.datasets.map(d => d.name).sort()).toEqual(['Production Tickets', 'staging-tickets']);
+      });
+
+      it('listDatasets combines targetType, targetIds, and name filters', async () => {
+        await datasetsStorage.createDataset({
+          name: 'agent-prod-alpha',
+          targetType: 'agent',
+          targetIds: ['a1'],
+        });
+        await datasetsStorage.createDataset({
+          name: 'agent-prod-beta',
+          targetType: 'agent',
+          targetIds: ['a2'],
+        });
+        await datasetsStorage.createDataset({
+          name: 'workflow-prod-alpha',
+          targetType: 'workflow',
+          targetIds: ['a1'],
+        });
+        await datasetsStorage.createDataset({
+          name: 'agent-staging-alpha',
+          targetType: 'agent',
+          targetIds: ['a1'],
+        });
+
+        const result = await datasetsStorage.listDatasets({
+          filters: { targetType: 'agent', targetIds: ['a1'], name: 'prod' },
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(result.datasets).toHaveLength(1);
+        expect(result.datasets[0]!.name).toBe('agent-prod-alpha');
       });
     });
 
@@ -456,6 +861,58 @@ export function createDatasetsTests({
         });
         expect(v3.items).toHaveLength(2);
       });
+
+      it('listItems applies search alongside version', async () => {
+        // Use a fresh dataset with string-valued inputs because some adapters
+        // (mongodb) only run search against string-valued input fields.
+        const searchDs = await datasetsStorage.createDataset({ name: 'version-search' });
+        const a = await datasetsStorage.addItem({ datasetId: searchDs.id, input: 'alpha-original' });
+        await datasetsStorage.addItem({ datasetId: searchDs.id, input: 'beta-original' });
+        // v2 now. Updating a -> v3
+        await datasetsStorage.updateItem({ id: a.id, datasetId: searchDs.id, input: 'alpha-updated' });
+
+        const searchUpdated = await datasetsStorage.listItems({
+          datasetId: searchDs.id,
+          version: 3,
+          search: 'updated',
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(searchUpdated.items).toHaveLength(1);
+        expect(searchUpdated.items[0]!.input).toBe('alpha-updated');
+
+        // Search at an older version reaches into historical input values
+        const searchOriginalAtV2 = await datasetsStorage.listItems({
+          datasetId: searchDs.id,
+          version: 2,
+          search: 'alpha-original',
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(searchOriginalAtV2.items).toHaveLength(1);
+        expect(searchOriginalAtV2.items[0]!.input).toBe('alpha-original');
+      });
+
+      it('listItems applies pagination alongside version', async () => {
+        // Add two more items so v4 has 3 items: item1 'updated', second, third
+        await datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'second' } });
+        await datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'third' } });
+
+        const page0 = await datasetsStorage.listItems({
+          datasetId: ds.id,
+          version: 4,
+          pagination: { page: 0, perPage: 2 },
+        });
+        expect(page0.items).toHaveLength(2);
+        expect(page0.pagination.total).toBe(3);
+        expect(page0.pagination.hasMore).toBe(true);
+
+        const page1 = await datasetsStorage.listItems({
+          datasetId: ds.id,
+          version: 4,
+          pagination: { page: 1, perPage: 2 },
+        });
+        expect(page1.items).toHaveLength(1);
+        expect(page1.pagination.hasMore).toBe(false);
+      });
     });
 
     // ---------------------------------------------------------------------------
@@ -489,6 +946,148 @@ export function createDatasetsTests({
           pagination: { page: 0, perPage: 10 },
         });
         expect(dv.versions).toHaveLength(1);
+      });
+
+      itItemIdentity('batchInsertItems treats exact externalId retries as no-ops', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'identity-retry' });
+        const payload = { externalId: 'item-1', input: { q: 'same' }, metadata: { source: 'test' } };
+
+        const [first] = await datasetsStorage.batchInsertItems({ datasetId: ds.id, items: [payload] });
+        const [retry] = await datasetsStorage.batchInsertItems({ datasetId: ds.id, items: [payload] });
+
+        expect(retry!.id).toBe(first!.id);
+        expect(retry!.externalId).toBe('item-1');
+        expect(first).not.toHaveProperty('validTo');
+        expect(first).not.toHaveProperty('isDeleted');
+        expect(retry).not.toHaveProperty('validTo');
+        expect(retry).not.toHaveProperty('isDeleted');
+
+        const history = await datasetsStorage.getItemHistory(first!.id);
+        expect(history).toHaveLength(1);
+        expect(history[0]!.validTo).toBeNull();
+        expect(history[0]!.isDeleted).toBe(false);
+        expect((await datasetsStorage.getDatasetById({ id: ds.id }))!.version).toBe(1);
+      });
+
+      itItemIdentity('batchInsertItems converges concurrent exact externalId retries', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'identity-concurrent' });
+        const payload = { externalId: 'item-1', input: { q: 'same' } };
+
+        const [[first], [second]] = await Promise.all([
+          datasetsStorage.batchInsertItems({ datasetId: ds.id, items: [payload] }),
+          datasetsStorage.batchInsertItems({ datasetId: ds.id, items: [payload] }),
+        ]);
+
+        expect(second!.id).toBe(first!.id);
+        expect(
+          (await datasetsStorage.listItems({ datasetId: ds.id, pagination: { page: 0, perPage: 10 } })).items,
+        ).toHaveLength(1);
+        expect((await datasetsStorage.getDatasetById({ id: ds.id }))!.version).toBe(1);
+      });
+
+      itItemIdentity('batchInsertItems rejects incompatible externalId reuse without mutation', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'identity-conflict' });
+        const [first] = await datasetsStorage.batchInsertItems({
+          datasetId: ds.id,
+          items: [{ externalId: 'item-1', input: { q: 'first' } }],
+        });
+
+        await expect(
+          datasetsStorage.batchInsertItems({
+            datasetId: ds.id,
+            items: [
+              { externalId: 'item-2', input: { q: 'new' } },
+              { externalId: 'item-1', input: { q: 'different' } },
+            ],
+          }),
+        ).rejects.toMatchObject({ id: 'DATASET_ITEM_IDENTITY_CONFLICT' });
+
+        expect((await datasetsStorage.getDatasetById({ id: ds.id }))!.version).toBe(1);
+        expect(
+          (await datasetsStorage.listItems({ datasetId: ds.id, pagination: { page: 0, perPage: 10 } })).items,
+        ).toEqual([expect.objectContaining({ id: first!.id })]);
+      });
+
+      itItemIdentity('batchInsertItems resolves equivalent request-local identities to one item', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'identity-local-duplicate' });
+        const items = await datasetsStorage.batchInsertItems({
+          datasetId: ds.id,
+          items: [
+            { externalId: 'item-1', input: { q: 'same' } },
+            { externalId: 'item-1', input: { q: 'same' } },
+            { input: { q: 'append' } },
+          ],
+        });
+
+        expect(items).toHaveLength(3);
+        expect(items[0]!.id).toBe(items[1]!.id);
+        expect(items[2]!.id).not.toBe(items[0]!.id);
+        expect(
+          (await datasetsStorage.listItems({ datasetId: ds.id, pagination: { page: 0, perPage: 10 } })).items,
+        ).toHaveLength(2);
+      });
+
+      itItemIdentity('batchInsertItems rejects incompatible request-local identities', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'identity-local-conflict' });
+
+        await expect(
+          datasetsStorage.batchInsertItems({
+            datasetId: ds.id,
+            items: [
+              { externalId: 'item-1', input: { q: 'first' } },
+              { externalId: 'item-1', input: { q: 'different' } },
+            ],
+          }),
+        ).rejects.toMatchObject({ id: 'DATASET_ITEM_IDENTITY_CONFLICT' });
+
+        expect((await datasetsStorage.getDatasetById({ id: ds.id }))!.version).toBe(0);
+      });
+
+      itItemIdentity('preserves externalId through updates and compares retries against the first row', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'identity-update' });
+        const original = { externalId: 'item-1', input: { q: 'original' } };
+        const [created] = await datasetsStorage.batchInsertItems({ datasetId: ds.id, items: [original] });
+        const updated = await datasetsStorage.updateItem({
+          id: created!.id,
+          datasetId: ds.id,
+          input: { q: 'updated' },
+        });
+
+        expect(updated.externalId).toBe('item-1');
+        const [retry] = await datasetsStorage.batchInsertItems({ datasetId: ds.id, items: [original] });
+        expect(retry!.id).toBe(created!.id);
+        expect(retry!.input).toEqual({ q: 'updated' });
+        expect((await datasetsStorage.getDatasetById({ id: ds.id }))!.version).toBe(2);
+      });
+
+      itItemIdentity('keeps deleted externalIds reserved', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'identity-delete' });
+        const original = { externalId: 'item-1', input: { q: 'original' } };
+        const [created] = await datasetsStorage.batchInsertItems({ datasetId: ds.id, items: [original] });
+        await datasetsStorage.deleteItem({ id: created!.id, datasetId: ds.id });
+
+        await expect(datasetsStorage.batchInsertItems({ datasetId: ds.id, items: [original] })).rejects.toMatchObject({
+          id: 'DATASET_ITEM_IDENTITY_CONFLICT',
+          conflicts: [expect.objectContaining({ reason: 'deleted' })],
+        });
+        expect((await datasetsStorage.getDatasetById({ id: ds.id }))!.version).toBe(2);
+      });
+
+      itItemIdentity('scopes externalId identity to the dataset', async () => {
+        const firstDataset = await datasetsStorage.createDataset({ name: 'identity-scope-1' });
+        const secondDataset = await datasetsStorage.createDataset({ name: 'identity-scope-2' });
+        const payload = { externalId: 'shared', input: { q: 'same' } };
+
+        const [first] = await datasetsStorage.batchInsertItems({ datasetId: firstDataset.id, items: [payload] });
+        const [second] = await datasetsStorage.batchInsertItems({ datasetId: secondDataset.id, items: [payload] });
+
+        expect(first!.id).not.toBe(second!.id);
+      });
+
+      it('treats empty batches as true no-ops', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'empty-batch' });
+        await expect(datasetsStorage.batchInsertItems({ datasetId: ds.id, items: [] })).resolves.toEqual([]);
+        expect((await datasetsStorage.getDatasetById({ id: ds.id }))!.version).toBe(0);
       });
 
       it('batchInsertItems validates against inputSchema', async () => {

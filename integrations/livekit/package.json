@@ -1,0 +1,106 @@
+{
+  "name": "@mastra/livekit",
+  "version": "0.3.0",
+  "description": "LiveKit voice integration for Mastra agents — realtime voice with semantic turn detection and barge-in",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./worker": {
+      "import": {
+        "types": "./dist/worker-entry.d.ts",
+        "default": "./dist/worker-entry.js"
+      },
+      "require": {
+        "types": "./dist/worker-entry.d.ts",
+        "default": "./dist/worker-entry.cjs"
+      }
+    },
+    "./plugin": {
+      "import": {
+        "types": "./dist/plugin-entry.d.ts",
+        "default": "./dist/plugin-entry.js"
+      },
+      "require": {
+        "types": "./dist/plugin-entry.d.ts",
+        "default": "./dist/plugin-entry.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build:lib": "tsup --silent --config tsup.config.ts",
+    "build:watch": "pnpm build:lib --watch",
+    "lint": "eslint .",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "mastra",
+    "livekit",
+    "voice",
+    "voice-agent",
+    "webrtc",
+    "turn-detection",
+    "ai-agent"
+  ],
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "integrations/livekit"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "homepage": "https://mastra.ai",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "@livekit/protocol": "^1.46.6",
+    "livekit-server-sdk": "^2.15.4"
+  },
+  "peerDependencies": {
+    "@livekit/agents": "^1.4.0",
+    "@livekit/agents-plugin-livekit": "^1.4.0",
+    "@livekit/agents-plugin-silero": "^1.4.0",
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0",
+    "zod": ">=3.0.0 || >=4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@livekit/agents-plugin-livekit": {
+      "optional": true
+    },
+    "@livekit/agents-plugin-silero": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@internal/lint": "workspace:*",
+    "@internal/types-builder": "workspace:*",
+    "@livekit/agents": "^1.4.5",
+    "@livekit/agents-plugin-livekit": "^1.4.5",
+    "@livekit/agents-plugin-silero": "^1.4.5",
+    "@mastra/core": "workspace:*",
+    "@types/node": "22.20.1",
+    "eslint": "^10.4.1",
+    "tsup": "^8.5.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "zod": "catalog:"
+  }
+}

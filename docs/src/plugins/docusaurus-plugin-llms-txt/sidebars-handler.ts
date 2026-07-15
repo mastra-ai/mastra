@@ -92,13 +92,27 @@ function getDocId(item: SidebarItem): string | null {
 }
 
 /**
+ * Build the sibling markdown URL for an "index" doc.
+ *
+ * The index doc maps to the section's own route. With trailingSlash: false the
+ * sibling file is "<route>.md", except the site root ("/") whose file is
+ * "index.md". For a nested section baseUrl already carries the path segment
+ * (e.g. ".../docs"), so the sibling is "${baseUrl}.md". For the root section
+ * baseUrl is the bare origin, so the sibling is "${baseUrl}/index.md".
+ */
+function indexMarkdownUrl(baseUrl: string): string {
+  const hasPathSegment = new URL(baseUrl).pathname !== '/'
+  return hasPathSegment ? `${baseUrl}.md` : `${baseUrl}/index.md`
+}
+
+/**
  * Find the overview/index doc in a category's items
  */
 function findCategoryOverviewUrl(items: SidebarItem[], baseUrl: string): string | null {
   for (const item of items) {
     const docId = getDocId(item)
     if (docId && (docId.endsWith('/index') || docId === 'index')) {
-      return `${baseUrl}/${docId}`
+      return `${baseUrl}/${docId}.md`
     }
   }
   return null
@@ -121,8 +135,8 @@ export function generateMarkdownList(
     const docId = getDocId(item)
 
     if (typeof item === 'string' || item.type === 'doc') {
-      // It's a doc item - create a link
-      const url = docId === 'index' ? baseUrl : `${baseUrl}/${docId}`
+      // It's a doc item - link to the page's sibling markdown file
+      const url = docId === 'index' ? indexMarkdownUrl(baseUrl) : `${baseUrl}/${docId}.md`
       output += `${indent}- [${label}](${url})\n`
     } else if (item.type === 'category') {
       // Check if this category should be condensed to just its overview link

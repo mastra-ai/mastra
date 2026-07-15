@@ -33,7 +33,7 @@ export const TreeFolderTrigger = React.forwardRef<HTMLDivElement, TreeFolderTrig
         ref={ref}
         data-tree-folder-row="true"
         className={cn(
-          'group flex h-7 min-w-0 w-full items-center rounded-sm hover:bg-surface4',
+          'group flex h-7 w-full min-w-0 items-center rounded-sm hover:bg-surface4',
           transitions.colors,
           folderCtx?.isFocused && 'bg-surface4 text-neutral6',
           className,
@@ -43,7 +43,7 @@ export const TreeFolderTrigger = React.forwardRef<HTMLDivElement, TreeFolderTrig
         <CollapsibleTrigger
           data-tree-folder-trigger="true"
           tabIndex={-1}
-          className="flex h-7 min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-sm px-1 outline-hidden focus-visible:outline-hidden focus-visible:ring-0"
+          className="flex h-7 min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-sm px-1 outline-hidden focus-visible:ring-0 focus-visible:outline-hidden"
           style={{ paddingLeft: depth * 12 }}
           onMouseDown={e => {
             e.preventDefault();

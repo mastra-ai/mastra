@@ -45,7 +45,7 @@ export const TreeFile = React.forwardRef<HTMLLIElement, TreeFileProps>(({ id, cl
       className={cn(
         'group flex h-7 min-w-0 cursor-pointer items-center gap-1.5 rounded-sm px-1',
         transitions.colors,
-        'outline-hidden hover:bg-surface4 focus-visible:outline-hidden focus-visible:bg-surface4 focus-visible:text-neutral6',
+        'outline-hidden hover:bg-surface4 focus-visible:bg-surface4 focus-visible:text-neutral6 focus-visible:outline-hidden',
         isSelected && 'bg-surface4 text-neutral6',
         className,
       )}

@@ -2,10 +2,17 @@ import { ReadableStream } from 'node:stream/web';
 import type { PubSub } from '../../events/pubsub';
 import type { Event } from '../../events/types';
 import type { IMastraLogger } from '../../logger';
+import type { OutputProcessorOrWorkflow } from '../../processors';
 import { safeClose, safeEnqueue } from '../../stream/base';
 import { MastraModelOutput } from '../../stream/base/output';
-import type { ChunkType } from '../../stream/types';
+import type {
+  ChunkType,
+  MastraOnFinishCallback,
+  MastraOnStepFinishCallback,
+  LanguageModelUsage,
+} from '../../stream/types';
 import { MessageList } from '../message-list';
+import type { StructuredOutputOptions } from '../types';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from './constants';
 import type {
   AgentStreamEvent,
@@ -17,6 +24,20 @@ import type {
   AgentAbortEventData,
   AgentIterationCompleteEventData,
 } from './types';
+
+/**
+ * Map workflow usage (which may use legacy promptTokens/completionTokens) to
+ * the canonical LanguageModelUsage shape (inputTokens/outputTokens).
+ */
+function normalizeUsage(raw?: Record<string, unknown>): LanguageModelUsage {
+  if (!raw) {
+    return { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+  }
+  const inputTokens = (raw.inputTokens as number) ?? (raw.promptTokens as number) ?? 0;
+  const outputTokens = (raw.outputTokens as number) ?? (raw.completionTokens as number) ?? 0;
+  const totalTokens = (raw.totalTokens as number) ?? inputTokens + outputTokens;
+  return { inputTokens, outputTokens, totalTokens };
+}
 
 /**
  * Options for creating a durable agent stream
@@ -48,10 +69,12 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   onChunk?: (chunk: ChunkType<OUTPUT>) => void | Promise<void>;
   /** Callback when step finishes */
   onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
-  /** Callback when execution finishes */
-  onFinish?: (result: AgentFinishEventData) => void | Promise<void>;
+  /** Callback when execution finishes — routed through MastraModelOutput for rich step data */
+  onFinish?: MastraOnFinishCallback<OUTPUT>;
+  /** Lifecycle hook called after the FINISH event closes the stream (for cleanup scheduling) */
+  onStreamFinished?: () => void | Promise<void>;
   /** Callback on error */
-  onError?: (error: Error) => void | Promise<void>;
+  onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
   /** Callback when workflow suspends */
   onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
   /** Callback when execution is aborted via abortSignal */
@@ -60,6 +83,27 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   onIterationComplete?: (data: AgentIterationCompleteEventData) => void | Promise<void>;
   /** Optional logger for structured logging */
   logger?: IMastraLogger;
+  /**
+   * If true, close the underlying ReadableStream when a SUSPENDED event is
+   * received. Used by `generate()` / `resumeGenerate()` so that
+   * `getFullOutput()` resolves on suspend instead of hanging. Streaming
+   * callers leave this `false` so the stream stays open for a later resume.
+   */
+  closeOnSuspend?: boolean;
+  /**
+   * Structured output configuration with live schema. When provided,
+   * `MastraModelOutput` pipes LLM text through `createObjectStreamTransformer`
+   * to produce `object-result` chunks.
+   */
+  structuredOutput?: StructuredOutputOptions<OUTPUT>;
+  /** Output processors to run in MastraModelOutput's stream pipeline */
+  outputProcessors?: OutputProcessorOrWorkflow[];
+  /**
+   * Optional external MessageList to use instead of creating a fresh empty one.
+   * When provided (e.g. the registry's live MessageList), MastraModelOutput can
+   * resolve step content from messages added during the workflow execution.
+   */
+  messageList?: MessageList;
 }
 
 /**
@@ -95,11 +139,16 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     onChunk,
     onStepFinish,
     onFinish,
+    onStreamFinished,
     onError,
     onSuspended,
     onAbort,
     onIterationComplete,
     logger,
+    closeOnSuspend = false,
+    structuredOutput,
+    outputProcessors,
+    messageList: externalMessageList,
   } = options;
 
   // Helper to log errors (uses logger if available, falls back to console)
@@ -111,11 +160,16 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     }
   };
 
-  // Create a message list for the output
-  const messageList = new MessageList({
-    threadId,
-    resourceId,
-  });
+  // Use an external MessageList if provided (e.g. the live registry one that
+  // llm-execution.ts keeps in sync), otherwise create a fresh empty one.
+  // This lets MastraModelOutput resolve step content from the real assistant
+  // messages added during the workflow execution.
+  const messageList =
+    externalMessageList ??
+    new MessageList({
+      threadId,
+      resourceId,
+    });
 
   // Track subscription state
   let isSubscribed = false;
@@ -140,6 +194,10 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   // `TypeError: Invalid state: Controller is already closed` from the
   // controller, which the outer try/catch logs but which floods the
   // console and (in test runs) causes timeouts as event handlers retry.
+  // Track the last error message seen in an 'error' chunk, so we can
+  // surface it in onError when the FINISH event arrives with reason 'error'.
+  let lastErrorMessage: string | undefined;
+
   const handleEvent = async (event: Event) => {
     if (!controller) return;
 
@@ -150,6 +208,11 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       switch (streamEvent.type) {
         case AgentStreamEventTypes.CHUNK: {
           const chunk = streamEvent.data as AgentChunkEventData;
+          // Track error chunks for onError callback
+          if ((chunk as any).type === 'error') {
+            const errPayload = (chunk as any).payload;
+            lastErrorMessage = errPayload?.error?.message || errPayload?.message || 'LLM execution error';
+          }
           safeEnqueue(controller, chunk as ChunkType<OUTPUT>);
           await onChunk?.(chunk as ChunkType<OUTPUT>);
           break;
@@ -182,11 +245,71 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           } as ChunkType<OUTPUT>;
           safeEnqueue(controller, finishChunk);
           safeClose(controller);
-          // Call callback after closing stream (errors don't prevent closure)
+
+          // Build rich onFinish payload from finish event data.
+          // The pubsub FINISH event carries output.text, output.steps, and
+          // stepResult — enough to reconstruct the fields scenario tests expect
+          // (text, steps, toolResults, finishReason, usage).
+          if (onFinish) {
+            try {
+              const steps = (data.output?.steps ?? []) as any[];
+              const allToolResults = steps.flatMap((s: any) => s?.toolResults ?? []);
+              const allToolCalls = steps.flatMap((s: any) => s?.toolCalls ?? []);
+              await onFinish({
+                text: data.output?.text ?? '',
+                steps,
+                toolResults: allToolResults,
+                toolCalls: allToolCalls,
+                dynamicToolCalls: [],
+                dynamicToolResults: [],
+                staticToolCalls: [],
+                staticToolResults: [],
+                files: [],
+                sources: [],
+                reasoning: [],
+                content: [],
+                finishReason: data.stepResult?.reason ?? 'stop',
+                usage: normalizeUsage(data.output?.usage),
+                totalUsage: normalizeUsage(data.output?.usage),
+                warnings: data.stepResult?.warnings ?? [],
+                request: { body: undefined },
+                response: {},
+                reasoningText: undefined,
+                providerMetadata: undefined,
+              });
+            } catch (callbackError) {
+              logError(`[DurableAgentStream] onFinish callback error:`, callbackError);
+            }
+          }
+
+          // When the finish reason is 'abort', also fire onAbort so
+          // consumers see it — the abort was handled gracefully (clean
+          // return from llm-execution) rather than crashing the workflow,
+          // so the separate ABORT event never fires.
+          if (onAbort && (data.stepResult?.reason as string) === 'abort') {
+            try {
+              await onAbort({ steps: (data.output?.steps ?? []) as unknown[] });
+            } catch (callbackError) {
+              logError(`[DurableAgentStream] onAbort (from FINISH) callback error:`, callbackError);
+            }
+          }
+
+          // When the finish reason is 'error', also fire onError so
+          // consumers see it — the error was handled gracefully (bail
+          // response) rather than crashing the workflow, so the ERROR
+          // event never fires.
+          if (onError && data.stepResult?.reason === 'error') {
+            try {
+              await onError({ error: new Error(lastErrorMessage || 'LLM execution error') });
+            } catch (callbackError) {
+              logError(`[DurableAgentStream] onError (from FINISH) callback error:`, callbackError);
+            }
+          }
+
           try {
-            await onFinish?.(data);
+            await onStreamFinished?.();
           } catch (callbackError) {
-            logError(`[DurableAgentStream] onFinish callback error:`, callbackError);
+            logError(`[DurableAgentStream] onStreamFinished callback error:`, callbackError);
           }
           break;
         }
@@ -198,16 +321,18 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           if (data.error.stack) {
             error.stack = data.error.stack;
           }
-          // Close stream with error first, then call callback. Wrapped in
-          // try/catch because `controller.error` throws if the controller
-          // has already been closed/errored by an earlier event.
+          // Enqueue an error chunk and close the stream normally (mirrors the
+          // regular agent's deferred-error-chunk pattern). Using
+          // controller.error() would error the base ReadableStream, which
+          // MastraModelOutput.consumeStream swallows — leaving fullStream
+          // hanging because no 'finish' event fires on the internal emitter.
+          safeEnqueue(controller, {
+            type: 'error',
+            payload: { error },
+          } as ChunkType<OUTPUT>);
+          safeClose(controller);
           try {
-            controller.error(error);
-          } catch {
-            // Stream already closed/errored — drop silently.
-          }
-          try {
-            await onError?.(error);
+            await onError?.({ error });
           } catch (callbackError) {
             logError(`[DurableAgentStream] onError callback error:`, callbackError);
           }
@@ -217,7 +342,12 @@ export function createDurableAgentStream<OUTPUT = undefined>(
         case AgentStreamEventTypes.SUSPENDED: {
           const data = streamEvent.data as AgentSuspendedEventData;
           await onSuspended?.(data);
-          // Don't close the stream on suspend - it can be resumed
+          // By default we leave the stream open on suspend so a later resume
+          // can keep streaming chunks. `generate()`/`resumeGenerate()` opt
+          // into closing here so `getFullOutput()` can resolve.
+          if (closeOnSuspend) {
+            safeClose(controller);
+          }
           break;
         }
 
@@ -309,7 +439,15 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     controller = null;
   };
 
-  // Create the MastraModelOutput
+  // Create the MastraModelOutput.
+  // onStepFinish is passed to MastraModelOutput so it fires during stream
+  // consumption (the harness and user code iterate fullStream, which drives
+  // consumeStream internally). The pubsub STEP_FINISH event is not emitted
+  // by the durable workflow, so the pubsub handler alone is not sufficient.
+  //
+  // onFinish is called from the pubsub FINISH handler (above) with a
+  // payload built from the event data. This ensures it fires even when
+  // nobody iterates the stream (e.g. resume flows with delay-only waits).
   const output = new MastraModelOutput<OUTPUT>({
     model,
     stream,
@@ -317,6 +455,19 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     messageId,
     options: {
       runId,
+      onStepFinish: onStepFinish as MastraOnStepFinishCallback<OUTPUT> | undefined,
+      // For durable agents there is only one MastraModelOutput for the whole run.
+      // isLLMExecutionStep must be true so output processors run per-chunk
+      // (processOutputStream / processPart path) rather than the batch
+      // runOutputProcessors path which only fires at finish.  It also gates
+      // createObjectStreamTransformer for structured output.
+      // resolveFinalPromises forces text/finishReason promise resolution at
+      // step-finish despite isLLMExecutionStep being true — durable agents have
+      // no outer MastraModelOutput to resolve them.
+      structuredOutput: structuredOutput as any,
+      isLLMExecutionStep: true,
+      resolveFinalPromises: true,
+      outputProcessors,
     },
   });
 
@@ -344,7 +495,9 @@ export async function emitChunkEvent<OUTPUT = undefined>(
 }
 
 /**
- * Helper to emit a step start event to pubsub
+ * Helper to emit a step start event to pubsub.
+ * The `data` payload must include `type: 'step-start'` so the stream-adapter
+ * consumer recognises it as a `ChunkType` and enqueues it onto the client stream.
  */
 export async function emitStepStartEvent(
   pubsub: PubSub,
@@ -354,7 +507,7 @@ export async function emitStepStartEvent(
   await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
     type: AgentStreamEventTypes.STEP_START,
     runId,
-    data,
+    data: { type: 'step-start', ...data },
   });
 }
 

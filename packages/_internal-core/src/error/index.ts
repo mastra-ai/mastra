@@ -140,3 +140,14 @@ export class MastraBaseError<DOMAIN, CATEGORY> extends Error {
 }
 
 export class MastraError extends MastraBaseError<`${ErrorDomain}`, `${ErrorCategory}`> {}
+
+/** Permanent workflow step failure — bypasses workflow retryConfig. */
+export class MastraNonRetryableError extends Error {
+  public readonly isNonRetryable = true as const;
+
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = 'MastraNonRetryableError';
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}

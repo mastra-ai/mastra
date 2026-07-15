@@ -58,6 +58,9 @@ export class ObservationTurn {
   /** Optional observability context for nested OM spans. */
   observabilityContext?: ObservabilityContext;
 
+  /** Optional agent that owns this processor turn. */
+  agent?: ProcessorContext['agent'];
+
   /** Optional signal sender for processor-originated notifications. */
   sendSignal?: (
     signal: Parameters<NonNullable<ProcessorContext['sendSignal']>>[0],
@@ -74,6 +77,7 @@ export class ObservationTurn {
     threadId: string;
     resourceId?: string;
     messageList: MessageList;
+    agent?: ProcessorContext['agent'];
     sendSignal?: ProcessorContext['sendSignal'];
     requestContext?: RequestContext;
     observabilityContext?: ObservabilityContext;
@@ -83,6 +87,7 @@ export class ObservationTurn {
     this.threadId = opts.threadId;
     this.resourceId = opts.resourceId;
     this.messageList = opts.messageList;
+    this.agent = opts.agent;
     this.sendSignal = opts.sendSignal;
     this.requestContext = opts.requestContext;
     this.observabilityContext = opts.observabilityContext;
@@ -207,6 +212,7 @@ export class ObservationTurn {
             messages: unobservedMessages,
             record,
             writer: this.writer,
+            agent: this.agent,
             sendSignal: this.sendSignal,
             requestContext: this.requestContext,
             currentModel: this.actorModelContext,
@@ -243,5 +249,33 @@ export class ObservationTurn {
       return otherThreadsContext;
     }
     return this._context?.otherThreadsContext;
+  }
+
+  /**
+   * Serialize to a minimal, acyclic snapshot of the turn's identity and lifecycle.
+   *
+   * `ObservationTurn` is a request-scoped runtime orchestration object: it holds live
+   * references (the `ObservationalMemory` engine, the `MessageList`, the stream writer, the
+   * memory provider, lifecycle hooks) and a back-reference to its current `ObservationStep`,
+   * which points back at the turn — a cycle. None of that is persistable state. The turn is
+   * stashed in the shared processor-state map (`state.__omTurn`) only so the input and output
+   * OM processor instances can reach the *live* object within a single request; that map is
+   * also threaded into processor workflows, whose snapshots the storage layer serializes with
+   * `JSON.stringify`. Without this projection, that serialization throws "Converting circular
+   * structure to JSON" via `_currentStep` <-> `turn`.
+   *
+   * The projection is lossless: the dropped fields are live runtime objects that cannot and
+   * should not round-trip through storage, and OM never reads the turn back from a snapshot —
+   * it always reads the live `__omTurn` from the in-memory map and re-establishes a fresh turn
+   * when a deserialized `MessageList` no longer matches (see the processor's turn handling).
+   */
+  toJSON() {
+    return {
+      threadId: this.threadId,
+      resourceId: this.resourceId,
+      started: this._started,
+      ended: this._ended,
+      currentStepNumber: this._currentStep?.stepNumber,
+    };
   }
 }

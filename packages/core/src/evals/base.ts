@@ -4,7 +4,7 @@ import { Agent, isSupportedLanguageModel } from '../agent';
 import type { MastraDBMessage, MastraMessagePart, MastraToolInvocationPart } from '../agent/message-list';
 import type { AgentMemoryOption, ToolsInput } from '../agent/types';
 import { tryStreamWithJsonFallback } from '../agent/utils';
-import { ErrorCategory, ErrorDomain, MastraError } from '../error';
+import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '../error';
 import { resolveModelConfig } from '../llm/model/resolve-model';
 import type { MastraModelConfig } from '../llm/model/shared.types';
 import { noopLogger } from '../logger';
@@ -28,6 +28,11 @@ import type {
   Span,
 } from '../observability';
 import { executeWithContext } from '../observability/utils';
+import type {
+  ErrorProcessorOrWorkflow,
+  InputProcessorOrWorkflow,
+  OutputProcessorOrWorkflow,
+} from '../processors/index';
 import { RequestContext } from '../request-context';
 import type { PublicSchema } from '../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
@@ -80,8 +85,44 @@ export interface ScorerJudgeConfig {
   defaultMemoryOptions?: AgentMemoryOption;
   /** Optional callback for observing the internal judge agent stream as soon as it starts. */
   onStream?: (stream: Awaited<ReturnType<Agent['stream']>>) => void | Promise<void>;
+  /** Optional maximum number of agentic loop iterations for the internal judge agent. */
+  maxSteps?: number;
+  /**
+   * Optional input processors for the internal judge agent. Run before the judge's
+   * messages reach the model (e.g. redaction, validation).
+   */
+  inputProcessors?: InputProcessorOrWorkflow[];
+  /**
+   * Optional output processors for the internal judge agent. Run on the judge's
+   * output before it is returned (e.g. moderation, transformation).
+   */
+  outputProcessors?: OutputProcessorOrWorkflow[];
+  /**
+   * Optional error processors for the internal V2+ judge agent. These implement
+   * `processAPIError` and can inspect LLM API rejections and signal a retry,
+   * e.g. `StreamErrorRetryProcessor`. V1 judges use `generateLegacy()` and do
+   * not run error processors.
+   */
+  errorProcessors?: ErrorProcessorOrWorkflow[];
+  /**
+   * Maximum number of times error processors can retry one V2+ judge generation.
+   * When errorProcessors are configured and this is omitted, the runtime cap is
+   * 10. Set this explicitly to bound the coordinated retry budget.
+   */
+  maxProcessorRetries?: number;
+  /**
+   * Optional request context forwarded to the judge agent execution. When the judge
+   * agent has memory with OM observers that read dynamic model config from controller
+   * state (e.g. mastracode's `getObserverModel`), this lets the OM system resolve the
+   * correct observer model and provider credentials.
+   */
+  requestContext?: RequestContext<any>;
 }
 
+/**
+ * Step-level fields override scorer-level judge fields. Processor arrays replace
+ * the scorer-level arrays; omit maxProcessorRetries to inherit its numeric cap.
+ */
 export type ScorerStepJudgeConfig = Omit<ScorerJudgeConfig, 'memory' | 'defaultMemoryOptions'> & {
   /** Per-step memory options merged onto scorer-level `judge.defaultMemoryOptions`. */
   memory?: AgentMemoryOption;
@@ -553,7 +594,7 @@ class MastraScorer<
         output: prepared.output,
         groundTruth: prepared.groundTruth,
         expectedTrajectory: prepared.expectedTrajectory,
-        requestContext: normalizedRequestContext,
+        requestContext: normalizedRequestContext?.serializeForSpan(),
       },
       attributes: {
         scorerId: this.id,
@@ -603,23 +644,22 @@ class MastraScorer<
     }
 
     if (workflowResult.status === 'failed') {
-      const workflowFailure =
-        workflowResult.error instanceof Error
-          ? workflowResult.error
-          : new Error(typeof workflowResult.error === 'string' ? workflowResult.error : 'Scorer workflow failed');
+      const workflowFailure = getErrorFromUnknown(workflowResult.error, {
+        fallbackMessage: 'Scorer workflow failed',
+      });
       evalSpan?.error({ error: workflowFailure, endSpan: true });
       throw new MastraError(
         {
           id: 'MASTR_SCORER_FAILED_TO_RUN_WORKFLOW_FAILED',
           domain: ErrorDomain.SCORER,
           category: ErrorCategory.USER,
-          text: `Scorer Run Failed: ${typeof workflowResult.error === 'string' ? workflowResult.error : workflowResult.error.message}`,
+          text: `Scorer Run Failed: ${workflowFailure.message}`,
           details: {
             scorerId: this.config.id ?? this.config.name,
             steps: this.steps.map(s => s.name).join(', '),
           },
         },
-        workflowResult.error instanceof Error ? workflowResult.error : undefined,
+        workflowFailure,
       );
     }
 
@@ -876,6 +916,11 @@ class MastraScorer<
     const defaultMemoryOptions = this.config.judge?.defaultMemoryOptions;
     const stepMemoryOptions = originalStep.judge?.memory;
     const onStream = originalStep.judge?.onStream ?? this.config.judge?.onStream;
+    const maxSteps = originalStep.judge?.maxSteps ?? this.config.judge?.maxSteps;
+    const inputProcessors = originalStep.judge?.inputProcessors ?? this.config.judge?.inputProcessors;
+    const outputProcessors = originalStep.judge?.outputProcessors ?? this.config.judge?.outputProcessors;
+    const errorProcessors = originalStep.judge?.errorProcessors ?? this.config.judge?.errorProcessors;
+    const maxProcessorRetries = originalStep.judge?.maxProcessorRetries ?? this.config.judge?.maxProcessorRetries;
     const memoryOptions = stepMemoryOptions
       ? {
           ...defaultMemoryOptions,
@@ -902,7 +947,11 @@ class MastraScorer<
 
     // Resolve the model configuration to a LanguageModel instance
     // Pass the Mastra instance to enable custom gateway resolution
-    const resolvedModel = await resolveModelConfig(modelConfig, undefined, this.#mastra);
+    const resolvedModel = await resolveModelConfig(
+      modelConfig,
+      this.config.judge?.requestContext ?? undefined,
+      this.#mastra,
+    );
     const judgeModel = resolvedModel.modelId;
 
     const judge = new Agent({
@@ -912,10 +961,19 @@ class MastraScorer<
       instructions,
       ...(tools ? { tools } : {}),
       ...(memory ? { memory } : {}),
+      ...(inputProcessors ? { inputProcessors } : {}),
+      ...(outputProcessors ? { outputProcessors } : {}),
+      ...(errorProcessors ? { errorProcessors } : {}),
+      ...(maxProcessorRetries !== undefined ? { maxProcessorRetries } : {}),
     });
+    if (this.#mastra) {
+      judge.__registerMastra(this.#mastra);
+    }
     const judgeRunOptions = {
       ...observabilityContext,
       ...(memoryOptions ? { memory: memoryOptions } : {}),
+      ...(maxSteps ? { maxSteps } : {}),
+      ...(this.config.judge?.requestContext ? { requestContext: this.config.judge.requestContext } : {}),
     };
 
     // GenerateScore output must be a number

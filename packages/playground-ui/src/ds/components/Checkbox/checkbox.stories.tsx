@@ -12,7 +12,7 @@ const SURFACES: { token: string; label: string; className: string }[] = [
 function SurfaceFrame({ className, label, children }: { className: string; label: string; children: React.ReactNode }) {
   return (
     <div className={`rounded-2xl border border-border1 p-5 ${className}`}>
-      <p className="mb-4 text-ui-xs uppercase tracking-wide text-neutral3">{label}</p>
+      <p className="mb-4 text-ui-xs tracking-wide text-neutral3 uppercase">{label}</p>
       {children}
     </div>
   );
@@ -92,7 +92,7 @@ export const AllStates: Story = {
     layout: 'centered',
   },
   render: () => (
-    <div className="grid min-w-[26rem] gap-4 rounded-lg border border-border1 bg-surface2 p-4">
+    <div className="min-w-104 grid gap-4 rounded-lg border border-border1 bg-surface2 p-4">
       <div className="grid grid-cols-[9rem_repeat(4,minmax(0,1fr))] items-center gap-x-5 gap-y-3 text-ui-sm text-neutral3">
         <span />
         <span>Default</span>
@@ -108,7 +108,7 @@ export const AllStates: Story = {
           aria-label="focused checked"
           checked
           onCheckedChange={() => {}}
-          className="border-neutral5/60 outline outline-1 outline-offset-2 outline-neutral5/55"
+          className="border-neutral5/60 outline-1 outline-offset-2 outline-neutral5/55 outline-solid"
         />
 
         <span className="text-neutral5">Disabled</span>
@@ -120,7 +120,7 @@ export const AllStates: Story = {
           checked
           disabled
           onCheckedChange={() => {}}
-          className="border-neutral5/60 outline outline-1 outline-offset-2 outline-neutral5/35"
+          className="border-neutral5/60 outline-1 outline-offset-2 outline-neutral5/35 outline-solid"
         />
       </div>
     </div>

@@ -376,9 +376,12 @@ export type StructuredOutputOptionsBase<OUTPUT = {}> = {
   useAgent?: boolean;
 
   /**
-   * Whether to use system prompt injection instead of native response format to coerce the LLM to respond with json text if the LLM does not natively support structured outputs.
+   * Whether to use prompt injection instead of native response format to coerce the LLM to respond with JSON text.
+   * true and 'system' inject JSON instructions into the leading system message.
+   * 'inline' appends JSON instructions to the latest user message.
+   * false or omitted uses the provider's native response format.
    */
-  jsonPromptInjection?: boolean;
+  jsonPromptInjection?: boolean | 'system' | 'inline';
 
   /**
    * Optional logger instance for structured logging
@@ -489,6 +492,11 @@ export interface GoalConfig {
    * own judging). When omitted, the default judge is text-only.
    */
   tools?: DynamicArgument<ToolsInput | undefined>;
+  /**
+   * Max steps the judge agent may take per evaluation (its internal agentic-loop
+   * budget). When omitted the judge uses the model loop's default (5).
+   */
+  maxSteps?: number;
   /**
    * Custom goal scorer (a {@link MastraScorer} or a registered scorer id). When
    * omitted, a default rubric scorer judges the objective with the judge model.
@@ -790,9 +798,10 @@ interface AgentConfigBase<
   outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[], TRequestContext>;
   /**
    * Maximum number of times processors can trigger a retry per generation.
-   * When a processor calls abort({ retry: true }), the agent will retry with feedback.
-   * This limit prevents infinite retry loops.
-   * If not set, no retries are performed.
+   * When a processor calls abort({ retry: true }), the agent retries with feedback.
+   * Input and output processor retries require this value to be set. When
+   * errorProcessors are configured and it is omitted, their runtime cap is 10.
+   * Set it explicitly to bound every retry path.
    */
   maxProcessorRetries?: number;
   /**
@@ -964,8 +973,9 @@ export type AgentGenerateOptions<
   outputProcessors?: OutputProcessorOrWorkflow[];
   /**
    * Maximum number of times processors can trigger a retry for this generation.
-   * Overrides agent's default maxProcessorRetries.
-   * If not set, no retries are performed.
+   * Overrides the agent's default maxProcessorRetries. Input and output processor
+   * retries require an explicit cap; errorProcessors default to a cap of 10 when
+   * configured without one. Set this explicitly to bound every retry path.
    */
   maxProcessorRetries?: number;
   /** Error processors to use for this generation call (overrides agent's default) */

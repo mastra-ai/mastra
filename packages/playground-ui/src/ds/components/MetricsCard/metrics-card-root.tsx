@@ -6,7 +6,7 @@ export function MetricsCardRoot({ children, className }: { children: ReactNode; 
   return (
     <DashboardCard
       className={cn(
-        'flex-1 grid grid-rows-[4rem_1fr] min-h-72 gap-2 min-w-80 md:min-w-[22rem] lg:min-w-[24rem] xl:min-w-[26rem] 2xl:min-w-[30rem]',
+        '2xl:min-w-120 md:min-w-88 xl:min-w-104 grid min-h-72 min-w-80 flex-1 grid-rows-[4rem_1fr] gap-2 lg:min-w-sm',
         className,
       )}
     >

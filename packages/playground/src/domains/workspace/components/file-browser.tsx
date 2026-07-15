@@ -4,6 +4,7 @@ import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
+import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { Tree } from '@mastra/playground-ui/components/Tree';
 import { AmazonIcon } from '@mastra/playground-ui/icons/AmazonIcon';
@@ -34,7 +35,7 @@ import {
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { coldarkDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
+import { coldarkCold, coldarkDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 import type { FileEntry } from '../types';
 import { cn } from '@/lib/utils';
 
@@ -754,10 +755,12 @@ function getLanguageFromExtension(ext?: string): string | null {
  * Highlighted code display component using Prism.
  */
 function HighlightedCode({ content, language }: { content: string; language: string }) {
+  const isDark = useTheme().resolvedTheme === 'dark';
+
   return (
     <SyntaxHighlighter
       language={language}
-      style={coldarkDark}
+      style={isDark ? coldarkDark : coldarkCold}
       customStyle={{
         margin: 0,
         padding: '1rem',
