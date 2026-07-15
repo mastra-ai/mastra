@@ -49,7 +49,7 @@ vi.mock('@ai-sdk/perplexity-v5', () => ({ createPerplexity: createPerplexityMock
 vi.mock('@ai-sdk/togetherai-v5', () => ({ createTogetherAI: createTogetherAIMock }));
 vi.mock('@ai-sdk/xai-v6', () => ({ createXai: createXaiMock }));
 vi.mock('@internal/ai-v6', () => ({ createGateway: createGatewayMock }));
-vi.mock('@openrouter/ai-sdk-provider-v5', () => ({ createOpenRouter: createOpenRouterMock }));
+vi.mock('@openrouter/ai-sdk-provider-v6', () => ({ createOpenRouter: createOpenRouterMock }));
 
 // Mock fetch globally
 const mockFetch = vi.fn();
