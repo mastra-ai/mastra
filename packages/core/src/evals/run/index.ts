@@ -320,8 +320,23 @@ export async function runEvals(config: {
         for (let ti = 0; ti < turns.length; ti++) {
           const record = perTurn[ti];
           if (!record) continue;
-          const scored = await scoreTurn(turns[ti]!, record, item);
+          const { rawResults, ...scored } = await scoreTurn(turns[ti]!, record, item);
           itemTurnResults.push({ index: ti, ...scored });
+
+          if (storage) {
+            for (const [scorerId, scoreResult] of Object.entries(rawResults)) {
+              await saveSingleScore({
+                storage,
+                scoreResult,
+                scorerId,
+                entityId: target.id,
+                entityType: 'AGENT',
+                mastra,
+                target,
+                item,
+              });
+            }
+          }
         }
         perItemTurnResults.push(itemTurnResults);
       }
@@ -427,10 +442,11 @@ async function scoreTurn(
   turn: EvalTurn,
   record: PerTurnRecord,
   item: RunEvalsDataItem<any>,
-): Promise<Omit<ScoredTurn, 'index'>> {
+): Promise<Omit<ScoredTurn, 'index'> & { rawResults: Record<string, any> }> {
   const gates: Array<{ id: string; score: number }> = [];
   const thresholds: Array<{ id: string; score: number; threshold: ThresholdConfig }> = [];
   const scores: Array<{ id: string; score: number }> = [];
+  const rawResults: Record<string, any> = {};
 
   if (turn.gates) {
     for (const gate of turn.gates) {
@@ -448,6 +464,7 @@ async function scoreTurn(
           targetSpanId: record.spanId,
         });
         score = gateScore.score as number;
+        rawResults[gate.id] = gateScore;
       } catch {
         score = 0;
       }
@@ -471,6 +488,7 @@ async function scoreTurn(
       });
       const score = scoreResult.score as number;
       scores.push({ id: scorer.id, score });
+      rawResults[scorer.id] = scoreResult;
       const threshold = thresholdMap.get(scorer.id);
       if (threshold !== undefined) {
         thresholds.push({ id: scorer.id, score, threshold });
@@ -478,7 +496,7 @@ async function scoreTurn(
     }
   }
 
-  return { gates, thresholds, scores };
+  return { gates, thresholds, scores, rawResults };
 }
 
 /** Aggregates per-item turn results by turn index, averaging scores across items. */

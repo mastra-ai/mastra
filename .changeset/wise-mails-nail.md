@@ -11,7 +11,7 @@ Added multi-turn support to `runEvals`. Data items can now include an `inputs: s
 - Works with gates, thresholds, and all existing scorer configurations
 - Validation rejects empty `inputs` arrays with a `MastraError`
 
-Also added a `turns` API for **per-turn assertions**. Instead of a single holistic score over the accumulated conversation (which can hide a broken follow-up turn), each turn colocates its `input` with `gates`/`scorers` that evaluate only that turn's input and output. Per-turn outcomes are reported in `result.turnResults` and folded into the overall `verdict`. `turns` is Agent-only and mutually exclusive with `input`/`inputs`.
+Also added a `turns` API for **per-turn assertions**. Instead of a single holistic score over the accumulated conversation (which can hide a broken follow-up turn), each turn colocates its `input` with `gates`/`scorers` that evaluate only that turn's input and output. Per-turn outcomes are reported in `result.turnResults` and folded into the overall `verdict`. When the agent has storage configured, per-turn scorer/gate results are persisted like top-level scores. `turns` is Agent-only and mutually exclusive with `input`/`inputs`.
 
 **Example — holistic multi-turn (`inputs`)**
 ```ts

@@ -1811,6 +1811,31 @@ describe('runEvals', () => {
       ).rejects.toThrow("'turns' cannot be combined with 'input' or 'inputs'");
     });
 
+    it('rejects turns for Workflow targets', async () => {
+      const step = createStep({
+        id: 'turns-step',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ output: z.string() }),
+        execute: async ({ inputData }) => ({ output: `Processed: ${inputData.input}` }),
+      });
+      const workflow = createWorkflow({
+        id: 'turns-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ output: z.string() }),
+        options: { validateInputs: false },
+      })
+        .then(step)
+        .commit();
+
+      await expect(
+        runEvals({
+          data: [{ turns: [{ input: { input: 'first' } }] }] as any,
+          scorers: [createMockScorer('basic', 0.8)],
+          target: workflow,
+        }),
+      ).rejects.toThrow("'turns' is not supported for Workflow targets");
+    });
+
     it('supports mixing a single-turn item with a turns item', async () => {
       const agent = createTurnAgent('mixedAgent');
 
@@ -1836,6 +1861,73 @@ describe('runEvals', () => {
       expect(result.summary.totalItems).toBe(2);
       expect(result.turnResults!.length).toBe(2);
       expect(result.turnResults![0]!.scores!['mixed-turn-scorer']).toBe(1.0);
+    });
+
+    it('persists per-turn scores to storage (one score per turn)', async () => {
+      const dummyModel = new MockLanguageModelV2({
+        doGenerate: async () => ({
+          content: [{ type: 'text', text: 'turn response' }],
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        }),
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'turn response' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        }),
+      });
+
+      const agent = new Agent({
+        id: 'turnPersistAgent',
+        name: 'Turn Persist Agent',
+        instructions: 'Mock',
+        model: dummyModel,
+      });
+
+      const storage = new InMemoryStore();
+      const mastra = new Mastra({ agents: { turnPersistAgent: agent }, logger: false, storage });
+
+      const scoresStore = (await mastra.getStorage()!.getStore('scores'))!;
+      const saveScoreSpy = vi.spyOn(scoresStore, 'saveScore');
+
+      const perTurnScorer = createScorer({
+        id: 'per-turn-persisted',
+        name: 'per-turn-persisted',
+        description: 'per-turn',
+      }).generateScore(() => 0.75);
+      mastra.addScorer(perTurnScorer, 'per-turn-persisted');
+
+      await runEvals({
+        data: [
+          {
+            turns: [
+              { input: 'first', scorers: [perTurnScorer] },
+              { input: 'second', scorers: [perTurnScorer] },
+            ],
+          },
+        ],
+        target: mastra.getAgent('turnPersistAgent'),
+      });
+
+      const perTurnCalls = saveScoreSpy.mock.calls.filter(
+        ([payload]: any[]) => payload?.scorerId === 'per-turn-persisted',
+      );
+      expect(perTurnCalls).toHaveLength(2);
+      expect(perTurnCalls[0]![0]).toMatchObject({
+        scorerId: 'per-turn-persisted',
+        entityId: 'turnPersistAgent',
+        entityType: 'AGENT',
+        score: 0.75,
+        source: 'TEST',
+      });
     });
   });
 });
