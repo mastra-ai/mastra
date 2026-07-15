@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../agent';
 import { Mastra } from '../../mastra';
+import { MockMemory } from '../../memory/mock';
 import { NoOpObservability } from '../../observability';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
@@ -1665,6 +1666,116 @@ describe('runEvals', () => {
 
       expect(turnCount).toBe(2);
       expect(result.verdict).toBe('passed');
+    });
+  });
+
+  describe('multi-turn memory integration (real Memory + storage)', () => {
+    const buildModel = (capturedPrompts: string[]) =>
+      new MockLanguageModelV2({
+        doGenerate: async (options: any) => {
+          capturedPrompts.push(JSON.stringify(options.prompt));
+          return {
+            content: [{ type: 'text', text: `reply ${capturedPrompts.length}` }],
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          };
+        },
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'reply' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        }),
+      });
+
+    it('injects a resourceId so a memory-backed agent persists and recalls across turns', async () => {
+      const capturedPrompts: string[] = [];
+      const memory = new MockMemory();
+      const agent = new Agent({
+        id: 'memoryMultiTurnAgent',
+        name: 'memoryMultiTurnAgent',
+        instructions: 'Mock',
+        model: buildModel(capturedPrompts),
+        memory,
+      });
+
+      let capturedThread: string | undefined;
+      let capturedResource: string | undefined;
+      const originalGenerate = agent.generate.bind(agent);
+      vi.spyOn(agent, 'generate').mockImplementation(async (input: any, options: any) => {
+        const thread = options?.memory?.thread;
+        capturedThread = typeof thread === 'string' ? thread : thread?.id;
+        capturedResource = options?.memory?.resource;
+        return originalGenerate(input, options);
+      });
+
+      await runEvals({
+        data: [{ inputs: ['My favorite city is Brooklyn.', 'What did I say my favorite city was?'] }],
+        scorers: [createMockScorer('basic', 1)],
+        target: agent,
+      });
+
+      // runEvals owns the thread; it must also inject a resource (defaulting to the
+      // thread id) so real Mastra memory can create the thread and recall history.
+      expect(capturedThread).toBeDefined();
+      expect(capturedResource).toBe(capturedThread);
+
+      // The thread was actually created in storage with the injected resource.
+      const thread = await memory.getThreadById({ threadId: capturedThread! });
+      expect(thread).not.toBeNull();
+      expect(thread?.resourceId).toBe(capturedResource);
+
+      // Both turns were persisted to the one shared thread.
+      const { messages } = await memory.recall({ threadId: capturedThread!, perPage: false });
+      expect(messages.filter(m => m.role === 'user').length).toBe(2);
+      expect(messages.filter(m => m.role === 'assistant').length).toBe(2);
+
+      // Cross-turn recall: the second turn's prompt includes the first turn's content.
+      expect(capturedPrompts.length).toBe(2);
+      expect(capturedPrompts[1]).toContain('Brooklyn');
+    });
+
+    it('preserves a caller-provided memory.resource (thread optional in options)', async () => {
+      const capturedPrompts: string[] = [];
+      const memory = new MockMemory();
+      const agent = new Agent({
+        id: 'memoryResourceAgent',
+        name: 'memoryResourceAgent',
+        instructions: 'Mock',
+        model: buildModel(capturedPrompts),
+        memory,
+      });
+
+      let capturedResource: string | undefined;
+      let capturedThread: string | undefined;
+      const originalGenerate = agent.generate.bind(agent);
+      vi.spyOn(agent, 'generate').mockImplementation(async (input: any, options: any) => {
+        capturedResource = options?.memory?.resource;
+        const thread = options?.memory?.thread;
+        capturedThread = typeof thread === 'string' ? thread : thread?.id;
+        return originalGenerate(input, options);
+      });
+
+      await runEvals({
+        data: [{ inputs: ['Turn 1', 'Turn 2'] }],
+        scorers: [createMockScorer('basic', 1)],
+        target: agent,
+        // No thread supplied — runEvals injects it; only resource is provided.
+        targetOptions: { memory: { resource: 'user-42' } },
+      });
+
+      expect(capturedResource).toBe('user-42');
+      expect(capturedThread).toBeDefined();
+
+      const thread = await memory.getThreadById({ threadId: capturedThread! });
+      expect(thread?.resourceId).toBe('user-42');
     });
   });
 

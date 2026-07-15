@@ -1,6 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import type { CoreMessage } from '@internal/ai-sdk-v4';
-import type { Agent, AgentExecutionOptions, AiMessageType, UIMessageWithMetadata } from '../../agent';
+import type {
+  Agent,
+  AgentExecutionOptions,
+  AgentMemoryOption,
+  AiMessageType,
+  UIMessageWithMetadata,
+} from '../../agent';
 import { isSupportedLanguageModel } from '../../agent';
 import { MastraError } from '../../error';
 import { validateAndSaveScore } from '../../mastra/hooks';
@@ -144,6 +150,20 @@ type RunEvalsResult = {
   turnResults?: TurnResult[];
 };
 
+/**
+ * Agent execution options accepted by runEvals. Identical to the agent's own options
+ * except `thread` is optional on `memory`: runEvals generates and injects a thread per
+ * data item (multi-turn shares one thread across its turns), so callers only need to
+ * supply a `resource` when they want a specific one — they don't have to pass a
+ * placeholder thread that runEvals would immediately replace.
+ */
+type RunEvalsAgentOptions = Omit<
+  AgentExecutionOptions<any>,
+  'scorers' | 'returnScorerData' | 'requestContext' | 'memory'
+> & {
+  memory?: Omit<AgentMemoryOption, 'thread'> & { thread?: AgentMemoryOption['thread'] };
+};
+
 // Agent with gates (scorers optional) — gate-only runs are allowed
 export function runEvals<TAgent extends Agent>(config: {
   data: RunEvalsDataItem<TAgent>[];
@@ -151,7 +171,7 @@ export function runEvals<TAgent extends Agent>(config: {
   gates: MastraScorer<any, any, any, any>[];
   scorers?: ScorerEntry[];
   target: TAgent;
-  targetOptions?: Omit<AgentExecutionOptions<any>, 'scorers' | 'returnScorerData' | 'requestContext'>;
+  targetOptions?: RunEvalsAgentOptions;
   onItemComplete?: (params: {
     item: RunEvalsDataItem<TAgent>;
     targetResult: Awaited<ReturnType<Agent['generate']>>;
@@ -167,7 +187,7 @@ export function runEvals<TAgent extends Agent>(config: {
   target: TAgent;
   /** Gates: scorers that must score 1.0 for the run to pass. */
   gates?: MastraScorer<any, any, any, any>[];
-  targetOptions?: Omit<AgentExecutionOptions<any>, 'scorers' | 'returnScorerData' | 'requestContext'>;
+  targetOptions?: RunEvalsAgentOptions;
   onItemComplete?: (params: {
     item: RunEvalsDataItem<TAgent>;
     targetResult: Awaited<ReturnType<Agent['generate']>>;
@@ -213,7 +233,7 @@ export function runEvals<TAgent extends Agent>(config: {
   data: RunEvalsDataItem<TAgent>[];
   scorers: AgentScorerConfig;
   target: TAgent;
-  targetOptions?: Omit<AgentExecutionOptions<any>, 'scorers' | 'returnScorerData' | 'requestContext'>;
+  targetOptions?: RunEvalsAgentOptions;
   onItemComplete?: (params: {
     item: RunEvalsDataItem<TAgent>;
     targetResult: Awaited<ReturnType<Agent['generate']>>;
@@ -230,9 +250,7 @@ export async function runEvals(config: {
   scorers?: ScorerEntry[] | MastraScorer<any, any, any, any>[] | WorkflowScorerConfig | AgentScorerConfig;
   target: Agent | Workflow;
   gates?: MastraScorer<any, any, any, any>[];
-  targetOptions?:
-    | Omit<AgentExecutionOptions<any>, 'scorers' | 'returnScorerData' | 'requestContext'>
-    | WorkflowRunOptions;
+  targetOptions?: RunEvalsAgentOptions | WorkflowRunOptions;
   onItemComplete?: (params: {
     item: RunEvalsDataItem<any>;
     targetResult: any;
@@ -828,31 +846,17 @@ function validateEvalsInputs(
 async function executeTarget(
   target: Agent | Workflow,
   item: RunEvalsDataItem<any>,
-  targetOptions?:
-    | Omit<AgentExecutionOptions<any>, 'scorers' | 'returnScorerData' | 'requestContext'>
-    | WorkflowRunOptions,
+  targetOptions?: RunEvalsAgentOptions | WorkflowRunOptions,
 ) {
   try {
     if (isWorkflow(target)) {
       return await executeWorkflow(target, item, targetOptions as WorkflowRunOptions);
     } else if (item.turns && Array.isArray(item.turns) && item.turns.length > 0) {
-      return await executeAgentTurns(
-        target,
-        item,
-        targetOptions as Omit<AgentExecutionOptions<any>, 'scorers' | 'returnScorerData' | 'requestContext'>,
-      );
+      return await executeAgentTurns(target, item, targetOptions as RunEvalsAgentOptions);
     } else if (item.inputs && Array.isArray(item.inputs) && item.inputs.length > 0) {
-      return await executeAgentMultiTurn(
-        target,
-        item,
-        targetOptions as Omit<AgentExecutionOptions<any>, 'scorers' | 'returnScorerData' | 'requestContext'>,
-      );
+      return await executeAgentMultiTurn(target, item, targetOptions as RunEvalsAgentOptions);
     } else {
-      return await executeAgent(
-        target,
-        item,
-        targetOptions as Omit<AgentExecutionOptions<any>, 'scorers' | 'returnScorerData' | 'requestContext'>,
-      );
+      return await executeAgent(target, item, targetOptions as RunEvalsAgentOptions);
     }
   } catch (error) {
     throw new MastraError(
@@ -894,21 +898,21 @@ async function executeWorkflow(target: Workflow, item: RunEvalsDataItem<any>, ta
   };
 }
 
-async function executeAgent(
-  agent: Agent,
-  item: RunEvalsDataItem<any>,
-  targetOptions?: Omit<AgentExecutionOptions<any>, 'scorers' | 'returnScorerData' | 'requestContext'>,
-) {
+async function executeAgent(agent: Agent, item: RunEvalsDataItem<any>, targetOptions?: RunEvalsAgentOptions) {
   const observabilityContext = resolveObservabilityContext(item);
   const model = await agent.getModel();
   if (isSupportedLanguageModel(model)) {
-    const { structuredOutput, ...restOptions } = targetOptions ?? {};
+    const { structuredOutput, memory, ...restOptions } = targetOptions ?? {};
     const baseOptions = {
       ...restOptions,
       ...observabilityContext,
       scorers: {},
       returnScorerData: true,
       requestContext: item.requestContext,
+      // Single-turn does not own a thread, so a caller-supplied memory must carry
+      // its own thread (the runEvals-level thread relaxation only applies to the
+      // multi-turn `inputs`/`turns` paths, which inject a shared thread per item).
+      ...(memory ? { memory: memory as AgentMemoryOption } : {}),
     };
     const result = structuredOutput
       ? await agent.generate(item.input, { ...baseOptions, structuredOutput })
@@ -951,7 +955,7 @@ async function runAgentTurns(
   agent: Agent,
   inputs: AgentInputType[],
   item: RunEvalsDataItem<any>,
-  targetOptions?: Omit<AgentExecutionOptions<any>, 'scorers' | 'returnScorerData' | 'requestContext'>,
+  targetOptions?: RunEvalsAgentOptions,
 ): Promise<{ allOutputMessages: any[]; perTurn: PerTurnRecord[]; lastResult: any }> {
   const observabilityContext = resolveObservabilityContext(item);
   const model = await agent.getModel();
@@ -972,6 +976,14 @@ async function runAgentTurns(
   }
 
   const { structuredOutput, memory: callerMemory, ...restOptions } = targetOptions ?? ({} as any);
+
+  // Mastra memory persists and recalls messages per (resource, thread). runEvals
+  // owns the thread (one per data item), so callers only supply a resource when
+  // they want a specific one; otherwise we default the resource to the thread id
+  // so each conversation is isolated and cross-turn recall works out of the box.
+  const resourceId = callerMemory?.resource ?? threadId;
+  const turnMemory = { ...callerMemory, thread: threadId, resource: resourceId };
+
   const allOutputMessages: any[] = [];
   const perTurn: PerTurnRecord[] = [];
   let lastResult: any = undefined;
@@ -985,7 +997,7 @@ async function runAgentTurns(
         scorers: {},
         returnScorerData: true,
         requestContext: item.requestContext,
-        memory: { ...callerMemory, thread: threadId },
+        memory: turnMemory,
       };
       result = structuredOutput
         ? await agent.generate(turnInput, { ...baseOptions, structuredOutput })
@@ -996,7 +1008,7 @@ async function runAgentTurns(
         scorers: {},
         returnScorerData: true,
         requestContext: item.requestContext,
-        memory: { ...callerMemory, thread: threadId },
+        memory: turnMemory,
         ...observabilityContext,
       });
     }
@@ -1024,11 +1036,7 @@ async function runAgentTurns(
  * all output messages for scoring. Each entry in `item.inputs` is sent
  * sequentially via agent.generate() with the same threadId.
  */
-async function executeAgentMultiTurn(
-  agent: Agent,
-  item: RunEvalsDataItem<any>,
-  targetOptions?: Omit<AgentExecutionOptions<any>, 'scorers' | 'returnScorerData' | 'requestContext'>,
-) {
+async function executeAgentMultiTurn(agent: Agent, item: RunEvalsDataItem<any>, targetOptions?: RunEvalsAgentOptions) {
   const inputs: AgentInputType[] = item.inputs!;
   const { allOutputMessages, lastResult } = await runAgentTurns(agent, inputs, item, targetOptions);
 
@@ -1048,11 +1056,7 @@ async function executeAgentMultiTurn(
  * on the same thread; the returned `perTurn` records let the caller score each turn
  * against only its own input/output.
  */
-async function executeAgentTurns(
-  agent: Agent,
-  item: RunEvalsDataItem<any>,
-  targetOptions?: Omit<AgentExecutionOptions<any>, 'scorers' | 'returnScorerData' | 'requestContext'>,
-) {
+async function executeAgentTurns(agent: Agent, item: RunEvalsDataItem<any>, targetOptions?: RunEvalsAgentOptions) {
   const turns: EvalTurn[] = item.turns!;
   const inputs = turns.map(t => t.input);
   const { allOutputMessages, perTurn, lastResult } = await runAgentTurns(agent, inputs, item, targetOptions);

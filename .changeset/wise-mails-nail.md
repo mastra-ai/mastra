@@ -7,6 +7,7 @@ Added multi-turn support to `runEvals`. Data items can now include an `inputs: s
 **What changed**
 - `RunEvalsDataItem` accepts an optional `inputs` array for multi-turn conversations
 - Each turn runs `agent.generate()` with the same `threadId`, preserving conversation history
+- `runEvals` injects both a shared `threadId` and a `resourceId` (Mastra memory scopes messages by resource + thread, so both are needed for recall); the resource defaults to the generated thread and a caller-provided `targetOptions.memory.resource` is preserved. `thread` is now optional in `targetOptions.memory` since `runEvals` owns it.
 - Scorers receive the accumulated output messages from all turns
 - Works with gates, thresholds, and all existing scorer configurations
 - Validation rejects empty `inputs` arrays with a `MastraError`
