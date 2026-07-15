@@ -5,10 +5,15 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { CircleDot, EllipsisVertical, GitPullRequest, MessageSquare } from 'lucide-react';
 import type { ComponentType, DragEvent } from 'react';
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router';
 
 import { useApiConfig } from '../../../../shared/api/config';
 import { relativeTime } from '../../../../shared/lib/date';
 import { SkeletonRows } from '../../ui';
+import { AGENT_CONTROLLER_ID } from '../chat/services/constants';
+// Deep imports (not the workspaces barrel) to avoid provider/component cycles.
+import { useSelectWorkspaceMutation, useWorkspacesQuery } from '../workspaces/hooks/useWorkspaces';
+import type { Project } from '../workspaces/services/projects';
 import { FactoryItemActions } from './components/FactoryItemActions';
 import { FactoryPageShell } from './components/FactoryPageShell';
 import { LoadMoreSentinel } from './components/LoadMoreSentinel';
@@ -25,7 +30,7 @@ import { useWorkItemsQuery } from './hooks/useWorkItems';
 import type { GithubIssue, GithubPullRequest } from './services/factory';
 import type { LinearIssue } from './services/linear';
 import { connectLinear, isLinearReauthError } from './services/linear';
-import type { WorkItem, WorkItemSource } from './services/workItems';
+import type { WorkItem, WorkItemSessionRef, WorkItemSource } from './services/workItems';
 import { BOARD_STAGES, stageLabel } from './stages';
 import type { BoardStageId } from './stages';
 
@@ -340,12 +345,13 @@ export function BoardPage() {
       description="Issues and pull requests across intake, work, review, and done."
       maxWidthClassName="max-w-7xl"
     >
-      {project => <Board githubProjectId={project.githubProjectId} />}
+      {project => <Board project={project} />}
     </FactoryPageShell>
   );
 }
 
-function Board({ githubProjectId }: { githubProjectId: string }) {
+function Board({ project }: { project: Project & { githubProjectId: string } }) {
+  const githubProjectId = project.githubProjectId;
   const items = useWorkItemsQuery(githubProjectId);
   const configQuery = useIntakeConfigQuery();
   const linearStatusQuery = useLinearStatusQuery();
@@ -384,6 +390,28 @@ function Board({ githubProjectId }: { githubProjectId: string }) {
   const remove = useDeleteWorkItemMutation(githubProjectId);
   const { start, enabled: runEnabled } = useStartFactoryRun();
   const triage = useStartIssueTriageMutation(githubProjectId);
+  const navigate = useNavigate();
+
+  // Worktrees that still exist. A card's session ref whose worktree was
+  // deleted is stale: its thread is gone (worktree deletion cascades onto its
+  // threads), so it neither renders a Thread link nor blocks re-running.
+  const workspaces = useWorkspacesQuery(project);
+  const liveWorktreePaths = useMemo(
+    () => new Set((workspaces.data?.worktrees ?? []).map(worktree => worktree.worktreePath)),
+    [workspaces.data],
+  );
+
+  // Threads are scoped per worktree, so opening a card's thread first makes
+  // its worktree the active workspace — otherwise the thread page can't
+  // resolve the thread in the active scope and bounces away.
+  const selectWorkspace = useSelectWorkspaceMutation(project, {
+    agentControllerId: AGENT_CONTROLLER_ID,
+    resourceId: project.resourceId,
+  });
+  const openThread = async (session: WorkItemSessionRef) => {
+    await selectWorkspace.mutateAsync(session.projectPath);
+    navigate(`/threads/${session.threadId}`);
+  };
 
   const workItems = useMemo(() => items.data ?? [], [items.data]);
 
@@ -430,7 +458,7 @@ function Board({ githubProjectId }: { githubProjectId: string }) {
     );
   }
 
-  const mutationError = [start, triage, upsert, update, remove].find(m => m.isError)?.error;
+  const mutationError = [start, triage, upsert, update, remove, selectWorkspace].find(m => m.isError)?.error;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -475,8 +503,10 @@ function Board({ githubProjectId }: { githubProjectId: string }) {
                   key={`${item.id}:${stage.id}`}
                   item={item}
                   columnStage={stage.id}
+                  liveWorktreePaths={liveWorktreePaths}
                   runDisabled={!runEnabled || start.isPending}
                   runStarting={start.isPending}
+                  onOpenThread={session => void openThread(session)}
                   onStartRun={(spec, action) =>
                     start.mutate({
                       branch: spec.branch,
@@ -607,14 +637,18 @@ const SOURCE_ICONS: Record<
  * them into a single "Thread" link. Distinct threads (e.g. a triage thread
  * created outside the item's worktree) each keep their own labelled link.
  */
-function sessionThreadLinks(sessions: WorkItem['sessions']): Array<{ threadId: string; label: string }> {
-  const rolesByThread = new Map<string, string[]>();
+function sessionThreadLinks(
+  sessions: Record<string, WorkItemSessionRef>,
+): Array<{ session: WorkItemSessionRef; label: string }> {
+  const byThread = new Map<string, { session: WorkItemSessionRef; roles: string[] }>();
   for (const [role, session] of Object.entries(sessions)) {
-    rolesByThread.set(session.threadId, [...(rolesByThread.get(session.threadId) ?? []), role]);
+    const entry = byThread.get(session.threadId);
+    if (entry) entry.roles.push(role);
+    else byThread.set(session.threadId, { session, roles: [role] });
   }
-  const threads = [...rolesByThread.entries()];
-  return threads.map(([threadId, roles]) => ({
-    threadId,
+  const threads = [...byThread.values()];
+  return threads.map(({ session, roles }) => ({
+    session,
     label: threads.length === 1 ? 'Thread' : `${roles.join('/')} thread`,
   }));
 }
@@ -622,16 +656,21 @@ function sessionThreadLinks(sessions: WorkItem['sessions']): Array<{ threadId: s
 function WorkItemCard({
   item,
   columnStage,
+  liveWorktreePaths,
   runDisabled,
   runStarting,
+  onOpenThread,
   onStartRun,
   onMove,
   onRemove,
 }: {
   item: WorkItem;
   columnStage: BoardStageId;
+  /** Worktrees that still exist; session refs outside this set are stale. */
+  liveWorktreePaths: ReadonlySet<string>;
   runDisabled: boolean;
   runStarting: boolean;
+  onOpenThread: (session: WorkItemSessionRef) => void;
   onStartRun: (spec: ItemRunSpec, action: RunAction) => void;
   onMove: (toStage: string) => void;
   onRemove: () => void;
@@ -639,8 +678,13 @@ function WorkItemCard({
   const { icon: Icon, className: iconClassName } = SOURCE_ICONS[item.source];
   const otherStages = item.stages.filter(stage => stage !== columnStage);
   const runSpec = itemRunSpec(item);
+  // Session refs whose worktree was deleted are stale: their threads went with
+  // the worktree, so they don't render links and don't block re-running.
+  const liveSessions = Object.fromEntries(
+    Object.entries(item.sessions).filter(([, session]) => liveWorktreePaths.has(session.projectPath)),
+  );
   // Offer only runs whose session slot hasn't been used yet on this card.
-  const runActions = runSpec === null ? [] : runSpec.actions.filter(action => !(action.role in item.sessions));
+  const runActions = runSpec === null ? [] : runSpec.actions.filter(action => !(action.role in liveSessions));
 
   return (
     <article
@@ -692,17 +736,21 @@ function WorkItemCard({
           </DropdownMenu.Content>
         </DropdownMenu>
       </div>
-      {(otherStages.length > 0 || Object.keys(item.sessions).length > 0) && (
+      {(otherStages.length > 0 || Object.keys(liveSessions).length > 0) && (
         <div className="flex flex-wrap items-center gap-1.5">
           {otherStages.map(stage => (
             <span key={stage} className="rounded-full bg-surface5 px-1.5 py-0.5 text-ui-xs text-icon4">
               {stageLabel(stage)}
             </span>
           ))}
-          {sessionThreadLinks(item.sessions).map(({ threadId, label }) => (
+          {sessionThreadLinks(liveSessions).map(({ session, label }) => (
             <a
-              key={threadId}
-              href={`/threads/${threadId}`}
+              key={session.threadId}
+              href={`/threads/${session.threadId}`}
+              onClick={event => {
+                event.preventDefault();
+                onOpenThread(session);
+              }}
               className="flex items-center gap-1 text-ui-xs text-icon3 no-underline hover:text-icon5"
             >
               <MessageSquare size={11} aria-hidden />
