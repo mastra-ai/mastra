@@ -27,6 +27,16 @@ import type { McpConfig, McpHttpOAuthConfig, McpServerConfig, McpSkippedServer }
  */
 export const DEFAULT_OAUTH_REDIRECT_URL = 'http://127.0.0.1:1458/oauth/callback';
 
+// Matches the entire 127.0.0.0/8 range in dotted-quad form. `URL` normalizes
+// IPv4 hosts to four octets (so `127.1` becomes `127.0.0.1`), so anchoring the
+// pattern is enough — and it rejects lookalikes like `127.evil.com` that a
+// `startsWith('127.')` check would wrongly accept.
+const LOOPBACK_IPV4 = /^127\.(?:\d{1,3})\.(?:\d{1,3})\.(?:\d{1,3})$/;
+
+function isLoopbackHostname(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '[::1]' || hostname === '::1' || LOOPBACK_IPV4.test(hostname);
+}
+
 export function loadMcpConfig(projectDir: string, configDirName = DEFAULT_CONFIG_DIR): McpConfig {
   const claudeConfig = loadClaudeSettings(projectDir);
   const globalConfig = loadSingleConfig(getGlobalMcpPath(configDirName));
@@ -218,10 +228,7 @@ function parseOAuthConfig(raw: unknown): { config?: McpHttpOAuthConfig; reason?:
   const rawRedirectUrl = obj.redirectUrl ?? DEFAULT_OAUTH_REDIRECT_URL;
   try {
     const redirectUrl = new URL(rawRedirectUrl);
-    const isLoopback =
-      redirectUrl.hostname === 'localhost' ||
-      redirectUrl.hostname.startsWith('127.') ||
-      redirectUrl.hostname === '[::1]';
+    const isLoopback = isLoopbackHostname(redirectUrl.hostname);
     if (redirectUrl.protocol !== 'https:' && !(redirectUrl.protocol === 'http:' && isLoopback)) {
       return { reason: 'Invalid OAuth redirectUrl: must use HTTPS unless it is a loopback HTTP URL' };
     }

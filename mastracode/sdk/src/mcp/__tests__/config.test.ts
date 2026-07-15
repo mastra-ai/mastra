@@ -302,6 +302,21 @@ describe('validateConfig', () => {
     expect(result.skippedServers![0]!.reason).toContain('must use HTTPS');
   });
 
+  it('rejects an HTTP OAuth redirect URL whose host only looks like a loopback address', () => {
+    const result = validateConfig({
+      mcpServers: {
+        remote: {
+          url: 'https://mcp.example.com/sse',
+          oauth: { redirectUrl: 'http://127.evil.com/callback' },
+        },
+      },
+    });
+
+    expect(result.mcpServers).toBeUndefined();
+    expect(result.skippedServers).toHaveLength(1);
+    expect(result.skippedServers![0]!.reason).toContain('must use HTTPS');
+  });
+
   it('skips http server entry with invalid OAuth scopes', () => {
     const result = validateConfig({
       mcpServers: {
