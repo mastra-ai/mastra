@@ -366,6 +366,10 @@ export function setupAutocomplete(state: TUIState): void {
       description: 'Manage push-to-talk voice input (engine, provider, model)',
     },
     { name: 'review', description: 'Review a GitHub pull request' },
+    {
+      name: 'adversarial-review',
+      description: 'Review a PR in a fresh headless instance (optionally another model)',
+    },
     { name: 'report-issue', description: 'Open or browse mastracode issues' },
     { name: 'setup', description: 'Re-run the setup wizard' },
     { name: 'browser', description: 'Configure browser automation' },

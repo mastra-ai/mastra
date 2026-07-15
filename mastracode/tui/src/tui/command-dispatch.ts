@@ -33,6 +33,7 @@ import {
   handleSettingsCommand,
   handleLoginCommand,
   handleReviewCommand as handleReviewCmd,
+  handleAdversarialReviewCommand as handleAdversarialReviewCmd,
   handleReportIssueCommand as handleReportIssueCmd,
   handleSetupCommand,
   handleBrowserCommand,
@@ -237,6 +238,9 @@ export async function dispatchSlashCommand(
       return true;
     case 'review':
       await handleReviewCmd(ctx, args);
+      return true;
+    case 'adversarial-review':
+      await handleAdversarialReviewCmd(ctx, args);
       return true;
     case 'report-issue':
       await handleReportIssueCmd(ctx, args);
