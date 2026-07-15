@@ -378,17 +378,25 @@ describe('WorkspacesSection', () => {
     expect(created).toBe(1);
   });
 
-  it('stays on non-thread routes when switching workspaces', async () => {
+  it('opens the session thread when switching workspaces from a Factory page', async () => {
     seedActiveProject(githubProject);
     useAgentControllerHandlers();
+    server.use(
+      http.get(`${API}/sessions/:resourceId/threads`, () =>
+        HttpResponse.json({
+          threads: [
+            { id: 'thread-latest', title: 'Latest', resourceId: 'resource-gh', updatedAt: '2026-06-09T00:00:00.000Z' },
+          ],
+        }),
+      ),
+    );
     renderSection('/factory/board');
 
     await userEvent.click(await screen.findByRole('button', { name: 'feat-ui' }));
 
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'feat-ui' })).toHaveAttribute('aria-current', 'true'),
-    );
-    expect(screen.getByTestId('location')).toHaveTextContent('/factory/board');
+    // A session row IS its conversation — clicking it opens the thread even
+    // from worktree-independent pages like the board.
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-latest'));
   });
 
   it('offers no ad-hoc workspace creation — factory sessions come from board runs', async () => {

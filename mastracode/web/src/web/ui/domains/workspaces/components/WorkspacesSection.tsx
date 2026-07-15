@@ -68,11 +68,10 @@ export function WorkspacesSection() {
   const selectedPath = workspaces.data?.selected?.worktreePath;
   const pending = selectWorkspace.isPending || deleteWorkspace.isPending;
 
-  // Threads are scoped to a worktree, so entering a workspace lands on its
-  // most recent thread (creating one when it has none). Factory pages are
-  // worktree-independent and stay put.
+  // Threads are scoped to a worktree, so entering a session lands on its
+  // most recent thread (creating one when it has none) — from anywhere,
+  // including Factory pages: a session row IS its conversation.
   const openWorktreeThread = async (worktreePath: string) => {
-    if (location.pathname.startsWith('/factory')) return;
     try {
       // Address the target worktree's own session (sessions are scoped per
       // worktree). Create it up front so a brand-new scope is seeded with its
@@ -138,8 +137,9 @@ export function WorkspacesSection() {
       onSuccess: ({ updated, wasSelected }) => {
         setConfirmDelete(null);
         // Threads under the deleted worktree are gone; if we were inside one,
-        // land on the fallback workspace's latest thread.
-        if (wasSelected) {
+        // land on the fallback workspace's latest thread. Factory pages are
+        // worktree-independent, so deleting from there stays put.
+        if (wasSelected && !location.pathname.startsWith('/factory')) {
           const fallback = updated.selectedWorktreePath;
           if (fallback) void openWorktreeThread(fallback);
           else void navigate('/new', { replace: true });
