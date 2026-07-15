@@ -120,6 +120,8 @@ export class StagehandBrowser extends MastraBrowser {
     const stagehandOptions: ConstructorParameters<typeof Stagehand>[0] = {
       env: config.env ?? 'LOCAL',
       model: config.model,
+      experimental: config.experimental,
+      disableAPI: config.disableAPI,
       selfHeal: config.selfHeal ?? true,
       domSettleTimeout: config.domSettleTimeout,
       verbose: (config.verbose ?? 0) as 0 | 1 | 2,
