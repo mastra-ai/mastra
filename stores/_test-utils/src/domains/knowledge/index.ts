@@ -23,6 +23,16 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       expect(await store.getEntity(page.id)).toBeNull();
     });
 
+    it('reserves page kinds case-insensitively for page records', async () => {
+      await expect(store.createEntity({ name: 'Not a page', kind: ' Page ', scope: resource })).rejects.toThrow(
+        /reserved/,
+      );
+      const entity = await store.createEntity({ name: 'Entity', kind: 'task', scope: resource });
+      await expect(store.updateEntity({ id: entity.id, version: entity.version, kind: '\tPAGE\n' })).rejects.toThrow(
+        /reserved/,
+      );
+    });
+
     it('applies fact visibility independently from parent entity identity scope', async () => {
       const entity = await store.createEntity({ name: 'Resource entity', kind: 'task', scope: resource });
       await store.appendFact({
