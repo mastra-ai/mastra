@@ -1,11 +1,11 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import {
   DataList as EntityList,
   DataListSkeleton as EntityListSkeleton,
-  AgentIcon,
-  WorkspacesIcon,
-  truncateString,
-} from '@mastra/playground-ui';
-import { Badge } from '@mastra/playground-ui/components/Badge';
+} from '@mastra/playground-ui/components/DataList';
+import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { WorkspacesIcon } from '@mastra/playground-ui/icons/WorkspacesIcon';
+import { truncateString } from '@mastra/playground-ui/utils/truncate-string';
 import { useMemo } from 'react';
 import type { WorkspaceItem } from '../types';
 import { useLinkComponent } from '@/lib/framework';

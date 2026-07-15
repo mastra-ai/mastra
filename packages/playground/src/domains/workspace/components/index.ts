@@ -1,5 +1,5 @@
 // File browser components
-export { FileBrowser, FileViewer, type FileBrowserProps, type FileViewerProps } from './file-browser';
+export { FileBrowser, type FileBrowserProps } from './file-browser';
 
 export { WorkspacesList, type WorkspacesListProps } from './workspaces-list';
 

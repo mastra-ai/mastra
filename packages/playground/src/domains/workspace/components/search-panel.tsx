@@ -1,4 +1,4 @@
-import { Searchbar } from '@mastra/playground-ui/components/Searchbar';
+import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
 import { Loader2, FileText, FolderOpen } from 'lucide-react';
 import { useState } from 'react';
@@ -86,7 +86,7 @@ export function SearchWorkspacePanel({
     <div className="space-y-3">
       <div className="flex items-center gap-3">
         <div className="flex-1">
-          <Searchbar onSearch={handleSearch} label="Search workspace files" placeholder="Search workspace files..." />
+          <ListSearch onSearch={handleSearch} label="Search workspace files" placeholder="Search workspace files..." />
         </div>
         {isSearching && <Loader2 className="h-4 w-4 animate-spin text-neutral4 shrink-0" />}
       </div>
@@ -175,7 +175,7 @@ export function SearchSkillsPanel({ onSearch, results, isSearching, onResultClic
     <div className="space-y-3">
       <div className="flex items-center gap-3">
         <div className="flex-1">
-          <Searchbar onSearch={handleSearch} label="Search across skills" placeholder="Search across skills..." />
+          <ListSearch onSearch={handleSearch} label="Search across skills" placeholder="Search across skills..." />
         </div>
         {isSearching && <Loader2 className="h-4 w-4 animate-spin text-neutral4 shrink-0" />}
       </div>

@@ -119,25 +119,25 @@ afterEach(() => cleanup());
 describe('Workspace skill overview pane', () => {
   describe('when the workspace has installed skill fixtures', () => {
     it('renders the rich skill view when a skill SKILL.md is opened', async () => {
-    useSkillsWorkspaceHandlers();
+      useSkillsWorkspaceHandlers();
 
-    renderEditor('/workspaces/skills-ws?file=.agents/skills/code-review/SKILL.md');
+      renderEditor('/workspaces/skills-ws?file=.agents/skills/code-review/SKILL.md');
 
-    // The skill name renders as the overview heading (the rich pane, not the file viewer).
-    expect(await screen.findByRole('heading', { name: 'code-review' })).not.toBeNull();
-    // The empty preview state is replaced by the overview.
-    await waitFor(() => expect(screen.queryByText('Select a file to preview its contents')).toBeNull());
-    // The plain file viewer's copy-content action is NOT shown for a skill's SKILL.md.
-    expect(screen.queryByLabelText('Copy to clipboard')).toBeNull();
-  });
+      // The skill name renders as the overview heading (the rich pane, not the file viewer).
+      expect(await screen.findByRole('heading', { name: 'code-review' })).not.toBeNull();
+      // The empty preview state is replaced by the overview.
+      await waitFor(() => expect(screen.queryByText('Select a file to preview its contents')).toBeNull());
+      // The plain file viewer's copy-content action is NOT shown for a skill's SKILL.md.
+      expect(screen.queryByLabelText('Copy file content')).toBeNull();
+    });
 
-  it('opens a non-skill file in the plain file viewer, not the rich view', async () => {
-    useSkillsWorkspaceHandlers();
+    it('opens a non-skill file in the plain file viewer, not the rich view', async () => {
+      useSkillsWorkspaceHandlers();
 
-    renderEditor('/workspaces/skills-ws?file=README.md');
+      renderEditor('/workspaces/skills-ws?file=README.md');
 
-    // A regular file shows the file viewer (its copy-content action).
-    expect(await screen.findByLabelText('Copy to clipboard')).not.toBeNull();
-  });
+      // A regular file shows the file viewer (its copy-content action).
+      expect(await screen.findByLabelText('Copy file content')).not.toBeNull();
+    });
   });
 });

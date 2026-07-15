@@ -1,12 +1,8 @@
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
-import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { Files } from '@mastra/playground-ui/components/Files';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
-import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
-import { Tree } from '@mastra/playground-ui/components/Tree';
 import { AmazonIcon } from '@mastra/playground-ui/icons/AmazonIcon';
 import { AzureIcon } from '@mastra/playground-ui/icons/AzureIcon';
 import { GoogleIcon } from '@mastra/playground-ui/icons/GoogleIcon';
@@ -31,11 +27,9 @@ import {
   Wand2,
   Search,
   X,
-  ChevronRight,
 } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { coldarkCold, coldarkDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 import type { FileEntry } from '../types';
 import { cn } from '@/lib/utils';
 
@@ -80,6 +74,7 @@ export interface FileBrowserProps {
   onLoadFolder?: (path: string) => void;
   /** Set of folder paths currently loading their children. */
   loadingPaths?: ReadonlySet<string>;
+  footer?: ReactNode;
 }
 
 // =============================================================================
@@ -331,6 +326,7 @@ export function FileBrowser({
   isDeleting,
   onLoadFolder,
   loadingPaths,
+  footer,
 }: FileBrowserProps) {
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   // Parent path under which a new folder is being created. '.' means workspace root.
@@ -445,103 +441,56 @@ export function FileBrowser({
       </button>
     );
 
-  const selectFileFromEventTarget = (target: EventTarget | null) => {
-    if (!(target instanceof HTMLElement) || target.closest('button')) return;
-    const item = target.closest<HTMLElement>('[data-tree-item-kind="file"]');
-    const id = item?.dataset.treeItemId;
-    if (id) {
-      onFileSelect?.(id);
-    }
-  };
-
   const isSkillsPath = (path: string) => path === '.agents/skills' || path.startsWith('.agents/skills/');
 
-  // Accent left-bar drawn on the selected row to echo the reference design.
-  const selectedBarClass =
-    'relative before:absolute before:inset-y-1 before:left-0 before:w-0.5 before:rounded-full before:bg-accent1';
-
-  const renderNode = (node: FileTreeNode, depth = 0) => {
+  const renderNode = (node: FileTreeNode) => {
     const isSkillLocation = isSkillsPath(node.path);
     const isSkillRoot = skillPaths?.has(node.path) ?? false;
-    const isSelected = selectedPath != null && selectedPath === node.path;
 
     if (node.entry.type === 'directory') {
-      const isFolderLoading = loadingPaths?.has(node.path) ?? false;
       return (
-        <Tree.Folder
+        <Files.Folder
           key={node.path}
           id={node.path}
+          label={node.name}
+          icon={isSkillRoot ? <SkillIcon className="h-4 w-4 text-accent1" /> : getFileIcon(node.entry, true)}
+          metadata={renderMetadata(node)}
+          actions={renderFolderActions(node)}
           defaultOpen={!lazy}
-          onOpenChange={open => {
-            if (open && lazy) onLoadFolder?.(node.path);
-          }}
+          onLoad={lazy ? onLoadFolder : undefined}
+          loading={loadingPaths?.has(node.path)}
           data-workspace-tree-location={isSkillLocation ? 'skills' : undefined}
+          className={cn(isSkillRoot && 'font-medium')}
         >
-          <Tree.FolderTrigger actions={renderFolderActions(node)}>
-            <Tree.Icon>
-              {isFolderLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin text-neutral4" />
-              ) : isSkillRoot ? (
-                <SkillIcon className="h-4 w-4 text-accent1" />
-              ) : (
-                getFileIcon(node.entry, true)
-              )}
-            </Tree.Icon>
-            <Tree.Label className={cn('text-sm flex-1 text-neutral6', isSkillRoot && 'font-medium')}>
-              {node.name}
-            </Tree.Label>
-            {renderMetadata(node)}
-          </Tree.FolderTrigger>
-          {node.children.length > 0 && (
-            <Tree.FolderContent className="relative">
-              {/* Indent guide — a hairline under the parent chevron. The span carries
-                  no tree role, so the Tree's keyboard/aria logic ignores it. */}
-              <span
-                aria-hidden
-                className="pointer-events-none absolute inset-y-0 w-px bg-border1"
-                style={{ left: depth * 12 + 13 }}
-              />
-              {node.children.map(child => renderNode(child, depth + 1))}
-            </Tree.FolderContent>
-          )}
-        </Tree.Folder>
+          {node.children.map(renderNode)}
+        </Files.Folder>
       );
     }
 
     return (
-      <Tree.File
+      <Files.File
         key={node.path}
         id={node.path}
+        label={node.name}
+        icon={getFileIcon(node.entry, false)}
+        metadata={renderMetadata(node)}
+        actions={renderDeleteAction(node)}
         data-workspace-tree-location={isSkillLocation ? 'skills' : undefined}
-        className={cn(isSelected && selectedBarClass)}
-      >
-        <span
-          className="flex min-w-0 flex-1 items-center gap-1.5"
-          onClick={() => onFileSelect?.(node.path)}
-          onKeyDown={event => {
-            if (event.key === 'Enter' || event.key === ' ') {
-              event.preventDefault();
-              onFileSelect?.(node.path);
-            }
-          }}
-        >
-          <Tree.Icon>{getFileIcon(node.entry, false)}</Tree.Icon>
-          <Tree.Label className="text-sm flex-1 text-neutral6">{node.name}</Tree.Label>
-          {renderMetadata(node)}
-        </span>
-        {renderDeleteAction(node)}
-      </Tree.File>
+      />
     );
   };
 
   return (
-    <div className="h-full overflow-hidden">
-      {/* Header */}
-      <div className="flex h-12 shrink-0 items-center justify-between border-b border-border1 bg-surface3 px-4">
-        <div className="flex items-center gap-2 text-sm font-medium text-neutral6">
+    <Files.FileTree
+      selectedPath={selectedPath}
+      onSelect={onFileSelect}
+      title={
+        <div className="flex items-center gap-2">
           <FolderOpen className="h-4 w-4 text-amber-400" />
           <span>Files</span>
         </div>
+      }
+      actions={
         <div className="flex items-center gap-1">
           {onToggleSearch && (
             <Button
@@ -593,320 +542,100 @@ export function FileBrowser({
             </Button>
           )}
         </div>
-      </div>
+      }
+      collapsible
+      id="workspace-file-tree"
+      minSize={200}
+      maxSize="50%"
+      defaultSize={320}
+      collapsedSize={60}
+      footer={footer}
+      loading={isLoading}
+      error={error ? getErrorMessage(error) : undefined}
+      empty="Workspace is empty"
+      overlays={
+        <>
+          {/* Delete Confirmation */}
+          <AlertDialog open={!!deleteTarget} onOpenChange={open => !isDeleting && !open && setDeleteTarget(null)}>
+            <AlertDialog.Content>
+              <AlertDialog.Header>
+                <AlertDialog.Title>Delete Item</AlertDialog.Title>
+                <AlertDialog.Description>
+                  Are you sure you want to delete "{deleteTarget}"? This action cannot be undone.
+                </AlertDialog.Description>
+              </AlertDialog.Header>
+              <AlertDialog.Footer>
+                <AlertDialog.Cancel disabled={isDeleting}>Cancel</AlertDialog.Cancel>
+                <AlertDialog.Action
+                  disabled={isDeleting}
+                  onClick={async () => {
+                    try {
+                      if (deleteTarget && onDelete) {
+                        await onDelete(deleteTarget);
+                      }
+                    } finally {
+                      setDeleteTarget(null);
+                    }
+                  }}
+                >
+                  {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                  Delete
+                </AlertDialog.Action>
+              </AlertDialog.Footer>
+            </AlertDialog.Content>
+          </AlertDialog>
 
-      {/* File Tree */}
-      <div className="h-full overflow-auto">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-6 w-6 animate-spin text-neutral3" />
-          </div>
-        ) : error ? (
-          <div className="py-12 px-4 text-center">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-red-500/10 mb-4">
-              <AlertCircle className="h-6 w-6 text-red-400" />
-            </div>
-            <p className="text-sm text-neutral6 font-medium mb-1">Failed to load directory</p>
-            <p className="text-xs text-neutral4 max-w-sm mx-auto">{getErrorMessage(error)}</p>
-          </div>
-        ) : tree.length === 0 ? (
-          <div className="py-12 text-center text-neutral4 text-sm">Workspace is empty</div>
-        ) : (
-          <TooltipProvider>
-            <div
-              onClickCapture={event => selectFileFromEventTarget(event.target)}
-              onKeyDownCapture={event => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  selectFileFromEventTarget(event.target);
-                }
-              }}
-            >
-              <Tree selectedId={selectedPath}>{tree.map(node => renderNode(node, 0))}</Tree>
-            </div>
-          </TooltipProvider>
-        )}
-      </div>
-
-      {/* Delete Confirmation */}
-      <AlertDialog open={!!deleteTarget} onOpenChange={open => !isDeleting && !open && setDeleteTarget(null)}>
-        <AlertDialog.Content>
-          <AlertDialog.Header>
-            <AlertDialog.Title>Delete Item</AlertDialog.Title>
-            <AlertDialog.Description>
-              Are you sure you want to delete "{deleteTarget}"? This action cannot be undone.
-            </AlertDialog.Description>
-          </AlertDialog.Header>
-          <AlertDialog.Footer>
-            <AlertDialog.Cancel disabled={isDeleting}>Cancel</AlertDialog.Cancel>
-            <AlertDialog.Action
-              disabled={isDeleting}
-              onClick={async () => {
-                try {
-                  if (deleteTarget && onDelete) {
-                    await onDelete(deleteTarget);
-                  }
-                } finally {
-                  setDeleteTarget(null);
-                }
-              }}
-            >
-              {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Delete
-            </AlertDialog.Action>
-          </AlertDialog.Footer>
-        </AlertDialog.Content>
-      </AlertDialog>
-
-      {/* Create Folder */}
-      <AlertDialog
-        open={createParent !== null}
-        onOpenChange={open => !isCreatingDirectory && !open && closeCreateDialog()}
-      >
-        <AlertDialog.Content>
-          <form
-            onSubmit={event => {
-              event.preventDefault();
-              void submitCreateFolder();
-            }}
+          {/* Create Folder */}
+          <AlertDialog
+            open={createParent !== null}
+            onOpenChange={open => !isCreatingDirectory && !open && closeCreateDialog()}
           >
-            <AlertDialog.Header>
-              <AlertDialog.Title>New folder</AlertDialog.Title>
-              <AlertDialog.Description>
-                {createParent && !isRootPath(createParent)
-                  ? `Create a folder inside "${createParent}".`
-                  : 'Create a folder at the workspace root.'}
-              </AlertDialog.Description>
-            </AlertDialog.Header>
-            <AlertDialog.Body>
-              <Input
-                autoFocus
-                value={newFolderName}
-                onChange={event => setNewFolderName(event.target.value)}
-                placeholder="Folder name"
-                aria-label="Folder name"
-                disabled={isCreatingDirectory}
-              />
-            </AlertDialog.Body>
-            <AlertDialog.Footer>
-              <AlertDialog.Cancel type="button" disabled={isCreatingDirectory}>
-                Cancel
-              </AlertDialog.Cancel>
-              <Button type="submit" variant="primary" size="lg" disabled={isCreatingDirectory || !newFolderName.trim()}>
-                {isCreatingDirectory ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                Create
-              </Button>
-            </AlertDialog.Footer>
-          </form>
-        </AlertDialog.Content>
-      </AlertDialog>
-    </div>
-  );
-}
-
-// =============================================================================
-// File Viewer Component
-// =============================================================================
-
-/**
- * Map file extensions to Prism language names for syntax highlighting.
- */
-function getLanguageFromExtension(ext?: string): string | null {
-  if (!ext) return null;
-  const map: Record<string, string> = {
-    js: 'javascript',
-    jsx: 'jsx',
-    ts: 'typescript',
-    tsx: 'tsx',
-    json: 'json',
-    md: 'markdown',
-    mdx: 'mdx',
-    py: 'python',
-    rb: 'ruby',
-    go: 'go',
-    rs: 'rust',
-    java: 'java',
-    c: 'c',
-    cpp: 'cpp',
-    h: 'c',
-    hpp: 'cpp',
-    css: 'css',
-    scss: 'scss',
-    less: 'less',
-    html: 'html',
-    xml: 'xml',
-    yaml: 'yaml',
-    yml: 'yaml',
-    toml: 'toml',
-    sh: 'bash',
-    bash: 'bash',
-    zsh: 'bash',
-    sql: 'sql',
-    graphql: 'graphql',
-    gql: 'graphql',
-    dockerfile: 'dockerfile',
-    makefile: 'makefile',
-    vue: 'vue',
-    svelte: 'svelte',
-  };
-  return map[ext.toLowerCase()] || null;
-}
-
-/**
- * Highlighted code display component using Prism.
- */
-function HighlightedCode({ content, language }: { content: string; language: string }) {
-  const isDark = useTheme().resolvedTheme === 'dark';
-
-  return (
-    <SyntaxHighlighter
-      language={language}
-      style={isDark ? coldarkDark : coldarkCold}
-      customStyle={{
-        margin: 0,
-        padding: '1rem',
-        backgroundColor: 'transparent',
-        fontSize: '0.875rem',
-      }}
-      codeTagProps={{
-        style: {
-          fontFamily: 'var(--font-mono)',
-        },
-      }}
+            <AlertDialog.Content>
+              <form
+                onSubmit={event => {
+                  event.preventDefault();
+                  void submitCreateFolder();
+                }}
+              >
+                <AlertDialog.Header>
+                  <AlertDialog.Title>New folder</AlertDialog.Title>
+                  <AlertDialog.Description>
+                    {createParent && !isRootPath(createParent)
+                      ? `Create a folder inside "${createParent}".`
+                      : 'Create a folder at the workspace root.'}
+                  </AlertDialog.Description>
+                </AlertDialog.Header>
+                <AlertDialog.Body>
+                  <Input
+                    autoFocus
+                    value={newFolderName}
+                    onChange={event => setNewFolderName(event.target.value)}
+                    placeholder="Folder name"
+                    aria-label="Folder name"
+                    disabled={isCreatingDirectory}
+                  />
+                </AlertDialog.Body>
+                <AlertDialog.Footer>
+                  <AlertDialog.Cancel type="button" disabled={isCreatingDirectory}>
+                    Cancel
+                  </AlertDialog.Cancel>
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    size="lg"
+                    disabled={isCreatingDirectory || !newFolderName.trim()}
+                  >
+                    {isCreatingDirectory ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                    Create
+                  </Button>
+                </AlertDialog.Footer>
+              </form>
+            </AlertDialog.Content>
+          </AlertDialog>
+        </>
+      }
     >
-      {content}
-    </SyntaxHighlighter>
-  );
-}
-
-/**
- * Strip a leading YAML frontmatter block (`---\n…\n---`) from markdown so the
- * rendered view shows the document body, not the raw metadata. The frontmatter
- * stays visible in the "Source" view.
- */
-function stripFrontmatter(markdown: string): string {
-  const match = /^﻿?---\r?\n[\s\S]*?\r?\n---[ \t]*\r?\n?/.exec(markdown);
-  return match ? markdown.slice(match[0].length).replace(/^\s*\n/, '') : markdown;
-}
-
-export interface FileViewerProps {
-  path: string;
-  content: string;
-  isLoading: boolean;
-  mimeType?: string;
-}
-
-type MarkdownView = 'rendered' | 'source';
-
-/**
- * Breadcrumb of the file path shown in the viewer header (reference `.file-crumb`),
- * with each segment muted and the file name emphasized.
- */
-function FilePathBreadcrumb({ path }: { path: string }) {
-  const segments = path.split('/').filter(Boolean);
-  return (
-    <div className="flex min-w-0 items-center gap-1 text-sm">
-      {segments.map((segment, index) => {
-        const isLast = index === segments.length - 1;
-        return (
-          <span key={`${segment}-${index}`} className="flex min-w-0 items-center gap-1">
-            {index > 0 && <ChevronRight className="h-3.5 w-3.5 shrink-0 text-neutral3" />}
-            <span className={cn('truncate', isLast ? 'font-medium text-neutral6' : 'text-neutral4')}>{segment}</span>
-          </span>
-        );
-      })}
-    </div>
-  );
-}
-
-/** Rendered | Source segmented toggle for markdown files (reference `.seg-toggle`). */
-function MarkdownViewToggle({ value, onChange }: { value: MarkdownView; onChange: (value: MarkdownView) => void }) {
-  return (
-    <div className="flex items-center gap-0.5 rounded-md border border-border1 bg-surface4 p-0.5">
-      {(['rendered', 'source'] as const).map(option => (
-        <button
-          key={option}
-          type="button"
-          onClick={() => onChange(option)}
-          aria-pressed={value === option}
-          className={cn(
-            'rounded-sm px-2 py-0.5 text-xs font-medium capitalize transition-colors',
-            value === option ? 'bg-surface2 text-neutral6' : 'text-neutral4 hover:text-neutral5',
-          )}
-        >
-          {option}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-export function FileViewer({ path, content, isLoading, mimeType }: FileViewerProps) {
-  const fileName = path.split('/').pop() || path;
-  const ext = fileName.split('.').pop()?.toLowerCase();
-  const isImage = mimeType?.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(ext || '');
-  const isMarkdown = ext === 'md' || ext === 'mdx';
-  const language = getLanguageFromExtension(ext);
-  // Markdown opens rendered by default, with a toggle to inspect the raw source.
-  const [markdownView, setMarkdownView] = useState<MarkdownView>('rendered');
-
-  return (
-    // Single scroll container so the header can stick + frost over the content,
-    // and so short files size to their content instead of leaving a tall void.
-    <div className="h-full min-w-0 overflow-auto bg-surface1">
-      {/* Sticky header — solid surface3 to match the file-tree header. */}
-      <div className="sticky top-0 z-10 flex h-12 items-center justify-between gap-3 border-b border-border1 bg-surface3 px-4">
-        <div className="flex min-w-0 items-center gap-2">
-          {getFileIcon({ name: fileName, type: 'file' })}
-          <FilePathBreadcrumb path={path} />
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {isMarkdown && <MarkdownViewToggle value={markdownView} onChange={setMarkdownView} />}
-          <CopyButton content={content} copyMessage="Copied file content" variant="ghost" />
-        </div>
-      </div>
-
-      {/* Content */}
-      {isLoading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-6 w-6 animate-spin text-neutral3" />
-        </div>
-      ) : isImage ? (
-        <div className="p-4 flex items-center justify-center">
-          <img
-            src={`data:${mimeType || 'image/png'};base64,${btoa(content)}`}
-            alt={fileName}
-            className="max-h-full max-w-full object-contain"
-          />
-        </div>
-      ) : isMarkdown && markdownView === 'rendered' ? (
-        <div className="w-full max-w-4xl px-8 py-8">
-          <MarkdownRenderer>{stripFrontmatter(content)}</MarkdownRenderer>
-        </div>
-      ) : isMarkdown || ext === 'json' ? (
-        <div className="w-full max-w-4xl px-8 py-8">
-          <div className="overflow-hidden rounded-lg border border-surface5">
-            <CodeEditor
-              value={content}
-              language={ext === 'json' ? 'json' : 'markdown'}
-              editable={false}
-              showCopyButton={false}
-              className="rounded-none border-0 [&_.cm-gutterElement]:w-6"
-            />
-          </div>
-        </div>
-      ) : language ? (
-        <div className="w-full max-w-4xl px-8 py-8">
-          <div className="overflow-hidden rounded-lg border border-surface5">
-            <HighlightedCode content={content} language={language} />
-          </div>
-        </div>
-      ) : (
-        <div className="w-full max-w-4xl px-8 py-8">
-          <pre className="overflow-x-auto rounded-lg border border-surface5 bg-surface2 p-4 font-mono text-sm whitespace-pre-wrap text-neutral5">
-            {content}
-          </pre>
-        </div>
-      )}
-    </div>
+      <TooltipProvider>{tree.map(renderNode)}</TooltipProvider>
+    </Files.FileTree>
   );
 }

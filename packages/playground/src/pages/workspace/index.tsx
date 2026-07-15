@@ -1,20 +1,21 @@
-import { CollapsiblePanel, PanelSeparator, is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { Files } from '@mastra/playground-ui/components/Files';
 import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/query-utils';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { FileText, Wand2, Search, X } from 'lucide-react';
 import { useState, useCallback, useEffect, useMemo } from 'react';
-import { Group, Panel, useDefaultLayout } from 'react-resizable-panels';
+import { useDefaultLayout } from 'react-resizable-panels';
 import { useSearchParams, useParams, useNavigate } from 'react-router';
 import { isWorkspaceNotSupportedError } from '@/domains/workspace/compatibility';
-import { AddSkillDialog, FileBrowser, FileViewer, SkillDetail, SkillsTable } from '@/domains/workspace/components';
+import { AddSkillDialog, FileBrowser, SkillDetail, SkillsTable } from '@/domains/workspace/components';
 import { NoWorkspacesInfo } from '@/domains/workspace/components/no-workspaces-info';
 import { SearchWorkspacePanel, SearchSkillsPanel } from '@/domains/workspace/components/search-panel';
 import { WorkspaceNotConfigured } from '@/domains/workspace/components/workspace-not-configured';
@@ -439,94 +440,75 @@ export default function Workspace() {
       {workspaceCrumbs && <RouteHeaderCrumbs crumbs={workspaceCrumbs} />}
       <PageLayout.MainArea className="min-h-0 flex flex-col gap-6 overflow-hidden">
         {hasFilesystem && (
-          <Group
+          <Files
+            selectedPath={selectedFile ?? undefined}
+            onSelect={setSelectedFile}
             className="relative h-full min-h-0 w-full min-w-0 overflow-hidden"
             defaultLayout={defaultFilesLayout}
             onLayoutChange={onFilesLayoutChange}
           >
-            {/* Left rail — swaps between the file tree and the search view, VS Code style. */}
-            <CollapsiblePanel
-              direction="left"
-              id="workspace-file-tree"
-              minSize={200}
-              maxSize="50%"
-              defaultSize={320}
-              collapsedSize={60}
-              collapsible={true}
-              className="flex min-w-0 flex-col overflow-hidden border-r border-surface5 bg-surface1"
+            {isSearchActive ? (
+              <Files.FileTree
+                raw
+                hideHeader
+                collapsible
+                id="workspace-file-tree"
+                minSize={200}
+                maxSize="50%"
+                defaultSize={320}
+                collapsedSize={60}
+                footer={attachedEntity}
+              >
+                <WorkspaceSearchView
+                  key={effectiveWorkspaceId}
+                  workspaceId={effectiveWorkspaceId!}
+                  canSearchFiles={canSearchFiles}
+                  canSearchSkills={canSearchSkills}
+                  canBM25={canBM25}
+                  canVector={canVector}
+                  showInitWarning={!isLoadingInfo && workspaceInfo?.status !== 'ready'}
+                  onClose={() => setShowSearch(false)}
+                  onViewFileResult={id => updateSearchParams({ file: id })}
+                  onViewSkillResult={(_skillName, skillPath, source) => {
+                    updateSearchParams({ file: skillResultFilePath(skillPath, source) });
+                  }}
+                />
+              </Files.FileTree>
+            ) : (
+              <FileBrowser
+                entries={filesData?.entries ?? []}
+                currentPath="."
+                isLoading={isLoadingFiles}
+                error={filesError instanceof Error ? filesError : undefined}
+                onNavigate={() => undefined}
+                skillPaths={skillPaths}
+                onRefresh={() => void refetchFiles()}
+                onCreateDirectory={isReadOnly ? undefined : handleCreateDirectory}
+                onDelete={isReadOnly ? undefined : handleDeleteFile}
+                onAddSkill={canManageSkills ? () => setShowAddSkillDialog(true) : undefined}
+                onToggleSearch={hasSearchCapability ? () => setShowSearch(true) : undefined}
+                isCreatingDirectory={createDirectory.isPending}
+                isDeleting={deleteFile.isPending}
+                footer={attachedEntity}
+              />
+            )}
+            <Files.FilePreview
+              path={selectedFile ?? undefined}
+              content={fileContent?.content ?? ''}
+              loading={isLoadingFileContent || (selectedSkill ? isLoadingSkillDetail : false)}
+              mimeType={fileContent?.mimeType}
+              empty="Select a file to preview its contents"
             >
-              <div className="min-h-0 flex-1 overflow-auto">
-                {isSearchActive ? (
-                  <WorkspaceSearchView
-                    key={effectiveWorkspaceId}
-                    workspaceId={effectiveWorkspaceId!}
-                    canSearchFiles={canSearchFiles}
-                    canSearchSkills={canSearchSkills}
-                    canBM25={canBM25}
-                    canVector={canVector}
-                    showInitWarning={!isLoadingInfo && workspaceInfo?.status !== 'ready'}
-                    onClose={() => setShowSearch(false)}
-                    onViewFileResult={id => {
-                      updateSearchParams({ file: id });
-                    }}
-                    onViewSkillResult={(_skillName, skillPath, source) => {
-                      updateSearchParams({ file: skillResultFilePath(skillPath, source) });
-                    }}
+              {selectedSkill && skillDetail ? (
+                <div className="w-full min-w-0 max-w-4xl px-8 py-8">
+                  <SkillDetail
+                    skill={skillDetail}
+                    onReferenceClick={ref => setSelectedFile(skillResultFilePath(selectedSkill.path, ref))}
                   />
-                ) : (
-                  <FileBrowser
-                    entries={filesData?.entries ?? []}
-                    currentPath="."
-                    isLoading={isLoadingFiles}
-                    error={filesError instanceof Error ? filesError : null}
-                    onNavigate={() => undefined}
-                    onFileSelect={setSelectedFile}
-                    selectedPath={selectedFile ?? undefined}
-                    skillPaths={skillPaths}
-                    onRefresh={() => void refetchFiles()}
-                    onCreateDirectory={isReadOnly ? undefined : handleCreateDirectory}
-                    onDelete={isReadOnly ? undefined : handleDeleteFile}
-                    onAddSkill={canManageSkills ? () => setShowAddSkillDialog(true) : undefined}
-                    onToggleSearch={hasSearchCapability ? () => setShowSearch(true) : undefined}
-                    isCreatingDirectory={createDirectory.isPending}
-                    isDeleting={deleteFile.isPending}
-                  />
-                )}
-              </div>
-              {attachedEntity}
-            </CollapsiblePanel>
-            <PanelSeparator />
-            {/* Right pane — rich skill view (a skill's SKILL.md), file viewer, or empty. */}
-            <Panel id="workspace-file-preview" className="flex min-w-0 flex-col overflow-hidden bg-surface1">
-              <div className="min-h-0 min-w-0 flex-1 overflow-auto">
-                {selectedSkill ? (
-                  isLoadingSkillDetail || !skillDetail ? (
-                    <div className="flex h-full items-center justify-center">
-                      <Spinner />
-                    </div>
-                  ) : (
-                    <div className="w-full min-w-0 max-w-4xl px-8 py-8">
-                      <SkillDetail
-                        skill={skillDetail}
-                        onReferenceClick={ref => setSelectedFile(skillResultFilePath(selectedSkill.path, ref))}
-                      />
-                    </div>
-                  )
-                ) : selectedFile ? (
-                  <FileViewer
-                    path={selectedFile}
-                    content={fileContent?.content ?? ''}
-                    isLoading={isLoadingFileContent}
-                    mimeType={fileContent?.mimeType}
-                  />
-                ) : (
-                  <div className="flex h-full items-center justify-center text-sm text-neutral4">
-                    Select a file to preview its contents
-                  </div>
-                )}
-              </div>
-            </Panel>
-          </Group>
+                </div>
+              ) : undefined}
+            </Files.FilePreview>
+          </Files>
         )}
 
         {!hasFilesystem && hasSkills && isSearchActive && (
