@@ -49,6 +49,10 @@ export function extractV6NativeApprovals(messages: V6UIMessage[]): V6NativeAppro
       const runId = part.approval.id.slice(0, lastSep);
       const toolCallId = part.approval.id.slice(lastSep + separator.length);
       if (!runId || !toolCallId) continue;
+      // The composite approval id embeds the same toolCallId the part carries.
+      // A mismatch means the part is malformed or stale, so skip it rather
+      // than resume a tool call the user never answered.
+      if (toolCallId !== part.toolCallId) continue;
 
       byTarget.set(`${runId}${separator}${toolCallId}`, {
         resumeData: {

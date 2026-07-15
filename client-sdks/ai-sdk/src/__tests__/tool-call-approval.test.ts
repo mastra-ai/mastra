@@ -247,6 +247,27 @@ describe('extractV6NativeApproval', () => {
     expect(extractV6NativeApprovals(messages as any)).toEqual([]);
   });
 
+  it('skips a part whose composite approval id embeds a different toolCallId', () => {
+    const approvalId = `run-123${APPROVAL_ID_SEPARATOR}tooluse_other`;
+    const messages = [
+      {
+        role: 'assistant' as const,
+        id: 'msg-1',
+        parts: [
+          {
+            type: 'tool-myTool',
+            toolCallId: 'tooluse_abc123',
+            state: 'approval-responded' as const,
+            input: {},
+            approval: { id: approvalId, approved: true },
+          },
+        ],
+      },
+    ];
+
+    expect(extractV6NativeApprovals(messages as any)).toEqual([]);
+  });
+
   it('returns null when the approval id has no separator', () => {
     const messages = [
       {
