@@ -2,6 +2,7 @@ import { ActiveModel } from './ActiveModel';
 import { GoalStatus } from './GoalStatus';
 import { ModesSelection } from './ModesSelection';
 import { OperationalMemoryStatus } from './OperationalMemoryStatus';
+import { PullRequestLinks } from './PullRequestLinks';
 import { QueuedFollowUps } from './QueuedFollowUps';
 import { RuntimeActivity } from './RuntimeActivity';
 
@@ -22,6 +23,7 @@ export function StatusLine() {
       <QueuedFollowUps />
       <GoalStatus />
       <span className="flex-1" />
+      <PullRequestLinks />
     </div>
   );
 }

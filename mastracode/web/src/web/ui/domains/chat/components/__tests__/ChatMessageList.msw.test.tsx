@@ -5,7 +5,11 @@
  * notice, empty-thread state, transcript entries, and the working indicator.
  * Driven end-to-end: real fetch/SSE transport, MSW at the network boundary.
  */
-import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/client-js';
+import type {
+  AgentControllerEvent,
+  AgentControllerMessageContent,
+  AgentControllerSessionState,
+} from '@mastra/client-js';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -139,6 +143,138 @@ describe('ChatMessageList', () => {
     await waitFor(() => expect(screen.getByText('Hello from the agent')).toBeInTheDocument());
   });
 
+  it('given a streamed notification signal, then it renders the notification provenance in the transcript', async () => {
+    seedProject();
+    useAgentControllerHandlers([
+      {
+        type: 'message_update',
+        message: {
+          id: 'notification-message-1',
+          role: 'assistant',
+          content: [
+            { type: 'text', text: 'I will inspect the updated pull request.' },
+            {
+              type: 'notification',
+              notificationId: 'notification-1',
+              message: 'octo/repo#42 received a new comment',
+              source: 'github',
+              kind: 'issue-comment-created',
+              priority: 'high',
+              metadata: {
+                action: 'created',
+                repository: 'octo/repo',
+                pullRequestNumber: 42,
+                targetUrl: 'https://github.com/octo/repo/pull/42#issuecomment-123',
+              },
+            },
+            {
+              type: 'notification',
+              notificationId: 'notification-2',
+              message: 'octo/repo#42 was merged',
+              source: 'github',
+              kind: 'pull-request-merged',
+              priority: 'urgent',
+            },
+            {
+              type: 'notification',
+              notificationId: 'notification-3',
+              message: 'octo/repo#43 was closed',
+              source: 'github',
+              kind: 'pull-request-closed',
+              priority: 'urgent',
+            },
+          ],
+        },
+      },
+    ]);
+    renderMessageList();
+
+    await waitFor(() => expect(screen.getByText('octo/repo#42 received a new comment')).toBeInTheDocument());
+    expect(screen.getAllByText('octo/repo#42 received a new comment')).toHaveLength(1);
+    expect(screen.getAllByText('octo/repo#42 was merged')).toHaveLength(1);
+    expect(screen.getAllByText('octo/repo#43 was closed')).toHaveLength(1);
+    expect(screen.getByText('I will inspect the updated pull request.')).toBeInTheDocument();
+    expect(screen.getAllByText('github')).toHaveLength(3);
+    expect(screen.queryByText('high')).not.toBeInTheDocument();
+    expect(screen.queryByText('urgent')).not.toBeInTheDocument();
+    const targetLink = screen.getByRole('link', { name: /Open notification target/ });
+    expect(targetLink).toHaveAttribute('href', 'https://github.com/octo/repo/pull/42#issuecomment-123');
+    expect(targetLink.querySelector('[data-notification-state="notification"]')).toBeInTheDocument();
+    expect(screen.getByText('octo/repo#42 was merged').closest('[data-notification-state]')).toHaveAttribute(
+      'data-notification-state',
+      'merged',
+    );
+    expect(screen.getByText('octo/repo#43 was closed').closest('[data-notification-state]')).toHaveAttribute(
+      'data-notification-state',
+      'closed',
+    );
+  });
+
+  it('given an assistant response after a notification summary, then it does not render the response as a notice', async () => {
+    seedProject();
+    const summary: AgentControllerMessageContent = {
+      type: 'notification_summary',
+      message: 'github: 1',
+      pending: 1,
+      bySource: { github: 1 },
+      byPriority: { high: 1 },
+      notificationIds: ['notification-1'],
+    };
+    useAgentControllerHandlers([
+      {
+        type: 'message_update',
+        message: { id: 'assistant-1', role: 'assistant', content: [summary] },
+      },
+      {
+        type: 'message_update',
+        message: {
+          id: 'assistant-1',
+          role: 'assistant',
+          content: [summary, { type: 'text', text: 'The pull request is ready for review.' }],
+        },
+      },
+    ]);
+    renderMessageList();
+
+    await waitFor(() => expect(screen.getByText('The pull request is ready for review.')).toBeInTheDocument());
+    expect(screen.getByText('Notification summary')).toBeInTheDocument();
+    expect(screen.getByText('github: 1')).toBeInTheDocument();
+    expect(screen.queryByText('1 pending')).not.toBeInTheDocument();
+    expect(screen.getByText('The pull request is ready for review.').closest('.bg-notice-info\\/20')).toBeNull();
+  });
+
+  it('given a persisted notification signal, then it remains visible after transcript hydration', async () => {
+    seedProject();
+    useAgentControllerHandlers();
+    server.use(
+      http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () =>
+        HttpResponse.json({
+          messages: [
+            {
+              id: 'notification-message-1',
+              role: 'user',
+              content: [
+                {
+                  type: 'notification',
+                  notificationId: 'notification-1',
+                  message: 'octo/repo#42 was approved',
+                  source: 'github',
+                  kind: 'pull-request-review',
+                  priority: 'urgent',
+                },
+              ],
+            },
+          ],
+        }),
+      ),
+    );
+    renderMessageList();
+
+    await waitFor(() => expect(screen.getByText('octo/repo#42 was approved')).toBeInTheDocument());
+    expect(screen.getByText('github')).toBeInTheDocument();
+    expect(screen.queryByText('urgent')).not.toBeInTheDocument();
+  });
+
   it('given a running turn without streamed assistant text, then it shows the working indicator', async () => {
     seedProject();
     useAgentControllerHandlers([{ type: 'agent_start' }]);
@@ -157,6 +293,11 @@ describe('ChatMessageList', () => {
           messages: [
             { id: 'status-1', role: 'assistant', content: [{ type: 'om_compaction' }] },
             { id: 'status-2', role: 'assistant', content: [{ type: 'om_summary', text: 'Memory updated' }] },
+            {
+              id: 'status-3',
+              role: 'assistant',
+              content: [{ type: 'om_compaction' }, { type: 'text', text: 'This is an ordinary agent response.' }],
+            },
           ],
         }),
       ),
@@ -168,6 +309,7 @@ describe('ChatMessageList', () => {
     // …the text-less one renders nothing instead of an empty bubble.
     const notices = document.querySelectorAll('.bg-notice-info\\/20');
     expect(notices).toHaveLength(1);
+    expect(screen.getByText('This is an ordinary agent response.').closest('.bg-notice-info\\/20')).toBeNull();
   });
 
   it('given the session fails to connect, then it shows the disconnected notice', async () => {

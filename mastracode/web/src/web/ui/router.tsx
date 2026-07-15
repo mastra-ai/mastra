@@ -82,6 +82,9 @@ export function createAppRoutes(): RouteObject[] {
           children: [
             { path: 'new', element: <NewPage /> },
             { path: 'threads/:threadId', element: <ThreadPage /> },
+            // Personal (non-factory) sessions: same thread page, but the
+            // session provider binds to the user's own resourceId + worktree.
+            { path: 'user/threads/:threadId', element: <ThreadPage /> },
             { path: 'factory/board', element: <BoardPage /> },
             // Legacy Factory pages, folded into the Board.
             { path: 'factory/intake', element: <Navigate to="/factory/board" replace /> },

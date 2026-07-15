@@ -12,6 +12,7 @@ import {
   TABLE_EXPERIMENTS,
   TABLE_EXPERIMENT_RESULTS,
   TABLE_SCHEMAS,
+  hasErrorCode,
 } from '@mastra/core/storage';
 import type {
   AddDatasetItemInput,
@@ -73,6 +74,7 @@ function rowToItem(row: Record<string, any>): DatasetItem {
     id: String(t.id),
     datasetId: String(t.datasetId),
     datasetVersion: Number(t.datasetVersion),
+    externalId: (t.externalId as string | null | undefined) ?? null,
     organizationId: (t.organizationId as string | null | undefined) ?? null,
     projectId: (t.projectId as string | null | undefined) ?? null,
     input: t.input,
@@ -158,7 +160,7 @@ export class DatasetsSpanner extends DatasetsStorage {
     await this.db.alterTable({
       tableName: TABLE_DATASET_ITEMS,
       schema: TABLE_SCHEMAS[TABLE_DATASET_ITEMS],
-      ifNotExists: ['organizationId', 'projectId'],
+      ifNotExists: ['organizationId', 'projectId', 'externalId'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -177,6 +179,11 @@ export class DatasetsSpanner extends DatasetsStorage {
         name: 'mastra_dataset_items_dataset_version_idx',
         table: TABLE_DATASET_ITEMS,
         columns: ['datasetId', 'datasetVersion'],
+      },
+      {
+        name: 'mastra_dataset_items_dataset_externalid_version_idx',
+        table: TABLE_DATASET_ITEMS,
+        columns: ['datasetId', 'externalId', 'datasetVersion'],
       },
       {
         // Unique invariant: one snapshot row per (datasetId, version). The DESC
@@ -227,7 +234,8 @@ export class DatasetsSpanner extends DatasetsStorage {
   async createDataset(input: CreateDatasetInput): Promise<DatasetRecord> {
     try {
       const now = new Date();
-      const id = randomUUID();
+      const id = input.id ?? randomUUID();
+      if (input.id !== undefined) this.validateCallerDefinedDatasetId(input.id);
       const record: DatasetRecord = {
         id,
         name: input.name,
@@ -273,6 +281,11 @@ export class DatasetsSpanner extends DatasetsStorage {
       });
       return record;
     } catch (error) {
+      if (input.id !== undefined && hasErrorCode(error, new Set([6, 'ALREADY_EXISTS']))) {
+        const existing = await this.getDatasetById({ id: input.id });
+        if (existing) return this.resolveExistingDataset(existing, { ...input, id: input.id });
+      }
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('SPANNER', 'CREATE_DATASET', 'FAILED'),
@@ -742,6 +755,7 @@ export class DatasetsSpanner extends DatasetsStorage {
                 id: args.id,
                 datasetId: args.datasetId,
                 datasetVersion: newVersion,
+                externalId: existing.externalId ?? null,
                 organizationId,
                 projectId,
                 validTo: null,
@@ -764,6 +778,7 @@ export class DatasetsSpanner extends DatasetsStorage {
               id: args.id,
               datasetId: args.datasetId,
               datasetVersion: newVersion,
+              externalId: existing.externalId ?? null,
               organizationId,
               projectId,
               input: merged.input,
@@ -824,6 +839,7 @@ export class DatasetsSpanner extends DatasetsStorage {
                 id: args.id,
                 datasetId: args.datasetId,
                 datasetVersion: newVersion,
+                externalId: existing.externalId ?? null,
                 organizationId,
                 projectId,
                 validTo: null,
@@ -1106,55 +1122,75 @@ export class DatasetsSpanner extends DatasetsStorage {
     try {
       // An empty batch is a no-op: don't bump the dataset version or write a snapshot.
       if (input.items.length === 0) return [];
-      const now = new Date();
-      const prepared = input.items.map(item => ({ id: randomUUID(), item }));
       let result: DatasetItem[] = [];
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
           try {
-            const { version: newVersion, organizationId, projectId } = await this.bumpVersion(tx, input.datasetId, now);
-            for (const { id, item } of prepared) {
-              await this.db.insert({
-                tableName: TABLE_DATASET_ITEMS,
-                record: {
-                  id,
-                  datasetId: input.datasetId,
-                  datasetVersion: newVersion,
-                  organizationId,
-                  projectId,
-                  validTo: null,
-                  isDeleted: false,
-                  input: item.input,
-                  groundTruth: item.groundTruth ?? null,
-                  expectedTrajectory: item.expectedTrajectory ?? null,
-                  toolMocks: item.toolMocks ?? null,
-                  requestContext: item.requestContext ?? null,
-                  metadata: item.metadata ?? null,
-                  source: item.source ?? null,
-                  createdAt: now,
-                  updatedAt: now,
-                },
-                transaction: tx,
+            const [datasetRows] = await tx.run({
+              sql: `SELECT * FROM ${quoteIdent(TABLE_DATASETS, 'table name')} WHERE ${quoteIdent('id', 'column name')} = @id LIMIT 1`,
+              params: { id: input.datasetId },
+              json: true,
+            });
+            const dataset = datasetRows[0] as Record<string, any> | undefined;
+            if (!dataset) {
+              throw new MastraError({
+                id: createStorageErrorId('SPANNER', 'BATCH_INSERT_ITEMS', 'DATASET_NOT_FOUND'),
+                domain: ErrorDomain.STORAGE,
+                category: ErrorCategory.USER,
+                details: { datasetId: input.datasetId },
               });
             }
-            await this.insertVersionRow(tx, input.datasetId, newVersion, now);
+            const externalIds = [...new Set(input.items.flatMap(item => (item.externalId ? [item.externalId] : [])))];
+            let historyRows: DatasetItemRow[] = [];
+            if (externalIds.length > 0) {
+              const [rows] = await tx.run({
+                sql: `SELECT * FROM ${quoteIdent(TABLE_DATASET_ITEMS, 'table name')} WHERE ${quoteIdent('datasetId', 'column name')} = @datasetId AND ${quoteIdent('externalId', 'column name')} IN UNNEST(@externalIds) ORDER BY ${quoteIdent('datasetVersion', 'column name')}`,
+                params: { datasetId: input.datasetId, externalIds },
+                types: { externalIds: { type: 'array', child: 'string' } },
+                json: true,
+              });
+              historyRows = (rows as Array<Record<string, any>>).map(rowToItemRow);
+            }
+            const plan = this.planDatasetItemBatch(input.items, historyRows, randomUUID);
+            const resolved = new Map<string, DatasetItem>(
+              [...plan.existingCurrentItems].map(([id, row]) => [id, this.datasetItemFromRow(row)]),
+            );
+            if (plan.inserts.length > 0) {
+              const now = new Date();
+              const {
+                version: newVersion,
+                organizationId,
+                projectId,
+              } = await this.bumpVersion(tx, input.datasetId, now);
+              for (const insert of plan.inserts) {
+                const item: DatasetItem = {
+                  id: insert.id,
+                  datasetId: input.datasetId,
+                  datasetVersion: newVersion,
+                  externalId: insert.item.externalId ?? null,
+                  organizationId,
+                  projectId,
+                  input: insert.item.input,
+                  groundTruth: insert.item.groundTruth,
+                  expectedTrajectory: insert.item.expectedTrajectory,
+                  toolMocks: insert.item.toolMocks,
+                  requestContext: insert.item.requestContext,
+                  metadata: insert.item.metadata,
+                  source: insert.item.source,
+                  createdAt: now,
+                  updatedAt: now,
+                };
+                await this.db.insert({
+                  tableName: TABLE_DATASET_ITEMS,
+                  record: { ...item, validTo: null, isDeleted: false },
+                  transaction: tx,
+                });
+                resolved.set(item.id, item);
+              }
+              await this.insertVersionRow(tx, input.datasetId, newVersion, now);
+            }
             await tx.commit();
-            result = prepared.map(({ id, item }) => ({
-              id,
-              datasetId: input.datasetId,
-              datasetVersion: newVersion,
-              organizationId,
-              projectId,
-              input: item.input,
-              groundTruth: item.groundTruth,
-              expectedTrajectory: item.expectedTrajectory,
-              toolMocks: item.toolMocks,
-              requestContext: item.requestContext,
-              metadata: item.metadata,
-              source: item.source,
-              createdAt: now,
-              updatedAt: now,
-            }));
+            result = plan.resolvedIds.map(id => resolved.get(id)!);
           } catch (err) {
             await tx.rollback().catch(rollbackErr => {
               throw new AggregateError([err, rollbackErr], 'Transaction and rollback both failed');
@@ -1201,6 +1237,7 @@ export class DatasetsSpanner extends DatasetsStorage {
                   id: existing.id,
                   datasetId: input.datasetId,
                   datasetVersion: newVersion,
+                  externalId: existing.externalId ?? null,
                   organizationId,
                   projectId,
                   validTo: null,

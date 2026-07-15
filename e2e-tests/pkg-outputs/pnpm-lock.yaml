@@ -22,7 +22,7 @@ importers:
         specifier: ^0.2.17
         version: 0.2.17
       vitest:
-        specifier: ^4.1.8
+        specifier: ^4.1.10
         version: 4.1.10(vite@8.1.4(yaml@2.9.0))
 
 packages:

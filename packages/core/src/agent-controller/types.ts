@@ -1091,6 +1091,9 @@ export interface AgentControllerRequestContext<TState = unknown> {
   /** Current resource ID */
   resourceId: string;
 
+  /** Optional isolation scope used to identify this session within its resource. */
+  scope?: string;
+
   /**
    * Snapshot of the relevant session-owned values for this request.
    * Plain data (not the live Session); read-only at the point of use.
