@@ -52,8 +52,18 @@ vi.mock('../init/init', () => ({
   init: vi.fn(),
 }));
 
+vi.mock('../init/skills-install', () => ({
+  installMastraSkills: vi.fn(),
+}));
+
 vi.mock('../utils.js', () => ({
   getPackageManager: vi.fn(() => 'npm'),
+  isGitInitialized: vi.fn(),
+  gitInit: vi.fn(),
+}));
+
+vi.mock('./coding-agents', () => ({
+  detectCodingAgentSkills: vi.fn(),
 }));
 
 vi.mock('./provider-adapter', () => ({
@@ -107,6 +117,14 @@ beforeEach(async () => {
   const clone = await import('../../utils/clone-template');
   vi.mocked(clone.cloneTemplate).mockResolvedValue('/tmp/my-project');
   vi.mocked(clone.installDependencies).mockResolvedValue();
+
+  const codingAgents = await import('./coding-agents');
+  vi.mocked(codingAgents.detectCodingAgentSkills).mockResolvedValue(['universal']);
+  const skills = await import('../init/skills-install');
+  vi.mocked(skills.installMastraSkills).mockResolvedValue({ success: true, agents: ['universal'] });
+  const commandUtils = await import('../utils.js');
+  vi.mocked(commandUtils.isGitInitialized).mockResolvedValue(false);
+  vi.mocked(commandUtils.gitInit).mockResolvedValue();
 
   const createUtils = await import('./utils');
   vi.mocked(createUtils.createOwnedStagingDirectory).mockResolvedValue({
@@ -476,6 +494,157 @@ describe('create materialization lifecycle', () => {
     });
 
     expect(prompts.note).toHaveBeenCalledWith(expect.stringContaining('ANTHROPIC_API_KEY'));
+  });
+});
+
+describe('create skills and git automation', () => {
+  it('installs detected skills in the published project before initializing git', async () => {
+    const { create } = await import('./create');
+    const { publishStagedProject } = await import('./utils');
+    const codingAgents = await import('./coding-agents');
+    const skills = await import('../init/skills-install');
+    const commandUtils = await import('../utils.js');
+    vi.mocked(codingAgents.detectCodingAgentSkills).mockResolvedValueOnce(['claude-code', 'universal']);
+    vi.mocked(skills.installMastraSkills).mockResolvedValueOnce({
+      success: true,
+      agents: ['claude-code', 'universal'],
+    });
+
+    await create({ projectName: 'my-project', yes: true, resolveVersionTag: vi.fn().mockResolvedValue('latest') });
+
+    expect(commandUtils.isGitInitialized).toHaveBeenNthCalledWith(1, { cwd: process.cwd() });
+    expect(commandUtils.isGitInitialized).toHaveBeenNthCalledWith(2, {
+      cwd: path.resolve(process.cwd(), 'my-project'),
+    });
+    expect(skills.installMastraSkills).toHaveBeenCalledWith({
+      directory: path.resolve(process.cwd(), 'my-project'),
+      agents: ['claude-code', 'universal'],
+    });
+    expect(publishStagedProject).toHaveBeenCalledBefore(vi.mocked(skills.installMastraSkills));
+    expect(skills.installMastraSkills).toHaveBeenCalledBefore(vi.mocked(commandUtils.gitInit));
+  });
+
+  it.each([
+    { mode: 'template', options: { template: 'agent-harness' } },
+    { mode: 'empty', options: { empty: true } },
+  ])('installs skills for $mode mode', async ({ options }) => {
+    const { create } = await import('./create');
+    const skills = await import('../init/skills-install');
+
+    await create({
+      projectName: 'my-project',
+      ...options,
+      resolveVersionTag: vi.fn().mockResolvedValue('latest'),
+    });
+
+    expect(skills.installMastraSkills).toHaveBeenCalledWith({
+      directory: path.resolve(process.cwd(), 'my-project'),
+      agents: ['universal'],
+    });
+  });
+
+  it('honors --no-skills without preventing git initialization', async () => {
+    const { create } = await import('./create');
+    const codingAgents = await import('./coding-agents');
+    const skills = await import('../init/skills-install');
+    const commandUtils = await import('../utils.js');
+
+    await create({
+      projectName: 'my-project',
+      empty: true,
+      skills: false,
+      resolveVersionTag: vi.fn().mockResolvedValue('latest'),
+    });
+
+    expect(codingAgents.detectCodingAgentSkills).not.toHaveBeenCalled();
+    expect(skills.installMastraSkills).not.toHaveBeenCalled();
+    expect(commandUtils.gitInit).toHaveBeenCalledOnce();
+  });
+
+  it('continues to git and completion when skills installation fails', async () => {
+    const { create } = await import('./create');
+    const prompts = await import('@clack/prompts');
+    const skills = await import('../init/skills-install');
+    const commandUtils = await import('../utils.js');
+    vi.mocked(skills.installMastraSkills).mockResolvedValueOnce({
+      success: false,
+      error: 'skills unavailable',
+      agents: ['universal'],
+    });
+
+    await create({
+      projectName: 'my-project',
+      empty: true,
+      resolveVersionTag: vi.fn().mockResolvedValue('latest'),
+    });
+
+    expect(commandUtils.gitInit).toHaveBeenCalledOnce();
+    expect(prompts.note).toHaveBeenCalledWith(
+      expect.stringContaining('installation failed for universal'),
+      'Setup warnings',
+    );
+    expect(prompts.outro).toHaveBeenCalledOnce();
+  });
+
+  it('honors --no-git after capturing the invocation worktree state', async () => {
+    const { create } = await import('./create');
+    const commandUtils = await import('../utils.js');
+
+    await create({
+      projectName: 'my-project',
+      empty: true,
+      git: false,
+      resolveVersionTag: vi.fn().mockResolvedValue('latest'),
+    });
+
+    expect(commandUtils.isGitInitialized).toHaveBeenCalledOnce();
+    expect(commandUtils.gitInit).not.toHaveBeenCalled();
+  });
+
+  it('skips nested git initialization when invoked inside an existing worktree', async () => {
+    const { create } = await import('./create');
+    const commandUtils = await import('../utils.js');
+    vi.mocked(commandUtils.isGitInitialized).mockResolvedValueOnce(true);
+
+    await create({
+      projectName: 'my-project',
+      empty: true,
+      resolveVersionTag: vi.fn().mockResolvedValue('latest'),
+    });
+
+    expect(commandUtils.isGitInitialized).toHaveBeenCalledOnce();
+    expect(commandUtils.gitInit).not.toHaveBeenCalled();
+  });
+
+  it('skips git initialization when the published target already has git metadata', async () => {
+    const { create } = await import('./create');
+    const commandUtils = await import('../utils.js');
+    vi.mocked(commandUtils.isGitInitialized).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+
+    await create({
+      projectName: 'my-project',
+      template: 'agent-harness',
+      resolveVersionTag: vi.fn().mockResolvedValue('latest'),
+    });
+
+    expect(commandUtils.isGitInitialized).toHaveBeenCalledTimes(2);
+    expect(commandUtils.gitInit).not.toHaveBeenCalled();
+  });
+
+  it('keeps a published project and reaches completion when git initialization fails', async () => {
+    const { create } = await import('./create');
+    const prompts = await import('@clack/prompts');
+    const { publishStagedProject } = await import('./utils');
+    const commandUtils = await import('../utils.js');
+    vi.mocked(commandUtils.gitInit).mockRejectedValueOnce(new Error('git unavailable'));
+
+    await expect(
+      create({ projectName: 'my-project', yes: true, resolveVersionTag: vi.fn().mockResolvedValue('latest') }),
+    ).resolves.toBeUndefined();
+
+    expect(publishStagedProject).toHaveBeenCalledOnce();
+    expect(prompts.note).toHaveBeenCalledWith(expect.stringContaining('Git: initialization failed'), 'Setup warnings');
+    expect(prompts.outro).toHaveBeenCalledOnce();
   });
 });
 

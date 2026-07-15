@@ -9,8 +9,10 @@ import { getAnalytics } from '../../analytics/index';
 import { cloneTemplate, installDependencies } from '../../utils/clone-template';
 import { findTemplateByName, loadTemplates, selectTemplate } from '../../utils/template-utils';
 import type { Template } from '../../utils/template-utils';
-import { getPackageManager } from '../utils.js';
+import { installMastraSkills } from '../init/skills-install';
+import { getPackageManager, gitInit, isGitInitialized } from '../utils.js';
 
+import { detectCodingAgentSkills } from './coding-agents';
 import {
   CREATE_LLM_PROVIDERS,
   configureCreateCommand,
@@ -247,6 +249,7 @@ export const create = async (args: CreateOptions): Promise<void> => {
 
   const versionTag = mode === 'template' ? undefined : ((await args.resolveVersionTag?.()) ?? 'latest');
   const packageManager = getPackageManager();
+  const invocationIsGitWorktree = await isGitInitialized({ cwd: invocationCwd });
   const staging = await createOwnedStagingDirectory(invocationCwd, projectName);
   let selectedApiKeyEnv: string | undefined;
 
@@ -294,6 +297,19 @@ export const create = async (args: CreateOptions): Promise<void> => {
     }
   }
 
+  const postSetup = await runPostCreateSetup({
+    projectPath: targetPath,
+    installSkills: options.skills,
+    initializeGit: options.git,
+    invocationIsGitWorktree,
+  });
+  analytics?.trackEvent('cli_create_post_setup', {
+    skills_agents: postSetup.skillsAgents,
+    skills_outcome: postSetup.skillsOutcome,
+    git_outcome: postSetup.gitOutcome,
+  });
+  p.note(formatPostCreateSetup(postSetup), postSetup.hasFailure ? 'Setup warnings' : 'Project setup');
+
   if (mode === 'managed') {
     p.note(
       llmApiKey
@@ -308,6 +324,81 @@ export const create = async (args: CreateOptions): Promise<void> => {
 
   postCreate({ projectName, packageManager });
 };
+
+interface PostCreateSetupResult {
+  skillsAgents: string[];
+  skillsOutcome: 'installed' | 'failed' | 'opted_out';
+  gitOutcome: 'initialized' | 'failed' | 'opted_out' | 'parent_worktree' | 'target_worktree';
+  hasFailure: boolean;
+}
+
+async function runPostCreateSetup({
+  projectPath,
+  installSkills,
+  initializeGit,
+  invocationIsGitWorktree,
+}: {
+  projectPath: string;
+  installSkills: boolean;
+  initializeGit: boolean;
+  invocationIsGitWorktree: boolean;
+}): Promise<PostCreateSetupResult> {
+  let skillsAgents: string[] = [];
+  let skillsOutcome: PostCreateSetupResult['skillsOutcome'] = 'opted_out';
+
+  if (installSkills) {
+    try {
+      skillsAgents = await detectCodingAgentSkills();
+      const result = await installMastraSkills({ directory: projectPath, agents: skillsAgents });
+      skillsOutcome = result.success ? 'installed' : 'failed';
+    } catch {
+      skillsOutcome = 'failed';
+    }
+  }
+
+  let gitOutcome: PostCreateSetupResult['gitOutcome'];
+  if (!initializeGit) {
+    gitOutcome = 'opted_out';
+  } else if (invocationIsGitWorktree) {
+    gitOutcome = 'parent_worktree';
+  } else if (await isGitInitialized({ cwd: projectPath })) {
+    gitOutcome = 'target_worktree';
+  } else {
+    try {
+      await gitInit({ cwd: projectPath });
+      gitOutcome = 'initialized';
+    } catch {
+      gitOutcome = 'failed';
+    }
+  }
+
+  return {
+    skillsAgents,
+    skillsOutcome,
+    gitOutcome,
+    hasFailure: skillsOutcome === 'failed' || gitOutcome === 'failed',
+  };
+}
+
+function formatPostCreateSetup(result: PostCreateSetupResult): string {
+  const agents = result.skillsAgents.join(', ');
+  const skillsSummary =
+    result.skillsOutcome === 'opted_out'
+      ? 'Skills: skipped (--no-skills)'
+      : result.skillsOutcome === 'installed'
+        ? `Skills: installed for ${agents}`
+        : `Skills: installation failed${agents ? ` for ${agents}` : ''}`;
+
+  const gitSummaries: Record<PostCreateSetupResult['gitOutcome'], string> = {
+    initialized: 'Git: initialized with an initial commit',
+    failed: 'Git: initialization failed',
+    opted_out: 'Git: skipped (--no-git)',
+    parent_worktree: 'Git: skipped because the project is inside an existing worktree',
+    target_worktree: 'Git: skipped because the project already contains git metadata',
+  };
+
+  return `${skillsSummary}\n${gitSummaries[result.gitOutcome]}`;
+}
 
 const postCreate = ({ projectName, packageManager }: { projectName: string; packageManager: string }) => {
   p.outro(`

@@ -1,3 +1,6 @@
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { InvalidArgumentError } from 'commander';
 import { execa } from 'execa';
@@ -139,16 +142,31 @@ export async function isGitInitialized({ cwd }: { cwd: string }): Promise<boolea
  * Initialize a git repository in the specified directory.
  */
 export async function gitInit({ cwd }: { cwd: string }) {
-  await execa('git', ['init'], { cwd, stdio: 'ignore' });
-  await execa('git', ['add', '-A'], { cwd, stdio: 'ignore' });
-  await execa(
-    'git',
-    [
-      'commit',
-      '-m',
-      '"Initial commit from Mastra"',
-      '--author="dane-ai-mastra[bot] <dane-ai-mastra[bot]@users.noreply.github.com>"',
-    ],
-    { cwd, stdio: 'ignore' },
-  );
+  const emptyHooksDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-git-hooks-'));
+
+  try {
+    await execa('git', ['init'], { cwd, stdio: 'ignore' });
+    await fs.appendFile(path.join(cwd, '.git', 'info', 'exclude'), '\n.env\n.env.*\n!.env.example\n!.env.*.example\n');
+    await execa('git', ['add', '-A'], { cwd, stdio: 'ignore' });
+    await execa(
+      'git',
+      [
+        '-c',
+        'user.name=Mastra',
+        '-c',
+        'user.email=noreply@mastra.ai',
+        '-c',
+        'commit.gpgSign=false',
+        '-c',
+        `core.hooksPath=${emptyHooksDirectory}`,
+        'commit',
+        '--no-verify',
+        '-m',
+        'Initial commit from Mastra',
+      ],
+      { cwd, stdio: 'ignore' },
+    );
+  } finally {
+    await fs.rm(emptyHooksDirectory, { recursive: true, force: true });
+  }
 }
