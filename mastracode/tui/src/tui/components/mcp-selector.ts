@@ -568,9 +568,13 @@ export class McpSelectorComponent extends Box implements Focusable {
       })
       .finally(() => {
         this._authenticating.delete(name);
-        // The auth flow has ended (connected, failed, or cancelled); close the
-        // auto-opened cancel sub-menu so the row shows its resolved state.
-        this.subMenuOpen = false;
+        // The auth flow has ended (connected, failed, or cancelled). Close the
+        // auto-opened cancel sub-menu so the row shows its resolved state — but
+        // only if the user is still looking at *this* server's sub-menu, so we
+        // don't yank shut a different server's menu they navigated to meanwhile.
+        if (this.subMenuOpen && this.statuses[this.selectedIndex]?.name === name) {
+          this.subMenuOpen = false;
+        }
         if (!this._reloading) {
           this.updateList();
         }
