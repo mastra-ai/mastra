@@ -183,6 +183,18 @@ export function createMcpManager(
   /** Per-server handlers that receive the OAuth authorization URL during authenticateServer(). */
   const authUrlHandlers = new Map<string, (url: string) => void>();
 
+  /**
+   * Servers with an OAuth authorization flow currently in flight. Owned by the
+   * manager (not the TUI) so the state survives a `/mcp` selector being closed
+   * and reopened — the reopened selector reads it back off the server status and
+   * can still offer "Cancel authentication".
+   */
+  const authenticatingServers = new Set<string>();
+
+  /** Overlay the manager-owned `authenticating` flag onto a status snapshot. */
+  const withAuthenticating = (status: McpServerStatus): McpServerStatus =>
+    authenticatingServers.has(status.name) ? { ...status, authenticating: true } : status;
+
   const MAX_STDERR_LINES = 200;
 
   /** Hook into a server's stderr stream and buffer its output. */
@@ -609,12 +621,14 @@ export function createMcpManager(
       if (options?.onAuthorizationUrl) {
         authUrlHandlers.set(name, options.onAuthorizationUrl);
       }
+      authenticatingServers.add(name);
       try {
         return await connectSingleServer(name, cfg, () =>
           client!.authenticate(name, options?.timeoutMs === undefined ? undefined : { timeoutMs: options.timeoutMs }),
         );
       } finally {
         authUrlHandlers.delete(name);
+        authenticatingServers.delete(name);
       }
     },
 
@@ -638,7 +652,7 @@ export function createMcpManager(
     },
 
     getServerStatuses() {
-      return Array.from(serverStatuses.values());
+      return Array.from(serverStatuses.values(), withAuthenticating);
     },
 
     getSkippedServers() {
