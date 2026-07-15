@@ -127,7 +127,13 @@ import * as discoveryOps from './discovery';
 import * as feedbackOps from './feedback';
 import * as logsOps from './logs';
 import * as metricsOps from './metrics';
-import { checkSignalTablesMigrationStatus, isReplacingMergeTreeEngine, migrateSignalTables } from './migration';
+import {
+  checkLegacySpanMigrationStatus,
+  checkSignalTablesMigrationStatus,
+  isReplacingMergeTreeEngine,
+  migrateLegacySpans,
+  migrateSignalTables,
+} from './migration';
 import type { ClickHouseDeltaCursorStrategy } from './polling';
 import { deltaPollingSupported } from './polling';
 import * as scoresOps from './scores';
@@ -440,6 +446,19 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       });
     }
 
+    // Non-blocking: detect legacy span table and suggest migration
+    try {
+      const legacyStatus = await checkLegacySpanMigrationStatus(this.#client);
+      if (legacyStatus.needsMigration) {
+        this.logger?.warn?.(
+          `Legacy span table 'mastra_ai_spans' detected. ` +
+            `Run 'npx mastra migrate' to migrate historical spans to the v-next schema.`,
+        );
+      }
+    } catch {
+      // Ignore — non-critical detection
+    }
+
     try {
       await assertExistingTablesCompatibleWithReplication(this.#client, this.#replication);
       const existingStrategy = await detectExistingDeltaCursorStrategy(this.#client);
@@ -559,9 +578,9 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
   }
 
   /**
-   * Manually migrate legacy signal tables to the signal-ID ReplacingMergeTree schema.
-   * The public method name is historical; the CLI still calls `migrateSpans()`
-   * for observability migrations even though this now also migrates signal tables.
+   * Manually migrate legacy tables to the v-next schema.
+   * Handles both signal table migrations (MergeTree → ReplacingMergeTree)
+   * and legacy span migration (mastra_ai_spans → mastra_span_events).
    */
   async migrateSpans(): Promise<{
     success: boolean;
@@ -569,35 +588,47 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     duplicatesRemoved: number;
     message: string;
   }> {
-    const migrationStatus = await checkSignalTablesMigrationStatus(this.#client);
+    const messages: string[] = [];
 
-    if (!migrationStatus.needsMigration) {
-      return {
-        success: true,
-        alreadyMigrated: true,
-        duplicatesRemoved: 0,
-        message: 'Migration already complete. Signal tables already use signal-ID dedupe keys.',
-      };
+    // Signal table migration
+    const signalStatus = await checkSignalTablesMigrationStatus(this.#client);
+    if (signalStatus.needsMigration) {
+      if (isReplicationConfigured(this.#replication)) {
+        throw new MastraError({
+          id: createStorageErrorId('CLICKHOUSE', 'REPLICATION', 'SIGNAL_TABLES_MIGRATION_UNSUPPORTED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text:
+            'ClickHouse replication is enabled, so Mastra will not run copy-and-swap signal table migrations automatically. ' +
+            'Migrate existing local signal tables manually before enabling replication.',
+        });
+      }
+      await migrateSignalTables(this.#client, this.logger);
+      messages.push(`Migrated signal tables: ${signalStatus.tables.map(t => t.table).join(', ')}.`);
     }
 
-    if (isReplicationConfigured(this.#replication)) {
-      throw new MastraError({
-        id: createStorageErrorId('CLICKHOUSE', 'REPLICATION', 'SIGNAL_TABLES_MIGRATION_UNSUPPORTED'),
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.USER,
-        text:
-          'ClickHouse replication is enabled, so Mastra will not run copy-and-swap signal table migrations automatically. ' +
-          'Migrate existing local signal tables manually before enabling replication.',
-      });
+    // Legacy span migration
+    const legacyStatus = await checkLegacySpanMigrationStatus(this.#client);
+    if (legacyStatus.needsMigration) {
+      if (isReplicationConfigured(this.#replication)) {
+        throw new MastraError({
+          id: createStorageErrorId('CLICKHOUSE', 'REPLICATION', 'LEGACY_SPAN_MIGRATION_UNSUPPORTED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: 'ClickHouse replication is enabled. Migrate legacy mastra_ai_spans manually before enabling replication.',
+        });
+      }
+      const result = await migrateLegacySpans(this.#client, this.logger);
+      messages.push(`Migrated ${result.migratedRows} legacy spans in ${result.batches} batches.`);
     }
 
-    await migrateSignalTables(this.#client, this.logger);
+    const alreadyMigrated = !signalStatus.needsMigration && !legacyStatus.needsMigration;
 
     return {
       success: true,
-      alreadyMigrated: false,
+      alreadyMigrated,
       duplicatesRemoved: 0,
-      message: `Migration complete. Migrated signal tables: ${migrationStatus.tables.map(t => t.table).join(', ')}.`,
+      message: alreadyMigrated ? 'Migration already complete.' : `Migration complete. ${messages.join(' ')}`,
     };
   }
 

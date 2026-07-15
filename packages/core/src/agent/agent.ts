@@ -128,6 +128,7 @@ import { buildMcpServerGuidance } from './mcp-guidance';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { SaveQueueManager } from './save-queue';
+import type { CreatedAgentSignal } from './signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
 import type { SubAgent } from './subagent';
 import { agentThreadStreamRuntime } from './thread-stream-runtime';
@@ -848,6 +849,28 @@ export class Agent<
    */
   __getGoalConfig(): GoalConfig | undefined {
     return this.#goal;
+  }
+
+  /**
+   * Returns a closure that drains pending signals for a given run from the
+   * shared `AgentThreadStreamRuntime`. Used by `prepareForDurableExecution` to
+   * store the drain function on the in-process `RunRegistryEntry`.
+   * @internal
+   */
+  __getDrainPendingSignals(): (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[] {
+    const pubsub = this.getPubSub();
+    return (runId, scope) => agentThreadStreamRuntime.drainPendingSignals(runId, pubsub, scope);
+  }
+
+  /**
+   * Returns the uncombined input processors suitable for `processLLMRequest`.
+   * Combined (workflow-wrapped) processors skip `processLLMRequest`; this
+   * method returns them individually so the `ProcessorRunner` can invoke
+   * each processor's `processLLMRequest` method.
+   * @internal — used by `DurableAgent` preparation to populate the registry.
+   */
+  async __listLLMRequestProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]> {
+    return this.listResolvedLLMRequestProcessors(requestContext);
   }
 
   /**
@@ -4260,6 +4283,7 @@ export class Agent<
     toolsets,
     requestContext,
     mastraProxy,
+    outputWriter,
     autoResumeSuspendedTools,
     backgroundTaskEnabled,
     ...rest
@@ -4270,6 +4294,7 @@ export class Agent<
     toolsets: ToolsetsInput;
     requestContext: RequestContext;
     mastraProxy?: MastraUnion;
+    outputWriter?: OutputWriter;
     autoResumeSuspendedTools?: boolean;
     backgroundTaskEnabled?: boolean;
   } & Partial<ObservabilityContext>) {
@@ -4301,6 +4326,7 @@ export class Agent<
             requestContext,
             ...observabilityContext,
             model: await this.getModel({ requestContext }),
+            outputWriter,
             tracingPolicy: this.#options?.tracingPolicy,
             requireApproval: (toolObj as any).requireApproval,
             backgroundConfig: (toolObj as any).background,
@@ -4470,9 +4496,14 @@ export class Agent<
 
         const toModelOutput = delegation?.includeSubAgentToolResultsInModelContext
           ? undefined
-          : (output: SubAgentToolOutput) => ({
+          : (output: SubAgentToolOutput | string) => ({
               type: 'text' as const,
-              value: output.text,
+              // When a sub-agent invocation is dispatched as a background task, the agentic loop
+              // hands `toModelOutput` the placeholder string from tool-call-step.ts ("Background
+              // task started...") instead of the agentOutputSchema object. Reading `output.text`
+              // off that string is undefined, which serializes to a tool message with null content
+              // that providers (e.g. Anthropic) reject with a 500. Use the string as-is in that case.
+              value: typeof output === 'string' ? output : (output.text ?? ''),
             });
 
         const toolObj = createTool({
@@ -4816,7 +4847,10 @@ export class Agent<
                             memory: {
                               resource: subAgentResourceId,
                               thread: subAgentThreadId,
-                              options: { lastMessages: false },
+                              // Title generation is a top-level thread concern. Ephemeral subagent
+                              // delegation threads are never surfaced, so suppress it here to avoid
+                              // an extra title-generation LLM call per delegation (issue #18738).
+                              options: { lastMessages: false, generateTitle: false },
                             },
                           }
                         : {}),
@@ -4835,7 +4869,10 @@ export class Agent<
                             memory: {
                               resource: subAgentResourceId,
                               thread: subAgentThreadId,
-                              options: { lastMessages: false },
+                              // Title generation is a top-level thread concern. Ephemeral subagent
+                              // delegation threads are never surfaced, so suppress it here to avoid
+                              // an extra title-generation LLM call per delegation (issue #18738).
+                              options: { lastMessages: false, generateTitle: false },
                             },
                           }
                         : {}),
@@ -4951,6 +4988,10 @@ export class Agent<
                               thread: subAgentThreadId,
                               options: {
                                 lastMessages: false,
+                                // Title generation is a top-level thread concern. Ephemeral subagent
+                                // delegation threads are never surfaced, so suppress it here to avoid
+                                // an extra title-generation LLM call per delegation (issue #18738).
+                                generateTitle: false,
                               },
                             },
                           }
@@ -4972,6 +5013,10 @@ export class Agent<
                               thread: subAgentThreadId,
                               options: {
                                 lastMessages: false,
+                                // Title generation is a top-level thread concern. Ephemeral subagent
+                                // delegation threads are never surfaced, so suppress it here to avoid
+                                // an extra title-generation LLM call per delegation (issue #18738).
+                                generateTitle: false,
                               },
                             },
                           }
@@ -5634,6 +5679,7 @@ export class Agent<
     resourceId?: string;
     runId?: string;
     requestContext?: RequestContext;
+    outputWriter?: OutputWriter;
     memoryConfig?: MemoryConfig;
     autoResumeSuspendedTools?: boolean;
     hooks?: ToolHooks;
@@ -5667,6 +5713,7 @@ export class Agent<
       resourceId: resourceIdFromContext || options.resourceId || optionMemory?.resource || mergedMemory?.resource,
       runId: mergedOptions.runId,
       requestContext,
+      outputWriter: mergedOptions.outputWriter,
       memoryConfig: options.memoryConfig ?? mergedMemory?.options,
       autoResumeSuspendedTools: mergedOptions.autoResumeSuspendedTools,
       // Use the deep-merged delegation so default callbacks (e.g. messageFilter)
@@ -5752,6 +5799,7 @@ export class Agent<
       ...observabilityContext,
       mastraProxy,
       toolsets: toolsets!,
+      outputWriter,
       autoResumeSuspendedTools,
       backgroundTaskEnabled,
     });
@@ -6239,12 +6287,8 @@ export class Agent<
 
   #getSuspendedToolCalls(existingSnapshot: WorkflowRunState | null | undefined): AgentRunToolCall[] {
     const toolCalls: AgentRunToolCall[] = [];
-    for (const key in existingSnapshot?.context) {
-      const step = existingSnapshot?.context[key];
-      if (step?.status !== 'suspended') continue;
-      const payload = step.suspendPayload;
-      if (!payload) continue;
 
+    const collectFromPayload = (payload: Record<string, any>, stepKey: string) => {
       if (payload.requireToolApproval) {
         toolCalls.push({
           toolCallId: payload.requireToolApproval.toolCallId,
@@ -6254,22 +6298,129 @@ export class Agent<
         });
       } else if (payload.toolCallSuspended || payload.toolName || payload.toolCallId) {
         toolCalls.push({
-          toolCallId: payload.toolCallId,
+          toolCallId: payload.toolCallId ?? this.#findResumeLabelForStep(existingSnapshot, stepKey),
           toolName: payload.toolName,
           requiresApproval: false,
           suspendPayload: payload.toolCallSuspended,
         });
+      }
+    };
+
+    for (const key in existingSnapshot?.context) {
+      const step = existingSnapshot?.context[key];
+      if (step?.status !== 'suspended') continue;
+      const payload = step.suspendPayload;
+      if (!payload) continue;
+
+      // A foreach step (e.g. parallel tool calls in the agentic loop) can park several
+      // iterations at once, but its step-level suspendPayload only carries the first
+      // suspended iteration. The full set lives in `__workflow_meta.foreachOutput`,
+      // where each suspended entry keeps its own per-iteration payload — surface every
+      // one of them so all pending tool calls are discoverable and resumable.
+      const suspendedIterations = this.#getSuspendedForeachIterations(payload);
+      if (suspendedIterations.length > 0) {
+        for (const iteration of suspendedIterations) {
+          collectFromPayload(iteration.suspendPayload, key);
+        }
+      } else {
+        collectFromPayload(payload, key);
       }
     }
 
     return toolCalls;
   }
 
+  #getSuspendedForeachIterations(
+    payload: Record<string, any>,
+  ): { status: 'suspended'; suspendPayload: Record<string, any> }[] {
+    // The default engine persists foreach aggregation as an array; the evented
+    // engine persists it as an object keyed by iteration index.
+    const foreachOutput = payload.__workflow_meta?.foreachOutput;
+    const entries = Array.isArray(foreachOutput)
+      ? foreachOutput
+      : foreachOutput && typeof foreachOutput === 'object'
+        ? Object.values(foreachOutput)
+        : [];
+    return entries.filter(
+      (entry: any): entry is { status: 'suspended'; suspendPayload: Record<string, any> } =>
+        entry?.status === 'suspended' && !!entry.suspendPayload,
+    );
+  }
+
+  async #validateSuspendedToolCallTarget({
+    snapshot,
+    toolCallId,
+    runId,
+    method,
+  }: {
+    snapshot: WorkflowRunState;
+    toolCallId: string | undefined;
+    runId: string;
+    method: string;
+  }) {
+    if (toolCallId === undefined) return;
+
+    const isTargetSuspended = (currentSnapshot: WorkflowRunState) =>
+      this.#getSuspendedToolCalls(currentSnapshot).some(toolCall => toolCall.toolCallId === toolCallId);
+
+    let isSuspended = isTargetSuspended(snapshot);
+    if (!isSuspended) {
+      // A resume stream can expose the next suspension just before its snapshot is
+      // persisted. Briefly poll after authorization so an immediate response to
+      // that newly surfaced tool call is not rejected based on the prior snapshot.
+      const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
+      const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
+      const deadline = Date.now() + 2000;
+      while (!isSuspended && workflowsStore && Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 25));
+        const latestSnapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: 'agentic-loop', runId });
+        isSuspended = latestSnapshot ? isTargetSuspended(latestSnapshot) : false;
+      }
+    }
+
+    if (!isSuspended) {
+      throw new MastraError({
+        id: 'AGENT_RESUME_TOOL_CALL_NOT_SUSPENDED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent "${this.name}" ${method}() cannot resume tool call "${toolCallId}" because it is not suspended.`,
+        details: {
+          agentName: this.name,
+          method,
+          runId,
+          toolCallId,
+        },
+      });
+    }
+  }
+
+  /**
+   * Suspend payloads persisted before they carried `toolCallId` only hold the
+   * id as the workflow resume label (`resumeLabels[toolCallId] = { stepId }`).
+   * Recover it when exactly one label points at the suspended step.
+   */
+  #findResumeLabelForStep(existingSnapshot: WorkflowRunState | null | undefined, stepId: string): string | undefined {
+    const labels = Object.entries(existingSnapshot?.resumeLabels ?? {}).filter(
+      ([, target]) => target.stepId === stepId,
+    );
+    return labels.length === 1 ? labels[0]![0] : undefined;
+  }
+
   #getSuspendedToolInfo(
     existingSnapshot: WorkflowRunState | null | undefined,
+    targetToolCallId?: string,
   ): { toolCallId?: string; toolName?: string } | undefined {
-    const [first] = this.#getSuspendedToolCalls(existingSnapshot);
-    return first ? { toolCallId: first.toolCallId, toolName: first.toolName } : undefined;
+    const suspendedToolCalls = this.#getSuspendedToolCalls(existingSnapshot);
+    // Several tool calls can be parked at once. Never label an explicitly targeted
+    // resume with a sibling if this snapshot predates the target's persistence.
+    const info =
+      targetToolCallId !== undefined
+        ? (suspendedToolCalls.find(toolCall => toolCall.toolCallId === targetToolCallId) ?? {
+            toolCallId: targetToolCallId,
+            toolName: undefined,
+          })
+        : suspendedToolCalls[0];
+    return info ? { toolCallId: info.toolCallId, toolName: info.toolName } : undefined;
   }
 
   #getResumeSpanInput(resumeData: unknown, suspendedToolInfo?: { toolCallId?: string; toolName?: string }): unknown {
@@ -6535,7 +6686,9 @@ export class Agent<
     // For resumed runs, surface resumeData as the span input and link the resumed
     // span back to the original suspended trace. Mirrors Workflow.resume tracing.
     const isResume = !!resumeContext;
-    const suspendedToolInfo = isResume ? this.#getSuspendedToolInfo(resumeContext?.snapshot) : undefined;
+    const suspendedToolInfo = isResume
+      ? this.#getSuspendedToolInfo(resumeContext?.snapshot, options.toolCallId)
+      : undefined;
     const persistedTracingContext = isResume
       ? (resumeContext?.snapshot?.tracingContext as
           | { traceId?: string; spanId?: string; parentSpanId?: string }
@@ -7500,6 +7653,10 @@ export class Agent<
     }
 
     const results: SendAgentNotificationSignalResult<OUTPUT>[] = [];
+    // Set when a record stays pending with a scheduled deliverAt/summaryAt —
+    // those are delivered later by the notification dispatch workflow, so the
+    // dispatcher schedule (and scheduler) must be lazily activated.
+    let needsDispatcher = false;
     for (const { record, decision } of planned) {
       if (decision.action === 'discard') {
         const updated = await notifications.updateNotification({
@@ -7540,6 +7697,10 @@ export class Agent<
               : (decision.summaryAt ?? record.summaryAt),
           deliveryReason: decision.reason,
         });
+
+        if (updated.deliverAt != null || updated.summaryAt != null) {
+          needsDispatcher = true;
+        }
 
         if (shouldEmitSummaryNow) {
           const signal = createNotificationSummarySignal(summarizeNotifications([updated]));
@@ -7649,6 +7810,10 @@ export class Agent<
         persisted: result.persisted,
         accepted: result.accepted,
       });
+    }
+
+    if (needsDispatcher) {
+      await this.#mastra?.__ensureNotificationDispatchReady();
     }
 
     return results;
@@ -8056,7 +8221,10 @@ export class Agent<
     }
 
     const runId = streamOptions?.runId ?? '';
-    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeStream' });
+    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({
+      runId,
+      method: 'resumeStream',
+    });
     const snapshotMemoryInfo = this.#getSnapshotMemoryInfo(existingSnapshot);
 
     if (snapshotMemoryInfo?.threadId) {
@@ -8074,6 +8242,12 @@ export class Agent<
       runId: mergedStreamOptions.runId,
       snapshotMemoryInfo,
       actor,
+    });
+    await this.#validateSuspendedToolCallTarget({
+      snapshot: existingSnapshot,
+      toolCallId: streamOptions?.toolCallId,
+      runId,
+      method: 'resumeStream',
     });
 
     const llm = await this.getLLM({
@@ -8218,13 +8392,22 @@ export class Agent<
     delete loopOptions.actor;
 
     const runId = options?.runId ?? '';
-    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeGenerate' });
+    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({
+      runId,
+      method: 'resumeGenerate',
+    });
     await this.#requireAgentExecutionFGA({
       requestContext: mergedOptions.requestContext,
       memory: mergedOptions.memory,
       runId: mergedOptions.runId,
       snapshotMemoryInfo: this.#getSnapshotMemoryInfo(existingSnapshot),
       actor,
+    });
+    await this.#validateSuspendedToolCallTarget({
+      snapshot: existingSnapshot,
+      toolCallId: options?.toolCallId,
+      runId,
+      method: 'resumeGenerate',
     });
 
     const llm = await this.getLLM({

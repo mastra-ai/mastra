@@ -75,14 +75,14 @@ result.thresholdResults // [{ id, passed, averageScore, threshold }]
     name: 'scorers',
     type: 'ScorerEntry[] | AgentScorerConfig | WorkflowScorerConfig',
     description:
-      'Scorers to use. Each entry is either a bare `MastraScorer` or `{ scorer, threshold }` for threshold tracking. An `AgentScorerConfig` object separates agent-level and trajectory scorers. A `WorkflowScorerConfig` object specifies scorers for the workflow, individual steps, and trajectory.',
-    isOptional: false,
+      'Scorers to use. Each entry is either a bare `MastraScorer` or `{ scorer, threshold }` for threshold tracking. An `AgentScorerConfig` object separates agent-level and trajectory scorers. A `WorkflowScorerConfig` object specifies scorers for the workflow, individual steps, and trajectory. Optional when at least one gate is provided (gate-only runs).',
+    isOptional: true,
   },
   {
     name: 'gates',
     type: 'MastraScorer[]',
     description:
-      'Scorers that must score 1.0 for the run to pass. If any gate averages below 1.0 across data items, the verdict is `failed`. Gates run before regular scorers on each data item.',
+      'Scorers that must score 1.0 for the run to pass. If any gate averages below 1.0 across data items, the verdict is `failed`. Gates run before regular scorers on each data item. When provided, `scorers` may be omitted.',
     isOptional: true,
   },
   {

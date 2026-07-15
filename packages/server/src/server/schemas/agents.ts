@@ -212,7 +212,7 @@ export const serializedAgentSchema = z.object({
   defaultOptions: defaultOptionsSchema.optional(),
   defaultGenerateOptionsLegacy: z.record(z.string(), z.any()).optional(),
   defaultStreamOptionsLegacy: z.record(z.string(), z.any()).optional(),
-  source: z.enum(['code', 'stored']).optional(),
+  source: z.enum(['code', 'stored', 'fs']).optional(),
   status: z.enum(['draft', 'published', 'archived']).optional(),
   activeVersionId: z.string().optional(),
   hasDraft: z.boolean().optional(),
@@ -532,6 +532,32 @@ export const resumeStreamBodySchema = agentExecutionBodySchema.omit({ messages: 
   runId: z.string(),
   resumeData: z.unknown().refine(x => x !== undefined, { message: 'resumeData is required' }),
   toolCallId: z.string().optional(),
+});
+
+// ============================================================================
+// Recover Schema
+// ============================================================================
+
+/**
+ * Body schema for recovering an orphaned RUNNING durable-agent run.
+ * Thread and resource are read from the persisted snapshot, so we only accept
+ * the runId plus request-context / version overrides needed for auth and
+ * routing.
+ */
+export const recoverBodySchema = z.object({
+  runId: z.string(),
+  requestContext: z.record(z.string(), z.any()).optional(),
+  versions: z
+    .object({
+      agents: z
+        .record(
+          z.string(),
+          z.union([z.object({ versionId: z.string() }), z.object({ status: z.enum(['draft', 'published']) })]),
+        )
+        .optional(),
+      defaultStatus: z.enum(['draft', 'published']).optional(),
+    })
+    .optional(),
 });
 
 // ============================================================================

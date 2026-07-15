@@ -272,6 +272,60 @@ describe('Scheduler', () => {
     expect(scheduler.isRunning).toBe(false);
   });
 
+  it('does not keep the event loop alive after stop (setInterval is unrefed)', async () => {
+    const origSetInterval = globalThis.setInterval;
+    const unref = vi.fn();
+    const setIntervalSpy = vi
+      .spyOn(globalThis, 'setInterval')
+      .mockImplementation((handler: any, ms?: number, ...args: any[]) => {
+        const handle = origSetInterval(handler, ms, ...args);
+        // Replace unref on the real handle with a spy so we can assert it's called
+        const origUnref = handle.unref.bind(handle);
+        handle.unref = () => {
+          unref();
+          return origUnref();
+        };
+        return handle;
+      });
+
+    const { store } = makeStore();
+    const pubsub = new EventEmitterPubSub();
+    const scheduler = new Scheduler({
+      schedulesStore: store,
+      pubsub,
+      config: { tickIntervalMs: 60_000 },
+    });
+
+    await scheduler.start();
+    expect(setIntervalSpy).toHaveBeenCalledOnce();
+    expect(unref).toHaveBeenCalled();
+
+    await scheduler.stop();
+    setIntervalSpy.mockRestore();
+  });
+
+  it('starts on runtimes where setInterval returns a numeric handle (e.g. Cloudflare Workers)', async () => {
+    // workerd's setInterval returns a number, which has no .unref method
+    const setIntervalSpy = vi.spyOn(globalThis, 'setInterval').mockImplementation((() => 123) as any);
+
+    try {
+      const { store } = makeStore();
+      const pubsub = new EventEmitterPubSub();
+      const scheduler = new Scheduler({
+        schedulesStore: store,
+        pubsub,
+        config: { tickIntervalMs: 60_000 },
+      });
+
+      await expect(scheduler.start()).resolves.toBeUndefined();
+      expect(scheduler.isRunning).toBe(true);
+
+      await scheduler.stop();
+    } finally {
+      setIntervalSpy.mockRestore();
+    }
+  });
+
   it('skips firing when the target workflow is not registered', async () => {
     const { store } = makeStore();
     const pubsub = new EventEmitterPubSub();

@@ -13,6 +13,20 @@ import { isOmReproCaptureEnabled, safeCaptureJson, writeProcessInputStepReproCap
 import { insertTemporalGapMarkers } from './temporal-markers';
 import type { TokenCounterModelContext } from './token-counter';
 
+/**
+ * Coerce a shared `state.__omTurn` value to a usable live turn.
+ *
+ * The turn is stashed in the shared processor-state map as a live `ObservationTurn`, but it
+ * serializes (via `ObservationTurn.toJSON`) to a plain, method-less projection. If such a snapshot
+ * were ever resumed back through here, `__omTurn` would be that plain object and calling `.end()`
+ * on it would throw a synchronous TypeError the surrounding `.catch()` could not trap. Only treat a
+ * value with a callable `end()` as a turn, so OM falls through to creating a fresh one. In practice
+ * OM reads the live turn from the in-memory map, so this is defensive.
+ */
+function asLiveTurn(value: unknown): ObservationTurn | undefined {
+  return value && typeof (value as ObservationTurn).end === 'function' ? (value as ObservationTurn) : undefined;
+}
+
 /** Subset of Memory that the processor needs — avoids circular imports. */
 export interface MemoryContextProvider {
   getContext(opts: { threadId: string; resourceId?: string }): Promise<{
@@ -214,7 +228,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       // processOutputResult. In production, getInputProcessors() and
       // getOutputProcessors() each call createOMProcessor(), producing two
       // different instances that share only the processorStates map.
-      const activeTurn = (state.__omTurn as ObservationTurn | undefined) ?? this.turn;
+      const activeTurn = asLiveTurn(state.__omTurn) ?? this.turn;
       if (activeTurn && activeTurn.messageList !== messageList) {
         // Durable runs may deserialize a fresh MessageList between loop iterations. End the
         // old turn first so any messages tracked on that list are flushed before OM moves on.
@@ -234,6 +248,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           threadId,
           resourceId,
           messageList,
+          agent: args.agent,
           observabilityContext: getOmObservabilityContext(args),
           hooks: {
             onBufferChunkSealed: rotateResponseMessageId,
@@ -242,6 +257,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         });
         this.turn.writer = writer;
         this.turn.sendSignal = args.sendSignal;
+        this.turn.agent = args.agent;
         this.turn.requestContext = requestContext;
         await this.turn.start(this.memory);
         if (stepNumber === 0 && this.temporalMarkers) {
@@ -365,7 +381,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
 
         // Retrieve the turn from shared processor state — in production, the input
         // and output processors are separate instances (see comment in processInputStep).
-        const turn = (state.__omTurn as ObservationTurn | undefined) ?? this.turn;
+        const turn = asLiveTurn(state.__omTurn) ?? this.turn;
         if (turn) {
           await turn.end();
           this.turn = undefined;

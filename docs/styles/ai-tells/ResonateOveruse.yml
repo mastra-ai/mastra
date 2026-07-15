@@ -1,0 +1,13 @@
+---
+extends: existence
+message: "AI overused verb: '%s'. Name what connects and why, or disable this rule for physics or audio writing."
+level: error
+nonword: true
+ignorecase: true
+# "Resonate" is an AI overuse fingerprint for reception: an idea "resonates
+# with" an audience, a message "resonates deeply." Flag the figurative reception
+# sense broadly. The only literal sense is physics and acoustics (a cavity
+# resonates at a frequency), a clear domain that disables the whole rule. The
+# noun forms "resonance" and "resonant" are a different word and stay clean.
+tokens:
+  - "\\bresonat(?:e|es|ed|ing)\\b"

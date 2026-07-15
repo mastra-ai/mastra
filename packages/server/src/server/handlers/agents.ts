@@ -6,7 +6,7 @@ import type {
   AgentSignalInput,
   DurableAgentLike,
 } from '@mastra/core/agent';
-import { AGENT_STREAM_TOPIC } from '@mastra/core/agent/durable';
+import { AGENT_STREAM_TOPIC, DurableStepIds } from '@mastra/core/agent/durable';
 import type { VersionOverrides } from '@mastra/core/di';
 import { mergeVersionOverrides, MASTRA_VERSIONS_KEY } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -68,6 +68,7 @@ import {
   streamUntilIdleBodySchema,
   resumeStreamBodySchema,
   resumeStreamUntilIdleBodySchema,
+  recoverBodySchema,
 } from '../schemas/agents';
 import type { ProviderListItem } from '../schemas/agents';
 import { createStoredAgentResponseSchema } from '../schemas/stored-agents';
@@ -279,7 +280,7 @@ export interface SerializedAgent {
   /** Serialized JSON schema for request context validation */
   requestContextSchema?: string;
 
-  source?: 'code' | 'stored';
+  source?: 'code' | 'stored' | 'fs';
   status?: 'draft' | 'published' | 'archived';
   activeVersionId?: string;
   hasDraft?: boolean;
@@ -2677,6 +2678,80 @@ export const RESUME_STREAM_ROUTE = createRoute({
       return streamResult.fullStream;
     } catch (error) {
       return handleError(error, 'error resuming agent stream');
+    }
+  },
+});
+
+export const RECOVER_ROUTE = createRoute({
+  method: 'POST',
+  path: '/agents/:agentId/recover',
+  responseType: 'stream' as const,
+  streamFormat: 'sse' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: recoverBodySchema,
+  responseSchema: streamResponseSchema,
+  summary: 'Recover an orphaned durable agent run',
+  description:
+    'Re-drives an orphaned RUNNING durable-agent run after a process restart. Only supported on durable agents (createDurableAgent). Returns a stream that replays past chunks and continues the loop to completion.',
+  tags: ['Agents'],
+  requiresAuth: true,
+  requiresPermission: MastraFGAPermissions.AGENTS_EXECUTE,
+  handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
+    try {
+      if (!params.runId) {
+        throw new HTTPException(400, { message: 'Run id is required' });
+      }
+
+      const { runId, versions } = params;
+      const bodyRequestContext = (params as { requestContext?: Record<string, unknown> }).requestContext;
+
+      const versionOptions = extractVersionOptions(
+        serverRequestContext,
+        bodyRequestContext as Record<string, unknown> | undefined,
+      );
+
+      // Merge body-scoped context and apply version overrides BEFORE
+      // resolving the agent, so that `getAgentFromSystem` picks the
+      // correct draft/published version and any downstream agent lookups
+      // (memory, tools) see the same stashed overrides. Mirrors the order
+      // used by other execute-style routes that predate this one but
+      // needed the same fix.
+      mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
+      stashVersionOverrides(serverRequestContext, versions);
+      ensureDefaultVersionStatus(serverRequestContext, versionOptions);
+
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions,
+      });
+
+      // Durable-agent check via duck-typing to avoid a hard runtime dep on the
+      // DurableAgent class inside @mastra/core (mirrors the pattern used by
+      // Mastra.recoverAllDurableAgents()).
+      if (typeof (agent as any).recover !== 'function') {
+        throw new HTTPException(400, {
+          message: 'Agent does not support recover. Only durable agents (createDurableAgent) can recover runs.',
+        });
+      }
+
+      const workflowsStore = await mastra.getStorage()?.getStore('workflows');
+      const workflowRun = await workflowsStore?.getWorkflowRunById({
+        workflowName: DurableStepIds.AGENTIC_LOOP,
+        runId,
+      });
+      await validateRunOwnership(workflowRun, getEffectiveResourceId(serverRequestContext, undefined));
+
+      // NOTE: DurableAgent.recover() reads the workflow's requestContext from
+      // the persisted snapshot. serverRequestContext is only used above for
+      // ownership checks and version resolution.
+      const streamResult = await (agent as any).recover(runId, {
+        abortSignal,
+      });
+
+      return streamResult.fullStream;
+    } catch (error) {
+      return handleError(error, 'error recovering agent run');
     }
   },
 });

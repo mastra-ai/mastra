@@ -88,6 +88,8 @@ export const scoringHookInputSchema = z.object({
   spanId: z.string().optional(),
   resourceId: z.string().optional(),
   threadId: z.string().optional(),
+  // Tenancy: organizationId arrives via ObservabilityContext; projectId is scores-specific.
+  projectId: z.string().optional(),
   // Note: observabilityContext is not serializable, so we don't include it in the schema
 });
 
@@ -192,6 +194,17 @@ export const scoreRowDataSchema = z.object({
   spanId: z.string().optional(),
   resourceId: z.string().optional(),
   threadId: z.string().optional(),
+  // Multi-tenant scope. `resourceId` is overloaded (memory end-user), so tenancy
+  // uses dedicated fields: organizationId (account) + projectId (project scope).
+  organizationId: z.string().nullish(),
+  projectId: z.string().nullish(),
+  // Batch handle shared across all per-trace scores produced by one batch scoring
+  // call. `runId` stays per-execution; `batchId` groups the batch.
+  batchId: z.string().nullish(),
+  // Dataset provenance: links a baseline score back to the curated dataset item it
+  // scored, so scores can join to ground truth without re-running the agent.
+  datasetId: z.string().nullish(),
+  datasetItemId: z.string().nullish(),
 
   // Additional ScoreRowData fields
   preprocessStepResult: optionalRecordSchema,
@@ -297,6 +310,16 @@ export type McpToolCallStep = TrajectoryStepBase & {
   success?: boolean;
 };
 
+export type ProviderToolCallStep = TrajectoryStepBase & {
+  stepType: 'provider_tool_call';
+  /** Arguments passed to the server-side tool */
+  toolArgs?: Record<string, unknown>;
+  /** Result returned by the server-side tool */
+  toolResult?: Record<string, unknown>;
+  /** Whether the tool call succeeded */
+  success?: boolean;
+};
+
 export type ModelGenerationStep = TrajectoryStepBase & {
   stepType: 'model_generation';
   /** The model ID used for generation */
@@ -387,6 +410,7 @@ export type ProcessorRunStep = TrajectoryStepBase & {
 export type TrajectoryStep =
   | ToolCallStep
   | McpToolCallStep
+  | ProviderToolCallStep
   | ModelGenerationStep
   | AgentRunStep
   | WorkflowStepStep
@@ -808,6 +832,20 @@ function spanToTrajectorySteps(node: SpanTreeNode): TrajectoryStep[] {
           toolArgs,
           toolResult,
           mcpServer: typeof attrs.mcpServer === 'string' ? attrs.mcpServer : undefined,
+          success: typeof attrs.success === 'boolean' ? attrs.success : undefined,
+        },
+      ];
+    }
+
+    case SpanType.PROVIDER_TOOL_CALL: {
+      const toolArgs = toRecordOrUndefined(span.input);
+      const toolResult = toRecordOrUndefined(span.output);
+      return [
+        {
+          ...base,
+          stepType: 'provider_tool_call' as const,
+          toolArgs,
+          toolResult,
           success: typeof attrs.success === 'boolean' ? attrs.success : undefined,
         },
       ];

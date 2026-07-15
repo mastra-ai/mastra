@@ -443,6 +443,115 @@ describe.each([
       ]);
     }, 30000);
 
+    it('reports the toolCallId for suspend()-parked tool calls', async () => {
+      const askUserTool = createTool({
+        id: 'Ask user tool',
+        description: 'Asks the user for the name',
+        inputSchema: z.object({ name: z.string() }),
+        suspendSchema: z.object({ question: z.string() }),
+        resumeSchema: z.object({ name: z.string() }),
+        execute: async (_input, context) => {
+          if (!context?.agent?.resumeData) {
+            return await context?.agent?.suspend({ question: 'Which user?' });
+          }
+          return { name: context.agent.resumeData.name, email: 'dero@mail.com' };
+        },
+      });
+
+      const agent = new Agent({
+        id: 'suspending-agent',
+        name: 'Suspending Agent',
+        instructions: 'You find users.',
+        model: createMockModel({ toolName: 'askUserTool' }),
+        tools: { askUserTool },
+      });
+      new Mastra({ agents: { agent }, logger: false, storage: new InMemoryStore() });
+
+      const stream = await agent.stream('Find the user', {
+        memory: { thread: 'thread-1', resource: 'resource-1' },
+      });
+      let suspendedToolCallId = '';
+      for await (const chunk of stream.fullStream) {
+        if (chunk.type === 'tool-call-suspended') {
+          suspendedToolCallId = chunk.payload.toolCallId;
+        }
+      }
+      expect(suspendedToolCallId).toBeTruthy();
+
+      // The id the stream chunk carries must survive into discovery, otherwise
+      // sendToolApproval({ toolCallId }) can never match the run it names.
+      const { runs } = await agent.listSuspendedRuns({ threadId: 'thread-1' });
+      expect(runs).toHaveLength(1);
+      expect(runs[0]!.toolCalls).toEqual([
+        expect.objectContaining({
+          toolCallId: suspendedToolCallId,
+          toolName: 'askUserTool',
+          requiresApproval: false,
+        }),
+      ]);
+    }, 30000);
+
+    it('recovers the toolCallId from resume labels for suspend()-parked snapshots persisted without one', async () => {
+      const askUserTool = createTool({
+        id: 'Ask user tool',
+        description: 'Asks the user for the name',
+        inputSchema: z.object({ name: z.string() }),
+        suspendSchema: z.object({ question: z.string() }),
+        resumeSchema: z.object({ name: z.string() }),
+        execute: async (_input, context) => {
+          if (!context?.agent?.resumeData) {
+            return await context?.agent?.suspend({ question: 'Which user?' });
+          }
+          return { name: context.agent.resumeData.name, email: 'dero@mail.com' };
+        },
+      });
+
+      const storage = new InMemoryStore();
+      const agent = new Agent({
+        id: 'suspending-agent',
+        name: 'Suspending Agent',
+        instructions: 'You find users.',
+        model: createMockModel({ toolName: 'askUserTool' }),
+        tools: { askUserTool },
+      });
+      new Mastra({ agents: { agent }, logger: false, storage });
+
+      const stream = await agent.stream('Find the user', {
+        memory: { thread: 'thread-1', resource: 'resource-1' },
+      });
+      let suspendedToolCallId = '';
+      for await (const chunk of stream.fullStream) {
+        if (chunk.type === 'tool-call-suspended') {
+          suspendedToolCallId = chunk.payload.toolCallId;
+        }
+      }
+      expect(suspendedToolCallId).toBeTruthy();
+
+      // Simulate a snapshot persisted before the suspend payload carried
+      // toolCallId: back then the id only survived as the workflow resume
+      // label (resumeLabels[toolCallId] = { stepId }).
+      const workflowsStore = (await storage.getStore('workflows'))!;
+      const run = await workflowsStore.getWorkflowRunById({ runId: stream.runId, workflowName: 'agentic-loop' });
+      expect(run).not.toBeNull();
+      const snapshot = run!.snapshot as WorkflowRunState;
+      for (const key in snapshot.context) {
+        const step = snapshot.context[key];
+        if (step?.status === 'suspended' && step.suspendPayload) {
+          delete (step.suspendPayload as Record<string, unknown>).toolCallId;
+        }
+      }
+      await workflowsStore.persistWorkflowSnapshot({
+        workflowName: 'agentic-loop',
+        runId: stream.runId,
+        resourceId: 'resource-1',
+        snapshot,
+      });
+
+      const { runs } = await agent.listSuspendedRuns({ threadId: 'thread-1' });
+      expect(runs).toHaveLength(1);
+      expect(runs[0]!.toolCalls[0]!.toolCallId).toBe(suspendedToolCallId);
+    }, 30000);
+
     it('returns an empty list once the run is resumed and completes', async () => {
       const { agent } = createSuspendedSetup();
       const { runId, toolCallId } = await suspendRun(agent, 'thread-1', 'resource-1');
@@ -686,6 +795,71 @@ describe.each([
       await vi.waitFor(
         async () => {
           expect(mockFindUser).toHaveBeenCalledWith(expect.objectContaining({ name: 'Dero Israel' }));
+          expect((await workflowsStore.listWorkflowRuns({})).runs).toHaveLength(0);
+        },
+        { timeout: 10000 },
+      );
+    }, 30000);
+
+    it('matches a suspend()-parked run by toolCallId after a simulated restart', async () => {
+      const resumedTool = vi.fn();
+      const makeAskUserAgent = (toolCallOnFirstCall: boolean) => {
+        const askUserTool = createTool({
+          id: 'Ask user tool',
+          description: 'Asks the user for the name',
+          inputSchema: z.object({ name: z.string() }),
+          suspendSchema: z.object({ question: z.string() }),
+          resumeSchema: z.object({ name: z.string() }),
+          execute: async (_input, context) => {
+            if (!context?.agent?.resumeData) {
+              return await context?.agent?.suspend({ question: 'Which user?' });
+            }
+            resumedTool(context.agent.resumeData);
+            return { name: context.agent.resumeData.name, email: 'dero@mail.com' };
+          },
+        });
+        const agent = new Agent({
+          id: 'suspending-agent',
+          name: 'Suspending Agent',
+          instructions: 'You find users.',
+          model: createMockModel({ toolName: 'askUserTool', toolCallOnFirstCall }),
+          tools: { askUserTool },
+        });
+        const mastra = new Mastra({ agents: { agent }, logger: false, storage });
+        return { agent, mastra };
+      };
+
+      const storage = new InMemoryStore();
+      const { agent } = makeAskUserAgent(true);
+      const stream = await agent.stream('Find the user', {
+        memory: { thread: 'thread-1', resource: 'resource-1' },
+      });
+      let suspendedToolCallId = '';
+      for await (const chunk of stream.fullStream) {
+        if (chunk.type === 'tool-call-suspended') {
+          suspendedToolCallId = chunk.payload.toolCallId;
+        }
+      }
+      expect(suspendedToolCallId).toBeTruthy();
+
+      // Fresh process: the run must be resolved from storage, and the id taken
+      // from the tool-call-suspended chunk has to match the discovered run.
+      const { agent: restartedAgent, mastra } = makeAskUserAgent(false);
+      expect(restartedAgent.getActiveThreadRunId({ threadId: 'thread-1', resourceId: 'resource-1' })).toBeUndefined();
+
+      const result = await restartedAgent.sendToolApproval({
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        toolCallId: suspendedToolCallId,
+        approved: true,
+        resumeData: { name: 'Dero Israel' },
+      });
+      expect(result).toEqual({ accepted: true, runId: stream.runId, toolCallId: suspendedToolCallId });
+
+      const workflowsStore = (await mastra.getStorage()!.getStore('workflows'))!;
+      await vi.waitFor(
+        async () => {
+          expect(resumedTool).toHaveBeenCalledWith(expect.objectContaining({ name: 'Dero Israel' }));
           expect((await workflowsStore.listWorkflowRuns({})).runs).toHaveLength(0);
         },
         { timeout: 10000 },

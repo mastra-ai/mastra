@@ -1,6 +1,6 @@
 {
   "name": "@mastra/pg",
-  "version": "1.14.2",
+  "version": "1.16.0",
   "description": "Postgres provider for Mastra - includes both vector and db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -52,7 +52,7 @@
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.19.21",
+    "@types/node": "22.20.1",
     "@types/pg": "^8.18.0",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
@@ -63,7 +63,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.42.1-0 <2.0.0-0"
+    "@mastra/core": ">=1.51.0-0 <2.0.0-0"
   },
   "files": [
     "dist",

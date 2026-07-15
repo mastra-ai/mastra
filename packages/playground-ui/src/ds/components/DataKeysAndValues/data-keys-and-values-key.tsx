@@ -6,5 +6,5 @@ export interface DataKeysAndValuesKeyProps {
 }
 
 export function DataKeysAndValuesKey({ className, children }: DataKeysAndValuesKeyProps) {
-  return <dt className={cn('text-ui-smd  text-neutral2 shrink-0 py-0.5', className)}>{children}</dt>;
+  return <dt className={cn('shrink-0  py-0.5 text-ui-smd text-neutral2', className)}>{children}</dt>;
 }

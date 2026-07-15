@@ -7,9 +7,9 @@ packages:
 
 # LeaseProvider
 
-`LeaseProvider` is the distributed leasing contract, separate from event delivery ([`PubSub`](/reference/pubsub/base)). Mastra's [signals layer](/docs/agents/signals) uses it to elect a single owner across multiple processes (for example, serverless invocations) for a given resource, most commonly a thread key. The owner is the process that wakes and runs the agent stream, so other processes route follow-up work to it instead of starting a competing run.
+`LeaseProvider` is the distributed leasing contract, separate from event delivery ([`PubSub`](/reference/pubsub/base)). Mastra's [signals layer](/docs/long-running-agents/signals) uses it to elect a single owner across multiple processes (for example, serverless invocations) for a given resource, most commonly a thread key. The owner is the process that wakes and runs the agent stream, so other processes route follow-up work to it instead of starting a competing run.
 
-Leasing is a distinct concern from pub/sub. A backend implements `LeaseProvider` only when it can genuinely coordinate a lock, such as Redis via atomic `SET`/Lua, or an in-memory map for single-process. Backends that cannot lease omit it; the signals runtime feature-detects the capability and falls back to a no-op provider, preserving single-process behavior.
+Leasing is a distinct concern from pub/sub. A backend implements `LeaseProvider` only when it can genuinely coordinate a lock, such as Redis via atomic `SET`/Lua, or an in-memory map for single-process. Backends that can't lease omit it; the signals runtime feature-detects the capability and falls back to a no-op provider, preserving single-process behavior.
 
 The built-in [`RedisStreamsPubSub`](/reference/pubsub/redis-streams) implements `LeaseProvider`, which is what enables signals to coordinate across instances in distributed and serverless deployments.
 
@@ -98,7 +98,7 @@ Returns: `Promise<string | undefined>`
 
 #### `releaseLease(key, owner)`
 
-Releases a lease. This is a no-op if the caller is not the current owner: implementations check ownership atomically before releasing, so a concurrent renewal by another owner is never clobbered.
+Releases a lease. This is a no-op if the caller isn't the current owner: implementations check ownership atomically before releasing, so a concurrent renewal by another owner is never clobbered.
 
 ```typescript
 await pubsub.releaseLease('thread:abc', runId)
@@ -138,18 +138,18 @@ if (!transferred) {
 Returns: `Promise<boolean>`
 
 :::warning
-Backends that cannot perform the transfer atomically must still implement it as a best-effort `releaseLease(fromOwner)` followed by `acquireLease(toOwner)`, and document that the swap is non-atomic, since a racing process can win the key in the gap. Keeping the method required means callers have a single code path and atomicity is an explicit per-backend decision.
+Backends that can't perform the transfer atomically must still implement it as a best-effort `releaseLease(fromOwner)` followed by `acquireLease(toOwner)`, and document that the swap is non-atomic, since a racing process can win the key in the gap. Keeping the method required means callers have a single code path and atomicity is an explicit per-backend decision.
 :::
 
 ## Capability detection
 
 The signals runtime detects `LeaseProvider` structurally rather than with `instanceof`, so detection works even when a separately published backend resolves a different copy of `@mastra/core`. A value is treated as a `LeaseProvider` when it exposes all five methods (`acquireLease`, `getLeaseOwner`, `releaseLease`, `renewLease`, `transferLease`).
 
-When the configured pub/sub backend does not implement `LeaseProvider`, the runtime falls back to an always-win no-op provider. Every caller wins its own lease race, and release, renew, and transfer are inert, which preserves the expected single-process behavior.
+When the configured pub/sub backend doesn't implement `LeaseProvider`, the runtime falls back to an always-win no-op provider. Every caller wins its own lease race, and release, renew, and transfer are inert, which preserves the expected single-process behavior.
 
 ## Related
 
 - [PubSub](/reference/pubsub/base): The event delivery contract, separate from leasing
 - [RedisStreamsPubSub](/reference/pubsub/redis-streams): The built-in backend that implements `LeaseProvider`
-- [Signals](/docs/agents/signals): The runtime that uses leasing to coordinate thread runs across processes
-- [Channels](/docs/agents/channels): Uses leasing to coordinate agent runs in serverless and multi-instance deployments
+- [Signals](/docs/long-running-agents/signals): The runtime that uses leasing to coordinate thread runs across processes
+- [Channels](/docs/capabilities/channels/overview): Uses leasing to coordinate agent runs in serverless and multi-instance deployments

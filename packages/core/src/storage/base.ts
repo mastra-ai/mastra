@@ -25,6 +25,7 @@ import type {
   ThreadStateStorage,
 } from './domains';
 import { InMemoryThreadStateStorage } from './domains/thread-state/inmemory';
+import type { PruneOptions, PruneResult, RetentionConfig, TableRetentionPolicy } from './retention';
 
 /** Map of all storage domain interfaces available in a composite store. */
 export type StorageDomains = {
@@ -114,8 +115,14 @@ export function calculatePagination(
 /**
  * Configuration for individual domain overrides.
  * Each domain can be sourced from a different storage adapter.
+ *
+ * Set a domain to `false` to disable it entirely: the domain resolves to
+ * `undefined` instead of falling back to the `editor`/`default` stores, so
+ * nothing can read from or write to it through this composite.
  */
-export type MastraStorageDomains = Partial<StorageDomains>;
+export type MastraStorageDomains = {
+  [K in keyof StorageDomains]?: StorageDomains[K] | false;
+};
 
 /**
  * Configuration options for MastraCompositeStore.
@@ -197,6 +204,28 @@ export interface MastraCompositeStoreConfig {
    * // No auto-init, tables must already exist
    */
   disableInit?: boolean;
+
+  /**
+   * Opt-in, table-granular, age-based retention policies.
+   *
+   * Declare per-domain, per-table `maxAge` policies; call `storage.prune()`
+   * to delete rows older than their configured age. Anything left unset is
+   * kept forever (no behavior change by default).
+   *
+   * @example
+   * ```typescript
+   * retention: {
+   *   memory: {
+   *     messages: { maxAge: '30d' },
+   *     threads: { maxAge: '90d' },
+   *   },
+   *   observability: {
+   *     spans: { maxAge: '7d' },
+   *   },
+   * }
+   * ```
+   */
+  retention?: RetentionConfig;
 }
 
 /**
@@ -246,6 +275,15 @@ export interface StorageMastraRef {
   getEditor?: () => { getSource?: () => 'code' | 'db' | undefined } | undefined;
 }
 
+/** A domain that implements the age-based retention `prune()` contract. */
+interface PruneCapable {
+  prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]>;
+}
+
+function isPruneCapable(value: unknown): value is PruneCapable {
+  return typeof value === 'object' && value !== null && typeof (value as PruneCapable).prune === 'function';
+}
+
 export class MastraCompositeStore extends MastraBase {
   protected hasInitialized: null | Promise<boolean> = null;
   protected shouldCacheInit = true;
@@ -258,6 +296,12 @@ export class MastraCompositeStore extends MastraBase {
    * When true, automatic initialization (table creation/migrations) is disabled.
    */
   disableInit: boolean = false;
+
+  /**
+   * Opt-in, table-granular, age-based retention policies. Consumed by
+   * `prune()`. Undefined means nothing is pruned (keep forever).
+   */
+  protected retention?: RetentionConfig;
 
   /**
    * Retained references to the parent stores supplied via composition. `init()`
@@ -283,6 +327,7 @@ export class MastraCompositeStore extends MastraBase {
 
     this.id = config.id;
     this.disableInit = config.disableInit ?? false;
+    this.retention = config.retention;
 
     // If composition config is provided (default, editor, or domains), compose the stores
     if (config.default || config.editor || config.domains) {
@@ -295,10 +340,11 @@ export class MastraCompositeStore extends MastraBase {
       this.parentDefault = config.default;
       this.parentEditor = config.editor;
 
-      // Validate that at least one storage source is provided
+      // Validate that at least one storage source is provided (a `false`
+      // override disables a domain, so it doesn't count as a source)
       const hasDefaultDomains = defaultStores && Object.values(defaultStores).some(v => v !== undefined);
       const hasEditorDomains = editorStores && Object.values(editorStores).some(v => v !== undefined);
-      const hasOverrideDomains = Object.values(domainOverrides).some(v => v !== undefined);
+      const hasOverrideDomains = Object.values(domainOverrides).some(v => v !== undefined && v !== false);
 
       if (!hasDefaultDomains && !hasEditorDomains && !hasOverrideDomains) {
         throw new Error(
@@ -308,9 +354,13 @@ export class MastraCompositeStore extends MastraBase {
 
       const editorDomainSet = new Set<string>(EDITOR_DOMAINS);
 
-      // Helper: resolve a domain with priority: domains > editor (for editor domains) > default
+      // Helper: resolve a domain with priority: domains > editor (for editor domains) > default.
+      // A `false` override disables the domain — it resolves to undefined
+      // instead of falling through to the editor/default stores.
       const resolve = <K extends keyof StorageDomains>(key: K): StorageDomains[K] | undefined => {
-        if (domainOverrides[key] !== undefined) return domainOverrides[key];
+        const override: StorageDomains[K] | false | undefined = domainOverrides[key];
+        if (override === false) return undefined;
+        if (override !== undefined) return override;
         if (editorDomainSet.has(key) && editorStores?.[key] !== undefined) return editorStores[key];
         return defaultStores?.[key];
       };
@@ -341,8 +391,13 @@ export class MastraCompositeStore extends MastraBase {
         // The thread-state domain always has an in-memory store wired by default
         // so the built-in task tools work out of the box without a configured
         // backend. Configure a durable backend for state that must survive a
-        // process restart.
-        threadState: resolve('threadState') ?? new InMemoryThreadStateStorage(),
+        // process restart. An explicit `false` override still disables the
+        // domain entirely — the in-memory fallback only applies when the
+        // domain is left unset.
+        threadState:
+          domainOverrides.threadState === false
+            ? undefined
+            : (resolve('threadState') ?? new InMemoryThreadStateStorage()),
       } as StorageDomains;
     }
     // Otherwise, subclasses set stores themselves
@@ -391,6 +446,56 @@ export class MastraCompositeStore extends MastraBase {
    */
   async getStore<K extends keyof StorageDomains>(storeName: K): Promise<StorageDomains[K] | undefined> {
     return this.stores?.[storeName];
+  }
+
+  /**
+   * Delete rows older than their configured `maxAge` across all domains that
+   * have a policy declared in `retention`.
+   *
+   * Prune is safe at scale: each domain deletes in bounded, batched, resumable,
+   * cancellable chunks (see {@link PruneOptions}). It only deletes rows. On
+   * SQLite/LibSQL freed pages are reused by future writes so the file stops
+   * growing; handing disk back to the OS is left to the underlying database and
+   * the operator to manage.
+   *
+   * Returns one {@link PruneResult} per table touched. A result with
+   * `done: false` means eligible rows remain — call `prune()` again (e.g. on
+   * the next cron tick) to continue.
+   *
+   * Prune is meant to run unattended (a cron tick), so a failure in one
+   * domain is logged and skipped rather than rejecting the whole call — the
+   * results already gathered for other domains are still returned, and the
+   * failed domain is retried naturally on the next tick.
+   *
+   * With no `retention` configured this is a no-op returning `[]`.
+   *
+   * Pass `options.retention` to replace the configured retention policies for
+   * this call only — e.g. to skip a domain (keep chat history) or prune more
+   * aggressively than the standing config without reconstructing the store.
+   */
+  async prune(options?: PruneOptions): Promise<PruneResult[]> {
+    const retention = options?.retention ?? this.retention;
+    if (!retention) return [];
+
+    const results: PruneResult[] = [];
+    for (const [domainKey, tablePolicies] of Object.entries(retention) as [
+      keyof StorageDomains,
+      Record<string, TableRetentionPolicy> | undefined,
+    ][]) {
+      if (options?.signal?.aborted) break;
+      if (!tablePolicies || Object.keys(tablePolicies).length === 0) continue;
+
+      const domain = this.stores?.[domainKey];
+      if (!isPruneCapable(domain)) continue; // domain not configured / doesn't support retention
+
+      try {
+        const domainResults = await domain.prune(tablePolicies, options);
+        results.push(...domainResults);
+      } catch (error) {
+        this.logger?.error(`prune() failed for domain "${domainKey}"`, { error });
+      }
+    }
+    return results;
   }
 
   /**

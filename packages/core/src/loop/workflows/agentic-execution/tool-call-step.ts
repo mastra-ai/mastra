@@ -564,13 +564,27 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             await removeToolMetadata({ toolCallId: inputData.toolCallId, toolName: inputData.toolName }, 'approval');
 
             if (!resumeData.approved) {
+              // Return the approval decision (not a `result` string) so it persists as
+              // `state: 'output-denied'` with `approval`. The denial reason carries the
+              // existing string so downstream consumers/UI keep the same message.
               return {
-                result: 'Tool call was not approved by the user',
+                approval: {
+                  id: inputData.toolCallId,
+                  approved: false,
+                  reason: 'Tool call was not approved by the user',
+                },
                 ...inputData,
               };
             }
           }
         }
+
+        // When an approval-gated tool is approved on resume, tag the resolved output with the
+        // approval decision so it round-trips through persistence as `approval: { approved: true }`.
+        const approvalGrant =
+          toolRequiresApproval && resumeData && (resumeData as { approved?: boolean }).approved === true
+            ? ({ approval: { id: inputData.toolCallId, approved: true as const } } as const)
+            : undefined;
 
         //this is to avoid passing resume data to the tool if it's not needed
         // For agent tools, always pass resume data so the agent tool wrapper knows to call
@@ -728,6 +742,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   toolCallSuspended: suspendPayload,
                   __streamState: streamState.serialize(),
                   __agentId: agentId,
+                  toolCallId: inputData.toolCallId,
                   toolName: inputData.toolName,
                   resumeLabel: options?.resumeLabel,
                 },
@@ -1088,6 +1103,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                         toolName: params.toolName,
                         args,
                         result,
+                        // Preserve the approval decision for an approved approval-gated tool that
+                        // ran in the background so it round-trips on recall, matching the sync path
+                        // and the "started" placeholder above.
+                        ...(approvalGrant ?? {}),
                       },
                       ...(providerMetadata ? { providerMetadata } : {}),
                     },
@@ -1164,51 +1183,19 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     }
                   }
                 },
-                // Execution injector — updates the existing tool-invocation in the
-                // message list (keyed by toolCallId) background task startedAt.
+                // Execution injector — records background task lifecycle metadata on the
+                // assistant message without changing the model-visible tool result.
                 onExecution: async params => {
-                  const inputTransform = await transformToolPayloadForTargets(
-                    {
-                      phase: 'input-available',
-                      toolName: params.toolName,
-                      toolCallId: params.toolCallId,
-                      input: args,
-                      providerMetadata: inputData.providerMetadata as Record<string, unknown> | undefined,
-                    },
-                    transformSource,
-                    logger,
-                  );
-                  const transformCarrier = withToolPayloadTransformMetadata(
-                    { metadata: {} as Record<string, any> },
-                    inputTransform,
-                  );
-                  const providerMetadata = withToolPayloadTransformProviderMetadata(
-                    inputData.providerMetadata as ProviderMetadata | undefined,
-                    transformCarrier.metadata,
-                  ) as ProviderMetadata | undefined;
-
-                  messageList.updateToolInvocation(
-                    {
-                      type: 'tool-invocation',
-                      toolInvocation: {
-                        state: 'call',
-                        toolCallId: params.toolCallId,
-                        toolName: params.toolName,
-                        args,
-                      },
-                      ...(providerMetadata ? { providerMetadata } : {}),
-                    },
-                    {
-                      mode: 'stream',
-                      backgroundTasks: {
-                        [params.toolCallId]: {
-                          startedAt: params.startedAt,
-                          suspendedAt: params.suspendedAt,
-                          taskId: params.taskId,
-                        },
+                  messageList.updateMessageMetadataByToolCallId(params.toolCallId, {
+                    mode: 'stream',
+                    backgroundTasks: {
+                      [params.toolCallId]: {
+                        startedAt: params.startedAt,
+                        suspendedAt: params.suspendedAt,
+                        taskId: params.taskId,
                       },
                     },
-                  );
+                  });
                 },
 
                 // Per-task callbacks
@@ -1244,8 +1231,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               // bubbles up through the AI-SDK-v5 tool builder and gets
               // wrapped as `TOOL_EXECUTION_FAILED: Invalid state:
               // Controller is already closed`.
-              safeEnqueue(controller, {
-                type: 'background-task-started' as any,
+              const backgroundTaskStartedChunk = {
+                type: 'background-task-started' as const,
                 runId,
                 from: ChunkFrom.AGENT,
                 payload: {
@@ -1253,12 +1240,25 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   toolName: inputData.toolName,
                   toolCallId: inputData.toolCallId,
                 },
-              });
+              };
+              safeEnqueue(controller, backgroundTaskStartedChunk);
+              try {
+                await options?.onChunk?.(backgroundTaskStartedChunk);
+              } catch (error) {
+                logger?.warn?.('Error invoking onChunk for background-task-started', {
+                  toolCallId: inputData.toolCallId,
+                  toolName: inputData.toolName,
+                  error,
+                  errorMessage: error instanceof Error ? error.message : undefined,
+                  errorStack: error instanceof Error ? error.stack : undefined,
+                });
+              }
 
               // Return placeholder result so the LLM can continue
               return {
                 result: `Background task started. Task ID: ${task.id}. The tool "${inputData.toolName}" is running in the background. You will be notified when it completes.`,
                 ...inputData,
+                ...(approvalGrant ?? {}),
               };
             }
             // fallbackToSync: concurrency limit hit, fall through to synchronous execution
@@ -1282,7 +1282,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
         }
 
-        return { result, ...inputData };
+        return { result, ...inputData, ...(approvalGrant ?? {}) };
       } catch (error) {
         // Re-throw FGA authorization errors instead of swallowing them
         if (error instanceof Error && error.name === 'FGADeniedError') {

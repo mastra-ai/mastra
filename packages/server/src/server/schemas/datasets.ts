@@ -256,6 +256,11 @@ export const paginationQuerySchema = z.object({
   perPage: z.coerce.number().optional().default(10),
 });
 
+export const tenancyQuerySchema = z.object({
+  organizationId: z.string().optional().describe('Restrict lookup to the given organization'),
+  projectId: z.string().optional().describe('Restrict lookup to the given project'),
+});
+
 export const listItemsQuerySchema = z.object({
   page: z.coerce.number().optional().default(0),
   perPage: z.coerce.number().optional().default(10),
@@ -293,6 +298,7 @@ export const updateDatasetBodySchema = z.object({
 });
 
 export const addItemBodySchema = z.object({
+  externalId: z.string().optional().nullable().describe('Caller-defined, dataset-local item identity'),
   input: z.unknown().describe('Input data for the dataset item'),
   groundTruth: z.unknown().optional().describe('Expected output for comparison'),
   expectedTrajectory: trajectoryExpectationSchema,
@@ -366,6 +372,7 @@ export const datasetItemResponseSchema = z.object({
   id: z.string(),
   datasetId: z.string(),
   datasetVersion: z.number().int(),
+  externalId: z.string().optional().nullable(),
   input: z.unknown(),
   groundTruth: z.unknown().optional(),
   expectedTrajectory: z.unknown().optional(),
@@ -584,6 +591,7 @@ export const listDatasetVersionsResponseSchema = z.object({
 export const batchInsertItemsBodySchema = z.object({
   items: z.array(
     z.object({
+      externalId: z.string().optional().nullable(),
       input: z.unknown(),
       groundTruth: z.unknown().optional(),
       expectedTrajectory: trajectoryExpectationSchema,

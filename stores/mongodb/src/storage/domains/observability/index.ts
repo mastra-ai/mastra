@@ -8,6 +8,10 @@ import {
   TraceStatus,
 } from '@mastra/core/storage';
 import type {
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
   SpanRecord,
   UpdateSpanRecord,
   ListTracesArgs,
@@ -26,8 +30,10 @@ import type {
   GetTraceResponse,
   GetTraceLightResponse,
 } from '@mastra/core/storage';
+import { MongoBulkWriteError } from 'mongodb';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
+import { resolveTargets, runPrune } from '../../retention';
 import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
 
 export class ObservabilityMongoDB extends ObservabilityStorage {
@@ -37,6 +43,11 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
 
   /** Collections managed by this domain */
   static readonly MANAGED_COLLECTIONS = [TABLE_SPANS] as const;
+
+  /** Anchor is the span's start time, stored as a BSON date. */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    spans: { table: TABLE_SPANS, column: 'startedAt', indexed: true },
+  };
 
   constructor(config: MongoDBDomainConfig) {
     super();
@@ -50,6 +61,16 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
 
   private async getCollection(name: string) {
     return this.#connector.getCollection(name);
+  }
+
+  /** Delete spans older than the `spans` policy's `maxAge`, batched. */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveTargets({
+      policies,
+      descriptor: ObservabilityMongoDB.retentionTables,
+      order: ['spans'],
+    });
+    return runPrune({ connector: this.#connector, domain: 'observability', targets, options, logger: this.logger });
   }
 
   /**
@@ -927,9 +948,15 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
 
       if (records.length > 0) {
         const collection = await this.getCollection(TABLE_SPANS);
-        await collection.insertMany(records);
+        await collection.insertMany(records, { ordered: false });
       }
     } catch (error) {
+      // With ordered: false, MongoDB throws MongoBulkWriteError when any writes fail.
+      // Duplicate key errors (11000) are expected in at-least-once delivery — skip them.
+      if (error instanceof MongoBulkWriteError) {
+        const writeErrors = Array.isArray(error.writeErrors) ? error.writeErrors : [error.writeErrors];
+        if (writeErrors.length > 0 && writeErrors.every(e => e.code === 11000)) return;
+      }
       throw new MastraError(
         {
           id: createStorageErrorId('MONGODB', 'BATCH_CREATE_SPANS', 'FAILED'),

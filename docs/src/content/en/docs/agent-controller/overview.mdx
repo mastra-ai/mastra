@@ -41,7 +41,7 @@ Use the AgentController when your application needs:
 - Subagent orchestration to delegate focused subtasks with constrained tools
 - Session continuity with persistent threads, state, and observational memory across restarts
 
-You could assemble all of this yourself on top of the [Agent class](/docs/agents/overview), which exposes the full agent loop, tools, and memory. The AgentController is an opinionated set of defaults that wires those pieces into one application style: an ongoing session where the agent acts as a collaborator rather than a one-shot endpoint. Reach for the Agent class directly when you want full control or a simple request-response call; reach for the AgentController when you want the collaborative-session model without building the runtime around it.
+You could assemble all of this yourself on top of the [Agent class](/docs/agents/overview), which exposes the full agent loop, tools, and memory. The AgentController is an opinionated set of defaults that wires those pieces into one application style: an ongoing session where the agent acts as a collaborator rather than a one-shot endpoint. Reach for the Agent class directly when you want full control or a request-response call; reach for the AgentController when you want the collaborative-session model without building the runtime around it.
 
 ## Key capabilities
 
@@ -51,7 +51,7 @@ You could assemble all of this yourself on top of the [Agent class](/docs/agents
 - **Subagents**: Spawn focused child agents with constrained tools for subtasks, optionally forking the parent conversation. See [Subagents](/docs/agent-controller/subagents).
 - **Tool approvals and permissions**: Configure which tools require user confirmation, grant session-wide exceptions, and handle interactive tool suspension. See [Tool approvals](/docs/agent-controller/tool-approvals).
 - **Model management**: Switch models per-mode at runtime, track usage, and resolve gateway-backed models through Mastra's [model router](/models).
-- **Follow-ups and steering**: Queue messages while the agent is running, or inject mid-stream instructions to redirect the agent. Built on [signals](/docs/agents/signals).
+- **Follow-ups and steering**: Queue messages while the agent is running, or inject mid-stream instructions to redirect the agent. Built on [signals](/docs/long-running-agents/signals).
 - **Event system**: Subscribe to typed events (message updates, mode changes, tool approvals) or coalesced `AgentControllerDisplayState` snapshots to drive your UI. See [Events](/reference/agent-controller/agent-controller-class#events).
 - **Observational memory**: Automatic summarization and reflection across threads for long-running agent sessions. See [Observational memory](/docs/memory/observational-memory).
 
@@ -65,6 +65,7 @@ import { AgentController } from '@mastra/core/agent-controller'
 import { LibSQLStore } from '@mastra/libsql'
 
 const agent = new Agent({
+  id: 'assistant',
   name: 'assistant',
   instructions: 'Help the user plan and complete tasks.',
   model: '__GATEWAY_OPENAI_MODEL__',
@@ -96,11 +97,7 @@ await agentController.selectOrCreateThread()
 await agentController.sendMessage({ content: 'Hello!' })
 ```
 
-:::note
-
 Visit the [AgentController reference](/reference/agent-controller/agent-controller-class) for the full constructor parameters and method signatures.
-
-:::
 
 ## Architecture
 
@@ -141,3 +138,4 @@ Your app sends commands — send a message, switch mode, approve a tool call —
 - [Subagents](/docs/agent-controller/subagents): Delegate focused subtasks
 - [Tool approvals and permissions](/docs/agent-controller/tool-approvals): Human-in-the-loop gating
 - [API reference](/reference/agent-controller/agent-controller-class): Full constructor and method docs
+- 📹 [Mastra AgentController harness workshop](https://www.youtube.com/watch?v=tV1pSleP-LM)

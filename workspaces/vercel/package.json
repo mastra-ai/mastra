@@ -1,6 +1,6 @@
 {
   "name": "@mastra/vercel",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "Vercel serverless sandbox provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",
@@ -36,7 +36,7 @@
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.19.21",
+    "@types/node": "22.20.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "dotenv": "^17.4.2",

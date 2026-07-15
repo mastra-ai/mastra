@@ -213,7 +213,8 @@ const RefBlockContent = ({
               value={localContent}
               onChange={handleContentChange}
               placeholder="Referenced block is empty..."
-              className="border-none rounded-none bg-transparent min-h-12"
+              variant="embedded"
+              className="min-h-12"
               language="markdown"
               highlightVariables
               showCopyButton={false}

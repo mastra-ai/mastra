@@ -92,7 +92,7 @@ export const LongContent: Story = {
           <DialogDescription>Please read these terms carefully.</DialogDescription>
         </DialogHeader>
         <DialogBody className="max-h-[80vh]">
-          <div className="py-4 space-y-4">
+          <div className="space-y-4 py-4">
             <p className="text-sm text-neutral5">
               Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et
               dolore magna aliqua.

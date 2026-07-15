@@ -30,6 +30,7 @@ import {
   LIST_AGENTS_ROUTE,
   STREAM_GENERATE_ROUTE,
   RESUME_STREAM_ROUTE,
+  RECOVER_ROUTE,
   SEND_TOOL_APPROVAL_ROUTE,
   LIST_SUSPENDED_RUNS_ROUTE,
   QUEUE_AGENT_MESSAGE_ROUTE,
@@ -869,7 +870,7 @@ describe('Agent Routes Authorization', () => {
   describe('RESUME_STREAM_ROUTE', () => {
     async function persistAgenticLoopRun({ runId, resourceId }: { runId: string; resourceId?: string }) {
       const workflowsStore = await storage.getStore('workflows');
-      await workflowsStore.persistWorkflowSnapshot({
+      await workflowsStore?.persistWorkflowSnapshot({
         workflowName: 'agentic-loop',
         runId,
         resourceId,
@@ -884,6 +885,7 @@ describe('Agent Routes Authorization', () => {
           suspendedPaths: {},
           resumeLabels: {},
           waitingPaths: {},
+          timestamp: Date.now(),
         },
       });
     }
@@ -1156,6 +1158,147 @@ describe('Agent Routes Authorization', () => {
       } as any);
 
       expect(result).toBe(expectedStream);
+    });
+  });
+
+  describe('RECOVER_ROUTE', () => {
+    async function persistDurableAgenticLoopRun({
+      runId,
+      resourceId,
+      status = 'running',
+    }: {
+      runId: string;
+      resourceId?: string;
+      status?: 'running' | 'suspended' | 'pending';
+    }) {
+      const workflowsStore = await storage.getStore('workflows');
+      await workflowsStore?.persistWorkflowSnapshot({
+        workflowName: 'durable-agentic-loop',
+        runId,
+        resourceId,
+        snapshot: {
+          runId,
+          status,
+          value: {},
+          context: {},
+          activePaths: [],
+          activeStepsPath: {},
+          serializedStepGraph: [],
+          suspendedPaths: {},
+          resumeLabels: {},
+          waitingPaths: {},
+          timestamp: Date.now(),
+        },
+      });
+    }
+
+    it('should return 400 when runId is missing', async () => {
+      const requestContext = createContextWithReservedKeys({});
+
+      await expect(
+        RECOVER_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext,
+          abortSignal: new AbortController().signal,
+        } as any),
+      ).rejects.toThrow(new HTTPException(400, { message: 'Run id is required' }));
+    });
+
+    it('should return 400 when the target agent is not a durable agent', async () => {
+      const requestContext = createContextWithReservedKeys({});
+
+      await expect(
+        RECOVER_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext,
+          abortSignal: new AbortController().signal,
+          runId: 'test-run-id',
+        } as any),
+      ).rejects.toThrow(
+        new HTTPException(400, {
+          message: 'Agent does not support recover. Only durable agents (createDurableAgent) can recover runs.',
+        }),
+      );
+    });
+
+    it('should return 403 when runId belongs to a different resource', async () => {
+      // Add a recover method to make the agent look durable.
+      (mockAgent as any).recover = vi.fn();
+
+      await persistDurableAgenticLoopRun({ runId: 'recover-run-owned-by-b', resourceId: 'user-b' });
+
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+
+      await expect(
+        RECOVER_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext,
+          abortSignal: new AbortController().signal,
+          runId: 'recover-run-owned-by-b',
+        } as any),
+      ).rejects.toThrow(
+        new HTTPException(403, { message: 'Access denied: workflow run belongs to a different resource' }),
+      );
+
+      delete (mockAgent as any).recover;
+    });
+
+    it('should call agent.recover(runId, { abortSignal }) and return fullStream', async () => {
+      const expectedStream = new ReadableStream();
+      const recoverMock = vi.fn().mockResolvedValue({ fullStream: expectedStream });
+      (mockAgent as any).recover = recoverMock;
+
+      await persistDurableAgenticLoopRun({ runId: 'recover-run-1' });
+
+      const requestContext = createContextWithReservedKeys({});
+      const abortController = new AbortController();
+
+      const result = await RECOVER_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: abortController.signal,
+        runId: 'recover-run-1',
+      } as any);
+
+      expect(recoverMock).toHaveBeenCalledWith('recover-run-1', { abortSignal: abortController.signal });
+      expect(result).toBe(expectedStream);
+
+      delete (mockAgent as any).recover;
+    });
+
+    it('should stash version overrides on requestContext before calling agent.recover()', async () => {
+      const recoverMock = vi.fn().mockResolvedValue({ fullStream: new ReadableStream() });
+      (mockAgent as any).recover = recoverMock;
+
+      await persistDurableAgenticLoopRun({ runId: 'recover-run-versions' });
+
+      const requestContext = createContextWithReservedKeys({});
+
+      await RECOVER_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        runId: 'recover-run-versions',
+        versions: {
+          agents: {
+            'sub-agent': { versionId: 'version-1' },
+          },
+        },
+      } as any);
+
+      expect(requestContext.get(MASTRA_VERSIONS_KEY)).toEqual({
+        agents: {
+          'sub-agent': { versionId: 'version-1' },
+        },
+        defaultStatus: 'published',
+      });
+
+      delete (mockAgent as any).recover;
     });
   });
 

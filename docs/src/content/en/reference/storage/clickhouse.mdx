@@ -87,6 +87,20 @@ const observabilityStore = new ObservabilityStorageClickhouse({
 
 New projects should use `ObservabilityStorageClickhouseVNext` instead.
 
+### Migrating from legacy to vNext
+
+To migrate historical spans from the legacy `mastra_ai_spans` table to the vNext schema, run:
+
+```bash npm2yarn
+npx mastra migrate
+```
+
+The migration copies span data from `mastra_ai_spans` into `mastra_span_events` in day-sized batches. It handles column mapping, deduplicates legacy rows, and preserves the original table as a backup. After migration, traces appear in Studio through the vNext adapter.
+
+:::note
+The legacy table isn't deleted. Drop it manually after verifying the migration.
+:::
+
 ### ClickHouse for every domain
 
 `ClickhouseStoreVNext` backs the `memory`, `workflows`, and `observability` domains with ClickHouse and uses the vNext observability adapter automatically. Use it when you want ClickHouse to back the entire application without wiring a composite store manually.
@@ -241,7 +255,7 @@ When `replication` is set, Mastra rewrites its `MergeTree` and `ReplacingMergeTr
 - `zookeeperPath`: `'/clickhouse/tables/{shard}/{database}/{table}'`
 - `replicaName`: `'{replica}'`
 
-The defaults match the most common self-managed convention. If your cluster's existing tables use a different layout (for example `/clickhouse/tables/{shard}/{table}` without the `{database}` segment), set `zookeeperPath` explicitly to match. Mastra does not read your cluster's convention from Keeper, so a mismatched default writes Mastra's metadata to a separate branch from the rest of the cluster.
+The defaults match the most common self-managed convention. If your cluster's existing tables use a different layout (for example `/clickhouse/tables/{shard}/{table}` without the `{database}` segment), set `zookeeperPath` explicitly to match. Mastra doesn't read your cluster's convention from Keeper, so a mismatched default writes Mastra's metadata to a separate branch from the rest of the cluster.
 
 ```typescript
 new ClickhouseStoreVNext({
@@ -261,7 +275,7 @@ Manual maintenance such as `optimizeTable()` and `materializeTtl()` runs on ever
 
 If existing Mastra tables use local `MergeTree` or `ReplacingMergeTree` engines, initialization fails while `replication` is enabled. Mastra refuses to silently convert local tables because copy-and-swap is unsafe across replicas. To migrate, recreate the affected tables as `Replicated*` before enabling replication. The typical sequence is: rename the local table, run `CREATE TABLE ... ENGINE = ReplicatedMergeTree(...) ON CLUSTER ...`, run `INSERT INTO ... SELECT * FROM <renamed_local>`, then drop the renamed local table.
 
-Do not set `replication` on ClickHouse Cloud. Cloud rewrites `MergeTree` to `SharedMergeTree` server-side, and explicit `ReplicatedMergeTree` engines produce incorrect DDL. `replication` is only for self-managed multi-replica clusters.
+Don't set `replication` on ClickHouse Cloud. Cloud rewrites `MergeTree` to `SharedMergeTree` server-side, and explicit `ReplicatedMergeTree` engines produce incorrect DDL. `replication` is only for self-managed multi-replica clusters.
 
 ### Observability domain options
 
