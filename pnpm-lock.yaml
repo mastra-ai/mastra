@@ -4153,8 +4153,8 @@ importers:
         specifier: npm:@ai-sdk/groq@2.0.43
         version: '@ai-sdk/groq@2.0.43(zod@4.4.3)'
       '@ai-sdk/groq-v6':
-        specifier: npm:@ai-sdk/groq@3.0.50
-        version: '@ai-sdk/groq@3.0.50(zod@4.4.3)'
+        specifier: npm:@ai-sdk/groq@3.0.51
+        version: '@ai-sdk/groq@3.0.51(zod@4.4.3)'
       '@ai-sdk/mistral-v5':
         specifier: npm:@ai-sdk/mistral@2.0.37
         version: '@ai-sdk/mistral@2.0.37(zod@4.4.3)'
@@ -9482,8 +9482,8 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/groq@3.0.50':
-    resolution: {integrity: sha512-1gDBiXuPveG1n6wSPlOO4w/4/dYVBEjEezx+e7uiO8jvL7Pheu+CBRcdgYFd5sYqSONTbl0zEApYFBEbilSqCg==}
+  '@ai-sdk/groq@3.0.51':
+    resolution: {integrity: sha512-c9ZxaVuzJj10tgqddo9J6+9S1KNBPjblaAH04DWFqcKuGQYlJFAHUBsDNoL5psKQAMUf0Fjz78AI9POm+348SQ==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -30053,7 +30053,7 @@ snapshots:
       '@ai-sdk/provider-utils': 3.0.28(zod@4.4.3)
       zod: 4.4.3
 
-  '@ai-sdk/groq@3.0.50(zod@4.4.3)':
+  '@ai-sdk/groq@3.0.51(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider': 3.0.14
       '@ai-sdk/provider-utils': 4.0.38(zod@4.4.3)
