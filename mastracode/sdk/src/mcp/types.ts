@@ -96,4 +96,10 @@ export interface McpServerStatus {
    * the UI uses it to keep offering "Cancel authentication" while auth is pending.
    */
   authenticating?: boolean;
+  /**
+   * Whether this failed status is the result of the caller deliberately
+   * cancelling an in-flight authentication (rather than a genuine failure).
+   * The UI uses it to suppress a misleading "Failed to authenticate" message.
+   */
+  cancelled?: boolean;
 }

@@ -108,6 +108,11 @@ export class McpSelectorComponent extends Box implements Focusable {
   // cancel path while they show as connecting).
   private _authenticating = new Set<string>();
 
+  // Names of servers the user is actively cancelling. The authenticate flow
+  // resolves with a failed status when cancelled, so we track this to suppress
+  // the misleading "Failed to authenticate" toast on a deliberate cancel.
+  private _cancelling = new Set<string>();
+
   // Focusable implementation
   private _focused = false;
   get focused(): boolean {
@@ -457,6 +462,8 @@ export class McpSelectorComponent extends Box implements Focusable {
         for (const name of this._authenticating) {
           if (!liveNames.has(name)) this._authenticating.delete(name);
         }
+        // Reload aborts every pending flow, so no cancel is still resolving.
+        this._cancelling.clear();
         // Clamp selected index in case server count changed
         const total = this.getTotalItems();
         if (this.selectedIndex >= total) {
@@ -571,7 +578,10 @@ export class McpSelectorComponent extends Box implements Focusable {
         }
         if (updated.connected) {
           this.showInfoCallback(`MCP: Authenticated "${name}" — ${updated.toolCount} tool(s)`);
-        } else {
+        } else if (!updated.cancelled && !this._cancelling.has(name)) {
+          // A deliberate cancel also resolves with a failed status; the manager
+          // marks it `cancelled` (which survives a reopened selector) and the
+          // cancel path already messaged the user, so don't stack a "Failed" toast.
           this.showInfoCallback(`MCP: Failed to authenticate "${name}": ${updated.error ?? 'Unknown error'}`);
         }
       })
@@ -591,10 +601,16 @@ export class McpSelectorComponent extends Box implements Focusable {
             needsAuth: true,
           };
         }
-        this.showInfoCallback(`MCP: Failed to authenticate "${name}": ${errMsg}`);
+        // A rejection carries no status object, so we can't read the durable
+        // `cancelled` flag here; fall back to the local set, which is populated
+        // for the same-instance cancel that produced this rejection.
+        if (!this._cancelling.has(name)) {
+          this.showInfoCallback(`MCP: Failed to authenticate "${name}": ${errMsg}`);
+        }
       })
       .finally(() => {
         this._authenticating.delete(name);
+        this._cancelling.delete(name);
         // The auth flow has ended (connected, failed, or cancelled). Close the
         // auto-opened cancel sub-menu so the row shows its resolved state — but
         // only if the user is still looking at *this* server's sub-menu, so we
@@ -615,7 +631,12 @@ export class McpSelectorComponent extends Box implements Focusable {
     // set was discarded with the previous instance) can still cancel.
     if (!this.isAuthenticating(status)) return;
 
+    // Mark the cancel so the pending authenticate flow suppresses its "Failed"
+    // toast, then repaint immediately so the row reflects the cancelling state
+    // instead of waiting for the authenticate promise to settle.
+    this._cancelling.add(name);
     this.showInfoCallback(`MCP: Cancelling authentication for "${name}"...`);
+    this.updateList();
     this.onCancelAuthenticateServerCallback(name)
       .then((cancelled: boolean) => {
         if (cancelled) {

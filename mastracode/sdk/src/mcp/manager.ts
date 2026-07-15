@@ -191,6 +191,15 @@ export function createMcpManager(
    */
   const authenticatingServers = new Set<string>();
 
+  /**
+   * Servers whose in-flight authentication was cancelled by the caller. Set by
+   * cancelServerAuthentication() so the resolving authenticateServer() call can
+   * mark its failed status as a deliberate cancel rather than a genuine failure.
+   * This lives on the manager (not the TUI selector) so the signal survives the
+   * selector being closed and reopened mid-flow.
+   */
+  const cancelledAuthServers = new Set<string>();
+
   /** Overlay the manager-owned `authenticating` flag onto a status snapshot. */
   const withAuthenticating = (status: McpServerStatus): McpServerStatus =>
     authenticatingServers.has(status.name) ? { ...status, authenticating: true } : status;
@@ -237,7 +246,8 @@ export function createMcpManager(
     // when the user authenticates — unless a previous session already stored
     // OAuth state for this server, in which case the provider is needed to
     // attach the persisted tokens on connect.
-    const oauth = cfg.oauth ?? (existsSync(getOAuthStoragePath(projectDir, name, cfg)) ? DEFAULT_OAUTH_CONFIG : undefined);
+    const oauth =
+      cfg.oauth ?? (existsSync(getOAuthStoragePath(projectDir, name, cfg)) ? DEFAULT_OAUTH_CONFIG : undefined);
     if (!oauth) return undefined;
 
     // redirectUrl is optional in the user-supplied config; resolve the stable
@@ -550,7 +560,10 @@ export function createMcpManager(
       return connectSingleServer(name, cfg, () => client!.reconnectServer(name));
     },
 
-    async authenticateServer(name: string, options?: { onAuthorizationUrl?: (url: string) => void; timeoutMs?: number }): Promise<McpServerStatus> {
+    async authenticateServer(
+      name: string,
+      options?: { onAuthorizationUrl?: (url: string) => void; timeoutMs?: number },
+    ): Promise<McpServerStatus> {
       const cfg = config.mcpServers?.[name];
       if (!cfg) {
         return {
@@ -599,12 +612,14 @@ export function createMcpManager(
         def.authProvider = createOAuthProvider(name, { ...(cfg as McpHttpServerConfig), oauth: DEFAULT_OAUTH_CONFIG });
       }
 
-      // authUrlHandlers has a single slot per server, and a concurrent second
-      // attempt would overwrite the first caller's handler (so it never sees the
+      // Reject a concurrent second attempt for the same server. authUrlHandlers
+      // has a single slot per server, so a second call with an onAuthorizationUrl
+      // would overwrite the first caller's handler (which then never sees the
       // URL) and its finally would delete the handler out from under the other
-      // in-flight call. The underlying client.authenticate already coalesces
-      // same-server calls into one flow, so reject the duplicate here instead.
-      if (authUrlHandlers.has(name)) {
+      // in-flight call. Gate on authenticatingServers rather than authUrlHandlers
+      // so callers without a URL handler are caught too. The underlying
+      // client.authenticate already coalesces same-server calls into one flow.
+      if (authenticatingServers.has(name)) {
         const current = serverStatuses.get(name);
         return {
           name,
@@ -622,13 +637,23 @@ export function createMcpManager(
         authUrlHandlers.set(name, options.onAuthorizationUrl);
       }
       authenticatingServers.add(name);
+      cancelledAuthServers.delete(name);
       try {
-        return await connectSingleServer(name, cfg, () =>
+        const result = await connectSingleServer(name, cfg, () =>
           client!.authenticate(name, options?.timeoutMs === undefined ? undefined : { timeoutMs: options.timeoutMs }),
         );
+        // A cancelled flow resolves with a failed status; mark it so callers can
+        // distinguish a deliberate cancel from a genuine authentication failure.
+        // Write the marker back to the durable status map (not just the returned
+        // value) so a selector reopened after cancellation still sees it.
+        const finalStatus =
+          cancelledAuthServers.has(name) && !result.connected ? { ...result, cancelled: true } : result;
+        serverStatuses.set(name, finalStatus);
+        return finalStatus;
       } finally {
         authUrlHandlers.delete(name);
         authenticatingServers.delete(name);
+        cancelledAuthServers.delete(name);
       }
     },
 
@@ -636,7 +661,14 @@ export function createMcpManager(
       if (!client) {
         return false;
       }
-      return client.cancelAuthentication(name);
+      // Record the intent before aborting so the resolving authenticateServer()
+      // call can tag its failed status as cancelled rather than failed.
+      cancelledAuthServers.add(name);
+      const cancelled = await client.cancelAuthentication(name);
+      if (!cancelled) {
+        cancelledAuthServers.delete(name);
+      }
+      return cancelled;
     },
 
     disconnect,

@@ -141,14 +141,24 @@ function showTextStatus(ctx: SlashCommandContext): void {
   lines.push('');
 
   for (const status of statuses) {
-    const icon = status.connecting ? '⟳' : status.connected ? '\u2713' : status.needsAuth ? '\u26a0' : '\u2717';
-    const state = status.connecting
-      ? 'connecting...'
-      : status.connected
-        ? 'connected'
-        : status.needsAuth
-          ? 'needs auth — authenticate via /mcp'
-          : `error: ${status.error}`;
+    const icon = status.authenticating
+      ? '\u26a0'
+      : status.connecting
+        ? '⟳'
+        : status.connected
+          ? '\u2713'
+          : status.needsAuth
+            ? '\u26a0'
+            : '\u2717';
+    const state = status.authenticating
+      ? 'authenticating — cancel via /mcp'
+      : status.connecting
+        ? 'connecting...'
+        : status.connected
+          ? 'connected'
+          : status.needsAuth
+            ? 'needs auth — authenticate via /mcp'
+            : `error: ${status.error}`;
     lines.push(`  ${icon} ${status.name} [${status.transport}] (${state})`);
     if (status.toolNames.length > 0) {
       for (const toolName of status.toolNames) {

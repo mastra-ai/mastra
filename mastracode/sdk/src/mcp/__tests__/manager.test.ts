@@ -195,6 +195,7 @@ describe('createMcpManager', () => {
 
     it('uses separate OAuth token storage for the same server name in different projects', async () => {
       const dataDir = await fs.mkdtemp(join(tmpdir(), 'mc-oauth-test-'));
+      const prevDataDir = process.env.MASTRA_APP_DATA_DIR;
       process.env.MASTRA_APP_DATA_DIR = dataDir;
       try {
         const httpConfig: McpHttpServerConfig = {
@@ -222,7 +223,11 @@ describe('createMcpManager', () => {
         expect(secondStoragePath).toEqual(expect.stringMatching(/mcp-oauth\/[a-f0-9]{16}\.json$/));
         expect(firstStoragePath).not.toBe(secondStoragePath);
       } finally {
-        delete process.env.MASTRA_APP_DATA_DIR;
+        if (prevDataDir === undefined) {
+          delete process.env.MASTRA_APP_DATA_DIR;
+        } else {
+          process.env.MASTRA_APP_DATA_DIR = prevDataDir;
+        }
         await fs.rm(dataDir, { recursive: true, force: true });
       }
     });
@@ -1176,6 +1181,85 @@ describe('createMcpManager', () => {
       expect(result.error).toContain('Timed out');
       expect(result.needsAuth).toBe(true);
     });
+
+    it('rejects a concurrent second attempt even without an onAuthorizationUrl handler', async () => {
+      setupConfig({ mcpServers: { api: { url: 'https://api.example.com/mcp' } } });
+      let releaseAuth: () => void = () => {};
+      const authGate = new Promise<void>(resolve => {
+        releaseAuth = resolve;
+      });
+      const authenticate = vi.fn().mockImplementation(async () => {
+        await authGate;
+      });
+      setupAuthenticatingClient({ authenticate });
+
+      const manager = createMcpManager('/tmp/test');
+      await manager.init();
+
+      // Neither call passes onAuthorizationUrl, so the guard must key on the
+      // manager's authenticating set rather than the authUrlHandlers slot.
+      const first = manager.authenticateServer('api');
+      const second = await manager.authenticateServer('api');
+
+      expect(second.error).toContain('already in progress');
+
+      releaseAuth();
+      await first;
+
+      // The in-flight flow ran once; the duplicate never reached the client.
+      expect(authenticate).toHaveBeenCalledTimes(1);
+    });
+
+    it('marks the resolved status as cancelled when the flow was cancelled', async () => {
+      setupConfig({ mcpServers: { api: { url: 'https://api.example.com/mcp' } } });
+      let releaseAuth: () => void = () => {};
+      const authGate = new Promise<void>(resolve => {
+        releaseAuth = resolve;
+      });
+      setupAuthenticatingClient({
+        // The flow parks until cancelled, then resolves with a failed auth state.
+        authenticate: vi.fn().mockImplementation(async () => {
+          await authGate;
+          throw new Error('OAuth callback server closed before receiving an authorization code');
+        }),
+        getServerAuthState: vi.fn().mockReturnValue('needs-auth'),
+        cancelAuthentication: vi.fn().mockImplementation(() => {
+          releaseAuth();
+          return true;
+        }),
+      });
+
+      const manager = createMcpManager('/tmp/test');
+      await manager.init();
+
+      const authPromise = manager.authenticateServer('api');
+      const cancelled = await manager.cancelServerAuthentication('api');
+      const result = await authPromise;
+
+      expect(cancelled).toBe(true);
+      expect(result.connected).toBe(false);
+      // The durable cancelled marker lets the UI suppress a "Failed" toast even
+      // if the selector was closed and reopened during the flow.
+      expect(result.cancelled).toBe(true);
+      // It must survive on the manager's durable snapshot, not just the returned
+      // value — a reopened selector reads getServerStatuses(), not the promise.
+      expect(manager.getServerStatuses()[0]!.cancelled).toBe(true);
+    });
+
+    it('does not mark a genuine failure as cancelled', async () => {
+      setupConfig({ mcpServers: { api: { url: 'https://api.example.com/mcp' } } });
+      setupAuthenticatingClient({
+        authenticate: vi.fn().mockRejectedValue(new Error('Timed out waiting for the OAuth callback')),
+        getServerAuthState: vi.fn().mockReturnValue('needs-auth'),
+      });
+
+      const manager = createMcpManager('/tmp/test');
+      await manager.init();
+
+      const result = await manager.authenticateServer('api');
+      expect(result.connected).toBe(false);
+      expect(result.cancelled).toBeUndefined();
+    });
   });
 
   describe('OAuth token storage fingerprint', () => {
@@ -1212,6 +1296,7 @@ describe('createMcpManager', () => {
 
     it('eagerly attaches a provider on init when a previous session persisted OAuth state', async () => {
       const dataDir = await fs.mkdtemp(join(tmpdir(), 'mc-oauth-test-'));
+      const prevDataDir = process.env.MASTRA_APP_DATA_DIR;
       process.env.MASTRA_APP_DATA_DIR = dataDir;
       try {
         setupConfig({ mcpServers: { api: { url: 'https://api.example.com/mcp' } } });
@@ -1239,7 +1324,11 @@ describe('createMcpManager', () => {
         expect(MockedMCPOAuthClientProvider).toHaveBeenCalledTimes(1);
         expect(MockedMCPOAuthClientProvider.mock.calls[0]![0]!.storage.filePath).toBe(storagePath);
       } finally {
-        delete process.env.MASTRA_APP_DATA_DIR;
+        if (prevDataDir === undefined) {
+          delete process.env.MASTRA_APP_DATA_DIR;
+        } else {
+          process.env.MASTRA_APP_DATA_DIR = prevDataDir;
+        }
         await fs.rm(dataDir, { recursive: true, force: true });
       }
     });

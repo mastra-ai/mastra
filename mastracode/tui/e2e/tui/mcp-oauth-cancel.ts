@@ -116,8 +116,18 @@ export const mcpOauthCancelScenario = {
     await runtime.waitForScreenText(/Cancel authentication/i, terminal, 8_000);
     terminal.write('\r');
 
+    // A deliberate cancel shows the cancel confirmation, then the aborted flow
+    // settles the server back to needs-auth.
+    await runtime.waitForScreenText(/Cancelled authentication for "oauth_server"/i, terminal, 8_000);
+
     // Cancelling aborts the pending flow and returns the server to needs-auth.
     await runtime.waitForScreenText(/oauth_server \[http\] needs auth/i, terminal, 10_000);
+
+    // The "Failed to authenticate" toast decision is made when the auth promise
+    // settles — which has already happened now that the row reads needs-auth
+    // above. Asserting its absence here is a settled-state check, not a race
+    // window: the deliberate cancel must never stack a failure toast.
+    await runtime.waitForScreenTextAbsent(/Failed to authenticate "oauth_server"/i, terminal, 2_000);
     runtime.printScreen('mcp selector after cancelling oauth authenticate', terminal);
     terminal.write('\x1b');
     await runtime.waitForScreenTextAbsent(/Manage MCP servers/i, terminal, 8_000);

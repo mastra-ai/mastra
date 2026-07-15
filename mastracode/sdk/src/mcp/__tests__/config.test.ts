@@ -4,7 +4,13 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { DEFAULT_OAUTH_REDIRECT_URL, classifyServerEntry, expandEnvVars, loadMcpConfig, validateConfig } from '../config.js';
+import {
+  DEFAULT_OAUTH_REDIRECT_URL,
+  classifyServerEntry,
+  expandEnvVars,
+  loadMcpConfig,
+  validateConfig,
+} from '../config.js';
 
 describe('classifyServerEntry', () => {
   it('classifies stdio entry', () => {
