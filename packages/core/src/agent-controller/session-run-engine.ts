@@ -378,6 +378,23 @@ export class SessionRunEngine {
       case 'error': {
         const streamError = getErrorFromUnknown(chunk.payload.error);
         this.#session.emit({ type: 'error', error: streamError });
+
+        // A run that dies after emitting `tool_suspended` (e.g. persisting the
+        // suspended snapshot failed) leaves its parked suspensions unresumable:
+        // answering them would fail with a misleading "could not find a
+        // suspended run" error that masks this primary failure. Retract them so
+        // the UI dismisses the prompts and the user sees the real error.
+        const failedRunId = chunk.runId ?? this.#session.run.getRunId();
+        if (failedRunId) {
+          for (const { toolCallId, toolName } of this.#session.suspensions.deleteForRun({ runId: failedRunId })) {
+            this.#session.emit({
+              type: 'tool_suspension_cancelled',
+              toolCallId,
+              toolName,
+              reason: streamError.message,
+            });
+          }
+        }
         break;
       }
 
