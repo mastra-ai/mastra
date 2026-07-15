@@ -5,7 +5,6 @@ import type { MastraDBMessage, MastraMessagePart, MastraToolInvocationPart } fro
 import type { AgentMemoryOption, ToolsInput } from '../agent/types';
 import { tryStreamWithJsonFallback } from '../agent/utils';
 import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '../error';
-import { modelSupportsStructuredOutput } from '../llm/model/provider-registry';
 import { resolveModelConfig } from '../llm/model/resolve-model';
 import type { MastraModelConfig } from '../llm/model/shared.types';
 import { noopLogger } from '../logger';
@@ -74,10 +73,6 @@ type ScorerTypeShortcuts = {
  * grading text alone. Tools run in the judge agent's own tool-call loop and the
  * judge still returns the step's structured output at the end.
  */
-function selectJsonPromptInjection(capability: boolean | undefined): 'inline' | undefined {
-  return capability === true ? undefined : 'inline';
-}
-
 export interface ScorerJudgeConfig {
   model: MastraModelConfig;
   instructions: string;
@@ -956,7 +951,7 @@ class MastraScorer<
       this.#mastra,
     );
     const judgeModel = resolvedModel.modelId;
-    const jsonPromptInjection = selectJsonPromptInjection(modelSupportsStructuredOutput(judgeModel));
+    const jsonPromptInjection = 'auto' as const;
 
     const judge = new Agent({
       id: 'judge',
