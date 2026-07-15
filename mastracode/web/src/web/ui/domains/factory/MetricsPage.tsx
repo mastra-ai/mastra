@@ -167,7 +167,11 @@ function StageBreakdown({ metrics }: { metrics: FactoryMetrics }) {
   const wipByStage = new Map(metrics.wip.map(entry => [entry.stage, entry.count]));
   const durationByStage = new Map(metrics.stageDurations.map(entry => [entry.stage, entry]));
   const stages = [
-    ...new Set([...BOARD_STAGES.map(stage => stage.id as string), ...metrics.stageDurations.map(d => d.stage)]),
+    ...new Set([
+      ...BOARD_STAGES.map(stage => stage.id as string),
+      ...metrics.wip.map(entry => entry.stage),
+      ...metrics.stageDurations.map(entry => entry.stage),
+    ]),
   ].sort((a, b) => stageOrder(a) - stageOrder(b));
   const maxMedian = Math.max(1, ...metrics.stageDurations.map(entry => entry.medianMs));
 

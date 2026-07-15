@@ -165,7 +165,18 @@ afterEach(() => {
 
 describe('Factory Metrics page', () => {
   it('given aggregated metrics, when the page renders, then stat cards, stages, aging items, and source mix appear', async () => {
-    useMetricsHandlers();
+    useMetricsHandlers(
+      makeMetrics({
+        // 'blocked' exists only in wip (no duration samples, not a board column):
+        // it must still show up in the stage breakdown.
+        wip: [
+          { stage: 'execute', count: 2 },
+          { stage: 'review', count: 1 },
+          { stage: 'blocked', count: 1 },
+        ],
+        wipTotal: 4,
+      }),
+    );
     renderAt('/factory/metrics');
 
     expect(await screen.findByRole('heading', { name: 'Metrics' })).toBeInTheDocument();
@@ -177,7 +188,7 @@ describe('Factory Metrics page', () => {
     expect(within(cycle).getByText('3h')).toBeInTheDocument();
     expect(within(cycle).getByText('p90 8h')).toBeInTheDocument();
     const inFlight = screen.getByText('In flight').parentElement!;
-    expect(within(inFlight).getByText('3')).toBeInTheDocument();
+    expect(within(inFlight).getByText('4')).toBeInTheDocument();
     const agents = screen.getByText('Agents running').parentElement!;
     expect(within(agents).getByText('0')).toBeInTheDocument();
 
@@ -188,6 +199,8 @@ describe('Factory Metrics page', () => {
     expect(within(stages).getByText(/median 2h · 1 in column/)).toBeInTheDocument();
     // Stages without samples still render with their current WIP count.
     expect(within(stages).getByText('Intake')).toBeInTheDocument();
+    // A WIP-only stage outside the board vocabulary still gets a row.
+    expect(within(stages).getByText('blocked')).toBeInTheDocument();
 
     // Aging WIP: linked titles when a source URL exists, plain text otherwise.
     const aging = screen.getByRole('heading', { name: 'Oldest in-flight items' }).parentElement!;
