@@ -44,6 +44,7 @@ type BoardStageId = (typeof BOARD_STAGES)[number]['id'];
 const QUEUED_LABEL = 'queued';
 const AUTO_TRIAGED_LABEL = 'auto-triaged';
 const NEEDS_APPROVAL_LABEL = 'needs-approval';
+const QUEUED_TRIAGE_POLL_INTERVAL_MS = 3_000;
 
 function hasLabel(labels: readonly string[], label: string): boolean {
   return labels.some(item => item.toLowerCase() === label);
@@ -363,6 +364,9 @@ function Board({ githubProjectId }: { githubProjectId: string }) {
   const queuedIssues = useProjectIssuesQuery(githubProjectId, QUEUED_LABEL);
   const triageIssues = useProjectIssuesQuery(githubProjectId, AUTO_TRIAGED_LABEL);
   const needsApprovalIssues = useProjectIssuesQuery(githubProjectId, NEEDS_APPROVAL_LABEL);
+  const { refetch: refetchQueuedIssues } = queuedIssues;
+  const { refetch: refetchTriageIssues } = triageIssues;
+  const { refetch: refetchNeedsApprovalIssues } = needsApprovalIssues;
   const pulls = useProjectPullRequestsQuery(githubProjectId);
   const linearIssues = useLinearIssuesQuery(activeIntakeSource === 'linear');
 
@@ -373,19 +377,27 @@ function Board({ githubProjectId }: { githubProjectId: string }) {
   const triage = useStartIssueTriageMutation(githubProjectId);
 
   const workItems = useMemo(() => items.data ?? [], [items.data]);
-  const queuedCount = queuedIssues.data?.length ?? 0;
+  const triageSourceIssues = useMemo(
+    () =>
+      [...(needsApprovalIssues.data ?? []), ...(triageIssues.data ?? []), ...(queuedIssues.data ?? [])].filter(
+        (issue, index, all) => all.findIndex(item => item.number === issue.number) === index,
+      ),
+    [needsApprovalIssues.data, triageIssues.data, queuedIssues.data],
+  );
+  const hasQueuedTriageIssue = triageSourceIssues.some(issue => hasLabel(issue.labels, QUEUED_LABEL));
 
   useEffect(() => {
-    if (queuedCount === 0) return;
-    const startedAt = Date.now();
-    const interval = window.setInterval(() => {
-      void queuedIssues.refetch();
-      void triageIssues.refetch();
-      void needsApprovalIssues.refetch();
-      if (Date.now() - startedAt > 60_000) window.clearInterval(interval);
-    }, 3_000);
+    if (!hasQueuedTriageIssue) return;
+
+    const refetchTriageFeeds = () => {
+      void refetchQueuedIssues();
+      void refetchTriageIssues();
+      void refetchNeedsApprovalIssues();
+    };
+
+    const interval = window.setInterval(refetchTriageFeeds, QUEUED_TRIAGE_POLL_INTERVAL_MS);
     return () => window.clearInterval(interval);
-  }, [queuedCount, queuedIssues, triageIssues, needsApprovalIssues]);
+  }, [hasQueuedTriageIssue, refetchQueuedIssues, refetchTriageIssues, refetchNeedsApprovalIssues]);
 
   // Live candidates minus anything already on the board (any stage).
   const candidates = useMemo(() => {
@@ -393,13 +405,7 @@ function Board({ githubProjectId }: { githubProjectId: string }) {
     const intakeIssues = (activeIntakeSource === 'github' ? (issues.data ?? []) : []).filter(
       issue => !hasLabel(issue.labels, QUEUED_LABEL) && !hasLabel(issue.labels, AUTO_TRIAGED_LABEL),
     );
-    const issueCandidates = [
-      ...(needsApprovalIssues.data ?? []),
-      ...(triageIssues.data ?? []),
-      ...(queuedIssues.data ?? []),
-    ]
-      .filter((issue, index, all) => all.findIndex(item => item.number === issue.number) === index)
-      .map(issueCandidate);
+    const issueCandidates = triageSourceIssues.map(issueCandidate);
     const all: BoardCandidate[] = [
       ...issueCandidates,
       ...intakeIssues.map(issueCandidate),
@@ -412,16 +418,7 @@ function Board({ githubProjectId }: { githubProjectId: string }) {
       seen.add(candidate.sourceKey);
       return true;
     });
-  }, [
-    workItems,
-    issues.data,
-    queuedIssues.data,
-    triageIssues.data,
-    needsApprovalIssues.data,
-    pulls.data,
-    linearIssues.data,
-    activeIntakeSource,
-  ]);
+  }, [workItems, issues.data, triageSourceIssues, pulls.data, linearIssues.data, activeIntakeSource]);
 
   const moveItem = (id: string, fromStage: string | null, toStage: string) => {
     const item = workItems.find(i => i.id === id);
