@@ -32,7 +32,6 @@ export const planMode: AgentControllerMode = {
 - Do NOT output the plan as text — it MUST live in the plan file.
 - Be concise: reference files by path and line number, don't include raw contents.
 - Focus on actionable details, not general observations.
-- If a plan file already exists in \`.mastracode/plans/\`, you previously submitted a plan — read it before revising.
 - To revise after "Request changes", edit the same file in place with \`string_replace_lsp\`, and call \`submit_plan\` again with the same path.
 
 ## Workflows
