@@ -73,6 +73,9 @@ const githubProject: Project = {
   githubProjectId: 'gh-proj-1',
   sandboxId: 'railway-sandbox-1',
   sandboxWorkdir: '/workspace/repo',
+  repoFullName: 'octocat/repo',
+  defaultBranch: 'main',
+  installationId: 123,
   selectedWorktreePath: '/workspace/repo',
   worktrees: [{ branch: 'main', baseBranch: 'main', worktreePath: '/workspace/repo' }],
   resourceId: RESOURCE_ID,
@@ -755,7 +758,7 @@ describe('ChatSessionProvider', () => {
 
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('ready'));
     expect(requests).toContain(
-      'setState:{"state":{"projectPath":"/workspace/repo","githubProjectId":"gh-proj-1","sandboxId":"railway-sandbox-1","sandboxWorkdir":"/workspace/repo"}}',
+      'setState:{"state":{"projectPath":"/workspace/repo","githubProjectId":"gh-proj-1","sandboxId":"railway-sandbox-1","sandboxWorkdir":"/workspace/repo","repoFullName":"octocat/repo","defaultBranch":"main","installationId":123}}',
     );
   });
 

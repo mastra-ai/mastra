@@ -211,6 +211,9 @@ function toProjectPayload(row: GithubProjectRow) {
     name: row.repoFullName,
     source: 'github' as const,
     githubProjectId: row.id,
+    repoFullName: row.repoFullName,
+    defaultBranch: row.defaultBranch,
+    installationId: row.installationId,
   };
 }
 
@@ -897,6 +900,9 @@ interface EnsureResult {
   githubProjectId: string;
   sandboxId: string | null;
   sandboxWorkdir: string;
+  repoFullName: string;
+  defaultBranch: string;
+  installationId: number;
 }
 
 /**
@@ -911,13 +917,13 @@ async function prepareProject(
   onProgress?: ProgressFn,
 ): Promise<EnsureResult> {
   const sandboxRow = await loadOrCreateSandboxRow(project, userId);
+  const token = await mintInstallationToken(project.installationId);
   const sandbox = await ensureProjectSandbox(sandboxRow, onProgress);
   // Re-read the sandbox binding so we have the freshly persisted sandboxId.
   const [fresh] = await getAppDb()
     .select()
     .from(githubProjectSandboxes)
     .where(eq(githubProjectSandboxes.id, sandboxRow.id));
-  const token = await mintInstallationToken(project.installationId);
   const finalRow = fresh ?? sandboxRow;
   await materializeRepo(
     finalRow,
@@ -931,6 +937,9 @@ async function prepareProject(
     githubProjectId: project.id,
     sandboxId: finalRow.sandboxId,
     sandboxWorkdir: finalRow.sandboxWorkdir,
+    repoFullName: project.repoFullName,
+    defaultBranch: project.defaultBranch,
+    installationId: project.installationId,
   };
   const done: PrepareProgress = { phase: 'done', message: 'Workspace ready.' };
   onProgress?.(done);

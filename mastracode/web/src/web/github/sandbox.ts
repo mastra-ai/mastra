@@ -9,8 +9,15 @@
  * - `ensureProjectSandbox(row)` provisions a new sandbox (persisting its provider
  *   id so re-opens reattach) or reattaches to the stored one.
  * - `materializeRepo(row, token)` runs `git clone` (first open) or `git pull`
- *   (re-open) inside the sandbox, using a short-lived installation token that is
- *   scrubbed from the git remote afterwards so it never persists in the VM.
+ *   (re-open) inside the sandbox, using a short-lived installation token
+ *   injected only into the temporary remote URL and scrubbed from `.git/config`
+ *   afterwards so it never persists in the VM. Each open mints a fresh token,
+ *   so an expired token never blocks the next materialize.
+ *
+ * We use a token-in-URL for git rather than `gh auth login`/`setup-git` because
+ * the Railway sandbox image ships a `safe-gh` wrapper that blocks the auth
+ * subcommands. `GH_TOKEN` env is honored by `gh` and is used inline for
+ * `gh pr create`.
  *
  * The Railway sandbox is constructed behind a swappable factory so tests can
  * inject a fake sandbox and other providers can be added later.
@@ -80,6 +87,22 @@ export type SandboxFactory = (opts: {
   /** Stable per-(project,user) checkpoint key for providers that support snapshot restore. */
   checkpointName?: string;
 }) => MaterializationSandbox;
+
+/**
+ * Build the token-auth clone/pull/push URL for a repo. The token lives only
+ * inside this URL for the duration of one git operation and is scrubbed from
+ * the remote afterwards (see `withInstallToken`) so it never persists in the
+ * VM's `.git/config`. We use URL-in-token for git rather than gh's credential
+ * helper because the Railway sandbox image ships a `safe-gh` wrapper that
+ * blocks `gh auth login` / `gh auth setup-git` (they're not on its allowlist).
+ */
+function tokenUrl(repoFullName: string, token: string): string {
+  return `https://x-access-token:${token}@github.com/${repoFullName}.git`;
+}
+
+function cleanUrl(repoFullName: string): string {
+  return `https://github.com/${repoFullName}.git`;
+}
 
 /**
  * Resolve the active sandbox provider. An explicit `MASTRACODE_SANDBOX_PROVIDER`
@@ -196,6 +219,10 @@ const railwayFactory: SandboxFactory = ({ providerSandboxId, env, idleTimeoutMin
     ...(env ? { env } : {}),
     ...(idleTimeoutMinutes !== undefined ? { idleTimeoutMinutes } : {}),
     ...(checkpointName ? { checkpointName } : {}),
+    // The template only needs `git` and `gh` installed. Repo cloning and gh
+    // auth are done at operation time via `authenticateGh` + `ensureRepoCheckout`
+    // so each open uses a freshly minted (non-expired) installation token.
+    template: builder => builder.withPackages('git', 'gh'),
   });
 
 /** Local host-process sandbox (single-user dev; no tenant isolation). */
@@ -329,8 +356,12 @@ export async function teardownProjectSandbox(
  * materialized (sandbox id + workdir carried on controller state), so no DB
  * round-trip is needed.
  */
-export async function reattachProjectSandbox(providerSandboxId: string): Promise<MaterializationSandbox> {
-  const sandbox = sandboxFactory({ providerSandboxId, idleTimeoutMinutes: getSandboxIdleMinutes() });
+export async function reattachProjectSandbox(input: string | { sandboxId: string }): Promise<MaterializationSandbox> {
+  const sandboxId = typeof input === 'string' ? input : input.sandboxId;
+  const idleTimeoutMinutes = getSandboxIdleMinutes();
+  const checkpointName = `mc-cp-${sandboxId}`;
+
+  const sandbox = sandboxFactory({ providerSandboxId: sandboxId, idleTimeoutMinutes, checkpointName });
   await sandbox.start();
   return sandbox;
 }
@@ -371,18 +402,6 @@ export class MaterializeError extends Error {
   }
 }
 
-/**
- * Build the token-auth clone/pull URL for a repo. The token lives only inside
- * this URL and is scrubbed from the remote after the operation.
- */
-function tokenUrl(repoFullName: string, token: string): string {
-  return `https://x-access-token:${token}@github.com/${repoFullName}.git`;
-}
-
-function cleanUrl(repoFullName: string): string {
-  return `https://github.com/${repoFullName}.git`;
-}
-
 /** Repo metadata needed to materialize, read from the org-owned project row. */
 export interface RepoMaterializeInfo {
   repoFullName: string;
@@ -390,24 +409,24 @@ export interface RepoMaterializeInfo {
 }
 
 /**
- * Materialize the repo inside the user's sandbox. Clones on first open, pulls on
- * re-open. Always scrubs the install token from the remote afterwards and sets
- * `materialized_at` on the per-user sandbox binding row.
+ * Materialize the repo inside the user's sandbox. Clones on first open, pulls
+ * on re-open. Always scrubs the install token from the remote afterwards.
+ * Each call mints a fresh token upstream, so an expired token never blocks
+ * the next materialize.
  *
- * @param sandboxRow the per-(project,user) sandbox binding (provisioned via
- *                   `ensureProjectSandbox`)
- * @param repo       repo metadata from the org-owned project row
  * @param sandbox    the live sandbox to run git inside
+ * @param workdir    the in-sandbox path to clone/pull into
+ * @param repoInfo   repo metadata from the org-owned project row
  * @param token      a freshly minted, short-lived installation access token
+ * @param onProgress optional progress callback for user-facing status updates
  */
-export async function materializeRepo(
-  sandboxRow: GithubProjectSandboxRow,
-  repoInfo: RepoMaterializeInfo,
+export async function ensureRepoCheckout(
   sandbox: MaterializationSandbox,
+  workdir: string,
+  repoInfo: RepoMaterializeInfo,
   token: string,
   onProgress?: ProgressFn,
 ): Promise<void> {
-  const workdir = sandboxRow.sandboxWorkdir;
   const repo = repoInfo.repoFullName;
 
   // 0. Defense in depth: never build a git command from values that aren't
@@ -443,9 +462,9 @@ export async function materializeRepo(
 
   try {
     if (!alreadyMaterialized) {
-      // 2a. First open: shallow-clone the default branch into the workdir. A
-      // shallow single-branch clone is dramatically faster for large repos; the
-      // later re-open uses `git pull --ff-only`, which works on shallow clones.
+      // 2a. First open: shallow-clone the default branch. A shallow
+      // single-branch clone is dramatically faster for large repos; the later
+      // re-open uses `git pull --ff-only`, which works on shallow clones.
       reportProgress(onProgress, {
         phase: 'cloning',
         message: `Cloning ${repo} (first open can take a minute)…`,
@@ -458,7 +477,9 @@ export async function materializeRepo(
         throw classifyGitFailure(clone, 'clone-failed');
       }
     } else {
-      // 2b. Re-open: refresh remote to the token URL and fast-forward pull.
+      // 2b. Re-open: refresh remote to the token URL (this ensure minted a
+      // fresh token, so any previously stored token is stale) and fast-forward
+      // pull.
       reportProgress(onProgress, { phase: 'pulling', message: `Updating ${repo} to the latest changes…` });
       const setUrl = await sh(sandbox, `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(authUrl)}`);
       if (setUrl.exitCode !== 0) {
@@ -471,11 +492,85 @@ export async function materializeRepo(
     }
   } finally {
     // 3. Always scrub the token from the remote so it isn't left in the VM's
-    // git config, even when the clone/pull above failed partway through. This
-    // is best-effort on the failure path (the workdir may not exist yet after a
-    // failed clone); on the success path the scrub must succeed or we surface it.
+    // git config, even when the clone/pull above failed partway through. Best
+    // effort on the failure path (the workdir may not exist yet after a failed
+    // clone); on the success path the scrub must succeed or we surface it.
     await scrubRemote(sandbox, workdir, repo, alreadyMaterialized);
   }
+}
+
+/**
+ * Reset the git remote back to the tokenless URL. On a successful clone/pull
+ * the workdir always has a `.git`, so a non-zero exit code here means the
+ * token may still be persisted — surface it. On the failure path the workdir
+ * may not exist (e.g. a failed clone), so a non-zero exit is tolerated.
+ */
+async function scrubRemote(
+  sandbox: MaterializationSandbox,
+  workdir: string,
+  repoFullName: string,
+  expectGitDir: boolean,
+): Promise<void> {
+  const result = await sh(
+    sandbox,
+    `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(cleanUrl(repoFullName))}`,
+  );
+  if (result.exitCode !== 0 && expectGitDir) {
+    throw new MaterializeError(
+      `Failed to scrub installation token from git remote: ${result.stderr.trim() || result.stdout.trim()}`,
+      'pull-failed',
+    );
+  }
+}
+
+/**
+ * Temporarily rewrite `origin` to a tokenized URL, run `fn` (e.g. a push or
+ * fetch), and **always** scrub the remote back to the tokenless URL in a
+ * `finally`. The token therefore only ever lives in the remote URL for the
+ * duration of the operation and is never left in the VM's git config. Used by
+ * `pushBranch` and `ensureWorktree`; `ensureRepoCheckout` inlines the same
+ * pattern because it needs to distinguish clone vs. pull based on whether the
+ * checkout already exists.
+ *
+ * On the success path the scrub must succeed (a leaked token is a hard error);
+ * if it fails we surface it. On the failure path the scrub is best-effort but
+ * still attempted, and the original operation error is rethrown.
+ */
+export async function withInstallToken<T>(
+  sandbox: MaterializationSandbox,
+  workdir: string,
+  repoFullName: string,
+  token: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repoFullName)) {
+    throw new MaterializeError(`Refusing to push: invalid repo full name '${repoFullName}'.`, 'push-failed');
+  }
+
+  const setUrl = await sh(
+    sandbox,
+    `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(tokenUrl(repoFullName, token))}`,
+  );
+  if (setUrl.exitCode !== 0) {
+    await scrubRemote(sandbox, workdir, repoFullName, false);
+    throw new MaterializeError(`Failed to set git remote: ${setUrl.stderr.trim()}`, 'push-failed');
+  }
+
+  try {
+    return await fn();
+  } finally {
+    await scrubRemote(sandbox, workdir, repoFullName, true);
+  }
+}
+
+export async function materializeRepo(
+  sandboxRow: GithubProjectSandboxRow,
+  repoInfo: RepoMaterializeInfo,
+  sandbox: MaterializationSandbox,
+  token: string,
+  onProgress?: ProgressFn,
+): Promise<void> {
+  await ensureRepoCheckout(sandbox, sandboxRow.sandboxWorkdir, repoInfo, token, onProgress);
 
   // 4. Mark materialized.
   reportProgress(onProgress, { phase: 'finalizing', message: 'Finalizing workspace…' });
@@ -500,30 +595,6 @@ async function hasExistingCheckout(
   const url = result.stdout.trim().toLowerCase();
   const suffix = `github.com/${repoFullName.toLowerCase()}`;
   return url.endsWith(`${suffix}.git`) || url.endsWith(suffix);
-}
-
-/**
- * Reset the git remote back to the tokenless URL. On a successful clone/pull the
- * workdir always has a `.git`, so a non-zero exit code here means the token may
- * still be persisted — surface it. On the failure path the workdir may not exist
- * (e.g. a failed clone), so a non-zero exit is tolerated.
- */
-async function scrubRemote(
-  sandbox: MaterializationSandbox,
-  workdir: string,
-  repoFullName: string,
-  expectGitDir: boolean,
-): Promise<void> {
-  const result = await sh(
-    sandbox,
-    `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(cleanUrl(repoFullName))}`,
-  );
-  if (result.exitCode !== 0 && expectGitDir) {
-    throw new MaterializeError(
-      `Failed to scrub installation token from git remote: ${result.stderr.trim() || result.stdout.trim()}`,
-      'pull-failed',
-    );
-  }
 }
 
 /**
@@ -610,47 +681,6 @@ export async function configureGitIdentity(
   const setEmail = await sh(sandbox, `git -C ${shellQuote(workdir)} config user.email ${shellQuote(email)}`);
   if (setEmail.exitCode !== 0) {
     throw new MaterializeError(`Failed to set git user.email: ${setEmail.stderr.trim()}`, 'commit-failed');
-  }
-}
-
-/**
- * Temporarily rewrite `origin` to a tokenized URL, run `fn` (e.g. a push), and
- * **always** scrub the remote back to the tokenless URL in a `finally`. The
- * token therefore only ever lives in the remote URL for the duration of the
- * operation and is never left in the VM's git config.
- *
- * On the success path the scrub must succeed (a leaked token is a hard error);
- * if it fails we surface it. On the failure path the scrub is best-effort but
- * still attempted, and the original operation error is rethrown.
- */
-export async function withInstallToken<T>(
-  sandbox: MaterializationSandbox,
-  workdir: string,
-  repoFullName: string,
-  token: string,
-  fn: () => Promise<T>,
-): Promise<T> {
-  if (!/^[\w.-]+\/[\w.-]+$/.test(repoFullName)) {
-    throw new MaterializeError(`Refusing to push: invalid repo full name '${repoFullName}'.`, 'push-failed');
-  }
-
-  const setUrl = await sh(
-    sandbox,
-    `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(tokenUrl(repoFullName, token))}`,
-  );
-  if (setUrl.exitCode !== 0) {
-    // Best-effort scrub even though set-url failed, then surface the failure.
-    await scrubRemote(sandbox, workdir, repoFullName, false);
-    throw new MaterializeError(`Failed to set git remote: ${setUrl.stderr.trim()}`, 'push-failed');
-  }
-
-  try {
-    return await fn();
-  } finally {
-    // Always restore the tokenless remote. The workdir has a `.git` (we just
-    // rewrote its remote) so a scrub failure means the token may still persist
-    // — surface it.
-    await scrubRemote(sandbox, workdir, repoFullName, true);
   }
 }
 
@@ -1004,7 +1034,11 @@ export async function createPullRequest(
 
   // GH_TOKEN is prefixed inline so it is exported only to the single `gh`
   // process and never to the wider shell session, git config, or VM env. `gh`
-  // is run from inside the checkout so it targets the correct repo/head branch.
+  // is run from inside the checkout so it targets the correct repo/head
+  // branch. We inline the token per invocation (rather than using
+  // `gh auth login`) because the sandbox image ships a `safe-gh` wrapper that
+  // blocks `gh auth login` / `gh auth setup-git` (not on its allowlist), but
+  // `GH_TOKEN` is honored by real `gh` and bypasses that auth path.
   const ghCommand = [
     `GH_TOKEN=${shellQuote(token)} gh pr create`,
     `--base ${shellQuote(base)}`,

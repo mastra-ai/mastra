@@ -129,6 +129,10 @@ function toStatusText(part: AgentControllerMessageContent): string | null {
     return `Thread title updated: ${part.newTitle}`;
   }
 
+  // Notification summaries are surfaced through the notification renderer via
+  // harnessContent metadata; suppress duplicating their text in transcript parts.
+  if (part.type === 'notification_summary') return null;
+
   if ('message' in part && typeof part.message === 'string') return part.message;
   return null;
 }

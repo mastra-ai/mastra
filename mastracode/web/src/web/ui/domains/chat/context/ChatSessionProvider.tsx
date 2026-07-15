@@ -60,6 +60,9 @@ export function ChatSessionProvider({
             githubProjectId: activeProject.githubProjectId,
             sandboxId: activeProject.sandboxId,
             sandboxWorkdir: activeProject.sandboxWorkdir,
+            repoFullName: activeProject.repoFullName,
+            defaultBranch: activeProject.defaultBranch,
+            installationId: activeProject.installationId,
           }
         : undefined,
       baseUrl,

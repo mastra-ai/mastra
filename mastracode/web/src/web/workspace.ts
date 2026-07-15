@@ -5,26 +5,28 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import { MASTRACODE_WORKSPACE_TOOLS } from '@mastra/code-sdk/workspace-tools';
-import { reattachProjectSandbox } from './github/sandbox.js';
+import { mintInstallationToken } from './github/client.js';
+import { ensureRepoCheckout, reattachProjectSandbox } from './github/sandbox.js';
 import { SandboxFilesystem } from './github/sandbox-filesystem.js';
 
-const WORKSPACE_ID_PREFIX = 'mastra-code-workspace';
+const WORKSPACE_ID_PREFIX = 'mc';
 
 async function getSandboxWorkspace({
-  githubProjectId,
   sandboxId,
   workdir,
-  worktreePath,
+  repoFullName,
+  defaultBranch,
+  installationId,
   mastra,
 }: {
-  githubProjectId: string;
   sandboxId: string;
   workdir: string;
-  worktreePath?: string;
+  repoFullName?: string;
+  defaultBranch?: string;
+  installationId?: number;
   mastra?: Mastra;
 }): Promise<Workspace> {
-  const boundWorkdir = worktreePath || workdir;
-  const workspaceId = `${WORKSPACE_ID_PREFIX}-gh-${githubProjectId}-${sandboxId}-${boundWorkdir}`;
+  const workspaceId = `${WORKSPACE_ID_PREFIX}-${sandboxId}`;
 
   try {
     const existing = mastra?.getWorkspaceById(workspaceId) as Workspace | undefined;
@@ -36,8 +38,15 @@ async function getSandboxWorkspace({
     // Not registered yet.
   }
 
-  const sandbox = await reattachProjectSandbox(sandboxId);
-  const filesystem = new SandboxFilesystem({ sandbox, workdir: boundWorkdir });
+  const sandbox = await reattachProjectSandbox({ sandboxId });
+  if (repoFullName && defaultBranch && installationId) {
+    // Mint the token here (not at reattach time) so it goes straight to
+    // `authenticateGh` inside `ensureRepoCheckout` — the ~1h token stays fresh
+    // for the actual git operations rather than being provisioned upfront.
+    const token = await mintInstallationToken(installationId);
+    await ensureRepoCheckout(sandbox, workdir, { repoFullName, defaultBranch }, token);
+  }
+  const filesystem = new SandboxFilesystem({ sandbox, workdir });
 
   return new Workspace({
     id: workspaceId,
@@ -80,12 +89,13 @@ export async function getWebWorkspace({
   const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
   const state = ctx?.getState();
 
-  if (state?.githubProjectId && state.sandboxId && state.sandboxWorkdir) {
+  if (ctx?.session.id && state?.sandboxWorkdir) {
     return getSandboxWorkspace({
-      githubProjectId: state.githubProjectId,
-      sandboxId: state.sandboxId,
+      sandboxId: ctx.session.id,
       workdir: state.sandboxWorkdir,
-      worktreePath: state.worktreePath,
+      repoFullName: typeof state.repoFullName === 'string' ? state.repoFullName : undefined,
+      defaultBranch: typeof state.defaultBranch === 'string' ? state.defaultBranch : undefined,
+      installationId: typeof state.installationId === 'number' ? state.installationId : undefined,
       mastra,
     });
   }

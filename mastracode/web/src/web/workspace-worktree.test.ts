@@ -4,6 +4,17 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 // Capture the workdir the SandboxFilesystem is constructed with so we can assert
 // the workspace binds to the worktree path rather than the repo root.
 const sandboxFsCalls: Array<{ workdir: string }> = [];
+const ensureRepoCheckout = vi.fn(async () => {});
+const mintInstallationToken = vi.fn(async () => 'app-token');
+const reattachProjectSandbox = vi.fn(async () => ({
+  executeCommand: vi.fn(),
+  getInfo: vi.fn(),
+}));
+
+vi.mock('./github/client.js', () => ({
+  mintInstallationToken,
+}));
+
 vi.mock('./github/sandbox-filesystem.js', () => ({
   SandboxFilesystem: class {
     workdir: string;
@@ -15,10 +26,8 @@ vi.mock('./github/sandbox-filesystem.js', () => ({
 }));
 
 vi.mock('./github/sandbox.js', () => ({
-  reattachProjectSandbox: vi.fn(async () => ({
-    executeCommand: vi.fn(),
-    getInfo: vi.fn(),
-  })),
+  ensureRepoCheckout,
+  reattachProjectSandbox,
 }));
 
 function createSandboxRequestContext(state: Record<string, unknown>) {
@@ -27,7 +36,7 @@ function createSandboxRequestContext(state: Record<string, unknown>) {
   requestContext.set('controller', {
     modeId: 'build',
     getState,
-    session: { state: { get: getState } },
+    session: { id: 'session-sandbox-1', state: { get: getState } },
   });
   return requestContext;
 }
@@ -36,11 +45,17 @@ const baseState = {
   githubProjectId: 'proj-1',
   sandboxId: 'sbx-1',
   sandboxWorkdir: '/workspace/hello',
+  repoFullName: 'octocat/hello',
+  defaultBranch: 'main',
+  installationId: 123,
   sandboxAllowedPaths: [],
 };
 
 afterEach(() => {
   sandboxFsCalls.length = 0;
+  ensureRepoCheckout.mockClear();
+  mintInstallationToken.mockClear();
+  reattachProjectSandbox.mockClear();
   vi.resetModules();
 });
 
@@ -68,11 +83,20 @@ describe('getWebWorkspace', () => {
     });
 
     expect(sandboxFsCalls.at(-1)?.workdir).toBe('/workspace/hello');
-    // Reuse key embeds the bound workdir (repo root here).
-    expect(workspace.id).toBe('mastra-code-workspace-gh-proj-1-sbx-1-/workspace/hello');
+    expect(workspace.id).toBe('mc-session-sandbox-1');
+    expect(mintInstallationToken).toHaveBeenCalledWith(123);
+    expect(reattachProjectSandbox).toHaveBeenCalledWith({
+      sandboxId: 'session-sandbox-1',
+    });
+    expect(ensureRepoCheckout).toHaveBeenCalledWith(
+      expect.anything(),
+      '/workspace/hello',
+      { repoFullName: 'octocat/hello', defaultBranch: 'main' },
+      'app-token',
+    );
   });
 
-  it('binds the workspace to the worktree path when one is active', async () => {
+  it('binds the workspace to the sandbox workdir even when a branch is active', async () => {
     const { getWebWorkspace } = await import('./workspace.js');
     const workspace = await getWebWorkspace({
       requestContext: createSandboxRequestContext({
@@ -82,26 +106,20 @@ describe('getWebWorkspace', () => {
       }) as any,
     });
 
-    expect(sandboxFsCalls.at(-1)?.workdir).toBe('/workspace/worktrees/feat-x');
-    // Reuse key includes the worktree path, so a different worktree gets a fresh workspace.
-    expect(workspace.id).toBe('mastra-code-workspace-gh-proj-1-sbx-1-/workspace/worktrees/feat-x');
+    expect(sandboxFsCalls.at(-1)?.workdir).toBe('/workspace/hello');
+    expect(workspace.id).toBe('mc-session-sandbox-1');
   });
 
-  it('produces distinct reuse keys for different worktrees on the same sandbox', async () => {
+  it('skips checkout when repo metadata is incomplete', async () => {
     const { getWebWorkspace } = await import('./workspace.js');
-    const a = await getWebWorkspace({
+    await getWebWorkspace({
       requestContext: createSandboxRequestContext({
-        ...baseState,
-        worktreePath: '/workspace/worktrees/feat-a',
-      }) as any,
-    });
-    const b = await getWebWorkspace({
-      requestContext: createSandboxRequestContext({
-        ...baseState,
-        worktreePath: '/workspace/worktrees/feat-b',
+        githubProjectId: 'proj-1',
+        sandboxWorkdir: '/workspace/hello',
       }) as any,
     });
 
-    expect(a.id).not.toBe(b.id);
+    expect(mintInstallationToken).not.toHaveBeenCalled();
+    expect(ensureRepoCheckout).not.toHaveBeenCalled();
   });
 });

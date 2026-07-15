@@ -7,8 +7,10 @@ import { createAgentControllerClient, requireAgentControllerSession } from '../.
 /** How often workspace activity is re-checked while the tab is focused. */
 export const WORKSPACE_ACTIVITY_POLL_MS = 5000;
 
-function isActiveWorkspaceThread(thread: AgentControllerThreadInfo, projectPath: string): boolean {
-  return thread.tags?.projectPath === projectPath && 'state' in thread && thread.state === 'active';
+type WorkspaceActivityThread = { tags?: Record<string, string | undefined>; state?: string };
+
+function isActiveWorkspaceThread(thread: WorkspaceActivityThread, projectPath: string): boolean {
+  return thread.tags?.projectPath === projectPath && thread.state === 'active';
 }
 
 interface WorkspaceActivityOptions {
