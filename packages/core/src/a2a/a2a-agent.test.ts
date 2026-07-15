@@ -486,12 +486,20 @@ describe('A2AAgent', () => {
       events.push(event as StreamEventWithOptionalId);
     }
 
-    expect(events.map(event => event.type)).toEqual(['text-start', 'text-delta', 'text-end', 'finish']);
+    expect(events.map(event => event.type)).toEqual(['start', 'text-start', 'text-delta', 'text-end', 'finish']);
     expect(events.every(event => event.runId === 'stream-run-1')).toBe(true);
     expect(events.every(event => event.from === 'AGENT')).toBe(true);
-    expect(events[0]?.payload?.id).toBe('message-1');
+    expect(events[0]?.payload?.id).toBe(agent.id);
     expect(events[1]?.payload?.id).toBe('message-1');
     expect(events[2]?.payload?.id).toBe('message-1');
+    expect(events[3]?.payload?.id).toBe('message-1');
+    expect(events[4]?.payload).toMatchObject({
+      stepResult: { reason: 'stop' },
+      output: { usage: {} },
+      metadata: {},
+      messages: { all: [], user: [], nonUser: [] },
+      finishReason: 'stop',
+    });
     expect(await stream.text).toBe('Buffered remote response');
     expect((await stream.getResult()).text).toBe('Buffered remote response');
   });
@@ -537,12 +545,20 @@ describe('A2AAgent', () => {
       events.push(event as StreamEventWithOptionalId);
     }
 
-    expect(events.map(event => event.type)).toEqual(['text-start', 'text-delta', 'text-end', 'finish']);
+    expect(events.map(event => event.type)).toEqual(['start', 'text-start', 'text-delta', 'text-end', 'finish']);
     expect(events.every(event => event.runId === 'stream-run-2')).toBe(true);
     expect(events.every(event => event.from === 'AGENT')).toBe(true);
-    expect(events[0]?.payload?.id).toBe('response:text');
+    expect(events[0]?.payload?.id).toBe(agent.id);
     expect(events[1]?.payload?.id).toBe('response:text');
     expect(events[2]?.payload?.id).toBe('response:text');
+    expect(events[3]?.payload?.id).toBe('response:text');
+    expect(events[4]?.payload).toMatchObject({
+      stepResult: { reason: 'stop' },
+      output: { usage: {} },
+      metadata: {},
+      messages: { all: [], user: [], nonUser: [] },
+      finishReason: 'stop',
+    });
     expect(await stream.text).toBe('Hello from stream');
     expect((await stream.task)?.status.state).toBe('completed');
   });
@@ -612,7 +628,7 @@ describe('A2AAgent', () => {
       events.push(event.type);
     }
 
-    expect(events).toEqual(['text-start', 'text-delta', 'text-end', 'tool-call-suspended']);
+    expect(events).toEqual(['start', 'text-start', 'text-delta', 'text-end', 'tool-call-suspended']);
     expect(await stream.text).toBe('Hello later');
     expect(await stream.suspendPayload).toMatchObject({
       taskId: 'task-1',
@@ -817,6 +833,14 @@ describe('A2AAgent', () => {
     });
 
     const resumed = await agent.resumeStream(undefined, { runId: 'stream-run-3' });
+    const resumedEvents: string[] = [];
+    for await (const event of resumed.fullStream) {
+      resumedEvents.push(event.type);
+    }
+
+    // Resumed runs continue an existing stream, so no `start` chunk is emitted
+    // (mirrors the regular Agent loop, which skips `start` when resuming).
+    expect(resumedEvents).toEqual(['text-start', 'text-delta', 'text-end', 'finish']);
     expect(await resumed.text).toBe('Resubscribed text');
     expect((await resumed.task)?.status.state).toBe('completed');
   });
