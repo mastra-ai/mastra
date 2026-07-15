@@ -4873,7 +4873,7 @@ export type PostAgentsAgentIdGenerate_Body = {
               id: string;
               [x: string]: unknown;
             };
-        resource: string;
+        resource?: string | undefined;
         options?:
           | {
               [key: string]: any;
@@ -5048,7 +5048,7 @@ export type PostAgentsAgentIdGenerateVnext_Body = {
               id: string;
               [x: string]: unknown;
             };
-        resource: string;
+        resource?: string | undefined;
         options?:
           | {
               [key: string]: any;
@@ -5225,7 +5225,7 @@ export type PostAgentsAgentIdStream_Body = {
               id: string;
               [x: string]: unknown;
             };
-        resource: string;
+        resource?: string | undefined;
         options?:
           | {
               [key: string]: any;
@@ -5400,7 +5400,7 @@ export type PostAgentsAgentIdStreamUntilIdle_Body = {
               id: string;
               [x: string]: unknown;
             };
-        resource: string;
+        resource?: string | undefined;
         options?:
           | {
               [key: string]: any;
@@ -5580,7 +5580,7 @@ export type PostAgentsAgentIdStreamVnext_Body = {
               id: string;
               [x: string]: unknown;
             };
-        resource: string;
+        resource?: string | undefined;
         options?:
           | {
               [key: string]: any;
@@ -5915,7 +5915,7 @@ export type PostAgentsAgentIdSendMessage_Body =
                               id: string;
                               [x: string]: unknown;
                             };
-                        resource: string;
+                        resource?: string | undefined;
                         options?:
                           | {
                               [key: string]: any;
@@ -6301,7 +6301,7 @@ export type PostAgentsAgentIdQueueMessage_Body =
                               id: string;
                               [x: string]: unknown;
                             };
-                        resource: string;
+                        resource?: string | undefined;
                         options?:
                           | {
                               [key: string]: any;
@@ -6661,7 +6661,7 @@ export type PostAgentsAgentIdSignals_Body =
                               id: string;
                               [x: string]: unknown;
                             };
-                        resource: string;
+                        resource?: string | undefined;
                         options?:
                           | {
                               [key: string]: any;
@@ -7206,7 +7206,7 @@ export type PostAgentsAgentIdResumeStream_Body = {
               id: string;
               [x: string]: unknown;
             };
-        resource: string;
+        resource?: string | undefined;
         options?:
           | {
               [key: string]: any;
@@ -7602,7 +7602,7 @@ export type PostAgentsAgentIdResumeStreamUntilIdle_Body = {
               id: string;
               [x: string]: unknown;
             };
-        resource: string;
+        resource?: string | undefined;
         options?:
           | {
               [key: string]: any;
@@ -7782,7 +7782,7 @@ export type PostAgentsAgentIdNetwork_Body = {
               id: string;
               [x: string]: unknown;
             };
-        resource: string;
+        resource?: string | undefined;
         options?:
           | {
               [key: string]: any;
@@ -8433,7 +8433,7 @@ export type PostAgentsAgentIdStreamVNext_Body = {
               id: string;
               [x: string]: unknown;
             };
-        resource: string;
+        resource?: string | undefined;
         options?:
           | {
               [key: string]: any;
@@ -8613,7 +8613,7 @@ export type PostAgentsAgentIdStreamVnextUi_Body = {
               id: string;
               [x: string]: unknown;
             };
-        resource: string;
+        resource?: string | undefined;
         options?:
           | {
               [key: string]: any;
@@ -8795,7 +8795,7 @@ export type PostAgentsAgentIdStreamUi_Body = {
               id: string;
               [x: string]: unknown;
             };
-        resource: string;
+        resource?: string | undefined;
         options?:
           | {
               [key: string]: any;
@@ -21097,7 +21097,7 @@ export type PostAgentsAgentIdGenerateLegacy_Body = {
               id: string;
               [x: string]: unknown;
             };
-        resource: string;
+        resource?: string | undefined;
         options?:
           | {
               [key: string]: any;
@@ -21277,7 +21277,7 @@ export type PostAgentsAgentIdStreamLegacy_Body = {
               id: string;
               [x: string]: unknown;
             };
-        resource: string;
+        resource?: string | undefined;
         options?:
           | {
               [key: string]: any;

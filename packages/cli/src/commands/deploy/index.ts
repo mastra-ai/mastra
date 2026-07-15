@@ -847,10 +847,9 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
 
   if (finalStatus.status === 'running') {
     const { studioUrl, serverUrl } = derivePublicUrls(environment.slug);
-    p.log.success(`Deploy succeeded in ${elapsed(performance.now() - tTotal)}!`);
     p.log.info(`  Studio: ${pc.cyan(studioUrl)}`);
     p.log.info(`  Server: ${pc.cyan(serverUrl)}`);
-    p.outro('');
+    p.outro(`Deploy succeeded in ${elapsed(performance.now() - tTotal)}!`);
   } else if (finalStatus.status === 'failed') {
     p.log.error(`Deploy failed: ${finalStatus.error}`);
     process.exit(1);
