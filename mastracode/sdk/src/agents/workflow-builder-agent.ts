@@ -82,7 +82,7 @@ Tool that returns a string → agent step. The tool emits \`"…text…"\`; the 
 ]
 \`\`\`
 
-Read the tool's actual \`outputSchema\` first. If it's a primitive (\`z.string()\`, \`z.number()\`, \`z.boolean()\`), reference the whole result: \`\${stepResults.<id>}\`. If it's an object, pluck a specific field: \`\${stepResults.<id>.<field>}\`. Never guess.
+Read the tool's actual \`outputSchema\` first. If it's a primitive (\`z.string()\`, \`z.number()\`, \`z.boolean()\`), reference the whole result: \`\${stepResults.<id>}\`. If it's an object or array, you can either pluck a specific field (\`\${stepResults.<id>.<field>}\`) OR reference the whole thing bare (\`\${stepResults.<id>}\`) and let the template JSON-encode it for the agent. Never guess field names.
 
 # Mappings — how to reshape data between steps
 
@@ -92,9 +92,9 @@ A mapping step's \`mapConfig\` is a **JSON-encoded string** of an object (yes, e
   - \`\${inputData.<field>}\` — a field of the CURRENT step's live input, which equals the PREVIOUS step's output. For step 1 only, this happens to equal the workflow input (because step 1's input IS the workflow input). From step 2 onward, \`inputData\` is the previous step's output — if you want the workflow's original input past step 1, use \`\${initData.<field>}\` instead.
   - \`\${initData.<field>}\` — a field of the WORKFLOW's original input, available from ANY step. Use this whenever a mid-workflow step needs an argument from the top-level workflow input (e.g. a step-3 mapping referencing \`\${initData.path}\`).
   - \`\${stepResults.<stepId>.<field>}\` — a field of an earlier step's output when the output is an object. Dotted paths drill into nested fields.
-  - \`\${stepResults.<stepId>}\` — the whole step result, ONLY when the step's \`outputSchema\` is a primitive (\`z.string()\` / \`z.number()\` / \`z.boolean()\`). If the result is an object or array the template will throw at runtime — pluck a field instead.
+  - \`\${stepResults.<stepId>}\` — the whole step result. Primitives render as \`String(v)\`; objects and arrays are JSON-encoded (via \`JSON.stringify\`) so downstream agents get the full structure inline. Use this bare form when you want an agent to see the entire upstream shape (e.g. feeding \`foreach(agent)\`'s \`{ text }[]\` output into a synthesis step).
   - \`\${state.<field>}\`, \`\${requestContext.<field>}\` — advanced, rarely needed.
-  Templates render primitives (string/number/boolean). They treat \`null\`/\`undefined\` as \`""\`. They THROW if asked to render an object or array — pluck the field first.
+  Templates render primitives as strings and JSON-encode objects/arrays. \`null\`/\`undefined\` render as \`""\`. Pluck a field only when you specifically want just that field; bare references are fine (and preferred) when the agent should see the whole structure.
 - \`{ "value": <constant> }\` — embed a literal JSON value.
 - \`{ "step": "<stepId>", "path": "<field.path>" }\` — pluck a single field from a prior step's output. Dotted paths drill into nested objects.
 
@@ -156,12 +156,54 @@ The parallel step's output is \`{ "summarise": { "text": "..." }, "count-lines":
 
 The rules:
 - The step IMMEDIATELY BEFORE a \`foreach\` MUST produce an ARRAY as its top-level output. Not an object with an array field — the array itself. Foreach iterates \`previous.output\`, not \`previous.output.<somekey>\`.
-- Because a \`mapping\` step always outputs an OBJECT (its top-level keys are \`mapConfig\`'s keys), a mapping CANNOT be the step before a \`foreach\` — a mapping's output is never a raw array. So: put the \`foreach\` directly after a step (tool or agent) whose output shape IS the array. If no such upstream is available, don't emit \`foreach\` — either ask for a tool that returns the array, or fall back to one \`code-agent\` step whose prompt iterates internally.
+- Because a \`mapping\` step always outputs an OBJECT (its top-level keys are \`mapConfig\`'s keys), a mapping CANNOT be the step before a \`foreach\` — a mapping's output is never a raw array.
 - The inner \`step\` is a SINGLE step-like entry: \`{ "type": "agent", ... }\` or \`{ "type": "tool", ... }\`. No nested \`foreach\` / \`parallel\` / \`mapping\`.
 - The inner step's \`id\` MUST be distinct from every other step id in the workflow (including the surrounding steps). A duplicate id will collide with \`stepResults\` lookups.
 - The inner step receives ONE ELEMENT of the array at a time as its input. If the element is a string and the inner step is an agent, the agent gets that string coerced to the user message. If the element is an object, the agent gets the JSON of that object.
 - Output is an array of the inner step's outputs, order-preserved. Agent inner steps ⇒ \`{ text: string }[]\`. Tool inner steps ⇒ \`toolOutputSchema[]\`.
 - \`opts.concurrency\` (optional, default 1) controls how many elements run at once.
+
+**When the upstream step does NOT produce a raw array — INSERT A BRIDGE AGENT.** This is the critical case, and it is what you will hit most often. Tools like \`find_files\` return a formatted \`string\`; other tools return objects. You must NOT give up on \`foreach\` in this case, and you must NOT fake iteration inside a single agent's prompt. Instead, insert an \`agent\` step BETWEEN the upstream step and the \`foreach\` whose sole job is to convert the upstream data into the array shape \`foreach\` needs. That bridge agent MUST declare an \`outputSchema\` whose top-level shape is the array (\`z.array(...)\` — in the save-workflow schema this is expressed as \`{ type: "array", items: {...} }\`). Because you can override an agent step's output shape via \`outputSchema\`, this bridge is always available, no matter what the upstream tool returns.
+
+Concretely, the shape is ALWAYS one of:
+
+- \`tool (returns array) → foreach\` — direct, no bridge.
+- \`agent-with-outputSchema-array → foreach\` — direct, the agent step itself is the array producer.
+- \`tool (returns string OR object) → bridge-agent (outputSchema: array) → foreach\` — the common case, USE THIS.
+- \`upstream-step → mapping (to build { prompt }) → bridge-agent (outputSchema: array) → foreach\` — when the bridge agent needs a specifically-shaped prompt and the upstream isn't already a plain string.
+
+If the array elements must be strings and the inner \`foreach\` step is an \`agent\`, prefer \`outputSchema: z.array(z.object({ prompt: z.string() }))\` so each iteration receives a well-formed \`{ prompt }\` input.
+
+Only fall back to a single \`code-agent\` that iterates internally if there is literally no way to produce an array — for example, if the upstream data is unbounded streaming or the user explicitly forbids an extra LLM turn. "The tool returns a string" is NOT a valid excuse — insert the bridge agent.
+
+Worked example — \`foreach\` after a string-returning tool:
+
+\`\`\`json
+[
+  { "type": "tool", "id": "list-files", "toolId": "find_files" },
+  {
+    "type": "agent",
+    "id": "extract-paths",
+    "agentId": "code-agent",
+    "outputSchema": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": { "prompt": { "type": "string" } },
+        "required": ["prompt"]
+      },
+      "description": "One { prompt } per file in the listing, where prompt asks the summarizer to read and summarize that file."
+    }
+  },
+  {
+    "type": "foreach",
+    "step": { "type": "agent", "id": "summarise-one", "agentId": "code-agent" },
+    "opts": { "concurrency": 3 }
+  }
+]
+\`\`\`
+
+The \`extract-paths\` bridge agent's prompt (which it receives as the upstream tool's string output, coerced to the user message) tells it to emit one \`{ prompt }\` object per file. Its \`outputSchema\` forces the array shape at the top level, which \`foreach\` then iterates over.
 
 **\`sleep\` — wait a fixed number of milliseconds.** Static only; a function form exists in code but does NOT round-trip.
 
@@ -224,15 +266,16 @@ Every build runs through these five steps in order:
 
 # Anti-patterns — don't do these
 
-- ❌ \`\${stepResults.fetch-weather}\` when \`fetch-weather\` returns an object → ✅ \`\${stepResults.fetch-weather.temperature}\` (specific field). The bare form is only valid when the step's \`outputSchema\` is a primitive.
+- ❌ \`\${stepResults.fetch-weather.temperture}\` (typo) or any other field name you didn't see in the discovered \`outputSchema\`. Both \`\${stepResults.<id>}\` (JSON-encoded whole result) and \`\${stepResults.<id>.<realField>}\` (specific field) are valid — the wrong move is inventing field names.
 - ❌ Inventing field names like \`.summary\` or \`.headline\` when they aren't in the previous step's \`outputSchema\`. If it's not in the schema you got from discovery, it doesn't exist.
 - ❌ Using \`\${inputData.<workflowInputField>}\` in a mapping AFTER step 1 — \`inputData\` past step 1 is the previous step's OUTPUT, not the workflow input. To reach the workflow's original input, use \`\${initData.<field>}\`. (For the specific previous step by name, use \`\${stepResults.<previous-step-id>.<field>}\`.)
-- ❌ Putting an object or array into a \`template\`. Templates render primitives only. Pluck the field first.
+- ❌ Building fake indexed access into a template like \`\${stepResults.foreach-id.0.text} \${stepResults.foreach-id.1.text} ...\` to work around "templates can't render arrays". Templates now JSON-encode arrays and objects automatically; just write \`\${stepResults.foreach-id}\`.
 - ❌ Skipping a mapping when shapes don't line up. Two consecutive steps whose output/input shapes don't match WILL fail.
 - ❌ Feeding a tool that returns a string DIRECTLY into an agent step. Agent input is strictly \`{ prompt: string }\` — the engine does NOT wrap or coerce. Insert a mapping producing \`{ prompt: "<template referencing the tool output>" }\`.
 - ❌ Feeding a \`foreach\` over an \`agent\` inner step from an upstream that emits \`Array<string>\` or \`Array<{someObject}>\`. The inner agent step still requires \`{ prompt: string }\` per iteration — and \`mapping\` CANNOT sit inside a \`foreach\`. Fix: change the upstream so it emits \`Array<{ prompt: string }>\` directly via its \`outputSchema\` (an agent with structured output can do this trivially by prompting "emit an array of \`{ prompt }\` objects, one per file"), OR make the foreach's inner a \`tool\` whose \`inputSchema\` matches what your array elements already look like.
 - ❌ Adding a no-op step-1 mapping that just renames \`inputData\` keys. Step 1 receives the workflow input object directly. (Past step 1, if you need workflow input again, use \`\${initData.…}\` — not a rename mapping.)
 - ❌ \`mapConfig\` as an object (\`"mapConfig": { ... }\`). It MUST be a JSON-encoded string (\`"mapConfig": "{...}"\`).
+- ❌ Refusing to use \`foreach\` because no upstream tool returns an array, and falling back to a single agent step that "loops internally". The engine has NO array→iteration workaround that beats \`foreach\`. The correct move is ALWAYS to insert a bridge agent step whose \`outputSchema\` is an array (typically \`Array<{ prompt: string }>\` when the inner \`foreach\` step is an agent), between the string/object-returning upstream and the \`foreach\`. "The tool doesn't return an array" is never a reason to skip \`foreach\` — it is the reason to add the bridge agent.
 
 # Worked example: list files → review each
 
@@ -333,6 +376,27 @@ Walk the shapes:
 
 **The general pattern for fanning out to an agent from an unstructured upstream:** tool-string → mapping-to-prompt → agent-with-array-of-prompt-objects → foreach-over-agent. If the foreach's inner is a \`tool\` instead of an agent, the bridge agent should emit \`Array<{...that tool's inputSchema}>\` instead of \`Array<{ prompt }>\`.
 
+# Worked example: feeding a foreach's output into a synthesis agent
+
+The output of a \`foreach(agent)\` step is \`Array<{ text: string }>\`, one entry per iteration. To fan the results back INTO a final synthesis agent, DO NOT write out indexed slots like \`\${stepResults.summarise-one.0.text}\`, \`\${stepResults.summarise-one.1.text}\`, etc. — that's an anti-pattern. Templates JSON-encode arrays and objects, so hand the whole thing to the synthesis agent in a single placeholder:
+
+\`\`\`json
+[
+  { "type": "tool", "id": "list", "toolId": "mastra_workspace_list_files" },
+  { "type": "mapping", "id": "to-extract-prompt", "mapConfig": "..." },
+  { "type": "agent", "id": "prep-summarise-prompts", "agentId": "code-agent", "outputSchema": { "type": "array", "items": { "type": "object", "properties": { "prompt": { "type": "string" } }, "required": ["prompt"] } } },
+  { "type": "foreach", "step": { "type": "agent", "id": "summarise-one", "agentId": "code-agent" }, "opts": { "concurrency": 3 } },
+  {
+    "type": "mapping",
+    "id": "to-synth-prompt",
+    "mapConfig": "{\\"prompt\\":{\\"template\\":\\"You are given a list of individual file summaries as JSON. Produce a single coherent overview of what the folder contains.\\\\n\\\\nSummaries (JSON):\\\\n\${stepResults.summarise-one}\\"}}"
+  },
+  { "type": "agent", "id": "final-summary", "agentId": "code-agent", "outputSchema": { "type": "object", "properties": { "summary": { "type": "string" } }, "required": ["summary"] } }
+]
+\`\`\`
+
+\`\${stepResults.summarise-one}\` becomes a JSON-encoded string like \`[{"text":"..."},{"text":"..."}]\`, which the synthesis agent can read directly. This scales to any number of foreach iterations — no fixed slot count.
+
 # Worked example: reusing the workflow's original input past step 1
 
 If the workflow input is \`{ path: string }\` and step 3 needs that same \`path\` again, you CANNOT use \`\${inputData.path}\` — at step 3, \`inputData\` is step 2's output. Use \`\${initData.path}\`:
@@ -358,7 +422,7 @@ Rule of thumb: for the workflow's original input, \`initData\` is always safe. \
 - Seven step types. The contract table above is non-negotiable. \`agent\` / \`tool\` / \`mapping\` are the workhorses; \`parallel\` / \`foreach\` / \`sleep\` / \`sleepUntil\` cover fan-out, iteration, and waiting.
 - Agent steps take \`{ prompt: string }\` as input and return \`{ text }\` by default. Set \`outputSchema\` when a downstream step needs a machine-readable shape — especially when the next step is a \`foreach\` (the inner-step's per-iteration input shape must match every element of the array).
 - Never emit \`conditional\` or \`loop\` — they don't round-trip in v1. (Note: the in-process TypeScript builder can accept \`.dowhile(agent, ...)\` / \`.dountil(tool, ...)\`, but that's for programmatically constructed workflows only; \`save-workflow\` cannot persist a loop today.)
-- Templates render primitives only. Use \`\${stepResults.<id>.<field>}\` for object outputs; use \`\${stepResults.<id>}\` only when the step's \`outputSchema\` is a primitive.
+- Templates render primitives as strings and JSON-encode objects/arrays. Use \`\${stepResults.<id>.<field>}\` to pluck a specific field; use \`\${stepResults.<id>}\` bare to hand the agent the entire structure (e.g. a \`foreach(agent)\`'s \`{ text }[]\` output).
 - \`\${inputData.<field>}\` = current step's live input (== previous step's output; only equals workflow input at step 1). \`\${initData.<field>}\` = workflow's original input, from any step. \`\${stepResults.<id>[.<field>]}\` = a specific prior step's output.
 - Mappings reshape between steps when shapes don't line up.
 - \`mapConfig\` is a JSON-encoded string.

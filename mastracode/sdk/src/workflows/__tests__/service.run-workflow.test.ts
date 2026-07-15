@@ -475,9 +475,12 @@ describe('run-workflow chat tool — isolates workflow-step memory from parent c
     expect(capturedMemory?.thread?.id).toBeDefined();
     expect(capturedMemory?.thread?.id).not.toBe('parent-chat-thread');
     expect(capturedMemory?.resourceId).toBe('user-1');
-    // MASTRA_THREAD_ID_KEY must be scrubbed so it doesn't override the fresh
-    // thread id in the MastraMemory payload.
-    expect(capture.captured?.threadIdKey).toBeUndefined();
+    // MASTRA_THREAD_ID_KEY must be stamped with the SAME fresh ephemeral id
+    // as MastraMemory.thread.id. Inner agent invocations (e.g. foreach(agent))
+    // resolve their runtime thread through this reserved key rather than
+    // through the MastraMemory payload — see the withEphemeralMemory fix
+    // that closed the workflow-agent-step observational-memory tripwire.
+    expect(capture.captured?.threadIdKey).toBe(capturedMemory?.thread?.id);
     // Controller must still be forwarded so getDynamicModel resolves.
     expect(capture.captured?.controller).toBeDefined();
 

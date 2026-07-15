@@ -1500,14 +1500,16 @@ export function createVariableResolutionTests(ctx: WorkflowTestContext, registry
       // matching `throws at workflow-definition time on an unknown namespace`
       // test below in the definition-time section.
 
-      it('throws when a placeholder resolves to an object/array', async () => {
+      it('JSON-stringifies a placeholder value that resolves to an object/array', async () => {
         if (!useRegistry) return;
         const { workflow } = registry!['var-template-object-value']!;
         const result = await execute(workflow, {});
-        expect(result.status).toBe('failed');
-        if (result.status === 'failed') {
-          expect(String((result as any).error?.message ?? result.error)).toMatch(/resolved to an object\/array/);
-        }
+        expect(result.status).toBe('success');
+        const mappingStep = Object.entries(result.steps).find(([id]) => id.startsWith('mapping_'));
+        expect(mappingStep?.[1]).toMatchObject({
+          status: 'success',
+          output: { bad: '{"a":1,"b":2}' },
+        });
       });
 
       it('throws when stepResults references a non-existent step', async () => {

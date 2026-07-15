@@ -808,17 +808,23 @@ function validateTemplate(template: string): void {
 
 /**
  * Coerces a resolved placeholder value to a string. Primitives are stringified
- * the normal way; objects/arrays throw with a hint pointing at the offending
- * placeholder (since `String({})` → `"[object Object]"` is almost never what
- * the caller meant). `null`/`undefined` render as empty.
+ * the normal way; objects and arrays are JSON-encoded so downstream agents can
+ * consume complex step outputs (e.g. `foreach(agent)` returns `{ text }[]`)
+ * directly in a template. `null`/`undefined` render as empty. If JSON encoding
+ * fails (circular references, BigInt, etc.), throws with a hint pointing at
+ * the offending placeholder.
  */
 function stringifyTemplateValue(v: unknown, template: string, idx: number, rawExpr: string): string {
   if (v === null || v === undefined) return '';
   if (typeof v === 'object') {
-    throw new Error(
-      `${describeBadPlaceholder(template, idx, rawExpr)} resolved to an object/array. ` +
-        `Drill into a primitive path (e.g. \${${rawExpr}.someField}) or stringify the value in a preceding step.`,
-    );
+    try {
+      return JSON.stringify(v);
+    } catch (err) {
+      throw new Error(
+        `${describeBadPlaceholder(template, idx, rawExpr)} resolved to a value that could not be JSON-stringified ` +
+          `(${(err as Error).message}). Drill into a primitive path (e.g. \${${rawExpr}.someField}) or reshape the value in a preceding step.`,
+      );
+    }
   }
   return String(v);
 }

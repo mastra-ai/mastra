@@ -2,8 +2,9 @@
  * Verifies that `${stepResults.<stepId>}` (no subpath) is accepted at
  * definition time and renders the step's scalar output at runtime.
  *
- * Also verifies that non-primitive step outputs still throw at runtime
- * when referenced without a subpath.
+ * Also verifies that object/array step outputs are JSON-stringified when
+ * referenced without a subpath — this is what makes `foreach(agent)`
+ * output ({ text: string }[]) usable directly in a downstream template.
  */
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
@@ -26,6 +27,14 @@ const objectTool = createTool({
   inputSchema: z.object({}),
   outputSchema: z.object({ value: z.string() }),
   execute: async () => ({ value: 'nested' }),
+});
+
+const arrayTool = createTool({
+  id: 'echo-arr',
+  description: 'Returns an array of objects like a foreach(agent) result',
+  inputSchema: z.object({}),
+  outputSchema: z.array(z.object({ text: z.string() })),
+  execute: async () => [{ text: 'first summary' }, { text: 'second summary' }],
 });
 
 describe('template ${stepResults.<stepId>} (no subpath)', () => {
@@ -88,7 +97,7 @@ describe('template ${stepResults.<stepId>} (no subpath)', () => {
     }
   });
 
-  it('throws at runtime when a bare stepResults reference resolves to an object', async () => {
+  it('JSON-stringifies an object step output when referenced with no subpath', async () => {
     const wf = createWorkflow({
       id: 'object-render',
       inputSchema: z.object({}),
@@ -96,7 +105,7 @@ describe('template ${stepResults.<stepId>} (no subpath)', () => {
     })
       .tool(objectTool)
       .map({
-        message: { template: 'nope ${stepResults.echo-obj}' },
+        message: { template: 'The object is ${stepResults.echo-obj}' },
       })
       .commit();
 
@@ -111,11 +120,40 @@ describe('template ${stepResults.<stepId>} (no subpath)', () => {
     const run = await mastra.getWorkflow('object-render').createRun();
     const result = await run.start({ inputData: {} });
 
-    expect(result.status).toBe('failed');
-    if (result.status === 'failed') {
-      const err: any = result.error;
-      const msg = typeof err === 'string' ? err : (err?.message ?? JSON.stringify(err));
-      expect(msg).toMatch(/resolved to an object\/array/);
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect(result.result).toEqual({ message: 'The object is {"value":"nested"}' });
+    }
+  });
+
+  it('JSON-stringifies an array step output (foreach(agent)-like shape) when referenced with no subpath', async () => {
+    const wf = createWorkflow({
+      id: 'array-render',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ message: z.string() }),
+    })
+      .tool(arrayTool)
+      .map({
+        message: { template: 'Summaries: ${stepResults.echo-arr}' },
+      })
+      .commit();
+
+    const mastra = new Mastra({
+      logger: false,
+      tools: { 'echo-arr': arrayTool } as any,
+      workflows: { 'array-render': wf } as any,
+      storage: new InMemoryStore({ id: 'array-render' }),
+    });
+    wf.__registerMastra(mastra);
+
+    const run = await mastra.getWorkflow('array-render').createRun();
+    const result = await run.start({ inputData: {} });
+
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect(result.result).toEqual({
+        message: 'Summaries: [{"text":"first summary"},{"text":"second summary"}]',
+      });
     }
   });
 });
