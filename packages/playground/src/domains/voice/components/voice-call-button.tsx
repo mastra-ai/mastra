@@ -1,19 +1,26 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Loader2, Phone, PhoneOff } from 'lucide-react';
 import type { VoiceCallControls } from '../types';
+import { useMastraPackages } from '@/domains/configuration/hooks/use-mastra-packages';
 
 export interface VoiceCallButtonProps {
   voiceCall: VoiceCallControls;
 }
 
 export const VoiceCallButton = ({ voiceCall }: VoiceCallButtonProps) => {
+  const { data: systemPackages } = useMastraPackages();
+  const liveKitUnavailable = systemPackages?.liveKitConnectionRouteEnabled === false;
+
   if (voiceCall.status === 'idle') {
     return (
       <Button
         variant="default"
         size="icon-md"
         type="button"
-        tooltip="Start voice call"
+        aria-label="Start voice call"
+        disabled={liveKitUnavailable}
+        focusableWhenDisabled={liveKitUnavailable}
+        tooltip={liveKitUnavailable ? 'Configure @mastra/livekit to start voice calls.' : 'Start voice call'}
         data-testid="voice-call-button"
         onClick={() => voiceCall.start()}
       >

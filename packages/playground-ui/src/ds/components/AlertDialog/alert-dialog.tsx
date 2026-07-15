@@ -1,7 +1,7 @@
 import { AlertDialog as AlertDialogPrimitive } from '@base-ui/react/alert-dialog';
 import * as React from 'react';
 
-import { buttonVariants } from '@/ds/components/Button/Button';
+import { buttonVariants } from '@/ds/components/Button/button-variants';
 import { asChildRenderProps } from '@/lib/as-child';
 import { cn } from '@/lib/utils';
 

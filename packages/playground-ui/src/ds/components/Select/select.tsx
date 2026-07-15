@@ -3,8 +3,8 @@ import type { SelectPopupProps, SelectPositionerProps } from '@base-ui/react/sel
 import { Check, ChevronDown } from 'lucide-react';
 import * as React from 'react';
 
-import { buttonVariants } from '../Button/Button';
-import type { TextButtonSize } from '../Button/Button';
+import { buttonVariants } from '../Button/button-variants';
+import type { TextButtonSize } from '../Button/button-variants';
 import { controlTriggerOpenState } from '@/ds/primitives/control-size';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { transitions } from '@/ds/primitives/transitions';

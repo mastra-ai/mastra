@@ -1,6 +1,6 @@
 import { cva } from 'class-variance-authority';
-import { buttonVariants } from '../Button/Button';
-import type { TextButtonSize } from '../Button/Button';
+import { buttonVariants } from '../Button/button-variants';
+import type { TextButtonSize } from '../Button/button-variants';
 import { controlTriggerOpenState } from '@/ds/primitives/control-size';
 import type { ControlTriggerVisualVariant } from '@/ds/primitives/control-size';
 import { transitions } from '@/ds/primitives/transitions';

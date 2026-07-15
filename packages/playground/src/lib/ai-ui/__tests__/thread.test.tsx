@@ -1,3 +1,4 @@
+import type { GetSystemPackagesResponse } from '@mastra/client-js';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { TaskItem } from '@mastra/core/signals';
 import { MastraReactProvider } from '@mastra/react';
@@ -23,6 +24,14 @@ declare global {
 }
 
 const BASE_URL = 'http://localhost:4111';
+
+const systemPackagesWithLiveKit: GetSystemPackagesResponse = {
+  packages: [],
+  isDev: false,
+  cmsEnabled: false,
+  observabilityEnabled: false,
+  liveKitConnectionRouteEnabled: true,
+};
 
 type CapturedBody = Record<string, unknown>;
 
@@ -55,6 +64,7 @@ const workingMemoryResponse = () =>
   HttpResponse.json({ workingMemory: null, source: 'thread', workingMemoryTemplate: null, threadExists: false });
 
 const baseHandlers = () => [
+  http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json(systemPackagesWithLiveKit)),
   http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
   http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false, login: null })),
   http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: {} })),

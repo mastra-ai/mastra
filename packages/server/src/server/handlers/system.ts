@@ -141,8 +141,8 @@ export const GET_SYSTEM_PACKAGES_ROUTE = createRoute({
   path: '/system/packages',
   responseType: 'json',
   responseSchema: systemPackagesResponseSchema,
-  summary: 'Get installed Mastra packages',
-  description: 'Returns a list of all installed Mastra packages and their versions from the project',
+  summary: 'Get installed Mastra packages and Studio capabilities',
+  description: 'Returns installed Mastra packages and runtime capabilities used by Studio',
   tags: ['System'],
   requiresAuth: true,
   handler: async ({ mastra }) => {
@@ -170,11 +170,17 @@ export const GET_SYSTEM_PACKAGES_ROUTE = createRoute({
       const editor = mastra.getEditor();
       const editorSource = editor?.getSource?.();
       const editorSourceCapabilities = editor ? await getEditorSourceCapabilities(editor) : undefined;
+      const liveKitConnectionRouteEnabled =
+        mastra
+          .getServer()
+          ?.apiRoutes?.some(route => route.method === 'POST' && route.path === '/voice/livekit/connection-details') ??
+        false;
 
       return {
         packages,
         isDev: process.env.MASTRA_DEV === 'true',
         cmsEnabled: !!editor,
+        liveKitConnectionRouteEnabled,
         editorSource,
         editorSourceCapabilities,
         observabilityEnabled,

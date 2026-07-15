@@ -5,6 +5,7 @@ export const systemPackages: GetSystemPackagesResponse = {
   isDev: false,
   cmsEnabled: false,
   observabilityEnabled: false,
+  liveKitConnectionRouteEnabled: false,
 };
 
 export const emptyPlatforms: ChannelPlatformInfo[] = [];

@@ -39,6 +39,41 @@ test.describe('Agent detail page', () => {
     });
   });
 
+  /**
+   * FEATURE: LiveKit voice-call availability
+   * USER STORY: Users should know why voice calls are unavailable before trying to start one.
+   * BEHAVIOR UNDER TEST: The runtime capability response disables the call action and explains how to enable it.
+   *
+   * Data flow: /api/system/packages reports liveKitConnectionRouteEnabled=false, which gates the call button.
+   * This runtime capability does not persist in browser storage and prevents connection-details requests.
+   */
+  test.describe('when the LiveKit connection route is unavailable', () => {
+    test('disables voice calls and explains how to configure LiveKit', async ({ page }) => {
+      await page.route('**/api/system/packages', async route => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            packages: [],
+            isDev: false,
+            cmsEnabled: true,
+            observabilityEnabled: false,
+            liveKitConnectionRouteEnabled: false,
+            storageType: 'LibSQLStore',
+          }),
+        });
+      });
+
+      await page.goto('/agents/weather-agent/chat/new');
+
+      const callButton = page.getByRole('button', { name: 'Start voice call' });
+      await expect(callButton).toBeDisabled();
+
+      await callButton.focus();
+      await expect(page.getByRole('tooltip')).toHaveText('Configure @mastra/livekit to start voice calls.');
+    });
+  });
+
   test.describe('when the agent settings page is visited', () => {
     test('shows the general overview tab selected with its details', async ({ page }) => {
       await page.goto('/agents/weather-agent/settings');

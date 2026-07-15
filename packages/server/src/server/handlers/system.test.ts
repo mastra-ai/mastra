@@ -29,10 +29,23 @@ type MockEditor = {
     | undefined;
 };
 
-const createMockMastra = (editor: boolean | MockEditor, storage?: MockStorage, hasObservability = false) =>
+type MockServer = {
+  apiRoutes?: Array<{
+    method: 'GET' | 'POST';
+    path: string;
+  }>;
+};
+
+const createMockMastra = (
+  editor: boolean | MockEditor,
+  storage?: MockStorage,
+  hasObservability = false,
+  server?: MockServer,
+) =>
   ({
     getEditor: () => (editor === true ? {} : editor || undefined),
     getStorage: () => storage,
+    getServer: () => server,
     observability: {
       getDefaultInstance: () => (hasObservability ? {} : undefined),
     },
@@ -75,6 +88,7 @@ describe('System Handlers', () => {
         packages,
         isDev: false,
         cmsEnabled: false,
+        liveKitConnectionRouteEnabled: false,
         observabilityEnabled: false,
         storageType: undefined,
         observabilityStorageType: undefined,
@@ -91,6 +105,7 @@ describe('System Handlers', () => {
         packages: [],
         isDev: false,
         cmsEnabled: false,
+        liveKitConnectionRouteEnabled: false,
         observabilityEnabled: false,
         storageType: undefined,
         observabilityStorageType: undefined,
@@ -108,6 +123,7 @@ describe('System Handlers', () => {
         packages: [],
         isDev: false,
         cmsEnabled: false,
+        liveKitConnectionRouteEnabled: false,
         observabilityEnabled: false,
         storageType: undefined,
         observabilityStorageType: undefined,
@@ -124,6 +140,7 @@ describe('System Handlers', () => {
         packages: [],
         isDev: false,
         cmsEnabled: false,
+        liveKitConnectionRouteEnabled: false,
         observabilityEnabled: false,
         storageType: undefined,
         observabilityStorageType: undefined,
@@ -141,6 +158,7 @@ describe('System Handlers', () => {
         packages: [],
         isDev: true,
         cmsEnabled: false,
+        liveKitConnectionRouteEnabled: false,
         observabilityEnabled: false,
         storageType: undefined,
         observabilityStorageType: undefined,
@@ -157,6 +175,7 @@ describe('System Handlers', () => {
         packages: [],
         isDev: false,
         cmsEnabled: true,
+        liveKitConnectionRouteEnabled: false,
         observabilityEnabled: false,
         storageType: undefined,
         observabilityStorageType: undefined,
@@ -173,11 +192,39 @@ describe('System Handlers', () => {
         packages: [],
         isDev: false,
         cmsEnabled: false,
+        liveKitConnectionRouteEnabled: false,
         observabilityEnabled: false,
         storageType: undefined,
         observabilityStorageType: undefined,
         observabilityRuntimeStrategy: undefined,
       });
+    });
+
+    it('should return liveKitConnectionRouteEnabled true for the exact default LiveKit POST route', async () => {
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({
+        mastra: createMockMastra(false, undefined, false, {
+          apiRoutes: [{ method: 'POST', path: '/voice/livekit/connection-details' }],
+        }),
+      } as any);
+
+      expect(result).toMatchObject({ liveKitConnectionRouteEnabled: true });
+    });
+
+    it.each([
+      {
+        name: 'a different method',
+        route: { method: 'GET' as const, path: '/voice/livekit/connection-details' },
+      },
+      {
+        name: 'a custom path',
+        route: { method: 'POST' as const, path: '/voice/livekit/custom-connection-details' },
+      },
+    ])('should return liveKitConnectionRouteEnabled false for $name', async ({ route }) => {
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({
+        mastra: createMockMastra(false, undefined, false, { apiRoutes: [route] }),
+      } as any);
+
+      expect(result).toMatchObject({ liveKitConnectionRouteEnabled: false });
     });
 
     it('should return filesystem capabilities for local code-source editor storage', async () => {
@@ -350,6 +397,7 @@ describe('System Handlers', () => {
         packages: [],
         isDev: false,
         cmsEnabled: false,
+        liveKitConnectionRouteEnabled: false,
         observabilityEnabled: true,
         storageType: undefined,
         observabilityStorageType: undefined,
@@ -374,6 +422,7 @@ describe('System Handlers', () => {
         packages: [],
         isDev: false,
         cmsEnabled: false,
+        liveKitConnectionRouteEnabled: false,
         observabilityEnabled: false,
         storageType: 'mock-storage',
         observabilityStorageType: 'MockObservabilityStore',

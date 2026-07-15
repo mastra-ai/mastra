@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { GetSystemPackagesResponse } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -14,6 +15,14 @@ import { server } from '@/test/msw-server';
 const BASE_URL = 'http://localhost:4111';
 const AGENT_ID = 'call-center';
 const GREETING = 'Thanks for calling BrightSmile Dental, this is Riley.';
+
+const systemPackagesWithLiveKit: GetSystemPackagesResponse = {
+  packages: [],
+  isDev: false,
+  cmsEnabled: false,
+  observabilityEnabled: false,
+  liveKitConnectionRouteEnabled: true,
+};
 
 // Heavy presentational siblings with their own coverage — the page state machine,
 // AgentChat, Thread, and the voice hook stay real.
@@ -105,6 +114,7 @@ function installHandlers() {
   // The worker "creates" the thread and persists the greeting when the call connects.
   let callStarted = false;
   server.use(
+    http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json(systemPackagesWithLiveKit)),
     http.post(`${BASE_URL}/voice/livekit/connection-details`, () => {
       callStarted = true;
       return HttpResponse.json({
