@@ -282,6 +282,15 @@ export async function createOAuthCallbackServer(options: OAuthCallbackServerOpti
     throw new Error(`Failed to start OAuth callback server: ports ${firstPort}-${lastPort} are all in use`);
   }
 
+  // The bind-time 'error' listener is removed once 'listening' fires, so after
+  // this point the server has no 'error' handler. An emitted 'error' (e.g. a
+  // post-bind socket failure) with no listener throws and would crash the host
+  // process. Keep a persistent listener that settles the flow with the error
+  // instead of letting it become an uncaught exception.
+  server.on('error', error => {
+    settle({ error: error instanceof Error ? error : new Error(String(error)) });
+  });
+
   return {
     url: boundUrl,
     port: boundPort,

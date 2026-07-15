@@ -315,6 +315,8 @@ console.log(instructionsByServer.db)
 
 Runs the interactive OAuth authorization-code flow for a server configured with an `MCPOAuthClientProvider` whose redirect URL points at a loopback address. Starts a local callback server, delivers the authorization URL through the provider's `onRedirectToAuthorization` callback, waits for the browser to return the authorization code, exchanges it for tokens, and reconnects. See [Interactive browser authentication](#interactive-browser-authentication).
 
+The optional `timeoutMs` bounds how long the flow waits for the browser to return the authorization code before rejecting, and defaults to 5 minutes.
+
 ```typescript prettier:false
 async authenticate(serverName: string, options?: { timeoutMs?: number }): Promise<void>
 ```
@@ -998,14 +1000,18 @@ Hosts that drive the flow themselves can capture the authorization code with the
 ```typescript
 import { createOAuthCallbackServer, getCallbackUrlCandidates } from '@mastra/mcp'
 
+// getCallbackUrlCandidates() lists every URL the helper may bind, so register
+// all of them as redirect_uris during client registration to cover port fallback.
+const redirectUris = getCallbackUrlCandidates('http://127.0.0.1:5533/oauth/callback').map(url =>
+  url.toString(),
+)
+
 const server = await createOAuthCallbackServer({
   redirectUrl: 'http://127.0.0.1:5533/oauth/callback',
   state: expectedState,
 })
 
-// server.url reflects any port fallback — use it as the redirect_uri.
-// getCallbackUrlCandidates() lists every URL the helper may bind, so all
-// of them can be registered as redirect_uris during client registration.
+// server.url reflects the port actually bound — use it as the redirect_uri.
 try {
   const { code } = await server.waitForCode()
   // Exchange the code here.

@@ -7,9 +7,25 @@
  */
 
 import { createServer } from 'node:http';
+import type * as NodeHttp from 'node:http';
 import type { Server as HttpServer } from 'node:http';
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+
+// Track every HTTP server the callback helper creates so a test can reach the
+// bound instance and emit a post-bind 'error' on it.
+const createdServers: HttpServer[] = [];
+vi.mock('node:http', async () => {
+  const actual = await vi.importActual<typeof NodeHttp>('node:http');
+  return {
+    ...actual,
+    createServer: (...args: Parameters<typeof actual.createServer>) => {
+      const server = actual.createServer(...args);
+      createdServers.push(server);
+      return server;
+    },
+  };
+});
 
 import type { OAuthCallbackServer } from './oauth-callback-server.js';
 import { createOAuthCallbackServer, getCallbackUrlCandidates } from './oauth-callback-server.js';
@@ -186,5 +202,25 @@ describe('createOAuthCallbackServer', () => {
 
     const reclaimed = await occupyPort(port);
     await closeServer(reclaimed);
+  });
+
+  it('settles the flow instead of crashing when the server errors after binding', async () => {
+    const port = await getFreePort();
+    createdServers.length = 0;
+    callbackServer = await createOAuthCallbackServer({
+      redirectUrl: `http://127.0.0.1:${port}/oauth/callback`,
+      state: STATE,
+    });
+
+    const boundServer = createdServers.at(-1)!;
+    expect(boundServer).toBeDefined();
+    // The bind-time listeners are once()-based and self-remove, so after bind
+    // the server has no 'error' listener. Emitting one with no handler would
+    // throw and crash the host process; the persistent listener must absorb it
+    // and reject the pending waitForCode instead.
+    const pending = callbackServer.waitForCode();
+    boundServer.emit('error', new Error('post-bind socket failure'));
+
+    await expect(pending).rejects.toThrow(/post-bind socket failure/);
   });
 });
