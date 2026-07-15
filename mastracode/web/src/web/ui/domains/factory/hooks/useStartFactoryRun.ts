@@ -24,6 +24,12 @@ export interface StartFactoryRunWorkItem {
   id?: string;
   /** Session slot the run fills on the card, e.g. `work` or `review`. */
   role: string;
+  /**
+   * Roles already tracked on the card. A work item keeps a single threadId for
+   * its whole lifecycle, so filing repoints every known role at this run's
+   * thread — converging refs that diverged while session scoping was broken.
+   */
+  existingRoles?: string[];
   /** Stages the card should hold once the run is underway. */
   stages: string[];
   source: WorkItemSource;
@@ -126,7 +132,11 @@ export function useStartFactoryRun() {
       const githubProjectId = activeProject?.githubProjectId;
       if (workItem && githubProjectId) {
         try {
-          const sessions = { [workItem.role]: { projectPath, branch, threadId } };
+          // One thread per item: stamp the run's ref onto every role the card
+          // tracks so all refs share this threadId.
+          const ref = { projectPath, branch, threadId };
+          const roles = new Set([...(workItem.existingRoles ?? []), workItem.role]);
+          const sessions = Object.fromEntries([...roles].map(role => [role, ref]));
           if (workItem.id) {
             await updateWorkItem(baseUrl, workItem.id, { stages: workItem.stages, sessions });
           } else {

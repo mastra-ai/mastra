@@ -3,6 +3,7 @@ import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 
 import { useChatModes } from '../../context/useChatModes';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
+import { getModeColor, getModeForegroundColor } from '../mode-colors';
 
 /**
  * Session mode buttons; switches modes through the agent controller. Only
@@ -20,17 +21,28 @@ export function ModesSelection() {
   return (
     <div role="group" aria-label="Session mode" className="shrink-0">
       <ButtonsGroup spacing="close">
-        {modes.map(m => (
-          <Button
-            key={m.id}
-            variant={selectedModeId === m.id ? 'primary' : 'ghost'}
-            size="sm"
-            aria-pressed={selectedModeId === m.id}
-            onClick={() => void setMode(m.id)}
-          >
-            {m.name ?? m.id}
-          </Button>
-        ))}
+        {modes.map(m => {
+          const selected = selectedModeId === m.id;
+          const modeColor = getModeColor(m.id);
+          const modeForegroundColor = getModeForegroundColor(m.id);
+
+          return (
+            <Button
+              key={m.id}
+              variant="outline"
+              size="sm"
+              style={
+                selected && modeColor && modeForegroundColor
+                  ? { backgroundColor: modeColor, color: modeForegroundColor }
+                  : undefined
+              }
+              aria-pressed={selected}
+              onClick={() => void setMode(m.id)}
+            >
+              {m.name ?? m.id}
+            </Button>
+          );
+        })}
       </ButtonsGroup>
     </div>
   );
