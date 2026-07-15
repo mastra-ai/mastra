@@ -2,6 +2,7 @@ import { processApifyServers } from './processors/apify';
 import { processApiTrackerServers } from './processors/apitracker';
 import { processDockerServers } from './processors/docker';
 import { processFleurServers } from './processors/fleur';
+import { processMcpindexServers } from './processors/mcpindex';
 import { processMcpRunServers } from './processors/mcprun';
 import { processPulseMcpServers } from './processors/pulse';
 import type { RegistryFile } from './types';
@@ -131,7 +132,10 @@ export const registryData: RegistryFile = {
       description:
         'Find MCP servers by natural-language task, with quality scores and an advisory trust screen (REVIEW / UNVERIFIED) that flags a tool before an agent calls it.',
       url: 'https://mcpindex.ai',
+      servers_url: 'https://mcpindex.ai/api/v1/servers',
       tags: ['open-source'],
+      count: '15000+',
+      postProcessServers: processMcpindexServers,
     },
     {
       id: 'mcpmarket',
