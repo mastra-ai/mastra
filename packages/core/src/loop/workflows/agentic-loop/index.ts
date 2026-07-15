@@ -189,11 +189,10 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
             name: tc.toolName || tc.name || '',
             args: (tc.args || {}) as Record<string, unknown>,
           })),
-          toolResults: (typedInputData.output.toolResults || []).map((tr: any) => ({
-            id: tr.toolCallId || tr.id || '',
-            name: tr.toolName || tr.name || '',
-            result: tr.result,
-            error: tr.error,
+          toolResults: toolResultParts.map(tr => ({
+            id: tr.toolCallId,
+            name: tr.toolName,
+            result: unwrapToolResultOutput(tr.output),
           })),
           isFinal,
           finishReason: typedInputData.stepResult?.reason || 'unknown',
@@ -295,4 +294,26 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
       return typedInputData.stepResult?.isContinued ?? false;
     })
     .commit();
+}
+
+function unwrapToolResultOutput(output: unknown): unknown {
+  if (!output || typeof output !== 'object' || Array.isArray(output)) {
+    return output;
+  }
+
+  const record = output as Record<string, unknown>;
+  if (!('value' in record)) {
+    return output;
+  }
+
+  switch (record.type) {
+    case 'text':
+    case 'json':
+    case 'error-text':
+    case 'error-json':
+    case 'content':
+      return record.value;
+    default:
+      return output;
+  }
 }
