@@ -693,6 +693,32 @@ describe('Factory Board — persisted cards', () => {
     expect(links[0]).toHaveAttribute('href', '/threads/thread-shared');
   });
 
+  it('given legacy sessions that diverged onto different threads, when the Board renders, then the card still shows a single Thread link', async () => {
+    useBoardHandlers({
+      workItems: [
+        makeWorkItem({
+          id: 'wi-1',
+          title: 'Fix flaky test',
+          source: 'github-issue',
+          sourceKey: 'github-issue:12',
+          stages: ['execute'],
+          // Refs filed while session scoping was broken point at two threads;
+          // the card must not surface role-labelled links for them.
+          sessions: { plan: { ...issueWorkSession, threadId: 'thread-plan' }, work: issueWorkSession },
+        }),
+      ],
+    });
+    renderAt('/factory/board', projectWithIssueWorktree);
+
+    await screen.findByTestId('board-column-intake');
+    const card = within(column('execute')).getByTestId('work-item-card');
+    const links = within(card).getAllByRole('link', { name: /thread/i });
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAccessibleName('Thread');
+    // The last-filed ref wins until the next run converges them.
+    expect(links[0]).toHaveAttribute('href', '/threads/thread-work');
+  });
+
   it('given a session ref whose worktree was deleted, when the Board renders, then the stale thread link is hidden and runs are offered again', async () => {
     useBoardHandlers({
       workItems: [
@@ -1224,6 +1250,51 @@ describe('Factory Board — investigate flow', () => {
         id: 'wi-1',
         stages: ['planning'],
         sessions: { plan: { branch: 'factory/issue-12', threadId: 'thread-factory' } },
+      },
+    ]);
+  });
+
+  it('given a card with a legacy plan ref, when Build is chosen, then filing repoints every role at the run thread', async () => {
+    const state = useBoardHandlers({
+      workItems: [
+        makeWorkItem({
+          id: 'wi-1',
+          title: 'Fix flaky test',
+          source: 'github-issue',
+          sourceKey: 'github-issue:12',
+          url: 'https://github.com/mastra-ai/mastra/issues/12',
+          stages: ['planning'],
+          metadata: { number: 12 },
+          // Legacy ref from before scoping was fixed: dead worktree, own thread.
+          sessions: {
+            plan: {
+              projectPath: '/gone/worktree',
+              branch: 'factory/issue-12',
+              threadId: 'thread-legacy-plan',
+              startedBy: 'user-1',
+            },
+          },
+        }),
+      ],
+    });
+    const captured = useFactoryRunHandlers('factory-issue-12');
+    const { router } = renderAt('/factory/board');
+
+    await screen.findByTestId('board-column-planning');
+    await userEvent.click(within(column('planning')).getByRole('button', { name: 'Actions for Fix flaky test' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Build' }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
+    expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
+    // One thread per item: every role ref converges onto the run's thread.
+    expect(state.patches).toMatchObject([
+      {
+        id: 'wi-1',
+        stages: ['execute'],
+        sessions: {
+          plan: { branch: 'factory/issue-12', threadId: 'thread-factory' },
+          work: { branch: 'factory/issue-12', threadId: 'thread-factory' },
+        },
       },
     ]);
   });

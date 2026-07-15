@@ -516,6 +516,7 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
                       workItem: {
                         id: item.id,
                         role: action.role,
+                        existingRoles: Object.keys(item.sessions),
                         stages: stagesAfterRunStart(item.stages, action.stage),
                         source: item.source,
                         sourceKey: item.sourceKey,
@@ -632,25 +633,15 @@ const SOURCE_ICONS: Record<
 };
 
 /**
- * The card's thread links. All of an item's runs share one branch/worktree, so
- * the role-keyed session refs normally all point at the same thread — collapse
- * them into a single "Thread" link. Distinct threads (e.g. a triage thread
- * created outside the item's worktree) each keep their own labelled link.
+ * The card's single conversation. A work item keeps one threadId for its whole
+ * lifecycle — every run reuses the worktree's thread — so the card renders
+ * exactly one "Thread" link. Items filed while session scoping was broken may
+ * still carry divergent role refs; the last-filed ref wins (runs converge them
+ * back onto one thread the next time they file).
  */
-function sessionThreadLinks(
-  sessions: Record<string, WorkItemSessionRef>,
-): Array<{ session: WorkItemSessionRef; label: string }> {
-  const byThread = new Map<string, { session: WorkItemSessionRef; roles: string[] }>();
-  for (const [role, session] of Object.entries(sessions)) {
-    const entry = byThread.get(session.threadId);
-    if (entry) entry.roles.push(role);
-    else byThread.set(session.threadId, { session, roles: [role] });
-  }
-  const threads = [...byThread.values()];
-  return threads.map(({ session, roles }) => ({
-    session,
-    label: threads.length === 1 ? 'Thread' : `${roles.join('/')} thread`,
-  }));
+function itemThreadSession(sessions: Record<string, WorkItemSessionRef>): WorkItemSessionRef | null {
+  const refs = Object.values(sessions);
+  return refs.at(-1) ?? null;
 }
 
 function WorkItemCard({
@@ -685,6 +676,7 @@ function WorkItemCard({
   );
   // Offer only runs whose session slot hasn't been used yet on this card.
   const runActions = runSpec === null ? [] : runSpec.actions.filter(action => !(action.role in liveSessions));
+  const threadSession = itemThreadSession(liveSessions);
 
   return (
     <article
@@ -736,27 +728,26 @@ function WorkItemCard({
           </DropdownMenu.Content>
         </DropdownMenu>
       </div>
-      {(otherStages.length > 0 || Object.keys(liveSessions).length > 0) && (
+      {(otherStages.length > 0 || threadSession !== null) && (
         <div className="flex flex-wrap items-center gap-1.5">
           {otherStages.map(stage => (
             <span key={stage} className="rounded-full bg-surface5 px-1.5 py-0.5 text-ui-xs text-icon4">
               {stageLabel(stage)}
             </span>
           ))}
-          {sessionThreadLinks(liveSessions).map(({ session, label }) => (
+          {threadSession !== null && (
             <a
-              key={session.threadId}
-              href={`/threads/${session.threadId}`}
+              href={`/threads/${threadSession.threadId}`}
               onClick={event => {
                 event.preventDefault();
-                onOpenThread(session);
+                onOpenThread(threadSession);
               }}
               className="flex items-center gap-1 text-ui-xs text-icon3 no-underline hover:text-icon5"
             >
               <MessageSquare size={11} aria-hidden />
-              {label}
+              Thread
             </a>
-          ))}
+          )}
         </div>
       )}
     </article>
