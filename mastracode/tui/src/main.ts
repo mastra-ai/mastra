@@ -13,10 +13,10 @@ import { formatScaffoldSuccess, scaffoldPlugin } from '@mastra/code-sdk/plugins/
 import { setupDebugLogging } from '@mastra/code-sdk/utils/debug-log';
 import { drainPipedStdin, reopenStdinFromTTY } from '@mastra/code-sdk/utils/stdin-pipe';
 import { releaseAllThreadLocks } from '@mastra/code-sdk/utils/thread-lock';
-import { getCurrentVersion } from '@mastra/code-sdk/utils/update-check';
 import { detectTerminalTheme } from './tui/detect-theme.js';
 import { MastraTUI } from './tui/index.js';
 import { applyThemeMode, restoreTerminalForeground } from './tui/theme.js';
+import { getCurrentVersion } from './version.js';
 
 let controller: Awaited<ReturnType<typeof createMastraCode>>['controller'];
 let mcpManager: Awaited<ReturnType<typeof createMastraCode>>['mcpManager'];
