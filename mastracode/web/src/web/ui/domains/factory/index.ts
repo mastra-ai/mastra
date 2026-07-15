@@ -1,4 +1,5 @@
 export { BoardPage } from './BoardPage';
+export { MetricsPage } from './MetricsPage';
 export { FactorySection } from './components/FactorySection';
 export * from './hooks/useFactoryData';
 export * from './hooks/useLinearData';
