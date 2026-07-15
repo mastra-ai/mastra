@@ -12,7 +12,6 @@ overrides:
   '@mastra/auth-workos': link:../../auth/workos
   '@mastra/auth-cloud': link:../../auth/cloud
   '@mastra/core': link:../../packages/core
-  '@mastra/deployer': link:../../packages/deployer
   '@mastra/duckdb': link:../../stores/duckdb
   '@mastra/editor': link:../../packages/editor
   '@mastra/loggers': link:../../packages/loggers
@@ -64,9 +63,6 @@ importers:
       '@mastra/core':
         specifier: link:../../packages/core
         version: link:../../packages/core
-      '@mastra/deployer':
-        specifier: link:../../packages/deployer
-        version: link:../../packages/deployer
       '@mastra/duckdb':
         specifier: link:../../stores/duckdb
         version: link:../../stores/duckdb
