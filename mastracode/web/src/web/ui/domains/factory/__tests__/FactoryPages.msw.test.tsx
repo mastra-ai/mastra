@@ -676,7 +676,7 @@ describe('Factory Board — persisted cards', () => {
     expect(within(column('intake')).queryByTestId('work-item-card')).not.toBeInTheDocument();
   });
 
-  it('given a card in Triage, when Investigate is chosen, then triage exits and the card moves to Building', async () => {
+  it('given a card in Triage, when Investigate is chosen, then triage exits and the card moves to Planning', async () => {
     const state = useBoardHandlers({
       workItems: [
         makeWorkItem({
@@ -698,7 +698,7 @@ describe('Factory Board — persisted cards', () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
-    expect(state.patches).toMatchObject([{ id: 'wi-1', stages: ['execute'] }]);
+    expect(state.patches).toMatchObject([{ id: 'wi-1', stages: ['planning'] }]);
   });
 
   it('given a persisted issue card needing approval, when Prepare approval is chosen, then the triage session ref is recorded without leaving Triage', async () => {
@@ -760,7 +760,7 @@ describe('Factory Board — persisted cards', () => {
     expect(within(column('triage')).queryByTestId('work-item-card')).not.toBeInTheDocument();
   });
 
-  it('given a card in Planning, when Investigate is chosen, then planning exits and the card moves to Building', async () => {
+  it('given a card in Planning, when Build is chosen, then planning exits and the card moves to Building', async () => {
     const state = useBoardHandlers({
       workItems: [
         makeWorkItem({
@@ -778,10 +778,11 @@ describe('Factory Board — persisted cards', () => {
 
     await screen.findByTestId('board-column-planning');
     await userEvent.click(within(column('planning')).getByRole('button', { name: 'Actions for Fix flaky test' }));
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Investigate' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Build' }));
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
+    expect(captured.messages[0]!.message).toContain('Implement a fix for GitHub issue #12');
     expect(state.patches).toMatchObject([{ id: 'wi-1', stages: ['execute'] }]);
   });
 
@@ -946,7 +947,7 @@ function useFactoryRunHandlers(branchDir: string): CapturedRun {
 }
 
 describe('Factory Board — investigate flow', () => {
-  it('given an issue candidate, when Investigate is clicked, then a worktree, thread, and prompt are created, a work item materializes into Building, and the app navigates to the thread', async () => {
+  it('given an issue candidate, when Investigate is clicked, then a worktree, thread, and prompt are created, a work item materializes into Planning, and the app navigates to the thread', async () => {
     const state = useBoardHandlers({ issues });
     const captured = useFactoryRunHandlers('factory-issue-12');
     const { router } = renderAt('/factory/board');
@@ -962,20 +963,43 @@ describe('Factory Board — investigate flow', () => {
     expect(captured.messages[0]!.message).toContain('understand-issue skill');
     expect(captured.messages[0]!.message).toContain('GitHub issue #12 (https://github.com/mastra-ai/mastra/issues/12)');
     expect(captured.messages[0]!.message).not.toContain('Fix flaky test');
-    // The run files a board record in the execute stage with the work session ref.
+    // The run files a board record in the planning stage with the plan session ref.
     expect(state.posts).toMatchObject([
       {
         source: 'github-issue',
         sourceKey: 'github-issue:12',
         title: 'Fix flaky test',
-        stages: ['execute'],
+        stages: ['planning'],
         sessions: {
-          work: {
+          plan: {
             projectPath: '/sandbox/mastra/worktrees/factory-issue-12',
             branch: 'factory/issue-12',
             threadId: 'thread-factory',
           },
         },
+      },
+    ]);
+  });
+
+  it('given an issue candidate, when Build is chosen from the menu, then a work item materializes into Building with a work session', async () => {
+    const state = useBoardHandlers({ issues });
+    const captured = useFactoryRunHandlers('factory-issue-12');
+    const { router } = renderAt('/factory/board');
+
+    const intake = await screen.findByTestId('board-column-intake');
+    await within(intake).findByText('Fix flaky test');
+    await userEvent.click(within(intake).getByRole('button', { name: 'More actions for Fix flaky test' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Build' }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
+    expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
+    expect(captured.messages[0]!.message).toContain('Implement a fix for GitHub issue #12');
+    expect(state.posts).toMatchObject([
+      {
+        source: 'github-issue',
+        sourceKey: 'github-issue:12',
+        stages: ['execute'],
+        sessions: { work: { branch: 'factory/issue-12', threadId: 'thread-factory' } },
       },
     ]);
   });
@@ -1086,7 +1110,7 @@ describe('Factory Board — investigate flow', () => {
     expect(captured.messages[0]!.message).not.toContain('understand-issue skill');
   });
 
-  it('given a persisted issue card without a work session, when Investigate is chosen, then the run starts and the card PATCHes into Building with the session ref', async () => {
+  it('given a persisted issue card without a plan session, when Investigate is chosen, then the run starts and the card PATCHes into Planning with the session ref', async () => {
     const state = useBoardHandlers({
       workItems: [
         makeWorkItem({
@@ -1115,8 +1139,8 @@ describe('Factory Board — investigate flow', () => {
     expect(state.patches).toMatchObject([
       {
         id: 'wi-1',
-        stages: ['execute'],
-        sessions: { work: { branch: 'factory/issue-12', threadId: 'thread-factory' } },
+        stages: ['planning'],
+        sessions: { plan: { branch: 'factory/issue-12', threadId: 'thread-factory' } },
       },
     ]);
   });
@@ -1151,7 +1175,7 @@ describe('Factory Board — investigate flow', () => {
 
     await screen.findByTestId('board-column-review');
     await userEvent.click(within(column('review')).getByRole('button', { name: 'Actions for Add factory pages' }));
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Start review' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Review' }));
 
     await waitFor(() => expect(router.state.location.pathname).toBe(`/threads/${THREAD_ID}`));
     // No new thread was created — the resumed thread carried the follow-up run.
