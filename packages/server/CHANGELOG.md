@@ -1,5 +1,12 @@
 # @mastra/server
 
+## 1.51.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/core@1.51.1-alpha.1
+
 ## 1.51.1-alpha.0
 
 ### Patch Changes
