@@ -94,20 +94,73 @@ function renderSchemaOneLine(schema: unknown): string {
   return `{ ${parts.join(', ')} }`;
 }
 
+interface SerializedInnerStep {
+  type: string;
+  id?: string;
+  agentId?: string;
+  toolId?: string;
+  step?: { id?: string };
+}
+
 interface SerializedStepEntry {
   type: string;
   id?: string;
   agentId?: string;
   toolId?: string;
   stepId?: string;
-  steps?: unknown[];
+  steps?: SerializedInnerStep[];
+  step?: SerializedInnerStep;
+  opts?: { concurrency?: number };
+  loopType?: 'dowhile' | 'dountil';
 }
 
 /**
- * Render a stored workflow as a compact ASCII diagram. Assumes a linear graph
- * (mapping → agent → tool → …), which is what the workflow-builder produces
- * today. Parallel / conditional / loop shells are rendered as a single box
- * with the branch count; nested branches are not expanded.
+ * One-line label for a nested single-step entry (agent/tool/mapping/step).
+ * Used inside parallel/foreach/loop containers so the reader can see WHICH
+ * step is being fanned out or looped over.
+ */
+function labelInnerStep(inner: SerializedInnerStep | undefined): string {
+  if (!inner) return '?';
+  switch (inner.type) {
+    case 'agent':
+      return `${inner.id ?? '?'} · agent → ${inner.agentId ?? '?'}`;
+    case 'tool':
+      return `${inner.id ?? '?'} · tool → ${inner.toolId ?? '?'}`;
+    case 'mapping':
+      return `${inner.id ?? '?'} · mapping`;
+    case 'step':
+      return `${inner.step?.id ?? inner.id ?? '?'} · step`;
+    default:
+      return `${inner.id ?? '?'} · ${inner.type}`;
+  }
+}
+
+/**
+ * Container entries (foreach / loop / parallel / conditional) have no top-level
+ * `id` in the serialized graph — synthesize a stable display title from the
+ * inner step(s) so users can tell them apart.
+ */
+function containerTitle(index: number, entry: SerializedStepEntry): string {
+  const n = `${index + 1}.`;
+  switch (entry.type) {
+    case 'foreach':
+      return `${n} foreach(${entry.step?.id ?? '?'})`;
+    case 'loop':
+      return `${n} ${entry.loopType ?? 'loop'}(${entry.step?.id ?? '?'})`;
+    case 'parallel':
+      return `${n} parallel`;
+    case 'conditional':
+      return `${n} conditional`;
+    default:
+      return `${n} ${entry.id ?? '(unnamed)'}`;
+  }
+}
+
+/**
+ * Render a stored workflow as a compact ASCII diagram. Linear steps render as
+ * a single box; container steps (parallel / conditional / foreach / loop)
+ * render an outer box plus one indented sub-box per inner step so the reader
+ * can see WHAT is being fanned out, iterated, or branched over.
  */
 function renderWorkflowDefinition(def: StoredWorkflowRow): string {
   const lines: string[] = [];
@@ -123,52 +176,106 @@ function renderWorkflowDefinition(def: StoredWorkflowRow): string {
     return lines.join('\n');
   }
 
-  const BOX_WIDTH = 41;
+  const BOX_WIDTH = 45;
   const inner = BOX_WIDTH - 2;
   const pad = (text: string) => {
     const trimmed = text.length > inner - 2 ? text.slice(0, inner - 3) + '…' : text;
     return ` ${trimmed.padEnd(inner - 1)}`;
   };
   const top = `┌${'─'.repeat(inner)}┐`;
+  const mid = `├${'─'.repeat(inner)}┤`;
   const bot = `└${'─'.repeat(Math.floor(inner / 2))}┬${'─'.repeat(inner - Math.floor(inner / 2) - 1)}┘`;
+  const botFlat = `└${'─'.repeat(inner)}┘`;
   const gap = `${' '.repeat(Math.floor(inner / 2) + 1)}│`;
   const arrow = `${' '.repeat(Math.floor(inner / 2) + 1)}▼`;
 
-  graph.forEach((entry, i) => {
-    const title = `${i + 1}. ${entry.id ?? '(unnamed)'}`;
-    let subtitle: string;
-    switch (entry.type) {
-      case 'agent':
-        subtitle = `agent → ${entry.agentId ?? '?'}`;
-        break;
-      case 'tool':
-        subtitle = `tool → ${entry.toolId ?? '?'}`;
-        break;
-      case 'step':
-        subtitle = `step → ${entry.stepId ?? '?'}`;
-        break;
-      case 'parallel':
-        subtitle = `parallel (${Array.isArray(entry.steps) ? entry.steps.length : '?'} branches)`;
-        break;
-      case 'conditional':
-        subtitle = 'conditional';
-        break;
-      case 'loop':
-        subtitle = 'loop';
-        break;
-      default:
-        subtitle = entry.type;
-    }
-    // TODO: render nested branches for parallel / conditional / loop.
+  const pushBox = (title: string, subtitles: string[], last: boolean) => {
     lines.push(top);
     lines.push(`│${pad(title)}│`);
-    lines.push(`│${pad(subtitle)}│`);
-    lines.push(bot);
-    if (i < graph.length - 1) {
+    for (const s of subtitles) lines.push(`│${pad(s)}│`);
+    lines.push(last ? botFlat : bot);
+    if (!last) {
       lines.push(gap, arrow);
     } else {
-      lines.push(gap);
       lines.push(`${' '.repeat(Math.floor(inner / 2) - 2)}(output)`);
+    }
+  };
+
+  const pushContainerBox = (title: string, headerLine: string, innerLabels: string[], last: boolean) => {
+    lines.push(top);
+    lines.push(`│${pad(title)}│`);
+    lines.push(`│${pad(headerLine)}│`);
+    lines.push(mid);
+    if (innerLabels.length === 0) {
+      lines.push(`│${pad('(empty)')}│`);
+    } else {
+      for (const label of innerLabels) lines.push(`│${pad(`  • ${label}`)}│`);
+    }
+    lines.push(last ? botFlat : bot);
+    if (!last) {
+      lines.push(gap, arrow);
+    } else {
+      lines.push(`${' '.repeat(Math.floor(inner / 2) - 2)}(output)`);
+    }
+  };
+
+  graph.forEach((entry, i) => {
+    const last = i === graph.length - 1;
+    switch (entry.type) {
+      case 'agent':
+        pushBox(`${i + 1}. ${entry.id ?? '(unnamed)'}`, [`agent → ${entry.agentId ?? '?'}`], last);
+        break;
+      case 'tool':
+        pushBox(`${i + 1}. ${entry.id ?? '(unnamed)'}`, [`tool → ${entry.toolId ?? '?'}`], last);
+        break;
+      case 'mapping':
+        pushBox(`${i + 1}. ${entry.id ?? '(unnamed)'}`, ['mapping'], last);
+        break;
+      case 'step':
+        pushBox(`${i + 1}. ${entry.id ?? '(unnamed)'}`, [`step → ${entry.stepId ?? '?'}`], last);
+        break;
+      case 'sleep':
+        pushBox(`${i + 1}. ${entry.id ?? '(unnamed)'}`, ['sleep'], last);
+        break;
+      case 'sleepUntil':
+        pushBox(`${i + 1}. ${entry.id ?? '(unnamed)'}`, ['sleepUntil'], last);
+        break;
+      case 'foreach': {
+        const concurrency = entry.opts?.concurrency ?? 1;
+        pushContainerBox(
+          containerTitle(i, entry),
+          `foreach — concurrency ${concurrency}`,
+          [labelInnerStep(entry.step)],
+          last,
+        );
+        break;
+      }
+      case 'loop': {
+        pushContainerBox(containerTitle(i, entry), `${entry.loopType ?? 'loop'}`, [labelInnerStep(entry.step)], last);
+        break;
+      }
+      case 'parallel': {
+        const branches = Array.isArray(entry.steps) ? entry.steps : [];
+        pushContainerBox(
+          containerTitle(i, entry),
+          `parallel — ${branches.length} branch${branches.length === 1 ? '' : 'es'}`,
+          branches.map(labelInnerStep),
+          last,
+        );
+        break;
+      }
+      case 'conditional': {
+        const branches = Array.isArray(entry.steps) ? entry.steps : [];
+        pushContainerBox(
+          containerTitle(i, entry),
+          `conditional — ${branches.length} branch${branches.length === 1 ? '' : 'es'}`,
+          branches.map(labelInnerStep),
+          last,
+        );
+        break;
+      }
+      default:
+        pushBox(`${i + 1}. ${entry.id ?? '(unnamed)'}`, [entry.type], last);
     }
   });
 

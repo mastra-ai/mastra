@@ -25,3 +25,7 @@ The prompt used to teach that templates render primitives only and would throw o
 **`workflowBuilderAgent` now has a clearer rule for adding a bridge agent before `foreach`.**
 
 When the upstream step's top-level output is not already an array (typical for string-returning workspace tools like `find_files`), the previous guidance said to "ask for a tool that returns the array or fall back to a single code-agent that iterates internally" — which the builder correctly followed by opting out of `foreach`. The updated prompt promotes the bridge pattern instead: insert an `agent` step between the string/object-returning upstream and the `foreach`, with `outputSchema` set to an array (typically `Array<{ prompt: string }>` when the inner foreach step is an agent). A new anti-pattern calls out refusing `foreach` in this situation.
+
+**`/workflows show` now renders the inner step of a `foreach` / `loop` / `parallel` / `conditional` container.**
+
+Previously the diagram only printed the entry `type` (e.g. `foreach`, `loop`) with no indication of what was being iterated or fanned out. Container entries have no top-level `id` in the serialized graph, so linear-graph titles like `4. (unnamed)` were misleading. The renderer now synthesizes a container title from the inner step (`foreach(summarise-one)`, `dowhile(check)`, `parallel`, `conditional`), prints the container header line (`foreach — concurrency 3`, `parallel — 2 branches`, `dountil`), and lists each inner step on its own line with its kind and agent/tool id.
