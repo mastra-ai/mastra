@@ -6368,8 +6368,7 @@ export class Agent<
       // A resume stream can expose the next suspension just before its snapshot is
       // persisted. Briefly poll after authorization so an immediate response to
       // that newly surfaced tool call is not rejected based on the prior snapshot.
-      const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
-      const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
+      const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
       const deadline = Date.now() + 2000;
       while (!isSuspended && workflowsStore && Date.now() < deadline) {
         await new Promise(resolve => setTimeout(resolve, 25));
@@ -7468,8 +7467,7 @@ export class Agent<
       });
     }
 
-    const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
-    const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
+    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
 
     if (!workflowsStore) {
       throw new MastraError({
