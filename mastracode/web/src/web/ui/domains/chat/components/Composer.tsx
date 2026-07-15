@@ -1,16 +1,13 @@
 import type { AgentControllerMessage } from '@mastra/client-js';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import {
   Composer as ComposerRoot,
-  ComposerActionButton,
   ComposerActions,
-  ComposerAttachment,
-  ComposerAttachmentRemove,
   ComposerAttachments,
   ComposerBox,
   ComposerInput,
-  ComposerSubmitButton,
-} from '@mastra/playground-ui/components/ai/composer';
+} from '@mastra/playground-ui/components/Composer';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowUp, ImagePlus, Square, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -291,18 +288,25 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()}>
       <ComposerBox style={modeColor ? { borderColor: modeColor } : undefined}>
         {images.length > 0 && (
-          <ComposerAttachments>
+          <ComposerAttachments className="mx-3 mt-3 flex max-w-none justify-start gap-2 pb-0">
             {images.map(img => (
-              <ComposerAttachment key={img.id}>
+              <div key={img.id} className="relative">
                 <img
                   src={`data:${img.mediaType};base64,${img.data}`}
                   alt={img.filename ?? 'Attached image'}
                   className="h-14 w-14 rounded-md border border-border1 object-cover"
                 />
-                <ComposerAttachmentRemove onClick={() => removeImage(img.id)} aria-label="Remove image">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon-xs"
+                  className="absolute -right-1 -top-1 rounded-full bg-surface3"
+                  onClick={() => removeImage(img.id)}
+                  aria-label="Remove image"
+                >
                   <X size={10} />
-                </ComposerAttachmentRemove>
-              </ComposerAttachment>
+                </Button>
+              </div>
             ))}
           </ComposerAttachments>
         )}
@@ -347,30 +351,36 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
         <ComposerActions className="static w-full justify-between px-3 pb-2">
           <StatusLine />
           <ButtonsGroup spacing="close" aria-label="Composer actions">
-            <ComposerActionButton
+            <Button
+              type="button"
               variant="outline"
+              size="icon-sm"
               disabled={disabled}
               onClick={() => fileInputRef.current?.click()}
               aria-label="Attach image"
             >
               <ImagePlus size={14} />
-            </ComposerActionButton>
+            </Button>
             {busy && (
-              <ComposerActionButton
+              <Button
+                type="button"
                 variant="outline"
+                size="icon-sm"
                 onClick={() => void abortMutation.mutateAsync()}
                 aria-label="Abort"
               >
                 <Square size={14} />
-              </ComposerActionButton>
+              </Button>
             )}
-            <ComposerSubmitButton
+            <Button
+              type="submit"
               variant="outline"
+              size="icon-sm"
               disabled={disabled || (!draft.trim() && images.length === 0)}
               aria-label="Send message"
             >
               <ArrowUp size={16} />
-            </ComposerSubmitButton>
+            </Button>
           </ButtonsGroup>
         </ComposerActions>
       </ComposerBox>

@@ -181,9 +181,7 @@ describe('StatusLine', () => {
       renderStatusLine();
 
       const buildButton = await screen.findByRole('button', { name: 'Build' });
-      await waitFor(() =>
-        expect(buildButton).toHaveStyle({ backgroundColor: '#16c858', color: '#111827' }),
-      );
+      await waitFor(() => expect(buildButton).toHaveStyle({ backgroundColor: '#16c858', color: '#111827' }));
       expect(screen.getByRole('button', { name: 'Plan' })).not.toHaveAttribute('style');
       expect(screen.getByRole('button', { name: 'Explore' })).not.toHaveAttribute('style');
     });
