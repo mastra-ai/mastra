@@ -16,7 +16,7 @@
  * and no longer scopes reads; org-scoped reads use `org_id`.
  */
 
-import { bigint, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { bigint, index, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 
 /**
  * A GitHub App installation an org has connected. The installation is org-owned:
@@ -130,14 +130,60 @@ export const githubWorktrees = pgTable(
   ],
 );
 
+export const githubSignalSubscriptions = pgTable(
+  'github_signal_subscriptions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orgId: text('org_id').notNull(),
+    installationId: bigint('installation_id', { mode: 'number' }).notNull(),
+    githubProjectId: uuid('github_project_id').notNull(),
+    repoId: bigint('repo_id', { mode: 'number' }).notNull(),
+    repoFullName: text('repo_full_name').notNull(),
+    pullRequestNumber: bigint('pull_request_number', { mode: 'number' }).notNull(),
+    sessionId: text('session_id').notNull(),
+    ownerId: text('owner_id').notNull(),
+    resourceId: text('resource_id').notNull(),
+    threadId: text('thread_id').notNull(),
+    sessionScope: text('session_scope').notNull().default(''),
+    source: text('source', { enum: ['auto-gh-pr-create', 'factory-pr-create', 'explicit-tool'] }).notNull(),
+    status: text('status', { enum: ['open', 'closed', 'merged'] })
+      .notNull()
+      .default('open'),
+    subscribedByUserId: text('subscribed_by_user_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  table => [
+    uniqueIndex('github_signal_subscriptions_target_pr_unique').on(
+      table.orgId,
+      table.githubProjectId,
+      table.repoId,
+      table.pullRequestNumber,
+      table.sessionId,
+      table.resourceId,
+      table.threadId,
+      table.sessionScope,
+    ),
+    index('github_signal_subscriptions_pr_lookup').on(
+      table.orgId,
+      table.installationId,
+      table.repoId,
+      table.pullRequestNumber,
+    ),
+    index('github_signal_subscriptions_thread_lookup').on(table.resourceId, table.threadId, table.sessionScope),
+  ],
+);
+
 export type GithubInstallationRow = typeof githubInstallations.$inferSelect;
 export type GithubProjectRow = typeof githubProjects.$inferSelect;
 export type GithubProjectSandboxRow = typeof githubProjectSandboxes.$inferSelect;
 export type GithubWorktreeRow = typeof githubWorktrees.$inferSelect;
+export type GithubSignalSubscriptionRow = typeof githubSignalSubscriptions.$inferSelect;
 export type NewGithubInstallationRow = typeof githubInstallations.$inferInsert;
 export type NewGithubProjectRow = typeof githubProjects.$inferInsert;
 export type NewGithubProjectSandboxRow = typeof githubProjectSandboxes.$inferInsert;
 export type NewGithubWorktreeRow = typeof githubWorktrees.$inferInsert;
+export type NewGithubSignalSubscriptionRow = typeof githubSignalSubscriptions.$inferInsert;
 
 /**
  * Idempotent DDL run on boot when the feature is enabled. We keep migrations
@@ -211,4 +257,38 @@ ALTER TABLE github_worktrees ADD COLUMN IF NOT EXISTS org_id text;
 
 CREATE UNIQUE INDEX IF NOT EXISTS github_worktrees_project_user_branch_unique
   ON github_worktrees (github_project_id, user_id, branch);
+
+CREATE TABLE IF NOT EXISTS github_signal_subscriptions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id text NOT NULL,
+  installation_id bigint NOT NULL,
+  github_project_id uuid NOT NULL,
+  repo_id bigint NOT NULL,
+  repo_full_name text NOT NULL,
+  pull_request_number bigint NOT NULL,
+  session_id text NOT NULL,
+  owner_id text NOT NULL,
+  resource_id text NOT NULL,
+  thread_id text NOT NULL,
+  session_scope text NOT NULL DEFAULT '',
+  source text NOT NULL,
+  status text NOT NULL DEFAULT 'open',
+  subscribed_by_user_id text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE github_signal_subscriptions ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'open';
+
+CREATE UNIQUE INDEX IF NOT EXISTS github_signal_subscriptions_target_pr_unique
+  ON github_signal_subscriptions (
+    org_id, github_project_id, repo_id, pull_request_number,
+    session_id, resource_id, thread_id, session_scope
+  );
+
+CREATE INDEX IF NOT EXISTS github_signal_subscriptions_pr_lookup
+  ON github_signal_subscriptions (org_id, installation_id, repo_id, pull_request_number);
+
+CREATE INDEX IF NOT EXISTS github_signal_subscriptions_thread_lookup
+  ON github_signal_subscriptions (resource_id, thread_id, session_scope);
 `;

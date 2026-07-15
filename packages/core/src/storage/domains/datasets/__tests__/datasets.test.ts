@@ -34,6 +34,44 @@ describe('DatasetsInMemory', () => {
       expect(dataset.version).toBe(0);
     });
 
+    it('atomically resolves a compatible caller-defined ID without mutating the dataset', async () => {
+      const input = { id: 'durable-dataset', name: 'original', organizationId: 'org', projectId: null };
+      const results = await Promise.all(Array.from({ length: 20 }, () => storage.createDataset(input)));
+
+      expect(results.every(dataset => dataset.id === input.id)).toBe(true);
+      expect(db.datasets.size).toBe(1);
+
+      await storage.updateDataset({ id: input.id, name: 'updated' });
+      const retried = await storage.createDataset({ ...input, name: 'ignored retry name', projectId: undefined });
+      expect(retried.name).toBe('updated');
+      expect(retried.version).toBe(0);
+      expect(db.datasets.size).toBe(1);
+    });
+
+    it('rejects incompatible reuse of a caller-defined ID', async () => {
+      await storage.createDataset({ id: 'durable-dataset', name: 'test', organizationId: 'org-a' });
+
+      await expect(
+        storage.createDataset({ id: 'durable-dataset', name: 'test', organizationId: 'org-b' }),
+      ).rejects.toMatchObject({ id: 'DATASET_ID_CONFLICT' });
+    });
+
+    it('releases a caller-defined ID after deletion', async () => {
+      const first = await storage.createDataset({ id: 'reusable-dataset', name: 'first' });
+      await storage.deleteDataset({ id: first.id });
+      const second = await storage.createDataset({ id: first.id, name: 'second' });
+
+      expect(second.name).toBe('second');
+      expect(second.version).toBe(0);
+      expect(second.createdAt).not.toBe(first.createdAt);
+    });
+
+    it('rejects an empty caller-defined ID', async () => {
+      await expect(storage.createDataset({ id: '', name: 'test' })).rejects.toMatchObject({
+        id: 'DATASET_INVALID_ID',
+      });
+    });
+
     it('getDatasetById returns dataset or null', async () => {
       const created = await storage.createDataset({ name: 'test' });
       const fetched = await storage.getDatasetById({ id: created.id });

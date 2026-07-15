@@ -15,6 +15,7 @@ import type { Context } from 'hono';
 import { ensureWebAuthUser, webAuthTenant } from '../auth';
 import { getAppDb } from '../github/db';
 import { githubProjects } from '../github/schema';
+import { clampMetricsWindow, computeFactoryMetrics } from './metrics';
 import {
   deleteWorkItem,
   listWorkItems,
@@ -91,6 +92,19 @@ export function buildFactoryRoutes(): ApiRoute[] {
         if ('response' in resolved) return resolved.response;
         const items = await listWorkItems(resolved.orgId, resolved.projectId);
         return c.json({ workItems: items });
+      },
+    }),
+
+    // ── Flow metrics aggregated over the project's work items ───────────────
+    registerApiRoute('/web/factory/projects/:id/metrics', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveProject(loose(c));
+        if ('response' in resolved) return resolved.response;
+        const days = clampMetricsWindow(loose(c).req.query('days'));
+        const items = await listWorkItems(resolved.orgId, resolved.projectId);
+        return c.json({ metrics: computeFactoryMetrics(items, { days, now: new Date() }) });
       },
     }),
 

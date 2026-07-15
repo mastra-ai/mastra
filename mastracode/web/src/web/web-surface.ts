@@ -327,6 +327,7 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
     ...(deps.githubReady
       ? buildGithubRoutes({
           baseUrl: deps.publicOrigin,
+          controller: deps.controller,
           runIssueTriage: input => runIssueTriage(deps, input),
         })
       : []),

@@ -1563,9 +1563,6 @@ export type ProviderModelsMap = {
     'openai-gpt-5.2',
     'openai-gpt-5.4',
     'openai-gpt-5.5',
-    'openai-gpt-5.6-luna',
-    'openai-gpt-5.6-sol',
-    'openai-gpt-5.6-terra',
     'snowflake-llama3.3-70b',
   ];
   readonly 'tencent-token-plan': readonly ['hy3'];
@@ -2194,6 +2191,9 @@ export type ProviderModelsMap = {
     'qwen-omni-turbo',
     'qwen-plus',
     'qwen-plus-latest',
+    'qwen-turbo',
+    'qwen-vl-max',
+    'qwen-vl-plus',
     'qwen2-5-vl-32b-instruct',
     'qwen2-5-vl-72b-instruct',
     'qwen3-235b-a22b-fp8',
@@ -2225,6 +2225,7 @@ export type ProviderModelsMap = {
     'qwen3.7-max',
     'qwen3.7-plus',
     'qwen35-397b-a17b',
+    'qwq-plus',
     'seed-1-6-250615',
     'seed-1-6-250915',
     'seed-1-6-flash-250715',
@@ -3041,8 +3042,6 @@ export type ProviderModelsMap = {
     'minimax-m2-7',
     'minimax-m2-7-highspeed',
     'minimax-m3',
-    'mistral-medium-3',
-    'mistral-small-4',
     'muse-spark-1-1',
     'qwen3-5-122b-a10b',
     'qwen3-5-27b',
@@ -4061,9 +4060,6 @@ export type ProviderModelsMap = {
     'databricks-gpt-5-4-mini',
     'databricks-gpt-5-4-nano',
     'databricks-gpt-5-5',
-    'databricks-gpt-5-6-luna',
-    'databricks-gpt-5-6-sol',
-    'databricks-gpt-5-6-terra',
     'databricks-gpt-5-mini',
     'databricks-gpt-5-nano',
     'databricks-gpt-oss-120b',
@@ -4808,10 +4804,8 @@ export type ProviderModelsMap = {
   readonly moark: readonly ['GLM-4.7', 'MiniMax-M2.1'];
   readonly lilac: readonly ['google/gemma-4-31b-it', 'minimaxai/minimax-m3', 'moonshotai/kimi-k2.6', 'zai-org/glm-5.2'];
   readonly ambient: readonly [
-    'ambient/large',
     'moonshotai/kimi-k2.6',
     'moonshotai/kimi-k2.7-code',
-    'z-ai/glm-5.2',
     'zai-org/GLM-5.1-FP8',
     'zai-org/GLM-5.2-FP8',
   ];

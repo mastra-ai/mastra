@@ -20,6 +20,9 @@ const ORIGIN = TEST_BASE_URL;
 const PROJECT_ID = 'project-gh';
 const GITHUB_PROJECT_ID = 'github-project-1';
 
+// The persisted shape intentionally includes a legacy repo-root entry (older
+// builds stored it) and a personal user-session worktree: neither is a
+// factory workspace, so both must be filtered out of the workspaces data.
 const rootProject: Project = {
   id: PROJECT_ID,
   name: 'Mastra',
@@ -31,8 +34,15 @@ const rootProject: Project = {
   worktrees: [
     { branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' },
     { branch: 'feat-ui', worktreePath: '/sandbox/mastra-worktrees/feat-ui', baseBranch: 'main' },
+    { branch: 'feat-api', worktreePath: '/sandbox/mastra-worktrees/feat-api', baseBranch: 'main' },
+    {
+      branch: 'user/alice-notes',
+      worktreePath: '/sandbox/mastra-worktrees/user-alice-notes',
+      baseBranch: 'main',
+      threadId: 'thread-user',
+    },
   ],
-  selectedWorktreePath: '/sandbox/mastra',
+  selectedWorktreePath: '/sandbox/mastra-worktrees/feat-ui',
   createdAt: 1,
 };
 
@@ -41,13 +51,13 @@ function saveProject(project: Project) {
 }
 
 describe('workspaces query hooks', () => {
-  it('reads GitHub project worktrees through React Query', async () => {
+  it('reads factory worktrees only: legacy repo-root and user/ session entries are excluded', async () => {
     saveProject(rootProject);
 
     const { result } = renderHookWithProviders(() => useWorkspacesQuery(rootProject));
 
-    await waitFor(() => expect(result.current.data?.selected?.branch).toBe('main'));
-    expect(result.current.data?.worktrees.map(worktree => worktree.branch)).toEqual(['main', 'feat-ui']);
+    await waitFor(() => expect(result.current.data?.selected?.branch).toBe('feat-ui'));
+    expect(result.current.data?.worktrees.map(worktree => worktree.branch)).toEqual(['feat-ui', 'feat-api']);
   });
 
   it('selects a workspace, persists it, and refreshes projects consumers', async () => {
@@ -63,17 +73,17 @@ describe('workspaces query hooks', () => {
       return { projects, workspaces, selectWorkspace };
     });
 
-    await waitFor(() => expect(result.current.workspaces.data?.selected?.branch).toBe('main'));
+    await waitFor(() => expect(result.current.workspaces.data?.selected?.branch).toBe('feat-ui'));
 
     await act(async () => {
-      await result.current.selectWorkspace.mutateAsync('/sandbox/mastra-worktrees/feat-ui');
+      await result.current.selectWorkspace.mutateAsync('/sandbox/mastra-worktrees/feat-api');
     });
     await waitForMutationsIdle(client);
 
-    expect(loadProjects()[0]?.selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-ui');
-    await waitFor(() => expect(result.current.workspaces.data?.selected?.branch).toBe('feat-ui'));
+    expect(loadProjects()[0]?.selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-api');
+    await waitFor(() => expect(result.current.workspaces.data?.selected?.branch).toBe('feat-api'));
     await waitFor(() =>
-      expect(result.current.projects.data[0]?.selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-ui'),
+      expect(result.current.projects.data[0]?.selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-api'),
     );
   });
 
@@ -112,8 +122,8 @@ describe('workspaces query hooks', () => {
     expect(received).toEqual({ branch: 'feat-new' });
     await waitFor(() => expect(result.current.workspaces.data?.selected?.branch).toBe('feat-new'));
     expect(result.current.workspaces.data?.worktrees.map(worktree => worktree.branch)).toEqual([
-      'main',
       'feat-ui',
+      'feat-api',
       'feat-new',
     ]);
   });
@@ -135,11 +145,11 @@ describe('workspaces query hooks', () => {
       });
     });
 
-    expect(loadProjects()[0]?.selectedWorktreePath).toBe('/sandbox/mastra');
+    expect(loadProjects()[0]?.selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-ui');
   });
 
   it('deletes a workspace, cascades its threads, and falls back the stored selection when it was selected', async () => {
-    saveProject({ ...rootProject, selectedWorktreePath: '/sandbox/mastra-worktrees/feat-ui' });
+    saveProject(rootProject); // selected: feat-ui
     let received: unknown;
 
     server.use(
@@ -187,8 +197,9 @@ describe('workspaces query hooks', () => {
     expect(received).toEqual({ branch: 'feat-ui' });
     expect(deletedThreads).toEqual(['thread-1', 'thread-2']);
     const stored = loadProjects()[0]!;
-    expect(stored.worktrees?.map(worktree => worktree.branch)).toEqual(['main']);
-    expect(stored.selectedWorktreePath).toBe('/sandbox/mastra');
+    // User-session worktrees survive but never become the selection.
+    expect(stored.worktrees?.map(worktree => worktree.branch)).toEqual(['feat-api', 'user/alice-notes']);
+    expect(stored.selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-api');
   });
 
   it('keeps threads and the stored worktree when the server delete fails', async () => {
@@ -218,15 +229,20 @@ describe('workspaces query hooks', () => {
     });
 
     expect(threadSession.deleteThread).not.toHaveBeenCalled();
-    expect(loadProjects()[0]?.worktrees?.map(worktree => worktree.branch)).toEqual(['main', 'feat-ui']);
+    expect(loadProjects()[0]?.worktrees?.map(worktree => worktree.branch)).toEqual([
+      'main',
+      'feat-ui',
+      'feat-api',
+      'user/alice-notes',
+    ]);
   });
 
   it('keeps the stored selection when deleting an unselected workspace', async () => {
-    saveProject(rootProject); // selected: /sandbox/mastra (root)
+    saveProject(rootProject); // selected: feat-ui
 
     server.use(
       http.post(`${ORIGIN}/web/github/projects/${GITHUB_PROJECT_ID}/worktree/delete`, () =>
-        HttpResponse.json({ removed: true, branch: 'feat-ui', worktreePath: '/sandbox/mastra-worktrees/feat-ui' }),
+        HttpResponse.json({ removed: true, branch: 'feat-api', worktreePath: '/sandbox/mastra-worktrees/feat-api' }),
       ),
     );
 
@@ -239,24 +255,31 @@ describe('workspaces query hooks', () => {
 
     await act(async () => {
       await result.current.mutateAsync({
-        branch: 'feat-ui',
-        worktreePath: '/sandbox/mastra-worktrees/feat-ui',
+        branch: 'feat-api',
+        worktreePath: '/sandbox/mastra-worktrees/feat-api',
         baseBranch: 'main',
       });
     });
     await waitForMutationsIdle(client);
 
-    expect(loadProjects()[0]?.worktrees?.map(worktree => worktree.branch)).toEqual(['main']);
-    expect(loadProjects()[0]?.selectedWorktreePath).toBe('/sandbox/mastra');
+    expect(loadProjects()[0]?.worktrees?.map(worktree => worktree.branch)).toEqual(['feat-ui', 'user/alice-notes']);
+    expect(loadProjects()[0]?.selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-ui');
   });
 
-  it('derives the active projectPath from the selected GitHub worktree', () => {
-    expect(deriveProjectPath(rootProject)).toBe('/sandbox/mastra');
-    expect(deriveProjectPath({ ...rootProject, selectedWorktreePath: '/sandbox/mastra-worktrees/feat-ui' })).toBe(
-      '/sandbox/mastra-worktrees/feat-ui',
+  it('derives the active projectPath from the selected factory worktree, with no repo-root fallback', () => {
+    expect(deriveProjectPath(rootProject)).toBe('/sandbox/mastra-worktrees/feat-ui');
+    expect(deriveProjectPath({ ...rootProject, selectedWorktreePath: '/sandbox/mastra-worktrees/feat-api' })).toBe(
+      '/sandbox/mastra-worktrees/feat-api',
     );
-    expect(deriveProjectPath({ ...rootProject, worktrees: [], selectedWorktreePath: undefined })).toBe(
-      '/sandbox/mastra',
-    );
+    // No factory worktree yet: nothing to chat in, so no project path.
+    expect(deriveProjectPath({ ...rootProject, worktrees: [], selectedWorktreePath: undefined })).toBe('');
+    // A user-session worktree is never the project selection.
+    expect(
+      deriveProjectPath({
+        ...rootProject,
+        worktrees: rootProject.worktrees!.filter(w => w.branch.startsWith('user/')),
+        selectedWorktreePath: undefined,
+      }),
+    ).toBe('');
   });
 });

@@ -21,7 +21,10 @@ export const queryKeys = {
   linearIssues: () => ['linear', 'issues'] as const,
   intakeConfig: () => ['intake', 'config'] as const,
   workItems: (githubProjectId: string | undefined) => ['factory', 'work-items', githubProjectId ?? null] as const,
+  factoryMetrics: (githubProjectId: string | undefined, days: number) =>
+    ['factory', 'metrics', githubProjectId ?? null, days] as const,
   workspaces: (projectId: string | undefined) => ['workspaces', projectId ?? null] as const,
+  userSessions: (projectId: string | undefined) => ['user-sessions', projectId ?? null] as const,
   providers: () => ['providers'] as const,
   customProviders: () => ['custom-providers'] as const,
   modelPacks: (resourceId: string | undefined) => ['model-packs', resourceId ?? null] as const,
