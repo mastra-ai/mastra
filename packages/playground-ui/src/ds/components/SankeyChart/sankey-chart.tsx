@@ -10,6 +10,7 @@ import { buildSankeyChartGraph, getSankeyChartCurveSelection, reorderSankeyChart
 import type { SankeyChartColumn, SankeyChartCurveSelection, SankeyChartRecord } from './sankey-chart-utils';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { Colors } from '@/ds/tokens';
+import { stringToColor } from '@/lib/colors';
 import { cn } from '@/lib/utils';
 
 export type SankeyChartColumnProps = SankeyChartColumn;
@@ -169,16 +170,19 @@ function SankeyChartRoot({
                   : false;
                 return <SankeyNode {...props} columnLabel={node?.column.label} showColumnLabel={showColumnLabel} />;
               }}
-              link={(props: SankeyLinkProps) => (
-                <SankeyLink
-                  {...props}
-                  clickable={onCurveClick !== undefined}
-                  onSelect={() => {
-                    const link = graph.links[props.index];
-                    if (link) onCurveClick?.(getSankeyChartCurveSelection(link));
-                  }}
-                />
-              )}
+              link={(props: SankeyLinkProps) => {
+                const link = graph.links[props.index];
+                return (
+                  <SankeyLink
+                    {...props}
+                    color={stringToColor(String(link?.sourceNode.value ?? ''), 68, 55)}
+                    clickable={onCurveClick !== undefined}
+                    onSelect={() => {
+                      if (link) onCurveClick?.(getSankeyChartCurveSelection(link));
+                    }}
+                  />
+                );
+              }}
             />
           </ResponsiveContainer>
         </div>
@@ -206,7 +210,7 @@ function SankeyNode({
           {columnLabel}
         </text>
       ) : null}
-      <rect x={x} y={y} width={width} height={height} rx={2} fill={Colors.accent3} fillOpacity={0.9} />
+      <rect x={x} y={y} width={width} height={height} rx={2} fill={Colors.neutral1} />
       <text
         x={labelOnRight ? x + width + 8 : x - 8}
         y={y + height / 2}
@@ -230,9 +234,10 @@ function SankeyLink({
   sourceControlX,
   targetControlX,
   linkWidth,
+  color,
   clickable,
   onSelect,
-}: SankeyLinkProps & { clickable: boolean; onSelect: () => void }) {
+}: SankeyLinkProps & { color: string; clickable: boolean; onSelect: () => void }) {
   const path = `M${sourceX},${sourceY} C${sourceControlX},${sourceY} ${targetControlX},${targetY} ${targetX},${targetY}`;
   const handleKeyDown = (event: KeyboardEvent<SVGPathElement>) => {
     if (event.key !== 'Enter' && event.key !== ' ') return;
@@ -244,8 +249,8 @@ function SankeyLink({
     <path
       d={path}
       fill="none"
-      stroke={Colors.accent3}
-      strokeOpacity={0.28}
+      stroke={color}
+      strokeOpacity={0.55}
       strokeWidth={Math.max(1, linkWidth)}
       role={clickable ? 'button' : undefined}
       tabIndex={clickable ? 0 : undefined}

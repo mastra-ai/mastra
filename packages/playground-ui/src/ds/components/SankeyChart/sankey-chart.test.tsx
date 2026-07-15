@@ -2,6 +2,7 @@
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { stringToColor } from '../../../lib/colors';
 import { SankeyChart } from './sankey-chart';
 
 afterEach(() => {
@@ -67,6 +68,23 @@ describe('SankeyChart', () => {
     const chartLabels = [...container.querySelectorAll('svg text')].map(element => element.textContent);
 
     expect(chartLabels).toEqual(expect.arrayContaining(['Channel', 'Region', 'Outcome']));
+    expect(container.querySelectorAll('svg rect[fill="var(--neutral1)"]').length).toBeGreaterThan(0);
+  });
+
+  it('colors each curve from its source value', async () => {
+    render(<Example onCurveClick={() => {}} />);
+
+    const curves = await screen.findAllByRole('button', { name: 'Select Sankey curve' });
+    const colors = curves.map(curve => curve.getAttribute('stroke'));
+
+    expect(colors).toEqual(
+      expect.arrayContaining([
+        stringToColor('Search', 68, 55),
+        stringToColor('Referral', 68, 55),
+        stringToColor('EU', 68, 55),
+        stringToColor('US', 68, 55),
+      ]),
+    );
   });
 
   it('shows an empty state when fewer than two columns are enabled', () => {
