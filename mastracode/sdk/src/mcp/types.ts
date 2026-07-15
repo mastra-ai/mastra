@@ -33,8 +33,8 @@ export interface McpHttpServerConfig {
  * OAuth client configuration for an HTTP MCP server.
  */
 export interface McpHttpOAuthConfig {
-  /** Redirect URL controlled by the user/application for OAuth callbacks */
-  redirectUrl: string;
+  /** Redirect URL for OAuth callbacks. Defaults to DEFAULT_OAUTH_REDIRECT_URL when omitted. */
+  redirectUrl?: string;
   /** Human-readable OAuth client name */
   clientName?: string;
   /** Optional scopes requested during OAuth */
@@ -88,4 +88,12 @@ export interface McpServerStatus {
   transport: 'stdio' | 'http';
   /** Error message if connection failed */
   error?: string;
+  /** Whether the server rejected the connection pending OAuth authorization */
+  needsAuth?: boolean;
+  /**
+   * Whether an OAuth authorization flow is currently in flight for this server.
+   * Owned by the manager so the state survives a selector being closed/reopened;
+   * the UI uses it to keep offering "Cancel authentication" while auth is pending.
+   */
+  authenticating?: boolean;
 }

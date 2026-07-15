@@ -17,6 +17,16 @@ import * as path from 'node:path';
 import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import type { McpConfig, McpHttpOAuthConfig, McpServerConfig, McpSkippedServer } from './types.js';
 
+/**
+ * Default OAuth redirect URL for servers that do not configure one.
+ * Port 1458 is stable across sessions so persisted tokens keep the same
+ * storage fingerprint; it sits clear of the ports the Codex login flow
+ * reserves (1455/1457). When 1458 is busy the callback server falls back
+ * to the next sequential port, which stays covered by the client
+ * registration (see `@mastra/mcp`'s `getCallbackUrlCandidates`).
+ */
+export const DEFAULT_OAUTH_REDIRECT_URL = 'http://127.0.0.1:1458/oauth/callback';
+
 export function loadMcpConfig(projectDir: string, configDirName = DEFAULT_CONFIG_DIR): McpConfig {
   const claudeConfig = loadClaudeSettings(projectDir);
   const globalConfig = loadSingleConfig(getGlobalMcpPath(configDirName));
@@ -202,11 +212,12 @@ function parseOAuthConfig(raw: unknown): { config?: McpHttpOAuthConfig; reason?:
   }
 
   const obj = raw as Record<string, unknown>;
-  if (typeof obj.redirectUrl !== 'string') {
-    return { reason: 'Invalid OAuth config: missing required field "redirectUrl"' };
+  if (obj.redirectUrl !== undefined && typeof obj.redirectUrl !== 'string') {
+    return { reason: 'Invalid OAuth config: "redirectUrl" must be a string' };
   }
+  const rawRedirectUrl = obj.redirectUrl ?? DEFAULT_OAUTH_REDIRECT_URL;
   try {
-    const redirectUrl = new URL(obj.redirectUrl);
+    const redirectUrl = new URL(rawRedirectUrl);
     const isLoopback =
       redirectUrl.hostname === 'localhost' ||
       redirectUrl.hostname.startsWith('127.') ||
@@ -224,7 +235,7 @@ function parseOAuthConfig(raw: unknown): { config?: McpHttpOAuthConfig; reason?:
 
   return {
     config: {
-      redirectUrl: obj.redirectUrl,
+      redirectUrl: rawRedirectUrl,
       clientName: typeof obj.clientName === 'string' ? obj.clientName : undefined,
       scopes: obj.scopes as string[] | undefined,
       clientId: typeof obj.clientId === 'string' ? obj.clientId : undefined,
