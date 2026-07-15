@@ -529,6 +529,13 @@ export class InternalMastraMCPClient extends MastraBase {
    * transport that started the authorization flow so finishAuth can complete it.
    */
   private markNeedsAuth(transport: StreamableHTTPClientTransport | SSEClientTransport): void {
+    // A prior connect() may have left a pending transport that never completed
+    // finishAuth. Close the superseded one before replacing it so its event
+    // stream and session resources are released rather than abandoned.
+    const superseded = this.pendingAuthTransport;
+    if (superseded && superseded !== transport) {
+      void superseded.close().catch(() => {});
+    }
     this.pendingAuthTransport = transport;
     this._authState = 'needs-auth';
     this.log('debug', 'Server requires OAuth authorization before connecting.');

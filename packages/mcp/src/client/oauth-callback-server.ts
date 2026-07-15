@@ -264,14 +264,19 @@ export async function createOAuthCallbackServer(options: OAuthCallbackServerOpti
   const hostname = candidates[0]!.hostname.replace(/^\[|\]$/g, '');
 
   let boundUrl: URL | undefined;
+  let boundPort: number | undefined;
   for (const candidate of candidates) {
-    const error = await listen(server, Number(candidate.port), hostname);
+    const candidatePort = Number(candidate.port);
+    const error = await listen(server, candidatePort, hostname);
     if (!error) {
       boundUrl = candidate;
+      // Preserve the port we actually listened on. Reading URL.port back would
+      // return '' for the default 80/443, losing the effective port.
+      boundPort = candidatePort;
       break;
     }
   }
-  if (!boundUrl) {
+  if (!boundUrl || boundPort === undefined) {
     const firstPort = Number(candidates[0]!.port);
     const lastPort = Number(candidates[candidates.length - 1]!.port);
     throw new Error(`Failed to start OAuth callback server: ports ${firstPort}-${lastPort} are all in use`);
@@ -279,7 +284,7 @@ export async function createOAuthCallbackServer(options: OAuthCallbackServerOpti
 
   return {
     url: boundUrl,
-    port: Number(boundUrl.port),
+    port: boundPort,
 
     waitForCode({ timeoutMs = DEFAULT_CALLBACK_TIMEOUT_MS } = {}) {
       let timer: NodeJS.Timeout | undefined;

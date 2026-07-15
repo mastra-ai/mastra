@@ -27,8 +27,13 @@ import { MCPClientServerProxy } from './server-proxy';
 const mcpClientInstances = new Map<string, InstanceType<typeof MCPClient>>();
 const TOOL_DISCOVERY_MAX_ATTEMPTS = 2;
 
-// Hostnames authenticate() accepts for the provider's redirect URL (RFC 8252 loopback redirection)
-const LOOPBACK_HOSTNAMES = new Set(['127.0.0.1', 'localhost', '[::1]']);
+// Whether a hostname is a loopback address authenticate() accepts for the
+// provider's redirect URL (RFC 8252 loopback redirection). Kept in sync with the
+// mastracode config parser, which accepts any 127.0.0.0/8 host, so a config that
+// parses (e.g. 127.0.0.2) does not later fail here.
+function isLoopbackHostname(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '[::1]' || hostname.startsWith('127.');
+}
 
 /**
  * Configuration options for creating an MCPClient instance.
@@ -761,6 +766,18 @@ To fix this you have three different options:
       try {
         mcpClientInstances.delete(this.id);
 
+        // Tear down any in-flight authorization: each callback server owns a live
+        // loopback HTTP port, and closing it rejects the flow's waitForCode. Await
+        // the flow settlements so a disconnect during authentication does not leave
+        // a bound port or a dangling promise keeping the process alive.
+        const pendingFlows = Array.from(this.authFlowsByServer.values());
+        await Promise.allSettled(
+          Array.from(this.authCallbackServersByServer.values()).map(server => server.close()),
+        );
+        await Promise.allSettled(pendingFlows);
+        this.authCallbackServersByServer.clear();
+        this.authFlowsByServer.clear();
+
         // Disconnect all clients in the cache
         await Promise.allSettled(Array.from(this.mcpClientsById.values()).map(client => client.disconnect()));
         this.mcpClientsById.clear();
@@ -862,7 +879,7 @@ To fix this you have three different options:
     }
 
     const redirectUrl = new URL(provider.redirectUrl.toString());
-    if (redirectUrl.protocol !== 'http:' || !LOOPBACK_HOSTNAMES.has(redirectUrl.hostname)) {
+    if (redirectUrl.protocol !== 'http:' || !isLoopbackHostname(redirectUrl.hostname)) {
       throw new Error(
         `Cannot authenticate MCP server ${serverName}: the provider's redirect URL must be a loopback address, got ${redirectUrl.origin}.`,
       );

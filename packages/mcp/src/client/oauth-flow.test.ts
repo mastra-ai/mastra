@@ -529,6 +529,29 @@ describe('MCPClient OAuth authorization flow', () => {
     expect(mcp.getServerAuthState('fixture')).toBe('authorized');
   });
 
+  it('disconnect cancels a pending flow: the callback port is released and the flow settles', async () => {
+    const { mcpServer, callbackUrl } = await setup();
+    let authorizationReached: (() => void) | undefined;
+    const reachedAuthorization = new Promise<void>(resolve => {
+      authorizationReached = resolve;
+    });
+    const provider = createProvider({
+      callbackUrl,
+      onRedirectToAuthorization: () => {
+        authorizationReached?.();
+      },
+    });
+    const mcp = createClient(mcpServer.url, provider);
+
+    const flow = mcp.authenticate('fixture');
+    await reachedAuthorization;
+
+    // Disconnecting mid-flow must close the callback server and settle the
+    // pending authentication rather than leaving a bound port or a live promise.
+    await mcp.disconnect();
+    await expect(flow).rejects.toThrow(/closed before receiving an authorization code/);
+  });
+
   it('rejects authenticate for servers without an MCPOAuthClientProvider', async () => {
     const mcp = track(
       new MCPClient({
