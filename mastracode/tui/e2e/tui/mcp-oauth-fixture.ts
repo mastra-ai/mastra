@@ -9,12 +9,25 @@ export type McpOAuthFixture = {
   close: () => Promise<void>;
   /** Streamable HTTP MCP endpoint (requires a Bearer token issued by the fixture). */
   url: string;
+  /**
+   * Release the authorize endpoint when it is being held open (see
+   * `holdAuthorize`). Resolves any in-flight authorize request so the OAuth
+   * flow can complete. No-op when the endpoint is not held.
+   */
+  releaseAuthorize: () => void;
 };
 
 export type McpOAuthFixtureOptions = {
   name: string;
   registerTools: (server: McpFixtureServer) => void;
   version?: string;
+  /**
+   * When true, the authorize endpoint parks the request (holding the browser
+   * "open") instead of redirecting immediately. This keeps the client's OAuth
+   * flow pending so a scenario can exercise cancellation before any code is
+   * issued. Call `releaseAuthorize()` to let a held request complete.
+   */
+  holdAuthorize?: boolean;
 };
 
 function readBody(req: IncomingMessage): Promise<string> {
@@ -49,6 +62,15 @@ export async function startMcpOAuthFixtureServer(options: McpOAuthFixtureOptions
   const pendingCodes = new Map<string, { codeChallenge: string; redirectUri: string }>();
   const refreshTokens = new Set<string>();
   const validTokens = new Set<string>();
+
+  // When `holdAuthorize` is set, in-flight authorize requests wait on this
+  // promise instead of redirecting; `releaseAuthorize()` resolves it.
+  let releaseHeldAuthorize: (() => void) | undefined;
+  const authorizeGate = options.holdAuthorize
+    ? new Promise<void>(resolve => {
+        releaseHeldAuthorize = resolve;
+      })
+    : undefined;
 
   let baseUrl = '';
 
@@ -113,6 +135,11 @@ export async function startMcpOAuthFixtureServer(options: McpOAuthFixtureOptions
         if (!client || !client.redirect_uris.includes(redirectUri)) {
           sendJson(res, 400, { error: 'invalid_request', error_description: 'Unknown client or redirect_uri' });
           return;
+        }
+        // Park the request (browser "open") until released, so a scenario can
+        // cancel the pending OAuth flow before any code is issued.
+        if (authorizeGate) {
+          await authorizeGate;
         }
         const code = `code-${randomUUID()}`;
         pendingCodes.set(code, { codeChallenge: requestUrl.searchParams.get('code_challenge') ?? '', redirectUri });
@@ -209,10 +236,12 @@ export async function startMcpOAuthFixtureServer(options: McpOAuthFixtureOptions
 
   return {
     close: async () => {
+      releaseHeldAuthorize?.();
       await Promise.all([...activeServers].map(server => server.close().catch(() => undefined)));
       activeServers.clear();
       await new Promise<void>(resolve => httpServer.close(() => resolve())).catch(() => undefined);
     },
     url: `${baseUrl}/mcp`,
+    releaseAuthorize: () => releaseHeldAuthorize?.(),
   };
 }
