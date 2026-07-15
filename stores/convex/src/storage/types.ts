@@ -9,6 +9,48 @@ export type IndexHint =
   | { index: 'by_workflow'; workflowName: string }
   | { index: 'by_workflow_run'; workflowName: string; runId: string };
 
+/**
+ * A buffered observation chunk in wire/storage format: Date fields are ISO
+ * strings so chunks survive the JSON HTTP boundary and Convex storage
+ * (persisted as a JSON string inside the record's bufferedObservationChunks).
+ */
+export type SerializedOMChunk = {
+  id: string;
+  cycleId: string;
+  observations: string;
+  tokenCount: number;
+  messageIds: string[];
+  messageTokens: number;
+  /** ISO timestamp */
+  lastObservedAt: string;
+  /** ISO timestamp */
+  createdAt: string;
+  suggestedContinuation?: string;
+  currentTask?: string;
+  threadTitle?: string;
+  extractedValues?: Record<string, unknown>;
+  extractionFailures?: Array<{ slug: string; error: string }>;
+};
+
+/**
+ * Serialized observational memory generation fields the server needs to create
+ * a new generation record (used by omSwapBufferedReflection). Timestamps are
+ * ISO strings; config/metadata are JSON strings.
+ */
+export type SerializedOMCurrentRecord = {
+  id: string;
+  lookupKey: string;
+  scope: string;
+  threadId: string | null;
+  resourceId: string;
+  config: string;
+  metadata: string | null;
+  observedTimezone: string | null;
+  lastObservedAt: string | null;
+  totalTokensObserved: number;
+  generationCount: number;
+};
+
 export type StorageRequest =
   | {
       op: 'insert';
@@ -132,6 +174,90 @@ export type StorageRequest =
       op: 'deleteScheduleTriggers';
       tableName: TABLE_NAMES | string;
       scheduleId: string;
+    }
+  | {
+      op: 'omGetLatest';
+      tableName: TABLE_NAMES | string;
+      lookupKey: string;
+    }
+  | {
+      op: 'omGetHistory';
+      tableName: TABLE_NAMES | string;
+      lookupKey: string;
+      limit: number;
+      /** ISO timestamp; records with createdAt >= from */
+      from?: string;
+      /** ISO timestamp; records with createdAt <= to */
+      to?: string;
+      offset?: number;
+    }
+  | {
+      op: 'omUpdateActive';
+      tableName: TABLE_NAMES | string;
+      id: string;
+      observations: string;
+      tokenCount: number;
+      /** ISO timestamp */
+      lastObservedAt: string;
+      observedMessageIds: string[] | null;
+      /** ISO timestamp */
+      updatedAt: string;
+    }
+  | {
+      op: 'omAppendBufferedChunk';
+      tableName: TABLE_NAMES | string;
+      id: string;
+      chunk: SerializedOMChunk;
+      /** ISO timestamp */
+      lastBufferedAtTime?: string;
+      /** ISO timestamp */
+      updatedAt: string;
+    }
+  | {
+      op: 'omSwapBuffered';
+      tableName: TABLE_NAMES | string;
+      id: string;
+      activationRatio: number;
+      messageTokensThreshold: number;
+      currentPendingTokens: number;
+      forceMaxActivation?: boolean;
+      /** ISO timestamp override for lastObservedAt after swap */
+      lastObservedAt?: string;
+      /** Refreshed chunks with up-to-date messageTokens (see SwapBufferedToActiveInput) */
+      bufferedChunks?: SerializedOMChunk[];
+      /** ISO timestamp used for updatedAt and lastObservedAt fallback */
+      now: string;
+    }
+  | {
+      op: 'omUpdateBufferedReflection';
+      tableName: TABLE_NAMES | string;
+      id: string;
+      reflection: string;
+      tokenCount: number;
+      inputTokenCount: number;
+      reflectedObservationLineCount: number;
+      /** ISO timestamp */
+      updatedAt: string;
+    }
+  | {
+      op: 'omSwapBufferedReflection';
+      tableName: TABLE_NAMES | string;
+      currentRecord: SerializedOMCurrentRecord;
+      /** ID for the new generation record */
+      newId: string;
+      /** Token count of the combined new activeObservations */
+      tokenCount: number;
+      /** ISO timestamp */
+      now: string;
+    }
+  | {
+      op: 'omUpdateConfig';
+      tableName: TABLE_NAMES | string;
+      id: string;
+      /** JSON string; deep-merged into the stored config server-side */
+      config: string;
+      /** ISO timestamp */
+      updatedAt: string;
     };
 
 export type StorageResponse =

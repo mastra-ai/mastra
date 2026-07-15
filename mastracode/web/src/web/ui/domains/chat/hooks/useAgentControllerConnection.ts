@@ -12,6 +12,7 @@ interface UseAgentControllerConnectionArgs {
   agentControllerId: string;
   resourceId: string;
   projectPath?: string;
+  projectState?: Record<string, unknown>;
   baseUrl?: string;
   enabled?: boolean;
   onEvent: (event: AgentControllerEvent) => void;
@@ -21,6 +22,7 @@ export function useAgentControllerConnection({
   agentControllerId,
   resourceId,
   projectPath,
+  projectState,
   baseUrl = '',
   enabled = true,
   onEvent,
@@ -28,8 +30,21 @@ export function useAgentControllerConnection({
   const [sseConnectionState, setSseConnectionState] = useState<SseConnectionState>('never');
   const sseConnected = sseConnectionState === 'connected';
   const hasEverConnected = sseConnectionState !== 'never';
-  const { session } = createAgentControllerClient({ agentControllerId, resourceId, baseUrl, enabled });
-  const initQuery = useAgentControllerSessionInit({ agentControllerId, resourceId, projectPath, baseUrl, enabled });
+  const { session } = createAgentControllerClient({
+    agentControllerId,
+    resourceId,
+    scope: projectPath,
+    baseUrl,
+    enabled,
+  });
+  const initQuery = useAgentControllerSessionInit({
+    agentControllerId,
+    resourceId,
+    projectPath,
+    projectState,
+    baseUrl,
+    enabled,
+  });
   const syncQuery = useAgentControllerSessionSync({
     agentControllerId,
     resourceId,

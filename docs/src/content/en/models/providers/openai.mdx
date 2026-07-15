@@ -773,7 +773,7 @@ const response = await agent.generate("Hello!", {
     },
     {
         "name": "include",
-        "type": "(\"file_search_call.results\" | \"message.output_text.logprobs\" | \"reasoning.encrypted_content\")[] | null | undefined",
+        "type": "(\"web_search_call.results\" | \"file_search_call.results\" | \"message.output_text.logprobs\" | \"reasoning.encrypted_content\")[] | null | undefined",
         "description": "",
         "isOptional": true
     },
@@ -820,6 +820,12 @@ const response = await agent.generate("Hello!", {
         "isOptional": true
     },
     {
+        "name": "promptCacheOptions",
+        "type": "{ mode?: \"explicit\" | \"implicit\" | undefined; ttl?: \"30m\" | undefined; } | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
         "name": "promptCacheRetention",
         "type": "\"in_memory\" | \"24h\" | null | undefined",
         "description": "",
@@ -828,6 +834,18 @@ const response = await agent.generate("Hello!", {
     {
         "name": "reasoningEffort",
         "type": "string | null | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "reasoningMode",
+        "type": "\"standard\" | \"pro\" | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "reasoningContext",
+        "type": "\"auto\" | \"current_turn\" | \"all_turns\" | undefined",
         "description": "",
         "isOptional": true
     },
@@ -845,7 +863,7 @@ const response = await agent.generate("Hello!", {
     },
     {
         "name": "serviceTier",
-        "type": "\"default\" | \"auto\" | \"flex\" | \"priority\" | null | undefined",
+        "type": "\"auto\" | \"default\" | \"flex\" | \"priority\" | null | undefined",
         "description": "",
         "isOptional": true
     },
@@ -853,6 +871,12 @@ const response = await agent.generate("Hello!", {
         "name": "store",
         "type": "boolean | null | undefined",
         "description": "Controls whether OpenAI stores your API requests for model training. Required to be \"false\" if your organization has zero data retention enabled. See: https://platform.openai.com/docs/guides/your-data#zero-data-retention",
+        "isOptional": true
+    },
+    {
+        "name": "passThroughUnsupportedFiles",
+        "type": "boolean | undefined",
+        "description": "",
         "isOptional": true
     },
     {

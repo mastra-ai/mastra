@@ -95,7 +95,10 @@ function serializeEntry(entry: StepFlowEntry): SerializedStepFlowEntry {
       return {
         type: 'foreach',
         step: serializeSingleEntry(entry.step),
-        opts: { concurrency: entry.opts.concurrency },
+        opts:
+          typeof entry.opts.concurrency === 'function'
+            ? { fn: entry.opts.concurrency.toString() }
+            : { concurrency: entry.opts.concurrency },
       };
     case 'conditional':
       throw new Error(`Conditional steps cannot be stored: requires the Phase-2 predicate DSL.`);

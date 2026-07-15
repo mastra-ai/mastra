@@ -256,7 +256,7 @@ vi.mock('../onboarding/packs.js', () => ({
 vi.mock('../onboarding/settings.js', () => ({
   getCustomProviderId: vi.fn(),
   loadSettings: loadSettingsMock,
-  MEMORY_GATEWAY_PROVIDER: 'mastra',
+  MASTRA_GATEWAY_PROVIDER: 'mastra',
   resolveModelDefaults: vi.fn(() => ({ build: '', plan: '', fast: '' })),
   resolveOmModel: vi.fn(() => ''),
   resolveOmRoleModel: vi.fn(() => ''),
@@ -406,7 +406,7 @@ describe('createMastraCode', () => {
     expect(agentControllerConfig?.subagents).toEqual([subagent]);
   }, 10_000);
 
-  it('uses configured memory gateway settings when creating the MastraCode gateway', async () => {
+  it('uses configured mastra gateway settings when creating the MastraCode gateway', async () => {
     const settings = createMockSettings();
     settings.memoryGateway = { baseUrl: 'https://gateway.example.com/v1' };
     loadSettingsMock.mockReturnValue(settings);
@@ -796,6 +796,19 @@ describe('createMastraCode', () => {
       | undefined;
     expect(agentConfig?.inputProcessors?.map(processor => processor.id)).toContain('provider-history-compat');
     expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toContain('provider-history-compat');
+  });
+
+  it('does not configure the polling GitHub provider when the embedding disables it', async () => {
+    loadSettingsMock.mockReturnValue({
+      ...createMockSettings(),
+      signals: { unixSocketPubSub: false, experimentalGithubSignals: true },
+    });
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode({ disableGithubSignals: true });
+
+    const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as { signals?: Array<{ id?: string }> } | undefined;
+    expect(agentConfig?.signals?.map(signal => signal.id)).not.toContain('github-signals');
   });
 
   it('configures GitHubSignals as a signal provider for local PR subscriptions', async () => {

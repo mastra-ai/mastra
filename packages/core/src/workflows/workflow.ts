@@ -98,6 +98,7 @@ import type {
   OutputWriter,
   StepMetadata,
   WorkflowRunStartOptions,
+  ForeachOptions,
 } from './types';
 import { cleanStepResult, createRestartExecutionParams, createTimeTravelExecutionParams } from './utils';
 
@@ -2649,10 +2650,10 @@ export class Workflow<
           unknown extends TStepRC ? unknown : TRequestContext
         >
       : 'Previous step must return an array type',
-    opts?: {
-      concurrency: number;
-    },
+    opts?: ForeachOptions,
   ) {
+    const concurrency = opts?.concurrency ?? 1;
+    const serializedOpts = typeof concurrency === 'function' ? { fn: concurrency.toString() } : { concurrency };
     this.stepFlow.push({
       type: 'foreach',
       step: toSingleStepEntry(step as any),
@@ -2661,7 +2662,7 @@ export class Workflow<
     this.serializedStepFlow.push({
       type: 'foreach',
       step: toSerializedSingleStepEntry(step as any),
-      opts: opts ?? { concurrency: 1 },
+      opts: serializedOpts,
     });
     this.steps[(step as any).id] = step as any;
     return this as unknown as Workflow<
@@ -3066,10 +3067,29 @@ export class Workflow<
       for (const [stepName, stepResult] of suspendedSteps) {
         // @ts-expect-error - context type mismatch
         const suspendPath: string[] = [stepName, ...(stepResult?.suspendPayload?.__workflow_meta?.path ?? [])];
+        const nestedMeta = (stepResult as any)?.suspendPayload?.__workflow_meta ?? {};
+        // Keep the nested workflow metadata (foreachIndex, foreachOutput, resumeLabels) when
+        // propagating a suspension to the parent — mirrors the evented engine — so the parent
+        // snapshot is self-describing about EVERY parked iteration, not just the first one.
+        // Only runId and path change as we propagate up. Per-iteration `__streamState` blobs
+        // are stripped from the propagated copies: they can be large and resume reads them
+        // from the nested run's own snapshot, so the parent only needs the identifying fields.
+        const propagatedForeachOutput = Array.isArray(nestedMeta.foreachOutput)
+          ? nestedMeta.foreachOutput.map((entry: any) => {
+              if (entry?.status !== 'suspended' || !entry.suspendPayload) return entry;
+              const { __streamState: _streamState, ...suspendPayload } = entry.suspendPayload;
+              return { ...entry, suspendPayload };
+            })
+          : undefined;
         await suspend(
           {
             ...(stepResult as any)?.suspendPayload,
-            __workflow_meta: { runId: run.runId, path: suspendPath },
+            __workflow_meta: {
+              ...nestedMeta,
+              ...(propagatedForeachOutput ? { foreachOutput: propagatedForeachOutput } : {}),
+              runId: run.runId,
+              path: suspendPath,
+            },
           },
           {
             resumeLabel: Object.keys(res.resumeLabels ?? {}),

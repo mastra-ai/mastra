@@ -1,7 +1,7 @@
 import { TripWire } from '../agent/trip-wire';
 import type { ActorSignal } from '../auth/ee';
 import { RequestContext } from '../di';
-import { MastraError, ErrorDomain, ErrorCategory } from '../error';
+import { MastraError, MastraNonRetryableError, ErrorDomain, ErrorCategory } from '../error';
 import type { SerializedError } from '../error';
 import { getErrorFromUnknown } from '../error/utils.js';
 import type { PubSub } from '../events/pubsub';
@@ -472,8 +472,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         const result = await this.wrapDurableOperation(stepId, runStep);
         return { ok: true, result };
       } catch (e) {
-        if (i === params.retries) {
-          // Retries exhausted - return failed result
+        const isNonRetryable = e instanceof MastraNonRetryableError;
+
+        if (isNonRetryable || i === params.retries) {
           // Use getErrorFromUnknown directly on the original error to preserve custom properties
           const errorInstance = getErrorFromUnknown(e, {
             serializeStack: false,
@@ -504,6 +505,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               status: 'failed',
               error: errorInstance,
               endedAt: Date.now(),
+              ...(isNonRetryable && { nonRetryable: true as const }),
               // Preserve TripWire data as plain object for proper serialization
               tripwire:
                 e instanceof TripWire

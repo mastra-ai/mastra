@@ -48,6 +48,16 @@ interface StagehandConfigExtensions {
   model?: ModelConfiguration;
 
   /**
+   * Enable Stagehand experimental features.
+   */
+  experimental?: boolean;
+
+  /**
+   * Disable the Stagehand API so model execution runs locally.
+   */
+  disableAPI?: boolean;
+
+  /**
    * Enable self-healing selectors.
    * When enabled, Stagehand uses AI to find elements even when selectors fail.
    * @default true

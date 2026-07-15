@@ -11,12 +11,12 @@ import { ToolStream } from '../../tools/stream';
 import { selectFields } from '../../utils';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
-import type { ExecuteStepParams } from './step';
 import type { ConditionFunction, InnerOutput, LoopConditionFunction, Step } from '../step';
 import { getStepResult } from '../step';
 import type {
   DefaultEngineType,
   ExecutionContext,
+  ForeachOptions,
   OutputWriter,
   RestartExecutionParams,
   SerializedStepFlowEntry,
@@ -33,14 +33,20 @@ import {
   runCountDeprecationMessage,
   getResumeLabelsByStepId,
   getSingleStepEntryId,
+  resolveForeachConcurrency,
 } from '../utils';
+import type { ExecuteStepParams } from './step';
 
 /**
  * Runs one child of a parallel/conditional block by dispatching on its step type
  * to the matching engine execute method - the same per-type dispatch the engine
  * uses for top-level entries.
  */
-function executeChildEntry(engine: DefaultExecutionEngine, child: SingleStepEntry, params: Omit<ExecuteStepParams, 'step'>) {
+function executeChildEntry(
+  engine: DefaultExecutionEngine,
+  child: SingleStepEntry,
+  params: Omit<ExecuteStepParams, 'step'>,
+) {
   switch (child.type) {
     case 'step':
       return engine.executeStep({ ...params, step: child.step });
@@ -858,9 +864,7 @@ export interface ExecuteForeachParams extends ObservabilityContext {
   entry: {
     type: 'foreach';
     step: Step;
-    opts: {
-      concurrency: number;
-    };
+    opts: ForeachOptions;
   };
   prevStep: StepFlowEntry;
   prevOutput: any;
@@ -915,7 +919,10 @@ export async function executeForeach(
 
   const { step, opts } = entry;
   const results: any[] = [];
-  const concurrency = opts.concurrency;
+  const concurrency = resolveForeachConcurrency(opts, {
+    inputData: prevOutput,
+    getInitData: () => stepResults?.input,
+  });
   const startTime = resume?.steps[0] === step.id ? undefined : Date.now();
   const resumeTime = resume?.steps[0] === step.id ? Date.now() : undefined;
 

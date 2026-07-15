@@ -159,7 +159,7 @@ function WorkspaceSurface({ children }: { children: React.ReactNode }) {
   const [deployments, setDeployments] = React.useState(12);
 
   return (
-    <div className="min-h-[560px] bg-surface1 p-4 sm:p-6">
+    <div className="min-h-140 bg-surface1 p-4 sm:p-6">
       <div className="mx-auto grid max-w-6xl gap-4">
         <div className="flex flex-col gap-4 rounded-lg border border-border1 bg-surface2 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
           <div className="grid gap-1">

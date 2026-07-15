@@ -10,7 +10,7 @@ import type {
 } from '@mastra/core/notifications';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraCompositeStore } from '@mastra/core/storage';
-import type { ToolHooks } from '@mastra/core/tools';
+import type { ToolAfterHookContext, ToolHooks } from '@mastra/core/tools';
 import type { HookManager } from '../hooks/index.js';
 import type { McpManager } from '../mcp/index.js';
 import type { MastraCodeComposedState } from '../schema.js';
@@ -65,11 +65,14 @@ export class LazyNotificationsStorage extends NotificationsStorage {
   }
 }
 
-export function createToolHooks(hookManager?: HookManager): ToolHooks | undefined {
-  if (!hookManager) return undefined;
+export type PostToolObserver = (context: ToolAfterHookContext) => void | Promise<void>;
+
+export function createToolHooks(hookManager?: HookManager, postToolObserver?: PostToolObserver): ToolHooks | undefined {
+  if (!hookManager && !postToolObserver) return undefined;
 
   return {
     beforeToolCall: async ({ toolName, input }) => {
+      if (!hookManager) return;
       const preResult = await hookManager.runPreToolUse(toolName, input);
       if (!preResult.allowed) {
         return {
@@ -80,22 +83,33 @@ export function createToolHooks(hookManager?: HookManager): ToolHooks | undefine
         };
       }
     },
-    afterToolCall: async ({ toolName, input, output, error }) => {
-      await hookManager
-        .runPostToolUse(
-          toolName,
-          input,
-          error ? { error: error instanceof Error ? error.message : String(error) } : output,
-          Boolean(error),
-        )
-        .catch(() => undefined);
+    afterToolCall: async context => {
+      const { toolName, input, output, error } = context;
+      if (hookManager) {
+        const failed = error !== undefined;
+        await hookManager
+          .runPostToolUse(
+            toolName,
+            input,
+            failed ? { error: error instanceof Error ? error.message : String(error) } : output,
+            failed,
+          )
+          .catch(() => undefined);
+      }
+      await Promise.resolve()
+        .then(() => postToolObserver?.(context))
+        .catch(error => {
+          console.warn(`[MastraCode] Post-tool observer failed for ${toolName}.`, error);
+        });
     },
   };
 }
 
 type DynamicToolProvider =
   | Record<string, ToolLike | undefined>
-  | ((ctx: { requestContext: RequestContext }) => Record<string, ToolLike | undefined>);
+  | ((ctx: {
+      requestContext: RequestContext;
+    }) => Record<string, ToolLike | undefined> | Promise<Record<string, ToolLike | undefined>>);
 
 export function createDynamicTools(
   mcpManager?: McpManager,
@@ -104,7 +118,11 @@ export function createDynamicTools(
   storage?: MastraCompositeStore,
   pluginTools?: Record<string, ToolLike>,
 ) {
-  return function getDynamicTools({ requestContext }: { requestContext: RequestContext }) {
+  return function getDynamicTools({
+    requestContext,
+  }: {
+    requestContext: RequestContext;
+  }): Record<string, ToolLike> | Promise<Record<string, ToolLike>> {
     const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeComposedState> | undefined;
     const state = ctx?.getState();
 
@@ -150,40 +168,52 @@ export function createDynamicTools(
       Object.assign(tools, mcpTools);
     }
 
-    if (extraTools) {
-      const resolved = typeof extraTools === 'function' ? extraTools({ requestContext }) : extraTools;
-      for (const [name, tool] of Object.entries(resolved)) {
-        if (tool && !(name in tools)) {
-          tools[name] = tool;
+    const finish = (resolvedExtra: Record<string, ToolLike | undefined> | undefined) => {
+      if (resolvedExtra) {
+        for (const [name, tool] of Object.entries(resolvedExtra)) {
+          if (tool && !(name in tools)) {
+            tools[name] = tool;
+          }
         }
       }
-    }
 
-    if (pluginTools) {
-      for (const [name, tool] of Object.entries(pluginTools)) {
-        if (!(name in tools)) {
-          tools[name] = tool;
+      if (pluginTools) {
+        for (const [name, tool] of Object.entries(pluginTools)) {
+          if (!(name in tools)) {
+            tools[name] = tool;
+          }
         }
       }
-    }
 
-    // Remove tools explicitly disabled via config so the model never sees them.
-    if (disabledTools?.length) {
-      for (const toolName of disabledTools) {
-        delete tools[toolName];
-      }
-    }
-
-    // Remove tools that have a per-tool 'deny' policy so the model never sees them.
-    const permissionRules = state?.permissionRules;
-    if (permissionRules?.tools) {
-      for (const [name, policy] of Object.entries(permissionRules.tools)) {
-        if (policy === 'deny') {
-          delete tools[name];
+      // Remove tools explicitly disabled via config so the model never sees them.
+      if (disabledTools?.length) {
+        for (const toolName of disabledTools) {
+          delete tools[toolName];
         }
       }
+
+      // Remove tools that have a per-tool 'deny' policy so the model never sees them.
+      const permissionRules = state?.permissionRules;
+      if (permissionRules?.tools) {
+        for (const [name, policy] of Object.entries(permissionRules.tools)) {
+          if (policy === 'deny') {
+            delete tools[name];
+          }
+        }
+      }
+
+      return tools;
+    };
+
+    if (typeof extraTools === 'function') {
+      const resolved = extraTools({ requestContext });
+      // Stay synchronous for sync providers; only go async when the provider does.
+      if (resolved && typeof (resolved as PromiseLike<unknown>).then === 'function') {
+        return Promise.resolve(resolved).then(finish);
+      }
+      return finish(resolved as Record<string, ToolLike | undefined>);
     }
 
-    return tools;
+    return finish(extraTools);
   };
 }

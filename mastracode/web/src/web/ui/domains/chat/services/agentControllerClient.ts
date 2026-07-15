@@ -6,6 +6,12 @@ export type AgentControllerSession = ReturnType<AgentController['session']>;
 export interface CreateAgentControllerClientArgs {
   agentControllerId: string;
   resourceId: string;
+  /**
+   * Per-worktree session scope (the worktree's project path). Sessions sharing
+   * a resourceId but scoped differently are independent server-side sessions,
+   * so the client cache must be keyed by scope too.
+   */
+  scope?: string;
   baseUrl?: string;
   enabled?: boolean;
 }
@@ -18,8 +24,8 @@ type AgentControllerClientEntry = {
 
 const clientCache = new Map<string, AgentControllerClientEntry>();
 
-const cacheKey = (agentControllerId: string, resourceId: string, baseUrl: string) =>
-  JSON.stringify([baseUrl, agentControllerId, resourceId]);
+const cacheKey = (agentControllerId: string, resourceId: string, baseUrl: string, scope: string | undefined) =>
+  JSON.stringify([baseUrl, agentControllerId, resourceId, scope ?? null]);
 
 export function requireAgentControllerSession(session: AgentControllerSession | null) {
   if (!session) throw new Error('Agent controller session is not available');
@@ -29,12 +35,14 @@ export function requireAgentControllerSession(session: AgentControllerSession | 
 export function createAgentControllerClient({
   agentControllerId,
   resourceId,
+  scope,
   baseUrl = '',
   enabled = true,
 }: CreateAgentControllerClientArgs) {
   if (!enabled) return { client: null, controller: null, session: null };
 
-  const key = cacheKey(agentControllerId, resourceId, baseUrl);
+  const normalizedScope = scope || undefined;
+  const key = cacheKey(agentControllerId, resourceId, baseUrl, normalizedScope);
   const cached = clientCache.get(key);
   if (cached) return cached;
 

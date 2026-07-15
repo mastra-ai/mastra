@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer",
-  "version": "1.51.0-alpha.6",
+  "version": "1.51.0",
   "description": "",
   "type": "module",
   "files": [
@@ -136,12 +136,12 @@
     "@mastra/server": "workspace:*",
     "@types/babel__core": "^7.20.5",
     "@types/fs-extra": "^11.0.4",
-    "@types/node": "22.19.21",
+    "@types/node": "22.20.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^10.4.1",
     "fetch-to-node": "^2.1.0",
-    "hono-openapi": "^1.3.0",
+    "hono-openapi": "^1.3.1",
     "stacktrace-parser": "^0.1.11",
     "tsup": "^8.5.1",
     "tsx": "catalog:",

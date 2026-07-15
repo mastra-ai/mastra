@@ -293,6 +293,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/ebcloud',
+          label: 'EBCloud',
+        },
+        {
+          type: 'doc',
           id: 'providers/empiriolabs',
           label: 'EmpirioLabs AI',
         },
@@ -445,6 +450,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/lucidquery',
           label: 'LucidQuery',
+        },
+        {
+          type: 'doc',
+          id: 'providers/lynkr',
+          label: 'Lynkr',
         },
         {
           type: 'doc',
@@ -674,12 +684,22 @@ const sidebars = {
         {
           type: 'doc',
           id: 'providers/stepfun',
-          label: 'StepFun',
+          label: 'StepFun (China)',
         },
         {
           type: 'doc',
           id: 'providers/stepfun-ai',
-          label: 'StepFun AI',
+          label: 'StepFun (Global)',
+        },
+        {
+          type: 'doc',
+          id: 'providers/stepfun-step-plan',
+          label: 'StepFun Step Plan (China)',
+        },
+        {
+          type: 'doc',
+          id: 'providers/stepfun-ai-step-plan',
+          label: 'StepFun Step Plan (Global)',
         },
         {
           type: 'doc',

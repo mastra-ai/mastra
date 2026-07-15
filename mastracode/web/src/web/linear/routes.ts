@@ -13,7 +13,6 @@
 
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
-import { eq } from 'drizzle-orm';
 import type { Context } from 'hono';
 
 import { ensureWebAuthUser, webAuthTenant } from '../auth';
@@ -28,9 +27,14 @@ import {
   listLinearProjects,
 } from './client';
 import { getIntakeConfig } from '../intake/store';
+import { invalidateLinearConnectionCache } from './agent-tools';
 import { getLinearFeatureDiagnostics, isLinearFeatureEnabled } from './config';
+import {
+  getFreshLinearAccessToken as getFreshAccessToken,
+  LinearReauthRequiredError,
+  loadLinearConnection as loadConnection,
+} from './connection';
 import { linearConnections } from './schema';
-import type { LinearConnectionRow } from './schema';
 
 type RouteContext = Context;
 
@@ -85,10 +89,12 @@ function parseAfterCursor(raw: string | undefined): string | undefined | null {
   return raw;
 }
 
-/** Load the org's Linear connection, or `null` when not connected. */
-async function loadConnection(orgId: string): Promise<LinearConnectionRow | null> {
-  const [row] = await getAppDb().select().from(linearConnections).where(eq(linearConnections.orgId, orgId));
-  return row ?? null;
+/** Map a Linear read failure to the API response for the SPA. */
+function linearFetchError(c: RouteContext, err: unknown) {
+  if (err instanceof LinearReauthRequiredError || (err as { status?: number }).status === 401) {
+    return c.json({ error: 'linear_reauth_required', message: new LinearReauthRequiredError().message }, 409);
+  }
+  return c.json({ error: 'linear_fetch_failed', message: err instanceof Error ? err.message : String(err) }, 502);
 }
 
 /**
@@ -185,14 +191,17 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
         }
 
         try {
-          const accessToken = await exchangeLinearOAuthCode(code, redirectUri);
-          const workspace = await fetchLinearWorkspace(accessToken);
+          const tokens = await exchangeLinearOAuthCode(code, redirectUri);
+          const workspace = await fetchLinearWorkspace(tokens.accessToken);
           await getAppDb()
             .insert(linearConnections)
             .values({
               orgId,
               userId,
-              accessToken,
+              accessToken: tokens.accessToken,
+              refreshToken: tokens.refreshToken,
+              expiresAt: tokens.expiresAt,
+              scope: tokens.scope,
               workspaceName: workspace.name,
               workspaceUrlKey: workspace.urlKey,
             })
@@ -200,7 +209,10 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
               target: [linearConnections.orgId],
               set: {
                 userId,
-                accessToken,
+                accessToken: tokens.accessToken,
+                refreshToken: tokens.refreshToken,
+                expiresAt: tokens.expiresAt,
+                scope: tokens.scope,
                 workspaceName: workspace.name,
                 workspaceUrlKey: workspace.urlKey,
                 updatedAt: new Date(),
@@ -211,6 +223,8 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
           return c.redirect('/?linear=error');
         }
 
+        // Let the agent tools see the new connection immediately.
+        invalidateLinearConnectionCache(orgId);
         return c.redirect('/?linear=connected');
       },
     }),
@@ -231,13 +245,11 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
         }
 
         try {
-          const projects = await listLinearProjects(connection.accessToken);
+          const accessToken = await getFreshAccessToken(connection);
+          const projects = await listLinearProjects(accessToken);
           return c.json({ projects });
         } catch (err) {
-          return c.json(
-            { error: 'linear_fetch_failed', message: err instanceof Error ? err.message : String(err) },
-            502,
-          );
+          return linearFetchError(loose(c), err);
         }
       },
     }),
@@ -274,13 +286,11 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
         }
 
         try {
-          const { issues, nextCursor } = await listActiveLinearIssues(connection.accessToken, after, projectIds);
+          const accessToken = await getFreshAccessToken(connection);
+          const { issues, nextCursor } = await listActiveLinearIssues(accessToken, after, projectIds);
           return c.json({ issues, nextCursor });
         } catch (err) {
-          return c.json(
-            { error: 'linear_fetch_failed', message: err instanceof Error ? err.message : String(err) },
-            502,
-          );
+          return linearFetchError(loose(c), err);
         }
       },
     }),

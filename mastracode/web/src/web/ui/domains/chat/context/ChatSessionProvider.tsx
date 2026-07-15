@@ -3,24 +3,64 @@ import type { ReactNode } from 'react';
 
 import { useApiConfig } from '../../../../../shared/api/config';
 import { SkeletonRows } from '../../../ui';
-// Deep imports (not the workspaces barrel): the barrel re-exports components
-// that consume this chat context, so importing it here would create a cycle.
+// Deep imports (not the domain barrels): the barrels re-export components
+// that consume this chat context, so importing them here would create cycles.
+import { useWebAuth } from '../../auth/hooks/useWebAuth';
+import { userSessionResourceId } from '../../auth/services/auth';
 import { useActiveProjectContext } from '../../workspaces/context/ActiveProjectProvider';
 import { deriveProjectPath } from '../../workspaces/hooks/useWorkspaces';
+import { findUserSessionByThreadId } from '../../workspaces/services/projects';
 import { useAgentControllerThreadMessages } from '../hooks/useAgentControllerThreadMessages';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { ChatModelsProvider } from './ChatModelsProvider';
 import { ChatModesProvider } from './ChatModesProvider';
 import { ChatPermissionsProvider } from './ChatPermissionsProvider';
 import { ChatSessionContext } from './ChatSessionContext';
+import type { ChatSessionContextApi } from './ChatSessionContext';
 import { ChatTranscriptProvider } from './ChatTranscriptProvider';
 import { useChatSessionContext } from './useChatSessionContext';
 
-export function ChatSessionProvider({ children, threadId }: { children: ReactNode; threadId?: string }) {
+export function ChatSessionProvider({
+  children,
+  threadId,
+  userScoped = false,
+}: {
+  children: ReactNode;
+  threadId?: string;
+  /** True for /user/threads/* routes: bind to the user's personal session. */
+  userScoped?: boolean;
+}) {
   const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
+  const auth = useWebAuth();
   const { baseUrl } = useApiConfig();
-  const projectPath = deriveProjectPath(activeProject);
-  const sessionContextValue = { resourceId, sessionEnabled, projectPath, baseUrl };
+  let sessionContextValue: ChatSessionContextApi;
+  if (userScoped) {
+    // Personal session: resourceId is the logged-in user, scope is the
+    // user-session worktree that owns the route's thread.
+    const userSession = threadId ? findUserSessionByThreadId(threadId) : undefined;
+    sessionContextValue = {
+      resourceId: userSessionResourceId(auth.data),
+      sessionEnabled: !auth.isPending && Boolean(userSession),
+      projectPath: userSession?.worktree.worktreePath,
+      baseUrl,
+      kind: 'user',
+      threadBasePath: '/user/threads',
+    };
+  } else {
+    const projectPath = deriveProjectPath(activeProject);
+    const isGithubProject = activeProject?.source === 'github';
+    sessionContextValue = {
+      resourceId,
+      // GitHub projects have no repo-root session anymore — without a factory
+      // worktree there is nothing to bind a session to.
+      sessionEnabled: sessionEnabled && (!isGithubProject || Boolean(projectPath)),
+      projectPath,
+      projectState: isGithubProject ? { githubProjectId: activeProject.githubProjectId } : undefined,
+      baseUrl,
+      kind: isGithubProject ? 'factory' : 'user',
+      threadBasePath: '/threads',
+    };
+  }
 
   return (
     <ChatSessionContext.Provider value={sessionContextValue}>
@@ -30,10 +70,11 @@ export function ChatSessionProvider({ children, threadId }: { children: ReactNod
 }
 
 function ChatSessionBoundary({ children, threadId }: { children: ReactNode; threadId?: string }) {
-  const { resourceId, sessionEnabled, baseUrl } = useChatSessionContext();
+  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const messagesQuery = useAgentControllerThreadMessages({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
+    projectPath,
     threadId,
     baseUrl,
     enabled: sessionEnabled && Boolean(threadId),
