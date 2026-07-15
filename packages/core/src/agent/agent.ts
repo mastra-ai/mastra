@@ -24,6 +24,7 @@ import type {
 } from '../evals';
 import { runScorer } from '../evals/hooks';
 
+import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
 import { resolveModelConfig } from '../llm';
 import type { CoreMessage } from '../llm';
@@ -42,6 +43,7 @@ import type { MastraLanguageModel, MastraLegacyLanguageModel, MastraModelConfig 
 import { RegisteredLogger } from '../logger';
 import { networkLoop } from '../loop/network';
 import type { Mastra } from '../mastra';
+import { Mastra as MastraClass } from '../mastra';
 import type { VersionOverrides } from '../mastra/types';
 import { mergeVersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
@@ -81,6 +83,7 @@ import type { SignalProvider } from '../signals/signal-provider';
 import { resolveAgentSkills, mergeWorkspaceSkills } from '../skills/agent-skills-resolver';
 import type { AgentSkillsInput, SkillInput } from '../skills/types';
 
+import { InMemoryStore } from '../storage';
 import type { GoalObjectiveRecord } from '../storage/domains/thread-state/base';
 import { ChunkFrom } from '../stream';
 import type { MastraAgentNetworkStream } from '../stream';
@@ -473,6 +476,14 @@ export class Agent<
   #originalModel: DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext> | ModelFallbacks;
   maxRetries?: number;
   #mastra?: Mastra;
+  /**
+   * Lazily-built in-memory Mastra used when the agent isn't wired into one.
+   * Provides a workflow storage backend for internal snapshot lookups
+   * (loadAgenticLoopSnapshotOrThrow, assertToolCallSuspended,
+   * listSuspendedRuns) so `new Agent(...)` works standalone. Cleared when
+   * `__registerMastra` attaches a real Mastra later.
+   */
+  #ephemeralMastra?: Mastra;
   #pubsub?: PubSub;
   #inheritedPubSub?: PubSub;
   #memory?: DynamicArgument<MastraMemory, TRequestContext>;
@@ -3078,6 +3089,12 @@ export class Agent<
    */
   __registerMastra(mastra: Mastra) {
     this.#mastra = mastra;
+
+    // Drop any ephemeral Mastra now that a real one is attached; we no longer
+    // need the storage fallback.
+    if (this.#ephemeralMastra) {
+      this.#ephemeralMastra = undefined;
+    }
 
     // Propagate logger to workspace if it's a direct instance (not a factory function)
     if (this.#workspace && typeof this.#workspace !== 'function') {
@@ -6232,12 +6249,33 @@ export class Agent<
   }
 
   /**
+   * Lazily build (and cache) an ephemeral in-memory Mastra. A `new Agent(...)`
+   * that isn't wired into a Mastra still needs *some* storage for internal
+   * snapshot lookups (agentic-loop resume, suspended-run discovery). Reused
+   * for every subsequent call on this agent; `__registerMastra(real)` clears
+   * it.
+   */
+  async #getOrCreateEphemeralMastra(): Promise<Mastra> {
+    if (this.#ephemeralMastra) {
+      return this.#ephemeralMastra;
+    }
+    const ephemeral = new MastraClass({
+      logger: false,
+      storage: new InMemoryStore(),
+      pubsub: new EventEmitterPubSub(),
+    });
+    this.#ephemeralMastra = ephemeral;
+    return ephemeral;
+  }
+
+  /**
    * Loads the agentic-loop workflow snapshot for resume, or throws an actionable error.
    * Used by resumeStream and resumeGenerate to fail fast at the agent boundary.
    * @internal
    */
   async #loadAgenticLoopSnapshotOrThrow({ runId, method }: { runId: string; method: string }) {
-    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+    const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
+    const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
     const existingSnapshot = await waitForSuspendedSnapshot(workflowsStore, 'agentic-loop', runId);
 
     if (!existingSnapshot) {
@@ -6368,7 +6406,8 @@ export class Agent<
       // A resume stream can expose the next suspension just before its snapshot is
       // persisted. Briefly poll after authorization so an immediate response to
       // that newly surfaced tool call is not rejected based on the prior snapshot.
-      const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+      const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
+      const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
       const deadline = Date.now() + 2000;
       while (!isSuspended && workflowsStore && Date.now() < deadline) {
         await new Promise(resolve => setTimeout(resolve, 25));
@@ -7467,7 +7506,8 @@ export class Agent<
       });
     }
 
-    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+    const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
+    const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
 
     if (!workflowsStore) {
       throw new MastraError({
