@@ -11,6 +11,7 @@ import { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
 import { Agent } from '../agent';
 import { createDurableAgent } from '../durable/create-durable-agent';
+import { globalRunRegistry } from '../durable/run-registry';
 
 function createMockFGAProvider(authorized = true): IFGAProvider {
   return {
@@ -248,6 +249,53 @@ describe('DurableAgent FGA checks', () => {
 
   it('stream() denies before durable execution when agents:execute is denied', async () => {
     await expectDurableDenial('stream');
+  });
+
+  it('resume() authorizes the registered execution context when called without options', async () => {
+    const requireActor = vi
+      .fn()
+      .mockRejectedValue(new FGADeniedError(null, { type: 'agent', id: 'test-agent' }, 'agents:execute'));
+    const fgaProvider = { ...createMockFGAProvider(true), requireActor };
+    const pubsub = new EventEmitterPubSub();
+    const defaultOptions = vi.fn(() => ({
+      actor: { actorKind: 'system' as const, agentId: 'default-system-agent' },
+    }));
+    const base = new Agent({
+      id: 'test-agent',
+      name: 'test-agent',
+      instructions: 'test',
+      model: createMockModel(),
+      defaultOptions,
+    });
+    const durableAgent = createDurableAgent({ agent: base, pubsub });
+    const mastra = new Mastra({ agents: {}, logger: false, pubsub, server: { fga: fgaProvider } });
+    (durableAgent as any).__registerMastra(mastra);
+
+    const requestContext = new RequestContext();
+    requestContext.set('organizationId', 'org-1');
+    const { runId } = await durableAgent.prepare('test', {
+      requestContext,
+      memory: { thread: 'thread-1', resource: 'resource-1' },
+      actor: { actorKind: 'system', agentId: 'registered-system-agent' },
+    });
+    const defaultResolutionsBeforeResume = defaultOptions.mock.calls.length;
+
+    try {
+      await expect(durableAgent.resume(runId, { approved: true })).rejects.toThrow(FGADeniedError);
+      expect(defaultOptions).toHaveBeenCalledTimes(defaultResolutionsBeforeResume + 1);
+      expect(requireActor).toHaveBeenCalledWith(
+        expect.objectContaining({ agentId: 'registered-system-agent' }),
+        expect.objectContaining({
+          resource: { type: 'agent', id: 'test-agent' },
+          context: expect.objectContaining({ requestContext, resourceId: 'resource-1' }),
+        }),
+      );
+    } finally {
+      durableAgent.runRegistry.cleanup(runId);
+      globalRunRegistry.delete(runId);
+      await mastra.stopWorkers?.();
+      await pubsub.close();
+    }
   });
 
   it.each([

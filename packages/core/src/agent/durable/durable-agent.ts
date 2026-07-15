@@ -1231,33 +1231,6 @@ export class DurableAgent<
     resumeData: unknown,
     options?: DurableAgentStreamOptions<TOutput>,
   ): Promise<DurableAgentStreamResult<TOutput>> {
-    // Delegate to the idle-loop wrapper when `untilIdle` is set. Strip
-    // `untilIdle` before passing to the wrapper so the inner agent.resume()
-    // call (and subsequent agent.stream([]) continuations) don't recurse.
-    if (options?.untilIdle) {
-      const { untilIdle, ...rest } = options;
-      const maxIdleMs = typeof untilIdle === 'object' ? untilIdle.maxIdleMs : undefined;
-      return runResumeDurableStreamUntilIdle<TOutput>(
-        this as unknown as DurableAgent<any, any, TOutput>,
-        runId,
-        resumeData,
-        { ...rest, maxIdleMs } as DurableAgentStreamOptions<TOutput> & { maxIdleMs?: number },
-        {
-          activeStreams: this.#activeStreamUntilIdle,
-          bgManager: this.#mastra?.backgroundTaskManager,
-        },
-      );
-    }
-
-    if (options?.requestContext || options?.memory || options?.actor) {
-      await this.requireAgentExecutionFGA({
-        requestContext: options.requestContext,
-        memory: options.memory,
-        runId,
-        actor: options.actor,
-      });
-    }
-
     let entry = this.#runRegistry.get(runId);
     if (!entry) {
       // A persisted durable run can outlive this process (or the registry TTL).
@@ -1305,20 +1278,23 @@ export class DurableAgent<
       )?.memoryInfo;
       const threadId = workflowInput.state?.threadId ?? messageListMemoryInfo?.threadId;
       const resourceId = workflowInput.state?.resourceId ?? messageListMemoryInfo?.resourceId;
-      const requestContext =
-        options?.requestContext ??
-        (workflowInput.requestContextEntries
-          ? new RequestContext(
-              Object.entries(workflowInput.requestContextEntries) as Iterable<readonly [string, unknown]>,
-            )
-          : undefined);
-      const memory = options?.memory ?? (threadId ? { thread: threadId, resource: resourceId } : undefined);
+      const snapshotRequestContext = workflowInput.requestContextEntries
+        ? new RequestContext<unknown>(Object.entries(workflowInput.requestContextEntries))
+        : undefined;
+      const memory = threadId
+        ? {
+            ...options?.memory,
+            thread: threadId,
+            resource: resourceId ?? options?.memory?.resource,
+          }
+        : options?.memory;
 
       await this.prepare([], {
         ...(options as AgentExecutionOptions<TOutput>),
         runId,
-        requestContext,
+        requestContext: options?.requestContext ?? snapshotRequestContext,
         memory,
+        actor: options?.actor ?? workflowInput.options?.actor,
       });
       entry = this.#runRegistry.get(runId);
     }
@@ -1326,18 +1302,71 @@ export class DurableAgent<
       throw new Error(`Failed to rehydrate registry entry for run ${runId}. Cannot resume.`);
     }
 
+    const memoryInfo = this.#runRegistry.getMemoryInfo(runId);
+    const registeredMemory = memoryInfo?.threadId
+      ? ({
+          ...options?.memory,
+          thread: memoryInfo.threadId,
+          resource: memoryInfo.resourceId ?? options?.memory?.resource,
+        } as DurableAgentStreamOptions<TOutput>['memory'])
+      : options?.memory;
+
+    const resolvedOptions = (await this.#resolveExecutionOptions({
+      ...(options as DurableAgentStreamOptions<TOutput>),
+      requestContext:
+        options?.requestContext ??
+        (entry.requestContext as DurableAgentStreamOptions<TOutput>['requestContext'] | undefined),
+      memory: registeredMemory ?? options?.memory,
+      actor: options?.actor ?? (entry.actor as DurableAgentStreamOptions<TOutput>['actor'] | undefined),
+    })) as DurableAgentStreamOptions<TOutput>;
+
+    // Delegate to the idle-loop wrapper when `untilIdle` is set. Strip
+    // `untilIdle` before passing to the wrapper so the inner agent.resume()
+    // call (and subsequent agent.stream([]) continuations) don't recurse.
+    if (resolvedOptions.untilIdle) {
+      const { untilIdle, ...rest } = resolvedOptions;
+      const maxIdleMs = typeof untilIdle === 'object' ? untilIdle.maxIdleMs : undefined;
+      const resolvedOptionsAgent = {
+        id: this.id,
+        getDefaultOptions: () => ({}),
+        getMemory: (args?: any) => this.getMemory(args),
+        resume: (innerRunId: string, innerResumeData: unknown, innerOptions?: DurableAgentStreamOptions<TOutput>) =>
+          this.resume(innerRunId, innerResumeData, innerOptions),
+        stream: (innerMessages: MessageListInput, innerOptions?: DurableAgentStreamOptions<TOutput>) =>
+          this.stream(innerMessages, innerOptions),
+      } as unknown as DurableAgent<any, any, TOutput>;
+      return runResumeDurableStreamUntilIdle<TOutput>(
+        resolvedOptionsAgent,
+        runId,
+        resumeData,
+        { ...rest, maxIdleMs } as DurableAgentStreamOptions<TOutput> & { maxIdleMs?: number },
+        {
+          activeStreams: this.#activeStreamUntilIdle,
+          bgManager: this.#mastra?.backgroundTaskManager,
+        },
+      );
+    }
+
+    await this.requireAgentExecutionFGA({
+      requestContext: resolvedOptions.requestContext,
+      memory: resolvedOptions.memory,
+      runId,
+      snapshotMemoryInfo: memoryInfo,
+      actor: resolvedOptions.actor,
+    });
+
     // Install a fresh abort controller for the resumed segment. The original
     // controller is gone (the stream that owned it has already settled), so
     // we overwrite the registry slot. If the caller passed an external
     // signal, forward it onto the new internal controller.
     const abortController = new AbortController();
-    if (options?.abortSignal) {
-      if (options.abortSignal.aborted) {
-        abortController.abort((options.abortSignal as AbortSignal & { reason?: unknown }).reason);
+    if (resolvedOptions.abortSignal) {
+      if (resolvedOptions.abortSignal.aborted) {
+        abortController.abort((resolvedOptions.abortSignal as AbortSignal & { reason?: unknown }).reason);
       } else {
-        options.abortSignal.addEventListener(
+        resolvedOptions.abortSignal.addEventListener(
           'abort',
-          () => abortController.abort((options.abortSignal as AbortSignal & { reason?: unknown }).reason),
+          () => abortController.abort((resolvedOptions.abortSignal as AbortSignal & { reason?: unknown }).reason),
           { once: true },
         );
       }
@@ -1349,8 +1378,6 @@ export class DurableAgent<
       globalEntryForAbort.abortController = abortController;
       globalEntryForAbort.abortSignal = abortController.signal;
     }
-
-    const memoryInfo = this.#runRegistry.getMemoryInfo(runId);
 
     // Track cleanup state to avoid double cleanup
     let cleanedUp = false;
@@ -1392,16 +1419,16 @@ export class DurableAgent<
       threadId: memoryInfo?.threadId,
       resourceId: memoryInfo?.resourceId,
       offset: resumeOffset,
-      onChunk: options?.onChunk,
-      onStepFinish: options?.onStepFinish,
-      onFinish: options?.onFinish,
+      onChunk: resolvedOptions.onChunk,
+      onStepFinish: resolvedOptions.onStepFinish,
+      onFinish: resolvedOptions.onFinish,
       onStreamFinished: scheduleAutoCleanup,
       onError: async error => {
-        await options?.onError?.(error);
+        await resolvedOptions.onError?.(error);
         scheduleAutoCleanup();
       },
-      onSuspended: options?.onSuspended,
-      closeOnSuspend: (options as any)?.[CLOSE_ON_SUSPEND] === true,
+      onSuspended: resolvedOptions.onSuspended,
+      closeOnSuspend: (resolvedOptions as any)[CLOSE_ON_SUSPEND] === true,
       structuredOutput: entry.structuredOutput as any,
       outputProcessors: entry.outputProcessors,
       messageList: globalEntry?.messageList ?? this.#runRegistry.getMessageList(runId),
@@ -1409,7 +1436,7 @@ export class DurableAgent<
 
     // Wait for subscription to be ready, then resume workflow
     const workflow = this.getWorkflow();
-    const requestContext = options?.requestContext ?? globalRunRegistry.get(runId)?.requestContext;
+    const requestContext = resolvedOptions.requestContext;
 
     // Open a fresh AGENT_RUN + MODEL_GENERATION for the resumed segment on the same
     // traceId — the originals were ended as `suspended` and can't be reopened. Post-resume
@@ -1485,8 +1512,9 @@ export class DurableAgent<
         const run = await workflow.createRun({ runId, pubsub: this.pubsub });
         const result = await run.resume({
           resumeData,
-          label: options?.toolCallId,
+          label: resolvedOptions.toolCallId,
           requestContext,
+          actor: resolvedOptions.actor,
           ...createObservabilityContext({ currentSpan: entry.resumeAgentSpan ?? entry.agentSpan }),
         });
         if (result?.status === 'failed') {
@@ -1512,11 +1540,8 @@ export class DurableAgent<
     // Register the resumed run with the thread-stream runtime so
     // subscribeToThread subscribers are notified of the new stream.
     const resumeStreamOptions: AgentExecutionOptions<TOutput> = {
-      ...options,
+      ...resolvedOptions,
       runId,
-      memory: memoryInfo?.threadId
-        ? { thread: memoryInfo.threadId, resource: memoryInfo.resourceId }
-        : (options as any)?.memory,
     } as AgentExecutionOptions<TOutput>;
     await agentThreadStreamRuntime.registerRun(
       this as unknown as Agent<any, any, any, any>,
@@ -1796,6 +1821,7 @@ export class DurableAgent<
       memory,
       saveQueueManager,
       requestContext,
+      actor: workflowInput.options.actor,
       agentSpan: recoverAgentSpan,
       abortController,
       abortSignal: abortController.signal,
