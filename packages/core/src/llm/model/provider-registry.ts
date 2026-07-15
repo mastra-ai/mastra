@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
+import { getCapabilityFileName } from './capability-file.js';
 import type { ProviderConfig, MastraModelGatewayInterface } from './gateways/base.js';
 import { getGatewayId, shouldEnableGateway } from './gateways/gateway-helpers.js';
 import { MastraGateway } from './gateways/mastra.js';
@@ -507,7 +508,7 @@ function loadProviderCapabilityFile(provider: string, useDynamicLoading: boolean
   }
 
   for (const capabilitiesDir of capabilitiesDirCache) {
-    const filePath = path.join(capabilitiesDir, `${provider}.json`);
+    const filePath = path.join(capabilitiesDir, getCapabilityFileName(provider));
     try {
       const content = fs.readFileSync(filePath, 'utf-8');
       const data = JSON.parse(content) as ProviderCapabilityFile;
