@@ -480,14 +480,14 @@ describe('A2AAgent', () => {
       fetch: fetchMock as typeof fetch,
     });
 
-    const stream = await agent.stream('Buffered request', { runId: 'stream-run-1' });
+    const stream = await agent.stream('Buffered request');
     const events: StreamEventWithOptionalId[] = [];
     for await (const event of stream.fullStream) {
       events.push(event as StreamEventWithOptionalId);
     }
 
     expect(events.map(event => event.type)).toEqual(['start', 'text-start', 'text-delta', 'text-end', 'finish']);
-    expect(events.every(event => event.runId === 'stream-run-1')).toBe(true);
+    expect(events.every(event => event.runId === stream.runId)).toBe(true);
     expect(events.every(event => event.from === 'AGENT')).toBe(true);
     expect(events[0]?.payload?.id).toBe(agent.id);
     expect(events[1]?.payload?.id).toBe('message-1');
@@ -501,7 +501,9 @@ describe('A2AAgent', () => {
       finishReason: 'stop',
     });
     expect(await stream.text).toBe('Buffered remote response');
-    expect((await stream.getResult()).text).toBe('Buffered remote response');
+    const result = await stream.getResult();
+    expect(result.text).toBe('Buffered remote response');
+    expect(result.runId).toBe(stream.runId);
   });
 
   it('consumes remote message/stream events when streaming is supported', async () => {

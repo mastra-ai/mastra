@@ -621,7 +621,7 @@ export class A2AAgent implements SubAgent {
     const memoryInfo = resolveMemoryInfo(options);
 
     if (!bootstrap.streamingSupported) {
-      const result = await this.generate(messages, options);
+      const result = await this.generate(messages, { ...options, runId });
       return this.#createBufferedStreamResult({ runId, result, emitStart: true, ...memoryInfo });
     }
 
