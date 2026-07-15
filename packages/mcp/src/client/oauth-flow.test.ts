@@ -629,6 +629,44 @@ describe('MCPClient OAuth authorization flow', () => {
     await expect(flow).rejects.toThrow();
   });
 
+  it('waits for an in-flight disconnect before starting a new authenticate flow', async () => {
+    const { mcpServer, callbackUrl } = await setup();
+
+    // First flow stalls at the authorization URL so a disconnect can catch it
+    // mid-flight. The retry after disconnect drives the browser to completion.
+    let authorizationReached: (() => void) | undefined;
+    const reachedAuthorization = new Promise<void>(resolve => {
+      authorizationReached = resolve;
+    });
+    let driveOnRedirect = false;
+    const provider = createProvider({
+      callbackUrl,
+      onRedirectToAuthorization: url => {
+        if (driveOnRedirect) {
+          return driveBrowser(url);
+        }
+        authorizationReached?.();
+      },
+    });
+    const mcp = track(createClient(mcpServer.url, provider));
+
+    const stalledFlow = mcp.authenticate('fixture');
+    await reachedAuthorization;
+
+    // Start the disconnect and, without awaiting it, immediately kick off a new
+    // authenticate. The guard must hold the new flow until disconnect finishes
+    // clearing the auth-flow maps, so the retry does not race the teardown and
+    // orphan its callback server.
+    driveOnRedirect = true;
+    const disconnectPromise = mcp.disconnect();
+    const retryFlow = mcp.authenticate('fixture');
+
+    await expect(stalledFlow).rejects.toThrow(/closed before receiving an authorization code/);
+    await disconnectPromise;
+    await retryFlow;
+    expect(mcp.getServerAuthState('fixture')).toBe('authorized');
+  });
+
   it('rejects authenticate for servers without an MCPOAuthClientProvider', async () => {
     const mcp = track(
       new MCPClient({

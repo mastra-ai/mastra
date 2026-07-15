@@ -490,9 +490,10 @@ export class InternalMastraMCPClient extends MastraBase {
     if (shouldTrySSE) {
       this.log('debug', 'Falling back to deprecated HTTP+SSE transport...');
       // Fallback to SSE transport
-      // If fetch is provided, ensure it's also in eventSourceInit for the EventSource connection
-      // The top-level fetch is used for POST requests, but eventSourceInit.fetch is needed for the SSE stream
-      const sseEventSourceInit = { ...eventSourceInit, fetch };
+      // The top-level fetch is used for POST requests, but eventSourceInit.fetch is needed for the SSE stream.
+      // Only supply our span-detaching fetch when the caller hasn't provided one, so an explicit
+      // eventSourceInit.fetch is preserved rather than overwritten.
+      const sseEventSourceInit = { ...eventSourceInit, fetch: eventSourceInit?.fetch ?? fetch };
 
       const sseTransport = new SSEClientTransport(url, {
         requestInit,
@@ -518,9 +519,24 @@ export class InternalMastraMCPClient extends MastraBase {
     }
 
     // Reaching here means a transport connected; any earlier authorization requirement is satisfied.
-    this.pendingAuthTransport = undefined;
+    // Close, don't just drop, any transport left pending from an earlier 401 so its event stream
+    // and session resources are released rather than abandoned.
+    this.closePendingAuthTransport();
     if (authProvider) {
       this._authState = 'authorized';
+    }
+  }
+
+  /**
+   * Closes and clears any transport retained from an unfinished authorization
+   * flow. Safe to call when nothing is pending. Centralizes the cleanup so
+   * success, disconnect, and forceReconnect all release the same resource.
+   */
+  private closePendingAuthTransport(replacement?: StreamableHTTPClientTransport | SSEClientTransport): void {
+    const pending = this.pendingAuthTransport;
+    this.pendingAuthTransport = replacement;
+    if (pending && pending !== replacement) {
+      void pending.close().catch(() => {});
     }
   }
 
@@ -532,11 +548,7 @@ export class InternalMastraMCPClient extends MastraBase {
     // A prior connect() may have left a pending transport that never completed
     // finishAuth. Close the superseded one before replacing it so its event
     // stream and session resources are released rather than abandoned.
-    const superseded = this.pendingAuthTransport;
-    if (superseded && superseded !== transport) {
-      void superseded.close().catch(() => {});
-    }
-    this.pendingAuthTransport = transport;
+    this.closePendingAuthTransport(transport);
     this._authState = 'needs-auth';
     this.log('debug', 'Server requires OAuth authorization before connecting.');
   }
@@ -705,6 +717,9 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   async disconnect() {
+    // Release any transport left pending from an unfinished authorization flow,
+    // even when there is no live transport to tear down.
+    this.closePendingAuthTransport();
     if (!this.transport) {
       this.log('debug', 'Disconnect called but no transport was connected.');
       return;
@@ -752,6 +767,10 @@ export class InternalMastraMCPClient extends MastraBase {
    */
   async forceReconnect(): Promise<void> {
     this.log('debug', 'Forcing reconnection to MCP server...');
+
+    // Release any transport left pending from an unfinished authorization flow
+    // before rebuilding the connection.
+    this.closePendingAuthTransport();
 
     // Disconnect current connection (ignore errors as connection may already be broken)
     try {
