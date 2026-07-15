@@ -10,7 +10,6 @@ import { useToolCall } from '@/services/tool-call-provider';
 interface SubmitPlanControlsProps {
   toolCallId: string;
   suspendPayload: SubmitPlanSuspendPayload;
-  hasPlan: boolean;
   onActionChange: (action: SubmitPlanResumeData['action'] | undefined) => void;
 }
 
@@ -26,15 +25,11 @@ const createResumeData = (
   ...(feedback ? { feedback } : {}),
 });
 
-export const SubmitPlanControls = ({
-  toolCallId,
-  suspendPayload,
-  hasPlan,
-  onActionChange,
-}: SubmitPlanControlsProps) => {
+export const SubmitPlanControls = ({ toolCallId, suspendPayload, onActionChange }: SubmitPlanControlsProps) => {
   const { approveToolcall, isRunning } = useToolCall();
   const [feedback, setFeedback] = useState('');
   const trimmedFeedback = feedback.trim();
+  const hasPlan = Boolean(suspendPayload.plan?.trim());
 
   const submitDecision = async (action: SubmitPlanResumeData['action'], feedbackValue?: string) => {
     if (isRunning) return;
@@ -67,19 +62,21 @@ export const SubmitPlanControls = ({
 
       <PlanActionGroup>
         <Popover>
-          <PopoverTrigger asChild>
-            <Button
-              type="button"
-              variant="primary"
-              size="icon-sm"
-              tooltip="Request changes"
-              aria-label="Request changes"
-              disabled={isRunning}
-            >
-              <MessageSquareText />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent side="top" align="end" sideOffset={8} className="w-72 p-3">
+          <PopoverTrigger
+            render={
+              <Button
+                type="button"
+                variant="primary"
+                size="icon-sm"
+                tooltip="Request changes"
+                aria-label="Request changes"
+                disabled={isRunning}
+              >
+                <MessageSquareText />
+              </Button>
+            }
+          />
+          <PopoverContent side="top" align="end" sideOffset={8}>
             <Textarea
               aria-label="Requested changes"
               placeholder="Describe requested changes..."
@@ -89,7 +86,6 @@ export const SubmitPlanControls = ({
               rows={3}
               variant="outline"
               size="sm"
-              className="min-h-20 resize-y rounded-lg bg-surface1"
             />
             <div className="mt-2 flex justify-end">
               <Button

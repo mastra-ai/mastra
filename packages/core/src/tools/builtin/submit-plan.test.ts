@@ -37,7 +37,12 @@ describe('submitPlanTool (native suspend)', () => {
     expect(result).toEqual({
       content: 'Plan approved. Proceed with implementation following the approved plan.',
       isError: false,
-      submittedPlan: { title: 'Ship it', path: '.mastracode/plans/ship-it.md', plan: 'Do it' },
+      submittedPlan: {
+        action: 'approved',
+        title: 'Ship it',
+        path: '.mastracode/plans/ship-it.md',
+        plan: 'Do it',
+      },
     });
   });
 
@@ -47,6 +52,7 @@ describe('submitPlanTool (native suspend)', () => {
     const result = await (submitPlanTool as any).execute({ path: '.mastracode/plans/ship-it.md' }, ctx);
 
     expect(result.isError).toBe(false);
+    expect(result.submittedPlan.action).toBe('rejected');
     expect(result.content).toContain('The user wants revisions.');
     expect(result.content).toContain('User feedback: Add tests');
   });
@@ -57,6 +63,7 @@ describe('submitPlanTool (native suspend)', () => {
     const result = await (submitPlanTool as any).execute({ path: '.mastracode/plans/ship-it.md' }, ctx);
 
     expect(result.isError).toBe(false);
+    expect(result.submittedPlan.action).toBe('rejected');
     expect(result.content).toContain('not approved');
     expect(result.content).toContain('Stop now');
     expect(result.content).toContain('next message');

@@ -44,7 +44,10 @@ const extractPendingToolApprovalIdsFromMessages = (messages: MastraDBMessage[]) 
 
       for (const suspensionData of Object.values(source)) {
         const toolCallId = suspensionData?.toolCallId;
-        if (typeof toolCallId === 'string' && toolCallId.length > 0) {
+        const hasOutput =
+          typeof toolCallId === 'string' &&
+          messages.some(candidate => toolCallHasOutput(candidate.content.parts, toolCallId));
+        if (typeof toolCallId === 'string' && toolCallId.length > 0 && !hasOutput) {
           pendingToolApprovalIds.add(toolCallId);
         }
       }
@@ -216,6 +219,20 @@ export type NetworkArgs = SharedArgs & {
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
 
+const isPlainObject = (value: unknown): value is Record<string, unknown> => {
+  if (!isObject(value) || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+};
+
+const isJSONValue = (value: unknown): value is JSONValue => {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;
+  if (typeof value === 'number') return Number.isFinite(value);
+  if (Array.isArray(value)) return value.every(isJSONValue);
+  if (!isPlainObject(value)) return false;
+  return Object.values(value).every(isJSONValue);
+};
+
 const getErrorName = (error: unknown) => (isObject(error) && typeof error.name === 'string' ? error.name : undefined);
 
 const isAbortError = (error: unknown) => getErrorName(error) === 'AbortError';
@@ -315,7 +332,7 @@ export const useChat = ({
     setTasks(extractLatestTasksFromMessages(formattedMessages));
     pendingToolApprovalIdsRef.current = extractPendingToolApprovalIdsFromMessages(formattedMessages);
     setIsAwaitingToolApproval(pendingToolApprovalIdsRef.current.size > 0);
-    _currentRunId.current = extractRunIdFromMessages(formattedMessages);
+    _currentRunId.current = extractRunIdFromMessages(formattedMessages, pendingToolApprovalIdsRef.current);
   }, [initialMessages]);
 
   useEffect(() => {
@@ -910,8 +927,18 @@ export const useChat = ({
     const onChunk = _onChunk.current;
     const currentRunId = _currentRunId.current;
 
-    if (!currentRunId)
-      return console.info('[approveToolCall] approveToolCall can only be called after a stream has started');
+    if (resumeData !== undefined && !isJSONValue(resumeData)) {
+      throw new TypeError('Tool resume data must be JSON-serializable');
+    }
+
+    let approvalTarget: { threadId: string } | { runId: string };
+    if (_threadSubscriptionKeyRef.current && threadId) {
+      approvalTarget = { threadId };
+    } else if (currentRunId) {
+      approvalTarget = { runId: currentRunId };
+    } else {
+      throw new Error('[approveToolCall] approveToolCall can only be called after a stream has started');
+    }
 
     setIsRunning(true);
     setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'approved' } }));
@@ -926,11 +953,11 @@ export const useChat = ({
     };
 
     const agent = baseClient.getAgent(agentId);
-    if (_threadSubscriptionKeyRef.current && threadId) {
+    if ('threadId' in approvalTarget) {
       try {
         await agent.sendToolApproval({
           resourceId: resourceId || agentId,
-          threadId,
+          threadId: approvalTarget.threadId,
           toolCallId,
           approved: true,
           ...(resumeData !== undefined ? { resumeData } : {}),
@@ -949,13 +976,13 @@ export const useChat = ({
     try {
       const response =
         resumeData !== undefined
-          ? await agent.resumeStream(resumeData as JSONValue, {
-              runId: currentRunId,
+          ? await agent.resumeStream(resumeData, {
+              runId: approvalTarget.runId,
               toolCallId,
               requestContext: _requestContext.current,
             })
           : await agent.approveToolCall({
-              runId: currentRunId,
+              runId: approvalTarget.runId,
               toolCallId,
               requestContext: _requestContext.current,
             });

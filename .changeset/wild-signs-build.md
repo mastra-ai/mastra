@@ -2,4 +2,4 @@
 '@mastra/react': patch
 ---
 
-Fixed useChat approval fallback so custom resume data resumes suspended tool calls instead of being dropped.
+Fixed suspended tool approvals so custom resume data is preserved and reloaded threads use the correct pending run.

@@ -18,13 +18,20 @@ import {
 import { useState } from 'react';
 import { SubmitPlanControls } from './submit-plan-controls';
 
+export type SubmitPlanStatus = SubmitPlanResumeData['action'] | 'failed';
+
 export interface SubmitPlanBadgeProps {
   toolCallId: string;
   suspendPayload: SubmitPlanSuspendPayload;
   resultContent?: string;
+  resultStatus?: SubmitPlanStatus;
 }
 
-type SubmitPlanStatus = SubmitPlanResumeData['action'] | 'failed';
+const statusDetails: Record<SubmitPlanStatus, { label: string; variant: 'success' | 'error' }> = {
+  approved: { label: 'Approved', variant: 'success' },
+  rejected: { label: 'Rejected', variant: 'error' },
+  failed: { label: 'Failed', variant: 'error' },
+};
 
 const getResultStatus = (content: string | undefined): SubmitPlanStatus | undefined => {
   if (content?.startsWith('Plan approved')) return 'approved';
@@ -33,17 +40,16 @@ const getResultStatus = (content: string | undefined): SubmitPlanStatus | undefi
   return undefined;
 };
 
-export const SubmitPlanBadge = ({ toolCallId, suspendPayload, resultContent }: SubmitPlanBadgeProps) => {
+export const SubmitPlanBadge = ({ toolCallId, suspendPayload, resultContent, resultStatus }: SubmitPlanBadgeProps) => {
   const [submittedAction, setSubmittedAction] = useState<SubmitPlanResumeData['action']>();
 
   const { path, title, plan } = suspendPayload;
   const planContent = typeof plan === 'string' && plan.trim().length > 0 ? plan : undefined;
   const hasPlan = planContent !== undefined;
   const resolvedTitle = typeof title === 'string' && title.trim().length > 0 ? title : 'Submitted plan';
-  const isComplete = resultContent !== undefined || submittedAction !== undefined;
-  const status = getResultStatus(resultContent) ?? submittedAction;
-  const statusLabel = status === 'approved' ? 'Approved' : status === 'rejected' ? 'Rejected' : 'Failed';
-  const statusVariant = status === 'approved' ? 'success' : 'error';
+  const isComplete = resultContent !== undefined || resultStatus !== undefined || submittedAction !== undefined;
+  const status = resultStatus ?? getResultStatus(resultContent) ?? submittedAction;
+  const resolvedStatus = status ? statusDetails[status] : undefined;
   const copyContent = [resolvedTitle, `File: ${path}`, ...(planContent ? [planContent] : [])].join('\n\n');
 
   return (
@@ -51,7 +57,7 @@ export const SubmitPlanBadge = ({ toolCallId, suspendPayload, resultContent }: S
       <PlanHeader>
         <PlanLabel />
         <PlanHeaderActions>
-          {status && <PlanStatus variant={statusVariant}>{statusLabel}</PlanStatus>}
+          {resolvedStatus && <PlanStatus variant={resolvedStatus.variant}>{resolvedStatus.label}</PlanStatus>}
           <PlanCopyButton content={copyContent} />
         </PlanHeaderActions>
       </PlanHeader>
@@ -73,7 +79,6 @@ export const SubmitPlanBadge = ({ toolCallId, suspendPayload, resultContent }: S
             <SubmitPlanControls
               toolCallId={toolCallId}
               suspendPayload={suspendPayload}
-              hasPlan={hasPlan}
               onActionChange={setSubmittedAction}
             />
           )}

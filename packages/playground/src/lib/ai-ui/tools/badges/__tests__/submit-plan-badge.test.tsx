@@ -152,7 +152,8 @@ describe('SubmitPlanBadge', () => {
           title: 'Reviewed plan',
           plan: 'Plan',
         },
-        resultContent: 'Plan approved. Proceed with implementation following the approved plan.',
+        resultContent: 'Localized success response',
+        resultStatus: 'approved',
       });
 
       expect(screen.getByText('Approved')).toBeTruthy();

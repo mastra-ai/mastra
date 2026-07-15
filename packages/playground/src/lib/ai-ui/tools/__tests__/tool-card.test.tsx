@@ -175,30 +175,32 @@ describe('ToolCard dispatch', () => {
     expect(screen.getByText('searchDocs')).toBeTruthy();
   });
 
-  it('routes submit_plan tools to the dedicated plan review renderer', () => {
-    renderToolCard(
-      baseProps({
-        toolName: 'submit_plan',
-        toolCallId: 'submit-plan-call',
-        output: undefined,
-        metadata: {
-          mode: 'stream',
-          suspendedTools: {
-            'submit-plan-call': {
-              suspendPayload: {
-                path: '/workspace/plan.md',
-                title: 'Review plan',
-                plan: 'Plan body',
+  describe('when rendering a submit_plan tool', () => {
+    it('routes it to the dedicated plan review renderer', () => {
+      renderToolCard(
+        baseProps({
+          toolName: 'submit_plan',
+          toolCallId: 'submit-plan-call',
+          output: undefined,
+          metadata: {
+            mode: 'stream',
+            suspendedTools: {
+              'submit-plan-call': {
+                suspendPayload: {
+                  path: '/workspace/plan.md',
+                  title: 'Review plan',
+                  plan: 'Plan body',
+                },
               },
             },
           },
-        },
-      }),
-    );
+        }),
+      );
 
-    expect(screen.getByTestId('submit-plan-badge')).toBeTruthy();
-    expect(screen.getByText('Review plan')).toBeTruthy();
-    expect(screen.queryByText('submit_plan')).toBeNull();
+      expect(screen.getByTestId('submit-plan-badge')).toBeTruthy();
+      expect(screen.getByText('Review plan')).toBeTruthy();
+      expect(screen.queryByText('submit_plan')).toBeNull();
+    });
   });
 
   it('treats background-task string results as a generic tool badge', () => {

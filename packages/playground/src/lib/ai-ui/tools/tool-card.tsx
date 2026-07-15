@@ -186,7 +186,7 @@ export const ToolCardInner = ({ toolName, input, output, toolCallId, state, meta
 
   // submit_plan suspensions render an inline plan review with resume data.
   if (toolName === 'submit_plan') {
-    return <SubmitPlanTool toolName={toolName} toolCallId={toolCallId} output={output} metadata={metadata} />;
+    return <SubmitPlanTool toolCallId={toolCallId} output={output} metadata={metadata} />;
   }
 
   if (isBackgroundTaskResult) {

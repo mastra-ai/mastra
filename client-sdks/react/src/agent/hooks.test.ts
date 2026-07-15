@@ -374,15 +374,9 @@ describe('useChat forwards clientTools', () => {
     unmount();
   });
 
-  it('passes custom resumeData through subscription approvals', async () => {
+  it('passes custom resumeData through subscription approvals without a local run ID', async () => {
     keepSubscriptionOpen = true;
     nextSubscribeChunks = [
-      {
-        type: 'start',
-        runId: 'run-approval',
-        from: 'AGENT',
-        payload: { messageId: 'msg-approval' },
-      },
       {
         type: 'tool-call-suspended',
         runId: 'run-approval',
@@ -667,6 +661,15 @@ describe('useChat forwards clientTools', () => {
                 toolCallId: 'tool-call-done',
                 toolName: 'weatherTool',
                 args: { city: 'London' },
+              },
+            },
+            suspendedTools: {
+              'tool-call-done': {
+                runId: 'run-reload',
+                toolCallId: 'tool-call-done',
+                toolName: 'weatherTool',
+                args: { city: 'London' },
+                suspendPayload: { question: 'Continue?' },
               },
             },
           },
@@ -1045,6 +1048,33 @@ describe('useChat forwards clientTools', () => {
 
     expect(result.current.isRunning).toBe(false);
     expect(result.current.toolCallApprovals['tool-call-approval-1']).toBeUndefined();
+  });
+
+  it('rejects non-JSON custom resume data before resuming', async () => {
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+        }),
+      { wrapper },
+    );
+
+    await act(async () => {
+      await result.current.sendMessage({
+        mode: 'stream',
+        message: 'hi',
+      });
+    });
+
+    await expect(
+      act(async () => {
+        await result.current.approveToolCall('tool-call-approval-1', { approvedAt: new Date() });
+      }),
+    ).rejects.toThrow('Tool resume data must be JSON-serializable');
+
+    expect(resumeStreamMock).not.toHaveBeenCalled();
+    expect(result.current.isRunning).toBe(false);
   });
 
   it('uses approveToolCall for legacy approval when custom resumeData is not provided', async () => {

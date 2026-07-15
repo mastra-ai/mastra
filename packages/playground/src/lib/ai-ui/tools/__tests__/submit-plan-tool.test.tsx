@@ -6,7 +6,6 @@ import { SubmitPlanTool } from '../submit-plan-tool';
 import { ToolCallProvider } from '@/services/tool-call-provider';
 
 type RenderProps = {
-  toolName: string;
   toolCallId: string;
   output: unknown;
   metadata?: MessageMetadata;
@@ -38,55 +37,89 @@ const metadataWithPayload = (key: string, suspendPayload: unknown): MessageMetad
 afterEach(() => cleanup());
 
 describe('SubmitPlanTool', () => {
-  it('prefers the toolCallId payload and renders its markdown body', () => {
-    const metadata: MessageMetadata = {
-      suspendedTools: {
-        submit_plan: {
-          suspendPayload: {
-            path: '/tmp/wrong.md',
-            title: 'Wrong plan',
-            plan: 'Wrong body',
+  describe('when metadata contains payloads under both supported keys', () => {
+    it('prefers the toolCallId payload and renders its markdown body', () => {
+      const metadata: MessageMetadata = {
+        suspendedTools: {
+          submit_plan: {
+            suspendPayload: {
+              path: '/tmp/wrong.md',
+              title: 'Wrong plan',
+              plan: 'Wrong body',
+            },
+          },
+          'call-1': {
+            suspendPayload: {
+              path: '/tmp/right.md',
+              title: 'Review migration plan',
+              plan: '## Steps\n\n- Move data\n- Verify output',
+            },
           },
         },
-        'call-1': {
-          suspendPayload: {
-            path: '/tmp/right.md',
-            title: 'Review migration plan',
-            plan: '## Steps\n\n- Move data\n- Verify output',
-          },
-        },
-      },
-    };
+      };
 
-    renderTool({ toolName: 'submit_plan', toolCallId: 'call-1', output: undefined, metadata });
+      renderTool({ toolCallId: 'call-1', output: undefined, metadata });
 
-    expect(screen.getByText('Review migration plan')).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Steps' })).toBeTruthy();
-    expect(screen.queryByText('Wrong plan')).toBeNull();
-  });
-
-  it('falls back to the toolName payload and renders a path-only review', () => {
-    const metadata = metadataWithPayload('submit_plan', {
-      path: '/workspace/.mastracode/plans/plan.md',
-      plan: '   ',
+      expect(screen.getByText('Review migration plan')).toBeTruthy();
+      expect(screen.getByRole('heading', { name: 'Steps' })).toBeTruthy();
+      expect(screen.queryByText('Wrong plan')).toBeNull();
     });
-
-    renderTool({ toolName: 'submit_plan', toolCallId: 'call-2', output: undefined, metadata });
-
-    expect(screen.getByText('Submitted plan')).toBeTruthy();
-    expect(screen.getByText('Plan file')).toBeTruthy();
-    expect(screen.getByText('/workspace/.mastracode/plans/plan.md')).toBeTruthy();
   });
 
-  it.each([
-    { name: 'missing path', payload: { title: 'Missing path', plan: 'Body' } },
-    { name: 'blank path', payload: { path: '   ', plan: 'Body' } },
-    { name: 'invalid optional fields', payload: { path: '/tmp/plan.md', title: 42 } },
-  ])('renders nothing for a malformed payload with $name', ({ payload }) => {
-    const metadata = metadataWithPayload('call-malformed', payload);
+  describe('when metadata is keyed by the submit_plan tool name', () => {
+    it('renders a path-only review', () => {
+      const metadata = metadataWithPayload('submit_plan', {
+        path: '/workspace/.mastracode/plans/plan.md',
+        plan: '   ',
+      });
 
-    renderTool({ toolName: 'submit_plan', toolCallId: 'call-malformed', output: undefined, metadata });
+      renderTool({ toolCallId: 'call-2', output: undefined, metadata });
 
-    expect(screen.queryByTestId('submit-plan-badge')).toBeNull();
+      expect(screen.getByText('Submitted plan')).toBeTruthy();
+      expect(screen.getByText('Plan file')).toBeTruthy();
+      expect(screen.getByText('/workspace/.mastracode/plans/plan.md')).toBeTruthy();
+    });
+  });
+
+  describe('when the result contains a submitted plan snapshot', () => {
+    it('renders that snapshot and its structured approval status', () => {
+      const metadata = metadataWithPayload('call-resolved', {
+        path: '/tmp/stale.md',
+        title: 'Stale plan',
+      });
+
+      renderTool({
+        toolCallId: 'call-resolved',
+        output: {
+          content: 'Localized success response',
+          isError: false,
+          submittedPlan: {
+            action: 'approved',
+            path: '/tmp/resolved.md',
+            title: 'Resolved plan',
+            plan: 'Resolved body',
+          },
+        },
+        metadata,
+      });
+
+      expect(screen.getByText('Resolved plan')).toBeTruthy();
+      expect(screen.getByText('Approved')).toBeTruthy();
+      expect(screen.queryByText('Stale plan')).toBeNull();
+    });
+  });
+
+  describe('when the payload is malformed', () => {
+    it.each([
+      { name: 'missing path', payload: { title: 'Missing path', plan: 'Body' } },
+      { name: 'blank path', payload: { path: '   ', plan: 'Body' } },
+      { name: 'invalid optional fields', payload: { path: '/tmp/plan.md', title: 42 } },
+    ])('renders nothing for $name', ({ payload }) => {
+      const metadata = metadataWithPayload('call-malformed', payload);
+
+      renderTool({ toolCallId: 'call-malformed', output: undefined, metadata });
+
+      expect(screen.queryByTestId('submit-plan-badge')).toBeNull();
+    });
   });
 });
