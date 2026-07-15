@@ -396,11 +396,7 @@ export class BraintrustExporter extends TrackingExporter<
       return;
     }
 
-    const attrs = span.attributes as { toolCallId?: string } | undefined;
-    const toolCallId = attrs?.toolCallId ?? span.metadata?.toolCallId;
-    if (!toolCallId) {
-      return;
-    }
+    const toolCallId = this.resolveToolCallId(span);
 
     // Store the result for later merging
     modelGenSpanData.pendingToolResults.set(toolCallId, {
@@ -508,7 +504,7 @@ export class BraintrustExporter extends TrackingExporter<
     return match?.[1] ?? span.name;
   }
 
-  private getToolCallId(span: AnyExportedSpan): string {
+  private resolveToolCallId(span: AnyExportedSpan): string {
     const attrs = span.attributes as { toolCallId?: string } | undefined;
     return (
       attrs?.toolCallId ??
@@ -536,7 +532,7 @@ export class BraintrustExporter extends TrackingExporter<
         content: '',
         tool_calls: [
           {
-            id: this.getToolCallId(span),
+            id: this.resolveToolCallId(span),
             type: 'function',
             function: {
               name: this.getToolName(span),
@@ -552,7 +548,7 @@ export class BraintrustExporter extends TrackingExporter<
     return {
       role: 'tool',
       content: serializeToolResult(span.output),
-      tool_call_id: this.getToolCallId(span),
+      tool_call_id: this.resolveToolCallId(span),
     };
   }
 

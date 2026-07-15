@@ -1098,6 +1098,90 @@ describe('BraintrustExporter', () => {
     );
   });
 
+  it('should resolve toolCallId from metadata when absent from attributes', async () => {
+    const traceId = 'metadata-tool-call-id-trace';
+
+    const llmSpan = createMockSpan({
+      id: 'meta-model-gen-span',
+      traceId,
+      name: 'gpt-4-call',
+      type: SpanType.MODEL_GENERATION,
+      isRoot: true,
+      input: [{ role: 'user', content: 'What is 2+2?' }],
+      output: { text: 'The answer is 4.' },
+      attributes: { model: 'gpt-4', provider: 'openai' },
+    });
+
+    const modelStepSpan = createMockSpan({
+      id: 'meta-model-step-span',
+      traceId,
+      name: 'Model Step 0',
+      type: SpanType.MODEL_STEP,
+      isRoot: false,
+      input: {},
+      output: {
+        text: '',
+        toolCalls: [{ toolCallId: 'meta-tc-1', toolName: 'calculator', args: { a: 2, b: 2 } }],
+      },
+      attributes: { stepIndex: 0 },
+    });
+    modelStepSpan.parentSpanId = llmSpan.id;
+
+    // Agent SDK tool spans carry toolCallId in metadata rather than attributes
+    const toolCallSpan = createMockSpan({
+      id: 'meta-tool-call-span',
+      traceId,
+      name: "tool: 'calculator'",
+      type: SpanType.TOOL_CALL,
+      isRoot: false,
+      entityName: 'calculator',
+      input: { a: 2, b: 2 },
+      output: { result: 4 },
+      attributes: { toolType: 'tool' },
+      metadata: { toolCallId: 'meta-tc-1' },
+    });
+    toolCallSpan.parentSpanId = modelStepSpan.id;
+
+    await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: llmSpan });
+    await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: modelStepSpan });
+    await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: toolCallSpan });
+    await exporter.exportTracingEvent({
+      type: TracingEventType.SPAN_ENDED,
+      exportedSpan: { ...toolCallSpan, endTime: new Date() },
+    });
+    await exporter.exportTracingEvent({
+      type: TracingEventType.SPAN_ENDED,
+      exportedSpan: { ...modelStepSpan, endTime: new Date() },
+    });
+
+    mockSpan.log.mockClear();
+
+    await exporter.exportTracingEvent({
+      type: TracingEventType.SPAN_ENDED,
+      exportedSpan: { ...llmSpan, endTime: new Date() },
+    });
+
+    expect(mockSpan.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        output: [
+          {
+            role: 'assistant',
+            content: '',
+            tool_calls: [
+              {
+                id: 'meta-tc-1',
+                type: 'function',
+                function: { name: 'calculator', arguments: '{"a":2,"b":2}' },
+              },
+            ],
+          },
+          { role: 'tool', content: '{"result":4}', tool_call_id: 'meta-tc-1' },
+          { role: 'assistant', content: 'The answer is 4.' },
+        ],
+      }),
+    );
+  });
+
   describe('AI SDK v5 Message Conversion', () => {
     it('should convert AI SDK v5 user messages to OpenAI format', async () => {
       const llmSpan = createMockSpan({
