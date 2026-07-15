@@ -124,7 +124,10 @@ describe('SessionRunEngine — MastraDBMessage contract', () => {
     );
     await engine.processStreamChunk(
       state,
-      chunk({ type: 'tool-result', payload: { toolCallId: 'tc1', toolName: 'read', result: 'ok' } }),
+      chunk({
+        type: 'tool-result',
+        payload: { toolCallId: 'tc1', toolName: 'read', result: 'ok', isError: true },
+      }),
       ctx,
     );
 
@@ -135,6 +138,7 @@ describe('SessionRunEngine — MastraDBMessage contract', () => {
     expect(toolPart.toolInvocation.toolName).toBe('read');
     expect(toolPart.toolInvocation.state).toBe('result');
     expect(toolPart.toolInvocation.result).toBe('ok');
+    expect((toolPart.toolInvocation as { isError?: boolean }).isError).toBe(true);
   });
 
   it('Given a signal data chunk, When it arrives, Then it emits a DB-native signal message', async () => {

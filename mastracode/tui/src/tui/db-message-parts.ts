@@ -94,7 +94,7 @@ export function getAssistantRenderParts(message: MastraDBMessage): AssistantRend
           args: inv.args,
           result: inv.result,
           hasResult,
-          isError: hasResult && isErrorResult(inv.result),
+          isError: hasResult && (typeof inv.isError === 'boolean' ? inv.isError : isErrorResult(inv.result)),
         });
         break;
       }

@@ -79,6 +79,34 @@ describe('getAssistantRenderParts', () => {
     ]);
   });
 
+  it('uses canonical tool error metadata for completed tool render items', () => {
+    const message = assistantMessage([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          toolCallId: 'call-1',
+          toolName: 'view',
+          args: { path: 'a.ts' },
+          state: 'result',
+          result: 'ok',
+          isError: true,
+        },
+      } as never,
+    ]);
+
+    expect(getAssistantRenderParts(message)).toEqual([
+      {
+        kind: 'tool',
+        toolCallId: 'call-1',
+        toolName: 'view',
+        args: { path: 'a.ts' },
+        result: 'ok',
+        hasResult: true,
+        isError: true,
+      },
+    ]);
+  });
+
   it('maps a data-om-observation-end part to an om render item', () => {
     const message = assistantMessage([
       {

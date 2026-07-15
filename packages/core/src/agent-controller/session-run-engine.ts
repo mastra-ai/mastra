@@ -492,27 +492,31 @@ export class SessionRunEngine {
           ? toolResult.providerMetadata
           : undefined;
         const result = getDisplayTransform(chunk.metadata, 'output-available', toolResult.result);
+        const isError = getBoolean(toolResult.isError, false);
         const toolIndex = state.toolPartById.get(toolCallId);
         const existing = toolIndex !== undefined ? state.currentMessage.content.parts[toolIndex] : undefined;
         if (existing && existing.type === 'tool-invocation') {
-          existing.toolInvocation = {
-            ...existing.toolInvocation,
-            state: 'result',
+          existing.toolInvocation = Object.assign(existing.toolInvocation, {
+            state: 'result' as const,
             result,
-          };
+            isError,
+          });
           if (providerMetadata) {
             existing.providerMetadata = providerMetadata;
           }
         } else {
           const toolInvocationPart: MastraToolInvocationPart = {
             type: 'tool-invocation',
-            toolInvocation: {
-              state: 'result',
-              toolCallId,
-              toolName,
-              args: {},
-              result,
-            },
+            toolInvocation: Object.assign(
+              {
+                state: 'result' as const,
+                toolCallId,
+                toolName,
+                args: {},
+                result,
+              },
+              { isError },
+            ),
           };
           if (providerMetadata) {
             toolInvocationPart.providerMetadata = providerMetadata;
@@ -523,7 +527,7 @@ export class SessionRunEngine {
           type: 'tool_end',
           toolCallId,
           result,
-          isError: getBoolean(toolResult.isError, false),
+          isError,
           ...(providerMetadata ? { providerMetadata } : {}),
         });
         this.#session.emit({ type: 'message_update', message: this.cloneMessage(state.currentMessage) });

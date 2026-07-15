@@ -2,14 +2,14 @@ import type { SessionNotification, RequestPermissionRequest, AgentSideConnection
 import type { AgentControllerEvent, MastraDBMessage, Session, TokenUsage } from '@mastra/core/agent-controller';
 import { mastraDBMessageToSignal } from '@mastra/core/signals';
 
-/** Join the text of all `text` parts on a DB-native message, newline-separated. */
+/** Concatenate the text of all `text` parts on a DB-native assistant message. */
 function getMessageText(message: MastraDBMessage): string {
   const content = message.content;
   if (typeof content === 'string' || !content?.parts) return '';
   return content.parts
     .filter((part): part is Extract<(typeof content.parts)[number], { type: 'text' }> => part.type === 'text')
     .map(part => part.text)
-    .join('\n');
+    .join('');
 }
 
 function getSignalText(message: MastraDBMessage): string {

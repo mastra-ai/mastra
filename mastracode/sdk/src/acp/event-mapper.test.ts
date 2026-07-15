@@ -188,6 +188,52 @@ describe('ACP Event Mapper', () => {
       expect(state.lastTextLength).toBe(13);
     });
 
+    it('concatenates adjacent text parts without inserting a separator', () => {
+      const state = createPromptState('session-1');
+      const createdAt = new Date();
+
+      handleAgentControllerEvent(
+        {
+          type: 'message_update',
+          message: {
+            id: 'msg-1',
+            role: 'assistant',
+            content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
+            createdAt,
+          },
+        },
+        state,
+        mockConnection,
+        mockSession,
+      );
+      handleAgentControllerEvent(
+        {
+          type: 'message_update',
+          message: {
+            id: 'msg-1',
+            role: 'assistant',
+            content: {
+              format: 2,
+              parts: [
+                { type: 'text', text: 'Hello' },
+                { type: 'text', text: 'world' },
+              ],
+            },
+            createdAt,
+          },
+        },
+        state,
+        mockConnection,
+        mockSession,
+      );
+
+      expect(sessionUpdateSpy.mock.calls.map(([notification]) => notification.update.content.text)).toEqual([
+        'Hello',
+        'world',
+      ]);
+      expect(state.lastTextLength).toBe('Helloworld'.length);
+    });
+
     it('ignores non-assistant messages', () => {
       const state = createPromptState('session-1');
 
