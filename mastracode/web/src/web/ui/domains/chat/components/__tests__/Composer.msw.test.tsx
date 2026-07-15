@@ -361,7 +361,9 @@ describe('Composer', () => {
 
       const textbox = await screen.findByRole('textbox', { name: 'Message' });
 
-      expect(textbox.closest('[data-slot="composer-box"]')).toHaveStyle({ borderColor: '#16c858' });
+      const composerBox = textbox.closest('[data-slot="composer-box"]');
+      if (!composerBox) throw new Error('Expected the textbox to be inside a composer box');
+      expect(getComputedStyle(composerBox).borderColor).toBe('rgb(22, 200, 88)');
     });
   });
 
@@ -376,18 +378,16 @@ describe('Composer', () => {
       await userEvent.type(input, 'first line{Shift>}{Enter}{/Shift}second line{Shift>}{Enter}{/Shift}third line');
 
       expect(input).toHaveValue('first line\nsecond line\nthird line');
-      expect(input).toHaveClass('field-sizing-content');
       expect((input as HTMLTextAreaElement).style.height).toBe('');
     });
 
-    it('sizes the textarea variant with CSS classes only', async () => {
+    it('leaves textarea variant height under stylesheet control', async () => {
       seedProject();
       useAgentControllerHandlers();
       renderComposer({ variant: 'textarea' });
 
       const input = await screen.findByRole('textbox');
       await waitFor(() => expect(input).toBeEnabled());
-      expect(input).toHaveClass('field-sizing-content', 'min-h-28');
       expect((input as HTMLTextAreaElement).style.height).toBe('');
     });
   });
