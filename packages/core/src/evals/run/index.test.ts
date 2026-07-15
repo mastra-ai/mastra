@@ -2039,6 +2039,13 @@ describe('runEvals', () => {
         score: 0.75,
         source: 'TEST',
       });
+      // Each persisted per-turn score is labeled with its turn index so the UI can
+      // group/label them, and turns share the same conversation thread id.
+      const turnIndexes = perTurnCalls.map(([payload]: any[]) => payload.metadata?.turnIndex).sort();
+      expect(turnIndexes).toEqual([0, 1]);
+      const threadIds = perTurnCalls.map(([payload]: any[]) => payload.threadId);
+      expect(threadIds[0]).toBeTruthy();
+      expect(threadIds[0]).toBe(threadIds[1]);
     });
   });
 });
