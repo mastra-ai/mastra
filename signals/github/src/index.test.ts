@@ -999,6 +999,78 @@ describe('GithubSignals', () => {
     });
   });
 
+  it('surfaces snapshot read failures on the subscription and clears them after recovery', async () => {
+    const thread: StorageThreadType = {
+      id: 'thread-snapshot-error',
+      resourceId: 'resource-snapshot-error',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              {
+                owner: 'mastra-ai',
+                repo: 'mastra',
+                number: 123,
+                subscribedAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                lastSubscribeSignalId: 'signal-1',
+              },
+            ],
+          },
+        },
+      },
+    };
+    const threadStore = createThreadStore(thread);
+    let snapshotCalls = 0;
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true })),
+      getPullRequestSnapshot: vi.fn(async () => {
+        snapshotCalls += 1;
+        if (snapshotCalls === 1) {
+          throw new Error('gitcrawl database query failed (db: /missing/gitcrawl.db): unable to open database file');
+        }
+        return {
+          title: 'Add GitHub signals',
+          state: 'open',
+          githubUpdatedAt: '2026-01-01T00:05:00.000Z',
+          contentHash: 'recovered-hash',
+          latestCommentAuthor: 'contributor',
+        };
+      }),
+    };
+    const sendNotificationSignal = vi.fn(async () => ({ accepted: true }));
+    const permissionResolver = { getPermission: vi.fn(async () => 'write' as const) };
+    const processor = new GithubSignals({ threadStore, syncClient, permissionResolver });
+    processor.addAgent({ sendSignal: vi.fn(), sendNotificationSignal });
+
+    // First sync: the snapshot read fails, so the failure must be recorded on
+    // the subscription instead of silently reporting a healthy poll.
+    await expect(processor.syncThreadNow({ threadId: thread.id, resourceId: thread.resourceId })).resolves.toBe(1);
+    expect(sendNotificationSignal).not.toHaveBeenCalled();
+    const failedThread = vi.mocked(threadStore.saveThread).mock.calls[0]![0].thread;
+    const [failedSubscription] = (failedThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions;
+    expect(failedSubscription).toMatchObject({
+      lastSyncStatus: 'success',
+      lastSnapshotError: 'gitcrawl database query failed (db: /missing/gitcrawl.db): unable to open database file',
+    });
+    expect(failedSubscription.lastObservedContentHash).toBeUndefined();
+
+    // Second sync: the snapshot read recovers, the error clears, and the
+    // baseline observation notifies as usual.
+    await expect(processor.syncThreadNow({ threadId: thread.id, resourceId: thread.resourceId })).resolves.toBe(1);
+    expect(sendNotificationSignal).toHaveBeenCalledTimes(1);
+    const recoveredThread = vi.mocked(threadStore.saveThread).mock.calls[1]![0].thread;
+    const [recoveredSubscription] = (recoveredThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY]
+      .subscriptions;
+    expect(recoveredSubscription.lastSnapshotError).toBeUndefined();
+    expect(recoveredSubscription).toMatchObject({
+      lastSyncStatus: 'success',
+      lastObservedContentHash: 'recovered-hash',
+    });
+  });
+
   it('expires cached author permissions and reloads them after the TTL', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
