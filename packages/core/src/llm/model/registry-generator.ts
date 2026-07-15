@@ -5,6 +5,7 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { getCapabilityFileName } from './capability-file.js';
 import type {
   AttachmentCapabilities,
   MastraModelGatewayInterface,
@@ -310,19 +311,10 @@ export async function writeRegistryFiles(
     (structuredOutputCapabilities && Object.keys(structuredOutputCapabilities).length > 0);
   if (hasCapabilities) {
     const capDir = path.join(jsonDir, 'capabilities');
-    await fs.mkdir(capDir, { recursive: true });
 
-    // Clean out stale provider files from previous runs
-    try {
-      const existing = await fs.readdir(capDir);
-      for (const file of existing) {
-        if (file.endsWith('.json')) {
-          await fs.unlink(path.join(capDir, file));
-        }
-      }
-    } catch {
-      // Directory may not exist yet — ignore
-    }
+    // Replace the directory so stale files and legacy nested gateway paths are removed.
+    await fs.rm(capDir, { recursive: true, force: true });
+    await fs.mkdir(capDir, { recursive: true });
 
     // Build a merged capability object per provider
     const allProviderIds = new Set([
@@ -339,7 +331,7 @@ export async function writeRegistryFiles(
         capData.structuredOutput = structuredOutputCapabilities[provider];
       }
 
-      const providerFile = path.join(capDir, `${provider}.json`);
+      const providerFile = path.join(capDir, getCapabilityFileName(provider));
       await atomicWriteFile(providerFile, JSON.stringify(capData, null, 2), 'utf-8');
     }
   }
