@@ -488,6 +488,32 @@ describe('Thread', () => {
     expect(captured).toHaveLength(0);
   });
 
+  describe('when Enter is pressed during IME composition', () => {
+    it('does not send the partial message', async () => {
+      const captured: Captured[] = [];
+      server.use(
+        ...baseHandlers(),
+        http.post(`${BASE_URL}/api/agents/agent-1/stream`, async ({ request }) => {
+          captured.push({ url: request.url, body: await captureBody(request) });
+          return sseResponse();
+        }),
+      );
+
+      await act(async () => {
+        renderThread([]);
+      });
+
+      const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+      await act(async () => {
+        fireEvent.change(textarea, { target: { value: 'composing text' } });
+        fireEvent.keyDown(textarea, { key: 'Enter', isComposing: true });
+        await new Promise(resolve => setTimeout(resolve, 50));
+      });
+
+      expect(captured).toHaveLength(0);
+    });
+  });
+
   it('attaches a URL from the popover without sending the chat message', async () => {
     const captured: Captured[] = [];
     server.use(

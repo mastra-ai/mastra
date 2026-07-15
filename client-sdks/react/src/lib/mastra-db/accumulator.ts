@@ -8,6 +8,7 @@ import type {
 } from '@mastra/core/agent/message-list';
 import type { AgentChunkType, ChunkType, NetworkChunkType } from '@mastra/core/stream';
 import type { WorkflowStreamResult, StepResult } from '@mastra/core/workflows';
+import { uint8ArrayToBase64, encodeFilePartDataForStorage } from '../../agent/signal-data';
 import { formatCompletionFeedback, formatStreamCompletionFeedback } from './formatCompletionFeedback';
 import { CLIENT_MESSAGE_ID_KEY } from './types';
 import type {
@@ -44,15 +45,6 @@ type StreamChunk = {
 
 const cloneMetadata = (metadata: MastraDBMessageMetadata | undefined): MastraDBMessageMetadata =>
   metadata ? { ...metadata } : {};
-
-const uint8ArrayToBase64 = (bytes: Uint8Array): string => {
-  const chunkSize = 0x8000;
-  let binary = '';
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
-  }
-  return btoa(binary);
-};
 
 const withParts = (message: MastraDBMessage, parts: MastraMessagePart[]): MastraDBMessage => ({
   ...message,
@@ -352,40 +344,58 @@ const signalContentsToUserMessages = (contents: unknown, metadata: MastraDBMessa
 
     if (typedPart.type === 'image') {
       const image = typedPart.image;
-      return [
-        {
-          type: 'file',
-          mimeType:
-            typeof typedPart.mediaType === 'string'
-              ? typedPart.mediaType
-              : typeof typedPart.mimeType === 'string'
-                ? typedPart.mimeType
-                : 'image/*',
-          data: typeof image === 'string' ? image : image instanceof URL ? image.toString() : '',
-        },
-      ];
+      const mimeType =
+        typeof typedPart.mediaType === 'string'
+          ? typedPart.mediaType
+          : typeof typedPart.mimeType === 'string'
+            ? typedPart.mimeType
+            : 'image/*';
+      if (
+        typeof image === 'string' ||
+        image instanceof URL ||
+        image instanceof ArrayBuffer ||
+        image instanceof Uint8Array
+      ) {
+        return [
+          {
+            type: 'file',
+            mimeType,
+            data: encodeFilePartDataForStorage(image, mimeType),
+          },
+        ];
+      }
+      return [{ type: 'file', mimeType, data: '' }];
     }
 
     if (typedPart.type === 'file') {
       const data = typedPart.data;
-      const dataValue =
-        typeof data === 'string'
-          ? data
-          : data instanceof URL
-            ? data.toString()
-            : typeof typedPart.url === 'string'
-              ? typedPart.url
-              : '';
+      const mimeType =
+        typeof typedPart.mediaType === 'string'
+          ? typedPart.mediaType
+          : typeof typedPart.mimeType === 'string'
+            ? typedPart.mimeType
+            : 'application/octet-stream';
+      if (
+        typeof data === 'string' ||
+        data instanceof URL ||
+        data instanceof ArrayBuffer ||
+        data instanceof Uint8Array
+      ) {
+        return [
+          {
+            type: 'file',
+            mimeType,
+            data: encodeFilePartDataForStorage(data, mimeType),
+            ...(typeof typedPart.filename === 'string' ? { filename: typedPart.filename } : {}),
+          },
+        ];
+      }
+      const urlFallback = typeof typedPart.url === 'string' ? typedPart.url : '';
       return [
         {
           type: 'file',
-          mimeType:
-            typeof typedPart.mediaType === 'string'
-              ? typedPart.mediaType
-              : typeof typedPart.mimeType === 'string'
-                ? typedPart.mimeType
-                : 'application/octet-stream',
-          data: dataValue,
+          mimeType,
+          data: urlFallback,
           ...(typeof typedPart.filename === 'string' ? { filename: typedPart.filename } : {}),
         },
       ];
@@ -419,6 +429,21 @@ const signalContentsToUserMessages = (contents: unknown, metadata: MastraDBMessa
 
   const parts = content.flatMap(toMessagePart);
   return parts.length ? [makeUserMessage(parts)] : [];
+};
+
+const reconcilePendingUserEcho = (
+  message: MastraDBMessage,
+  echoedContents: unknown,
+  metadata: MastraDBMessageMetadata,
+  options: { signalId?: string; keepClientMessageId: boolean },
+): MastraDBMessage => {
+  const echoedMessages = signalContentsToUserMessages(echoedContents, metadata);
+  const echoedParts = echoedMessages[0]?.content.parts;
+  let reconciled = typeof options.signalId === 'string' ? { ...message, id: options.signalId } : message;
+  if (echoedParts?.length) {
+    reconciled = { ...reconciled, content: { ...reconciled.content, parts: echoedParts } };
+  }
+  return options.keepClientMessageId ? clearPendingStatusKeepClientId(reconciled) : clearPendingStatus(reconciled);
 };
 
 const makeToolInvocationPart = (invocation: MastraToolInvocation): MastraToolInvocationPart => ({
@@ -495,7 +520,10 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
           result.map(message =>
             message.content.metadata?.status === 'pending' &&
             message.content.metadata[CLIENT_MESSAGE_ID_KEY] === echoedClientMessageId
-              ? clearPendingStatusKeepClientId(typeof signalId === 'string' ? { ...message, id: signalId } : message)
+              ? reconcilePendingUserEcho(message, (chunk as any).data.contents, metadata, {
+                  signalId: typeof signalId === 'string' ? signalId : undefined,
+                  keepClientMessageId: true,
+                })
               : message,
           ),
         );
@@ -505,7 +533,9 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
         return finishStreamingAssistantMessage(
           result.map(message =>
             message.id === signalId && message.content.metadata?.status === 'pending'
-              ? clearPendingStatus(message)
+              ? reconcilePendingUserEcho(message, (chunk as any).data.contents, metadata, {
+                  keepClientMessageId: false,
+                })
               : message,
           ),
         );

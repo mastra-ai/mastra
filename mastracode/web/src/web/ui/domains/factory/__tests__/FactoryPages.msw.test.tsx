@@ -363,6 +363,7 @@ describe('Factory sidebar section', () => {
     expect(within(nav).getByText('Factory')).toBeInTheDocument();
     // The Board link appears once the GitHub status query resolves as connected.
     expect(await within(nav).findByRole('link', { name: /Board/ })).toHaveAttribute('href', '/factory/board');
+    expect(within(nav).getByRole('link', { name: /Metrics/ })).toHaveAttribute('href', '/factory/metrics');
     // The factory Sessions list is nested under the same menu.
     expect(within(nav).getByRole('region', { name: 'Factory sessions' })).toBeInTheDocument();
   });
@@ -382,6 +383,7 @@ describe('Factory sidebar section', () => {
     const nav = await screen.findByRole('navigation', { name: 'Factory' });
     expect(within(nav).getByRole('region', { name: 'Factory sessions' })).toBeInTheDocument();
     await waitFor(() => expect(within(nav).queryByRole('link', { name: /Board/ })).not.toBeInTheDocument());
+    expect(within(nav).queryByRole('link', { name: /Metrics/ })).not.toBeInTheDocument();
   });
 });
 
@@ -630,7 +632,24 @@ describe('Factory Board — persisted cards', () => {
     expect(within(reviewCard).getByText('Building')).toBeInTheDocument();
   });
 
-  it('given a work item with sessions, when the Board renders, then the card links to each role thread', async () => {
+  // A project that still has the worktree the cards' session refs point at:
+  // Thread links only render while the ref's worktree exists.
+  const issueWorktreePath = '/sandbox/mastra/worktrees/factory-issue-12';
+  const projectWithIssueWorktree: Project = {
+    ...githubProject,
+    worktrees: [
+      ...(githubProject.worktrees ?? []),
+      { branch: 'factory/issue-12', worktreePath: issueWorktreePath, baseBranch: 'main' },
+    ],
+  };
+  const issueWorkSession = {
+    projectPath: issueWorktreePath,
+    branch: 'factory/issue-12',
+    threadId: 'thread-work',
+    startedBy: 'user-1',
+  };
+
+  it('given a work item with sessions, when the Board renders, then the card links to its thread', async () => {
     useBoardHandlers({
       workItems: [
         makeWorkItem({
@@ -639,22 +658,114 @@ describe('Factory Board — persisted cards', () => {
           source: 'github-issue',
           sourceKey: 'github-issue:12',
           stages: ['execute'],
-          sessions: {
-            work: {
-              projectPath: '/sandbox/mastra/worktrees/factory-issue-12',
-              branch: 'factory/issue-12',
-              threadId: 'thread-work',
-              startedBy: 'user-1',
-            },
-          },
+          sessions: { work: issueWorkSession },
         }),
       ],
     });
+    renderAt('/factory/board', projectWithIssueWorktree);
+
+    await screen.findByTestId('board-column-intake');
+    const card = within(column('execute')).getByTestId('work-item-card');
+    expect(within(card).getByRole('link', { name: 'Thread' })).toHaveAttribute('href', '/threads/thread-work');
+  });
+
+  it('given plan and work sessions on the same thread, when the Board renders, then the card shows a single Thread link', async () => {
+    const sharedThread = { ...issueWorkSession, threadId: 'thread-shared' };
+    useBoardHandlers({
+      workItems: [
+        makeWorkItem({
+          id: 'wi-1',
+          title: 'Fix flaky test',
+          source: 'github-issue',
+          sourceKey: 'github-issue:12',
+          stages: ['execute'],
+          sessions: { plan: sharedThread, work: sharedThread },
+        }),
+      ],
+    });
+    renderAt('/factory/board', projectWithIssueWorktree);
+
+    await screen.findByTestId('board-column-intake');
+    const card = within(column('execute')).getByTestId('work-item-card');
+    const links = within(card).getAllByRole('link', { name: /thread/i });
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAccessibleName('Thread');
+    expect(links[0]).toHaveAttribute('href', '/threads/thread-shared');
+  });
+
+  it('given legacy sessions that diverged onto different threads, when the Board renders, then the card still shows a single Thread link', async () => {
+    useBoardHandlers({
+      workItems: [
+        makeWorkItem({
+          id: 'wi-1',
+          title: 'Fix flaky test',
+          source: 'github-issue',
+          sourceKey: 'github-issue:12',
+          stages: ['execute'],
+          // Refs filed while session scoping was broken point at two threads;
+          // the card must not surface role-labelled links for them.
+          sessions: { plan: { ...issueWorkSession, threadId: 'thread-plan' }, work: issueWorkSession },
+        }),
+      ],
+    });
+    renderAt('/factory/board', projectWithIssueWorktree);
+
+    await screen.findByTestId('board-column-intake');
+    const card = within(column('execute')).getByTestId('work-item-card');
+    const links = within(card).getAllByRole('link', { name: /thread/i });
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAccessibleName('Thread');
+    // The last-filed ref wins until the next run converges them.
+    expect(links[0]).toHaveAttribute('href', '/threads/thread-work');
+  });
+
+  it('given a session ref whose worktree was deleted, when the Board renders, then the stale thread link is hidden and runs are offered again', async () => {
+    useBoardHandlers({
+      workItems: [
+        makeWorkItem({
+          id: 'wi-1',
+          title: 'Fix flaky test',
+          source: 'github-issue',
+          sourceKey: 'github-issue:12',
+          stages: ['execute'],
+          metadata: { number: 12 },
+          sessions: { work: issueWorkSession },
+        }),
+      ],
+    });
+    // The default project does not have the ref's worktree — it was deleted.
     renderAt('/factory/board');
 
     await screen.findByTestId('board-column-intake');
     const card = within(column('execute')).getByTestId('work-item-card');
-    expect(within(card).getByRole('link', { name: /work thread/ })).toHaveAttribute('href', '/threads/thread-work');
+    expect(within(card).queryByRole('link', { name: /thread/i })).not.toBeInTheDocument();
+    // The stale ref no longer occupies the run slot: runs are offered again.
+    await userEvent.click(within(card).getByRole('button', { name: 'Actions for Fix flaky test' }));
+    expect(await screen.findByRole('menuitem', { name: 'Investigate' })).toBeInTheDocument();
+  });
+
+  it('given a thread link, when clicked, then its worktree becomes the selected workspace and the app navigates to the thread', async () => {
+    useBoardHandlers({
+      workItems: [
+        makeWorkItem({
+          id: 'wi-1',
+          title: 'Fix flaky test',
+          source: 'github-issue',
+          sourceKey: 'github-issue:12',
+          stages: ['execute'],
+          sessions: { work: issueWorkSession },
+        }),
+      ],
+    });
+    const { router } = renderAt('/factory/board', projectWithIssueWorktree);
+
+    await screen.findByTestId('board-column-intake');
+    const card = within(column('execute')).getByTestId('work-item-card');
+    await userEvent.click(within(card).getByRole('link', { name: 'Thread' }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-work'));
+    const stored = JSON.parse(localStorage.getItem('mastracode-projects') ?? '[]') as Project[];
+    expect(stored[0]?.selectedWorktreePath).toBe(issueWorktreePath);
   });
 
   it('given a card in Intake, when Move to Triage is chosen from the menu, then the card lands in the Triage swimlane', async () => {
@@ -674,7 +785,7 @@ describe('Factory Board — persisted cards', () => {
     expect(within(column('intake')).queryByTestId('work-item-card')).not.toBeInTheDocument();
   });
 
-  it('given a card in Triage, when Investigate is chosen, then triage exits and the card moves to Building', async () => {
+  it('given a card in Triage, when Investigate is chosen, then triage exits and the card moves to Planning', async () => {
     const state = useBoardHandlers({
       workItems: [
         makeWorkItem({
@@ -696,7 +807,7 @@ describe('Factory Board — persisted cards', () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
-    expect(state.patches).toMatchObject([{ id: 'wi-1', stages: ['execute'] }]);
+    expect(state.patches).toMatchObject([{ id: 'wi-1', stages: ['planning'] }]);
   });
 
   it('given a persisted issue card needing approval, when Prepare approval is chosen, then the triage session ref is recorded without leaving Triage', async () => {
@@ -758,7 +869,7 @@ describe('Factory Board — persisted cards', () => {
     expect(within(column('triage')).queryByTestId('work-item-card')).not.toBeInTheDocument();
   });
 
-  it('given a card in Planning, when Investigate is chosen, then planning exits and the card moves to Building', async () => {
+  it('given a card in Planning, when Build is chosen, then planning exits and the card moves to Building', async () => {
     const state = useBoardHandlers({
       workItems: [
         makeWorkItem({
@@ -776,10 +887,11 @@ describe('Factory Board — persisted cards', () => {
 
     await screen.findByTestId('board-column-planning');
     await userEvent.click(within(column('planning')).getByRole('button', { name: 'Actions for Fix flaky test' }));
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Investigate' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Build' }));
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
+    expect(captured.messages[0]!.message).toContain('Implement a fix for GitHub issue #12');
     expect(state.patches).toMatchObject([{ id: 'wi-1', stages: ['execute'] }]);
   });
 
@@ -944,7 +1056,7 @@ function useFactoryRunHandlers(branchDir: string): CapturedRun {
 }
 
 describe('Factory Board — investigate flow', () => {
-  it('given an issue candidate, when Investigate is clicked, then a worktree, thread, and prompt are created, a work item materializes into Building, and the app navigates to the thread', async () => {
+  it('given an issue candidate, when Investigate is clicked, then a worktree, thread, and prompt are created, a work item materializes into Planning, and the app navigates to the thread', async () => {
     const state = useBoardHandlers({ issues });
     const captured = useFactoryRunHandlers('factory-issue-12');
     const { router } = renderAt('/factory/board');
@@ -960,20 +1072,43 @@ describe('Factory Board — investigate flow', () => {
     expect(captured.messages[0]!.message).toContain('understand-issue skill');
     expect(captured.messages[0]!.message).toContain('GitHub issue #12 (https://github.com/mastra-ai/mastra/issues/12)');
     expect(captured.messages[0]!.message).not.toContain('Fix flaky test');
-    // The run files a board record in the execute stage with the work session ref.
+    // The run files a board record in the planning stage with the plan session ref.
     expect(state.posts).toMatchObject([
       {
         source: 'github-issue',
         sourceKey: 'github-issue:12',
         title: 'Fix flaky test',
-        stages: ['execute'],
+        stages: ['planning'],
         sessions: {
-          work: {
+          plan: {
             projectPath: '/sandbox/mastra/worktrees/factory-issue-12',
             branch: 'factory/issue-12',
             threadId: 'thread-factory',
           },
         },
+      },
+    ]);
+  });
+
+  it('given an issue candidate, when Build is chosen from the menu, then a work item materializes into Building with a work session', async () => {
+    const state = useBoardHandlers({ issues });
+    const captured = useFactoryRunHandlers('factory-issue-12');
+    const { router } = renderAt('/factory/board');
+
+    const intake = await screen.findByTestId('board-column-intake');
+    await within(intake).findByText('Fix flaky test');
+    await userEvent.click(within(intake).getByRole('button', { name: 'More actions for Fix flaky test' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Build' }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
+    expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
+    expect(captured.messages[0]!.message).toContain('Implement a fix for GitHub issue #12');
+    expect(state.posts).toMatchObject([
+      {
+        source: 'github-issue',
+        sourceKey: 'github-issue:12',
+        stages: ['execute'],
+        sessions: { work: { branch: 'factory/issue-12', threadId: 'thread-factory' } },
       },
     ]);
   });
@@ -1084,7 +1219,7 @@ describe('Factory Board — investigate flow', () => {
     expect(captured.messages[0]!.message).not.toContain('understand-issue skill');
   });
 
-  it('given a persisted issue card without a work session, when Investigate is chosen, then the run starts and the card PATCHes into Building with the session ref', async () => {
+  it('given a persisted issue card without a plan session, when Investigate is chosen, then the run starts and the card PATCHes into Planning with the session ref', async () => {
     const state = useBoardHandlers({
       workItems: [
         makeWorkItem({
@@ -1113,8 +1248,53 @@ describe('Factory Board — investigate flow', () => {
     expect(state.patches).toMatchObject([
       {
         id: 'wi-1',
+        stages: ['planning'],
+        sessions: { plan: { branch: 'factory/issue-12', threadId: 'thread-factory' } },
+      },
+    ]);
+  });
+
+  it('given a card with a legacy plan ref, when Build is chosen, then filing repoints every role at the run thread', async () => {
+    const state = useBoardHandlers({
+      workItems: [
+        makeWorkItem({
+          id: 'wi-1',
+          title: 'Fix flaky test',
+          source: 'github-issue',
+          sourceKey: 'github-issue:12',
+          url: 'https://github.com/mastra-ai/mastra/issues/12',
+          stages: ['planning'],
+          metadata: { number: 12 },
+          // Legacy ref from before scoping was fixed: dead worktree, own thread.
+          sessions: {
+            plan: {
+              projectPath: '/gone/worktree',
+              branch: 'factory/issue-12',
+              threadId: 'thread-legacy-plan',
+              startedBy: 'user-1',
+            },
+          },
+        }),
+      ],
+    });
+    const captured = useFactoryRunHandlers('factory-issue-12');
+    const { router } = renderAt('/factory/board');
+
+    await screen.findByTestId('board-column-planning');
+    await userEvent.click(within(column('planning')).getByRole('button', { name: 'Actions for Fix flaky test' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Build' }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
+    expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
+    // One thread per item: every role ref converges onto the run's thread.
+    expect(state.patches).toMatchObject([
+      {
+        id: 'wi-1',
         stages: ['execute'],
-        sessions: { work: { branch: 'factory/issue-12', threadId: 'thread-factory' } },
+        sessions: {
+          plan: { branch: 'factory/issue-12', threadId: 'thread-factory' },
+          work: { branch: 'factory/issue-12', threadId: 'thread-factory' },
+        },
       },
     ]);
   });
@@ -1149,7 +1329,7 @@ describe('Factory Board — investigate flow', () => {
 
     await screen.findByTestId('board-column-review');
     await userEvent.click(within(column('review')).getByRole('button', { name: 'Actions for Add factory pages' }));
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Start review' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Review' }));
 
     await waitFor(() => expect(router.state.location.pathname).toBe(`/threads/${THREAD_ID}`));
     // No new thread was created — the resumed thread carried the follow-up run.
