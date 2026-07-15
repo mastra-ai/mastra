@@ -627,6 +627,60 @@ describe('GithubSignals', () => {
     );
   });
 
+  it('still subscribes when the baseline snapshot read fails and records the error', async () => {
+    const thread: StorageThreadType = {
+      id: 'thread-subscribe-snapshot-error',
+      resourceId: 'resource-subscribe-snapshot-error',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {},
+    };
+    const threadStore = createThreadStore(thread);
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true, stdout: '{"ok":true}' })),
+      getPullRequestSnapshot: vi.fn(async () => {
+        throw new Error('gitcrawl database query failed (db: /missing/gitcrawl.db): unable to open database file');
+      }),
+    };
+    const signal = createSignal({
+      ...GithubSignals.signals.subscribeToPR({ owner: 'mastra-ai', repo: 'mastra', number: 123 }),
+      type: 'reactive',
+    });
+    const messageList = new MessageList({ threadId: thread.id, resourceId: thread.resourceId });
+    messageList.add([signal.toDBMessage({ threadId: thread.id, resourceId: thread.resourceId })], 'input');
+    const chunks: unknown[] = [];
+
+    // The subscribe itself must not fail when only the snapshot read fails.
+    await runGithubSignalsProcessor({
+      processor: new GithubSignals({ threadStore, syncClient }),
+      messageList,
+      requestContext: createRequestContext(thread),
+      chunks,
+    });
+
+    expect(threadStore.saveThread).toHaveBeenCalledTimes(1);
+    const savedThread = vi.mocked(threadStore.saveThread).mock.calls[0]![0].thread;
+    const [subscription] = (savedThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions;
+    expect(subscription).toMatchObject({
+      owner: 'mastra-ai',
+      repo: 'mastra',
+      number: 123,
+      lastSyncStatus: 'success',
+      lastSnapshotError: 'gitcrawl database query failed (db: /missing/gitcrawl.db): unable to open database file',
+    });
+    // No baseline cursor and no baseline notification without a snapshot.
+    expect(subscription.lastObservedContentHash).toBeUndefined();
+    expect(chunks).toContainEqual(
+      expect.objectContaining({
+        type: 'data-signal',
+        data: expect.objectContaining({
+          tagName: GITHUB_SYNC_STATUS_TAG,
+          attributes: expect.objectContaining({ status: 'subscribed', number: 123 }),
+        }),
+      }),
+    );
+  });
+
   it('preserves one-time hint state and granular cursors when resubscribing', async () => {
     const thread: StorageThreadType = {
       id: 'thread-resubscribe',

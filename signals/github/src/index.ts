@@ -2034,7 +2034,18 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       subscription.lastSyncStatus = syncResult.ok ? 'success' : 'error';
       if (syncResult.error) subscription.lastSyncError = syncResult.error;
       else delete subscription.lastSyncError;
-      const snapshot = syncResult.ok ? await this.#syncClient.getPullRequestSnapshot?.(syncInput) : undefined;
+      let snapshot: GithubPullRequestSnapshot | undefined;
+      if (syncResult.ok) {
+        try {
+          snapshot = await this.#syncClient.getPullRequestSnapshot?.(syncInput);
+        } catch (error) {
+          // Snapshot read failures must not fail the subscribe itself: keep
+          // the subscription and record the error so polling (and /github
+          // debug) can surface and later clear it.
+          subscription.lastSnapshotError = error instanceof Error ? error.message : String(error);
+        }
+      }
+      if (snapshot) delete subscription.lastSnapshotError;
       baselineSnapshot = snapshot;
       if (snapshot) applySnapshotCursor(subscription, snapshot);
     } else {
