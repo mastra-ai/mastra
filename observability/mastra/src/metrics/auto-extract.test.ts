@@ -644,4 +644,42 @@ describe('AutoExtractedMetrics', () => {
       'openrouter-anthropic-claude-sonnet-4-6',
     );
   });
+
+  it('should estimate costs for Bedrock inference-profile model ids', () => {
+    setup();
+    const span = createMockSpan({
+      type: SpanType.MODEL_GENERATION,
+      endTime: new Date('2026-01-01T00:00:01Z'),
+      attributes: {
+        provider: 'amazon-bedrock',
+        model: 'us.anthropic.claude-sonnet-4-6',
+        responseModel: 'us.anthropic.claude-sonnet-4-6',
+        usage: {
+          inputTokens: 1_150,
+          outputTokens: 100,
+          inputDetails: { text: 1_000, cacheRead: 100, cacheWrite: 50 },
+          outputDetails: { text: 100 },
+        },
+      },
+    });
+
+    vi.spyOn(PricingRegistry, 'getGlobal').mockReturnValue(pricingRegistry);
+
+    emitAutoExtractedMetrics(span, createMetricsContext(span));
+
+    const costContexts = emittedMetrics.flatMap(event => (event.metric.costContext ? [event.metric.costContext] : []));
+    expect(costContexts).toHaveLength(6);
+    expect(costContexts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          costMetadata: expect.objectContaining({ pricing_id: 'amazon-bedrock-claude-sonnet-4-6' }),
+        }),
+      ]),
+    );
+    expect(costContexts).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ costMetadata: expect.objectContaining({ error: 'no_matching_model' }) }),
+      ]),
+    );
+  });
 });

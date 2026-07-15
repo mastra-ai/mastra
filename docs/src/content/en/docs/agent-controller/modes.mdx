@@ -105,7 +105,7 @@ const reviewMode = {
 
 - **`undefined`** (default): no mode-level restriction — every tool is visible.
 - **`[]`**: no tools are available for this mode.
-- A denied tool stays hidden even if it appears in the list. Per-tool and per-category `deny` rules in your permission config always take precedence.
+- A denied tool stays hidden even when the list includes it. Per-tool and per-category `deny` rules in your permission config always take precedence.
 
 Workspace tools use the same list as every other tool — reference them by their exposed names (`view`, `write_file`, `find_files`, etc.). Visibility is enforced at LLM-call time, so the model never sees — and can't attempt to call — a tool outside the allowlist.
 

@@ -1,5 +1,6 @@
 packages:
-  - mastracode
+  - mastracode/sdk
+  - mastracode/tui
   - docs
   - packages/_vendored/*
   - packages/_internals/*
@@ -33,18 +34,19 @@ enableGlobalVirtualStore: true
 
 catalog:
   '@microsoft/api-extractor': ^7.57.7
-  '@vitest/coverage-v8': 4.1.8
-  '@vitest/ui': 4.1.8
+  '@vitest/coverage-v8': 4.1.10
+  '@vitest/ui': 4.1.10
   date-fns: 4.4.0
   react: ^19.2.5
   react-dom: ^19.2.5
   typescript: ^6.0.3
-  vitest: 4.1.8
+  vitest: 4.1.10
   zod: ^4.4.3
   tsx: ^4.22.4
 
 patchedDependencies:
   '@changesets/get-dependents-graph@2.1.4': patches/@changesets__get-dependents-graph@2.1.4.patch
+  '@earendil-works/pi-tui@0.80.6': patches/@earendil-works__pi-tui@0.80.6.patch
   tsup@8.5.1: patches/tsup@8.5.1.patch
 
 packageExtensions:
@@ -118,7 +120,9 @@ trustPolicyExclude:
 overrides:
   typescript: ^6.0.3
   '@types/node': 22.19.15
-  cookie: '>=1.1.1'
+  # Capped below 2: cookie@2 renamed parse/serialize to parseCookie/stringifyCookie,
+  # which breaks react-router's build when renovate's pnpm dedupe floats it up.
+  cookie: '>=1.1.1 <2'
   tmp: '>=0.2.6'
   jsondiffpatch: '>=0.7.3'
   ssri: '>=6.0.2'
@@ -158,7 +162,7 @@ overrides:
   form-data@>=4.0.0 <4.0.6: 4.0.6
   brace-expansion@<1.1.13: 1.1.13
   brace-expansion@>=2.0.0 <2.0.3: 2.0.3
-  '@clerk/shared@>=3.0.0 <3.47.5': 3.47.5
+  '@clerk/shared@>=3.0.0 <3.47.5': 3.47.7
   js-cookie@>=3.0.0 <3.0.7: 3.0.7
   path-to-regexp@<0.1.13: 0.1.13
   joi@>=17.0.0 <17.13.4: 17.13.4
@@ -183,8 +187,8 @@ overrides:
   http-proxy-middleware@>=0.16.0 <2.0.10: 2.0.10
   launch-editor@<2.14.1: 2.14.1
   mdast-util-to-hast@>=13.0.0 <13.2.1: 13.2.1
-  '@babel/core@>=7.0.0 <7.29.6': 7.29.6
-  '@babel/plugin-transform-modules-systemjs@>=7.12.0 <7.29.4': 7.29.4
+  '@babel/core@>=7.0.0 <7.29.6': 7.29.7
+  '@babel/plugin-transform-modules-systemjs@>=7.12.0 <7.29.4': 7.29.7
   dompurify@>=3.0.0 <3.4.11: 3.4.11
   '@tootallnate/once@<3.0.1': ^3.0.1
   '@codemirror/lang-jinja': ^6.0.1

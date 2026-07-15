@@ -133,10 +133,10 @@ function TimeAxis({ domain }: { domain: TDomain }) {
   const ticks = [0, 0.25, 0.5, 0.75, 1];
   return (
     <div className="grid grid-cols-[6rem_1fr] items-center">
-      <p className="flex items-center self-stretch border-r border-border1/50 pl-3 text-ui-xs font-medium text-icon3">
+      <p className="text-icon3 flex items-center self-stretch border-r border-border1/50 pl-3 text-ui-xs font-medium">
         Time
       </p>
-      <div className="flex justify-between px-1 py-1.5 font-mono text-ui-xs text-icon3">
+      <div className="text-icon3 flex justify-between px-1 py-1.5 font-mono text-ui-xs">
         {ticks.map(t => (
           <span key={t}>{formatTimeDisplay(tToTimestamp(t, domain))}</span>
         ))}
@@ -206,7 +206,7 @@ function AreaRow({ label, data, dataKey, color, gradientId, domain, zoomDomain, 
 
   return (
     <div className="relative grid grid-cols-[6rem_1fr] items-center border-b border-border1/50 hover:z-10">
-      <p className="flex items-center self-stretch border-r border-border1/50 pl-3 text-ui-xs font-medium text-icon3">
+      <p className="text-icon3 flex items-center self-stretch border-r border-border1/50 pl-3 text-ui-xs font-medium">
         {label}
       </p>
       <div>
@@ -255,7 +255,7 @@ interface EventRowProps {
 function EventRow({ label, data, color, height = 32, domain, zoomDomain }: EventRowProps) {
   return (
     <div className="relative grid grid-cols-[6rem_1fr] items-center border-b border-border1/50 hover:z-10">
-      <p className="flex items-center self-stretch border-r border-border1/50 pl-3 text-ui-xs font-medium text-icon3">
+      <p className="text-icon3 flex items-center self-stretch border-r border-border1/50 pl-3 text-ui-xs font-medium">
         {label}
       </p>
       <div>
@@ -348,7 +348,7 @@ function CombinedRow({
 
   return (
     <div className="relative grid grid-cols-[6rem_1fr] items-center border-b border-border1/50 hover:z-10">
-      <p className="flex items-center self-stretch border-r border-border1/50 pl-3 text-ui-xs font-medium text-icon3">
+      <p className="text-icon3 flex items-center self-stretch border-r border-border1/50 pl-3 text-ui-xs font-medium">
         {label}
       </p>
       <div>
@@ -455,7 +455,7 @@ function ZoomTrack({
   return (
     <div className="grid grid-cols-[6rem_1fr] items-center border-b border-border1/50">
       <div className="flex items-center gap-1 self-stretch border-r border-border1/50 pl-3">
-        <p className="text-ui-xs font-medium text-icon3">Zoom</p>
+        <p className="text-icon3 text-ui-xs font-medium">Zoom</p>
         <Button variant="ghost" size="icon-sm" aria-label="Reset zoom" onClick={onReset}>
           <RotateCcw className="size-3" />
         </Button>
@@ -587,7 +587,7 @@ export function FlameGraph({
   if (!hasData) return null;
 
   return (
-    <div className="flex flex-col pb-2 pr-2 [&_.recharts-surface]:outline-none">
+    <div className="flex flex-col pr-2 pb-2 [&_.recharts-surface]:outline-none">
       <CombinedRow
         label="Messages"
         areaData={contextData}

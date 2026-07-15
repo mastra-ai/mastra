@@ -20,6 +20,12 @@ Signals are a way to interact with an agent through a thread. Instead of startin
 
 Use message APIs for user-authored input. Use `sendSignal()` for lower-level system context, such as background task notifications, policy reminders, or processor-generated context.
 
+:::tip[📹 Watch]
+
+Watch [Mastra signals overview](https://www.youtube.com/watch?v=7It2y89TVP4) to see how signals wake and steer long-running agents.
+
+:::
+
 ## When to use signals
 
 Use signals when an agent thread needs new input or context outside the original `stream()` call. Signals are useful when users send follow-up messages while a run is active, when background systems need to add context to a thread, or when external events should wake, update, or notify the agent.
@@ -120,11 +126,7 @@ const result = agent.sendSignal(
 await result.persisted
 ```
 
-Pass `ifIdle.streamOptions` when the idle wake-up stream needs options such as model settings, tools, or runtime context.
-
-:::note
-Visit [`Agent.sendSignal()` reference](/reference/agents/agent#sendsignalsignal-options) for `ifActive`, `ifIdle`, branch attributes, and `streamOptions`.
-:::
+Pass `ifIdle.streamOptions` when the idle wake-up stream needs options such as model settings, tools, or runtime context. Visit [`Agent.sendSignal()` reference](/reference/agents/agent#sendsignalsignal-options) for `ifActive`, `ifIdle`, branch attributes, and `streamOptions`.
 
 ### Send notification context
 
@@ -209,11 +211,7 @@ Awaiting `sendSignal()` preserves stream echo ordering when a subscribed thread 
 
 ### Conditional attributes
 
-Use `ifActive.attributes` and `ifIdle.attributes` to tag input with context that depends on whether the agent is active or idle at delivery time. Top-level `attributes` always apply, and Mastra merges the selected branch's `attributes` into them when the input is accepted.
-
-:::note
-Visit [`Agent.sendMessage()` reference](/reference/agents/agent#sendmessagemessage-options) and [`Agent.sendSignal()` reference](/reference/agents/agent#sendsignalsignal-options) for branch-specific attributes.
-:::
+Use `ifActive.attributes` and `ifIdle.attributes` to tag input with context that depends on whether the agent is active or idle at delivery time. Top-level `attributes` always apply, and Mastra merges the selected branch's `attributes` into them when the input is accepted. Visit [`Agent.sendMessage()` reference](/reference/agents/agent#sendmessagemessage-options) and [`Agent.sendSignal()` reference](/reference/agents/agent#sendsignalsignal-options) for branch-specific attributes.
 
 ## State and notification signals
 
@@ -288,11 +286,7 @@ Notification signals represent external events such as GitHub activity, email, S
 
 Notification delivery has two phases. During ingress, `agent.sendNotificationSignal()` stores a notification record and resolves the agent's delivery policy. During dispatch, Mastra consumes due records and emits full notification or summary signals.
 
-The default delivery policy is priority-aware. Urgent notifications deliver immediately, while lower-priority notifications may be batched into summaries or wait until the thread is idle.
-
-:::note
-Visit [`Agent.sendNotificationSignal()` reference](/reference/agents/agent#sendnotificationsignalnotification-options) for notification fields, [`Agent` constructor reference](/reference/agents/agent#constructor-parameters) for `notifications.deliveryPolicy` configuration, and [`createNotificationInboxTool()` reference](/reference/signals/create-notification-inbox-tool) for inbox tool actions.
-:::
+The default delivery policy is priority-aware. Urgent notifications deliver immediately, while lower-priority notifications may be batched into summaries or wait until the thread is idle. Visit [`Agent.sendNotificationSignal()` reference](/reference/agents/agent#sendnotificationsignalnotification-options) for notification fields, [`Agent` constructor reference](/reference/agents/agent#constructor-parameters) for `notifications.deliveryPolicy` configuration, and [`createNotificationInboxTool()` reference](/reference/signals/create-notification-inbox-tool) for inbox tool actions.
 
 ```typescript title="src/mastra/notifications.ts"
 await agent.sendNotificationSignal(
@@ -328,19 +322,11 @@ Notification summaries tell the model that inbox records are waiting:
 
 When Mastra emits a summary, it clears `summaryAt` and sets `summarySignalId` on each summarized record. The records stay pending and readable. When Mastra emits a full notification, it sets `deliveredSignalId` and marks the record `delivered`. If the inbox tool reads a notification first, it can inject the full notification signal and mark the record `seen`, which prevents duplicate full delivery.
 
-Configure a delivery policy on the agent when some notifications should wait for a different dispatch window or summary rollup. Enable scheduled dispatch at the Mastra level when deferred notifications and summary rollups should be delivered automatically.
-
-:::note
-Visit [`Agent` constructor reference](/reference/agents/agent#constructor-parameters) for `notifications.deliveryPolicy` and [`Mastra` class reference](/reference/core/mastra-class#constructor-parameters) for runtime notification dispatch configuration.
-:::
+Configure a delivery policy on the agent when some notifications should wait for a different dispatch window or summary rollup. Enable scheduled dispatch at the Mastra level when deferred notifications and summary rollups should be delivered automatically. Visit [`Agent` constructor reference](/reference/agents/agent#constructor-parameters) for `notifications.deliveryPolicy` and [`Mastra` class reference](/reference/core/mastra-class#constructor-parameters) for runtime notification dispatch configuration.
 
 #### Notification inbox tool
 
-Use `createNotificationInboxTool()` to give agents one tool for inbox actions instead of many CRUD tools. Use `read` after a `<notification-summary>` signal when the agent needs the full records behind the summary. The notification contents are delivered as signals, not as normal tool output.
-
-:::note
-Visit [`createNotificationInboxTool()` reference](/reference/signals/create-notification-inbox-tool) for the setup example, input schema, and action behavior.
-:::
+Use `createNotificationInboxTool()` to give agents one tool for inbox actions instead of many CRUD tools. Use `read` after a `<notification-summary>` signal when the agent needs the full records behind the summary. The notification contents are delivered as signals, not as normal tool output. Visit [`createNotificationInboxTool()` reference](/reference/signals/create-notification-inbox-tool) for the setup example, input schema, and action behavior.
 
 `sendNotificationSignal()` requires a storage domain with `notifications` support. Use `sendSignal({ type: 'notification' })` only for lower-level notification-shaped context that should bypass inbox storage.
 
@@ -365,7 +351,7 @@ export const mastra = new Mastra({
 })
 ```
 
-`RedisStreamsPubSub` implements both the event delivery contract and distributed leasing, so a single backend handles cross-instance signal delivery and lease ownership. Vercel's one-click Redis integration and Upstash Redis both work well. For more on when a distributed pub/sub is needed, see the [PubSub guide](/docs/server/pubsub) and the [`RedisStreamsPubSub` reference](/reference/pubsub/redis-streams).
+`RedisStreamsPubSub` implements both the event delivery contract and distributed leasing, so a single backend handles cross-instance signal delivery and lease ownership. Vercel's managed Redis integration and Upstash Redis both work well. For more on when a distributed pub/sub is needed, see the [PubSub guide](/docs/server/pubsub) and the [`RedisStreamsPubSub` reference](/reference/pubsub/redis-streams).
 
 ## Compatibility and APIs
 
@@ -376,19 +362,11 @@ Mastra still accepts legacy signal payloads such as `type: 'user-message'` and `
 - `type: 'user-message'`: Normalizes to `type: 'user'` and `tagName: 'user'`
 - `type: 'system-reminder'`: Normalizes to `type: 'reactive'` and `tagName: 'system-reminder'`
 
-Existing stored signal rows and older clients continue to load through the compatibility layer. New clients call the message routes when the server supports them; React's thread signal path falls back to the legacy `/signals` route when it detects an older server.
-
-:::note
-Visit [Agent signals reference](/reference/agents/agent#thread-signals) for the full message, signal, and subscription types.
-:::
+Existing stored signal rows and older clients continue to load through the compatibility layer. New clients call the message routes when the server supports them; React's thread signal path falls back to the legacy `/signals` route when it detects an older server. Visit [Agent signals reference](/reference/agents/agent#thread-signals) for the full message, signal, and subscription types.
 
 ### Approve tool calls
 
-When a subscribed run pauses for tool approval, approve or decline the tool call with the subscription-native methods. The resumed chunks arrive through the existing thread subscription.
-
-:::note
-Visit [`client.getAgent().sendToolApproval()` reference](/reference/client-js/agents#sendtoolapproval) and [server agent routes](/reference/server/routes#subscription-tool-approval-routes) for request and response shapes.
-:::
+When a subscribed run pauses for tool approval, approve or decline the tool call with the subscription-native methods. The resumed chunks arrive through the existing thread subscription. Visit [`client.getAgent().sendToolApproval()` reference](/reference/client-js/agents#sendtoolapproval) and [server agent routes](/reference/server/routes#subscription-tool-approval-routes) for request and response shapes.
 
 ### Use HTTP routes
 
@@ -455,3 +433,4 @@ Use heartbeats together with client-side reconnect logic. Heartbeats reduce idle
 - [`client.getAgent().subscribeToThread()`](/reference/client-js/agents#subscribetothread)
 - [`client.getAgent().sendToolApproval()`](/reference/client-js/agents#sendtoolapproval)
 - [`RedisStreamsPubSub`](/reference/pubsub/redis-streams)
+- 📹 [Mastra signals workshop](https://www.youtube.com/watch?v=KLg6uFKz9aw\&t=3020s)

@@ -10,6 +10,7 @@ class TemporalExecutionEngine {
     });
   }
   async execute(params) {
+    this.initData = params.input;
     let result = params.input;
     const stepResults = {};
     for (const entry of params.graph.steps) {
@@ -134,12 +135,17 @@ class TemporalExecutionEngine {
         }
       case 'foreach':
         {
+          const items = Array.isArray(inputData) ? inputData : [];
+          // Concurrency may be a resolver function evaluated per run.
+          const configured = typeof entry.opts.concurrency === 'function' ? entry.opts.concurrency({
+            inputData,
+            getInitData: () => this.initData
+          }) : entry.opts.concurrency ?? 1;
+          const concurrency = Number.isFinite(configured) ? Math.max(1, Math.floor(configured)) : 1;
           log.info('foreach', {
             step: entry.step.id,
-            concurrency: entry.opts.concurrency
+            concurrency
           });
-          const items = Array.isArray(inputData) ? inputData : [];
-          const concurrency = Math.max(1, entry.opts.concurrency ?? 1);
           const results = new Array(items.length);
           let index = 0;
           const workers = Array.from({
@@ -164,15 +170,13 @@ class TemporalExecutionEngine {
     }
   }
 }
-function createWorkflow(workflowId) {
+function createWorkflow(workflowId, options) {
   const stepFlow = [];
   let autoId = 0;
   const nextId = prefix => `${prefix}_${autoId++}`;
   const workflow = async startArgs => {
     const engine = new TemporalExecutionEngine({
-      options: {
-        startToCloseTimeout: '1 minute'
-      }
+      options
     });
     return engine.execute({
       workflowId,

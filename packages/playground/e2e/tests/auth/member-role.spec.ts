@@ -223,8 +223,7 @@ test.describe('Member Role', () => {
       await page.goto('/tools/weatherInfo');
 
       // Should see the tool execution form/panel
-      const locationInput = page.getByLabel(/location/i).or(page.locator('input[name="location"]'));
-      await expect(locationInput.first()).toBeVisible();
+      await expect(page.locator('[name="location"]')).toBeVisible();
     });
 
     test('member does not see permission denied for tool execution', async ({ page }) => {
@@ -336,8 +335,7 @@ test.describe('Member Role', () => {
       await page.goto('/tools/weatherInfo');
 
       // Member should see tool execution panel
-      const locationInput = page.getByLabel(/location/i).or(page.locator('input[name="location"]'));
-      await expect(locationInput.first()).toBeVisible();
+      await expect(page.locator('[name="location"]')).toBeVisible();
 
       // Now check as viewer
       await setupMockAuth(page, {

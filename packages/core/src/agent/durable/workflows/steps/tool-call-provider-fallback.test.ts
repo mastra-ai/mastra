@@ -21,6 +21,9 @@ import { createDurableToolCallStep } from './tool-call';
 vi.mock('../../utils/resolve-runtime', () => ({
   resolveTool: vi.fn(),
   toolRequiresApproval: vi.fn().mockResolvedValue(false),
+  // Cross-process rebuild is a no-op for these tests (no Mastra agent wired) —
+  // return undefined so resolution falls through to the existing paths.
+  rebuildRunToolsFromMastra: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('../../stream-adapter', () => ({

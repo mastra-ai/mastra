@@ -22,6 +22,7 @@ import { loginAction, logoutAction } from './commands/auth/login';
 import { listOrgsAction, switchOrgAction } from './commands/auth/orgs';
 import { createTokenAction, listTokensAction, revokeTokenAction } from './commands/auth/tokens';
 import { whoamiAction } from './commands/auth/whoami';
+import { registerEnvDbCommands } from './commands/db/index.js';
 import { unifiedDeployAction } from './commands/deploy/index.js';
 import { registerEnvCommands } from './commands/env/index.js';
 import { COMPONENTS, LLMProvider } from './commands/init/utils';
@@ -35,19 +36,10 @@ import { logsAction } from './commands/studio/deploy-logs';
 import { statusAction } from './commands/studio/deploy-status';
 import { suggestionsAction } from './commands/studio/deploy-suggestions';
 import { listProjectsAction, createProjectAction } from './commands/studio/projects';
-import { parseComponents, parseLlmProvider, parseMcp, parseSkills } from './commands/utils';
+import { parseComponents, parseLlmProvider, parseMcp, parseSkills, wrapAction } from './commands/utils';
 import { buildWorker } from './commands/worker/build';
 import { devWorker } from './commands/worker/dev';
 import { startWorker } from './commands/worker/start';
-
-function wrapAction(fn: (...args: any[]) => Promise<void>): (...args: any[]) => void {
-  return (...args: any[]) => {
-    fn(...args).catch((err: Error) => {
-      console.error(`Error: ${err.message}`);
-      process.exit(1);
-    });
-  };
-}
 
 const mastraPkg = pkgJson as PackageJson;
 export const version = mastraPkg.version;
@@ -366,7 +358,10 @@ authTokens.command('revoke <token-id>').description('Revoke an API token').actio
 
 // ---- Environment commands ----
 
-registerEnvCommands(program);
+const envCommand = registerEnvCommands(program);
+
+// Databases: mastra env db ...
+registerEnvDbCommands(envCommand);
 
 // ---- Server commands ----
 
@@ -437,7 +432,9 @@ serverEnvCommand
 
 serverEnvCommand
   .command('pull [file]')
-  .description('Pull environment variables into a local .env file (default: .env)')
+  .description(
+    'Pull project-level environment variables into a local .env file (default: .env) — use `mastra env vars pull` to include environment-scoped vars',
+  )
   .option('-c, --config <file>', 'Project config file path (default: .mastra-project.json)')
   .option('--project <id>', 'Project ID or slug (overrides linked project when MASTRA_PROJECT_ID is unset)')
   .action(wrapAction(envPullAction));

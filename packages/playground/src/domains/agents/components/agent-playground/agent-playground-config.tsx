@@ -1,15 +1,15 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
-import { HoverPopover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui/components/Popover';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JsonSchema, JsonSchemaProperty } from '@mastra/playground-ui/utils/json-schema';
-import { Braces, Wrench, Cpu, Eye, Pencil } from 'lucide-react';
-import { useState, useMemo } from 'react';
+import { Braces, Wrench, Cpu } from 'lucide-react';
+import { useMemo } from 'react';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { useCompareAgentVersions } from '../../hooks/use-agent-versions';
@@ -669,7 +669,6 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
   const instructionBlocks = form.watch('instructionBlocks');
   const variables = form.watch('variables') as JsonSchema | undefined;
   const toolCount = tools ? Object.keys(tools).length : 0;
-  const [showPreview, setShowPreview] = useState(false);
 
   const variableEntries = useMemo(() => Object.entries(variables?.properties ?? {}), [variables]);
 
@@ -725,44 +724,22 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
               <div className="flex flex-col gap-3 pt-4 pb-2">
                 <Txt variant="ui-sm" className="font-normal text-neutral3">
                   Add instruction blocks to your agent. Blocks are combined in order to form the system prompt. You can{' '}
-                  <HoverPopover>
-                    <PopoverTrigger asChild>
-                      <button
-                        type="button"
-                        className="text-neutral3 underline decoration-dotted hover:text-neutral5 cursor-pointer inline"
-                      >
-                        use variables
-                      </button>
-                    </PopoverTrigger>{' '}
-                    as part of your instruction blocks.
-                    <PopoverContent side="bottom" align="start">
-                      <p className="text-ui-sm text-neutral5">
+                  <Tooltip>
+                    <TooltipTrigger className="text-neutral3 underline decoration-dotted hover:text-neutral5 cursor-pointer inline">
+                      use variables
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" align="start" className="max-w-72">
+                      <span>
                         Use <code className="text-accent1 font-medium">{'{{variableName}}'}</code> syntax to insert
                         dynamic values into your instruction blocks.
-                      </p>
-                    </PopoverContent>
-                  </HoverPopover>
+                      </span>
+                    </TooltipContent>
+                  </Tooltip>{' '}
+                  as part of your instruction blocks.
                 </Txt>
-
-                {!readOnly && (
-                  <div className="flex items-center justify-between">
-                    <button
-                      type="button"
-                      onClick={() => setShowPreview(prev => !prev)}
-                      className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors text-neutral3 hover:text-neutral5 hover:bg-surface3"
-                    >
-                      <Icon size="sm">{showPreview ? <Pencil /> : <Eye />}</Icon>
-                      {showPreview ? 'Edit' : 'Preview'}
-                    </button>
-                  </div>
-                )}
               </div>
 
-              {readOnly || showPreview ? (
-                <ReadOnlyInstructions blocks={instructionBlocks} />
-              ) : (
-                <InstructionBlocksPage />
-              )}
+              {readOnly ? <ReadOnlyInstructions blocks={instructionBlocks} /> : <InstructionBlocksPage />}
             </TabContent>
 
             <TabContent value="tools" className="px-4 py-0 pb-4">

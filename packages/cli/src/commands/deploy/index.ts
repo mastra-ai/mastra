@@ -26,12 +26,14 @@ import { checkBuildStaleness } from '../../utils/source-hash.js';
 import { fetchOrgs } from '../auth/api.js';
 import { MASTRA_PLATFORM_API_URL, MASTRA_STUDIO_URL } from '../auth/client.js';
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
-import { preflightBuildOutput, printPreflightIssues } from '../deploy-preflight.js';
+import { mergePreflightEnvVars, preflightBuildOutput, printPreflightIssues } from '../deploy-preflight.js';
 import { fetchEnvironments, fetchProjects, createEnvironment } from '../env/platform-api.js';
 import type { Environment } from '../env/platform-api.js';
-import { loadDeployEnvFromDotenv, readEnvVars, getMastraVersion } from '../studio/deploy.js';
+import { getDeployEnvFiles, loadDeployEnvFromDotenv, readEnvVars, getMastraVersion } from '../studio/deploy.js';
 import { createProject } from '../studio/platform-api.js';
 import { getProjectConfigToSave, loadProjectConfig, saveProjectConfig } from '../studio/project-config.js';
+import { getOverwrittenEnvKeys } from './env-vars.js';
+import { assertDeployDir } from './validate-dir.js';
 
 /**
  * Derive the public studio/server URLs from the environment slug.
@@ -553,6 +555,7 @@ export async function unifiedDeployAction(dir: string | undefined, opts: DeployO
 
 async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
   const targetDir = resolve(dir || process.cwd());
+  await assertDeployDir(dir, targetDir);
   loadDeployEnvFromDotenv(targetDir);
 
   const isHeadless = Boolean(process.env.MASTRA_API_TOKEN);
@@ -749,17 +752,63 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
     }
   }
 
-  const envVars = await readEnvVars(targetDir, { autoAccept, envFile });
+  // If the user didn't pass --env-file and no ambient .env* file exists,
+  // skip the local env-var upload entirely and let the platform use the
+  // env vars stored on the target environment. The server-side deploy
+  // handler merges request envVars over environment.envVars, so an empty
+  // (absent) envVars payload cleanly falls back to what's already stored.
+  let envVars: Record<string, string> = {};
+  const hasAmbientEnvFile = envFile ? true : (await getDeployEnvFiles(targetDir)).length > 0;
+  if (hasAmbientEnvFile) {
+    envVars = await readEnvVars(targetDir, { autoAccept, envFile });
+  }
   const envCount = Object.keys(envVars).length;
   if (envCount > 0) {
     p.log.step(`Found ${envCount} env var(s)`);
-  } else {
+  } else if (hasAmbientEnvFile) {
     p.log.step('No env vars found in selected env file');
+  } else {
+    p.log.step('No local env file — using env vars stored on the environment');
   }
 
-  // Pre-upload validation
+  // Warn before overwriting env vars that already exist on the environment
+  // with a different value. The platform merges request envVars over the
+  // stored environment.envVars (request wins), so these keys get replaced.
+  // Only relevant when deploying to a pre-existing environment.
+  if (envCount > 0 && envResolution.existing) {
+    const overwrittenKeys = getOverwrittenEnvKeys(environment.envVars, envVars);
+    if (overwrittenKeys.length > 0) {
+      p.log.warn(
+        `This deploy will overwrite ${overwrittenKeys.length} existing env var(s) on "${environment.name}":\n` +
+          overwrittenKeys.map(key => `  • ${key}`).join('\n'),
+      );
+
+      if (!autoAccept) {
+        const confirmed = await p.confirm({
+          message: 'Overwrite these env vars?',
+          initialValue: true,
+        });
+
+        if (p.isCancel(confirmed) || !confirmed) {
+          p.cancel('Deploy cancelled.');
+          process.exit(0);
+        }
+      }
+    }
+  }
+
+  // Pre-upload validation. Preflight sees the same env picture the platform
+  // applies at deploy time: request env vars merged over the environment's
+  // stored vars (request wins), so platform-stored vars don't false-alarm.
   if (!skipPreflight) {
-    const issues = await preflightBuildOutput(targetDir, envVars);
+    const preflightEnv = mergePreflightEnvVars(environment.envVars, envVars);
+    const issues = await preflightBuildOutput(targetDir, preflightEnv, {
+      hasEnvFile: hasAmbientEnvFile,
+      // Managed resources (e.g. attached databases) inject vars at deploy
+      // time; the platform exposes their names on the environment. Absent
+      // field = older platform = incomplete env picture (soften to warnings).
+      managedEnvVarNames: environment.managedEnvVarNames ?? null,
+    });
     const outcome = await printPreflightIssues(issues, { autoAccept });
     if (outcome === 'blocked') {
       p.cancel('Deploy blocked by preflight errors.');

@@ -883,6 +883,13 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       if (serverOnError) {
         return serverOnError(err, c as unknown as Parameters<typeof serverOnError>[1]);
       }
+      // Log before responding — otherwise the error is invisible on the server
+      // and the client only ever sees an opaque 500.
+      this.mastra.getLogger()?.error(`Custom route handler failed: ${c.req.method} ${c.req.path}`, {
+        method: c.req.method,
+        path: c.req.path,
+        error: err instanceof Error ? (err.stack ?? err.message) : String(err),
+      });
       return c.json({ error: 'Internal Server Error' }, 500);
     });
 

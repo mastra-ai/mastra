@@ -11,7 +11,7 @@ export const ChipsGroup = forwardRef<HTMLDivElement, ChipsGroupProps>(function C
     <div
       ref={ref}
       className={cn(
-        'flex gap-[1px] items-center [&>*:not(:last-child)]:rounded-r-none [&>*:not(:first-child)]:rounded-l-none',
+        'flex items-center gap-[1px] [&>*:not(:first-child)]:rounded-l-none [&>*:not(:last-child)]:rounded-r-none',
         className,
       )}
       {...props}
