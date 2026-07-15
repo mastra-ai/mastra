@@ -601,6 +601,24 @@ const SOURCE_ICONS: Record<
   manual: { icon: CircleDot, className: 'text-icon3' },
 };
 
+/**
+ * The card's thread links. All of an item's runs share one branch/worktree, so
+ * the role-keyed session refs normally all point at the same thread — collapse
+ * them into a single "Thread" link. Distinct threads (e.g. a triage thread
+ * created outside the item's worktree) each keep their own labelled link.
+ */
+function sessionThreadLinks(sessions: WorkItem['sessions']): Array<{ threadId: string; label: string }> {
+  const rolesByThread = new Map<string, string[]>();
+  for (const [role, session] of Object.entries(sessions)) {
+    rolesByThread.set(session.threadId, [...(rolesByThread.get(session.threadId) ?? []), role]);
+  }
+  const threads = [...rolesByThread.entries()];
+  return threads.map(([threadId, roles]) => ({
+    threadId,
+    label: threads.length === 1 ? 'Thread' : `${roles.join('/')} thread`,
+  }));
+}
+
 function WorkItemCard({
   item,
   columnStage,
@@ -681,14 +699,14 @@ function WorkItemCard({
               {stageLabel(stage)}
             </span>
           ))}
-          {Object.entries(item.sessions).map(([role, session]) => (
+          {sessionThreadLinks(item.sessions).map(({ threadId, label }) => (
             <a
-              key={role}
-              href={`/threads/${session.threadId}`}
+              key={threadId}
+              href={`/threads/${threadId}`}
               className="flex items-center gap-1 text-ui-xs text-icon3 no-underline hover:text-icon5"
             >
               <MessageSquare size={11} aria-hidden />
-              {role} thread
+              {label}
             </a>
           ))}
         </div>

@@ -632,7 +632,7 @@ describe('Factory Board — persisted cards', () => {
     expect(within(reviewCard).getByText('Building')).toBeInTheDocument();
   });
 
-  it('given a work item with sessions, when the Board renders, then the card links to each role thread', async () => {
+  it('given a work item with sessions, when the Board renders, then the card links to its thread', async () => {
     useBoardHandlers({
       workItems: [
         makeWorkItem({
@@ -656,7 +656,36 @@ describe('Factory Board — persisted cards', () => {
 
     await screen.findByTestId('board-column-intake');
     const card = within(column('execute')).getByTestId('work-item-card');
-    expect(within(card).getByRole('link', { name: /work thread/ })).toHaveAttribute('href', '/threads/thread-work');
+    expect(within(card).getByRole('link', { name: 'Thread' })).toHaveAttribute('href', '/threads/thread-work');
+  });
+
+  it('given plan and work sessions on the same thread, when the Board renders, then the card shows a single Thread link', async () => {
+    const sharedThread = {
+      projectPath: '/sandbox/mastra/worktrees/factory-issue-12',
+      branch: 'factory/issue-12',
+      threadId: 'thread-shared',
+      startedBy: 'user-1',
+    };
+    useBoardHandlers({
+      workItems: [
+        makeWorkItem({
+          id: 'wi-1',
+          title: 'Fix flaky test',
+          source: 'github-issue',
+          sourceKey: 'github-issue:12',
+          stages: ['execute'],
+          sessions: { plan: sharedThread, work: sharedThread },
+        }),
+      ],
+    });
+    renderAt('/factory/board');
+
+    await screen.findByTestId('board-column-intake');
+    const card = within(column('execute')).getByTestId('work-item-card');
+    const links = within(card).getAllByRole('link', { name: /thread/i });
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAccessibleName('Thread');
+    expect(links[0]).toHaveAttribute('href', '/threads/thread-shared');
   });
 
   it('given a card in Intake, when Move to Triage is chosen from the menu, then the card lands in the Triage swimlane', async () => {
