@@ -1667,4 +1667,170 @@ describe('runEvals', () => {
       expect(result.verdict).toBe('passed');
     });
   });
+
+  describe('turns (per-turn assertions)', () => {
+    const createTurnAgent = (id: string, counter?: { count: number }): Agent => {
+      const dummyModel = new MockLanguageModelV2({
+        doGenerate: async () => {
+          if (counter) counter.count++;
+          return {
+            content: [{ type: 'text', text: 'turn response' }],
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          };
+        },
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'turn response' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        }),
+      });
+      return new Agent({ id, name: id, instructions: 'Mock', model: dummyModel });
+    };
+
+    it('scores each turn against only its own output and returns turnResults', async () => {
+      const counter = { count: 0 };
+      const agent = createTurnAgent('turnsAgent', counter);
+
+      // A per-turn scorer only sees that turn's output (length 1), unlike a holistic
+      // accumulated scorer which would see every turn.
+      const perTurnScorer = createScorer({
+        id: 'per-turn-length',
+        description: 'Each turn produces exactly one output message',
+      }).generateScore(({ run }: any) => (Array.isArray(run.output) && run.output.length === 1 ? 1.0 : 0.0));
+
+      const holisticScorer = createScorer({
+        id: 'holistic-length',
+        description: 'Holistic scorer sees accumulated output',
+      }).generateScore(({ run }: any) => (Array.isArray(run.output) && run.output.length === 2 ? 1.0 : 0.0));
+
+      const result = await runEvals({
+        data: [
+          {
+            turns: [
+              { input: 'Turn one', scorers: [perTurnScorer] },
+              { input: 'Turn two', scorers: [perTurnScorer] },
+            ],
+          },
+        ],
+        scorers: [holisticScorer],
+        target: agent,
+      });
+
+      expect(counter.count).toBe(2);
+      // Holistic scorer sees both turns accumulated.
+      expect(result.scores['holistic-length']).toBe(1.0);
+      // Per-turn scorer saw one message per turn.
+      expect(result.turnResults).toBeDefined();
+      expect(result.turnResults!.length).toBe(2);
+      expect(result.turnResults![0]!.scores!['per-turn-length']).toBe(1.0);
+      expect(result.turnResults![1]!.scores!['per-turn-length']).toBe(1.0);
+    });
+
+    it('fails the verdict when a per-turn gate fails on one turn (wrong turn cannot satisfy)', async () => {
+      const agent = createTurnAgent('turnGateAgent');
+
+      // Gate passes only when the turn's own input asks to call the tool.
+      const perTurnGate = createScorer({
+        id: 'per-turn-gate',
+        description: 'Turn input must request a tool call',
+      }).generateScore(({ run }: any) => (typeof run.input === 'string' && run.input.includes('call') ? 1.0 : 0.0));
+
+      const result = await runEvals({
+        data: [
+          {
+            turns: [
+              { input: 'please call the tool', gates: [perTurnGate] },
+              { input: 'do not do anything', gates: [perTurnGate] },
+            ],
+          },
+        ],
+        target: agent,
+      });
+
+      expect(result.verdict).toBe('failed');
+      expect(result.turnResults![0]!.gateResults![0]!.passed).toBe(true);
+      expect(result.turnResults![1]!.gateResults![0]!.passed).toBe(false);
+    });
+
+    it("yields 'scored' when a per-turn threshold is missed but gates pass", async () => {
+      const agent = createTurnAgent('turnThresholdAgent');
+
+      const lowScorer = createMockScorer('turn-low', 0.3);
+
+      const result = await runEvals({
+        data: [
+          {
+            turns: [{ input: 'A question', scorers: [{ scorer: lowScorer, threshold: 0.8 }] }],
+          },
+        ],
+        target: agent,
+      });
+
+      expect(result.verdict).toBe('scored');
+      expect(result.turnResults![0]!.thresholdResults![0]!.passed).toBe(false);
+    });
+
+    it('rejects an empty turns array', async () => {
+      const agent = createTurnAgent('emptyTurnsAgent');
+      await expect(
+        runEvals({
+          data: [{ turns: [] }] as any,
+          scorers: [createMockScorer('basic', 0.8)],
+          target: agent,
+        }),
+      ).rejects.toThrow("'turns' must be a non-empty array");
+    });
+
+    it('rejects a turn without an input', async () => {
+      const agent = createTurnAgent('badTurnAgent');
+      await expect(
+        runEvals({
+          data: [{ turns: [{ scorers: [createMockScorer('basic', 0.8)] }] }] as any,
+          target: agent,
+        }),
+      ).rejects.toThrow("must be an object with an 'input' property");
+    });
+
+    it('rejects combining turns with input', async () => {
+      const agent = createTurnAgent('conflictAgent');
+      await expect(
+        runEvals({
+          data: [{ input: 'x', turns: [{ input: 'y' }] }] as any,
+          scorers: [createMockScorer('basic', 0.8)],
+          target: agent,
+        }),
+      ).rejects.toThrow("'turns' cannot be combined with 'input' or 'inputs'");
+    });
+
+    it('supports mixing a single-turn item with a turns item', async () => {
+      const agent = createTurnAgent('mixedAgent');
+
+      const perTurnScorer = createScorer({
+        id: 'mixed-turn-scorer',
+        description: 'per-turn',
+      }).generateScore(() => 1.0);
+
+      const result = await runEvals({
+        data: [
+          { input: 'single turn question' },
+          { turns: [{ input: 'first', scorers: [perTurnScorer] }, { input: 'second', scorers: [perTurnScorer] }] },
+        ],
+        scorers: [createMockScorer('basic', 0.9)],
+        target: agent,
+      });
+
+      expect(result.summary.totalItems).toBe(2);
+      expect(result.turnResults!.length).toBe(2);
+      expect(result.turnResults![0]!.scores!['mixed-turn-scorer']).toBe(1.0);
+    });
+  });
 });

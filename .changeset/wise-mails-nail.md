@@ -11,7 +11,9 @@ Added multi-turn support to `runEvals`. Data items can now include an `inputs: s
 - Works with gates, thresholds, and all existing scorer configurations
 - Validation rejects empty `inputs` arrays with a `MastraError`
 
-**Example**
+Also added a `turns` API for **per-turn assertions**. Instead of a single holistic score over the accumulated conversation (which can hide a broken follow-up turn), each turn colocates its `input` with `gates`/`scorers` that evaluate only that turn's input and output. Per-turn outcomes are reported in `result.turnResults` and folded into the overall `verdict`. `turns` is Agent-only and mutually exclusive with `input`/`inputs`.
+
+**Example — holistic multi-turn (`inputs`)**
 ```ts
 import { runEvals } from '@mastra/core/evals'
 import { checks } from '@mastra/evals/checks'
@@ -32,4 +34,29 @@ const result = await runEvals({
     checks.includes('Brooklyn'),
   ],
 })
+```
+
+**Example — per-turn assertions (`turns`)**
+```ts
+const result = await runEvals({
+  target: weatherAgent,
+  data: [
+    {
+      turns: [
+        {
+          input: 'What is the weather in Brooklyn?',
+          gates: [checks.calledTool('get_weather')],
+        },
+        {
+          input: 'What about tomorrow?',
+          gates: [checks.calledTool('get_weather')], // must call again this turn
+          scorers: [{ scorer: checks.similarity('tomorrow forecast'), threshold: 0.5 }],
+        },
+      ],
+    },
+  ],
+})
+
+result.verdict // folds in per-turn gate/threshold outcomes
+result.turnResults // [{ index, gateResults, thresholdResults, scores }]
 ```

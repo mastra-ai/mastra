@@ -64,6 +64,52 @@ Two details matter when writing scorers for multi-turn items:
 - **`run.output` is the accumulated output from every turn.** Output-based scorers — `checks.includes`, `checks.calledTool`, `checks.similarity`, and similar — evaluate the whole conversation. For example, `checks.calledTool('get_weather', { times: 2 })` counts calls across all turns.
 - **`run.input` is only the first turn's input.** Scorers that compare input against output (faithfulness, answer relevancy, and other input-relative LLM scorers) only see the first user message, not the full conversation. Prefer output-based checks for multi-turn, or build scorers that read the accumulated `run.output` directly.
 
+## Per-turn assertions with `turns`
+
+The `inputs` form scores the **accumulated** output holistically — a single score over every turn's output. That can hide per-turn failures: an output-based check like `checks.includes('Brooklyn')` passes if _any_ turn mentions Brooklyn, even when the follow-up turn is broken.
+
+When you need to assert that a **specific turn** behaved correctly, use `turns` instead. Each turn is an object with its own `input` and optional `gates`/`scorers` that evaluate **only that turn's** input and output:
+
+```typescript title="src/evals/per-turn-eval.ts"
+import { runEvals } from '@mastra/core/evals'
+import { checks } from '@mastra/evals/checks'
+import { weatherAgent } from '../agents'
+
+const result = await runEvals({
+  data: [
+    {
+      turns: [
+        {
+          input: 'What is the weather in Brooklyn?',
+          gates: [checks.calledTool('get_weather')],
+        },
+        {
+          // The follow-up must call the tool again — it can't be satisfied
+          // by the first turn's tool call.
+          input: 'What about tomorrow?',
+          gates: [checks.calledTool('get_weather')],
+          scorers: [{ scorer: checks.similarity('tomorrow forecast'), threshold: 0.5 }],
+        },
+      ],
+    },
+  ],
+  target: weatherAgent,
+})
+
+result.verdict // 'passed' | 'scored' | 'failed'
+result.turnResults // per-turn gate/threshold/scorer outcomes
+```
+
+Semantics:
+
+- A per-turn gate or scorer sees **only that turn's** `run.input` and `run.output` — never the accumulated conversation. This fixes both blind spots of `inputs`: the wrong turn can't satisfy a check, and `run.input` is correct for each turn.
+- Per-turn outcomes fold into the overall [verdict](/docs/evals/gates-and-verdicts): a failing turn gate makes the verdict `failed`; a missed turn threshold (with gates passing) makes it `scored`.
+- `result.turnResults[i]` reports each turn's `gateResults`, `thresholdResults`, and `scores`, so a failure points at the exact turn. Across multiple conversations, turn results are averaged by turn index.
+- A turn with no `gates`/`scorers` just advances the conversation.
+- Top-level `scorers`/`gates` still run holistically over the accumulated output, so you can combine "this turn must call the tool" with "the overall answer mentions Brooklyn."
+
+Use `inputs` when a single holistic score over the whole conversation is enough; use `turns` when correctness depends on individual turns. `turns` cannot be combined with `input` or `inputs` in the same data item.
+
 ## Combining with gates and thresholds
 
 Multi-turn data items work with [gates and verdicts](/docs/evals/gates-and-verdicts). Use output-based scorers so gating reflects the full conversation:

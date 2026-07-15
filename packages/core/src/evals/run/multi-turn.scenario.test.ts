@@ -282,3 +282,81 @@ describe('Multi-turn — scenario tests via runEvals + AIMock', () => {
     });
   });
 });
+
+describe('Per-turn assertions (turns) — scenario tests via runEvals + AIMock', () => {
+  /** Gate/scorer that reads only the turn's own input. */
+  function inputContainsScorer(id: string, substring: string) {
+    return createScorer({
+      id,
+      description: `Turn input contains "${substring}"`,
+      name: id,
+    }).generateScore(({ run }) => (typeof run.input === 'string' && run.input.includes(substring) ? 1 : 0));
+  }
+
+  it('scores each turn against its own input/output and returns per-turn results', async () => {
+    const agent = textAgent('scripted answer');
+
+    const result = await runEvals({
+      data: [
+        {
+          turns: [
+            { input: 'first turn', scorers: [outputCountScorer(1)] },
+            { input: 'second turn', scorers: [outputCountScorer(1)] },
+          ],
+        },
+      ],
+      target: agent,
+    });
+
+    // Each turn sees exactly one output message (not the accumulated two).
+    expect(result.turnResults).toBeDefined();
+    expect(result.turnResults!.length).toBe(2);
+    expect(result.turnResults![0]!.scores!['output-count-1']).toBe(1.0);
+    expect(result.turnResults![1]!.scores!['output-count-1']).toBe(1.0);
+
+    // Both turns actually hit the model.
+    expect(mock.getRequests().length).toBe(2);
+  });
+
+  it('fails the verdict when a per-turn gate fails on a later turn', async () => {
+    const agent = textAgent('scripted answer');
+
+    const result = await runEvals({
+      data: [
+        {
+          turns: [
+            { input: 'please call the tool', gates: [inputContainsScorer('turn-gate', 'call')] },
+            { input: 'unrelated follow-up', gates: [inputContainsScorer('turn-gate', 'call')] },
+          ],
+        },
+      ],
+      target: agent,
+    });
+
+    expect(result.verdict).toBe('failed');
+    expect(result.turnResults![0]!.gateResults![0]!.passed).toBe(true);
+    expect(result.turnResults![1]!.gateResults![0]!.passed).toBe(false);
+  });
+
+  it("yields verdict 'scored' when a per-turn threshold is missed", async () => {
+    const agent = textAgent('scripted answer');
+
+    const lowScorer = createScorer({
+      id: 'turn-quality',
+      description: 'Fixed low score',
+      name: 'Turn Quality',
+    }).generateScore(() => 0.3);
+
+    const result = await runEvals({
+      data: [
+        {
+          turns: [{ input: 'a question', scorers: [{ scorer: lowScorer, threshold: 0.8 }] }],
+        },
+      ],
+      target: agent,
+    });
+
+    expect(result.verdict).toBe('scored');
+    expect(result.turnResults![0]!.thresholdResults![0]!.passed).toBe(false);
+  });
+});
