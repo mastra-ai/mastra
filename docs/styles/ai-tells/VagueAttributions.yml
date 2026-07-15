@@ -1,0 +1,67 @@
+---
+extends: existence
+message: "AI vague attribution: '%s'. Name the specific source or delete the claim."
+level: error
+ignorecase: true
+tokens:
+  - experts argue
+  - experts suggest
+  - experts believe
+  - experts say
+  - experts agree
+  - experts warn
+  - experts note
+  - experts predict
+  - experts contend
+  - experts recommend
+  - experts have noted
+  - experts have argued
+  - experts have suggested
+  - experts have warned
+  - industry reports suggest
+  - industry reports indicate
+  - industry reports show
+  - industry experts
+  - industry observers
+  - industry analysts
+  - observers have cited
+  - observers have noted
+  - observers note
+  - critics argue
+  - critics suggest
+  - critics contend
+  - critics have noted
+  - critics have argued
+  - some critics argue
+  - some experts argue
+  - some experts suggest
+  - some experts believe
+  - some analysts
+  - some observers
+  - some researchers
+  - many experts
+  - many analysts
+  - many observers
+  - many researchers
+  - studies show that
+  - studies suggest that
+  - studies indicate that
+  - studies have shown that
+  - studies have found that
+  - research shows that
+  - research suggests that
+  - research indicates that
+  - research has shown that
+  - research has found that
+  - several studies
+  - several experts
+  - several analysts
+  - several observers
+  - numerous studies
+  - numerous experts
+  - a growing body of research
+  - a growing body of evidence
+  - a growing number of experts
+  - the evidence suggests
+  - the data suggests
+  - the research suggests

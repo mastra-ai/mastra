@@ -15,8 +15,8 @@ import {
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Label } from '@mastra/playground-ui/components/Label';
-import { HoverPopover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui/components/Popover';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { Check, ChevronDown, Download, GitPullRequest, Info, MessageSquare, Save } from 'lucide-react';
@@ -148,24 +148,19 @@ export function AgentPlaygroundVersionBar({
 
         {currentValue && <CopyButton content={currentValue} tooltip="Copy version ID" size="sm" />}
 
-        <HoverPopover>
-          <PopoverTrigger asChild>
-            <button
-              type="button"
-              aria-label="Version information"
-              className="text-neutral3 hover:text-neutral5 transition-colors shrink-0 rounded-sm focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-white/30"
-            >
-              <Icon size="sm">
-                <Info />
-              </Icon>
-            </button>
-          </PopoverTrigger>
-          <PopoverContent align="start" className="w-56">
-            <Txt variant="ui-sm" className="text-neutral3">
-              {versionInfoText}
-            </Txt>
-          </PopoverContent>
-        </HoverPopover>
+        <Tooltip>
+          <TooltipTrigger
+            aria-label="Version information"
+            className="text-neutral3 hover:text-neutral5 transition-colors shrink-0 rounded-sm focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-white/30"
+          >
+            <Icon size="sm">
+              <Info />
+            </Icon>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" align="start" className="max-w-56">
+            {versionInfoText}
+          </TooltipContent>
+        </Tooltip>
 
         <div className="flex items-center gap-2 ml-auto shrink-0">
           {readOnly && <Badge variant="warning">Read-only</Badge>}

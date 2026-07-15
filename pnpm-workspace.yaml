@@ -327,3 +327,4 @@ allowBuilds:
   '@mongodb-js/zstd': false
   node-liblzma: false
   workerd: false
+  braintrust: false

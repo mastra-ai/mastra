@@ -20,15 +20,15 @@ const voice = new SpeechifyVoice()
 // Initialize with custom configuration
 const voice = new SpeechifyVoice({
   speechModel: {
-    name: 'simba-english',
+    name: 'simba-3.2',
     apiKey: 'your-api-key',
   },
-  speaker: 'george', // Default voice
+  speaker: 'harper_32', // Default voice (simba-3.2 serves the curated Simba 3 voices only)
 })
 
 // Convert text to speech
 const audioStream = await voice.speak('Hello, world!', {
-  speaker: 'henry', // Override default voice
+  speaker: 'imogen_32', // Override default voice
 })
 ```
 
@@ -48,8 +48,9 @@ const audioStream = await voice.speak('Hello, world!', {
         parameters: [
           {
             name: 'name',
-            type: 'VoiceModelName',
-            description: 'The Speechify model to use',
+            type: 'SpeechifyModel',
+            description:
+              "The Speechify model to use ('simba-3.2', 'simba-3.0', 'simba-english', or 'simba-multilingual')",
             isOptional: true,
             defaultValue: "'simba-english'",
           },
@@ -66,9 +67,10 @@ const audioStream = await voice.speak('Hello, world!', {
   {
     name: 'speaker',
     type: 'SpeechifyVoiceId',
-    description: 'Default voice ID to use for speech synthesis',
+    description:
+      'Default voice ID to use for speech synthesis. The Simba 3 models serve a curated voice set only (harper_32, imogen_32, ...); the classic catalog voices (george, henry, ...) work with simba-english and simba-multilingual',
     isOptional: true,
-    defaultValue: "'george'",
+    defaultValue: "'harper_32' for Simba 3 models, otherwise 'george'",
   },
 ]}
 />
@@ -105,7 +107,7 @@ Converts text to speech using the configured speech model and voice.
           },
           {
             name: 'model',
-            type: 'VoiceModelName',
+            type: 'SpeechifyModel',
             description: 'Override the default model for this request',
             isOptional: true,
             defaultValue: "Constructor's model value",
@@ -156,5 +158,9 @@ This method isn't supported by Speechify and will throw an error. Speechify does
 
 - Speechify requires an API key for authentication
 - The default model is 'simba-english'
+- 'simba-3.2' is Speechify's latest streaming model with the lowest latency and richest expressivity, and the recommended model for English
+- 'simba-3.2' and 'simba-3.0' are currently English only; use 'simba-multilingual' for non-English or mixed-language input
+- 'simba-3.2' and 'simba-3.0' serve a curated voice set only: 'beatrice\_32', 'dominic\_32', 'edmund\_32', 'geffen\_32', 'harper\_32', 'hugh\_32', 'imogen\_32', 'wyatt\_32'. Classic catalog voices such as 'george' return an error on these models
+- The default speaker follows the configured model: 'harper\_32' for the Simba 3 models, otherwise 'george'
 - Speech-to-text functionality isn't supported
 - Additional audio stream options can be passed through the speak() method's options parameter

@@ -19,7 +19,21 @@ export interface WebAuthState {
   /** Whether the server has WorkOS auth configured. */
   authEnabled: boolean;
   authenticated: boolean;
-  user?: { email?: string; name?: string };
+  user?: { userId?: string; email?: string; name?: string };
+}
+
+/**
+ * The user-session resourceId used when auth is disabled (local dev): there is
+ * only one operator, so a fixed id keeps their sessions stable across reloads.
+ */
+export const LOCAL_USER_RESOURCE_ID = 'local-user';
+
+/**
+ * The resourceId under which a user's personal (non-factory) sessions live:
+ * the stable WorkOS user id, or a fixed local id when auth is disabled.
+ */
+export function userSessionResourceId(state: WebAuthState | undefined): string {
+  return state?.user?.userId ?? LOCAL_USER_RESOURCE_ID;
 }
 
 /**
@@ -60,7 +74,10 @@ export async function fetchAuthState(baseUrl: string): Promise<WebAuthState> {
     if (!res.ok) {
       return { authEnabled: true, authenticated: false };
     }
-    const data = (await res.json()) as { authenticated?: boolean; user?: { email?: string; name?: string } | null };
+    const data = (await res.json()) as {
+      authenticated?: boolean;
+      user?: { userId?: string; email?: string; name?: string } | null;
+    };
     return {
       authEnabled: true,
       authenticated: Boolean(data.authenticated),

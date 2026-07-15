@@ -806,9 +806,10 @@ SystemMessage types: string | string[] | CoreSystemMessage | CoreSystemMessage[]
   },
   {
     name: 'tools',
-    type: 'ToolsInput | ({ requestContext: RequestContext }) => ToolsInput | Promise<ToolsInput>',
+    type: 'ToolsInput | ({ requestContext: RequestContext, mastra?: Mastra }) => ToolsInput | Promise<ToolsInput>',
     isOptional: true,
-    description: 'Tools that the agent can access. Can be provided statically or resolved dynamically.',
+    description:
+      'Tools that the agent can access. Can be provided statically or resolved dynamically from the request context and associated Mastra instance when available.',
   },
   {
     name: 'hooks',
