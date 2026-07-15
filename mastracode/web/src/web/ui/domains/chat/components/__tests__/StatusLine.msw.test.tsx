@@ -101,6 +101,7 @@ function useAgentControllerHandlers(events: AgentControllerEvent[] = [], delayed
         modes: [
           { id: 'build', name: 'Build' },
           { id: 'plan', name: 'Plan' },
+          { id: 'fast', name: 'Explore' },
         ],
       }),
     ),
@@ -168,6 +169,36 @@ describe('StatusLine', () => {
         expect(screen.getByRole('button', { name: 'Build' })).toHaveAttribute('aria-pressed', 'true'),
       );
       expect(screen.getByRole('button', { name: 'Plan' })).toHaveAttribute('aria-pressed', 'false');
+      expect(screen.getByRole('button', { name: 'Explore' })).toHaveAttribute('aria-pressed', 'false');
+      for (const button of screen.getAllByRole('button', { name: /Build|Plan|Explore/ })) {
+        expect(button).toHaveAttribute('data-variant', 'outline');
+      }
+    });
+
+    it('colors only the active mode background', async () => {
+      seedProject();
+      useAgentControllerHandlers();
+      renderStatusLine();
+
+      const buildButton = await screen.findByRole('button', { name: 'Build' });
+      await waitFor(() =>
+        expect(buildButton).toHaveStyle({ backgroundColor: '#16c858', color: '#111827' }),
+      );
+      expect(screen.getByRole('button', { name: 'Plan' })).not.toHaveAttribute('style');
+      expect(screen.getByRole('button', { name: 'Explore' })).not.toHaveAttribute('style');
+    });
+
+    it('colors Explore orange when its fast mode is active', async () => {
+      seedProject();
+      useAgentControllerHandlers();
+      const user = userEvent.setup();
+      renderStatusLine();
+
+      const exploreButton = await screen.findByRole('button', { name: 'Explore' });
+      await user.click(exploreButton);
+
+      await waitFor(() => expect(exploreButton).toHaveAttribute('aria-pressed', 'true'));
+      expect(exploreButton).toHaveStyle({ backgroundColor: '#fdac53', color: '#111827' });
     });
 
     it('switches modes through the controller mode endpoint before updating the pressed state', async () => {
@@ -181,6 +212,7 @@ describe('StatusLine', () => {
 
       await waitFor(() => expect(onMode).toHaveBeenCalledWith({ modeId: 'plan' }));
       await waitFor(() => expect(planButton).toHaveAttribute('aria-pressed', 'true'));
+      expect(planButton).toHaveStyle({ backgroundColor: '#7f45e0', color: '#ffffff' });
       expect(screen.getByRole('button', { name: 'Build' })).toHaveAttribute('aria-pressed', 'false');
     });
   });

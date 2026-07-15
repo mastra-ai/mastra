@@ -20,13 +20,14 @@ const RESOURCE_ID = 'resource-test';
 const SESSION = `${API}/sessions/${RESOURCE_ID}`;
 const THREAD_ID = 'thread-test';
 
-function sessionState(): AgentControllerSessionState {
+function sessionState(running = false): AgentControllerSessionState {
   return {
     controllerId: 'code',
     resourceId: RESOURCE_ID,
     modeId: 'build',
     modelId: 'openai/gpt-4o-mini',
     threadId: THREAD_ID,
+    running,
     settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
   };
 }
@@ -50,8 +51,10 @@ function seedProject() {
   localStorage.setItem('mastracode-active-project', project.id);
 }
 
-function useAgentControllerHandlers() {
+function useAgentControllerHandlers({ running = false }: { running?: boolean } = {}) {
   const onSend = vi.fn();
+  const onSteer = vi.fn();
+  const onAbort = vi.fn();
   const onPermissions = vi.fn();
   let permissions: PermissionRules = { categories: { execute: 'ask' }, tools: { 'shell.run': 'deny' } };
   server.use(
@@ -60,12 +63,20 @@ function useAgentControllerHandlers() {
     ),
     http.get(`${API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', name: 'Build' }] })),
     http.get(`${API}/models`, () => HttpResponse.json({ models: [] })),
-    http.get(SESSION, () => HttpResponse.json(sessionState())),
-    http.put(`${SESSION}/state`, () => HttpResponse.json(sessionState())),
+    http.get(SESSION, () => HttpResponse.json(sessionState(running))),
+    http.put(`${SESSION}/state`, () => HttpResponse.json(sessionState(running))),
     http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () => HttpResponse.json({ messages: [] })),
     http.get(`${SESSION}/stream`, () => sse()),
     http.post(`${SESSION}/messages`, async ({ request }) => {
       onSend(await request.json());
+      return HttpResponse.json({ ok: true });
+    }),
+    http.post(`${SESSION}/steer`, async ({ request }) => {
+      onSteer(await request.json());
+      return HttpResponse.json({ ok: true });
+    }),
+    http.post(`${SESSION}/abort`, () => {
+      onAbort();
       return HttpResponse.json({ ok: true });
     }),
     http.get(`${SESSION}/permissions`, () => {
@@ -86,7 +97,7 @@ function useAgentControllerHandlers() {
       return HttpResponse.json({ ok: true });
     }),
   );
-  return { onSend, onPermissions };
+  return { onSend, onSteer, onAbort, onPermissions };
 }
 
 function NoticeProbe() {
@@ -139,6 +150,59 @@ afterEach(() => {
 });
 
 describe('Composer', () => {
+  describe('when submitting a message', () => {
+    it('sends the trimmed draft on Enter', async () => {
+      seedProject();
+      const { onSend } = useAgentControllerHandlers();
+      renderComposer();
+
+      const input = await screen.findByRole('textbox');
+      await waitFor(() => expect(input).toBeEnabled());
+      await userEvent.type(input, '  hello agent  {Enter}');
+
+      await waitFor(() => expect(onSend).toHaveBeenCalledWith({ message: 'hello agent' }));
+    });
+
+    it('keeps a newline in the draft on Shift+Enter', async () => {
+      seedProject();
+      const { onSend } = useAgentControllerHandlers();
+      renderComposer();
+
+      const input = await screen.findByRole('textbox');
+      await waitFor(() => expect(input).toBeEnabled());
+      await userEvent.type(input, 'first line{Shift>}{Enter}{/Shift}second line');
+
+      expect(input).toHaveValue('first line\nsecond line');
+      expect(onSend).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when the agent is busy', () => {
+    it('steers instead of sending a new message', async () => {
+      seedProject();
+      const { onSend, onSteer } = useAgentControllerHandlers({ running: true });
+      renderComposer();
+
+      const input = await screen.findByRole('textbox');
+      await waitFor(() => expect(input).toHaveAttribute('placeholder', 'Steer the agent…'));
+      await userEvent.type(input, 'change direction{Enter}');
+
+      await waitFor(() => expect(onSteer).toHaveBeenCalledWith({ message: 'change direction' }));
+      expect(onSend).not.toHaveBeenCalled();
+    });
+
+    it('aborts the active run', async () => {
+      seedProject();
+      const { onAbort } = useAgentControllerHandlers({ running: true });
+      renderComposer();
+
+      const abort = await screen.findByRole('button', { name: 'Abort' });
+      await userEvent.click(abort);
+
+      await waitFor(() => expect(onAbort).toHaveBeenCalledOnce());
+    });
+  });
+
   describe('when entering exact no-arg slash commands', () => {
     it('shows permissions from the client cache instead of sending a message', async () => {
       seedProject();
@@ -276,6 +340,28 @@ describe('Composer', () => {
 
       await userEvent.type(input, 'text only{Enter}');
       await waitFor(() => expect(onSend).toHaveBeenCalledWith({ message: 'text only' }));
+    });
+  });
+
+  describe('when rendering the composer controls', () => {
+    it('places the session status line in the composer actions area', async () => {
+      seedProject();
+      useAgentControllerHandlers();
+      renderComposer();
+
+      const statusLine = await screen.findByLabelText('Session status line');
+
+      expect(statusLine.closest('[data-slot="composer-actions"]')).toBeInTheDocument();
+    });
+
+    it('colors the composer box border with the active mode', async () => {
+      seedProject();
+      useAgentControllerHandlers();
+      renderComposer();
+
+      const textbox = await screen.findByRole('textbox', { name: 'Message' });
+
+      expect(textbox.closest('[data-slot="composer-box"]')).toHaveStyle({ borderColor: '#16c858' });
     });
   });
 
