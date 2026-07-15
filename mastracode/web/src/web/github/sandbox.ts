@@ -219,26 +219,15 @@ const railwayFactory: SandboxFactory = ({ providerSandboxId, env, idleTimeoutMin
     ...(env ? { env } : {}),
     ...(idleTimeoutMinutes !== undefined ? { idleTimeoutMinutes } : {}),
     ...(checkpointName ? { checkpointName } : {}),
-    // Template installs `git` and `gh`. `gh` is installed from GitHub's
-    // official apt repo rather than the Debian community package: the community
-    // build regressed against deprecated GitHub APIs and isn't reliable, and
-    // availability of `gh` in the default Debian sources varies across the
-    // Debian release Railway happens to ship as the sandbox base. Repo cloning
-    // and gh auth are done at operation time via `withInstallToken` + inline
-    // `GH_TOKEN` so each open uses a freshly minted installation token.
-    template: builder =>
-      builder.withPackages('git', 'ca-certificates', 'curl', 'gnupg').run(
-        [
-          'set -eux',
-          'install -m 0755 -d /etc/apt/keyrings',
-          'curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /etc/apt/keyrings/githubcli-archive-keyring.gpg',
-          'chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg',
-          'echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list',
-          'apt-get update',
-          'DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends gh',
-          'rm -rf /var/lib/apt/lists/*',
-        ].join(' && '),
-      ),
+    // Template installs only `git`. `gh` and its supporting apt setup are
+    // installed at runtime by `ensureGhInstalled` on first use — installing
+    // it at template-build time was fragile (Railway returns only a generic
+    // "template failed to build" error with no build-step logs, so failures
+    // in the multi-step apt/keyring/repo bootstrap were undebuggable). Runtime
+    // install surfaces stderr through `executeCommand` where we can read it.
+    // Repo cloning and gh auth are done at operation time via `withInstallToken`
+    // + inline `GH_TOKEN` so each open uses a freshly minted installation token.
+    template: builder => builder.withPackages('git'),
   });
 
 /** Local host-process sandbox (single-user dev; no tenant isolation). */
@@ -411,6 +400,7 @@ export class MaterializeError extends Error {
       | 'push-failed'
       | 'commit-failed'
       | 'gh-missing'
+      | 'gh-install-failed'
       | 'pr-failed',
   ) {
     super(message);
@@ -1005,17 +995,43 @@ export interface CreatePullRequestResult {
 }
 
 /**
- * Preflight that `gh` is installed in the sandbox. Only called on the PR path so
- * a missing `gh` never blocks clone/open. Surfaces an actionable error naming
- * the sandbox template requirement.
+ * Ensure `gh` (GitHub CLI) is installed in the sandbox. Installed at runtime
+ * rather than baked into the sandbox template because template-build failures
+ * on Railway surface only a generic error (no per-step logs), which makes the
+ * multi-step apt/keyring/repo bootstrap impossible to debug remotely. Runtime
+ * install streams stderr through `executeCommand`, so a real failure produces
+ * an actionable error message.
+ *
+ * Idempotent: if `gh` is already present, this is a single `gh --version` call.
+ * On a fresh sandbox, this pulls GitHub's official apt repo and installs `gh`
+ * from it (the Debian community `gh` is unreliable across Debian releases and
+ * upstream regressed against deprecated GitHub APIs).
  */
-async function assertGhAvailable(sandbox: MaterializationSandbox): Promise<void> {
-  const version = await sh(sandbox, 'gh --version');
-  if (version.exitCode !== 0) {
-    throw new MaterializeError(
-      'The GitHub CLI (gh) is not installed in the sandbox. The sandbox template must include gh to open pull requests.',
-      'gh-missing',
-    );
+async function ensureGhInstalled(sandbox: MaterializationSandbox): Promise<void> {
+  const existing = await sh(sandbox, 'gh --version');
+  if (existing.exitCode === 0) return;
+
+  const install = await sh(
+    sandbox,
+    [
+      'set -eux',
+      'apt-get update',
+      'DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates curl',
+      'mkdir -p /etc/apt/keyrings',
+      'curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /etc/apt/keyrings/githubcli-archive-keyring.gpg',
+      'chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg',
+      'ARCH=$(dpkg --print-architecture)',
+      'echo "deb [arch=$ARCH signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list',
+      'apt-get update',
+      'DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends gh',
+    ].join('; '),
+  );
+
+  if (install.exitCode !== 0) {
+    const stderr = (install.stderr ?? '').trim();
+    const stdout = (install.stdout ?? '').trim();
+    const detail = stderr || stdout || `exit ${install.exitCode}`;
+    throw new MaterializeError(`Failed to install gh in the sandbox: ${detail}`, 'gh-install-failed');
   }
 }
 
@@ -1046,7 +1062,7 @@ export async function createPullRequest(
     throw new MaterializeError(`Refusing to open PR: invalid head branch '${head}'.`, 'pr-failed');
   }
 
-  await assertGhAvailable(sandbox);
+  await ensureGhInstalled(sandbox);
 
   // GH_TOKEN is prefixed inline so it is exported only to the single `gh`
   // process and never to the wider shell session, git config, or VM env. `gh`

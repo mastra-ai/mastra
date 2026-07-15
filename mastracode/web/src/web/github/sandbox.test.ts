@@ -892,10 +892,40 @@ describe('createPullRequest', () => {
     expect(ghCall).toContain("--body ''");
   });
 
-  it('surfaces an actionable gh-missing error when gh is not installed', async () => {
-    const sandbox = new FakeSandbox(script =>
-      script === 'gh --version' ? { exitCode: 127, stdout: '', stderr: 'gh: not found' } : OK,
-    );
+  it('installs gh at runtime and proceeds when gh is missing but install succeeds', async () => {
+    let ghInstalled = false;
+    const sandbox = new FakeSandbox(script => {
+      if (script === 'gh --version') {
+        return ghInstalled
+          ? { exitCode: 0, stdout: 'gh version 2.0.0', stderr: '' }
+          : { exitCode: 127, stdout: '', stderr: 'gh: not found' };
+      }
+      if (script.includes('apt-get install') && script.includes('gh')) {
+        ghInstalled = true;
+        return OK;
+      }
+      if (script.includes('gh pr create')) return { exitCode: 0, stdout: 'https://github.com/o/r/pull/1\n', stderr: '' };
+      return OK;
+    });
+    const result = await createPullRequest(sandbox, '/workspace/hello', {
+      token: 'tok',
+      base: 'main',
+      head: 'feat/x',
+      title: 't',
+    });
+    expect(result.url).toBe('https://github.com/o/r/pull/1');
+    // The gh apt bootstrap must have run.
+    expect(sandbox.calls.some(c => c.includes('cli.github.com'))).toBe(true);
+    // gh pr create must run after install completes.
+    expect(sandbox.calls.some(c => c.includes('gh pr create'))).toBe(true);
+  });
+
+  it('surfaces gh-install-failed with stderr when the apt install fails', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script === 'gh --version') return { exitCode: 127, stdout: '', stderr: 'gh: not found' };
+      if (script.includes('apt-get install')) return { exitCode: 100, stdout: '', stderr: 'E: no candidate' };
+      return OK;
+    });
     const err = await createPullRequest(sandbox, '/workspace/hello', {
       token: 'tok',
       base: 'main',
@@ -903,8 +933,9 @@ describe('createPullRequest', () => {
       title: 't',
     }).catch(e => e);
     expect(err).toBeInstanceOf(MaterializeError);
-    expect(err.code).toBe('gh-missing');
-    // gh pr create must not run when the preflight fails.
+    expect(err.code).toBe('gh-install-failed');
+    expect(err.message).toContain('E: no candidate');
+    // gh pr create must not run when install fails.
     expect(sandbox.calls.some(c => c.includes('gh pr create'))).toBe(false);
   });
 
