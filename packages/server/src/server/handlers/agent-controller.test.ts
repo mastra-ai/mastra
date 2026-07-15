@@ -187,6 +187,27 @@ describe('agent-controller routes', () => {
     });
   });
 
+  describe('SWITCH_AGENT_CONTROLLER_THREAD_ROUTE', () => {
+    it('does not interrupt the session when the requested thread is already active', async () => {
+      const controller = mastra.getAgentController('code');
+      if (!controller) throw new Error('Expected the code agent controller');
+      await controller.init();
+      const session = await controller.createSession({ resourceId: 'user-1', id: 'user-1', ownerId: controller.id });
+      const threadId = session.thread.requireId();
+      const switchThread = vi.spyOn(session.thread, 'switch');
+
+      const response = await SWITCH_AGENT_CONTROLLER_THREAD_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-1',
+        threadId,
+      });
+
+      expect(response).toEqual({ ok: true });
+      expect(switchThread).not.toHaveBeenCalled();
+    });
+  });
+
   describe('SEND_AGENT_CONTROLLER_MESSAGE_ROUTE', () => {
     it('acks a send (reply streams over SSE, not this response)', async () => {
       const res = await SEND_AGENT_CONTROLLER_MESSAGE_ROUTE.handler({

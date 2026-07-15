@@ -1,9 +1,16 @@
-import type { LanguageModelV4, LanguageModelV4CallOptions, LanguageModelV4FilePart } from '@ai-sdk/provider-v7';
+import type {
+  LanguageModelV4,
+  LanguageModelV4CallOptions,
+  LanguageModelV4File,
+  LanguageModelV4FilePart,
+  LanguageModelV4StreamPart,
+} from '@ai-sdk/provider-v7';
 import { convertToDataContent } from '../../../../stream/aisdk/v5/compat/content';
 import type { MastraLanguageModelV4 } from '../../shared.types';
 import { createStreamFromGenerateResult } from '../generate-to-stream';
 
 type StreamResult = Awaited<ReturnType<LanguageModelV4['doStream']>>;
+type GenerateResult = Awaited<ReturnType<LanguageModelV4['doGenerate']>>;
 type LegacyFileData = string | URL | Uint8Array | ArrayBuffer;
 type FileData = LegacyFileData | LanguageModelV4FilePart['data'];
 
@@ -107,6 +114,68 @@ function remapCallOptionsToV4(options: LanguageModelV4CallOptions): LanguageMode
 }
 
 /**
+ * V4 responses tag generated file data ({type: 'data' | 'url'}), but Mastra's
+ * shared response pipeline (chunk transforms, file buffering, message
+ * persistence) expects the flat V2/V3 shape (base64 string | Uint8Array).
+ * Untag before handing results to the shared pipeline so file chunks and
+ * persisted message history keep the flat contract. This applies to both
+ * 'file' and 'reasoning-file' parts, which carry the same tagged data shape.
+ *
+ * Response file data is typed as the 'data' | 'url' variants only, so this
+ * guard is exhaustive for well-formed responses. Other tagged variants
+ * ('reference' | 'text') have no flat equivalent and pass through untouched.
+ */
+function isUntaggableV4ResponseFileData(data: unknown): data is LanguageModelV4File['data'] {
+  if (typeof data !== 'object' || data === null || !('type' in data)) {
+    return false;
+  }
+
+  return data.type === 'data' || data.type === 'url';
+}
+
+function untagV4ResponseFileData(data: LanguageModelV4File['data']): string | Uint8Array {
+  return data.type === 'url' ? data.url.toString() : data.data;
+}
+
+function isFilePartType(type: string): boolean {
+  return type === 'file' || type === 'reasoning-file';
+}
+
+function untagResponseFileContent(content: GenerateResult['content']): GenerateResult['content'] {
+  let contentModified = false;
+  const untagged = content.map(part => {
+    if (!isFilePartType(part.type) || !('data' in part) || !isUntaggableV4ResponseFileData(part.data)) {
+      return part;
+    }
+
+    contentModified = true;
+    // Downstream consumers require the flat data shape, which no longer
+    // matches the V4 content type — hence the cast.
+    return { ...part, data: untagV4ResponseFileData(part.data) } as unknown as (typeof content)[number];
+  });
+
+  return contentModified ? untagged : content;
+}
+
+function untagFileStreamParts(stream: StreamResult['stream']): StreamResult['stream'] {
+  return stream.pipeThrough(
+    new TransformStream<LanguageModelV4StreamPart, LanguageModelV4StreamPart>({
+      transform(part, controller) {
+        if (isFilePartType(part.type) && 'data' in part && isUntaggableV4ResponseFileData(part.data)) {
+          // Same flat-shape cast as untagResponseFileContent.
+          controller.enqueue({
+            ...part,
+            data: untagV4ResponseFileData(part.data),
+          } as unknown as LanguageModelV4StreamPart);
+        } else {
+          controller.enqueue(part);
+        }
+      },
+    }),
+  );
+}
+
+/**
  * Wrapper class for AI SDK V7 (LanguageModelV4) that converts doGenerate to return
  * a stream format for consistency with Mastra's streaming architecture.
  */
@@ -145,17 +214,24 @@ export class AISDKV7LanguageModel implements MastraLanguageModelV4 {
 
   async doGenerate(options: LanguageModelV4CallOptions) {
     const result = await this.#model.doGenerate(remapCallOptionsToV4(options));
+    const content = untagResponseFileContent(result.content);
+    const untaggedResult = content === result.content ? result : { ...result, content };
 
     return {
-      ...result,
+      ...untaggedResult,
       request: result.request!,
       response: result.response as unknown as StreamResult['response'],
-      stream: createStreamFromGenerateResult(result),
+      stream: createStreamFromGenerateResult(untaggedResult),
     };
   }
 
   async doStream(options: LanguageModelV4CallOptions) {
-    return await this.#model.doStream(remapCallOptionsToV4(options));
+    const result = await this.#model.doStream(remapCallOptionsToV4(options));
+
+    return {
+      ...result,
+      stream: untagFileStreamParts(result.stream),
+    };
   }
 
   /**
