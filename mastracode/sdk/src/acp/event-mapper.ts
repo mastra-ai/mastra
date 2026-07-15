@@ -1,5 +1,6 @@
 import type { SessionNotification, RequestPermissionRequest, AgentSideConnection } from '@agentclientprotocol/sdk';
 import type { AgentControllerEvent, MastraDBMessage, Session, TokenUsage } from '@mastra/core/agent-controller';
+import { mastraDBMessageToSignal } from '@mastra/core/signals';
 
 /** Join the text of all `text` parts on a DB-native message, newline-separated. */
 function getMessageText(message: MastraDBMessage): string {
@@ -7,6 +8,16 @@ function getMessageText(message: MastraDBMessage): string {
   if (typeof content === 'string' || !content?.parts) return '';
   return content.parts
     .filter((part): part is Extract<(typeof content.parts)[number], { type: 'text' }> => part.type === 'text')
+    .map(part => part.text)
+    .join('\n');
+}
+
+function getSignalText(message: MastraDBMessage): string {
+  const contents = mastraDBMessageToSignal(message).contents;
+  if (typeof contents === 'string') return contents;
+  if (!Array.isArray(contents)) return '';
+  return contents
+    .filter((part): part is Extract<(typeof contents)[number], { type: 'text' }> => part.type === 'text')
     .map(part => part.text)
     .join('\n');
 }
@@ -73,6 +84,18 @@ export function handleAgentControllerEvent(
     case 'agent_start':
       state.lastTextLength = 0;
       break;
+
+    case 'message_start': {
+      if (event.message.role !== 'signal') break;
+      const text = getSignalText(event.message);
+      if (text) {
+        sendUpdate(connection, state.sessionId, {
+          sessionUpdate: 'agent_message_chunk',
+          content: { type: 'text', text },
+        });
+      }
+      break;
+    }
 
     case 'message_update': {
       if (event.message.role !== 'assistant') break;

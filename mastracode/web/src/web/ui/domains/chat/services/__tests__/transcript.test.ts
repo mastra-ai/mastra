@@ -12,6 +12,34 @@ function dbMessage(id: string, role: MastraDBMessage['role'], parts: MastraMessa
   return { id, role, createdAt: new Date(), content: { format: 2, parts } };
 }
 
+function signalMessage({
+  id,
+  type,
+  tagName,
+  text,
+  attributes,
+}: {
+  id: string;
+  type: string;
+  tagName: string;
+  text: string;
+  attributes?: Record<string, unknown>;
+}): MastraDBMessage {
+  const createdAt = new Date('2026-07-15T10:00:00.000Z');
+  return {
+    id,
+    role: 'signal',
+    createdAt,
+    content: {
+      format: 2,
+      parts: [{ type: 'text', text }],
+      metadata: {
+        signal: { id, type, tagName, createdAt: createdAt.toISOString(), attributes },
+      },
+    },
+  };
+}
+
 function messageParts(entry: unknown): unknown[] {
   return isMessageEntry(entry) ? entry.message.content.parts : [];
 }
@@ -94,6 +122,106 @@ describe('transcript reducer message entries', () => {
     expect(state.entries[0]).toMatchObject({ kind: 'notice', text: 'Command handled' });
     expect(state.entries[1]).toMatchObject({ kind: 'message', id: 'assistant-1', streaming: true });
     expect(messageParts(state.entries[1])).toEqual([{ type: 'text', text: 'Streaming text' }]);
+  });
+
+  it('retains live signal messages between assistant segments without changing assistant decode state', () => {
+    const firstAssistant = dbMessage('assistant-1', 'assistant', [{ type: 'text', text: 'Before signals' }]);
+    const reminder = signalMessage({
+      id: 'reminder-1',
+      type: 'system-reminder',
+      tagName: 'system-reminder',
+      text: 'Follow the package instructions.',
+      attributes: { type: 'dynamic-agents-md', path: '/repo/AGENTS.md' },
+    });
+    const summary = signalMessage({
+      id: 'summary-1',
+      type: 'notification',
+      tagName: 'notification-summary',
+      text: 'github: 2 pending notifications',
+      attributes: { pending: 2, notificationIds: ['n1', 'n2'] },
+    });
+    const secondAssistant = dbMessage('assistant-2', 'assistant', [{ type: 'text', text: 'After signals' }]);
+
+    let state = transcriptReducer({ ...initialTranscript, pending: true }, {
+      type: 'event',
+      event: { type: 'message_update', message: firstAssistant },
+    });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message: firstAssistant } });
+    const decodeStartedAt = state._decodeStartedAt;
+
+    for (const message of [reminder, summary]) {
+      state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message } });
+      expect(state.entries.at(-1)).toMatchObject({ kind: 'message', id: message.id, streaming: true });
+      expect(state.pending).toBe(false);
+      expect(state._decodeStartedAt).toBe(decodeStartedAt);
+
+      state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message } });
+      expect(state.entries.at(-1)).toMatchObject({ kind: 'message', id: message.id, streaming: false });
+      expect(state.pending).toBe(false);
+      expect(state._decodeStartedAt).toBe(decodeStartedAt);
+    }
+
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'message_update', message: secondAssistant },
+    });
+
+    expect(state.entries.map(entry => entry.id)).toEqual(['assistant-1', 'reminder-1', 'summary-1', 'assistant-2']);
+    expect(state.entries[1]).toMatchObject({
+      message: {
+        role: 'signal',
+        content: {
+          parts: [{ type: 'text', text: 'Follow the package instructions.' }],
+          metadata: {
+            signal: {
+              type: 'system-reminder',
+              tagName: 'system-reminder',
+              attributes: { type: 'dynamic-agents-md', path: '/repo/AGENTS.md' },
+            },
+          },
+        },
+      },
+    });
+    expect(state.entries[2]).toMatchObject({
+      message: {
+        role: 'signal',
+        content: {
+          parts: [{ type: 'text', text: 'github: 2 pending notifications' }],
+          metadata: {
+            signal: {
+              type: 'notification',
+              tagName: 'notification-summary',
+              attributes: { pending: 2, notificationIds: ['n1', 'n2'] },
+            },
+          },
+        },
+      },
+    });
+    expect(messageParts(state.entries[3])).toEqual([{ type: 'text', text: 'After signals' }]);
+  });
+
+  it('keeps signal-only events from clearing pending or starting decode timing', () => {
+    const reminder = signalMessage({
+      id: 'reminder-1',
+      type: 'system-reminder',
+      tagName: 'system-reminder',
+      text: 'Wait for assistant output.',
+    });
+    const pending = { ...initialTranscript, pending: true };
+
+    const started = transcriptReducer(pending, {
+      type: 'event',
+      event: { type: 'message_start', message: reminder },
+    });
+    const ended = transcriptReducer(started, {
+      type: 'event',
+      event: { type: 'message_end', message: reminder },
+    });
+
+    expect(ended.pending).toBe(true);
+    expect(ended._decodeStartedAt).toBe(0);
+    expect(ended.entries).toHaveLength(1);
+    expect(ended.entries[0]).toMatchObject({ id: 'reminder-1', streaming: false });
   });
 
   it('keeps tool lifecycle events visible inline before a message update re-emits the tool call', () => {

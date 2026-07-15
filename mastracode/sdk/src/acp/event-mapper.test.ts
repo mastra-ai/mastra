@@ -1,5 +1,6 @@
 import type { AgentSideConnection } from '@agentclientprotocol/sdk';
 import type { AgentControllerEvent, Session } from '@mastra/core/agent-controller';
+import { createSignal } from '@mastra/core/signals';
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -41,6 +42,97 @@ describe('ACP Event Mapper', () => {
       resolve: vi.fn(),
     };
   }
+
+  describe('standalone signal messages', () => {
+    it('emits system reminders and notification summaries from message_start', () => {
+      const state = createPromptState('session-1');
+      const messages = [
+        createSignal({
+          id: 'reminder-1',
+          type: 'system-reminder',
+          tagName: 'system-reminder',
+          contents: 'Follow the package instructions.',
+          createdAt: new Date('2026-07-15T10:00:00.000Z'),
+          attributes: { type: 'dynamic-agents-md', path: '/repo/AGENTS.md' },
+        }).toDBMessage(),
+        createSignal({
+          id: 'summary-1',
+          type: 'notification',
+          tagName: 'notification-summary',
+          contents: [{ type: 'text', text: 'github: 2 pending notifications' }],
+          createdAt: new Date('2026-07-15T10:00:01.000Z'),
+          attributes: { pending: 2 },
+        }).toDBMessage(),
+      ];
+
+      for (const message of messages) {
+        handleAgentControllerEvent({ type: 'message_start', message }, state, mockConnection, mockSession);
+        handleAgentControllerEvent({ type: 'message_end', message }, state, mockConnection, mockSession);
+      }
+
+      expect(sessionUpdateSpy).toHaveBeenNthCalledWith(1, {
+        sessionId: 'session-1',
+        update: {
+          sessionUpdate: 'agent_message_chunk',
+          content: { type: 'text', text: 'Follow the package instructions.' },
+        },
+      });
+      expect(sessionUpdateSpy).toHaveBeenNthCalledWith(2, {
+        sessionId: 'session-1',
+        update: {
+          sessionUpdate: 'agent_message_chunk',
+          content: { type: 'text', text: 'github: 2 pending notifications' },
+        },
+      });
+      expect(sessionUpdateSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('emits a signal once without duplicating or truncating adjacent assistant text', () => {
+      const state = createPromptState('session-1');
+      const firstAssistant = {
+        id: 'assistant-1',
+        role: 'assistant' as const,
+        content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'Before signal' }] },
+        createdAt: new Date('2026-07-15T10:00:00.000Z'),
+      };
+      const signal = createSignal({
+        id: 'reminder-1',
+        type: 'system-reminder',
+        tagName: 'system-reminder',
+        contents: 'Remember this.',
+        createdAt: new Date('2026-07-15T10:00:01.000Z'),
+      }).toDBMessage();
+      const secondAssistant = {
+        id: 'assistant-2',
+        role: 'assistant' as const,
+        content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'After signal' }] },
+        createdAt: new Date('2026-07-15T10:00:02.000Z'),
+      };
+
+      handleAgentControllerEvent(
+        { type: 'message_update', message: firstAssistant },
+        state,
+        mockConnection,
+        mockSession,
+      );
+      handleAgentControllerEvent({ type: 'message_end', message: firstAssistant }, state, mockConnection, mockSession);
+      handleAgentControllerEvent({ type: 'message_start', message: signal }, state, mockConnection, mockSession);
+      handleAgentControllerEvent({ type: 'message_end', message: signal }, state, mockConnection, mockSession);
+      handleAgentControllerEvent(
+        { type: 'message_update', message: secondAssistant },
+        state,
+        mockConnection,
+        mockSession,
+      );
+
+      expect(sessionUpdateSpy.mock.calls.map(([notification]) => notification.update.content.text)).toEqual([
+        'Before signal',
+        'Remember this.',
+        'After signal',
+      ]);
+      expect(state.lastTextLength).toBe('After signal'.length);
+    });
+  });
 
   describe('message_update - text delta computation', () => {
     it('emits agent_message_chunk with delta text', () => {

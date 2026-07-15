@@ -311,7 +311,9 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent): Transcri
 
     case 'message_start':
     case 'message_update': {
-      const next = upsertAssistant(state, event.message as MastraDBMessage, true);
+      const message = event.message as MastraDBMessage;
+      const next = upsertMessage(state, message, true);
+      if (message.role !== 'assistant') return next;
       // Only streamed assistant content opens the decode window — empty or
       // tool-only updates must not count toward tokens/sec.
       if (!hasAssistantText(next)) {
@@ -325,8 +327,10 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent): Transcri
       // First streamed assistant content clears the "thinking" pending state.
       return { ...decoded, pending: false };
     }
-    case 'message_end':
-      return { ...upsertAssistant(state, event.message, false), pending: false };
+    case 'message_end': {
+      const next = upsertMessage(state, event.message, false);
+      return event.message.role === 'assistant' ? { ...next, pending: false } : next;
+    }
 
     case 'tool_input_start':
       return withTool(state, event.toolCallId, t => ({ ...t, toolName: event.toolName }), {
@@ -614,11 +618,11 @@ function toMessageEntry(
   };
 }
 
-function upsertAssistant(state: TranscriptState, message: MastraDBMessage, streaming: boolean): TranscriptState {
-  if (message.role !== 'assistant') return state;
+function upsertMessage(state: TranscriptState, message: MastraDBMessage, streaming: boolean): TranscriptState {
+  if (message.role !== 'assistant' && message.role !== 'signal') return state;
   const entries = [...state.entries];
-  let idx = entries.findIndex(e => e.kind === 'message' && e.message.role === 'assistant' && e.id === message.id);
-  if (idx === -1) {
+  let idx = entries.findIndex(e => e.kind === 'message' && e.id === message.id);
+  if (message.role === 'assistant' && idx === -1) {
     const latestIdx = latestAssistantIndex(entries);
     const latest = latestIdx === -1 ? undefined : entries[latestIdx];
     if (latest?.kind === 'message' && latest.message.role === 'assistant' && latest.id.startsWith('assistant-tools-')) {
@@ -627,7 +631,8 @@ function upsertAssistant(state: TranscriptState, message: MastraDBMessage, strea
   }
   const prev = idx !== -1 ? entries[idx] : undefined;
   const prevEntry = prev?.kind === 'message' ? prev : undefined;
-  const nextMessage = preserveRuntimeToolParts(message, prevEntry?.message);
+  const nextMessage =
+    message.role === 'assistant' ? preserveRuntimeToolParts(message, prevEntry?.message) : message;
   const entry = toMessageEntry(nextMessage, { streaming, runtimeTools: prevEntry?.runtimeTools });
 
   if (idx === -1) entries.push(entry);
