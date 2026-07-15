@@ -142,10 +142,13 @@ describe('transcript reducer message entries', () => {
     });
     const secondAssistant = dbMessage('assistant-2', 'assistant', [{ type: 'text', text: 'After signals' }]);
 
-    let state = transcriptReducer({ ...initialTranscript, pending: true }, {
-      type: 'event',
-      event: { type: 'message_update', message: firstAssistant },
-    });
+    let state = transcriptReducer(
+      { ...initialTranscript, pending: true },
+      {
+        type: 'event',
+        event: { type: 'message_update', message: firstAssistant },
+      },
+    );
     state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message: firstAssistant } });
     const decodeStartedAt = state._decodeStartedAt;
 

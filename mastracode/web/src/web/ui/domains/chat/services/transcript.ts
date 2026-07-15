@@ -631,8 +631,7 @@ function upsertMessage(state: TranscriptState, message: MastraDBMessage, streami
   }
   const prev = idx !== -1 ? entries[idx] : undefined;
   const prevEntry = prev?.kind === 'message' ? prev : undefined;
-  const nextMessage =
-    message.role === 'assistant' ? preserveRuntimeToolParts(message, prevEntry?.message) : message;
+  const nextMessage = message.role === 'assistant' ? preserveRuntimeToolParts(message, prevEntry?.message) : message;
   const entry = toMessageEntry(nextMessage, { streaming, runtimeTools: prevEntry?.runtimeTools });
 
   if (idx === -1) entries.push(entry);
