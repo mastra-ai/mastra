@@ -298,6 +298,11 @@ export async function executeStep(
         throw validationError;
       }
 
+      // Read inside the durable operation so the timestamp is memoized with the
+      // rest of the result. A reading taken outside would be re-taken on every
+      // replay, collapsing the reported span to the replay's own overhead.
+      const durableStartedAt = Date.now();
+
       const retryCount = engine.getOrGenerateRetryCount(step.id);
 
       let timeTravelSteps: string[] = [];
@@ -447,7 +452,14 @@ export async function executeStep(
 
       const nestedWflowStepPaused = isNestedWorkflowStep && perStep;
 
-      return { output, suspended, bailed, contextMutations, nestedWflowStepPaused };
+      return {
+        output,
+        suspended,
+        bailed,
+        contextMutations,
+        nestedWflowStepPaused,
+        timings: { startedAt: durableStartedAt, endedAt: Date.now() },
+      };
     },
     { retries, delay, stepSpan, workflowId, runId },
   );
@@ -487,19 +499,34 @@ export async function executeStep(
       });
     }
 
+    // Timestamps come from inside the durable operation. On replay engines the
+    // operation above is served from the memo, so reading the clock out here
+    // would time the replay rather than the execution. `startedAt` is only
+    // restored for a fresh attempt: on resume the original `startedAt` is
+    // carried over from the pre-suspend attempt via `stepInfo` and must stay.
+    const { timings } = durableResult;
+    const startedAtOverride = startTime && timings ? { startedAt: timings.startedAt } : {};
+    const resolvedEndedAt = timings?.endedAt ?? Date.now();
+
     if (durableResult.suspended) {
       execResults = {
         status: 'suspended',
         suspendPayload: durableResult.suspended.payload,
         ...(durableResult.output ? { suspendOutput: durableResult.output } : {}),
-        suspendedAt: Date.now(),
+        ...startedAtOverride,
+        suspendedAt: resolvedEndedAt,
       };
     } else if (durableResult.bailed) {
-      execResults = { status: 'bailed', output: durableResult.bailed.payload, endedAt: Date.now() };
+      execResults = {
+        status: 'bailed',
+        output: durableResult.bailed.payload,
+        ...startedAtOverride,
+        endedAt: resolvedEndedAt,
+      };
     } else if (durableResult.nestedWflowStepPaused) {
       execResults = { status: 'paused' };
     } else {
-      execResults = { status: 'success', output: durableResult.output, endedAt: Date.now() };
+      execResults = { status: 'success', output: durableResult.output, ...startedAtOverride, endedAt: resolvedEndedAt };
     }
   }
 
