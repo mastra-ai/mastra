@@ -2,7 +2,7 @@
 '@mastra/core': minor
 ---
 
-Added optional provider-driven authorization for system (non-user) actors, enabling per-agent least privilege for autonomous and cron agents that previously bypassed fine-grained authorization (FGA) entirely.
+Added optional provider-driven authorization for system (non-user) actors, enabling per-agent least privilege after tenant scope has been validated.
 
 System actors (`actor: { actorKind: 'system' }` or `actor: true`) skip the user-centric FGA path. Previously the only boundary for them was tenant scope — there was no way to constrain which agent could do what, and no deny path. FGA providers can now opt in to enforce least privilege for those actors.
 
@@ -12,10 +12,10 @@ System actors (`actor: { actorKind: 'system' }` or `actor: true`) skip the user-
 - `ActorSignal` gains optional `agentId`, `permissions`, and `scope` so a provider can identify and constrain the acting agent. `permissions` reuses the `MastraFGAPermissionInput` vocabulary — the actor analog of a user's resolved permissions. It is a self-asserted claim: a provider enforcing real least privilege should resolve authoritative grants from a trusted source keyed by `agentId` rather than trusting it directly.
 - When a provider does not implement `requireActor`, the existing trusted-actor bypass is preserved exactly — this change is fully backward compatible.
 
-**Before** — system actors always bypassed FGA:
+**Before** — system actors had tenant scoping but no provider-defined per-agent authorization:
 
 ```ts
-// Cron/system run: FGA is skipped, no per-agent limits are possible.
+// Cron/system run: tenant scope is required, but no per-agent limits are possible.
 await agent.generate('run nightly report', {
   actor: { actorKind: 'system', sourceWorkflow: 'nightly' },
 });

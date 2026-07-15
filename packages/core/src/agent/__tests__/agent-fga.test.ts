@@ -249,4 +249,98 @@ describe('DurableAgent FGA checks', () => {
   it('stream() denies before durable execution when agents:execute is denied', async () => {
     await expectDurableDenial('stream');
   });
+
+  it.each([
+    { name: 'generate()', method: 'generate' as const },
+    { name: 'stream()', method: 'stream' as const },
+    { name: 'stream({ untilIdle: true })', method: 'stream' as const, untilIdle: true },
+  ])('$name authorizes the effective default actor exactly once', async ({ method, untilIdle }) => {
+    const requireActor = vi
+      .fn()
+      .mockRejectedValue(new FGADeniedError(null, { type: 'agent', id: 'test-agent' }, 'agents:execute'));
+    const fgaProvider = { ...createMockFGAProvider(true), requireActor };
+    const model = createMockModel();
+    const pubsub = new EventEmitterPubSub();
+    const defaultOptions = vi.fn(() => ({
+      actor: { actorKind: 'system' as const, agentId: 'default-system-agent' },
+    }));
+    const base = new Agent({
+      id: 'test-agent',
+      name: 'test-agent',
+      instructions: 'test',
+      model,
+      defaultOptions,
+    });
+    const durableAgent = createDurableAgent({ agent: base, pubsub });
+    const mastra = new Mastra({ agents: {}, logger: false, pubsub, server: { fga: fgaProvider } });
+    (durableAgent as any).__registerMastra(mastra);
+
+    const requestContext = new RequestContext();
+    requestContext.set('organizationId', 'org-1');
+
+    try {
+      await expect((durableAgent as any)[method]('test', { requestContext, untilIdle })).rejects.toThrow(
+        FGADeniedError,
+      );
+      expect(defaultOptions).toHaveBeenCalledTimes(1);
+      expect(requireActor).toHaveBeenCalledWith(
+        expect.objectContaining({ agentId: 'default-system-agent' }),
+        expect.objectContaining({ resource: { type: 'agent', id: 'test-agent' } }),
+      );
+      expect(model.doGenerateCalls).toHaveLength(0);
+    } finally {
+      await mastra.stopWorkers?.();
+      await pubsub.close();
+    }
+  });
+
+  it('forwards trusted resume context and the tool-call label', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const base = new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'test', model: createMockModel() });
+    const durableAgent = createDurableAgent({ agent: base, pubsub });
+    const output = { fullStream: new ReadableStream() };
+    const resume = vi.spyOn(durableAgent, 'resume').mockResolvedValue({ output } as any);
+    const requestContext = new RequestContext();
+    const actor = { actorKind: 'system' as const, agentId: 'approval-agent' };
+
+    try {
+      await expect(
+        durableAgent.resumeStream({ approved: true }, {
+          runId: 'run-1',
+          toolCallId: 'tool-call-1',
+          requestContext,
+          memory: { resource: 'resource-1' },
+          actor,
+        } as any),
+      ).resolves.toBe(output);
+      expect(resume).toHaveBeenCalledWith(
+        'run-1',
+        { approved: true },
+        expect.objectContaining({ toolCallId: 'tool-call-1', requestContext, actor }),
+      );
+    } finally {
+      await pubsub.close();
+    }
+  });
+
+  it.each([
+    ['approveToolCallGenerate', true],
+    ['declineToolCallGenerate', false],
+  ] as const)('%s uses the durable generate resume signature', async (method, approved) => {
+    const pubsub = new EventEmitterPubSub();
+    const base = new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'test', model: createMockModel() });
+    const durableAgent = createDurableAgent({ agent: base, pubsub });
+    const resumeGenerate = vi.spyOn(durableAgent, 'resumeGenerate').mockResolvedValue({ text: 'ok' } as any);
+
+    try {
+      await (durableAgent as any)[method]({ runId: 'run-1', toolCallId: 'tool-call-1' });
+      expect(resumeGenerate).toHaveBeenCalledWith(
+        'run-1',
+        { approved },
+        expect.objectContaining({ toolCallId: 'tool-call-1' }),
+      );
+    } finally {
+      await pubsub.close();
+    }
+  });
 });

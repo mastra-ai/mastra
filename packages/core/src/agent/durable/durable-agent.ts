@@ -10,6 +10,7 @@ import { RequestContext } from '../../request-context';
 import type { FullOutput, MastraModelOutput } from '../../stream/base/output';
 import type { ChunkType, MastraOnFinishCallback } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
+import { deepMerge } from '../../utils';
 import type { WorkflowRunState, WorkflowRunStatus } from '../../workflows/types';
 import { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent.types';
@@ -34,6 +35,7 @@ import { createDurableAgenticWorkflow } from './workflows';
  * Not part of the public `DurableAgentStreamOptions` surface.
  */
 const CLOSE_ON_SUSPEND = Symbol('mastra.durable.closeOnSuspend');
+const RESOLVED_EXECUTION_OPTIONS = Symbol('mastra.durable.resolvedExecutionOptions');
 
 /**
  * Options for DurableAgent.stream()
@@ -609,6 +611,23 @@ export class DurableAgent<
     return this.#wrappedAgent.getDefaultOptions(options);
   }
 
+  async #resolveExecutionOptions(
+    options?: DurableAgentStreamOptions<TOutput>,
+  ): Promise<DurableAgentStreamOptions<TOutput>> {
+    if ((options as any)?.[RESOLVED_EXECUTION_OPTIONS]) {
+      return options!;
+    }
+
+    const defaultOptions = await this.getDefaultOptions({ requestContext: options?.requestContext });
+    const resolvedOptions = deepMerge(
+      (defaultOptions ?? {}) as Record<string, unknown>,
+      (options ?? {}) as Record<string, unknown>,
+    ) as DurableAgentStreamOptions<TOutput>;
+    // Preserve the marker when the until-idle wrapper spreads these options.
+    Object.defineProperty(resolvedOptions, RESOLVED_EXECUTION_OPTIONS, { value: true, enumerable: true });
+    return resolvedOptions;
+  }
+
   override getDefaultGenerateOptionsLegacy(options?: any) {
     return this.#wrappedAgent.getDefaultGenerateOptionsLegacy(options);
   }
@@ -999,14 +1018,25 @@ export class DurableAgent<
     messages: MessageListInput,
     options?: DurableAgentStreamOptions<TOutput>,
   ): Promise<DurableAgentStreamResult<TOutput>> {
+    options = await this.#resolveExecutionOptions(options);
+
     // Delegate to the idle-loop wrapper when `untilIdle` is set.
     // Strip `untilIdle` before passing to the wrapper so its internal
     // agent.stream() call doesn't recurse.
     if (options?.untilIdle) {
       const { untilIdle, ...rest } = options;
       const maxIdleMs = typeof untilIdle === 'object' ? untilIdle.maxIdleMs : undefined;
+      // The idle helper normally resolves defaults for scope discovery. These
+      // options are already resolved, so keep its inner stream on the same values.
+      const resolvedOptionsAgent = {
+        id: this.id,
+        getDefaultOptions: () => ({}),
+        getMemory: (args?: any) => this.getMemory(args),
+        stream: (innerMessages: MessageListInput, innerOptions?: DurableAgentStreamOptions<TOutput>) =>
+          this.stream(innerMessages, innerOptions),
+      } as unknown as DurableAgent<any, any, TOutput>;
       return runDurableStreamUntilIdle<TOutput>(
-        this as unknown as DurableAgent<any, any, TOutput>,
+        resolvedOptionsAgent,
         messages,
         { ...rest, maxIdleMs },
         {
@@ -1034,6 +1064,7 @@ export class DurableAgent<
       options: options as AgentExecutionOptions<TOutput>,
       runId: options?.runId,
       requestContext: options?.requestContext,
+      optionsAreResolved: true,
       mastra: this.#mastra,
       durableAgentId: this.id,
       durableAgentName: this.name,
@@ -1218,11 +1249,15 @@ export class DurableAgent<
       );
     }
 
-    // agents:execute FGA is enforced when the run is started (stream()/generate()).
-    // resume() continues that already-authorized run and has no fresh request
-    // context to authenticate a principal, so it does not re-check here.
-    // Resume-time re-authorization would require threading a requestContext
-    // through resume() and is tracked as a follow-up.
+    if (options?.requestContext || options?.memory || options?.actor) {
+      await this.requireAgentExecutionFGA({
+        requestContext: options.requestContext,
+        memory: options.memory,
+        runId,
+        actor: options.actor,
+      });
+    }
+
     let entry = this.#runRegistry.get(runId);
     if (!entry) {
       // A persisted durable run can outlive this process (or the registry TTL).
@@ -1374,7 +1409,7 @@ export class DurableAgent<
 
     // Wait for subscription to be ready, then resume workflow
     const workflow = this.getWorkflow();
-    const requestContext = globalRunRegistry.get(runId)?.requestContext;
+    const requestContext = options?.requestContext ?? globalRunRegistry.get(runId)?.requestContext;
 
     // Open a fresh AGENT_RUN + MODEL_GENERATION for the resumed segment on the same
     // traceId — the originals were ended as `suspended` and can't be reopened. Post-resume
@@ -1450,6 +1485,7 @@ export class DurableAgent<
         const run = await workflow.createRun({ runId, pubsub: this.pubsub });
         const result = await run.resume({
           resumeData,
+          label: options?.toolCallId,
           requestContext,
           ...createObservabilityContext({ currentSpan: entry.resumeAgentSpan ?? entry.agentSpan }),
         });
@@ -1948,6 +1984,20 @@ export class DurableAgent<
     return this.resumeStream({ approved: false }, options);
   }
 
+  override async approveToolCallGenerate<OUTPUT = undefined>(
+    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string },
+  ): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>> {
+    const { runId, ...resumeOptions } = options;
+    return this.resumeGenerate(runId, { approved: true }, resumeOptions as any) as any;
+  }
+
+  override async declineToolCallGenerate<OUTPUT = undefined>(
+    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string },
+  ): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>> {
+    const { runId, ...resumeOptions } = options;
+    return this.resumeGenerate(runId, { approved: false }, resumeOptions as any) as any;
+  }
+
   /**
    * Generate a complete response from the agent using durable execution.
    *
@@ -1981,6 +2031,8 @@ export class DurableAgent<
     messages: MessageListInput,
     options?: DurableAgentStreamOptions<TOutput>,
   ): Promise<FullOutput<TOutput>> {
+    options = await this.#resolveExecutionOptions(options);
+
     // Enforce agent-level FGA (agents:execute) before durable execution — see
     // stream() above. Durable/evented generate would otherwise skip the gate.
     await this.requireAgentExecutionFGA({
@@ -1997,6 +2049,7 @@ export class DurableAgent<
       options: options as AgentExecutionOptions<TOutput>,
       runId: options?.runId,
       requestContext: options?.requestContext,
+      optionsAreResolved: true,
       mastra: this.#mastra,
       methodType: 'generate',
       durableAgentId: this.id,
@@ -2582,15 +2635,11 @@ export class DurableAgent<
     messages: MessageListInput,
     streamOptions?: DurableAgentStreamOptions<OUTPUT> & { maxIdleMs?: number },
   ): Promise<DurableAgentStreamResult<OUTPUT>> {
-    return runDurableStreamUntilIdle<OUTPUT>(
-      this as unknown as DurableAgent<any, any, OUTPUT>,
-      messages,
-      streamOptions,
-      {
-        activeStreams: this.#activeStreamUntilIdle,
-        bgManager: this.#mastra?.backgroundTaskManager,
-      },
-    );
+    const { maxIdleMs, ...options } = streamOptions ?? {};
+    return this.stream(messages, {
+      ...options,
+      untilIdle: maxIdleMs === undefined ? true : { maxIdleMs },
+    } as DurableAgentStreamOptions<TOutput>) as unknown as Promise<DurableAgentStreamResult<OUTPUT>>;
   }
 
   /**

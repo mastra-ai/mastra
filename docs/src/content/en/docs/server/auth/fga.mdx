@@ -295,8 +295,8 @@ class MyFGAProvider implements IFGAProvider {
 
 The actor signal is trusted input, so construct it server-side:
 
-- Mastra strips `actor` from public HTTP requests. Set it in server-side code, for example a scheduled job or a workflow, never from client input.
-- Establish tenant scope server-side. Mastra ignores a client-supplied `organizationId` in the request context, and the trusted-actor path requires an `organizationId` to be set.
+- Mastra strips `actor` from execution options handled by its built-in agent HTTP routes. Set it in server-side code, for example a scheduled job or a workflow, never from client input.
+- Establish tenant scope server-side. Built-in agent HTTP routes ignore a client-supplied `organizationId` in the request context, and the trusted-actor path requires an `organizationId` to be set.
 - Treat `actor.permissions` as a claim, not a grant. A provider that enforces least privilege resolves the agent's authoritative permissions from a trusted source, for example a manifest or your FGA backend keyed by `agentId`, rather than trusting the inline values.
 
 ## Related
