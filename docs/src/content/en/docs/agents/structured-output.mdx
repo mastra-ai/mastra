@@ -207,9 +207,9 @@ If your tools aren't being called when structured output is enabled, or you rece
 
 When your model doesn't support tools and structured output together, you have three options:
 
-1. **Use `jsonPromptInjection: true`** - Injects the schema into the prompt instead of using the API's `response_format` parameter
-1. **Use a separate structuring model** - Pass a `model` to `structuredOutput` to use a second LLM for structuring
-1. **Use `prepareStep`** - Handle tools and structured output in separate steps
+1. **Use `jsonPromptInjection`**: Set it to `'auto'` to select native structured output when supported and inline prompt injection otherwise, or choose an explicit injection mode
+1. **Use a separate structuring model**: Pass a `model` to `structuredOutput` to use a second LLM for structuring
+1. **Use `prepareStep`**: Handle tools and structured output in separate steps
 
 Each approach is detailed in the sections below.
 
@@ -219,9 +219,7 @@ Structured output support varies across LLMs due to differences in their APIs. T
 
 ### `jsonPromptInjection`
 
-By default, Mastra passes the schema to the model provider using the `response_format` API parameter. Most model providers have built-in support for this, which reliably enforces the schema.
-
-If your model provider doesn't support `response_format`, you'll get an error from the API. When this happens, set `jsonPromptInjection: true`. This adds the schema to the system prompt instead, instructing the model to output JSON. This is less reliable than the API parameter approach.
+By default, Mastra passes the schema to the model provider using the `response_format` API parameter. Set `jsonPromptInjection: 'auto'` to let Mastra choose the mode from its model capability data. Mastra uses native structured output for supported models and inline prompt injection for unsupported models or models without capability data.
 
 ```typescript
 import { z } from 'zod'
@@ -234,12 +232,19 @@ const response = await testAgent.generate('Help me plan my day.', {
         activities: z.array(z.string()),
       }),
     ),
-    jsonPromptInjection: true,
+    jsonPromptInjection: 'auto',
   },
 })
 
 console.log(response.object)
 ```
+
+Use an explicit mode when you need to override the capability-based choice:
+
+- `false` or omitted: Use the provider's native structured output.
+- `'inline'`: Add the schema instructions to the latest user message.
+- `true` or `'system'`: Add the schema instructions to the system message.
+- `'auto'`: Use native structured output when the model supports it. Otherwise, use inline prompt injection.
 
 :::note[Gemini 2.5 with tools]
 
