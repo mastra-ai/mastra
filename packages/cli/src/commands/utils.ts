@@ -142,12 +142,21 @@ export async function isGitInitialized({ cwd }: { cwd: string }): Promise<boolea
  * Initialize a git repository in the specified directory.
  */
 export async function gitInit({ cwd }: { cwd: string }) {
-  const emptyHooksDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-git-hooks-'));
+  const isolatedConfigDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-git-config-'));
+  const emptyHooksDirectory = path.join(isolatedConfigDirectory, 'hooks');
+  const emptyGlobalConfig = path.join(isolatedConfigDirectory, 'global.gitconfig');
+  await fs.mkdir(emptyHooksDirectory);
+  await fs.writeFile(emptyGlobalConfig, '');
+  const env = {
+    GIT_CONFIG_NOSYSTEM: '1',
+    GIT_CONFIG_GLOBAL: emptyGlobalConfig,
+    GIT_CONFIG_COUNT: '0',
+  };
 
   try {
-    await execa('git', ['init'], { cwd, stdio: 'ignore' });
+    await execa('git', ['init'], { cwd, stdio: 'ignore', env });
     await fs.appendFile(path.join(cwd, '.git', 'info', 'exclude'), '\n.env\n.env.*\n!.env.example\n!.env.*.example\n');
-    await execa('git', ['add', '-A'], { cwd, stdio: 'ignore' });
+    await execa('git', ['add', '-A'], { cwd, stdio: 'ignore', env });
     await execa(
       'git',
       [
@@ -164,9 +173,9 @@ export async function gitInit({ cwd }: { cwd: string }) {
         '-m',
         'Initial commit from Mastra',
       ],
-      { cwd, stdio: 'ignore' },
+      { cwd, stdio: 'ignore', env },
     );
   } finally {
-    await fs.rm(emptyHooksDirectory, { recursive: true, force: true });
+    await fs.rm(isolatedConfigDirectory, { recursive: true, force: true });
   }
 }

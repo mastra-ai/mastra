@@ -4,6 +4,7 @@ import { Command } from 'commander';
 import { PosthogAnalytics, setAnalytics } from 'mastra/dist/analytics/index.js';
 import {
   configureCreateCommand,
+  getCreateCommandAnalyticsArgs,
   isCreateCancelledError,
   runCreateCommand,
 } from 'mastra/dist/commands/create/create.js';
@@ -22,29 +23,23 @@ setAnalytics(analytics);
 const program = configureCreateCommand(new Command().name('create-mastra').version(`${version}`, '-v, --version'));
 
 program.action(async (projectName: string | undefined, args: CreateCommandOptions) => {
-  try {
-    await analytics.trackCommandExecution({
-      command: 'create',
-      args: {
-        projectName,
-        yes: args.yes ?? false,
-        empty: args.empty ?? false,
-        llmProvider: args.llm,
-        skills: args.skills,
-        git: args.git,
-        template: args.template,
-        timeout: args.timeout,
-      },
-      execution: () =>
-        runCreateCommand(projectName, args, {
-          analytics,
-          resolveVersionTag: () => getCreateVersionTag(version),
-        }),
-    });
-  } catch (error) {
-    if (isCreateCancelledError(error)) return;
-    throw error;
-  }
+  const execution = async () => {
+    try {
+      await runCreateCommand(projectName, args, {
+        analytics,
+        resolveVersionTag: () => getCreateVersionTag(version),
+      });
+    } catch (error) {
+      if (isCreateCancelledError(error)) return;
+      throw error;
+    }
+  };
+
+  await analytics.trackCommandExecution({
+    command: 'create',
+    args: getCreateCommandAnalyticsArgs(args),
+    execution,
+  });
 });
 
 try {

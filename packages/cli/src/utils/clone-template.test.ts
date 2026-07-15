@@ -138,6 +138,26 @@ describe('clone-template', () => {
       });
     });
 
+    it('cleans partial degit output before falling back to git clone', async () => {
+      const mockExec = vi.fn().mockImplementation(async (command: string) => {
+        if (command.startsWith('npx degit')) {
+          vol.fromJSON({ '/test-project/partial.txt': 'incomplete' });
+          throw new Error('degit failed');
+        }
+
+        expect(vol.existsSync('/test-project/partial.txt')).toBe(false);
+        vol.fromJSON({ '/test-project/package.json': JSON.stringify({ name: 'template' }) });
+        return { stdout: '', stderr: '' };
+      });
+      vi.mocked(child_process.exec).mockImplementation(mockExec);
+
+      const { cloneTemplate } = await import('./clone-template');
+      await cloneTemplate({ template: mockTemplate, projectName: 'test-project' });
+
+      expect(vol.existsSync('/test-project/partial.txt')).toBe(false);
+      expect(JSON.parse(vol.readFileSync('/test-project/package.json', 'utf8') as string).name).toBe('test-project');
+    });
+
     it('should fallback to git clone when degit exits successfully without files', async () => {
       const mockExec = vi
         .fn()

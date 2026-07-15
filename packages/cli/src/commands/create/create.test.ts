@@ -228,17 +228,28 @@ describe('create preflight and mode orchestration', () => {
     const prompts = await import('@clack/prompts');
     const { cloneTemplate } = await import('../../utils/clone-template');
     const resolveVersionTag = vi.fn();
+    const trackEvent = vi.fn();
 
     await create({
       projectName: 'my-project',
       template: 'agent-harness',
       resolveVersionTag,
+      analytics: { trackEvent } as never,
     });
 
     expect(prompts.select).not.toHaveBeenCalled();
     expect(prompts.password).not.toHaveBeenCalled();
     expect(resolveVersionTag).not.toHaveBeenCalled();
     expect(cloneTemplate).toHaveBeenCalledWith(expect.objectContaining({ template: mockTemplate }));
+    expect(trackEvent).toHaveBeenCalledWith('cli_create_mode_selected', {
+      mode: 'template',
+      template_slug: mockTemplate.slug,
+      skills: true,
+      git: true,
+    });
+    expect(trackEvent).toHaveBeenCalledWith('cli_template_used', { template_slug: mockTemplate.slug });
+    expect(JSON.stringify(trackEvent.mock.calls)).not.toContain(mockTemplate.title);
+    expect(JSON.stringify(trackEvent.mock.calls)).not.toContain(mockTemplate.githubUrl);
     const { adaptManagedAgentHarness } = await import('./provider-adapter');
     expect(adaptManagedAgentHarness).not.toHaveBeenCalled();
   });
@@ -707,59 +718,67 @@ describe('create cancellation', () => {
     expect(createOwnedStagingDirectory).not.toHaveBeenCalled();
   });
 
-  it('exits the full CLI process with status 0 on Ctrl+C and leaves no target behind', async () => {
-    const actualFs = await vi.importActual<typeof FsPromises>('node:fs/promises');
-    const cwd = await actualFs.mkdtemp(path.join(os.tmpdir(), 'mastra-create-cancel-'));
-    const cliEntry = fileURLToPath(new URL('../../index.ts', import.meta.url));
-    const tsxLoader = import.meta.resolve('tsx');
+  it.each([
+    { signal: 'SIGINT' as const, expectedCode: 0, expectedSignal: null, cancellationMessage: true },
+    { signal: 'SIGTERM' as const, expectedCode: null, expectedSignal: 'SIGTERM', cancellationMessage: false },
+  ])(
+    'handles $signal correctly at the full CLI prompt boundary',
+    async ({ signal, expectedCode, expectedSignal, cancellationMessage }) => {
+      const actualFs = await vi.importActual<typeof FsPromises>('node:fs/promises');
+      const cwd = await actualFs.mkdtemp(path.join(os.tmpdir(), 'mastra-create-cancel-'));
+      const cliEntry = fileURLToPath(new URL('../../index.ts', import.meta.url));
+      const tsxLoader = import.meta.resolve('tsx');
 
-    try {
-      const result = await new Promise<{ code: number | null; signal: NodeJS.Signals | null; output: string }>(
-        (resolve, reject) => {
-          const child = spawn(process.execPath, ['--import', tsxLoader, cliEntry, 'create'], {
-            cwd,
-            env: {
-              ...process.env,
-              FORCE_COLOR: '0',
-              MASTRA_TELEMETRY_DISABLED: '1',
-            },
-            stdio: ['pipe', 'pipe', 'pipe'],
-          });
-          let output = '';
-          let interrupted = false;
-          const timer = setTimeout(() => {
-            child.kill('SIGKILL');
-            reject(new Error(`Timed out waiting for create prompt. Output: ${output}`));
-          }, 15_000);
+      try {
+        const result = await new Promise<{ code: number | null; signal: NodeJS.Signals | null; output: string }>(
+          (resolve, reject) => {
+            const child = spawn(process.execPath, ['--import', tsxLoader, cliEntry, 'create'], {
+              cwd,
+              env: {
+                ...process.env,
+                FORCE_COLOR: '0',
+                MASTRA_TELEMETRY_DISABLED: '1',
+              },
+              stdio: ['pipe', 'pipe', 'pipe'],
+            });
+            let output = '';
+            let interrupted = false;
+            const timer = setTimeout(() => {
+              child.kill('SIGKILL');
+              reject(new Error(`Timed out waiting for create prompt. Output: ${output}`));
+            }, 15_000);
 
-          const onData = (chunk: Buffer) => {
-            output += chunk.toString();
-            if (!interrupted && output.includes('What do you want to name your project?')) {
-              interrupted = true;
-              child.kill('SIGINT');
-            }
-          };
-          child.stdout.on('data', onData);
-          child.stderr.on('data', onData);
-          child.on('error', error => {
-            clearTimeout(timer);
-            reject(error);
-          });
-          child.on('close', (code, signal) => {
-            clearTimeout(timer);
-            resolve({ code, signal, output });
-          });
-        },
-      );
+            const onData = (chunk: Buffer) => {
+              output += chunk.toString();
+              if (!interrupted && output.includes('What do you want to name your project?')) {
+                interrupted = true;
+                child.kill(signal);
+              }
+            };
+            child.stdout.on('data', onData);
+            child.stderr.on('data', onData);
+            child.on('error', error => {
+              clearTimeout(timer);
+              reject(error);
+            });
+            child.on('close', (code, closeSignal) => {
+              clearTimeout(timer);
+              resolve({ code, signal: closeSignal, output });
+            });
+          },
+        );
 
-      expect(result.code).toBe(0);
-      expect(result.signal).toBeNull();
-      expect(result.output).toContain('Operation cancelled');
-      expect(await actualFs.readdir(cwd)).toEqual([]);
-    } finally {
-      await actualFs.rm(cwd, { recursive: true, force: true });
-    }
-  }, 20_000);
+        expect(result.code).toBe(expectedCode);
+        expect(result.signal).toBe(expectedSignal);
+        if (cancellationMessage) expect(result.output).toContain('Operation cancelled');
+        else expect(result.output).not.toContain('Operation cancelled');
+        expect(await actualFs.readdir(cwd)).toEqual([]);
+      } finally {
+        await actualFs.rm(cwd, { recursive: true, force: true });
+      }
+    },
+    20_000,
+  );
 });
 
 describe('GitHub template validation', () => {
@@ -796,6 +815,47 @@ describe('GitHub template validation', () => {
         }),
       }),
     );
+  });
+
+  it('normalizes a scheme-less canonical GitHub repository URL', async () => {
+    const { create } = await import('./create');
+    const { cloneTemplate } = await import('../../utils/clone-template');
+    vi.mocked(global.fetch).mockImplementation(async input => {
+      const url = String(input);
+      if (url.endsWith('/package.json')) {
+        return {
+          ok: true,
+          text: async () => JSON.stringify({ dependencies: { '@mastra/core': 'latest' } }),
+        } as Response;
+      }
+      if (url.endsWith('/src/mastra/index.ts')) {
+        return { ok: true, text: async () => 'export const mastra = new Mastra({});' } as Response;
+      }
+      return { ok: false } as Response;
+    });
+
+    await create({ projectName: 'github-project', template: 'github.com/example/mastra-template' });
+
+    expect(cloneTemplate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        template: expect.objectContaining({ githubUrl: 'https://github.com/example/mastra-template' }),
+      }),
+    );
+  });
+
+  it.each([
+    'https://github.com/example/repo/tree/main',
+    'https://github.com/example/repo?token=secret',
+    'https://user:secret@github.com/example/repo',
+  ])('rejects non-canonical GitHub URL %s before network or staging work', async template => {
+    const { create } = await import('./create');
+    const { loadTemplates } = await import('../../utils/template-utils');
+    const { createOwnedStagingDirectory } = await import('./utils');
+
+    await expect(create({ projectName: 'github-project', template })).rejects.toThrow('Invalid GitHub repository URL');
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(loadTemplates).not.toHaveBeenCalled();
+    expect(createOwnedStagingDirectory).not.toHaveBeenCalled();
   });
 
   it('rejects GitHub repositories without a valid Mastra project', async () => {

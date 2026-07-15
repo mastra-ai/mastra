@@ -10,6 +10,16 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../create/create', () => ({
   runCreateCommand: mocks.runCreateCommand,
   isCreateCancelledError: mocks.isCreateCancelledError,
+  getCreateCommandAnalyticsArgs: (args: {
+    empty?: boolean;
+    template?: string | boolean;
+    skills?: boolean;
+    git?: boolean;
+  }) => ({
+    mode: args.empty ? 'empty' : args.template !== undefined ? 'template' : 'managed',
+    skills: args.skills,
+    git: args.git,
+  }),
 }));
 
 vi.mock('../../analytics', () => ({
@@ -38,28 +48,26 @@ describe('createProject', () => {
       llmApiKey: 'secret',
       skills: false,
       git: false,
-      template: undefined,
+      template: 'https://github.com/private-owner/private-repo?token=secret',
       timeout: 12_345,
     };
 
-    await createProjectWithDependencies('my-project', args, { analytics });
+    await createProjectWithDependencies('private-project-name', args, { analytics });
 
-    expect(mocks.runCreateCommand).toHaveBeenCalledWith('my-project', args, {
+    expect(mocks.runCreateCommand).toHaveBeenCalledWith('private-project-name', args, {
       analytics,
       resolveVersionTag: expect.any(Function),
     });
 
     const trackedArgs = trackCommandExecution.mock.calls[0]?.[0].args;
     expect(trackedArgs).toEqual({
-      projectName: 'my-project',
-      yes: true,
-      empty: false,
-      llmProvider: 'anthropic',
+      mode: 'template',
       skills: false,
       git: false,
-      template: undefined,
-      timeout: 12_345,
     });
+    expect(JSON.stringify(trackedArgs)).not.toContain('private-project-name');
+    expect(JSON.stringify(trackedArgs)).not.toContain('private-repo');
+    expect(JSON.stringify(trackedArgs)).not.toContain('secret');
     expect(trackedArgs).not.toHaveProperty('llmApiKey');
     expect(trackedArgs).not.toHaveProperty('components');
     expect(trackedArgs).not.toHaveProperty('observability');
@@ -85,15 +93,28 @@ describe('createProject', () => {
     expect(mocks.getVersionTag).toHaveBeenCalledWith('1.19.0');
   });
 
-  it('swallows only the centralized cancellation signal so the command exits successfully', async () => {
+  it('reports centralized cancellation as a successful tracked command', async () => {
     const cancellation = new Error('cancelled');
     mocks.runCreateCommand.mockRejectedValue(cancellation);
     mocks.isCreateCancelledError.mockImplementation(error => error === cancellation);
+    let trackedOutcome: 'resolved' | 'rejected' | undefined;
+    const trackCommandExecution = vi.fn(async ({ execution }) => {
+      try {
+        await execution();
+        trackedOutcome = 'resolved';
+      } catch (error) {
+        trackedOutcome = 'rejected';
+        throw error;
+      }
+    });
+    const analytics = { trackCommandExecution } as never;
     const { createProjectWithDependencies } = await import('./create-project');
 
     await expect(
-      createProjectWithDependencies('my-project', { skills: true, git: true, timeout: 60_000 }, { analytics: null }),
+      createProjectWithDependencies('my-project', { skills: true, git: true, timeout: 60_000 }, { analytics }),
     ).resolves.toBeUndefined();
+    expect(trackCommandExecution).toHaveBeenCalledOnce();
+    expect(trackedOutcome).toBe('resolved');
   });
 
   it('rethrows non-cancellation failures', async () => {

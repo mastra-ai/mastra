@@ -105,6 +105,19 @@ async function waitForServer(url: string, timeout = 60_000) {
   throw new Error(`Timed out waiting for ${url}`);
 }
 
+async function waitForServerStop(url: string, timeout = 5_000) {
+  const started = Date.now();
+  while (Date.now() - started < timeout) {
+    try {
+      await fetch(url, { signal: AbortSignal.timeout(500) });
+    } catch {
+      return;
+    }
+    await delay(100);
+  }
+  throw new Error(`Timed out waiting for ${url} to stop`);
+}
+
 describe('create-mastra published binaries', () => {
   beforeAll(async () => {
     await execa('rm', ['-rf', testRoot]);
@@ -147,10 +160,11 @@ describe('create-mastra published binaries', () => {
       serverOutput += String(chunk);
     });
 
-    const serverExited = new Promise<never>((_, reject) => {
-      server.once('exit', (code: unknown, signal: unknown) => {
-        reject(new Error(`Mastra dev exited before startup (code ${code}, signal ${signal})`));
-      });
+    const serverExit = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(resolve => {
+      server.once('exit', (code, signal) => resolve({ code, signal }));
+    });
+    const serverExited = serverExit.then(({ code, signal }) => {
+      throw new Error(`Mastra dev exited before startup (code ${code}, signal ${signal})`);
     });
 
     try {
@@ -163,7 +177,7 @@ describe('create-mastra published binaries', () => {
       const agents = (await agentsResponse.json()) as Record<string, { name?: string }>;
       expect(agents.agent?.name).toBe('Agent');
     } finally {
-      if (server.pid) {
+      if (server.exitCode === null && server.signalCode === null && server.pid) {
         if (process.platform === 'win32') {
           server.kill('SIGTERM');
         } else {
@@ -174,6 +188,21 @@ describe('create-mastra published binaries', () => {
           }
         }
       }
+
+      const stopped = await Promise.race([serverExit.then(() => true), delay(5_000).then(() => false)]);
+      if (!stopped && server.exitCode === null && server.signalCode === null) {
+        if (process.platform === 'win32') {
+          server.kill('SIGKILL');
+        } else if (server.pid) {
+          try {
+            process.kill(-server.pid, 'SIGKILL');
+          } catch (error) {
+            if ((error as { code?: string }).code !== 'ESRCH') throw error;
+          }
+        }
+        await serverExit;
+      }
+      await waitForServerStop(`http://localhost:${port}`);
     }
   }, 90_000);
 

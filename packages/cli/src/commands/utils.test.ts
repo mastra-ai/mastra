@@ -147,6 +147,7 @@ describe('gitInit', () => {
     const project = path.join(root, 'project');
     const home = path.join(root, 'home');
     const globalHooks = path.join(root, 'global-hooks');
+    const globalExcludes = path.join(root, 'global-excludes');
     const hookMarker = path.join(root, 'hook-ran');
     const globalConfig = path.join(root, 'global.gitconfig');
     await Promise.all([fs.mkdir(project), fs.mkdir(home), fs.mkdir(globalHooks)]);
@@ -157,7 +158,11 @@ describe('gitInit', () => {
     await fs.writeFile(path.join(project, '.env.test.example'), 'TEST_SECRET=\n');
     await fs.writeFile(path.join(globalHooks, 'post-commit'), `#!/bin/sh\ntouch ${JSON.stringify(hookMarker)}\n`);
     await fs.chmod(path.join(globalHooks, 'post-commit'), 0o755);
-    await fs.writeFile(globalConfig, `[commit]\n\tgpgSign = true\n[core]\n\thooksPath = ${globalHooks}\n`);
+    await fs.writeFile(globalExcludes, 'index.ts\n');
+    await fs.writeFile(
+      globalConfig,
+      `[commit]\n\tgpgSign = true\n[core]\n\thooksPath = ${globalHooks}\n\texcludesFile = ${globalExcludes}\n`,
+    );
 
     const originalEnv = {
       HOME: process.env.HOME,
@@ -182,6 +187,18 @@ describe('gitInit', () => {
       const commitCall = gitCalls.find(([, args]) => args.includes('commit'));
       expect(commitCall).toBeDefined();
       expect(commitCall?.[1]).not.toEqual(expect.arrayContaining([expect.stringContaining('"')]));
+      for (const [command, args, options] of gitCalls) {
+        if (command !== 'git' || !args.some(argument => ['init', 'add', 'commit'].includes(argument))) continue;
+        expect(options).toEqual(
+          expect.objectContaining({
+            env: expect.objectContaining({
+              GIT_CONFIG_NOSYSTEM: '1',
+              GIT_CONFIG_COUNT: '0',
+              GIT_CONFIG_GLOBAL: expect.stringContaining('mastra-git-config-'),
+            }),
+          }),
+        );
+      }
       const hooksArgument = commitCall?.[1].find(argument => argument.startsWith('core.hooksPath='));
       expect(hooksArgument).toBeDefined();
       expect(await fs.stat(hooksArgument!.slice('core.hooksPath='.length)).catch(() => undefined)).toBeUndefined();

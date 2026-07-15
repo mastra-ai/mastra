@@ -90,6 +90,10 @@ async function cloneRepositoryWithoutGit(repoUrl: string, targetPath: string, br
       throw new Error('degit completed without cloning template files');
     }
   } catch {
+    // Degit can leave partial output behind, so reset only this clone-owned destination before the fallback.
+    await fs.rm(targetPath, { recursive: true, force: true });
+    await fs.mkdir(targetPath, { recursive: true });
+
     // Fallback to git clone + remove .git
     try {
       const gitArgs = ['git', 'clone'];

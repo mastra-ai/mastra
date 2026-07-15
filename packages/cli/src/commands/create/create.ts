@@ -68,6 +68,14 @@ export function isCreateCancelledError(error: unknown): error is CreateCancelled
   return error instanceof CreateCancelledError;
 }
 
+export function getCreateCommandAnalyticsArgs(args: CreateCommandOptions) {
+  return {
+    mode: args.empty ? 'empty' : args.template !== undefined ? 'template' : 'managed',
+    skills: args.skills,
+    git: args.git,
+  };
+}
+
 export interface CreateOptions {
   projectName?: string;
   yes?: boolean;
@@ -105,7 +113,6 @@ async function runCreatePrompt<T>(prompt: (signal: AbortSignal) => Promise<T | s
     rejectCancellation(new CreateCancelledError());
   };
   process.once('SIGINT', abort);
-  process.once('SIGTERM', abort);
 
   try {
     const value = await Promise.race([prompt(controller.signal), cancellation]);
@@ -116,7 +123,6 @@ async function runCreatePrompt<T>(prompt: (signal: AbortSignal) => Promise<T | s
     return value;
   } finally {
     process.removeListener('SIGINT', abort);
-    process.removeListener('SIGTERM', abort);
   }
 }
 
@@ -243,7 +249,6 @@ export const create = async (args: CreateOptions): Promise<void> => {
   if (selectedTemplate) {
     analytics?.trackEvent('cli_template_used', {
       template_slug: selectedTemplate.slug,
-      template_title: selectedTemplate.title,
     });
   }
 
@@ -409,10 +414,34 @@ const postCreate = ({ projectName, packageManager }: { projectName: string; pack
   `);
 };
 
-function isGitHubUrl(url: string): boolean {
+function parseGitHubRepositoryUrl(value: string): string | undefined {
   try {
-    const parsedUrl = new URL(url);
-    return parsedUrl.hostname === 'github.com' && parsedUrl.pathname.split('/').length >= 3;
+    const parsedUrl = new URL(value.startsWith('github.com/') ? `https://${value}` : value);
+    const pathParts = parsedUrl.pathname.split('/').filter(Boolean);
+    if (
+      parsedUrl.protocol !== 'https:' ||
+      parsedUrl.hostname !== 'github.com' ||
+      parsedUrl.username ||
+      parsedUrl.password ||
+      parsedUrl.search ||
+      parsedUrl.hash ||
+      pathParts.length !== 2
+    ) {
+      return undefined;
+    }
+
+    const [owner, repoPart] = pathParts;
+    const repo = repoPart?.replace(/\.git$/, '');
+    if (!owner || !repo) return undefined;
+    return `https://github.com/${owner}/${repo}`;
+  } catch {
+    return undefined;
+  }
+}
+
+function looksLikeGitHubUrl(value: string): boolean {
+  try {
+    return new URL(value.startsWith('github.com/') ? `https://${value}` : value).hostname === 'github.com';
   } catch {
     return false;
   }
@@ -512,10 +541,11 @@ async function resolveTemplate(mode: Exclude<CreateMode, 'empty'>, template?: st
     throw new Error('No template selected');
   }
 
-  if (isGitHubUrl(template)) {
+  const githubUrl = parseGitHubRepositoryUrl(template);
+  if (githubUrl) {
     const spinner = p.spinner();
     spinner.start('Validating GitHub repository...');
-    const validation = await validateGitHubProject(template);
+    const validation = await validateGitHubProject(githubUrl);
     if (!validation.isValid) {
       spinner.stop('Validation failed');
       p.log.error('This does not appear to be a valid Mastra project:');
@@ -523,7 +553,10 @@ async function resolveTemplate(mode: Exclude<CreateMode, 'empty'>, template?: st
       throw new Error('Invalid Mastra project');
     }
     spinner.stop('Valid Mastra project ✓');
-    return createFromGitHubUrl(template);
+    return createFromGitHubUrl(githubUrl);
+  }
+  if (looksLikeGitHubUrl(template)) {
+    throw new Error('Invalid GitHub repository URL. Use https://github.com/<owner>/<repository>.');
   }
 
   const templates = await loadTemplates();

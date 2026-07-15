@@ -256,9 +256,10 @@ export async function adaptManagedAgentHarness({
     fs.writeFile(agentPath, nextFiles['src/mastra/agents/agent.ts'], 'utf8'),
     fs.writeFile(packageJsonPath, nextFiles['package.json'], 'utf8'),
     fs.writeFile(envExamplePath, nextFiles['.env.example'], 'utf8'),
-    fs.writeFile(envPath, nextFiles['.env'], { encoding: 'utf8', mode: 0o600 }),
+    fs.writeFile(envPath, nextFiles['.env'], 'utf8'),
     fs.writeFile(readmePath, nextFiles['README.md'], 'utf8'),
   ]);
+  if (process.platform !== 'win32') await fs.chmod(envPath, 0o600);
 
   return config;
 }

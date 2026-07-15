@@ -121,6 +121,9 @@ describe('adaptManagedAgentHarness', () => {
 
       expect(envExample).toBe(`${config.apiKeyEnv}=\n`);
       expect(env).toBe(`${config.apiKeyEnv}=provider-secret\n`);
+      if (process.platform !== 'win32') {
+        expect((await fs.stat(path.join(projectPath, '.env'))).mode & 0o777).toBe(0o600);
+      }
       expect(readme).toContain(`- ${providerExpected.feature}`);
       expect(readme).toContain(`- ${providerExpected.prerequisite}`);
       expect(readme).toContain(`npx create-mastra@latest <project-name> --llm ${provider}`);
