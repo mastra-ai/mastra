@@ -1389,8 +1389,8 @@ export class DurableAgent<
           tracingPolicy: agentTracingPolicy,
           tracingOptions: {
             traceId: origTraceId,
-            metadata: entry.agentSpan?.metadata,
-            tags: entry.agentSpan?.tags,
+            metadata: { ...entry.agentSpan?.metadata, ...options?.tracingOptions?.metadata },
+            tags: options?.tracingOptions?.tags ?? entry.agentSpan?.tags,
           },
           requestContext,
           mastra: this.#mastra,
