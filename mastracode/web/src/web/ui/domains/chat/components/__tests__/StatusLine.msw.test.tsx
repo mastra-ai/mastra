@@ -29,15 +29,29 @@ afterEach(() => {
   localStorage.clear();
 });
 
-function seedProject() {
-  const project: Project = {
-    id: 'project-test',
-    name: 'MastraCode Test',
-    path: '/tmp/mastracode-test',
-    resourceId: RESOURCE_ID,
-    gitBranch: 'main',
-    createdAt: 1,
-  };
+function seedProject(source: 'local' | 'github' = 'local') {
+  const project: Project =
+    source === 'github'
+      ? {
+          id: 'project-test',
+          name: 'octo/hello',
+          source: 'github',
+          githubProjectId: 'github-project-test',
+          sandboxWorkdir: '/tmp/mastracode-test',
+          resourceId: RESOURCE_ID,
+          gitBranch: 'main',
+          worktrees: [{ branch: 'feature', worktreePath: '/tmp/mastracode-test-worktree', baseBranch: 'main' }],
+          selectedWorktreePath: '/tmp/mastracode-test-worktree',
+          createdAt: 1,
+        }
+      : {
+          id: 'project-test',
+          name: 'MastraCode Test',
+          path: '/tmp/mastracode-test',
+          resourceId: RESOURCE_ID,
+          gitBranch: 'main',
+          createdAt: 1,
+        };
   localStorage.setItem('mastracode-projects', JSON.stringify([project]));
   localStorage.setItem('mastracode-active-project', project.id);
 }
@@ -187,6 +201,116 @@ describe('StatusLine', () => {
       renderStatusLine();
 
       expect(screen.getByText('no model')).toBeInTheDocument();
+    });
+  });
+
+  describe('when the active GitHub thread is subscribed to a pull request', () => {
+    it('shows a linked pull request at the right side of the status line', async () => {
+      seedProject('github');
+      useAgentControllerHandlers();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/github/subscriptions`, ({ request }) => {
+          const url = new URL(request.url);
+          expect(url.searchParams.get('resourceId')).toBe(RESOURCE_ID);
+          expect(url.searchParams.get('threadId')).toBe(THREAD_ID);
+          expect(url.searchParams.get('scope')).toBe('/tmp/mastracode-test-worktree');
+          return HttpResponse.json({
+            subscriptions: [
+              {
+                id: 'subscription-1',
+                repoFullName: 'octo/hello',
+                pullRequestNumber: 42,
+                status: 'open',
+                url: 'https://github.com/octo/hello/pull/42',
+              },
+            ],
+          });
+        }),
+      );
+      renderStatusLine();
+
+      const link = await screen.findByRole('link', { name: 'Open open octo/hello pull request 42' });
+      expect(link).toHaveTextContent('PR #42');
+      expect(link).toHaveAttribute('href', 'https://github.com/octo/hello/pull/42');
+    });
+
+    it('refreshes subscribed pull requests when an agent run completes', async () => {
+      seedProject('github');
+      useAgentControllerHandlers([{ type: 'agent_start' }], [{ type: 'agent_end' }]);
+      let requests = 0;
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => {
+          requests += 1;
+          return HttpResponse.json({
+            subscriptions:
+              requests > 1
+                ? [
+                    {
+                      id: 'subscription-1',
+                      repoFullName: 'octo/hello',
+                      pullRequestNumber: 42,
+                      status: 'open',
+                      url: 'https://github.com/octo/hello/pull/42',
+                    },
+                  ]
+                : [],
+          });
+        }),
+      );
+      renderStatusLine();
+
+      await waitFor(() => expect(requests).toBeGreaterThan(1));
+      expect(await screen.findByRole('link', { name: 'Open open octo/hello pull request 42' })).toBeInTheDocument();
+    });
+
+    it('refreshes the pull request status when a notification arrives', async () => {
+      seedProject('github');
+      useAgentControllerHandlers(
+        [],
+        [
+          {
+            type: 'message_update',
+            message: {
+              id: 'notification-message',
+              role: 'assistant',
+              content: [
+                {
+                  type: 'notification',
+                  notificationId: 'notification-merged',
+                  message: 'octo/hello#42 was merged',
+                  source: 'github',
+                  kind: 'pull-request-merged',
+                  priority: 'urgent',
+                },
+              ],
+            },
+          },
+        ],
+      );
+      let requests = 0;
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => {
+          requests += 1;
+          return HttpResponse.json({
+            subscriptions: [
+              {
+                id: 'subscription-1',
+                repoFullName: 'octo/hello',
+                pullRequestNumber: 42,
+                status: requests > 1 ? 'merged' : 'open',
+                url: 'https://github.com/octo/hello/pull/42',
+              },
+            ],
+          });
+        }),
+      );
+      renderStatusLine();
+
+      await screen.findByRole('link', { name: 'Open open octo/hello pull request 42' });
+      await waitFor(() =>
+        expect(screen.getByRole('link', { name: 'Open merged octo/hello pull request 42' })).toBeInTheDocument(),
+      );
+      expect(requests).toBeGreaterThan(1);
     });
   });
 

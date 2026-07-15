@@ -939,6 +939,66 @@
       "source": "/docs/agents/file-based-agents",
       "destination": "/docs/getting-started/file-based-agents",
       "permanent": true
+    },
+    {
+      "source": "/docs/agents/input-processors",
+      "destination": "/docs/agents/processors",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/model-providers",
+      "destination": "/models",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/model-usage",
+      "destination": "/models",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/ai-sdk",
+      "destination": "/models",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/using-with-agents-and-tools",
+      "destination": "/docs/workflows/agents-and-tools",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/using-agents-and-tools",
+      "destination": "/docs/workflows/agents-and-tools",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/steps",
+      "destination": "/reference/workflows/step",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/agents",
+      "destination": "/docs/workflows/agents-and-tools",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/flow-control",
+      "destination": "/docs/workflows/control-flow",
+      "permanent": true
+    },
+    {
+      "source": "/docs/evals/running-evals",
+      "destination": "/docs/evals/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/scorers/custom-scorers",
+      "destination": "/docs/evals/custom-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/docs/scorers/creating-custom-scorers",
+      "destination": "/docs/evals/custom-scorers",
+      "permanent": true
     }
   ]
 }

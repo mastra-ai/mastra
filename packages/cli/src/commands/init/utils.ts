@@ -560,7 +560,10 @@ export const mastra = new Mastra({
     id: 'composite-storage',
     default: new LibSQLStore({
       id: "mastra-storage",
-      url: "file:./mastra.db",
+      // Uses a hosted database when deployed (mastra env db create --kind turso),
+      // and a local file during development.
+      url: process.env.TURSO_DATABASE_URL ?? "file:./mastra.db",
+      authToken: process.env.TURSO_AUTH_TOKEN,
     }),
     domains: {
       observability: await new DuckDBStore().getStore('observability'),

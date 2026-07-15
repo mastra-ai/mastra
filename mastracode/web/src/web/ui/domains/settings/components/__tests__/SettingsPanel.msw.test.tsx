@@ -4,7 +4,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
@@ -12,6 +12,15 @@ import { ChatSessionProvider } from '../../../chat/context/ChatSessionProvider';
 import type { Project } from '../../../workspaces';
 import { ActiveProjectProvider } from '../../../workspaces';
 import { SettingsPanel } from '../../index';
+import { loadDoneSound, playDoneSound } from '../../services/doneSound';
+
+// The completion sound synthesizes audio via AudioContext, which jsdom
+// doesn't provide; mock playback (persistence stays real) so specs can
+// assert the preview fired.
+vi.mock('../../services/doneSound', async importOriginal => ({
+  ...(await importOriginal<typeof import('../../services/doneSound')>()),
+  playDoneSound: vi.fn(),
+}));
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
 const RESOURCE_ID = 'resource-settings-panel';
@@ -165,6 +174,21 @@ describe('SettingsPanel', () => {
       expect(screen.getByTestId('theme-value')).toHaveTextContent('light');
       expect(screen.queryByText('Density')).not.toBeInTheDocument();
       expect(screen.queryByText('Spacing between messages and controls')).not.toBeInTheDocument();
+    });
+
+    it('persists the completion sound choice and previews it', async () => {
+      const user = userEvent.setup();
+      vi.mocked(playDoneSound).mockClear();
+      renderSettingsPanel();
+
+      const soundGroup = screen.getByRole('group', { name: 'Completion sound' });
+      await user.click(within(soundGroup).getByRole('button', { name: 'Arcade' }));
+
+      expect(loadDoneSound()).toBe('arcade');
+      expect(playDoneSound).toHaveBeenCalledWith('arcade');
+
+      await user.click(within(soundGroup).getByRole('button', { name: 'None' }));
+      expect(loadDoneSound()).toBe('none');
     });
   });
 

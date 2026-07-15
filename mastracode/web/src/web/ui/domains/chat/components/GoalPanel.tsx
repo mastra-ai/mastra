@@ -1,107 +1,68 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ArrowUp, Target } from 'lucide-react';
-import { useState } from 'react';
+import { Target } from 'lucide-react';
 
-import { useChatRuntime } from '../context/useChatRuntime';
 import { useChatSessionContext } from '../context/useChatSessionContext';
+import { useChatTranscript } from '../context/useChatTranscript';
 import {
   useClearAgentControllerGoalMutation,
   usePauseAgentControllerGoalMutation,
   useResumeAgentControllerGoalMutation,
-  useSetAgentControllerGoalMutation,
 } from '../../../../../shared/hooks/useAgentControllerGoalMutations';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 
-import { ComposerInput } from './ComposerInput';
-import type { ComposerVariant } from './ComposerInput';
+const goalBar = 'flex shrink-0 items-center gap-2.5 border-b border-border1 bg-accent2/5 px-4 py-2 text-xs';
 
-type GoalPanelProps = {
-  composerVariant?: ComposerVariant;
-  draft?: string;
-  onDraftChange?: (draft: string) => void;
-};
-
-export function GoalPanel({ composerVariant = 'inline', draft: controlledDraft, onDraftChange }: GoalPanelProps) {
-  const [uncontrolledDraft, setUncontrolledDraft] = useState('');
-  const draft = controlledDraft ?? uncontrolledDraft;
-
-  const updateDraft = (next: string) => {
-    if (onDraftChange) onDraftChange(next);
-    else setUncontrolledDraft(next);
+/**
+ * Progress bar for an active goal. Renders nothing when no goal is set —
+ * goals are started via the `/goal <objective>` slash command, so the chat
+ * stays uncluttered by default.
+ */
+export function GoalPanel() {
+  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
+  const { transcript } = useChatTranscript();
+  const hookArgs = {
+    agentControllerId: AGENT_CONTROLLER_ID,
+    resourceId,
+    projectPath,
+    baseUrl,
+    enabled: sessionEnabled,
   };
-  const { resourceId, sessionEnabled, baseUrl } = useChatSessionContext();
-  const { goal } = useChatRuntime();
-  const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, baseUrl, enabled: sessionEnabled };
-  const setGoalMutation = useSetAgentControllerGoalMutation(hookArgs);
   const pauseGoalMutation = usePauseAgentControllerGoalMutation(hookArgs);
   const resumeGoalMutation = useResumeAgentControllerGoalMutation(hookArgs);
   const clearGoalMutation = useClearAgentControllerGoalMutation(hookArgs);
+  const goal = transcript.goal;
 
-  if (!sessionEnabled) return null;
-
-  if (!goal) {
-    return (
-      <form
-        className="relative flex w-full flex-col gap-2"
-        onSubmit={event => {
-          event.preventDefault();
-          if (draft.trim()) {
-            void setGoalMutation.mutateAsync(draft.trim());
-            updateDraft('');
-          }
-        }}
-      >
-        <ComposerInput
-          value={draft}
-          onChange={event => updateDraft(event.target.value)}
-          placeholder="Describe your goal…"
-          composerVariant={composerVariant}
-          className="pr-12"
-          aria-label="Goal objective"
-        />
-        <Button
-          className="absolute bottom-2 right-2"
-          type="submit"
-          size="icon-sm"
-          disabled={!draft.trim()}
-          aria-label="Set goal"
-        >
-          <ArrowUp size={16} />
-        </Button>
-      </form>
-    );
-  }
+  if (!sessionEnabled || !goal) return null;
 
   const progress = `${goal.iteration}/${goal.maxRuns}`;
-  const objective = goal.reason ? `${goal.objective}\n${goal.reason}` : goal.objective;
 
   return (
-    <div className="relative flex w-full flex-col gap-2">
-      <ComposerInput
-        value={objective}
-        readOnly
-        composerVariant={composerVariant}
-        className="pr-40"
-        aria-label="Goal objective"
-      />
-      <div className="absolute bottom-2 right-2 flex items-center gap-1">
-        <span className="rounded-full border border-border1 bg-surface2 px-2 py-px text-ui-sm tabular-nums text-icon3">
-          {progress}
-        </span>
-        {goal.status === 'active' && (
-          <Button size="sm" onClick={() => void pauseGoalMutation.mutateAsync()}>
-            Pause
-          </Button>
-        )}
-        {goal.status === 'paused' && (
-          <Button variant="primary" size="sm" onClick={() => void resumeGoalMutation.mutateAsync()}>
-            Resume
-          </Button>
-        )}
-        <Button size="icon-sm" onClick={() => void clearGoalMutation.mutateAsync()} aria-label="Clear goal">
-          <Target size={15} />
+    <div className={goalBar}>
+      <span className="inline-flex text-accent2">
+        <Target size={15} />
+      </span>
+      <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-ui-sm font-medium">
+        {goal.objective}
+      </span>
+      <span className="rounded-full border border-border1 bg-surface2 px-2 py-px text-ui-sm tabular-nums text-icon3">
+        {progress}
+      </span>
+      {goal.reason && (
+        <span className="max-w-52 overflow-hidden text-ellipsis whitespace-nowrap text-icon3">{goal.reason}</span>
+      )}
+      {goal.status === 'active' && (
+        <Button size="sm" onClick={() => void pauseGoalMutation.mutateAsync()}>
+          Pause
         </Button>
-      </div>
+      )}
+      {goal.status === 'paused' && (
+        <Button variant="primary" size="sm" onClick={() => void resumeGoalMutation.mutateAsync()}>
+          Resume
+        </Button>
+      )}
+      <Button size="sm" onClick={() => void clearGoalMutation.mutateAsync()}>
+        Clear
+      </Button>
     </div>
   );
 }

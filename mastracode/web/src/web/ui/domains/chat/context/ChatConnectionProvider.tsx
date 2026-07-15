@@ -28,6 +28,8 @@ export function ChatConnectionProvider({
     status: connection.status,
     state: connection.state,
     threadId: connection.threadId,
+    createdThreadId: connection.threadId,
+    stateUpdatedAt: connection.stateUpdatedAt,
   };
 
   return <ChatConnectionContext.Provider value={connectionValue}>{children}</ChatConnectionContext.Provider>;

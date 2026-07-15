@@ -3,14 +3,13 @@
     "name": "test-45e4713b",
     "testFile": "src/agent/agent-gemini.e2e.test.ts",
     "testName": "Gemini Model Compatibility Tests > Agent network() method > should handle single turn with maxSteps=1 and messages ending with assistant in network",
-    "createdAt": "2026-05-18T10:51:09.310Z",
-    "updatedAt": "2026-05-28T17:34:12.068Z"
+    "createdAt": "2026-07-14T17:15:33.578Z"
   },
   "recordings": [
     {
-      "hash": "6ea924443291c81a",
+      "hash": "220ba554301dcffb",
       "request": {
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
         "method": "POST",
         "body": {
           "generationConfig": {
@@ -73,7 +72,7 @@
             ]
           }
         },
-        "timestamp": 1779989648501
+        "timestamp": 1784049330267
       },
       "response": {
         "status": 200,
@@ -81,9 +80,9 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-type": "application/json; charset=UTF-8",
-          "date": "Thu, 28 May 2026 17:34:09 GMT",
+          "date": "Tue, 14 Jul 2026 17:15:31 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=941",
+          "server-timing": "gfet4t7; dur=806",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
@@ -96,43 +95,37 @@
               "content": {
                 "parts": [
                   {
-                    "text": "{\n  \"primitiveId\": \"helperAgent\",\n  \"primitiveType\": \"agent\",\n  \"prompt\": \"What is 5 + 3?\",\n  \"selectionReason\": \"The user is asking a math question, so I should delegate it to the helperAgent.\"\n}"
+                    "text": "{\n\"primitiveId\": \"helperAgent\",\n\"primitiveType\": \"agent\",\n\"prompt\": \"What is 5 plus 3?\",\n\"selectionReason\": \"The user is asking a mathematical question (5 plus 3), which aligns with the capabilities of the helperAgent. Therefore, helperAgent is selected to provide the answer. No other workflows or tools are available for this task.\"\n}"
                   }
                 ],
                 "role": "model"
               },
               "finishReason": "STOP",
-              "avgLogprobs": -0.03313693453053959
+              "index": 0
             }
           ],
           "usageMetadata": {
-            "promptTokenCount": 854,
-            "candidatesTokenCount": 61,
-            "totalTokenCount": 915,
+            "promptTokenCount": 800,
+            "candidatesTokenCount": 84,
+            "totalTokenCount": 884,
             "promptTokensDetails": [
               {
                 "modality": "TEXT",
-                "tokenCount": 854
-              }
-            ],
-            "candidatesTokensDetails": [
-              {
-                "modality": "TEXT",
-                "tokenCount": 61
+                "tokenCount": 800
               }
             ],
             "serviceTier": "standard"
           },
-          "modelVersion": "gemini-2.0-flash",
-          "responseId": "kHwYap6VMsTg_uMPoeT4yAI"
+          "modelVersion": "gemini-2.5-flash",
+          "responseId": "sm5WaqOBFLH4nsEP6squoQ0"
         },
         "isStreaming": false
       }
     },
     {
-      "hash": "f7a5c487cf4fa360",
+      "hash": "6763ac70d1c6637a",
       "request": {
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse",
         "method": "POST",
         "body": {
           "generationConfig": {},
@@ -157,7 +150,7 @@
               "role": "user",
               "parts": [
                 {
-                  "text": "What is 5 + 3?"
+                  "text": "What is 5 plus 3?"
                 }
               ]
             }
@@ -170,7 +163,7 @@
             ]
           }
         },
-        "timestamp": 1779989649610
+        "timestamp": 1784049331093
       },
       "response": {
         "status": 200,
@@ -179,26 +172,25 @@
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-disposition": "attachment",
           "content-type": "text/event-stream",
-          "date": "Thu, 28 May 2026 17:34:10 GMT",
+          "date": "Tue, 14 Jul 2026 17:15:31 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=367",
+          "server-timing": "gfet4t7; dur=565",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
           "x-xss-protection": "0"
         },
         "chunks": [
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"8\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 43,\"totalTokenCount\": 43,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 43}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"kXwYao6_OZy1gLUP54ylyA4\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\\n\"}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 40,\"candidatesTokenCount\": 2,\"totalTokenCount\": 42,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 40}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 2}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"kXwYao6_OZy1gLUP54ylyA4\"}\r\n\r\n"
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"8\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 43,\"candidatesTokenCount\": 1,\"totalTokenCount\": 86,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 43}],\"thoughtsTokenCount\": 42,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"s25WarqmCfm3nsEPpZO58QE\"}\r\n\r\n"
         ],
-        "chunkTimings": [0, 0],
+        "chunkTimings": [0],
         "isStreaming": true
       }
     },
     {
-      "hash": "d0daef34fa59fc0c",
+      "hash": "c368fb2d3e329783",
       "request": {
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse",
         "method": "POST",
         "body": {
           "generationConfig": {
@@ -227,7 +219,7 @@
               "role": "user",
               "parts": [
                 {
-                  "text": "\n    The agent helperAgent has contributed to the task.\n    This is the result: \"8\\n\"\n    \n    \n\nPrimitives already executed: agent \"helperAgent\"\n\n    You need to evaluate if the task is complete. Pay very close attention to the SYSTEM INSTRUCTIONS for when the task is considered complete. \n    Only return true if the task is complete according to the system instructions.\n    Original task: Let me calculate that for you.\n\n    If no primitive (type = 'none'), the task is complete because we can't run any primitive to further task completion.\n\n    Also, if the agent helperAgent has declined the tool call in its response, then the task is complete as the primitive tool-call was declined by the user.\n\n    IMPORTANT: If the above result is from an AGENT PRIMITIVE and it is a suitable final result itself considering the original task, then finalResult should be an empty string or undefined.\n    \n    If the task is complete and the result is not from an AGENT PRIMITIVE, always generate a finalResult.\n    IF the task is complete and the result is from an AGENT PRIMITIVE, but the AGENT PRIMITIVE response is not comprehensive enough to accomplish the user's original task, then generate a finalResult.\n\n    IMPORTANT: The generated finalResult should not be the exact primitive result. You should craft a comprehensive response based on the message history.\n    The finalResult field should be written in natural language.\n\n    You must return this JSON shape:\n    {\n      \"isComplete\": boolean,\n      \"completionReason\": string,\n      \"finalResult\": string,\n    }\n  "
+                  "text": "\n    The agent helperAgent has contributed to the task.\n    This is the result: \"8\"\n    \n    \n\nPrimitives already executed: agent \"helperAgent\"\n\n    You need to evaluate if the task is complete. Pay very close attention to the SYSTEM INSTRUCTIONS for when the task is considered complete. \n    Only return true if the task is complete according to the system instructions.\n    Original task: Let me calculate that for you.\n\n    If no primitive (type = 'none'), the task is complete because we can't run any primitive to further task completion.\n\n    Also, if the agent helperAgent has declined the tool call in its response, then the task is complete as the primitive tool-call was declined by the user.\n\n    IMPORTANT: If the above result is from an AGENT PRIMITIVE and it is a suitable final result itself considering the original task, then finalResult should be an empty string or undefined.\n    \n    If the task is complete and the result is not from an AGENT PRIMITIVE, always generate a finalResult.\n    IF the task is complete and the result is from an AGENT PRIMITIVE, but the AGENT PRIMITIVE response is not comprehensive enough to accomplish the user's original task, then generate a finalResult.\n\n    IMPORTANT: The generated finalResult should not be the exact primitive result. You should craft a comprehensive response based on the message history.\n    The finalResult field should be written in natural language.\n\n    You must return this JSON shape:\n    {\n      \"isComplete\": boolean,\n      \"completionReason\": string,\n      \"finalResult\": string,\n    }\n  "
                 }
               ]
             }
@@ -240,7 +232,7 @@
             ]
           }
         },
-        "timestamp": 1779989650109
+        "timestamp": 1784049331677
       },
       "response": {
         "status": 200,
@@ -249,22 +241,19 @@
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-disposition": "attachment",
           "content-type": "text/event-stream",
-          "date": "Thu, 28 May 2026 17:34:11 GMT",
+          "date": "Tue, 14 Jul 2026 17:15:33 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=944",
+          "server-timing": "gfet4t7; dur=1838",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
           "x-xss-protection": "0"
         },
         "chunks": [
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"{\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 758,\"totalTokenCount\": 758,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 758}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"knwYave6LcHh1PIP8di4yAU\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\\n  \\\"\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 758,\"totalTokenCount\": 758,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 758}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"knwYave6LcHh1PIP8di4yAU\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"isComplete\\\": true,\\n  \\\"completionReason\\\": \\\"The helperAgent provided\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 758,\"totalTokenCount\": 758,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 758}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"knwYave6LcHh1PIP8di4yAU\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" the answer, and the task is complete.\\\",\\n  \\\"finalResult\\\": \\\"The answer\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 758,\"totalTokenCount\": 758,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 758}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"knwYave6LcHh1PIP8di4yAU\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" is 8.\\\"\\n}\"}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 802,\"candidatesTokenCount\": 44,\"totalTokenCount\": 846,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 802}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 44}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"knwYave6LcHh1PIP8di4yAU\"}\r\n\r\n"
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"{\\\"isComplete\\\": true, \\\"completionReason\\\": \\\"The helperAgent has performed the calculation and provided the result. The original task was to calculate something for the user,\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 756,\"candidatesTokenCount\": 34,\"totalTokenCount\": 1052,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 756}],\"thoughtsTokenCount\": 262,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"s25Wav-AL_6ensEPjJbEuAg\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" and this has been achieved.\\\", \\\"finalResult\\\": \\\"\\\"}\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 756,\"candidatesTokenCount\": 45,\"totalTokenCount\": 1063,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 756}],\"thoughtsTokenCount\": 262,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"s25Wav-AL_6ensEPjJbEuAg\"}\r\n\r\n"
         ],
-        "chunkTimings": [0, 0, 74, 141, 72],
+        "chunkTimings": [0, 1],
         "isStreaming": true
       }
     }

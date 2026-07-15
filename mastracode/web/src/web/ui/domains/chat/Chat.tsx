@@ -1,18 +1,54 @@
-import { Outlet } from 'react-router';
+import type { ReactNode } from 'react';
+import { Outlet, useLocation } from 'react-router';
 
 import { OverlaysProvider } from '../../lib/overlays';
 import { ActiveProjectProvider } from '../workspaces';
-import { ChatSessionConfigProvider } from './context/ChatSessionProvider';
+import { ChatOverlays } from './components/ChatOverlays';
+import { ChatCommandsProvider } from './context/ChatCommandsProvider';
+import { ChatSessionProvider } from './context/ChatSessionProvider';
+import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 
-/** Shared persistent chat shell providers. Route leaves own thread state. */
+/**
+ * Shared chat app providers. Route leaves render their own pages so `/new` is a
+ * real page boundary instead of a branch inside the thread transcript.
+ */
 export default function Chat() {
   return (
     <ActiveProjectProvider>
-      <ChatSessionConfigProvider>
+      <ChatSessionRouteProvider>
         <OverlaysProvider>
-          <Outlet />
+          <ChatCommandsProvider>
+            <ChatShell />
+          </ChatCommandsProvider>
         </OverlaysProvider>
-      </ChatSessionConfigProvider>
+      </ChatSessionRouteProvider>
     </ActiveProjectProvider>
+  );
+}
+
+function ChatSessionRouteProvider({ children }: { children: ReactNode }) {
+  const { pathname } = useLocation();
+  const userScoped = pathname.startsWith('/user/threads/');
+  const threadId = userScoped
+    ? decodeURIComponent(pathname.slice('/user/threads/'.length))
+    : pathname.startsWith('/threads/')
+      ? decodeURIComponent(pathname.slice('/threads/'.length))
+      : undefined;
+
+  return (
+    <ChatSessionProvider threadId={threadId} userScoped={userScoped}>
+      {children}
+    </ChatSessionProvider>
+  );
+}
+
+function ChatShell() {
+  useGlobalShortcuts();
+
+  return (
+    <>
+      <Outlet />
+      <ChatOverlays />
+    </>
   );
 }

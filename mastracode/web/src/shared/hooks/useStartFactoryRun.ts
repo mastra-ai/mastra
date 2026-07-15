@@ -4,21 +4,46 @@ import { useNavigate } from 'react-router';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import { useSendAgentControllerMessageMutation } from './useAgentControllerRunMutations';
-import { useSetAgentControllerStateMutation } from './useAgentControllerStateMutations';
-import { useCreateAgentControllerThreadMutation } from './useAgentControllerThreadMutations';
+import type { AgentControllerSession } from '../../web/ui/domains/chat/services/agentControllerClient';
+import { createAgentControllerClient, requireAgentControllerSession } from '../../web/ui/domains/chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../web/ui/domains/chat/services/constants';
 // Deep imports (not the workspaces barrel) to avoid provider/component cycles.
 import { useActiveProjectContext } from '../../web/ui/domains/workspaces/context/ActiveProjectProvider';
 import { deriveProjectPath, useCreateWorkspaceMutation } from './useWorkspaces';
+import type { Project } from '../../web/ui/domains/workspaces/services/projects';
+import { createWorkItem, updateWorkItem } from '../../web/ui/domains/factory/services/workItems';
+import type { WorkItemSource } from '../../web/ui/domains/factory/services/workItems';
+
+/**
+ * Board record to file once the run is underway. With an `id` the existing
+ * card is PATCHed (stages + the role's session ref); without one a new card is
+ * POSTed (the server upserts on `sourceKey`).
+ */
+export interface StartFactoryRunWorkItem {
+  /** Existing work item to patch; omit to materialize a new card. */
+  id?: string;
+  /** Session slot the run fills on the card, e.g. `work` or `review`. */
+  role: string;
+  /** Stages the card should hold once the run is underway. */
+  stages: string[];
+  source: WorkItemSource;
+  sourceKey: string | null;
+  title: string;
+  url?: string | null;
+  metadata?: Record<string, unknown>;
+}
 
 export interface StartFactoryRunInput {
   /** Feature branch for the new worktree (e.g. `factory/issue-12`). */
   branch: string;
   /** Title for the new thread shown in the sidebar. */
   threadTitle: string;
+  /** Existing thread tags to prefer before falling back to the session thread. */
+  threadTags?: Record<string, string>;
   /** First user message sent to the agent (e.g. a skill invocation). */
   prompt: string;
+  /** Board card to file for this run (kanban record; optional). */
+  workItem?: StartFactoryRunWorkItem;
 }
 
 /**
@@ -26,9 +51,10 @@ export interface StartFactoryRunInput {
  * item's branch, create a fresh thread in that workspace, send the kickoff
  * prompt, and navigate to the new thread.
  *
- * Mirrors the Composer's `/new` flow (create thread → send → seed message
- * cache → navigate) on top of the WorkspacesSection worktree flow (create
- * worktree → select it → point the session's `projectPath` at it).
+ * Sessions are scoped per worktree, so the run targets the NEW worktree's own
+ * session (created here with its `projectPath` tag) instead of repointing the
+ * currently active one — parallel Factory runs over the same project stay
+ * independent and never abort each other.
  */
 export function useStartFactoryRun() {
   const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
@@ -36,47 +62,136 @@ export function useStartFactoryRun() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const hookArgs = {
-    agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    projectPath: deriveProjectPath(activeProject),
-    baseUrl,
-    enabled: sessionEnabled,
-  };
-  const setStateMutation = useSetAgentControllerStateMutation(hookArgs);
-  const workspaceSession = { setState: (updates: Record<string, unknown>) => setStateMutation.mutateAsync(updates) };
-  const createWorkspace = useCreateWorkspaceMutation(activeProject, workspaceSession, {
+  const createWorkspace = useCreateWorkspaceMutation(activeProject, {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
   });
-  const createThread = useCreateAgentControllerThreadMutation(hookArgs);
-  const send = useSendAgentControllerMessageMutation(hookArgs);
 
   const mutation = useMutation({
-    mutationFn: async ({ branch, threadTitle, prompt }: StartFactoryRunInput) => {
+    mutationFn: async ({ branch, threadTitle, threadTags, prompt, workItem }: StartFactoryRunInput) => {
       const updatedProject = await createWorkspace.mutateAsync(branch);
-      const thread = await createThread.mutateAsync(threadTitle);
-      await send.mutateAsync(prompt);
+      queryClient.setQueryData(queryKeys.projects(), (projects: Project[] | undefined) =>
+        projects?.map(project => (project.id === updatedProject.id ? updatedProject : project)),
+      );
+      const projectPath = deriveProjectPath(updatedProject);
+      if (!projectPath) throw new Error('Could not resolve the new worktree path');
 
-      // Seed the thread's message cache so the prompt renders immediately when
-      // the thread page mounts, before the server transcript catches up.
+      // Address the new worktree's own session; create it up front so a
+      // brand-new scope is seeded with its projectPath tag before the thread
+      // is created in it.
+      const { session } = createAgentControllerClient({
+        agentControllerId: AGENT_CONTROLLER_ID,
+        resourceId,
+        scope: projectPath,
+        baseUrl,
+        enabled: sessionEnabled,
+      });
+      const scopedSession = requireAgentControllerSession(session);
+      const created = await scopedSession.create({ tags: { projectPath } });
+
+      // Worktrees hold a single conversation, so the run targets the session's
+      // own thread. Bringing a brand-new scope online seeds it with a fresh
+      // empty untitled thread (core creates one when no thread matches the
+      // scope tags) — claim it for this run by renaming it. When the session
+      // resumed a real thread (titled or with messages), i.e. a repeat run on
+      // the same item, reuse that thread: the prompt lands as a follow-up
+      // message instead of leaving a stray second thread in the worktree.
+      const threadId = await resolveRunThread(scopedSession, created.threadId, threadTitle, projectPath, threadTags);
+      await scopedSession.sendMessage(prompt);
+
+      // Append the prompt to the thread's message cache so it renders
+      // immediately when the thread page mounts, before the server transcript
+      // catches up. Appending (not replacing) preserves any prior conversation
+      // when the run reuses an existing thread.
       const message: AgentControllerMessage = {
         id: `local-${Date.now()}`,
         role: 'user',
         content: [{ type: 'text', text: prompt }],
       };
-      queryClient.setQueryData(queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, thread.id), [
-        message,
-      ]);
+      queryClient.setQueryData(
+        queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, threadId),
+        (existing: AgentControllerMessage[] | undefined) => [...(existing ?? []), message],
+      );
       // The thread now exists under the new worktree's project path; refresh
-      // that thread list (createThread invalidated the pre-switch path).
+      // its thread list so the sidebar shows it once the UI lands there.
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.agentControllerThreads(AGENT_CONTROLLER_ID, resourceId, deriveProjectPath(updatedProject)),
+        queryKey: queryKeys.agentControllerThreads(AGENT_CONTROLLER_ID, resourceId, projectPath),
       });
-      return thread.id;
+
+      // File the board card now that the run is underway, hanging the run's
+      // session ref off the requested role. Best-effort: the run itself
+      // (worktree + session + thread + prompt) already succeeded, so a filing
+      // failure must not reject the mutation and strand the user off the
+      // thread that is actively running.
+      const githubProjectId = activeProject?.githubProjectId;
+      if (workItem && githubProjectId) {
+        try {
+          const sessions = { [workItem.role]: { projectPath, branch, threadId } };
+          if (workItem.id) {
+            await updateWorkItem(baseUrl, workItem.id, { stages: workItem.stages, sessions });
+          } else {
+            await createWorkItem(baseUrl, githubProjectId, {
+              source: workItem.source,
+              sourceKey: workItem.sourceKey,
+              title: workItem.title,
+              url: workItem.url ?? null,
+              stages: workItem.stages,
+              sessions,
+              metadata: workItem.metadata,
+            });
+          }
+          void queryClient.invalidateQueries({ queryKey: queryKeys.workItems(githubProjectId) });
+        } catch (err) {
+          console.error('Failed to file the board card for this run', err);
+        }
+      }
+      return threadId;
     },
     onSuccess: threadId => void navigate(`/threads/${threadId}`),
   });
 
   return { start: mutation, enabled: sessionEnabled };
+}
+
+/**
+ * Resolve the thread a run should land on. Worktree sessions hold a single
+ * conversation, so this is the session's own thread:
+ *
+ * - Fresh scope: the session was seeded with an empty untitled thread — claim
+ *   it by renaming it to `title`.
+ * - Resumed scope (repeat run on the same item): the thread already has a
+ *   title or messages — reuse it as-is; the prompt becomes a follow-up.
+ * - No thread on the session (unexpected): create one.
+ */
+async function resolveRunThread(
+  session: AgentControllerSession,
+  threadId: string | undefined,
+  title: string,
+  projectPath: string,
+  threadTags: Record<string, string> | undefined,
+): Promise<string> {
+  const extraTags = Object.entries(threadTags ?? {}).filter(([, value]) => value);
+  if (extraTags.length > 0) {
+    const tags = { projectPath, ...Object.fromEntries(extraTags) };
+    const taggedThread = (await session.listThreads({ tags, limit: 20 }))[0];
+    if (taggedThread) {
+      await session.switchThread(taggedThread.id);
+      if (taggedThread.id === threadId && isUntitledThread(taggedThread.title)) {
+        const messages = await session.listMessages(taggedThread.id, 1);
+        if (messages.length === 0) await session.renameThread(taggedThread.id, title);
+      }
+      return taggedThread.id;
+    }
+  }
+
+  if (!threadId) return (await session.createThread(title)).id;
+  const [threads, messages] = await Promise.all([session.listThreads(), session.listMessages(threadId, 1)]);
+  const existing = threads.find(thread => thread.id === threadId);
+  if (!existing) return (await session.createThread(title)).id;
+  if (isUntitledThread(existing.title) && messages.length === 0) await session.renameThread(threadId, title);
+  return threadId;
+}
+
+function isUntitledThread(title: string | null | undefined): boolean {
+  return !title || title === 'Untitled thread';
 }

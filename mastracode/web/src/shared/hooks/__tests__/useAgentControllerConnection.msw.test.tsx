@@ -85,6 +85,55 @@ describe('useAgentControllerConnection', () => {
     expect(onStream).toHaveBeenCalledTimes(1);
   });
 
+  it('given a GitHub project session, when the connection initializes, then its project identity is persisted to controller state', async () => {
+    let receivedState: unknown;
+    const onEvent = vi.fn();
+
+    server.use(
+      http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, () =>
+        HttpResponse.json({ controllerId, resourceId, threadId: 'created-thread' }),
+      ),
+      http.put(`${sessionUrl}/state`, async ({ request }) => {
+        receivedState = await request.json();
+        return HttpResponse.json({ ok: true });
+      }),
+      http.get(sessionUrl, () =>
+        HttpResponse.json({
+          controllerId,
+          resourceId,
+          modeId: 'build',
+          modelId: 'openai/gpt-4o-mini',
+          threadId: 'state-thread',
+          settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
+        }),
+      ),
+      http.get(
+        `${sessionUrl}/stream`,
+        () =>
+          new Response(new ReadableStream<Uint8Array>({ start() {}, cancel() {} }), {
+            headers: { 'content-type': 'text/event-stream' },
+          }),
+      ),
+    );
+
+    const projectState = {
+      githubProjectId: 'github-project-1',
+      sandboxId: 'sandbox-1',
+      sandboxWorkdir: '/sandbox/repo',
+    };
+    const { result } = renderHookWithProviders(() =>
+      useAgentControllerConnection({
+        ...hookArgs,
+        projectPath: '/sandbox/repo',
+        projectState,
+        onEvent,
+      }),
+    );
+
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    expect(receivedState).toEqual({ state: { projectPath: '/sandbox/repo', ...projectState } });
+  });
+
   it('given the event callback changes after connection, then the active stream is not resubscribed', async () => {
     const onStream = vi.fn();
     const onEvent = vi.fn();

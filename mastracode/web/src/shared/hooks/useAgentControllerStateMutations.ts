@@ -34,7 +34,7 @@ export function useSetAgentControllerStateMutation({
         }),
         'settings' in updates
           ? queryClient.invalidateQueries({
-              queryKey: queryKeys.agentControllerSettings(agentControllerId, resourceId),
+              queryKey: queryKeys.agentControllerSettings(agentControllerId, resourceId, projectPath),
               exact: true,
             })
           : Promise.resolve(),

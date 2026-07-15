@@ -284,7 +284,7 @@ export class Dataset {
    * Update an existing item in the dataset. Only the provided payload fields
    * are patched.
    */
-  async updateItem(input: { itemId: string } & Partial<DatasetItemPayload>): Promise<DatasetItem> {
+  async updateItem(input: { itemId: string } & Partial<Omit<DatasetItemPayload, 'externalId'>>): Promise<DatasetItem> {
     const store = await this.#getDatasetsStore();
     const { itemId, ...rest } = input;
     return store.updateItem({ id: itemId, datasetId: this.id, ...rest, filters: this.#scope });

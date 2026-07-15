@@ -10,7 +10,7 @@ import type { DatabaseKind, ProjectDatabase } from './platform-api.js';
 import {
   attachDatabase,
   DB_ENV_VAR_NAMES,
-  detachDatabase,
+  deleteDatabase,
   fetchDatabase,
   fetchDatabaseConnection,
   fetchDatabases,
@@ -48,12 +48,12 @@ export function registerEnvDbCommands(envCommand: Command) {
     .option('--json', 'Output as JSON')
     .action(wrapAction(showDatabaseAction));
 
-  db.command('detach')
-    .description('Detach a database from the project (soft-delete; admin only)')
+  db.command('delete')
+    .description('Permanently delete a database and all its data (admin only)')
     .argument('<database>', 'Database ID or name')
     .option(...PROJECT_OPTION)
     .option('-y, --yes', 'Skip confirmation')
-    .action(wrapAction(detachDatabaseAction));
+    .action(wrapAction(deleteDatabaseAction));
 }
 
 /* ------------------------------------------------------------------ */
@@ -343,10 +343,10 @@ async function showDatabaseAction(dbArg: string, options: { project?: string; sh
 }
 
 /* ------------------------------------------------------------------ */
-/*  mastra env db detach                                               */
+/*  mastra env db delete                                               */
 /* ------------------------------------------------------------------ */
 
-async function detachDatabaseAction(dbArg: string, options: { project?: string; yes?: boolean }) {
+async function deleteDatabaseAction(dbArg: string, options: { project?: string; yes?: boolean }) {
   const token = await getToken();
   const { orgId } = await resolveCurrentOrg(token);
   const project = await resolveProject(token, orgId, options.project);
@@ -355,7 +355,7 @@ async function detachDatabaseAction(dbArg: string, options: { project?: string; 
 
   if (!options.yes) {
     const confirm = await p.confirm({
-      message: `Detach database "${db.name}" (${db.kind}) from ${project.name}? Deploys will no longer receive its env vars.`,
+      message: `Permanently delete database "${db.name}" (${db.kind}) and ALL of its data? This cannot be undone. Deploys for ${project.name} will no longer receive its env vars.`,
     });
 
     if (p.isCancel(confirm) || !confirm) {
@@ -364,6 +364,6 @@ async function detachDatabaseAction(dbArg: string, options: { project?: string; 
     }
   }
 
-  await detachDatabase(token, orgId, project.id, db.id);
-  console.info(`Database "${db.name}" detached.`);
+  await deleteDatabase(token, orgId, project.id, db.id);
+  console.info(`Database "${db.name}" deleted.`);
 }

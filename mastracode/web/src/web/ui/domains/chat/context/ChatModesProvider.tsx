@@ -18,6 +18,7 @@ export function ChatModesProvider({ children }: ChatModesProviderProps) {
   const modesQuery = useAgentControllerModes({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
+    projectPath,
     baseUrl,
     enabled: sessionEnabled,
   });

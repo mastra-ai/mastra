@@ -1,16 +1,16 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useQueryClient } from '@tanstack/react-query';
-import { GitBranch, Plus } from 'lucide-react';
-import { useRef, useState } from 'react';
-import type { FormEvent, KeyboardEvent, ReactNode } from 'react';
+import { GitBranch, MoreHorizontal, Plus } from 'lucide-react';
+import { useState } from 'react';
+import type { FormEvent, KeyboardEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
 import { useApiConfig } from '../../../../../shared/api/config';
 import { queryKeys } from '../../../../../shared/api/keys';
-import { useToast } from '../../../ui';
-import { useSetAgentControllerStateMutation } from '../../../../../shared/hooks/useAgentControllerStateMutations';
 import { AGENT_CONTROLLER_THREAD_PAGE_SIZE } from '../../../../../shared/hooks/useAgentControllerThreads';
 import { createAgentControllerClient, requireAgentControllerSession } from '../../chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
@@ -18,61 +18,76 @@ import { useActiveProjectContext } from '../context/ActiveProjectProvider';
 import {
   deriveProjectPath,
   useCreateWorkspaceMutation,
+  useDeleteWorkspaceMutation,
   useSelectWorkspaceMutation,
   useWorkspacesQuery,
 } from '../../../../../shared/hooks/useWorkspaces';
+import { useWorkspaceActivity } from '../../../../../shared/hooks/useWorkspaceActivity';
+import { useWorkspaceAttention } from '../../../../../shared/hooks/useWorkspaceAttention';
 import type { Worktree } from '../services/projects';
 
 /**
- * Sidebar section listing a GitHub project's worktrees.
- *
- * Threads are scoped to the worktree they run in, so callers can pass the
- * thread list as `children`: it renders nested under the active worktree row
- * (or after the list when no worktree is selected yet).
+ * Factory sessions: a GitHub project's feature worktrees, rendered as the
+ * "Sessions" subsection of the Factory menu. Each worktree holds a single
+ * factory-run conversation, so selecting one opens its thread directly —
+ * there is no nested thread list.
  */
-export function WorkspacesSection({ children }: { children?: ReactNode }) {
+export function WorkspacesSection() {
   const { baseUrl } = useApiConfig();
-  const { toast } = useToast();
   const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
   const [creating, setCreating] = useState(false);
   const [branch, setBranch] = useState('');
   const workspaces = useWorkspacesQuery(activeProject);
+  const projectPath = deriveProjectPath(activeProject);
   const scope = { agentControllerId: AGENT_CONTROLLER_ID, resourceId };
-  const setStateMutation = useSetAgentControllerStateMutation({
-    agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    projectPath: deriveProjectPath(activeProject),
-    baseUrl,
-    enabled: sessionEnabled,
-  });
-  const workspaceSession = { setState: (updates: Record<string, unknown>) => setStateMutation.mutateAsync(updates) };
-  const selectWorkspace = useSelectWorkspaceMutation(activeProject, workspaceSession, scope);
-  const createWorkspace = useCreateWorkspaceMutation(activeProject, workspaceSession, scope);
+  const selectWorkspace = useSelectWorkspaceMutation(activeProject, scope);
+  const createWorkspace = useCreateWorkspaceMutation(activeProject, scope);
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
-  const openingWorktreePath = useRef<string | undefined>(undefined);
   const { session } = createAgentControllerClient({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
+    scope: projectPath || undefined,
     baseUrl,
     enabled: sessionEnabled,
   });
+  const deleteWorkspace = useDeleteWorkspaceMutation(activeProject, session, scope);
+  const [confirmDelete, setConfirmDelete] = useState<Worktree | null>(null);
+  const worktrees = workspaces.data?.worktrees ?? [];
+  const runningByPath = useWorkspaceActivity({
+    agentControllerId: AGENT_CONTROLLER_ID,
+    resourceId,
+    projectPath: projectPath || undefined,
+    worktreePaths: worktrees.map(worktree => worktree.worktreePath),
+    baseUrl,
+    enabled: sessionEnabled && activeProject?.source === 'github',
+  });
+  const { attentionByPath, clearAttention } = useWorkspaceAttention(runningByPath);
 
   if (activeProject?.source !== 'github') return null;
 
-  const worktrees = workspaces.data?.worktrees ?? [];
   const selectedPath = workspaces.data?.selected?.worktreePath;
-  const pending = createWorkspace.isPending || selectWorkspace.isPending;
+  const pending = createWorkspace.isPending || selectWorkspace.isPending || deleteWorkspace.isPending;
 
   // Threads are scoped to a worktree, so entering a workspace lands on its
   // most recent thread (creating one when it has none). Factory pages are
   // worktree-independent and stay put.
   const openWorktreeThread = async (worktreePath: string) => {
-    if (location.pathname.startsWith('/factory') || openingWorktreePath.current === worktreePath) return;
-    openingWorktreePath.current = worktreePath;
+    if (location.pathname.startsWith('/factory')) return;
     try {
-      const chatSession = requireAgentControllerSession(session);
+      // Address the target worktree's own session (sessions are scoped per
+      // worktree). Create it up front so a brand-new scope is seeded with its
+      // projectPath tag before any thread is created in it.
+      const { session: targetSession } = createAgentControllerClient({
+        agentControllerId: AGENT_CONTROLLER_ID,
+        resourceId,
+        scope: worktreePath,
+        baseUrl,
+        enabled: sessionEnabled,
+      });
+      const chatSession = requireAgentControllerSession(targetSession);
+      await chatSession.create({ tags: { projectPath: worktreePath } });
       const threadsKey = queryKeys.agentControllerThreads(AGENT_CONTROLLER_ID, resourceId, worktreePath);
       const threads = await queryClient.fetchQuery({
         queryKey: threadsKey,
@@ -102,8 +117,8 @@ export function WorkspacesSection({ children }: { children?: ReactNode }) {
       }
       // Empty worktree: leave the stale thread route before creating, so the
       // route-thread sync can't race the create call and error on the old
-      // thread. The workspace switch already rebound the session to this
-      // worktree, so the new thread is tagged with its projectPath.
+      // thread. The scoped session is pinned to this worktree, so the new
+      // thread is tagged with its projectPath.
       if (location.pathname.startsWith('/threads/')) void navigate('/new', { replace: true });
       const created = await chatSession.createThread();
       // A fresh thread has no messages; seed the cache to skip the skeleton.
@@ -115,14 +130,30 @@ export function WorkspacesSection({ children }: { children?: ReactNode }) {
       void navigate(`/threads/${created.id}`, { replace: true });
     } catch {
       void navigate('/new', { replace: true });
-    } finally {
-      if (openingWorktreePath.current === worktreePath) openingWorktreePath.current = undefined;
     }
   };
 
   const resetCreate = () => {
     setCreating(false);
     setBranch('');
+  };
+
+  const confirmDeleteWorktree = () => {
+    if (!confirmDelete) return;
+    const target = confirmDelete;
+    deleteWorkspace.mutate(target, {
+      onSuccess: ({ updated, wasSelected }) => {
+        setConfirmDelete(null);
+        // Threads under the deleted worktree are gone; if we were inside one,
+        // land on the fallback workspace's latest thread.
+        if (wasSelected) {
+          const fallback = updated.selectedWorktreePath;
+          if (fallback) void openWorktreeThread(fallback);
+          else void navigate('/new', { replace: true });
+        }
+      },
+      onError: () => setConfirmDelete(null),
+    });
   };
 
   const createBranch = () => {
@@ -133,9 +164,6 @@ export function WorkspacesSection({ children }: { children?: ReactNode }) {
         resetCreate();
         const path = updated.selectedWorktreePath;
         if (path) void openWorktreeThread(path);
-      },
-      onError: error => {
-        toast(error instanceof Error ? error.message : 'Failed to create workspace', 'error');
       },
     });
   };
@@ -154,10 +182,10 @@ export function WorkspacesSection({ children }: { children?: ReactNode }) {
   };
 
   return (
-    <section className="flex flex-col gap-2" aria-label="Workspaces">
+    <section className="flex flex-col gap-2" aria-label="Factory sessions">
       <div className="flex items-center justify-between px-1">
         <Txt as="span" variant="ui-xs" className="text-icon3 uppercase tracking-wide">
-          Workspaces
+          Sessions
         </Txt>
         <Button
           variant="ghost"
@@ -173,21 +201,23 @@ export function WorkspacesSection({ children }: { children?: ReactNode }) {
       <div className="flex flex-col gap-1">
         {worktrees.map(worktree => {
           const active = worktree.worktreePath === selectedPath;
-          const nested = active && Boolean(children);
           return (
-            <div key={worktree.worktreePath} className="flex flex-col gap-1">
-              <WorkspaceRow
-                worktree={worktree}
-                active={active}
-                disabled={pending}
-                onSelect={() =>
-                  selectWorkspace.mutate(worktree.worktreePath, {
-                    onSuccess: () => void openWorktreeThread(worktree.worktreePath),
-                  })
-                }
-              />
-              {nested && <div className="ml-[15px] flex flex-col border-l border-border1 pl-2">{children}</div>}
-            </div>
+            <WorkspaceRow
+              key={worktree.worktreePath}
+              worktree={worktree}
+              active={active}
+              running={runningByPath[worktree.worktreePath] === true}
+              attention={attentionByPath[worktree.worktreePath] === true}
+              disabled={pending}
+              onSeen={() => clearAttention(worktree.worktreePath)}
+              onSelect={() => {
+                clearAttention(worktree.worktreePath);
+                selectWorkspace.mutate(worktree.worktreePath, {
+                  onSuccess: () => void openWorktreeThread(worktree.worktreePath),
+                });
+              }}
+              onDelete={() => setConfirmDelete(worktree)}
+            />
           );
         })}
 
@@ -210,37 +240,119 @@ export function WorkspacesSection({ children }: { children?: ReactNode }) {
             )}
           </form>
         )}
-
-        {Boolean(children) && !worktrees.some(worktree => worktree.worktreePath === selectedPath) && (
-          <div className="flex flex-col">{children}</div>
-        )}
       </div>
+
+      {confirmDelete && (
+        <Dialog open onOpenChange={open => !open && setConfirmDelete(null)}>
+          <DialogContent className="w-full max-w-sm" aria-label="Delete workspace">
+            <DialogHeader className="px-5 pt-4 pb-2">
+              <DialogTitle>Delete workspace?</DialogTitle>
+            </DialogHeader>
+            <div className="flex flex-col gap-4 px-5 pb-4">
+              <Txt as="p" variant="ui-sm" className="m-0 text-icon4">
+                This deletes the <span className="text-icon6">{confirmDelete.branch}</span> checkout, its uncommitted
+                changes, and every thread in this workspace. This can’t be undone.
+              </Txt>
+              <div className="flex justify-end gap-2">
+                <Button variant="ghost" onClick={() => setConfirmDelete(null)} disabled={deleteWorkspace.isPending}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  className="bg-red-600 text-white hover:bg-red-500"
+                  onClick={confirmDeleteWorktree}
+                  disabled={deleteWorkspace.isPending}
+                >
+                  {deleteWorkspace.isPending ? 'Deleting…' : 'Delete'}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </section>
   );
 }
 
-function WorkspaceRow({
+export function WorkspaceRow({
   worktree,
+  label,
   active,
+  running,
+  attention,
   disabled,
   onSelect,
+  onSeen,
+  onDelete,
 }: {
   worktree: Worktree;
+  /** Display name; defaults to the worktree's branch. */
+  label?: string;
   active: boolean;
+  running: boolean;
+  /** A run finished here and the user hasn't opened the workspace since. */
+  attention: boolean;
   disabled: boolean;
   onSelect: () => void;
+  onSeen: () => void;
+  onDelete?: () => void;
 }) {
+  // Selecting a row marks it seen (the parent clears attention in onSelect);
+  // the already-active row can't be re-selected, so clicking it just clears
+  // the done indicator.
+  const onClick = active ? (attention ? onSeen : undefined) : onSelect;
+  const name = label ?? worktree.branch;
   return (
-    <button
-      type="button"
-      aria-current={active ? 'true' : undefined}
-      aria-disabled={active || undefined}
-      disabled={disabled}
-      onClick={active ? undefined : onSelect}
-      className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition ${active ? 'bg-surface4 text-icon6' : 'text-icon3 hover:bg-surface3 hover:text-icon5'} disabled:cursor-default disabled:opacity-70`}
-    >
-      <GitBranch size={13} />
-      <span className="truncate">{worktree.branch}</span>
-    </button>
+    <div className={`group relative rounded-md ${active ? 'bg-surface4' : 'hover:bg-surface3'}`}>
+      <button
+        type="button"
+        aria-current={active ? 'true' : undefined}
+        aria-disabled={(active && !attention) || undefined}
+        disabled={disabled}
+        onClick={onClick}
+        className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition ${active ? 'text-icon6' : 'text-icon3 hover:text-icon5'} disabled:cursor-default disabled:opacity-70`}
+      >
+        <GitBranch size={13} />
+        <span className="truncate">{name}</span>
+        {running ? (
+          <span
+            role="status"
+            aria-label={`Agent working in ${name}`}
+            title="Agent working"
+            className="ml-auto size-2 shrink-0 animate-pulse rounded-full bg-accent1 group-hover:opacity-0"
+          />
+        ) : attention ? (
+          <span
+            role="status"
+            aria-label={`Agent finished in ${name}`}
+            title="Agent finished — open to dismiss"
+            className="ml-auto size-2 shrink-0 rounded-full bg-accent1 group-hover:opacity-0"
+          />
+        ) : null}
+      </button>
+      {onDelete && (
+        <DropdownMenu>
+          <DropdownMenu.Trigger
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Workspace actions"
+                disabled={disabled}
+                className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 data-[popup-open]:opacity-100"
+              >
+                <MoreHorizontal size={15} />
+              </Button>
+            }
+          />
+          <DropdownMenu.Content align="end" className="min-w-28">
+            <DropdownMenu.Item variant="destructive" onClick={onDelete}>
+              Delete
+            </DropdownMenu.Item>
+          </DropdownMenu.Content>
+        </DropdownMenu>
+      )}
+    </div>
   );
 }
