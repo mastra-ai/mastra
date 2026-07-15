@@ -295,7 +295,7 @@ describe('mountWebAuth /auth routes (enabled)', () => {
     expect(await res.json()).toEqual({ authenticated: true, user: { email: 'user@example.com', name: 'User' } });
   });
 
-  it('/auth/me surfaces the organization id to the SPA', async () => {
+  it('/auth/me surfaces the organization id and stable user id to the SPA', async () => {
     mockAuthenticate.mockResolvedValue({
       workosId: 'user_1',
       email: 'user@example.com',
@@ -307,7 +307,7 @@ describe('mountWebAuth /auth routes (enabled)', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       authenticated: true,
-      user: { email: 'user@example.com', name: 'User', organizationId: 'org_a' },
+      user: { email: 'user@example.com', name: 'User', organizationId: 'org_a', userId: 'user_1' },
     });
   });
 });

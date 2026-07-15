@@ -25,7 +25,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@types/node": "22.19.21",
+    "@types/node": "22.20.1",
     "mastra": "deployers-e2e-test",
     "wrangler": "^4.110.0",
     "typescript": "^6.0.3"

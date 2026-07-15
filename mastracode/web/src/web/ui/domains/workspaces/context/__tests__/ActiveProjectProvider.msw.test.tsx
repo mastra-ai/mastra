@@ -153,7 +153,9 @@ describe('ActiveProjectProvider', () => {
         sandboxId: 'sbx_1',
         sandboxWorkdir: '/workspace/hello',
       });
-      expect(stored?.worktrees).toEqual([{ branch: 'main', worktreePath: '/workspace/hello', baseBranch: 'main' }]);
+      // The repo-root checkout is not a workspace, so materialization seeds no
+      // worktrees — sessions only exist once created explicitly.
+      expect(stored?.worktrees ?? []).toEqual([]);
     });
 
     it('given materialization fails, when a GitHub project is selected, then it is NOT activated and the error is exposed', async () => {

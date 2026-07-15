@@ -246,33 +246,32 @@ describe('Sidebar', () => {
   });
 
   describe('when a GitHub project is active', () => {
-    it('nests the thread list under the active worktree inside the Workspaces section', async () => {
+    it('nests the factory Sessions list under the Factory menu, without the repo root', async () => {
       seedProject(githubProject);
       useAuthHandler();
       useGithubStatusHandler();
       useAgentControllerHandlers();
       renderSidebar();
 
-      const activeWorktree = await screen.findByRole('button', { name: 'main' });
-      const thread = await screen.findByText('First thread');
-      // The row button sits inside a hover-group wrapper; nested threads render
-      // as a sibling of that wrapper inside the worktree's container.
-      expect(activeWorktree.parentElement?.parentElement).toContainElement(thread);
-
-      const inactiveWorktree = screen.getByRole('button', { name: 'feat-ui' });
-      expect(inactiveWorktree.parentElement?.parentElement).not.toContainElement(thread);
+      const factory = await screen.findByRole('navigation', { name: 'Factory' });
+      expect(await within(factory).findByText('Sessions')).toBeInTheDocument();
+      // Only feature worktrees are sessions: the repo-root checkout is not one.
+      expect(within(factory).getByRole('button', { name: 'feat-ui' })).toBeInTheDocument();
+      expect(within(factory).queryByRole('button', { name: 'main' })).not.toBeInTheDocument();
     });
 
-    it('does not render a flat thread list outside the Workspaces section', async () => {
+    it('renders the User Sessions section and no thread list', async () => {
       seedProject(githubProject);
       useAuthHandler();
       useGithubStatusHandler();
       useAgentControllerHandlers();
       renderSidebar();
 
-      const workspaces = await screen.findByRole('region', { name: 'Workspaces' });
-      const thread = await screen.findByText('First thread');
-      expect(workspaces).toContainElement(thread);
+      expect(await screen.findByRole('region', { name: 'User sessions' })).toBeInTheDocument();
+      // Each worktree holds a single conversation, so GitHub projects have no
+      // thread list — neither nested nor flat.
+      await screen.findByRole('button', { name: 'feat-ui' });
+      expect(screen.queryByText('First thread')).not.toBeInTheDocument();
     });
   });
 
