@@ -152,5 +152,5 @@ describeForAllEngines(
       }
     });
   },
-  { skip: ['durable'] }, // RC4: abortSignal not forwarded to durable workflow engine
+  {},
 );

@@ -185,6 +185,8 @@ export interface AgentControllerSessionState {
   threadId?: string;
   modeId: string;
   modelId: string;
+  /** Whether the agent is currently executing a run (for initial UI hydration). */
+  running?: boolean;
   /** OM progress snapshot for the status line (initial hydration). */
   omProgress?: AgentControllerOMProgress;
   /** Cumulative token usage for the current thread. */
@@ -210,6 +212,12 @@ export interface AgentControllerThreadInfo {
    * worktree/scope a thread belongs to when a resourceId is shared.
    */
   tags?: Record<string, string>;
+  /**
+   * Whether a run is currently executing on this thread (`'active'`) or not
+   * (`'idle'`). Present on `listThreads()` results; lets one listing report
+   * activity across every worktree/scope sharing the resourceId.
+   */
+  state?: 'active' | 'idle';
 }
 
 export interface AgentControllerAvailableModel {
@@ -302,20 +310,34 @@ export interface AgentControllerSubscription {
 
 /**
  * A session bound to a `resourceId` within one agent controller. Sessions are
- * get-or-create on the server, so re-creating the same resourceId resumes the
- * existing conversation rather than forking it.
+ * get-or-create on the server, so re-creating the same resourceId (and scope)
+ * resumes the existing conversation rather than forking it.
+ *
+ * Pass a `scope` to address an independent session over the same resourceId:
+ * two sessions with the same resourceId but different scopes have their own
+ * run loop, thread binding, and mode/model/state (e.g. one session per git
+ * worktree, with the worktree path as the scope). The scope travels on every
+ * request as a `sessionScope` query param.
  */
 export class AgentControllerSession extends BaseResource {
   constructor(
     options: ClientOptions,
     private readonly controllerId: string,
     private readonly resourceId: string,
+    private readonly scope?: string,
   ) {
     super(options);
   }
 
   private base() {
     return `/agent-controller/${encodeURIComponent(this.controllerId)}/sessions/${encodeURIComponent(this.resourceId)}`;
+  }
+
+  /** Append this session's scope (if any) as a `sessionScope` query param. */
+  private url(path: string): string {
+    if (this.scope === undefined) return path;
+    const sep = path.includes('?') ? '&' : '?';
+    return `${path}${sep}sessionScope=${encodeURIComponent(this.scope)}`;
   }
 
   /**
@@ -328,7 +350,7 @@ export class AgentControllerSession extends BaseResource {
   create(options?: { tags?: Record<string, string> }): Promise<CreateAgentControllerSessionResponse> {
     return this.request(`/agent-controller/${encodeURIComponent(this.controllerId)}/sessions`, {
       method: 'POST',
-      body: { resourceId: this.resourceId, tags: options?.tags },
+      body: { resourceId: this.resourceId, tags: options?.tags, sessionScope: this.scope },
     });
   }
 
@@ -337,7 +359,7 @@ export class AgentControllerSession extends BaseResource {
    * message arrives here as `message_*` events, not on the sendMessage call.
    */
   async subscribe(options: SubscribeAgentControllerSessionOptions): Promise<AgentControllerSubscription> {
-    const response = (await this.request(`${this.base()}/stream`, { stream: true })) as Response;
+    const response = (await this.request(this.url(`${this.base()}/stream`), { stream: true })) as Response;
     if (!response.body) {
       throw new Error('No response body for agent controller session stream');
     }
@@ -386,19 +408,29 @@ export class AgentControllerSession extends BaseResource {
     };
   }
 
-  /** Send a user message. The reply streams over `subscribe()`. */
-  async sendMessage(message: string): Promise<void> {
-    await this.request(`${this.base()}/messages`, { method: 'POST', body: { message } });
+  /**
+   * Send a user message. The reply streams over `subscribe()`.
+   * Pass a structured message to attach files (e.g. pasted images) as base64-encoded data:
+   * `sendMessage({ content: 'What is in this image?', files })`.
+   */
+  async sendMessage(
+    message: string | { content: string; files?: Array<{ data: string; mediaType: string; filename?: string }> },
+  ): Promise<void> {
+    const { content, files } = typeof message === 'string' ? { content: message, files: undefined } : message;
+    await this.request(this.url(`${this.base()}/messages`), {
+      method: 'POST',
+      body: { message: content, ...(files?.length ? { files } : {}) },
+    });
   }
 
   /** Abort the in-flight run for this session. */
   async abort(): Promise<void> {
-    await this.request(`${this.base()}/abort`, { method: 'POST' });
+    await this.request(this.url(`${this.base()}/abort`), { method: 'POST' });
   }
 
   /** Approve or decline a pending tool call (`tool_approval_required`). */
   async approveTool(toolCallId: string, approved: boolean): Promise<void> {
-    await this.request(`${this.base()}/tool-approval`, {
+    await this.request(this.url(`${this.base()}/tool-approval`), {
       method: 'POST',
       body: { toolCallId, approved },
     });
@@ -410,7 +442,7 @@ export class AgentControllerSession extends BaseResource {
    * `request_access`, and a {@link PlanResume} for `submit_plan`.
    */
   async respondToToolSuspension(toolCallId: string, resumeData: string | string[] | PlanResume): Promise<void> {
-    await this.request(`${this.base()}/tool-suspension`, {
+    await this.request(this.url(`${this.base()}/tool-suspension`), {
       method: 'POST',
       body: { toolCallId, resumeData },
     });
@@ -418,33 +450,32 @@ export class AgentControllerSession extends BaseResource {
 
   /** Inject a message into the in-flight run without starting a new turn. */
   async steer(message: string): Promise<void> {
-    await this.request(`${this.base()}/steer`, { method: 'POST', body: { message } });
+    await this.request(this.url(`${this.base()}/steer`), { method: 'POST', body: { message } });
   }
 
   /** Get the current mode, model, and thread (for initial UI hydration). */
   state(): Promise<AgentControllerSessionState> {
-    return this.request(this.base());
+    return this.request(this.url(this.base()));
   }
 
   /** Merge key-value pairs into the session state. Existing keys not in the payload are preserved. */
   async setState(updates: Record<string, unknown>): Promise<void> {
-    await this.request(`${this.base()}/state`, { method: 'PUT', body: { state: updates } });
+    await this.request(this.url(`${this.base()}/state`), { method: 'PUT', body: { state: updates } });
   }
 
   /** Switch the active mode (e.g. `build`, `plan`). */
   async switchMode(modeId: string): Promise<void> {
-    await this.request(`${this.base()}/mode`, { method: 'POST', body: { modeId } });
+    await this.request(this.url(`${this.base()}/mode`), { method: 'POST', body: { modeId } });
   }
 
   /** Switch the model. Defaults to thread scope. */
   async switchModel(modelId: string, options?: { scope?: 'global' | 'thread'; modeId?: string }): Promise<void> {
-    await this.request(`${this.base()}/model`, {
+    await this.request(this.url(`${this.base()}/model`), {
       method: 'POST',
       body: { modelId, scope: options?.scope, modeId: options?.modeId },
     });
   }
 
-  /** List the threads for this session's resource, most-recently-updated first. Pass `limit` for just the newest N. */
   /**
    * List the session's threads, newest first. Pass `limit` to cap the count
    * (e.g. for a sidebar) and `tags` to scope to threads matching every tag —
@@ -460,18 +491,20 @@ export class AgentControllerSession extends BaseResource {
     if (opts.limit != null) params.set('limit', String(opts.limit));
     if (opts.tags && Object.keys(opts.tags).length > 0) params.set('tags', JSON.stringify(opts.tags));
     const query = params.toString() ? `?${params.toString()}` : '';
-    const body = await this.request<{ threads: AgentControllerThreadInfo[] }>(`${this.base()}/threads${query}`);
+    const body = await this.request<{ threads: AgentControllerThreadInfo[] }>(
+      this.url(`${this.base()}/threads${query}`),
+    );
     return body.threads;
   }
 
   /** Switch the session to an existing thread (rebinds stream + state). */
   async switchThread(threadId: string): Promise<void> {
-    await this.request(`${this.base()}/thread`, { method: 'POST', body: { threadId } });
+    await this.request(this.url(`${this.base()}/thread`), { method: 'POST', body: { threadId } });
   }
 
   /** Create a new thread (unbinds previous, binds the new one). */
   async createThread(title?: string): Promise<AgentControllerThreadInfo> {
-    return this.request(`${this.base()}/threads`, {
+    return this.request(this.url(`${this.base()}/threads`), {
       method: 'POST',
       body: { title },
     });
@@ -479,14 +512,14 @@ export class AgentControllerSession extends BaseResource {
 
   /** Delete a thread. If it's the active thread the session unbinds. */
   async deleteThread(threadId: string): Promise<void> {
-    await this.request(`${this.base()}/threads/${encodeURIComponent(threadId)}`, {
+    await this.request(this.url(`${this.base()}/threads/${encodeURIComponent(threadId)}`), {
       method: 'DELETE',
     });
   }
 
   /** Rename a thread. */
   async renameThread(threadId: string, title: string): Promise<void> {
-    await this.request(`${this.base()}/threads/${encodeURIComponent(threadId)}`, {
+    await this.request(this.url(`${this.base()}/threads/${encodeURIComponent(threadId)}`), {
       method: 'PUT',
       body: { title },
     });
@@ -494,7 +527,7 @@ export class AgentControllerSession extends BaseResource {
 
   /** Clone a thread (and its messages). The session binds to the clone. */
   async cloneThread(options?: { sourceThreadId?: string; title?: string }): Promise<AgentControllerThreadInfo> {
-    return this.request(`${this.base()}/threads/clone`, {
+    return this.request(this.url(`${this.base()}/threads/clone`), {
       method: 'POST',
       body: options ?? {},
     });
@@ -504,7 +537,7 @@ export class AgentControllerSession extends BaseResource {
   async listMessages(threadId: string, limit?: number): Promise<MastraDBMessage[]> {
     const params = limit != null ? `?limit=${limit}` : '';
     const body = await this.request<{ messages: MastraDBMessage[] }>(
-      `${this.base()}/threads/${encodeURIComponent(threadId)}/messages${params}`,
+      this.url(`${this.base()}/threads/${encodeURIComponent(threadId)}/messages${params}`),
     );
     return body.messages;
   }
@@ -514,18 +547,18 @@ export class AgentControllerSession extends BaseResource {
    * if a run is active it queues for after completion.
    */
   async followUp(message: string): Promise<void> {
-    await this.request(`${this.base()}/follow-up`, { method: 'POST', body: { message } });
+    await this.request(this.url(`${this.base()}/follow-up`), { method: 'POST', body: { message } });
   }
 
   /** Get the observational memory record for this session's thread. */
   async getOMRecord(): Promise<unknown> {
-    const body = await this.request<{ record: unknown }>(`${this.base()}/om`);
+    const body = await this.request<{ record: unknown }>(this.url(`${this.base()}/om`));
     return body.record;
   }
 
   /** Change the session's resource identity. */
   async setResourceId(newResourceId: string): Promise<void> {
-    await this.request(`${this.base()}/resource`, {
+    await this.request(this.url(`${this.base()}/resource`), {
       method: 'POST',
       body: { newResourceId },
     });
@@ -533,13 +566,13 @@ export class AgentControllerSession extends BaseResource {
 
   /** Get known resource IDs for this session. */
   async getResourceIds(): Promise<string[]> {
-    const body = await this.request<{ resourceIds: string[] }>(`${this.base()}/resources`);
+    const body = await this.request<{ resourceIds: string[] }>(this.url(`${this.base()}/resources`));
     return body.resourceIds;
   }
 
   /** Get the current goal for this session's thread. */
   async getGoal(): Promise<AgentControllerGoalRecord | undefined> {
-    const body = await this.request<{ goal?: AgentControllerGoalRecord }>(`${this.base()}/goal`);
+    const body = await this.request<{ goal?: AgentControllerGoalRecord }>(this.url(`${this.base()}/goal`));
     return body.goal;
   }
 
@@ -548,7 +581,7 @@ export class AgentControllerSession extends BaseResource {
     objective: string,
     options?: { judgeModelId?: string; maxRuns?: number },
   ): Promise<AgentControllerGoalRecord | undefined> {
-    const body = await this.request<{ goal?: AgentControllerGoalRecord }>(`${this.base()}/goal`, {
+    const body = await this.request<{ goal?: AgentControllerGoalRecord }>(this.url(`${this.base()}/goal`), {
       method: 'POST',
       body: { objective, ...options },
     });
@@ -561,7 +594,7 @@ export class AgentControllerSession extends BaseResource {
     maxRuns?: number;
     status?: 'active' | 'paused' | 'done';
   }): Promise<AgentControllerGoalRecord | undefined> {
-    const body = await this.request<{ goal?: AgentControllerGoalRecord }>(`${this.base()}/goal`, {
+    const body = await this.request<{ goal?: AgentControllerGoalRecord }>(this.url(`${this.base()}/goal`), {
       method: 'PUT',
       body: options,
     });
@@ -570,7 +603,7 @@ export class AgentControllerSession extends BaseResource {
 
   /** Clear the current goal. */
   async clearGoal(): Promise<void> {
-    await this.request(`${this.base()}/goal`, { method: 'DELETE' });
+    await this.request(this.url(`${this.base()}/goal`), { method: 'DELETE' });
   }
 
   // ---------------------------------------------------------------------------
@@ -579,12 +612,12 @@ export class AgentControllerSession extends BaseResource {
 
   /** Get the current permission rules (per-category and per-tool policies). */
   async getPermissions(): Promise<PermissionRules> {
-    return this.request(`${this.base()}/permissions`);
+    return this.request(this.url(`${this.base()}/permissions`));
   }
 
   /** Set the approval policy for a tool category. */
   async setPermissionForCategory(category: ToolCategory, policy: PermissionPolicy): Promise<void> {
-    await this.request(`${this.base()}/permissions/category`, {
+    await this.request(this.url(`${this.base()}/permissions/category`), {
       method: 'PUT',
       body: { category, policy },
     });
@@ -592,7 +625,7 @@ export class AgentControllerSession extends BaseResource {
 
   /** Set the approval policy for a specific tool. */
   async setPermissionForTool(toolName: string, policy: PermissionPolicy): Promise<void> {
-    await this.request(`${this.base()}/permissions/tool`, {
+    await this.request(this.url(`${this.base()}/permissions/tool`), {
       method: 'PUT',
       body: { toolName, policy },
     });
@@ -604,7 +637,7 @@ export class AgentControllerSession extends BaseResource {
    * or is persisted for later.
    */
   async sendNotification(input: SendNotificationInput): Promise<SendNotificationResult> {
-    return this.request(`${this.base()}/notifications`, {
+    return this.request(this.url(`${this.base()}/notifications`), {
       method: 'POST',
       body: input,
     });
@@ -641,9 +674,13 @@ export class AgentController extends BaseResource {
     return this.request(`${this.basePath()}/workspace`);
   }
 
-  /** Scope to a session bound to `resourceId` (e.g. a user or conversation id). */
-  session(resourceId: string): AgentControllerSession {
-    return new AgentControllerSession(this.options, this.controllerId, resourceId);
+  /**
+   * Scope to a session bound to `resourceId` (e.g. a user or conversation id).
+   * Pass `scope` to address an independent session over the same resourceId
+   * (e.g. one session per git worktree, with the worktree path as the scope).
+   */
+  session(resourceId: string, scope?: string): AgentControllerSession {
+    return new AgentControllerSession(this.options, this.controllerId, resourceId, scope);
   }
 }
 

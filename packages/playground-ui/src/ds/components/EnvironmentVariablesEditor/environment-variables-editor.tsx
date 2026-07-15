@@ -2,6 +2,7 @@ import { EnvironmentVariablesEditorActions } from './environment-variables-edito
 import { EnvironmentVariablesEditorAddButton } from './environment-variables-editor-add-button';
 import { EnvironmentVariablesEditorDuplicateKeysError } from './environment-variables-editor-duplicate-keys-error';
 import { EnvironmentVariablesEditorMessages } from './environment-variables-editor-messages';
+import { EnvironmentVariablesEditorPasteHint } from './environment-variables-editor-paste-hint';
 import { EnvironmentVariablesEditorReadOnlyEmpty } from './environment-variables-editor-read-only-empty';
 import { EnvironmentVariablesEditorReadOnlyHeader } from './environment-variables-editor-read-only-header';
 import { EnvironmentVariablesEditorReadOnlyItem } from './environment-variables-editor-read-only-item';
@@ -69,6 +70,7 @@ export const EnvironmentVariablesEditor = Object.assign(renderEnvironmentVariabl
   Rows: EnvironmentVariablesEditorRows,
   Row: EnvironmentVariablesEditorRow,
   AddButton: EnvironmentVariablesEditorAddButton,
+  PasteHint: EnvironmentVariablesEditorPasteHint,
   Messages: EnvironmentVariablesEditorMessages,
   DuplicateKeysError: EnvironmentVariablesEditorDuplicateKeysError,
   Actions: EnvironmentVariablesEditorActions,
@@ -83,6 +85,7 @@ export type {
   EnvironmentVariablesEditorAddButtonProps,
   EnvironmentVariablesEditorDuplicateKeysErrorProps,
   EnvironmentVariablesEditorMessagesProps,
+  EnvironmentVariablesEditorPasteHintProps,
   EnvironmentVariablesEditorProps,
   EnvironmentVariablesEditorReadOnlyEmptyProps,
   EnvironmentVariablesEditorReadOnlyHeaderProps,

@@ -113,7 +113,7 @@ export function CodeBlock({
           lang={lang}
           className={cn(
             'px-4 py-3 font-mono text-ui-sm text-neutral5',
-            overflow === 'scroll' ? 'overflow-x-auto whitespace-pre' : 'whitespace-pre-wrap break-all',
+            overflow === 'scroll' ? 'overflow-x-auto whitespace-pre' : 'break-all whitespace-pre-wrap',
           )}
         />
         <CopyButton
@@ -122,7 +122,7 @@ export function CodeBlock({
           tooltip={copyTooltip}
           size="sm"
           className={cn(
-            'absolute top-2 right-2 opacity-100 pointer-fine:opacity-0 group-hover:opacity-100 group-focus-within:opacity-100',
+            'absolute top-2 right-2 opacity-100 group-focus-within:opacity-100 group-hover:opacity-100 pointer-fine:opacity-0',
             transitions.opacity,
           )}
         />

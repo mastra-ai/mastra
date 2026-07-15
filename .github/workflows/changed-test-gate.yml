@@ -18,13 +18,13 @@ concurrency:
 jobs:
   changed-tests:
     # This workflow runs PR code in the unprivileged pull_request sandbox, without
-    # secrets or write permissions. Keep PR Triage on pull_request_target for labels.
+    # secrets or write permissions.
     if: ${{ github.repository == 'mastra-ai/mastra' && github.event.pull_request.draft == false }}
     runs-on: starsling-ubuntu-24.04
     timeout-minutes: 30
     steps:
       - name: Checkout base
-        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           persist-credentials: false
           ref: ${{ github.event.pull_request.base.sha }}

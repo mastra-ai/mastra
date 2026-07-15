@@ -140,7 +140,7 @@ describe('Anthropic e2e test', () => {
   beforeAll(() => mock.start());
   afterAll(() => mock.saveAndStop());
 
-  it('should be succesful with structured_output', { timeout: 40_000 }, async () => {
+  it('should be successful with structured_output', { timeout: 40_000 }, async () => {
     const schema = z.object(allSchemas);
 
     const model = anthropic('claude-sonnet-4-0');

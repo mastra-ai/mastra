@@ -9,6 +9,7 @@ const sidebars = {
   referenceSidebar: [
     { type: 'doc', id: 'index', label: 'Overview' },
     { type: 'doc', id: 'configuration', label: 'Configuration' },
+    { type: 'doc', id: 'project-structure', label: 'Project Structure' },
     {
       type: 'category',
       label: 'ACP',
@@ -164,6 +165,19 @@ const sidebars = {
         { type: 'doc', id: 'client-js/tools', label: 'Tools API' },
         { type: 'doc', id: 'client-js/vectors', label: 'Vectors API' },
         { type: 'doc', id: 'client-js/workflows', label: 'Workflows API' },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Code SDK',
+      collapsed: true,
+      items: [
+        {
+          type: 'doc',
+          id: 'code-sdk/mount-agent-controller',
+          label: 'mountAgentControllerOnMastra()',
+          customProps: { tags: ['beta'] },
+        },
       ],
     },
     {
@@ -346,6 +360,27 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'File-based Agents',
+      items: [
+        { type: 'doc', id: 'file-based-agents/config', label: 'config.ts' },
+        { type: 'doc', id: 'file-based-agents/instructions', label: 'Instructions' },
+        { type: 'doc', id: 'file-based-agents/logger', label: 'Logger' },
+        { type: 'doc', id: 'file-based-agents/memory', label: 'Memory' },
+        { type: 'doc', id: 'file-based-agents/observability', label: 'Observability' },
+        { type: 'doc', id: 'file-based-agents/processors', label: 'Processors' },
+        { type: 'doc', id: 'file-based-agents/scorers', label: 'Scorers' },
+        { type: 'doc', id: 'file-based-agents/server', label: 'Server' },
+        { type: 'doc', id: 'file-based-agents/skills', label: 'Skills' },
+        { type: 'doc', id: 'file-based-agents/storage', label: 'Storage' },
+        { type: 'doc', id: 'file-based-agents/studio', label: 'Studio' },
+        { type: 'doc', id: 'file-based-agents/subagents', label: 'Subagents' },
+        { type: 'doc', id: 'file-based-agents/tools', label: 'Tools' },
+        { type: 'doc', id: 'file-based-agents/workflows', label: 'Workflows' },
+        { type: 'doc', id: 'file-based-agents/workspace', label: 'Workspace' },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Mastra platform',
       collapsed: true,
       items: [{ type: 'doc', id: 'mastra-platform/api', label: 'API Reference' }],
@@ -359,12 +394,14 @@ const sidebars = {
         { type: 'doc', id: 'memory/memory-class', label: 'Memory Class' },
         { type: 'doc', id: 'memory/observational-memory', label: 'Observational Memory' },
         { type: 'doc', id: 'memory/serialized-memory-config', label: 'SerializedMemoryConfig' },
+        { type: 'doc', id: 'memory/summarizeConversation', label: 'summarizeConversation()' },
         { type: 'doc', id: 'memory/cloneThread', label: '.cloneThread()' },
         { type: 'doc', id: 'memory/createThread', label: '.createThread()' },
         { type: 'doc', id: 'memory/deleteMessages', label: '.deleteMessages()' },
         { type: 'doc', id: 'memory/getThreadById', label: '.getThreadById()' },
         { type: 'doc', id: 'memory/listThreads', label: '.listThreads()' },
         { type: 'doc', id: 'memory/recall', label: '.recall()' },
+        { type: 'doc', id: 'memory/summarizeThread', label: '.summarizeThread()' },
       ],
     },
     {
