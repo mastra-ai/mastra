@@ -12,7 +12,7 @@ import { createPerplexity } from '@ai-sdk/perplexity-v5';
 import { createTogetherAI } from '@ai-sdk/togetherai-v5';
 import { createXai } from '@ai-sdk/xai-v6';
 import { createGateway } from '@internal/ai-v6';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider-v5';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider-v6';
 import { parseModelRouterId } from '../gateway-resolver.js';
 import { MastraModelGateway } from './base.js';
 import type {

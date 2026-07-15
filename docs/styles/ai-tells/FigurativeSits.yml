@@ -1,0 +1,75 @@
+---
+extends: existence
+message: "AI overused verb: '%s'. Name the literal relation: is at or rests with. Disable this rule for furniture or geography prose."
+level: error
+nonword: true
+ignorecase: true
+# "Sits" is an AI fingerprint for placing an abstraction: an idea "sits at the
+# intersection of" two fields, a tension "sits at the core of" a debate, the
+# responsibility "sits with" a team, and unfinished work just "sits" idle. The
+# sibling of FigurativeLands, but the calculus flips: literal sitting is
+# everywhere (people, pets, furniture, buildings all sit), so a broad
+# subject + "sits" + preposition rule would flood. The complement after the
+# verb is the discriminator instead — each token curates a figurative sense, so
+# "the cat sits on the mat" stays quiet. Domain writing where these placements
+# are literal (furniture, cartography, page layout) disables the whole rule.
+# "At the heart of" is left to PromotionalPuffery to avoid a double flag.
+tokens:
+  # --- Conceptual-location placement: an abstraction is located at a figurative
+  # point ("sits at the intersection of," "sits at the core of"). The scaffold
+  # noun is the tell, so the subject need not be curated.
+  - "\\bsit(?:s|ting)? (?:squarely |firmly |neatly |cleanly |comfortably |uncomfortably |uneasily |awkwardly |snugly )?at the (?:intersection|center|centre|core|nexus|crux|crossroads|confluence|junction|foundation|edge|apex|boundary) of\\b"
+
+  # --- Range placement: a value or answer located along an implied spectrum
+  # ("sits somewhere between," "sits somewhere in the middle").
+  - "\\bsit(?:s|ting)? somewhere (?:between|in|along|on|near|toward|around|beyond)\\b"
+
+  # --- Adverb + relational preposition. The figurative adverb marks the
+  # placement as conceptual ("sits squarely within scope," "sits comfortably
+  # alongside," "sits uneasily with"), which a literal object rarely does.
+  - "\\bsit(?:s|ting)? (?:squarely|firmly|neatly|cleanly|comfortably|uncomfortably|uneasily|awkwardly|snugly|precariously) (?:within|inside|in|at|on|alongside|atop|above|below|beneath|beside|between|with|next|among|amid|outside)\\b"
+
+  # --- Companion or stacked placement. "Alongside," "atop," and "astride" read
+  # as figurative pairing, ranking, or straddling ("sits alongside the
+  # incumbent," "sits atop the leaderboard," "sits astride two domains").
+  # Literal senses (a fork alongside a plate) disable the rule for furniture
+  # prose.
+  - "\\bsit(?:s|ting)? (?:alongside|atop|astride)\\b"
+
+  # --- Rests-with and within-scope: responsibility or membership assigned by
+  # placement ("the decision sits with the board," "this sits within our
+  # remit"). "Sit with it" for reflection rides along on purpose.
+  - "\\bsit(?:s|ting)? with\\b"
+  - "\\bsit(?:s|ting)? (?:squarely |firmly |neatly |comfortably )?within\\b"
+
+  # --- Dormancy: work left unaddressed just "sits" ("the ticket sits idle,"
+  # "the feature sits in isolation," "the draft just sits there").
+  - "\\bjust sit(?:s|ting)? there\\b"
+  - "\\bsit(?:s|ting)? in isolation\\b"
+  - "\\bsit(?:s|ting)? (?:idle|unused|untouched|unresolved|unaddressed|unfinished|dormant|neglected|stale|forgotten|abandoned)\\b"
+
+  # --- Acceptance idiom: an idea that "doesn't sit right" or "sits well." A
+  # literal "sit still" is not in the set, so it stays quiet.
+  - "\\bsit(?:s|ting)? (?:right|well|poorly|badly|wrong)\\b"
+
+  # --- Emotional weight: news or a verdict that "sits heavy."
+  - "\\bsit(?:s|ting)? (?:heavy|heavily)\\b"
+
+  # --- Opposition placement ("sits at odds with," "sits in tension with").
+  - "\\bsit(?:s|ting)? (?:at odds|in tension|in conflict|in opposition) (?:with|to)\\b"
+
+  # --- Limbo: work stranded in an abstract holding place ("sits in limbo").
+  - "\\bsit(?:s|ting)? in (?:limbo|purgatory|a holding pattern|the balance|a gr[ae]y area|no man's land)\\b"
+
+  # --- Emphasis and indecision idioms ("sits front and center," "sits on the
+  # fence").
+  - "\\bsit(?:s|ting)? front and cent(?:er|re)\\b"
+  - "\\bsit(?:s|ting)? on the fence\\b"
+
+  # --- Layer-stack placement, gated on a structure noun so a literal "the shelf
+  # sits above the sink" stays quiet ("the cache sits above the database tier").
+  - "\\bsit(?:s|ting)? (?:just |right |directly )?(?:above|below|beneath|underneath|on top of) the (?:\\w+ )?(?:layer|stack|tier|level|hierarchy|pipeline|chain)\\b"
+
+  # --- Ranking placement, gated on a priority noun ("sits at the top of the
+  # backlog"). Bare "atop" is already covered by the companion arm above.
+  - "\\bsit(?:s|ting)? at the top of the (?:agenda|priority|priorities|to-?do|backlog|pile|queue)\\b"
