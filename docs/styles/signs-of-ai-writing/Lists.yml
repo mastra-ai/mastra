@@ -1,8 +1,0 @@
-extends: existence
-message: 'Avoid using numbered sequence words (firstly, secondly, thirdly) in the same paragraph.'
-level: warning
-scope: paragraph
-link: https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing
-ignorecase: true
-raw:
-  - '\b(firstly|first)[,\s][\s\S]*\b(secondly|second)[,\s][\s\S]*\b(thirdly|third)\b'
