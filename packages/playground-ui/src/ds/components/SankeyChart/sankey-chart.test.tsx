@@ -22,6 +22,12 @@ const data = [
   { channel: 'Referral', region: 'US', outcome: 'Won' },
 ];
 
+const columns = [
+  { id: 'channel', label: 'Channel' },
+  { id: 'region', label: 'Region' },
+  { id: 'outcome', label: 'Outcome' },
+];
+
 function getColumnCheckbox(label: string) {
   const labelElement = screen.getByText(label, { selector: 'span' }).closest('label');
   const checkbox = labelElement?.querySelector<HTMLElement>('[role="checkbox"]');
@@ -36,26 +42,12 @@ function Example({
   onCurveClick?: (selection: unknown) => void;
   columnOrder?: Array<string>;
 }) {
-  return (
-    <SankeyChart data={data} onCurveClick={onCurveClick} columnOrder={columnOrder}>
-      <SankeyChart.Column id="channel" label="Channel" />
-      <SankeyChart.Column id="region" label="Region" />
-      <SankeyChart.Column id="outcome" label="Outcome" />
-    </SankeyChart>
-  );
+  return <SankeyChart data={data} columns={columns} onCurveClick={onCurveClick} columnOrder={columnOrder} />;
 }
 
 describe('SankeyChart', () => {
-  it('discovers column definitions nested in a fragment', async () => {
-    const columns = (
-      <>
-        <SankeyChart.Column id="channel" label="Channel" />
-        <SankeyChart.Column id="region" label="Region" />
-        <SankeyChart.Column id="outcome" label="Outcome" />
-      </>
-    );
-
-    render(<SankeyChart data={data}>{columns}</SankeyChart>);
+  it('renders the supplied columns', async () => {
+    render(<SankeyChart data={data} columns={columns} />);
 
     expect(await screen.findAllByText('Channel')).not.toHaveLength(0);
     expect(screen.queryByText('Select at least two columns with data to display a flow')).toBeNull();

@@ -1,5 +1,5 @@
 export { SankeyChart } from './sankey-chart';
-export type { SankeyChartColumnProps, SankeyChartElement, SankeyChartProps } from './sankey-chart';
+export type { SankeyChartProps } from './sankey-chart';
 export {
   buildSankeyChartGraph,
   getSankeyChartCurveSelection,

@@ -12,13 +12,11 @@ const data = [
   { channel: 'Partner', region: 'Europe', outcome: 'Won' },
 ];
 
-const columns = (
-  <>
-    <SankeyChart.Column id="channel" label="Channel" />
-    <SankeyChart.Column id="region" label="Region" />
-    <SankeyChart.Column id="outcome" label="Outcome" />
-  </>
-);
+const columns = [
+  { id: 'channel', label: 'Channel' },
+  { id: 'region', label: 'Region' },
+  { id: 'outcome', label: 'Outcome' },
+];
 
 const meta: Meta<typeof SankeyChart> = {
   title: 'Metrics/SankeyChart',
@@ -32,7 +30,7 @@ type Story = StoryObj<typeof SankeyChart>;
 export const Default: Story = {
   render: () => (
     <div className="w-full p-8">
-      <SankeyChart data={data}>{columns}</SankeyChart>
+      <SankeyChart data={data} columns={columns} />
     </div>
   ),
 };
@@ -46,13 +44,12 @@ export const Interactive: Story = {
       <div className="w-full p-8">
         <SankeyChart
           data={data}
+          columns={columns}
           columnOrder={columnOrder}
           onColumnOrderChange={setColumnOrder}
           visibleColumnIds={visibleColumnIds}
           onVisibleColumnIdsChange={setVisibleColumnIds}
-        >
-          {columns}
-        </SankeyChart>
+        />
       </div>
     );
   },
@@ -64,9 +61,7 @@ export const ClickableCurves: Story = {
 
     return (
       <div className="w-full space-y-4 p-8">
-        <SankeyChart data={data} onCurveClick={setSelection}>
-          {columns}
-        </SankeyChart>
+        <SankeyChart data={data} columns={columns} onCurveClick={setSelection} />
         <div className="rounded-md border border-border1 bg-surface2 p-3 text-ui-sm text-neutral4">
           {selection
             ? `${selection.source.column.label}: ${selection.source.value} → ${selection.target.column.label}: ${selection.target.value} (${selection.records.length} records)`
@@ -80,7 +75,7 @@ export const ClickableCurves: Story = {
 export const Empty: Story = {
   render: () => (
     <div className="w-full p-8">
-      <SankeyChart data={[]}>{columns}</SankeyChart>
+      <SankeyChart data={[]} columns={columns} />
     </div>
   ),
 };

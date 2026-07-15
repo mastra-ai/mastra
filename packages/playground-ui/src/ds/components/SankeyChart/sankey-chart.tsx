@@ -1,9 +1,8 @@
-/* eslint-disable react-refresh/only-export-components -- Compound component parts are intentionally colocated. */
 import type { DraggableProvided, DropResult, DroppableProvided } from '@hello-pangea/dnd';
 import { DragDropContext, Draggable, Droppable } from '@hello-pangea/dnd';
 import { GripVertical } from 'lucide-react';
-import { Children, Fragment, isValidElement, useState } from 'react';
-import type { CSSProperties, KeyboardEvent, ReactElement, ReactNode } from 'react';
+import { useState } from 'react';
+import type { CSSProperties, KeyboardEvent } from 'react';
 import type { SankeyLinkProps, SankeyNodeProps } from 'recharts';
 import { ResponsiveContainer, Sankey } from 'recharts';
 import { buildSankeyChartGraph, getSankeyChartCurveSelection, reorderSankeyChartColumns } from './sankey-chart-utils';
@@ -13,11 +12,9 @@ import { Colors } from '@/ds/tokens';
 import { stringToColor } from '@/lib/colors';
 import { cn } from '@/lib/utils';
 
-export type SankeyChartColumnProps = SankeyChartColumn;
-
 export type SankeyChartProps = {
   data: Array<SankeyChartRecord>;
-  children: ReactNode;
+  columns: Array<SankeyChartColumn>;
   height?: CSSProperties['height'];
   className?: string;
   columnOrder?: Array<string>;
@@ -27,13 +24,9 @@ export type SankeyChartProps = {
   onCurveClick?: (selection: SankeyChartCurveSelection) => void;
 };
 
-function SankeyChartColumnDefinition(_: SankeyChartColumnProps) {
-  return null;
-}
-
-function SankeyChartRoot({
+export function SankeyChart({
   data,
-  children,
+  columns,
   height = 320,
   className,
   columnOrder,
@@ -42,11 +35,10 @@ function SankeyChartRoot({
   onVisibleColumnIdsChange,
   onCurveClick,
 }: SankeyChartProps) {
-  const declaredColumns = getDeclaredColumns(children);
-  const declaredIds = declaredColumns.map(column => column.id);
-  const [internalOrder, setInternalOrder] = useState(declaredIds);
-  const [internalVisibleIds, setInternalVisibleIds] = useState(declaredIds);
-  const orderedColumns = orderColumns(declaredColumns, columnOrder ?? internalOrder);
+  const columnIds = columns.map(column => column.id);
+  const [internalOrder, setInternalOrder] = useState(columnIds);
+  const [internalVisibleIds, setInternalVisibleIds] = useState(columnIds);
+  const orderedColumns = orderColumns(columns, columnOrder ?? internalOrder);
   const visibleIds = new Set(visibleColumnIds ?? internalVisibleIds);
   const enabledColumns = orderedColumns.filter(column => visibleIds.has(column.id));
   const graph = buildSankeyChartGraph(data, enabledColumns);
@@ -262,25 +254,9 @@ function SankeyLink({
   );
 }
 
-function getDeclaredColumns(children: ReactNode): Array<SankeyChartColumn> {
-  return Children.toArray(children).flatMap(child => {
-    if (isValidElement<{ children?: ReactNode }>(child) && child.type === Fragment) {
-      return getDeclaredColumns(child.props.children);
-    }
-    if (!isValidElement<SankeyChartColumnProps>(child) || child.type !== SankeyChartColumnDefinition) return [];
-    return [{ id: child.props.id, label: child.props.label }];
-  });
-}
-
 function orderColumns(columns: Array<SankeyChartColumn>, order: Array<string>) {
   const positions = new Map(order.map((id, index) => [id, index]));
   return [...columns].sort(
     (left, right) => (positions.get(left.id) ?? columns.length) - (positions.get(right.id) ?? columns.length),
   );
 }
-
-export const SankeyChart = Object.assign(SankeyChartRoot, {
-  Column: SankeyChartColumnDefinition,
-});
-
-export type SankeyChartElement = ReactElement<SankeyChartColumnProps, typeof SankeyChartColumnDefinition>;
