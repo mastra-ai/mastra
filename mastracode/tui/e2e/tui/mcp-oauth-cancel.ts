@@ -85,12 +85,10 @@ export const mcpOauthCancelScenario = {
     await runtime.waitForScreenText(/Authenticate/i, terminal, 8_000);
     terminal.write('\r');
 
-    // The authorize endpoint is held open, so the flow parks and the server sits
-    // in the connecting state while the "browser" is nominally open.
-    await runtime.waitForScreenText(/oauth_server \[http\] connecting/i, terminal, 8_000);
-
-    // Re-open the sub-menu on the same server; a mid-OAuth server offers Cancel.
-    terminal.write('\r');
+    // The authorize endpoint is held open, so the flow parks. The selector
+    // surfaces the cancel affordance in the row state and auto-opens the
+    // "Cancel authentication" sub-menu, pre-selected, so Enter backs out.
+    await runtime.waitForScreenText(/oauth_server \[http\] authenticating — Enter to cancel/i, terminal, 8_000);
     await runtime.waitForScreenText(/Cancel authentication/i, terminal, 8_000);
     terminal.write('\r');
 
