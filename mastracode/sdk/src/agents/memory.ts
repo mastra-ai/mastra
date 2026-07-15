@@ -101,7 +101,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
       : DYNAMIC_AGENTS_MD_INSTRUCTION;
     const reflectionInstruction = caveman ? CAVEMAN_OM_INSTRUCTION : undefined;
 
-    const memory = new Memory({
+    cachedMemory = new Memory({
       storage,
       vector: vector || false,
       embedder: vector ? fastembed.small : undefined,
@@ -134,8 +134,6 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
         },
       },
     });
-
-    cachedMemory = memory;
     cachedMemoryKey = cacheKey;
 
     return cachedMemory;
