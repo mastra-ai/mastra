@@ -570,7 +570,13 @@ function walk(schema: JsonSchema): z.ZodTypeAny {
   if (Array.isArray(schema.enum) && schema.enum.length > 0) {
     out = z.enum(schema.enum.map(String) as [string, ...string[]]);
   } else if (Array.isArray(schema.type)) {
-    out = z.union(schema.type.map((t: string) => walk({ ...schema, type: t })) as any);
+    const options = schema.type.map((t: string) => walk({ ...schema, type: t }));
+    // z.union requires a tuple of at least two members; guard shorter arrays.
+    if (options.length === 1) {
+      out = options[0]!;
+    } else {
+      out = z.union(options as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]]);
+    }
   } else {
     switch (schema.type) {
       case 'object': {
@@ -580,8 +586,8 @@ function walk(schema: JsonSchema): z.ZodTypeAny {
           const childSchema = walk(child as JsonSchema);
           shape[key] = required.has(key) ? childSchema : childSchema.optional();
         }
-        out = z.object(shape);
-        if (schema.additionalProperties === true) out = (out as any).passthrough();
+        const obj = z.object(shape);
+        out = schema.additionalProperties === true ? obj.passthrough() : obj;
         break;
       }
       case 'array':

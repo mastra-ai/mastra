@@ -3,20 +3,9 @@
  * Calls `mastra.addStoredWorkflow()` — the same path `POST /api/stored/workflows`
  * takes. After this returns the workflow is immediately runnable.
  */
+import type { Mastra } from '@mastra/core/mastra';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-
-interface AddStoredWorkflowable {
-  addStoredWorkflow: (def: {
-    id: string;
-    description?: string;
-    inputSchema: unknown;
-    outputSchema: unknown;
-    graph: unknown[];
-  }) => Promise<void>;
-  listAgents?: () => Record<string, unknown>;
-  listTools?: () => Record<string, unknown>;
-}
 
 /**
  * Walk every entry the schema can emit and collect referenced agent/tool ids so
@@ -27,27 +16,42 @@ interface AddStoredWorkflowable {
  * missing engine feature. Catch the mistake here and return a targeted error
  * naming both the wrong id and the shape it should have.
  */
+type RefEntry =
+  | { type: 'agent'; id: string; agentId: string }
+  | { type: 'tool'; id: string; toolId: string }
+  | { type: 'parallel'; steps: readonly RefEntry[] }
+  | { type: 'foreach'; step: RefEntry };
+
 function collectRefs(graph: readonly unknown[]): {
   agents: Array<{ stepId: string; agentId: string }>;
   tools: Array<{ stepId: string; toolId: string }>;
 } {
   const agents: Array<{ stepId: string; agentId: string }> = [];
   const tools: Array<{ stepId: string; toolId: string }> = [];
-  const visit = (entry: any) => {
+  const visit = (entry: unknown) => {
     if (!entry || typeof entry !== 'object') return;
-    switch (entry.type) {
-      case 'agent':
-        agents.push({ stepId: entry.id, agentId: entry.agentId });
+    const e = entry as Partial<RefEntry> & { type?: unknown };
+    switch (e.type) {
+      case 'agent': {
+        const a = e as Extract<RefEntry, { type: 'agent' }>;
+        agents.push({ stepId: a.id, agentId: a.agentId });
         return;
-      case 'tool':
-        tools.push({ stepId: entry.id, toolId: entry.toolId });
+      }
+      case 'tool': {
+        const t = e as Extract<RefEntry, { type: 'tool' }>;
+        tools.push({ stepId: t.id, toolId: t.toolId });
         return;
-      case 'parallel':
-        (entry.steps as unknown[]).forEach(visit);
+      }
+      case 'parallel': {
+        const p = e as Extract<RefEntry, { type: 'parallel' }>;
+        p.steps.forEach(visit);
         return;
-      case 'foreach':
-        visit(entry.step);
+      }
+      case 'foreach': {
+        const f = e as Extract<RefEntry, { type: 'foreach' }>;
+        visit(f.step);
         return;
+      }
       default:
         return;
     }
@@ -164,7 +168,7 @@ export const saveWorkflowTool = createTool({
   }),
   execute: async (def, { mastra }) => {
     if (!mastra) throw new Error('save-workflow requires a Mastra context.');
-    const m = mastra as unknown as AddStoredWorkflowable;
+    const m = mastra as Mastra;
 
     // Pre-flight: verify every agentId / toolId the graph references exists in
     // the correct registry. This catches the common builder-agent mistake of
@@ -205,7 +209,11 @@ export const saveWorkflowTool = createTool({
       );
     }
 
-    await m.addStoredWorkflow(def);
+    // The Zod schema output is structurally compatible with
+    // StoredWorkflowGraph, but TS can't prove it (optional-vs-required
+    // discrepancies on `foreach.opts`). Pre-flight validation above already
+    // enforces the shape; the cast documents that boundary.
+    await m.addStoredWorkflow(def as Parameters<Mastra['addStoredWorkflow']>[0]);
     return { ok: true as const, id: def.id };
   },
 });

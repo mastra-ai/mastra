@@ -22,7 +22,7 @@ export const listWorkflowsTool = createTool({
   }),
   execute: async (_input, { mastra }) => {
     if (!mastra) throw new Error('list-workflows requires a Mastra context.');
-    const { workflows, total } = await listWorkflows(mastra as unknown as Mastra);
+    const { workflows, total } = await listWorkflows(mastra as Mastra);
     return {
       workflows: workflows.map(wf => ({ id: wf.id, description: wf.description, status: wf.status })),
       total,

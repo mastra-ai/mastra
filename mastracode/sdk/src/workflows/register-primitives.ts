@@ -63,12 +63,9 @@ export async function registerWorkflowBuilderPrimitives(
 ): Promise<void> {
   const { projectPath, allowedPaths = [], codeAgent, mcpManager } = options;
 
-  const addAgent = (mastra as unknown as { addAgent: (agent: unknown, key?: string) => void }).addAgent;
-  const addTool = (mastra as unknown as { addTool: (tool: unknown, key?: string) => void }).addTool;
-
   // 1. Agents workflows can compose.
-  addAgent.call(mastra, workflowBuilderAgent, 'workflow-builder');
-  addAgent.call(mastra, codeAgent, 'code-agent');
+  mastra.addAgent(workflowBuilderAgent, 'workflow-builder');
+  mastra.addAgent(codeAgent, 'code-agent');
 
   // 2. Workspace tools — bound to a project-rooted local workspace.
   const workspace = new Workspace({
@@ -83,25 +80,25 @@ export async function registerWorkflowBuilderPrimitives(
   });
   const workspaceTools = await createWorkspaceTools(workspace, { workspace });
   for (const [toolId, tool] of Object.entries(workspaceTools)) {
-    addTool.call(mastra, tool, toolId);
+    mastra.addTool(tool, toolId);
   }
 
   // 3. Web tools — Tavily only. Provider-native web tools (Anthropic/OpenAI)
   //    are model-locked and would freeze workflows to one provider.
   if (hasTavilyKey()) {
-    addTool.call(mastra, createWebSearchTool(), 'web-search');
-    addTool.call(mastra, createWebExtractTool(), 'web-extract');
+    mastra.addTool(createWebSearchTool(), 'web-search');
+    mastra.addTool(createWebExtractTool(), 'web-extract');
   }
 
   // 4. notification_inbox — LazyNotificationsStorage resolves the notifications
   //    domain per-call rather than at boot, so it works even when the domain
   //    isn't fully initialised yet.
-  const storage = (mastra as unknown as { getStorage: () => unknown }).getStorage();
+  const storage = mastra.getStorage();
   if (storage) {
     const notificationInbox = createNotificationInboxTool({
       storage: new LazyNotificationsStorage(storage as never),
     });
-    addTool.call(mastra, notificationInbox, MC_TOOLS.NOTIFICATION_INBOX);
+    mastra.addTool(notificationInbox, MC_TOOLS.NOTIFICATION_INBOX);
   }
 
   // 5. MCP tools — snapshot the current set. Ids are already server-namespaced
@@ -109,7 +106,7 @@ export async function registerWorkflowBuilderPrimitives(
   //    `mastra.getTool(id)` resolves them at run time.
   if (mcpManager) {
     for (const [toolId, tool] of Object.entries(mcpManager.getTools())) {
-      addTool.call(mastra, tool, toolId);
+      mastra.addTool(tool, toolId);
     }
   }
 }

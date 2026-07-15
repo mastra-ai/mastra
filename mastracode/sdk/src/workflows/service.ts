@@ -37,18 +37,6 @@ interface WorkflowRunOutputLike {
   result: Promise<unknown>;
 }
 
-interface MastraLike {
-  getStorage: () => { getStore: (name: string) => Promise<unknown> } | undefined;
-  getWorkflow: (id: string) =>
-    | {
-        createRun: () => Promise<{
-          stream: (args: { inputData: unknown; requestContext?: unknown }) => WorkflowRunOutputLike;
-        }>;
-      }
-    | undefined;
-  removeWorkflow?: (keyOrId: string) => boolean;
-}
-
 interface WorkflowDefinitionsStore {
   list: (args?: { status?: 'active' | 'archived' }) => Promise<{ definitions: StoredWorkflowRow[]; total: number }>;
   get: (id: string) => Promise<StoredWorkflowRow | null>;
@@ -56,9 +44,14 @@ interface WorkflowDefinitionsStore {
 }
 
 async function workflowDefinitionsStore(mastra: Mastra): Promise<WorkflowDefinitionsStore> {
-  const storage = (mastra as unknown as MastraLike).getStorage();
+  const storage = mastra.getStorage();
   if (!storage) throw new Error('Storage is not configured on the Mastra instance.');
-  const store = (await storage.getStore('workflowDefinitions')) as WorkflowDefinitionsStore | undefined;
+  // `getStore` is a generic domain accessor; workflowDefinitions is registered
+  // by mastracode. The domain shape is validated at boot; cast the resolved
+  // store to the interface we exercise.
+  const store = (await (storage as unknown as { getStore: (name: string) => Promise<unknown> }).getStore(
+    'workflowDefinitions',
+  )) as WorkflowDefinitionsStore | undefined;
   if (!store) throw new Error('workflowDefinitions storage domain is not available.');
   return store;
 }
@@ -80,10 +73,7 @@ export async function deleteWorkflow(mastra: Mastra, id: string): Promise<{ ok: 
   // Also unregister the live in-process Workflow instance so a subsequent
   // save-workflow with the same id re-registers cleanly instead of getting
   // no-op'd by addWorkflow's first-write-wins guard.
-  const removeWorkflow = (mastra as unknown as MastraLike).removeWorkflow;
-  if (typeof removeWorkflow === 'function') {
-    removeWorkflow.call(mastra, id);
-  }
+  mastra.removeWorkflow(id);
   return { ok: true, id };
 }
 
@@ -109,11 +99,23 @@ export async function runWorkflow(
    */
   onEvent?: WorkflowRunEventCallback,
 ): Promise<RunResult> {
-  const wf = (mastra as unknown as MastraLike).getWorkflow(workflowId);
+  // `getWorkflow` is generic over the statically-registered workflow map, but
+  // stored workflows are registered dynamically at load time — the id is a
+  // runtime value, not a compile-time key. `as never` widens the arg past the
+  // generic constraint; the runtime lookup already validates.
+  let wf: ReturnType<Mastra['getWorkflow']> | undefined;
+  try {
+    wf = mastra.getWorkflow(workflowId as never);
+  } catch {
+    wf = undefined;
+  }
   if (!wf) throw new Error(`No workflow registered with id "${workflowId}". Was it built and saved?`);
 
   const run = await wf.createRun();
-  const output = run.stream({ inputData, requestContext });
+  const output = run.stream({
+    inputData,
+    requestContext: requestContext as Parameters<typeof run.stream>[0]['requestContext'],
+  }) as unknown as WorkflowRunOutputLike;
   if (onEvent) {
     for await (const event of output.fullStream) {
       try {

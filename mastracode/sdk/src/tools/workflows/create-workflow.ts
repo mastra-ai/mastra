@@ -7,21 +7,9 @@
  * The split exists so the parent code-agent's system prompt stays focused on
  * coding and isn't polluted with the long workflow-authoring contract.
  */
+import type { Mastra } from '@mastra/core/mastra';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-
-interface AgentLike {
-  stream: (
-    input: string,
-    options?: { requestContext?: unknown },
-  ) => Promise<{
-    fullStream: ReadableStream<{
-      type: string;
-      payload?: { toolName?: string; result?: unknown; error?: unknown; args?: unknown };
-    }>;
-    text: Promise<string>;
-  }>;
-}
 
 /**
  * Coerce an unknown thrown value into a readable string. Sub-agent tool errors
@@ -51,9 +39,7 @@ export const createWorkflowTool = createTool({
   }),
   execute: async ({ request }, { mastra, requestContext }) => {
     if (!mastra) throw new Error('create-workflow requires a Mastra context.');
-    const builder = (mastra as unknown as { getAgent: (id: string) => AgentLike | undefined }).getAgent(
-      'workflow-builder',
-    );
+    const builder = (mastra as Mastra).getAgent('workflow-builder' as never);
     if (!builder) {
       throw new Error(
         'The "workflow-builder" sub-agent is not registered on this Mastra instance. Cannot build workflows.',
@@ -80,19 +66,18 @@ export const createWorkflowTool = createTool({
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
-      const toolName = value?.payload?.toolName;
-      if (value?.type === 'tool-call' && toolName === 'save-workflow') {
+      if (value?.type === 'tool-call' && value.payload?.toolName === 'save-workflow') {
         saveAttempted = true;
       }
-      if (value?.type === 'tool-result' && toolName === 'save-workflow') {
-        const result = value.payload?.result as { id?: string; ok?: boolean } | undefined;
+      if (value?.type === 'tool-result' && value.payload?.toolName === 'save-workflow') {
+        const result = value.payload.result as { id?: string; ok?: boolean } | undefined;
         if (result && result.ok === true && typeof result.id === 'string') {
           workflowId = result.id;
           saveSucceeded = true;
         }
       }
-      if (value?.type === 'tool-error' && typeof toolName === 'string') {
-        toolErrors.push({ toolName, error: stringifyError(value.payload?.error) });
+      if (value?.type === 'tool-error' && typeof value.payload?.toolName === 'string') {
+        toolErrors.push({ toolName: value.payload.toolName, error: stringifyError(value.payload.error) });
       }
     }
 

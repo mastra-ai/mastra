@@ -423,7 +423,7 @@ export async function processWorkflowForEach(
         result,
         requestContext,
       });
-      stepResults[getInnerStepId(step.step)] = result as any;
+      stepResults[getInnerStepId(step.step)] = result as StepResult<any, any, any, any>;
     }
 
     await pubsub.publish('workflows', {

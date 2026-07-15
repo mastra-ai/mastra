@@ -21,6 +21,6 @@ export const deleteWorkflowTool = createTool({
   }),
   execute: async ({ id }, { mastra }) => {
     if (!mastra) throw new Error('delete-workflow requires a Mastra context.');
-    return deleteWorkflow(mastra as unknown as Mastra, id);
+    return deleteWorkflow(mastra as Mastra, id);
   },
 });

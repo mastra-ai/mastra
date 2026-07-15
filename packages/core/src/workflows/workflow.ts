@@ -219,17 +219,15 @@ function areProcessorMessageArraysEqual(before: unknown[] | undefined, after: un
 function findStepInGraph(graph: SerializedStepFlowEntry[], stepId: string): SerializedStepFlowEntry | undefined {
   for (const entry of graph) {
     if (entry.type === 'loop') {
-      const inner = entry.step as SerializedSingleStepEntry | SerializedStep<any>;
-      const innerId = 'type' in inner ? (inner.type === 'step' ? inner.step.id : (inner as any).id) : (inner as any).id;
-      if (innerId === stepId) return entry;
+      if (entry.step.id === stepId) return entry;
     }
     if (entry.type === 'foreach') {
       const inner = entry.step;
       const innerId = inner.type === 'step' ? inner.step.id : inner.id;
       if (innerId === stepId) return entry;
     }
-    if (entry.type === 'step' && (entry as any).step?.id === stepId) return entry;
-    if ('id' in entry && (entry as any).id === stepId) return entry;
+    if (entry.type === 'step' && entry.step?.id === stepId) return entry;
+    if ('id' in entry && typeof entry.id === 'string' && entry.id === stepId) return entry;
     if ((entry.type === 'conditional' || entry.type === 'parallel') && 'steps' in entry) {
       const found = findStepInGraph(entry.steps as SerializedStepFlowEntry[], stepId);
       if (found) return found;
@@ -955,12 +953,27 @@ export function createMappingStep(
 }
 
 /**
+ * Steps produced by {@link createStepFromAgent} / {@link createStepFromTool}
+ * smuggle the original agent/tool ref and options on non-public fields so we
+ * can rebuild a declarative graph entry when they land in `.then()` etc.
+ * The intersection with the widest `Step` generic keeps the return-side
+ * assignment to {@link SingleStepEntry} typed while the optional metadata
+ * fields carry the smuggled agent/tool refs.
+ */
+type StepWithRefMetadata = Step<string, any, any, any, any, any, any, any> & {
+  __agentRef?: { id: string };
+  __agentOptions?: unknown;
+  __toolRef?: { id: string };
+  __toolOptions?: unknown;
+};
+
+/**
  * Converts a step passed to `.then()` / `.parallel()` / `.branch()` into the
  * appropriate declarative live graph entry based on its `component` discriminator.
  * Agent/tool steps (built via `createStep`) carry their original ref + options on
  * `__agentRef`/`__toolRef`, allowing us to emit a declarative entry.
  */
-function toSingleStepEntry(step: any): SingleStepEntry {
+function toSingleStepEntry(step: StepWithRefMetadata): SingleStepEntry {
   if (step?.component === 'AGENT' && step.__agentRef) {
     return {
       type: 'agent',
@@ -973,11 +986,11 @@ function toSingleStepEntry(step: any): SingleStepEntry {
   if (step?.component === 'TOOL' && step.__toolRef) {
     return { type: 'tool', id: step.id, toolId: step.__toolRef.id, tool: step.__toolRef, options: step.__toolOptions };
   }
-  return { type: 'step', step };
+  return { type: 'step', step: step as unknown as Step };
 }
 
 /** JSON-safe mirror of {@link toSingleStepEntry}. */
-function toSerializedSingleStepEntry(step: any): SerializedSingleStepEntry {
+function toSerializedSingleStepEntry(step: StepWithRefMetadata): SerializedSingleStepEntry {
   if (step?.component === 'AGENT' && step.__agentRef) {
     return {
       type: 'agent',
@@ -2072,8 +2085,8 @@ export class Workflow<
       any
     >,
   ) {
-    this.stepFlow.push(toSingleStepEntry(step as any));
-    this.serializedStepFlow.push(toSerializedSingleStepEntry(step as any));
+    this.stepFlow.push(toSingleStepEntry(step as StepWithRefMetadata));
+    this.serializedStepFlow.push(toSerializedSingleStepEntry(step as StepWithRefMetadata));
     this.steps[step.id] = step;
     return this as unknown as Workflow<
       TEngineType,
@@ -2460,12 +2473,15 @@ export class Workflow<
         : `Error: Expected Step with state schema that is a subset of workflow state`;
     },
   ) {
-    this.stepFlow.push({ type: 'parallel', steps: steps.map((step: any) => toSingleStepEntry(step)) });
+    this.stepFlow.push({
+      type: 'parallel',
+      steps: steps.map(step => toSingleStepEntry(step as StepWithRefMetadata)),
+    });
     this.serializedStepFlow.push({
       type: 'parallel',
-      steps: steps.map((step: any) => toSerializedSingleStepEntry(step)),
+      steps: steps.map(step => toSerializedSingleStepEntry(step as StepWithRefMetadata)),
     });
-    steps.forEach((step: any) => {
+    steps.forEach(step => {
       this.steps[step.id] = step;
     });
     return this as unknown as Workflow<
@@ -2496,13 +2512,13 @@ export class Workflow<
   >(steps: TBranchSteps) {
     this.stepFlow.push({
       type: 'conditional',
-      steps: steps.map(([_cond, step]) => toSingleStepEntry(step as any)),
+      steps: steps.map(([_cond, step]) => toSingleStepEntry(step as StepWithRefMetadata)),
       conditions: steps.map(([cond]) => cond),
       serializedConditions: steps.map(([cond, _step]) => ({ id: `${_step.id}-condition`, fn: cond.toString() })),
     });
     this.serializedStepFlow.push({
       type: 'conditional',
-      steps: steps.map(([_cond, step]) => toSerializedSingleStepEntry(step as any)),
+      steps: steps.map(([_cond, step]) => toSerializedSingleStepEntry(step as StepWithRefMetadata)),
       serializedConditions: steps.map(([cond, _step]) => ({ id: `${_step.id}-condition`, fn: cond.toString() })),
     });
     steps.forEach(([_, step]) => {
@@ -2654,17 +2670,18 @@ export class Workflow<
   ) {
     const concurrency = opts?.concurrency ?? 1;
     const serializedOpts = typeof concurrency === 'function' ? { fn: concurrency.toString() } : { concurrency };
+    const foreachStep = step as StepWithRefMetadata;
     this.stepFlow.push({
       type: 'foreach',
-      step: toSingleStepEntry(step as any),
+      step: toSingleStepEntry(foreachStep),
       opts: opts ?? { concurrency: 1 },
     });
     this.serializedStepFlow.push({
       type: 'foreach',
-      step: toSerializedSingleStepEntry(step as any),
+      step: toSerializedSingleStepEntry(foreachStep),
       opts: serializedOpts,
     });
-    this.steps[(step as any).id] = step as any;
+    this.steps[foreachStep.id] = foreachStep;
     return this as unknown as Workflow<
       TEngineType,
       TSteps,

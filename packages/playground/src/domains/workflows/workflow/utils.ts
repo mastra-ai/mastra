@@ -189,20 +189,21 @@ const getSingleStepFlowId = (flow: SerializedStepFlowEntry): string => {
   return '';
 };
 
-type SerializedStepLike = Extract<SerializedStepFlowEntry, { type: 'step' }>['step'];
+type SerializedStepInner = Extract<SerializedStepFlowEntry, { type: 'step' }>['step'];
+type SerializedStepLike = Pick<SerializedStepInner, 'id' | 'description' | 'component'> &
+  Partial<Pick<SerializedStepInner, 'serializedStepFlow' | 'mapConfig' | 'canSuspend' | 'metadata'>>;
 
 /**
  * `foreach.step` widened to `SerializedSingleStepEntry` (agent | tool | step | mapping).
- * The graph renderer needs a `SerializedStep`-shaped view of the inner body. For
- * the `type: 'step'` variant, return the wrapped step directly. For agent/tool
- * variants, synthesize an id-only shim so downstream reads (`.id`, `.description`,
- * etc.) don't blow up.
+ * For the `type: 'step'` variant, forward the wrapped step directly; for
+ * agent/tool/mapping variants, synthesize an id-only shim so downstream reads
+ * (`.id`, `.description`, `.component`, ...) don't blow up.
  */
 const unwrapForeachInner = (
   inner: Extract<SerializedStepFlowEntry, { type: 'foreach' }>['step'],
 ): SerializedStepLike => {
   if (inner.type === 'step') return inner.step;
-  return { id: inner.id, description: undefined, component: undefined } as unknown as SerializedStepLike;
+  return { id: inner.id, description: undefined, component: undefined };
 };
 
 const getStepNodeAndEdge = ({

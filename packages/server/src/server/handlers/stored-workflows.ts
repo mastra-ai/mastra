@@ -1,3 +1,5 @@
+import type { Mastra } from '@mastra/core/mastra';
+
 import { HTTPException } from '../http-exception';
 import {
   storedWorkflowIdPathParams,
@@ -96,10 +98,10 @@ export const UPSERT_STORED_WORKFLOW_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, ...def }) => {
     try {
-      // Cast through unknown — the body schema is intentionally loose (the
-      // schemas/graph are agent-constructed JSON) and addStoredWorkflow types
-      // them precisely.
-      await (mastra as any).addStoredWorkflow(def);
+      // Cast because the route-builder types `mastra` as `any`; the body schema
+      // is intentionally loose (the graph is agent-constructed JSON) and
+      // `Mastra.addStoredWorkflow` types the definition precisely.
+      await (mastra as Mastra).addStoredWorkflow(def);
       return { ok: true as const, id: def.id };
     } catch (error) {
       return handleError(error, 'Error upserting stored workflow');

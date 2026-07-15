@@ -22,7 +22,7 @@ export const getWorkflowTool = createTool({
   }),
   execute: async ({ id }, { mastra }) => {
     if (!mastra) throw new Error('get-workflow requires a Mastra context.');
-    const def = await getWorkflow(mastra as unknown as Mastra, id);
+    const def = await getWorkflow(mastra as Mastra, id);
     if (!def) throw new Error(`No workflow with id "${id}".`);
     return {
       id: def.id,

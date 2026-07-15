@@ -94,6 +94,36 @@ export type ParentWorkflow = {
  * generic `workflow.step.run`. `Event.type` is just a string so no event union
  * needs widening.
  */
+/**
+ * A foreach step stores its per-iteration state in a shape that layers on top
+ * of {@link StepResult}: the `payload` is the input array and `output` is the
+ * (partial) array of iteration results, with any per-iteration `suspendPayload`
+ * shape flowing through. This helper narrows the union so call sites that
+ * specifically consume foreach state don't need `as any`, while keeping the
+ * per-iteration item shape untyped (it varies by inner step).
+ */
+type ForeachIterationResult = null | {
+  status?: string;
+  output?: unknown;
+  suspendPayload?: any;
+  [key: string]: unknown;
+};
+type ForeachStepResult = {
+  output?: ForeachIterationResult[];
+  payload?: unknown[];
+  status?: string;
+  startedAt?: number;
+  [key: string]: unknown;
+};
+
+function readForeachResult(
+  stepResults: Record<string, StepResult<any, any, any, any>>,
+  id: string,
+): ForeachStepResult | undefined {
+  const result = stepResults[id] as (StepResult<any, any, any, any> & ForeachStepResult) | undefined;
+  return result;
+}
+
 export function stepRunEventType(entry: StepFlowEntry | undefined): string {
   switch (entry?.type) {
     case 'agent':
@@ -1348,7 +1378,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     // For 'step' entries step.step is already a live Step. For 'loop' / 'foreach'
     // (widened to SingleStepEntry) materialize the inner step so the rest of this
     // method can keep treating step.step as a live Step at runtime.
-    const innerStep: Step = step.type === 'step' ? step.step : materializeInnerStep(step.step, this.mastra as any);
+    const innerStep: Step = step.type === 'step' ? step.step : materializeInnerStep(step.step, this.mastra);
 
     if (!isExecutableStep(step)) {
       return this.errorWorkflow(
@@ -2253,7 +2283,8 @@ export class WorkflowEventProcessor extends EventProcessor {
       });
 
       const currentIdx = executionPath[1];
-      const existingStepResult = snapshot?.context?.[getInnerStepId(step.step)] as any;
+      const snapshotContext = snapshot?.context as Record<string, ForeachStepResult> | undefined;
+      const existingStepResult = snapshotContext?.[getInnerStepId(step.step)];
       const currentResult = existingStepResult?.output;
       // Preserve the original payload (the input array) from the existing step result
       const originalPayload = existingStepResult?.payload;
@@ -2364,8 +2395,8 @@ export class WorkflowEventProcessor extends EventProcessor {
       // For foreach iterations, check if all iterations are complete before emitting events
       // This prevents emitting workflow.suspend when only some concurrent iterations have finished
       if (currentIdx !== undefined) {
-        const foreachResult = stepResults[getInnerStepId(step.step)] as any;
-        const iterationResults = foreachResult?.output ?? [];
+        const foreachResult = readForeachResult(stepResults, getInnerStepId(step.step));
+        const iterationResults: ForeachIterationResult[] = foreachResult?.output ?? [];
         const targetLen = foreachResult?.payload?.length ?? 0;
 
         // Count iterations by status - pending iterations appear as null in stepResults after
@@ -2417,7 +2448,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             {
               workflow,
               workflowId,
-              prevResult: { status: 'success', output: foreachResult.payload } as any,
+              prevResult: { status: 'success', output: foreachResult!.payload } as any,
               runId,
               executionPath: [executionPath[0]!],
               stepResults,
@@ -2473,9 +2504,9 @@ export class WorkflowEventProcessor extends EventProcessor {
           const foreachSuspendResult = {
             status: 'suspended' as const,
             output: iterationResults,
-            payload: foreachResult.payload,
+            payload: foreachResult!.payload,
             suspendedAt: Date.now(),
-            startedAt: foreachResult.startedAt,
+            startedAt: foreachResult!.startedAt ?? Date.now(),
             suspendPayload: {
               ...firstSuspendedIterationPayload,
               __workflow_meta: {
@@ -2556,7 +2587,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           {
             workflow,
             workflowId,
-            prevResult: { status: 'success', output: foreachResult.payload } as any,
+            prevResult: { status: 'success', output: foreachResult!.payload } as any,
             runId,
             executionPath: [executionPath[0]!],
             stepResults,
@@ -2837,7 +2868,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       });
     } else if (step?.type === 'foreach') {
       // Get the original array from the foreach step's stored payload
-      const foreachStepResult = stepResults[getInnerStepId(step.step)] as any;
+      const foreachStepResult = readForeachResult(stepResults, getInnerStepId(step.step));
       const originalArray = foreachStepResult?.payload;
       await this.mastra.pubsub.publish('workflows', {
         type: 'workflow.step.run',
