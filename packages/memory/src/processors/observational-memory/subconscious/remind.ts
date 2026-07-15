@@ -105,6 +105,7 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
             `Current time: ${new Date().toISOString()}\n\nScoped source candidates:\n${JSON.stringify(sources)}\n\nCurrent observations:\n${context.rawObservations}`,
             {
               requestContext: context.requestContext,
+              abortSignal: context.abortSignal,
               maxSteps: config.maxSteps,
             },
           );
@@ -126,6 +127,7 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
             tagName: 'remembered',
             contents,
             createdAt: new Date(),
+            metadata: { origin: 'subconscious' },
             attributes: {
               source: 'subconscious',
               sourceIds: sourceIds.join(','),
@@ -134,6 +136,10 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
             },
           });
         } catch (error) {
+          await context.writer?.custom({
+            type: 'data-subconscious-error',
+            data: { agent: 'remind', error: error instanceof Error ? error.message : String(error) },
+          });
           if (store && scope) {
             await publishSubconsciousActivity({
               store,

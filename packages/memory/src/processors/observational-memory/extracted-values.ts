@@ -1,4 +1,4 @@
-import type { ProcessorContext } from '@mastra/core/processors';
+import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 
 import type { Memory } from '../..';
@@ -244,6 +244,8 @@ export async function applyExtractorHooks(opts: {
   memory?: Memory;
   sendSignal?: ProcessorContext['sendSignal'];
   sendStateSignal?: ProcessorContext['sendStateSignal'];
+  writer?: ProcessorStreamWriter;
+  abortSignal?: AbortSignal;
   requestContext?: RequestContext;
 }): Promise<{ values?: Record<string, unknown>; failures?: ExtractionFailure[] }> {
   const values = normalizeExtractedValues(opts.values) ?? {};
@@ -279,6 +281,8 @@ export async function applyExtractorHooks(opts: {
         memory: opts.memory,
         sendSignal: opts.sendSignal,
         sendStateSignal: opts.sendStateSignal,
+        writer: opts.writer,
+        abortSignal: opts.abortSignal,
         requestContext: opts.requestContext,
       });
       if (isHook || hookValue === undefined) {
@@ -292,6 +296,7 @@ export async function applyExtractorHooks(opts: {
         failures.push({ slug: extractor.slug, error: parsed.error.message });
       }
     } catch (error) {
+      if (opts.abortSignal?.aborted) throw error;
       if (!isHook) {
         delete values[extractor.slug];
       }
