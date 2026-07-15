@@ -103,6 +103,59 @@ describe('transcript reducer message entries', () => {
     ]);
   });
 
+  it('projects persisted and live user signals to user messages without changing canonical content', () => {
+    const persisted = signalMessage({
+      id: 'user-signal-1',
+      type: 'user',
+      tagName: 'user',
+      text: 'sup',
+    });
+    const steered = signalMessage({
+      id: 'user-signal-2',
+      type: 'user',
+      tagName: 'user',
+      text: 'also inspect the tests',
+      attributes: { delivery: 'while-active' },
+    });
+    const reminder = signalMessage({
+      id: 'reminder-1',
+      type: 'system-reminder',
+      tagName: 'system-reminder',
+      text: 'Follow the package instructions.',
+    });
+
+    const hydrated = createInitialTranscript({ messages: [persisted, reminder] });
+    const persistedEntry = hydrated.entries[0];
+    const reminderEntry = hydrated.entries[1];
+
+    expect(persistedEntry).toMatchObject({
+      kind: 'message',
+      id: persisted.id,
+      message: { role: 'user', createdAt: persisted.createdAt, content: persisted.content },
+      steer: false,
+    });
+    expect(reminderEntry).toMatchObject({
+      kind: 'message',
+      id: reminder.id,
+      message: { role: 'signal', content: reminder.content },
+    });
+    expect(persisted.role).toBe('signal');
+
+    const live = transcriptReducer(hydrated, {
+      type: 'event',
+      event: { type: 'message_start', message: steered },
+    });
+
+    expect(live.entries[2]).toMatchObject({
+      kind: 'message',
+      id: steered.id,
+      message: { role: 'user', createdAt: steered.createdAt, content: steered.content },
+      streaming: true,
+      steer: true,
+    });
+    expect(steered.role).toBe('signal');
+  });
+
   it('streams message updates without replacing non-message transcript state', () => {
     const withNotice = transcriptReducer(initialTranscript, {
       type: 'localNotice',

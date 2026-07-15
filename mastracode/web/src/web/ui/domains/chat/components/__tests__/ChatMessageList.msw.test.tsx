@@ -240,6 +240,46 @@ describe('ChatMessageList', () => {
     expect(screen.getByText('The pull request is ready for review.').closest('.bg-notice-info\\/20')).toBeNull();
   });
 
+  it('given a persisted user signal, then it renders in the right-aligned user bubble after hydration', async () => {
+    seedProject();
+    useAgentControllerHandlers();
+    server.use(
+      http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () =>
+        HttpResponse.json({
+          messages: [
+            {
+              id: 'user-signal-1',
+              role: 'signal',
+              createdAt: '2026-07-15T16:00:00.000Z',
+              content: {
+                format: 2,
+                parts: [{ type: 'text', text: 'sup' }],
+                metadata: {
+                  signal: {
+                    id: 'user-signal-1',
+                    type: 'user',
+                    tagName: 'user',
+                    createdAt: '2026-07-15T16:00:00.000Z',
+                    contents: [{ type: 'text', text: 'sup' }],
+                    attributes: { delivery: 'message' },
+                  },
+                },
+              },
+            },
+          ],
+        }),
+      ),
+    );
+    renderMessageList();
+
+    await waitFor(() => {
+      const message = screen.getByText('sup');
+      const userRow = message.closest('.items-end');
+      expect(userRow).toBeInTheDocument();
+      expect(userRow?.firstElementChild).toHaveClass('max-w-[70%]', 'bg-surface3');
+    });
+  });
+
   it('given a persisted notification signal, then it remains visible after transcript hydration', async () => {
     seedProject();
     useAgentControllerHandlers();

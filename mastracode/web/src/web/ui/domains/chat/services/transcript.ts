@@ -608,13 +608,25 @@ function toMessageEntry(
   message: MastraDBMessage,
   options: { streaming?: boolean; steer?: boolean; runtimeTools?: Record<string, ToolCall> } = {},
 ): MessageEntry {
+  const signalMetadata = message.role === 'signal' ? message.content.metadata?.signal : undefined;
+  const signal =
+    signalMetadata && typeof signalMetadata === 'object' && !Array.isArray(signalMetadata)
+      ? (signalMetadata as Record<string, unknown>)
+      : undefined;
+  const isUserSignal = signal?.type === 'user' || signal?.type === 'user-message';
+  const attributes =
+    signal?.attributes && typeof signal.attributes === 'object' && !Array.isArray(signal.attributes)
+      ? (signal.attributes as Record<string, unknown>)
+      : undefined;
+  const displayMessage = isUserSignal ? { ...message, role: 'user' as const } : message;
+
   return {
     kind: 'message',
     id: message.id,
-    message,
+    message: displayMessage,
     runtimeTools: options.runtimeTools,
     streaming: options.streaming,
-    steer: options.steer,
+    steer: options.steer ?? (isUserSignal ? attributes?.delivery === 'while-active' : undefined),
   };
 }
 
