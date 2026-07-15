@@ -14,6 +14,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { HTTPException } from '../http-exception';
 import {
   abortAgentThreadBodySchema,
+  agentExecutionBodySchema,
   approveToolCallBodySchema,
   declineToolCallBodySchema,
   queueAgentMessageBodySchema,
@@ -754,6 +755,49 @@ describe('Agent Routes Authorization', () => {
         } as any),
       ).resolves.toBeDefined();
     });
+
+    it('should accept memory without resource when context provides one (mapUserToResourceId)', async () => {
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+
+      let capturedMemoryOption: any;
+      vi.spyOn(mockAgent, 'generate').mockImplementation(async (_messages, options) => {
+        capturedMemoryOption = options?.memory;
+        return { text: 'mocked response' } as any;
+      });
+
+      await GENERATE_AGENT_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        messages: [{ role: 'user', content: 'test' }],
+        memory: {
+          thread: 'new-thread',
+          // no resource — server derives it from the request context
+        },
+      } as any);
+
+      expect(capturedMemoryOption.resource).toBe('user-a');
+    });
+
+    it('should return 400 when memory is provided but no resource can be resolved', async () => {
+      await expect(
+        GENERATE_AGENT_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: new RequestContext(),
+          abortSignal: new AbortController().signal,
+          messages: [{ role: 'user', content: 'test' }],
+          memory: {
+            thread: 'new-thread',
+          },
+        } as any),
+      ).rejects.toThrow(
+        expect.objectContaining({
+          status: 400,
+        }),
+      );
+    });
   });
 
   describe('STREAM_GENERATE_ROUTE', () => {
@@ -814,6 +858,78 @@ describe('Agent Routes Authorization', () => {
 
       // The resource should be overridden to user-a (from context)
       expect(capturedMemoryOption.resource).toBe('user-a');
+    });
+
+    it('should accept memory without resource when context provides one (mapUserToResourceId)', async () => {
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+
+      let capturedMemoryOption: any;
+      vi.spyOn(mockAgent, 'stream').mockImplementation(async (_messages, options) => {
+        capturedMemoryOption = options?.memory;
+        return { fullStream: new ReadableStream() } as any;
+      });
+
+      await STREAM_GENERATE_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        messages: [{ role: 'user', content: 'test' }],
+        memory: {
+          thread: 'new-stream-thread',
+          // no resource — server derives it from the request context
+        },
+      } as any);
+
+      expect(capturedMemoryOption.resource).toBe('user-a');
+    });
+
+    it('should return 400 when memory is provided but no resource can be resolved', async () => {
+      await expect(
+        STREAM_GENERATE_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: new RequestContext(),
+          abortSignal: new AbortController().signal,
+          messages: [{ role: 'user', content: 'test' }],
+          memory: {
+            thread: 'new-stream-thread',
+          },
+        } as any),
+      ).rejects.toThrow(
+        expect.objectContaining({
+          status: 400,
+        }),
+      );
+    });
+  });
+
+  describe('agentExecutionBodySchema memory option', () => {
+    it('accepts a memory option without resource', () => {
+      const result = agentExecutionBodySchema.safeParse({
+        messages: ['what was my last message?'],
+        memory: { thread: 'test-thread' },
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('still accepts a memory option with resource', () => {
+      const result = agentExecutionBodySchema.safeParse({
+        messages: ['hi'],
+        memory: { thread: 'test-thread', resource: 'user-1' },
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('still requires thread when memory is provided', () => {
+      const result = agentExecutionBodySchema.safeParse({
+        messages: ['hi'],
+        memory: { resource: 'user-1' },
+      });
+
+      expect(result.success).toBe(false);
     });
   });
 

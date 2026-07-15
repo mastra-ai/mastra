@@ -1,5 +1,31 @@
 # @internal/playground
 
+## 1.19.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/core@1.51.1-alpha.1
+  - @mastra/client-js@1.32.1-alpha.1
+  - @mastra/react@1.2.6-alpha.1
+  - @mastra/playground-ui@41.1.0-alpha.1
+
+## 1.19.1-alpha.0
+
+### Patch Changes
+
+- Fixed the version information hint to use a tooltip. ([#19482](https://github.com/mastra-ai/mastra/pull/19482))
+
+- Fixed the variable syntax help so only the underlined text opens its tooltip. ([#19478](https://github.com/mastra-ai/mastra/pull/19478))
+
+- Fixed instruction block actions so the prompt editor uses the full available width. ([#19475](https://github.com/mastra-ai/mastra/pull/19475))
+
+- Updated dependencies [[`8a0d145`](https://github.com/mastra-ai/mastra/commit/8a0d145aadbdf7278665aceaaec364b35dd9bd94), [`bd2f1d2`](https://github.com/mastra-ai/mastra/commit/bd2f1d274d05e60e2366f005ea0d94d5cea0d5ff), [`21a0eb8`](https://github.com/mastra-ai/mastra/commit/21a0eb86746ba0b703acea360d4f84c6a5a493f2), [`de86fd7`](https://github.com/mastra-ai/mastra/commit/de86fd7119f0438381d1a642e3d258143c0b9c29), [`2fd1a51`](https://github.com/mastra-ai/mastra/commit/2fd1a510946ede90bd42de32c315f7586bfcfd20), [`2745031`](https://github.com/mastra-ai/mastra/commit/2745031d1d4a4978f037092da371428c32e2842a), [`8bb910f`](https://github.com/mastra-ai/mastra/commit/8bb910f1fcdb2922a7b99a2d6c739ed5d53eb601), [`db650ce`](https://github.com/mastra-ai/mastra/commit/db650ce490348914e85b93651d83acdf8f2a4c31), [`6354eeb`](https://github.com/mastra-ai/mastra/commit/6354eeb32efa9f5f68f51dda394e90e2ee76f1fb), [`165b46e`](https://github.com/mastra-ai/mastra/commit/165b46e831bca635b9b85b453325ebf9fab7590d)]:
+  - @mastra/core@1.51.1-alpha.0
+  - @mastra/react@1.2.6-alpha.0
+  - @mastra/playground-ui@41.1.0-alpha.0
+  - @mastra/client-js@1.32.1-alpha.0
+
 ## 1.19.0
 
 ### Minor Changes
