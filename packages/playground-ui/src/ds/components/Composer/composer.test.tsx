@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { createRef, useState } from 'react';
 import { afterEach, assert, describe, expect, it, vi } from 'vitest';
 
-import { Composer, ComposerActions, ComposerAttachments, ComposerInput } from './composer';
+import { Composer, ComposerActions, ComposerAttachments, ComposerBox, ComposerInput } from './composer';
 
 afterEach(() => {
   cleanup();
@@ -18,16 +18,18 @@ const ControlledComposer = () => {
       <ComposerAttachments aria-label="Attachments">
         <span>notes.txt</span>
       </ComposerAttachments>
-      <ComposerInput
-        aria-label="Message"
-        value={value}
-        onChange={event => {
-          setValue(event.target.value);
-        }}
-      />
-      <ComposerActions aria-label="Composer actions">
-        <button type="submit">Send message</button>
-      </ComposerActions>
+      <ComposerBox>
+        <ComposerInput
+          aria-label="Message"
+          value={value}
+          onChange={event => {
+            setValue(event.target.value);
+          }}
+        />
+        <ComposerActions aria-label="Composer actions">
+          <button type="submit">Send message</button>
+        </ComposerActions>
+      </ComposerBox>
     </Composer>
   );
 };
@@ -39,9 +41,13 @@ describe('Composer', () => {
 
       const form = screen.getByRole('form', { name: 'Message composer' });
       expect(form.getAttribute('data-slot')).toBe('composer');
-      expect(screen.getByRole('region', { name: 'Attachments' }).getAttribute('data-slot')).toBe(
-        'composer-attachments',
-      );
+      const attachments = screen.getByRole('region', { name: 'Attachments' });
+      const box = document.querySelector('[data-slot="composer-box"]');
+      assert(box);
+      expect(attachments.getAttribute('data-slot')).toBe('composer-attachments');
+      expect(attachments.parentElement).toBe(form);
+      expect(box.parentElement).toBe(form);
+      expect(attachments.nextElementSibling).toBe(box);
       expect(screen.getByRole('textbox', { name: 'Message' }).getAttribute('data-slot')).toBe('composer-input');
       expect(screen.getByRole('region', { name: 'Composer actions' }).getAttribute('data-slot')).toBe(
         'composer-actions',
@@ -131,19 +137,23 @@ describe('Composer', () => {
           <ComposerAttachments className="custom-attachments" data-testid="composer-attachments">
             Attachment
           </ComposerAttachments>
-          <ComposerInput className="custom-input" data-testid="composer-input" />
-          <ComposerActions className="custom-actions" data-testid="composer-actions">
-            Actions
-          </ComposerActions>
+          <ComposerBox className="custom-box" data-testid="composer-box">
+            <ComposerInput className="custom-input" data-testid="composer-input" />
+            <ComposerActions className="custom-actions" data-testid="composer-actions">
+              Actions
+            </ComposerActions>
+          </ComposerBox>
         </Composer>,
       );
 
       const root = screen.getByTestId('composer-root');
       const attachments = screen.getByTestId('composer-attachments');
+      const box = screen.getByTestId('composer-box');
       const input = screen.getByTestId('composer-input');
       const actions = screen.getByTestId('composer-actions');
       assert(root.classList.contains('custom-root'));
       assert(attachments.classList.contains('custom-attachments'));
+      assert(box.classList.contains('custom-box'));
       assert(input.classList.contains('custom-input'));
       assert(actions.classList.contains('custom-actions'));
     });
@@ -152,8 +162,10 @@ describe('Composer', () => {
   describe('when a sending pulse is active', () => {
     it('renders the controlled pulse as decorative content', () => {
       render(
-        <Composer sendingPulseKey={2}>
-          <ComposerInput aria-label="Message" />
+        <Composer>
+          <ComposerBox sendingPulseKey={2}>
+            <ComposerInput aria-label="Message" />
+          </ComposerBox>
         </Composer>,
       );
 
@@ -166,8 +178,10 @@ describe('Composer', () => {
   describe('when no sending pulse has been triggered', () => {
     it('omits the pulse content', () => {
       render(
-        <Composer sendingPulseKey={0}>
-          <ComposerInput aria-label="Message" />
+        <Composer>
+          <ComposerBox sendingPulseKey={0}>
+            <ComposerInput aria-label="Message" />
+          </ComposerBox>
         </Composer>,
       );
 

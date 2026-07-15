@@ -1,44 +1,41 @@
-import type { ComponentPropsWithoutRef, ReactNode } from 'react';
-import { Children, forwardRef, isValidElement } from 'react';
+import type { ComponentPropsWithoutRef } from 'react';
+import { forwardRef } from 'react';
 
 import { ScrollArea } from '../ScrollArea';
 import { cn } from '@/lib/utils';
 
 import './composer-sending.css';
 
-export interface ComposerProps extends ComponentPropsWithoutRef<'form'> {
+export type ComposerProps = ComponentPropsWithoutRef<'form'>;
+
+export const Composer = forwardRef<HTMLFormElement, ComposerProps>(({ children, ...props }, ref) => (
+  <form ref={ref} data-slot="composer" {...props}>
+    {children}
+  </form>
+));
+Composer.displayName = 'Composer';
+
+export interface ComposerBoxProps extends ComponentPropsWithoutRef<'div'> {
   sendingPulseKey?: number;
 }
 
-export const Composer = forwardRef<HTMLFormElement, ComposerProps>(
-  ({ children, className, sendingPulseKey = 0, ...props }, ref) => {
-    const regions = Children.toArray(children);
-    const attachmentRegions: ReactNode[] = [];
-    const contentRegions: ReactNode[] = [];
-
-    for (const child of regions) {
-      if (isValidElement(child) && child.type === ComposerAttachments) {
-        attachmentRegions.push(child);
-      } else {
-        contentRegions.push(child);
-      }
-    }
-
-    return (
-      <form ref={ref} data-slot="composer" className={cn('relative px-2 pb-2', className)} {...props}>
-        {attachmentRegions}
-        <div
-          data-slot="composer-content"
-          className="duration-normal @container relative mx-auto mt-auto w-full max-w-3xl overflow-hidden rounded-[22px] border border-border2/40 bg-surface3 transition-colors focus-within:border-border2"
-        >
-          <ComposerSendingPulse pulseKey={sendingPulseKey} />
-          <div className="relative z-10">{contentRegions}</div>
-        </div>
-      </form>
-    );
-  },
+export const ComposerBox = forwardRef<HTMLDivElement, ComposerBoxProps>(
+  ({ children, className, sendingPulseKey = 0, ...props }, ref) => (
+    <div
+      ref={ref}
+      data-slot="composer-box"
+      className={cn(
+        'duration-normal @container relative mx-auto mt-auto w-full max-w-3xl overflow-hidden rounded-[22px] border border-border2/40 bg-surface3 transition-colors focus-within:border-border2',
+        className,
+      )}
+      {...props}
+    >
+      <ComposerSendingPulse pulseKey={sendingPulseKey} />
+      <div className="relative z-10">{children}</div>
+    </div>
+  ),
 );
-Composer.displayName = 'Composer';
+ComposerBox.displayName = 'ComposerBox';
 
 export const ComposerAttachments = forwardRef<HTMLDivElement, ComponentPropsWithoutRef<'div'>>(
   ({ className, ...props }, ref) => (

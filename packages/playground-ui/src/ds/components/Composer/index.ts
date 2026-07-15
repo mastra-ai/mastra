@@ -1,2 +1,2 @@
-export { Composer, ComposerActions, ComposerAttachments, ComposerInput } from './composer';
-export type { ComposerProps } from './composer';
+export { Composer, ComposerActions, ComposerAttachments, ComposerBox, ComposerInput } from './composer';
+export type { ComposerBoxProps, ComposerProps } from './composer';
