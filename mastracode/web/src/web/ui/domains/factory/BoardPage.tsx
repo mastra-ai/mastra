@@ -26,20 +26,8 @@ import type { GithubIssue, GithubPullRequest } from './services/factory';
 import type { LinearIssue } from './services/linear';
 import { connectLinear, isLinearReauthError } from './services/linear';
 import type { WorkItem, WorkItemSource } from './services/workItems';
-
-// ── Stages ─────────────────────────────────────────────────────────────────
-
-/** Board columns. Stages are plain strings server-side; these are the UI's vocabulary. */
-const BOARD_STAGES = [
-  { id: 'intake', label: 'Intake' },
-  { id: 'triage', label: 'Triage' },
-  { id: 'planning', label: 'Planning' },
-  { id: 'execute', label: 'Building' },
-  { id: 'review', label: 'Review' },
-  { id: 'done', label: 'Done' },
-] as const;
-
-type BoardStageId = (typeof BOARD_STAGES)[number]['id'];
+import { BOARD_STAGES, stageLabel } from './stages';
+import type { BoardStageId } from './stages';
 
 const AUTO_TRIAGED_LABEL = 'auto-triaged';
 const NEEDS_APPROVAL_LABEL = 'needs-approval';
@@ -56,10 +44,6 @@ function metadataLabels(metadata: Record<string, unknown>): string[] {
 
 function issueTriageThreadTags(issueNumber: number): Record<string, string> {
   return { role: 'triage', source: 'github-issue', purpose: 'issue-triage', issueNumber: String(issueNumber) };
-}
-
-function stageLabel(stage: string): string {
-  return BOARD_STAGES.find(s => s.id === stage)?.label ?? stage;
 }
 
 /**
