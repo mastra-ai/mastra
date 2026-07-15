@@ -1,5 +1,3 @@
-import crypto from 'node:crypto';
-
 import { MastraBase } from '@mastra/core/base';
 import type { StorageThreadType } from '@mastra/core/memory';
 import {
