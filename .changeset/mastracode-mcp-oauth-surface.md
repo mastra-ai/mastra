@@ -18,3 +18,18 @@ The server manager gains `authenticateServer(name)` and
 `cancelServerAuthentication(name)`, `McpServerStatus` gains an optional
 `needsAuth` flag, and the OAuth `redirectUrl` in MCP server config is now
 optional (it defaults to a stable loopback URL).
+
+```ts
+const server = manager.getServerStatuses().find(s => s.name === 'supabase')
+if (server?.needsAuth) {
+  // Opens the consent page in the browser, completes the OAuth flow, and
+  // resolves with the reconnected server status.
+  const status = await manager.authenticateServer('supabase', {
+    onAuthorizationUrl: url => openInBrowser(url),
+  })
+  console.log(status.connected)
+
+  // Abort an abandoned browser flow and return the server to needs-auth:
+  // await manager.cancelServerAuthentication('supabase')
+}
+```
