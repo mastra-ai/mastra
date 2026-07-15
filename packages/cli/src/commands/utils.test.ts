@@ -109,4 +109,29 @@ describe('getVersionTag', () => {
 
     expect(tag).toBeUndefined();
   });
+
+  test('uses an explicitly supplied version without resolving package metadata', async () => {
+    const { execa } = await import('execa');
+    const fsExtra = (await import('fs-extra')).default;
+    vi.mocked(execa).mockResolvedValue({ stdout: 'snapshot: 1.2.3-snapshot.4' } as any);
+
+    const { getVersionTag } = await import('./utils');
+    const tag = await getVersionTag('1.2.3-snapshot.4');
+
+    expect(tag).toBe('snapshot');
+    expect(fsExtra.readJSON).not.toHaveBeenCalled();
+    expect(execa).toHaveBeenCalledWith('npm', ['dist-tag', 'ls', 'mastra'], expect.any(Object));
+  });
+
+  test('warns and falls back to latest when explicit create version lookup fails', async () => {
+    const { execa } = await import('execa');
+    vi.mocked(execa).mockRejectedValue(new Error('registry unavailable'));
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { getVersionTag } = await import('./utils');
+    const tag = await getVersionTag('1.2.3');
+
+    expect(tag).toBe('latest');
+    expect(consoleSpy).toHaveBeenCalledWith('We could not resolve the mastra version tag, falling back to "latest"');
+  });
 });

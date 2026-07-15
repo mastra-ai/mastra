@@ -2,110 +2,50 @@
 import { Command } from 'commander';
 
 import { PosthogAnalytics, setAnalytics } from 'mastra/dist/analytics/index.js';
-import { create } from 'mastra/dist/commands/create/create.js';
+import {
+  configureCreateCommand,
+  isCreateCancelledError,
+  runCreateCommand,
+} from 'mastra/dist/commands/create/create.js';
+import type { CreateCommandOptions } from 'mastra/dist/commands/create/create.js';
 
 import { getPackageVersion, getCreateVersionTag } from './utils.js';
 
 const version = await getPackageVersion();
-const createVersionTag = await getCreateVersionTag();
-
 const analytics = new PosthogAnalytics({
   apiKey: 'phc_SBLpZVAB6jmHOct9CABq3PF0Yn5FU3G2FgT4xUr2XrT',
   host: 'https://us.posthog.com',
-  version: version!,
+  version,
 });
 setAnalytics(analytics);
 
-const program = new Command();
+const program = configureCreateCommand(new Command().name('create-mastra').version(`${version}`, '-v, --version'));
 
-program
-  .version(`${version}`, '-v, --version')
-  .description(`create-mastra ${version}`)
-  .action(async () => {
-    try {
-      analytics.trackCommand({
-        command: 'version',
-      });
-      console.info(`create-mastra ${version}`);
-    } catch {
-      // ignore
-    }
-  });
-
-program
-  .name('create-mastra')
-  .description('Create a new Mastra project')
-  .argument('[project-name]', 'Directory name of the project')
-  .option(
-    '-p, --project-name <string>',
-    'Project name that will be used in package.json and as the project directory name.',
-  )
-  .option('--default', 'Quick start with defaults (src, OpenAI, examples)')
-  .option('-c, --components <components>', 'Comma-separated list of components (agents, tools, workflows, scorers)')
-  .option('-l, --llm <model-provider>', 'Default model provider (openai, anthropic, groq, google, or cerebras)')
-  .option('-k, --llm-api-key <api-key>', 'API key for the model provider')
-  .option('-e, --example', 'Include example code')
-  .option('-n, --no-example', 'Do not include example code')
-  .option('-t, --timeout [timeout]', 'Configurable timeout for package installation, defaults to 60000 ms')
-  .option('-d, --dir <directory>', 'Target directory for Mastra source code (default: src/)')
-  .option('-m, --mcp <mcp>', 'MCP Server for code editor (cursor, cursor-global, windsurf, vscode, antigravity)')
-  .option(
-    '--template [template-name]',
-    'Create project from a template (use template name, public GitHub URL, or leave blank to select from list)',
-  )
-  .option('--observe', 'Enable Mastra Observe (writes MASTRA_CLOUD_ACCESS_TOKEN placeholder to .env)')
-  .option('--no-observe', 'Do not enable Mastra Observe')
-  .action(async (projectNameArg, args) =>
-    analytics.trackCommandExecution({
+program.action(async (projectName: string | undefined, args: CreateCommandOptions) => {
+  try {
+    await analytics.trackCommandExecution({
       command: 'create',
       args: {
-        projectName: projectNameArg || args.projectName,
-        components: args.components,
+        projectName,
+        yes: args.yes ?? false,
+        empty: args.empty ?? false,
         llmProvider: args.llm,
-        addExample: args.example,
-        default: args.default,
+        skills: args.skills,
+        git: args.git,
         template: args.template,
-        observability: args.observe,
+        timeout: args.timeout,
       },
-      execution: async () => {
-        // TODO(major): Remove args.projectName in favor of projectNameArg
-        const projectName = projectNameArg || args.projectName;
-        const timeout = args?.timeout ? (args?.timeout === true ? 60000 : parseInt(args?.timeout, 10)) : undefined;
-
-        if (args.default) {
-          await create({
-            components: ['agents', 'tools', 'workflows', 'scorers'],
-            llmProvider: 'openai',
-            addExample: true,
-            createVersionTag,
-            timeout,
-            projectName,
-            mcpServer: args.mcp,
-            directory: 'src/',
-            template: args.template,
-            analytics,
-            observability: args.observe,
-          });
-          return;
-        }
-
-        await create({
-          components: args.components ? args.components.split(',') : [],
-          llmProvider: args.llm,
-          addExample: args.example,
-          llmApiKey: args.llmApiKey,
-          createVersionTag,
-          timeout,
-          projectName,
-          directory: args.dir,
-          mcpServer: args.mcp,
-          template: args.template,
+      execution: () =>
+        runCreateCommand(projectName, args, {
           analytics,
-          observability: args.observe,
-        });
-      },
-    }),
-  );
+          resolveVersionTag: () => getCreateVersionTag(version),
+        }),
+    });
+  } catch (error) {
+    if (isCreateCancelledError(error)) return;
+    throw error;
+  }
+});
 
 try {
   await program.parseAsync(process.argv);
