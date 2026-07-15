@@ -219,10 +219,26 @@ const railwayFactory: SandboxFactory = ({ providerSandboxId, env, idleTimeoutMin
     ...(env ? { env } : {}),
     ...(idleTimeoutMinutes !== undefined ? { idleTimeoutMinutes } : {}),
     ...(checkpointName ? { checkpointName } : {}),
-    // The template only needs `git` and `gh` installed. Repo cloning and gh
-    // auth are done at operation time via `authenticateGh` + `ensureRepoCheckout`
-    // so each open uses a freshly minted (non-expired) installation token.
-    template: builder => builder.withPackages('git', 'gh'),
+    // Template installs `git` and `gh`. `gh` is installed from GitHub's
+    // official apt repo rather than the Debian community package: the community
+    // build regressed against deprecated GitHub APIs and isn't reliable, and
+    // availability of `gh` in the default Debian sources varies across the
+    // Debian release Railway happens to ship as the sandbox base. Repo cloning
+    // and gh auth are done at operation time via `withInstallToken` + inline
+    // `GH_TOKEN` so each open uses a freshly minted installation token.
+    template: builder =>
+      builder.withPackages('git', 'ca-certificates', 'curl', 'gnupg').run(
+        [
+          'set -eux',
+          'install -m 0755 -d /etc/apt/keyrings',
+          'curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /etc/apt/keyrings/githubcli-archive-keyring.gpg',
+          'chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg',
+          'echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list',
+          'apt-get update',
+          'DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends gh',
+          'rm -rf /var/lib/apt/lists/*',
+        ].join(' && '),
+      ),
   });
 
 /** Local host-process sandbox (single-user dev; no tenant isolation). */
