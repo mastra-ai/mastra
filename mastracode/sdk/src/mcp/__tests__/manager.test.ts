@@ -194,30 +194,37 @@ describe('createMcpManager', () => {
     });
 
     it('uses separate OAuth token storage for the same server name in different projects', async () => {
-      const httpConfig: McpHttpServerConfig = {
-        url: 'https://mcp.example.com/mcp',
-        oauth: {
-          redirectUrl: 'http://localhost:3000/oauth/callback',
-          clientName: 'Remote MCP',
-          scopes: ['mcp:read'],
-          clientId: 'client-id',
-        },
-      };
-      setupConfig({ mcpServers: { remote: httpConfig } });
+      const dataDir = await fs.mkdtemp(join(tmpdir(), 'mc-oauth-test-'));
+      process.env.MASTRA_APP_DATA_DIR = dataDir;
+      try {
+        const httpConfig: McpHttpServerConfig = {
+          url: 'https://mcp.example.com/mcp',
+          oauth: {
+            redirectUrl: 'http://localhost:3000/oauth/callback',
+            clientName: 'Remote MCP',
+            scopes: ['mcp:read'],
+            clientId: 'client-id',
+          },
+        };
+        setupConfig({ mcpServers: { remote: httpConfig } });
 
-      MockedMCPClient.mockImplementation(function (this: any) {
-        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({ toolsets: { remote: {} }, errors: {} });
-        this.disconnect = vi.fn().mockResolvedValue(undefined);
-      } as any);
+        MockedMCPClient.mockImplementation(function (this: any) {
+          this.listToolsetsWithErrors = vi.fn().mockResolvedValue({ toolsets: { remote: {} }, errors: {} });
+          this.disconnect = vi.fn().mockResolvedValue(undefined);
+        } as any);
 
-      await createMcpManager('/tmp/project-a').init();
-      await createMcpManager('/tmp/project-b').init();
+        await createMcpManager('/tmp/project-a').init();
+        await createMcpManager('/tmp/project-b').init();
 
-      const firstStoragePath = MockedMCPOAuthClientProvider.mock.calls[0]?.[0]?.storage?.filePath;
-      const secondStoragePath = MockedMCPOAuthClientProvider.mock.calls[1]?.[0]?.storage?.filePath;
-      expect(firstStoragePath).toEqual(expect.stringMatching(/mcp-oauth\/[a-f0-9]{16}\.json$/));
-      expect(secondStoragePath).toEqual(expect.stringMatching(/mcp-oauth\/[a-f0-9]{16}\.json$/));
-      expect(firstStoragePath).not.toBe(secondStoragePath);
+        const firstStoragePath = MockedMCPOAuthClientProvider.mock.calls[0]?.[0]?.storage?.filePath;
+        const secondStoragePath = MockedMCPOAuthClientProvider.mock.calls[1]?.[0]?.storage?.filePath;
+        expect(firstStoragePath).toEqual(expect.stringMatching(/mcp-oauth\/[a-f0-9]{16}\.json$/));
+        expect(secondStoragePath).toEqual(expect.stringMatching(/mcp-oauth\/[a-f0-9]{16}\.json$/));
+        expect(firstStoragePath).not.toBe(secondStoragePath);
+      } finally {
+        delete process.env.MASTRA_APP_DATA_DIR;
+        await fs.rm(dataDir, { recursive: true, force: true });
+      }
     });
 
     it('creates one MCPClient with all servers', async () => {

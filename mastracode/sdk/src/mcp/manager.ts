@@ -50,6 +50,11 @@ export interface McpManager {
    * Servers without an `oauth` config are provisioned with a zero-config default
    * (dynamic client registration). The authorization URL is surfaced through
    * `onAuthorizationUrl` for the caller to open in a browser.
+   *
+   * Resolves with the resulting {@link McpServerStatus}: a connected status on
+   * success, or a status carrying an `error` message on failure (including
+   * cancellation) — it does not reject. Inspect the returned status rather than
+   * relying on a thrown error.
    */
   authenticateServer(
     name: string,
@@ -223,10 +228,14 @@ export function createMcpManager(
     const oauth = cfg.oauth ?? (existsSync(getOAuthStoragePath(projectDir, name, cfg)) ? DEFAULT_OAUTH_CONFIG : undefined);
     if (!oauth) return undefined;
 
+    // redirectUrl is optional in the user-supplied config; resolve the stable
+    // default here so provider metadata always carries a concrete URL.
+    const redirectUrl = oauth.redirectUrl ?? DEFAULT_OAUTH_REDIRECT_URL;
+
     return new MCPOAuthClientProvider({
-      redirectUrl: oauth.redirectUrl,
+      redirectUrl,
       clientMetadata: {
-        redirect_uris: [oauth.redirectUrl],
+        redirect_uris: [redirectUrl],
         client_name: oauth.clientName ?? `Mastra Code MCP ${name}`,
         grant_types: ['authorization_code', 'refresh_token'],
         response_types: ['code'],
@@ -576,6 +585,25 @@ export function createMcpManager(
       const def = serverDefs[name];
       if (def?.url && !def.authProvider) {
         def.authProvider = createOAuthProvider(name, { ...(cfg as McpHttpServerConfig), oauth: DEFAULT_OAUTH_CONFIG });
+      }
+
+      // authUrlHandlers has a single slot per server, and a concurrent second
+      // attempt would overwrite the first caller's handler (so it never sees the
+      // URL) and its finally would delete the handler out from under the other
+      // in-flight call. The underlying client.authenticate already coalesces
+      // same-server calls into one flow, so reject the duplicate here instead.
+      if (authUrlHandlers.has(name)) {
+        const current = serverStatuses.get(name);
+        return {
+          name,
+          connected: current?.connected ?? false,
+          connecting: current?.connecting,
+          needsAuth: current?.needsAuth,
+          toolCount: current?.toolCount ?? 0,
+          toolNames: current?.toolNames ?? [],
+          transport: current?.transport ?? getTransport(cfg),
+          error: `Authentication for "${name}" is already in progress`,
+        };
       }
 
       if (options?.onAuthorizationUrl) {
