@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { forwardRef } from 'react';
 import { Link as RouterLink, Outlet, RouterProvider, createMemoryRouter } from 'react-router';
@@ -138,6 +138,19 @@ describe('Workspace skill overview pane', () => {
 
       // A regular file exposes the file viewer's icon-only copy action.
       expect(await screen.findByRole('button', { name: 'Copy file content' })).not.toBeNull();
+    });
+
+    it('switches a markdown file from rendered content to source', async () => {
+      useSkillsWorkspaceHandlers();
+
+      renderEditor('/workspaces/skills-ws?file=README.md');
+
+      const sourceButton = await screen.findByRole('button', { name: 'Source' });
+      fireEvent.click(sourceButton);
+
+      expect(sourceButton.getAttribute('aria-pressed')).toBe('true');
+      await waitFor(() => expect(screen.queryByRole('heading', { name: 'Code Review' })).toBeNull());
+      expect(document.body.textContent).toContain('# Code Review');
     });
   });
 });

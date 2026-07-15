@@ -16,7 +16,6 @@ import type { PanelProps } from 'react-resizable-panels';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { Code } from '@/ds/components/Code';
-import { CodeEditor } from '@/ds/components/CodeEditor';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
@@ -217,7 +216,11 @@ const FilesFolder = React.forwardRef<HTMLLIElement, FilesFolderProps>(
       >
         <Tree.FolderTrigger
           actions={
-            actions ? <FilesActionMenu label={`Actions for ${String(label)}`}>{actions}</FilesActionMenu> : undefined
+            actions ? (
+              <FilesActionMenu label={`Actions for ${String(label)}`} showOnParentInteraction>
+                {actions}
+              </FilesActionMenu>
+            ) : undefined
           }
         >
           <Tree.Icon>
@@ -237,12 +240,24 @@ const FilesFolder = React.forwardRef<HTMLLIElement, FilesFolderProps>(
 );
 FilesFolder.displayName = 'Files.Folder';
 
-function FilesActionMenu({ label, children }: { label: string; children: React.ReactNode }) {
+function FilesActionMenu({
+  label,
+  children,
+  showOnParentInteraction = false,
+}: {
+  label: string;
+  children: React.ReactNode;
+  showOnParentInteraction?: boolean;
+}) {
   return (
     <DropdownMenu>
       <DropdownMenu.Trigger
         aria-label={label}
-        className="flex size-7 items-center justify-center rounded-md text-neutral3 transition-colors hover:bg-surface4 hover:text-neutral6"
+        className={cn(
+          'flex size-7 items-center justify-center rounded-md text-neutral3 transition-colors hover:bg-surface4 hover:text-neutral6',
+          showOnParentInteraction &&
+            'opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 focus-visible:opacity-100',
+        )}
         onClick={event => event.stopPropagation()}
         onPointerDown={event => event.stopPropagation()}
       >
@@ -326,7 +341,11 @@ const FilesFile = React.forwardRef<HTMLLIElement, FilesFileProps>(
       {metadata || actions ? (
         <span className="ml-auto flex shrink-0 items-center gap-1">
           {metadata ? <span className="text-xs text-neutral3">{metadata}</span> : null}
-          {actions ? <FilesActionMenu label={`Actions for ${String(label)}`}>{actions}</FilesActionMenu> : null}
+          {actions ? (
+            <FilesActionMenu label={`Actions for ${String(label)}`} showOnParentInteraction>
+              {actions}
+            </FilesActionMenu>
+          ) : null}
         </span>
       ) : null}
     </Tree.File>
@@ -443,11 +462,10 @@ function FilesFilePreview({
   } else if (isMarkdown || extension === 'json') {
     body = (
       <div className="w-full max-w-4xl p-8">
-        <CodeEditor
-          value={content}
-          language={extension === 'json' ? 'json' : 'markdown'}
-          editable={false}
-          showCopyButton={false}
+        <Code
+          code={content}
+          lang={extension === 'json' ? 'json' : 'markdown'}
+          className="overflow-x-auto rounded-lg border border-surface5 bg-surface2 p-4 font-mono text-sm whitespace-pre-wrap text-neutral5"
         />
       </div>
     );
