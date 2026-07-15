@@ -168,5 +168,7 @@
     "@mastra/s3": "0.6.0",
     "@mastra/vercel": "1.2.0"
   },
-  "changesets": []
+  "changesets": [
+    "green-birds-knock"
+  ]
 }
