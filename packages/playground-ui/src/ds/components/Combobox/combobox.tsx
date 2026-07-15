@@ -3,7 +3,7 @@ import { Check, ChevronsUpDown, Search } from 'lucide-react';
 import * as React from 'react';
 import { comboboxItemClass, comboboxStyles, comboboxTriggerClass } from './combobox-styles';
 import type { ComboboxVariant } from './combobox-styles';
-import type { TextButtonSize } from '@/ds/components/Button/button-variants';
+import type { TextButtonSize } from '@/ds/components/Button/Button';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { cn } from '@/lib/utils';
 

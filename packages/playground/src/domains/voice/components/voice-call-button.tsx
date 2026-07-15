@@ -18,11 +18,19 @@ export const VoiceCallButton = ({ voiceCall }: VoiceCallButtonProps) => {
         size="icon-md"
         type="button"
         aria-label="Start voice call"
-        disabled={liveKitUnavailable}
-        focusableWhenDisabled={liveKitUnavailable}
+        aria-disabled={liveKitUnavailable || undefined}
+        className="aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
         tooltip={liveKitUnavailable ? 'Configure @mastra/livekit to start voice calls.' : 'Start voice call'}
         data-testid="voice-call-button"
-        onClick={() => voiceCall.start()}
+        onClick={event => {
+          if (liveKitUnavailable) {
+            event.preventDefault();
+            event.stopPropagation();
+            return;
+          }
+
+          voiceCall.start();
+        }}
       >
         <Phone className="h-5 w-5 text-neutral3 hover:text-neutral6" />
       </Button>

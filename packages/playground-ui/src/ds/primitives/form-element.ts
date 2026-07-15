@@ -1,5 +1,4 @@
-export const sharedFormElementDisabledStyle =
-  'disabled:opacity-50 disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:cursor-not-allowed';
+export const sharedFormElementDisabledStyle = 'disabled:opacity-50 disabled:cursor-not-allowed';
 
 // Focus indicator for the (green-less) input family. Instead of a heavy ring we
 // reinforce the existing 1px border: on focus it brightens to a translucent neutral

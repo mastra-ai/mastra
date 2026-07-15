@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Plus, Settings, Trash } from 'lucide-react';
 import { TooltipProvider } from '../Tooltip';
+import type { ButtonVariant } from './Button';
 import { Button } from './Button';
-import type { ButtonVariant } from './button-variants';
 
 const ALL_VARIANTS: ButtonVariant[] = ['default', 'primary', 'outline', 'ghost'];
 
