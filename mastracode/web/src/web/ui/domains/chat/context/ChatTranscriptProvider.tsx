@@ -12,7 +12,11 @@ import { ChatTranscriptContext } from './ChatTranscriptContext';
 import type { ChatTranscriptApi } from './ChatTranscriptContext';
 import { useChatConnection } from './useChatConnection';
 
-export function ChatTranscriptProvider({ children, threadId, initialMessages }: {
+export function ChatTranscriptProvider({
+  children,
+  threadId,
+  initialMessages,
+}: {
   children: ReactNode;
   threadId?: string;
   initialMessages?: AgentControllerMessage[];
@@ -38,20 +42,26 @@ export function ChatTranscriptProvider({ children, threadId, initialMessages }: 
 function ChatRuntimeValueProvider({ children, runtime }: { children: ReactNode; runtime: ChatRuntimeState }) {
   const { state } = useChatConnection();
   return (
-    <ChatRuntimeContext.Provider value={{
-      usage: runtime.usage ?? state?.tokenUsage,
-      followUpCount: runtime.followUpCount,
-      omProgress: runtime.omProgress ?? state?.omProgress,
-      omPhase: runtime.omPhase,
-      goal: runtime.goal,
-      tokensPerSec: runtime.tokensPerSec,
-    }}>
+    <ChatRuntimeContext.Provider
+      value={{
+        usage: runtime.usage ?? state?.tokenUsage,
+        followUpCount: runtime.followUpCount,
+        omProgress: runtime.omProgress ?? state?.omProgress,
+        omPhase: runtime.omPhase,
+        goal: runtime.goal,
+        tokensPerSec: runtime.tokensPerSec,
+      }}
+    >
       {children}
     </ChatRuntimeContext.Provider>
   );
 }
 
-function ChatTranscriptValueProvider({ children, threadId, transcriptApi }: {
+function ChatTranscriptValueProvider({
+  children,
+  threadId,
+  transcriptApi,
+}: {
   children: ReactNode;
   threadId?: string;
   transcriptApi: ReturnType<typeof useAgentControllerTranscript>;

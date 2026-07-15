@@ -234,7 +234,7 @@ describe('WorkspacesSection', () => {
 
     // The run finishes; the next activity poll reports the thread idle.
     featState = 'idle';
-    await client.invalidateQueries({ queryKey: queryKeys.agentControllerActivity('code', 'resource-gh') });
+    await client.invalidateQueries({ queryKey: queryKeys.agentControllerActivity('code', RESOURCE_ID) });
 
     const doneDot = await screen.findByRole('status', { name: 'Agent finished in feat-ui' });
     expect(doneDot).not.toHaveClass('animate-pulse');

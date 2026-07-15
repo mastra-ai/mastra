@@ -2,7 +2,11 @@ import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-q
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import { listProjectIssues, listProjectPullRequests, startProjectIssueTriage } from '../../web/ui/domains/factory/services/factory';
+import {
+  listProjectIssues,
+  listProjectPullRequests,
+  startProjectIssueTriage,
+} from '../../web/ui/domains/factory/services/factory';
 import type { GithubIssue } from '../../web/ui/domains/factory/services/factory';
 
 /**

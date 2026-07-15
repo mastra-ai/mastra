@@ -27,21 +27,40 @@ interface ChatThreadMessagesApi {
 const ChatThreadMessagesContext = createContext<ChatThreadMessagesApi | null>(null);
 
 /** Stable project/API configuration for chat shell consumers such as the sidebar. */
-export function ChatSessionConfigProvider({ children, threadId, userScoped = false }: { children: ReactNode; threadId?: string; userScoped?: boolean }) {
+export function ChatSessionConfigProvider({
+  children,
+  threadId,
+  userScoped = false,
+}: {
+  children: ReactNode;
+  threadId?: string;
+  userScoped?: boolean;
+}) {
   const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
   const auth = useWebAuth();
   const { baseUrl } = useApiConfig();
   const projectPath = deriveProjectPath(activeProject);
   const userSession = userScoped && threadId ? findUserSessionByThreadId(threadId) : undefined;
+  const projectSessionEnabled = sessionEnabled && (activeProject?.source !== 'github' || Boolean(projectPath));
   const value = userScoped
-    ? { resourceId: userSessionResourceId(auth.data), sessionEnabled: !auth.isPending && Boolean(userSession), projectPath: userSession?.worktree.worktreePath, baseUrl, kind: 'user' as const, threadBasePath: '/user/threads' as const }
-    : { resourceId, sessionEnabled, projectPath, baseUrl, kind: activeProject?.source === 'github' ? 'factory' as const : 'user' as const, threadBasePath: '/threads' as const };
+    ? {
+        resourceId: userSessionResourceId(auth.data),
+        sessionEnabled: !auth.isPending && Boolean(userSession),
+        projectPath: userSession?.worktree.worktreePath,
+        baseUrl,
+        kind: 'user' as const,
+        threadBasePath: '/user/threads' as const,
+      }
+    : {
+        resourceId,
+        sessionEnabled: projectSessionEnabled,
+        projectPath,
+        baseUrl,
+        kind: activeProject?.source === 'github' ? ('factory' as const) : ('user' as const),
+        threadBasePath: '/threads' as const,
+      };
 
-  return (
-    <ChatSessionContext.Provider value={value}>
-      {children}
-    </ChatSessionContext.Provider>
-  );
+  return <ChatSessionContext.Provider value={value}>{children}</ChatSessionContext.Provider>;
 }
 
 /**
@@ -78,7 +97,8 @@ export function ChatSessionBoundary({
 
   return (
     <ChatTranscriptProvider
-      key={`${resourceId}:${threadId ?? 'draft'}:${messagesQuery.dataUpdatedAt}`}
+      key={`${resourceId}:${threadId ?? 'draft'}`}
+      threadId={threadId}
       initialMessages={messagesQuery.data}
     >
       <ChatModesProvider>
@@ -126,7 +146,15 @@ function ChatMessageFeedback({ threadId, isPending, error }: ChatThreadMessagesA
 }
 
 /** Backward-compatible full chat boundary for focused component tests. */
-export function ChatSessionProvider({ children, threadId, userScoped = false }: { children: ReactNode; threadId?: string; userScoped?: boolean }) {
+export function ChatSessionProvider({
+  children,
+  threadId,
+  userScoped = false,
+}: {
+  children: ReactNode;
+  threadId?: string;
+  userScoped?: boolean;
+}) {
   return (
     <ChatSessionConfigProvider threadId={threadId} userScoped={userScoped}>
       <ChatSessionBoundary threadId={threadId} deferUntilMessagesReady>

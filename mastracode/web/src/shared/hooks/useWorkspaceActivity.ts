@@ -2,7 +2,10 @@ import type { AgentControllerThreadInfo } from '@mastra/client-js';
 import { useQuery } from '@tanstack/react-query';
 
 import { queryKeys } from '../api/keys';
-import { createAgentControllerClient, requireAgentControllerSession } from '../../web/ui/domains/chat/services/agentControllerClient';
+import {
+  createAgentControllerClient,
+  requireAgentControllerSession,
+} from '../../web/ui/domains/chat/services/agentControllerClient';
 
 /** How often workspace activity is re-checked while the tab is focused. */
 export const WORKSPACE_ACTIVITY_POLL_MS = 5000;

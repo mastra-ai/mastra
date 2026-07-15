@@ -91,22 +91,33 @@ function sse(events: AgentControllerEvent[] = []): Response {
 
 function delayedSse(event: AgentControllerEvent) {
   const encoder = new TextEncoder();
-  let emit: () => void = () => {};
+  const emitters = new Set<() => void>();
+  let pending = false;
   let markReady: () => void = () => {};
   const ready = new Promise<void>(resolve => {
     markReady = resolve;
   });
-  const response = new Response(
-    new ReadableStream<Uint8Array>({
-      start(controller) {
-        emit = () => controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
-        markReady();
-      },
-      cancel() {},
-    }),
-    { headers: { 'content-type': 'text/event-stream' } },
-  );
-  return { response, emit: () => ready.then(() => emit()) };
+  const response = () =>
+    new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          const emit = () => controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+          emitters.add(emit);
+          if (pending) emit();
+          markReady();
+        },
+        cancel() {},
+      }),
+      { headers: { 'content-type': 'text/event-stream' } },
+    );
+  return {
+    response,
+    emit: () =>
+      ready.then(() => {
+        pending = true;
+        emitters.forEach(emit => emit());
+      }),
+  };
 }
 
 function useAgentControllerHandlers({
@@ -125,6 +136,9 @@ function useAgentControllerHandlers({
     http.get(`${API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', label: 'Build' }] })),
     http.get(`${API}/models`, () => HttpResponse.json({ models: [] })),
     http.get(`${TEST_BASE_URL}/auth/me`, () => new Response(null, { status: 404 })),
+    http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+      HttpResponse.json({ enabled: false, connected: false, installations: [] }),
+    ),
     http.get(SESSION, () => HttpResponse.json(sessionState())),
     http.put(`${SESSION}/state`, async ({ request }) => {
       onState(await request.json());
@@ -203,8 +217,10 @@ describe('MastraCode sidebar auth actions', () => {
     renderSeededApp({ authenticated: true, user: { name: 'Ada Lovelace', email: 'ada@example.com' } });
 
     await waitFor(() => expect(screen.queryByRole('status', { name: 'Checking sign-in' })).not.toBeInTheDocument());
-    expect(await screen.findByText('Ada Lovelace')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /sign out/i })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Ada Lovelace')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /sign out/i })).toBeInTheDocument();
+    });
     expect(screen.queryByRole('button', { name: /sign in/i })).not.toBeInTheDocument();
   });
 
@@ -231,11 +247,13 @@ describe('MastraCode empty thread state', () => {
   it('given a project with no messages, when the app renders, then the Mastra Code wordmark hero appears', async () => {
     renderSeededApp();
 
-    expect(await screen.findByText('Ready for new conversation')).toBeInTheDocument();
-    const wordmark = screen.getByLabelText('Mastra Code');
-    expect(wordmark).toBeInTheDocument();
-    // The hero sits inside the transcript scroller, which centers empty content vertically.
-    expect(wordmark.closest('.place-items-center')).not.toBeNull();
+    await waitFor(() => {
+      expect(screen.getByText('Ready for new conversation')).toBeInTheDocument();
+      const wordmark = screen.getByLabelText('Mastra Code');
+      expect(wordmark).toBeInTheDocument();
+      // The hero sits inside the transcript scroller, which centers empty content vertically.
+      expect(wordmark.closest('.place-items-center')).not.toBeNull();
+    });
   });
 });
 
@@ -260,11 +278,13 @@ describe('MastraCode message rendering', () => {
     renderChat();
 
     await waitFor(() => expect(screen.queryByRole('status', { name: 'Loading messages' })).not.toBeInTheDocument());
-    await waitFor(() => expect(document.body).toHaveTextContent('Hello from hydrate'));
-    expect(document.body).toHaveTextContent('from hydrate');
-    expect(screen.getByText('checking files')).toBeInTheDocument();
-    const card = await findToolCard('view');
-    expect(within(card).getByText('Done')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(document.body).toHaveTextContent('Hello from hydrate');
+      expect(document.body).toHaveTextContent('from hydrate');
+      expect(screen.getByText('checking files')).toBeInTheDocument();
+      const card = screen.getByRole('group', { name: 'Tool: view' });
+      expect(within(card).getByText('Done')).toBeInTheDocument();
+    });
   });
 
   it('composes consecutive tool cards into a single bordered container', async () => {
@@ -286,19 +306,21 @@ describe('MastraCode message rendering', () => {
 
     renderChat();
 
-    const first = await findToolCard('view');
-    const last = await findToolCard('search');
+    await waitFor(() => {
+      const first = screen.getByRole('group', { name: 'Tool: view' });
+      const last = screen.getByRole('group', { name: 'Tool: search' });
 
-    // First card rounds only its top; last card rounds only its bottom, so the
-    // pair reads as one container. The shared inner edge becomes a divider
-    // (the last card's top border) rather than two abutting rounded borders.
-    expect(first.className).toContain('rounded-t-xl');
-    expect(first.className).not.toContain('rounded-b-xl');
-    expect(last.className).toContain('rounded-b-xl');
-    expect(last.className).not.toContain('rounded-t-xl');
-    // border-y gives the last card a top edge (the divider from the first card)
-    // plus the closing bottom border.
-    expect(last.className).toContain('border-y');
+      // First card rounds only its top; last card rounds only its bottom, so the
+      // pair reads as one container. The shared inner edge becomes a divider
+      // (the last card's top border) rather than two abutting rounded borders.
+      expect(first.className).toContain('rounded-t-xl');
+      expect(first.className).not.toContain('rounded-b-xl');
+      expect(last.className).toContain('rounded-b-xl');
+      expect(last.className).not.toContain('rounded-t-xl');
+      // border-y gives the last card a top edge (the divider from the first card)
+      // plus the closing bottom border.
+      expect(last.className).toContain('border-y');
+    });
   });
 
   it('renders assistant text when SSE message updates arrive after subscription', async () => {
@@ -308,14 +330,15 @@ describe('MastraCode message rendering', () => {
       message: { id: 'assistant-stream', role: 'assistant', content: [{ type: 'text', text: 'Streaming now' }] },
     });
     useAgentControllerHandlers();
-    server.use(http.get(`${SESSION}/stream`, () => stream.response));
+    server.use(http.get(`${SESSION}/stream`, () => stream.response()));
 
     renderChat();
 
-    await screen.findByRole('textbox', { name: 'Message' });
+    await waitFor(() => expect(screen.getByText('Ready for new conversation')).toBeInTheDocument());
+    await new Promise(resolve => setTimeout(resolve, 100));
     await stream.emit();
 
-    expect(await screen.findByText('Streaming now')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Streaming now')).toBeInTheDocument());
   });
 
   it('renders tool lifecycle events inline before a later message update re-emits the tool part', async () => {

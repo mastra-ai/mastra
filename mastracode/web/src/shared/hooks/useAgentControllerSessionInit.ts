@@ -1,7 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { queryKeys } from '../api/keys';
-import { createAgentControllerClient, requireAgentControllerSession } from '../../web/ui/domains/chat/services/agentControllerClient';
+import {
+  createAgentControllerClient,
+  requireAgentControllerSession,
+} from '../../web/ui/domains/chat/services/agentControllerClient';
 
 interface UseAgentControllerSessionInitArgs {
   agentControllerId: string;

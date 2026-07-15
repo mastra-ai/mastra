@@ -2,7 +2,10 @@ import type { PlanResume } from '@mastra/client-js';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '../api/keys';
-import { createAgentControllerClient, requireAgentControllerSession } from '../../web/ui/domains/chat/services/agentControllerClient';
+import {
+  createAgentControllerClient,
+  requireAgentControllerSession,
+} from '../../web/ui/domains/chat/services/agentControllerClient';
 
 interface AgentControllerRunMutationArgs {
   agentControllerId: string;
@@ -44,7 +47,9 @@ export function useSendAgentControllerMessageMutation(args: AgentControllerRunMu
   return useMutation({
     mutationFn: (input: SendAgentControllerMessageInput | string) => {
       const { text, files } = typeof input === 'string' ? { text: input, files: undefined } : input;
-      return requireAgentControllerSession(session).sendMessage(files?.length ? { content: text, files } : { content: text });
+      return requireAgentControllerSession(session).sendMessage(
+        files?.length ? { content: text, files } : { content: text },
+      );
     },
     onSuccess: invalidateSession,
   });

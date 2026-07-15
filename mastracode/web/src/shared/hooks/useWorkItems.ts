@@ -2,8 +2,17 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import { createWorkItem, deleteWorkItem, listWorkItems, updateWorkItem } from '../../web/ui/domains/factory/services/workItems';
-import type { CreateWorkItemInput, UpdateWorkItemInput, WorkItem } from '../../web/ui/domains/factory/services/workItems';
+import {
+  createWorkItem,
+  deleteWorkItem,
+  listWorkItems,
+  updateWorkItem,
+} from '../../web/ui/domains/factory/services/workItems';
+import type {
+  CreateWorkItemInput,
+  UpdateWorkItemInput,
+  WorkItem,
+} from '../../web/ui/domains/factory/services/workItems';
 
 /** The org's persisted work items (kanban cards) for a project. */
 export function useWorkItemsQuery(githubProjectId: string | undefined) {

@@ -20,7 +20,11 @@ import {
 import { useIntakeConfigQuery } from '../../../../shared/hooks/useIntakeConfig';
 import { useLinearIssuesQuery, useLinearStatusQuery } from '../../../../shared/hooks/useLinearData';
 import { useStartFactoryRun } from '../../../../shared/hooks/useStartFactoryRun';
-import { useDeleteWorkItemMutation, useUpdateWorkItemMutation, useUpsertWorkItemMutation } from '../../../../shared/hooks/useWorkItems';
+import {
+  useDeleteWorkItemMutation,
+  useUpdateWorkItemMutation,
+  useUpsertWorkItemMutation,
+} from '../../../../shared/hooks/useWorkItems';
 import { useWorkItemsQuery } from '../../../../shared/hooks/useWorkItems';
 import type { GithubIssue, GithubPullRequest } from './services/factory';
 import type { LinearIssue } from './services/linear';

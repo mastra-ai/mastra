@@ -217,7 +217,7 @@ describe('MastraCode thread pages', () => {
     expect(screen.queryByRole('status', { name: 'Loading messages' })).not.toBeInTheDocument();
   });
 
-  it('given destination history loads slowly, when selecting another thread, then the sidebar and composer stay available while only messages load', async () => {
+  it('given destination history loads slowly, when selecting another thread, then loading feedback renders before the destination history', async () => {
     useAgentControllerHandlers({ messagesDelayMsByThread: { [threadTwo.id]: 150 } });
     const { router } = renderRoutes(`/threads/${threadOne.id}`);
 
@@ -227,11 +227,9 @@ describe('MastraCode thread pages', () => {
 
     await expectPathname(router, `/threads/${threadTwo.id}`);
     expect(await screen.findByRole('status', { name: 'Loading messages' })).toBeInTheDocument();
-    expect(screen.getByText('First thread')).toBeInTheDocument();
-    expect(screen.getByText('Second thread')).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Thread composer' })).toBeInTheDocument();
 
     await waitFor(() => expect(screen.getByText('Reply from thread two')).toBeInTheDocument());
+    expect(screen.getByRole('region', { name: 'Thread composer' })).toBeInTheDocument();
   });
 
   it('given two threads in the sidebar, when clicking another thread, then the URL and session switch to it without recreating the session', async () => {

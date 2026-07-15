@@ -66,6 +66,22 @@ const nextProject: Project = {
   createdAt: 2,
 };
 
+const githubProject: Project = {
+  id: 'github-project-test',
+  name: 'MastraCode GitHub Test',
+  source: 'github',
+  githubProjectId: 'github-project-id',
+  resourceId: RESOURCE_ID,
+  worktrees: [],
+  createdAt: 3,
+};
+
+const githubProjectWithWorktree: Project = {
+  ...githubProject,
+  worktrees: [{ branch: 'feature/test', baseBranch: 'main', worktreePath: '/tmp/mastracode-github-test' }],
+  selectedWorktreePath: '/tmp/mastracode-github-test',
+};
+
 function seedProject(projects: Project[] = [project], activeProject: Project = project) {
   localStorage.setItem('mastracode-projects', JSON.stringify(projects));
   localStorage.setItem('mastracode-active-project', activeProject.id);
@@ -156,6 +172,7 @@ function Probe() {
     <div>
       <span data-testid="status">{status}</span>
       <span data-testid="thread-id">{threadId ?? '(none)'}</span>
+      <span data-testid="transcript-thread-id">{transcript.threadId ?? '(none)'}</span>
       <span data-testid="entries-count">{transcript.entries.length}</span>
       <span data-testid="message-text">{messageText}</span>
       <span data-testid="busy">{busy ? 'yes' : 'no'}</span>
@@ -523,6 +540,7 @@ describe('ChatSessionProvider', () => {
       renderProbe(ROUTE_THREAD_ID);
 
       await waitFor(() => expect(screen.getByTestId('entries-count')).toHaveTextContent('2'));
+      expect(screen.getByTestId('transcript-thread-id')).toHaveTextContent(ROUTE_THREAD_ID);
       expect(screen.getByTestId('message-text')).toHaveTextContent('Persisted user question');
       expect(screen.getByTestId('message-text')).not.toHaveTextContent('Wrong thread text');
       expect(requests).toContain('messages:route');
@@ -590,6 +608,31 @@ describe('ChatSessionProvider', () => {
       expect(screen.getByTestId('session-enabled')).toHaveTextContent('yes');
       expect(screen.getByTestId('session-project-path')).toHaveTextContent('/tmp/mastracode-test');
       expect(screen.getByTestId('session-base-url')).toHaveTextContent(TEST_BASE_URL);
+    });
+
+    it('disables a GitHub project until a factory worktree is selected', async () => {
+      const requests: string[] = [];
+      seedProject([githubProject], githubProject);
+      useAgentControllerHandlers([], requests);
+
+      renderFocusedProbe(<SessionContextProbe />);
+
+      await waitFor(() => expect(screen.getByTestId('session-resource-id')).toHaveTextContent(RESOURCE_ID));
+      expect(screen.getByTestId('session-enabled')).toHaveTextContent('no');
+      expect(screen.getByTestId('session-project-path')).toBeEmptyDOMElement();
+      expect(requests).not.toContain('create');
+    });
+
+    it('enables a GitHub project when a factory worktree is selected', async () => {
+      const requests: string[] = [];
+      seedProject([githubProjectWithWorktree], githubProjectWithWorktree);
+      useAgentControllerHandlers([], requests);
+
+      renderFocusedProbe(<SessionContextProbe />);
+
+      await waitFor(() => expect(screen.getByTestId('session-enabled')).toHaveTextContent('yes'));
+      expect(screen.getByTestId('session-project-path')).toHaveTextContent('/tmp/mastracode-github-test');
+      await waitFor(() => expect(requests).toContain('create'));
     });
   });
 

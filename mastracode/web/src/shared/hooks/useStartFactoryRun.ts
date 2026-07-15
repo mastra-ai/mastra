@@ -5,7 +5,10 @@ import { useNavigate } from 'react-router';
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import type { AgentControllerSession } from '../../web/ui/domains/chat/services/agentControllerClient';
-import { createAgentControllerClient, requireAgentControllerSession } from '../../web/ui/domains/chat/services/agentControllerClient';
+import {
+  createAgentControllerClient,
+  requireAgentControllerSession,
+} from '../../web/ui/domains/chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../web/ui/domains/chat/services/constants';
 // Deep imports (not the workspaces barrel) to avoid provider/component cycles.
 import { useActiveProjectContext } from '../../web/ui/domains/workspaces/context/ActiveProjectProvider';
