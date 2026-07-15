@@ -2,7 +2,6 @@ import type { MastraStorage, MemoryStorage } from '@mastra/core/storage';
 import { createSampleMessageV2, createSampleThread, createSampleThreadWithParams } from './data';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
-import { randomUUID } from 'node:crypto';
 
 export function createThreadsTest({ storage }: { storage: MastraStorage }) {
   let memoryStorage: MemoryStorage;
@@ -80,8 +79,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
 
     describe('resourceId isolation in getThreadById', () => {
       it('should return thread when resourceId matches (tenant match)', async () => {
-        const id = `thread-match-${randomUUID()}`;
-        const resourceId = `tenant-${randomUUID()}`;
+        const id = `thread-match-${crypto.randomUUID()}`;
+        const resourceId = `tenant-${crypto.randomUUID()}`;
         const thread = createSampleThreadWithParams(id, resourceId, new Date(), new Date());
         await memoryStorage.saveThread({ thread });
 
@@ -91,9 +90,9 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       });
 
       it('should return null when resourceId does not match (tenant mismatch)', async () => {
-        const id = `thread-mismatch-${randomUUID()}`;
-        const resourceId = `tenant-${randomUUID()}`;
-        const otherResourceId = `tenant-other-${randomUUID()}`;
+        const id = `thread-mismatch-${crypto.randomUUID()}`;
+        const resourceId = `tenant-${crypto.randomUUID()}`;
+        const otherResourceId = `tenant-other-${crypto.randomUUID()}`;
         const thread = createSampleThreadWithParams(id, resourceId, new Date(), new Date());
         await memoryStorage.saveThread({ thread });
 
@@ -102,8 +101,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       });
 
       it('should treat an empty string resourceId as an explicit scope', async () => {
-        const id = `thread-empty-resourceId-${randomUUID()}`;
-        const resourceId = `tenant-${randomUUID()}`;
+        const id = `thread-empty-resourceId-${crypto.randomUUID()}`;
+        const resourceId = `tenant-${crypto.randomUUID()}`;
         const thread = createSampleThreadWithParams(id, resourceId, new Date(), new Date());
         await memoryStorage.saveThread({ thread });
 
@@ -112,8 +111,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       });
 
       it('should return thread when resourceId is not provided (backwards compatibility)', async () => {
-        const id = `thread-no-resourceId-${randomUUID()}`;
-        const resourceId = `tenant-${randomUUID()}`;
+        const id = `thread-no-resourceId-${crypto.randomUUID()}`;
+        const resourceId = `tenant-${crypto.randomUUID()}`;
         const thread = createSampleThreadWithParams(id, resourceId, new Date(), new Date());
         await memoryStorage.saveThread({ thread });
 
@@ -279,7 +278,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       // Simulate user passing stringified JSON as message content (like the original bug report)
       const stringifiedContent = JSON.stringify({ userInput: 'test data', metadata: { key: 'value' } });
       const message: MastraDBMessage = {
-        id: `msg-${randomUUID()}`,
+        id: `msg-${crypto.randomUUID()}`,
         role: 'user',
         threadId: thread.id,
         resourceId: thread.resourceId,
@@ -318,7 +317,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
     });
 
     it('should return paginated threads with total count', async () => {
-      const resourceId = `pg-paginated-resource-${randomUUID()}`;
+      const resourceId = `pg-paginated-resource-${crypto.randomUUID()}`;
       const threadPromises = Array.from({ length: 17 }, () =>
         memoryStorage.saveThread({ thread: { ...createSampleThread(), resourceId } }),
       );
@@ -338,7 +337,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
     });
 
     it('should return paginated results when no pagination params for listThreads', async () => {
-      const resourceId = `pg-non-paginated-resource-${randomUUID()}`;
+      const resourceId = `pg-non-paginated-resource-${crypto.randomUUID()}`;
       await memoryStorage.saveThread({ thread: { ...createSampleThread(), resourceId } });
 
       const results = await memoryStorage.listThreads({ filter: { resourceId }, page: 0, perPage: 100 });
@@ -499,13 +498,13 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
 
     beforeEach(async () => {
       // Create unique resourceId for each test
-      resourceId = `sort-test-resource-${randomUUID()}`;
+      resourceId = `sort-test-resource-${crypto.randomUUID()}`;
 
       // Create test threads with specific dates for predictable sorting
       const baseTime = new Date('2024-01-01T00:00:00Z');
       const threadData = [
         {
-          id: `thread-${randomUUID()}`,
+          id: `thread-${crypto.randomUUID()}`,
           resourceId,
           title: 'Thread 1',
           createdAt: new Date(baseTime.getTime()), // oldest createdAt
@@ -513,7 +512,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
           metadata: { index: 1 },
         },
         {
-          id: `thread-${randomUUID()}`,
+          id: `thread-${crypto.randomUUID()}`,
           resourceId,
           title: 'Thread 2',
           createdAt: new Date(baseTime.getTime() + 1000),
@@ -521,7 +520,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
           metadata: { index: 2 },
         },
         {
-          id: `thread-${randomUUID()}`,
+          id: `thread-${crypto.randomUUID()}`,
           resourceId,
           title: 'Thread 3',
           createdAt: new Date(baseTime.getTime() + 2000),
@@ -529,7 +528,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
           metadata: { index: 3 },
         },
         {
-          id: `thread-${randomUUID()}`,
+          id: `thread-${crypto.randomUUID()}`,
           resourceId,
           title: 'Thread 4',
           createdAt: new Date(baseTime.getTime() + 3000),
@@ -537,7 +536,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
           metadata: { index: 4 },
         },
         {
-          id: `thread-${randomUUID()}`,
+          id: `thread-${crypto.randomUUID()}`,
           resourceId,
           title: 'Thread 5',
           createdAt: new Date(baseTime.getTime() + 4000), // newest createdAt
@@ -711,7 +710,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       });
 
       it('should handle empty results with sorting parameters', async () => {
-        const emptyResourceId = `empty-resource-${randomUUID()}`;
+        const emptyResourceId = `empty-resource-${crypto.randomUUID()}`;
 
         const result = await memoryStorage.listThreads({
           filter: { resourceId: emptyResourceId },
@@ -728,7 +727,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       });
 
       it('should handle single thread with sorting parameters', async () => {
-        const singleResourceId = `single-resource-${randomUUID()}`;
+        const singleResourceId = `single-resource-${crypto.randomUUID()}`;
         const singleThread = await memoryStorage.saveThread({
           thread: { ...createSampleThread(), resourceId: singleResourceId },
         });
@@ -749,13 +748,13 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
 
     describe('Thread sorting edge cases', () => {
       it('should handle threads with identical timestamps', async () => {
-        const identicalResourceId = `identical-resource-${randomUUID()}`;
+        const identicalResourceId = `identical-resource-${crypto.randomUUID()}`;
         const sameDate = new Date('2024-01-01T12:00:00Z');
 
         const identicalThreads = await Promise.all([
           memoryStorage.saveThread({
             thread: {
-              id: `identical-1-${randomUUID()}`,
+              id: `identical-1-${crypto.randomUUID()}`,
               resourceId: identicalResourceId,
               title: 'Identical Thread 1',
               createdAt: sameDate,
@@ -765,7 +764,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
           }),
           memoryStorage.saveThread({
             thread: {
-              id: `identical-2-${randomUUID()}`,
+              id: `identical-2-${crypto.randomUUID()}`,
               resourceId: identicalResourceId,
               title: 'Identical Thread 2',
               createdAt: sameDate,
@@ -775,7 +774,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
           }),
           memoryStorage.saveThread({
             thread: {
-              id: `identical-3-${randomUUID()}`,
+              id: `identical-3-${crypto.randomUUID()}`,
               resourceId: identicalResourceId,
               title: 'Identical Thread 3',
               createdAt: sameDate,
@@ -820,11 +819,11 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       });
 
       beforeEach(async () => {
-        filterResourceId1 = randomUUID();
+        filterResourceId1 = crypto.randomUUID();
 
         // Create threads with different timestamps for sorting tests
         filterThread1 = createSampleThreadWithParams(
-          randomUUID(),
+          crypto.randomUUID(),
           filterResourceId1,
           new Date(Date.now() - 4000),
           new Date(Date.now() - 4000),
@@ -832,7 +831,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
         filterThread1.metadata = { category: 'support', priority: 'high' };
 
         filterThread2 = createSampleThreadWithParams(
-          randomUUID(),
+          crypto.randomUUID(),
           filterResourceId1,
           new Date(Date.now() - 2000),
           new Date(Date.now() - 2000),
@@ -906,13 +905,13 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
     });
 
     beforeEach(async () => {
-      resourceId1 = randomUUID();
-      resourceId2 = randomUUID();
+      resourceId1 = crypto.randomUUID();
+      resourceId2 = crypto.randomUUID();
 
       // Use unique metadata values to avoid conflicts with other test blocks
       // Create threads with different metadata
       thread1 = createSampleThreadWithParams(
-        randomUUID(),
+        crypto.randomUUID(),
         resourceId1,
         new Date(Date.now() - 4000),
         new Date(Date.now() - 4000),
@@ -921,7 +920,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       thread1.title = 'Thread 1';
 
       thread2 = createSampleThreadWithParams(
-        randomUUID(),
+        crypto.randomUUID(),
         resourceId1,
         new Date(Date.now() - 3000),
         new Date(Date.now() - 3000),
@@ -930,7 +929,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       thread2.title = 'Thread 2';
 
       thread3 = createSampleThreadWithParams(
-        randomUUID(),
+        crypto.randomUUID(),
         resourceId2,
         new Date(Date.now() - 2000),
         new Date(Date.now() - 2000),
@@ -939,7 +938,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       thread3.title = 'Thread 3';
 
       thread4 = createSampleThreadWithParams(
-        randomUUID(),
+        crypto.randomUUID(),
         resourceId2,
         new Date(Date.now() - 1000),
         new Date(Date.now() - 1000),

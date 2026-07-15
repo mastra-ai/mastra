@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { Agent } from '../agent';
 import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { DurableAgentLike } from '../agent/types';
@@ -1128,7 +1127,7 @@ export class Mastra<
       }
       return id;
     }
-    return randomUUID();
+    return crypto.randomUUID();
   }
 
   /**

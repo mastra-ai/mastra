@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -44,11 +43,11 @@ describe('Memory with LibSQL Integration', () => {
     memory = new Memory({
       storage: new LibSQLStore({
         url: `file:${join(dbStoragePath, 'test.db')}`,
-        id: randomUUID(),
+        id: crypto.randomUUID(),
       }),
       vector: new LibSQLVector({
         url: 'file:libsql-test.db',
-        id: randomUUID(),
+        id: crypto.randomUUID(),
       }),
       embedder: fastembed,
       options: memoryOptions,
@@ -64,11 +63,11 @@ describe('Memory with LibSQL Integration', () => {
       memory,
       workerTestConfig: {
         storageTypeForWorker: StorageType.LibSQL,
-        storageConfigForWorker: { url: `file:${join(dbStoragePath, 'libsql-test.db')}`, id: randomUUID() },
+        storageConfigForWorker: { url: `file:${join(dbStoragePath, 'libsql-test.db')}`, id: crypto.randomUUID() },
         memoryOptionsForWorker: memoryOptions,
         vectorConfigForWorker: {
           url: 'file:libsql-test.db',
-          id: randomUUID(),
+          id: crypto.randomUUID(),
         },
       },
     };
@@ -79,7 +78,7 @@ describe('Memory with LibSQL Integration', () => {
       const memoryWithLimit = new Memory({
         storage: new LibSQLStore({
           url: 'file:libsql-test.db',
-          id: randomUUID(),
+          id: crypto.randomUUID(),
         }),
         embedder: fastembed.small,
         options: {
@@ -87,8 +86,8 @@ describe('Memory with LibSQL Integration', () => {
         },
       });
 
-      const threadId = randomUUID();
-      const resourceId = randomUUID();
+      const threadId = crypto.randomUUID();
+      const resourceId = crypto.randomUUID();
 
       await memoryWithLimit.createThread({
         threadId,
@@ -99,7 +98,7 @@ describe('Memory with LibSQL Integration', () => {
       const baseTime = Date.now();
       for (let i = 1; i <= 10; i++) {
         messages.push({
-          id: randomUUID(),
+          id: crypto.randomUUID(),
           threadId,
           resourceId,
           content: {
@@ -152,7 +151,7 @@ describe('Memory with LibSQL Integration', () => {
       omDbPath = await mkdtemp(join(tmpdir(), 'memory-om-ordering-'));
       omStorage = new LibSQLStore({
         url: `file:${join(omDbPath, 'om-ordering.db')}`,
-        id: randomUUID(),
+        id: crypto.randomUUID(),
       });
       await omStorage.init();
     });
@@ -202,7 +201,7 @@ describe('Memory with LibSQL Integration', () => {
 
     it('persists user then assistant with final text; monotonic createdAt; unique ids (no bufferTokens)', async () => {
       const agent = createOmAgent(false);
-      const threadId = randomUUID();
+      const threadId = crypto.randomUUID();
 
       await agent.generate('Please help me with something important.', {
         memory: { thread: threadId, resource: 'test-resource' },
@@ -225,7 +224,7 @@ describe('Memory with LibSQL Integration', () => {
 
     it('with bufferTokens, tool-invocation parts precede final text in storage order', async () => {
       const agent = createOmAgent(15);
-      const threadId = randomUUID();
+      const threadId = crypto.randomUUID();
 
       await agent.generate('Please help me with something important.', {
         memory: { thread: threadId, resource: 'test-resource' },
@@ -241,7 +240,7 @@ describe('Memory with LibSQL Integration', () => {
 
     it('second generate keeps both user messages ordered with unique ids (bufferTokens)', async () => {
       const agent = createOmAgent(15);
-      const threadId = randomUUID();
+      const threadId = crypto.randomUUID();
 
       await agent.generate('First message about flights.', {
         memory: { thread: threadId, resource: 'test-resource' },
@@ -264,7 +263,7 @@ describe('Memory with LibSQL Integration', () => {
 
     it('no duplicate user rows by content after two turns (bufferTokens)', async () => {
       const agent = createOmAgent(15);
-      const threadId = randomUUID();
+      const threadId = crypto.randomUUID();
 
       await agent.generate('Turn 1: search for restaurants.', {
         memory: { thread: threadId, resource: 'test-resource' },
@@ -287,7 +286,7 @@ describe('Memory with LibSQL Integration', () => {
      */
     it('persists post-seal assistant text under the rotated response message id (buffer beforeBuffer + LibSQL)', async () => {
       const memoryStore = (await omStorage.getStore('memory'))!;
-      const threadId = randomUUID();
+      const threadId = crypto.randomUUID();
       const resourceId = 'om-14745-libsql-resource';
 
       await runOm14745RotationScenario({

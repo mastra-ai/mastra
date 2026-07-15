@@ -13,7 +13,6 @@
  *
  * Tests run with OpenAI models.
  */
-import { randomUUID } from 'node:crypto';
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import type { MastraModelConfig } from '@mastra/core/llm';
@@ -192,7 +191,7 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
   for (const modelConfig of models) {
     describe(`Message Ordering with ${modelConfig.name} (${version}) (Issue #9909)`, () => {
       const createMemory = () => {
-        const testId = randomUUID();
+        const testId = crypto.randomUUID();
 
         return new Memory({
           options: { lastMessages: 20 },
@@ -216,8 +215,8 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
           tools,
         });
 
-        const threadId = randomUUID();
-        const resourceId = `ordering-test-user-${randomUUID()}`;
+        const threadId = crypto.randomUUID();
+        const resourceId = `ordering-test-user-${crypto.randomUUID()}`;
 
         console.info('\n========================================');
         console.info(`TEST: Stream -> Raw Storage -> Recall (${modelConfig.name} ${version})`);
@@ -362,8 +361,8 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
           tools,
         });
 
-        const threadId = randomUUID();
-        const resourceId = `multi-tool-test-${randomUUID()}`;
+        const threadId = crypto.randomUUID();
+        const resourceId = `multi-tool-test-${crypto.randomUUID()}`;
 
         console.info('\n========================================');
         console.info(`TEST: Multiple Tool Calls Ordering (${modelConfig.name} ${version})`);
@@ -459,8 +458,8 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
           tools,
         });
 
-        const threadId = randomUUID();
-        const resourceId = `exact-match-test-${randomUUID()}`;
+        const threadId = crypto.randomUUID();
+        const resourceId = `exact-match-test-${crypto.randomUUID()}`;
 
         console.info('\n========================================');
         console.info(`TEST: Exact Stream-Storage Match (${modelConfig.name} ${version})`);

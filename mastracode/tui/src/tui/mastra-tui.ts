@@ -4,7 +4,6 @@
  */
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
 import type { Component } from '@earendil-works/pi-tui';
 import { getOAuthProviders } from '@mastra/code-sdk/auth/storage';
 import {
@@ -996,7 +995,7 @@ export class MastraTUI {
   private beginLifecycleRun(): void {
     const hookMgr = this.state.hookManager;
     if (!hookMgr) return;
-    const runId = randomUUID();
+    const runId = crypto.randomUUID();
     hookMgr.setRunId(runId);
     hookMgr.runAgentStart().catch(() => {});
   }

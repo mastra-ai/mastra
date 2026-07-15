@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -50,7 +49,7 @@ describe('Memory with UpstashStore Integration', () => {
   const storageConfig = {
     url: 'http://localhost:8079',
     token: 'test_token',
-    id: randomUUID(),
+    id: crypto.randomUUID(),
   };
 
   getResuableTests(() => {
@@ -63,7 +62,7 @@ describe('Memory with UpstashStore Integration', () => {
       vector: new LibSQLVector({
         // TODO: use upstash vector in tests
         url: `file:${join(dbPath, 'upstash-test-vector.db')}`,
-        id: randomUUID(),
+        id: crypto.randomUUID(),
       }),
       embedder: fastembed,
       options: memoryOptions,
@@ -91,8 +90,8 @@ describe('Memory with UpstashStore Integration', () => {
         },
       });
 
-      const threadId = randomUUID();
-      const resourceId = randomUUID();
+      const threadId = crypto.randomUUID();
+      const resourceId = crypto.randomUUID();
 
       await memoryWithLimit.createThread({
         threadId,
@@ -103,7 +102,7 @@ describe('Memory with UpstashStore Integration', () => {
       const baseTime = Date.now();
       for (let i = 1; i <= 10; i++) {
         messages.push({
-          id: randomUUID(),
+          id: crypto.randomUUID(),
           threadId,
           resourceId,
           content: {

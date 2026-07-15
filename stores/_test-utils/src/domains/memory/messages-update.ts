@@ -2,7 +2,6 @@ import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createSampleMessageV2, createSampleThread } from './data';
 import type { MastraStorage, MemoryStorage } from '@mastra/core/storage';
-import { randomUUID } from 'node:crypto';
 
 export function createMessagesUpdateTest({ storage }: { storage: MastraStorage }) {
   let memoryStorage: MemoryStorage;
@@ -164,7 +163,7 @@ export function createMessagesUpdateTest({ storage }: { storage: MastraStorage }
       const originalMessage = createSampleMessageV2({ threadId: thread.id });
       await memoryStorage.saveMessages({ messages: [originalMessage] });
 
-      const messages = [{ id: randomUUID(), role: 'assistant' }] as MastraDBMessage[];
+      const messages = [{ id: crypto.randomUUID(), role: 'assistant' }] as MastraDBMessage[];
 
       await expect(
         memoryStorage.updateMessages({

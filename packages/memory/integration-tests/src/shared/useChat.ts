@@ -1,5 +1,4 @@
 import { spawn } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
 import { mkdtemp } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -57,7 +56,7 @@ export function setupUseChatV4() {
     let port: number;
     let agent: ReturnType<typeof createWeatherAgent>;
     let dbPath: string;
-    const threadId = randomUUID();
+    const threadId = crypto.randomUUID();
     const resourceId = 'test-resource';
 
     beforeAll(async () => {
@@ -171,7 +170,7 @@ export function setupUseChatV4() {
 
     it('should stream useChat with client side tool calling', async () => {
       let error: Error | null = null;
-      const threadId = randomUUID();
+      const threadId = crypto.randomUUID();
 
       await agent.generateLegacy(`hi`, {
         threadId,
@@ -287,7 +286,7 @@ export function setupUseChatV5Plus({ useChatFunc, version }: { useChatFunc: any;
     let port: number;
     let agent: ReturnType<typeof createWeatherAgentV5>;
     let dbPath: string;
-    const threadId = randomUUID();
+    const threadId = crypto.randomUUID();
     const resourceId = 'test-resource';
 
     beforeAll(async () => {
@@ -404,7 +403,7 @@ export function setupUseChatV5Plus({ useChatFunc, version }: { useChatFunc: any;
 
     it('should stream useChat with client side tool calling', async () => {
       let error: Error | null = null;
-      const localThreadId = randomUUID();
+      const localThreadId = crypto.randomUUID();
 
       await agent.generate(`hi`, {
         memory: { thread: localThreadId, resource: resourceId },
@@ -532,7 +531,7 @@ export function setupUseChatV5Plus({ useChatFunc, version }: { useChatFunc: any;
     });
 
     it('should not create duplicate assistant messages', async () => {
-      const testThreadId = randomUUID();
+      const testThreadId = crypto.randomUUID();
       const testResourceId = 'test-user-exact-flow-11091';
       const mastraClient = new MastraClient({ baseUrl: `http://localhost:${port}` });
 

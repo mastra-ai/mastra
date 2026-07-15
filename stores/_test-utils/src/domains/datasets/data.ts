@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { CreateDatasetInput, AddDatasetItemInput } from '@mastra/core/storage';
 
 /**
@@ -7,7 +6,7 @@ import type { CreateDatasetInput, AddDatasetItemInput } from '@mastra/core/stora
  */
 export function createSampleDataset(overrides?: Partial<CreateDatasetInput>): CreateDatasetInput {
   return {
-    name: `dataset-${randomUUID().slice(0, 8)}`,
+    name: `dataset-${crypto.randomUUID().slice(0, 8)}`,
     ...overrides,
   };
 }
@@ -20,7 +19,7 @@ export function createSampleDatasetItem(
   overrides?: Partial<Omit<AddDatasetItemInput, 'datasetId'>>,
 ): Omit<AddDatasetItemInput, 'datasetId'> {
   return {
-    input: { q: `question-${randomUUID().slice(0, 8)}` },
+    input: { q: `question-${crypto.randomUUID().slice(0, 8)}` },
     ...overrides,
   };
 }

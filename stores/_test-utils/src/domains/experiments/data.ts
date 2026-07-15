@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { CreateExperimentInput, AddExperimentResultInput } from '@mastra/core/storage';
 
 /**
@@ -7,11 +6,11 @@ import type { CreateExperimentInput, AddExperimentResultInput } from '@mastra/co
  */
 export function createSampleExperiment(overrides?: Partial<CreateExperimentInput>): CreateExperimentInput {
   return {
-    name: `experiment-${randomUUID().slice(0, 8)}`,
+    name: `experiment-${crypto.randomUUID().slice(0, 8)}`,
     datasetId: null,
     datasetVersion: null,
     targetType: 'agent',
-    targetId: `agent-${randomUUID().slice(0, 8)}`,
+    targetId: `agent-${crypto.randomUUID().slice(0, 8)}`,
     totalItems: 5,
     ...overrides,
   };
@@ -26,10 +25,10 @@ export function createSampleExperimentResult(
 ): Omit<AddExperimentResultInput, 'experimentId'> {
   const now = new Date();
   return {
-    itemId: `item-${randomUUID().slice(0, 8)}`,
+    itemId: `item-${crypto.randomUUID().slice(0, 8)}`,
     itemDatasetVersion: null,
-    input: { q: `question-${randomUUID().slice(0, 8)}` },
-    output: { a: `answer-${randomUUID().slice(0, 8)}` },
+    input: { q: `question-${crypto.randomUUID().slice(0, 8)}` },
+    output: { a: `answer-${crypto.randomUUID().slice(0, 8)}` },
     groundTruth: null,
     error: null,
     startedAt: now,

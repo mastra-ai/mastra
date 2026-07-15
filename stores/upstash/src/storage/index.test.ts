@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import {
   createTestSuite,
   createConfigValidationTests,
@@ -29,8 +28,8 @@ const createTestClient = () =>
     token: TEST_CONFIG.token,
   });
 
-const createThread = (resourceId = `resource-${randomUUID()}`): StorageThreadType => ({
-  id: `thread-${randomUUID()}`,
+const createThread = (resourceId = `resource-${crypto.randomUUID()}`): StorageThreadType => ({
+  id: `thread-${crypto.randomUUID()}`,
   resourceId,
   title: 'Test Thread',
   metadata: {},
@@ -39,7 +38,7 @@ const createThread = (resourceId = `resource-${randomUUID()}`): StorageThreadTyp
 });
 
 const createMessage = (thread: StorageThreadType, overrides: Partial<MastraDBMessage> = {}): MastraDBMessage => ({
-  id: overrides.id ?? randomUUID(),
+  id: overrides.id ?? crypto.randomUUID(),
   threadId: overrides.threadId ?? thread.id,
   resourceId: overrides.resourceId ?? thread.resourceId,
   role: overrides.role ?? 'user',
@@ -329,9 +328,9 @@ describe('WorkflowsUpstash.persistWorkflowSnapshot', () => {
     const workflowsDomain = new WorkflowsUpstash({ client: createTestClient() });
     await workflowsDomain.init();
 
-    const workflowName = `workflow-${randomUUID()}`;
-    const runId = `run-${randomUUID()}`;
-    const resourceId = `resource-${randomUUID()}`;
+    const workflowName = `workflow-${crypto.randomUUID()}`;
+    const runId = `run-${crypto.randomUUID()}`;
+    const resourceId = `resource-${crypto.randomUUID()}`;
     const createdAt = new Date('2024-01-15T10:00:00.000Z');
     const updatedAt = new Date('2024-06-01T12:00:00.000Z');
 

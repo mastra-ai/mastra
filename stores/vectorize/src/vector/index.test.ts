@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { QueryResult } from '@mastra/core/vector';
 import dotenv from 'dotenv';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi, afterEach } from 'vitest';
@@ -226,8 +225,8 @@ async function waitForQueryResults({
 describe('CloudflareVector', () => {
   let vectorDB: CloudflareVector;
   const VECTOR_DIMENSION = 1536;
-  const testIndexName = `default-${randomUUID()}`;
-  const testIndexName2 = `default-${randomUUID()}`;
+  const testIndexName = `default-${crypto.randomUUID()}`;
+  const testIndexName2 = `default-${crypto.randomUUID()}`;
 
   // Helper function to create a normalized vector
   const createVector = (primaryDimension: number, value: number = 1.0): number[] => {
@@ -262,7 +261,7 @@ describe('CloudflareVector', () => {
 
   describe('Index Operations', () => {
     const tempIndexName = 'test_temp_index';
-    const tempIndexNameCreateDescribeDelete = `create-describe-delete-${randomUUID().slice(0, 8)}`;
+    const tempIndexNameCreateDescribeDelete = `create-describe-delete-${crypto.randomUUID().slice(0, 8)}`;
 
     beforeEach(async () => {
       // Cleanup any existing index before each test
@@ -532,7 +531,7 @@ describe('CloudflareVector', () => {
 
   describe('Error Handling', () => {
     it('should handle duplicate index creation gracefully', async () => {
-      const duplicateIndexName = `duplicate-test-${randomUUID()}`;
+      const duplicateIndexName = `duplicate-test-${crypto.randomUUID()}`;
       const dimension = 768;
       const infoSpy = vi.spyOn(vectorDB['logger'], 'info');
       const warnSpy = vi.spyOn(vectorDB['logger'], 'warn');

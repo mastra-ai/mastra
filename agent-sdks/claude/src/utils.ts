@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { ReadableStream, TransformStream } from 'node:stream/web';
 import type { ReadableStreamDefaultController } from 'node:stream/web';
 
@@ -97,7 +96,7 @@ export function createCompletedMastraStream({
 }): ReadableStream<ChunkType> {
   return new ReadableStream<ChunkType>({
     start(controller) {
-      const textId = randomUUID();
+      const textId = crypto.randomUUID();
       enqueueStartChunks(controller, {
         runId,
         prompt,
@@ -155,7 +154,7 @@ export function createMastraOutput<OUTPUT>({
     },
     stream: stream as ReadableStream<ChunkType<OUTPUT>>,
     messageList,
-    messageId: randomUUID(),
+    messageId: crypto.randomUUID(),
     options: {
       ...options,
       runId,

@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   MCPServersStorage,
@@ -188,7 +186,7 @@ export class MongoDBMCPServersStorage extends MCPServersStorage {
       }
 
       // Create version 1
-      const versionId = randomUUID();
+      const versionId = crypto.randomUUID();
       const versionDoc: Record<string, any> = {
         id: versionId,
         mcpServerId: mcpServer.id,

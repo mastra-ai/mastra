@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { ReadableStream } from 'node:stream/web';
 
 import { Agent as CursorAgent } from '@cursor/sdk';
@@ -155,7 +154,7 @@ export class CursorSDKAgent extends Agent {
     options?: SDKAgentRunOptions<OUTPUT>,
   ): Promise<FullOutput<OUTPUT>> {
     const prompt = promptToText(messages);
-    const runId = options?.runId ?? randomUUID();
+    const runId = options?.runId ?? crypto.randomUUID();
     const modelId = getCursorModelId(this.options, sdkAgent);
     const requestContext = options?.requestContext ?? new RequestContext();
     const instructions = options?.instructions ? promptToText(options.instructions) : undefined;
@@ -210,7 +209,7 @@ export class CursorSDKAgent extends Agent {
     sdkAgent: SDKAgent,
     options?: SDKAgentRunOptions<OUTPUT>,
   ): Promise<MastraModelOutput<OUTPUT>> {
-    const runId = options?.runId ?? randomUUID();
+    const runId = options?.runId ?? crypto.randomUUID();
     const prompt = promptToText(messages);
     const modelId = getCursorModelId(this.options, sdkAgent);
     const requestContext = options?.requestContext ?? new RequestContext();
@@ -353,7 +352,7 @@ function runCursorAsMastraStream(
 ): ReadableStream<ChunkType> {
   return new ReadableStream<ChunkType>({
     start: async controller => {
-      const textId = randomUUID();
+      const textId = crypto.randomUUID();
       const usage = createCursorUsageCollector();
       let text = '';
 

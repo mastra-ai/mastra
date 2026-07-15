@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import { LLMock } from '@copilotkit/aimock';
 import { stepCountIs } from '@internal/ai-sdk-v5';
@@ -53,7 +52,7 @@ describe('AIMock loop scenario: evented + RedisStreamsPubSub', () => {
     // Per-test keyPrefix so concurrent or repeated runs don't cross talk.
     const pubsub = new RedisStreamsPubSub({
       url: REDIS_URL,
-      keyPrefix: `aimock-${randomUUID()}`,
+      keyPrefix: `aimock-${crypto.randomUUID()}`,
       blockMs: 200,
     });
     pubsubs.push(pubsub);
@@ -98,7 +97,7 @@ describe('AIMock loop scenario: evented + RedisStreamsPubSub', () => {
       baseURL: `${mock.url.replace(/\/+$/, '')}/v1`,
     });
 
-    const agentId = `aimock-redis-scenario-${randomUUID()}`;
+    const agentId = `aimock-redis-scenario-${crypto.randomUUID()}`;
     const agent = new Agent({
       id: agentId,
       name: 'AIMock Redis Scenario Agent',

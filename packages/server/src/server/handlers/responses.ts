@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { Agent, MastraDBMessage } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -230,7 +229,7 @@ async function resolveThreadExecutionContext({
       return null;
     }
 
-    const threadId = randomUUID();
+    const threadId = crypto.randomUUID();
     const createdThread = await memory.createThread({
       threadId,
       resourceId: effectiveResourceId ?? threadId,

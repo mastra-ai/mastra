@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { Database } from '@google-cloud/spanner';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
@@ -176,7 +175,7 @@ export class ExperimentsSpanner extends ExperimentsStorage {
   async createExperiment(input: CreateExperimentInput): Promise<Experiment> {
     try {
       const now = new Date();
-      const id = input.id ?? randomUUID();
+      const id = input.id ?? crypto.randomUUID();
       const experiment: Experiment = {
         id,
         name: input.name ?? undefined,
@@ -476,7 +475,7 @@ export class ExperimentsSpanner extends ExperimentsStorage {
   async addExperimentResult(input: AddExperimentResultInput): Promise<ExperimentResult> {
     try {
       const now = new Date();
-      const id = input.id ?? randomUUID();
+      const id = input.id ?? crypto.randomUUID();
       const result: ExperimentResult = {
         id,
         experimentId: input.experimentId,

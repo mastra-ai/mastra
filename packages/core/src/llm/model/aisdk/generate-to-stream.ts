@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 /**
  * Converts a doGenerate result to a ReadableStream format.
  * This is shared between V2 and V3 model wrappers since the content/result structure is compatible.
@@ -76,7 +74,7 @@ export function createStreamFromGenerateResult(result: {
             text: string;
             providerMetadata?: unknown;
           };
-          const id = `msg_${randomUUID()}`;
+          const id = `msg_${crypto.randomUUID()}`;
           controller.enqueue({
             type: 'text-start',
             id,
@@ -92,7 +90,7 @@ export function createStreamFromGenerateResult(result: {
             id,
           });
         } else if (message.type === 'reasoning') {
-          const id = `reasoning_${randomUUID()}`;
+          const id = `reasoning_${crypto.randomUUID()}`;
           const reasoning = message as {
             type: 'reasoning';
             text: string;

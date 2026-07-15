@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { Readable, Writable } from 'node:stream';
 import { AgentSideConnection, ndJsonStream } from '@agentclientprotocol/sdk';
 import type { AgentController, AgentControllerMode, Session } from '@mastra/core/agent-controller';
@@ -23,8 +22,8 @@ export async function runAcpServer(
   // Handle cleanup on disconnect (success or error)
   try {
     session = await controller.createSession({
-      id: `acp-${randomUUID()}`,
-      ownerId: `acp-owner-${randomUUID()}`,
+      id: `acp-${crypto.randomUUID()}`,
+      ownerId: `acp-owner-${crypto.randomUUID()}`,
     });
     const activeSession = session;
 

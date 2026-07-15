@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -214,7 +213,7 @@ export async function getAgentMemoryTests({
       const resourceId = 'test-resource-semantic';
 
       // First, create a thread and add some messages to establish history
-      const thread1Id = randomUUID();
+      const thread1Id = crypto.randomUUID();
 
       await agentGenerate(agent, 'Tell me about cats', { threadId: thread1Id, resourceId }, model);
 
@@ -224,7 +223,7 @@ export async function getAgentMemoryTests({
 
       // Now create a second thread - this should be able to access memory from thread1
       // due to resource scope, even on the first message
-      const thread2Id = randomUUID();
+      const thread2Id = crypto.randomUUID();
 
       const secondResponse = (await agentGenerate(
         agent,
@@ -270,7 +269,7 @@ export async function getAgentMemoryTests({
       tools,
     });
     it('should save all user messages (not just the most recent)', async () => {
-      const threadId = randomUUID();
+      const threadId = crypto.randomUUID();
       const resourceId = 'all-user-messages';
 
       // Send multiple user messages
@@ -299,7 +298,7 @@ export async function getAgentMemoryTests({
     });
 
     it('should save assistant responses for both text and object output modes', async () => {
-      const threadId = randomUUID();
+      const threadId = crypto.randomUUID();
       const resourceId = 'assistant-responses';
       // 1. Text mode
       await agentGenerate(agent, [{ role: 'user', content: 'What is 2+2?' }], { threadId, resourceId }, model);
@@ -330,7 +329,7 @@ export async function getAgentMemoryTests({
     });
 
     it('should not save messages provided in the context option', async () => {
-      const threadId = randomUUID();
+      const threadId = crypto.randomUUID();
       const resourceId = 'context-option-messages-not-saved';
 
       const userMessageContent = 'This is a user message.';
@@ -372,7 +371,7 @@ export async function getAgentMemoryTests({
     });
 
     it('should persist UIMessageWithMetadata through agent generate and memory', async () => {
-      const threadId = randomUUID();
+      const threadId = crypto.randomUUID();
       const resourceId = 'ui-message-metadata';
 
       // Create messages with metadata
@@ -470,7 +469,7 @@ export async function getAgentMemoryTests({
           memory,
         });
 
-        const threadId = randomUUID();
+        const threadId = crypto.randomUUID();
         const resourceId = 'test-resource-reasoning';
 
         const result = (await agentGenerate(
@@ -575,7 +574,7 @@ export async function getAgentMemoryTests({
     });
 
     it('should preserve metadata when generateTitle is true', async () => {
-      const threadId = randomUUID();
+      const threadId = crypto.randomUUID();
       const resourceId = 'gen-title-metadata';
       const metadata = { foo: 'bar', custom: 123 };
 
@@ -608,7 +607,7 @@ export async function getAgentMemoryTests({
     });
 
     it('should use generateTitle with request context', async () => {
-      const threadId = randomUUID();
+      const threadId = crypto.randomUUID();
       const resourceId = 'gen-title-with-request-context';
       const metadata = { foo: 'bar', custom: 123 };
 
@@ -647,7 +646,7 @@ export async function getAgentMemoryTests({
     });
 
     it('should preserve metadata when generateTitle is false', async () => {
-      const threadId = randomUUID();
+      const threadId = crypto.randomUUID();
       const resourceId = 'no-gen-title-metadata';
       const metadata = { foo: 'baz', custom: 456 };
 
@@ -705,7 +704,7 @@ export async function getAgentMemoryTests({
     });
 
     it('should apply processors to filter tool messages from context', async () => {
-      const threadId = randomUUID();
+      const threadId = crypto.randomUUID();
       const resourceId = 'processor-filter-tool-message';
 
       // First, ask a question that will trigger a tool call
@@ -822,7 +821,7 @@ export async function getAgentMemoryTests({
         memory: memoryWithWorkingMemory,
       });
 
-      const threadId = randomUUID();
+      const threadId = crypto.randomUUID();
       const resourceId = 'test-resource-wm';
 
       // First, set working memory
@@ -927,7 +926,7 @@ export async function getAgentMemoryTests({
         memory: inputProcessorMemory,
       });
 
-      const threadId = randomUUID();
+      const threadId = crypto.randomUUID();
       const resourceId = 'input-processor-resource';
 
       // First message
@@ -1008,7 +1007,7 @@ export async function getAgentMemoryTests({
         outputProcessors: [abortingGuardrail],
       });
 
-      const threadId = randomUUID();
+      const threadId = crypto.randomUUID();
       const resourceId = 'guardrail-memory-test';
 
       // Generate should complete but with tripwire
@@ -1055,7 +1054,7 @@ export async function getAgentMemoryTests({
         outputProcessors: [passingGuardrail],
       });
 
-      const threadId = randomUUID();
+      const threadId = crypto.randomUUID();
       const resourceId = 'passing-guardrail-memory-test';
 
       // Generate should complete normally
@@ -1114,7 +1113,7 @@ export async function getAgentMemoryTests({
         inputProcessors: [inputAbortingGuardrail],
       });
 
-      const threadId = randomUUID();
+      const threadId = crypto.randomUUID();
       const resourceId = 'input-guardrail-memory-test';
 
       // Generate should complete but with tripwire (no LLM call made)
@@ -1164,7 +1163,7 @@ export async function getAgentMemoryTests({
     });
 
     it('should clone a thread with all messages', async () => {
-      const sourceThreadId = randomUUID();
+      const sourceThreadId = crypto.randomUUID();
       const resourceId = 'clone-test-resource';
 
       // Create a conversation in the source thread
@@ -1199,7 +1198,7 @@ export async function getAgentMemoryTests({
     });
 
     it('should clone a thread with custom title', async () => {
-      const sourceThreadId = randomUUID();
+      const sourceThreadId = crypto.randomUUID();
       const resourceId = 'clone-custom-title-resource';
 
       // Create source thread with a message
@@ -1216,7 +1215,7 @@ export async function getAgentMemoryTests({
     });
 
     it('should clone a thread with message limit', async () => {
-      const sourceThreadId = randomUUID();
+      const sourceThreadId = crypto.randomUUID();
       const resourceId = 'clone-limit-resource';
 
       // Create multiple messages
@@ -1239,7 +1238,7 @@ export async function getAgentMemoryTests({
     });
 
     it('should allow continuing conversation on cloned thread independently', async () => {
-      const sourceThreadId = randomUUID();
+      const sourceThreadId = crypto.randomUUID();
       const resourceId = 'clone-continue-resource';
 
       // Create initial conversation
@@ -1272,8 +1271,8 @@ export async function getAgentMemoryTests({
     });
 
     it('should clone thread with custom thread ID', async () => {
-      const sourceThreadId = randomUUID();
-      const customCloneId = `custom-clone-${randomUUID()}`;
+      const sourceThreadId = crypto.randomUUID();
+      const customCloneId = `custom-clone-${crypto.randomUUID()}`;
       const resourceId = 'clone-custom-id-resource';
 
       // Create source thread
@@ -1289,7 +1288,7 @@ export async function getAgentMemoryTests({
     });
 
     it('should use utility methods to check clone status', async () => {
-      const sourceThreadId = randomUUID();
+      const sourceThreadId = crypto.randomUUID();
       const resourceId = 'clone-utility-resource';
 
       // Create source thread
@@ -1323,7 +1322,7 @@ export async function getAgentMemoryTests({
     });
 
     it('should list all clones of a source thread', async () => {
-      const sourceThreadId = randomUUID();
+      const sourceThreadId = crypto.randomUUID();
       const resourceId = 'clone-list-resource';
 
       // Create source thread
@@ -1342,7 +1341,7 @@ export async function getAgentMemoryTests({
     });
 
     it('should track clone history chain', async () => {
-      const originalThreadId = randomUUID();
+      const originalThreadId = crypto.randomUUID();
       const resourceId = 'clone-history-resource';
 
       // Create original thread
@@ -1369,7 +1368,7 @@ export async function getAgentMemoryTests({
     });
 
     it('should create embeddings for cloned messages that are searchable via semantic recall', async () => {
-      const sourceThreadId = randomUUID();
+      const sourceThreadId = crypto.randomUUID();
       const resourceId = 'clone-embedding-resource';
 
       // Create a unique, memorable message in the source thread

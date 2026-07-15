@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { inspect } from 'node:util';
@@ -244,7 +243,7 @@ function createOmReproCaptureDir(threadId: string, label: string): string {
     process.cwd(),
     getOmReproCaptureDir(),
     sanitizedThreadId,
-    `${Date.now()}-${label}-${randomUUID()}`,
+    `${Date.now()}-${label}-${crypto.randomUUID()}`,
   );
   mkdirSync(captureDir, { recursive: true });
   return captureDir;

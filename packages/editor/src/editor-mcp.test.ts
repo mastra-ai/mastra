@@ -1,5 +1,4 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { randomUUID } from 'crypto';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { MCPServerBase } from '@mastra/core/mcp';
@@ -49,7 +48,7 @@ class TestMCPServer extends MCPServerBase {
 
 const createTestStorage = () => {
   return new LibSQLStore({
-    id: `test-${randomUUID()}`,
+    id: `test-${crypto.randomUUID()}`,
     url: ':memory:',
   });
 };
@@ -120,7 +119,7 @@ describe('EditorMCPNamespace', () => {
 
       // Config changes require createVersion + update(activeVersionId)
       await mcpStore!.createVersion({
-        id: randomUUID(),
+        id: crypto.randomUUID(),
         mcpClientId: 'mcp-update',
         versionNumber: 2,
         name: 'Updated Name',
@@ -843,7 +842,7 @@ describe('Agent MCP tool resolution', () => {
     // Update the MCP client config via createVersion + update(activeVersionId)
     const mcpStore = await storage.getStore('mcpClients');
     await mcpStore!.createVersion({
-      id: randomUUID(),
+      id: crypto.randomUUID(),
       mcpClientId: 'updatable-mcp',
       versionNumber: 2,
       name: 'Updated MCP',
@@ -879,7 +878,7 @@ describe('Agent MCP tool resolution', () => {
 
     // Create v2 via createVersion + activate
     await mcpStore!.createVersion({
-      id: randomUUID(),
+      id: crypto.randomUUID(),
       mcpClientId: 'versioned-mcp',
       versionNumber: 2,
       name: 'Version 2',
@@ -894,7 +893,7 @@ describe('Agent MCP tool resolution', () => {
 
     // Create v3 via createVersion + activate
     await mcpStore!.createVersion({
-      id: randomUUID(),
+      id: crypto.randomUUID(),
       mcpClientId: 'versioned-mcp',
       versionNumber: 3,
       name: 'Version 3',

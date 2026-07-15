@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { EventEmitterPubSub } from '../../events';
@@ -135,8 +134,8 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         try {
           const agentOne = mastra.getAgent('userAgent');
           const memory = {
-            thread: randomUUID(),
-            resource: randomUUID(),
+            thread: crypto.randomUUID(),
+            resource: crypto.randomUUID(),
           };
 
           const stream = await agentOne.stream('Find the user with name - Dero Israel', { memory });
@@ -215,7 +214,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         const approveAll = vi.fn().mockReturnValue(true);
         const suspendingAgent = makeAgent();
         const suspendStream = await suspendingAgent.stream('Find the user with name - Dero Israel', {
-          memory: { thread: randomUUID(), resource: randomUUID() },
+          memory: { thread: crypto.randomUUID(), resource: crypto.randomUUID() },
           requireToolApproval: approveAll,
         });
         let approvedToolName = '';
@@ -234,7 +233,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         const denyApproval = vi.fn().mockReturnValue(false);
         const runningAgent = makeAgent();
         const runStream = await runningAgent.stream('Find the user with name - Dero Israel', {
-          memory: { thread: randomUUID(), resource: randomUUID() },
+          memory: { thread: crypto.randomUUID(), resource: crypto.randomUUID() },
           requireToolApproval: denyApproval,
         });
         let sawApproval = false;
@@ -319,7 +318,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
 
         const mastra = new Mastra({ agents: { resumeAgent }, logger: false, storage: mockStorage });
         const agent = mastra.getAgent('resumeAgent');
-        const memory = { thread: randomUUID(), resource: randomUUID() };
+        const memory = { thread: crypto.randomUUID(), resource: crypto.randomUUID() };
         const requireToolApproval = vi.fn().mockReturnValue(true);
 
         mockFindUser.mockClear();

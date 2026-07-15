@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import * as path from 'node:path';
 import { Worker } from 'node:worker_threads';
 import { MessageList } from '@mastra/core/agent';
@@ -31,7 +30,7 @@ interface WorkerTestConfig {
 const createTestThread = (title: string, metadata = {}, i = 0) => {
   const now = Date.now();
   return {
-    id: randomUUID(),
+    id: crypto.randomUUID(),
     title,
     resourceId,
     metadata,
@@ -58,7 +57,7 @@ const createTestMessage = (
   }
 
   return {
-    id: randomUUID(),
+    id: crypto.randomUUID(),
     threadId,
     content: {
       format: 2,
@@ -704,7 +703,7 @@ export function getResuableTests(optionsFactory: () => { memory: Memory; workerT
       });
 
       it('should handle deleting non-existent message gracefully', async () => {
-        const nonExistentId = randomUUID();
+        const nonExistentId = crypto.randomUUID();
 
         // Should not throw when deleting non-existent message
         await expect(memory.deleteMessages([nonExistentId])).resolves.not.toThrow();
@@ -1131,7 +1130,7 @@ export function getResuableTests(optionsFactory: () => { memory: Memory; workerT
     ): ObservationalMemoryRecord => {
       const now = new Date();
       return {
-        id: randomUUID(),
+        id: crypto.randomUUID(),
         scope: overrides.scope,
         threadId: overrides.threadId,
         resourceId: overrides.resourceId,
@@ -1273,7 +1272,7 @@ export function getResuableTests(optionsFactory: () => { memory: Memory; workerT
 
         const chunkDate = new Date();
         const chunk1: BufferedObservationChunk = {
-          id: randomUUID(),
+          id: crypto.randomUUID(),
           cycleId: 'cycle-1',
           observations: 'Chunk 1 observations',
           tokenCount: 20,
@@ -1283,7 +1282,7 @@ export function getResuableTests(optionsFactory: () => { memory: Memory; workerT
           createdAt: chunkDate,
         };
         const chunk2: BufferedObservationChunk = {
-          id: randomUUID(),
+          id: crypto.randomUUID(),
           cycleId: 'cycle-2',
           observations: 'Chunk 2 observations',
           tokenCount: 15,
@@ -1470,7 +1469,7 @@ export function getResuableTests(optionsFactory: () => { memory: Memory; workerT
         const store = await memory.storage.getStore('memory');
         if (!store?.supportsObservationalMemory) return;
 
-        const newResourceId = `om-clone-new-${randomUUID()}`;
+        const newResourceId = `om-clone-new-${crypto.randomUUID()}`;
 
         const sourceThread = createTestThread('Resource OM Clone Source');
         sourceThread.resourceId = omResourceId;

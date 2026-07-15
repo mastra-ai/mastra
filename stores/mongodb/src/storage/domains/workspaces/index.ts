@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   WorkspacesStorage,
@@ -198,7 +196,7 @@ export class MongoDBWorkspacesStorage extends WorkspacesStorage {
       for (const field of SNAPSHOT_FIELDS) {
         if ((workspace as any)[field] !== undefined) snapshotConfig[field] = (workspace as any)[field];
       }
-      const versionId = randomUUID();
+      const versionId = crypto.randomUUID();
       const versionDoc: Record<string, any> = {
         id: versionId,
         workspaceId: id,
@@ -288,7 +286,7 @@ export class MongoDBWorkspacesStorage extends WorkspacesStorage {
         const existingSnapshot = this.extractSnapshotFields(latestVersion);
         const mergedSnapshot = { ...existingSnapshot, ...configFields };
         newVersionDoc = {
-          id: randomUUID(),
+          id: crypto.randomUUID(),
           workspaceId: id,
           versionNumber: latestVersion.versionNumber + 1,
           changedFields: Object.keys(configFields),

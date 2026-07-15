@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
@@ -186,7 +185,7 @@ export class ScoresMSSQL extends ScoresStorage {
 
     try {
       // Generate ID like other storage implementations
-      const scoreId = randomUUID();
+      const scoreId = crypto.randomUUID();
       const now = new Date();
 
       const {

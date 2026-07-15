@@ -1,13 +1,12 @@
 import type { MastraStorage, MemoryStorage } from '@mastra/core/storage';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { randomUUID } from 'node:crypto';
 
 /**
  * Helper to create sample OM initialization input
  */
 function createSampleOMInput({
   threadId = null,
-  resourceId = `resource-${randomUUID()}`,
+  resourceId = `resource-${crypto.randomUUID()}`,
   scope = 'resource' as const,
 }: {
   threadId?: string | null;
@@ -45,10 +44,10 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
     });
 
     const createChunk = ({ observations, messageTokens }: { observations: string; messageTokens: number }) => ({
-      cycleId: `cycle-${randomUUID()}`,
+      cycleId: `cycle-${crypto.randomUUID()}`,
       observations,
       tokenCount: Math.round(messageTokens / 2),
-      messageIds: [`msg-${randomUUID()}`],
+      messageIds: [`msg-${crypto.randomUUID()}`],
       messageTokens,
       lastObservedAt: new Date(),
     });
@@ -87,7 +86,7 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
       });
 
       it('should create a thread-scoped observational memory record', async () => {
-        const threadId = `thread-${randomUUID()}`;
+        const threadId = `thread-${crypto.randomUUID()}`;
         const input = createSampleOMInput({ threadId, scope: 'thread' });
 
         const record = await memoryStorage.initializeObservationalMemory(input);
@@ -124,7 +123,7 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
       });
 
       it('should retrieve thread-scoped record with threadId', async () => {
-        const threadId = `thread-${randomUUID()}`;
+        const threadId = `thread-${crypto.randomUUID()}`;
         const input = createSampleOMInput({ threadId, scope: 'thread' });
         const created = await memoryStorage.initializeObservationalMemory(input);
 
@@ -143,7 +142,7 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
       });
 
       it('should return history in reverse chronological order', async () => {
-        const resourceId = `resource-${randomUUID()}`;
+        const resourceId = `resource-${crypto.randomUUID()}`;
         const input = createSampleOMInput({ resourceId });
 
         // Create initial record
@@ -164,7 +163,7 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
       });
 
       it('should respect limit parameter', async () => {
-        const resourceId = `resource-${randomUUID()}`;
+        const resourceId = `resource-${crypto.randomUUID()}`;
         const input = createSampleOMInput({ resourceId });
 
         // Create initial record
@@ -186,7 +185,7 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
       });
 
       it('should filter by from date', async () => {
-        const resourceId = `resource-${randomUUID()}`;
+        const resourceId = `resource-${crypto.randomUUID()}`;
         const input = createSampleOMInput({ resourceId });
 
         // Create initial record
@@ -213,7 +212,7 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
       });
 
       it('should filter by to date', async () => {
-        const resourceId = `resource-${randomUUID()}`;
+        const resourceId = `resource-${crypto.randomUUID()}`;
         const input = createSampleOMInput({ resourceId });
 
         // Create initial record
@@ -240,7 +239,7 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
       });
 
       it('should filter by from and to date combined', async () => {
-        const resourceId = `resource-${randomUUID()}`;
+        const resourceId = `resource-${crypto.randomUUID()}`;
         const input = createSampleOMInput({ resourceId });
 
         // Create initial record
@@ -278,7 +277,7 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
       });
 
       it('should support offset', async () => {
-        const resourceId = `resource-${randomUUID()}`;
+        const resourceId = `resource-${crypto.randomUUID()}`;
         const input = createSampleOMInput({ resourceId });
 
         // Create initial record + 3 reflections = 4 records total
@@ -302,7 +301,7 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
       });
 
       it('should support offset with limit', async () => {
-        const resourceId = `resource-${randomUUID()}`;
+        const resourceId = `resource-${crypto.randomUUID()}`;
         const input = createSampleOMInput({ resourceId });
 
         // Create initial record + 3 reflections = 4 records total
@@ -325,7 +324,7 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
       });
 
       it('should return all records when empty options object is passed', async () => {
-        const resourceId = `resource-${randomUUID()}`;
+        const resourceId = `resource-${crypto.randomUUID()}`;
         const input = createSampleOMInput({ resourceId });
 
         const first = await memoryStorage.initializeObservationalMemory(input);
@@ -344,7 +343,7 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
       });
 
       it('should return empty array when from is in the future', async () => {
-        const resourceId = `resource-${randomUUID()}`;
+        const resourceId = `resource-${crypto.randomUUID()}`;
         const input = createSampleOMInput({ resourceId });
 
         const first = await memoryStorage.initializeObservationalMemory(input);
@@ -363,7 +362,7 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
       });
 
       it('should return empty array when to is far in the past', async () => {
-        const resourceId = `resource-${randomUUID()}`;
+        const resourceId = `resource-${crypto.randomUUID()}`;
         const input = createSampleOMInput({ resourceId });
 
         const first = await memoryStorage.initializeObservationalMemory(input);
@@ -382,7 +381,7 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
       });
 
       it('should return empty array when offset exceeds total records', async () => {
-        const resourceId = `resource-${randomUUID()}`;
+        const resourceId = `resource-${crypto.randomUUID()}`;
         const input = createSampleOMInput({ resourceId });
 
         const first = await memoryStorage.initializeObservationalMemory(input);
@@ -399,7 +398,7 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
       });
 
       it('should treat offset 0 the same as no offset', async () => {
-        const resourceId = `resource-${randomUUID()}`;
+        const resourceId = `resource-${crypto.randomUUID()}`;
         const input = createSampleOMInput({ resourceId });
 
         const first = await memoryStorage.initializeObservationalMemory(input);
@@ -422,7 +421,7 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
       });
 
       it('should preserve reverse chronological order when filtering by from', async () => {
-        const resourceId = `resource-${randomUUID()}`;
+        const resourceId = `resource-${crypto.randomUUID()}`;
         const input = createSampleOMInput({ resourceId });
 
         const first = await memoryStorage.initializeObservationalMemory(input);
@@ -454,7 +453,7 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
       });
 
       it('should preserve reverse chronological order when using offset', async () => {
-        const resourceId = `resource-${randomUUID()}`;
+        const resourceId = `resource-${crypto.randomUUID()}`;
         const input = createSampleOMInput({ resourceId });
 
         // Create 5 records total
@@ -477,7 +476,7 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
       });
 
       it('should combine from + to + limit correctly', async () => {
-        const resourceId = `resource-${randomUUID()}`;
+        const resourceId = `resource-${crypto.randomUUID()}`;
         const input = createSampleOMInput({ resourceId });
 
         // Record before range
@@ -521,7 +520,7 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
       });
 
       it('should combine from + to + offset correctly', async () => {
-        const resourceId = `resource-${randomUUID()}`;
+        const resourceId = `resource-${crypto.randomUUID()}`;
         const input = createSampleOMInput({ resourceId });
 
         // Record before range
@@ -566,7 +565,7 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
       });
 
       it('should combine from + to + offset + limit for full pagination', async () => {
-        const resourceId = `resource-${randomUUID()}`;
+        const resourceId = `resource-${crypto.randomUUID()}`;
         const input = createSampleOMInput({ resourceId });
 
         // Record before range
@@ -610,8 +609,8 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
       });
 
       it('should work with thread-scoped records (non-null threadId)', async () => {
-        const scopedThreadId = `thread-${randomUUID()}`;
-        const resourceId = `resource-${randomUUID()}`;
+        const scopedThreadId = `thread-${crypto.randomUUID()}`;
+        const resourceId = `resource-${crypto.randomUUID()}`;
         const input = createSampleOMInput({ threadId: scopedThreadId, resourceId, scope: 'thread' });
 
         const first = await memoryStorage.initializeObservationalMemory(input);
@@ -649,8 +648,8 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
       });
 
       it('should not return records from a different resource when filtering', async () => {
-        const resourceIdA = `resource-a-${randomUUID()}`;
-        const resourceIdB = `resource-b-${randomUUID()}`;
+        const resourceIdA = `resource-a-${crypto.randomUUID()}`;
+        const resourceIdB = `resource-b-${crypto.randomUUID()}`;
 
         // Create records for resource A
         const firstA = await memoryStorage.initializeObservationalMemory(
@@ -687,7 +686,7 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
       });
 
       it('should return empty array when from equals to and no record has that exact timestamp', async () => {
-        const resourceId = `resource-${randomUUID()}`;
+        const resourceId = `resource-${crypto.randomUUID()}`;
         const input = createSampleOMInput({ resourceId });
 
         await memoryStorage.initializeObservationalMemory(input);
@@ -703,7 +702,7 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
       });
 
       it('should handle offset on a single record', async () => {
-        const resourceId = `resource-${randomUUID()}`;
+        const resourceId = `resource-${crypto.randomUUID()}`;
         const input = createSampleOMInput({ resourceId });
 
         // Only 1 record
@@ -723,7 +722,7 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
       });
 
       it('should paginate correctly using offset + limit across multiple pages', async () => {
-        const resourceId = `resource-${randomUUID()}`;
+        const resourceId = `resource-${crypto.randomUUID()}`;
         const input = createSampleOMInput({ resourceId });
 
         // Create 6 records total (gen 0..5)
@@ -767,7 +766,7 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
       });
 
       it('should return correct results when limit exceeds available records after offset', async () => {
-        const resourceId = `resource-${randomUUID()}`;
+        const resourceId = `resource-${crypto.randomUUID()}`;
         const input = createSampleOMInput({ resourceId });
 
         // 3 records total
@@ -788,7 +787,7 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
       });
 
       it('should return correct results when limit exceeds available records after date filtering', async () => {
-        const resourceId = `resource-${randomUUID()}`;
+        const resourceId = `resource-${crypto.randomUUID()}`;
         const input = createSampleOMInput({ resourceId });
 
         const first = await memoryStorage.initializeObservationalMemory(input);
@@ -1106,7 +1105,7 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
       });
 
       it('should clear all history for a resource', async () => {
-        const resourceId = `resource-${randomUUID()}`;
+        const resourceId = `resource-${crypto.randomUUID()}`;
         const input = createSampleOMInput({ resourceId });
 
         // Create initial record
@@ -1232,8 +1231,8 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
       });
 
       it('should maintain separate records for different resources', async () => {
-        const resource1 = `resource-${randomUUID()}`;
-        const resource2 = `resource-${randomUUID()}`;
+        const resource1 = `resource-${crypto.randomUUID()}`;
+        const resource2 = `resource-${crypto.randomUUID()}`;
 
         await memoryStorage.initializeObservationalMemory(createSampleOMInput({ resourceId: resource1 }));
         await memoryStorage.initializeObservationalMemory(createSampleOMInput({ resourceId: resource2 }));
@@ -1247,8 +1246,8 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
       });
 
       it('should maintain separate records for thread-scoped vs resource-scoped', async () => {
-        const resourceId = `resource-${randomUUID()}`;
-        const threadId = `thread-${randomUUID()}`;
+        const resourceId = `resource-${crypto.randomUUID()}`;
+        const threadId = `thread-${crypto.randomUUID()}`;
 
         // Create resource-scoped record
         await memoryStorage.initializeObservationalMemory(
@@ -1392,7 +1391,7 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
       it('should retain observed message IDs across buffered activation', async () => {
         const input = createSampleOMInput();
         const record = await memoryStorage.initializeObservationalMemory(input);
-        const observedMessageIds = [`msg-${randomUUID()}`, `msg-${randomUUID()}`];
+        const observedMessageIds = [`msg-${crypto.randomUUID()}`, `msg-${crypto.randomUUID()}`];
 
         await memoryStorage.updateActiveObservations({
           id: record.id,

@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { MessageSendParams, TaskQueryParams, TaskIdParams } from '@mastra/core/a2a';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -48,7 +47,7 @@ export async function getAgentExecutionHandler(c: Context) {
     mastra,
     agentId,
     requestContext,
-    requestId: randomUUID(),
+    requestId: crypto.randomUUID(),
     method: body.method as 'message/send' | 'message/stream' | 'tasks/get' | 'tasks/cancel',
     params: body.params as MessageSendParams | TaskQueryParams | TaskIdParams,
     taskStore,

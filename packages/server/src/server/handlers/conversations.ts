@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
 import {
@@ -68,7 +67,7 @@ export const CREATE_CONVERSATION_ROUTE = createRoute({
         throw new HTTPException(400, { message: `Memory storage is not configured for agent "${agent.id}"` });
       }
 
-      const threadId = conversation_id ?? randomUUID();
+      const threadId = conversation_id ?? crypto.randomUUID();
       const resourceId = getEffectiveResourceId(requestContext, resource_id) ?? threadId;
       const thread = await memory.createThread({
         threadId,

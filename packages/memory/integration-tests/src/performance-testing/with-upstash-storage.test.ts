@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import { mkdtemp } from 'node:fs/promises';
 import { createServer } from 'node:net';
@@ -103,7 +102,7 @@ describe('Memory with UpstashStore Performance', () => {
       }),
       vector: new LibSQLVector({
         url: `file:${join(dbPath, 'perf-upstash-vector.db')}`,
-        id: randomUUID(),
+        id: crypto.randomUUID(),
       }),
       embedder: fastembed.small,
       options: {

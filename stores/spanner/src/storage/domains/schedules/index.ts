@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { Database } from '@google-cloud/spanner';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
@@ -513,7 +512,7 @@ export class SchedulesSpanner extends SchedulesStorage {
       await this.db.insert({
         tableName: TABLE_SCHEDULE_TRIGGERS,
         record: {
-          id: trigger.id ?? randomUUID(),
+          id: trigger.id ?? crypto.randomUUID(),
           schedule_id: trigger.scheduleId,
           run_id: trigger.runId ?? null,
           scheduled_fire_at: trigger.scheduledFireAt,

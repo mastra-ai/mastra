@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { UUID } from 'node:crypto';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -42,8 +41,8 @@ export async function setupStreamingMemoryTest({
         tools,
       });
 
-      const threadId = randomUUID();
-      const resourceId = randomUUID();
+      const threadId = crypto.randomUUID();
+      const resourceId = crypto.randomUUID();
       const isV5Plus = isV5PlusModel(model);
 
       const stream1 = (await agentStream(agent, 'what is the weather in LA?', { threadId, resourceId }, model)) as any;
@@ -129,13 +128,13 @@ export async function setupStreamingMemoryTest({
           memory: isolatedMemory,
         });
 
-        const threadId = randomUUID();
+        const threadId = crypto.randomUUID();
         const resourceId = 'test-resource-msg-id';
         const customIds: UUID[] = [];
 
         new Mastra({
           idGenerator: () => {
-            const id = randomUUID();
+            const id = crypto.randomUUID();
             customIds.push(id);
             return id;
           },
@@ -164,7 +163,7 @@ export async function setupStreamingMemoryTest({
       it('should preserve data-* parts through save → recall → UI conversion round-trip', async () => {
         const dbPath = join(await mkdtemp(join(tmpdir(), `streaming-memory-data-parts-${Date.now()}-`)), 'mastra.db');
         const isolatedMemory = (createIsolatedMemory ?? createMemory)(dbPath);
-        const threadId = randomUUID();
+        const threadId = crypto.randomUUID();
         const resourceId = 'test-data-parts-resource';
 
         await isolatedMemory.createThread({
@@ -175,7 +174,7 @@ export async function setupStreamingMemoryTest({
 
         const messagesWithDataParts = [
           {
-            id: randomUUID(),
+            id: crypto.randomUUID(),
             threadId,
             resourceId,
             role: 'user' as const,
@@ -186,7 +185,7 @@ export async function setupStreamingMemoryTest({
             createdAt: new Date(),
           },
           {
-            id: randomUUID(),
+            id: crypto.randomUUID(),
             threadId,
             resourceId,
             role: 'assistant' as const,
@@ -207,7 +206,7 @@ export async function setupStreamingMemoryTest({
             createdAt: new Date(Date.now() + 1000),
           },
           {
-            id: randomUUID(),
+            id: crypto.randomUUID(),
             threadId,
             resourceId,
             role: 'assistant' as const,

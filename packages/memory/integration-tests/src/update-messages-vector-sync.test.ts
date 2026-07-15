@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { fastembed } from '@mastra/fastembed';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
@@ -19,11 +18,11 @@ describe('updateMessages should sync vector database (Issue #6195)', () => {
   let storage: LibSQLStore;
   let vector: LibSQLVector;
   let threadId: string;
-  const resourceId = `test-resource-${randomUUID()}`;
+  const resourceId = `test-resource-${crypto.randomUUID()}`;
 
   beforeEach(async () => {
     // Use a unique file-based database for each test to avoid state pollution
-    const uniqueId = randomUUID();
+    const uniqueId = crypto.randomUUID();
     const dbFile = `file:/tmp/test-${uniqueId}.db`;
 
     storage = new LibSQLStore({
@@ -55,7 +54,7 @@ describe('updateMessages should sync vector database (Issue #6195)', () => {
     // Create a thread for testing
     const thread = await memory.saveThread({
       thread: {
-        id: randomUUID(),
+        id: crypto.randomUUID(),
         title: 'Update Message Vector Test',
         resourceId,
         metadata: {},
@@ -81,7 +80,7 @@ describe('updateMessages should sync vector database (Issue #6195)', () => {
     // Step 1: Save a message with original content about "quantum physics"
     const originalContent = 'Quantum physics explores subatomic particles and wave functions in the universe.';
     const originalMessage = {
-      id: randomUUID(),
+      id: crypto.randomUUID(),
       threadId,
       content: {
         format: 2 as const,
@@ -170,7 +169,7 @@ describe('updateMessages should sync vector database (Issue #6195)', () => {
   it('should delete vectors when message content is cleared', async () => {
     // Save a message with content
     const message = {
-      id: randomUUID(),
+      id: crypto.randomUUID(),
       threadId,
       content: {
         format: 2 as const,
@@ -217,7 +216,7 @@ describe('updateMessages should sync vector database (Issue #6195)', () => {
   it('should handle updating multiple messages at once', async () => {
     // Create two messages about very different topics
     const message1 = {
-      id: randomUUID(),
+      id: crypto.randomUUID(),
       threadId,
       content: {
         format: 2 as const,
@@ -229,7 +228,7 @@ describe('updateMessages should sync vector database (Issue #6195)', () => {
     };
 
     const message2 = {
-      id: randomUUID(),
+      id: crypto.randomUUID(),
       threadId,
       content: {
         format: 2 as const,

@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { anthropic as anthropicV6 } from '@ai-sdk/anthropic-v6';
 import { createGatewayMock } from '@internal/test-utils';
 import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
@@ -192,7 +191,7 @@ export function getPgStorageTests(connectionString: string) {
 
   getResuableTests(() => {
     const storage = new PostgresStore({
-      id: randomUUID(),
+      id: crypto.randomUUID(),
       ...config,
       ...poolLimits,
     });
@@ -219,7 +218,7 @@ export function getPgStorageTests(connectionString: string) {
 
   describe('Memory with PostgresStore Integration', () => {
     const integrationStorage = new PostgresStore({
-      id: randomUUID(),
+      id: crypto.randomUUID(),
       ...config,
       ...poolLimits,
     });
@@ -291,7 +290,7 @@ export function getPgStorageTests(connectionString: string) {
         }
       });
       it('should create and retrieve a thread', async () => {
-        const threadId = randomUUID();
+        const threadId = crypto.randomUUID();
         const thread = await memory.createThread({
           threadId,
           resourceId,
@@ -310,12 +309,12 @@ export function getPgStorageTests(connectionString: string) {
       it('should list threads by resource id', async () => {
         // Create multiple threads
         await memory.createThread({
-          threadId: randomUUID(),
+          threadId: crypto.randomUUID(),
           resourceId,
           title: 'Thread 1',
         });
         await memory.createThread({
-          threadId: randomUUID(),
+          threadId: crypto.randomUUID(),
           resourceId,
           title: 'Thread 2',
         });
@@ -335,7 +334,7 @@ export function getPgStorageTests(connectionString: string) {
       let threadId: string;
 
       beforeEach(async () => {
-        threadId = randomUUID();
+        threadId = crypto.randomUUID();
         await memory.createThread({
           threadId,
           resourceId,
@@ -346,7 +345,7 @@ export function getPgStorageTests(connectionString: string) {
       it('should save and recall messages', async () => {
         const messages = [
           {
-            id: randomUUID(),
+            id: crypto.randomUUID(),
             threadId,
             resourceId,
             role: 'user' as const,
@@ -357,7 +356,7 @@ export function getPgStorageTests(connectionString: string) {
             createdAt: new Date(),
           },
           {
-            id: randomUUID(),
+            id: crypto.randomUUID(),
             threadId,
             resourceId,
             role: 'assistant' as const,
@@ -385,7 +384,7 @@ export function getPgStorageTests(connectionString: string) {
       it('should respect lastMessages limit', async () => {
         // Create 15 messages
         const messages = Array.from({ length: 15 }, (_, i) => ({
-          id: randomUUID(),
+          id: crypto.randomUUID(),
           threadId,
           resourceId,
           role: 'user' as const,
@@ -413,7 +412,7 @@ export function getPgStorageTests(connectionString: string) {
       let threadId: string;
 
       beforeEach(async () => {
-        threadId = randomUUID();
+        threadId = crypto.randomUUID();
         await memory.createThread({
           threadId,
           resourceId,
@@ -424,7 +423,7 @@ export function getPgStorageTests(connectionString: string) {
       it('should find semantically similar messages', async () => {
         const messages = [
           {
-            id: randomUUID(),
+            id: crypto.randomUUID(),
             threadId,
             resourceId,
             role: 'user' as const,
@@ -435,7 +434,7 @@ export function getPgStorageTests(connectionString: string) {
             createdAt: new Date(),
           },
           {
-            id: randomUUID(),
+            id: crypto.randomUUID(),
             threadId,
             resourceId,
             role: 'assistant' as const,
@@ -446,7 +445,7 @@ export function getPgStorageTests(connectionString: string) {
             createdAt: new Date(Date.now() + 1000),
           },
           {
-            id: randomUUID(),
+            id: crypto.randomUUID(),
             threadId,
             resourceId,
             role: 'user' as const,
@@ -494,7 +493,7 @@ export function getPgStorageTests(connectionString: string) {
         // Create a fresh thread for testing
         const thread = await memory.saveThread({
           thread: {
-            id: randomUUID(),
+            id: crypto.randomUUID(),
             title: 'Pagination Test Thread',
             resourceId,
             metadata: {},
@@ -510,7 +509,7 @@ export function getPgStorageTests(connectionString: string) {
         const messages = [];
         for (let i = 0; i < 10; i++) {
           messages.push({
-            id: randomUUID(),
+            id: crypto.randomUUID(),
             threadId,
             resourceId,
             content: {
@@ -617,7 +616,7 @@ export function getPgStorageTests(connectionString: string) {
         const messages = [];
         for (let i = 0; i < 3; i++) {
           messages.push({
-            id: randomUUID(),
+            id: crypto.randomUUID(),
             threadId,
             resourceId,
             content: `Message ${i + 1}`,
@@ -655,7 +654,7 @@ export function getPgStorageTests(connectionString: string) {
     describe('PostgreSQL Vector Index Configuration', () => {
       it('should support HNSW index configuration', async () => {
         const hnswMemory = createMemoryWithCleanup({
-          storage: new PostgresStore({ ...config, id: randomUUID(), ...poolLimits }),
+          storage: new PostgresStore({ ...config, id: crypto.randomUUID(), ...poolLimits }),
           vector: new PgVector({ connectionString, id: 'test-vector', ...poolLimits }),
           embedder: fastembed,
           options: {
@@ -675,8 +674,8 @@ export function getPgStorageTests(connectionString: string) {
           },
         });
 
-        const threadId = randomUUID();
-        const testResourceId = randomUUID();
+        const threadId = crypto.randomUUID();
+        const testResourceId = crypto.randomUUID();
 
         // Create thread first
         await hnswMemory.createThread({
@@ -688,7 +687,7 @@ export function getPgStorageTests(connectionString: string) {
         await hnswMemory.saveMessages({
           messages: [
             {
-              id: randomUUID(),
+              id: crypto.randomUUID(),
               content: 'Test message for HNSW index' as any,
               role: 'user',
               createdAt: new Date(),
@@ -711,7 +710,7 @@ export function getPgStorageTests(connectionString: string) {
 
       it('should support IVFFlat index configuration with custom lists', async () => {
         const ivfflatMemory = createMemoryWithCleanup({
-          storage: new PostgresStore({ ...config, id: randomUUID(), ...poolLimits }),
+          storage: new PostgresStore({ ...config, id: crypto.randomUUID(), ...poolLimits }),
           vector: new PgVector({ connectionString, id: 'test-vector', ...poolLimits }),
           embedder: fastembed,
           options: {
@@ -730,8 +729,8 @@ export function getPgStorageTests(connectionString: string) {
           },
         });
 
-        const threadId = randomUUID();
-        const testResourceId = randomUUID();
+        const threadId = crypto.randomUUID();
+        const testResourceId = crypto.randomUUID();
 
         // Create thread first
         await ivfflatMemory.createThread({
@@ -743,7 +742,7 @@ export function getPgStorageTests(connectionString: string) {
         await ivfflatMemory.saveMessages({
           messages: [
             {
-              id: randomUUID(),
+              id: crypto.randomUUID(),
               content: 'Test message for IVFFlat index' as any,
               role: 'user',
               createdAt: new Date(),
@@ -766,7 +765,7 @@ export function getPgStorageTests(connectionString: string) {
 
       it('should support flat (no index) configuration', async () => {
         const flatMemory = createMemoryWithCleanup({
-          storage: new PostgresStore({ ...config, id: randomUUID(), ...poolLimits }),
+          storage: new PostgresStore({ ...config, id: crypto.randomUUID(), ...poolLimits }),
           vector: new PgVector({ connectionString, id: 'test-vector', ...poolLimits }),
           embedder: fastembed,
           options: {
@@ -782,8 +781,8 @@ export function getPgStorageTests(connectionString: string) {
           },
         });
 
-        const threadId = randomUUID();
-        const testResourceId = randomUUID();
+        const threadId = crypto.randomUUID();
+        const testResourceId = crypto.randomUUID();
 
         // Create thread first
         await flatMemory.createThread({
@@ -795,7 +794,7 @@ export function getPgStorageTests(connectionString: string) {
         await flatMemory.saveMessages({
           messages: [
             {
-              id: randomUUID(),
+              id: crypto.randomUUID(),
               content: 'Test message for flat scan' as any,
               role: 'user',
               createdAt: new Date(),
@@ -819,7 +818,7 @@ export function getPgStorageTests(connectionString: string) {
       it('should handle index configuration changes', async () => {
         // Start with IVFFlat
         const memory1 = createMemoryWithCleanup({
-          storage: new PostgresStore({ ...config, id: randomUUID(), ...poolLimits }),
+          storage: new PostgresStore({ ...config, id: crypto.randomUUID(), ...poolLimits }),
           vector: new PgVector({ connectionString, id: 'test-vector', ...poolLimits }),
           embedder: fastembed,
           options: {
@@ -834,14 +833,14 @@ export function getPgStorageTests(connectionString: string) {
           },
         });
 
-        const threadId = randomUUID();
-        const testResourceId = randomUUID();
+        const threadId = crypto.randomUUID();
+        const testResourceId = crypto.randomUUID();
 
         await memory1.createThread({ threadId, resourceId: testResourceId });
         await memory1.saveMessages({
           messages: [
             {
-              id: randomUUID(),
+              id: crypto.randomUUID(),
               content: 'First configuration' as any,
               role: 'user',
               createdAt: new Date(),
@@ -854,7 +853,7 @@ export function getPgStorageTests(connectionString: string) {
 
         // Now switch to HNSW - should trigger index recreation
         const memory2 = createMemoryWithCleanup({
-          storage: new PostgresStore({ ...config, id: randomUUID(), ...poolLimits }),
+          storage: new PostgresStore({ ...config, id: crypto.randomUUID(), ...poolLimits }),
           vector: new PgVector({ connectionString, id: 'test-vector', ...poolLimits }),
           embedder: fastembed,
           options: {
@@ -873,7 +872,7 @@ export function getPgStorageTests(connectionString: string) {
         await memory2.saveMessages({
           messages: [
             {
-              id: randomUUID(),
+              id: crypto.randomUUID(),
               content: 'Second configuration with HNSW' as any,
               role: 'user',
               createdAt: new Date(),
@@ -895,7 +894,7 @@ export function getPgStorageTests(connectionString: string) {
       it('should preserve existing index when no config provided', async () => {
         // First, create with HNSW
         const memory1 = createMemoryWithCleanup({
-          storage: new PostgresStore({ ...config, id: randomUUID(), ...poolLimits }),
+          storage: new PostgresStore({ ...config, id: crypto.randomUUID(), ...poolLimits }),
           vector: new PgVector({ connectionString, id: 'test-vector', ...poolLimits }),
           embedder: fastembed,
           options: {
@@ -911,14 +910,14 @@ export function getPgStorageTests(connectionString: string) {
           },
         });
 
-        const threadId = randomUUID();
-        const testResourceId = randomUUID();
+        const threadId = crypto.randomUUID();
+        const testResourceId = crypto.randomUUID();
 
         await memory1.createThread({ threadId, resourceId: testResourceId });
         await memory1.saveMessages({
           messages: [
             {
-              id: randomUUID(),
+              id: crypto.randomUUID(),
               content: 'HNSW index created' as any,
               role: 'user',
               createdAt: new Date(),
@@ -931,7 +930,7 @@ export function getPgStorageTests(connectionString: string) {
 
         // Create another memory instance without index config - should preserve HNSW
         const memory2 = createMemoryWithCleanup({
-          storage: new PostgresStore({ ...config, id: randomUUID(), ...poolLimits }),
+          storage: new PostgresStore({ ...config, id: crypto.randomUUID(), ...poolLimits }),
           vector: new PgVector({ connectionString, id: 'test-vector', ...poolLimits }),
           embedder: fastembed,
           options: {
@@ -946,7 +945,7 @@ export function getPgStorageTests(connectionString: string) {
         await memory2.saveMessages({
           messages: [
             {
-              id: randomUUID(),
+              id: crypto.randomUUID(),
               content: 'Should still use HNSW index' as any,
               role: 'user',
               createdAt: new Date(),
@@ -970,7 +969,7 @@ export function getPgStorageTests(connectionString: string) {
       // PR-added regression repro. Kept skipped by default because CI currently falls back to
       // fuzzy llm-recorder matches for this path, which makes the recorded tool-heavy run unstable.
       it.skip('splits buffered output into multiple assistant messages instead of one mega-message', async () => {
-        const storage = new PostgresStore({ id: randomUUID(), ...config, ...poolLimits });
+        const storage = new PostgresStore({ id: crypto.randomUUID(), ...config, ...poolLimits });
         const memory = createMemoryWithCleanup({
           storage,
           options: {
@@ -1222,14 +1221,14 @@ CRITICAL RULES:
         // This breaks conversation history for any thread that exceeds lastMessages.
 
         const memoryWithLimit = createMemoryWithCleanup({
-          storage: new PostgresStore({ ...config, id: randomUUID(), ...poolLimits }),
+          storage: new PostgresStore({ ...config, id: crypto.randomUUID(), ...poolLimits }),
           options: {
             lastMessages: 3, // Limit to 3 messages
           },
         });
 
-        const threadId = randomUUID();
-        const testResourceId = randomUUID();
+        const threadId = crypto.randomUUID();
+        const testResourceId = crypto.randomUUID();
 
         // Create thread
         await memoryWithLimit.createThread({
@@ -1243,7 +1242,7 @@ CRITICAL RULES:
         const baseTime = Date.now();
         for (let i = 1; i <= 10; i++) {
           messages.push({
-            id: randomUUID(),
+            id: crypto.randomUUID(),
             threadId,
             resourceId: testResourceId,
             content: {

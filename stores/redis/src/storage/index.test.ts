@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import {
   createTestSuite,
   createConfigValidationTests,
@@ -33,8 +32,8 @@ const createTestClient = async (): Promise<RedisClient> => {
 };
 
 const createThread = (overrides: Partial<StorageThreadType> = {}): StorageThreadType => ({
-  id: `thread-${randomUUID()}`,
-  resourceId: `resource-${randomUUID()}`,
+  id: `thread-${crypto.randomUUID()}`,
+  resourceId: `resource-${crypto.randomUUID()}`,
   title: 'Test Thread',
   metadata: {},
   createdAt: new Date(),
@@ -48,7 +47,7 @@ const createMessage = (params: {
   createdAt: Date;
   content: string;
 }): MastraDBMessage => ({
-  id: randomUUID(),
+  id: crypto.randomUUID(),
   threadId: params.threadId,
   resourceId: params.resourceId,
   role: 'user',

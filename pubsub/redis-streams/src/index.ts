@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, LeaseProvider, PubSubDeliveryMode, SubscribeOptions } from '@mastra/core/events';
 import { createClient } from 'redis';
@@ -181,7 +180,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
   #subKey(topic: string, cb: EventCallback): string {
     let cbId = this.#cbIds.get(cb);
     if (!cbId) {
-      cbId = randomUUID();
+      cbId = crypto.randomUUID();
       this.#cbIds.set(cb, cbId);
     }
     return `${topic}::${cbId}`;
@@ -211,7 +210,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     if (options?.localOnly) {
       const localEvent: Event = {
         ...event,
-        id: randomUUID(),
+        id: crypto.randomUUID(),
         createdAt: new Date(),
         deliveryAttempt: event.deliveryAttempt ?? 1,
       };
@@ -221,7 +220,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
 
     await this.#ensureWriterConnected();
 
-    const id = randomUUID();
+    const id = crypto.randomUUID();
     const createdAt = new Date();
     const payload: Event = {
       ...event,
@@ -287,8 +286,8 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     await this.#ensureWriterConnected();
 
     const isGrouped = !!options?.group;
-    const group = options?.group ?? `__fanout-${randomUUID()}`;
-    const consumer = `${group}-${randomUUID()}`;
+    const group = options?.group ?? `__fanout-${crypto.randomUUID()}`;
+    const consumer = `${group}-${crypto.randomUUID()}`;
     const streamKey = this.#streamKey(topic);
 
     // Create the consumer group if it doesn't exist. MKSTREAM creates the

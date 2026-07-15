@@ -5,7 +5,6 @@ import { createScorer } from '@mastra/core/evals';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/evals';
 import { MastraEditor } from './index';
-import { randomUUID } from 'crypto';
 import { LibSQLStore } from '@mastra/libsql';
 import { convertArrayToReadableStream, LanguageModelV2, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { MastraModelGateway, ProviderConfig } from '@mastra/core/llm';
@@ -16,7 +15,7 @@ import { MastraModelGateway, ProviderConfig } from '@mastra/core/llm';
 
 const createTestStorage = () => {
   return new LibSQLStore({
-    id: `test-${randomUUID()}`,
+    id: `test-${crypto.randomUUID()}`,
     url: ':memory:',
   });
 };
@@ -32,7 +31,7 @@ const createTestStorage = () => {
  */
 const createScorerMockLLM = (score: number, reason: string) => {
   let callIndex = 0;
-  const modelId = `scorer-model-${randomUUID()}`;
+  const modelId = `scorer-model-${crypto.randomUUID()}`;
 
   const mockLLM = new MockLanguageModelV2({
     doGenerate: async () => {
@@ -165,7 +164,7 @@ function createAgentTestRun({
       taggedSystemMessages: {},
     },
     output,
-    runId: randomUUID(),
+    runId: crypto.randomUUID(),
   };
 }
 

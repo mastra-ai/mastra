@@ -1,5 +1,4 @@
 import type { WorkflowRunState } from '@mastra/core/workflows';
-import { randomUUID } from 'node:crypto';
 import { expect } from 'vitest';
 
 export const checkWorkflowSnapshot = (snapshot: WorkflowRunState | string, stepId: string, status: string) => {
@@ -10,8 +9,8 @@ export const checkWorkflowSnapshot = (snapshot: WorkflowRunState | string, stepI
 };
 
 export const createSampleWorkflowSnapshot = (status: string, createdAt?: Date) => {
-  const runId = `run-${randomUUID()}`;
-  const stepId = `step-${randomUUID()}`;
+  const runId = `run-${crypto.randomUUID()}`;
+  const stepId = `step-${crypto.randomUUID()}`;
   const timestamp = createdAt || new Date();
   const snapshot = {
     result: { success: true },

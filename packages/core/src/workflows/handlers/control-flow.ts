@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import fastq from 'fastq';
 import type { done as DoneCallback } from 'fastq';
 import type { ActorSignal } from '../../auth/ee';
@@ -354,7 +353,7 @@ export async function executeConditional(
             writer: new ToolStream(
               {
                 prefix: 'workflow-step',
-                callId: randomUUID(),
+                callId: crypto.randomUUID(),
                 name: 'conditional',
                 runId,
               },
@@ -774,7 +773,7 @@ export async function executeLoop(
           writer: new ToolStream(
             {
               prefix: 'workflow-step',
-              callId: randomUUID(),
+              callId: crypto.randomUUID(),
               name: 'loop',
               runId,
             },

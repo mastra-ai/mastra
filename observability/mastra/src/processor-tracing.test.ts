@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent/message-list';
@@ -1630,7 +1629,7 @@ describe('Processor Tracing Tests', () => {
     it('should trace MessageHistory processor when memory is enabled', async () => {
       const model = createMockModel();
       const mockMemory = new MockMemory({ enableMessageHistory: true });
-      const threadId = randomUUID();
+      const threadId = crypto.randomUUID();
       const resourceId = 'test-resource';
 
       // Create thread first
@@ -1707,7 +1706,7 @@ describe('Processor Tracing Tests', () => {
         enableMessageHistory: true,
         enableWorkingMemory: true,
       });
-      const threadId = randomUUID();
+      const threadId = crypto.randomUUID();
       const resourceId = 'test-resource';
 
       // Create thread first
@@ -1775,7 +1774,7 @@ describe('Processor Tracing Tests', () => {
     it('should trace memory processors alongside custom processors', async () => {
       const model = createMockModel();
       const mockMemory = new MockMemory({ enableMessageHistory: true });
-      const threadId = randomUUID();
+      const threadId = crypto.randomUUID();
       const resourceId = 'test-resource';
 
       // Create thread first
@@ -1849,7 +1848,7 @@ describe('Processor Tracing Tests', () => {
     it('should respect processor execution order for memory processors', async () => {
       const model = createMockModel();
       const mockMemory = new MockMemory({ enableMessageHistory: true });
-      const threadId = randomUUID();
+      const threadId = crypto.randomUUID();
       const resourceId = 'test-resource';
 
       // Create thread first

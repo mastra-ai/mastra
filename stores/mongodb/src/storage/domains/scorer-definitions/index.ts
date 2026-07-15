@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   ScorerDefinitionsStorage,
@@ -184,7 +182,7 @@ export class MongoDBScorerDefinitionsStorage extends ScorerDefinitionsStorage {
       }
 
       // Create version 1
-      const versionId = randomUUID();
+      const versionId = crypto.randomUUID();
       const versionDoc: Record<string, any> = {
         id: versionId,
         scorerDefinitionId: scorerDefinition.id,

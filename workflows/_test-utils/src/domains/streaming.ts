@@ -8,7 +8,6 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
-import { randomUUID } from 'crypto';
 import { simulateReadableStream } from '@internal/ai-sdk-v4';
 // @ts-ignore - module resolution for test utilities
 import { MockLanguageModelV1, MockLanguageModelV2 } from '@internal/ai-sdk-v4/test';
@@ -1118,7 +1117,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
         new Mastra({
           workflows: { 'agent-detailed-streaming-test': workflow },
           agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
-          idGenerator: () => randomUUID(),
+          idGenerator: () => crypto.randomUUID(),
         });
 
         const agentStep1 = createStep(agent);
@@ -1499,7 +1498,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
         new Mastra({
           workflows: { 'test-workflow-agent-options-callbacks': workflow },
           agents: { 'test-agent-with-options': agent },
-          idGenerator: () => randomUUID(),
+          idGenerator: () => crypto.randomUUID(),
         });
 
         const agentStep = createStep(agent, {
@@ -1604,7 +1603,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
         new Mastra({
           workflows: { 'agent-vnext-streaming-test': workflow },
           agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
-          idGenerator: () => randomUUID(),
+          idGenerator: () => crypto.randomUUID(),
         });
 
         const agentStep1 = createStep(agent);
@@ -1734,7 +1733,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
         new Mastra({
           workflows: { 'agent-nonstreaming-test': workflow },
           agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
-          idGenerator: () => randomUUID(),
+          idGenerator: () => crypto.randomUUID(),
         });
 
         const agentStep1 = createStep(agent);
@@ -2224,7 +2223,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
           new Mastra({
             workflows: { 'article-workflow': workflow },
             agents: { 'article-generator': agent },
-            idGenerator: () => randomUUID(),
+            idGenerator: () => crypto.randomUUID(),
           });
 
           workflow

@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -1176,7 +1176,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
   async subscribeThreadToPR(input: GithubPollingThread & { pr: GithubPRSignalInput }): Promise<GithubOperationResult> {
     const pr = typeof input.pr === 'number' ? { number: input.pr } : input.pr;
     return this.#subscribe({
-      id: `github-command-subscribe-${randomUUID()}`,
+      id: `github-command-subscribe-${crypto.randomUUID()}`,
       ...pr,
       threadId: input.threadId,
       resourceId: input.resourceId,
@@ -1188,7 +1188,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
   ): Promise<GithubOperationResult> {
     const pr = typeof input.pr === 'number' ? { number: input.pr } : input.pr;
     return this.#unsubscribe({
-      id: `github-command-unsubscribe-${randomUUID()}`,
+      id: `github-command-unsubscribe-${crypto.randomUUID()}`,
       ...pr,
       threadId: input.threadId,
       resourceId: input.resourceId,
@@ -1378,7 +1378,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
         execute: async (input, context) => {
           const executionThreadContext = getExecutionThreadContext(context);
           const result = await this.#subscribe({
-            id: `github-tool-subscribe-${randomUUID()}`,
+            id: `github-tool-subscribe-${crypto.randomUUID()}`,
             owner: input.owner,
             repo: input.repo,
             number: input.number,
@@ -1409,7 +1409,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
         execute: async (input, context) => {
           const executionThreadContext = getExecutionThreadContext(context);
           const result = await this.#unsubscribe({
-            id: `github-tool-unsubscribe-${randomUUID()}`,
+            id: `github-tool-unsubscribe-${crypto.randomUUID()}`,
             owner: input.owner,
             repo: input.repo,
             number: input.number,

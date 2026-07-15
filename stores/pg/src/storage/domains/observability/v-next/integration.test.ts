@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { coreFeatures } from '@mastra/core/features';
 import { SpanType } from '@mastra/core/observability';
 import { Pool } from 'pg';
@@ -60,7 +59,7 @@ function schemaName(prefix: string): string {
     .replace(/[^a-z0-9_]/g, '_')
     .slice(0, 52)
     .replace(/_+$/g, '');
-  const suffix = randomUUID().replace(/-/g, '').slice(0, 8);
+  const suffix = crypto.randomUUID().replace(/-/g, '').slice(0, 8);
   return `${normalized || 'obs'}_${suffix}`;
 }
 
@@ -170,8 +169,8 @@ function makeSpan(overrides: Partial<Record<string, unknown>> = {}) {
   const endedAt = (overrides.endedAt as Date | undefined) ?? new Date(startedAt.getTime() + 1_000);
 
   return {
-    traceId: `trace-${randomUUID()}`,
-    spanId: `span-${randomUUID()}`,
+    traceId: `trace-${crypto.randomUUID()}`,
+    spanId: `span-${crypto.randomUUID()}`,
     name: 'root-span',
     spanType: SpanType.AGENT_RUN,
     isEvent: false,
@@ -186,7 +185,7 @@ function makeSpan(overrides: Partial<Record<string, unknown>> = {}) {
 
 function makeMetric(overrides: Partial<Record<string, unknown>> = {}) {
   return {
-    metricId: `metric-${randomUUID()}`,
+    metricId: `metric-${crypto.randomUUID()}`,
     timestamp: dayAt(0, 11),
     name: 'mastra_latency_ms',
     value: 1,
@@ -200,7 +199,7 @@ function makeMetric(overrides: Partial<Record<string, unknown>> = {}) {
 
 function makeLog(overrides: Partial<Record<string, unknown>> = {}) {
   return {
-    logId: `log-${randomUUID()}`,
+    logId: `log-${crypto.randomUUID()}`,
     timestamp: dayAt(0, 11),
     level: 'info' as const,
     message: 'test-log',
@@ -212,9 +211,9 @@ function makeLog(overrides: Partial<Record<string, unknown>> = {}) {
 
 function makeScore(overrides: Partial<Record<string, unknown>> = {}) {
   return {
-    scoreId: `score-${randomUUID()}`,
+    scoreId: `score-${crypto.randomUUID()}`,
     timestamp: dayAt(0, 11),
-    traceId: `score-trace-${randomUUID()}`,
+    traceId: `score-trace-${crypto.randomUUID()}`,
     spanId: null,
     scorerId: 'quality',
     score: 0.5,
@@ -226,9 +225,9 @@ function makeScore(overrides: Partial<Record<string, unknown>> = {}) {
 
 function makeFeedback(overrides: Partial<Record<string, unknown>> = {}) {
   return {
-    feedbackId: `feedback-${randomUUID()}`,
+    feedbackId: `feedback-${crypto.randomUUID()}`,
     timestamp: dayAt(0, 11),
-    traceId: `feedback-trace-${randomUUID()}`,
+    traceId: `feedback-trace-${crypto.randomUUID()}`,
     spanId: null,
     feedbackType: 'rating',
     feedbackSource: 'user',

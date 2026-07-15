@@ -1,12 +1,11 @@
 import type { StorageCreateAgentInput } from '@mastra/core/storage';
-import { randomUUID } from 'node:crypto';
 
 /**
  * Creates a sample agent input for testing storage operations.
  * @param overrides - Optional fields to override the default values
  */
 export const createSampleAgent = ({
-  id = `agent-${randomUUID()}`,
+  id = `agent-${crypto.randomUUID()}`,
   authorId,
   visibility,
   metadata,
@@ -47,7 +46,7 @@ export const createSampleAgent = ({
  * Creates a sample agent with all fields populated for comprehensive testing.
  */
 export const createFullSampleAgent = ({
-  id = `agent-${randomUUID()}`,
+  id = `agent-${crypto.randomUUID()}`,
 }: {
   id?: string;
 } = {}): StorageCreateAgentInput => ({
@@ -119,7 +118,7 @@ export const createFullSampleAgent = ({
  */
 export const createSampleAgents = (count: number): StorageCreateAgentInput[] => {
   return Array.from({ length: count }, (_, i) => ({
-    id: `agent-${randomUUID()}`,
+    id: `agent-${crypto.randomUUID()}`,
     name: `Test Agent ${i + 1}`,
     description: `Description for agent ${i + 1}`,
     instructions: `Instructions for agent ${i + 1}`,

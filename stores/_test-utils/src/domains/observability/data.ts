@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { SpanType, EntityType } from '@mastra/core/observability';
 import type { CreateFeedbackRecord, CreateSpanRecord, SpanRecord } from '@mastra/core/storage';
 
@@ -13,8 +12,8 @@ export const DEFAULT_BASE_DATE = new Date('2024-01-01T00:00:00Z');
  */
 export function createSpan(overrides: Partial<CreateSpanRecord> = {}): CreateSpanRecord {
   const baseDate = overrides.startedAt || DEFAULT_BASE_DATE;
-  const traceId = overrides.traceId || `trace-${randomUUID()}`;
-  const spanId = overrides.spanId || `span-${randomUUID()}`;
+  const traceId = overrides.traceId || `trace-${crypto.randomUUID()}`;
+  const spanId = overrides.spanId || `span-${crypto.randomUUID()}`;
 
   return {
     traceId,
@@ -93,8 +92,8 @@ export function createChildSpan(parentSpanId: string, overrides: Partial<CreateS
  */
 export function createOldSchemaSpan(overrides: Partial<CreateSpanRecord> = {}): CreateSpanRecord {
   const baseDate = overrides.startedAt || DEFAULT_BASE_DATE;
-  const traceId = overrides.traceId || `trace-${randomUUID()}`;
-  const spanId = overrides.spanId || `span-${randomUUID()}`;
+  const traceId = overrides.traceId || `trace-${crypto.randomUUID()}`;
+  const spanId = overrides.spanId || `span-${crypto.randomUUID()}`;
 
   return {
     traceId,
@@ -139,7 +138,7 @@ export function createOldSchemaSpan(overrides: Partial<CreateSpanRecord> = {}): 
  */
 export function createFeedbackRecord(overrides: Partial<CreateFeedbackRecord> = {}): CreateFeedbackRecord {
   return {
-    feedbackId: overrides.feedbackId ?? `feedback-${randomUUID()}`,
+    feedbackId: overrides.feedbackId ?? `feedback-${crypto.randomUUID()}`,
     timestamp: overrides.timestamp ?? DEFAULT_BASE_DATE,
     feedbackType: 'thumbs',
     feedbackSource: 'human',

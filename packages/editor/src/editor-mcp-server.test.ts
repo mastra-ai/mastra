@@ -1,5 +1,4 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { randomUUID } from 'crypto';
 import { Mastra } from '@mastra/core';
 import { MCPServerBase } from '@mastra/core/mcp';
 import { createTool } from '@mastra/core/tools';
@@ -10,7 +9,7 @@ import { MastraEditor } from './index';
 
 const createTestStorage = () => {
   return new LibSQLStore({
-    id: `test-${randomUUID()}`,
+    id: `test-${crypto.randomUUID()}`,
     url: ':memory:',
   });
 };
@@ -401,7 +400,7 @@ describe('EditorMCPServerNamespace', () => {
       // Create a new version with both tools
       const mcpServerStore = await storage.getStore('mcpServers');
       const newVersion = await mcpServerStore!.createVersion({
-        id: randomUUID(),
+        id: crypto.randomUUID(),
         versionNumber: 2,
         mcpServerId: 'update-test',
         name: 'Updated Server',

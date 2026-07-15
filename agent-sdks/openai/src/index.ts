@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { ReadableStream } from 'node:stream/web';
 
 import { Agent } from '@mastra/core/agent';
@@ -129,7 +128,7 @@ export class OpenAISDKAgent extends Agent {
     options?: SDKAgentRunOptions<OUTPUT>,
   ): Promise<FullOutput<OUTPUT>> {
     const prompt = promptToText(messages);
-    const runId = options?.runId ?? randomUUID();
+    const runId = options?.runId ?? crypto.randomUUID();
     const sdkAgent = getRunOpenAIAgent(this.resolveOpenAIAgent(), options);
     const modelId = getModelId(this.options, sdkAgent);
     const requestContext = options?.requestContext ?? new RequestContext();
@@ -177,7 +176,7 @@ export class OpenAISDKAgent extends Agent {
     options?: SDKAgentRunOptions<OUTPUT>,
   ): Promise<MastraModelOutput<OUTPUT>> {
     const prompt = promptToText(messages);
-    const runId = options?.runId ?? randomUUID();
+    const runId = options?.runId ?? crypto.randomUUID();
     const sdkAgent = getRunOpenAIAgent(this.resolveOpenAIAgent(), options);
     const modelId = getModelId(this.options, sdkAgent);
     const requestContext = options?.requestContext ?? new RequestContext();
@@ -316,7 +315,7 @@ function runOpenAIAsMastraStream<OUTPUT>(
 ): ReadableStream<ChunkType> {
   return new ReadableStream<ChunkType>({
     start: async controller => {
-      const textId = randomUUID();
+      const textId = crypto.randomUUID();
       let text = '';
       let responseId: string | undefined;
       let modelId = requestedModelId;

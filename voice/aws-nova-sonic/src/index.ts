@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { PassThrough } from 'node:stream';
 import { BedrockRuntimeClient, InvokeModelWithBidirectionalStreamCommand } from '@aws-sdk/client-bedrock-runtime';
 import { MastraVoice } from '@internal/voice';
@@ -570,7 +569,7 @@ export class NovaSonicVoice extends MastraVoice<
     this.log('Pre-populating queue with sessionStart and promptStart events...');
 
     // Generate promptName for this session
-    const promptName = randomUUID();
+    const promptName = crypto.randomUUID();
     this._promptName = promptName;
 
     // 1. Session start event
@@ -728,7 +727,7 @@ export class NovaSonicVoice extends MastraVoice<
     // 3. System prompt events
     // AWS requires that the FIRST content after promptStart must have SYSTEM role
     // We always send a SYSTEM content, even if instructions are empty
-    const systemContentName = randomUUID();
+    const systemContentName = crypto.randomUUID();
     // Content start
     eventQueue.push({
       event: {
@@ -1726,7 +1725,7 @@ export class NovaSonicVoice extends MastraVoice<
       );
     }
 
-    const contentName = randomUUID();
+    const contentName = crypto.randomUUID();
     // Content start
     await this.sendClientEvent({
       contentStart: {
@@ -1838,7 +1837,7 @@ export class NovaSonicVoice extends MastraVoice<
     }
     if (!this.audioContentStarted) {
       // First time sending audio - need to send contentStart first
-      const audioContentId = randomUUID();
+      const audioContentId = crypto.randomUUID();
       this.audioContentName = audioContentId;
 
       this.log(`[send] First audio send - sending AUDIO contentStart with contentName: ${audioContentId}`);

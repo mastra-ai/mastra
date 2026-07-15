@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { isProviderDefinedTool } from '@mastra/core/tools';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
@@ -488,7 +487,7 @@ export function mapMastraMessagesToResponseOutputItems({
  * Creates a stable assistant-message-backed response identifier.
  */
 export function createMessageId() {
-  return `msg_${randomUUID()}`;
+  return `msg_${crypto.randomUUID()}`;
 }
 
 /**

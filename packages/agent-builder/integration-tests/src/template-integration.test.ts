@@ -1,6 +1,5 @@
 import type { ChildProcess } from 'node:child_process';
 import { spawn, execSync } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
 import { mkdtempSync, mkdirSync, rmSync, cpSync, existsSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
@@ -256,7 +255,7 @@ describe('Template Workflow Integration Tests', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         messages: [{ role: 'user', content: 'What is the weather in San Francisco?' }],
-        threadId: randomUUID(),
+        threadId: crypto.randomUUID(),
         resourceId: 'test-resource',
       }),
     });
@@ -278,7 +277,7 @@ describe('Template Workflow Integration Tests', () => {
             content: 'I want to analyze a CSV file with sales data. Can you help me?',
           },
         ],
-        threadId: randomUUID(),
+        threadId: crypto.randomUUID(),
         resourceId: 'test-resource',
       }),
     });

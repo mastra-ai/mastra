@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import { LLMock } from '@copilotkit/aimock';
 import { stepCountIs } from '@internal/ai-sdk-v5';
@@ -52,7 +51,7 @@ describe('AIMock loop scenario: evented + GoogleCloudPubSub', () => {
     if (!mock) throw new Error('AIMock server is not running');
 
     const pubsub = new GoogleCloudPubSub({
-      projectId: `aimock-${randomUUID().slice(0, 8)}`,
+      projectId: `aimock-${crypto.randomUUID().slice(0, 8)}`,
       apiEndpoint: EMULATOR_HOST,
     });
     pubsubs.push(pubsub);
@@ -97,7 +96,7 @@ describe('AIMock loop scenario: evented + GoogleCloudPubSub', () => {
       baseURL: `${mock.url.replace(/\/+$/, '')}/v1`,
     });
 
-    const agentId = `aimock-gcp-scenario-${randomUUID()}`;
+    const agentId = `aimock-gcp-scenario-${crypto.randomUUID()}`;
     const agent = new Agent({
       id: agentId,
       name: 'AIMock GCP Scenario Agent',

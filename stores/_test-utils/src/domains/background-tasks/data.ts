@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { BackgroundTask } from '@mastra/core/background-tasks';
 
 /**
@@ -6,13 +5,13 @@ import type { BackgroundTask } from '@mastra/core/background-tasks';
  */
 export function createSampleTask(overrides?: Partial<BackgroundTask>): BackgroundTask {
   return {
-    id: randomUUID(),
+    id: crypto.randomUUID(),
     status: 'pending',
     toolName: 'test-tool',
-    toolCallId: `call-${randomUUID()}`,
+    toolCallId: `call-${crypto.randomUUID()}`,
     args: { query: 'test' },
     agentId: 'agent-1',
-    runId: `run-${randomUUID()}`,
+    runId: `run-${crypto.randomUUID()}`,
     retryCount: 0,
     maxRetries: 0,
     timeoutMs: 300_000,

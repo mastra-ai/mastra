@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { Client, InValue } from '@libsql/client';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent';
@@ -2186,7 +2185,7 @@ export class MemoryLibSQL extends MemoryStorage {
 
       // Create new chunk with ID and timestamp
       const newChunk: BufferedObservationChunk = {
-        id: `ombuf-${randomUUID()}`,
+        id: `ombuf-${crypto.randomUUID()}`,
         cycleId: input.chunk.cycleId,
         observations: input.chunk.observations,
         tokenCount: input.chunk.tokenCount,

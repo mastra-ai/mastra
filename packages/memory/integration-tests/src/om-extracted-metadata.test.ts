@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -17,7 +16,7 @@ const createMessage = (
   text: string,
   createdAt: string,
 ): MastraDBMessage => ({
-  id: randomUUID(),
+  id: crypto.randomUUID(),
   threadId,
   resourceId,
   role,
@@ -35,7 +34,7 @@ describe('Observational Memory extracted metadata persistence', () => {
   beforeEach(async () => {
     dbDir = await mkdtemp(join(tmpdir(), 'memory-om-extracted-metadata-'));
     const storage = new LibSQLStore({
-      id: randomUUID(),
+      id: crypto.randomUUID(),
       url: `file:${join(dbDir, 'test.db')}`,
     });
     await storage.init();
@@ -47,8 +46,8 @@ describe('Observational Memory extracted metadata persistence', () => {
   });
 
   it('persists extracted values through LibSQL thread metadata helpers', async () => {
-    const threadId = randomUUID();
-    const resourceId = randomUUID();
+    const threadId = crypto.randomUUID();
+    const resourceId = crypto.randomUUID();
     const now = new Date();
 
     await memory.saveThread({
@@ -111,8 +110,8 @@ describe('Observational Memory extracted metadata persistence', () => {
   });
 
   it('updates markdown working memory from an end-to-end LibSQL observation run', async () => {
-    const threadId = randomUUID();
-    const resourceId = randomUUID();
+    const threadId = crypto.randomUUID();
+    const resourceId = crypto.randomUUID();
     const observerOutput = `<observations>
 - User shared durable profile details.
 </observations>
@@ -178,8 +177,8 @@ describe('Observational Memory extracted metadata persistence', () => {
   });
 
   it('replaces schema-backed working memory from an end-to-end LibSQL observation run', async () => {
-    const threadId = randomUUID();
-    const resourceId = randomUUID();
+    const threadId = crypto.randomUUID();
+    const resourceId = crypto.randomUUID();
     const observerOutput = `<observations>
 - User shared durable schema-backed profile details.
 </observations>`;
@@ -262,8 +261,8 @@ describe('Observational Memory extracted metadata persistence', () => {
   });
 
   it('persists extracted values from an end-to-end LibSQL observation run', async () => {
-    const threadId = randomUUID();
-    const resourceId = randomUUID();
+    const threadId = crypto.randomUUID();
+    const resourceId = crypto.randomUUID();
     const observerOutput = `<observations>
 - User is prioritizing the extractor API and needs documentation coverage.
 </observations>

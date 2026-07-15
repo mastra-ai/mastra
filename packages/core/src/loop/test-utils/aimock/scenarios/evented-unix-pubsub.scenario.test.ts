@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { stepCountIs } from '@internal/ai-sdk-v5';
@@ -40,7 +39,7 @@ describe('AIMock loop scenario: evented + UnixSocketPubSub', () => {
     // UUID to make the test portable on every host.
     const socketDir = mkdtempSync('/tmp/aim-');
     socketDirs.push(socketDir);
-    const socketPath = join(socketDir, `${randomUUID().slice(0, 8)}.sock`);
+    const socketPath = join(socketDir, `${crypto.randomUUID().slice(0, 8)}.sock`);
     const pubsub = new UnixSocketPubSub(socketPath);
     pubsubs.push(pubsub);
 

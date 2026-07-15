@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { fastembed } from '@mastra/fastembed';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
@@ -16,10 +15,10 @@ describe('saveMessages should persist role/content/created_at into vector metada
   let storage: LibSQLStore;
   let vector: LibSQLVector;
   let threadId: string;
-  const resourceId = `test-resource-${randomUUID()}`;
+  const resourceId = `test-resource-${crypto.randomUUID()}`;
 
   beforeEach(async () => {
-    const uniqueId = randomUUID();
+    const uniqueId = crypto.randomUUID();
     const dbFile = `file:/tmp/test-${uniqueId}.db`;
 
     storage = new LibSQLStore({ id: `save-msg-storage-${uniqueId}`, url: dbFile });
@@ -38,7 +37,7 @@ describe('saveMessages should persist role/content/created_at into vector metada
 
     const thread = await memory.saveThread({
       thread: {
-        id: randomUUID(),
+        id: crypto.randomUUID(),
         title: 'Save Message Vector Metadata Test',
         resourceId,
         metadata: {},
@@ -64,7 +63,7 @@ describe('saveMessages should persist role/content/created_at into vector metada
     const text = 'I prefer morning meetings.';
     const createdAt = new Date('2026-01-01T12:00:00.000Z');
     const message = {
-      id: randomUUID(),
+      id: crypto.randomUUID(),
       threadId,
       content: { format: 2 as const, parts: [{ type: 'text' as const, text }] },
       role: 'user' as const,
@@ -104,7 +103,7 @@ describe('saveMessages should persist role/content/created_at into vector metada
 
     const createdAt = new Date('2026-02-02T08:00:00.000Z');
     const message = {
-      id: randomUUID(),
+      id: crypto.randomUUID(),
       threadId,
       content: { format: 2 as const, parts: [{ type: 'text' as const, text: longText }] },
       role: 'assistant' as const,

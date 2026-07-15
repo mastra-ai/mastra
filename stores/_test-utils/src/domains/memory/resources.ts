@@ -1,7 +1,6 @@
 import type { MastraStorage, MemoryStorage } from '@mastra/core/storage';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { createSampleResource } from './data';
-import { randomUUID } from 'node:crypto';
 
 export function createResourcesTest({ storage }: { storage: MastraStorage }) {
   let memoryStorage: MemoryStorage;
@@ -147,7 +146,7 @@ export function createResourcesTest({ storage }: { storage: MastraStorage }) {
     });
 
     it('should create new resource when updating non-existent resource', async () => {
-      const nonExistentId = `resource-${randomUUID()}`;
+      const nonExistentId = `resource-${crypto.randomUUID()}`;
       const newWorkingMemory = 'New working memory';
       const newMetadata = { created: true, source: 'update' };
 
@@ -182,7 +181,7 @@ export function createResourcesTest({ storage }: { storage: MastraStorage }) {
 
     it('should handle null/undefined workingMemory', async () => {
       const resource = {
-        id: `resource-${randomUUID()}`,
+        id: `resource-${crypto.randomUUID()}`,
         workingMemory: undefined,
         metadata: { key: 'value', test: true },
         createdAt: new Date(),
@@ -210,7 +209,7 @@ export function createResourcesTest({ storage }: { storage: MastraStorage }) {
 
     it('should handle null/undefined metadata', async () => {
       const resource = {
-        id: `resource-${randomUUID()}`,
+        id: `resource-${crypto.randomUUID()}`,
         workingMemory: 'Sample working memory content',
         metadata: undefined,
         createdAt: new Date(),

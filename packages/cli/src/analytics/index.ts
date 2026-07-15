@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -86,7 +85,7 @@ export class PosthogAnalytics {
         if (distinctId && !this.isHostnameDerivedDistinctId(distinctId)) {
           const config = {
             distinctId,
-            sessionId: sessionId || randomUUID(),
+            sessionId: sessionId || crypto.randomUUID(),
           };
           if (config.sessionId !== sessionId) {
             this.writeCliConfig(config, configPath);
@@ -100,7 +99,7 @@ export class PosthogAnalytics {
 
     const config = {
       distinctId: this.createDistinctId(),
-      sessionId: randomUUID(),
+      sessionId: crypto.randomUUID(),
     };
     this.writeCliConfig(config, configPath);
     return config;
@@ -142,7 +141,7 @@ export class PosthogAnalytics {
   }
 
   private createDistinctId(): string {
-    return `mastra-${randomUUID()}`;
+    return `mastra-${crypto.randomUUID()}`;
   }
 
   private isHostnameDerivedDistinctId(distinctId: string): boolean {

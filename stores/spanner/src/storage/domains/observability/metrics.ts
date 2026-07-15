@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { Spanner } from '@google-cloud/spanner';
 import type { Database, Transaction } from '@google-cloud/spanner';
 import type { ExecuteSqlRequest, TimestampBounds } from '@google-cloud/spanner/build/src/transaction';
@@ -761,7 +760,7 @@ export async function batchCreateMetrics(database: Database, args: BatchCreateMe
   // the JSON.stringify up-front sidesteps that fork.
   const encodeJson = (v: unknown): string | null => (v == null ? null : JSON.stringify(v));
   const rows = args.metrics.map(m => ({
-    metricId: m.metricId ?? randomUUID(),
+    metricId: m.metricId ?? crypto.randomUUID(),
     timestamp: m.timestamp instanceof Date ? m.timestamp : new Date(m.timestamp as unknown as string | number),
     name: m.name,
     value: Spanner.float(Number(m.value)),

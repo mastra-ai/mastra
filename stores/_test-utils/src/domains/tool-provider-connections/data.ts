@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { StorageUpsertToolProviderConnectionInput } from '@mastra/core/storage';
 
 /**
@@ -8,10 +7,10 @@ export function createSampleConnection(
   overrides?: Partial<StorageUpsertToolProviderConnectionInput>,
 ): StorageUpsertToolProviderConnectionInput {
   return {
-    authorId: `author_${randomUUID()}`,
+    authorId: `author_${crypto.randomUUID()}`,
     providerId: 'composio',
     toolkit: 'gmail',
-    connectionId: `conn_${randomUUID()}`,
+    connectionId: `conn_${crypto.randomUUID()}`,
     label: 'Work Gmail',
     scope: 'per-author',
     ...overrides,
