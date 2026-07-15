@@ -57,6 +57,7 @@ A local `.env` file is optional. Environment variables stored on the platform ar
 
     ```ts title="src/mastra/index.ts"
     new LibSQLStore({
+      id: 'mastra-storage',
       // Uses the hosted database when deployed, a local file during development
       url: process.env.TURSO_DATABASE_URL ?? 'file:./mastra.db',
       authToken: process.env.TURSO_AUTH_TOKEN,
@@ -111,6 +112,7 @@ Preflight validates the built output before anything ships, and only flags issue
   import { LibSQLStore } from '@mastra/libsql'
 
   export const storage = new LibSQLStore({
+    id: 'mastra-storage',
     // Uses the hosted database when deployed, a local file during development
     url: process.env.TURSO_DATABASE_URL ?? 'file:./mastra.db',
     authToken: process.env.TURSO_AUTH_TOKEN,
