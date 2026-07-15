@@ -444,7 +444,7 @@ describe('Factory Board — Intake candidates', () => {
   });
 
   it('given an untriaged issue candidate, when Triage issue is chosen, then the server triage run starts and the Board stays open', async () => {
-    const state = useBoardHandlers({ issues });
+    const state = useBoardHandlers({ issues, triageIssues: [] });
     let resolveTriage!: () => void;
     const triageStarted = new Promise<void>(resolve => {
       resolveTriage = resolve;
@@ -453,7 +453,8 @@ describe('Factory Board — Intake candidates', () => {
       http.post(
         `${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues/:number/triage`,
         async ({ request, params }) => {
-          state.triageRequests.push({ number: Number(params.number), body: await request.json() });
+          const number = Number(params.number);
+          state.triageRequests.push({ number, body: await request.json() });
           await triageStarted;
           return HttpResponse.json({ ok: true, threadId: 'thread-triage' }, { status: 202 });
         },
