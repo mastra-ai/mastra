@@ -23,15 +23,13 @@ export const runWorkflowTool = createTool({
   }),
   execute: async ({ workflowId, inputData }, { mastra, requestContext }) => {
     if (!mastra) throw new Error('run-workflow requires a Mastra context.');
-    // Forward the caller's requestContext so agent steps can resolve
-    // `controller` bindings (session, modelId, workspace) → getDynamicModel
-    // and dynamic tools work inside the workflow's agent step.
-    //
-    // Swap the caller's chat memory scope for a fresh isolated one for the
-    // duration of the run so the workflow's agent step doesn't write into
-    // (or read from) the parent chat thread. See ephemeral-memory.ts.
+    // Forward the caller's requestContext so agent steps can resolve dynamic
+    // model/tool bindings from session state, and swap the caller's chat
+    // memory scope for a fresh isolated one for the duration of the run so
+    // the workflow's agent step doesn't write into (or read from) the parent
+    // chat thread. See ephemeral-memory.ts.
     return withEphemeralMemory(requestContext, async () => {
-      const result = await runWorkflow(mastra as unknown as Mastra, workflowId, inputData, requestContext);
+      const result = await runWorkflow(mastra as Mastra, workflowId, inputData, requestContext);
       if (result.status === 'tripwire' && result.tripwire) {
         return {
           status: result.status,
@@ -42,26 +40,13 @@ export const runWorkflowTool = createTool({
       if (result.error instanceof Error) {
         errorText = `${result.error.name}: ${result.error.message}`;
         const cause = (result.error as { cause?: unknown }).cause;
-        if (cause) errorText += ` | cause: ${JSON.stringify(cause, Object.getOwnPropertyNames(cause)).slice(0, 500)}`;
-        if (result.error.stack) errorText += `\nstack: ${result.error.stack.split('\n').slice(0, 6).join('\n')}`;
+        if (cause) errorText += ` | cause: ${JSON.stringify(cause, Object.getOwnPropertyNames(cause))}`;
+        if (result.error.stack) errorText += `\nstack: ${result.error.stack}`;
       } else if (result.error) {
         try {
           errorText = JSON.stringify(result.error, Object.getOwnPropertyNames(result.error));
         } catch {
           errorText = String(result.error);
-        }
-      }
-      // Dump full error to a scratch file so it's inspectable even if the TUI truncates the tool result.
-      if (errorText) {
-        try {
-          const fs = await import('node:fs');
-          fs.writeFileSync(
-            '/tmp/mastracode-workflow-error.log',
-            `[${new Date().toISOString()}] workflowId=${workflowId}\n${errorText}\n\nfull error object:\n${JSON.stringify(result.error, Object.getOwnPropertyNames(result.error ?? {}), 2)}\n\n`,
-            { flag: 'a' },
-          );
-        } catch {
-          // best effort
         }
       }
       return { status: result.status, result: result.result, error: errorText };
