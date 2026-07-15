@@ -93,7 +93,10 @@ describe('clone-template', () => {
     };
 
     it('should clone template successfully using degit', async () => {
-      const mockExec = vi.fn().mockResolvedValue({ stdout: '', stderr: '' });
+      const mockExec = vi.fn().mockImplementation(async () => {
+        vol.fromJSON({ '/test-project/README.md': 'template' });
+        return { stdout: '', stderr: '' };
+      });
       vi.mocked(child_process.exec).mockImplementation(mockExec);
 
       // Filesystem starts empty from beforeEach vol.reset()
@@ -135,6 +138,29 @@ describe('clone-template', () => {
       });
     });
 
+    it('should fallback to git clone when degit exits successfully without files', async () => {
+      const mockExec = vi
+        .fn()
+        .mockResolvedValueOnce({ stdout: '', stderr: '' })
+        .mockResolvedValueOnce({ stdout: '', stderr: '' });
+      vi.mocked(child_process.exec).mockImplementation(mockExec);
+
+      const { cloneTemplate } = await import('./clone-template');
+      const result = await cloneTemplate({
+        template: mockTemplate,
+        projectName: 'test-project',
+      });
+
+      expect(result).toBe('/test-project');
+      expect(mockExec).toHaveBeenNthCalledWith(
+        2,
+        'git clone https\\://github.com/mastra-ai/template-test /test-project',
+        {
+          cwd: process.cwd(),
+        },
+      );
+    });
+
     it('should update package.json with new project name', async () => {
       const mockExec = vi.fn(async (cmd: string) => {
         // Simulate degit creating the directory and package.json
@@ -165,7 +191,10 @@ describe('clone-template', () => {
     });
 
     it('should handle missing package.json gracefully', async () => {
-      const mockExec = vi.fn().mockResolvedValue({ stdout: '', stderr: '' });
+      const mockExec = vi.fn().mockImplementation(async () => {
+        vol.fromJSON({ '/test-project/README.md': 'template' });
+        return { stdout: '', stderr: '' };
+      });
       vi.mocked(child_process.exec).mockImplementation(mockExec);
 
       const { logger } = await import('./logger');
@@ -214,7 +243,10 @@ describe('clone-template', () => {
     });
 
     it('should use custom target directory when provided', async () => {
-      const mockExec = vi.fn().mockResolvedValue({ stdout: '', stderr: '' });
+      const mockExec = vi.fn().mockImplementation(async () => {
+        vol.fromJSON({ '/custom/path/test-project/README.md': 'template' });
+        return { stdout: '', stderr: '' };
+      });
       vi.mocked(child_process.exec).mockImplementation(mockExec);
 
       const { cloneTemplate } = await import('./clone-template');
@@ -231,7 +263,10 @@ describe('clone-template', () => {
     });
 
     it('should clone from beta branch when branch is specified with degit', async () => {
-      const mockExec = vi.fn().mockResolvedValue({ stdout: '', stderr: '' });
+      const mockExec = vi.fn().mockImplementation(async () => {
+        vol.fromJSON({ '/test-project/README.md': 'template' });
+        return { stdout: '', stderr: '' };
+      });
       vi.mocked(child_process.exec).mockImplementation(mockExec);
 
       const { cloneTemplate } = await import('./clone-template');

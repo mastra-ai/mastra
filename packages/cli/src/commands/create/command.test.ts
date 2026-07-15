@@ -184,6 +184,13 @@ describe('release-channel tag selection', () => {
     ).toBe('create-mastra-e2e-test');
   });
 
+  it('matches changesets snapshot tags before latest', () => {
+    const version = '0.0.0-create-mastra-e2e-test-20260715172042';
+    expect(selectMatchingDistTag(version, `latest: ${version}\ncreate-mastra-e2e-test: ${version}`)).toBe(
+      'create-mastra-e2e-test',
+    );
+  });
+
   it('falls back deterministically through latest, beta, then lexical order', () => {
     expect(selectMatchingDistTag('1.0.0', 'zeta: 1.0.0\nbeta: 1.0.0\nlatest: 1.0.0')).toBe('latest');
     expect(selectMatchingDistTag('1.0.0', 'zeta: 1.0.0\nbeta: 1.0.0')).toBe('beta');

@@ -85,6 +85,10 @@ async function cloneRepositoryWithoutGit(repoUrl: string, targetPath: string, br
     await exec(degitCommand, {
       cwd: process.cwd(),
     });
+
+    if ((await fs.readdir(targetPath)).length === 0) {
+      throw new Error('degit completed without cloning template files');
+    }
   } catch {
     // Fallback to git clone + remove .git
     try {

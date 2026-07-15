@@ -814,6 +814,20 @@ Use the [`list`](#list) command to get the correct ID.
 
 List all available scorer templates. Use the ID for the `add` command.
 
+## `mastra create`
+
+Create a standalone Mastra project with the same project-creation flow as [`create-mastra`](/reference/cli/create-mastra).
+
+```bash npm2yarn
+npx mastra@latest create my-mastra-project --yes
+```
+
+By default, the command creates the managed agent harness. Use `--llm <provider>` to select OpenAI, Anthropic, Google Gemini, or xAI, `--template [template]` to use an arbitrary template, or `--empty` to create a minimal provider-free scaffold.
+
+The command installs Mastra skills for detected coding assistants and initializes Git when appropriate. Use `--no-skills` or `--no-git` to opt out.
+
+`mastra create` accepts the positional `[project-name]` argument and these options: `--yes`, `--empty`, `-l, --llm <provider>`, `-k, --llm-api-key <key>`, `--no-skills`, `--no-git`, `-t, --template [template]`, and `--timeout <milliseconds>`. See the [`create-mastra` reference](/reference/cli/create-mastra) for mode behavior, conflicts, validation, and complete flag descriptions.
+
 ## `mastra init`
 
 The `mastra init` command initializes Mastra in an existing project. Use this command to scaffold the necessary folders and configuration without generating a new project from scratch.

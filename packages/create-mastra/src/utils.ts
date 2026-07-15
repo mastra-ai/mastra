@@ -35,7 +35,10 @@ function selectMatchingDistTag(version: string, output: string): string | undefi
     });
 
   const prereleaseChannel = getPrereleaseChannel(version);
-  if (prereleaseChannel && matchingTags.includes(prereleaseChannel)) return prereleaseChannel;
+  const matchingPrereleaseTag = prereleaseChannel
+    ? matchingTags.find(tag => prereleaseChannel === tag || prereleaseChannel.startsWith(`${tag}-`))
+    : undefined;
+  if (matchingPrereleaseTag) return matchingPrereleaseTag;
   if (matchingTags.includes('latest')) return 'latest';
   if (matchingTags.includes('beta')) return 'beta';
   return matchingTags.sort((a, b) => a.localeCompare(b))[0];

@@ -33,10 +33,10 @@ The following templates demonstrate Gateway-first Mastra applications:
 Install a template using the `create-mastra` command:
 
 ```sh npm2yarn
-npx create-mastra@latest --template template-name
+npx create-mastra@latest my-project --template template-name
 ```
 
-This creates a complete project with all necessary code and configuration.
+This creates a complete project and installs its dependencies. The template author controls the models, provider dependencies, environment variables, and source code.
 
 ### Setup Process
 
@@ -55,12 +55,6 @@ After installation:
    ```
 
    Edit `.env` with required API keys as documented in the template's README.
-
-1. **Install dependencies** (if not done automatically):
-
-   ```sh npm2yarn
-   npm install
-   ```
 
 1. **Start development server**:
 

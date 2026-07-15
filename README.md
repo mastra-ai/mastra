@@ -51,21 +51,22 @@ If you're new to AI agents, check out our [templates](https://mastra.ai/docs/get
 <summary><strong>Alternative:</strong> Use this pre-built prompt to get started</summary>
 
 ```md
-Make new Mastra project. Mastra = framework for AI apps + agents on modern TypeScript stack. Before run command, ask these questions one by one. Wait for answers unless already given:
+Create a new Mastra project. Mastra is a framework for AI applications and agents on a modern TypeScript stack. Before running the command, ask these questions one at a time and wait for each answer unless it was already provided:
 
 Project name? (default: "my-mastra-app")
-Provider? (default: "openai", options: "openai", "anthropic", "groq", "google", "cerebras", "mistral")
-Provider rules:
+Provider? (default: "openai"; options: "openai", "anthropic", "google", "xai")
 
-Allowed provider -> use it.
-Any other value -> use "openai".
-Run with answers: npm create mastra@latest <project-name> -- --default --llm <provider>
+Use OpenAI if the provider isn't one of the supported values.
 
-After project created, go to project dir. Start dev server: npx bgproc start -n <project-name> -w -- npm run dev
+Run: npm create mastra@latest <project-name> -- --llm <provider> --yes
 
-Start Mastra Studio at http://localhost:4111. Studio = UI for build, test, manage agents, workflows, tools.
+The command creates the managed agent harness, installs Mastra skills for detected coding assistants, and initializes Git when appropriate.
 
-Also tell: Mastra model router give 3000+ models from many providers: https://mastra.ai/models
+After creation, enter the project directory and start the dev server: npx bgproc start -n <project-name> -w -- npm run dev
+
+Open Mastra Studio at http://localhost:4111. Studio is the interface for building, testing, and managing agents, workflows, and tools.
+
+Also mention that the Mastra model router provides access to thousands of models: https://mastra.ai/models
 ```
 
 </details>
