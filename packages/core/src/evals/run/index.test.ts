@@ -1822,7 +1822,12 @@ describe('runEvals', () => {
       const result = await runEvals({
         data: [
           { input: 'single turn question' },
-          { turns: [{ input: 'first', scorers: [perTurnScorer] }, { input: 'second', scorers: [perTurnScorer] }] },
+          {
+            turns: [
+              { input: 'first', scorers: [perTurnScorer] },
+              { input: 'second', scorers: [perTurnScorer] },
+            ],
+          },
         ],
         scorers: [createMockScorer('basic', 0.9)],
         target: agent,

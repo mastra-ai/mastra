@@ -153,7 +153,7 @@ result.thresholdResults // [{ id, passed, averageScore, threshold }]
     name: 'turns',
     type: 'EvalTurn[]',
     description:
-      'Multi-turn conversation with per-turn assertions. Each turn is an object `{ input, gates?, scorers? }` sent sequentially on the same thread; its `gates`/`scorers` evaluate only that turn\'s input and output. Per-turn outcomes are reported in `turnResults` and folded into the overall `verdict`. Only supported for Agent targets. Mutually exclusive with `input` and `inputs`.',
+      "Multi-turn conversation with per-turn assertions. Each turn is an object `{ input, gates?, scorers? }` sent sequentially on the same thread; its `gates`/`scorers` evaluate only that turn's input and output. Per-turn outcomes are reported in `turnResults` and folded into the overall `verdict`. Only supported for Agent targets. Mutually exclusive with `input` and `inputs`.",
     isOptional: true,
   },
   {
