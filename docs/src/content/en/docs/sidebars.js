@@ -192,7 +192,7 @@ const sidebars = {
             {
               type: 'doc',
               id: 'workflows/human-in-the-loop',
-              label: 'Human-in-the-loop',
+              label: 'Human-in-the-loop (HITL)',
             },
             {
               type: 'doc',
