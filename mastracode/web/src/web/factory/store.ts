@@ -237,9 +237,9 @@ export async function upsertWorkItem(params: {
   const { orgId, userId, githubProjectId, input } = params;
   const now = new Date();
 
-  const reuseExisting = (): Promise<WorkItemRow | null> => {
-    if (input.sourceKey === null) return Promise.resolve(null);
-    return getAppDb().transaction(tx =>
+  const reuseExisting = async (): Promise<WorkItemRow | null> => {
+    if (input.sourceKey === null) return null;
+    const updated = await getAppDb().transaction(tx =>
       applyUpdateLocked(
         tx,
         and(eq(workItems.githubProjectId, githubProjectId), eq(workItems.sourceKey, input.sourceKey!)),
@@ -248,6 +248,7 @@ export async function upsertWorkItem(params: {
         now,
       ),
     );
+    return updated?.item ?? null;
   };
 
   const reused = await reuseExisting();
@@ -284,12 +285,18 @@ export async function upsertWorkItem(params: {
 /** The transaction client drizzle hands to `db.transaction` callbacks. */
 type DbTx = Parameters<Parameters<AppDb['transaction']>[0]>[0];
 
+/** Pre-patch state returned alongside an update so callers can diff for auditing. */
+export interface WorkItemPriorState {
+  stages: string[];
+  sessionRoles: string[];
+}
+
 /**
  * Shared update path for upsert-reuse and PATCH: stage diff + merges. Must run
  * inside a transaction — the row is read with `FOR UPDATE` so concurrent
  * read-modify-writes of `stageHistory`/`sessions`/`metadata` serialize instead
  * of silently dropping each other's merges. Returns `null` when no row
- * matches `where`.
+ * matches `where`; otherwise the updated row plus the pre-patch state.
  */
 async function applyUpdateLocked(
   tx: DbTx,
@@ -297,9 +304,13 @@ async function applyUpdateLocked(
   patch: UpdateWorkItemInput,
   userId: string,
   now: Date,
-): Promise<WorkItemRow | null> {
+): Promise<{ item: WorkItemRow; previous: WorkItemPriorState } | null> {
   const [existing] = await tx.select().from(workItems).where(where).for('update');
   if (!existing) return null;
+  const previous: WorkItemPriorState = {
+    stages: [...existing.stages],
+    sessionRoles: Object.keys(existing.sessions),
+  };
   const set: Partial<WorkItemRow> = { updatedAt: now };
   if (patch.title !== undefined) set.title = patch.title;
   if (patch.url !== undefined) set.url = patch.url;
@@ -314,32 +325,33 @@ async function applyUpdateLocked(
     set.metadata = { ...existing.metadata, ...patch.metadata };
   }
   const [updated] = await tx.update(workItems).set(set).where(eq(workItems.id, existing.id)).returning();
-  return updated ?? { ...existing, ...set };
+  return { item: updated ?? { ...existing, ...set }, previous };
 }
 
 /**
  * Patch an org's work item: stage changes are diffed into history, sessions
- * and metadata are merged. Returns `null` when the item doesn't exist in the
- * caller's org.
+ * and metadata are merged. Returns the updated row plus the pre-patch stages
+ * and session roles (for audit diffing), or `null` when the item doesn't
+ * exist in the caller's org.
  */
 export async function updateWorkItem(
   orgId: string,
   id: string,
   userId: string,
   patch: UpdateWorkItemInput,
-): Promise<WorkItemRow | null> {
+): Promise<{ item: WorkItemRow; previous: WorkItemPriorState } | null> {
   return getAppDb().transaction(tx =>
     applyUpdateLocked(tx, and(eq(workItems.id, id), eq(workItems.orgId, orgId)), patch, userId, new Date()),
   );
 }
 
-/** Delete an org's work item. Returns `false` when it doesn't exist in the org. */
-export async function deleteWorkItem(orgId: string, id: string): Promise<boolean> {
+/** Delete an org's work item. Returns the deleted row, or `null` when it doesn't exist in the org. */
+export async function deleteWorkItem(orgId: string, id: string): Promise<WorkItemRow | null> {
   const [existing] = await getAppDb()
     .select()
     .from(workItems)
     .where(and(eq(workItems.id, id), eq(workItems.orgId, orgId)));
-  if (!existing) return false;
+  if (!existing) return null;
   await getAppDb().delete(workItems).where(eq(workItems.id, id));
-  return true;
+  return existing;
 }

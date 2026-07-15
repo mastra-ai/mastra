@@ -364,6 +364,7 @@ describe('Factory sidebar section', () => {
     // The Board link appears once the GitHub status query resolves as connected.
     expect(await within(nav).findByRole('link', { name: /Board/ })).toHaveAttribute('href', '/factory/board');
     expect(within(nav).getByRole('link', { name: /Metrics/ })).toHaveAttribute('href', '/factory/metrics');
+    expect(within(nav).getByRole('link', { name: /Audit/ })).toHaveAttribute('href', '/factory/audit');
     // The factory Sessions list is nested under the same menu.
     expect(within(nav).getByRole('region', { name: 'Factory sessions' })).toBeInTheDocument();
   });
@@ -384,6 +385,7 @@ describe('Factory sidebar section', () => {
     expect(within(nav).getByRole('region', { name: 'Factory sessions' })).toBeInTheDocument();
     await waitFor(() => expect(within(nav).queryByRole('link', { name: /Board/ })).not.toBeInTheDocument());
     expect(within(nav).queryByRole('link', { name: /Metrics/ })).not.toBeInTheDocument();
+    expect(within(nav).queryByRole('link', { name: /Audit/ })).not.toBeInTheDocument();
   });
 });
 
