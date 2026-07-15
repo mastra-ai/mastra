@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Use model capability data to select native structured output or JSON prompt injection for goal judges, while preserving fallback retries for unexpected provider failures.
+Add `jsonPromptInjection: 'auto'` to select native structured output when model capability data confirms support and inline JSON prompt injection otherwise. Goal judges use this shared automatic path while preserving fallback retries for unexpected provider failures.
