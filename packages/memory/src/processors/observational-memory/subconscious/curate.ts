@@ -92,6 +92,7 @@ export function createCuratorHandler(
       }
     } catch (error) {
       const message = `curate: ${error instanceof Error ? error.message : String(error)}`;
+      await context.writer?.custom({ type: 'data-subconscious-error', data: { agent: 'curate', error: message } });
       if (store && scope) {
         await publishSubconsciousActivity({
           store,

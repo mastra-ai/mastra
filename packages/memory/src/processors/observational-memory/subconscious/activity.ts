@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import type { ProcessorContext } from '@mastra/core/processors';
+import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
 import type {
   KnowledgeActivityEvent,
   KnowledgeScope,
@@ -109,8 +109,14 @@ export function renderSubconsciousActivity(snapshot: SubconsciousActivitySnapsho
 
 export async function publishSubconsciousError(input: {
   error: string;
+  agent?: string;
   sendStateSignal?: ProcessorContext['sendStateSignal'];
+  writer?: ProcessorStreamWriter;
 }): Promise<void> {
+  await input.writer?.custom({
+    type: 'data-subconscious-error',
+    data: { error: input.error, agent: input.agent },
+  });
   if (!input.sendStateSignal) return;
   const snapshot: SubconsciousActivitySnapshot = { updates: [], hot: [], errors: [input.error] };
   const contents = renderSubconsciousActivity(snapshot);
@@ -120,6 +126,7 @@ export async function publishSubconsciousError(input: {
     cacheKey: createHash('sha256').update(contents).digest('hex'),
     tagName: 'state',
     attributes: { id: SUBCONSCIOUS_ACTIVITY_STATE_ID },
+    metadata: { origin: 'subconscious' },
     contents,
     value: snapshot,
   });
@@ -142,6 +149,7 @@ export async function publishSubconsciousActivity(input: {
     cacheKey,
     tagName: 'state',
     attributes: { id: SUBCONSCIOUS_ACTIVITY_STATE_ID },
+    metadata: { origin: 'subconscious' },
     contents,
     value: snapshot,
   });

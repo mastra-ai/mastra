@@ -9,6 +9,7 @@ import { stripThreadTags } from '../message-utils';
 import { parseObservationGroups, wrapInObservationGroup } from '../observation-groups';
 import type { ObserverRunner } from '../observer-runner';
 import type { ReflectorRunner } from '../reflector-runner';
+import { stripSubconsciousSignals } from '../subconscious/origin';
 import { getMaxThreshold } from '../thresholds';
 import type { TokenCounter } from '../token-counter';
 import type {
@@ -101,8 +102,9 @@ export abstract class ObservationStrategy {
       }
 
       const { messages, existingObservations } = await this.prepare();
+      const observationMessages = stripSubconsciousSignals(messages);
       await this.emitStartMarkers(cycleId);
-      const output = await this.observe(existingObservations, messages);
+      const output = await this.observe(existingObservations, observationMessages);
       const processed = await this.process(output, existingObservations);
       await this.persist(processed);
       await this.emitEndMarkers(cycleId, processed);

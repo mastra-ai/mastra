@@ -551,6 +551,8 @@ export class ReflectorRunner {
       mainAgent,
       memory: this.memory,
       sendSignal,
+      writer: streamContext?.writer,
+      abortSignal,
       requestContext,
     });
     const extractedValues = hookedValues.values;
@@ -906,6 +908,7 @@ export class ReflectorRunner {
       await this.notifyReflectionCommitted({
         ...committedContext,
         observations: allLines.slice(0, reflectedLineCount).join('\n').trim(),
+        writer,
       });
     }
 
@@ -1238,6 +1241,7 @@ export class ReflectorRunner {
         requestContext,
         mainAgent,
         sendStateSignal,
+        writer,
         abortSignal,
         observabilityContext,
       });
