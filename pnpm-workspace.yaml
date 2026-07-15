@@ -59,6 +59,11 @@ packageExtensions:
       # a second SnapshotClient is created and every toMatchSnapshot() in
       # tests that import from that entrypoint fails. Keep these in sync.
       vitest: 4.1.8
+  '@ai-sdk/provider-utils@3.0.28':
+    dependencies:
+      msw: ^2.12.11
+      # See the note on the 3.0.25 entry — must track the catalog `vitest`.
+      vitest: 4.1.10
   '@uiw/codemirror-theme-dracula@*':
     dependencies:
       '@babel/runtime': ^7.29.2
