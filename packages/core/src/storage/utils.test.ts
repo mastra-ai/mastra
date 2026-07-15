@@ -11,7 +11,24 @@ import {
   serializeDate,
   filterByDateRange,
   jsonValueEquals,
+  hasErrorCode,
 } from './utils';
+
+describe('hasErrorCode', () => {
+  it('matches error codes through the cause chain', () => {
+    const error = { cause: { cause: { code: '23505' } } };
+
+    expect(hasErrorCode(error, new Set(['23505']))).toBe(true);
+    expect(hasErrorCode(error, new Set(['other']))).toBe(false);
+  });
+
+  it('stops when the cause chain contains a cycle', () => {
+    const error: { code: string; cause?: unknown } = { code: 'outer' };
+    error.cause = error;
+
+    expect(hasErrorCode(error, new Set(['missing']))).toBe(false);
+  });
+});
 
 describe('safelyParseJSON', () => {
   const sampleObject = {

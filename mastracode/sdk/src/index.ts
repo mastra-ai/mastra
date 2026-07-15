@@ -54,6 +54,7 @@ import { getStaticallyLoadedInstructionPaths } from './agents/prompts/agent-inst
 // import { planSubagent } from './agents/subagents/plan.js';
 import { attachOMThreadStatePersistence, restoreOMThreadStateForCurrentThread } from './agents/thread-caveman-state.js';
 import { createDynamicTools, createToolHooks } from './agents/tools.js';
+import type { PostToolObserver, ToolLike } from './agents/tools.js';
 
 import { getDynamicWorkspace, getGoalJudgeTools } from './agents/workspace.js';
 import { AuthStorage } from './auth/storage.js';
@@ -66,7 +67,7 @@ import type { ProviderAccess } from './onboarding/packs.js';
 import { getAvailableModePacks, getAvailableOmPacks } from './onboarding/packs.js';
 import {
   loadSettings,
-  MEMORY_GATEWAY_PROVIDER,
+  MASTRA_GATEWAY_PROVIDER,
   OBSERVABILITY_AUTH_PREFIX,
   resolveModelDefaults,
   resolveOmRoleModel,
@@ -172,18 +173,14 @@ export interface MastraCodeConfig {
   modes?: AgentControllerMode[];
   /** Override or extend subagent definitions. Default: explore/plan/execute */
   subagents?: AgentControllerSubagent[];
-  /** Extra tools merged into the dynamic tool set. Can be a static record or a function that receives requestContext. */
+  /** Extra tools merged into the dynamic tool set. Can be a static record or a (sync or async) function that receives requestContext. */
   extraTools?:
-    | Record<
-        string,
-        { execute?: (input: unknown, context?: unknown) => Promise<unknown> | unknown; [key: string]: unknown }
-      >
+    | Record<string, ToolLike | undefined>
     | ((ctx: {
         requestContext: RequestContext;
-      }) => Record<
-        string,
-        { execute?: (input: unknown, context?: unknown) => Promise<unknown> | unknown; [key: string]: unknown }
-      >);
+      }) => Record<string, ToolLike | undefined> | Promise<Record<string, ToolLike | undefined>>);
+  /** Observe completed tool calls without replacing or modifying the built-in tool implementation. */
+  postToolObserver?: PostToolObserver;
   /** Tools removed from the dynamic tool set before exposure to the model */
   disabledTools?: string[];
   /** Custom storage config instead of auto-detected default */
@@ -210,6 +207,8 @@ export interface MastraCodeConfig {
   disableHooks?: boolean;
   /** Disable plugin discovery/loading. Default: false */
   disablePlugins?: boolean;
+  /** Disable the polling-based GitHub signal provider even when enabled in global settings. Default: false */
+  disableGithubSignals?: boolean;
   /** Override the plugin manager. Primarily useful for tests or embedding. */
   pluginManager?: PluginManager;
   /**
@@ -292,7 +291,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // Auth storage (shared with Claude Max / OpenAI providers and AgentController)
   const authStorage = createAuthStorage();
   const globalSettings = loadSettings(config?.settingsPath);
-  const storedGatewayKey = authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER);
+  const storedGatewayKey = authStorage.getStoredApiKey(MASTRA_GATEWAY_PROVIDER);
   const storedGatewayUrl = globalSettings.memoryGateway?.baseUrl;
 
   if (storedGatewayKey) {
@@ -312,12 +311,12 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       const envVars = cfg?.apiKeyEnvVar;
       providerEnvVars[provider] = Array.isArray(envVars) ? envVars[0] : envVars;
     }
-    providerEnvVars[MEMORY_GATEWAY_PROVIDER] ??= 'MASTRA_GATEWAY_API_KEY';
+    providerEnvVars[MASTRA_GATEWAY_PROVIDER] ??= 'MASTRA_GATEWAY_API_KEY';
     authStorage.loadStoredApiKeysIntoEnv(providerEnvVars);
   } catch {
     // Registry unavailable — load well-known provider keys so non-gateway flows still work
     authStorage.loadStoredApiKeysIntoEnv({
-      [MEMORY_GATEWAY_PROVIDER]: 'MASTRA_GATEWAY_API_KEY',
+      [MASTRA_GATEWAY_PROVIDER]: 'MASTRA_GATEWAY_API_KEY',
       anthropic: 'ANTHROPIC_API_KEY',
       openai: 'OPENAI_API_KEY',
       google: 'GOOGLE_GENERATIVE_AI_API_KEY',
@@ -508,61 +507,62 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // well after controller is constructed (line ~692). Explicit type annotations
   // on githubSignals, codeAgent, modes, and controller break the circular
   // inference chain this forward reference would otherwise create.
-  const githubSignals: GithubSignals | undefined = globalSettings.signals?.experimentalGithubSignals
-    ? new GithubSignals({
-        cwd: project.rootPath,
-        gitcrawlCommand:
-          process.env.MASTRACODE_GITCRAWL_BIN ??
-          process.env.GITCRAWL_BIN ??
-          process.env.MASTRACODE_GITCRAWL_COMMAND ??
-          process.env.GITCRAWL_COMMAND,
-        getNotificationStreamOptions: async ({ resourceId, threadId }) => {
-          // Run the woken notification as the session that owns the target
-          // resource so it uses that session's model/mode/state. Fall back to
-          // the current session only when no session owns the resource yet.
-          const session = (await controller.getSessionByResource(resourceId)) ?? activeSession!;
-          // A long-running system must be able to drive work unattended, so a
-          // target session without an explicit model selection falls back to a
-          // real model rather than failing the run: the current session's live
-          // selection (what the user actually picked), then the mode's default.
-          const modeId = session.mode.get();
-          const defaultModeModelId = controller.listModes().find(mode => mode.id === modeId)?.defaultModelId;
-          const modelId = session.model.get() || activeSession?.model.get() || defaultModeModelId || '';
-          const requestContext = new RequestContext();
-          const agentControllerContext: AgentControllerRequestContext = {
-            controllerId: controller.id,
-            state: session.state.get(),
-            getState: () => session.state.get(),
-            setState: updates => session.state.set(updates),
-            threadId,
-            resourceId,
-            session: {
-              id: session.identity.getId(),
-              ownerId: session.identity.getOwnerId(),
-              modeId,
-              modelId,
-              state: {
-                get: () => session.state.get(),
-                set: updates => session.state.set(updates),
-                update: updater => session.state.update(updater),
+  const githubSignals: GithubSignals | undefined =
+    globalSettings.signals?.experimentalGithubSignals && !config?.disableGithubSignals
+      ? new GithubSignals({
+          cwd: project.rootPath,
+          gitcrawlCommand:
+            process.env.MASTRACODE_GITCRAWL_BIN ??
+            process.env.GITCRAWL_BIN ??
+            process.env.MASTRACODE_GITCRAWL_COMMAND ??
+            process.env.GITCRAWL_COMMAND,
+          getNotificationStreamOptions: async ({ resourceId, threadId }) => {
+            // Run the woken notification as the session that owns the target
+            // resource so it uses that session's model/mode/state. Fall back to
+            // the current session only when no session owns the resource yet.
+            const session = (await controller.getSessionByResource(resourceId)) ?? activeSession!;
+            // A long-running system must be able to drive work unattended, so a
+            // target session without an explicit model selection falls back to a
+            // real model rather than failing the run: the current session's live
+            // selection (what the user actually picked), then the mode's default.
+            const modeId = session.mode.get();
+            const defaultModeModelId = controller.listModes().find(mode => mode.id === modeId)?.defaultModelId;
+            const modelId = session.model.get() || activeSession?.model.get() || defaultModeModelId || '';
+            const requestContext = new RequestContext();
+            const agentControllerContext: AgentControllerRequestContext = {
+              controllerId: controller.id,
+              state: session.state.get(),
+              getState: () => session.state.get(),
+              setState: updates => session.state.set(updates),
+              threadId,
+              resourceId,
+              session: {
+                id: session.identity.getId(),
+                ownerId: session.identity.getOwnerId(),
+                modeId,
+                modelId,
+                state: {
+                  get: () => session.state.get(),
+                  set: updates => session.state.set(updates),
+                  update: updater => session.state.update(updater),
+                },
               },
-            },
-            workspace: controller.getWorkspace(),
-            getSubagentModelId: params => session.subagents.model.get(params ?? {}),
-          };
-          requestContext.set('controller', agentControllerContext);
+              workspace: controller.getWorkspace(),
+              getSubagentModelId: params => session.subagents.model.get(params ?? {}),
+            };
+            requestContext.set('controller', agentControllerContext);
 
-          return {
-            memory: { thread: threadId, resource: resourceId },
-            requestContext,
-            maxSteps: 1000,
-            savePerStep: false,
-            requireToolApproval: (session.state.get() as Record<string, unknown>).yolo !== true,
-            modelSettings: { temperature: 1 },
-          };
-        },
-      })
-    : undefined;
+            return {
+              memory: { thread: threadId, resource: resourceId },
+              requestContext,
+              maxSteps: 1000,
+              savePerStep: false,
+              requireToolApproval: (session.state.get() as Record<string, unknown>).yolo !== true,
+              modelSettings: { temperature: 1 },
+            };
+          },
+        })
+      : undefined;
   const codeAgent: Agent = createCodingAgent({
     id: CODE_AGENT_ID,
     name: 'Code Agent',
@@ -574,7 +574,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     instructions: getDynamicInstructions,
     model: getDynamicModel,
     tools: createDynamicTools(mcpManager, config?.extraTools, config?.disabledTools, storage, pluginTools),
-    hooks: createToolHooks(hookManager),
+    hooks: createToolHooks(hookManager, config?.postToolObserver),
     scorers: {
       outcome: {
         scorer: outcomeScorer,
@@ -1062,6 +1062,12 @@ export async function prepareAgentControllerMount(
   const mastraArgs = {
     agentControllers: { [controllerId]: controller },
     storage,
+    // Mirror the controller's internal-Mastra construction (which passes
+    // `config.pubsub` through): the server-owned Mastra must run its event
+    // bus on the same transport so streams/workflows/signals stay
+    // cross-process when a distributed PubSub (e.g. Redis Streams) is
+    // configured.
+    ...(base.signalsPubSub ? { pubsub: base.signalsPubSub } : {}),
     ...(Object.keys(serverConfig).length ? { server: serverConfig } : {}),
   };
 

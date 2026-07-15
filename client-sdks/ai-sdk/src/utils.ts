@@ -10,7 +10,7 @@ export const isMastraTextStreamChunk = (chunk: any): chunk is ChunkType<OutputSc
     typeof chunk === 'object' &&
     'type' in chunk &&
     typeof chunk.type === 'string' &&
-    [
+    ([
       'text-start',
       'text-delta',
       'text-end',
@@ -36,7 +36,8 @@ export const isMastraTextStreamChunk = (chunk: any): chunk is ChunkType<OutputSc
       'object',
       'tripwire',
       'raw',
-    ].includes(chunk.type)
+    ].includes(chunk.type) ||
+      chunk.type.startsWith('background-task-'))
   );
 };
 

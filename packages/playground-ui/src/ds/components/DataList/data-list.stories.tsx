@@ -139,7 +139,7 @@ export const Default: Story = {
  */
 export const WithErrorRows: Story = {
   render: ({ variant }) => (
-    <DataList columns={COMPACT_COLUMNS} variant={variant} className="max-h-[320px]">
+    <DataList columns={COMPACT_COLUMNS} variant={variant} className="max-h-80">
       <DataList.Top>
         <DataList.TopCell>ID</DataList.TopCell>
         <DataList.TopCell>Input</DataList.TopCell>
@@ -282,14 +282,14 @@ export const WithTrailingCell: Story = {
       ].map(item => (
         <DataList.RowWrapper key={item.path}>
           <DataList.RowButton flushLeft flushRight colEnd={-2} onClick={() => {}}>
-            <DataList.Cell className="text-neutral6 font-medium">{item.name}</DataList.Cell>
+            <DataList.Cell className="font-medium text-neutral6">{item.name}</DataList.Cell>
             <DataList.MonoCell height="default">{item.path}</DataList.MonoCell>
             <DataList.Cell className="min-w-0">
               <span className="block truncate">{item.description}</span>
             </DataList.Cell>
           </DataList.RowButton>
           <DataList.Cell className="py-0">
-            <div className="flex items-center justify-end gap-1 pr-3 w-full">
+            <div className="flex w-full items-center justify-end gap-1 pr-3">
               <Button
                 type="button"
                 variant="ghost"
@@ -298,7 +298,7 @@ export const WithTrailingCell: Story = {
                 aria-label={`Edit ${item.name}`}
                 onClick={e => e.stopPropagation()}
               >
-                <Pencil className="h-4 w-4" />
+                <Pencil className="size-4" />
               </Button>
               <Button
                 type="button"
@@ -308,7 +308,7 @@ export const WithTrailingCell: Story = {
                 aria-label={`Delete ${item.name}`}
                 onClick={e => e.stopPropagation()}
               >
-                <Trash2 className="h-4 w-4" />
+                <Trash2 className="size-4" />
               </Button>
             </div>
           </DataList.Cell>
@@ -385,8 +385,8 @@ export const Empty: Story = {
 /** Wide grid with constrained columns, horizontal scrolling, and a long badge that must stay inside its cell. */
 export const WideColumnsOverflow: Story = {
   render: ({ variant }) => (
-    <div className="max-w-[760px]">
-      <DataList columns={WIDE_COLUMNS} variant={variant} className="max-h-[360px]">
+    <div className="max-w-190">
+      <DataList columns={WIDE_COLUMNS} variant={variant} className="max-h-90">
         <DataList.Top>
           <DataList.TopCell>Run</DataList.TopCell>
           <DataList.TopCell>Input</DataList.TopCell>
@@ -431,7 +431,7 @@ export const WideColumnsOverflow: Story = {
 /** Sticky row headers keep the first column visible while wide metric-like grids scroll horizontally. */
 export const StickyRowHeaders: Story = {
   render: ({ variant, stickyHeaderBackground }) => (
-    <div className="max-w-[760px]">
+    <div className="max-w-190">
       <DataList
         columns="minmax(12rem,auto) auto auto auto auto auto auto auto"
         variant={variant}
@@ -613,7 +613,7 @@ const SAMPLE_SCORES = Array.from({ length: 25 }, (_, i) => ({
 function buildScoresColumns(visible: Set<ToggleableColumn>): string {
   const parts = ['auto', 'auto', 'minmax(0, 10rem)'];
   if (visible.has('entity')) parts.push('minmax(0, 14rem)');
-  if (visible.has('input')) parts.push('minmax(0, 100rem)');
+  if (visible.has('input')) parts.push('minmax(0, 40rem)');
   return parts.join(' ');
 }
 
@@ -640,8 +640,8 @@ export const ScoresTable: Story = {
     }, []);
 
     return (
-      <div className="flex flex-col h-[480px] min-h-0 gap-0">
-        <div className="flex items-center justify-end pb-2 shrink-0">
+      <div className="h-120 flex min-h-0 flex-col gap-0">
+        <div className="flex shrink-0 items-center justify-end pb-2">
           <DropdownMenu>
             <DropdownMenu.Trigger asChild>
               <Button variant="outline" size="sm">
@@ -664,7 +664,7 @@ export const ScoresTable: Story = {
           </DropdownMenu>
         </div>
 
-        <ScoresDataList columns={columns} className="flex-1 min-h-0">
+        <ScoresDataList columns={columns} className="min-h-0 flex-1">
           <ScoresDataList.Top>
             <ScoresDataList.TopCell>Date</ScoresDataList.TopCell>
             <ScoresDataList.TopCell>Time</ScoresDataList.TopCell>

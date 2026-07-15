@@ -34,6 +34,23 @@ const project: Project = {
   createdAt: 1,
 };
 
+/** GitHub project with a feature worktree selected — thread list is read-only. */
+const worktreeProject: Project = {
+  id: 'p-gh',
+  name: 'Mastra',
+  source: 'github',
+  githubProjectId: 'gh-1',
+  sandboxWorkdir: '/sandbox/mastra',
+  resourceId: RESOURCE_ID,
+  gitBranch: 'main',
+  worktrees: [
+    { branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' },
+    { branch: 'feat-ui', worktreePath: '/sandbox/mastra-worktrees/feat-ui', baseBranch: 'main' },
+  ],
+  selectedWorktreePath: '/sandbox/mastra-worktrees/feat-ui',
+  createdAt: 1,
+};
+
 function thread(id: string, title: string, updatedAt: string): AgentControllerThreadInfo {
   return { id, title, resourceId: RESOURCE_ID, createdAt: '2026-06-01T00:00:00.000Z', updatedAt };
 }
@@ -45,9 +62,9 @@ afterEach(() => {
   localStorage.clear();
 });
 
-function seedProject() {
-  localStorage.setItem('mastracode-projects', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-project', project.id);
+function seedProject(seeded: Project = project) {
+  localStorage.setItem('mastracode-projects', JSON.stringify([seeded]));
+  localStorage.setItem('mastracode-active-project', seeded.id);
 }
 
 function sessionState(): AgentControllerSessionState {
@@ -192,6 +209,31 @@ describe('ThreadList', () => {
       .map(item => within(item).getByRole('button', { name: /Thread \d/ }).textContent);
     expect(titles.map(t => t?.slice(0, 8))).toEqual(['Thread 7', 'Thread 6', 'Thread 5', 'Thread 4', 'Thread 3']);
     expect(screen.getByText('+2 more')).toBeInTheDocument();
+  });
+
+  it('given a feature worktree is active, then thread titles render read-only without actions or a new-thread control', async () => {
+    seedProject(worktreeProject);
+    useAgentControllerHandlers([threadOne]);
+    renderThreadList();
+
+    // The title still shows for context…
+    expect(await screen.findByText('First thread')).toBeInTheDocument();
+    // …but no "Threads" header/count and no way to create, rename, clone, or delete threads.
+    expect(screen.queryByText('Threads')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'New thread' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Thread actions' })).not.toBeInTheDocument();
+  });
+
+  it('given a GitHub project, then the list is read-only even when the repo-root path was persisted as selected', async () => {
+    // Legacy projects could persist the repo root as the selected worktree;
+    // it is no longer a workspace, so GitHub lists never expose thread controls.
+    seedProject({ ...worktreeProject, selectedWorktreePath: '/sandbox/mastra' });
+    useAgentControllerHandlers([threadOne]);
+    renderThreadList();
+
+    expect(await screen.findByText('First thread')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'New thread' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Thread actions' })).not.toBeInTheDocument();
   });
 
   it('when a thread is clicked, then the app navigates to its page and the sidebar closes', async () => {

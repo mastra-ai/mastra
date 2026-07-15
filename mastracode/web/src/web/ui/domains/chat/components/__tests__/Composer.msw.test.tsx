@@ -215,6 +215,70 @@ describe('Composer', () => {
     });
   });
 
+  describe('when attaching images', () => {
+    const pngFile = () => new File(['png-bytes'], 'shot.png', { type: 'image/png' });
+    const pngBase64 = 'cG5nLWJ5dGVz'; // btoa('png-bytes')
+
+    it('previews the image, sends it as a file, and clears the pending list', async () => {
+      seedProject();
+      const { onSend } = useAgentControllerHandlers();
+      renderComposer();
+
+      const input = await screen.findByRole('textbox');
+      await waitFor(() => expect(input).toBeEnabled());
+      await userEvent.upload(screen.getByLabelText('Attach images'), pngFile());
+
+      const preview = await screen.findByRole('img', { name: 'shot.png' });
+      expect(preview).toHaveAttribute('src', `data:image/png;base64,${pngBase64}`);
+
+      await userEvent.type(input, 'look at this{Enter}');
+
+      await waitFor(() =>
+        expect(onSend).toHaveBeenCalledWith({
+          message: 'look at this',
+          files: [{ data: pngBase64, mediaType: 'image/png', filename: 'shot.png' }],
+        }),
+      );
+      expect(screen.queryByRole('img', { name: 'shot.png' })).not.toBeInTheDocument();
+    });
+
+    it('sends an image without any text', async () => {
+      seedProject();
+      const { onSend } = useAgentControllerHandlers();
+      renderComposer();
+
+      await waitFor(() => expect(screen.getByRole('textbox')).toBeEnabled());
+      await userEvent.upload(screen.getByLabelText('Attach images'), pngFile());
+      await screen.findByRole('img', { name: 'shot.png' });
+
+      await userEvent.click(screen.getByRole('button', { name: 'Send message' }));
+
+      await waitFor(() =>
+        expect(onSend).toHaveBeenCalledWith({
+          message: '',
+          files: [{ data: pngBase64, mediaType: 'image/png', filename: 'shot.png' }],
+        }),
+      );
+    });
+
+    it('removes a pending image before sending', async () => {
+      seedProject();
+      const { onSend } = useAgentControllerHandlers();
+      renderComposer();
+
+      const input = await screen.findByRole('textbox');
+      await waitFor(() => expect(input).toBeEnabled());
+      await userEvent.upload(screen.getByLabelText('Attach images'), pngFile());
+      await screen.findByRole('img', { name: 'shot.png' });
+
+      await userEvent.click(screen.getByRole('button', { name: 'Remove image' }));
+      expect(screen.queryByRole('img', { name: 'shot.png' })).not.toBeInTheDocument();
+
+      await userEvent.type(input, 'text only{Enter}');
+      await waitFor(() => expect(onSend).toHaveBeenCalledWith({ message: 'text only' }));
+    });
+  });
+
   describe('when composing a multi-line draft', () => {
     it('grows with content via CSS instead of inline styles', async () => {
       seedProject();

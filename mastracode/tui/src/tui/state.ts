@@ -40,6 +40,7 @@ import { showError, showInfo } from './display.js';
 
 import { GoalManager } from './goal-manager.js';
 import type { OnboardingInlineComponent } from './onboarding-inline.js';
+import { RenderScheduler } from './render-scheduler.js';
 import { getEditorTheme, mastra, TERM_WIDTH_BUFFER } from './theme.js';
 import { VoiceController } from './voice/voice-controller.js';
 
@@ -165,6 +166,7 @@ export interface TUIState {
 
   // ── TUI framework (set once) ──────────────────────────────────────────
   ui: TUI;
+  renderScheduler?: RenderScheduler;
   chatContainer: Container;
   editorContainer: Container;
   idleCounter?: IdleCounterComponent;
@@ -342,6 +344,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     });
   }
   const ui = new TUI(terminal);
+  const renderScheduler = new RenderScheduler(() => ui.requestRender());
 
   // Perf profiling removed
 
@@ -349,6 +352,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
   const editorContainer = new Container();
   const footer = new Container();
   const editor = new CustomEditor(ui, getEditorTheme());
+  editor.requestRender = () => renderScheduler.request();
   const result: TUIState = {
     // Core dependencies
     controller: options.controller,
@@ -363,6 +367,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
 
     // TUI framework
     ui,
+    renderScheduler,
     chatContainer,
     editorContainer,
     editor,

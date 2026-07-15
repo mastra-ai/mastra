@@ -146,6 +146,34 @@ describe('IntakeSection', () => {
     });
   });
 
+  describe('given Linear is connected', () => {
+    it('shows the workspace name with a reconnect option', async () => {
+      useIntakeHandlers();
+
+      renderIntakeSection();
+
+      expect(await screen.findByText('Connected to Acme')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Reconnect' })).toBeInTheDocument();
+    });
+  });
+
+  describe('given the Linear authorization has expired', () => {
+    it('offers to reconnect instead of an empty project picker', async () => {
+      useIntakeHandlers();
+      server.use(
+        http.get(LINEAR_PROJECTS_URL, () => HttpResponse.json({ error: 'linear_reauth_required' }, { status: 409 })),
+      );
+
+      renderIntakeSection();
+
+      expect(
+        await screen.findByText('Linear authorization expired. Reconnect to keep syncing issues.'),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Reconnect Linear' })).toBeInTheDocument();
+      expect(screen.queryByRole('checkbox', { name: 'Q3 Roadmap' })).not.toBeInTheDocument();
+    });
+  });
+
   describe('given Linear is not connected', () => {
     it('shows the connect prompt instead of the project picker', async () => {
       useIntakeHandlers({
