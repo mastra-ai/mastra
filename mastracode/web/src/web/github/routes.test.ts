@@ -427,13 +427,14 @@ describe('webhook route', () => {
       sender: 'ada',
       installationId: 7,
     });
-    await vi.waitFor(() => expect(addIssueLabels).toHaveBeenCalledWith(7, 'octo/hello', 12, ['auto-triaged']));
+    await vi.waitFor(() => expect(runIssueTriage).toHaveBeenCalled());
+    expect(addIssueLabels).not.toHaveBeenCalled();
     expect(runIssueTriage).toHaveBeenCalledWith({
       repository: 'octo/hello',
       issueNumber: 12,
       issueTitle: 'Fix flaky test',
       issueUrl: 'https://github.com/octo/hello/issues/12',
-      labels: ['bug', 'auto-triaged'],
+      labels: ['bug'],
       sender: 'ada',
       installationId: 7,
       resourceId: 'p1',
@@ -1105,24 +1106,25 @@ describe('issues route', () => {
         body: JSON.stringify({
           title: 'Fix flaky test',
           url: 'https://github.com/octo/hello/issues/12',
-          labels: ['bug', 'auto-triaged', ''],
+          labels: ['bug', ''],
         }),
       },
     );
     expect(res.status).toBe(202);
     expect(await res.json()).toEqual({
       ok: true,
+      status: 'queued',
       threadId: 'thread-triage',
       projectPath: '/workspace/worktrees/factory-issue-12-aeab418d',
       branch: 'factory/issue-12',
     });
-    expect(addIssueLabels).toHaveBeenCalledWith(7, 'octo/hello', 12, ['auto-triaged']);
+    expect(addIssueLabels).toHaveBeenCalledWith(7, 'octo/hello', 12, ['queued', 'auto-triaged']);
     expect(runIssueTriage).toHaveBeenCalledWith({
       repository: 'octo/hello',
       issueNumber: 12,
       issueTitle: 'Fix flaky test',
       issueUrl: 'https://github.com/octo/hello/issues/12',
-      labels: ['bug', 'auto-triaged'],
+      labels: ['bug', 'queued', 'auto-triaged'],
       installationId: 7,
       resourceId: 'p1',
       projectPath: '/workspace/worktrees/factory-issue-12-aeab418d',

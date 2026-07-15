@@ -9,7 +9,11 @@ import type { GithubIssue } from '../services/factory';
  * Open issues for a GitHub project, loaded one page at a time as the list is
  * scrolled; disabled until a github project is active.
  */
-export function useProjectIssuesQuery(githubProjectId: string | undefined, label?: string) {
+export function useProjectIssuesQuery(
+  githubProjectId: string | undefined,
+  label?: string,
+  options?: { refetchInterval?: number | false },
+) {
   const { baseUrl } = useApiConfig();
   return useInfiniteQuery({
     queryKey: queryKeys.githubIssues(githubProjectId, label),
@@ -17,6 +21,7 @@ export function useProjectIssuesQuery(githubProjectId: string | undefined, label
     initialPageParam: 1,
     getNextPageParam: lastPage => lastPage.nextPage,
     enabled: Boolean(githubProjectId),
+    refetchInterval: options?.refetchInterval,
     select: data => data.pages.flatMap(page => page.issues),
   });
 }
@@ -26,10 +31,14 @@ export function useStartIssueTriageMutation(githubProjectId: string | undefined)
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (issue: GithubIssue) => startProjectIssueTriage(baseUrl, githubProjectId!, issue),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.githubIssues(githubProjectId) });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.githubIssues(githubProjectId, 'auto-triaged') });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.workItems(githubProjectId) });
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.githubIssues(githubProjectId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.githubIssues(githubProjectId, 'queued') }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.githubIssues(githubProjectId, 'auto-triaged') }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.githubIssues(githubProjectId, 'needs-approval') }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.workItems(githubProjectId) }),
+      ]);
     },
   });
 }

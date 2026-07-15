@@ -314,6 +314,8 @@ export async function listRepoOpenIssues(
     repo: parts.repo,
     state: 'open',
     labels: options.label,
+    sort: 'updated',
+    direction: 'desc',
     per_page: LIST_PAGE_SIZE,
     page,
   });

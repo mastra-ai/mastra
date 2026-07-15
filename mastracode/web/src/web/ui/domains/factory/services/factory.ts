@@ -83,6 +83,7 @@ export async function listProjectIssues(
 
 export interface StartIssueTriageResult {
   ok: true;
+  status: 'queued';
   threadId?: string;
 }
 
@@ -101,9 +102,15 @@ export async function startProjectIssueTriage(
       body: JSON.stringify({ title: issue.title, url: issue.url, labels: issue.labels }),
     },
   );
-  let body: { error?: string; message?: string; ok?: unknown; threadId?: unknown } | undefined;
+  let body: { error?: string; message?: string; ok?: unknown; status?: unknown; threadId?: unknown } | undefined;
   try {
-    body = (await res.json()) as { error?: string; message?: string; ok?: unknown; threadId?: unknown };
+    body = (await res.json()) as {
+      error?: string;
+      message?: string;
+      ok?: unknown;
+      status?: unknown;
+      threadId?: unknown;
+    };
   } catch {
     if (res.ok) throw new Error('Invalid triage response');
   }
@@ -113,10 +120,10 @@ export async function startProjectIssueTriage(
     else if (body?.error) message = body.error;
     throw new Error(message);
   }
-  if (body?.ok !== true) {
+  if (body?.ok !== true || body.status !== 'queued') {
     throw new Error('Invalid triage response');
   }
-  return { ok: true, threadId: typeof body.threadId === 'string' ? body.threadId : undefined };
+  return { ok: true, status: 'queued', threadId: typeof body.threadId === 'string' ? body.threadId : undefined };
 }
 
 /** List one page of a project's open pull requests (drafts excluded server-side). */

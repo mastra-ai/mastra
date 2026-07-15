@@ -34,10 +34,10 @@ import { streamSSE } from 'hono/streaming';
 import { ensureWebAuthUser, getWebAuthUser, webAuthTenant } from '../auth';
 import type { WebAuthTenant } from '../auth';
 import {
+  addIssueLabels,
   buildInstallUrl,
   buildOAuthIdentifyUrl,
   exchangeOAuthCode,
-  addIssueLabels,
   getInstallationRepo,
   listInstallationRepos,
   listRepoOpenIssues,
@@ -182,7 +182,7 @@ function parseListPage(raw: string | undefined): number | null {
   return page >= 1 ? page : null;
 }
 
-const VALID_ISSUE_LABEL_FILTERS = new Set(['auto-triaged', 'needs-approval']);
+const VALID_ISSUE_LABEL_FILTERS = new Set(['queued', 'auto-triaged', 'needs-approval']);
 
 function parseIssueLabelFilter(raw: string | undefined): string | undefined | null {
   if (raw === undefined || raw === '') return undefined;
@@ -297,13 +297,11 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
           );
         if (!project) throw new Error(`GitHub project not found for ${input.repository}`);
         const projectPath = input.projectPath ?? computeWorktreePath(project.sandboxWorkdir, branch);
-        await addIssueLabels(input.installationId, input.repository, input.issueNumber, ['auto-triaged']);
         return runIssueTriage({
           ...input,
           resourceId: project.id,
           projectPath,
           branch,
-          labels: input.labels.includes('auto-triaged') ? input.labels : [...input.labels, 'auto-triaged'],
         });
       }
     : undefined;
@@ -709,13 +707,14 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         if (!runIssueTriage) return c.json({ error: 'triage_unavailable' }, 503);
         const branch = `factory/issue-${issueNumber}`;
         const projectPath = computeWorktreePath(sandboxRow.sandboxWorkdir, branch);
-        await addIssueLabels(project.installationId, project.repoFullName, issueNumber, ['auto-triaged']);
+        await addIssueLabels(project.installationId, project.repoFullName, issueNumber, ['queued', 'auto-triaged']);
+        const labels = Array.from(new Set([...parseStringList(body.labels), 'queued', 'auto-triaged']));
         const result = await runIssueTriage({
           repository: project.repoFullName,
           issueNumber,
           issueTitle: body.title,
           issueUrl: body.url,
-          labels: parseStringList(body.labels),
+          labels,
           installationId: project.installationId,
           resourceId: project.id,
           projectPath,
@@ -724,6 +723,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         return c.json(
           {
             ok: true,
+            status: 'queued',
             threadId: result.threadId,
             projectPath: result.projectPath ?? projectPath,
             branch: result.branch ?? branch,

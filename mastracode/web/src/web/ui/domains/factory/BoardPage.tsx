@@ -4,7 +4,7 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { CircleDot, EllipsisVertical, GitPullRequest, MessageSquare } from 'lucide-react';
 import type { ComponentType, DragEvent } from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { useApiConfig } from '../../../../shared/api/config';
 import { relativeTime } from '../../../../shared/lib/date';
@@ -41,6 +41,7 @@ const BOARD_STAGES = [
 
 type BoardStageId = (typeof BOARD_STAGES)[number]['id'];
 
+const QUEUED_LABEL = 'queued';
 const AUTO_TRIAGED_LABEL = 'auto-triaged';
 const NEEDS_APPROVAL_LABEL = 'needs-approval';
 
@@ -52,6 +53,15 @@ function metadataLabels(metadata: Record<string, unknown>): string[] {
   return Array.isArray(metadata.labels)
     ? metadata.labels.filter((label): label is string => typeof label === 'string')
     : [];
+}
+
+type BoardIssueTriageStatus = 'queued' | 'triaged' | 'needs-approval' | 'untriaged';
+
+function issueTriageStatus(issue: GithubIssue): BoardIssueTriageStatus {
+  if (hasLabel(issue.labels, QUEUED_LABEL)) return 'queued';
+  if (hasLabel(issue.labels, NEEDS_APPROVAL_LABEL)) return 'needs-approval';
+  if (hasLabel(issue.labels, AUTO_TRIAGED_LABEL)) return 'triaged';
+  return 'untriaged';
 }
 
 function issueTriageThreadTags(issueNumber: number): Record<string, string> {
@@ -113,14 +123,14 @@ interface BoardCandidate {
   source: WorkItemSource;
   title: string;
   url: string;
-  /** Meta line under the title, e.g. `#12 · alice · opened 3 days ago`. */
+  /** Meta line under the title, e.g. `#12 · alice · opened 3 days ago · updated 1 hour ago`. */
   meta: string;
   icon: ComponentType<{ size?: number; className?: string }>;
   iconClassName: string;
   /** Column the candidate is offered in: issues in Intake, PRs in Review. */
   column: BoardStageId;
   /** Default one-click run for the candidate. */
-  actionLabel: 'Investigate' | 'Prepare approval' | 'Review';
+  actionLabel: 'Queued' | 'Investigate' | 'Prepare approval' | 'Review';
   /** Session slot + stage the default run fills. */
   runRole: 'triage' | 'work' | 'review';
   runStage: BoardStageId;
@@ -135,8 +145,9 @@ interface BoardCandidate {
 
 function issueCandidate(issue: GithubIssue): BoardCandidate {
   const labels = issue.labels;
-  const autoTriaged = hasLabel(labels, AUTO_TRIAGED_LABEL);
-  const needsApproval = hasLabel(labels, NEEDS_APPROVAL_LABEL);
+  const status = issueTriageStatus(issue);
+  const needsApproval = status === 'needs-approval';
+  const queued = status === 'queued';
   const ref = `GitHub issue #${issue.number} (${issue.url})`;
   const investigateBase = `Investigate ${ref}.`;
   const approvalBase = `Prepare approval for ${ref}.`;
@@ -145,11 +156,11 @@ function issueCandidate(issue: GithubIssue): BoardCandidate {
     source: 'github-issue',
     title: issue.title,
     url: issue.url,
-    meta: `#${issue.number}${issue.author ? ` · ${issue.author}` : ''} · opened ${relativeTime(issue.createdAt)}`,
+    meta: `#${issue.number}${issue.author ? ` · ${issue.author}` : ''} · opened ${relativeTime(issue.createdAt)} · updated ${relativeTime(issue.updatedAt)}`,
     icon: CircleDot,
     iconClassName: 'text-accent1',
-    column: autoTriaged ? 'triage' : 'intake',
-    actionLabel: needsApproval ? 'Prepare approval' : 'Investigate',
+    column: status === 'untriaged' ? 'intake' : 'triage',
+    actionLabel: queued ? 'Queued' : needsApproval ? 'Prepare approval' : 'Investigate',
     runRole: needsApproval ? 'triage' : 'work',
     runStage: needsApproval ? 'triage' : 'execute',
     branch: `factory/issue-${issue.number}`,
@@ -347,9 +358,11 @@ function Board({ githubProjectId }: { githubProjectId: string }) {
         ? 'linear'
         : null;
 
-  // Only the active intake feed fetches; the other feed loads on switch.
+  // The active intake feed loads on demand; triage feeds stay mounted so queued issues can progress in-place.
   const issues = useProjectIssuesQuery(activeIntakeSource === 'github' ? githubProjectId : undefined);
+  const queuedIssues = useProjectIssuesQuery(githubProjectId, QUEUED_LABEL);
   const triageIssues = useProjectIssuesQuery(githubProjectId, AUTO_TRIAGED_LABEL);
+  const needsApprovalIssues = useProjectIssuesQuery(githubProjectId, NEEDS_APPROVAL_LABEL);
   const pulls = useProjectPullRequestsQuery(githubProjectId);
   const linearIssues = useLinearIssuesQuery(activeIntakeSource === 'linear');
 
@@ -360,21 +373,55 @@ function Board({ githubProjectId }: { githubProjectId: string }) {
   const triage = useStartIssueTriageMutation(githubProjectId);
 
   const workItems = useMemo(() => items.data ?? [], [items.data]);
+  const queuedCount = queuedIssues.data?.length ?? 0;
+
+  useEffect(() => {
+    if (queuedCount === 0) return;
+    const startedAt = Date.now();
+    const interval = window.setInterval(() => {
+      void queuedIssues.refetch();
+      void triageIssues.refetch();
+      void needsApprovalIssues.refetch();
+      if (Date.now() - startedAt > 60_000) window.clearInterval(interval);
+    }, 3_000);
+    return () => window.clearInterval(interval);
+  }, [queuedCount, queuedIssues, triageIssues, needsApprovalIssues]);
 
   // Live candidates minus anything already on the board (any stage).
   const candidates = useMemo(() => {
     const known = new Set(workItems.map(item => item.sourceKey).filter(Boolean));
     const intakeIssues = (activeIntakeSource === 'github' ? (issues.data ?? []) : []).filter(
-      issue => !hasLabel(issue.labels, AUTO_TRIAGED_LABEL),
+      issue => !hasLabel(issue.labels, QUEUED_LABEL) && !hasLabel(issue.labels, AUTO_TRIAGED_LABEL),
     );
+    const issueCandidates = [
+      ...(needsApprovalIssues.data ?? []),
+      ...(triageIssues.data ?? []),
+      ...(queuedIssues.data ?? []),
+    ]
+      .filter((issue, index, all) => all.findIndex(item => item.number === issue.number) === index)
+      .map(issueCandidate);
     const all: BoardCandidate[] = [
+      ...issueCandidates,
       ...intakeIssues.map(issueCandidate),
-      ...(triageIssues.data ?? []).map(issueCandidate),
       ...(pulls.data ?? []).map(pullRequestCandidate),
       ...(activeIntakeSource === 'linear' ? (linearIssues.data ?? []).map(linearCandidate) : []),
     ];
-    return all.filter(candidate => !known.has(candidate.sourceKey));
-  }, [workItems, issues.data, triageIssues.data, pulls.data, linearIssues.data, activeIntakeSource]);
+    const seen = new Set<string>();
+    return all.filter(candidate => {
+      if (known.has(candidate.sourceKey) || seen.has(candidate.sourceKey)) return false;
+      seen.add(candidate.sourceKey);
+      return true;
+    });
+  }, [
+    workItems,
+    issues.data,
+    queuedIssues.data,
+    triageIssues.data,
+    needsApprovalIssues.data,
+    pulls.data,
+    linearIssues.data,
+    activeIntakeSource,
+  ]);
 
   const moveItem = (id: string, fromStage: string | null, toStage: string) => {
     const item = workItems.find(i => i.id === id);
@@ -481,7 +528,7 @@ function Board({ githubProjectId }: { githubProjectId: string }) {
                     (start.isPending && start.variables?.branch === candidate.branch) ||
                     (triage.isPending && triage.variables?.number === candidate.issue?.number)
                   }
-                  disabled={!runEnabled || start.isPending || triage.isPending}
+                  disabled={candidate.actionLabel === 'Queued' || !runEnabled || start.isPending || triage.isPending}
                   onRun={prompt =>
                     start.mutate({
                       branch: candidate.branch,
@@ -685,7 +732,12 @@ function CandidateCard({
 }) {
   const Icon = candidate.icon;
   const labels = metadataLabels(candidate.metadata);
-  const showTriage = candidate.source === 'github-issue' && !hasLabel(labels, AUTO_TRIAGED_LABEL) && onTriage;
+  const showTriage =
+    candidate.source === 'github-issue' &&
+    !hasLabel(labels, QUEUED_LABEL) &&
+    !hasLabel(labels, AUTO_TRIAGED_LABEL) &&
+    !hasLabel(labels, NEEDS_APPROVAL_LABEL) &&
+    onTriage;
   return (
     <article
       draggable

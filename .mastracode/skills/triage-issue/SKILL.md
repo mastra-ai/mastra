@@ -13,16 +13,23 @@ Keep the work focused on first-contact intake: classify the issue, explain the r
 
 Use only these auto-triage labels:
 
-- `auto-triaged` — add after a successful triage comment for every issue processed by this skill.
+- `queued` — pending manual triage. This means the UI has requested triage, but this skill has not completed the comment and final labels yet. Remove this label when triage completes.
+- `auto-triaged` — present on every issue routed through this flow so the UI can show it in Triage while queued and after completion.
 - `needs-approval` — add only when the recommended next action needs maintainer approval or prep before someone should investigate, implement, close, or reject.
 
 Also remove `status: needs triage` after the triage comment is posted or updated, if that label is present.
 
 Apply only the labels listed above.
 
+## Status lifecycle
+
+- `queued` — the issue has the `queued` and `auto-triaged` labels because manual triage has started, but this skill has not completed the comment and final label updates.
+- `triaged` — this skill has posted or updated the triage comment, removed `queued` if present, and left `auto-triaged` without `needs-approval`.
+- `needs-approval` — this skill has posted or updated the triage comment, removed `queued` if present, and left `auto-triaged` with `needs-approval`.
+
 ## Output contract
 
-Triage ends with one GitHub-visible issue comment. Update an existing auto-triage comment when possible instead of adding duplicates.
+Triage ends with one GitHub-visible issue comment and a completed label state. Update an existing auto-triage comment when possible instead of adding duplicates.
 
 Use this shape:
 
@@ -113,9 +120,10 @@ When there is an explicit active PR that closes/fixes the issue, mention it in t
 
 After the comment is posted or updated:
 
-1. Add `auto-triaged`.
-2. Add `needs-approval` only if the selected route needs maintainer approval/prep.
-3. Remove `status: needs triage` if present.
-4. Stop.
+1. Remove `queued` if present so the pending state cannot linger after completion.
+2. Ensure `auto-triaged` remains present so the issue stays in the Triage feed.
+3. Add `needs-approval` only if the selected route needs maintainer approval/prep.
+4. Remove `status: needs triage` if present.
+5. Stop.
 
-If the next route is investigation, approval prep, docs work, or a linked fixing PR, name that route in the comment and stop after the issue update.
+If the next route is investigation, approval prep, docs work, or a linked fixing PR, name that route in the comment and stop after the issue update. The UI may have shown this issue as `queued` before the skill completed; the labels above are what move it to `triaged` or `needs-approval`.

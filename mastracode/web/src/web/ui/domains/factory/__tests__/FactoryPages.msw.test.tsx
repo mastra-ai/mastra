@@ -217,7 +217,9 @@ interface BoardState {
 interface BoardHandlerOptions {
   workItems?: WorkItem[];
   issues?: GithubIssue[];
+  queuedIssues?: GithubIssue[];
   triageIssues?: GithubIssue[];
+  needsApprovalIssues?: GithubIssue[];
   pullRequests?: GithubPullRequest[];
   linearIssues?: LinearIssue[];
 }
@@ -241,7 +243,14 @@ function useBoardHandlers(options: BoardHandlerOptions = {}): BoardState {
       const label = new URL(request.url).searchParams.get('label');
       state.issueRequests.push(label);
       return HttpResponse.json({
-        issues: label === 'auto-triaged' ? (options.triageIssues ?? []) : (options.issues ?? []),
+        issues:
+          label === 'queued'
+            ? (options.queuedIssues ?? [])
+            : label === 'auto-triaged'
+              ? (options.triageIssues ?? [])
+              : label === 'needs-approval'
+                ? (options.needsApprovalIssues ?? [])
+                : (options.issues ?? []),
         nextPage: null,
       });
     }),
@@ -249,7 +258,7 @@ function useBoardHandlers(options: BoardHandlerOptions = {}): BoardState {
       `${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues/:number/triage`,
       async ({ request, params }) => {
         state.triageRequests.push({ number: Number(params.number), body: await request.json() });
-        return HttpResponse.json({ ok: true, threadId: 'thread-triage' }, { status: 202 });
+        return HttpResponse.json({ ok: true, status: 'queued', threadId: 'thread-triage' }, { status: 202 });
       },
     ),
     http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/prs`, () =>
@@ -423,7 +432,7 @@ describe('Factory Board — Intake candidates', () => {
     renderAt('/factory/board');
 
     expect(await screen.findByRole('heading', { name: 'Board' })).toBeInTheDocument();
-    await waitFor(() => expect(state.issueRequests).toEqual(expect.arrayContaining([null, 'auto-triaged'])));
+    await waitFor(() => expect(state.issueRequests).toEqual(expect.arrayContaining([null, 'queued', 'auto-triaged'])));
     const intake = await screen.findByTestId('board-column-intake');
     expect(await within(intake).findByText('Fix flaky test')).toBeInTheDocument();
     expect(within(intake).getByText('Improve docs')).toBeInTheDocument();
@@ -443,20 +452,36 @@ describe('Factory Board — Intake candidates', () => {
     expect(within(intake).queryByText('Add factory pages')).not.toBeInTheDocument();
   });
 
-  it('given an untriaged issue candidate, when Triage issue is chosen, then the server triage run starts and the Board stays open', async () => {
-    const state = useBoardHandlers({ issues, triageIssues: [] });
+  it('given an untriaged issue candidate, when Triage issue is chosen, then it appears queued in Triage while the Board stays open', async () => {
+    const state = useBoardHandlers({ issues, queuedIssues: [], triageIssues: [] });
+    let triageResolved = false;
     let resolveTriage!: () => void;
     const triageStarted = new Promise<void>(resolve => {
       resolveTriage = resolve;
     });
     server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues`, ({ request }) => {
+        const label = new URL(request.url).searchParams.get('label');
+        state.issueRequests.push(label);
+        if (label === 'queued') {
+          return HttpResponse.json({
+            issues: triageResolved ? [{ ...issues[0]!, labels: ['bug', 'queued'] }] : [],
+            nextPage: null,
+          });
+        }
+        if (label === 'auto-triaged') return HttpResponse.json({ issues: [], nextPage: null });
+        return HttpResponse.json({
+          issues: triageResolved ? [{ ...issues[1]!, labels: [] }] : issues,
+          nextPage: null,
+        });
+      }),
       http.post(
         `${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues/:number/triage`,
         async ({ request, params }) => {
           const number = Number(params.number);
           state.triageRequests.push({ number, body: await request.json() });
           await triageStarted;
-          return HttpResponse.json({ ok: true, threadId: 'thread-triage' }, { status: 202 });
+          return HttpResponse.json({ ok: true, status: 'queued', threadId: 'thread-triage' }, { status: 202 });
         },
       ),
     );
@@ -481,17 +506,59 @@ describe('Factory Board — Intake candidates', () => {
       },
     ]);
     const unfilteredRequestsBeforeResolve = state.issueRequests.filter(label => label === null).length;
-    const autoTriagedRequestsBeforeResolve = state.issueRequests.filter(label => label === 'auto-triaged').length;
+    const queuedRequestsBeforeResolve = state.issueRequests.filter(label => label === 'queued').length;
+    triageResolved = true;
     resolveTriage();
     await waitFor(() => expect(router.state.location.pathname).toBe('/factory/board'));
     await waitFor(() => {
       expect(state.issueRequests.filter(label => label === null).length).toBeGreaterThan(
         unfilteredRequestsBeforeResolve,
       );
-      expect(state.issueRequests.filter(label => label === 'auto-triaged').length).toBeGreaterThan(
-        autoTriagedRequestsBeforeResolve,
+      expect(state.issueRequests.filter(label => label === 'queued').length).toBeGreaterThan(
+        queuedRequestsBeforeResolve,
       );
     });
+
+    const triageColumn = await screen.findByTestId('board-column-triage');
+    const queuedCard = await within(triageColumn).findByRole('article', { name: 'Fix flaky test' });
+    const queuedButton = within(queuedCard).getByRole('button', { name: 'Queued Fix flaky test' });
+    expect(queuedButton).toBeDisabled();
+    expect(
+      within(queuedCard).queryByRole('button', { name: 'Prepare approval Fix flaky test' }),
+    ).not.toBeInTheDocument();
+    expect(within(column('intake')).queryByText('Fix flaky test')).not.toBeInTheDocument();
+  });
+
+  it('given a queued issue, when GitHub labels complete on a later poll, then the Triage action becomes Investigate', async () => {
+    useBoardHandlers({ queuedIssues: [{ ...issues[0]!, labels: ['bug', 'queued'] }], triageIssues: [] });
+    let autoTriagedRequests = 0;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues`, ({ request }) => {
+        const label = new URL(request.url).searchParams.get('label');
+        if (label === 'queued') {
+          return HttpResponse.json({
+            issues: autoTriagedRequests < 2 ? [{ ...issues[0]!, labels: ['bug', 'queued'] }] : [],
+            nextPage: null,
+          });
+        }
+        if (label === 'auto-triaged') {
+          autoTriagedRequests += 1;
+          return HttpResponse.json({
+            issues: autoTriagedRequests >= 2 ? [{ ...issues[0]!, labels: ['bug', 'auto-triaged'] }] : [],
+            nextPage: null,
+          });
+        }
+        return HttpResponse.json({ issues: [], nextPage: null });
+      }),
+    );
+    renderAt('/factory/board');
+
+    const triageColumn = await screen.findByTestId('board-column-triage');
+    const card = await within(triageColumn).findByRole('article', { name: 'Fix flaky test' });
+    expect(within(card).getByRole('button', { name: 'Queued Fix flaky test' })).toBeDisabled();
+    expect(
+      await within(card).findByRole('button', { name: 'Investigate Fix flaky test' }, { timeout: 5_000 }),
+    ).toBeInTheDocument();
   });
 
   it('given an auto-triaged issue candidate, when the Board renders, then it appears in Triage with Investigate and no label chips', async () => {
@@ -549,7 +616,7 @@ describe('Factory Board — Intake candidates', () => {
 
     // Only the Linear feed's candidates remain in Intake.
     expect(await within(column('intake')).findByText('Fix intake sync')).toBeInTheDocument();
-    expect(within(column('intake')).queryByText('Fix flaky test')).not.toBeInTheDocument();
+    await waitFor(() => expect(within(column('intake')).queryByText('Fix flaky test')).not.toBeInTheDocument());
     // The switch only affects the Intake feed: PRs and persisted cards stay.
     expect(within(column('review')).getByText('Add factory pages')).toBeInTheDocument();
     expect(within(column('execute')).getByText('Linear card')).toBeInTheDocument();
