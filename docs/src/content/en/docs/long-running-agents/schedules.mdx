@@ -44,6 +44,7 @@ const pinger = new Agent({
 
 const mastra = new Mastra({
   agents: { pinger },
+  scheduler: { enabled: true },
   storage: new LibSQLStore({ url: 'file:./mastra.db' }),
 })
 
@@ -75,6 +76,7 @@ Set `timezone` to an IANA timezone, for example `America/New_York`, so fire time
 
 For more readable cron construction, you can use a userland builder such as [`cron-time-generator`](https://www.npmjs.com/package/cron-time-generator) and pass its output to `cron`.
 
+
 ## Threadless and threaded schedules
 
 An agent schedule fires in one of two modes, decided by whether you pass a `threadId`.
@@ -87,7 +89,31 @@ Without a `threadId`, each fire is an isolated `agent.generate()` run. Nothing i
 
 With a `threadId`, the schedule sends a [signal](/docs/long-running-agents/signals) into that thread, so the prompt joins the agent's conversation. Threaded schedules require a `resourceId` alongside the `threadId`.
 
+:::warning
+
+The thread must exist before the first fire. `agent.sendSignal()` throws if the target thread is missing, and every fire will fail with `thread "<id>" not found`. Create the thread with `memory.createThread()` before the first cron fire.
+:::
+
 ```typescript title="src/mastra/schedules.ts"
+import { Memory } from '@mastra/memory'
+
+const pinger = new Agent({
+  id: 'pinger',
+  name: 'Pinger',
+  instructions: 'Report the current system status in one sentence.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  memory: new Memory(),
+})
+
+// Register `pinger` on your Mastra instance, then:
+
+const memory = await mastra.getAgent('pinger').getMemory()
+await memory!.createThread({
+  threadId: 'thread-123',
+  resourceId: 'user-456',
+  title: 'Daily status',
+})
+
 await mastra.schedules.create({
   agentId: 'pinger',
   cron: '0 9 * * *',
@@ -119,6 +145,30 @@ await mastra.schedules.create({
 ```
 
 `providerOptions` are merged into the signal payload on every fire and apply to both threaded and threadless schedules.
+
+#### Wake behavior on idle threads
+
+When the target thread has no stream running, Mastra needs an explicit instruction to start one. Without `ifIdle: { behavior: 'wake' }` (or `'queue'` to hold the signal for the next stream), the signal is delivered to the thread but the agent doesn't run, and no response is written to the thread. For scheduled fires that should always produce an agent response, set `ifIdle: { behavior: 'wake' }` on every threaded schedule.
+
+#### Signal type and thread visibility
+
+`signalType` controls how the fire lands in the thread. The default is `'notification'`, which wakes the agent but doesn't render as a user-authored message in the thread's message history. To make each fire visible set `signalType: 'user'`.
+
+```typescript
+await mastra.schedules.create({
+  agentId: 'pinger',
+  cron: '0 9 * * *',
+  prompt: 'Summarize anything new since yesterday.',
+  threadId: 'thread-123',
+  resourceId: 'user-456',
+  signalType: 'user',
+  ifIdle: { behavior: 'wake' },
+})
+```
+
+#### Fixed fields on threaded schedules
+
+`threadId` and `resourceId` are set at create time and cannot be patched via `update()`. To change the thread a schedule delivers into, delete the schedule and create a new one.
 
 ## Managing schedules
 
