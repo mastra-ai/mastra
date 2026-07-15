@@ -290,6 +290,26 @@ describe('AISDKV7LanguageModel', () => {
       });
     });
 
+    it('passes unsupported tagged variants (reference/text) through unchanged instead of untagging to undefined', async () => {
+      const model = createMockV4Model();
+      const referenceData = { type: 'reference', reference: { openai: 'file-123' } };
+      (model.doGenerate as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+        content: [{ type: 'file', mediaType: 'image/png', data: referenceData }],
+        finishReason: 'stop',
+        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        warnings: [],
+      });
+      const wrapped = new AISDKV7LanguageModel(model);
+
+      const result = await wrapped.doGenerate({ prompt: [] } as unknown as LanguageModelV4CallOptions);
+
+      expect(result.content).toContainEqual({
+        type: 'file',
+        mediaType: 'image/png',
+        data: referenceData,
+      });
+    });
+
     it('passes flat response file data through unchanged', async () => {
       const model = createMockV4Model();
       const content = [{ type: 'file', mediaType: 'image/png', data: 'iVBORw0KGgo=' }];

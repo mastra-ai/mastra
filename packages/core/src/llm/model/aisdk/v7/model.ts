@@ -119,7 +119,15 @@ function remapCallOptionsToV4(options: LanguageModelV4CallOptions): LanguageMode
  * persistence) expects the flat V2/V3 shape (base64 string | Uint8Array).
  * Untag before handing results to the shared pipeline so file chunks and
  * persisted message history keep the flat contract.
+ *
+ * Response file data is typed as the 'data' | 'url' variants only, so this
+ * guard is exhaustive for well-formed responses. Other tagged variants
+ * ('reference' | 'text') have no flat equivalent and pass through untouched.
  */
+function isUntaggableV4ResponseFileData(data: unknown): data is LanguageModelV4File['data'] {
+  return isTaggedV4FileData(data) && (data.type === 'data' || data.type === 'url');
+}
+
 function untagV4ResponseFileData(data: LanguageModelV4File['data']): string | Uint8Array {
   return data.type === 'url' ? data.url.toString() : data.data;
 }
@@ -127,7 +135,7 @@ function untagV4ResponseFileData(data: LanguageModelV4File['data']): string | Ui
 function untagResponseFileContent(content: GenerateResult['content']): GenerateResult['content'] {
   let contentModified = false;
   const untagged = content.map(part => {
-    if (part.type !== 'file' || !isTaggedV4FileData(part.data)) {
+    if (part.type !== 'file' || !isUntaggableV4ResponseFileData(part.data)) {
       return part;
     }
 
@@ -144,7 +152,7 @@ function untagFileStreamParts(stream: StreamResult['stream']): StreamResult['str
   return stream.pipeThrough(
     new TransformStream<LanguageModelV4StreamPart, LanguageModelV4StreamPart>({
       transform(part, controller) {
-        if (part.type === 'file' && isTaggedV4FileData(part.data)) {
+        if (part.type === 'file' && isUntaggableV4ResponseFileData(part.data)) {
           // Same flat-shape cast as untagResponseFileContent.
           controller.enqueue({
             ...part,
