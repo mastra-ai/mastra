@@ -6263,6 +6263,10 @@ export class Agent<
       logger: false,
       storage: new InMemoryStore(),
       pubsub: new EventEmitterPubSub(),
+      // Skip module-level scorer-hook registration: the hook can never resolve
+      // a scorer on this registry-less instance, and it would pin the whole
+      // ephemeral graph against GC for the process lifetime (#19404).
+      __ephemeral: true,
     });
     this.#ephemeralMastra = ephemeral;
     return ephemeral;
