@@ -86,6 +86,7 @@ import SchedulesPage from './pages/workflows/schedules';
 import { Workflow } from './pages/workflows/workflow';
 import Workspace from './pages/workspace';
 import WorkspaceSkillDetailPage from './pages/workspace/skills/[skillName]';
+import Workspaces from './pages/workspaces';
 import { Layout } from '@/components/layout';
 import { MinimalLayout } from '@/components/minimal-layout';
 import { AgentBuilderEditionLayout, AgentBuilderLayout } from '@/domains/agent-builder/layouts/agent-builder-layout';
@@ -540,7 +541,7 @@ export const routes: RouteObject[] = [
         ]),
       },
 
-      { path: '/workspaces', element: <Workspace />, handle: navHandle('/workspaces') },
+      { path: '/workspaces', element: <Workspaces />, handle: navHandle('/workspaces') },
       { path: '/workspaces/:workspaceId', element: <Workspace />, handle: navHandle('/workspaces') },
       {
         path: '/workspaces/:workspaceId/skills/:skillName',

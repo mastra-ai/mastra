@@ -9,10 +9,11 @@ export interface TreeFolderTriggerProps {
   className?: string;
   children: React.ReactNode;
   actions?: React.ReactNode;
+  onClick?: React.MouseEventHandler<HTMLDivElement>;
 }
 
 export const TreeFolderTrigger = React.forwardRef<HTMLDivElement, TreeFolderTriggerProps>(
-  ({ className, children, actions }, ref) => {
+  ({ className, children, actions, onClick }, ref) => {
     const treeCtx = useTreeContext();
     const folderCtx = useTreeFolderContext();
     const depth = useTreeDepth();
@@ -37,6 +38,7 @@ export const TreeFolderTrigger = React.forwardRef<HTMLDivElement, TreeFolderTrig
           folderCtx?.isFocused && 'bg-surface4 text-neutral6',
           className,
         )}
+        onClick={onClick}
       >
         <CollapsibleTrigger
           data-tree-folder-trigger="true"

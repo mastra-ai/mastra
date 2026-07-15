@@ -1,3 +1,5 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
 import {
@@ -17,6 +19,7 @@ import { useState } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { coldarkDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 import type { Skill, SkillSource } from '../types';
+import { cn } from '@/lib/utils';
 
 export interface SkillDetailProps {
   skill: Skill;
@@ -53,6 +56,13 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
   const [showRawInstructions, setShowRawInstructions] = useState(false);
   const sourceInfo = getSourceInfo(skill.source);
 
+  // A skill with no description can't be indexed for search — surface that
+  // (the only real "invalid" signal in workspace skill data).
+  const isInvalid = !skill.description?.trim();
+  const installCommand = skill.skillsShSource
+    ? `npx skills add ${skill.skillsShSource.owner}/${skill.skillsShSource.repo}/${skill.name}`
+    : null;
+
   const toggleSection = (section: string) => {
     setExpandedSections(prev => {
       const next = new Set(prev);
@@ -69,49 +79,78 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
     <div className="space-y-6 min-w-0 overflow-hidden">
       {/* Header */}
       <div className="flex items-start gap-4">
-        <div className="p-3 rounded-lg bg-surface5">
-          <SkillIcon className="h-6 w-6 text-neutral4" />
+        <div className="rounded-lg border border-border2 bg-surface5 p-3">
+          <SkillIcon className="h-6 w-6 text-accent1" />
         </div>
-        <div className="flex-1">
-          <h1 className="text-xl font-semibold text-neutral6">{skill.name}</h1>
-          <p className="text-sm text-neutral4 mt-1">{skill.description}</p>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-xl font-semibold text-neutral6">{skill.name}</h1>
+            {isInvalid ? (
+              <Badge variant="warning">Invalid</Badge>
+            ) : skill.skillsShSource ? (
+              <Badge variant="info">skills.sh</Badge>
+            ) : null}
+          </div>
+          <p className={cn('mt-1 text-sm', skill.description ? 'text-neutral4' : 'text-neutral3')}>
+            {skill.description || 'No description provided.'}
+          </p>
+          {/* Compact meta row (reference `.d-meta`) — no heavy cards. */}
+          <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-neutral3">
+            <span className="inline-flex items-center gap-1.5">
+              {sourceInfo.icon}
+              {sourceInfo.label}
+            </span>
+            <span aria-hidden className="h-1 w-1 rounded-full bg-neutral2" />
+            <span className="inline-flex min-w-0 items-center gap-1.5">
+              <FolderOpen className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate font-mono">{skill.path}</span>
+            </span>
+            {skill.references.length > 0 && (
+              <>
+                <span aria-hidden className="h-1 w-1 rounded-full bg-neutral2" />
+                <span className="inline-flex items-center gap-1.5">
+                  <FileText className="h-3.5 w-3.5" />
+                  {skill.references.length} {skill.references.length === 1 ? 'reference' : 'references'}
+                </span>
+              </>
+            )}
+            {skill.license && (
+              <>
+                <span aria-hidden className="h-1 w-1 rounded-full bg-neutral2" />
+                <span>{String(skill.license)}</span>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Metadata */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <MetadataCard label="Source" value={sourceInfo.label} icon={sourceInfo.icon} />
-        <MetadataCard label="Path" value={skill.path} icon={<FolderOpen className="h-3.5 w-3.5" />} />
-        {skill.license && <MetadataCard label="License" value={skill.license} />}
-        {skill.compatibility != null && <MetadataCard label="Compatibility" value={skill.compatibility} />}
-        <MetadataCard
-          label="References"
-          value={`${skill.references.length} files`}
-          icon={<FileText className="h-3.5 w-3.5" />}
-        />
-      </div>
+      {/* Install command (skills.sh skills only) */}
+      {installCommand && (
+        <div>
+          <p className="mb-2 text-xs uppercase tracking-wide text-neutral3">Install</p>
+          <div className="flex items-center gap-2 rounded-lg border border-border1 bg-surface1 px-3 py-2 font-mono text-sm">
+            <span className="text-accent1">$</span>
+            <code className="min-w-0 flex-1 truncate text-neutral6">{installCommand}</code>
+            <CopyButton content={installCommand} copyMessage="Copied install command" variant="ghost" />
+          </div>
+        </div>
+      )}
 
-      {/* Instructions */}
-      <CollapsibleSection
-        title="Instructions"
-        isExpanded={expandedSections.has('instructions')}
-        onToggle={() => toggleSection('instructions')}
-        headerAction={
+      {/* Instructions — unboxed so the rendered SKILL.md can breathe. */}
+      <div className="border-t border-border1 pt-5">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-xs font-medium uppercase tracking-wide text-neutral3">Instructions</h2>
           <button
-            onClick={e => {
-              e.stopPropagation();
-              setShowRawInstructions(!showRawInstructions);
-            }}
-            className="flex items-center gap-1.5 px-2 py-1 rounded text-xs text-neutral4 hover:text-neutral5 hover:bg-surface4 transition-colors"
+            onClick={() => setShowRawInstructions(!showRawInstructions)}
+            className="flex items-center gap-1.5 rounded px-2 py-1 text-xs text-neutral4 transition-colors hover:bg-surface4 hover:text-neutral5"
             title={showRawInstructions ? 'Show rendered' : 'Show source'}
           >
             {showRawInstructions ? <Eye className="h-3.5 w-3.5" /> : <FileCode2 className="h-3.5 w-3.5" />}
             {showRawInstructions ? 'Rendered' : 'Source'}
           </button>
-        }
-      >
+        </div>
         {showRawInstructions ? (
-          <div style={{ backgroundColor: 'black' }} className="rounded-lg overflow-x-auto w-0 min-w-full">
+          <div className="w-0 min-w-full overflow-x-auto rounded-lg bg-surface1">
             <SyntaxHighlighter
               language="markdown"
               style={coldarkDark}
@@ -128,7 +167,7 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
         ) : (
           <MarkdownRenderer>{skill.instructions}</MarkdownRenderer>
         )}
-      </CollapsibleSection>
+      </div>
 
       {/* References */}
       {skill.references.length > 0 && (
@@ -188,57 +227,6 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
         </CollapsibleSection>
       )}
 
-      {/* Path */}
-      <div className="pt-4 border-t border-border1">
-        <p className="text-xs text-neutral3">
-          Path: <code className="px-1 py-0.5 rounded bg-surface4">{skill.path}</code>
-        </p>
-      </div>
-    </div>
-  );
-}
-
-/**
- * Format a value for display, handling strings, objects, and arrays.
- */
-function formatDisplayValue(value: unknown): string {
-  if (typeof value === 'string') {
-    return value;
-  }
-  if (typeof value === 'number' || typeof value === 'boolean') {
-    return String(value);
-  }
-  if (Array.isArray(value)) {
-    return value.map(v => (typeof v === 'string' ? v : JSON.stringify(v))).join(', ');
-  }
-  if (typeof value === 'object' && value !== null) {
-    // For objects, show a compact summary
-    const keys = Object.keys(value);
-    if (keys.length === 0) return '{}';
-    if (keys.length === 1) {
-      const key = keys[0];
-      const val = (value as Record<string, unknown>)[key];
-      if (Array.isArray(val)) {
-        return `${key}: ${val.join(', ')}`;
-      }
-      return `${key}: ${formatDisplayValue(val)}`;
-    }
-    return `{${keys.join(', ')}}`;
-  }
-  return String(value);
-}
-
-function MetadataCard({ label, value, icon }: { label: string; value: unknown; icon?: React.ReactNode }) {
-  const displayValue = formatDisplayValue(value);
-  return (
-    <div className="p-3 rounded-lg bg-surface3">
-      <p className="text-xs text-neutral3 mb-1">{label}</p>
-      <div className="flex items-center gap-1.5">
-        {icon && <span className="text-neutral4">{icon}</span>}
-        <p className="text-sm font-medium text-neutral5 truncate" title={displayValue}>
-          {displayValue}
-        </p>
-      </div>
     </div>
   );
 }
