@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
@@ -202,7 +201,7 @@ describe('Storage domain init during agent.stream with LibSQL', () => {
       agents: { 'test-agent': agent },
     });
 
-    const threadId = randomUUID();
+    const threadId = crypto.randomUUID();
     const resourceId = 'test-user';
 
     // Stream multiple times with memory enabled
@@ -267,13 +266,13 @@ describe('Storage domain init during agent.stream with LibSQL', () => {
     // Fire multiple concurrent stream calls (different threads but same storage)
     const streams = await Promise.all([
       agent.stream('Message 1', {
-        memory: { thread: randomUUID(), resource: resourceId },
+        memory: { thread: crypto.randomUUID(), resource: resourceId },
       }),
       agent.stream('Message 2', {
-        memory: { thread: randomUUID(), resource: resourceId },
+        memory: { thread: crypto.randomUUID(), resource: resourceId },
       }),
       agent.stream('Message 3', {
-        memory: { thread: randomUUID(), resource: resourceId },
+        memory: { thread: crypto.randomUUID(), resource: resourceId },
       }),
     ]);
 

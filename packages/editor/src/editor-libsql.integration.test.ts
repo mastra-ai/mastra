@@ -7,7 +7,6 @@ import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { createScorer } from '@mastra/core/evals';
 import { RequestContext } from '@mastra/core/request-context';
 import { MastraEditor } from './index';
-import { randomUUID } from 'crypto';
 import os from 'node:os';
 import { convertArrayToReadableStream, LanguageModelV2, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import {
@@ -26,8 +25,8 @@ import { MastraModelGateway, ProviderConfig } from '@mastra/core/llm';
 // Create in-memory LibSQL store for testing
 const createTestStorage = () => {
   return new LibSQLStore({
-    id: `test-${randomUUID()}`,
-    url: `file:${os.tmpdir()}/mastra-test-${randomUUID()}.db`,
+    id: `test-${crypto.randomUUID()}`,
+    url: `file:${os.tmpdir()}/mastra-test-${crypto.randomUUID()}.db`,
   });
 };
 
@@ -35,7 +34,7 @@ const createTestStorage = () => {
 const createTestVector = (id: string) => {
   return new LibSQLVector({
     id,
-    url: `file:${os.tmpdir()}/mastra-test-${randomUUID()}.db`,
+    url: `file:${os.tmpdir()}/mastra-test-${crypto.randomUUID()}.db`,
   });
 };
 
@@ -898,7 +897,7 @@ describe('MastraEditor with LibSQL Integration', () => {
 
       // Config changes require createVersion + update(activeVersionId)
       await agentsStore?.createVersion({
-        id: randomUUID(),
+        id: crypto.randomUUID(),
         agentId: 'versioned-agent',
         versionNumber: 2,
         name: 'Version 2',
@@ -949,7 +948,7 @@ describe('MastraEditor with LibSQL Integration', () => {
 
       // Config changes require createVersion + update(activeVersionId)
       await agentsStore?.createVersion({
-        id: randomUUID(),
+        id: crypto.randomUUID(),
         agentId: 'numbered-version-agent',
         versionNumber: 2,
         name: 'Version 2',
@@ -1099,7 +1098,7 @@ describe('MastraEditor with LibSQL Integration', () => {
 
       // Update the agent in storage — config changes require createVersion + update(activeVersionId)
       await agentsStore?.createVersion({
-        id: randomUUID(),
+        id: crypto.randomUUID(),
         agentId: 'cached-agent',
         versionNumber: 2,
         name: 'Updated Cached Agent',
@@ -1160,7 +1159,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       // Verify cache is cleared by updating and retrieving
       // Config changes require createVersion + update(activeVersionId)
       await agentsStore?.createVersion({
-        id: randomUUID(),
+        id: crypto.randomUUID(),
         agentId: 'cache-test-1',
         versionNumber: 2,
         name: 'Updated 1',
@@ -1176,7 +1175,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       });
 
       await agentsStore?.createVersion({
-        id: randomUUID(),
+        id: crypto.randomUUID(),
         agentId: 'cache-test-2',
         versionNumber: 2,
         name: 'Updated 2',
@@ -2060,7 +2059,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       // Config changes require createVersion + update(activeVersionId)
       const promptStore = await storage.getStore('promptBlocks');
       await promptStore?.createVersion({
-        id: randomUUID(),
+        id: crypto.randomUUID(),
         blockId: 'versioned-block',
         versionNumber: 2,
         name: 'Versioned Block',
@@ -2132,7 +2131,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       // Config changes require createVersion + update(activeVersionId)
       const promptStore = await storage.getStore('promptBlocks');
       await promptStore?.createVersion({
-        id: randomUUID(),
+        id: crypto.randomUUID(),
         blockId: 'updatable-block',
         versionNumber: 2,
         name: 'Updatable Block',
@@ -2228,7 +2227,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       // Update — config changes require createVersion + update(activeVersionId)
       const promptStore = await storage.getStore('promptBlocks');
       await promptStore?.createVersion({
-        id: randomUUID(),
+        id: crypto.randomUUID(),
         blockId: 'lifecycle-block',
         versionNumber: 2,
         name: 'Updated Block',

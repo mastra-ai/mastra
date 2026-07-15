@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { NodeRelationship, ObjectType } from './types';
 import type { Metadata, RelatedNodeInfo, RelatedNodeType, BaseNodeParams, TextNodeParams } from './types';
 
@@ -15,7 +15,7 @@ export abstract class BaseNode<T extends Metadata = Metadata> {
 
   protected constructor(init?: BaseNodeParams<T>) {
     const { id_, metadata, relationships } = init || {};
-    this.id_ = id_ ?? randomUUID();
+    this.id_ = id_ ?? crypto.randomUUID();
     this.metadata = metadata ?? ({} as T);
     this.relationships = relationships ?? {};
   }

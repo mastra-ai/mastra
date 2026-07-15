@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { ReadableStream, TransformStream } from 'node:stream/web';
 import type { CoreMessage } from '@internal/ai-sdk-v4';
 import { z } from 'zod/v4';
@@ -1733,7 +1732,7 @@ export class Workflow<
    * @returns The workflow instance for chaining
    */
   sleep(duration: number | ExecuteFunction<TState, TPrevSchema, number, any, any, TEngineType>) {
-    const id = `sleep_${this.#mastra?.generateId({ idType: 'step', source: 'workflow', entityId: this.id, stepType: 'sleep' }) || randomUUID()}`;
+    const id = `sleep_${this.#mastra?.generateId({ idType: 'step', source: 'workflow', entityId: this.id, stepType: 'sleep' }) || crypto.randomUUID()}`;
 
     const opts: StepFlowEntry<TEngineType> =
       typeof duration === 'function'
@@ -1772,7 +1771,7 @@ export class Workflow<
    * @returns The workflow instance for chaining
    */
   sleepUntil(date: Date | ExecuteFunction<TState, TPrevSchema, Date, any, any, TEngineType>) {
-    const id = `sleep_${this.#mastra?.generateId({ idType: 'step', source: 'workflow', entityId: this.id, stepType: 'sleep-until' }) || randomUUID()}`;
+    const id = `sleep_${this.#mastra?.generateId({ idType: 'step', source: 'workflow', entityId: this.id, stepType: 'sleep-until' }) || crypto.randomUUID()}`;
     const opts: StepFlowEntry<TEngineType> =
       typeof date === 'function'
         ? { type: 'sleepUntil', id, fn: date }
@@ -1851,7 +1850,7 @@ export class Workflow<
       const mappingStep: any = createStep({
         id:
           stepOptions?.id ||
-          `mapping_${this.#mastra?.generateId({ idType: 'step', source: 'workflow', entityId: this.id, stepType: 'mapping' }) || randomUUID()}`,
+          `mapping_${this.#mastra?.generateId({ idType: 'step', source: 'workflow', entityId: this.id, stepType: 'mapping' }) || crypto.randomUUID()}`,
         inputSchema: z.any(),
         outputSchema: z.any(),
         execute: mappingConfig as any,
@@ -1917,7 +1916,7 @@ export class Workflow<
     const mappingStep: any = createStep({
       id:
         stepOptions?.id ||
-        `mapping_${this.#mastra?.generateId({ idType: 'step', source: 'workflow', entityId: this.id, stepType: 'mapping' }) || randomUUID()}`,
+        `mapping_${this.#mastra?.generateId({ idType: 'step', source: 'workflow', entityId: this.id, stepType: 'mapping' }) || crypto.randomUUID()}`,
       inputSchema: z.any(),
       outputSchema: z.any(),
       execute: async ctx => {
@@ -2340,7 +2339,7 @@ export class Workflow<
         entityId: this.id,
         resourceId: options?.resourceId,
       }) ||
-      randomUUID();
+      crypto.randomUUID();
 
     // Return a new Run instance with object parameters
     const run =

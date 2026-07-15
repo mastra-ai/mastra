@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
@@ -72,8 +71,8 @@ function createSimpleTextModel() {
 
 describe('Workflow tool MastraMemory isolation', () => {
   it('should restore MastraMemory on requestContext after workflow tool execution', async () => {
-    const parentThreadId = randomUUID();
-    const subAgentThreadId = randomUUID();
+    const parentThreadId = crypto.randomUUID();
+    const subAgentThreadId = crypto.randomUUID();
     const resourceId = 'test-user';
     const mockMemory = new MockMemory();
 
@@ -142,7 +141,7 @@ describe('Workflow tool MastraMemory isolation', () => {
   });
 
   it('should restore MastraMemory even when workflow tool execution fails', async () => {
-    const parentThreadId = randomUUID();
+    const parentThreadId = crypto.randomUUID();
     const resourceId = 'test-user';
     const mockMemory = new MockMemory();
 

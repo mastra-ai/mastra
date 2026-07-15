@@ -12,7 +12,6 @@
  * 4. Token validation on protected endpoints
  */
 
-import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { Server as HttpServer, IncomingMessage, ServerResponse } from 'node:http';
 
@@ -527,7 +526,7 @@ describe('OAuth Middleware Integration', () => {
   const SERVER_URL = `http://localhost:${PORT}`;
   let httpServer: HttpServer;
 
-  const VALID_TOKEN = 'valid-test-token-' + randomUUID();
+  const VALID_TOKEN = 'valid-test-token-' + crypto.randomUUID();
 
   beforeAll(async () => {
     // Create an MCP server with a simple tool

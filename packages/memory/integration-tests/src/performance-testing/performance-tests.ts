@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { faker } from '@faker-js/faker';
 import type { Memory } from '@mastra/memory';
 import type { TextPart, ImagePart, FilePart, ToolCallPart } from 'ai';
@@ -7,7 +6,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 const resourceId = 'resource';
 // Test helpers
 const createTestThread = (title: string, metadata = {}) => ({
-  id: randomUUID(),
+  id: crypto.randomUUID(),
   title,
   resourceId,
   metadata,
@@ -24,7 +23,7 @@ const createTestMessage = (
 ) => {
   messageCounter++;
   return {
-    id: randomUUID(),
+    id: crypto.randomUUID(),
     threadId,
     content,
     role,

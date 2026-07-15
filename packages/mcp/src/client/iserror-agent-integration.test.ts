@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -162,8 +161,8 @@ describe('MCP isError - agent integration (four surfaces)', () => {
 
     // --- Surface 2 wiring: persistence ---
     const memory = new MockMemory();
-    const thread = randomUUID();
-    const resource = randomUUID();
+    const thread = crypto.randomUUID();
+    const resource = crypto.randomUUID();
 
     const agent = new Agent({
       id: 'mcp-iserror-agent',

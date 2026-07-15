@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import type * as http from 'node:http';
 import type { ToolsInput, Agent } from '@mastra/core/agent';
@@ -1730,7 +1729,6 @@ export class MCPServer extends MCPServerBase {
    * @example
    * ```typescript
    * import http from 'node:http';
-   * import { randomUUID } from 'node:crypto';
    *
    * const httpServer = http.createServer(async (req, res) => {
    *   await server.startHTTP({
@@ -1739,7 +1737,7 @@ export class MCPServer extends MCPServerBase {
    *     req,
    *     res,
    *     options: {
-   *       sessionIdGenerator: () => randomUUID(),
+   *       sessionIdGenerator: () => crypto.randomUUID(),
    *       onsessioninitialized: (sessionId) => {
    *         console.log(`New MCP session: ${sessionId}`);
    *       },
@@ -1821,7 +1819,7 @@ export class MCPServer extends MCPServerBase {
     }
 
     const mergedOptions = {
-      sessionIdGenerator: () => randomUUID(), // default: enabled
+      sessionIdGenerator: () => crypto.randomUUID(), // default: enabled
       ...options, // user-provided overrides default
     };
 
@@ -2682,7 +2680,7 @@ export class MCPServer extends MCPServerBase {
     try {
       const finalExecutionContext = {
         messages: executionContext?.messages || [],
-        toolCallId: executionContext?.toolCallId || randomUUID(),
+        toolCallId: executionContext?.toolCallId || crypto.randomUUID(),
         requestContext: executionContext?.requestContext,
       };
       await this.enforceToolExecutionFGA(toolId, finalExecutionContext.requestContext);

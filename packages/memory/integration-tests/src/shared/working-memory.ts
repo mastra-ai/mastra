@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -70,7 +69,7 @@ const createTestThread = (title: string, metadata = {}) => ({
 const createTestMessage = (threadId: string, content: string, role: 'user' | 'assistant' = 'user'): MastraDBMessage => {
   messageCounter++;
   return {
-    id: randomUUID(),
+    id: crypto.randomUUID(),
     threadId,
     content: {
       format: 2,
@@ -431,7 +430,7 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
           createTestMessage(threadId, 'User says something'),
           // Pure tool-call message (should be removed)
           {
-            id: randomUUID(),
+            id: crypto.randomUUID(),
             threadId,
             role: 'assistant',
             content: {
@@ -440,7 +439,7 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
                 {
                   type: 'tool-invocation',
                   toolInvocation: {
-                    toolCallId: randomUUID(),
+                    toolCallId: crypto.randomUUID(),
                     toolName: 'updateWorkingMemory',
                     args: {},
                     state: 'result',
@@ -454,7 +453,7 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
           } as MastraDBMessage,
           // Mixed content: tool-call + text (tool-call part should be filtered, text kept)
           {
-            id: randomUUID(),
+            id: crypto.randomUUID(),
             threadId,
             role: 'assistant',
             content: {
@@ -463,7 +462,7 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
                 {
                   type: 'tool-invocation',
                   toolInvocation: {
-                    toolCallId: randomUUID(),
+                    toolCallId: crypto.randomUUID(),
                     toolName: 'updateWorkingMemory',
                     args: { memory: 'should not persist' },
                     state: 'result',
@@ -481,7 +480,7 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
           } as MastraDBMessage,
           // Pure text message (should be kept)
           {
-            id: randomUUID(),
+            id: crypto.randomUUID(),
             threadId,
             role: 'assistant',
             content: {
@@ -1711,7 +1710,7 @@ function runWorkingMemoryNetworkTests(getMemory: () => Memory, model: MastraMode
         memory,
       });
 
-      const threadId = randomUUID();
+      const threadId = crypto.randomUUID();
 
       const result = await networkAgent.network('My email is test@example.com', {
         memory: { thread: threadId, resource: resourceId },

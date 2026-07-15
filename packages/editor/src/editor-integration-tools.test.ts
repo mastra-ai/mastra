@@ -1,5 +1,4 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { randomUUID } from 'crypto';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import type {
@@ -81,7 +80,7 @@ function createMockToolProvider(
 
 const createTestStorage = () => {
   return new LibSQLStore({
-    id: `test-${randomUUID()}`,
+    id: `test-${crypto.randomUUID()}`,
     url: ':memory:',
   });
 };
@@ -818,7 +817,7 @@ describe.skipIf(!process.env.ARCADE_API_KEY)('ArcadeToolProvider e2e (real API)'
   }, 30_000);
 
   it('should hydrate a stored agent with Arcade integration tools', async () => {
-    const _storage = new LibSQLStore({ id: `arcade-e2e-${randomUUID()}`, url: ':memory:' });
+    const _storage = new LibSQLStore({ id: `arcade-e2e-${crypto.randomUUID()}`, url: ':memory:' });
     const _editor = new MastraEditor({ toolProviders: { arcade: provider } });
     const _mastra = new Mastra({ storage: _storage, editor: _editor });
     await _storage.init();

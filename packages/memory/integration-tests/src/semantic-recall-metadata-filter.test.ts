@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -24,7 +23,7 @@ function createThread(id: string, metadata: Record<string, unknown>) {
 
 function createMessage(threadId: string, text: string, role: 'user' | 'assistant' = 'user'): MastraDBMessage {
   return {
-    id: randomUUID(),
+    id: crypto.randomUUID(),
     threadId,
     resourceId,
     role,
@@ -50,11 +49,11 @@ describe('Semantic recall with metadata filtering', () => {
     const dbPath = join(await mkdtemp(join(tmpdir(), 'memory-metadata-filter-test-')), 'test.db');
 
     const storage = new LibSQLStore({
-      id: randomUUID(),
+      id: crypto.randomUUID(),
       url: `file:${dbPath}`,
     });
     const vector = new LibSQLVector({
-      id: randomUUID(),
+      id: crypto.randomUUID(),
       url: `file:${dbPath}`,
     });
 

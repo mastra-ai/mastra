@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import type { AgentMemoryOption } from '@mastra/core/agent';
 import type { MastraMemory } from '@mastra/core/memory';
 import { InMemoryStore } from '@mastra/core/storage';
@@ -11,7 +9,7 @@ export interface TemporaryOmMemoryContext {
 }
 
 export function createTemporaryOmMemoryContext(prefix: string): TemporaryOmMemoryContext {
-  const threadId = `${prefix}-${randomUUID()}`;
+  const threadId = `${prefix}-${crypto.randomUUID()}`;
   const resourceId = prefix;
   const options: AgentMemoryOption = {
     thread: threadId,
