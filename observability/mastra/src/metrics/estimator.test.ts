@@ -451,6 +451,46 @@ describe('estimateCosts', () => {
     });
   });
 
+  it.each([
+    ['anthropic/claude-haiku-4.5', 'vercel-claude-haiku-4-5', 0.001],
+    ['amazon/nova-micro', 'vercel-amazon-nova-micro', 0.000035],
+  ])('resolves Vercel AI Gateway model id %s against Vercel pricing', (model, pricingId, estimatedCost) => {
+    const costs = estimateCosts(
+      {
+        provider: 'gateway',
+        model,
+        usage: { inputTokens: 1_000 },
+      },
+      pricingRegistry,
+    );
+
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)).toMatchObject({
+      provider: 'vercel',
+      costMetadata: { pricing_id: pricingId },
+    });
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)?.estimatedCost).toBeCloseTo(estimatedCost);
+  });
+
+  it.each(['claude-haiku-4.5', ' /claude-haiku-4.5', 'anthropic/claude/haiku-4.5'])(
+    'does not treat invalid Gateway model id %s as Vercel pricing',
+    model => {
+      const costs = estimateCosts(
+        {
+          provider: 'gateway',
+          model,
+          usage: { inputTokens: 1_000 },
+        },
+        pricingRegistry,
+      );
+
+      expect(costs.get(TokenMetrics.TOTAL_INPUT)).toEqual({
+        provider: 'gateway',
+        model,
+        costMetadata: { error: 'no_matching_model' },
+      });
+    },
+  );
+
   it('resolves Bedrock inference-profile ids and prices all Anthropic token meters', () => {
     const costs = estimateCosts(
       {

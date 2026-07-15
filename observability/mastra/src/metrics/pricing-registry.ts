@@ -74,10 +74,11 @@ export class PricingRegistry {
   }
 
   get(args: { provider: string; model: string }): PricingModel | null {
+    const provider = resolvePricingProvider(args.provider, args.model);
     // Try all model name variants in order of preference
-    const variants = getModelVariants(args.model, normalizeProvider(args.provider));
+    const variants = getModelVariants(args.model, provider);
     for (const variant of variants) {
-      const key = makePricingKey({ provider: args.provider, model: variant });
+      const key = makePricingKey({ provider, model: variant });
       const match = this.pricingModels.get(key);
       if (match) return match;
     }
@@ -188,6 +189,16 @@ function normalizeProvider(provider: string): string {
   const normalized = provider.trim().toLowerCase();
   const dotIndex = normalized.indexOf('.');
   return dotIndex !== -1 ? normalized.substring(0, dotIndex) : normalized;
+}
+
+function resolvePricingProvider(provider: string, model: string): string {
+  const normalizedProvider = normalizeProvider(provider);
+  const modelSegments = model.split('/');
+  const hasCreatorModelShape = modelSegments.length === 2 && modelSegments.every(segment => segment.trim().length > 0);
+
+  // AI SDK calls the Vercel AI Gateway provider "gateway", while the pricing
+  // snapshot stores its model-level prices under "vercel".
+  return normalizedProvider === 'gateway' && hasCreatorModelShape ? 'vercel' : normalizedProvider;
 }
 
 /**
