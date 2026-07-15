@@ -1099,6 +1099,12 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@internal/llm-recorder':
+        specifier: workspace:*
+        version: link:../../packages/_llm-recorder
+      '@internal/test-utils':
+        specifier: workspace:*
+        version: link:../../packages/_test-utils
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
