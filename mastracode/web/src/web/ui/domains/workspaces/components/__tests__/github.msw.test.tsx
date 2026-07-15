@@ -134,6 +134,9 @@ describe('github open-repo journey', () => {
     githubProjectId: 'ghp_1',
     sandboxId: 'sbx_1',
     sandboxWorkdir: '/workspace/hello',
+    repoFullName: 'octocat/hello',
+    defaultBranch: 'main',
+    installationId: 123,
   };
 
   afterEach(() => {

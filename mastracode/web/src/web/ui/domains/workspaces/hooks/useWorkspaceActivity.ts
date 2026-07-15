@@ -1,4 +1,3 @@
-import type { AgentControllerThreadInfo } from '@mastra/client-js';
 import { useQuery } from '@tanstack/react-query';
 
 import { queryKeys } from '../../../../../shared/api/keys';
@@ -7,8 +6,10 @@ import { createAgentControllerClient, requireAgentControllerSession } from '../.
 /** How often workspace activity is re-checked while the tab is focused. */
 export const WORKSPACE_ACTIVITY_POLL_MS = 5000;
 
-function isActiveWorkspaceThread(thread: AgentControllerThreadInfo, projectPath: string): boolean {
-  return thread.tags?.projectPath === projectPath && 'state' in thread && thread.state === 'active';
+type WorkspaceActivityThread = { tags?: Record<string, string | undefined>; state?: string };
+
+function isActiveWorkspaceThread(thread: WorkspaceActivityThread, projectPath: string): boolean {
+  return thread.tags?.projectPath === projectPath && thread.state === 'active';
 }
 
 /**
@@ -52,7 +53,7 @@ export function useWorkspaceActivity({
     refetchInterval: WORKSPACE_ACTIVITY_POLL_MS,
     retry: false,
   });
-  const threads = (query.data ?? []) as Array<{ tags?: Record<string, string | undefined>; state?: string }>;
+  const threads = (query.data ?? []) as WorkspaceActivityThread[];
   return Object.fromEntries(
     worktreePaths.map(path => [path, threads.some(thread => isActiveWorkspaceThread(thread, path))]),
   );

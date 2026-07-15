@@ -4,6 +4,9 @@ export interface ChatSessionGithubState {
   githubProjectId?: string;
   sandboxId?: string;
   sandboxWorkdir?: string;
+  repoFullName?: string;
+  defaultBranch?: string;
+  installationId?: number;
 }
 
 export interface ChatSessionContextApi {

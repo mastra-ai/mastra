@@ -35,6 +35,9 @@ export function useAgentControllerSessionInit({
       github?.githubProjectId ?? null,
       github?.sandboxId ?? null,
       github?.sandboxWorkdir ?? null,
+      github?.repoFullName ?? null,
+      github?.defaultBranch ?? null,
+      github?.installationId ?? null,
       'init',
     ],
     queryFn: async () => {
@@ -45,6 +48,9 @@ export function useAgentControllerSessionInit({
         ...(github?.githubProjectId ? { githubProjectId: github.githubProjectId } : {}),
         ...(github?.sandboxId ? { sandboxId: github.sandboxId } : {}),
         ...(github?.sandboxWorkdir ? { sandboxWorkdir: github.sandboxWorkdir } : {}),
+        ...(github?.repoFullName ? { repoFullName: github.repoFullName } : {}),
+        ...(github?.defaultBranch ? { defaultBranch: github.defaultBranch } : {}),
+        ...(github?.installationId ? { installationId: github.installationId } : {}),
       };
       if (Object.keys(state).length > 0) {
         try {

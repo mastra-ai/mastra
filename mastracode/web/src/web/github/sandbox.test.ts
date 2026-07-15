@@ -223,7 +223,7 @@ describe('ensureProjectSandbox', () => {
   it('passes the idle timeout and checkpoint name to the provider on provision', async () => {
     process.env.MASTRACODE_SANDBOX_IDLE_MINUTES = '15';
     const sandbox = new FakeSandbox();
-    let factoryArgs: { idleTimeoutMinutes?: number; checkpointName?: string } | undefined;
+    let factoryArgs: { idleTimeoutMinutes?: number; checkpointName?: string; env?: Record<string, string> } | undefined;
     setSandboxFactory(opts => {
       factoryArgs = opts;
       return sandbox;
@@ -233,6 +233,9 @@ describe('ensureProjectSandbox', () => {
 
     expect(factoryArgs?.idleTimeoutMinutes).toBe(15);
     expect(factoryArgs?.checkpointName).toBe('mastracode-web-proj-1-user-1');
+    // No token/env is pre-provisioned into the sandbox — `authenticateGh` runs
+    // per-operation with a freshly minted token instead.
+    expect(factoryArgs?.env).toBeUndefined();
   });
 
   it('re-provisions and clears the stale id when reattach to a dead sandbox fails', async () => {

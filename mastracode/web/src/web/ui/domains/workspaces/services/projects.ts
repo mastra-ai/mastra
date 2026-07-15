@@ -51,6 +51,12 @@ export interface Project {
    */
   sandboxId?: string;
   sandboxWorkdir?: string;
+  /** GitHub repo cloned into the sandbox. */
+  repoFullName?: string;
+  /** GitHub repo default branch cloned into the sandbox. */
+  defaultBranch?: string;
+  /** GitHub App installation id used to mint app tokens for sandbox git operations. */
+  installationId?: number;
   /**
    * Workspaces (git worktrees) for a GitHub project. The first entry is the
    * repo root on its default branch; additional entries are feature-branch
@@ -210,6 +216,9 @@ export function applyMaterializeResult(project: Project, result: MaterializeResu
     resourceId: result.resourceId,
     sandboxId: result.sandboxId,
     sandboxWorkdir: result.sandboxWorkdir,
+    repoFullName: result.repoFullName,
+    defaultBranch: result.defaultBranch,
+    installationId: result.installationId,
   };
   const updated: Project =
     merged.worktrees && merged.worktrees.length > 0 ? merged : { ...merged, worktrees: projectWorktrees(merged) };

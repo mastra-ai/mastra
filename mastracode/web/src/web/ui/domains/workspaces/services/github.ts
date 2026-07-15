@@ -140,6 +140,9 @@ export interface MaterializeResult {
   githubProjectId: string;
   sandboxId: string;
   sandboxWorkdir: string;
+  repoFullName: string;
+  defaultBranch: string;
+  installationId: number;
 }
 
 /** A coarse-grained step of the server-side sandbox preparation. */

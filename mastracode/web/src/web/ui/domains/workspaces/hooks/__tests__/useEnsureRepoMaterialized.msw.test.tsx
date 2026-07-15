@@ -22,6 +22,9 @@ const materialized: MaterializeResult = {
   githubProjectId: 'ghp_1',
   sandboxId: 'sbx_1',
   sandboxWorkdir: '/workspace/repo',
+  repoFullName: 'octocat/repo',
+  defaultBranch: 'main',
+  installationId: 123,
 };
 
 const progressEvents: PrepareProgress[] = [

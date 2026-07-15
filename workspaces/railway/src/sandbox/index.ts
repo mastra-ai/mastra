@@ -205,7 +205,7 @@ export class RailwaySandbox extends MastraSandbox {
       return;
     }
 
-    await this._startRailwaySandbox({ reconnectSandboxId: this._sandboxId, fallbackToCreate: false });
+    await this._startRailwaySandbox({ reconnectSandboxId: this._sandboxId, fallbackToCreate: true });
   }
 
   async restart(): Promise<void> {
@@ -281,6 +281,7 @@ export class RailwaySandbox extends MastraSandbox {
       if (!fallbackToCreate || !this.isSandboxUnavailableError(error)) {
         throw error;
       }
+
       return this._createNewSandbox(createOptions);
     }
 

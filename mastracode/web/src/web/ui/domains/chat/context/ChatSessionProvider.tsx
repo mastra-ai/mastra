@@ -26,6 +26,9 @@ export function ChatSessionProvider({ children, threadId }: { children: ReactNod
           githubProjectId: activeProject.githubProjectId,
           sandboxId: activeProject.sandboxId,
           sandboxWorkdir: activeProject.sandboxWorkdir,
+          repoFullName: activeProject.repoFullName,
+          defaultBranch: activeProject.defaultBranch,
+          installationId: activeProject.installationId,
         }
       : undefined;
   const sessionContextValue = { resourceId, sessionEnabled, projectPath, github, baseUrl };
