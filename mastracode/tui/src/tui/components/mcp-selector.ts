@@ -31,6 +31,8 @@ export interface McpSelectorOptions {
   onReconnectServer: (name: string) => Promise<McpServerStatus>;
   /** Callback to run the OAuth flow for a single server by name — returns updated status */
   onAuthenticateServer: (name: string) => Promise<McpServerStatus>;
+  /** Callback to cancel a pending OAuth flow for a server by name — resolves true if one was cancelled */
+  onCancelAuthenticateServer: (name: string) => Promise<boolean>;
   /** Get captured stderr logs for a server */
   getServerLogs: (name: string) => string[];
   /** Show an info message in the chat area */
@@ -69,6 +71,8 @@ const NEEDS_AUTH_ACTIONS: ServerAction[] = [
 
 const CONNECTING_ACTIONS: ServerAction[] = [{ label: 'Waiting for connection...', key: 'none' }];
 
+const AUTHENTICATING_ACTIONS: ServerAction[] = [{ label: 'Cancel authentication', key: 'cancel-authenticate' }];
+
 // =============================================================================
 // McpSelectorComponent
 // =============================================================================
@@ -82,6 +86,7 @@ export class McpSelectorComponent extends Box implements Focusable {
   private onReloadAllCallback: McpSelectorOptions['onReloadAll'];
   private onReconnectServerCallback: McpSelectorOptions['onReconnectServer'];
   private onAuthenticateServerCallback: McpSelectorOptions['onAuthenticateServer'];
+  private onCancelAuthenticateServerCallback: McpSelectorOptions['onCancelAuthenticateServer'];
   private getServerLogsCallback: McpSelectorOptions['getServerLogs'];
   private showInfoCallback: McpSelectorOptions['showInfo'];
   private onCloseCallback: () => void;
@@ -98,6 +103,10 @@ export class McpSelectorComponent extends Box implements Focusable {
 
   // Loading state during reload
   private _reloading = false;
+
+  // Names of servers with an in-flight OAuth flow (so their sub-menu offers a
+  // cancel path while they show as connecting).
+  private _authenticating = new Set<string>();
 
   // Focusable implementation
   private _focused = false;
@@ -118,6 +127,7 @@ export class McpSelectorComponent extends Box implements Focusable {
     this.onReloadAllCallback = options.onReloadAll;
     this.onReconnectServerCallback = options.onReconnectServer;
     this.onAuthenticateServerCallback = options.onAuthenticateServer;
+    this.onCancelAuthenticateServerCallback = options.onCancelAuthenticateServer;
     this.getServerLogsCallback = options.getServerLogs;
     this.showInfoCallback = options.showInfo;
     this.onCloseCallback = options.onClose;
@@ -331,7 +341,9 @@ export class McpSelectorComponent extends Box implements Focusable {
     if (!status) return;
 
     if (status.connecting) {
-      this.subMenuActions = CONNECTING_ACTIONS;
+      // A server mid-OAuth shows a cancel path (the user may have closed the
+      // browser); other connecting servers just wait.
+      this.subMenuActions = this._authenticating.has(status.name) ? AUTHENTICATING_ACTIONS : CONNECTING_ACTIONS;
     } else if (status.connected) {
       this.subMenuActions = CONNECTED_ACTIONS;
     } else if (status.needsAuth) {
@@ -397,6 +409,11 @@ export class McpSelectorComponent extends Box implements Focusable {
       case 'authenticate': {
         this.subMenuOpen = false;
         this.doAuthenticateServer(status);
+        break;
+      }
+      case 'cancel-authenticate': {
+        this.subMenuOpen = false;
+        this.doCancelAuthentication(status);
         break;
       }
     }
@@ -503,6 +520,7 @@ export class McpSelectorComponent extends Box implements Focusable {
         transport: status.transport,
       };
     }
+    this._authenticating.add(name);
     this.updateList();
     this.showInfoCallback(`MCP: Authenticating "${name}" — complete the sign-in in your browser.`);
 
@@ -539,9 +557,28 @@ export class McpSelectorComponent extends Box implements Focusable {
         this.showInfoCallback(`MCP: Failed to authenticate "${name}": ${errMsg}`);
       })
       .finally(() => {
+        this._authenticating.delete(name);
         if (!this._reloading) {
           this.updateList();
         }
+      });
+  }
+
+  private doCancelAuthentication(status: McpServerStatus): void {
+    const name = status.name;
+    // Nothing to cancel unless a flow is actually in flight for this server.
+    if (!this._authenticating.has(name)) return;
+
+    this.showInfoCallback(`MCP: Cancelling authentication for "${name}"...`);
+    this.onCancelAuthenticateServerCallback(name)
+      .then((cancelled: boolean) => {
+        if (cancelled) {
+          this.showInfoCallback(`MCP: Cancelled authentication for "${name}".`);
+        }
+      })
+      .catch(() => {
+        // The pending authenticate flow's own rejection handler restores the
+        // server's needs-auth status; a failed cancel needs no extra message.
       });
   }
 

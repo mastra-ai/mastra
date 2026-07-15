@@ -90,6 +90,9 @@ export async function handleMcpCommand(ctx: SlashCommandContext, args: string[])
         },
       });
     },
+    onCancelAuthenticateServer: async (name: string) => {
+      return mm.cancelServerAuthentication(name);
+    },
     getServerLogs: (name: string) => {
       return mm.getServerLogs(name);
     },

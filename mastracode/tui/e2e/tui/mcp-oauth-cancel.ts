@@ -1,0 +1,104 @@
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { z } from 'zod/v3';
+import { createGlobalPatchScope } from './global-patches.js';
+import { startMcpOAuthFixtureServer } from './mcp-oauth-fixture.js';
+import type { McpOAuthFixture } from './mcp-oauth-fixture.js';
+import type { McE2eInProcessApp, McE2eScenario } from './types.js';
+
+export const mcpOauthCancelScenario = {
+  name: 'mcp-oauth-cancel',
+  description:
+    'Starts authenticating a bare-url OAuth MCP server, then cancels the pending flow from the selector and confirms the server returns to needs-auth.',
+  testName: 'cancels a pending MCP OAuth authentication from the interactive selector overlay',
+  projectFixture: 'long-branch',
+  prepare({ projectDir }) {
+    mkdirSync(join(projectDir, '.mastracode'), { recursive: true });
+  },
+  async inProcessApp({ projectDir, startMastraCodeApp }): Promise<McE2eInProcessApp> {
+    const patches = createGlobalPatchScope();
+    // Never spawn a real browser from the e2e run.
+    patches.setEnv('MASTRA_MCP_OAUTH_NO_BROWSER', '1');
+    // Hold the authorize endpoint open so the client's OAuth flow stays pending,
+    // giving the scenario a deterministic window to cancel before any code is issued.
+    let fixtureServer: McpOAuthFixture | undefined = await startMcpOAuthFixtureServer({
+      name: 'mc-e2e-oauth-cancel-mcp',
+      holdAuthorize: true,
+      registerTools: server => {
+        server.tool(
+          'oauth_probe',
+          'Return the deterministic MCP OAuth e2e probe payload.',
+          { label: z.string().default('oauth') },
+          input => ({
+            content: [{ type: 'text', text: `MC_MCP_OAUTH_TOOL:${String(input.label)}:ok` }],
+          }),
+        );
+      },
+    });
+    const server = fixtureServer;
+
+    writeFileSync(
+      join(projectDir, '.mastracode', 'mcp.json'),
+      JSON.stringify({ mcpServers: { oauth_server: { url: server.url } } }, null, 2),
+    );
+
+    try {
+      const app = await startMastraCodeApp({
+        config: {
+          disableHooks: true,
+          disableMcp: false,
+          unixSocketPubSub: false,
+        },
+      });
+
+      return {
+        stop: async () => {
+          try {
+            await patches.stopApp(app.stop);
+          } finally {
+            // Release any held authorize request before tearing the server down.
+            fixtureServer?.releaseAuthorize();
+            await fixtureServer?.close();
+            fixtureServer = undefined;
+          }
+        },
+      };
+    } catch (error) {
+      server.releaseAuthorize();
+      await server.close();
+      patches.restore();
+      throw error;
+    }
+  },
+  async run({ terminal, runtime }) {
+    runtime.startLiveOutput(terminal);
+    terminal.resize(400, 50);
+
+    await runtime.waitForScreenText(/MCP: Failed to connect to "oauth_server"/i, terminal, 15_000);
+
+    terminal.submit('/mcp');
+    await runtime.waitForScreenText(/Manage MCP servers/i, terminal, 8_000);
+    await runtime.waitForScreenText(/oauth_server \[http\] needs auth/i, terminal, 8_000);
+
+    // Open the sub-menu and start authentication (Authenticate is the first action).
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Authenticate/i, terminal, 8_000);
+    terminal.write('\r');
+
+    // The authorize endpoint is held open, so the flow parks and the server sits
+    // in the connecting state while the "browser" is nominally open.
+    await runtime.waitForScreenText(/oauth_server \[http\] connecting/i, terminal, 8_000);
+
+    // Re-open the sub-menu on the same server; a mid-OAuth server offers Cancel.
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Cancel authentication/i, terminal, 8_000);
+    terminal.write('\r');
+
+    // Cancelling aborts the pending flow and returns the server to needs-auth.
+    await runtime.waitForScreenText(/oauth_server \[http\] needs auth/i, terminal, 10_000);
+    runtime.printScreen('mcp selector after cancelling oauth authenticate', terminal);
+    terminal.write('\x1b');
+    await runtime.waitForScreenTextAbsent(/Manage MCP servers/i, terminal, 8_000);
+    terminal.keyCtrlC();
+  },
+} satisfies McE2eScenario;

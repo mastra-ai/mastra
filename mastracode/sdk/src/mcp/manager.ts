@@ -55,6 +55,13 @@ export interface McpManager {
     name: string,
     options?: { onAuthorizationUrl?: (url: string) => void; timeoutMs?: number },
   ): Promise<McpServerStatus>;
+  /**
+   * Cancel a pending {@link authenticateServer} flow for a server (e.g. the
+   * user closed the browser without completing consent). The pending
+   * authenticate call rejects and the server returns to the `needsAuth` state
+   * so it can be retried. Returns `true` if a flow was cancelled.
+   */
+  cancelServerAuthentication(name: string): Promise<boolean>;
   /** Disconnect from all MCP servers and clean up. */
   disconnect(): Promise<void>;
   /** Get all tools from connected MCP servers (namespaced as serverName_toolName). */
@@ -575,6 +582,13 @@ export function createMcpManager(
       } finally {
         authUrlHandlers.delete(name);
       }
+    },
+
+    async cancelServerAuthentication(name: string): Promise<boolean> {
+      if (!client) {
+        return false;
+      }
+      return client.cancelAuthentication(name);
     },
 
     disconnect,
