@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { ReadableStream } from 'node:stream/web';
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
@@ -138,7 +137,7 @@ export class ClaudeSDKAgent extends Agent {
     options?: ClaudeSDKAgentRunOptions<OUTPUT>,
   ): Promise<FullOutput<OUTPUT>> {
     const prompt = promptToText(messages);
-    const runId = options?.runId ?? randomUUID();
+    const runId = options?.runId ?? crypto.randomUUID();
     const requestContext = options?.requestContext ?? new RequestContext();
     const instructions = options?.instructions ? promptToText(options.instructions) : undefined;
     const telemetry = createSDKAgentTelemetry({
@@ -182,7 +181,7 @@ export class ClaudeSDKAgent extends Agent {
     messages: MessageListInput,
     options?: ClaudeSDKAgentRunOptions<OUTPUT>,
   ): Promise<MastraModelOutput<OUTPUT>> {
-    const runId = options?.runId ?? randomUUID();
+    const runId = options?.runId ?? crypto.randomUUID();
     const prompt = promptToText(messages);
     const modelId = getModelId(this.options);
     const requestContext = options?.requestContext ?? new RequestContext();
@@ -323,7 +322,7 @@ async function runClaudeGenerate<OUTPUT>(
     finishReason: { unified: 'stop', raw: 'stop' },
     usage: usage.toV3Usage(),
     response: {
-      id: randomUUID(),
+      id: crypto.randomUUID(),
       modelId: getModelId(options),
       timestamp: new Date(),
     },
@@ -342,8 +341,8 @@ function runClaudeAsMastraStream<OUTPUT>(
 ): ReadableStream<ChunkType> {
   return new ReadableStream<ChunkType>({
     start: async controller => {
-      const textId = randomUUID();
-      const responseId = randomUUID();
+      const textId = crypto.randomUUID();
+      const responseId = crypto.randomUUID();
       const modelId = getModelId(options);
       const usage = createClaudeUsageCollector();
       let text = '';

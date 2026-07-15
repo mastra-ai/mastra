@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { ChannelConfig, ChannelInstallation } from '@mastra/core/storage';
 
 /**
@@ -7,13 +6,13 @@ import type { ChannelConfig, ChannelInstallation } from '@mastra/core/storage';
 export function createSampleInstallation(overrides?: Partial<ChannelInstallation>): ChannelInstallation {
   const now = new Date();
   return {
-    id: `install_${randomUUID()}`,
+    id: `install_${crypto.randomUUID()}`,
     platform: 'slack',
-    agentId: `agent_${randomUUID()}`,
+    agentId: `agent_${crypto.randomUUID()}`,
     status: 'active',
-    webhookId: `webhook_${randomUUID()}`,
+    webhookId: `webhook_${crypto.randomUUID()}`,
     data: { botToken: 'xoxb-test-token', teamId: 'T123456' },
-    configHash: `hash_${randomUUID()}`,
+    configHash: `hash_${crypto.randomUUID()}`,
     createdAt: now,
     updatedAt: now,
     ...overrides,

@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import net from 'node:net';
 import type { Event, EventCallback } from '@mastra/core/events';
 import { createClient } from 'redis';
@@ -94,7 +93,7 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
       try {
         const port = await proxy.listening;
         ps = new RedisStreamsPubSub({ url: `redis://127.0.0.1:${port}`, blockMs: 200 });
-        const topic = `sever-${randomUUID()}`;
+        const topic = `sever-${crypto.randomUUID()}`;
         const received: Event[] = [];
         const cb: EventCallback = (event, ack) => {
           received.push(event);
@@ -132,7 +131,7 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
   describe('clearTopic', () => {
     it('deletes the topic stream so finished runs release their memory', async () => {
       const ps = createPubSub();
-      const topic = `clear-${randomUUID()}`;
+      const topic = `clear-${crypto.randomUUID()}`;
       await ps.publish(topic, makeEvent());
       await ps.publish(topic, makeEvent());
 
@@ -146,12 +145,12 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
 
     it('is a no-op for a topic that was never published to', async () => {
       const ps = createPubSub();
-      await expect(ps.clearTopic(`never-${randomUUID()}`)).resolves.toBeUndefined();
+      await expect(ps.clearTopic(`never-${crypto.randomUUID()}`)).resolves.toBeUndefined();
     }, 15_000);
 
     it('lets a still-attached subscriber recover after the stream is deleted', async () => {
       const ps = createPubSub();
-      const topic = `clear-live-${randomUUID()}`;
+      const topic = `clear-live-${crypto.randomUUID()}`;
       const received: string[] = [];
       await ps.subscribe(topic, (event, ack) => {
         received.push((event.data as { n: number }).n.toString());
@@ -173,7 +172,7 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
   describe('streamIdleTtlMs', () => {
     it('stamps a rolling TTL on the stream key when configured (atomically with the write)', async () => {
       const ps = createPubSub({ streamIdleTtlMs: 60_000 });
-      const topic = `ttl-${randomUUID()}`;
+      const topic = `ttl-${crypto.randomUUID()}`;
       await ps.publish(topic, makeEvent());
 
       const inspector = await createInspector();
@@ -189,7 +188,7 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
 
     it('leaves streams persistent by default', async () => {
       const ps = createPubSub();
-      const topic = `nottl-${randomUUID()}`;
+      const topic = `nottl-${crypto.randomUUID()}`;
       await ps.publish(topic, makeEvent());
 
       const inspector = await createInspector();
@@ -207,7 +206,7 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
 
     it('refreshes the TTL on a nack retry republish', async () => {
       const ps = createPubSub({ streamIdleTtlMs: 60_000, maxDeliveryAttempts: 3 });
-      const topic = `ttl-nack-${randomUUID()}`;
+      const topic = `ttl-nack-${crypto.randomUUID()}`;
       const inspector = await createInspector();
       const streamKey = `mastra:topic:${topic}`;
 
@@ -232,7 +231,7 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
 
     it('reapplies the TTL when the read loop recreates a deleted stream (no publish)', async () => {
       const ps = createPubSub({ streamIdleTtlMs: 60_000 });
-      const topic = `ttl-recreate-${randomUUID()}`;
+      const topic = `ttl-recreate-${crypto.randomUUID()}`;
       const inspector = await createInspector();
       const streamKey = `mastra:topic:${topic}`;
 
@@ -261,7 +260,7 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
       };
       const ps1 = createPubSub({ streamIdleTtlMs: 60_000, logger });
       const ps2 = createPubSub({ streamIdleTtlMs: 60_000, logger });
-      const topic = `busygroup-${randomUUID()}`;
+      const topic = `busygroup-${crypto.randomUUID()}`;
       const group = 'workers';
       const received: number[] = [];
       const cb: EventCallback = (event, ack) => {

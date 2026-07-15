@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { Database, Transaction } from '@google-cloud/spanner';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
@@ -234,7 +233,7 @@ export class DatasetsSpanner extends DatasetsStorage {
   async createDataset(input: CreateDatasetInput): Promise<DatasetRecord> {
     try {
       const now = new Date();
-      const id = input.id ?? randomUUID();
+      const id = input.id ?? crypto.randomUUID();
       if (input.id !== undefined) this.validateCallerDefinedDatasetId(input.id);
       const record: DatasetRecord = {
         id,
@@ -603,7 +602,7 @@ export class DatasetsSpanner extends DatasetsStorage {
   private async insertVersionRow(tx: Transaction, datasetId: string, version: number, now: Date): Promise<void> {
     await this.db.insert({
       tableName: TABLE_DATASET_VERSIONS,
-      record: { id: randomUUID(), datasetId, version, createdAt: now },
+      record: { id: crypto.randomUUID(), datasetId, version, createdAt: now },
       transaction: tx,
     });
   }
@@ -641,7 +640,7 @@ export class DatasetsSpanner extends DatasetsStorage {
   protected async _doAddItem(args: AddDatasetItemInput): Promise<DatasetItem> {
     try {
       const now = new Date();
-      const itemId = randomUUID();
+      const itemId = crypto.randomUUID();
       let created: DatasetItem | null = null;
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
@@ -1048,7 +1047,7 @@ export class DatasetsSpanner extends DatasetsStorage {
   async createDatasetVersion(datasetId: string, version: number): Promise<DatasetVersion> {
     try {
       const now = new Date();
-      const id = randomUUID();
+      const id = crypto.randomUUID();
       await this.db.insert({
         tableName: TABLE_DATASET_VERSIONS,
         record: { id, datasetId, version, createdAt: now },
@@ -1151,7 +1150,7 @@ export class DatasetsSpanner extends DatasetsStorage {
               });
               historyRows = (rows as Array<Record<string, any>>).map(rowToItemRow);
             }
-            const plan = this.planDatasetItemBatch(input.items, historyRows, randomUUID);
+            const plan = this.planDatasetItemBatch(input.items, historyRows, () => crypto.randomUUID());
             const resolved = new Map<string, DatasetItem>(
               [...plan.existingCurrentItems].map(([id, row]) => [id, this.datasetItemFromRow(row)]),
             );

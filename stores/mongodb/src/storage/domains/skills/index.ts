@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   SkillsStorage,
@@ -189,7 +187,7 @@ export class MongoDBSkillsStorage extends SkillsStorage {
       for (const field of SNAPSHOT_FIELDS) {
         if ((skill as any)[field] !== undefined) snapshotConfig[field] = (skill as any)[field];
       }
-      const versionId = randomUUID();
+      const versionId = crypto.randomUUID();
       const versionDoc: Record<string, any> = {
         id: versionId,
         skillId: id,
@@ -302,7 +300,7 @@ export class MongoDBSkillsStorage extends SkillsStorage {
         if (changedFields.length > 0) {
           const mergedSnapshot = { ...existingSnapshot, ...configFields };
           newVersionDoc = {
-            id: randomUUID(),
+            id: crypto.randomUUID(),
             skillId: id,
             versionNumber: latestVersion.versionNumber + 1,
             changedFields,

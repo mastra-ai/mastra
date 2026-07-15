@@ -11,7 +11,6 @@
  * the core goal step drives continuation and surfaces progress via `goal` stream
  * chunks.
  */
-import { randomUUID } from 'node:crypto';
 import { loadSettings } from '@mastra/code-sdk/onboarding/settings';
 import type { Agent } from '@mastra/core/agent';
 import type { GoalObjectiveRecord } from '@mastra/core/storage';
@@ -133,7 +132,7 @@ export class GoalManager {
     const threadId = state.session.thread.getId();
     const agent = this.getAgent(state);
     const now = Date.now();
-    const id = randomUUID();
+    const id = crypto.randomUUID();
 
     if (agent && threadId) {
       const persisted = await agent.setObjective(objective, {
@@ -293,7 +292,7 @@ export class GoalManager {
       try {
         const record = await agent.getObjective({ threadId });
         if (record) {
-          this.record = { ...record, id: record.id ?? randomUUID() };
+          this.record = { ...record, id: record.id ?? crypto.randomUUID() };
           return;
         }
       } catch {
@@ -321,7 +320,7 @@ export class GoalManager {
         judgeModelId: saved.judgeModelId ?? '',
         startedAt: saved.startedAt ? Date.parse(saved.startedAt) || Date.now() : Date.now(),
         updatedAt: Date.now(),
-        id: saved.id ?? randomUUID(),
+        id: saved.id ?? crypto.randomUUID(),
       };
       this.activeDurationMs = saved.activeDurationMs ?? 0;
     } else {

@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { ActorSignal } from '@mastra/core/auth/ee';
 import type { RequestContext } from '@mastra/core/di';
 import { getErrorFromUnknown, MastraNonRetryableError } from '@mastra/core/error';
@@ -516,7 +515,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
     try {
       if (isResume) {
-        runId = stepResults[resume?.steps?.[0] ?? '']?.suspendPayload?.__workflow_meta?.runId ?? randomUUID();
+        runId = stepResults[resume?.steps?.[0] ?? '']?.suspendPayload?.__workflow_meta?.runId ?? crypto.randomUUID();
         const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
         const snapshot: any = await workflowsStore?.loadWorkflowSnapshot({
           workflowName: step.id,
@@ -603,10 +602,10 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       if (errorCause && typeof errorCause === 'object') {
         result = errorCause as WorkflowResult<any, any, any, any>;
         // The runId might be in the result's steps metadata
-        runId = errorCause.runId || randomUUID();
+        runId = errorCause.runId || crypto.randomUUID();
       } else {
         // Fallback: if we can't get the result from error, construct a basic failed result
-        runId = randomUUID();
+        runId = crypto.randomUUID();
         result = {
           status: 'failed',
           error: e instanceof Error ? e : new Error(String(e)),

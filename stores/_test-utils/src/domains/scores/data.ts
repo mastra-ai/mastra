@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { ScoreRowData, ScoringEntityType, ScoringSource } from '@mastra/core/evals';
 
 export function createSampleScore({
@@ -29,7 +28,7 @@ export function createSampleScore({
   runId?: string;
 }): ScoreRowData {
   return {
-    id: randomUUID(),
+    id: crypto.randomUUID(),
     entityId: entityId ?? 'eval-agent',
     entityType: entityType ?? 'AGENT',
     scorerId,
@@ -42,7 +41,7 @@ export function createSampleScore({
     datasetItemId,
     createdAt: new Date(),
     updatedAt: new Date(),
-    runId: runId ?? randomUUID(),
+    runId: runId ?? crypto.randomUUID(),
     reason: 'Sample reason',
     preprocessStepResult: {
       text: 'Sample preprocess step result',
@@ -61,7 +60,7 @@ export function createSampleScore({
     },
     input: [
       {
-        id: randomUUID(),
+        id: crypto.randomUUID(),
         name: 'input-1',
         value: 'Sample input',
       },

@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -16,7 +15,7 @@ interface AnalyticsConfig {
 }
 
 function createMastraAnalyticsDistinctId(): string {
-  return `mastra-${randomUUID()}`;
+  return `mastra-${crypto.randomUUID()}`;
 }
 
 function isHostnameDerivedDistinctId(distinctId: string, hostname = os.hostname()): boolean {
@@ -113,7 +112,7 @@ class NoopMastraCodeAnalytics implements MastraCodeAnalytics {
 class PostHogMastraCodeAnalytics implements MastraCodeAnalytics {
   private readonly client: PostHog;
   private readonly distinctId: string;
-  private readonly sessionId = randomUUID();
+  private readonly sessionId = crypto.randomUUID();
   private readonly version: string;
 
   constructor({ version, apiKey = POSTHOG_API_KEY, host = POSTHOG_HOST }: MastraCodeAnalyticsOptions) {

@@ -17,7 +17,6 @@
  * The "runMs" field controls how long the stubbed agent.stream() takes to
  * resolve _waitUntilFinished, simulating an in-flight model call.
  */
-import { randomUUID } from 'node:crypto';
 import { createInterface } from 'node:readline';
 
 import type { Agent } from '@mastra/core/agent';
@@ -50,7 +49,7 @@ function makeStubAgent(runMs: number, runtime: AgentThreadStreamRuntime, pubsub:
     stream: async (input: any, options: any) => {
       // The signal carrying the user message exposes its sigId as contents.
       const sigId: string = typeof input === 'string' ? input : (input?.contents ?? input?.text ?? '');
-      const runId = options?.runId ?? randomUUID();
+      const runId = options?.runId ?? crypto.randomUUID();
       const finished = new Promise<void>(resolve => {
         const timer = setTimeout(() => {
           runEnds.delete(sigId);

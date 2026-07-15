@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   TABLE_EXPERIMENTS,
@@ -245,7 +244,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
 
   async createExperiment(input: CreateExperimentInput): Promise<Experiment> {
     try {
-      const id = input.id ?? randomUUID();
+      const id = input.id ?? crypto.randomUUID();
       const now = new Date();
 
       await this.operations.insert({
@@ -543,7 +542,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       });
     }
     try {
-      const id = input.id ?? randomUUID();
+      const id = input.id ?? crypto.randomUUID();
       const now = new Date();
 
       await this.operations.insert({

@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import {
   normalizeScheduleTarget,
   SchedulesStorage,
@@ -342,7 +341,7 @@ export class SchedulesMySQL extends SchedulesStorage {
   }
 
   async recordTrigger(trigger: ScheduleTrigger): Promise<void> {
-    const id = trigger.id ?? randomUUID();
+    const id = trigger.id ?? crypto.randomUUID();
     await this.pool.execute(
       `INSERT INTO ${formatTableName(TABLE_SCHEDULE_TRIGGERS)} (${quoteIdentifier('id', 'column name')}, ${quoteIdentifier('schedule_id', 'column name')}, ${quoteIdentifier('run_id', 'column name')}, ${quoteIdentifier('scheduled_fire_at', 'column name')}, ${quoteIdentifier('actual_fire_at', 'column name')}, ${quoteIdentifier('outcome', 'column name')}, ${quoteIdentifier('error', 'column name')}, ${quoteIdentifier('trigger_kind', 'column name')}, ${quoteIdentifier('parent_trigger_id', 'column name')}, ${quoteIdentifier('metadata', 'column name')}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [

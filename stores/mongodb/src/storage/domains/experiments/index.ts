@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   ExperimentsStorage,
@@ -255,7 +253,7 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
   // -------------------------------------------------------------------------
 
   async createExperiment(input: CreateExperimentInput): Promise<Experiment> {
-    const id = input.id ?? randomUUID();
+    const id = input.id ?? crypto.randomUUID();
     const now = new Date();
 
     const doc = {
@@ -503,7 +501,7 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
   // -------------------------------------------------------------------------
 
   async addExperimentResult(input: AddExperimentResultInput): Promise<ExperimentResult> {
-    const id = input.id ?? randomUUID();
+    const id = input.id ?? crypto.randomUUID();
     const now = new Date();
 
     const doc = {

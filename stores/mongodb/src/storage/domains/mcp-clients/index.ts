@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   MCPClientsStorage,
@@ -171,7 +169,7 @@ export class MongoDBMCPClientsStorage extends MCPClientsStorage {
       for (const field of SNAPSHOT_FIELDS) {
         if ((mcpClient as any)[field] !== undefined) snapshotConfig[field] = (mcpClient as any)[field];
       }
-      const versionId = randomUUID();
+      const versionId = crypto.randomUUID();
       const versionDoc: Record<string, any> = {
         id: versionId,
         mcpClientId: mcpClient.id,

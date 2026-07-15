@@ -3,7 +3,6 @@
 // The tests will automatically start and configure the required Couchbase container.
 
 import { execSync } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
 
 import type { Cluster, Bucket, Scope, Collection } from 'couchbase';
 import { connect, QueryScanConsistency, ServiceType, PingState } from 'couchbase';
@@ -589,7 +588,7 @@ describe('Integration Testing CouchbaseVector', async () => {
     }, 50000);
 
     it('should handle duplicate index creation gracefully', async () => {
-      const duplicateIndexName = `duplicate-test-${randomUUID()}`;
+      const duplicateIndexName = `duplicate-test-${crypto.randomUUID()}`;
       const dimension = 768;
       const infoSpy = vi.spyOn(couchbase_client['logger'], 'info');
       const warnSpy = vi.spyOn(couchbase_client['logger'], 'warn');

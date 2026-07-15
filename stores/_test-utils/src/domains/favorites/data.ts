@@ -1,8 +1,7 @@
 import type { StorageCreateAgentInput, StorageCreateSkillInput } from '@mastra/core/storage';
-import { randomUUID } from 'node:crypto';
 
 export const createSampleAgent = ({
-  id = `agent-${randomUUID()}`,
+  id = `agent-${crypto.randomUUID()}`,
   authorId = 'owner',
   visibility = 'public',
   name = 'Test Agent',
@@ -18,7 +17,7 @@ export const createSampleAgent = ({
 });
 
 export const createSampleSkill = ({
-  id = `skill-${randomUUID()}`,
+  id = `skill-${crypto.randomUUID()}`,
   authorId = 'owner',
   visibility = 'public',
   name = 'Test Skill',

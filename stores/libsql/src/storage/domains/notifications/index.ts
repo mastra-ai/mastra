@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import type { Client, InValue } from '@libsql/client';
 import { NotificationsStorage, TABLE_NOTIFICATIONS, TABLE_SCHEMAS } from '@mastra/core/storage';
 import type {
@@ -181,7 +179,7 @@ export class NotificationsLibSQL extends NotificationsStorage {
 
     const now = input.createdAt ?? new Date();
     const record: NotificationRecord = {
-      id: input.id ?? randomUUID(),
+      id: input.id ?? crypto.randomUUID(),
       threadId: input.threadId,
       source: input.source,
       kind: input.kind,

@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { Database } from '@google-cloud/spanner';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
@@ -151,7 +150,7 @@ export class ScoresSpanner extends ScoresStorage {
     }
 
     try {
-      const scoreId = randomUUID();
+      const scoreId = crypto.randomUUID();
       const now = new Date();
       const {
         scorer,

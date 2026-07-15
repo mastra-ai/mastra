@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { Schedule, ScheduleTrigger } from '@mastra/core/storage';
 
 /**
@@ -7,7 +6,7 @@ import type { Schedule, ScheduleTrigger } from '@mastra/core/storage';
 export function createSampleSchedule(overrides?: Partial<Schedule>): Schedule {
   const now = Date.now();
   return {
-    id: `sched_${randomUUID()}`,
+    id: `sched_${crypto.randomUUID()}`,
     target: {
       type: 'workflow',
       workflowId: 'test-workflow',
@@ -28,9 +27,9 @@ export function createSampleSchedule(overrides?: Partial<Schedule>): Schedule {
 export function createSampleTrigger(overrides?: Partial<ScheduleTrigger>): ScheduleTrigger {
   const now = Date.now();
   return {
-    id: `tr_${randomUUID()}`,
+    id: `tr_${crypto.randomUUID()}`,
     scheduleId: 'sched_1',
-    runId: `run_${randomUUID()}`,
+    runId: `run_${crypto.randomUUID()}`,
     scheduledFireAt: now,
     actualFireAt: now,
     outcome: 'published',

@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   AgentsStorage,
@@ -233,7 +231,7 @@ export class AgentsMSSQL extends AgentsStorage {
         },
       });
       const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = agent;
-      const versionId = randomUUID();
+      const versionId = crypto.randomUUID();
       await this.createVersion({
         id: versionId,
         agentId: agent.id,

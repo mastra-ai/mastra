@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { emitErrorEvent } from '@mastra/core/agent/durable';
 import { RequestContext } from '@mastra/core/di';
 import type { PubSub } from '@mastra/core/events';
@@ -186,7 +185,7 @@ export class InngestWorkflow<
     runId?: string;
     resourceId?: string;
   }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput>> {
-    const runIdToUse = options?.runId || randomUUID();
+    const runIdToUse = options?.runId || crypto.randomUUID();
 
     // Return a new Run instance with object parameters
     const existingInMemoryRun = this.runs.get(runIdToUse);
@@ -311,7 +310,7 @@ export class InngestWorkflow<
 
         if (!runId) {
           runId = await step.run(`workflow.${this.id}.runIdGen`, async () => {
-            return randomUUID();
+            return crypto.randomUUID();
           });
         }
 

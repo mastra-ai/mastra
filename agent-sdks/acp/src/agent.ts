@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { ReadableStream } from 'node:stream/web';
 
 import type { ModelInfo, SessionUpdate } from '@agentclientprotocol/sdk';
@@ -111,7 +110,7 @@ export class AcpAgent<
       },
       toolResults: [],
       finishReason: 'stop',
-      runId: options?.runId ?? randomUUID(),
+      runId: options?.runId ?? crypto.randomUUID(),
     };
   }
 
@@ -124,7 +123,7 @@ export class AcpAgent<
   }
 
   async stream(messages: MessageListInput, options?: AgentStreamOptions): Promise<SubAgentStreamResult> {
-    const runId = options?.runId ?? randomUUID();
+    const runId = options?.runId ?? crypto.randomUUID();
     const prompt = this.getPrompt(messages, options?.instructions);
     const signal = (options as { abortSignal?: AbortSignal } | undefined)?.abortSignal;
     const messageList = new MessageList();
@@ -139,7 +138,7 @@ export class AcpAgent<
 
     const fullStream = new ReadableStream<ChunkType>({
       start: async controller => {
-        const textId = randomUUID();
+        const textId = crypto.randomUUID();
         const chunks: string[] = [];
         const toolNames = new Map<string, string>();
         const toolResults: AcpToolResult[] = [];
@@ -359,7 +358,7 @@ function createFinishChunk(type: 'step-finish' | 'finish', runId: string): Chunk
     runId,
     from: CHUNK_FROM_AGENT,
     payload: {
-      id: randomUUID(),
+      id: crypto.randomUUID(),
       output: {
         steps: [],
         usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },

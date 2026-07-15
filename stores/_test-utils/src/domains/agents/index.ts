@@ -1,7 +1,6 @@
 import type { MastraStorage, AgentsStorage } from '@mastra/core/storage';
 import { createSampleAgent, createFullSampleAgent, createSampleAgents } from './data';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { randomUUID } from 'node:crypto';
 
 export function createAgentsTests({ storage }: { storage: MastraStorage }) {
   // Skip tests if storage doesn't have agents domain
@@ -156,7 +155,7 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
         const created = await agentsStorage.create({ agent });
 
         // Set an active version
-        const versionId = randomUUID();
+        const versionId = crypto.randomUUID();
         await agentsStorage.createVersion({
           id: versionId,
           agentId: agent.id,
@@ -190,7 +189,7 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
 
         // Create version 2
         await agentsStorage.createVersion({
-          id: randomUUID(),
+          id: crypto.randomUUID(),
           agentId: agent.id,
           versionNumber: 2,
           name: 'Version 2',
@@ -202,7 +201,7 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
 
         // Create version 3 (latest)
         await agentsStorage.createVersion({
-          id: randomUUID(),
+          id: crypto.randomUUID(),
           agentId: agent.id,
           versionNumber: 3,
           name: 'Latest Version',
@@ -283,7 +282,7 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
         const originalVersionId = created.activeVersionId;
 
         // Create a second version
-        const versionId = randomUUID();
+        const versionId = crypto.randomUUID();
         await agentsStorage.createVersion({
           id: versionId,
           agentId: agent.id,
@@ -338,7 +337,7 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
 
         // Create additional versions
         await agentsStorage.createVersion({
-          id: randomUUID(),
+          id: crypto.randomUUID(),
           agentId: agent.id,
           versionNumber: 2,
           name: 'Version 2',

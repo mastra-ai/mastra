@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import {
   createSampleMessageV1,
   createSampleMessageV2,
@@ -676,7 +675,7 @@ describe.skip('D1Store REST API', () => {
     });
 
     it('should handle complex workflow state', async () => {
-      const runId = `run-${randomUUID()}`;
+      const runId = `run-${crypto.randomUUID()}`;
       const workflowName = 'complex-workflow';
 
       const complexSnapshot = {

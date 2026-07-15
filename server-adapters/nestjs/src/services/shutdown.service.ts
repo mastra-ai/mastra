@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { OnApplicationShutdown, OnModuleDestroy } from '@nestjs/common';
 import type { Response } from 'express';
@@ -40,7 +39,7 @@ export class ShutdownService implements OnModuleDestroy, OnApplicationShutdown {
    * Returns a unique request ID for tracking.
    */
   registerRequest(path: string): string {
-    const requestId = randomUUID();
+    const requestId = crypto.randomUUID();
     this.activeRequests.set(requestId, {
       startTime: Date.now(),
       path,
