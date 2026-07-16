@@ -177,7 +177,7 @@ overrides:
   which-typed-array: npm:@socketregistry/which-typed-array@^1
   yocto-spinner: npm:@socketregistry/yocto-spinner@^1
 
-packageExtensionsChecksum: sha256-/cD8y6AI9CdIuSvELFiNyGPNGS77AbBTfsEAe7m2Qbo=
+packageExtensionsChecksum: sha256-qbH4ejBMRYCmQgmjlQmgTQbTP1jfPCxamdw+Q0MGVLM=
 
 patchedDependencies:
   '@changesets/get-dependents-graph@2.1.4': eb65c5cbf43c61ce6dcb0c77fa30d9aebcdffa3a70dee1faefc4cde4125f28fa
@@ -33360,6 +33360,7 @@ snapshots:
       pathe: 2.0.3
       shell-quote: 1.8.4
       tar: 7.5.16
+      tslib: 2.8.1
     transitivePeerDependencies:
       - debug
       - supports-color

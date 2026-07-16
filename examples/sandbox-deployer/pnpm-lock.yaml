@@ -6,10 +6,13 @@ settings:
 
 overrides:
   '@mastra/core': link:../../packages/core
+  '@mastra/daytona': link:../../workspaces/daytona
   '@mastra/deployer-sandbox': link:../../deployers/sandbox
   '@mastra/e2b': link:../../workspaces/e2b
   '@mastra/vercel': link:../../workspaces/vercel
   mastra: link:../../packages/cli
+
+packageExtensionsChecksum: sha256-E1uC6ipRR7MoF7R/5oDB8SEpSulsYWlFaGB0bv3k/Mo=
 
 importers:
 
@@ -18,6 +21,9 @@ importers:
       '@mastra/core':
         specifier: link:../../packages/core
         version: link:../../packages/core
+      '@mastra/daytona':
+        specifier: link:../../workspaces/daytona
+        version: link:../../workspaces/daytona
       '@mastra/deployer-sandbox':
         specifier: link:../../deployers/sandbox
         version: link:../../deployers/sandbox

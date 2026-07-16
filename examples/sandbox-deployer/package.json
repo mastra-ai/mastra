@@ -4,7 +4,7 @@
   "private": true,
   "version": "0.0.0",
   "scripts": {
-    "build:linked-workspace-deps": "turbo --cwd ../.. build --filter mastra --filter @mastra/deployer-sandbox --filter @mastra/vercel --filter @mastra/e2b",
+    "build:linked-workspace-deps": "turbo --cwd ../.. build --filter mastra --filter @mastra/deployer-sandbox --filter @mastra/vercel --filter @mastra/e2b --filter @mastra/daytona",
     "build": "pnpm build:linked-workspace-deps && pnpm mastra:build",
     "mastra:build": "node ../../packages/cli/dist/index.js build",
     "mastra:dev": "node ../../packages/cli/dist/index.js dev",
@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@mastra/core": "latest",
+    "@mastra/daytona": "latest",
     "@mastra/deployer-sandbox": "latest",
     "@mastra/e2b": "latest",
     "@mastra/vercel": "latest",
@@ -27,8 +28,16 @@
     "typescript": "^5.9.3"
   },
   "pnpm": {
+    "packageExtensions": {
+      "@daytonaio/sdk": {
+        "dependencies": {
+          "tslib": "*"
+        }
+      }
+    },
     "overrides": {
       "@mastra/core": "link:../../packages/core",
+      "@mastra/daytona": "link:../../workspaces/daytona",
       "@mastra/deployer-sandbox": "link:../../deployers/sandbox",
       "@mastra/e2b": "link:../../workspaces/e2b",
       "@mastra/vercel": "link:../../workspaces/vercel",

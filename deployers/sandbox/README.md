@@ -2,7 +2,7 @@
 
 Deploy a full Mastra server into any workspace sandbox that supports networking — and get a live public URL in seconds.
 
-Works with any `WorkspaceSandbox` provider that implements the core `networking` capability (Vercel Sandbox, E2B, ...). Positioning: **ephemeral environments** — instant previews, PR/CI smoke deploys, agent-built-app verification, multi-tenant untrusted instances. Not production hosting.
+Works with any `WorkspaceSandbox` provider that implements the core `networking` capability (Vercel Sandbox, E2B, Daytona, ...). Positioning: **ephemeral environments** — instant previews, PR/CI smoke deploys, agent-built-app verification, multi-tenant untrusted instances. Not production hosting.
 
 ## Usage
 

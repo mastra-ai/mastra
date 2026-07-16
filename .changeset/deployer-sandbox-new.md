@@ -2,7 +2,7 @@
 '@mastra/deployer-sandbox': minor
 ---
 
-New package: deploy a full Mastra server (including Studio) into any workspace sandbox that supports networking, and get a live public URL in seconds. Works with `@mastra/vercel` and `@mastra/e2b` sandboxes. Built for ephemeral environments: instant previews, PR/CI smoke deploys, agent-built app verification, and multi-tenant untrusted instances.
+New package: deploy a full Mastra server (including Studio) into any workspace sandbox that supports networking, and get a live public URL in seconds. Works with `@mastra/vercel`, `@mastra/e2b`, and `@mastra/daytona` sandboxes. Built for ephemeral environments: instant previews, PR/CI smoke deploys, agent-built app verification, and multi-tenant untrusted instances.
 
 **Deploy from your Mastra config**
 

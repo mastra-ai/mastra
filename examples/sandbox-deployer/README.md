@@ -1,6 +1,6 @@
 # Sandbox Deployer Example
 
-Deploys a minimal Mastra server (one agent, one tool, plus Studio) into a sandbox microVM using `@mastra/deployer-sandbox`, and prints a live public URL. Supports two providers — Vercel Sandbox (default) and E2B — selected with the `SANDBOX_PROVIDER` env var.
+Deploys a minimal Mastra server (one agent, one tool, plus Studio) into a sandbox microVM using `@mastra/deployer-sandbox`, and prints a live public URL. Supports three providers — Vercel Sandbox (default), E2B, and Daytona — selected with the `SANDBOX_PROVIDER` env var.
 
 Sandboxes are ephemeral compute — use this for instant previews, CI smoke deploys, and verifying agent-built apps, not production hosting.
 
@@ -48,6 +48,16 @@ SANDBOX_PROVIDER=e2b E2B_API_KEY=e2b_... pnpm build
 
 E2B pauses the sandbox on timeout instead of killing it, and resumes running processes on wake — so a woken deployment answers immediately without a server relaunch.
 
+### Deploy to Daytona instead
+
+Set `SANDBOX_PROVIDER=daytona` (and `DAYTONA_API_KEY`) to deploy the same app to a Daytona sandbox:
+
+```bash
+SANDBOX_PROVIDER=daytona DAYTONA_API_KEY=dtn_... pnpm build
+```
+
+The sandbox is created with `public: true` so the preview URL works without a token. Stopping persists the filesystem but not processes, so waking relaunches the server (like Vercel).
+
 ## Lifecycle
 
 Manage the deployment with `getDeployment()` from `@mastra/deployer-sandbox/client` (`stop()`, `destroy()`, `logs()`, wake-on-demand). The sandbox name is the identity, so the scripts — or any other codebase — just construct the provider with the same name:
@@ -57,7 +67,7 @@ pnpm stop      # snapshot-stop (resumes on next deploy) — see scripts/stop.ts
 pnpm destroy   # permanently delete the sandbox — see scripts/destroy.ts
 ```
 
-Set `SANDBOX_PROVIDER=e2b` on these too when managing an E2B deployment.
+Set `SANDBOX_PROVIDER=e2b` (or `daytona`) on these too when managing a deployment on another provider.
 
 Both work from a fresh process: the provider attaches to the named sandbox without resuming it, so stopping or destroying never wakes (or bills) a stopped sandbox first. The Vercel CLI works too (`vercel sandbox ls|stop|rm`).
 

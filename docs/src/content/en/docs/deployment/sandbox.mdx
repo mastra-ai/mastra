@@ -24,6 +24,7 @@ The deployer works with any workspace sandbox that supports networking (public p
 
 - [Vercel Sandbox](/reference/workspace/vercel-sandbox) (`@mastra/vercel`)
 - [E2B](/reference/workspace/e2b-sandbox) (`@mastra/e2b`)
+- [Daytona](/reference/workspace/daytona-sandbox) (`@mastra/daytona`)
 
 Provider authors can add support by implementing the optional `networking` capability on [`WorkspaceSandbox`](/reference/workspace/sandbox).
 
@@ -92,6 +93,25 @@ const deployer = new SandboxDeployer({
 E2B reads its API key from the `E2B_API_KEY` environment variable. Pass `template: 'base'` unless you need filesystem mounts; without it, the provider builds a custom FUSE-enabled template on first use.
 
 E2B pauses instead of stopping: `stop()` snapshots the whole VM, including memory and running processes. When a paused sandbox wakes, the Mastra server resumes where it left off, and there's no relaunch step like on Vercel.
+
+### Using Daytona
+
+For Daytona the `id` option is the deployment identity: deploying again with the same `id` reconnects to the existing sandbox instead of creating a new one. Pass `public: true` so the preview URL works without a token.
+
+```typescript title="src/mastra/index.ts"
+import { SandboxDeployer } from '@mastra/deployer-sandbox'
+import { DaytonaSandbox } from '@mastra/daytona'
+
+const deployer = new SandboxDeployer({
+  sandbox: new DaytonaSandbox({
+    id: 'my-preview',
+    public: true,
+    autoStopInterval: 30, // minutes
+  }),
+})
+```
+
+Daytona reads its API key from the `DAYTONA_API_KEY` environment variable. Stopping a Daytona sandbox persists its filesystem but not running processes, so waking works like Vercel: the resolver relaunches the server on `wake: true`.
 
 ## Deploying programmatically
 
