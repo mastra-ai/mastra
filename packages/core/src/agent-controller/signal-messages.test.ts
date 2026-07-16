@@ -5,6 +5,7 @@ import { createSignal } from '../agent/signals';
 import { RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
 import { AgentController } from './agent-controller';
+import { toStateSignalContent } from './stream-content';
 import { createMockWorkspace } from './test-utils';
 import type { AgentControllerEvent } from './types';
 
@@ -1332,6 +1333,53 @@ describe('AgentController signal messages', () => {
     });
   });
 
+  it('renders persisted state signal values', async () => {
+    const storage = new InMemoryStore();
+    const { session } = await createController(storage);
+    const thread = await session.thread.create();
+    const value = { updates: [{ action: 'created', recordId: 'entity-1' }] };
+
+    await storage.stores.memory!.saveMessages({
+      messages: [
+        createSignal({
+          id: 'persisted-state-signal-1',
+          type: 'state',
+          tagName: 'state',
+          contents: 'Knowledge updated',
+          metadata: {
+            state: {
+              id: 'subconscious-activity',
+              mode: 'snapshot',
+              cacheKey: 'subconscious-activity:1',
+            },
+            value,
+          },
+          createdAt: new Date('2026-05-04T00:00:00.000Z'),
+        }).toDBMessage({ threadId: thread.id, resourceId: thread.resourceId }),
+      ],
+    });
+
+    await expect(session.thread.listActiveMessages()).resolves.toEqual([
+      {
+        id: 'persisted-state-signal-1',
+        role: 'user',
+        content: [
+          {
+            type: 'state_signal',
+            id: 'persisted-state-signal-1',
+            stateId: 'subconscious-activity',
+            mode: 'snapshot',
+            cacheKey: 'subconscious-activity:1',
+            version: undefined,
+            value,
+            message: 'Knowledge updated',
+          },
+        ],
+        createdAt: new Date('2026-05-04T00:00:00.000Z'),
+      },
+    ]);
+  });
+
   it('emits state signal data parts as renderable message updates', async () => {
     const storage = new InMemoryStore();
     const { session } = await createController(storage);
@@ -1358,6 +1406,7 @@ describe('AgentController signal messages', () => {
               cacheKey: 'browser:https://example.com',
               version: 2,
             },
+            delta: { activeTabUrl: 'https://example.com' },
           },
         },
       },
@@ -1376,10 +1425,32 @@ describe('AgentController signal messages', () => {
             mode: 'delta',
             cacheKey: 'browser:https://example.com',
             version: 2,
+            delta: { activeTabUrl: 'https://example.com' },
             message: 'changed: active tab URL changed to https://example.com',
           },
         ],
       }),
     });
+  });
+
+  it('keeps state signals without structured payloads backward compatible', () => {
+    const content = toStateSignalContent({
+      id: 'state-signal-2',
+      type: 'state',
+      contents: 'No structured payload',
+      metadata: { state: { id: 'tasks', mode: 'snapshot', cacheKey: 'tasks:1' } },
+    });
+
+    expect(content).toEqual({
+      type: 'state_signal',
+      id: 'state-signal-2',
+      stateId: 'tasks',
+      mode: 'snapshot',
+      cacheKey: 'tasks:1',
+      version: undefined,
+      message: 'No structured payload',
+    });
+    expect(content).not.toHaveProperty('value');
+    expect(content).not.toHaveProperty('delta');
   });
 });

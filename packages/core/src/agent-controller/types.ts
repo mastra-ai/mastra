@@ -954,6 +954,8 @@ export type AgentControllerMessageContent =
       mode: 'snapshot' | 'delta';
       cacheKey?: string;
       version?: number;
+      value?: unknown;
+      delta?: unknown;
       message: string;
     }
   | {

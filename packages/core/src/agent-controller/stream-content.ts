@@ -120,7 +120,8 @@ export function signalContentsToText(contents: unknown): string {
 export function toStateSignalContent(
   payload: Record<string, unknown>,
 ): Extract<AgentControllerMessageContent, { type: 'state_signal' }> | undefined {
-  const stateMetadata = getRecordValue(getRecordValue(payload.metadata)?.state);
+  const metadata = getRecordValue(payload.metadata);
+  const stateMetadata = getRecordValue(metadata?.state);
   const stateId = getStringValue(stateMetadata?.id) ?? getStringValue(payload.tagName) ?? 'state';
 
   return {
@@ -130,6 +131,8 @@ export function toStateSignalContent(
     mode: stateMetadata?.mode === 'delta' ? 'delta' : 'snapshot',
     cacheKey: getStringValue(stateMetadata?.cacheKey),
     version: typeof stateMetadata?.version === 'number' ? stateMetadata.version : undefined,
+    ...(metadata && 'value' in metadata ? { value: metadata.value } : {}),
+    ...(metadata && 'delta' in metadata ? { delta: metadata.delta } : {}),
     message: signalContentsToText(payload.contents),
   };
 }
