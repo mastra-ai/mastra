@@ -1,5 +1,30 @@
 # @internal/playground
 
+## 1.19.1-alpha.3
+
+### Patch Changes
+
+- Fixed notification cards to remain readable in light mode. ([#19588](https://github.com/mastra-ai/mastra/pull/19588))
+
+- Added stable metrics and logs capability reporting for observability storage. The system packages response now includes `observabilityStorageCapabilities` with `metrics` and `logs` flags, enabling capability-based detection that is resilient to bundler-generated constructor name changes. ([#19305](https://github.com/mastra-ai/mastra/pull/19305))
+
+  ```typescript
+  const packages = await client.getSystemPackages();
+  console.log(packages.observabilityStorageCapabilities?.metrics); // true
+  console.log(packages.observabilityStorageCapabilities?.logs); // true
+  ```
+
+  Studio now uses the capability response instead of relying on constructor names, with a fallback for older servers.
+
+- Simplified the tool execution page: form and result now stack in a single centered column, the result appears only after running the tool, and the result view is read-only with a copy button. ([#19565](https://github.com/mastra-ai/mastra/pull/19565))
+
+- Updated dependencies [[`1426af2`](https://github.com/mastra-ai/mastra/commit/1426af24975879c000d13ac75673f630fcc970c1), [`9704894`](https://github.com/mastra-ai/mastra/commit/9704894310958ab7a53b81038a95327a191f92e0), [`0a06e9f`](https://github.com/mastra-ai/mastra/commit/0a06e9f761c1e90c9b33462d346c6ae80ad625b3), [`4696604`](https://github.com/mastra-ai/mastra/commit/4696604a8db7517459e7075ed4a6924114cdbdfb), [`975295d`](https://github.com/mastra-ai/mastra/commit/975295d418552f0d46a59edfef4c3ee555f9930a), [`642de60`](https://github.com/mastra-ai/mastra/commit/642de60c29bb67631ea110d81f18cafd52f3228a), [`85e4fb5`](https://github.com/mastra-ai/mastra/commit/85e4fb50087a81c74df3a762f53b56373db0b912), [`22c7ca8`](https://github.com/mastra-ai/mastra/commit/22c7ca85b893ebc9bf0113309e13d238a896bdaf), [`85e4fb5`](https://github.com/mastra-ai/mastra/commit/85e4fb50087a81c74df3a762f53b56373db0b912), [`ef03c0c`](https://github.com/mastra-ai/mastra/commit/ef03c0cfc62367a458e4cc56462e2148b35681c5), [`4fb4d88`](https://github.com/mastra-ai/mastra/commit/4fb4d881bc107acee13890ad4d78661016c510ed), [`4eba27a`](https://github.com/mastra-ai/mastra/commit/4eba27adcf60f991df0e62f94b3e75b4e67f3b4b), [`c701be3`](https://github.com/mastra-ai/mastra/commit/c701be32d7d9aa94a66da8c6cc38dcac6856f464), [`50e0ec5`](https://github.com/mastra-ai/mastra/commit/50e0ec5a1b2f3dec9eb1333487be733ac499173c)]:
+  - @mastra/core@1.52.0-alpha.3
+  - @mastra/playground-ui@42.0.0-alpha.3
+  - @mastra/client-js@1.33.0-alpha.3
+  - @mastra/ai-sdk@1.6.3-alpha.0
+  - @mastra/react@1.2.6-alpha.3
+
 ## 1.19.1-alpha.2
 
 ### Patch Changes
