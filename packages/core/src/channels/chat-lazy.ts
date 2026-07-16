@@ -14,8 +14,8 @@ let loading: Promise<ChatModule> | undefined;
  * exports): a static import would be compiled to `require('chat')` in the CJS
  * build and crash every CJS consumer. A literal dynamic import is safe here
  * because this package builds with tsup's `treeshake` option, which emits CJS
- * through Rollup and preserves native `import()` in `.cjs` output (guarded by
- * a check in tsup.config.ts). The `@vite-ignore`/`webpackIgnore` comments keep
+ * through Rollup and preserves native `import()` in `.cjs` output.
+ * The `@vite-ignore`/`webpackIgnore` comments keep
  * Vite and webpack from pre-resolving the ESM-only package.
  *
  * The specifier must stay a literal (not a runtime-constructed string) so

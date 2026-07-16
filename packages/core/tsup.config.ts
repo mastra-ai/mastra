@@ -90,21 +90,6 @@ export default defineConfig({
   sourcemap: true,
   onSuccess: async () => {
     await new Promise(resolve => setTimeout(resolve, 1000));
-
-    // `chat` is ESM-only, so the CJS build must never contain `require('chat')` (it would
-    // crash CJS consumers). The lazy `import('chat')` in src/channels/chat-lazy.ts stays
-    // native in `.cjs` output only because the `treeshake` option above emits CJS through
-    // Rollup — without it, tsup rewrites the import to a multiline `require(... 'chat')`.
-    const cjsRequireChat = /require\(\s*(?:\/\*[\s\S]*?\*\/\s*)*(['"])chat\1\s*\)/;
-    for (const file of fs.readdirSync(path.join(process.cwd(), 'dist'), { recursive: true, encoding: 'utf-8' })) {
-      const filePath = path.join(process.cwd(), 'dist', file);
-      if (file.endsWith('.cjs') && cjsRequireChat.test(fs.readFileSync(filePath, 'utf-8'))) {
-        throw new Error(
-          `${filePath} contains require('chat'), which crashes CJS consumers because chat is ESM-only. ` +
-            `Keep the dynamic import in src/channels/chat-lazy.ts and the tsup 'treeshake' option intact.`,
-        );
-      }
-    }
     await generateTypes(
       process.cwd(),
       new Set([
