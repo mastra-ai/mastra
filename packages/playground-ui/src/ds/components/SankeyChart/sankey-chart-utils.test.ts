@@ -35,6 +35,16 @@ describe('SankeyChart utilities', () => {
     });
   });
 
+  describe('when records provide explicit weights', () => {
+    it('uses the weights for link totals without duplicating records', () => {
+      const data = [{ source: 'API', model: 'GPT', count: 3 }];
+
+      const graph = buildSankeyChartGraph(data, columns.slice(0, 2), record => Number(record.count));
+
+      expect(graph.links[0]).toMatchObject({ value: 3, records: data });
+    });
+  });
+
   describe('when equal labels appear in different dimensions', () => {
     it('creates distinct nodes keyed by their columns', () => {
       const graph = buildSankeyChartGraph([{ source: 'Shared', model: 'Shared' }], columns.slice(0, 2));

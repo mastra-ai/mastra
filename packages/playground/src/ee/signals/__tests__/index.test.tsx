@@ -55,6 +55,20 @@ describe('Signals page', () => {
     });
   });
 
+  describe('when the entities request fails', () => {
+    it('shows the entities error state', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities`, () =>
+          HttpResponse.json({ error: 'Unable to load entities' }, { status: 500 }),
+        ),
+      );
+
+      renderSignalsPage();
+
+      expect(await screen.findByText('Unable to load signal entities.')).not.toBeNull();
+    });
+  });
+
   describe('when no Agent Learning entities exist', () => {
     it('shows that the analysis is waiting for traces', async () => {
       server.use(http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(emptyThemeEntitiesResponse)));

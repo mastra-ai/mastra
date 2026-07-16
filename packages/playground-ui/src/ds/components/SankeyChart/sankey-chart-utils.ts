@@ -77,6 +77,7 @@ export function reorderSankeyChartColumns(
 export function buildSankeyChartGraph(
   data: Array<SankeyChartRecord>,
   columns: Array<SankeyChartColumn>,
+  getRecordWeight: (record: SankeyChartRecord) => number = () => 1,
 ): SankeyChartGraph {
   if (columns.length < 2 || data.length === 0) return EMPTY_GRAPH;
 
@@ -111,16 +112,17 @@ export function buildSankeyChartGraph(
       const target = getNode(targetColumn, targetValue);
       const id = `${source.node.id}->${target.node.id}`;
       const existingLink = linksById.get(id);
+      const weight = getRecordWeight(record);
 
       if (existingLink) {
-        existingLink.value += 1;
+        existingLink.value += weight;
         existingLink.records.push(record);
       } else {
         linksById.set(id, {
           id,
           source: source.index,
           target: target.index,
-          value: 1,
+          value: weight,
           sourceNode: source.node,
           targetNode: target.node,
           records: [record],

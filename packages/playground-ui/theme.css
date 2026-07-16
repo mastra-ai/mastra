@@ -404,6 +404,7 @@ html.light {
     100% {
       opacity: 0.45;
     }
+
     50% {
       opacity: 1;
     }
@@ -415,6 +416,7 @@ html.light {
       opacity: 0.5;
       transform: scale(0.96);
     }
+
     50% {
       opacity: 0.9;
       transform: scale(1.04);
@@ -426,6 +428,7 @@ html.light {
     100% {
       opacity: 0.72;
     }
+
     50% {
       opacity: 1;
     }
@@ -441,6 +444,7 @@ html.light {
     0% {
       background-position: 200% 0;
     }
+
     100% {
       background-position: -200% 0;
     }

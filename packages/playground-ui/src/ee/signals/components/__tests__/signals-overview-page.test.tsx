@@ -61,7 +61,9 @@ describe('SignalsOverviewPage', () => {
     it('previews where grouped trace relationships will appear', () => {
       render(<SignalsOverviewPage />);
 
-      expect(screen.getByText(/grouped trace relationships will appear here/i)).not.toBeNull();
+      expect(
+        screen.getByText(/grouped trace relationships will appear after traces contain at least two signal types/i),
+      ).not.toBeNull();
     });
 
     it('shows that the analysis is waiting for traces', () => {

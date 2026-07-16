@@ -3,6 +3,7 @@ import { buildSankeyChartGraph } from '@mastra/playground-ui/components/SankeyCh
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
+import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { SankeySignals } from '../sankey-signals';
@@ -21,9 +22,11 @@ const BASE_URL = 'http://localhost:3100';
 function renderSankeySignals() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <QueryClientProvider client={queryClient}>
-      <SankeySignals entityId="support-agent" signalNames={['goal', 'sentiment', 'behavior', 'outcome']} />
-    </QueryClientProvider>,
+    <MemoryRouter>
+      <QueryClientProvider client={queryClient}>
+        <SankeySignals entityId="support-agent" signalNames={['goal', 'sentiment', 'behavior', 'outcome']} />
+      </QueryClientProvider>
+    </MemoryRouter>,
   );
 }
 
@@ -188,9 +191,15 @@ describe('SankeySignals', () => {
       expect(graph.nodes.map(node => node.name)).toEqual(['Resolve support request', 'Request resolved']);
     });
 
+    it('preserves each API link as one chart record', () => {
+      const { records } = themeFlowToSankeyData(themeFlowResponse);
+
+      expect(records).toHaveLength(1);
+    });
+
     it('preserves the API link weight in the playground-ui chart graph', () => {
       const { columns, records } = themeFlowToSankeyData(themeFlowResponse);
-      const graph = buildSankeyChartGraph(records, columns);
+      const graph = buildSankeyChartGraph(records, columns, record => Number(record.traceCount));
 
       expect(graph.links[0]?.value).toBe(3);
     });

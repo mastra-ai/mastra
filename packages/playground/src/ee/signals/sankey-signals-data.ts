@@ -22,12 +22,11 @@ export function themeFlowToSankeyData(flow: ThemeFlowResponse): {
     const target = nodes.get(link.targetNodeId);
     if (!source || !target) continue;
 
-    for (let index = 0; index < link.traceCount; index += 1) {
-      records.push({
-        [source.signalName]: source.node.label,
-        [target.signalName]: target.node.label,
-      });
-    }
+    records.push({
+      [source.signalName]: source.node.label,
+      [target.signalName]: target.node.label,
+      traceCount: link.traceCount,
+    });
   }
 
   return { columns, records };

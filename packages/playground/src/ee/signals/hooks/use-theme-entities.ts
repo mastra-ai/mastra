@@ -7,7 +7,7 @@ export function useThemeEntities(entityType: string) {
   const config = getEntityLearningConfig();
 
   return useQuery({
-    queryKey: ['entity-learning', config?.projectId, 'entities', entityType],
+    queryKey: ['entity-learning', config?.baseUrl, config?.projectId, 'entities', entityType],
     queryFn: () => fetchThemeEntities(requireEntityLearningConfig(config), entityType),
     enabled: config !== undefined,
   });

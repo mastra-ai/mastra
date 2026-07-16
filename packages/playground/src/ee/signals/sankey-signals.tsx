@@ -1,6 +1,7 @@
 import { Sankey, SankeyChart } from '@mastra/playground-ui/components/SankeyChart';
 import { SignalsOverviewPage as SignalsEmptyState } from '@mastra/playground-ui/ee/signals';
 
+import { Link } from '../../lib/link';
 import { useThemeFlow, useThemeSnapshots } from './hooks';
 import { themeFlowToSankeyData } from './sankey-signals-data';
 import { SignalsLoadingSkeleton } from './signals-loading-skeleton';
@@ -27,14 +28,14 @@ export function SankeySignals({ entityId, entityType = 'agent', signalNames, hei
   }
 
   if (!snapshot) {
-    return <SignalsEmptyState />;
+    return <SignalsEmptyState LinkComponent={Link} />;
   }
 
   const flow = flowQuery.data;
   const populatedStageCount = flow?.stages.filter(stage => stage.nodes.length > 0).length ?? 0;
 
   if (!flow || populatedStageCount < 2) {
-    return <SignalsEmptyState />;
+    return <SignalsEmptyState LinkComponent={Link} />;
   }
 
   const { columns, records } = themeFlowToSankeyData(flow);
@@ -47,7 +48,7 @@ export function SankeySignals({ entityId, entityType = 'agent', signalNames, hei
         </h1>
       </header>
 
-      <Sankey data={records} columns={columns}>
+      <Sankey data={records} columns={columns} getRecordWeight={record => Number(record.traceCount)}>
         <div className="min-h-0 min-w-0 flex-1 w-full">
           <SankeyChart height={height ?? 640} margin={{ top: 40, right: 0, bottom: 12, left: 0 }} />
         </div>

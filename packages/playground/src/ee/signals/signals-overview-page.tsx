@@ -15,6 +15,10 @@ export function SignalsOverviewPage() {
     return <SignalsLoadingSkeleton />;
   }
 
+  if (entitiesQuery.isError) {
+    return <p>Unable to load signal entities.</p>;
+  }
+
   const entity = entitiesQuery.data?.entities.find(currentEntity => currentEntity.availableSignals.length >= 2);
 
   if (!entity) {

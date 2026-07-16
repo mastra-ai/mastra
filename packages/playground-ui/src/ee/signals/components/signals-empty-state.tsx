@@ -130,7 +130,7 @@ export const SignalsEmptyState = ({ actionSlot, LinkComponent = 'a' }: SignalsEm
 
         <section className="mt-10" aria-label="Signal relationship preview">
           <p className="font-mono text-[0.5625rem] tracking-[0.2em] text-neutral2 uppercase">
-            Grouped trace relationships will appear here
+            Grouped trace relationships will appear after traces contain at least two signal types
           </p>
           <div aria-hidden="true" className="h-18 mt-3 grid grid-cols-3 gap-5 opacity-35">
             {[0, 1, 2].map(index => (
