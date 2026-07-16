@@ -2,7 +2,15 @@ import { Button, buttonVariants } from '@mastra/playground-ui/components/Button'
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { CircleDot, EllipsisVertical, GitPullRequest, MessageSquare, Plus } from 'lucide-react';
+import {
+  CircleDot,
+  EllipsisVertical,
+  GitCompareArrows,
+  GitPullRequest,
+  Link2,
+  MessageSquare,
+  Plus,
+} from 'lucide-react';
 import type { ComponentType, DragEvent } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -40,6 +48,26 @@ import type { BoardStageId } from './stages';
 
 const AUTO_TRIAGED_LABEL = 'auto-triaged';
 const NEEDS_APPROVAL_LABEL = 'needs-approval';
+
+const SOURCE_LABELS: Record<WorkItemSource, string> = {
+  'github-issue': 'Issue',
+  'github-pr': 'PR Review',
+  'linear-issue': 'Linear',
+  manual: 'Manual',
+};
+
+function displayTitle(source: WorkItemSource, title: string): string {
+  return `${SOURCE_LABELS[source]}: ${title}`;
+}
+
+function SourceTitle({ source, title }: { source: WorkItemSource; title: string }) {
+  return (
+    <>
+      <span>{SOURCE_LABELS[source]}: </span>
+      <span>{title}</span>
+    </>
+  );
+}
 
 function hasLabel(labels: readonly string[], label: string): boolean {
   return labels.some(item => item.toLowerCase() === label);
@@ -224,7 +252,7 @@ function pullRequestCandidate(pr: GithubPullRequest): BoardCandidate {
     title: pr.title,
     url: pr.url,
     meta: `#${pr.number}${pr.author ? ` · ${pr.author}` : ''} · ${pr.headBranch} → ${pr.baseBranch}`,
-    icon: GitPullRequest,
+    icon: GitCompareArrows,
     iconClassName: 'text-accent1',
     column: 'intake',
     runActions: [
@@ -601,6 +629,7 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
                   key={`${item.id}:${stage.id}`}
                   item={item}
                   columnStage={stage.id}
+                  allItems={workItems}
                   liveWorktreePaths={liveWorktreePaths}
                   runDisabled={!runEnabled || start.isPending}
                   runStarting={start.isPending}
@@ -740,7 +769,7 @@ const SOURCE_ICONS: Record<
   { icon: ComponentType<{ size?: number; className?: string }>; className: string }
 > = {
   'github-issue': { icon: CircleDot, className: 'text-accent1' },
-  'github-pr': { icon: GitPullRequest, className: 'text-accent1' },
+  'github-pr': { icon: GitCompareArrows, className: 'text-accent1' },
   'linear-issue': { icon: CircleDot, className: 'text-accent3' },
   manual: { icon: CircleDot, className: 'text-icon3' },
 };
@@ -760,6 +789,7 @@ function itemThreadSession(sessions: Record<string, WorkItemSessionRef>): WorkIt
 function WorkItemCard({
   item,
   columnStage,
+  allItems,
   liveWorktreePaths,
   runDisabled,
   runStarting,
@@ -770,6 +800,7 @@ function WorkItemCard({
 }: {
   item: WorkItem;
   columnStage: BoardStageId;
+  allItems: WorkItem[];
   /** Worktrees that still exist; session refs outside this set are stale. */
   liveWorktreePaths: ReadonlySet<string>;
   runDisabled: boolean;
@@ -790,14 +821,23 @@ function WorkItemCard({
   // Offer only runs whose session slot hasn't been used yet on this card.
   const runActions = runSpec === null ? [] : runSpec.actions.filter(action => !(action.role in liveSessions));
   const threadSession = itemThreadSession(liveSessions);
+  const relatedItems = allItems.filter(
+    other =>
+      other.id !== item.id &&
+      other.stages.includes(columnStage) &&
+      (other.parentWorkItemId === item.id || item.parentWorkItemId === other.id),
+  );
 
   return (
     <article
       draggable
       aria-label={item.title}
       data-testid="work-item-card"
+      data-related={relatedItems.length > 0 ? 'true' : undefined}
       onDragStart={event => setDragPayload(event, { kind: 'work-item', id: item.id, fromStage: columnStage })}
-      className="flex cursor-grab flex-col gap-1.5 rounded-md border border-border1 bg-surface4 p-2 active:cursor-grabbing"
+      className={`flex cursor-grab flex-col gap-1.5 rounded-md border bg-surface4 p-2 active:cursor-grabbing ${
+        relatedItems.length > 0 ? 'border-accent2/50 ring-1 ring-accent2/20' : 'border-border1'
+      }`}
     >
       <div className="flex items-start gap-2">
         <Icon size={14} className={`mt-0.5 shrink-0 ${iconClassName}`} aria-hidden />
@@ -808,10 +848,12 @@ function WorkItemCard({
             rel="noreferrer"
             className="min-w-0 flex-1 truncate text-ui-sm text-icon6 no-underline hover:underline"
           >
-            {item.title}
+            <SourceTitle source={item.source} title={item.title} />
           </a>
         ) : (
-          <span className="min-w-0 flex-1 truncate text-ui-sm text-icon6">{item.title}</span>
+          <span className="min-w-0 flex-1 truncate text-ui-sm text-icon6">
+            <SourceTitle source={item.source} title={item.title} />
+          </span>
         )}
         <DropdownMenu>
           <DropdownMenu.Trigger
@@ -841,6 +883,18 @@ function WorkItemCard({
           </DropdownMenu.Content>
         </DropdownMenu>
       </div>
+      {relatedItems.map(related => {
+        const relationText =
+          related.parentWorkItemId === item.id
+            ? `Related ${displayTitle(related.source, related.title)}`
+            : `Related to ${displayTitle(related.source, related.title)}`;
+        return (
+          <div key={related.id} className="flex items-center gap-1 text-ui-xs text-accent2" aria-label={relationText}>
+            <Link2 size={11} aria-hidden />
+            <span className="truncate">{relationText}</span>
+          </div>
+        );
+      })}
       {(otherStages.length > 0 || threadSession !== null) && (
         <div className="flex flex-wrap items-center gap-1.5">
           {otherStages.map(stage => (
@@ -911,7 +965,9 @@ function CandidateCard({
       <div className="flex items-start gap-2">
         <Icon size={14} className={`mt-0.5 shrink-0 ${candidate.iconClassName}`} aria-hidden />
         <a href={candidate.url} target="_blank" rel="noreferrer" className="min-w-0 flex-1 no-underline">
-          <span className="block truncate text-ui-sm text-icon6">{candidate.title}</span>
+          <span className="block truncate text-ui-sm text-icon6">
+            <SourceTitle source={candidate.source} title={candidate.title} />
+          </span>
           <span className="block truncate text-ui-xs text-icon3">{candidate.meta}</span>
         </a>
       </div>
