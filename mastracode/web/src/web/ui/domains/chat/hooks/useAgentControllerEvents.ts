@@ -45,9 +45,14 @@ export function useAgentControllerEvents({
       if (connectedSnapshotRef.current === 'connected') setConnectionState('dropped');
     };
 
+    // Deliberately NOT passing `reconnect: true`: the SDK's internal reconnect
+    // swallows stream drops (onError never fires), so the drop → state re-sync
+    // → resubscribe loop in useAgentControllerConnection never runs and events
+    // emitted during the gap are lost until a full page refresh. Recovery here
+    // is owned by that loop: onError marks the stream dropped, the session
+    // sync poll repairs state, and the new `epoch` resubscribes.
     void session
       .subscribe({
-        reconnect: true,
         onEvent: event => onEventRef.current(event),
         onError: () => {
           if (!disposed) disconnect();
