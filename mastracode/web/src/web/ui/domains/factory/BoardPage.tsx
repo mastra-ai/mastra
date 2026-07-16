@@ -69,11 +69,12 @@ function issueTriagePrompt(issueUrl: string): string {
 
 /**
  * Candidate feeds the Intake swimlane can browse. Only one paginated list is
- * shown at a time; when both are configured a pill switcher inside the column
- * picks the active one.
+ * shown at a time; a pill switcher inside the column picks the active feed
+ * when more than one is available.
  */
 const INTAKE_SOURCES = [
-  { id: 'github', label: 'GitHub' },
+  { id: 'github', label: 'Issues' },
+  { id: 'github-prs', label: 'PRs' },
   { id: 'linear', label: 'Linear' },
 ] as const;
 
@@ -141,7 +142,7 @@ interface BoardCandidate {
   meta: string;
   icon: ComponentType<{ size?: number; className?: string }>;
   iconClassName: string;
-  /** Column the candidate is offered in: issues in Intake, PRs in Review. */
+  /** Column the candidate is offered in: live candidates start in Intake. */
   column: BoardStageId;
   /** Runs the candidate can start; the first is the one-click default. */
   runActions: RunAction[];
@@ -205,7 +206,7 @@ function pullRequestCandidate(pr: GithubPullRequest): BoardCandidate {
     meta: `#${pr.number}${pr.author ? ` · ${pr.author}` : ''} · ${pr.headBranch} → ${pr.baseBranch}`,
     icon: GitPullRequest,
     iconClassName: 'text-accent1',
-    column: 'review',
+    column: 'intake',
     runActions: [
       {
         label: 'Review',
@@ -337,9 +338,11 @@ function readDragPayload(event: DragEvent): DragPayload | null {
 /**
  * Factory › Board: an org-wide kanban over the project's work items. The
  * Intake column merges persisted `intake` cards with live GitHub/Linear
- * candidates (issues/PRs that have no record yet — records are materialized
- * only when someone acts on them). Cards move between columns by drag-and-drop
- * or the card menu; moves only file/move cards, never start agent runs.
+ * candidates (issues and PRs that have no record yet — records are
+ * materialized only when someone acts on them). Everything enters through
+ * Intake and moves through the system from there. Cards move between columns
+ * by drag-and-drop or the card menu; moves only file/move cards, never start
+ * agent runs.
  */
 export function BoardPage() {
   return (
@@ -359,8 +362,9 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
   const configQuery = useIntakeConfigQuery();
   const linearStatusQuery = useLinearStatusQuery();
 
-  // Intake sources mirror the old Intake page gating: nothing is synced until
-  // it's picked in Settings › General. PRs always feed the board.
+  // Intake sources mirror the old Intake page gating: issues sync only once
+  // picked in Settings › General. Open PRs always feed the board; they start
+  // in Intake and only move once the Factory acts on them.
   const config = configQuery.data;
   const githubEnabled = config?.github.enabled ?? true;
   const githubSelected = config ? (config.github.projectIds?.includes(githubProjectId) ?? false) : true;
@@ -370,21 +374,22 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
     (config?.linear.enabled ?? false) && linearConnected && (config?.linear.projectIds?.length ?? 0) > 0;
 
   // The Intake swimlane browses one candidate feed at a time; a pill switcher
-  // inside the column picks between GitHub and Linear when both are set up.
+  // inside the column filters between Issues, PRs, and Linear as available.
   const githubIntakeActive = githubEnabled && githubSelected;
+  const availableIntakeSources: IntakeSource[] = [
+    ...(githubIntakeActive ? (['github'] as const) : []),
+    'github-prs' as const,
+    ...(linearReady ? (['linear'] as const) : []),
+  ];
   const [intakeSource, setIntakeSource] = useState<IntakeSource>('github');
-  const showIntakeSourceSwitch = githubIntakeActive && linearReady;
-  const activeIntakeSource: IntakeSource | null = showIntakeSourceSwitch
+  const showIntakeSourceSwitch = availableIntakeSources.length > 1;
+  const activeIntakeSource: IntakeSource | null = availableIntakeSources.includes(intakeSource)
     ? intakeSource
-    : githubIntakeActive
-      ? 'github'
-      : linearReady
-        ? 'linear'
-        : null;
+    : (availableIntakeSources[0] ?? null);
 
-  // The active intake feed loads on demand; Triage is populated by persisted board items.
+  // Only the active intake feed fetches; Triage is populated by persisted board items.
   const issues = useProjectIssuesQuery(activeIntakeSource === 'github' ? githubProjectId : undefined);
-  const pulls = useProjectPullRequestsQuery(githubProjectId);
+  const pulls = useProjectPullRequestsQuery(activeIntakeSource === 'github-prs' ? githubProjectId : undefined);
   const linearIssues = useLinearIssuesQuery(activeIntakeSource === 'linear');
 
   const upsert = useUpsertWorkItemMutation(githubProjectId);
@@ -422,7 +427,7 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
     const intakeIssues = activeIntakeSource === 'github' ? (issues.data ?? []) : [];
     const all: BoardCandidate[] = [
       ...intakeIssues.map(issueCandidate),
-      ...(pulls.data ?? []).map(pullRequestCandidate),
+      ...(activeIntakeSource === 'github-prs' ? (pulls.data ?? []).map(pullRequestCandidate) : []),
       ...(activeIntakeSource === 'linear' ? (linearIssues.data ?? []).map(linearCandidate) : []),
     ];
     const seen = new Set<string>();
@@ -480,14 +485,14 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
             headerExtras={
               stage.id === 'intake' && showIntakeSourceSwitch ? (
                 <div role="group" aria-label="Intake source" className="flex items-center gap-1 pb-1">
-                  {INTAKE_SOURCES.map(source => (
+                  {INTAKE_SOURCES.filter(source => availableIntakeSources.includes(source.id)).map(source => (
                     <button
                       key={source.id}
                       type="button"
-                      aria-pressed={intakeSource === source.id}
+                      aria-pressed={activeIntakeSource === source.id}
                       onClick={() => setIntakeSource(source.id)}
                       className={`rounded-full border px-2.5 py-0.5 text-ui-xs transition ${
-                        intakeSource === source.id
+                        activeIntakeSource === source.id
                           ? 'border-accent1 bg-surface4 text-icon6'
                           : 'border-border1 bg-transparent text-icon3 hover:text-icon5'
                       }`}
@@ -582,9 +587,13 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
                 />
               ))}
             {stage.id === 'intake' && (
-              <IntakeColumnExtras source={activeIntakeSource} issues={issues} linearIssues={linearIssues} />
+              <IntakeColumnExtras
+                source={activeIntakeSource}
+                issues={issues}
+                pulls={pulls}
+                linearIssues={linearIssues}
+              />
             )}
-            {stage.id === 'review' && <ReviewColumnExtras pulls={pulls} />}
           </BoardColumn>
         ))}
       </div>
@@ -851,15 +860,17 @@ function CandidateCard({
 function IntakeColumnExtras({
   source,
   issues,
+  pulls,
   linearIssues,
 }: {
   source: IntakeSource | null;
   issues: ReturnType<typeof useProjectIssuesQuery>;
+  pulls: ReturnType<typeof useProjectPullRequestsQuery>;
   linearIssues: ReturnType<typeof useLinearIssuesQuery>;
 }) {
   const { baseUrl } = useApiConfig();
   if (source === null) return null;
-  const feed = source === 'github' ? issues : linearIssues;
+  const feed = source === 'github' ? issues : source === 'github-prs' ? pulls : linearIssues;
 
   return (
     <>
@@ -881,23 +892,6 @@ function IntakeColumnExtras({
         isFetchingNextPage={Boolean(feed.isFetchingNextPage)}
         onLoadMore={() => void feed.fetchNextPage()}
         label="Load more candidates"
-      />
-    </>
-  );
-}
-
-/** Review column tail: loading state and pull-request pagination. */
-function ReviewColumnExtras({ pulls }: { pulls: ReturnType<typeof useProjectPullRequestsQuery> }) {
-  return (
-    <>
-      {pulls.isPending && pulls.fetchStatus !== 'idle' && (
-        <SkeletonRows label="Loading pull requests" rows={3} rowClassName="h-12 w-full" />
-      )}
-      <LoadMoreSentinel
-        hasNextPage={Boolean(pulls.hasNextPage)}
-        isFetchingNextPage={Boolean(pulls.isFetchingNextPage)}
-        onLoadMore={() => void pulls.fetchNextPage()}
-        label="Load more pull requests"
       />
     </>
   );

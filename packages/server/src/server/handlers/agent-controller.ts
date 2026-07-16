@@ -98,8 +98,17 @@ const createSessionBodySchema = z.object({
 // file, 20MB total), adjusted for base64 overhead (~4/3x).
 const MAX_FILE_DATA_LENGTH = 14 * 1024 * 1024;
 const MAX_TOTAL_FILE_DATA_LENGTH = 28 * 1024 * 1024;
+/**
+ * Optional client-supplied request context, merged into the server-derived
+ * request context by the adapter context middleware (reserved keys are
+ * server-controlled). Declared on run-triggering body schemas so the OpenAPI
+ * spec documents it.
+ */
+const bodyRequestContextSchema = z.record(z.string(), z.any()).optional();
+
 const sendMessageBodySchema = z.object({
   message: z.string(),
+  requestContext: bodyRequestContextSchema,
   // Optional attachments (e.g. pasted images). `data` is base64-encoded.
   files: z
     .array(
@@ -115,10 +124,11 @@ const sendMessageBodySchema = z.object({
     })
     .optional(),
 });
-const steerBodySchema = z.object({ message: z.string() });
+const steerBodySchema = z.object({ message: z.string(), requestContext: bodyRequestContextSchema });
 const toolApprovalBodySchema = z.object({
   toolCallId: z.string(),
   approved: z.boolean(),
+  requestContext: bodyRequestContextSchema,
 });
 const toolSuspensionBodySchema = z.object({
   toolCallId: z.string(),
@@ -126,6 +136,7 @@ const toolSuspensionBodySchema = z.object({
   // multi-select); for submit_plan it's `{ action, feedback? }`; for
   // request_access it's "Yes"/"No".
   resumeData: z.any(),
+  requestContext: bodyRequestContextSchema,
 });
 const switchModeBodySchema = z.object({ modeId: z.string() });
 const switchModelBodySchema = z.object({
@@ -162,7 +173,7 @@ const listThreadsQuerySchema = z.object({
     }, z.record(z.string(), z.string()).optional())
     .optional(),
 });
-const followUpBodySchema = z.object({ message: z.string() });
+const followUpBodySchema = z.object({ message: z.string(), requestContext: bodyRequestContextSchema });
 
 const sendNotificationBodySchema = z.object({
   source: z.string(),

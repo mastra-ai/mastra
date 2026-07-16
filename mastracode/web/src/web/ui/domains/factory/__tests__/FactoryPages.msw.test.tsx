@@ -367,6 +367,7 @@ describe('Factory sidebar section', () => {
     // The Board link appears once the GitHub status query resolves as connected.
     expect(await within(nav).findByRole('link', { name: /Board/ })).toHaveAttribute('href', '/factory/board');
     expect(within(nav).getByRole('link', { name: /Metrics/ })).toHaveAttribute('href', '/factory/metrics');
+    expect(within(nav).getByRole('link', { name: /Audit/ })).toHaveAttribute('href', '/factory/audit');
     // The factory Sessions list is nested under the same menu.
     expect(within(nav).getByRole('region', { name: 'Factory sessions' })).toBeInTheDocument();
   });
@@ -387,6 +388,7 @@ describe('Factory sidebar section', () => {
     expect(within(nav).getByRole('region', { name: 'Factory sessions' })).toBeInTheDocument();
     await waitFor(() => expect(within(nav).queryByRole('link', { name: /Board/ })).not.toBeInTheDocument());
     expect(within(nav).queryByRole('link', { name: /Metrics/ })).not.toBeInTheDocument();
+    expect(within(nav).queryByRole('link', { name: /Audit/ })).not.toBeInTheDocument();
   });
 });
 
@@ -423,7 +425,7 @@ describe('Factory Board routing', () => {
 });
 
 describe('Factory Board — Intake candidates', () => {
-  it('given open issues and PRs, when the Board renders, then issues appear as Intake candidates and PRs as Review candidates', async () => {
+  it('given open issues and PRs, when the Board renders, then both appear as Intake candidates behind the feed filter', async () => {
     const state = useBoardHandlers({ issues, pullRequests });
     renderAt('/factory/board');
 
@@ -443,11 +445,13 @@ describe('Factory Board — Intake candidates', () => {
     expect(
       within(within(intake).getByRole('article', { name: 'Fix flaky test' })).queryByText('bug'),
     ).not.toBeInTheDocument();
-    // Open PRs are review work: they land in the Review column, not Intake.
-    const review = column('review');
-    expect(await within(review).findByText('Add factory pages')).toBeInTheDocument();
-    expect(within(review).getAllByTestId('candidate-card')).toHaveLength(1);
-    expect(within(intake).queryByText('Add factory pages')).not.toBeInTheDocument();
+    // PRs start in Intake too — behind the PRs feed pill, never in Review.
+    expect(within(column('review')).queryByTestId('candidate-card')).not.toBeInTheDocument();
+    const sources = within(intake).getByRole('group', { name: 'Intake source' });
+    await userEvent.click(within(sources).getByRole('button', { name: 'PRs' }));
+    expect(await within(column('intake')).findByText('Add factory pages')).toBeInTheDocument();
+    expect(within(column('intake')).queryByText('Fix flaky test')).not.toBeInTheDocument();
+    expect(within(column('review')).queryByTestId('candidate-card')).not.toBeInTheDocument();
   });
 
   it('given an untriaged issue candidate, when Triage issue is chosen, then a triage run starts, files a triage card, and navigates to the thread', async () => {
@@ -571,7 +575,7 @@ describe('Factory Board — Intake candidates', () => {
     });
     renderAt('/factory/board', githubProject, connectedStatus, { linearStatus: linearConnectedStatus });
 
-    // GitHub is the default feed: its issues show, Linear's don't.
+    // GitHub issues are the default feed: they show, Linear's don't.
     const intake = await screen.findByTestId('board-column-intake');
     await within(intake).findByText('Fix flaky test');
     expect(within(intake).queryByText('Fix intake sync')).not.toBeInTheDocument();
@@ -582,11 +586,13 @@ describe('Factory Board — Intake candidates', () => {
     // Only the Linear feed's candidates remain in Intake.
     expect(await within(column('intake')).findByText('Fix intake sync')).toBeInTheDocument();
     await waitFor(() => expect(within(column('intake')).queryByText('Fix flaky test')).not.toBeInTheDocument());
-    // The switch only affects the Intake feed: PRs and persisted cards stay.
-    expect(within(column('review')).getByText('Add factory pages')).toBeInTheDocument();
+    // The switch only affects the Intake feed: persisted cards stay put, and
+    // PR candidates only render behind their own feed pill.
     expect(within(column('execute')).getByText('Linear card')).toBeInTheDocument();
+    expect(within(column('intake')).queryByText('Add factory pages')).not.toBeInTheDocument();
+    expect(within(column('review')).queryByTestId('candidate-card')).not.toBeInTheDocument();
 
-    await userEvent.click(within(sources).getByRole('button', { name: 'GitHub' }));
+    await userEvent.click(within(sources).getByRole('button', { name: 'Issues' }));
     expect(await within(column('intake')).findByText('Fix flaky test')).toBeInTheDocument();
     expect(within(column('intake')).queryByText('Fix intake sync')).not.toBeInTheDocument();
   });
@@ -602,15 +608,18 @@ describe('Factory Board — Intake candidates', () => {
     expect(within(intake).getByText(/ENG-42/)).toBeInTheDocument();
   });
 
-  it('given the Linear feature is disabled, when the Board renders, then no Linear candidates or source switch appear', async () => {
+  it('given the Linear feature is disabled, when the Board renders, then no Linear candidates or Linear feed pill appear', async () => {
     useBoardHandlers({ issues, linearIssues });
     renderAt('/factory/board');
 
     const intake = await screen.findByTestId('board-column-intake');
     expect(await within(intake).findByText('Fix flaky test')).toBeInTheDocument();
     expect(within(intake).queryByText('Fix intake sync')).not.toBeInTheDocument();
-    // A single active feed needs no switcher.
-    expect(within(intake).queryByRole('group', { name: 'Intake source' })).not.toBeInTheDocument();
+    // Issues + PRs still get a switcher, but Linear is not offered.
+    const sources = within(intake).getByRole('group', { name: 'Intake source' });
+    expect(within(sources).getByRole('button', { name: 'Issues' })).toBeInTheDocument();
+    expect(within(sources).getByRole('button', { name: 'PRs' })).toBeInTheDocument();
+    expect(within(sources).queryByRole('button', { name: 'Linear' })).not.toBeInTheDocument();
   });
 
   it('given a work item exists for an issue, when the Board renders, then live candidates are deduped by source key', async () => {
@@ -1183,15 +1192,16 @@ describe('Factory Board — investigate flow', () => {
     }
   });
 
-  it('given a PR candidate, when Review is clicked, then the review prompt runs and a work item materializes into Review with a review session', async () => {
+  it('given a PR candidate in Intake, when Review is clicked, then the review prompt runs and a work item materializes into Review with a review session', async () => {
     const state = useBoardHandlers({ pullRequests });
     const captured = useFactoryRunHandlers('factory-pr-34');
     const { router } = renderAt('/factory/board');
 
-    await screen.findByTestId('board-column-intake');
-    const review = column('review');
-    await within(review).findByText('Add factory pages');
-    await userEvent.click(within(review).getByRole('button', { name: 'Review Add factory pages' }));
+    const intake = await screen.findByTestId('board-column-intake');
+    const sources = within(intake).getByRole('group', { name: 'Intake source' });
+    await userEvent.click(within(sources).getByRole('button', { name: 'PRs' }));
+    await within(intake).findByText('Add factory pages');
+    await userEvent.click(within(intake).getByRole('button', { name: 'Review Add factory pages' }));
 
     await waitFor(() => expect(router.state.location.pathname).toBe(`/threads/${THREAD_ID}`));
     expect(captured.worktree).toMatchObject({ branch: 'factory/pr-34' });
