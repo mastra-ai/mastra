@@ -426,38 +426,26 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
           .map((item: any) => this.parseMessageData(item))
           .filter((msg: any): msg is MastraDBMessage => 'content' in msg && typeof msg.content === 'object');
 
+      const toIso = (value: Date | string) => (value instanceof Date ? value.toISOString() : String(value));
+
       const applyQueryFilters = (q: any) => {
         let query = q;
+        const dateRange = filter?.dateRange;
+        const startIso = dateRange?.start ? toIso(dateRange.start) : undefined;
+        const endIso = dateRange?.end ? toIso(dateRange.end) : undefined;
+        const startOp = dateRange?.startExclusive ? 'gt' : 'gte';
+        const endOp = dateRange?.endExclusive ? 'lt' : 'lte';
 
-        if (filter?.dateRange?.start && filter?.dateRange?.end) {
-          const startIso =
-            filter.dateRange.start instanceof Date
-              ? filter.dateRange.start.toISOString()
-              : String(filter.dateRange.start);
-          const endIso =
-            filter.dateRange.end instanceof Date ? filter.dateRange.end.toISOString() : String(filter.dateRange.end);
-
-          if (filter.dateRange.startExclusive && filter.dateRange.endExclusive) {
-            query = query.gt({ createdAt: startIso }).lt({ createdAt: endIso });
-          } else if (filter.dateRange.startExclusive) {
-            query = query.gt({ createdAt: startIso }).lte({ createdAt: endIso });
-          } else if (filter.dateRange.endExclusive) {
-            query = query.gte({ createdAt: startIso }).lt({ createdAt: endIso });
-          } else {
+        if (startIso && endIso) {
+          if (startOp === 'gte' && endOp === 'lte') {
             query = query.between({ createdAt: startIso }, { createdAt: endIso });
+          } else {
+            query = query[startOp]({ createdAt: startIso })[endOp]({ createdAt: endIso });
           }
-        } else if (filter?.dateRange?.start) {
-          const startIso =
-            filter.dateRange.start instanceof Date
-              ? filter.dateRange.start.toISOString()
-              : String(filter.dateRange.start);
-          query = filter.dateRange.startExclusive
-            ? query.gt({ createdAt: startIso })
-            : query.gte({ createdAt: startIso });
-        } else if (filter?.dateRange?.end) {
-          const endIso =
-            filter.dateRange.end instanceof Date ? filter.dateRange.end.toISOString() : String(filter.dateRange.end);
-          query = filter.dateRange.endExclusive ? query.lt({ createdAt: endIso }) : query.lte({ createdAt: endIso });
+        } else if (startIso) {
+          query = query[startOp]({ createdAt: startIso });
+        } else if (endIso) {
+          query = query[endOp]({ createdAt: endIso });
         }
 
         if (resourceId) {
