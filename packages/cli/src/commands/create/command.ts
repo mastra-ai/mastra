@@ -63,7 +63,7 @@ export function configureCreateCommand(command: Command) {
     .description('Create a new Mastra project')
     .argument('[project-name]', 'Directory name of the project')
     .option('--yes', 'Skip prompts and use defaults')
-    .option('--empty', 'Create a provider-free empty project')
+    .option('--empty', 'Create an empty project')
     .option(
       '-l, --llm <provider>',
       `Model provider (${CREATE_LLM_PROVIDERS.map(provider => provider.value).join(', ')})`,
@@ -104,15 +104,15 @@ export function getCreateMode(options: Pick<NormalizedCreateOptions, 'empty' | '
 
 export function validateCreateOptionConflicts(options: NormalizedCreateOptions): CreateMode {
   if (options.empty && options.template !== undefined) {
-    throw new Error('The --empty and --template options cannot be used together');
+    throw new Error(`The --empty and --template options can't be used together`);
   }
 
   const mode = getCreateMode(options);
   if (mode !== 'managed' && options.llmProvider !== undefined) {
-    throw new Error('The --llm option can only be used with the managed agent-harness project');
+    throw new Error('The --llm option can only be used with the default template');
   }
   if (mode !== 'managed' && options.llmApiKey !== undefined) {
-    throw new Error('The --llm-api-key option can only be used with the managed agent-harness project');
+    throw new Error('The --llm-api-key option can only be used with the default template');
   }
   if (options.yes && options.template === true) {
     throw new Error('The --yes option requires a template value when --template is used');
@@ -150,13 +150,15 @@ export function validateProjectName(value: string): string {
   return projectName;
 }
 
+const NUMERIC_IDENTIFIER_PATTERN = /^\d+$/;
+
 function getPrereleaseChannel(version: string): string | undefined {
   const separator = version.indexOf('-');
   if (separator === -1) return undefined;
   return version
     .slice(separator + 1)
     .split('.')
-    .find(identifier => !/^\d+$/.test(identifier));
+    .find(identifier => !NUMERIC_IDENTIFIER_PATTERN.test(identifier));
 }
 
 export function selectMatchingDistTag(version: string, output: string): string | undefined {

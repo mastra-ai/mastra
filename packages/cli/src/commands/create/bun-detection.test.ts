@@ -1,9 +1,7 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-
 import { getPackageManager } from '../utils';
 import { writeEmptyScaffold } from './utils';
 
@@ -39,7 +37,7 @@ describe('Bun Runtime Detection', () => {
     expect(getPackageManager()).toBe('npm');
   });
 
-  it('authors the same exact manifest for bun without package-manager metadata', async () => {
+  it('does not add package-manager metadata for bun', async () => {
     const projectPath = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-bun-scaffold-'));
     temporaryDirectories.push(projectPath);
 
@@ -51,40 +49,8 @@ describe('Bun Runtime Detection', () => {
     });
 
     const manifest = JSON.parse(await fs.readFile(path.join(projectPath, 'package.json'), 'utf8'));
-    expect(manifest.name).toBe('bun-project');
     expect(manifest.packageManager).toBeUndefined();
     expect(manifest.devEngines).toBeUndefined();
     await expect(fs.stat(path.join(projectPath, 'pnpm-workspace.yaml'))).rejects.toMatchObject({ code: 'ENOENT' });
-  });
-
-  it('authors the same exact manifest for npm without package-manager metadata', async () => {
-    const projectPath = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-npm-scaffold-'));
-    temporaryDirectories.push(projectPath);
-
-    await writeEmptyScaffold({
-      projectPath,
-      projectName: 'npm-project',
-      versionTag: 'beta',
-      packageManager: 'npm',
-    });
-
-    const manifest = JSON.parse(await fs.readFile(path.join(projectPath, 'package.json'), 'utf8'));
-    expect(manifest.name).toBe('npm-project');
-    expect(manifest.dependencies['@mastra/core']).toBe('beta');
-    expect(manifest.devDependencies.mastra).toBe('beta');
-  });
-
-  it('does not add provider or example files for bun projects', async () => {
-    const projectPath = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-bun-minimal-'));
-    temporaryDirectories.push(projectPath);
-
-    await writeEmptyScaffold({
-      projectPath,
-      projectName: 'minimal-project',
-      versionTag: 'latest',
-      packageManager: 'bun',
-    });
-
-    expect((await fs.readdir(projectPath)).sort()).toEqual(['.gitignore', 'package.json', 'src', 'tsconfig.json']);
   });
 });

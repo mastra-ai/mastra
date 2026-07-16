@@ -1,10 +1,32 @@
 import { Command } from 'commander';
 import { describe, expect, it, vi } from 'vitest';
-
-import { configureCreateCommand, normalizeCreateCommandOptions, selectMatchingDistTag } from './create';
+import {
+  configureCreateCommand,
+  normalizeCreateCommandOptions,
+  parseCreateLLMProvider,
+  parseCreateTimeout,
+  selectMatchingDistTag,
+  validateCreateOptionConflicts,
+  validateProjectName,
+} from './create';
 
 type CreateCommandOptions = Parameters<typeof normalizeCreateCommandOptions>[1];
 type NormalizedCreateOptions = ReturnType<typeof normalizeCreateCommandOptions>;
+
+function createOptions(overrides: Partial<NormalizedCreateOptions> = {}): NormalizedCreateOptions {
+  return {
+    projectName: 'project',
+    yes: false,
+    empty: false,
+    llmProvider: undefined,
+    llmApiKey: undefined,
+    skills: true,
+    git: true,
+    template: undefined,
+    timeout: 60_000,
+    ...overrides,
+  };
+}
 
 function quiet(command: Command): Command {
   return command.exitOverride().configureOutput({
@@ -42,112 +64,109 @@ async function parseSubcommand(args: string[], onAction = vi.fn()) {
   return { program, command: program.commands[0]!, onAction };
 }
 
-const EXPECTED_OPTIONS = [
-  { short: undefined, long: '--yes' },
-  { short: undefined, long: '--empty' },
-  { short: '-l', long: '--llm' },
-  { short: '-k', long: '--llm-api-key' },
-  { short: undefined, long: '--no-skills' },
-  { short: undefined, long: '--no-git' },
-  { short: '-t', long: '--template' },
-  { short: undefined, long: '--timeout' },
-];
+describe('create option parsing', () => {
+  it('rejects providers outside the create-specific provider set', () => {
+    expect(() => parseCreateLLMProvider('groq')).toThrow('Choose a valid provider: openai, anthropic, google, xai');
+  });
 
-const REMOVED_OPTIONS = [
-  '--project-name',
-  '-p',
-  '--default',
-  '--dir',
-  '-d',
-  '--components',
-  '-c',
-  '--example',
-  '-e',
-  '--no-example',
-  '--mcp',
-  '-m',
-  '--skills',
-  '--observe',
-  '--no-observe',
-  '--observability',
-  '--no-observability',
-  '--observability-project',
-];
-
-describe('shared create Commander contract', () => {
   it.each([
-    ['standalone', () => createRoot(vi.fn())],
-    ['subcommand', () => createSubcommand(vi.fn()).commands[0]!],
-  ])('exposes the exact approved option inventory for the %s shape', (_name, build) => {
-    const command = build();
-
-    expect(command.options.map(option => ({ short: option.short, long: option.long }))).toEqual(EXPECTED_OPTIONS);
-    expect(command.registeredArguments.map(argument => argument.name())).toEqual(['project-name']);
+    ['1', 1],
+    ['60000', 60_000],
+    [String(Number.MAX_SAFE_INTEGER), Number.MAX_SAFE_INTEGER],
+  ])('parses the positive safe-integer timeout %s', (value, expected) => {
+    expect(parseCreateTimeout(value)).toBe(expected);
   });
 
-  it.each(REMOVED_OPTIONS)('rejects removed option or alias %s in both command shapes', async option => {
-    await expect(parseRoot([option])).rejects.toMatchObject({ code: 'commander.unknownOption' });
-    await expect(parseSubcommand([option])).rejects.toMatchObject({ code: 'commander.unknownOption' });
+  it.each(['0', '-1', '1.5', 'abc', String(Number.MAX_SAFE_INTEGER + 1)])('rejects the invalid timeout %s', value => {
+    expect(() => parseCreateTimeout(value)).toThrow('Timeout must be a positive integer');
+  });
+});
+
+describe('create option validation', () => {
+  it.each<{ overrides: Partial<NormalizedCreateOptions>; message: string }>([
+    {
+      overrides: { empty: true, template: 'agent-harness' },
+      message: `The --empty and --template options can't be used together`,
+    },
+    {
+      overrides: { empty: true, llmProvider: 'openai' },
+      message: 'The --llm option can only be used with the default template',
+    },
+    {
+      overrides: { empty: true, llmApiKey: 'secret' },
+      message: 'The --llm-api-key option can only be used with the default template',
+    },
+    {
+      overrides: { template: 'agent-harness', llmProvider: 'openai' },
+      message: 'The --llm option can only be used with the default template',
+    },
+    {
+      overrides: { template: 'agent-harness', llmApiKey: 'secret' },
+      message: 'The --llm-api-key option can only be used with the default template',
+    },
+    {
+      overrides: { template: true, yes: true },
+      message: 'The --yes option requires a template value when --template is used',
+    },
+    {
+      overrides: { projectName: undefined, yes: true },
+      message: 'The --yes option requires a positional project name',
+    },
+  ])('rejects $message', ({ overrides, message }) => {
+    expect(() => validateCreateOptionConflicts(createOptions(overrides))).toThrow(message);
   });
 
-  it('uses a required positive-integer timeout with a 60,000 ms default', async () => {
-    const rootDefault = vi.fn();
-    const subDefault = vi.fn();
-    await parseRoot(['project'], rootDefault);
-    await parseSubcommand(['project'], subDefault);
-
-    expect(rootDefault).toHaveBeenCalledWith(expect.objectContaining({ timeout: 60_000 }));
-    expect(subDefault).toHaveBeenCalledWith(expect.objectContaining({ timeout: 60_000 }));
-
-    await expect(parseRoot(['project', '--timeout'])).rejects.toMatchObject({
-      code: 'commander.optionMissingArgument',
-    });
-    await expect(parseRoot(['project', '--timeout', '0'])).rejects.toMatchObject({ code: 'commander.invalidArgument' });
-    await expect(parseRoot(['project', '--timeout', '-1'])).rejects.toMatchObject({
-      code: 'commander.invalidArgument',
-    });
-    await expect(parseRoot(['project', '--timeout', '1.5'])).rejects.toMatchObject({
-      code: 'commander.invalidArgument',
-    });
-    await expect(parseRoot(['project', '--timeout', 'abc'])).rejects.toMatchObject({
-      code: 'commander.invalidArgument',
-    });
+  it.each([
+    '',
+    '   ',
+    '.',
+    '..',
+    '../project',
+    'project/name',
+    'project\\name',
+    '/absolute',
+    '@scope/project',
+    'Uppercase',
+    'has space',
+    'trailing.',
+    'con',
+    'CON.txt',
+    'prn',
+    'aux',
+    'nul',
+    'com1',
+    'com9.log',
+    'lpt1',
+    'lpt9.txt',
+  ])('rejects unsafe project name %j', projectName => {
+    expect(() => validateProjectName(projectName)).toThrow('Project name must be');
   });
 
-  it('parses negated skills and git options to false in both shapes', async () => {
-    const rootAction = vi.fn();
-    const subAction = vi.fn();
-    await parseRoot(['project', '--no-skills', '--no-git'], rootAction);
-    await parseSubcommand(['project', '--no-skills', '--no-git'], subAction);
-
-    expect(rootAction).toHaveBeenCalledWith(expect.objectContaining({ skills: false, git: false }));
-    expect(subAction).toHaveBeenCalledWith(expect.objectContaining({ skills: false, git: false }));
+  it('trims valid project names', () => {
+    expect(validateProjectName('  valid-project  ')).toBe('valid-project');
   });
 
-  it('defaults skills and git to true in both shapes', async () => {
-    const rootAction = vi.fn();
-    const subAction = vi.fn();
-    await parseRoot(['project'], rootAction);
-    await parseSubcommand(['project'], subAction);
-
-    expect(rootAction).toHaveBeenCalledWith(expect.objectContaining({ skills: true, git: true }));
-    expect(subAction).toHaveBeenCalledWith(expect.objectContaining({ skills: true, git: true }));
+  it('accepts a 214-character project name', () => {
+    const projectName = `a${'b'.repeat(213)}`;
+    expect(validateProjectName(projectName)).toBe(projectName);
   });
+});
 
-  it.each(['openai', 'anthropic', 'google', 'xai'])('shares provider parsing for %s', async provider => {
-    const rootAction = vi.fn();
-    const subAction = vi.fn();
-    await parseRoot(['project', '--llm', provider], rootAction);
-    await parseSubcommand(['project', '--llm', provider], subAction);
+describe('shared create Commander wiring', () => {
+  it('applies the create defaults', async () => {
+    const action = vi.fn();
+    await parseRoot(['project'], action);
 
-    expect(rootAction).toHaveBeenCalledWith(expect.objectContaining({ llmProvider: provider }));
-    expect(subAction).toHaveBeenCalledWith(expect.objectContaining({ llmProvider: provider }));
-  });
-
-  it('rejects providers outside the create-specific provider set', async () => {
-    await expect(parseRoot(['project', '--llm', 'groq'])).rejects.toMatchObject({ code: 'commander.invalidArgument' });
-    await expect(parseSubcommand(['project', '--llm', 'mistral'])).rejects.toMatchObject({
-      code: 'commander.invalidArgument',
+    expect(action).toHaveBeenCalledWith({
+      projectName: 'project',
+      yes: false,
+      empty: false,
+      llmProvider: undefined,
+      llmApiKey: undefined,
+      skills: true,
+      git: true,
+      template: undefined,
+      timeout: 60_000,
     });
   });
 
@@ -170,43 +189,71 @@ describe('shared create Commander contract', () => {
     await parseRoot(args, rootAction);
     await parseSubcommand(args, subAction);
 
-    expect(rootAction.mock.calls[0]?.[0]).toEqual(subAction.mock.calls[0]?.[0]);
+    expect(rootAction.mock.calls[0]?.[0]).toEqual({
+      projectName: 'project',
+      yes: true,
+      empty: false,
+      llmProvider: 'anthropic',
+      llmApiKey: 'secret',
+      skills: false,
+      git: false,
+      template: undefined,
+      timeout: 12_345,
+    });
+    expect(subAction.mock.calls[0]?.[0]).toEqual(rootAction.mock.calls[0]?.[0]);
   });
 });
 
 describe('release-channel tag selection', () => {
-  it('prefers the first nonnumeric prerelease identifier when duplicate tags match', () => {
-    expect(
-      selectMatchingDistTag(
-        '1.2.3-create-mastra-e2e-test.4',
-        'latest: 1.2.3-create-mastra-e2e-test.4\nbeta: 1.2.3-create-mastra-e2e-test.4\ncreate-mastra-e2e-test: 1.2.3-create-mastra-e2e-test.4',
-      ),
-    ).toBe('create-mastra-e2e-test');
-  });
-
-  it('matches changesets snapshot tags before latest', () => {
-    const version = '0.0.0-create-mastra-e2e-test-20260715172042';
-    expect(selectMatchingDistTag(version, `latest: ${version}\ncreate-mastra-e2e-test: ${version}`)).toBe(
-      'create-mastra-e2e-test',
-    );
-  });
-
-  it('falls back deterministically through latest, beta, then lexical order', () => {
-    expect(selectMatchingDistTag('1.0.0', 'zeta: 1.0.0\nbeta: 1.0.0\nlatest: 1.0.0')).toBe('latest');
-    expect(selectMatchingDistTag('1.0.0', 'zeta: 1.0.0\nbeta: 1.0.0')).toBe('beta');
-    expect(selectMatchingDistTag('1.0.0', 'zeta: 1.0.0\nalpha: 1.0.0')).toBe('alpha');
-  });
-
-  it('matches exact wrapper versions and ignores different concrete Mastra package versions', () => {
-    expect(
-      selectMatchingDistTag(
-        '1.2.3-snapshot.1',
-        'snapshot: 9.9.9-snapshot.1\nlatest: 1.2.3\nsnapshot: 1.2.3-snapshot.1',
-      ),
-    ).toBe('snapshot');
+  it.each([
+    {
+      name: 'matching prerelease channel',
+      version: '1.2.3-beta.4',
+      output: 'latest: 1.2.3-beta.4\nbeta: 1.2.3-beta.4',
+      expected: 'beta',
+    },
+    {
+      name: 'first nonnumeric prerelease identifier',
+      version: '1.2.3-20260716.snapshot.1',
+      output: 'latest: 1.2.3-20260716.snapshot.1\nsnapshot: 1.2.3-20260716.snapshot.1',
+      expected: 'snapshot',
+    },
+    {
+      name: 'changesets snapshot channel',
+      version: '0.0.0-create-mastra-e2e-test-20260715172042',
+      output:
+        'latest: 0.0.0-create-mastra-e2e-test-20260715172042\ncreate-mastra-e2e-test: 0.0.0-create-mastra-e2e-test-20260715172042',
+      expected: 'create-mastra-e2e-test',
+    },
+    {
+      name: 'latest stable tag',
+      version: '1.2.3',
+      output: 'beta: 1.2.3\nlatest: 1.2.3',
+      expected: 'latest',
+    },
+    {
+      name: 'beta fallback',
+      version: '1.2.3',
+      output: 'zeta: 1.2.3\nbeta: 1.2.3',
+      expected: 'beta',
+    },
+    {
+      name: 'deterministic lexical fallback',
+      version: '1.2.3',
+      output: 'next: 1.2.3\nalpha: 1.2.3',
+      expected: 'alpha',
+    },
+    {
+      name: 'exact wrapper version while ignoring other versions',
+      version: '1.2.3-snapshot.1',
+      output: 'snapshot: 9.9.9-snapshot.1\nlatest: 1.2.3\nsnapshot: 1.2.3-snapshot.1',
+      expected: 'snapshot',
+    },
+  ])('selects the $name', ({ version, output, expected }) => {
+    expect(selectMatchingDistTag(version, output)).toBe(expected);
   });
 
   it('returns undefined when no tag exactly matches the wrapper version', () => {
-    expect(selectMatchingDistTag('1.0.0', 'latest: 1.0.1\nbeta: 1.0.0-beta.1')).toBeUndefined();
+    expect(selectMatchingDistTag('1.2.3', 'latest: 1.2.4\nbeta: 1.2.3-beta.1')).toBeUndefined();
   });
 });

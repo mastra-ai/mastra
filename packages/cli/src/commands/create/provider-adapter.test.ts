@@ -5,7 +5,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import type { CreateLLMProvider } from './command';
-import { adaptManagedAgentHarness, MANAGED_PROVIDER_CONFIGS } from './provider-adapter';
+import { adaptDefaultTemplate, MANAGED_PROVIDER_CONFIGS } from './provider-adapter';
 
 const templatePath = path.resolve('../../templates/template-agent-harness');
 const temporaryDirectories: string[] = [];
@@ -25,15 +25,7 @@ afterEach(async () => {
   );
 });
 
-const expected = {
-  openai: {
-    importLine: "import { openai } from '@ai-sdk/openai';",
-    primaryModel: 'openai/gpt-5.6-terra',
-    observationalModel: 'openai/gpt-5-mini',
-    webSearch: 'web_search: openai.tools.webSearch(),',
-    feature: 'OpenAI web search and direct web page fetching',
-    prerequisite: 'An OpenAI API key',
-  },
+const expectedAdaptations = {
   anthropic: {
     importLine: "import { anthropic } from '@ai-sdk/anthropic';",
     primaryModel: 'anthropic/claude-sonnet-5',
@@ -59,7 +51,7 @@ const expected = {
     prerequisite: 'An xAI API key',
   },
 } satisfies Record<
-  CreateLLMProvider,
+  Exclude<CreateLLMProvider, 'openai'>,
   {
     importLine: string;
     primaryModel: string;
@@ -70,14 +62,17 @@ const expected = {
   }
 >;
 
-describe('adaptManagedAgentHarness', () => {
-  for (const provider of Object.keys(expected) as CreateLLMProvider[]) {
-    it(`adapts the harness completely for ${provider}`, async () => {
+describe('adaptDefaultTemplate', () => {
+  for (const provider of Object.keys(MANAGED_PROVIDER_CONFIGS) as CreateLLMProvider[]) {
+    it(`adapts the default template completely for ${provider}`, async () => {
       const projectPath = await createFixture();
+      const agentPath = path.join(projectPath, 'src/mastra/agents/agent.ts');
+      const manifestPath = path.join(projectPath, 'package.json');
+      const originalAgent = await fs.readFile(agentPath, 'utf8');
+      const originalManifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
       const config = MANAGED_PROVIDER_CONFIGS[provider];
-      const providerExpected = expected[provider];
 
-      await adaptManagedAgentHarness({
+      const resolvedConfig = await adaptDefaultTemplate({
         projectPath,
         provider,
         apiKey: 'provider-secret',
@@ -85,25 +80,30 @@ describe('adaptManagedAgentHarness', () => {
       });
 
       const [agent, manifestSource, envExample, env, readme] = await Promise.all([
-        fs.readFile(path.join(projectPath, 'src/mastra/agents/agent.ts'), 'utf8'),
-        fs.readFile(path.join(projectPath, 'package.json'), 'utf8'),
+        fs.readFile(agentPath, 'utf8'),
+        fs.readFile(manifestPath, 'utf8'),
         fs.readFile(path.join(projectPath, '.env.example'), 'utf8'),
         fs.readFile(path.join(projectPath, '.env'), 'utf8'),
         fs.readFile(path.join(projectPath, 'README.md'), 'utf8'),
       ]);
       const manifest = JSON.parse(manifestSource);
 
-      expect(agent).toContain(providerExpected.importLine);
-      expect(agent).toContain(`model: '${providerExpected.primaryModel}'`);
-      expect(agent).toContain(`model: '${providerExpected.observationalModel}'`);
-      expect(agent).toContain('web_fetch: webFetchTool');
-      if (providerExpected.webSearch) {
-        expect(agent).toContain(providerExpected.webSearch);
+      if (provider === 'openai') {
+        expect(agent).toBe(originalAgent);
+        expect(resolvedConfig.sdkVersion).toBe(originalManifest.dependencies['@ai-sdk/openai']);
       } else {
-        expect(agent).not.toContain('web_search:');
+        const providerExpected = expectedAdaptations[provider];
+        expect(agent).toContain(providerExpected.importLine);
+        expect(agent).toContain(`model: '${providerExpected.primaryModel}'`);
+        expect(agent).toContain(`model: '${providerExpected.observationalModel}'`);
+        if (providerExpected.webSearch) expect(agent).toContain(providerExpected.webSearch);
+        else expect(agent).not.toContain('web_search:');
+        expect(readme).toContain(`- ${providerExpected.feature}`);
+        expect(readme).toContain(`- ${providerExpected.prerequisite}`);
       }
+      expect(agent).toContain('web_fetch: webFetchTool');
 
-      expect(manifest.dependencies[config.sdkPackage]).toBe(config.sdkVersion);
+      expect(manifest.dependencies[config.sdkPackage]).toBe(resolvedConfig.sdkVersion);
       for (const providerConfig of Object.values(MANAGED_PROVIDER_CONFIGS)) {
         if (providerConfig.sdkPackage !== config.sdkPackage) {
           expect(manifest.dependencies[providerConfig.sdkPackage]).toBeUndefined();
@@ -117,63 +117,138 @@ describe('adaptManagedAgentHarness', () => {
           }
         }
       }
-      expect(manifest.dependencies.zod).toBe('^4.4.3');
+      expect(manifest.dependencies.zod).toBe(originalManifest.dependencies.zod);
 
-      expect(envExample).toBe(`${config.apiKeyEnv}=\n`);
-      expect(env).toBe(`${config.apiKeyEnv}=provider-secret\n`);
+      expect(envExample).toContain(`${config.apiKeyEnv}=\n`);
+      expect(env).toContain(`${config.apiKeyEnv}=provider-secret\n`);
       if (process.platform !== 'win32') {
         expect((await fs.stat(path.join(projectPath, '.env'))).mode & 0o777).toBe(0o600);
       }
-      expect(readme).toContain(`- ${providerExpected.feature}`);
-      expect(readme).toContain(`- ${providerExpected.prerequisite}`);
       expect(readme).toContain(`npx create-mastra@latest <project-name> --llm ${provider}`);
       expect(readme).toContain(`set \`${config.apiKeyEnv}\``);
 
-      const managedFiles = `${agent}\n${manifestSource}\n${envExample}\n${env}\n${readme}`;
+      const functionalFiles = `${agent}\n${manifestSource}\n${envExample}\n${env}`;
       for (const [otherProvider, otherConfig] of Object.entries(MANAGED_PROVIDER_CONFIGS) as Array<
         [CreateLLMProvider, (typeof MANAGED_PROVIDER_CONFIGS)[CreateLLMProvider]]
       >) {
         if (otherProvider === provider) continue;
-        expect(managedFiles).not.toContain(otherConfig.sdkPackage);
-        expect(managedFiles).not.toContain(`${otherConfig.providerIdentifier}/`);
-        expect(managedFiles).not.toContain(otherConfig.apiKeyEnv);
-        expect(managedFiles).not.toContain(`${otherConfig.providerIdentifier}.tools`);
+        expect(functionalFiles).not.toContain(otherConfig.sdkPackage);
+        expect(functionalFiles).not.toContain(`${otherConfig.providerIdentifier}/`);
+        expect(functionalFiles).not.toContain(otherConfig.apiKeyEnv);
+        expect(functionalFiles).not.toContain(`${otherConfig.providerIdentifier}.tools`);
       }
     });
   }
 
+  it('preserves template-owned OpenAI versions, models, tools, and unrelated environment variables', async () => {
+    const projectPath = await createFixture();
+    const manifestPath = path.join(projectPath, 'package.json');
+    const agentPath = path.join(projectPath, 'src/mastra/agents/agent.ts');
+    const envExamplePath = path.join(projectPath, '.env.example');
+    const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
+    manifest.dependencies['@ai-sdk/openai'] = '^99.0.0';
+    await fs.writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+
+    const futureModels = ['openai/future-primary', 'openai/future-observational'];
+    let modelIndex = 0;
+    const updatedAgent = (await fs.readFile(agentPath, 'utf8'))
+      .replace(/(\bmodel\s*:\s*['"])openai\/[^'"]+(['"])/g, (_match: string, prefix: string, suffix: string) => {
+        return `${prefix}${futureModels[modelIndex++]!}${suffix}`;
+      })
+      .replace(/web_search\s*:\s*openai\.tools\.[^\n]+/, 'web_search: openai.tools.futureSearch(),');
+    await fs.writeFile(agentPath, updatedAgent, 'utf8');
+    await fs.writeFile(envExamplePath, '# Keep this comment\nOPENAI_API_KEY=\nTURSO_DATABASE_URL=\n', 'utf8');
+
+    const config = await adaptDefaultTemplate({ projectPath, provider: 'openai', versionTag: 'latest' });
+    const adaptedManifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
+
+    expect(config.sdkVersion).toBe('^99.0.0');
+    expect(adaptedManifest.dependencies['@ai-sdk/openai']).toBe('^99.0.0');
+    expect(await fs.readFile(agentPath, 'utf8')).toBe(updatedAgent);
+    expect(await fs.readFile(envExamplePath, 'utf8')).toBe(
+      '# Keep this comment\nOPENAI_API_KEY=\nTURSO_DATABASE_URL=\n',
+    );
+  });
+
+  it('adapts another provider when the template updates its OpenAI SDK, models, and search tool', async () => {
+    const projectPath = await createFixture();
+    const manifestPath = path.join(projectPath, 'package.json');
+    const agentPath = path.join(projectPath, 'src/mastra/agents/agent.ts');
+    const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
+    manifest.dependencies['@ai-sdk/openai'] = '^99.0.0';
+    await fs.writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+
+    const futureModels = ['openai/future-primary', 'openai/future-observational'];
+    let modelIndex = 0;
+    const updatedAgent = (await fs.readFile(agentPath, 'utf8'))
+      .replace(/(\bmodel\s*:\s*['"])openai\/[^'"]+(['"])/g, (_match: string, prefix: string, suffix: string) => {
+        return `${prefix}${futureModels[modelIndex++]!}${suffix}`;
+      })
+      .replace(/web_search\s*:\s*openai\.tools\.[^\n]+/, 'web_search: openai.tools.futureSearch(),');
+    await fs.writeFile(agentPath, updatedAgent, 'utf8');
+
+    await adaptDefaultTemplate({ projectPath, provider: 'anthropic', versionTag: 'latest' });
+
+    const adaptedAgent = await fs.readFile(agentPath, 'utf8');
+    const adaptedManifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
+    expect(adaptedAgent).toContain("model: 'anthropic/claude-sonnet-5'");
+    expect(adaptedAgent).toContain("model: 'anthropic/claude-haiku-4-5'");
+    expect(adaptedAgent).toContain('web_search: anthropic.tools.webSearch_20250305(),');
+    expect(adaptedManifest.dependencies['@ai-sdk/anthropic']).toBe(MANAGED_PROVIDER_CONFIGS.anthropic.sdkVersion);
+    expect(adaptedManifest.dependencies['@ai-sdk/openai']).toBeUndefined();
+  });
+
+  it('preserves extra environment entries when adapting to another provider', async () => {
+    const projectPath = await createFixture();
+    const envExamplePath = path.join(projectPath, '.env.example');
+    await fs.writeFile(envExamplePath, '# Storage\nTURSO_DATABASE_URL=\nOPENAI_API_KEY=\n', 'utf8');
+
+    await adaptDefaultTemplate({ projectPath, provider: 'anthropic', versionTag: 'latest' });
+
+    expect(await fs.readFile(envExamplePath, 'utf8')).toBe('# Storage\nTURSO_DATABASE_URL=\nANTHROPIC_API_KEY=\n');
+    expect(await fs.readFile(path.join(projectPath, '.env'), 'utf8')).toBe(
+      '# Storage\nTURSO_DATABASE_URL=\nANTHROPIC_API_KEY=\n',
+    );
+  });
+
   it('keeps the example placeholder actionable when the API key is skipped', async () => {
     const projectPath = await createFixture();
 
-    await adaptManagedAgentHarness({ projectPath, provider: 'anthropic', versionTag: 'latest' });
+    await adaptDefaultTemplate({ projectPath, provider: 'anthropic', versionTag: 'latest' });
 
-    expect(await fs.readFile(path.join(projectPath, '.env.example'), 'utf8')).toBe('ANTHROPIC_API_KEY=\n');
-    expect(await fs.readFile(path.join(projectPath, '.env'), 'utf8')).toBe('ANTHROPIC_API_KEY=\n');
+    expect(await fs.readFile(path.join(projectPath, '.env.example'), 'utf8')).toContain('ANTHROPIC_API_KEY=\n');
+    expect(await fs.readFile(path.join(projectPath, '.env'), 'utf8')).toContain('ANTHROPIC_API_KEY=\n');
   });
 
-  it('fails before writing when a required anchor is missing', async () => {
+  it('fails before writing when a required runtime site is missing', async () => {
     const projectPath = await createFixture();
     const agentPath = path.join(projectPath, 'src/mastra/agents/agent.ts');
     const originalAgent = await fs.readFile(agentPath, 'utf8');
-    await fs.writeFile(agentPath, originalAgent.replace("  model: 'openai/gpt-5.6-terra',\n", ''), 'utf8');
-    const beforeAttempt = await fs.readFile(agentPath, 'utf8');
+    const incompleteAgent = originalAgent.replace(/^\s*model:\s*['"]openai\/[^'"]+['"],?\s*$/m, '');
+    await fs.writeFile(agentPath, incompleteAgent, 'utf8');
 
-    await expect(adaptManagedAgentHarness({ projectPath, provider: 'google', versionTag: 'latest' })).rejects.toThrow(
-      'expected exactly one',
+    await expect(adaptDefaultTemplate({ projectPath, provider: 'google', versionTag: 'latest' })).rejects.toThrow(
+      'expected two OpenAI model assignments',
     );
 
-    expect(await fs.readFile(agentPath, 'utf8')).toBe(beforeAttempt);
+    expect(await fs.readFile(agentPath, 'utf8')).toBe(incompleteAgent);
     expect(await fs.readFile(path.join(projectPath, '.env.example'), 'utf8')).toBe('OPENAI_API_KEY=\n');
   });
 
-  it('fails when a required README anchor is duplicated', async () => {
-    const projectPath = await createFixture();
-    const readmePath = path.join(projectPath, 'README.md');
-    const readme = await fs.readFile(readmePath, 'utf8');
-    await fs.writeFile(readmePath, `${readme}\n- OpenAI web search and direct web page fetching\n`, 'utf8');
+  it('does not fail when README wording changes or README is absent', async () => {
+    const changedReadmeProject = await createFixture();
+    const changedReadmePath = path.join(changedReadmeProject, 'README.md');
+    await fs.writeFile(changedReadmePath, '# Custom project documentation\n', 'utf8');
 
-    await expect(adaptManagedAgentHarness({ projectPath, provider: 'xai', versionTag: 'latest' })).rejects.toThrow(
-      'found 2',
-    );
+    await expect(
+      adaptDefaultTemplate({ projectPath: changedReadmeProject, provider: 'xai', versionTag: 'latest' }),
+    ).resolves.toBeDefined();
+    expect(await fs.readFile(changedReadmePath, 'utf8')).toBe('# Custom project documentation\n');
+
+    const noReadmeProject = await createFixture();
+    await fs.rm(path.join(noReadmeProject, 'README.md'));
+    await expect(
+      adaptDefaultTemplate({ projectPath: noReadmeProject, provider: 'google', versionTag: 'latest' }),
+    ).resolves.toBeDefined();
   });
 });

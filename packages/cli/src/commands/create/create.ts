@@ -1,9 +1,7 @@
 import fsSync from 'node:fs';
 import path from 'node:path';
-
 import * as p from '@clack/prompts';
 import color from 'picocolors';
-
 import type { PosthogAnalytics } from '../../analytics/index';
 import { getAnalytics } from '../../analytics/index';
 import { cloneTemplate, installDependencies } from '../../utils/clone-template';
@@ -11,7 +9,6 @@ import { findTemplateByName, loadTemplates, selectTemplate } from '../../utils/t
 import type { Template } from '../../utils/template-utils';
 import { installMastraSkills } from '../init/skills-install';
 import { getPackageManager, gitInit, isGitInitialized } from '../utils.js';
-
 import { detectCodingAgentSkills } from './coding-agents';
 import {
   CREATE_LLM_PROVIDERS,
@@ -25,7 +22,7 @@ import {
   validateProjectName,
 } from './command';
 import type { CreateCommandOptions, CreateLLMProvider, CreateMode, NormalizedCreateOptions } from './command';
-import { adaptManagedAgentHarness } from './provider-adapter';
+import { adaptDefaultTemplate } from './provider-adapter';
 import {
   cleanupOwnedStagingDirectory,
   createOwnedStagingDirectory,
@@ -46,7 +43,7 @@ export {
 };
 export type { CreateCommandOptions, CreateLLMProvider, CreateMode, NormalizedCreateOptions };
 
-const MANAGED_AGENT_HARNESS_TEMPLATE: Template = {
+const DEFAULT_TEMPLATE: Template = {
   githubUrl: 'https://github.com/mastra-ai/template-agent-harness',
   title: 'Agent Harness',
   slug: 'template-agent-harness',
@@ -132,6 +129,12 @@ async function promptForProjectName(): Promise<string> {
       message: 'What do you want to name your project?',
       placeholder: 'my-mastra-app',
       signal,
+      validate: value => {
+        if (!value || value.length === 0) return `Project name can't be empty`;
+        if (fsSync.existsSync(value)) {
+          return `A directory named "${value}" already exists. Please choose a different name.`;
+        }
+      },
     }),
   );
 }
@@ -139,7 +142,7 @@ async function promptForProjectName(): Promise<string> {
 async function promptForProvider(): Promise<CreateLLMProvider> {
   return runCreatePrompt(signal =>
     p.select({
-      message: 'Select a default provider:',
+      message: 'Select a default model provider:',
       options: [...CREATE_LLM_PROVIDERS],
       signal,
     }),
@@ -169,7 +172,7 @@ async function promptForApiKey(provider: CreateLLMProvider): Promise<string | un
       mask: '*',
       clearOnError: true,
       validate: value => {
-        if (!value) return 'API key cannot be empty';
+        if (!value) return `API key can't be empty`;
       },
       signal,
     }),
@@ -277,7 +280,7 @@ export const create = async (args: CreateOptions): Promise<void> => {
       });
 
       if (isManaged) {
-        const providerConfig = await adaptManagedAgentHarness({
+        const providerConfig = await adaptDefaultTemplate({
           projectPath: staging.projectPath,
           provider: llmProvider!,
           apiKey: llmApiKey,
@@ -318,13 +321,11 @@ export const create = async (args: CreateOptions): Promise<void> => {
   if (mode === 'managed') {
     p.note(
       llmApiKey
-        ? `${color.green('Mastra agent harness installed!')}\n\nYour ${selectedApiKeyEnv} value was written to ${color.cyan('.env')}.`
-        : `${color.green('Mastra agent harness installed!')}\n\nSet ${selectedApiKeyEnv} in your ${color.cyan('.env')} file before starting.`,
+        ? `${color.green('Success!')}\n\nYour ${selectedApiKeyEnv} value was written to ${color.cyan('.env')}.`
+        : `${color.green('Success!')}\n\nSet ${selectedApiKeyEnv} in your ${color.cyan('.env')} file before starting.`,
     );
   } else if (mode === 'template') {
-    p.note(
-      `${color.green('Mastra template installed!')}\n\nAdd any required environment variables in your ${color.cyan('.env')} file.`,
-    );
+    p.note(`${color.green('Success!')}\n\nAdd any required environment variables in your ${color.cyan('.env')} file.`);
   }
 
   postCreate({ projectName, packageManager });
@@ -528,7 +529,7 @@ function createFromGitHubUrl(url: string): Template {
 }
 
 async function resolveTemplate(mode: Exclude<CreateMode, 'empty'>, template?: string | boolean): Promise<Template> {
-  if (mode === 'managed') return MANAGED_AGENT_HARNESS_TEMPLATE;
+  if (mode === 'managed') return DEFAULT_TEMPLATE;
 
   if (template === true) {
     const templates = await loadTemplates();

@@ -8,15 +8,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const CANCEL = Symbol('cancel');
 const fsMocks = vi.hoisted(() => ({
   existsSync: vi.fn(() => false),
-  rm: vi.fn(),
 }));
 
 vi.mock('node:fs', () => ({
   default: { existsSync: fsMocks.existsSync },
-}));
-
-vi.mock('node:fs/promises', () => ({
-  default: { rm: fsMocks.rm },
 }));
 
 vi.mock('@clack/prompts', () => ({
@@ -48,10 +43,6 @@ vi.mock('../../analytics/index', () => ({
   getAnalytics: vi.fn(() => null),
 }));
 
-vi.mock('../init/init', () => ({
-  init: vi.fn(),
-}));
-
 vi.mock('../init/skills-install', () => ({
   installMastraSkills: vi.fn(),
 }));
@@ -67,7 +58,7 @@ vi.mock('./coding-agents', () => ({
 }));
 
 vi.mock('./provider-adapter', () => ({
-  adaptManagedAgentHarness: vi.fn(),
+  adaptDefaultTemplate: vi.fn(),
 }));
 
 vi.mock('./utils', () => ({
@@ -98,6 +89,22 @@ const mockTemplate = {
   networks: [],
   workflows: [],
 };
+
+function mockValidGitHubProject() {
+  vi.mocked(global.fetch).mockImplementation(async input => {
+    const url = String(input);
+    if (url.endsWith('/package.json')) {
+      return {
+        ok: true,
+        text: async () => JSON.stringify({ dependencies: { '@mastra/core': 'latest' } }),
+      } as Response;
+    }
+    if (url.endsWith('/src/mastra/index.ts')) {
+      return { ok: true, text: async () => 'export const mastra = new Mastra({});' } as Response;
+    }
+    return { ok: false } as Response;
+  });
+}
 
 beforeEach(async () => {
   vi.clearAllMocks();
@@ -136,24 +143,22 @@ beforeEach(async () => {
   vi.mocked(createUtils.writeEmptyScaffold).mockResolvedValue();
 
   const adapter = await import('./provider-adapter');
-  vi.mocked(adapter.adaptManagedAgentHarness).mockResolvedValue({
+  vi.mocked(adapter.adaptDefaultTemplate).mockResolvedValue({
     displayName: 'OpenAI',
     sdkPackage: '@ai-sdk/openai',
-    sdkVersion: '^4.0.8',
+    sdkVersion: 'template-version',
     providerIdentifier: 'openai',
-    primaryModel: 'openai/gpt-5.6-terra',
-    observationalModel: 'openai/gpt-5-mini',
     apiKeyEnv: 'OPENAI_API_KEY',
     apiKeyPrerequisite: 'An OpenAI API key',
     featureDescription: 'OpenAI web search and direct web page fetching',
-    webSearchEntry: 'openai.tools.webSearch()',
   });
 });
 
 describe('create preflight and mode orchestration', () => {
-  it('uses managed agent-harness mode by default and --yes supplies OpenAI without prompts', async () => {
+  it('uses default template by default and --yes supplies OpenAI without prompts', async () => {
     const { create } = await import('./create');
     const { cloneTemplate } = await import('../../utils/clone-template');
+    const { loadTemplates } = await import('../../utils/template-utils');
     const prompts = await import('@clack/prompts');
     const resolveVersionTag = vi.fn().mockResolvedValue('latest');
 
@@ -163,14 +168,15 @@ describe('create preflight and mode orchestration', () => {
     expect(prompts.text).not.toHaveBeenCalled();
     expect(prompts.select).not.toHaveBeenCalled();
     expect(prompts.password).not.toHaveBeenCalled();
+    expect(loadTemplates).not.toHaveBeenCalled();
     expect(cloneTemplate).toHaveBeenCalledWith({
       template: mockTemplate,
       projectName: 'my-project',
       targetDir: '/tmp/.my-project.mastra-create-test',
       branch: undefined,
     });
-    const { adaptManagedAgentHarness } = await import('./provider-adapter');
-    expect(adaptManagedAgentHarness).toHaveBeenCalledWith({
+    const { adaptDefaultTemplate } = await import('./provider-adapter');
+    expect(adaptDefaultTemplate).toHaveBeenCalledWith({
       projectPath: '/tmp/.my-project.mastra-create-test/my-project',
       provider: 'openai',
       apiKey: undefined,
@@ -195,8 +201,8 @@ describe('create preflight and mode orchestration', () => {
     expect(resolveVersionTag).toHaveBeenCalledAfter(vi.mocked(prompts.select));
     expect(prompts.password).not.toHaveBeenCalled();
     expect(cloneTemplate).toHaveBeenCalledWith(expect.objectContaining({ projectName: 'prompted-project' }));
-    const { adaptManagedAgentHarness } = await import('./provider-adapter');
-    expect(adaptManagedAgentHarness).toHaveBeenCalledWith(
+    const { adaptDefaultTemplate } = await import('./provider-adapter');
+    expect(adaptDefaultTemplate).toHaveBeenCalledWith(
       expect.objectContaining({ provider: 'anthropic', apiKey: undefined }),
     );
   });
@@ -217,8 +223,8 @@ describe('create preflight and mode orchestration', () => {
     expect(prompts.select).toHaveBeenCalledOnce();
     expect(prompts.password).not.toHaveBeenCalled();
     expect(cloneTemplate).toHaveBeenCalledOnce();
-    const { adaptManagedAgentHarness } = await import('./provider-adapter');
-    expect(adaptManagedAgentHarness).toHaveBeenCalledWith(
+    const { adaptDefaultTemplate } = await import('./provider-adapter');
+    expect(adaptDefaultTemplate).toHaveBeenCalledWith(
       expect.objectContaining({ provider: 'google', apiKey: 'provided-key' }),
     );
   });
@@ -250,8 +256,8 @@ describe('create preflight and mode orchestration', () => {
     expect(trackEvent).toHaveBeenCalledWith('cli_template_used', { template_slug: mockTemplate.slug });
     expect(JSON.stringify(trackEvent.mock.calls)).not.toContain(mockTemplate.title);
     expect(JSON.stringify(trackEvent.mock.calls)).not.toContain(mockTemplate.githubUrl);
-    const { adaptManagedAgentHarness } = await import('./provider-adapter');
-    expect(adaptManagedAgentHarness).not.toHaveBeenCalled();
+    const { adaptDefaultTemplate } = await import('./provider-adapter');
+    expect(adaptDefaultTemplate).not.toHaveBeenCalled();
   });
 
   it('bare template mode prompts for the project name before loading and selecting templates', async () => {
@@ -279,6 +285,7 @@ describe('create preflight and mode orchestration', () => {
     expect(prompts.select).not.toHaveBeenCalled();
     expect(prompts.password).not.toHaveBeenCalled();
     expect(resolveVersionTag).toHaveBeenCalledOnce();
+    expect(resolveVersionTag).toHaveBeenCalledAfter(vi.mocked(prompts.text));
     expect(writeEmptyScaffold).toHaveBeenCalledWith({
       projectPath: '/tmp/.my-project.mastra-create-test/my-project',
       projectName: 'my-project',
@@ -287,21 +294,16 @@ describe('create preflight and mode orchestration', () => {
     });
   });
 
-  it.each([
-    [{ empty: true, template: 'agent-harness' }, '--empty and --template'],
-    [{ empty: true, llmProvider: 'openai' as const }, '--llm option'],
-    [{ empty: true, llmApiKey: 'secret' }, '--llm-api-key option'],
-    [{ template: 'agent-harness', llmProvider: 'openai' as const }, '--llm option'],
-    [{ template: 'agent-harness', llmApiKey: 'secret' }, '--llm-api-key option'],
-    [{ template: true, yes: true }, '--yes option requires a template value'],
-  ])('rejects conflicting options before prompts or side effects: %o', async (conflict, message) => {
+  it('rejects conflicting options before prompts or side effects', async () => {
     const { create } = await import('./create');
     const prompts = await import('@clack/prompts');
     const { loadTemplates } = await import('../../utils/template-utils');
     const { createOwnedStagingDirectory } = await import('./utils');
     const resolveVersionTag = vi.fn();
 
-    await expect(create({ projectName: 'my-project', ...conflict, resolveVersionTag })).rejects.toThrow(message);
+    await expect(
+      create({ projectName: 'my-project', empty: true, template: 'agent-harness', resolveVersionTag }),
+    ).rejects.toThrow(`The --empty and --template options can't be used together`);
 
     expect(prompts.text).not.toHaveBeenCalled();
     expect(prompts.select).not.toHaveBeenCalled();
@@ -310,51 +312,21 @@ describe('create preflight and mode orchestration', () => {
     expect(resolveVersionTag).not.toHaveBeenCalled();
   });
 
-  it('requires a positional project name with --yes before prompts or tag resolution', async () => {
+  it('rejects an unsafe project name before release-tag lookup or staging', async () => {
     const { create } = await import('./create');
-    const prompts = await import('@clack/prompts');
+    const { createOwnedStagingDirectory } = await import('./utils');
     const resolveVersionTag = vi.fn();
 
-    await expect(create({ yes: true, resolveVersionTag })).rejects.toThrow(
-      'The --yes option requires a positional project name',
+    await expect(create({ projectName: '../project', empty: true, resolveVersionTag })).rejects.toThrow(
+      'Project name must be',
     );
-    expect(prompts.text).not.toHaveBeenCalled();
     expect(resolveVersionTag).not.toHaveBeenCalled();
+    expect(createOwnedStagingDirectory).not.toHaveBeenCalled();
   });
 
-  it.each([
-    '',
-    '   ',
-    '.',
-    '..',
-    '../project',
-    'project/name',
-    'project\\name',
-    '/absolute',
-    '@scope/project',
-    'Uppercase',
-    'has space',
-    'trailing.',
-    'con',
-    'CON.txt',
-    'prn',
-    'aux',
-    'nul',
-    'com1',
-    'com9.log',
-    'lpt1',
-    'lpt9.txt',
-  ])('rejects unsafe project name %j before release-tag lookup', async projectName => {
+  it('uses the trimmed project name for the target and scaffold', async () => {
     const { create } = await import('./create');
-    const resolveVersionTag = vi.fn();
-
-    await expect(create({ projectName, empty: true, resolveVersionTag })).rejects.toThrow('Project name must be');
-    expect(resolveVersionTag).not.toHaveBeenCalled();
-  });
-
-  it('trims a valid project name once and uses it for the target and scaffold', async () => {
-    const { create } = await import('./create');
-    const { writeEmptyScaffold } = await import('./utils');
+    const { publishStagedProject, writeEmptyScaffold } = await import('./utils');
 
     await create({
       projectName: '  valid-project  ',
@@ -363,22 +335,17 @@ describe('create preflight and mode orchestration', () => {
     });
 
     expect(writeEmptyScaffold).toHaveBeenCalledWith(expect.objectContaining({ projectName: 'valid-project' }));
+    expect(publishStagedProject).toHaveBeenCalledWith(
+      expect.objectContaining({ projectName: 'valid-project', targetPath: path.resolve('valid-project') }),
+    );
   });
 
-  it('accepts the maximum 214-character safe project name', async () => {
-    const { create } = await import('./create');
-    const { writeEmptyScaffold } = await import('./utils');
-    const projectName = `a${'b'.repeat(213)}`;
-
-    await create({ projectName, empty: true, resolveVersionTag: vi.fn().mockResolvedValue('latest') });
-
-    expect(writeEmptyScaffold).toHaveBeenCalledWith(expect.objectContaining({ projectName }));
-  });
-
-  it('rejects an existing target before provider prompts, network access, or tag lookup', async () => {
+  it('rejects an existing target before prompts, network access, tag lookup, or staging', async () => {
     const { create } = await import('./create');
     const prompts = await import('@clack/prompts');
+    const { cloneTemplate } = await import('../../utils/clone-template');
     const { loadTemplates } = await import('../../utils/template-utils');
+    const { createOwnedStagingDirectory } = await import('./utils');
     const resolveVersionTag = vi.fn();
     fsMocks.existsSync.mockReturnValue(true);
 
@@ -387,8 +354,11 @@ describe('create preflight and mode orchestration', () => {
     );
 
     expect(prompts.select).not.toHaveBeenCalled();
+    expect(global.fetch).not.toHaveBeenCalled();
     expect(loadTemplates).not.toHaveBeenCalled();
+    expect(cloneTemplate).not.toHaveBeenCalled();
     expect(resolveVersionTag).not.toHaveBeenCalled();
+    expect(createOwnedStagingDirectory).not.toHaveBeenCalled();
   });
 
   it('uses the beta branch for a managed Mastra template only when the resolved channel is beta', async () => {
@@ -398,15 +368,6 @@ describe('create preflight and mode orchestration', () => {
     await create({ projectName: 'my-project', yes: true, resolveVersionTag: vi.fn().mockResolvedValue('beta') });
 
     expect(cloneTemplate).toHaveBeenCalledWith(expect.objectContaining({ branch: 'beta' }));
-  });
-
-  it('uses the direct managed template without loading the template catalog', async () => {
-    const { create } = await import('./create');
-    const { loadTemplates } = await import('../../utils/template-utils');
-
-    await create({ projectName: 'my-project', yes: true, resolveVersionTag: vi.fn().mockResolvedValue('latest') });
-
-    expect(loadTemplates).not.toHaveBeenCalled();
   });
 });
 
@@ -437,9 +398,9 @@ describe('create materialization lifecycle', () => {
   it('cleans owned staging and does not publish when managed adaptation fails', async () => {
     const { create } = await import('./create');
     const { installDependencies } = await import('../../utils/clone-template');
-    const { adaptManagedAgentHarness } = await import('./provider-adapter');
+    const { adaptDefaultTemplate } = await import('./provider-adapter');
     const { cleanupOwnedStagingDirectory, publishStagedProject } = await import('./utils');
-    vi.mocked(adaptManagedAgentHarness).mockRejectedValueOnce(new Error('compatibility failure'));
+    vi.mocked(adaptDefaultTemplate).mockRejectedValueOnce(new Error('compatibility failure'));
 
     await expect(
       create({ projectName: 'my-project', yes: true, resolveVersionTag: vi.fn().mockResolvedValue('latest') }),
@@ -483,18 +444,15 @@ describe('create materialization lifecycle', () => {
   it('names the selected provider environment key in the completion note when the key is skipped', async () => {
     const { create } = await import('./create');
     const prompts = await import('@clack/prompts');
-    const { adaptManagedAgentHarness } = await import('./provider-adapter');
-    vi.mocked(adaptManagedAgentHarness).mockResolvedValueOnce({
+    const { adaptDefaultTemplate } = await import('./provider-adapter');
+    vi.mocked(adaptDefaultTemplate).mockResolvedValueOnce({
       displayName: 'Anthropic',
       sdkPackage: '@ai-sdk/anthropic',
-      sdkVersion: '^3.0.96',
+      sdkVersion: 'configured-version',
       providerIdentifier: 'anthropic',
-      primaryModel: 'anthropic/claude-sonnet-5',
-      observationalModel: 'anthropic/claude-haiku-4-5',
       apiKeyEnv: 'ANTHROPIC_API_KEY',
       apiKeyPrerequisite: 'An Anthropic API key',
       featureDescription: 'Anthropic web search and direct web page fetching',
-      webSearchEntry: 'anthropic.tools.webSearch_20250305()',
     });
 
     await create({
@@ -787,19 +745,7 @@ describe('GitHub template validation', () => {
     const { cloneTemplate } = await import('../../utils/clone-template');
     const prompts = await import('@clack/prompts');
 
-    vi.mocked(global.fetch).mockImplementation(async input => {
-      const url = String(input);
-      if (url.endsWith('/package.json')) {
-        return {
-          ok: true,
-          text: async () => JSON.stringify({ dependencies: { '@mastra/core': 'latest' } }),
-        } as Response;
-      }
-      if (url.endsWith('/src/mastra/index.ts')) {
-        return { ok: true, text: async () => 'export const mastra = new Mastra({});' } as Response;
-      }
-      return { ok: false } as Response;
-    });
+    mockValidGitHubProject();
 
     await create({
       projectName: 'github-project',
@@ -820,19 +766,7 @@ describe('GitHub template validation', () => {
   it('normalizes a scheme-less canonical GitHub repository URL', async () => {
     const { create } = await import('./create');
     const { cloneTemplate } = await import('../../utils/clone-template');
-    vi.mocked(global.fetch).mockImplementation(async input => {
-      const url = String(input);
-      if (url.endsWith('/package.json')) {
-        return {
-          ok: true,
-          text: async () => JSON.stringify({ dependencies: { '@mastra/core': 'latest' } }),
-        } as Response;
-      }
-      if (url.endsWith('/src/mastra/index.ts')) {
-        return { ok: true, text: async () => 'export const mastra = new Mastra({});' } as Response;
-      }
-      return { ok: false } as Response;
-    });
+    mockValidGitHubProject();
 
     await create({ projectName: 'github-project', template: 'github.com/example/mastra-template' });
 

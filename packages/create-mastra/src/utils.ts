@@ -3,6 +3,8 @@ import path, { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { x } from 'tinyexec';
 
+const NUMERIC_IDENTIFIER_PATTERN = /^\d+$/;
+
 export async function getPackageVersion() {
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = dirname(__filename);
@@ -18,7 +20,7 @@ function getPrereleaseChannel(version: string): string | undefined {
   return version
     .slice(separator + 1)
     .split('.')
-    .find(identifier => !/^\d+$/.test(identifier));
+    .find(identifier => !NUMERIC_IDENTIFIER_PATTERN.test(identifier));
 }
 
 function selectMatchingDistTag(version: string, output: string): string | undefined {

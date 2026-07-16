@@ -439,7 +439,7 @@ Emit machine-readable JSON. Secret values are masked unless `--show-secrets` is 
 
 ### `mastra env db delete`
 
-Permanently deletes a database with the provider, including all of its data. This cannot be undone. The CLI prompts for confirmation unless `--yes` is passed. After deletion, deploys no longer receive the database's env vars.
+Permanently deletes a database with the provider, including all of its data. This can't be undone. The CLI prompts for confirmation unless `--yes` is passed. After deletion, deploys no longer receive the database's env vars.
 
 ```bash
 mastra env db delete <database>
@@ -822,7 +822,7 @@ Create a standalone Mastra project with the same project-creation flow as [`crea
 npx mastra@latest create my-mastra-project --yes
 ```
 
-By default, the command creates the managed agent harness. Use `--llm <provider>` to select OpenAI, Anthropic, Google Gemini, or xAI, `--template [template]` to use an arbitrary template, or `--empty` to create a minimal provider-free scaffold.
+By default, the command uses a default starter project. Use `--llm <provider>` to select OpenAI, Anthropic, Google Gemini, or xAI, `--template [template]` to use an arbitrary template, or `--empty` to create a minimal provider-free scaffold.
 
 The command installs Mastra skills for detected coding assistants and initializes Git when appropriate. Use `--no-skills` or `--no-git` to opt out.
 

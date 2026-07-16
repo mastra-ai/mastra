@@ -1,6 +1,6 @@
 ---
 title: "Quickstart"
-description: Create a Mastra agent harness and run it in Studio.
+description: Get started with Mastra by scaffolding an agent harness project in minutes.
 ---
 
 import QuickstartPrompt from "@site/src/content/en/docs/getting-started/_partial-quickstart-prompt.mdx";
@@ -8,10 +8,10 @@ import QuickstartPrompt from "@site/src/content/en/docs/getting-started/_partial
 # Mastra Quickstart
 
 <Inject>
-  **For AI agents:** Create a managed Mastra agent harness non-interactively with `npm create mastra@latest <project-name> -- --yes`. For a minimal project without an agent or model provider, use `npm create mastra@latest <project-name> -- --empty --yes`. To build a Mastra project from scratch, see the [manual installation guide](https://mastra.ai/docs/getting-started/manual-install).
+  **For AI agents:** Create a new Mastra project non-interactively with `npm create mastra@latest <project-name> -- --yes`. For a minimal project without an agent or model provider, use `npm create mastra@latest <project-name> -- --empty --yes`. To build a Mastra project from scratch, see the [manual installation guide](https://mastra.ai/docs/getting-started/manual-install).
 </Inject>
 
-The `create mastra` command is the quickest way to start a Mastra project. It creates an agent harness with workspace tools, memory, task tracking, web access, schedules, storage, and observability.
+The `create-mastra` CLI is the quickest way to start a Mastra project. It creates an agent harness with workspace tools, memory, task tracking, web access, schedules, storage, and observability.
 
 For more control, see the [manual installation guide](/docs/getting-started/manual-install). To add Mastra to an existing project, use [`mastra init`](/reference/cli/mastra#mastra-init).
 
@@ -35,25 +35,13 @@ Run the interactive setup:
 npm create mastra@latest
 ```
 
-The command asks for a project name, model provider, and optional API key. It then installs dependencies, installs Mastra skills for coding assistants detected on `PATH`, and creates an initial Git commit when you aren't already inside a repository.
+The command asks for a project name, model provider, and optional API key. It then installs dependencies, installs Mastra skills for your coding assistants, and creates an initial Git commit when you aren't already inside a repository.
 
-To skip every prompt, provide the project name and use `--yes`:
-
-```bash npm2yarn
-npm create mastra@latest my-mastra-app -- --yes
-```
-
-The provider defaults to OpenAI in non-interactive mode. Select another provider with `--llm`:
-
-```bash npm2yarn
-npm create mastra@latest my-mastra-app -- --llm anthropic --yes
-```
-
-The generated `src/mastra` directory contains the Mastra entry point, agent, workspace tools, and supporting harness code. See the [project structure reference](/reference/project-structure) for the standard Mastra layout.
+The generated `src/mastra` directory contains the Mastra entry point, agent, workspace tools, and supporting code. See the [project structure reference](/reference/project-structure) for the standard Mastra layout.
 
 :::tip
 
-Use `--template <template>` to start from a template, or `--empty` to create a minimal provider-free project. Use `--no-skills` or `--no-git` to skip automatic setup. See the [`create-mastra` reference](/reference/cli/create-mastra) for all flags and conflicts.
+Use `--template <template>` to start from a template, or `--empty` to create a minimal provider-free project. Use `--no-skills` or `--no-git` to skip automatic setup. See the [`create-mastra` reference](/reference/cli/create-mastra) for all flags.
 
 :::
 
@@ -65,7 +53,7 @@ Follow the terminal instructions to enter the project directory and start the de
 npm run dev
 ```
 
-Open [Studio at localhost:4111](http://localhost:4111), select the agent, and send a message. Add the provider API key named in `.env.example` if you skipped it during setup.
+Open [Studio at localhost:4111](http://localhost:4111), select the agent, and send a message. Add the provider API key named in `.env.example` to an `.env` file if you skipped it during setup.
 
 [Studio](/docs/studio/overview) lets you build and test agents without creating a separate UI.
 
@@ -73,6 +61,5 @@ Open [Studio at localhost:4111](http://localhost:4111), select the agent, and se
 
 - Integrate Mastra with [Next.js](/guides/getting-started/next-js), [React](/guides/getting-started/vite-react), or [Astro](/guides/getting-started/astro)
 - Learn how to [build Mastra with AI](/docs/getting-started/build-with-ai)
-- Explore [Mastra features](/docs#what-you-can-build)
 - Build an agent from scratch with a [guide](/guides)
 - Watch the [Mastra YouTube channel](https://www.youtube.com/@mastra-ai)

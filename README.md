@@ -42,7 +42,7 @@ The **recommended** way to get started with Mastra is by running the command bel
 npm create mastra@latest
 ```
 
-Follow the [Installation guide](https://mastra.ai/docs/getting-started/installation) for step-by-step setup with the CLI or a manual install.
+Follow the [Installation guide](https://mastra.ai/guides/getting-started/quickstart) for step-by-step setup with the CLI or a manual install.
 
 If you're new to AI agents, check out our [templates](https://mastra.ai/docs/getting-started/templates), [course](https://mastra.ai/course), and [YouTube videos](https://youtube.com/@mastra-ai) to start building with Mastra today.
 
@@ -60,7 +60,7 @@ Use OpenAI if the provider isn't one of the supported values.
 
 Run: npm create mastra@latest <project-name> -- --llm <provider> --yes
 
-The command creates the managed agent harness, installs Mastra skills for detected coding assistants, and initializes Git when appropriate.
+The command creates a default Mastra project, installs Mastra skills for detected coding assistants, and initializes Git when appropriate.
 
 After creation, enter the project directory and start the dev server: npx bgproc start -n <project-name> -w -- npm run dev
 

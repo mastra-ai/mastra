@@ -1,9 +1,7 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-
 import { afterEach, describe, expect, it } from 'vitest';
-
 import { detectCodingAgentSkills } from './coding-agents';
 
 const temporaryDirectories: string[] = [];
@@ -27,7 +25,32 @@ afterEach(async () => {
 });
 
 describe('detectCodingAgentSkills', () => {
-  it('detects every POSIX executable in the approved order and deduplicates universal', async () => {
+  it.each([
+    ['claude', 'claude-code'],
+    ['droid', 'droid'],
+    ['pi', 'pi'],
+  ] as const)('maps the %s executable to the %s skill', async (executable, skill) => {
+    const directory = await createTemporaryDirectory();
+    await createExecutable(directory, executable);
+
+    await expect(detectCodingAgentSkills({ env: { PATH: directory }, platform: 'linux' })).resolves.toEqual([skill]);
+  });
+
+  it.each(['codex', 'cursor-agent', 'gemini', 'opencode'] as const)(
+    'maps the %s executable to universal',
+    async executable => {
+      const directory = await createTemporaryDirectory();
+      await createExecutable(directory, 'claude');
+      await createExecutable(directory, executable);
+
+      await expect(detectCodingAgentSkills({ env: { PATH: directory }, platform: 'linux' })).resolves.toEqual([
+        'claude-code',
+        'universal',
+      ]);
+    },
+  );
+
+  it('returns skills in the approved order and deduplicates universal', async () => {
     const first = await createTemporaryDirectory();
     const second = await createTemporaryDirectory();
     await createExecutable(first, 'codex');
@@ -92,11 +115,11 @@ describe('detectCodingAgentSkills', () => {
   it('requires Windows candidates to be regular files but not POSIX-executable', async () => {
     const directory = await createTemporaryDirectory();
     await fs.mkdir(path.join(directory, 'claude.EXE'));
-    await createExecutable(directory, 'codex.COM', 0o644);
+    await createExecutable(directory, 'droid.COM', 0o644);
 
     await expect(
       detectCodingAgentSkills({ env: { PATH: directory, PATHEXT: '.exe;.com' }, platform: 'win32' }),
-    ).resolves.toEqual(['universal']);
+    ).resolves.toEqual(['droid']);
   });
 
   it('falls back to universal for missing, empty, or unsupported PATH contents', async () => {

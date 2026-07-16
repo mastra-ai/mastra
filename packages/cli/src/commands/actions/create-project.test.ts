@@ -1,10 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+  cliVersion: 'test-cli-version',
   runCreateCommand: vi.fn(),
   isCreateCancelledError: vi.fn((_error: unknown) => false),
   getAnalytics: vi.fn(),
   getVersionTag: vi.fn(),
+}));
+
+vi.mock('../../../package.json', () => ({
+  default: { version: mocks.cliVersion },
 }));
 
 vi.mock('../create/create', () => ({
@@ -90,7 +95,7 @@ describe('createProject', () => {
     const dependencies = mocks.runCreateCommand.mock.calls[0]?.[2];
     expect(mocks.getVersionTag).not.toHaveBeenCalled();
     await dependencies.resolveVersionTag();
-    expect(mocks.getVersionTag).toHaveBeenCalledWith('1.19.0');
+    expect(mocks.getVersionTag).toHaveBeenCalledWith(mocks.cliVersion);
   });
 
   it('reports centralized cancellation as a successful tracked command', async () => {

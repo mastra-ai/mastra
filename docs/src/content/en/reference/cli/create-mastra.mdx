@@ -1,57 +1,49 @@
 ---
 title: "Reference: create-mastra | CLI"
-description: Create a Mastra project from the managed agent harness, a template, or an empty scaffold.
+description: Create a Mastra project from a default starter, a template, or an empty scaffold.
 packages:
   - "create-mastra"
 ---
 
 # create-mastra
 
-Create a standalone Mastra project. By default, `create-mastra` installs the managed agent harness and configures it for your selected model provider.
+Create a standalone Mastra project. By default, `create-mastra` installs a default starter and configures it for your selected model provider.
 
 ```bash npm2yarn
-npx create-mastra@latest my-mastra-project --yes
-```
-
-You can also run the command without arguments to enter the interactive flow:
-
-```bash npm2yarn
-npx create-mastra@latest
+npx create-mastra@latest my-mastra-project
 ```
 
 ## Creation modes
 
-### Managed agent harness
+### Default starter
 
-The default mode creates an agent harness with workspace tools, memory, task tracking, web access, recurring schedules, storage, and observability. Select OpenAI, Anthropic, Google Gemini, or xAI:
+The default starter creates an agent harness with workspace tools, memory, task tracking, web access, recurring schedules, storage, and observability. Select OpenAI, Anthropic, Google Gemini, or xAI:
 
 ```bash npm2yarn
-npx create-mastra@latest my-agent --llm anthropic --yes
+npx create-mastra@latest my-mastra-project
 ```
 
 The generated provider dependency, models, API key variable, and native search tool match the selected provider. xAI projects omit native web search.
-
-When you don't use `--yes`, the command prompts for a missing project name, provider, and optional API key. When you use `--yes`, you must provide the project name; the provider defaults to OpenAI if you don't pass `--llm`.
 
 ### Template
 
 Use a template slug or a public GitHub URL:
 
 ```bash npm2yarn
-npx create-mastra@latest my-project --template coding-agent
+npx create-mastra@latest my-mastra-project --template coding-agent
 ```
 
 ```bash npm2yarn
-npx create-mastra@latest my-project --template https://github.com/mastra-ai/template-agent-harness
+npx create-mastra@latest my-mastra-project --template https://github.com/mastra-ai/template-agent-harness
 ```
 
 Leave the template value blank to select a template interactively:
 
 ```bash npm2yarn
-npx create-mastra@latest my-project --template
+npx create-mastra@latest my-mastra-project --template
 ```
 
-Template authors own their dependencies, models, environment variables, and source code. `create-mastra` doesn't apply `--llm`, `--llm-api-key`, or managed agent-harness changes to an arbitrary template.
+Template authors own their dependencies, models, environment variables, and source code. `create-mastra` doesn't apply `--llm` or `--llm-api-key`.
 
 ### Empty scaffold
 
@@ -59,17 +51,6 @@ Use `--empty` to create a provider-free project without agents, examples, model 
 
 ```bash npm2yarn
 npx create-mastra@latest my-empty-project --empty --yes
-```
-
-The authored scaffold contains:
-
-```text
-my-empty-project/
-├── src/mastra/index.ts
-├── .gitignore
-├── package.json
-├── pnpm-workspace.yaml  # When using pnpm
-└── tsconfig.json
 ```
 
 ## Automatic setup
@@ -84,7 +65,7 @@ Use `--no-skills` or `--no-git` to skip these steps. Skills and Git setup failur
 ## Conflicts and validation
 
 - `--empty` and `--template` can't be used together.
-- `--llm` and `--llm-api-key` are only valid for the managed agent harness.
+- `--llm` and `--llm-api-key` are only valid for the default starter project.
 - A bare `--template` can't be used with `--yes` because it requires template selection.
 - `--yes` requires a positional project name.
 - The project name must be a safe, lowercase, single directory name and the target must not already exist.
