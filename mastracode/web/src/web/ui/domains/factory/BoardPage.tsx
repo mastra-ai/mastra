@@ -45,8 +45,12 @@ function hasLabel(labels: readonly string[], label: string): boolean {
 }
 
 function githubNewIssueUrl(repoFullName: string): string | undefined {
-  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repoFullName)) return undefined;
-  return `https://github.com/${repoFullName}/issues/new`;
+  const [owner, repo, extra] = repoFullName.split('/');
+  if (extra || !owner || !repo || repo === '.' || repo === '..') return undefined;
+  if (!/^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(owner) || !/^[A-Za-z0-9_.-]+$/.test(repo)) {
+    return undefined;
+  }
+  return `https://github.com/${owner}/${repo}/issues/new`;
 }
 
 function metadataLabels(metadata: Record<string, unknown>): string[] {
