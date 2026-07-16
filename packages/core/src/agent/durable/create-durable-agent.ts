@@ -67,14 +67,22 @@ export interface CreateDurableAgentOptions<
 
   /** Maximum steps for agentic loop */
   maxSteps?: number;
+
+  /**
+   * Auto-cleanup timer for durable stream state (ms).
+   * Set to `0` to disable auto-cleanup. Defaults to `30_000` (30 seconds).
+   */
+  cleanupTimeoutMs?: number;
 }
 
 /**
  * Create a DurableAgent that wraps an existing Agent.
  *
  * This factory function is the recommended way to add durable execution
- * capabilities to an agent. It creates a DurableAgent instance with
- * resumable streams.
+ * capabilities to an agent when you need to customize the cache, pubsub, or
+ * other advanced options. For the common case, prefer the `durable` config
+ * flag on `AgentConfig` — attaching an agent constructed with `durable: true`
+ * (or `durable: { … }`) to a `Mastra` instance auto-wraps it at registration.
  *
  * @param options - Configuration options
  * @returns A DurableAgent instance
@@ -93,13 +101,26 @@ export interface CreateDurableAgentOptions<
  *   agents: { myAgent: durableAgent },
  * });
  * ```
+ *
+ * @example
+ * ```typescript
+ * // Equivalent, using the durable config flag:
+ * const agent = new Agent({
+ *   id: 'my-agent',
+ *   instructions: 'You are helpful',
+ *   model: openai('gpt-4'),
+ *   durable: true,
+ * });
+ *
+ * const mastra = new Mastra({ agents: { myAgent: agent } });
+ * ```
  */
 export function createDurableAgent<
   TAgentId extends string = string,
   TTools extends Record<string, any> = Record<string, any>,
   TOutput = undefined,
 >(options: CreateDurableAgentOptions<TAgentId, TTools, TOutput>): DurableAgent<TAgentId, TTools, TOutput> {
-  const { agent, id, name, cache, pubsub, maxSteps } = options;
+  const { agent, id, name, cache, pubsub, maxSteps, cleanupTimeoutMs } = options;
 
   return new DurableAgent({
     agent,
@@ -108,6 +129,7 @@ export function createDurableAgent<
     cache,
     pubsub,
     maxSteps,
+    cleanupTimeoutMs,
   } as DurableAgentConfig<TAgentId, TTools, TOutput>);
 }
 
