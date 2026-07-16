@@ -2,8 +2,8 @@
 '@mastra/pg': patch
 ---
 
-Attach `'error'` listeners to the `pg.Pool` instances `@mastra/pg` creates (PgVector, PostgresStore primary and vNext observability pools, and standalone domain pools from `resolvePgConfig`).
+Fixed an issue where the process could crash when Postgres drops an idle database connection (e.g., due to a backend restart, failover, or network failure).
 
-When Postgres drops an **idle** pooled connection (backend restart, failover, network partition, cloud proxies reaping idle sockets), `pg` emits `'error'` on the pool. With no listener attached, Node escalates that event to an `uncaughtException` and crashes the process (`Error: read ECONNRESET` at `TCP.onStreamRead`). The pool already discards the dead client, so the listener logs a warning and the next checkout reconnects.
+Previously, a dropped idle connection caused an uncaught exception that terminated the process. Now the connection drop is caught and logged as a warning, and the store automatically reconnects on the next database operation.
 
-Pools supplied by the caller (`{ pool }` configs) are not touched — their error handling stays with their owner, mirroring `close()` semantics.
+User-provided connection pools are unaffected and keep their existing error handling.
