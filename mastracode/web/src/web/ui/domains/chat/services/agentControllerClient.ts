@@ -53,3 +53,54 @@ export function createAgentControllerClient({
   clientCache.set(key, entry);
   return entry;
 }
+
+export interface InvokeWorkspaceSkillArgs {
+  agentControllerId: string;
+  resourceId: string;
+  scope?: string;
+  name: string;
+  arguments?: string;
+  baseUrl?: string;
+}
+
+export class WorkspaceSkillInvocationError extends Error {
+  readonly status: number;
+  readonly code: string;
+
+  constructor(message: string, status: number, code: string) {
+    super(message);
+    this.name = 'WorkspaceSkillInvocationError';
+    this.status = status;
+    this.code = code;
+  }
+}
+
+export async function invokeWorkspaceSkill({
+  agentControllerId,
+  resourceId,
+  scope,
+  name,
+  arguments: skillArguments,
+  baseUrl = '',
+}: InvokeWorkspaceSkillArgs): Promise<void> {
+  const response = await fetch(
+    `${baseUrl}/web/agent-controller/${encodeURIComponent(agentControllerId)}/skills/invoke`,
+    {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ resourceId, scope, name, arguments: skillArguments }),
+    },
+  );
+  if (response.ok) return;
+
+  let error: { error?: unknown; message?: unknown } = {};
+  try {
+    error = (await response.json()) as typeof error;
+  } catch {
+    // Preserve a useful status-based fallback when an intermediary returns HTML.
+  }
+  const code = typeof error.error === 'string' ? error.error : 'skill_invocation_failed';
+  const message = typeof error.message === 'string' ? error.message : `Skill invocation failed (${response.status}).`;
+  throw new WorkspaceSkillInvocationError(message, response.status, code);
+}

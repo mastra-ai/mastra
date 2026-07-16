@@ -10,7 +10,11 @@ vi.mock('@mastra/client-js', () => ({
   },
 }));
 
-import { createAgentControllerClient } from '../agentControllerClient';
+import {
+  createAgentControllerClient,
+  invokeWorkspaceSkill,
+  WorkspaceSkillInvocationError,
+} from '../agentControllerClient';
 
 describe('createAgentControllerClient', () => {
   it('given a worktree scope, then the server session is created with that scope (regression: dropping it merged all worktrees into one session)', () => {
@@ -56,5 +60,59 @@ describe('createAgentControllerClient', () => {
 
     expect(a.session).not.toBe(b.session);
     expect(aAgain.session).toBe(a.session);
+  });
+});
+
+describe('invokeWorkspaceSkill', () => {
+  it('posts the scoped skill request with browser credentials', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ ok: true })));
+
+    await invokeWorkspaceSkill({
+      agentControllerId: 'code',
+      resourceId: 'project-1',
+      scope: '/worktrees/review-42',
+      name: 'understand-pr',
+      arguments: 'octo/repo#42',
+      baseUrl: 'https://code.example',
+    });
+
+    expect(fetchSpy).toHaveBeenCalledWith('https://code.example/web/agent-controller/code/skills/invoke', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        resourceId: 'project-1',
+        scope: '/worktrees/review-42',
+        name: 'understand-pr',
+        arguments: 'octo/repo#42',
+      }),
+    });
+    fetchSpy.mockRestore();
+  });
+
+  it('surfaces typed server errors', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ error: 'skill_not_found', message: 'Skill not found: understand-pr.' }), {
+        status: 404,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    const invocation = invokeWorkspaceSkill({
+      agentControllerId: 'code',
+      resourceId: 'project-1',
+      scope: '/worktrees/review-42',
+      name: 'understand-pr',
+    });
+
+    await expect(invocation).rejects.toEqual(
+      expect.objectContaining<Partial<WorkspaceSkillInvocationError>>({
+        name: 'WorkspaceSkillInvocationError',
+        message: 'Skill not found: understand-pr.',
+        status: 404,
+        code: 'skill_not_found',
+      }),
+    );
+    fetchSpy.mockRestore();
   });
 });

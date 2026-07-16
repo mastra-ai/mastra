@@ -209,6 +209,7 @@ export class MastraFactory {
         ...(auth ? buildAuthRoutes(auth) : []),
         // Custom `/web/*` routes (fs / config / github / factory / audit).
         ...assembleWebApiRoutes({
+          controllerId: CONTROLLER_ID,
           controller,
           authStorage,
           publicOrigin,
