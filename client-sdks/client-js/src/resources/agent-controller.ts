@@ -425,20 +425,45 @@ export class AgentControllerSession extends BaseResource {
     let cancelled = false;
     let currentReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+    let delayResolve: (() => void) | undefined;
+
+    const settleDelay = () => {
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = undefined;
+      }
+      const resolve = delayResolve;
+      delayResolve = undefined;
+      resolve?.();
+    };
 
     const delay = (ms: number) =>
       new Promise<void>(resolve => {
-        reconnectTimer = setTimeout(() => {
-          reconnectTimer = undefined;
-          resolve();
-        }, ms);
+        delayResolve = resolve;
+        reconnectTimer = setTimeout(settleDelay, ms);
       });
 
     const requestStream = () => this.request(this.url(`${this.base()}/stream`), { stream: true }) as Promise<Response>;
 
     const streamEndedError = () => new Error('Agent controller session stream ended unexpectedly');
 
-    const pump = async (response: Response): Promise<'done' | 'transport_error' | 'consumer_error' | 'cancelled'> => {
+    const findFrameSeparator = (text: string): { index: number; length: number } | null => {
+      const candidates = [
+        { index: text.indexOf('\r\n\r\n'), length: 4 },
+        { index: text.indexOf('\n\n'), length: 2 },
+        { index: text.indexOf('\r\r'), length: 2 },
+      ].filter(candidate => candidate.index !== -1);
+      if (candidates.length === 0) return null;
+      return candidates.reduce((earliest, candidate) => (candidate.index < earliest.index ? candidate : earliest));
+    };
+
+    type PumpResult =
+      | { kind: 'done' }
+      | { kind: 'cancelled' }
+      | { kind: 'consumer_error' }
+      | { kind: 'transport_error'; error: unknown };
+
+    const pump = async (response: Response): Promise<PumpResult> => {
       if (!response.body) {
         throw new Error('No response body for agent controller session stream');
       }
@@ -451,14 +476,14 @@ export class AgentControllerSession extends BaseResource {
       try {
         while (!cancelled) {
           const { done, value } = await reader.read();
-          if (done) return cancelled ? 'cancelled' : 'done';
+          if (done) return cancelled ? { kind: 'cancelled' } : { kind: 'done' };
           buffer += decoder.decode(value, { stream: true });
 
-          let sep: number;
-          while ((sep = buffer.indexOf('\n\n')) !== -1) {
-            const frame = buffer.slice(0, sep);
-            buffer = buffer.slice(sep + 2);
-            for (const line of frame.split('\n')) {
+          let separator: { index: number; length: number } | null;
+          while ((separator = findFrameSeparator(buffer)) !== null) {
+            const frame = buffer.slice(0, separator.index);
+            buffer = buffer.slice(separator.index + separator.length);
+            for (const line of frame.split(/\r\n|\n|\r/)) {
               if (!line.startsWith('data:')) continue;
               const data = line.slice(5).trim();
               if (!data) continue;
@@ -472,18 +497,26 @@ export class AgentControllerSession extends BaseResource {
                 options.onEvent(event);
               } catch (cause) {
                 if (!cancelled) options.onError?.(cause);
-                return 'consumer_error';
+                return { kind: 'consumer_error' };
               }
             }
           }
         }
-        return 'cancelled';
-      } catch {
-        return cancelled ? 'cancelled' : 'transport_error';
+        return { kind: 'cancelled' };
+      } catch (error) {
+        return cancelled ? { kind: 'cancelled' } : { kind: 'transport_error', error };
       } finally {
         if (currentReader === reader) currentReader = null;
         void reader.cancel().catch(() => {});
       }
+    };
+
+    const reportTerminalError = (result: Extract<PumpResult, { kind: 'done' } | { kind: 'transport_error' }>) => {
+      if (result.kind === 'transport_error') {
+        options.onError?.(result.error);
+        return;
+      }
+      options.onError?.(streamEndedError());
     };
 
     const run = async () => {
@@ -505,7 +538,7 @@ export class AgentControllerSession extends BaseResource {
           continue;
         }
 
-        let result: 'done' | 'transport_error' | 'consumer_error' | 'cancelled';
+        let result: PumpResult;
         try {
           result = await pump(response);
         } catch (error) {
@@ -514,22 +547,22 @@ export class AgentControllerSession extends BaseResource {
             options.onError?.(error);
             return;
           }
-          result = 'transport_error';
+          result = { kind: 'transport_error', error };
         }
 
-        if (cancelled || result === 'cancelled') return;
-        if (result === 'consumer_error') return;
+        if (cancelled || result.kind === 'cancelled') return;
+        if (result.kind === 'consumer_error') return;
 
         if (!reconnectOptions) {
-          if (result === 'done' || result === 'transport_error') {
-            options.onError?.(streamEndedError());
+          if (result.kind === 'done' || result.kind === 'transport_error') {
+            reportTerminalError(result);
           }
           return;
         }
 
-        if (result === 'done' || result === 'transport_error') {
+        if (result.kind === 'done' || result.kind === 'transport_error') {
           if (attempts >= reconnectOptions.maxRetries) {
-            options.onError?.(streamEndedError());
+            reportTerminalError(result);
             return;
           }
           attempts++;
@@ -545,10 +578,7 @@ export class AgentControllerSession extends BaseResource {
     return {
       unsubscribe: () => {
         cancelled = true;
-        if (reconnectTimer) {
-          clearTimeout(reconnectTimer);
-          reconnectTimer = undefined;
-        }
+        settleDelay();
         void currentReader?.cancel().catch(() => {});
       },
     };
