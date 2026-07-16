@@ -35,6 +35,7 @@ import {
   useApproveAgentControllerToolMutation,
   useRespondAgentControllerSuspensionMutation,
 } from '../../../../../shared/hooks/useAgentControllerRunMutations';
+import { SKILL_ACTIVATION_MARKER } from '../../../../../shared/skillActivation';
 import { stripSerializedAnsi } from '../services/ansi';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 
@@ -113,7 +114,11 @@ function parseSkillActivation(text: string): SkillActivation | undefined {
   const match = skillActivationPattern.exec(text.trim());
   if (!match) return undefined;
 
-  const content = match[2];
+  const markedContent = match[2];
+  const markerPrefix = `${SKILL_ACTIVATION_MARKER}\n`;
+  if (!markedContent.startsWith(markerPrefix)) return undefined;
+
+  const content = markedContent.slice(markerPrefix.length);
   const argumentsIndex = content.lastIndexOf(skillArgumentsMarker);
   return {
     name: match[1],

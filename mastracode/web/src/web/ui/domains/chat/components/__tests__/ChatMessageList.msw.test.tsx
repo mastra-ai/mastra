@@ -296,7 +296,7 @@ describe('ChatMessageList', () => {
                 parts: [
                   {
                     type: 'text',
-                    text: '<skill name="understand-issue">\n# Understand Issue\n\nInvestigate every relevant code path.\n\nARGUMENTS: https://github.com/mastra-ai/mastra/issues/15\n</skill>',
+                    text: '<skill name="understand-issue">\n<!-- mastracode:skill-activation:v1 -->\n# Understand Issue\n\nInvestigate every relevant code path.\n\nARGUMENTS: https://github.com/mastra-ai/mastra/issues/15\n</skill>',
                   },
                 ],
               },
@@ -337,7 +337,7 @@ describe('ChatMessageList', () => {
                 parts: [
                   {
                     type: 'text',
-                    text: 'This ordinary XML-like message mentions `<skill name="understand-issue">` inline.',
+                    text: '<skill name="understand-issue">\nnot an invocation\n</skill>',
                   },
                 ],
               },
@@ -348,7 +348,7 @@ describe('ChatMessageList', () => {
     );
     renderMessageList();
 
-    await screen.findByText(/This ordinary XML-like message mentions/);
+    await screen.findByText(/not an invocation/);
     expect(screen.queryByRole('button', { name: /understand-issue skill contents/ })).not.toBeInTheDocument();
   });
 

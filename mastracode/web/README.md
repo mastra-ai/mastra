@@ -59,7 +59,7 @@ pnpm web:ui:test  # UI MSW tests (e2e/web-ui)
 
 ## Workspace skill invocation
 
-The private Web API can activate a user-invocable skill on an existing scoped AgentController session with `POST /web/agent-controller/:controllerId/skills/invoke`. It resolves the skill from that session's workspace, formats it with the same activation contract as `/skill/<name>` in the TUI, and returns an error without dispatching when the skill is missing. Authenticated requests may target only the caller's personal session or a Factory worktree owned by that organization user.
+The private Web API can activate a user-invocable skill on an existing scoped AgentController session with `POST /web/agent-controller/:controllerId/skills/invoke`. Factory workflow IDs such as `understand-issue` and `understand-pr` resolve to immutable server-owned definitions, so they are available in local and remote workspaces without modifying the target repository. Other IDs resolve from the session's workspace. Both paths use the same activation contract as `/skill/<name>` in the TUI and return an error without dispatching when the skill is missing. Authenticated requests may target only the caller's personal session or a Factory worktree owned by that organization user.
 
 ## GitHub pull request notifications
 
