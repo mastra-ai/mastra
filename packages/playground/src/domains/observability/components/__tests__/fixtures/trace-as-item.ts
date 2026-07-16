@@ -1,13 +1,16 @@
-import { spanRecordSchema } from '@mastra/core/storage';
+import type { MastraClient } from '@mastra/client-js';
+import { SpanType } from '@mastra/core/observability';
 
-export function createTraceDetails(input: unknown, output: unknown) {
+type GetSpanResponse = Awaited<ReturnType<MastraClient['getSpan']>>;
+
+export function createTraceDetails(input: unknown, output: unknown): GetSpanResponse['span'] {
   const timestamp = new Date('2026-07-16T12:00:00.000Z');
 
-  return spanRecordSchema.parse({
+  return {
     traceId: 'trace-1',
     spanId: 'span-1',
     name: 'Agent run',
-    spanType: 'agent_run',
+    spanType: SpanType.AGENT_RUN,
     isEvent: false,
     startedAt: timestamp,
     endedAt: timestamp,
@@ -15,5 +18,5 @@ export function createTraceDetails(input: unknown, output: unknown) {
     output,
     createdAt: timestamp,
     updatedAt: timestamp,
-  });
+  };
 }
