@@ -2,4 +2,4 @@
 '@mastra/dynamodb': patch
 ---
 
-Fixed listMessages reporting hasMore: true when the remaining thread messages were already returned through include context. DynamoDB now matches other storage adapters: hasMore is false once every thread message has been returned via pagination or include.
+Fixed `listMessages` reporting `hasMore: false` too early when `include` context messages fall outside the active `resourceId` or `dateRange` filters. Only messages matching the filters now count toward the returned total, so later filter-matching pages are no longer hidden.
