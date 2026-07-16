@@ -85678,6 +85678,12 @@ export type GetSystemPackages_Response = {
   observabilityEnabled: boolean;
   storageType?: string | undefined;
   observabilityStorageType?: string | undefined;
+  observabilityStorageCapabilities?:
+    | {
+        metrics: boolean;
+        logs: boolean;
+      }
+    | undefined;
   observabilityRuntimeStrategy?: ('realtime' | 'batch-with-updates' | 'insert-only' | 'event-sourced') | undefined;
 };
 

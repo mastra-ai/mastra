@@ -542,8 +542,13 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       // Sort all messages (paginated + included) for final output
       finalMessages = this._sortMessages(finalMessages, field, direction);
 
-      // hasMore reflects filtered pagination only; included context must not suppress it.
-      const hasMore = perPageInput !== false && offset + perPage < total;
+      // If include added enough context to cover every thread message, there is nothing more to page.
+      const threadIdSet = new Set(threadIds);
+      const returnedThreadMessageIds = new Set(
+        finalMessages.filter(m => m.threadId && threadIdSet.has(m.threadId)).map(m => m.id),
+      );
+      const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
+      const hasMore = perPageInput !== false && !allThreadMessagesReturned && offset + perPage < total;
 
       return {
         messages: finalMessages,
