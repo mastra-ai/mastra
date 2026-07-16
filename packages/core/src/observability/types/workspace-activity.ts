@@ -47,7 +47,11 @@ export interface ExportedSandboxOutput {
   /** Which sandbox surface produced this chunk */
   source: SandboxOutputSource;
 
-  /** Provider-assigned process id — present for `source: 'spawn'` */
+  /**
+   * Provider-assigned process id, when available for `source: 'spawn'`.
+   * May be absent on early chunks emitted before the provider has assigned
+   * one; `source: 'exec'` events never carry a process id.
+   */
   processId?: string;
 
   /** Which stream this chunk came from */
@@ -116,7 +120,12 @@ export interface ExportedFilesystemChange {
   /** Underlying bucket name (when the provider is bucket-backed) */
   bucketName?: string;
 
-  /** Absolute path (or destination path for copy/move) that was mutated */
+  /**
+   * The path supplied to the mutating operation, as-is. Providers may normalize
+   * or resolve this relative to their own root; consumers should treat it as
+   * caller/provider-relative rather than a guaranteed absolute filesystem path.
+   * For `copy` and `move`, this is the destination path.
+   */
   path: string;
 
   /** Which mutating operation ran */

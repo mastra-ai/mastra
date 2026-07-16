@@ -101,19 +101,31 @@ export interface WorkspaceInstrumentationMeta {
 // =============================================================================
 
 /**
- * Truncate a string chunk to at most `limit` bytes (measured as UTF-8 length).
- * The `truncated` flag is `true` when the source chunk exceeded the limit.
- * Handles Buffer inputs by converting to a UTF-8 string first.
+ * Truncate a string chunk to at most `limit` bytes when serialized as UTF-8.
+ *
+ * The chunk is walked as an iterable of Unicode code points so multi-byte
+ * characters (emoji, CJK, combining marks) are never split mid-sequence.
+ * `truncated: true` is set when the source, measured in UTF-8 bytes, exceeded
+ * `limit`. Handles Buffer inputs by decoding as UTF-8 first.
  */
 export function truncateChunk(
   chunk: string | Buffer,
   limit = SANDBOX_OUTPUT_CHUNK_LIMIT,
 ): { chunk: string; truncated: boolean } {
   const text = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
-  if (text.length <= limit) {
+  const sourceBytes = Buffer.byteLength(text, 'utf8');
+  if (sourceBytes <= limit) {
     return { chunk: text, truncated: false };
   }
-  return { chunk: text.slice(0, limit), truncated: true };
+  let accumulatedBytes = 0;
+  let out = '';
+  for (const codePoint of text) {
+    const cpBytes = Buffer.byteLength(codePoint, 'utf8');
+    if (accumulatedBytes + cpBytes > limit) break;
+    out += codePoint;
+    accumulatedBytes += cpBytes;
+  }
+  return { chunk: out, truncated: true };
 }
 
 // =============================================================================
@@ -191,6 +203,39 @@ function beginCall(
   };
 }
 
+/**
+ * Run `fn` and swallow any thrown error. Used to make every post-provider
+ * telemetry side effect (metric emit, log, span end, activity event) no-throw
+ * so a broken exporter cannot alter or hide a provider result the caller
+ * already observed.
+ */
+function safeEmit(fn: () => void): void {
+  try {
+    fn();
+  } catch {
+    // Intentionally swallow — telemetry must never change provider semantics.
+  }
+}
+
+/**
+ * Extract a redacted operation identifier from a shell command string. Commands
+ * routinely embed tokens, passwords, or user data in their arguments; only the
+ * program name (argv0) is recorded on spans and structured logs. The raw
+ * command is still passed through to the provider for actual execution — only
+ * the telemetry-facing representation is sanitized.
+ */
+function sanitizeCommand(command: string): string {
+  if (!command) return '';
+  // Trim leading whitespace, then take the first whitespace-delimited token.
+  const trimmed = command.trimStart();
+  const match = trimmed.match(/^\S+/);
+  if (!match) return '';
+  const program = match[0];
+  // Strip a leading path from the program (e.g. `/usr/bin/curl` -> `curl`).
+  const lastSep = Math.max(program.lastIndexOf('/'), program.lastIndexOf('\\'));
+  return lastSep >= 0 ? program.slice(lastSep + 1) : program;
+}
+
 function endCallSuccess(
   ctx: CallCtx,
   category: 'filesystem' | 'sandbox',
@@ -201,22 +246,28 @@ function endCallSuccess(
 ): void {
   const durationMs = Date.now() - ctx.startedAtMs;
 
-  ctx.metrics?.emit(`mastra.workspace.${category}.duration_ms`, durationMs, {
-    operation,
-    provider,
-    success: 'true',
-  });
+  safeEmit(() =>
+    ctx.metrics?.emit(`mastra.workspace.${category}.duration_ms`, durationMs, {
+      operation,
+      provider,
+      success: 'true',
+    }),
+  );
 
-  ctx.logger?.info(`workspace.${category}.${operation}`, {
-    provider,
-    durationMs,
-    ...extraLog,
-  });
+  safeEmit(() =>
+    ctx.logger?.info(`workspace.${category}.${operation}`, {
+      provider,
+      durationMs,
+      ...extraLog,
+    }),
+  );
 
-  ctx.span?.end({
-    output: spanOutput,
-    attributes: { success: true },
-  });
+  safeEmit(() =>
+    ctx.span?.end({
+      output: spanOutput,
+      attributes: { success: true },
+    }),
+  );
 }
 
 function endCallError(
@@ -231,26 +282,32 @@ function endCallError(
   const error = err instanceof Error ? err : new Error(String(err));
   const errorClass = error.name || 'Error';
 
-  ctx.metrics?.emit(`mastra.workspace.${category}.duration_ms`, durationMs, {
-    operation,
-    provider,
-    success: 'false',
-  });
-  ctx.metrics?.emit(`mastra.workspace.${category}.errors_total`, 1, {
-    operation,
-    provider,
-    error_class: errorClass,
-  });
+  safeEmit(() =>
+    ctx.metrics?.emit(`mastra.workspace.${category}.duration_ms`, durationMs, {
+      operation,
+      provider,
+      success: 'false',
+    }),
+  );
+  safeEmit(() =>
+    ctx.metrics?.emit(`mastra.workspace.${category}.errors_total`, 1, {
+      operation,
+      provider,
+      error_class: errorClass,
+    }),
+  );
 
-  ctx.logger?.error(`workspace.${category}.${operation}`, {
-    provider,
-    durationMs,
-    error: error.message,
-    errorClass,
-    ...extraLog,
-  });
+  safeEmit(() =>
+    ctx.logger?.error(`workspace.${category}.${operation}`, {
+      provider,
+      durationMs,
+      error: error.message,
+      errorClass,
+      ...extraLog,
+    }),
+  );
 
-  ctx.span?.error({ error, attributes: { success: false } });
+  safeEmit(() => ctx.span?.error({ error, attributes: { success: false } }));
 }
 
 // =============================================================================
@@ -278,7 +335,7 @@ function emitFilesystemChange(
     bytes,
   };
   const event: FilesystemChangeEvent = { type: 'filesystem_change', change };
-  ctx.instance.emitWorkspaceActivityEvent?.(event);
+  safeEmit(() => ctx.instance.emitWorkspaceActivityEvent?.(event));
 }
 
 function extractFilesystemBytes(operation: FilesystemChangeOperation, args: unknown[]): number | undefined {
@@ -320,18 +377,22 @@ function wrapFilesystemMethod(
       const mutationBytes = mutation ? extractFilesystemBytes(mutation, args) : undefined;
 
       if (bytesRead != null) {
-        ctx.metrics?.emit('mastra.workspace.filesystem.bytes', bytesRead, {
-          operation: method,
-          provider: fs.provider,
-          direction: 'read',
-        });
+        safeEmit(() =>
+          ctx.metrics?.emit('mastra.workspace.filesystem.bytes', bytesRead, {
+            operation: method,
+            provider: fs.provider,
+            direction: 'read',
+          }),
+        );
       }
       if (mutation && mutationBytes != null) {
-        ctx.metrics?.emit('mastra.workspace.filesystem.bytes', mutationBytes, {
-          operation: method,
-          provider: fs.provider,
-          direction: 'write',
-        });
+        safeEmit(() =>
+          ctx.metrics?.emit('mastra.workspace.filesystem.bytes', mutationBytes, {
+            operation: method,
+            provider: fs.provider,
+            direction: 'write',
+          }),
+        );
       }
 
       // filesystem_change on mutations only
@@ -415,7 +476,7 @@ function emitSandboxOutput(
     truncated: wasTruncated,
   };
   const event: SandboxOutputEvent = { type: 'sandbox_output', output };
-  ctx.instance.emitWorkspaceActivityEvent?.(event);
+  safeEmit(() => ctx.instance.emitWorkspaceActivityEvent?.(event));
 }
 
 function wrapSandboxExecuteCommand(
@@ -425,7 +486,8 @@ function wrapSandboxExecuteCommand(
 ): (...args: unknown[]) => Promise<unknown> {
   return async (...args: unknown[]): Promise<unknown> => {
     const command = typeof args[0] === 'string' ? args[0] : '';
-    const ctx = beginCall(instance, 'sandbox', 'executeCommand', meta, sandbox.provider, { command });
+    const commandProgram = sanitizeCommand(command);
+    const ctx = beginCall(instance, 'sandbox', 'executeCommand', meta, sandbox.provider, { commandProgram });
     try {
       const raw = sandbox.executeCommand!;
       const result = (await raw.call(sandbox, ...(args as Parameters<typeof raw>))) as
@@ -440,16 +502,20 @@ function wrapSandboxExecuteCommand(
       const stdoutBytes = result?.stdout ? Buffer.byteLength(result.stdout, 'utf8') : 0;
       const stderrBytes = result?.stderr ? Buffer.byteLength(result.stderr, 'utf8') : 0;
       if (stdoutBytes > 0) {
-        ctx.metrics?.emit('mastra.workspace.sandbox.stdout_bytes', stdoutBytes, {
-          provider: sandbox.provider,
-          source: 'exec',
-        });
+        safeEmit(() =>
+          ctx.metrics?.emit('mastra.workspace.sandbox.stdout_bytes', stdoutBytes, {
+            provider: sandbox.provider,
+            source: 'exec',
+          }),
+        );
       }
       if (stderrBytes > 0) {
-        ctx.metrics?.emit('mastra.workspace.sandbox.stderr_bytes', stderrBytes, {
-          provider: sandbox.provider,
-          source: 'exec',
-        });
+        safeEmit(() =>
+          ctx.metrics?.emit('mastra.workspace.sandbox.stderr_bytes', stderrBytes, {
+            provider: sandbox.provider,
+            source: 'exec',
+          }),
+        );
       }
 
       // Publish stdout/stderr as sandbox_output events (truncated)
@@ -466,7 +532,7 @@ function wrapSandboxExecuteCommand(
         'executeCommand',
         sandbox.provider,
         {
-          command,
+          commandProgram,
           exitCode: result?.exitCode,
           stdoutBytes,
           stderrBytes,
@@ -476,7 +542,7 @@ function wrapSandboxExecuteCommand(
 
       return result;
     } catch (err) {
-      endCallError(ctx, 'sandbox', 'executeCommand', sandbox.provider, err, { command });
+      endCallError(ctx, 'sandbox', 'executeCommand', sandbox.provider, err, { commandProgram });
       throw err;
     }
   };
@@ -490,12 +556,13 @@ function wrapProcessesSpawn(
 ): (...args: unknown[]) => Promise<unknown> {
   return async (...args: unknown[]): Promise<unknown> => {
     const command = typeof args[0] === 'string' ? args[0] : '';
+    const commandProgram = sanitizeCommand(command);
     const opts = (args[1] ?? {}) as {
       onStdout?: (data: string) => void;
       onStderr?: (data: string) => void;
     };
 
-    const ctx = beginCall(instance, 'sandbox', 'processes.spawn', meta, sandbox.provider, { command });
+    const ctx = beginCall(instance, 'sandbox', 'processes.spawn', meta, sandbox.provider, { commandProgram });
 
     // Chain user-supplied onStdout/onStderr with our activity emitter.
     // We install our listener BEFORE spawn returns so no early chunks are missed.
@@ -508,13 +575,15 @@ function wrapProcessesSpawn(
       try {
         if (opts.onStdout) opts.onStdout(data);
       } finally {
-        emitSandboxOutput(ctx, meta, sandbox, 'spawn', 'stdout', data, handle?.pid);
+        safeEmit(() => emitSandboxOutput(ctx, meta, sandbox, 'spawn', 'stdout', data, handle?.pid));
         const bytes = Buffer.byteLength(data, 'utf8');
         if (bytes > 0) {
-          ctx.metrics?.emit('mastra.workspace.sandbox.stdout_bytes', bytes, {
-            provider: sandbox.provider,
-            source: 'spawn',
-          });
+          safeEmit(() =>
+            ctx.metrics?.emit('mastra.workspace.sandbox.stdout_bytes', bytes, {
+              provider: sandbox.provider,
+              source: 'spawn',
+            }),
+          );
         }
       }
     };
@@ -522,13 +591,15 @@ function wrapProcessesSpawn(
       try {
         if (opts.onStderr) opts.onStderr(data);
       } finally {
-        emitSandboxOutput(ctx, meta, sandbox, 'spawn', 'stderr', data, handle?.pid);
+        safeEmit(() => emitSandboxOutput(ctx, meta, sandbox, 'spawn', 'stderr', data, handle?.pid));
         const bytes = Buffer.byteLength(data, 'utf8');
         if (bytes > 0) {
-          ctx.metrics?.emit('mastra.workspace.sandbox.stderr_bytes', bytes, {
-            provider: sandbox.provider,
-            source: 'spawn',
-          });
+          safeEmit(() =>
+            ctx.metrics?.emit('mastra.workspace.sandbox.stderr_bytes', bytes, {
+              provider: sandbox.provider,
+              source: 'spawn',
+            }),
+          );
         }
       }
     };
@@ -542,12 +613,12 @@ function wrapProcessesSpawn(
         'sandbox',
         'processes.spawn',
         sandbox.provider,
-        { command, pid: handle?.pid },
+        { commandProgram, pid: handle?.pid },
         { pid: handle?.pid },
       );
       return result;
     } catch (err) {
-      endCallError(ctx, 'sandbox', 'processes.spawn', sandbox.provider, err, { command });
+      endCallError(ctx, 'sandbox', 'processes.spawn', sandbox.provider, err, { commandProgram });
       throw err;
     }
   };
@@ -680,28 +751,41 @@ export interface WorkspaceInstrumentation {
   wrapSandbox(sandbox: WorkspaceSandbox): WorkspaceSandbox;
 }
 
+/**
+ * Cache entry that ties a wrapped provider Proxy to the specific
+ * `ObservabilityInstance` it closes over. Re-registration on `Mastra` (or a
+ * caller swapping the default instance) invalidates the entry so the next
+ * getter access rebuilds the Proxy against the new instance.
+ */
+interface WrapCacheEntry {
+  instance: ObservabilityInstance;
+  wrapped: WorkspaceFilesystem | WorkspaceSandbox;
+}
+
+export type WorkspaceProviderWrapCache = WeakMap<object, WrapCacheEntry>;
+
 export function createWorkspaceInstrumentation(
   mastra: Mastra,
   meta: WorkspaceInstrumentationMeta,
-  wrapCache: WeakMap<object, object>,
+  wrapCache: WorkspaceProviderWrapCache,
 ): WorkspaceInstrumentation {
   return {
     wrapFilesystem(fs: WorkspaceFilesystem): WorkspaceFilesystem {
       const instance = selectObservabilityInstance(mastra);
       if (!instance) return fs;
       const cached = wrapCache.get(fs);
-      if (cached) return cached as WorkspaceFilesystem;
+      if (cached && cached.instance === instance) return cached.wrapped as WorkspaceFilesystem;
       const wrapped = wrapFilesystem(fs, meta, instance);
-      wrapCache.set(fs, wrapped);
+      wrapCache.set(fs, { instance, wrapped });
       return wrapped;
     },
     wrapSandbox(sandbox: WorkspaceSandbox): WorkspaceSandbox {
       const instance = selectObservabilityInstance(mastra);
       if (!instance) return sandbox;
       const cached = wrapCache.get(sandbox);
-      if (cached) return cached as WorkspaceSandbox;
+      if (cached && cached.instance === instance) return cached.wrapped as WorkspaceSandbox;
       const wrapped = wrapSandbox(sandbox, meta, instance);
-      wrapCache.set(sandbox, wrapped);
+      wrapCache.set(sandbox, { instance, wrapped });
       return wrapped;
     },
   };

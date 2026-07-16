@@ -109,7 +109,14 @@ function makeObservabilityStub() {
     getSpanOutputProcessors: () => [],
     getLogger: () => ({}) as any,
     getBridge: () => undefined,
-    startSpan: ((opts: any) => makeFakeSpan('root', opts.name, spans)) as any,
+    startSpan: ((opts: any) => {
+      const span = makeFakeSpan('root', opts.name, spans);
+      // Capture the input/attributes provided at creation time.
+      const rec = spans[spans.length - 1];
+      if (opts.input !== undefined) rec.input = opts.input;
+      if (opts.attributes) rec.attributes = { ...(rec.attributes ?? {}), ...opts.attributes };
+      return span;
+    }) as any,
     rebuildSpan: () => ({}) as any,
     flush: async () => {},
     shutdown: async () => {},
@@ -154,6 +161,69 @@ describe('truncateChunk', () => {
   it('respects a custom limit', () => {
     const result = truncateChunk('abcdef', 3);
     expect(result).toEqual({ chunk: 'abc', truncated: true });
+  });
+
+  it('enforces limit as UTF-8 bytes, not UTF-16 code units, for multibyte input', () => {
+    // '💻' encodes as 4 bytes (surrogate pair in UTF-16 => 2 code units, but 4 bytes in UTF-8).
+    // 5 emoji => 20 bytes. Limit of 10 bytes should keep exactly 2 emoji.
+    const source = '💻'.repeat(5);
+    const result = truncateChunk(source, 10);
+    expect(result.truncated).toBe(true);
+    expect(result.chunk).toBe('💻💻');
+    expect(Buffer.byteLength(result.chunk, 'utf8')).toBeLessThanOrEqual(10);
+  });
+
+  it('never emits partial UTF-8 sequences (whole code points only)', () => {
+    // 3 emoji => 12 bytes. Limit of 5 bytes cannot fit even one whole emoji beyond
+    // the first; it should keep one full emoji and stop rather than slice a surrogate.
+    const source = '💻💻💻';
+    const result = truncateChunk(source, 5);
+    expect(result.truncated).toBe(true);
+    // First code point is 4 bytes; adding a second would exceed 5 bytes.
+    expect(result.chunk).toBe('💻');
+    expect(Buffer.byteLength(result.chunk, 'utf8')).toBeLessThanOrEqual(5);
+  });
+});
+
+describe('sandbox command redaction in telemetry', () => {
+  it('records only argv0 in span input and structured logs (not the full command)', async () => {
+    const { instance, logs, spans } = makeObservabilityStub();
+    const sb = makeFakeSandbox({
+      // Command carries a secret that MUST NOT surface in telemetry.
+      executeCommand: vi.fn(async (_command: string) => ({
+        success: true,
+        exitCode: 0,
+        stdout: 'ok\n',
+        stderr: '',
+        executionTimeMs: 1,
+      })),
+    });
+    const wrapped = wrapSandbox(sb, META, instance);
+
+    const rawCommand = '/usr/bin/curl -H "Authorization: Bearer supersecret" https://example.com';
+    await wrapped.executeCommand!(rawCommand);
+
+    // The underlying provider must still see the raw command.
+    expect(sb.executeCommand).toHaveBeenCalledWith(rawCommand);
+
+    // No emitted log carries the full command or the secret.
+    for (const l of logs) {
+      const serialized = JSON.stringify(l);
+      expect(serialized).not.toContain('supersecret');
+      expect(serialized).not.toContain('Bearer');
+      expect(serialized).not.toContain('example.com');
+    }
+
+    // The info log DOES carry the sanitized program name.
+    const infoLog = logs.find(l => l.message === 'workspace.sandbox.executeCommand');
+    expect(infoLog?.data?.commandProgram).toBe('curl');
+
+    // The span input DOES NOT carry the raw command.
+    expect(spans).toHaveLength(1);
+    const span = spans[0];
+    const serializedSpan = JSON.stringify(span);
+    expect(serializedSpan).not.toContain('supersecret');
+    expect(serializedSpan).not.toContain('Bearer');
   });
 });
 

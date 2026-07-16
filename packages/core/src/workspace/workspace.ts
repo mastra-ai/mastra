@@ -40,7 +40,7 @@ import type { MastraVector } from '../vector';
 
 import { WorkspaceError, SearchNotAvailableError } from './errors';
 import { createWorkspaceInstrumentation } from './observability';
-import type { WorkspaceInstrumentation } from './observability';
+import type { WorkspaceInstrumentation, WorkspaceProviderWrapCache } from './observability';
 import { CompositeFilesystem, LocalFilesystem } from './filesystem';
 import type { WorkspaceFilesystem, FilesystemInfo } from './filesystem';
 import { MastraFilesystem } from './filesystem/mastra-filesystem';
@@ -593,8 +593,12 @@ export class Workspace<
   #mastra?: Mastra;
   /** Instrumentation helper lazily built on first accessor use after registration. */
   #instrumentation?: WorkspaceInstrumentation;
-  /** Memoizes wrapped provider Proxies by their raw provider identity. */
-  readonly #providerWrapCache: WeakMap<object, object> = new WeakMap();
+  /**
+   * Memoizes wrapped provider Proxies by their raw provider identity.
+   * Entries carry the `ObservabilityInstance` the Proxy closed over so a
+   * re-registration against a different instance rebuilds the wrapper.
+   */
+  readonly #providerWrapCache: WorkspaceProviderWrapCache = new WeakMap();
 
   constructor(config: WorkspaceConfig<TFilesystem, TSandbox, TMounts>) {
     this.id = config.id ?? this.generateId();

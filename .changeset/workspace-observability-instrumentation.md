@@ -14,4 +14,20 @@ A new `WorkspaceActivityEvent` bus channel carries two variants:
 
 Exporters and bridges can opt in by implementing the new optional `onWorkspaceActivityEvent(event)` hook on `ObservabilityEvents`. Handlers that don't implement it silently drop the events.
 
+```ts
+import type { ObservabilityExporter, WorkspaceActivityEvent } from '@mastra/core/observability';
+
+export const workspaceActivityExporter: ObservabilityExporter = {
+  name: 'workspace-activity-logger',
+  onWorkspaceActivityEvent(event: WorkspaceActivityEvent) {
+    if (event.type === 'filesystem_change') {
+      console.log('[fs]', event.change.operation, event.change.path);
+    } else {
+      // 'sandbox_output' — event.output.chunk carries stdout/stderr text
+      console.log('[sb]', event.output.stream, event.output.chunk);
+    }
+  },
+};
+```
+
 Agent-owned workspaces (`new Agent({ workspace })`) are wrapped automatically via `Agent.__registerMastra` fanout.
