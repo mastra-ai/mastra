@@ -466,6 +466,12 @@ export class DefaultExporter extends BaseExporter {
         case 'score':
           createScoreEvents.push(createEvent);
           break;
+        case 'sandbox_output':
+        case 'filesystem_change':
+          // Workspace activity events are routed via `onWorkspaceActivityEvent`
+          // on individual handlers; they are not persisted through the buffered
+          // create/update flow used for spans, logs, metrics, scores, feedback.
+          break;
         default:
           createSpanEvents.push(createEvent);
           break;

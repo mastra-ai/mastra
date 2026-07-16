@@ -15,6 +15,7 @@ import type {
   MetricEvent,
   ScoreEvent,
   FeedbackEvent,
+  WorkspaceActivityEvent,
   ObservabilityEvent,
   ObservabilityDropEvent,
 } from '@mastra/core/observability';
@@ -103,6 +104,18 @@ export function routeToHandler(
       case 'feedback':
         if (handler.onFeedbackEvent) {
           return catchAsyncResult(handler.onFeedbackEvent(event as FeedbackEvent), handler.name, 'feedback', logger);
+        }
+        break;
+
+      case 'sandbox_output':
+      case 'filesystem_change':
+        if (handler.onWorkspaceActivityEvent) {
+          return catchAsyncResult(
+            handler.onWorkspaceActivityEvent(event as WorkspaceActivityEvent),
+            handler.name,
+            'workspace_activity',
+            logger,
+          );
         }
         break;
     }

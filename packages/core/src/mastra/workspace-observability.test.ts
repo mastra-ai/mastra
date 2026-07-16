@@ -1,0 +1,163 @@
+import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { Agent } from '../agent';
+import type {
+  ConfigSelectorOptions,
+  ObservabilityEntrypoint,
+  ObservabilityInstance,
+  WorkspaceActivityEvent,
+} from '../observability';
+import { LocalFilesystem } from '../workspace/filesystem';
+import { Workspace } from '../workspace/workspace';
+import { Mastra } from './index';
+
+/**
+ * Build a minimal `ObservabilityEntrypoint` that returns a single default
+ * instance. The instance records emitted workspace_activity events so tests
+ * can verify that auto-instrumentation kicked in.
+ */
+function makeObservabilityEntrypoint(): {
+  entrypoint: ObservabilityEntrypoint;
+  activity: WorkspaceActivityEvent[];
+} {
+  const activity: WorkspaceActivityEvent[] = [];
+
+  const instance: ObservabilityInstance = {
+    getConfig: () => ({}) as any,
+    getExporters: () => [],
+    getSpanOutputProcessors: () => [],
+    getLogger: () => ({}) as any,
+    getBridge: () => undefined,
+    startSpan: () => ({}) as any,
+    rebuildSpan: () => ({}) as any,
+    flush: async () => {},
+    shutdown: async () => {},
+    __setLogger: () => {},
+    // No getLoggerContext/getMetricsContext — wrapper must handle missing hooks.
+    emitWorkspaceActivityEvent: (event: WorkspaceActivityEvent) => {
+      activity.push(event);
+    },
+  };
+
+  const instances = new Map<string, ObservabilityInstance>([['default', instance]]);
+
+  const entrypoint: ObservabilityEntrypoint = {
+    flush: async () => {},
+    shutdown: async () => {},
+    setMastraContext: () => {},
+    setLogger: () => {},
+    getSelectedInstance: (_options: ConfigSelectorOptions) => instance,
+    registerInstance: (name: string, ins: ObservabilityInstance) => {
+      instances.set(name, ins);
+    },
+    getInstance: (name: string) => instances.get(name),
+    getDefaultInstance: () => instance,
+    listInstances: () => instances,
+    unregisterInstance: (name: string) => instances.delete(name),
+    hasInstance: (name: string) => instances.has(name),
+    setConfigSelector: () => {},
+    clear: () => {},
+  };
+
+  return { entrypoint, activity };
+}
+
+describe('Mastra workspace observability auto-instrumentation', () => {
+  let tempDir: string;
+
+  beforeEach(async () => {
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ws-obs-test-'));
+  });
+
+  afterEach(async () => {
+    try {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    } catch {
+      // ignore
+    }
+  });
+
+  const createWorkspace = () =>
+    new Workspace({
+      id: 'ws-obs',
+      name: 'workspace-obs',
+      filesystem: new LocalFilesystem({ basePath: tempDir }),
+    });
+
+  it('returns the raw provider when the workspace has no Mastra parent', () => {
+    const ws = createWorkspace();
+    const raw = (ws as any)._fs;
+    expect(ws.filesystem).toBe(raw);
+  });
+
+  it('returns the raw provider when Mastra has no observability configured', () => {
+    const ws = createWorkspace();
+    const mastra = new Mastra({ logger: false });
+    mastra.addWorkspace(ws);
+
+    const raw = (ws as any)._fs;
+    expect(ws.filesystem).toBe(raw);
+  });
+
+  it('wraps the filesystem provider when Mastra has observability configured', async () => {
+    const ws = createWorkspace();
+    const { entrypoint, activity } = makeObservabilityEntrypoint();
+    const mastra = new Mastra({ logger: false, observability: entrypoint });
+    mastra.addWorkspace(ws);
+
+    const raw = (ws as any)._fs;
+    const wrapped = ws.filesystem;
+    expect(wrapped).not.toBe(raw);
+
+    // Consecutive reads return the same Proxy (memoized).
+    expect(ws.filesystem).toBe(wrapped);
+
+    // Calling through the Proxy exercises instrumentation and reaches the raw provider.
+    await wrapped!.writeFile('hello.txt', 'world');
+    expect(activity.some(e => e.type === 'filesystem_change')).toBe(true);
+  });
+
+  it('registration is idempotent: re-adding the same workspace does not double-wrap or throw', async () => {
+    const ws = createWorkspace();
+    const { entrypoint } = makeObservabilityEntrypoint();
+    const mastra = new Mastra({ logger: false, observability: entrypoint });
+    mastra.addWorkspace(ws);
+    const firstProxy = ws.filesystem;
+
+    expect(() => mastra.addWorkspace(ws)).not.toThrow();
+    expect(ws.filesystem).toBe(firstProxy);
+  });
+
+  it('wraps sandbox and filesystem on an agent-owned workspace via Agent.__registerMastra fanout', () => {
+    const ws = createWorkspace();
+    const agent = new Agent({
+      name: 'A',
+      instructions: 'test',
+      model: new MockLanguageModelV1({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { promptTokens: 1, completionTokens: 1 },
+          text: 'ok',
+        }),
+      }),
+      workspace: ws,
+    });
+
+    const { entrypoint } = makeObservabilityEntrypoint();
+    const mastra = new Mastra({
+      logger: false,
+      observability: entrypoint,
+      agents: { A: agent },
+    });
+    // Silence unused-var: mastra is constructed for its side-effect (auto-register agent + workspace).
+    void mastra;
+
+    const raw = (ws as any)._fs;
+    expect(ws.filesystem).not.toBe(raw);
+  });
+});

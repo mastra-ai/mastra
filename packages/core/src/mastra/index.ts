@@ -2984,6 +2984,11 @@ export class Mastra<
       ...(metadata?.agentId ? { agentId: metadata.agentId } : {}),
       ...(metadata?.agentName ? { agentName: metadata.agentName } : {}),
     };
+
+    // Register this Mastra with the workspace so filesystem/sandbox providers
+    // get auto-instrumented when observability is configured. Idempotent — the
+    // workspace short-circuits re-registration with the same Mastra.
+    workspace.__registerMastra?.(this);
   }
 
   /**
