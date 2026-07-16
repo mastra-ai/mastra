@@ -160,6 +160,24 @@ export interface OtherAgentControllerEvent {
  */
 export type AgentControllerEvent = KnownAgentControllerEvent | OtherAgentControllerEvent;
 
+type SerializedMastraDBMessage = Omit<MastraDBMessage, 'createdAt'> & { createdAt: Date | string };
+
+function hydrateMessage(message: SerializedMastraDBMessage): MastraDBMessage {
+  return {
+    ...message,
+    createdAt: message.createdAt instanceof Date ? message.createdAt : new Date(message.createdAt),
+  };
+}
+
+function hydrateEventMessage(event: AgentControllerEvent): AgentControllerEvent {
+  if (event.type !== 'message_start' && event.type !== 'message_update' && event.type !== 'message_end') return event;
+
+  return {
+    ...event,
+    message: hydrateMessage(event.message as SerializedMastraDBMessage),
+  } as AgentControllerEvent;
+}
+
 /** Response from creating or resuming an agent controller session. */
 export interface CreateAgentControllerSessionResponse {
   controllerId: string;
@@ -397,7 +415,7 @@ export class AgentControllerSession extends BaseResource {
               const data = line.slice(5).trim();
               if (!data) continue;
               try {
-                options.onEvent(JSON.parse(data) as AgentControllerEvent);
+                options.onEvent(hydrateEventMessage(JSON.parse(data) as AgentControllerEvent));
               } catch {
                 // ignore malformed frame
               }
@@ -564,10 +582,10 @@ export class AgentControllerSession extends BaseResource {
   /** List messages for a specific thread. */
   async listMessages(threadId: string, limit?: number): Promise<MastraDBMessage[]> {
     const params = limit != null ? `?limit=${limit}` : '';
-    const body = await this.request<{ messages: MastraDBMessage[] }>(
+    const body = await this.request<{ messages: SerializedMastraDBMessage[] }>(
       this.url(`${this.base()}/threads/${encodeURIComponent(threadId)}/messages${params}`),
     );
-    return body.messages;
+    return body.messages.map(hydrateMessage);
   }
 
   /**

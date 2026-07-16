@@ -112,7 +112,7 @@ export function handleAgentControllerEvent(
     }
 
     case 'message_end':
-      state.lastTextLength = 0;
+      if (event.message.role === 'assistant') state.lastTextLength = 0;
       break;
 
     case 'tool_start':

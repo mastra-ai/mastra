@@ -87,9 +87,9 @@ describe('ACP Event Mapper', () => {
       expect(sessionUpdateSpy).toHaveBeenCalledTimes(2);
     });
 
-    it('emits a signal once without duplicating or truncating adjacent assistant text', () => {
+    it('preserves the cumulative assistant cursor across an interleaved signal', () => {
       const state = createPromptState('session-1');
-      const firstAssistant = {
+      const assistant = {
         id: 'assistant-1',
         role: 'assistant' as const,
         content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'Before signal' }] },
@@ -102,24 +102,18 @@ describe('ACP Event Mapper', () => {
         contents: 'Remember this.',
         createdAt: new Date('2026-07-15T10:00:01.000Z'),
       }).toDBMessage();
-      const secondAssistant = {
-        id: 'assistant-2',
-        role: 'assistant' as const,
-        content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'After signal' }] },
-        createdAt: new Date('2026-07-15T10:00:02.000Z'),
-      };
 
-      handleAgentControllerEvent(
-        { type: 'message_update', message: firstAssistant },
-        state,
-        mockConnection,
-        mockSession,
-      );
-      handleAgentControllerEvent({ type: 'message_end', message: firstAssistant }, state, mockConnection, mockSession);
+      handleAgentControllerEvent({ type: 'message_update', message: assistant }, state, mockConnection, mockSession);
       handleAgentControllerEvent({ type: 'message_start', message: signal }, state, mockConnection, mockSession);
       handleAgentControllerEvent({ type: 'message_end', message: signal }, state, mockConnection, mockSession);
+      expect(state.lastTextLength).toBe('Before signal'.length);
+
+      const updatedAssistant = {
+        ...assistant,
+        content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'Before signal after' }] },
+      };
       handleAgentControllerEvent(
-        { type: 'message_update', message: secondAssistant },
+        { type: 'message_update', message: updatedAssistant },
         state,
         mockConnection,
         mockSession,
@@ -128,9 +122,16 @@ describe('ACP Event Mapper', () => {
       expect(sessionUpdateSpy.mock.calls.map(([notification]) => notification.update.content.text)).toEqual([
         'Before signal',
         'Remember this.',
-        'After signal',
+        ' after',
       ]);
-      expect(state.lastTextLength).toBe('After signal'.length);
+
+      handleAgentControllerEvent(
+        { type: 'message_end', message: updatedAssistant },
+        state,
+        mockConnection,
+        mockSession,
+      );
+      expect(state.lastTextLength).toBe(0);
     });
   });
 

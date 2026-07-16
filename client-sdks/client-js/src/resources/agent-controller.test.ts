@@ -3,7 +3,7 @@ import { describe, expect, beforeEach, it, vi } from 'vitest';
 
 import { MastraClient } from '../client';
 import { agentControllerMessageText } from './agent-controller';
-import type { AgentControllerEvent } from './agent-controller';
+import type { AgentControllerEvent, KnownAgentControllerEvent } from './agent-controller';
 
 global.fetch = vi.fn();
 
@@ -220,27 +220,63 @@ describe('AgentController Resource', () => {
     expect(JSON.parse(init.body as string)).toEqual({ threadId: 't-1' });
   });
 
-  it('parses SSE frames into events (skipping heartbeats)', async () => {
-    const events = [
-      { type: 'agent_start' },
+  it('hydrates message timestamps returned by listMessages without mutating the source payload', async () => {
+    const sourceMessages = [
       {
-        type: 'message_update',
-        message: {
-          id: 'm1',
-          role: 'assistant',
-          content: { format: 2, parts: [{ type: 'text', text: 'hi' }] },
-          createdAt: '2026-01-01T00:00:00.000Z',
-        },
+        id: 'm1',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'hello' }] },
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+      {
+        id: 'm2',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'hi' }] },
+        createdAt: '2026-01-01T00:00:01.000Z',
       },
     ];
-    mockSse([`data: ${JSON.stringify(events[0])}\n\n`, `: heartbeat\n\n`, `data: ${JSON.stringify(events[1])}\n\n`]);
+    mockJson({ messages: sourceMessages });
 
-    const received: AgentControllerEvent[] = [];
+    const messages = await client.getAgentController('code').session('user-1').listMessages('t-1');
+
+    expect(messages.map(message => message.createdAt)).toEqual([
+      new Date('2026-01-01T00:00:00.000Z'),
+      new Date('2026-01-01T00:00:01.000Z'),
+    ]);
+    expect(messages.map(agentControllerMessageText)).toEqual(['hello', 'hi']);
+    expect(sourceMessages.map(message => message.createdAt)).toEqual([
+      '2026-01-01T00:00:00.000Z',
+      '2026-01-01T00:00:01.000Z',
+    ]);
+    expect(lastCall()[0]).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/threads/t-1/messages');
+  });
+
+  it('hydrates message timestamps from SSE events while skipping heartbeats', async () => {
+    const createdAt = '2026-01-01T00:00:00.000Z';
+    const message = {
+      id: 'm1',
+      role: 'assistant',
+      content: { format: 2, parts: [{ type: 'text', text: 'hi' }] },
+      createdAt,
+    };
+    const events = [
+      { type: 'agent_start' },
+      { type: 'message_start', message },
+      { type: 'message_update', message },
+      { type: 'message_end', message },
+    ];
+    mockSse([
+      `data: ${JSON.stringify(events[0])}\n\n`,
+      `: heartbeat\n\n`,
+      ...events.slice(1).map(event => `data: ${JSON.stringify(event)}\n\n`),
+    ]);
+
+    const received: KnownAgentControllerEvent[] = [];
     const sub = await client
       .getAgentController('code')
       .session('user-1')
       .subscribe({
-        onEvent: e => received.push(e),
+        onEvent: e => received.push(e as KnownAgentControllerEvent),
       });
 
     // Allow the async pump to drain the (already-closed) stream.
@@ -249,10 +285,12 @@ describe('AgentController Resource', () => {
 
     const [url] = lastCall();
     expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/stream');
-    expect(received.map(e => e.type)).toEqual(['agent_start', 'message_update']);
-    expect(received[1].type).toBe('message_update');
-    if (received[1].type === 'message_update') {
-      expect(agentControllerMessageText(received[1].message)).toBe('hi');
+    expect(received.map(e => e.type)).toEqual(['agent_start', 'message_start', 'message_update', 'message_end']);
+    for (const event of received.slice(1)) {
+      if (event.type !== 'message_start' && event.type !== 'message_update' && event.type !== 'message_end') continue;
+      expect(event.message.createdAt).toBeInstanceOf(Date);
+      expect(event.message.createdAt.toISOString()).toBe(createdAt);
+      expect(agentControllerMessageText(event.message)).toBe('hi');
     }
   });
 
