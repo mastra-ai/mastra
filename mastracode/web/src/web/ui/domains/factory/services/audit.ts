@@ -15,8 +15,10 @@ export interface AuditTarget {
 export interface AuditEvent {
   id: string;
   orgId: string;
-  /** WorkOS user id of whoever performed the action. */
+  /** WorkOS user id of whoever performed the action, or `agent:<threadId>`. */
   actorId: string;
+  /** Whether a human or an agent (inside a run) performed the action. */
+  actorType: 'human' | 'agent';
   /** Dot-namespaced action, e.g. 'factory.work_item.stage_moved'. */
   action: string;
   targets: AuditTarget[];

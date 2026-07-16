@@ -57,6 +57,7 @@ function makeEvent(overrides: Partial<AuditEvent> = {}): AuditEvent {
     id: 'evt-1',
     orgId: 'org-1',
     actorId: 'user_alice',
+    actorType: 'human',
     action: 'factory.work_item.stage_moved',
     targets: [{ type: 'work_item', id: 'wi-1', name: 'Fix flaky test' }],
     metadata: { from: ['triage'], to: ['building'] },
@@ -208,6 +209,47 @@ describe('Factory Audit page', () => {
     await waitFor(() =>
       expect(state.requests.map(r => r.actions)).toContain('factory.git.commit,factory.git.push,factory.git.pr_opened'),
     );
+  });
+
+  it('given the All filter, when the user picks Agent, then events are refetched with the agent action list', async () => {
+    const state = useAuditHandlers();
+    renderAt('/factory/audit');
+
+    await screen.findByRole('list', { name: 'Audit events' });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Agent' }));
+
+    await waitFor(() =>
+      expect(state.requests.map(r => r.actions)).toContain(
+        'factory.agent.commit,factory.agent.push,factory.agent.pr_opened',
+      ),
+    );
+  });
+
+  it('given an agent event, when the trail renders, then the row attributes it to the agent and the initiating human', async () => {
+    useAuditHandlers({
+      pages: [
+        {
+          events: [
+            makeEvent({
+              id: 'evt-agent',
+              actorId: 'agent:thread-42',
+              actorType: 'agent',
+              action: 'factory.agent.push',
+              targets: [{ type: 'worktree', id: '/sandbox/mastra-worktrees/feat-audit' }],
+              metadata: { command: 'git push origin feat/audit', branch: 'feat/audit', startedBy: 'user_alice' },
+            }),
+          ],
+        },
+      ],
+    });
+    renderAt('/factory/audit');
+
+    const list = await screen.findByRole('list', { name: 'Audit events' });
+    const row = within(list).getAllByRole('listitem')[0]!;
+    expect(within(row).getByText('Push')).toBeInTheDocument();
+    expect(within(row).getByText('by agent · started by user_alice')).toBeInTheDocument();
+    expect(within(row).queryByText(/agent:thread-42/)).not.toBeInTheDocument();
   });
 
   it('given more events than one page, when the user clicks Load more, then the next page is fetched with the cursor and appended', async () => {

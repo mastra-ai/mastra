@@ -26,6 +26,15 @@
  *   - factory.git.push
  *   - factory.git.pr_opened
  *   - factory.intake.config_updated
+ *
+ * v1.1 adds agent-level actions (also register these in WorkOS):
+ *   - factory.agent.commit
+ *   - factory.agent.push
+ *   - factory.agent.pr_opened
+ *
+ * Agent events carry `actor_type = 'agent'` with `actor_id = 'agent:<threadId>'`
+ * and `metadata.startedBy = <userId>` chaining accountability back to the human
+ * whose message drove the run.
  */
 
 import { index, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
@@ -39,6 +48,9 @@ export interface AuditTarget {
   /** Human-readable label (work-item title, branch name...). */
   name?: string;
 }
+
+/** Who performed the audited action. */
+export type AuditActorType = 'human' | 'agent';
 
 /** Request context captured alongside the event. */
 export interface AuditContext {
@@ -54,8 +66,10 @@ export const auditEvents = pgTable(
     id: uuid('id').primaryKey().defaultRandom(),
     /** Owning WorkOS organization id — the trail is org-wide. */
     orgId: text('org_id').notNull(),
-    /** WorkOS user id of whoever performed the action. */
+    /** WorkOS user id of whoever performed the action, or `agent:<threadId>`. */
     actorId: text('actor_id').notNull(),
+    /** Whether a human or an agent (inside a run) performed the action. */
+    actorType: text('actor_type').$type<AuditActorType>().notNull().default('human'),
     /** Dot-namespaced action, e.g. 'factory.work_item.stage_moved'. */
     action: text('action').notNull(),
     /** What was acted on. */
@@ -100,4 +114,6 @@ CREATE INDEX IF NOT EXISTS audit_events_org_occurred_idx
 
 CREATE INDEX IF NOT EXISTS audit_events_org_project_occurred_idx
   ON audit_events (org_id, github_project_id, occurred_at DESC);
+
+ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS actor_type text NOT NULL DEFAULT 'human';
 `;

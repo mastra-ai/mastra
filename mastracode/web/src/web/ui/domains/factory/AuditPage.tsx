@@ -25,6 +25,11 @@ const ACTION_GROUPS = [
   { key: 'runs', label: 'Runs', actions: ['factory.run.started', 'factory.triage.started'] },
   { key: 'worktrees', label: 'Worktrees', actions: ['factory.worktree.created', 'factory.worktree.deleted'] },
   { key: 'git', label: 'Git', actions: ['factory.git.commit', 'factory.git.push', 'factory.git.pr_opened'] },
+  {
+    key: 'agent',
+    label: 'Agent',
+    actions: ['factory.agent.commit', 'factory.agent.push', 'factory.agent.pr_opened'],
+  },
   { key: 'intake', label: 'Intake', actions: ['factory.intake.config_updated'] },
 ] as const;
 
@@ -141,7 +146,9 @@ function AuditEventRow({ event }: { event: AuditEvent }) {
             {target?.name ?? target?.id ?? '—'}
           </Txt>
           <Txt as="span" variant="ui-xs" className="text-icon3">
-            by {event.actorId}
+            {event.actorType === 'agent'
+              ? `by agent${typeof event.metadata.startedBy === 'string' ? ` · started by ${event.metadata.startedBy}` : ''}`
+              : `by ${event.actorId}`}
           </Txt>
         </div>
       </div>

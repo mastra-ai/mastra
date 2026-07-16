@@ -130,6 +130,20 @@ describe('recordAuditEvent', () => {
     expect(rows).toHaveLength(1);
   });
 
+  it('defaults actorType to human', async () => {
+    const row = await recordAuditEvent(baseEvent());
+    expect(row!.actorType).toBe('human');
+  });
+
+  it('stores an agent actorType when provided', async () => {
+    const row = await recordAuditEvent(
+      baseEvent({ actorId: 'agent:thread-1', actorType: 'agent', metadata: { startedBy: 'user_abc' } }),
+    );
+    expect(row!.actorType).toBe('agent');
+    expect(row!.actorId).toBe('agent:thread-1');
+    expect(row!.metadata).toEqual({ startedBy: 'user_abc' });
+  });
+
   it('stores metadata and context when provided', async () => {
     const row = await recordAuditEvent(
       baseEvent({

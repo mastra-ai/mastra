@@ -31,6 +31,7 @@ import { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
+import { observeAgentGitAction } from '../web/audit/agent-audit.js';
 import { buildAuthRoutes, createWebAuthGate, createWebAuthProvider, isWebAuthEnabled } from '../web/auth.js';
 import { buildLinearAgentTools } from '../web/linear/agent-tools.js';
 import { handleServerError } from '../web/server-error.js';
@@ -146,6 +147,11 @@ const prepared = await prepareAgentControllerMount({
         }) => {
           const pullRequestUrl = parseCreatedPullRequest(context);
           const requestContext = (context.context as { requestContext?: RequestContext } | undefined)?.requestContext;
+          // Audit externally-visible git side effects performed by the agent
+          // (commit / push / PR creation). Fire-and-forget; never throws.
+          if (requestContext) {
+            void observeAgentGitAction({ ...context, context: requestContext });
+          }
           if (pullRequestUrl && requestContext) {
             await subscribeCurrentSessionToPullRequest(requestContext, pullRequestUrl, 'auto-gh-pr-create');
           }

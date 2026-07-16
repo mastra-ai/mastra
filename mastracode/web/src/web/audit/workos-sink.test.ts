@@ -18,6 +18,7 @@ function makeRow(overrides: Partial<AuditEventRow> = {}): AuditEventRow {
     id: '00000000-0000-4000-8000-000000000001',
     orgId: 'org_123',
     actorId: 'user_abc',
+    actorType: 'human',
     action: 'factory.work_item.stage_moved',
     targets: [{ type: 'work_item', id: 'wi-1', name: 'Fix login' }],
     metadata: { fromStages: ['intake'], toStages: ['triage'], count: 2, ok: true },
@@ -50,6 +51,11 @@ describe('toWorkOSEvent', () => {
       context: { location: '10.0.0.1', userAgent: 'vitest' },
       metadata: { fromStages: '["intake"]', toStages: '["triage"]', count: 2, ok: true },
     });
+  });
+
+  it('maps agent rows to an agent actor type', () => {
+    const event = toWorkOSEvent(makeRow({ actorId: 'agent:thread-1', actorType: 'agent' }));
+    expect(event.actor).toEqual({ type: 'agent', id: 'agent:thread-1' });
   });
 
   it('falls back to an unknown location and drops null metadata values', () => {

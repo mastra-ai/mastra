@@ -12,7 +12,7 @@ import type { SQL } from 'drizzle-orm';
 import { getAppDb } from '../github/db';
 import { ensureAuditDbReady } from './db';
 import { auditEvents } from './schema';
-import type { AuditContext, AuditEventRow, AuditTarget } from './schema';
+import type { AuditActorType, AuditContext, AuditEventRow, AuditTarget } from './schema';
 
 /** Metadata is a bounded summary — never full payloads, never secrets. */
 const MAX_METADATA_JSON_LENGTH = 4096;
@@ -23,6 +23,8 @@ const MAX_PAGE_SIZE = 200;
 export interface RecordAuditEventInput {
   orgId: string;
   actorId: string;
+  /** Who performed the action; defaults to 'human'. */
+  actorType?: AuditActorType;
   /** Dot-namespaced action, e.g. 'factory.work_item.stage_moved'. */
   action: string;
   targets: AuditTarget[];
@@ -55,6 +57,7 @@ export async function recordAuditEvent(input: RecordAuditEventInput): Promise<Au
       .values({
         orgId: input.orgId,
         actorId: input.actorId,
+        actorType: input.actorType ?? 'human',
         action: input.action,
         targets: input.targets,
         metadata: boundMetadata(input.metadata),
