@@ -48,6 +48,7 @@ export function ClampedText({
           variant="ghost"
           size="xs"
           className="mt-1 -ml-[.8em] self-start justify-self-start"
+          aria-expanded={isExpanded}
           onClick={() => setIsExpanded(v => !v)}
         >
           {isExpanded ? showLessLabel : readMoreLabel}

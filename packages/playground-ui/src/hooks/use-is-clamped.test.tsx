@@ -54,6 +54,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  Reflect.deleteProperty(document, 'fonts');
 });
 
 describe('useIsClamped', () => {
@@ -80,6 +81,27 @@ describe('useIsClamped', () => {
     act(() => result.current.ref(createClampableElement({ scrollHeight: 60, clientHeight: 40 })));
 
     expect(result.current.isClamped).toBe(true);
+  });
+
+  it('re-measures on font load even when ResizeObserver is unsupported', async () => {
+    vi.stubGlobal('ResizeObserver', undefined);
+    let fontsReady!: () => void;
+    Object.defineProperty(document, 'fonts', {
+      configurable: true,
+      value: { ready: new Promise<void>(resolve => (fontsReady = resolve)) },
+    });
+
+    const element = createClampableElement({ scrollHeight: 60, clientHeight: 40 });
+    const { result } = renderHook(() => useIsClamped());
+
+    act(() => result.current.ref(element));
+    expect(result.current.isClamped).toBe(true);
+
+    setElementSize(element, { scrollHeight: 60, clientHeight: 60 });
+    fontsReady();
+    await act(async () => {});
+
+    expect(result.current.isClamped).toBe(false);
   });
 
   it('re-measures when the element resizes', () => {
