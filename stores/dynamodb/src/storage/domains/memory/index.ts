@@ -433,17 +433,19 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         const dateRange = filter?.dateRange;
         const startIso = dateRange?.start ? toIso(dateRange.start) : undefined;
         const endIso = dateRange?.end ? toIso(dateRange.end) : undefined;
-        const startOp = dateRange?.startExclusive ? 'gt' : 'gte';
-        const endOp = dateRange?.endExclusive ? 'lt' : 'lte';
+        const startExclusive = dateRange?.startExclusive ?? false;
+        const endExclusive = dateRange?.endExclusive ?? false;
+        const startOp = startExclusive ? 'gt' : 'gte';
+        const endOp = endExclusive ? 'lt' : 'lte';
 
         if (dateRange && startIso && endIso) {
           query = query.between({ createdAt: startIso }, { createdAt: endIso });
-          if (dateRange.startExclusive || dateRange.endExclusive) {
+          if (startExclusive || endExclusive) {
             query = query.where(({ createdAt }: any, { gt, lt }: any) => {
-              if (dateRange.startExclusive && dateRange.endExclusive) {
+              if (startExclusive && endExclusive) {
                 return `${gt(createdAt, startIso)} AND ${lt(createdAt, endIso)}`;
               }
-              if (dateRange.startExclusive) {
+              if (startExclusive) {
                 return gt(createdAt, startIso);
               }
               return lt(createdAt, endIso);
