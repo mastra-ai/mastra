@@ -19,6 +19,8 @@
 
 import { Mastra } from '@mastra/core/mastra';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
+import { BetterAuthWebAuth } from '../web/auth-better-adapter.js';
+import type { WebAuthAdapter } from '../web/auth-adapter.js';
 import { WorkOSWebAuth } from '../web/auth-workos-adapter.js';
 import { MastraFactory } from '../web/factory-entry.js';
 
@@ -42,14 +44,25 @@ if (redisUrl) {
   console.log(`[PubSub] REDIS_URL set — event bus on Redis Streams (${redisTarget}), cross-process leases enabled.`);
 }
 
-// Web auth: when the WorkOS credentials are present, the whole server sits
-// behind WorkOS AuthKit (hosted login). The WorkOS SDK reads WORKOS_API_KEY /
-// WORKOS_CLIENT_ID itself; the redirect URI falls back to
-// `<publicUrl>/auth/callback` inside the adapter's init(). Swap in
-// `new BetterAuthWebAuth({ secret })` (or any custom `WebAuthAdapter`) to run
-// without an external identity vendor. Unset → auth disabled (open server).
+// Web auth, by env precedence (any custom `WebAuthAdapter` works here too):
+//   1. WORKOS_API_KEY + WORKOS_CLIENT_ID → WorkOS AuthKit (hosted login). The
+//      WorkOS SDK reads its own credentials; the redirect URI falls back to
+//      `<publicUrl>/auth/callback` inside the adapter's init().
+//   2. BETTER_AUTH_SECRET → self-hosted better-auth (email/password on the app
+//      Postgres — no external identity vendor in the availability path).
+//      MASTRACODE_AUTH_SIGNUP_DISABLED=1 turns off public sign-up.
+//   3. Neither → auth disabled (open server, bare local dev).
 const workosConfigured = Boolean(process.env.WORKOS_API_KEY && process.env.WORKOS_CLIENT_ID);
-const auth = workosConfigured ? new WorkOSWebAuth({ redirectUri: process.env.WORKOS_REDIRECT_URI }) : undefined;
+const betterAuthSecret = process.env.BETTER_AUTH_SECRET;
+let auth: WebAuthAdapter | undefined;
+if (workosConfigured) {
+  auth = new WorkOSWebAuth({ redirectUri: process.env.WORKOS_REDIRECT_URI });
+} else if (betterAuthSecret) {
+  auth = new BetterAuthWebAuth({
+    secret: betterAuthSecret,
+    signUpDisabled: process.env.MASTRACODE_AUTH_SIGNUP_DISABLED === '1',
+  });
+}
 
 export const factory = new MastraFactory({
   auth,
