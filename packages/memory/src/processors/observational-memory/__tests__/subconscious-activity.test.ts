@@ -60,6 +60,27 @@ describe('Subconscious activity', () => {
     expect(snapshot.updates).toHaveLength(3);
   });
 
+  it('does not expose names after an activity target moves outside the visible scope', async () => {
+    const store = await createStore();
+    const secret = await store.createEntity({ name: 'Moved secret', kind: 'note', scope: resourceScope });
+    await store.updateEntity({ id: secret.id, version: secret.version, scope: alphaScope });
+    const page = await store.createPage({ name: 'Moved page', body: 'Private notes', scope: resourceScope });
+    await store.updatePage({ id: page.id, version: page.version, scope: alphaScope });
+
+    const snapshot = await buildSubconsciousActivitySnapshot({ store, scope: betaScope, recentUpdates: 10 });
+
+    expect(snapshot.updates).toContainEqual(
+      expect.objectContaining({ recordId: secret.id, type: 'entity', name: undefined }),
+    );
+    expect(snapshot.updates).toContainEqual(
+      expect.objectContaining({ recordId: page.id, type: 'page', name: undefined }),
+    );
+    expect(snapshot.hot.map(record => record.name)).not.toContain('Moved secret');
+    expect(snapshot.hot.map(record => record.name)).not.toContain('Moved page');
+    expect(renderSubconsciousActivity(snapshot)).not.toContain(secret.id);
+    expect(renderSubconsciousActivity(snapshot)).not.toContain(page.id);
+  });
+
   it('bounds updates and hot records, renders errors, and generates stable cache keys', async () => {
     const store = await createStore();
     for (let index = 0; index < 5; index++) {

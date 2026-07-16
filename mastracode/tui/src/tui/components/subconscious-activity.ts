@@ -3,28 +3,22 @@ import chalk from 'chalk';
 import { BOX_INDENT, mastra, theme } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
 
-const MAX_UPDATES = 10;
-const MAX_HOT = 10;
-const MAX_ERRORS = 10;
+const MAX_UPDATES = 100;
+const MAX_HOT = 100;
+const MAX_ERRORS = 100;
 const DISPLAY_UPDATES = 4;
 const DISPLAY_HOT = 4;
 const DISPLAY_ERRORS = 3;
 
 interface SubconsciousActivityUpdate {
-  id: string;
   action: string;
   type: 'entity' | 'fact' | 'page';
-  recordId: string;
   name?: string;
-  targetId: string;
-  targetType: 'entity' | 'page';
-  sourceThreadId?: string;
   createdAt: string;
 }
 
 interface SubconsciousHotRecord {
   type: 'entity' | 'page';
-  id: string;
   name: string;
   updates: number;
 }
@@ -61,7 +55,12 @@ function update(value: unknown): SubconsciousActivityUpdate | undefined {
   ) {
     return undefined;
   }
-  return item as unknown as SubconsciousActivityUpdate;
+  return {
+    action: item.action,
+    type: item.type as SubconsciousActivityUpdate['type'],
+    ...(typeof item.name === 'string' ? { name: item.name } : {}),
+    createdAt: item.createdAt,
+  };
 }
 
 function hotRecord(value: unknown): SubconsciousHotRecord | undefined {
@@ -77,7 +76,11 @@ function hotRecord(value: unknown): SubconsciousHotRecord | undefined {
   ) {
     return undefined;
   }
-  return item as unknown as SubconsciousHotRecord;
+  return {
+    type: item.type as SubconsciousHotRecord['type'],
+    name: item.name,
+    updates: item.updates,
+  };
 }
 
 export function parseSubconsciousActivitySnapshot(value: unknown): SubconsciousActivitySnapshot | undefined {
@@ -110,7 +113,7 @@ export class SubconsciousActivityComponent extends Container {
     this.addChild(new Text(theme.fg('dim', summary), BOX_INDENT + 2, 0));
 
     for (const item of snapshot.updates.slice(0, DISPLAY_UPDATES)) {
-      const target = item.name ?? item.recordId;
+      const target = item.name ?? `${item.type} (details unavailable)`;
       this.addChild(new Text(`${item.action}: ${target}`, BOX_INDENT + 2, 0));
     }
     if (snapshot.updates.length > DISPLAY_UPDATES) {

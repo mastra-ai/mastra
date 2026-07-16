@@ -693,7 +693,7 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     const rows = await (
       await this.#activityCollection()
     )
-      .find({ scopeKey: { $in: visibleScopeKeys(scope) }, ...(input.after ? { id: { $gt: input.after } } : {}) })
+      .find({ scopeKey: { $in: visibleScopeKeys(scope) }, ...(input.after ? { id: { $lt: input.after } } : {}) })
       .sort({ id: -1 })
       .limit(input.limit ?? 100)
       .toArray();

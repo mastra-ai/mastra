@@ -243,6 +243,14 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
           incomingFacts:
             kind === 'incoming' ? [...current.incomingFacts, ...next.incomingFacts] : current.incomingFacts,
           incomingFactsNextCursor: kind === 'incoming' ? next.incomingFactsNextCursor : current.incomingFactsNextCursor,
+          relatedEntities: [
+            ...new Map(
+              [...current.relatedEntities, ...next.relatedEntities].map(item => [
+                `${item.type}:${item.kind ?? ''}:${item.name}:${item.scope.level}:${item.scope.id}`,
+                item,
+              ]),
+            ).values(),
+          ],
         },
       };
     } catch (error) {

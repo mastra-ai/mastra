@@ -241,6 +241,40 @@ describe('KnowledgeBrowserComponent', () => {
     expect(text(browser)).toContain('Beta');
   });
 
+  it('preserves related entities while loading more facts', async () => {
+    const atlas = record('Atlas');
+    const alpha = record('Alpha dependency');
+    const beta = record('Beta dependency');
+    const first = { ...entityDetail(atlas, [alpha]), factsNextCursor: 'facts-page-2' };
+    const second = {
+      ...entityDetail(atlas, [{ ...alpha, handle: 'entity:Alpha-new-handle' }, beta]),
+      facts: [{ ...entityDetail(atlas).facts[0]!, text: 'Atlas follows Beta dependency.' }],
+    };
+    const inspector = createInspector({
+      getEntity: vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(second),
+    });
+    const { browser } = createBrowser(inspector);
+    await settle();
+    browser.handleInput('j');
+    browser.handleInput('\r');
+    await settle();
+    browser.handleInput('j');
+    browser.handleInput('\r');
+    await settle();
+
+    expect(text(browser)).toContain('Alpha dependency');
+    browser.handleInput('\r');
+    await settle();
+
+    expect(inspector.getEntity).toHaveBeenLastCalledWith({
+      handle: atlas.handle,
+      factsCursor: 'facts-page-2',
+      incomingFactsCursor: undefined,
+    });
+    expect(text(browser).match(/Alpha dependency/g)).toHaveLength(1);
+    expect(text(browser)).toContain('Beta dependency');
+  });
+
   it('resets to the resource scope when session identity changes', async () => {
     const getScopeTree = vi.fn().mockResolvedValueOnce(tree()).mockResolvedValue(tree('identity-2'));
     const { browser } = createBrowser(createInspector({ getScopeTree }));
