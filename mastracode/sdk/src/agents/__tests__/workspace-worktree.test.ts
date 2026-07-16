@@ -112,7 +112,7 @@ describe('getDynamicWorkspace sandbox worktree binding', () => {
     expect(workspace.id).toBe('mastra-code-workspace-gh-proj-1-sbx-1-/workspace/hello');
   });
 
-  it('combines read-only Factory skills with sandbox project skills and preserves Factory precedence', async () => {
+  it('loads sandbox project skills without adding Web Factory skills', async () => {
     const { getDynamicWorkspace } = await import('../workspace.js');
     const workspace = await getDynamicWorkspace({
       requestContext: createSandboxRequestContext({ ...baseState }) as any,
@@ -122,11 +122,9 @@ describe('getDynamicWorkspace sandbox worktree binding', () => {
     const understandPr = await workspace.skills?.get('understand-pr');
     const projectSkill = await workspace.skills?.get('project-skill');
 
-    expect(understandIssue?.path).toBe('/__mastracode_server_skills__/understand-issue');
-    expect(understandIssue?.instructions).toContain('# Understand Issue');
-    expect(understandIssue?.instructions).not.toContain('# Shadowed Project Skill');
-    expect(understandPr?.path).toBe('/__mastracode_server_skills__/understand-pr');
-    expect(understandPr?.instructions).toContain('# Understand PR');
+    expect(understandIssue?.path).toBe('.mastracode/skills/understand-issue');
+    expect(understandIssue?.instructions).toContain('# Shadowed Project Skill');
+    expect(understandPr).toBeNull();
     expect(projectSkill?.path).toBe('.mastracode/skills/project-skill');
     expect(projectSkill?.instructions).toContain('Loaded from sandbox.');
   });

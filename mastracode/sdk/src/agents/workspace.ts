@@ -6,14 +6,8 @@ import type { ToolsInput } from '@mastra/core/agent';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
-import {
-  Workspace,
-  LocalFilesystem,
-  LocalSandbox,
-  LocalSkillSource,
-  createWorkspaceTools,
-} from '@mastra/core/workspace';
-import type { LSPConfig, SkillSource, SkillSourceEntry, SkillSourceStat } from '@mastra/core/workspace';
+import { Workspace, LocalFilesystem, LocalSandbox, createWorkspaceTools } from '@mastra/core/workspace';
+import type { LSPConfig, SkillSource } from '@mastra/core/workspace';
 import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import { loadSettings } from '../onboarding/settings.js';
 import type { MastraCodeState } from '../schema.js';
@@ -152,64 +146,13 @@ export function buildSkillPaths(
   });
 }
 
-const FACTORY_SKILLS_SOURCE_PATH = join(dirname(fileURLToPath(import.meta.url)), 'factory-skills');
-const FACTORY_SKILLS_MOUNT = path.resolve(path.parse(process.cwd()).root, '__mastracode_server_skills__');
-const FACTORY_SKILL_NAMES = new Set(['understand-issue', 'understand-pr']);
-
-class FactorySkillSource implements SkillSource {
-  readonly #builtinSource = new LocalSkillSource();
-  readonly #fallbackSkillRoots: Set<string>;
-
-  constructor(
-    readonly fallback: SkillSource,
-    fallbackSkillRoots: string[],
-  ) {
-    this.#fallbackSkillRoots = new Set(fallbackSkillRoots.map(skillPath => path.normalize(skillPath)));
-  }
-
-  #isBuiltinPath(skillPath: string): boolean {
-    const normalized = path.normalize(skillPath);
-    return normalized === FACTORY_SKILLS_MOUNT || normalized.startsWith(`${FACTORY_SKILLS_MOUNT}${path.sep}`);
-  }
-
-  #builtinPath(skillPath: string): string {
-    const relative = path.relative(FACTORY_SKILLS_MOUNT, path.normalize(skillPath));
-    return path.join(FACTORY_SKILLS_SOURCE_PATH, relative);
-  }
-
-  exists(skillPath: string): Promise<boolean> {
-    return this.#isBuiltinPath(skillPath)
-      ? this.#builtinSource.exists(this.#builtinPath(skillPath))
-      : this.fallback.exists(skillPath);
-  }
-
-  stat(skillPath: string): Promise<SkillSourceStat> {
-    return this.#isBuiltinPath(skillPath)
-      ? this.#builtinSource.stat(this.#builtinPath(skillPath))
-      : this.fallback.stat(skillPath);
-  }
-
-  readFile(skillPath: string): Promise<string | Buffer> {
-    return this.#isBuiltinPath(skillPath)
-      ? this.#builtinSource.readFile(this.#builtinPath(skillPath))
-      : this.fallback.readFile(skillPath);
-  }
-
-  async readdir(skillPath: string): Promise<SkillSourceEntry[]> {
-    if (this.#isBuiltinPath(skillPath)) {
-      return this.#builtinSource.readdir(this.#builtinPath(skillPath));
-    }
-    const entries = await this.fallback.readdir(skillPath);
-    if (this.#fallbackSkillRoots.has(path.normalize(skillPath))) {
-      return entries.filter(entry => !FACTORY_SKILL_NAMES.has(entry.name));
-    }
-    return entries;
-  }
-
-  realpath(skillPath: string): Promise<string> {
-    if (this.#isBuiltinPath(skillPath)) return Promise.resolve(path.normalize(skillPath));
-    return this.fallback.realpath ? this.fallback.realpath(skillPath) : Promise.resolve(skillPath);
-  }
+export interface WorkspaceSkillExtension {
+  /** Distinguishes extended workspaces from the default resolver cache. */
+  id: string;
+  /** Additional read-only skill roots prepended to normal project/global skill roots. */
+  paths: string[];
+  /** Compose the additional roots with the workspace's normal skill source. */
+  createSource: (fallback: SkillSource, fallbackSkillRoots: string[]) => SkillSource;
 }
 
 /**
@@ -249,6 +192,7 @@ async function getSandboxWorkspace({
   worktreePath,
   configDir,
   mastra,
+  skillExtension,
 }: {
   githubProjectId: string;
   sandboxId: string;
@@ -256,6 +200,7 @@ async function getSandboxWorkspace({
   worktreePath?: string;
   configDir: string;
   mastra?: Mastra;
+  skillExtension?: WorkspaceSkillExtension;
 }): Promise<Workspace> {
   // Bind the workspace to the active worktree when one is set, so file tools and
   // command tools operate inside the feature branch's working tree rather than
@@ -266,7 +211,8 @@ async function getSandboxWorkspace({
   // (e.g. the previous one expired) or a different worktree must each get a
   // fresh Workspace/ProcessManager instead of reusing one bound to a stale
   // sandbox or the wrong working tree.
-  const workspaceId = `${WORKSPACE_ID_PREFIX}-gh-${githubProjectId}-${sandboxId}-${boundWorkdir}`;
+  const extensionId = skillExtension ? `-${skillExtension.id}` : '';
+  const workspaceId = `${WORKSPACE_ID_PREFIX}-gh-${githubProjectId}-${sandboxId}-${boundWorkdir}${extensionId}`;
 
   // Reuse the existing remote workspace if already registered (preserves the
   // reattached sandbox + ProcessManager state across re-opens).
@@ -283,7 +229,7 @@ async function getSandboxWorkspace({
   const sandbox = await reattachProjectSandbox(sandboxId);
   const filesystem = new SandboxFilesystem({ sandbox, workdir: boundWorkdir });
   const projectSkillPaths = [path.join(configDir, 'skills'), '.claude/skills', '.agents/skills'];
-  const skillPaths = [FACTORY_SKILLS_MOUNT, ...projectSkillPaths];
+  const skillPaths = [...(skillExtension?.paths ?? []), ...projectSkillPaths];
 
   return new Workspace({
     id: workspaceId,
@@ -292,16 +238,18 @@ async function getSandboxWorkspace({
     sandbox: sandbox as unknown as ConstructorParameters<typeof Workspace>[0]['sandbox'],
     tools: MASTRACODE_WORKSPACE_TOOLS,
     skills: skillPaths,
-    skillSource: new FactorySkillSource(filesystem, projectSkillPaths),
+    skillSource: skillExtension?.createSource(filesystem, projectSkillPaths) ?? filesystem,
   });
 }
 
 export async function getDynamicWorkspace({
   requestContext,
   mastra,
+  skillExtension,
 }: {
   requestContext: RequestContext;
   mastra?: Mastra;
+  skillExtension?: WorkspaceSkillExtension;
 }) {
   const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
   const state = ctx?.getState();
@@ -309,8 +257,8 @@ export async function getDynamicWorkspace({
   // GitHub/cloud-sandbox-backed project: the repo lives inside a remote sandbox,
   // not on the server host. Reattach to the already-provisioned + materialized
   // sandbox (the SPA called `.../ensure` first, persisting sandboxId/workdir on
-  // controller state) and build a sandbox-backed Workspace. Server-owned skills
-  // remain on the host while project skills resolve through the sandbox filesystem.
+  // controller state) and build a sandbox-backed Workspace. Optional embedders
+  // may add read-only skill roots while project skills remain sandbox-backed.
   if (state?.githubProjectId && state.sandboxId && state.sandboxWorkdir) {
     return getSandboxWorkspace({
       githubProjectId: state.githubProjectId,
@@ -319,6 +267,7 @@ export async function getDynamicWorkspace({
       worktreePath: state.worktreePath,
       configDir: state.configDir ?? DEFAULT_CONFIG_DIR,
       mastra,
+      skillExtension,
     });
   }
 
@@ -331,8 +280,9 @@ export async function getDynamicWorkspace({
   const projectPath = path.resolve(rawProjectPath);
   const configDir = state?.configDir ?? DEFAULT_CONFIG_DIR;
   const projectSkillPaths = buildSkillPaths(projectPath, configDir, state?.homeDir, state?.pluginSkillPaths ?? []);
-  const skillPaths = [FACTORY_SKILLS_MOUNT, ...projectSkillPaths];
-  const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectPath}`;
+  const skillPaths = [...(skillExtension?.paths ?? []), ...projectSkillPaths];
+  const extensionId = skillExtension ? `-${skillExtension.id}` : '';
+  const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectPath}${extensionId}`;
   const sandboxPaths = state?.sandboxAllowedPaths ?? [];
   const allowedPaths = [
     ...projectSkillPaths,
@@ -382,7 +332,7 @@ export async function getDynamicWorkspace({
     }),
     tools: workspaceTools,
     skills: skillPaths,
-    skillSource: new FactorySkillSource(filesystem, projectSkillPaths),
+    ...(skillExtension ? { skillSource: skillExtension.createSource(filesystem, projectSkillPaths) } : {}),
     lsp: lspConfig,
   });
 }

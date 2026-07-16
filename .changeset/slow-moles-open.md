@@ -12,4 +12,4 @@ const session = await controller.createSession({ resourceId, scope });
 const workspace = session.getWorkspace();
 ```
 
-Mastra Code workspaces now include the server-owned `understand-issue` and `understand-pr` skills as ordinary read-only `SKILL.md` assets. Local and sandbox-backed sessions can resolve them through `workspace.skills` without copying files into the connected repository.
+Mastra Code workspace resolvers can now accept an isolated read-only skill extension. Mastra Code Web uses this seam to expose its server-owned `understand-issue` and `understand-pr` `SKILL.md` assets to Factory sessions without adding them to default SDK or TUI workspaces.

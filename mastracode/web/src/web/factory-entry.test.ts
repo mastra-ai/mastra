@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { WebAuthAdapter, WebAuthAdapterInitContext } from './auth-adapter.js';
 import { MastraFactory } from './factory-entry.js';
+import { getFactoryWorkspace } from './factory/workspace.js';
 import {
   __resetRuntimeConfigForTests,
   getAppDatabaseUrl,
@@ -91,6 +92,11 @@ describe('MastraFactory.prepare', () => {
   it('maps database onto the pg storage config for the SDK mount', async () => {
     const config = await prepareFactory({ database: 'postgres://cfg/app' });
     expect(config.storage).toEqual({ backend: 'pg', connectionString: 'postgres://cfg/app' });
+  });
+
+  it('installs the Web Factory workspace resolver instead of changing the SDK default', async () => {
+    const config = await prepareFactory({});
+    expect(config.workspace).toBe(getFactoryWorkspace);
   });
 
   it('omits storage when no database is configured', async () => {

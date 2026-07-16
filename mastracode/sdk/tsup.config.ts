@@ -1,4 +1,3 @@
-import { access, cp } from 'node:fs/promises';
 import { generateTypes } from '@internal/types-builder';
 import { defineConfig } from 'tsup';
 
@@ -20,11 +19,6 @@ export default defineConfig({
   splitting: false,
   sourcemap: true,
   onSuccess: async () => {
-    await cp('src/agents/factory-skills', 'dist/agents/factory-skills', { recursive: true });
-    await Promise.all([
-      access('dist/agents/factory-skills/understand-issue/SKILL.md'),
-      access('dist/agents/factory-skills/understand-pr/SKILL.md'),
-    ]);
     await generateTypes(process.cwd());
   },
 });

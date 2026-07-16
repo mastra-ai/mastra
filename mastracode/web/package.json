@@ -13,7 +13,7 @@
     "web:dev": "concurrently --kill-others-on-fail --names server,ui \"PORT=4111 MASTRA_SKIP_PEERDEP_CHECK=1 varlock run -- mastra dev --dir src/mastra\" \"vite --config src/web/vite.config.ts\"",
     "web:dev:github": "pnpm db:up && pnpm web:dev",
     "web:ui:build": "pnpm run prebuild && vite --config src/web/vite.config.ts build",
-    "web:build": "pnpm run web:ui:build && node scripts/monorepo-deps.mjs run -- mastra build --dir src/mastra",
+    "web:build": "pnpm run web:ui:build && node scripts/monorepo-deps.mjs run -- mastra build --dir src/mastra && node scripts/copy-factory-skills.mjs",
     "web:deploy": "pnpm run web:build && node scripts/validate-output.mjs && mastra deploy --skip-build",
     "deps:pin": "node scripts/monorepo-deps.mjs pin",
     "deps:link": "node scripts/monorepo-deps.mjs link",

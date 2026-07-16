@@ -11,6 +11,7 @@
  *      `npm install` at deploy time)
  *   3. SPA `index.html` — present in `ui/` or `public/ui/` under the
  *      output dir
+ *   4. Factory `SKILL.md` files — packaged alongside the Web server bundle
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -64,6 +65,16 @@ if (!spaPath) {
   fail('SPA index.html not found in .mastra/output/{ui,public/ui}/ — run `pnpm web:build` (includes vite build)');
 } else {
   ok(`SPA (${path.relative(outputDir, spaPath)})`);
+}
+
+// 4. Web Factory skills
+for (const skillName of ['understand-issue', 'understand-pr']) {
+  const skillPath = path.join(outputDir, 'factory-skills', skillName, 'SKILL.md');
+  if (!fs.existsSync(skillPath)) {
+    fail(`Factory skill not found: factory-skills/${skillName}/SKILL.md`);
+  } else {
+    ok(`Factory skill (factory-skills/${skillName}/SKILL.md)`);
+  }
 }
 
 if (failures > 0) {

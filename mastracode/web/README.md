@@ -59,7 +59,7 @@ pnpm web:ui:test  # UI MSW tests (e2e/web-ui)
 
 ## Workspace skill invocation
 
-The private Web API can activate a user-invocable skill on an existing scoped AgentController session with `POST /web/agent-controller/:controllerId/skills/invoke`. Factory workflow skills such as `understand-issue` and `understand-pr` are packaged as ordinary server-owned `SKILL.md` files and registered with every local or remote Mastra Code workspace without modifying the target repository. The route resolves every ID through that workspace, uses the same `<skill name="…">` activation envelope as `/skill/<name>` in the TUI, and returns an error without dispatching when the skill is missing. Authenticated requests may target only the caller's personal session or a Factory worktree owned by that organization user.
+The private Web API can activate a user-invocable skill on an existing scoped AgentController session with `POST /web/agent-controller/:controllerId/skills/invoke`. The Web Factory packages workflow skills such as `understand-issue` and `understand-pr` as ordinary, read-only `SKILL.md` files and adds them only to workspaces created by `MastraFactory`; the shared SDK and TUI workspace resolver do not load them. The route resolves every ID through the session workspace, uses the same `<skill name="…">` activation envelope as `/skill/<name>` in the TUI, and returns an error without dispatching when the skill is missing. Authenticated requests may target only the caller's personal session or a Factory worktree owned by that organization user.
 
 ## GitHub pull request notifications
 
