@@ -91,28 +91,18 @@ export default defineConfig({
   onSuccess: async () => {
     await new Promise(resolve => setTimeout(resolve, 1000));
 
-    // `chat` is ESM-only; the CJS build must never contain `require('chat')` or CJS
-    // consumers crash. The lazy `import('chat')` in src/channels/chat-lazy.ts stays
-    // native in `.cjs` output only because the `treeshake` option above makes tsup
-    // emit CJS through Rollup. If that option is ever removed, tsup's default CJS
-    // writer rewrites the dynamic import to `require('chat')` — this check catches it.
-    const distDir = path.join(process.cwd(), 'dist');
-    // Matches tsup's actual rewrite shape, which spans lines and preserves comments:
-    //   require(\n  /* @vite-ignore */\n  "chat"\n)
+    // `chat` is ESM-only, so the CJS build must never contain `require('chat')` (it would
+    // crash CJS consumers). The lazy `import('chat')` in src/channels/chat-lazy.ts stays
+    // native in `.cjs` output only because the `treeshake` option above emits CJS through
+    // Rollup — without it, tsup rewrites the import to a multiline `require(... 'chat')`.
     const cjsRequireChat = /require\(\s*(?:\/\*[\s\S]*?\*\/\s*)*(['"])chat\1\s*\)/;
-    const stack = [distDir];
-    while (stack.length) {
-      const dir = stack.pop()!;
-      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-        const entryPath = path.join(dir, entry.name);
-        if (entry.isDirectory()) {
-          stack.push(entryPath);
-        } else if (entry.name.endsWith('.cjs') && cjsRequireChat.test(fs.readFileSync(entryPath, 'utf-8'))) {
-          throw new Error(
-            `${entryPath} contains require('chat'), which crashes CJS consumers because chat is ESM-only. ` +
-              `Keep the dynamic import in src/channels/chat-lazy.ts and the tsup 'treeshake' option intact.`,
-          );
-        }
+    for (const file of fs.readdirSync(path.join(process.cwd(), 'dist'), { recursive: true, encoding: 'utf-8' })) {
+      const filePath = path.join(process.cwd(), 'dist', file);
+      if (file.endsWith('.cjs') && cjsRequireChat.test(fs.readFileSync(filePath, 'utf-8'))) {
+        throw new Error(
+          `${filePath} contains require('chat'), which crashes CJS consumers because chat is ESM-only. ` +
+            `Keep the dynamic import in src/channels/chat-lazy.ts and the tsup 'treeshake' option intact.`,
+        );
       }
     }
     await generateTypes(
