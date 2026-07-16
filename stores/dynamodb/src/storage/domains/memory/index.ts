@@ -436,7 +436,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         const startOp = dateRange?.startExclusive ? 'gt' : 'gte';
         const endOp = dateRange?.endExclusive ? 'lt' : 'lte';
 
-        if (startIso && endIso) {
+        if (dateRange && startIso && endIso) {
           query = query.between({ createdAt: startIso }, { createdAt: endIso });
           if (dateRange.startExclusive || dateRange.endExclusive) {
             query = query.where(({ createdAt }: any, { gt, lt }: any) => {
