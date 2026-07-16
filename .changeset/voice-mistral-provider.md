@@ -16,7 +16,7 @@ import { MistralVoice } from '@mastra/voice-mistral'
 const voice = new MistralVoice()
 
 // Text-to-speech
-const audio = await voice.speak('Hello from Mistral')
+const audioStream = await voice.speak('Hello from Mistral')
 
 // Speech-to-text
 const text = await voice.listen(audioStream, { language: 'en' })

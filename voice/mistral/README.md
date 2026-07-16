@@ -5,7 +5,7 @@
 ## Installation
 
 ```bash
-npm install @mastra/voice-mistral @mastra/core
+npm install @mastra/voice-mistral
 ```
 
 ## Quick Start

@@ -90,6 +90,18 @@ describe('MistralVoice Integration Tests', () => {
       expect(Buffer.concat(chunks).length).toBeGreaterThan(0);
     }, 15000);
 
+    it('should stream audio chunks when stream is enabled', async () => {
+      const audioStream = await voice.speak('Streaming test.', {
+        stream: true,
+      });
+
+      const chunks: Buffer[] = [];
+      for await (const chunk of audioStream) {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      }
+      expect(Buffer.concat(chunks).length).toBeGreaterThan(0);
+    }, 15000);
+
     it('should throw on empty text', async () => {
       await expect(voice.speak('')).rejects.toThrow('Input text is empty');
     });
