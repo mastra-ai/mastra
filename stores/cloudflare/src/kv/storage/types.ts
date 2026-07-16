@@ -37,6 +37,12 @@ import type {
   TABLE_SCHEDULE_TRIGGERS,
   TABLE_TOOL_PROVIDER_CONNECTIONS,
   TABLE_NOTIFICATIONS,
+  TABLE_KNOWLEDGE_RECORDS,
+  TABLE_KNOWLEDGE_FACTS,
+  TABLE_KNOWLEDGE_MENTIONS,
+  TABLE_KNOWLEDGE_CURSORS,
+  TABLE_KNOWLEDGE_ACTIVITY,
+  TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
   SpanRecord,
   StorageAgentType,
   StoragePromptBlockType,
@@ -180,6 +186,12 @@ export type RecordTypes = {
   mastra_channel_config: Record<string, any>;
   [TABLE_NOTIFICATIONS]: Record<string, any>;
   mastra_thread_state: Record<string, any>;
+  [TABLE_KNOWLEDGE_RECORDS]: Record<string, any>;
+  [TABLE_KNOWLEDGE_FACTS]: Record<string, any>;
+  [TABLE_KNOWLEDGE_MENTIONS]: Record<string, any>;
+  [TABLE_KNOWLEDGE_CURSORS]: Record<string, any>;
+  [TABLE_KNOWLEDGE_ACTIVITY]: Record<string, any>;
+  [TABLE_KNOWLEDGE_SEMANTIC_OUTBOX]: Record<string, any>;
 };
 
 export type ListOptions = {
