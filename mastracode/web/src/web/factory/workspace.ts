@@ -6,10 +6,14 @@ import type { WorkspaceSkillExtension } from '@mastra/code-sdk/agents/workspace'
 import { LocalSkillSource } from '@mastra/core/workspace';
 import type { SkillSource, SkillSourceEntry, SkillSourceStat } from '@mastra/core/workspace';
 
-const bundledFactorySkillsPath = join(dirname(fileURLToPath(import.meta.url)), 'factory-skills');
+const bundleDirectory = dirname(fileURLToPath(import.meta.url));
+const bundledFactorySkillsPath = join(bundleDirectory, 'factory-skills');
 const FACTORY_SKILLS_SOURCE_PATH =
-  [join(process.cwd(), 'src', 'mastra', 'public', 'factory-skills'), bundledFactorySkillsPath].find(existsSync) ??
-  bundledFactorySkillsPath;
+  [
+    join(process.cwd(), 'src', 'mastra', 'public', 'factory-skills'),
+    join(bundleDirectory, '..', '..', 'src', 'mastra', 'public', 'factory-skills'),
+    bundledFactorySkillsPath,
+  ].find(existsSync) ?? bundledFactorySkillsPath;
 const FACTORY_SKILLS_MOUNT = path.resolve(path.parse(process.cwd()).root, '__mastracode_factory_skills__');
 const FACTORY_SKILL_NAMES = new Set(['understand-issue', 'understand-pr']);
 
