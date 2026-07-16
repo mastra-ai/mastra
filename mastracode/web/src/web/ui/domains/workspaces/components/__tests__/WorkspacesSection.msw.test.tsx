@@ -313,7 +313,7 @@ describe('WorkspacesSection', () => {
 
     await waitFor(() =>
       expect(stateUpdates).toContainEqual({
-        state: { projectPath: '/sandbox/mastra-worktrees/feat-ui', githubProjectId: GITHUB_PROJECT_ID },
+        state: { projectPath: '/sandbox/mastra-worktrees/feat-ui' },
       }),
     );
     await waitFor(() => expect(loadProjects()[0]?.selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-ui'));

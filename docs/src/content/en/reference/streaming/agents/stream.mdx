@@ -414,10 +414,10 @@ const stream = await agent.stream('message for agent')
                 parameters: [
                   {
                     name: 'jsonPromptInjection',
-                    type: 'boolean',
+                    type: "boolean | 'system' | 'inline' | 'auto'",
                     isOptional: true,
                     description:
-                      'Injects system prompt into the main agent instructing it to return structured output, useful for when a model does not natively support structured outputs.',
+                      "Controls how the JSON schema reaches the model. Set to 'auto' to use native structured output when supported and inline prompt injection otherwise.",
                   },
                 ],
               },

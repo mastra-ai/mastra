@@ -7,7 +7,7 @@
  * be deleted; previously the nested `executionWorkflow` row leaked as a stale
  * "pending"/"suspended" record for every completed agent run.
  */
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
@@ -89,22 +89,7 @@ function summarizeRuns(runs: { workflowName: string; runId: string; snapshot: st
     .sort((a, b) => a.workflowName.localeCompare(b.workflowName));
 }
 
-// The loop workflows pick their engine from MASTRA_EVENTED_EXECUTION at
-// creation time (per stream call), so the whole lifecycle runs against both
-// the default (direct) engine and the evented engine. The evented engine
-// persists snapshots asynchronously via its event processor, so cleanup on
-// terminal state must hold there too.
-describe.each([
-  { engine: 'default', evented: false },
-  { engine: 'evented', evented: true },
-])('agentic-loop snapshot lifecycle ($engine engine)', ({ evented }) => {
-  beforeAll(() => {
-    if (evented) vi.stubEnv('MASTRA_EVENTED_EXECUTION', 'true');
-  });
-
-  afterAll(() => {
-    if (evented) vi.unstubAllEnvs();
-  });
+describe('agentic-loop snapshot lifecycle', () => {
   it('keeps snapshot rows while suspended and deletes all rows after resume completes', async () => {
     const agent = new Agent({
       id: 'user-agent',
@@ -136,24 +121,16 @@ describe.each([
 
     // While suspended, both the loop row and the nested execution row must
     // exist so resumeStream() can restore the run (e.g. after a restart).
-    // The default engine persists the nested row under the parent's runId;
-    // the evented engine assigns nested runs their own random runId.
+    // The nested row is persisted under the parent's runId.
     const afterSuspend = summarizeRuns((await workflowsStore.listWorkflowRuns({})).runs);
     expect(afterSuspend).toEqual([
       { workflowName: 'agentic-loop', runId: stream.runId, status: 'suspended' },
-      { workflowName: 'executionWorkflow', runId: evented ? expect.any(String) : stream.runId, status: 'suspended' },
+      { workflowName: 'executionWorkflow', runId: stream.runId, status: 'suspended' },
     ]);
 
     // The default engine keeps the RunScope alive across the suspend
-    // boundary (the same in-memory loop holds the registration). The evented
-    // engine terminates the run after each step, so the scope is released
-    // when the WEP finishes processing the suspend — resume creates a fresh
-    // registration that hydrates from `_internal` via readScoped fallback.
-    if (evented) {
-      expect(mastra.__getRunScope(stream.runId)).toBeUndefined();
-    } else {
-      expect(mastra.__getRunScope(stream.runId)).toBeDefined();
-    }
+    // boundary (the same in-memory loop holds the registration).
+    expect(mastra.__getRunScope(stream.runId)).toBeDefined();
 
     const resumeStream = await agent.approveToolCall({ runId: stream.runId, toolCallId });
     for await (const _chunk of resumeStream.fullStream) {
@@ -251,15 +228,9 @@ describe.each([
     expect(afterSuspend.filter(r => r.workflowName === 'executionWorkflow')).toHaveLength(2);
     expect(afterSuspend.every(r => r.status === 'suspended')).toBe(true);
 
-    // Default engine: the supervisor's scope stays alive across the subagent
-    // suspend boundary. Evented engine: each step terminates async, so the
-    // scope is released — resume re-creates it. See the single-agent test
-    // above for the engine-asymmetry rationale.
-    if (evented) {
-      expect(mastra.__getRunScope(stream.runId)).toBeUndefined();
-    } else {
-      expect(mastra.__getRunScope(stream.runId)).toBeDefined();
-    }
+    // The supervisor's scope stays alive across the subagent suspend
+    // boundary — the in-memory loop holds the registration.
+    expect(mastra.__getRunScope(stream.runId)).toBeDefined();
 
     const resumeStream = await supervisor.approveToolCall({ runId: stream.runId, toolCallId });
     for await (const _chunk of resumeStream.fullStream) {
@@ -344,15 +315,9 @@ describe.each([
     }
     expect(toolCallId).toBeTruthy();
 
-    // Default engine: scope is held across the suspend boundary so decline
-    // reads back the same memory/transport handles the original stream
-    // registered. Evented engine: scope was released when WEP processed the
-    // suspend; decline re-registers and reads back via readScoped fallback.
-    if (evented) {
-      expect(mastra.__getRunScope(stream.runId)).toBeUndefined();
-    } else {
-      expect(mastra.__getRunScope(stream.runId)).toBeDefined();
-    }
+    // Scope is held across the suspend boundary so decline reads back the
+    // same memory/transport handles the original stream registered.
+    expect(mastra.__getRunScope(stream.runId)).toBeDefined();
 
     const resumeStream = await agent.declineToolCall({ runId: stream.runId, toolCallId });
     for await (const _chunk of resumeStream.fullStream) {
@@ -391,9 +356,7 @@ describe.each([
     }
     expect(sawError).toBe(true);
 
-    // The failure path must clean up the same way the success path does —
-    // in the evented engine a step failure ends the run via endWorkflow with
-    // status 'failed' (processWorkflowFail covers processor-internal errors).
+    // The failure path must clean up the same way the success path does.
     const rows = (await workflowsStore.listWorkflowRuns({})).runs;
     expect(rows).toHaveLength(0);
     // Failure is terminal — finally block must still unregister and release
@@ -401,56 +364,47 @@ describe.each([
     expect(mastra.__getRunScope(stream.runId)).toBeUndefined();
   }, 30000);
 
-  // Default engine only: the evented processor shares the same storage call,
-  // and rejecting it there would break the event-processor flow unrelated to
-  // what this test asserts (the stream-side cleanup being best-effort).
-  it.skipIf(evented)(
-    'still finishes the stream when snapshot cleanup fails',
-    async () => {
-      const agent = new Agent({
-        id: 'cleanup-fail-agent',
-        name: 'Cleanup Fail Agent',
-        instructions: 'You answer.',
-        model: new MockLanguageModelV2({
-          doStream: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            warnings: [],
-            stream: convertArrayToReadableStream([
-              { type: 'stream-start', warnings: [] },
-              { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
-              { type: 'text-start', id: 'text-1' },
-              { type: 'text-delta', id: 'text-1', delta: 'hello' },
-              { type: 'text-end', id: 'text-1' },
-              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
-            ]),
-          }),
+  it('still finishes the stream when snapshot cleanup fails', async () => {
+    const agent = new Agent({
+      id: 'cleanup-fail-agent',
+      name: 'Cleanup Fail Agent',
+      instructions: 'You answer.',
+      model: new MockLanguageModelV2({
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'hello' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+          ]),
         }),
-      });
+      }),
+    });
 
-      const mastra = new Mastra({
-        agents: { agent },
-        logger: false,
-        storage: new InMemoryStore(),
-      });
-      const workflowsStore = (await mastra.getStorage()!.getStore('workflows'))!;
-      const deleteSpy = vi
-        .spyOn(workflowsStore, 'deleteWorkflowRunById')
-        .mockRejectedValue(new Error('storage offline'));
+    const mastra = new Mastra({
+      agents: { agent },
+      logger: false,
+      storage: new InMemoryStore(),
+    });
+    const workflowsStore = (await mastra.getStorage()!.getStore('workflows'))!;
+    const deleteSpy = vi.spyOn(workflowsStore, 'deleteWorkflowRunById').mockRejectedValue(new Error('storage offline'));
 
-      try {
-        const stream = await agent.stream('hi');
-        let sawFinish = false;
-        for await (const chunk of stream.fullStream) {
-          if (chunk.type === 'finish') sawFinish = true;
-        }
-        // Cleanup is best-effort: a storage failure must not turn a successful
-        // run into a stream error or swallow the finish chunk.
-        expect(sawFinish).toBe(true);
-        expect(deleteSpy).toHaveBeenCalled();
-      } finally {
-        deleteSpy.mockRestore();
+    try {
+      const stream = await agent.stream('hi');
+      let sawFinish = false;
+      for await (const chunk of stream.fullStream) {
+        if (chunk.type === 'finish') sawFinish = true;
       }
-    },
-    30000,
-  );
+      // Cleanup is best-effort: a storage failure must not turn a successful
+      // run into a stream error or swallow the finish chunk.
+      expect(sawFinish).toBe(true);
+      expect(deleteSpy).toHaveBeenCalled();
+    } finally {
+      deleteSpy.mockRestore();
+    }
+  }, 30000);
 });

@@ -1,4 +1,5 @@
 import type { Agent } from '../agent';
+import type { MastraDBMessage } from '../agent/message-list/state/types';
 import { createSignal } from '../agent/signals';
 import type { AgentSignalAttributes, AgentSignalContents, AgentSignalInput } from '../agent/signals';
 import type {
@@ -28,7 +29,6 @@ import type {
   AgentControllerDisplayState,
   AgentControllerEvent,
   AgentControllerEventListener,
-  AgentControllerMessage,
   AgentControllerMode,
   AgentControllerOMConfig,
   AgentControllerRequestState,
@@ -164,7 +164,7 @@ export class SessionIdentity {
 /**
  * The shared-host storage surface the Session's thread domain leverages to read
  * and write threads. The AgentController backs this with its memory storage (mapping raw
- * storage rows to {@link AgentControllerThread}/{@link AgentControllerMessage}); when no storage
+ * storage rows to {@link AgentControllerThread}/{@link MastraDBMessage}); when no storage
  * is configured the handle is absent and the data methods degrade gracefully
  * (empty lists, undefined settings, no-op writes).
  *
@@ -181,9 +181,9 @@ export interface ThreadDataStore {
   /** Fetch a single thread by id, or null when it doesn't exist. */
   getById(input: { threadId: string }): Promise<AgentControllerThread | null>;
   /** List messages for a thread, newest-`limit` (returned oldest-first) or all. */
-  listMessages(input: { threadId: string; limit?: number }): Promise<AgentControllerMessage[]>;
+  listMessages(input: { threadId: string; limit?: number }): Promise<MastraDBMessage[]>;
   /** The first user message for each given thread id. */
-  firstUserMessages(input: { threadIds: string[] }): Promise<Map<string, AgentControllerMessage>>;
+  firstUserMessages(input: { threadIds: string[] }): Promise<Map<string, MastraDBMessage>>;
   /** Read a value from a thread's metadata. */
   getMetadata(input: { threadId: string; key: string }): Promise<unknown>;
   /** Write a value into a thread's metadata. */
@@ -265,7 +265,7 @@ export interface SessionMachinery {
     reminderType: string;
     role: 'user' | 'assistant' | 'system';
     metadata?: Record<string, unknown>;
-  }): Promise<AgentControllerMessage | null>;
+  }): Promise<MastraDBMessage | null>;
 }
 
 /**
@@ -432,7 +432,7 @@ export class SessionThread {
   }
 
   /** List messages for a thread (newest-`limit`, returned oldest-first), or all. */
-  async listMessages({ threadId, limit }: { threadId: string; limit?: number }): Promise<AgentControllerMessage[]> {
+  async listMessages({ threadId, limit }: { threadId: string; limit?: number }): Promise<MastraDBMessage[]> {
     if (!this.#store) return [];
     // Only expose messages for threads this session owns.
     await this.#requireOwnedThread({ threadId });
@@ -440,19 +440,19 @@ export class SessionThread {
   }
 
   /** List messages for the session's active thread (empty when not bound). */
-  async listActiveMessages({ limit }: { limit?: number } = {}): Promise<AgentControllerMessage[]> {
+  async listActiveMessages({ limit }: { limit?: number } = {}): Promise<MastraDBMessage[]> {
     if (this.#threadId === null) return [];
     return this.listMessages({ threadId: this.#threadId, limit });
   }
 
   /** The first user message for a single thread, or null. */
-  async firstUserMessage({ threadId }: { threadId: string }): Promise<AgentControllerMessage | null> {
+  async firstUserMessage({ threadId }: { threadId: string }): Promise<MastraDBMessage | null> {
     const messages = await this.firstUserMessages({ threadIds: [threadId] });
     return messages.get(threadId) ?? null;
   }
 
   /** The first user message for each given thread id. */
-  async firstUserMessages({ threadIds }: { threadIds: string[] }): Promise<Map<string, AgentControllerMessage>> {
+  async firstUserMessages({ threadIds }: { threadIds: string[] }): Promise<Map<string, MastraDBMessage>> {
     if (!this.#store || threadIds.length === 0) return new Map();
     return this.#store.firstUserMessages({ threadIds });
   }
@@ -2200,7 +2200,7 @@ export class SessionDisplayState {
 
       case 'tool_input_delta': {
         const buf = ds.toolInputBuffers.get(event.toolCallId);
-        if (buf) {
+        if (buf && typeof event.argsTextDelta === 'string') {
           buf.text += event.argsTextDelta;
         }
         break;
@@ -2783,7 +2783,7 @@ export class Session<TState = unknown> {
   processStream(
     response: { fullStream: AsyncIterable<any> },
     requestContext?: RequestContext,
-  ): Promise<{ message: AgentControllerMessage; suspended?: boolean } | undefined> {
+  ): Promise<{ message: MastraDBMessage; suspended?: boolean } | undefined> {
     return this.runEngine.processStream(response, requestContext);
   }
 
@@ -3032,6 +3032,7 @@ export class Session<TState = unknown> {
     const signal = createSignal(
       'content' in input ? { type: 'user', tagName: 'user', contents: input.content } : input,
     );
+    const shouldForwardGoalEvaluations = signal.attributes?.type === 'goal';
     const accepted = Promise.resolve().then(async () => {
       if (!this.thread.getId()) {
         const thread = await this.thread.create();
@@ -3091,7 +3092,23 @@ export class Session<TState = unknown> {
       } catch (error) {
         throw error;
       }
-      void result.accepted.catch(() => {});
+      void result.accepted
+        .then(accepted => {
+          if (accepted.action !== 'wake' || !shouldForwardGoalEvaluations) return;
+          // Goal evaluations are emitted after the model's finish chunk and are not forwarded by
+          // the per-thread subscription. Read only those lifecycle chunks from the owned wake output;
+          // processing the whole output here would duplicate message and suspension events.
+          void (async () => {
+            for await (const chunk of accepted.output.fullStream) {
+              if (chunk.type === 'goal') {
+                this.emit({ type: 'goal_evaluation', payload: chunk.payload });
+              }
+            }
+          })().catch(error => {
+            this.emit({ type: 'error', error: error instanceof Error ? error : new Error(String(error)) });
+          });
+        })
+        .catch(() => {});
       return { accepted: true as const, runId: undefined };
     });
 
@@ -3277,7 +3294,7 @@ export class Session<TState = unknown> {
     reminderType: string;
     role?: 'user' | 'assistant' | 'system';
     metadata?: Record<string, unknown>;
-  }): Promise<AgentControllerMessage | null> {
+  }): Promise<MastraDBMessage | null> {
     const threadId = this.thread.getId();
     if (!threadId) return null;
     return this.machinery.saveSystemReminder({
