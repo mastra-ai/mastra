@@ -1214,13 +1214,13 @@ describe('Factory Board — investigate flow', () => {
         name: 'understand-pr',
         arguments:
           'GitHub pull request #34 (https://github.com/mastra-ai/mastra/pull/34)\n\n' +
+          'Check out the PR in this worktree first with `gh pr checkout 34`. Expected head branch: feat/factory.\n\n' +
           'Prepared workspace context:\n' +
           '- Worktree: /sandbox/mastra/worktrees/factory-pr-34\n' +
           '- Branch: factory/pr-34',
       },
     ]);
     expect(JSON.stringify(captured.skillInvocations)).not.toContain('Add factory pages');
-    expect(JSON.stringify(captured.skillInvocations)).not.toContain('feat/factory-pages');
     expect(state.posts).toMatchObject([
       {
         source: 'github-pr',
@@ -1406,7 +1406,12 @@ describe('Factory Board — investigate flow', () => {
     expect(captured.threadTitles).toEqual([]);
     expect(captured.messages).toHaveLength(0);
     expect(captured.skillInvocations).toHaveLength(1);
-    expect(captured.skillInvocations[0]).toMatchObject({ name: 'understand-pr' });
+    expect(captured.skillInvocations[0]).toMatchObject({
+      name: 'understand-pr',
+      arguments: expect.stringContaining(
+        'Check out the PR in this worktree first with `gh pr checkout 34`. Expected head branch: feat/factory-pages.',
+      ),
+    });
     expect(state.patches).toMatchObject([
       {
         id: 'wi-pr',
