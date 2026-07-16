@@ -51,6 +51,10 @@ import type { ObservationalMemory, ObservationalMemoryConfig } from './processor
 import { KnowledgeSemanticIndexCoordinator, Subconscious } from './processors/observational-memory/subconscious';
 import { createCuratorHandler } from './processors/observational-memory/subconscious/curate';
 import { createKnowledgeTools } from './processors/observational-memory/subconscious/knowledge-tools';
+import {
+  composeReflectionAgentHandlers,
+  createLearnerHandler,
+} from './processors/observational-memory/subconscious/learn';
 import { summarizeConversation, SUMMARIZE_THREAD_DEFAULTS } from './processors/observational-memory/summarize';
 import type {
   SummarizeConversationOptions,
@@ -1822,11 +1826,20 @@ ${workingMemory}`;
       onIndexObservations,
       onReflectionCommitted:
         omConfig.subconscious instanceof Subconscious
-          ? createCuratorHandler(
-              this,
-              omConfig.subconscious.resolved,
-              new Memory({ storage: this.storage, options: { observationalMemory: false } }),
-            )
+          ? (() => {
+              const resolved = omConfig.subconscious.resolved;
+              const curate = createCuratorHandler(
+                this,
+                resolved,
+                new Memory({ storage: this.storage, options: { observationalMemory: false } }),
+              );
+              const learn = createLearnerHandler(
+                this,
+                resolved,
+                new Memory({ storage: this.storage, options: { observationalMemory: false } }),
+              );
+              return composeReflectionAgentHandlers([curate, learn]);
+            })()
           : undefined,
       observation: omConfig.observation
         ? {

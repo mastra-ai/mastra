@@ -11,6 +11,9 @@ import { Memory, Subconscious } from '@mastra/memory';
 import type { EmbeddingModel } from 'ai';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { createLearnerHandler } from '../../src/processors/observational-memory/subconscious/learn';
+import type { ResolvedSubconsciousConfig } from '../../src/processors/observational-memory/subconscious/types';
+
 function message(threadId: string, resourceId: string, text = 'Maya Chen owns Project Atlas.'): MastraDBMessage {
   return {
     id: randomUUID(),
@@ -517,5 +520,100 @@ describe('Subconscious LibSQL integration', () => {
     expect((await vector.query({ indexName, queryVector, topK: 20 })).some(match => match.id.endsWith(fact.id))).toBe(
       true,
     );
+  });
+
+  it('learns and updates one skill with idempotent LibSQL evidence', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'subconscious-learn-libsql-'));
+    directories.push(directory);
+    const storage = new LibSQLStore({ id: randomUUID(), url: `file:${join(directory, 'knowledge.db')}` });
+    await storage.init();
+    const memory = new Memory({ storage });
+    const knowledge = (await storage.getStore('knowledge'))!;
+    const threadId = randomUUID();
+    const resourceId = randomUUID();
+    const scope = ['org:acme', `resource:${resourceId}`, `thread:${threadId}`];
+    const project = await knowledge.createEntity({ name: 'Project Atlas', kind: 'project', scope });
+    const appendSource = (text: string) =>
+      knowledge.appendFact({
+        parentEntityId: project.id,
+        text,
+        scope,
+        sourceThreadId: threadId,
+        resolutionScope: scope,
+        defaultScope: scope,
+      });
+    const first = await appendSource('Deploy Atlas by validating then publishing.');
+    const second = await appendSource('Another deploy validated, published, then checked health.');
+    let pendingIds = [first.id, second.id];
+    let modelStep = 0;
+    const learnGenerate = async () => {
+      modelStep++;
+      if (modelStep % 2 === 1) {
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'tool-calls' as const,
+          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          warnings: [],
+          content: [
+            {
+              type: 'tool-call' as const,
+              toolCallId: `learn-${modelStep}`,
+              toolName: 'knowledge_record_skill',
+              input: JSON.stringify({
+                name: 'deploy-atlas-safely',
+                procedure: 'Validate, publish, then verify the health check.',
+                sourceFactIds: pendingIds,
+              }),
+            },
+          ],
+        };
+      }
+      return {
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        warnings: [],
+        content: [{ type: 'text' as const, text: `<learning-complete through="${pendingIds.at(-1)}" />` }],
+      };
+    };
+    const learnerModel = new MockLanguageModelV2({ doGenerate: learnGenerate as never });
+    const config: ResolvedSubconsciousConfig = {
+      observation: [],
+      reflection: [{ name: 'learn', maxSteps: 5, builtIn: true }],
+      defaultScope: 'resource',
+      learnedGuidance: true,
+      tools: true,
+      activity: { recentUpdates: 10 },
+    };
+    const requestContext = new RequestContext();
+    requestContext.set('organizationId', 'acme');
+    const handler = createLearnerHandler(
+      memory as any,
+      config,
+      new Memory({ storage, options: { observationalMemory: false } }) as any,
+    );
+    const run = () =>
+      handler({
+        parentThreadId: threadId,
+        resourceId,
+        observations: 'Full raw observations preserve the repeated deploy sequence.',
+        requestContext,
+        mainAgent: { getModel: vi.fn(async () => learnerModel) } as any,
+      });
+
+    await run();
+    const third = await appendSource('A third deploy repeated validation and publish.');
+    const fourth = await appendSource('Recovery again finished with a health check.');
+    pendingIds = [third.id, fourth.id];
+    await run();
+
+    const skills = await knowledge.listEntities({ scope, kind: 'skill' });
+    expect(skills).toHaveLength(1);
+    const evidence = await knowledge.factsAbout({ entityId: skills[0]!.id, scope });
+    expect(evidence.facts).toHaveLength(4);
+    expect(new Set(evidence.facts.map(fact => fact.id)).size).toBe(4);
+    expect(await knowledge.getCurationCursor({ sourceThreadId: threadId, agent: 'learn' })).toMatchObject({
+      lastFactId: fourth.id,
+    });
   });
 });
