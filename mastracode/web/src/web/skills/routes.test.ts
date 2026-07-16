@@ -137,6 +137,48 @@ describe('workspace skill invocation route', () => {
     expect(harness.sendA).toHaveBeenCalledWith({ content: message });
   });
 
+  it('returns once dispatch is accepted without waiting for the agent run to finish', async () => {
+    const harness = createHarness();
+    let finishRun!: () => void;
+    const run = new Promise<void>(resolve => {
+      finishRun = resolve;
+    });
+    harness.sendA.mockReturnValueOnce(run);
+
+    const response = await invoke(harness.app, {
+      resourceId: 'resource-1',
+      scope: '/worktrees/a',
+      name: 'understand-pr',
+    });
+
+    expect(response.status).toBe(200);
+    expect(harness.sendA).toHaveBeenCalledOnce();
+    finishRun();
+    await run;
+  });
+
+  it('handles a dispatch failure after acceptance without an unhandled rejection', async () => {
+    const harness = createHarness();
+    const failure = new Error('dispatch failed');
+    harness.sendA.mockRejectedValueOnce(failure);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      const response = await invoke(harness.app, {
+        resourceId: 'resource-1',
+        scope: '/worktrees/a',
+        name: 'understand-pr',
+      });
+
+      expect(response.status).toBe(200);
+      await vi.waitFor(() =>
+        expect(errorSpy).toHaveBeenCalledWith('Workspace skill dispatch failed after acceptance', failure),
+      );
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
   it('uses only the workspace owned by the addressed scope', async () => {
     const harness = createHarness();
     const response = await invoke(harness.app, {

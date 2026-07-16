@@ -158,7 +158,9 @@ export function buildSkillRoutes({
         const args = body.arguments?.trim();
         const content = `${formatSkillActivation(skill)}${args ? `\n\nARGUMENTS: ${args}` : ''}`.trim();
         const message = `<skill name="${skill.name}">\n${escapeSkillBoundary(content)}\n</skill>`;
-        await session.sendMessage({ content: message });
+        void session.sendMessage({ content: message }).catch(error => {
+          console.error('Workspace skill dispatch failed after acceptance', error);
+        });
         return c.json({ ok: true, skill: skill.name, message });
       },
     }),

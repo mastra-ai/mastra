@@ -16,6 +16,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/web-ui/render';
+import { queryKeys } from '../../../../../shared/api/keys';
 import type { GithubStatus, Project } from '../../workspaces';
 import { createAppRoutes } from '../../../router';
 import type { GithubIssue, GithubPullRequest } from '../services/factory';
@@ -1117,6 +1118,55 @@ describe('Factory Board — investigate flow', () => {
     ]);
   });
 
+  it('given the user opens the active thread before dispatch returns, when the run settles, then the skill activation is not projected twice', async () => {
+    const state = useBoardHandlers({ issues });
+    useFactoryRunHandlers('factory-issue-12');
+    const skillMessage =
+      '<skill name="understand-issue">\nActivated understand-issue.\n\nARGUMENTS: GitHub issue #12\n</skill>';
+    let releaseSkill!: () => void;
+    let markSkillRequested!: () => void;
+    const skillRequested = new Promise<void>(resolve => {
+      markSkillRequested = resolve;
+    });
+    const skillResponse = new Promise<void>(resolve => {
+      releaseSkill = resolve;
+    });
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/agent-controller/code/skills/invoke`, async () => {
+        markSkillRequested();
+        await skillResponse;
+        return HttpResponse.json({ ok: true, skill: 'understand-issue', message: skillMessage });
+      }),
+      http.get(`${SESSION}/threads/:threadId/messages`, () =>
+        HttpResponse.json({
+          messages: [
+            {
+              id: 'persisted-skill-activation',
+              role: 'user',
+              createdAt: '2026-07-16T00:00:00.000Z',
+              content: { format: 2, parts: [{ type: 'text', text: skillMessage }] },
+            },
+          ],
+        }),
+      ),
+    );
+    const { router, client } = renderAt('/factory/board');
+
+    const intake = await screen.findByTestId('board-column-intake');
+    await within(intake).findByText('Fix flaky test');
+    await userEvent.click(within(intake).getByRole('button', { name: 'Investigate Fix flaky test' }));
+    await skillRequested;
+
+    await router.navigate('/threads/thread-factory');
+    expect(await screen.findByRole('button', { name: /Show understand-issue skill contents/ })).toBeInTheDocument();
+    const messagesKey = queryKeys.agentControllerThreadMessages('code', RESOURCE_ID, 'thread-factory');
+    expect(client.getQueryData<unknown[]>(messagesKey)).toHaveLength(1);
+
+    releaseSkill();
+    await waitFor(() => expect(state.posts).toHaveLength(1));
+    expect(client.getQueryData<unknown[]>(messagesKey)).toHaveLength(1);
+  });
+
   it('given a missing workspace skill, when Investigate is clicked, then the error is visible and no fallback prompt or card is dispatched', async () => {
     const state = useBoardHandlers({ issues });
     const captured = useFactoryRunHandlers('factory-issue-12');
@@ -1142,9 +1192,25 @@ describe('Factory Board — investigate flow', () => {
     expect(state.posts).toHaveLength(0);
   });
 
-  it('given an issue candidate, when Build is chosen from the menu, then a work item materializes into Building with a work session', async () => {
+  it('given an issue candidate, when Build is chosen from the menu, then navigation happens while the prompt runs and a work item materializes into Building', async () => {
     const state = useBoardHandlers({ issues });
     const captured = useFactoryRunHandlers('factory-issue-12');
+    let releasePrompt!: () => void;
+    let markPromptRequested!: () => void;
+    const promptRequested = new Promise<void>(resolve => {
+      markPromptRequested = resolve;
+    });
+    const promptResponse = new Promise<void>(resolve => {
+      releasePrompt = resolve;
+    });
+    server.use(
+      http.post(`${SESSION}/messages`, async ({ request }) => {
+        captured.messages.push((await request.json()) as Record<string, unknown>);
+        markPromptRequested();
+        await promptResponse;
+        return HttpResponse.json({ ok: true });
+      }),
+    );
     const { router } = renderAt('/factory/board');
 
     const intake = await screen.findByTestId('board-column-intake');
@@ -1152,7 +1218,10 @@ describe('Factory Board — investigate flow', () => {
     await userEvent.click(within(intake).getByRole('button', { name: 'More actions for Fix flaky test' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Build' }));
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
+    await promptRequested;
+    expect(router.state.location.pathname).toBe('/threads/thread-factory');
+    releasePrompt();
+    await waitFor(() => expect(state.posts).toHaveLength(1));
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
     expect(captured.skillInvocations).toHaveLength(0);
     expect(captured.messages[0]!.message).toContain('Implement a fix for GitHub issue #12');

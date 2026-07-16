@@ -1,4 +1,3 @@
-import type { MastraDBMessage } from '@mastra/client-js';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 
@@ -111,10 +110,10 @@ export function useStartFactoryRun() {
       // the same item, reuse that thread: the prompt lands as a follow-up
       // message instead of leaving a stray second thread in the worktree.
       const threadId = await resolveRunThread(scopedSession, created.threadId, threadTitle, projectPath, threadTags);
-      let dispatchedMessage: string;
+      let promptDispatch: Promise<unknown> | undefined;
       if (invocation.type === 'skill') {
         const skillArguments = `${invocation.arguments.trim()}\n\nPrepared workspace context:\n- Worktree: ${projectPath}\n- Branch: ${branch}`;
-        const result = await invokeWorkspaceSkill({
+        await invokeWorkspaceSkill({
           agentControllerId: AGENT_CONTROLLER_ID,
           resourceId,
           scope: projectPath,
@@ -122,26 +121,16 @@ export function useStartFactoryRun() {
           arguments: skillArguments,
           baseUrl,
         });
-        dispatchedMessage = result.message;
       } else {
-        await scopedSession.sendMessage(invocation.prompt);
-        dispatchedMessage = invocation.prompt;
+        promptDispatch = scopedSession.sendMessage(invocation.prompt);
       }
 
-      // Append the dispatched message to the thread cache so it renders
-      // immediately when the thread page mounts, before the server transcript
-      // catches up. Appending (not replacing) preserves any prior conversation
-      // when the run reuses an existing thread.
-      const message: MastraDBMessage = {
-        id: `local-${Date.now()}`,
-        role: 'user',
-        createdAt: new Date(),
-        content: { format: 2, parts: [{ type: 'text', text: dispatchedMessage }] },
-      };
-      queryClient.setQueryData(
-        queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, threadId),
-        (existing: MastraDBMessage[] | undefined) => [...(existing ?? []), message],
-      );
+      // Skill dispatch returns once the kickoff is scheduled. Prompt dispatch
+      // still streams for the whole turn, so start it before navigating and
+      // let the mutation finish in the destination thread.
+      void navigate(`/threads/${threadId}`);
+      await promptDispatch;
+
       // The thread now exists under the new worktree's project path; refresh
       // its thread list so the sidebar shows it once the UI lands there.
       void queryClient.invalidateQueries({
@@ -179,9 +168,7 @@ export function useStartFactoryRun() {
           console.error('Failed to file the board card for this run', err);
         }
       }
-      return threadId;
     },
-    onSuccess: threadId => void navigate(`/threads/${threadId}`),
   });
 
   return { start: mutation, enabled: sessionEnabled };
