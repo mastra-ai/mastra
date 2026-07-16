@@ -86,6 +86,13 @@ const scorer = createScorer({
             description: 'System prompt/instructions for the LLM.',
           },
           {
+            name: 'jsonPromptInjection',
+            type: "boolean | 'system' | 'inline' | 'auto'",
+            isOptional: true,
+            description:
+              "Controls how the judge's structured output schema reaches the model. Defaults to 'auto', which uses native structured output when supported and inline prompt injection otherwise. Explicit values override automatic routing.",
+          },
+          {
             name: 'inputProcessors',
             type: 'Processor[]',
             isOptional: true,

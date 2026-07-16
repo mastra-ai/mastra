@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Add `jsonPromptInjection: 'auto'` to select native structured output when model capability data confirms support and inline JSON prompt injection otherwise. Goal judges use this shared automatic path while preserving fallback retries for unexpected provider failures.
+Add `jsonPromptInjection: 'auto'` to select native structured output when model capability data confirms support and inline JSON prompt injection otherwise. Scorer judges use this automatic path by default while preserving explicit `jsonPromptInjection` overrides and fallback retries for unexpected provider failures.
