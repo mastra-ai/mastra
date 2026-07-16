@@ -38,11 +38,15 @@ export const weatherTool = createTool({
     location: z.string().describe('City name'),
   }),
   outputSchema: z.object({
-    output: z.string(),
+    location: z.string(),
+    temperatureCelsius: z.number(),
+    conditions: z.string(),
   }),
   execute: async ({ location }) => {
     return {
-      output: `The weather in ${location} is sunny`,
+      location,
+      temperatureCelsius: 21,
+      conditions: 'sunny',
     }
   },
 })
