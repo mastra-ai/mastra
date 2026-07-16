@@ -1,5 +1,6 @@
 import { SignalsOverviewPage as SignalsEmptyState } from '@mastra/playground-ui/ee/signals';
 
+import { Link } from '../../lib/link';
 import { useThemeEntities } from './hooks';
 import { SankeySignals } from './sankey-signals';
 import { SignalsLoadingSkeleton } from './signals-loading-skeleton';
@@ -17,13 +18,13 @@ export function SignalsOverviewPage() {
   const entity = entitiesQuery.data?.entities.find(currentEntity => currentEntity.availableSignals.length >= 2);
 
   if (!entity) {
-    return <SignalsEmptyState />;
+    return <SignalsEmptyState LinkComponent={Link} />;
   }
 
   const signalNames = SIGNAL_ORDER.filter(signalName => entity.availableSignals.includes(signalName));
 
   if (signalNames.length < 2) {
-    return <SignalsEmptyState />;
+    return <SignalsEmptyState LinkComponent={Link} />;
   }
 
   return <SankeySignals entityId={entity.entityId} entityType="agent" signalNames={signalNames} />;

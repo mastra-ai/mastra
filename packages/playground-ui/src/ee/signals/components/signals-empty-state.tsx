@@ -3,6 +3,7 @@ import type { CSSProperties, ReactNode } from 'react';
 
 import { Button } from '../../../ds/components/Button';
 import { buildSankeyHueMap, nodeColorVivid } from '../../../ds/components/SankeyChart/sankeyColor';
+import type { LinkComponent } from '../../../ds/types/link-component';
 
 const signalLabels = ['Outcome', 'Goal', 'Behavior', 'Sentiment'];
 const signalHues = buildSankeyHueMap(signalLabels);
@@ -26,9 +27,10 @@ const PipelineConnector = () => (
 
 export type SignalsEmptyStateProps = {
   actionSlot?: ReactNode;
+  LinkComponent?: LinkComponent;
 };
 
-export const SignalsEmptyState = ({ actionSlot }: SignalsEmptyStateProps) => {
+export const SignalsEmptyState = ({ actionSlot, LinkComponent = 'a' }: SignalsEmptyStateProps) => {
   return (
     <section className="min-h-full w-full bg-surface1 p-6 md:px-10 lg:px-12 xl:px-[4.375rem]">
       <div className="max-w-260 mx-auto w-full">
@@ -147,7 +149,7 @@ export const SignalsEmptyState = ({ actionSlot }: SignalsEmptyStateProps) => {
             >
               Read the docs
             </Button>
-            <Button as="a" href="/observability" variant="primary" size="sm">
+            <Button as={LinkComponent} href="/observability" variant="primary" size="sm">
               View incoming traces
             </Button>
           </div>
