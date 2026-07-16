@@ -167,8 +167,8 @@ export const serializedAgentDefinitionSchema = z.object({
 const systemMessageSchema = z.union([
   z.string(),
   z.array(z.string()),
-  z.any(), // CoreSystemMessage or SystemModelMessage
-  z.array(z.any()),
+  z.unknown(), // CoreSystemMessage or SystemModelMessage
+  z.array(z.unknown()),
 ]);
 
 /**
@@ -210,8 +210,8 @@ export const serializedAgentSchema = z.object({
   supportsMemory: z.boolean().optional(),
   modelList: z.array(modelConfigSchema).optional(),
   defaultOptions: defaultOptionsSchema.optional(),
-  defaultGenerateOptionsLegacy: z.record(z.string(), z.any()).optional(),
-  defaultStreamOptionsLegacy: z.record(z.string(), z.any()).optional(),
+  defaultGenerateOptionsLegacy: z.record(z.string(), z.unknown()).optional(),
+  defaultStreamOptionsLegacy: z.record(z.string(), z.unknown()).optional(),
   source: z.enum(['code', 'stored', 'fs']).optional(),
   status: z.enum(['draft', 'published', 'archived']).optional(),
   activeVersionId: z.string().optional(),
@@ -277,7 +277,7 @@ const agentMemoryOptionSchema = z.object({
    * nor the request context provides a resource ID.
    */
   resource: z.string().optional(),
-  options: z.record(z.string(), z.any()).optional(),
+  options: z.record(z.string(), z.unknown()).optional(),
   readOnly: z.boolean().optional(),
 });
 
@@ -317,7 +317,7 @@ export const agentExecutionBodySchema = z
     savePerStep: z.boolean().optional(),
 
     // Request Context (handler-specific field - merged with server's requestContext)
-    requestContext: z.record(z.string(), z.any()).optional(),
+    requestContext: z.record(z.string(), z.unknown()).optional(),
 
     // Version overrides for sub-agents (and future primitives)
     versions: z
@@ -334,35 +334,35 @@ export const agentExecutionBodySchema = z
 
     // Execution Control
     maxSteps: z.number().optional(),
-    stopWhen: z.any().optional(),
+    stopWhen: z.unknown().optional(),
 
     // Model Configuration
     providerOptions: z
       .object({
-        anthropic: z.record(z.string(), z.any()).optional(),
-        google: z.record(z.string(), z.any()).optional(),
-        openai: z.record(z.string(), z.any()).optional(),
-        xai: z.record(z.string(), z.any()).optional(),
+        anthropic: z.record(z.string(), z.unknown()).optional(),
+        google: z.record(z.string(), z.unknown()).optional(),
+        openai: z.record(z.string(), z.unknown()).optional(),
+        xai: z.record(z.string(), z.unknown()).optional(),
       })
       .optional(),
-    modelSettings: z.any().optional(),
+    modelSettings: z.unknown().optional(),
 
     // Tool Configuration
     activeTools: z.array(z.string()).optional(),
-    toolsets: z.record(z.string(), z.any()).optional(),
-    clientTools: z.record(z.string(), z.any()).optional(),
+    toolsets: z.record(z.string(), z.unknown()).optional(),
+    clientTools: z.record(z.string(), z.unknown()).optional(),
     toolChoice: toolChoiceSchema.optional(),
     requireToolApproval: z.boolean().optional(),
 
     // Evaluation
     scorers: z
       .union([
-        z.record(z.string(), z.any()),
+        z.record(z.string(), z.unknown()),
         z.record(
           z.string(),
           z.object({
             scorer: z.string(),
-            sampling: z.any().optional(),
+            sampling: z.unknown().optional(),
           }),
         ),
       ])
@@ -373,15 +373,15 @@ export const agentExecutionBodySchema = z
     tracingOptions: tracingOptionsSchema.optional(),
 
     // Structured Output
-    output: z.any().optional(), // Zod schema, JSON schema, or structured output object
+    output: z.unknown().optional(), // Zod schema, JSON schema, or structured output object
     structuredOutput: z
       .object({
         schema: z.object({}).passthrough(),
-        model: z.union([z.string(), z.any()]).optional(),
+        model: z.union([z.string(), z.unknown()]).optional(),
         instructions: z.string().optional(),
         jsonPromptInjection: z.boolean().optional(),
         errorStrategy: z.enum(['strict', 'warn', 'fallback']).optional(),
-        fallbackValue: z.any().optional(),
+        fallbackValue: z.unknown().optional(),
       })
       .optional(),
 
@@ -414,19 +414,19 @@ export const resumeStreamUntilIdleBodySchema = agentExecutionBodySchema.omit({ m
 /**
  * Body schema for tool execute endpoint
  * Simple schema - tool validates its own input data
- * Note: Using z.unknown().refine() instead of z.any() to ensure data is required
- * (z.any() is treated as optional by Zod)
+ * Note: Using z.unknown().refine() instead of z.unknown() to ensure data is required
+ * (z.unknown() is treated as optional by Zod)
  */
 const executeToolDataBodySchema = z.object({
   data: z.unknown().refine(x => x !== undefined, { message: 'data is required' }),
 });
 
 export const executeToolBodySchema = executeToolDataBodySchema.extend({
-  requestContext: z.record(z.string(), z.any()).optional(),
+  requestContext: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const executeToolContextBodySchema = executeToolDataBodySchema.extend({
-  requestContext: z.record(z.string(), z.any()).optional(),
+  requestContext: z.record(z.string(), z.unknown()).optional(),
 });
 
 // ============================================================================
@@ -439,13 +439,13 @@ export const executeToolContextBodySchema = executeToolDataBodySchema.extend({
  */
 const toolCallActionBodySchema = z.object({
   runId: z.string(),
-  requestContext: z.record(z.string(), z.any()).optional(),
+  requestContext: z.record(z.string(), z.unknown()).optional(),
   toolCallId: z.string(),
   format: z.string().optional(),
 });
 const networkToolCallActionBodySchema = z.object({
   runId: z.string(),
-  requestContext: z.record(z.string(), z.any()).optional(),
+  requestContext: z.record(z.string(), z.unknown()).optional(),
   format: z.string().optional(),
 });
 
@@ -473,7 +473,7 @@ export const declineNetworkToolCallBodySchema = networkToolCallActionBodySchema;
  * Response schema for tool approval/decline
  */
 export const toolCallResponseSchema = z.object({
-  fullStream: z.any(), // ReadableStream
+  fullStream: z.unknown(), // ReadableStream
 });
 
 export const sendToolApprovalResponseSchema = z.object({
@@ -552,7 +552,7 @@ export const resumeStreamBodySchema = agentExecutionBodySchema.omit({ messages: 
  */
 export const recoverBodySchema = z.object({
   runId: z.string(),
-  requestContext: z.record(z.string(), z.any()).optional(),
+  requestContext: z.record(z.string(), z.unknown()).optional(),
   versions: z
     .object({
       agents: z
@@ -609,9 +609,9 @@ export const modelManagementResponseSchema = messageResponseSchema;
 // These return AI SDK types which have complex structures
 // ============================================================================
 
-export const generateResponseSchema = z.any(); // AI SDK GenerateResult type
-export const streamResponseSchema = z.any(); // AI SDK StreamResult type
-export const executeToolResponseSchema = z.any(); // Tool execution result varies by tool
+export const generateResponseSchema = z.unknown(); // AI SDK GenerateResult type
+export const streamResponseSchema = z.unknown(); // AI SDK StreamResult type
+export const executeToolResponseSchema = z.unknown(); // Tool execution result varies by tool
 
 // ============================================================================
 // Instruction Enhancement Schemas
@@ -701,13 +701,13 @@ export const abortAgentThreadBodySchema = subscribeAgentThreadBodySchema;
 export const sendToolApprovalBodySchema = z.object({
   resourceId: z.string(),
   threadId: z.string(),
-  requestContext: z.record(z.string(), z.any()).optional(),
+  requestContext: z.record(z.string(), z.unknown()).optional(),
   toolCallId: z.string(),
   approved: z.boolean(),
-  resumeData: z.any().optional(),
+  resumeData: z.unknown().optional(),
   format: z.string().optional(),
   messages: z.array(coreMessageSchema).optional(),
-  streamOptions: z.any().optional(),
+  streamOptions: z.unknown().optional(),
 });
 
 export const abortAgentThreadResponseSchema = z.object({
@@ -717,4 +717,4 @@ export const abortAgentThreadResponseSchema = z.object({
 /**
  * Response schema for observe endpoint (streaming response)
  */
-export const observeAgentResponseSchema = z.any(); // Streaming response
+export const observeAgentResponseSchema = z.unknown(); // Streaming response

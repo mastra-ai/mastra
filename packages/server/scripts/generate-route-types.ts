@@ -52,21 +52,21 @@ function createAuxiliaryTypeStore(prefix: string) {
   };
 }
 
+const globalAuxiliaryTypeStore = createAuxiliaryTypeStore('Shared');
+
 function renderSchemaType(aliasName: string, schema: z4.$ZodType, deprecated: boolean): string {
-  const auxiliaryTypeStore = createAuxiliaryTypeStore(aliasName);
   const { node } = zodToTs(schema, {
-    auxiliaryTypeStore,
-    unrepresentable: 'any',
+    auxiliaryTypeStore: globalAuxiliaryTypeStore,
+    unrepresentable: 'unknown',
     io: 'output',
   });
 
-  const auxiliaryDeclarations = [...auxiliaryTypeStore.definitions.values()]
-    .map(definition => printNode(definition.node))
-    .join('\n\n');
-
+  // We will collect auxiliaryDeclarations globally at the end, so we don't emit them here inline anymore!
+  // Wait, zodToTs might unroll them anyway unless they are registered in the store with a name?
+  // zodToTs unrolls unless `withName` is used. However, sharing the store is still correct and better.
   const aliasDeclaration = `${deprecated ? '/** @deprecated */\n' : ''}export type ${aliasName} = ${printNode(node)};`;
 
-  return auxiliaryDeclarations ? `${auxiliaryDeclarations}\n\n${aliasDeclaration}` : aliasDeclaration;
+  return aliasDeclaration;
 }
 
 function getRoutePart(
@@ -188,6 +188,10 @@ function generateRouteTypesFileContent(): string {
   }).join('\n');
   const clientInterface = renderPathClient();
 
+  const auxiliaryDeclarations = [...globalAuxiliaryTypeStore.definitions.values()]
+    .map(definition => printNode(definition.node))
+    .join('\n\n');
+
   return `/**
  * AUTO-GENERATED FILE - DO NOT EDIT DIRECTLY
  *
@@ -196,6 +200,8 @@ function generateRouteTypesFileContent(): string {
  */
 
 export type Simplify<T> = { [K in keyof T]: T[K] } & {};
+
+${auxiliaryDeclarations}
 
 ${routeBlocks}
 

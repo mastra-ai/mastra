@@ -96,7 +96,7 @@ export const tracingOptionsSchema = z.object({
  * Represents messages exchanged with AI models
  * Content can be string, array of content parts, or object (for complex message types)
  */
-export const coreMessageSchema = z.any();
+export const coreMessageSchema = z.unknown();
 // .object({
 //   role: z.enum(['system', 'user', 'assistant', 'tool']),
 //   content: z.union([
@@ -108,7 +108,7 @@ export const coreMessageSchema = z.any();
 //         })
 //         .passthrough(), // Preserve additional fields like text, image, toolCall, etc.
 //     ),
-//     z.any(), // For complex message content objects
+//     z.unknown(), // For complex message content objects
 //   ]),
 // })
 // .passthrough();
