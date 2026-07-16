@@ -4,7 +4,6 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { StorageThreadType, MastraMessageV1, MastraDBMessage } from '@mastra/core/memory';
 import {
   createStorageErrorId,
-  filterByDateRange,
   MemoryStorage,
   normalizePerPage,
   calculatePagination,
@@ -420,48 +419,99 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         };
       }
 
-      // Step 1: Get paginated messages from the thread first (without excluding included ones)
-      const query = this.service.entities.message.query.byThread({ entity: 'message', threadId });
-      const results = await query.go();
+      const order = direction === 'DESC' ? 'desc' : 'asc';
 
-      let allThreadMessages = results.data
-        .map((data: any) => this.parseMessageData(data))
-        .filter((msg: any): msg is MastraDBMessage => 'content' in msg && typeof msg.content === 'object');
+      const parseQueryMessages = (data: any[]): MastraDBMessage[] =>
+        data
+          .map((item: any) => this.parseMessageData(item))
+          .filter((msg: any): msg is MastraDBMessage => 'content' in msg && typeof msg.content === 'object');
 
-      // Apply resourceId filter
-      if (resourceId) {
-        allThreadMessages = allThreadMessages.filter((msg: MastraDBMessage) => msg.resourceId === resourceId);
-      }
+      const applyQueryFilters = (q: any) => {
+        let query = q;
 
-      // Apply date range filter
-      allThreadMessages = filterByDateRange(
-        allThreadMessages,
-        (msg: MastraDBMessage) => new Date(msg.createdAt),
-        filter?.dateRange,
-      );
+        if (filter?.dateRange?.start && filter?.dateRange?.end) {
+          const startIso =
+            filter.dateRange.start instanceof Date
+              ? filter.dateRange.start.toISOString()
+              : String(filter.dateRange.start);
+          const endIso =
+            filter.dateRange.end instanceof Date ? filter.dateRange.end.toISOString() : String(filter.dateRange.end);
 
-      // Sort messages by the specified field and direction
-      allThreadMessages.sort((a: MastraDBMessage, b: MastraDBMessage) => {
-        const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
-        const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
-
-        // Handle tiebreaker for stable sorting
-        if (aValue === bValue) {
-          return a.id.localeCompare(b.id);
+          if (filter.dateRange.startExclusive && filter.dateRange.endExclusive) {
+            query = query.gt({ createdAt: startIso }).lt({ createdAt: endIso });
+          } else if (filter.dateRange.startExclusive) {
+            query = query.gt({ createdAt: startIso }).lte({ createdAt: endIso });
+          } else if (filter.dateRange.endExclusive) {
+            query = query.gte({ createdAt: startIso }).lt({ createdAt: endIso });
+          } else {
+            query = query.between({ createdAt: startIso }, { createdAt: endIso });
+          }
+        } else if (filter?.dateRange?.start) {
+          const startIso =
+            filter.dateRange.start instanceof Date
+              ? filter.dateRange.start.toISOString()
+              : String(filter.dateRange.start);
+          query = filter.dateRange.startExclusive
+            ? query.gt({ createdAt: startIso })
+            : query.gte({ createdAt: startIso });
+        } else if (filter?.dateRange?.end) {
+          const endIso =
+            filter.dateRange.end instanceof Date ? filter.dateRange.end.toISOString() : String(filter.dateRange.end);
+          query = filter.dateRange.endExclusive ? query.lt({ createdAt: endIso }) : query.lte({ createdAt: endIso });
         }
 
-        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
-      });
+        if (resourceId) {
+          query = query.where(({ resourceId: rid }: any, { eq }: any) => eq(rid, resourceId));
+        }
 
-      // Save total before pagination
-      const total = allThreadMessages.length;
+        return query;
+      };
 
-      // Apply pagination
-      const paginatedMessages = allThreadMessages.slice(offset, offset + perPage);
-      const paginatedCount = paginatedMessages.length;
+      let paginatedMessages: MastraDBMessage[] = [];
+      let total = 0;
+
+      if (threadIds.length > 1) {
+        // DynamoDB can't query multiple partitions in one request. For multi-thread calls,
+        // fall back to per-thread fetch + merge/sort in memory to preserve correctness.
+        const threadResults = await Promise.all(
+          threadIds.map(async tid => {
+            const q = applyQueryFilters(
+              this.service.entities.message.query.byThread({ entity: 'message', threadId: tid }),
+            );
+            const countResult = await q.go({ pages: 'all', attributes: ['id'] });
+            const results = await q.go({ pages: 'all', order });
+            return { total: countResult.data.length, messages: parseQueryMessages(results.data) };
+          }),
+        );
+
+        total = threadResults.reduce((sum, r) => sum + r.total, 0);
+        const merged = threadResults.flatMap(r => r.messages);
+        const sorted = this._sortMessages(merged, field, direction);
+        paginatedMessages = perPageInput === false ? sorted : sorted.slice(offset, offset + perPage);
+      } else {
+        // Step 1: Query messages from the thread via byThread GSI (createdAt sort key).
+        const baseQuery = this.service.entities.message.query.byThread({ entity: 'message', threadId: threadIds[0]! });
+        const query = applyQueryFilters(baseQuery);
+
+        // Lightweight total: id-only reads across all pages (no full message bodies).
+        const countResult = await query.go({ pages: 'all', attributes: ['id'] });
+        total = countResult.data.length;
+
+        if (perPageInput === false) {
+          const results = await query.go({ pages: 'all', order });
+          paginatedMessages = parseQueryMessages(results.data);
+        } else {
+          const results = await query.go({ count: offset + perPage, order });
+          paginatedMessages = parseQueryMessages(results.data).slice(offset, offset + perPage);
+        }
+
+        if (field !== 'createdAt') {
+          paginatedMessages = this._sortMessages(paginatedMessages, field, direction);
+        }
+      }
 
       // Only return early if there are no messages AND no includes to process
-      if (total === 0 && paginatedCount === 0 && (!include || include.length === 0)) {
+      if (total === 0 && paginatedMessages.length === 0 && (!include || include.length === 0)) {
         return {
           messages: [],
           total: 0,
@@ -498,12 +548,12 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       // Calculate hasMore based on pagination window
       // If all thread messages have been returned (through pagination or include), hasMore = false
       // Otherwise, check if there are more pages in the pagination window
-      const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
+      const threadIdSet = new Set(threadIds);
+      const returnedThreadMessageIds = new Set(
+        finalMessages.filter(m => m.threadId && threadIdSet.has(m.threadId)).map(m => m.id),
+      );
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
-      let hasMore = false;
-      if (perPageInput !== false && !allThreadMessagesReturned) {
-        hasMore = offset + paginatedCount < total;
-      }
+      const hasMore = perPageInput !== false && !allThreadMessagesReturned && offset + perPage < total;
 
       return {
         messages: finalMessages,
@@ -768,48 +818,27 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       ),
     );
 
-    const targetMap = new Map<string, { threadId: string }>();
+    const targetMap = new Map<string, { threadId: string; createdAt: string }>();
     for (const { id, data } of targetResults) {
       if (data) {
-        targetMap.set(id, { threadId: (data as any).threadId });
+        const createdAt =
+          typeof (data as any).createdAt === 'string'
+            ? (data as any).createdAt
+            : new Date((data as any).createdAt).toISOString();
+        targetMap.set(id, { threadId: (data as any).threadId, createdAt });
       }
     }
 
     if (targetMap.size === 0) return [];
 
-    // Phase 2: Load each thread only once (cache across includes from the same thread).
-    // DynamoDB's byThread GSI returns messages sorted by createdAt (sort key).
-    const threadCache = new Map<string, MastraDBMessage[]>();
-    const uniqueThreadIds = [...new Set([...targetMap.values()].map(t => t.threadId))];
+    const parseQueryMessages = (data: any[]): MastraDBMessage[] =>
+      data
+        .map((item: any) => this.parseMessageData(item))
+        .filter(
+          (msg: MastraDBMessage | MastraMessageV1): msg is MastraDBMessage =>
+            'content' in msg && typeof msg.content === 'object',
+        );
 
-    await Promise.all(
-      uniqueThreadIds.map(async threadId => {
-        try {
-          const query = this.service.entities.message.query.byThread({ entity: 'message', threadId });
-          const results = await query.go();
-          const messages = results.data
-            .map((data: any) => this.parseMessageData(data))
-            .filter(
-              (msg: MastraDBMessage | MastraMessageV1): msg is MastraDBMessage =>
-                'content' in msg && typeof msg.content === 'object',
-            );
-
-          // Sort by createdAt ASC with ID tiebreaker for stable ordering
-          messages.sort((a: MastraDBMessage, b: MastraDBMessage) => {
-            const timeA = a.createdAt.getTime();
-            const timeB = b.createdAt.getTime();
-            if (timeA === timeB) return a.id.localeCompare(b.id);
-            return timeA - timeB;
-          });
-
-          threadCache.set(threadId, messages);
-        } catch {
-          // Thread load failed, skip
-        }
-      }),
-    );
-
-    // Phase 3: Slice context windows from cached thread data.
     const includeMessages: MastraDBMessage[] = [];
 
     for (const includeItem of include) {
@@ -817,15 +846,26 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       const target = targetMap.get(id);
       if (!target) continue;
 
-      const allMessages = threadCache.get(target.threadId);
-      if (!allMessages) continue;
+      try {
+        const prevResult = await this.service.entities.message.query
+          .byThread({ entity: 'message', threadId: target.threadId })
+          .lte({ createdAt: target.createdAt })
+          .go({ order: 'desc', count: withPreviousMessages + 1 });
 
-      const targetIndex = allMessages.findIndex((msg: MastraDBMessage) => msg.id === id);
-      if (targetIndex === -1) continue;
+        const prevMessages = parseQueryMessages(prevResult.data).reverse();
+        includeMessages.push(...prevMessages);
 
-      const startIndex = Math.max(0, targetIndex - withPreviousMessages);
-      const endIndex = Math.min(allMessages.length, targetIndex + withNextMessages + 1);
-      includeMessages.push(...allMessages.slice(startIndex, endIndex));
+        if (withNextMessages > 0) {
+          const nextResult = await this.service.entities.message.query
+            .byThread({ entity: 'message', threadId: target.threadId })
+            .gt({ createdAt: target.createdAt })
+            .go({ order: 'asc', count: withNextMessages });
+
+          includeMessages.push(...parseQueryMessages(nextResult.data));
+        }
+      } catch {
+        // Include query failed, skip this item
+      }
     }
 
     // Deduplicate
