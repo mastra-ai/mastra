@@ -139,7 +139,59 @@ export interface ListKnowledgeRecordsInput {
   scope: KnowledgeScope;
   namePrefix?: string;
   kind?: string;
+  cursor?: string;
   limit?: number;
+}
+
+export interface KnowledgeRecordCursor {
+  type: KnowledgeRecordType;
+  updatedAt: Date;
+  name: string;
+  id: string;
+}
+
+export function createKnowledgeRecordCursor(
+  record: Pick<KnowledgeRecord, 'type' | 'updatedAt' | 'name' | 'id'>,
+  filters: { namePrefix?: string; kind?: string } = {},
+): string {
+  return encodeURIComponent(
+    JSON.stringify({
+      version: 1,
+      type: record.type,
+      updatedAt: record.updatedAt.toISOString(),
+      name: record.name,
+      id: record.id,
+      namePrefix: filters.namePrefix?.toLocaleLowerCase() ?? null,
+      kind: filters.kind ?? null,
+    }),
+  );
+}
+
+export function parseKnowledgeRecordCursor(
+  cursor: string,
+  filters: { type: KnowledgeRecordType; namePrefix?: string; kind?: string },
+): KnowledgeRecordCursor {
+  let value: unknown;
+  try {
+    value = JSON.parse(decodeURIComponent(cursor));
+  } catch {
+    throw new Error('Invalid knowledge record cursor.');
+  }
+  if (!value || typeof value !== 'object') throw new Error('Invalid knowledge record cursor.');
+  const parsed = value as Record<string, unknown>;
+  const updatedAt = typeof parsed.updatedAt === 'string' ? new Date(parsed.updatedAt) : new Date(Number.NaN);
+  if (
+    parsed.version !== 1 ||
+    parsed.type !== filters.type ||
+    typeof parsed.name !== 'string' ||
+    typeof parsed.id !== 'string' ||
+    Number.isNaN(updatedAt.getTime()) ||
+    parsed.namePrefix !== (filters.namePrefix?.toLocaleLowerCase() ?? null) ||
+    parsed.kind !== (filters.kind ?? null)
+  ) {
+    throw new Error('Knowledge record cursor does not match the active browse filters.');
+  }
+  return { type: filters.type, updatedAt, name: parsed.name, id: parsed.id };
 }
 
 export interface ListKnowledgeFactsInput {

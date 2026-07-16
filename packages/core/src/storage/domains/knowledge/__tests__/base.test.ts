@@ -78,7 +78,7 @@ describe('InMemoryKnowledgeStorage', () => {
 
     expect((await store.factsAbout({ entityId: entity.id, scope: org })).facts).toHaveLength(1);
     expect(await store.search({ query: 'org-visible', scope: org })).toEqual([
-      expect.objectContaining({ type: 'fact', recordId: entity.id, scope: org }),
+      expect.objectContaining({ type: 'fact', name: '(private entity)', scope: org }),
     ]);
     expect((await store.factsAbout({ entityId: entity.id, scope: thread })).facts).toHaveLength(1);
   });
