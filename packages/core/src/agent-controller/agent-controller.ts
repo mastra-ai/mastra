@@ -1,9 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { Agent } from '../agent';
-import { resolveFilePartMediaTypeAndData } from '../agent/message-list/prompt/image-utils';
-import type { MastraDBMessage } from '../agent/message-list/state/types';
-import { mastraDBMessageToSignal } from '../agent/signals';
+import type { MastraDBMessage, MastraMessageContentV2 } from '../agent/message-list/state/types';
 import type { AgentInstructions, ToolsInput, ToolsetsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
 import { getErrorFromUnknown } from '../error';
@@ -24,17 +22,6 @@ import type { WorkspaceConfig } from '../workspace/workspace';
 import { Session } from './session';
 import type { ThreadDataStore } from './session';
 import {
-  getRecordValue,
-  signalContentsToControllerContent,
-  signalContentsToText,
-  toNotificationContent,
-  toNotificationSummaryContent,
-  toReactiveSignalContent,
-  toStateSignalContent,
-  toSystemReminderContent,
-  toUserSignalMessage,
-} from './stream-content';
-import {
   askUserTool,
   createSubagentTool,
   submitPlanTool,
@@ -47,8 +34,6 @@ import type {
   AvailableModel,
   IntervalHandler,
   AgentControllerConfig,
-  AgentControllerMessage,
-  AgentControllerMessageContent,
   AgentControllerMode,
   AgentControllerRequestContext,
   AgentControllerRequestStateUpdater,
@@ -1005,7 +990,7 @@ export class AgentController<TState = {}> {
   }: {
     threadId: string;
     limit?: number;
-  }): Promise<AgentControllerMessage[]> {
+  }): Promise<MastraDBMessage[]> {
     if (!this.#resolveStorage()) return [];
 
     const memoryStorage = await this.getMemoryStorage();
@@ -1024,11 +1009,7 @@ export class AgentController<TState = {}> {
     return result.messages.map(msg => this.convertToControllerMessage(msg));
   }
 
-  private async queryFirstUserMessages({
-    threadIds,
-  }: {
-    threadIds: string[];
-  }): Promise<Map<string, AgentControllerMessage>> {
+  private async queryFirstUserMessages({ threadIds }: { threadIds: string[] }): Promise<Map<string, MastraDBMessage>> {
     if (!this.#resolveStorage() || threadIds.length === 0) return new Map();
 
     const memoryStorage = await this.getMemoryStorage();
@@ -1038,7 +1019,7 @@ export class AgentController<TState = {}> {
       orderBy: { field: 'createdAt', direction: 'ASC' },
     });
 
-    const firstUserMessages = new Map<string, AgentControllerMessage>();
+    const firstUserMessages = new Map<string, MastraDBMessage>();
     for (const message of result.messages) {
       if (message.role !== 'user' || !message.threadId || firstUserMessages.has(message.threadId)) continue;
       firstUserMessages.set(message.threadId, this.convertToControllerMessage(message));
@@ -1605,7 +1586,7 @@ export class AgentController<TState = {}> {
   /**
    * Persist a system-reminder message for a thread (host-owned storage). Throws
    * when no storage is configured — the Session guards the no-thread case before
-   * calling. Returns the saved message converted to {@link AgentControllerMessage}.
+   * calling. Returns the saved {@link MastraDBMessage}.
    */
   private async saveSystemReminder({
     threadId,
@@ -1621,7 +1602,7 @@ export class AgentController<TState = {}> {
     reminderType: string;
     role: 'user' | 'assistant' | 'system';
     metadata?: Record<string, unknown>;
-  }): Promise<AgentControllerMessage | null> {
+  }): Promise<MastraDBMessage | null> {
     if (!this.#resolveStorage()) return null;
     const memoryStorage = await this.getMemoryStorage();
     const dbMessage = {
@@ -1667,335 +1648,25 @@ export class AgentController<TState = {}> {
 
   private convertToControllerMessage(msg: {
     id: string;
-    role: 'user' | 'assistant' | 'system' | 'signal';
+    role: MastraDBMessage['role'];
     createdAt: Date;
-    content: {
-      content?: string;
-      parts: Array<{
-        type: string;
-        text?: string;
-        reasoning?: string;
-        toolCallId?: string;
-        toolName?: string;
-        args?: unknown;
-        result?: unknown;
-        isError?: boolean;
-        toolInvocation?: {
-          state: string;
-          toolCallId: string;
-          toolName: string;
-          args?: unknown;
-          result?: unknown;
-          isError?: boolean;
-        };
-        [key: string]: unknown;
-      }>;
-      metadata?: Record<string, unknown>;
+    threadId?: string;
+    resourceId?: string;
+    type?: string;
+    content: MastraMessageContentV2;
+  }): MastraDBMessage {
+    // DB-native passthrough: the agent-controller now exposes the canonical persisted
+    // MastraDBMessage shape directly. No flattening into a UI content union — consumers
+    // read content.parts (and role === "signal" + content.metadata.signal) themselves.
+    return {
+      id: msg.id,
+      role: msg.role,
+      createdAt: msg.createdAt,
+      ...(msg.threadId !== undefined ? { threadId: msg.threadId } : {}),
+      ...(msg.resourceId !== undefined ? { resourceId: msg.resourceId } : {}),
+      ...(msg.type !== undefined ? { type: msg.type } : {}),
+      content: msg.content,
     };
-  }): AgentControllerMessage {
-    const content: AgentControllerMessageContent[] = [];
-    const systemReminder = getRecordValue(msg.content.metadata?.systemReminder);
-
-    if (systemReminder && typeof systemReminder.type === 'string') {
-      const reminder = toSystemReminderContent({
-        ...systemReminder,
-        contents: typeof systemReminder.message === 'string' ? systemReminder.message : '',
-        reminderType: systemReminder.type,
-      });
-      if (reminder) {
-        content.push(reminder);
-      }
-
-      return {
-        id: msg.id,
-        role: msg.role === 'signal' ? 'user' : msg.role,
-        content,
-        createdAt: msg.createdAt,
-      };
-    }
-
-    if (msg.role === 'signal') {
-      const signal = mastraDBMessageToSignal(msg as MastraDBMessage);
-
-      if (signal.type === 'user') {
-        const signalContent = signalContentsToControllerContent(signal.contents);
-        if (signalContent.length > 0) {
-          return {
-            id: msg.id,
-            role: 'user',
-            content: signalContent,
-            createdAt: msg.createdAt,
-            attributes: signal.attributes,
-          };
-        }
-      }
-
-      if (signal.type === 'state') {
-        const stateSignal = toStateSignalContent({
-          id: signal.id,
-          type: signal.type,
-          tagName: signal.tagName,
-          contents: signal.contents,
-          metadata: signal.metadata,
-        });
-        if (stateSignal) {
-          content.push(stateSignal);
-        }
-
-        return {
-          id: msg.id,
-          role: 'user',
-          content,
-          createdAt: msg.createdAt,
-        };
-      }
-
-      if (signal.type === 'reactive' && signal.tagName === 'system-reminder') {
-        const reminder = toSystemReminderContent({
-          type: signal.type,
-          contents: signalContentsToText(signal.contents),
-          attributes: signal.attributes ?? msg.content.metadata,
-          metadata: signal.metadata,
-        });
-        if (reminder) {
-          content.push(reminder);
-        }
-
-        return {
-          id: msg.id,
-          role: 'user',
-          content,
-          createdAt: msg.createdAt,
-        };
-      }
-
-      if (signal.type === 'notification' && signal.tagName === 'notification-summary') {
-        const notificationSummary = toNotificationSummaryContent({
-          id: signal.id,
-          contents: signal.contents,
-          attributes: signal.attributes,
-          metadata: signal.metadata,
-        });
-        if (notificationSummary) {
-          content.push(notificationSummary);
-        }
-
-        return {
-          id: msg.id,
-          role: 'user',
-          content,
-          createdAt: msg.createdAt,
-        };
-      }
-
-      if (signal.type === 'notification' && signal.tagName === 'notification') {
-        const notification = toNotificationContent({
-          id: signal.id,
-          contents: signal.contents,
-          attributes: signal.attributes,
-          metadata: signal.metadata,
-        });
-        if (notification) {
-          content.push(notification);
-        }
-
-        return {
-          id: msg.id,
-          role: 'user',
-          content,
-          createdAt: msg.createdAt,
-        };
-      }
-
-      if (signal.type === 'reactive') {
-        const reactiveSignal = toReactiveSignalContent({
-          id: signal.id,
-          type: signal.type,
-          tagName: signal.tagName,
-          contents: signal.contents,
-          attributes: signal.attributes,
-          metadata: signal.metadata,
-        });
-        if (reactiveSignal) {
-          content.push(reactiveSignal);
-        }
-
-        return {
-          id: msg.id,
-          role: 'user',
-          content,
-          createdAt: msg.createdAt,
-        };
-      }
-    }
-
-    for (const part of msg.content.parts) {
-      switch (part.type) {
-        case 'text':
-          if (part.text) {
-            content.push({ type: 'text', text: part.text });
-          }
-          break;
-        case 'reasoning':
-          if (part.reasoning) {
-            content.push({ type: 'thinking', thinking: part.reasoning });
-          }
-          break;
-        case 'tool-invocation':
-          if (part.toolInvocation) {
-            const inv = part.toolInvocation;
-            content.push({ type: 'tool_call', id: inv.toolCallId, name: inv.toolName, args: inv.args });
-            if (inv.state === 'result' && inv.result !== undefined) {
-              const partProviderMetadata = part.providerMetadata as Record<string, unknown> | undefined;
-              content.push({
-                type: 'tool_result',
-                id: inv.toolCallId,
-                name: inv.toolName,
-                result: inv.result,
-                isError: inv.isError ?? false,
-                ...(partProviderMetadata ? { providerMetadata: partProviderMetadata } : {}),
-              });
-            }
-          } else if (part.toolCallId && part.toolName) {
-            content.push({ type: 'tool_call', id: part.toolCallId, name: part.toolName, args: part.args });
-          }
-          break;
-        case 'tool-call':
-          if (part.toolCallId && part.toolName) {
-            content.push({ type: 'tool_call', id: part.toolCallId, name: part.toolName, args: part.args });
-          }
-          break;
-        case 'tool-result':
-          if (part.toolCallId && part.toolName) {
-            const resultProviderMetadata = part.providerMetadata as Record<string, unknown> | undefined;
-            content.push({
-              type: 'tool_result',
-              id: part.toolCallId,
-              name: part.toolName,
-              result: part.result,
-              isError: part.isError ?? false,
-              ...(resultProviderMetadata ? { providerMetadata: resultProviderMetadata } : {}),
-            });
-          }
-          break;
-        case 'data-om-observation-start': {
-          const data = (part as { data?: Record<string, unknown> }).data ?? {};
-          content.push({
-            type: 'om_observation_start',
-            tokensToObserve: (data.tokensToObserve as number) ?? 0,
-            operationType: (data.operationType as 'observation' | 'reflection') ?? 'observation',
-          });
-          break;
-        }
-        case 'data-om-observation-end': {
-          const data = (part as { data?: Record<string, unknown> }).data ?? {};
-          content.push({
-            type: 'om_observation_end',
-            tokensObserved: (data.tokensObserved as number) ?? 0,
-            observationTokens: (data.observationTokens as number) ?? 0,
-            durationMs: (data.durationMs as number) ?? 0,
-            operationType: (data.operationType as 'observation' | 'reflection') ?? 'observation',
-            observations: (data.observations as string) ?? undefined,
-            currentTask: (data.currentTask as string) ?? undefined,
-            suggestedResponse: (data.suggestedResponse as string) ?? undefined,
-          });
-          break;
-        }
-        case 'data-om-observation-failed': {
-          const data = (part as { data?: Record<string, unknown> }).data ?? {};
-          content.push({
-            type: 'om_observation_failed',
-            error: (data.error as string) ?? 'Unknown error',
-            tokensAttempted: (data.tokensAttempted as number) ?? 0,
-            operationType: (data.operationType as 'observation' | 'reflection') ?? 'observation',
-          });
-          break;
-        }
-        case 'data-signal': {
-          const data = (part as { data?: Record<string, unknown> }).data ?? {};
-          if (data.type === 'state') {
-            const stateSignal = toStateSignalContent(data);
-            if (stateSignal) content.push(stateSignal);
-          } else if (data.type === 'reactive' && data.tagName === 'system-reminder') {
-            const reminder = toSystemReminderContent(data);
-            if (reminder) content.push(reminder);
-          } else if (data.type === 'notification' && data.tagName === 'notification-summary') {
-            const notificationSummary = toNotificationSummaryContent(data);
-            if (notificationSummary) content.push(notificationSummary);
-          } else if (data.type === 'notification' && data.tagName === 'notification') {
-            const notification = toNotificationContent(data);
-            if (notification) content.push(notification);
-          } else if (data.type === 'reactive') {
-            const reactiveSignal = toReactiveSignalContent(data);
-            if (reactiveSignal) content.push(reactiveSignal);
-          }
-          break;
-        }
-        case 'data-user-message': {
-          const data = (part as { data?: Record<string, unknown> }).data ?? {};
-          const message = toUserSignalMessage(data);
-          if (message) {
-            content.push(...message.content);
-          }
-          break;
-        }
-        // Back-compat: persisted streams may still contain data-system-reminder parts
-        case 'data-system-reminder': {
-          const data = (part as { data?: Record<string, unknown> }).data ?? {};
-          const reminder = toSystemReminderContent(data);
-          if (reminder) {
-            content.push(reminder);
-          }
-          break;
-        }
-        case 'file': {
-          // Stored file parts can be v4- (`mimeType`/`data`) or v5-shaped (`mediaType`/`url`);
-          // resolve both so a v5 part's `url` payload isn't dropped as "non-string data".
-          const { mediaType, data } = resolveFilePartMediaTypeAndData(part);
-          if (typeof data !== 'string') {
-            console.warn('[Harness] Skipping file part with non-string data:', typeof data);
-            break;
-          }
-          content.push({
-            type: 'file',
-            data,
-            mediaType: mediaType ?? 'application/octet-stream',
-            ...((part as { filename?: string }).filename ? { filename: (part as { filename?: string }).filename } : {}),
-          });
-          break;
-        }
-        case 'image': {
-          const imgData =
-            typeof part.data === 'string'
-              ? part.data
-              : typeof (part as { image?: string }).image === 'string'
-                ? (part as { image?: string }).image!
-                : '';
-          content.push({
-            type: 'image',
-            data: imgData,
-            mimeType:
-              (part as { mimeType?: string }).mimeType ?? (part as { mediaType?: string }).mediaType ?? 'image/png',
-          });
-          break;
-        }
-        case 'data-om-thread-update': {
-          const data = (part as { data?: Record<string, unknown> }).data ?? {};
-          if (data.newTitle) {
-            content.push({
-              type: 'om_thread_title_updated',
-              threadId: (data.threadId as string) ?? '',
-              oldTitle: (data.oldTitle as string) ?? undefined,
-              newTitle: data.newTitle as string,
-            });
-          }
-          break;
-        }
-        // Skip other part types (step-start, data-om-status, etc.)
-      }
-    }
-
-    return { id: msg.id, role: msg.role === 'signal' ? 'user' : msg.role, content, createdAt: msg.createdAt };
   }
 
   // ===========================================================================

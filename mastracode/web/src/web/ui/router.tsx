@@ -16,6 +16,7 @@ import { SignInPage, useWebAuth } from './domains/auth';
 import Chat from './domains/chat/Chat';
 import { NewPage } from './domains/chat/NewPage';
 import { ThreadPage } from './domains/chat/ThreadPage';
+import { AuditPage } from './domains/factory/AuditPage';
 import { BoardPage } from './domains/factory/BoardPage';
 import { MetricsPage } from './domains/factory/MetricsPage';
 
@@ -88,6 +89,7 @@ export function createAppRoutes(): RouteObject[] {
             { path: 'user/threads/:threadId', element: <ThreadPage /> },
             { path: 'factory/board', element: <BoardPage /> },
             { path: 'factory/metrics', element: <MetricsPage /> },
+            { path: 'factory/audit', element: <AuditPage /> },
             // Legacy Factory pages, folded into the Board.
             { path: 'factory/intake', element: <Navigate to="/factory/board" replace /> },
             { path: 'factory/review', element: <Navigate to="/factory/board" replace /> },

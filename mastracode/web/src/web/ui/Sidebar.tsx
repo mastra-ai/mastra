@@ -2,11 +2,11 @@ import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Circle, LogOut, Settings } from 'lucide-react';
+import { LogOut, Settings } from 'lucide-react';
 
 import { useApiConfig } from '../../shared/api/config';
 import { redirectToLogout, useWebAuth } from './domains/auth';
-import { ThreadList, useChatConnection, useChatTranscript } from './domains/chat';
+import { ThreadList } from './domains/chat';
 import { FactorySection } from './domains/factory';
 import { ProjectSwitcher, useActiveProjectContext, UserSessionsSection, WorkspacesSection } from './domains/workspaces';
 import { useOverlays } from './lib/overlays';
@@ -48,36 +48,11 @@ export function Sidebar() {
   );
 }
 
-function statusLabel(status: string, running: boolean): string {
-  if (running) return 'Working…';
-  if (status === 'reconnecting') return 'Reconnecting…';
-  return status.charAt(0).toUpperCase() + status.slice(1);
-}
-
-function statusDotClass(status: string): string {
-  if (status === 'ready') return 'fill-accent1 text-accent1';
-  if (status === 'reconnecting') return 'animate-pulse fill-warning1 text-warning1';
-  if (status === 'error') return 'fill-error text-error';
-  return 'animate-pulse fill-icon2 text-icon2';
-}
-
 function SidebarFooter() {
-  const { status } = useChatConnection();
-  const { busy } = useChatTranscript();
   const overlays = useOverlays();
 
   return (
     <div className="mt-auto flex flex-col gap-2 border-t border-border1 pt-2">
-      <div
-        className="grid h-10 grid-cols-[2.75rem_1fr_auto] items-center text-ui-sm text-icon3"
-        role="status"
-        aria-live="polite"
-      >
-        <span className="flex items-center justify-center">
-          <Circle size={10} className={statusDotClass(status)} />
-        </span>
-        <span>{statusLabel(status, busy)}</span>
-      </div>
       <SidebarAuth />
       <Button
         variant="ghost"

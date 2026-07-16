@@ -303,16 +303,23 @@ describe('StatusLine', () => {
             message: {
               id: 'notification-message',
               role: 'assistant',
-              content: [
-                {
-                  type: 'notification',
-                  notificationId: 'notification-merged',
-                  message: 'octo/hello#42 was merged',
-                  source: 'github',
-                  kind: 'pull-request-merged',
-                  priority: 'urgent',
+              createdAt: new Date(),
+              content: {
+                format: 2,
+                parts: [],
+                metadata: {
+                  harnessContent: [
+                    {
+                      type: 'notification',
+                      notificationId: 'notification-merged',
+                      message: 'octo/hello#42 was merged',
+                      source: 'github',
+                      kind: 'pull-request-merged',
+                      priority: 'urgent',
+                    },
+                  ],
                 },
-              ],
+              },
             },
           },
         ],
@@ -412,6 +419,14 @@ describe('StatusLine', () => {
   });
 
   describe('when the agent is actively working', () => {
+    it('reports Working in the composer status line', async () => {
+      seedProject();
+      useAgentControllerHandlers([{ type: 'agent_start' }]);
+      renderStatusLine();
+
+      expect(await screen.findByRole('status')).toHaveTextContent('Working…');
+    });
+
     it('shows the observational memory phase while observing', async () => {
       seedProject();
       useAgentControllerHandlers([{ type: 'om_observation_start' }]);
@@ -427,7 +442,12 @@ describe('StatusLine', () => {
           { type: 'agent_start' },
           {
             type: 'message_update',
-            message: { id: 'assistant-1', role: 'assistant', content: [{ type: 'text', text: 'Working…' }] },
+            message: {
+              id: 'assistant-1',
+              role: 'assistant',
+              createdAt: new Date(),
+              content: { format: 2, parts: [{ type: 'text', text: 'Working…' }] },
+            },
           },
         ],
         [{ type: 'usage_update', usage: { completionTokens: 120 } }],

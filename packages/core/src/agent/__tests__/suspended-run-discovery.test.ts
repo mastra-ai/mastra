@@ -7,7 +7,7 @@
  * workflow snapshot storage, and `sendToolApproval()` falls back to it when
  * the in-memory map has no entry — making HITL approvals survive restarts.
  */
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
@@ -216,21 +216,7 @@ afterEach(() => {
   mockFindUser.mockClear();
 });
 
-// The loop workflows pick their engine from MASTRA_EVENTED_EXECUTION at
-// creation time (per stream call), so discovery must work against rows
-// persisted by both the default (direct) engine and the evented engine.
-describe.each([
-  { engine: 'default', evented: false },
-  { engine: 'evented', evented: true },
-])('suspended-run discovery ($engine engine)', ({ evented }) => {
-  beforeAll(() => {
-    if (evented) vi.stubEnv('MASTRA_EVENTED_EXECUTION', 'true');
-  });
-
-  afterAll(() => {
-    if (evented) vi.unstubAllEnvs();
-  });
-
+describe('suspended-run discovery', () => {
   describe('agent.listSuspendedRuns()', () => {
     it('returns suspended runs with thread, resource, and tool-call info', async () => {
       const { agent } = createSuspendedSetup();

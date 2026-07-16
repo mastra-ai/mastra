@@ -15,7 +15,7 @@ describe('ShortcutsOverlay', () => {
       </OverlayTestProviders>,
     );
     expect(screen.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeInTheDocument();
-    expect(screen.getByText('Open the command palette')).toBeInTheDocument();
+    expect(screen.getByText('Show this shortcuts help')).toBeInTheDocument();
     expect(screen.getByText('Insert a newline')).toBeInTheDocument();
   });
 });

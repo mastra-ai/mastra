@@ -294,7 +294,10 @@ describe('MCPClient OAuth authorization flow', () => {
     const ports = allocatePortBlock();
     const authServer = await startFakeAuthorizationServer(ports.authPort);
     const mcpServer = await startProtectedMcpServer(ports.mcpPort, authServer);
-    cleanups.push(() => mcpServer.close(), () => authServer.close());
+    cleanups.push(
+      () => mcpServer.close(),
+      () => authServer.close(),
+    );
     return { authServer, mcpServer, ports, callbackUrl: ports.callbackUrl };
   };
 
@@ -312,7 +315,10 @@ describe('MCPClient OAuth authorization flow', () => {
   it('marks the server as needs-auth when the connection is rejected with a 401', async () => {
     const { mcpServer, callbackUrl } = await setup();
     const authorizationUrls: URL[] = [];
-    const provider = createProvider({ callbackUrl, onRedirectToAuthorization: url => void authorizationUrls.push(url) });
+    const provider = createProvider({
+      callbackUrl,
+      onRedirectToAuthorization: url => void authorizationUrls.push(url),
+    });
     const mcp = track(createClient(mcpServer.url, provider));
 
     await expect(mcp.reconnectServer('fixture')).rejects.toThrow();
