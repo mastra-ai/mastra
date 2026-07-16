@@ -374,13 +374,28 @@ describe('expandEnvVars', () => {
 
 describe('loadMcpConfig', () => {
   let projectDir: string;
+  let homeDir: string;
+  let previousHome: string | undefined;
+  let previousUserProfile: string | undefined;
 
   beforeEach(() => {
     projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-config-'));
+    // Isolate the global ~/.mastracode/mcp.json so a developer's real config
+    // cannot leak into assertions (os.homedir() reads HOME / USERPROFILE).
+    homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-home-'));
+    previousHome = process.env.HOME;
+    previousUserProfile = process.env.USERPROFILE;
+    process.env.HOME = homeDir;
+    process.env.USERPROFILE = homeDir;
   });
 
   afterEach(() => {
+    if (previousHome === undefined) delete process.env.HOME;
+    else process.env.HOME = previousHome;
+    if (previousUserProfile === undefined) delete process.env.USERPROFILE;
+    else process.env.USERPROFILE = previousUserProfile;
     fs.rmSync(projectDir, { recursive: true, force: true });
+    fs.rmSync(homeDir, { recursive: true, force: true });
   });
 
   function writeJson(filePath: string, data: unknown): void {
@@ -427,25 +442,16 @@ describe('loadMcpConfig', () => {
   });
 
   it('lets a root .mcp.json override the global ~/.mastracode/mcp.json by server name', () => {
-    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-home-'));
-    const previousHome = process.env.HOME;
-    process.env.HOME = homeDir;
-    try {
-      writeJson(path.join(homeDir, '.mastracode', 'mcp.json'), {
-        mcpServers: { shared: { command: 'global-cmd' } },
-      });
-      writeJson(path.join(projectDir, '.mcp.json'), {
-        mcpServers: { shared: { command: 'root-cmd' } },
-      });
+    writeJson(path.join(homeDir, '.mastracode', 'mcp.json'), {
+      mcpServers: { shared: { command: 'global-cmd' } },
+    });
+    writeJson(path.join(projectDir, '.mcp.json'), {
+      mcpServers: { shared: { command: 'root-cmd' } },
+    });
 
-      const config = loadMcpConfig(projectDir);
+    const config = loadMcpConfig(projectDir);
 
-      expect(config.mcpServers!['shared']).toEqual({ command: 'root-cmd', args: undefined, env: undefined });
-    } finally {
-      if (previousHome === undefined) delete process.env.HOME;
-      else process.env.HOME = previousHome;
-      fs.rmSync(homeDir, { recursive: true, force: true });
-    }
+    expect(config.mcpServers!['shared']).toEqual({ command: 'root-cmd', args: undefined, env: undefined });
   });
 
   it('lets a root .mcp.json override .claude/settings.local.json by server name', () => {
