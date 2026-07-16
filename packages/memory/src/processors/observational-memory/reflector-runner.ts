@@ -56,6 +56,7 @@ import type {
   ObservationModelContext,
   ObserveHookUsage,
   ObserveHooks,
+  ReflectionCommittedContext,
   ResolvedObservationConfig,
   ResolvedReflectionConfig,
   ThresholdRange,
@@ -207,6 +208,7 @@ export class ReflectorRunner {
   ) => Promise<void>;
   private readonly getCompressionStartLevel: (requestContext?: RequestContext) => Promise<CompressionLevel>;
   private readonly memory?: Memory;
+  private readonly onReflectionCommitted?: (context: ReflectionCommittedContext) => Promise<void>;
   private mastra?: Mastra;
 
   constructor(opts: {
@@ -232,6 +234,7 @@ export class ReflectorRunner {
     resolveModel: ReflectionModelResolver;
     mastra?: Mastra;
     memory?: Memory;
+    onReflectionCommitted?: (context: ReflectionCommittedContext) => Promise<void>;
   }) {
     this.reflectionConfig = opts.reflectionConfig;
     this.observationConfig = opts.observationConfig;
@@ -246,6 +249,7 @@ export class ReflectorRunner {
     this.getCompressionStartLevel = opts.getCompressionStartLevel;
     this.mastra = opts.mastra;
     this.memory = opts.memory;
+    this.onReflectionCommitted = opts.onReflectionCommitted;
   }
 
   __registerMastra(mastra: Mastra): void {
@@ -794,6 +798,7 @@ export class ReflectorRunner {
       previousModel?: string;
       currentModel?: string;
     },
+    committedContext?: Omit<ReflectionCommittedContext, 'observations'>,
   ): Promise<TryActivateResult> {
     const bufferKey = this.buffering.getReflectionBufferKey(lockKey);
 
@@ -897,6 +902,12 @@ export class ReflectorRunner {
       currentRecord: freshRecord,
       tokenCount: combinedTokenCount,
     });
+    if (committedContext) {
+      await this.notifyReflectionCommitted({
+        ...committedContext,
+        observations: allLines.slice(0, reflectedLineCount).join('\n').trim(),
+      });
+    }
 
     BufferingCoordinator.lastBufferedBoundary.delete(bufferKey);
 
@@ -944,6 +955,15 @@ export class ReflectorRunner {
     return { status: 'activated' };
   }
 
+  private async notifyReflectionCommitted(context: ReflectionCommittedContext): Promise<void> {
+    if (!this.onReflectionCommitted || !context.parentThreadId || !context.resourceId) return;
+    try {
+      await this.onReflectionCommitted(context);
+    } catch (error) {
+      omDebug(`[OM:reflect] post-commit reflection agent failed: ${error}`);
+    }
+  }
+
   /**
    * Check if reflection needed and trigger if so.
    * Supports both synchronous reflection and async buffered reflection.
@@ -957,6 +977,7 @@ export class ReflectorRunner {
     abortSignal?: AbortSignal;
     mainAgent?: ProcessorContext['agent'];
     sendSignal?: ProcessorContext['sendSignal'];
+    sendStateSignal?: ProcessorContext['sendStateSignal'];
     messageList?: MessageList;
     currentModel?: ObservationModelContext;
     reflectionHooks?: Pick<ObserveHooks, 'onReflectionStart' | 'onReflectionEnd'>;
@@ -971,6 +992,7 @@ export class ReflectorRunner {
       abortSignal,
       mainAgent,
       sendSignal,
+      sendStateSignal,
       messageList,
       currentModel,
       reflectionHooks,
@@ -1072,6 +1094,15 @@ export class ReflectorRunner {
         writer,
         messageList,
         activationMetadata,
+        {
+          parentThreadId: requestedThreadId ?? record.threadId ?? '',
+          resourceId: record.resourceId ?? '',
+          requestContext,
+          mainAgent,
+          sendStateSignal,
+          abortSignal,
+          observabilityContext,
+        },
       );
       if (activationResult.status === 'activated') {
         return;
@@ -1199,6 +1230,16 @@ export class ReflectorRunner {
         currentRecord: record,
         reflection: reflectResult.observations,
         tokenCount: reflectionTokenCount,
+      });
+      await this.notifyReflectionCommitted({
+        parentThreadId: requestedThreadId ?? record.threadId ?? '',
+        resourceId: record.resourceId ?? '',
+        observations: record.activeObservations ?? '',
+        requestContext,
+        mainAgent,
+        sendStateSignal,
+        abortSignal,
+        observabilityContext,
       });
 
       if (writer && streamContext) {

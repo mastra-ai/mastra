@@ -1,6 +1,9 @@
 import type { AgentConfig } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { ObservationalMemoryModelSettings } from '@mastra/core/memory';
+import type { ObservabilityContext } from '@mastra/core/observability';
+import type { ProcessorContext } from '@mastra/core/processors';
+import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage } from '@mastra/core/storage';
 import type { ProviderMetadata } from '@mastra/core/stream';
 import type { Memory } from '../..';
@@ -883,6 +886,17 @@ export interface ObservationDebugEvent {
 /**
  * Configuration for ObservationalMemory
  */
+export interface ReflectionCommittedContext {
+  parentThreadId: string;
+  resourceId: string;
+  observations: string;
+  requestContext?: RequestContext;
+  mainAgent?: ProcessorContext['agent'];
+  sendStateSignal?: ProcessorContext['sendStateSignal'];
+  abortSignal?: AbortSignal;
+  observabilityContext?: ObservabilityContext;
+}
+
 export interface ObservationalMemoryConfig {
   /**
    * Storage adapter for persisting observations.
@@ -994,6 +1008,9 @@ export interface ObservationalMemoryConfig {
    * to opt reflections into provider-change activation.
    */
   activateOnProviderChange?: boolean;
+
+  /** @internal Runs Subconscious reflection work only after a reflection is durably committed. */
+  onReflectionCommitted?: (context: ReflectionCommittedContext) => Promise<void>;
 
   /** @internal Parent Mastra instance for custom gateway model resolution. */
   mastra?: Mastra;

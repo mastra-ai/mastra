@@ -90,6 +90,7 @@ export interface ResolvedSubconsciousAgent {
   name: string;
   instructions?: string;
   model?: SubconsciousModel;
+  agent?: Agent;
   maxSteps: number;
   builtIn: boolean;
 }

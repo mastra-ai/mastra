@@ -592,6 +592,7 @@ export class ObservationalMemory {
       resolveModel: inputTokens => this.resolveReflectionModel(inputTokens),
       mastra: config.mastra,
       memory: this.memory,
+      onReflectionCommitted: config.onReflectionCommitted,
     });
 
     // Validate buffer configuration

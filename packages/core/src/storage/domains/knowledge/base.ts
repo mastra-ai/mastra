@@ -207,6 +207,14 @@ export interface ListKnowledgeFactsOutput {
   nextCursor?: string;
 }
 
+export interface ListKnowledgeFactsBySourceInput {
+  sourceThreadId: string;
+  scope: KnowledgeScope;
+  after?: string;
+  limit?: number;
+  includeDeleted?: boolean;
+}
+
 export interface SearchKnowledgeInput {
   query: string;
   scope: KnowledgeScope;
@@ -389,6 +397,7 @@ export abstract class KnowledgeStorage extends StorageDomain {
   abstract getFact(input: { id: string; includeDeleted?: boolean }): Promise<KnowledgeFact | null>;
   abstract factsAbout(input: ListKnowledgeFactsInput): Promise<ListKnowledgeFactsOutput>;
   abstract factsTouching(input: ListKnowledgeFactsInput): Promise<ListKnowledgeFactsOutput>;
+  abstract listFactsBySource(input: ListKnowledgeFactsBySourceInput): Promise<ListKnowledgeFactsOutput>;
   abstract removeFact(input: { id: string; deletedBy: string }): Promise<KnowledgeFact>;
   abstract restoreFact(input: { id: string }): Promise<KnowledgeFact>;
   abstract rescopeFact(input: { id: string; scope: KnowledgeScope }): Promise<KnowledgeFact>;

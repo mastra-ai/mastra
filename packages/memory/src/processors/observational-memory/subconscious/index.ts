@@ -40,7 +40,7 @@ function boundedSteps(entry: { maxSteps?: number } | undefined, fallback: number
 }
 
 function resolveAgent(
-  entry: string | { name: string; instructions?: string; model?: any; maxSteps?: number },
+  entry: string | { name: string; instructions?: string; model?: any; agent?: any; maxSteps?: number },
   builtIns: Set<string>,
   globalModel: SubconsciousConfig['model'],
   globalMaxSteps: number,
@@ -51,6 +51,7 @@ function resolveAgent(
     name,
     instructions: config?.instructions,
     model: config?.model ?? globalModel,
+    agent: config?.agent,
     maxSteps: boundedSteps(config, globalMaxSteps),
     builtIn: builtIns.has(name),
   };
@@ -148,6 +149,9 @@ export class Subconscious {
       if (!BUILT_IN_REFLECTION.has(name)) throw new Error(`Unknown Subconscious reflection agent: ${name}`);
       return;
     }
+    if (BUILT_IN_REFLECTION.has(name) && 'agent' in entry && entry.agent) {
+      throw new Error(`Built-in Subconscious reflection agent "${name}" cannot be replaced with a custom agent.`);
+    }
     if (!BUILT_IN_REFLECTION.has(name) && !entry.instructions?.trim() && !('agent' in entry && entry.agent)) {
       throw new Error(`Custom Subconscious reflection agent "${name}" requires instructions or agent.`);
     }
@@ -157,12 +161,15 @@ export class Subconscious {
 export {
   buildSubconsciousActivitySnapshot,
   publishSubconsciousActivity,
+  publishSubconsciousError,
   renderSubconsciousActivity,
   SUBCONSCIOUS_ACTIVITY_STATE_ID,
 } from './activity';
 export type { SubconsciousActivitySnapshot, SubconsciousActivityUpdate } from './activity';
 export { SubconsciousCaptureExtractor, subconsciousCaptureSchema } from './capture';
 export { SubconsciousRemindExtractor } from './remind';
+export { createKnowledgeWriteTools } from './knowledge-write-tools';
+export type { KnowledgeWriteToolsOptions } from './knowledge-write-tools';
 export { KnowledgeSemanticIndexCoordinator, StaleKnowledgeSemanticIndexError } from './semantic-index';
 export type { KnowledgeSemanticIndexCoordinatorConfig } from './semantic-index';
 export type { CaptureExtractorOptions } from './capture';
