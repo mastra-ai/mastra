@@ -433,6 +433,7 @@ describe('tool lifecycle', () => {
           args: { customerId: 'cus_123' },
           state: 'result',
           result: { displayName: 'Acme' },
+          isError: false,
         },
       },
     ]);
@@ -533,6 +534,7 @@ describe('tool lifecycle', () => {
           args: null,
           state: 'result',
           result: null,
+          isError: false,
         },
       },
     ]);
