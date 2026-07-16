@@ -721,6 +721,16 @@
         "default": "./dist/utils/collect-tool-mocks.cjs"
       }
     },
+    "./utils/safe-stringify": {
+      "import": {
+        "types": "./dist/utils/safe-stringify.d.ts",
+        "default": "./dist/utils/safe-stringify.js"
+      },
+      "require": {
+        "types": "./dist/utils/safe-stringify.d.ts",
+        "default": "./dist/utils/safe-stringify.cjs"
+      }
+    },
     "./loop/server": {
       "import": {
         "types": "./dist/loop/server.d.ts",

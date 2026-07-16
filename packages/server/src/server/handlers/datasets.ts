@@ -92,6 +92,7 @@ function getHttpStatusForMastraError(errorId: string): number {
       return 404;
     case 'EXPERIMENT_NO_ITEMS':
     case 'DATASET_ITEM_EXTERNAL_ID_INVALID':
+    case 'DATASET_ITEM_PAYLOAD_NOT_SERIALIZABLE':
       return 400;
     case 'DATASET_ITEM_IDENTITY_CONFLICT':
       return 409;

@@ -348,6 +348,25 @@ describe('Datasets Handlers', () => {
       expect((error as HTTPException).cause).toEqual({ field: 'externalId' });
     });
 
+    it('maps circular dataset item payloads to HTTP 400', async () => {
+      const dataset = await mastra.datasets.create({ name: 'Circular Payload DS' });
+      const input: Record<string, unknown> = { q: 'cyclic' };
+      input.self = input;
+
+      const error = await ADD_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        input,
+      } as any).then(
+        () => null,
+        (caught: unknown) => caught,
+      );
+
+      expect(error).toBeInstanceOf(HTTPException);
+      expect((error as HTTPException).status).toBe(400);
+      expect((error as HTTPException).message).toContain('items[0].input.self references items[0].input');
+    });
+
     it('maps incompatible externalId reuse in a batch to HTTP 409', async () => {
       const dataset = await mastra.datasets.create({ name: 'Batch Conflict DS' });
       await BATCH_INSERT_ITEMS_ROUTE.handler({

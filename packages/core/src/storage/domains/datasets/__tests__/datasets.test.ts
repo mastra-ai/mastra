@@ -164,6 +164,49 @@ describe('DatasetsInMemory', () => {
       expect(item.updatedAt).toBeInstanceOf(Date);
     });
 
+    it('addItem rejects circular payloads before idempotency comparison', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      await storage.addItem({ datasetId: dataset.id, externalId: 'cyclic-item', input: { prompt: 'safe' } });
+      const input: Record<string, unknown> = { prompt: 'hello' };
+      input.self = input;
+
+      await expect(storage.addItem({ datasetId: dataset.id, externalId: 'cyclic-item', input })).rejects.toMatchObject({
+        id: 'DATASET_ITEM_PAYLOAD_NOT_SERIALIZABLE',
+        message: expect.stringContaining('items[0].input.self references items[0].input'),
+      });
+    });
+
+    it('updateItem rejects circular payloads with the offending path', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      const item = await storage.addItem({ datasetId: dataset.id, input: { prompt: 'hello' } });
+      const metadata: Record<string, unknown> = {};
+      metadata.self = metadata;
+
+      await expect(storage.updateItem({ id: item.id, datasetId: dataset.id, metadata })).rejects.toMatchObject({
+        id: 'DATASET_ITEM_PAYLOAD_NOT_SERIALIZABLE',
+        message: expect.stringContaining('item.metadata.self references item.metadata'),
+      });
+    });
+
+    it('batchInsertItems rejects circular payloads before insertion', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      const requestContext: Record<string, unknown> = {};
+      requestContext.self = requestContext;
+
+      await expect(
+        storage.batchInsertItems({
+          datasetId: dataset.id,
+          items: [{ input: { prompt: 'safe' } }, { input: { prompt: 'cyclic' }, requestContext }],
+        }),
+      ).rejects.toMatchObject({
+        id: 'DATASET_ITEM_PAYLOAD_NOT_SERIALIZABLE',
+        message: expect.stringContaining('items[1].requestContext.self references items[1].requestContext'),
+      });
+
+      const items = await storage.listItems({ datasetId: dataset.id, pagination: { page: 0, perPage: 10 } });
+      expect(items.items).toHaveLength(0);
+    });
+
     it('addItem throws for non-existent dataset', async () => {
       await expect(storage.addItem({ datasetId: 'non-existent', input: {} })).rejects.toThrow('Dataset not found');
     });
