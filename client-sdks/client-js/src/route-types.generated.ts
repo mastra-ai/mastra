@@ -17,12 +17,12 @@ type Shared_Auxiliary_557 =
       [key: string]: Shared_Auxiliary_557;
     };
 
-type Shared_Auxiliary_7587 = {
+type Shared_Auxiliary_7588 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_7587[] | undefined;
+  children?: Shared_Auxiliary_7588[] | undefined;
 };
 
 // ============================================================================
@@ -11678,7 +11678,16 @@ export type GetMemoryConfig_Response = {
   config: {
     lastMessages?: (number | false) | undefined;
     semanticRecall?: (boolean | unknown) | undefined;
-    workingMemory?: unknown | undefined;
+    workingMemory?:
+      | {
+          enabled?: boolean | undefined;
+          scope?: ('thread' | 'resource') | undefined;
+          template?: string | undefined;
+          schema?: unknown | undefined;
+          version?: ('stable' | 'vnext') | undefined;
+          [x: string]: unknown;
+        }
+      | undefined;
     observationalMemory?:
       | {
           enabled: boolean;
@@ -84422,7 +84431,7 @@ export type GetStoredSkills_Response = {
     /** List of asset file paths */
     assets?: string[] | undefined;
     /** Full file tree structure for the skill */
-    files?: Shared_Auxiliary_7587[] | undefined;
+    files?: Shared_Auxiliary_7588[] | undefined;
     /** Additional metadata for the skill */
     metadata?:
       | {
@@ -84509,7 +84518,7 @@ export type GetStoredSkillsStoredSkillId_Response = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_7587[] | undefined;
+  files?: Shared_Auxiliary_7588[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -84580,7 +84589,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_7587[] | undefined;
+  files?: Shared_Auxiliary_7588[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -84639,7 +84648,7 @@ export type PostStoredSkills_Response = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_7587[] | undefined;
+  files?: Shared_Auxiliary_7588[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -84719,7 +84728,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (Shared_Auxiliary_7587[] | undefined) | undefined;
+  files?: (Shared_Auxiliary_7588[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -84791,7 +84800,7 @@ export type PatchStoredSkillsStoredSkillId_Response =
       /** List of asset file paths */
       assets?: string[] | undefined;
       /** Full file tree structure for the skill */
-      files?: Shared_Auxiliary_7587[] | undefined;
+      files?: Shared_Auxiliary_7588[] | undefined;
       /** Additional metadata for the skill */
       metadata?:
         | {
@@ -84914,7 +84923,7 @@ export type PostStoredSkillsStoredSkillIdPublish_Response = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_7587[] | undefined;
+  files?: Shared_Auxiliary_7588[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {

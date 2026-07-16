@@ -469,7 +469,16 @@ export const memoryConfigResponseSchema = z.object({
     .object({
       lastMessages: z.union([z.number(), z.literal(false)]).optional(),
       semanticRecall: z.union([z.boolean(), z.unknown()]).optional(),
-      workingMemory: z.unknown().optional(),
+      workingMemory: z
+        .object({
+          enabled: z.boolean().optional(),
+          scope: z.enum(['thread', 'resource']).optional(),
+          template: z.string().optional(),
+          schema: z.unknown().optional(),
+          version: z.enum(['stable', 'vnext']).optional(),
+        })
+        .passthrough() // WorkingMemory has additional experimental fields (useStateSignals, agentManaged)
+        .optional(),
       observationalMemory: observationalMemoryConfigSchema.optional(),
     })
     .nullable(),
