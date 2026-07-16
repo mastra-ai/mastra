@@ -466,6 +466,9 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
       let paginatedMessages: MastraDBMessage[] = [];
       let total = 0;
+      // Ids of thread messages matching the active filters (resourceId/dateRange). Used for hasMore:
+      // included context can pull in messages outside the filters, which must not count toward total.
+      const filteredMessageIds = new Set<string>();
 
       if (threadIds.length > 1) {
         // DynamoDB can't query multiple partitions in one request. For multi-thread calls,
@@ -477,11 +480,14 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
             );
             const countResult = await q.go({ pages: 'all', attributes: ['id'] });
             const results = await q.go({ pages: 'all', order });
-            return { total: countResult.data.length, messages: parseQueryMessages(results.data) };
+            return { ids: countResult.data.map((item: any) => item.id), messages: parseQueryMessages(results.data) };
           }),
         );
 
-        total = threadResults.reduce((sum, r) => sum + r.total, 0);
+        for (const r of threadResults) {
+          for (const id of r.ids) filteredMessageIds.add(id);
+        }
+        total = threadResults.reduce((sum, r) => sum + r.ids.length, 0);
         const merged = threadResults.flatMap(r => r.messages);
         const sorted = this._sortMessages(merged, field, direction);
         paginatedMessages = perPageInput === false ? sorted : sorted.slice(offset, offset + perPage);
@@ -493,6 +499,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         // Lightweight total: id-only reads across all pages (no full message bodies).
         const countResult = await query.go({ pages: 'all', attributes: ['id'] });
         total = countResult.data.length;
+        for (const item of countResult.data) filteredMessageIds.add(item.id);
 
         if (perPageInput === false) {
           const results = await query.go({ pages: 'all', order });
@@ -542,13 +549,15 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       // Sort all messages (paginated + included) for final output
       finalMessages = this._sortMessages(finalMessages, field, direction);
 
-      // If include added enough context to cover every thread message, there is nothing more to page.
-      const threadIdSet = new Set(threadIds);
-      const returnedThreadMessageIds = new Set(
-        finalMessages.filter(m => m.threadId && threadIdSet.has(m.threadId)).map(m => m.id),
+      // Calculate hasMore based on pagination window
+      // If all filter-matching thread messages have been returned (through pagination or include),
+      // hasMore = false. Otherwise, check if there are more pages in the pagination window.
+      // Only count messages matching the active filters: include can add messages outside them.
+      const returnedFilteredMessageIds = new Set(
+        finalMessages.filter(m => filteredMessageIds.has(m.id)).map(m => m.id),
       );
-      const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
-      const hasMore = perPageInput !== false && !allThreadMessagesReturned && offset + perPage < total;
+      const allFilteredMessagesReturned = returnedFilteredMessageIds.size >= total;
+      const hasMore = perPageInput !== false && !allFilteredMessagesReturned && offset + perPage < total;
 
       return {
         messages: finalMessages,
