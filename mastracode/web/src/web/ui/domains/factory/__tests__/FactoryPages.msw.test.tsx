@@ -18,6 +18,7 @@ import { server } from '../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/web-ui/render';
 import type { GithubStatus, Project } from '../../workspaces';
 import { createAppRoutes } from '../../../router';
+import { FactoryItemActions } from '../components/FactoryItemActions';
 import type { GithubIssue, GithubPullRequest } from '../services/factory';
 import type { IntakeConfig } from '../services/intake';
 import type { LinearIssue, LinearStatus } from '../services/linear';
@@ -757,6 +758,29 @@ describe('Factory Work and Review intake candidates', () => {
     expect(within(intake).queryByText('Fix flaky test')).not.toBeInTheDocument();
     expect(within(column('triage')).queryByText('Fix flaky test')).not.toBeInTheDocument();
     expect(within(column('execute')).getByText('Fix flaky test')).toBeInTheDocument();
+  });
+});
+
+describe('Factory item actions', () => {
+  it('given a custom prompt opened before the action starts, then the stale form cannot duplicate the pending action', async () => {
+    const onRunPrompt = vi.fn();
+    const props = {
+      actionLabel: 'Investigate',
+      itemLabel: 'Fix flaky test',
+      disabled: false,
+      onAction: vi.fn(),
+      onRunPrompt,
+    };
+    const view = renderWithProviders(<FactoryItemActions {...props} starting={false} />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'More actions for Fix flaky test' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Custom prompt…' }));
+    await userEvent.type(screen.getByRole('textbox', { name: 'Prompt for Fix flaky test' }), 'Check the race');
+    view.rerender(<FactoryItemActions {...props} starting />);
+
+    expect(screen.getByRole('button', { name: 'Run' })).toBeDisabled();
+    fireEvent.submit(screen.getByRole('form', { name: 'Custom prompt for Fix flaky test' }));
+    expect(onRunPrompt).not.toHaveBeenCalled();
   });
 });
 

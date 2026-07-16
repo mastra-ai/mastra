@@ -52,7 +52,7 @@ export function FactoryItemActions({
 
   const runPrompt = () => {
     const trimmed = prompt.trim();
-    if (!trimmed) return;
+    if (!trimmed || starting) return;
     closePrompt();
     onRunPrompt(trimmed);
   };
@@ -127,7 +127,7 @@ export function FactoryItemActions({
               <Button type="button" variant="ghost" size="xs" onClick={closePrompt}>
                 Cancel
               </Button>
-              <Button type="submit" size="xs" disabled={!prompt.trim()}>
+              <Button type="submit" size="xs" disabled={starting || !prompt.trim()}>
                 Run
               </Button>
             </div>
