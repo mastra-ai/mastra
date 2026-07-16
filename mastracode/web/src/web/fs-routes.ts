@@ -1,4 +1,4 @@
-import { lstat, readdir, realpath, stat } from 'node:fs/promises';
+import { lstat, open, readdir, realpath, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve, sep } from 'node:path';
 
@@ -37,14 +37,39 @@ export interface DirectoryListing {
   entries: DirectoryEntry[];
 }
 
-export interface ArtifactEntry {
+export interface WorkspaceRenderedEntry {
   name: string;
-  /** Path relative to the workspace `.artifacts` directory. */
+  /** Path relative to the configured rendered root. */
   path: string;
   type: 'file' | 'directory';
   size: number;
   updatedAt: string;
 }
+
+export interface WorkspaceRenderedListing {
+  /** The confined workspace/project root. */
+  workspacePath: string;
+  /** Configured workspace-relative rendered root, e.g. `.artifacts`. */
+  root: string;
+  /** The confined absolute path for the rendered root. */
+  rootPath: string;
+  entries: WorkspaceRenderedEntry[];
+}
+
+export interface WorkspaceFile {
+  /** The confined workspace/project root. */
+  workspacePath: string;
+  /** Workspace-relative file path. */
+  path: string;
+  name: string;
+  size: number;
+  updatedAt: string;
+  contentType: 'text' | 'unsupported';
+  content?: string;
+  truncated?: boolean;
+}
+
+export type ArtifactEntry = WorkspaceRenderedEntry;
 
 export interface ArtifactListing {
   /** The confined workspace/project root. */
@@ -53,6 +78,9 @@ export interface ArtifactListing {
   artifactsPath: string;
   entries: ArtifactEntry[];
 }
+
+const MAX_TEXT_FILE_BYTES = 512 * 1024;
+const TEXT_DECODER = new TextDecoder('utf-8', { fatal: true });
 
 /** Resolve the browsable root, defaulting to the user's home directory. */
 export function resolveFsRoot(root?: string): string {
@@ -87,6 +115,38 @@ async function realPathWithinRoot(candidate: string, root: string): Promise<stri
   } catch {
     return null;
   }
+}
+
+function assertRelativePath(path: string, label: string): string {
+  const trimmed = path.trim();
+  if (!trimmed) throw new Error(`Missing required query param: ${label}`);
+  if (isAbsolute(trimmed)) throw new Error(`${label} must be relative`);
+  if (trimmed.split(/[\\/]+/).includes('..')) throw new Error(`${label} escapes workspace`);
+  const normalized = resolve('/', trimmed).slice(1);
+  if (!normalized || normalized === '..' || normalized.startsWith(`..${sep}`)) throw new Error(`${label} escapes workspace`);
+  return normalized;
+}
+
+async function confinedWorkspacePath(root: string, workspacePath: string): Promise<{ resolvedRoot: string; workspace: string }> {
+  const resolvedRoot = await realOrResolved(resolveFsRoot(root));
+  const candidate = isAbsolute(workspacePath) ? resolve(workspacePath) : resolve(resolvedRoot, workspacePath);
+  const workspace = await realPathWithinRoot(candidate, resolvedRoot);
+  if (!workspace) throw new Error('Path is outside the browsable root');
+  return { resolvedRoot, workspace };
+}
+
+async function confinedWorkspaceRelativePath(
+  root: string,
+  workspacePath: string,
+  relativePath: string,
+): Promise<{ workspace: string; path: string; relativePath: string }> {
+  const safeRelativePath = assertRelativePath(relativePath, 'path');
+  const { workspace } = await confinedWorkspacePath(root, workspacePath);
+  const candidate = resolve(workspace, safeRelativePath);
+  if (!isWithinRoot(candidate, workspace)) throw new Error('Path escapes workspace');
+  const confinedPath = await realPathWithinRoot(candidate, workspace);
+  if (!confinedPath) throw new Error('Path is outside the workspace');
+  return { workspace, path: confinedPath, relativePath: safeRelativePath };
 }
 
 /**
@@ -135,14 +195,14 @@ export async function listDirectory(root: string, requestedPath?: string): Promi
   return { root: resolvedRoot, path: target, parent, entries };
 }
 
-async function listArtifactEntries(artifactsPath: string, currentPath = artifactsPath): Promise<ArtifactEntry[]> {
+async function listRenderedEntries(rootPath: string, currentPath = rootPath): Promise<WorkspaceRenderedEntry[]> {
   const dirents = await readdir(currentPath, { withFileTypes: true });
-  const entries: ArtifactEntry[] = [];
+  const entries: WorkspaceRenderedEntry[] = [];
 
   for (const dirent of dirents) {
     const entryPath = join(currentPath, dirent.name);
     const info = await lstat(entryPath);
-    const relativePath = entryPath.slice(artifactsPath.length + 1);
+    const relativePath = entryPath.slice(rootPath.length + 1);
 
     if (info.isDirectory()) {
       entries.push({
@@ -152,7 +212,7 @@ async function listArtifactEntries(artifactsPath: string, currentPath = artifact
         size: info.size,
         updatedAt: info.mtime.toISOString(),
       });
-      entries.push(...(await listArtifactEntries(artifactsPath, entryPath)));
+      entries.push(...(await listRenderedEntries(rootPath, entryPath)));
       continue;
     }
 
@@ -170,23 +230,75 @@ async function listArtifactEntries(artifactsPath: string, currentPath = artifact
   return entries.sort((a, b) => a.path.localeCompare(b.path));
 }
 
-export async function listArtifacts(root: string, workspacePath: string): Promise<ArtifactListing> {
-  const resolvedRoot = await realOrResolved(resolveFsRoot(root));
-  const candidate = isAbsolute(workspacePath) ? resolve(workspacePath) : resolve(resolvedRoot, workspacePath);
-  const confinedWorkspace = await realPathWithinRoot(candidate, resolvedRoot);
-  if (!confinedWorkspace) throw new Error('Path is outside the browsable root');
+export async function listWorkspaceRenderedPath(
+  root: string,
+  workspacePath: string,
+  renderedRoot: string,
+): Promise<WorkspaceRenderedListing> {
+  const safeRoot = assertRelativePath(renderedRoot, 'root');
+  const { workspace } = await confinedWorkspacePath(root, workspacePath);
+  const renderedPath = resolve(workspace, safeRoot);
+  if (!isWithinRoot(renderedPath, workspace)) throw new Error('Root escapes workspace');
 
-  const artifactsPath = join(confinedWorkspace, '.artifacts');
-  const confinedArtifactsPath = await realPathWithinRoot(artifactsPath, resolvedRoot);
-  if (!confinedArtifactsPath) return { rootPath: confinedWorkspace, artifactsPath, entries: [] };
+  const confinedRootPath = await realPathWithinRoot(renderedPath, workspace);
+  if (!confinedRootPath) return { workspacePath: workspace, root: safeRoot, rootPath: renderedPath, entries: [] };
 
-  const info = await stat(confinedArtifactsPath);
-  if (!info.isDirectory()) return { rootPath: confinedWorkspace, artifactsPath: confinedArtifactsPath, entries: [] };
+  const info = await stat(confinedRootPath);
+  if (!info.isDirectory()) return { workspacePath: workspace, root: safeRoot, rootPath: confinedRootPath, entries: [] };
 
   return {
-    rootPath: confinedWorkspace,
-    artifactsPath: confinedArtifactsPath,
-    entries: await listArtifactEntries(confinedArtifactsPath),
+    workspacePath: workspace,
+    root: safeRoot,
+    rootPath: confinedRootPath,
+    entries: await listRenderedEntries(confinedRootPath),
+  };
+}
+
+export async function readWorkspaceFile(root: string, workspacePath: string, path: string): Promise<WorkspaceFile> {
+  const { workspace, path: confinedPath, relativePath } = await confinedWorkspaceRelativePath(root, workspacePath, path);
+  const info = await lstat(confinedPath);
+  if (info.isDirectory()) throw new Error('Path is a directory');
+  if (!info.isFile()) throw new Error('Unsupported file type');
+
+  const bytesToRead = Math.min(info.size, MAX_TEXT_FILE_BYTES);
+  const contentBuffer = Buffer.alloc(bytesToRead);
+  const handle = await open(confinedPath, 'r');
+  try {
+    await handle.read(contentBuffer, 0, bytesToRead, 0);
+  } finally {
+    await handle.close();
+  }
+
+  try {
+    const content = TEXT_DECODER.decode(contentBuffer);
+    return {
+      workspacePath: workspace,
+      path: relativePath,
+      name: relativePath.split('/').pop() ?? relativePath,
+      size: info.size,
+      updatedAt: info.mtime.toISOString(),
+      contentType: 'text',
+      content,
+      truncated: info.size > MAX_TEXT_FILE_BYTES,
+    };
+  } catch {
+    return {
+      workspacePath: workspace,
+      path: relativePath,
+      name: relativePath.split('/').pop() ?? relativePath,
+      size: info.size,
+      updatedAt: info.mtime.toISOString(),
+      contentType: 'unsupported',
+    };
+  }
+}
+
+export async function listArtifacts(root: string, workspacePath: string): Promise<ArtifactListing> {
+  const listing = await listWorkspaceRenderedPath(root, workspacePath, '.artifacts');
+  return {
+    rootPath: listing.workspacePath,
+    artifactsPath: listing.rootPath,
+    entries: listing.entries,
   };
 }
 
@@ -256,6 +368,45 @@ export function buildFsRoutes(options: { root?: string } = {}): ApiRoute[] {
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           const status = message === 'Path is outside the browsable root' ? 403 : 500;
+          return c.json({ error: message }, status);
+        }
+      },
+    }),
+    registerApiRoute('/web/workspace/rendered/list', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const workspacePath = c.req.query('workspacePath');
+        const renderedRoot = c.req.query('root');
+        if (!workspacePath) return c.json({ error: 'Missing required query param: workspacePath' }, 400);
+        if (!renderedRoot) return c.json({ error: 'Missing required query param: root' }, 400);
+        try {
+          return c.json(await listWorkspaceRenderedPath(root, workspacePath, renderedRoot));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          const status = message.includes('outside') || message.includes('relative') || message.includes('escapes') ? 403 : 500;
+          return c.json({ error: message }, status);
+        }
+      },
+    }),
+    registerApiRoute('/web/workspace/file', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const workspacePath = c.req.query('workspacePath');
+        const path = c.req.query('path');
+        if (!workspacePath) return c.json({ error: 'Missing required query param: workspacePath' }, 400);
+        if (!path) return c.json({ error: 'Missing required query param: path' }, 400);
+        try {
+          return c.json(await readWorkspaceFile(root, workspacePath, path));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          const status =
+            message.includes('outside') || message.includes('relative') || message.includes('escapes')
+              ? 403
+              : message.includes('directory')
+                ? 400
+                : 500;
           return c.json({ error: message }, status);
         }
       },

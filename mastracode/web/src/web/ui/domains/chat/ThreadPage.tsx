@@ -1,7 +1,11 @@
+import { useState } from 'react';
+import { useParams } from 'react-router';
+
 import { useOverlays } from '../../lib/overlays';
 import { Sidebar } from '../../Sidebar';
 import { ChatLayout } from '../../ui';
-import { EmptyProjectState, useActiveProjectContext } from '../workspaces';
+import { renderedPaths, WorkspaceViewerPanel } from '../workspace-viewer';
+import { activeWorkspacePath, EmptyProjectState, findUserSessionByThreadId, useActiveProjectContext } from '../workspaces';
 import { ChatHeader } from './components/ChatHeader';
 import { ChatMessageList } from './components/ChatMessageList';
 import { ComposerPanel } from './components/ComposerPanel';
@@ -13,6 +17,10 @@ const threadComposerInnerClass = 'mx-auto w-full max-w-[80ch]';
 export function ThreadPage() {
   const overlays = useOverlays();
   const { activeProject } = useActiveProjectContext();
+  const { threadId } = useParams<{ threadId: string }>();
+  const [workspaceViewerExpanded, setWorkspaceViewerExpanded] = useState(false);
+  const userSession = threadId ? findUserSessionByThreadId(threadId)?.worktree : undefined;
+  const workspacePath = activeProject ? activeWorkspacePath(activeProject, userSession) : undefined;
 
   return (
     <ChatLayout
@@ -24,6 +32,17 @@ export function ThreadPage() {
         activeProject ? <ThreadPageContent /> : <EmptyProjectState onOpenProjects={() => overlays.open('projects')} />
       }
       footer={activeProject ? <ThreadComposer /> : null}
+      rightPanelExpanded={workspaceViewerExpanded}
+      rightPanel={
+        workspacePath ? (
+          <WorkspaceViewerPanel
+            workspacePath={workspacePath}
+            renderedPaths={renderedPaths}
+            title="Workspace files"
+            onExpandedChange={setWorkspaceViewerExpanded}
+          />
+        ) : null
+      }
     />
   );
 }

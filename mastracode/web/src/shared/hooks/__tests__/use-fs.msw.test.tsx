@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../e2e/web-ui/msw-server';
 import { TEST_BASE_URL, renderHookWithProviders } from '../../../../e2e/web-ui/render';
-import { useArtifactListing, useDirectoryListing } from '../use-fs';
+import { useArtifactListing, useDirectoryListing, useWorkspaceFile, useWorkspaceRenderedListing } from '../use-fs';
 import { listing } from './fixtures/fs';
 
 const URL = `${TEST_BASE_URL}/web/fs/list`;
@@ -101,5 +101,95 @@ describe('useArtifactListing', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(seenPath).toBe('/home/user/project');
     expect(result.current.data?.entries[0]?.path).toBe('understand-pr/HISTORY.md');
+  });
+});
+
+const WORKSPACE_RENDERED_URL = `${TEST_BASE_URL}/web/workspace/rendered/list`;
+const WORKSPACE_FILE_URL = `${TEST_BASE_URL}/web/workspace/file`;
+
+describe('useWorkspaceRenderedListing', () => {
+  it('does not fetch until workspace path and root are available', () => {
+    let called = false;
+    server.use(
+      http.get(WORKSPACE_RENDERED_URL, () => {
+        called = true;
+        return HttpResponse.json({ workspacePath: '', root: '', rootPath: '', entries: [] });
+      }),
+    );
+
+    const { result } = renderHookWithProviders(() => useWorkspaceRenderedListing(undefined, '.artifacts'));
+
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(called).toBe(false);
+  });
+
+  it('fetches a configured rendered path for a workspace', async () => {
+    let seenWorkspacePath: string | null = null;
+    let seenRoot: string | null = null;
+    server.use(
+      http.get(WORKSPACE_RENDERED_URL, ({ request }) => {
+        const url = new global.URL(request.url);
+        seenWorkspacePath = url.searchParams.get('workspacePath');
+        seenRoot = url.searchParams.get('root');
+        return HttpResponse.json({
+          workspacePath: '/home/user/project',
+          root: '.artifacts',
+          rootPath: '/home/user/project/.artifacts',
+          entries: [{ name: 'HISTORY.md', path: 'understand-pr/HISTORY.md', type: 'file', size: 5, updatedAt: '2026-07-15T00:00:00.000Z' }],
+        });
+      }),
+    );
+
+    const { result } = renderHookWithProviders(() => useWorkspaceRenderedListing('/home/user/project', '.artifacts'));
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(seenWorkspacePath).toBe('/home/user/project');
+    expect(seenRoot).toBe('.artifacts');
+    expect(result.current.data?.entries[0]?.path).toBe('understand-pr/HISTORY.md');
+  });
+});
+
+describe('useWorkspaceFile', () => {
+  it('does not fetch when disabled', () => {
+    let called = false;
+    server.use(
+      http.get(WORKSPACE_FILE_URL, () => {
+        called = true;
+        return HttpResponse.json({ workspacePath: '', path: '', name: '', size: 0, updatedAt: '', contentType: 'text', content: '' });
+      }),
+    );
+
+    const { result } = renderHookWithProviders(() => useWorkspaceFile('/home/user/project', '.artifacts/file.md', { enabled: false }));
+
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(called).toBe(false);
+  });
+
+  it('fetches workspace file content', async () => {
+    let seenWorkspacePath: string | null = null;
+    let seenPath: string | null = null;
+    server.use(
+      http.get(WORKSPACE_FILE_URL, ({ request }) => {
+        const url = new global.URL(request.url);
+        seenWorkspacePath = url.searchParams.get('workspacePath');
+        seenPath = url.searchParams.get('path');
+        return HttpResponse.json({
+          workspacePath: '/home/user/project',
+          path: '.artifacts/understand-pr/HISTORY.md',
+          name: 'HISTORY.md',
+          size: 5,
+          updatedAt: '2026-07-15T00:00:00.000Z',
+          contentType: 'text',
+          content: 'notes',
+        });
+      }),
+    );
+
+    const { result } = renderHookWithProviders(() => useWorkspaceFile('/home/user/project', '.artifacts/understand-pr/HISTORY.md'));
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(seenWorkspacePath).toBe('/home/user/project');
+    expect(seenPath).toBe('.artifacts/understand-pr/HISTORY.md');
+    expect(result.current.data?.content).toBe('notes');
   });
 });

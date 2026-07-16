@@ -33,6 +33,10 @@ export const queryKeys = {
   om: (resourceId: string | undefined) => ['om', resourceId ?? null] as const,
   fsList: (path: string | undefined) => ['fs-list', path ?? null] as const,
   artifactsList: (path: string | undefined) => ['artifacts-list', path ?? null] as const,
+  workspaceRenderedList: (workspacePath: string | undefined, renderedRoot: string | undefined) =>
+    ['workspace-rendered-list', workspacePath ?? null, renderedRoot ?? null] as const,
+  workspaceFile: (workspacePath: string | undefined, filePath: string | undefined) =>
+    ['workspace-file', workspacePath ?? null, filePath ?? null] as const,
   agentControllerModels: (agentControllerId: string | undefined) =>
     ['agent-controller', agentControllerId ?? null, 'models'] as const,
   agentControllerModes: (agentControllerId: string | undefined) =>

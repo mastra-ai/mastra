@@ -2,4 +2,4 @@
 'mastracode-web': patch
 ---
 
-Add a read-only artifacts listing API for workspace `.artifacts` files in Mastra Code Web.
+Add a generic rendered workspace file viewer for Mastra Code Web, with `.artifacts` as the first configured read-only workspace path.
