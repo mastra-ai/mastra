@@ -627,7 +627,7 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
                   // for a perfectly live thread. Hold run/create actions until
                   // liveness is known.
                   runDisabled={!runEnabled || start.isPending || !workspaces.isSuccess}
-                  pendingRunRole={pendingRuns.find(run => run.id === item.id)?.role}
+                  pendingRunRoles={new Set(pendingRuns.filter(run => run.id === item.id).map(run => run.role))}
                   onOpenThread={session => void openThread(session)}
                   onCreateSession={spec =>
                     start.mutate({
@@ -675,7 +675,9 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
                 <CandidateCard
                   key={candidate.sourceKey}
                   candidate={candidate}
-                  pendingRunRole={pendingRuns.find(run => run.sourceKey === candidate.sourceKey)?.role}
+                  pendingRunRoles={
+                    new Set(pendingRuns.filter(run => run.sourceKey === candidate.sourceKey).map(run => run.role))
+                  }
                   triageStarting={candidate.issue !== undefined && pendingIssueNumbers.includes(candidate.issue.number)}
                   disabled={!runEnabled}
                   onRun={(action, prompt) =>
@@ -818,7 +820,7 @@ function WorkItemCard({
   columnStage,
   liveWorktreePaths,
   runDisabled,
-  pendingRunRole,
+  pendingRunRoles,
   onOpenThread,
   onCreateSession,
   onStartRun,
@@ -830,7 +832,7 @@ function WorkItemCard({
   /** Worktrees that still exist; session refs outside this set are stale. */
   liveWorktreePaths: ReadonlySet<string>;
   runDisabled: boolean;
-  pendingRunRole?: string;
+  pendingRunRoles: ReadonlySet<string>;
   onOpenThread: (session: WorkItemSessionRef) => void;
   /** Title click when the card has no live session: open an empty session (no run). */
   onCreateSession: (spec: { branch: string; threadTitle: string }) => void;
@@ -875,7 +877,7 @@ function WorkItemCard({
           <button
             type="button"
             disabled={runDisabled}
-            aria-busy={pendingRunRole !== undefined || undefined}
+            aria-busy={pendingRunRoles.size > 0 || undefined}
             onClick={() => onCreateSession(itemSessionSpec(item))}
             className="min-w-0 flex-1 truncate text-left text-ui-sm text-icon6 hover:underline disabled:opacity-60"
           >
@@ -904,7 +906,7 @@ function WorkItemCard({
           <DropdownMenu.Content align="end" className="min-w-44">
             {runSpec !== null &&
               runActions.map(action => {
-                const starting = pendingRunRole === action.role;
+                const starting = pendingRunRoles.has(action.role);
                 return (
                   <DropdownMenu.Item
                     key={action.label}
@@ -939,7 +941,7 @@ function WorkItemCard({
 
 function CandidateCard({
   candidate,
-  pendingRunRole,
+  pendingRunRoles,
   triageStarting,
   disabled,
   onRun,
@@ -948,7 +950,7 @@ function CandidateCard({
   onTriage,
 }: {
   candidate: BoardCandidate;
-  pendingRunRole?: string;
+  pendingRunRoles: ReadonlySet<string>;
   triageStarting: boolean;
   disabled: boolean;
   /** Start a run; `prompt` undefined = the action's default prompt. */
@@ -989,7 +991,7 @@ function CandidateCard({
           <button
             type="button"
             disabled={disabled}
-            aria-busy={pendingRunRole === defaultAction.role || undefined}
+            aria-busy={pendingRunRoles.has(defaultAction.role) || undefined}
             onClick={onOpenSession}
             className="truncate text-left text-ui-sm text-icon6 hover:underline disabled:opacity-60"
           >
@@ -1010,12 +1012,12 @@ function CandidateCard({
       <FactoryItemActions
         actionLabel={defaultAction.label}
         itemLabel={candidate.title}
-        starting={pendingRunRole === defaultAction.role}
+        starting={pendingRunRoles.has(defaultAction.role)}
         disabled={disabled}
         onAction={() => onRun(defaultAction)}
         extraActions={otherActions.map(action => ({
           label: action.label,
-          starting: pendingRunRole === action.role,
+          starting: pendingRunRoles.has(action.role),
           onAction: () => onRun(action),
         }))}
         onRunPrompt={prompt => onRun(defaultAction, prompt)}
