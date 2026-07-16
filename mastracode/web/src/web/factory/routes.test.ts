@@ -317,6 +317,101 @@ describe('DELETE /web/factory/work-items/:id', () => {
   });
 });
 
+// ── Related Work / Review items ──────────────────────────────────────────
+describe('work item relations', () => {
+  const create = async (overrides: Record<string, unknown>) => {
+    const response = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody(overrides));
+    return { response, body: await response.json() };
+  };
+
+  it('creates separate related items and preserves the relation on source-key reuse', async () => {
+    const { body: parent } = await create({ sourceKey: 'github-issue:parent' });
+    const { body: child } = await create({
+      source: 'github-pr',
+      sourceKey: 'github-pr:child',
+      parentWorkItemId: parent.workItem.id,
+    });
+
+    expect(child.workItem.parentWorkItemId).toBe(parent.workItem.id);
+
+    const { body: repeated } = await create({
+      source: 'github-pr',
+      sourceKey: 'github-pr:child',
+      parentWorkItemId: null,
+      title: 'Updated review title',
+    });
+    expect(repeated.workItem).toMatchObject({
+      id: child.workItem.id,
+      parentWorkItemId: parent.workItem.id,
+      title: 'Updated review title',
+    });
+  });
+
+  it('attaches a parent when a repeated source-key upsert supplies one', async () => {
+    const { body: parent } = await create({ sourceKey: 'github-issue:late-parent' });
+    const { body: existing } = await create({ source: 'github-pr', sourceKey: 'github-pr:late-child' });
+    const { body: related } = await create({
+      source: 'github-pr',
+      sourceKey: 'github-pr:late-child',
+      parentWorkItemId: parent.workItem.id,
+    });
+
+    expect(related.workItem).toMatchObject({ id: existing.workItem.id, parentWorkItemId: parent.workItem.id });
+  });
+
+  it('rejects missing, cross-project, self, and cyclic relations', async () => {
+    const missing = await create({
+      sourceKey: 'github-pr:missing',
+      parentWorkItemId: '00000000-0000-4000-8000-000000000099',
+    });
+    expect(missing.response.status).toBe(400);
+
+    const otherProjectId = '22222222-3333-4444-8555-666666666666';
+    seedProject('org1', otherProjectId);
+    const otherParentResponse = await json(
+      'POST',
+      `/web/factory/projects/${otherProjectId}/work-items`,
+      createBody({ sourceKey: 'github-issue:other-project' }),
+    );
+    const otherParent = (await otherParentResponse.json()).workItem;
+    const crossProject = await create({ sourceKey: 'github-pr:cross-project', parentWorkItemId: otherParent.id });
+    expect(crossProject.response.status).toBe(400);
+
+    const { body: first } = await create({ sourceKey: 'github-issue:first' });
+    const { body: second } = await create({ sourceKey: 'github-pr:second', parentWorkItemId: first.workItem.id });
+    expect(
+      (
+        await json('PATCH', `/web/factory/work-items/${first.workItem.id}`, {
+          parentWorkItemId: first.workItem.id,
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await json('PATCH', `/web/factory/work-items/${first.workItem.id}`, {
+          parentWorkItemId: second.workItem.id,
+        })
+      ).status,
+    ).toBe(400);
+  });
+
+  it('clears a relation explicitly and when the parent is deleted', async () => {
+    const { body: parent } = await create({ sourceKey: 'github-issue:delete-parent' });
+    const { body: child } = await create({
+      source: 'github-pr',
+      sourceKey: 'github-pr:delete-child',
+      parentWorkItemId: parent.workItem.id,
+    });
+
+    const cleared = await json('PATCH', `/web/factory/work-items/${child.workItem.id}`, { parentWorkItemId: null });
+    expect((await cleared.json()).workItem.parentWorkItemId).toBeNull();
+
+    await json('PATCH', `/web/factory/work-items/${child.workItem.id}`, { parentWorkItemId: parent.workItem.id });
+    expect((await json('DELETE', `/web/factory/work-items/${parent.workItem.id}`)).status).toBe(200);
+    expect((await listItems())[0]?.parentWorkItemId).toBeNull();
+  });
+});
+
 // ── Metrics ──────────────────────────────────────────────────────────────
 describe('GET /web/factory/projects/:id/metrics', () => {
   it('401s without a user and 404s for projects outside the org', async () => {

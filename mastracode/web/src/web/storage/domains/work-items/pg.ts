@@ -11,7 +11,13 @@
 import type pg from 'pg';
 
 import type { FactoryStorageContext } from '../../domain';
-import { WorkItemsStorage, applyStageTransition, computeWorkItemPatch, stampSessions } from './base';
+import {
+  WorkItemsStorage,
+  applyStageTransition,
+  computeWorkItemPatch,
+  stampSessions,
+  validateParentRelation,
+} from './base';
 import type {
   CreateWorkItemInput,
   UpdateWorkItemInput,
@@ -28,6 +34,7 @@ CREATE TABLE IF NOT EXISTS work_items (
   github_project_id uuid NOT NULL,
   source text NOT NULL,
   source_key text,
+  parent_work_item_id uuid,
   title text NOT NULL,
   url text,
   stages jsonb NOT NULL,
@@ -38,10 +45,30 @@ CREATE TABLE IF NOT EXISTS work_items (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
+ALTER TABLE work_items
+  ADD COLUMN IF NOT EXISTS parent_work_item_id uuid;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'work_items_parent_work_item_id_fkey'
+      AND conrelid = 'work_items'::regclass
+  ) THEN
+    ALTER TABLE work_items
+      ADD CONSTRAINT work_items_parent_work_item_id_fkey
+      FOREIGN KEY (parent_work_item_id) REFERENCES work_items(id) ON DELETE SET NULL;
+  END IF;
+END $$;
+
 CREATE UNIQUE INDEX IF NOT EXISTS work_items_org_project_source_key_unique
   ON work_items (org_id, github_project_id, source_key)
   WHERE source_key IS NOT NULL;
 DROP INDEX IF EXISTS work_items_project_source_key_unique;
+
+CREATE INDEX IF NOT EXISTS work_items_project_parent_idx
+  ON work_items (org_id, github_project_id, parent_work_item_id);
 `;
 
 interface WorkItemDbRow {
@@ -51,6 +78,7 @@ interface WorkItemDbRow {
   github_project_id: string;
   source: WorkItemRow['source'];
   source_key: string | null;
+  parent_work_item_id: string | null;
   title: string;
   url: string | null;
   stages: WorkItemRow['stages'];
@@ -69,6 +97,7 @@ function toRow(db: WorkItemDbRow): WorkItemRow {
     githubProjectId: db.github_project_id,
     source: db.source,
     sourceKey: db.source_key,
+    parentWorkItemId: db.parent_work_item_id,
     title: db.title,
     url: db.url,
     stages: db.stages,
@@ -83,6 +112,7 @@ function toRow(db: WorkItemDbRow): WorkItemRow {
 /** Serializer per patchable column: jsonb columns are stringified + cast. */
 const PATCH_COLUMNS: Record<string, { column: string; jsonb?: boolean }> = {
   updatedAt: { column: 'updated_at' },
+  parentWorkItemId: { column: 'parent_work_item_id' },
   title: { column: 'title' },
   url: { column: 'url' },
   stages: { column: 'stages', jsonb: true },
@@ -119,6 +149,18 @@ export class WorkItemsStoragePG extends WorkItemsStorage {
     }
   }
 
+  async #lockProjectRelations(client: pg.PoolClient, orgId: string, githubProjectId: string): Promise<void> {
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`${orgId}:${githubProjectId}`]);
+  }
+
+  async #projectItems(client: pg.PoolClient, orgId: string, githubProjectId: string): Promise<WorkItemRow[]> {
+    const { rows } = await client.query<WorkItemDbRow>(
+      'SELECT * FROM work_items WHERE org_id = $1 AND github_project_id = $2',
+      [orgId, githubProjectId],
+    );
+    return rows.map(toRow);
+  }
+
   async list(orgId: string, githubProjectId: string): Promise<WorkItemRow[]> {
     const { rows } = await this.#db.query<WorkItemDbRow>(
       'SELECT * FROM work_items WHERE org_id = $1 AND github_project_id = $2',
@@ -138,12 +180,13 @@ export class WorkItemsStoragePG extends WorkItemsStorage {
 
     const reuseExisting = async (): Promise<UpsertWorkItemResult | null> => {
       if (input.sourceKey === null) return null;
+      const patch = input.parentWorkItemId === null ? { ...input, parentWorkItemId: undefined } : input;
       const updated = await this.#withTx(client =>
         this.#applyUpdateLocked(
           client,
           'org_id = $1 AND github_project_id = $2 AND source_key = $3',
           [orgId, githubProjectId, input.sourceKey],
-          input,
+          patch,
           userId,
           now,
         ),
@@ -154,12 +197,12 @@ export class WorkItemsStoragePG extends WorkItemsStorage {
     const reused = await reuseExisting();
     if (reused) return reused;
 
-    try {
-      const { rows } = await this.#db.query<WorkItemDbRow>(
+    const insert = async (db: pg.Pool | pg.PoolClient): Promise<UpsertWorkItemResult> => {
+      const { rows } = await db.query<WorkItemDbRow>(
         `INSERT INTO work_items
-           (org_id, created_by, github_project_id, source, source_key, title, url,
+           (org_id, created_by, github_project_id, source, source_key, parent_work_item_id, title, url,
             stages, stage_history, sessions, metadata, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10::jsonb, $11::jsonb, $12, $13)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11::jsonb, $12::jsonb, $13, $14)
          RETURNING *`,
         [
           orgId,
@@ -167,6 +210,7 @@ export class WorkItemsStoragePG extends WorkItemsStorage {
           githubProjectId,
           input.source,
           input.sourceKey,
+          input.parentWorkItemId ?? null,
           input.title,
           input.url,
           JSON.stringify(input.stages),
@@ -178,6 +222,15 @@ export class WorkItemsStoragePG extends WorkItemsStorage {
         ],
       );
       return { created: true, item: toRow(rows[0]!) };
+    };
+
+    try {
+      if (input.parentWorkItemId == null) return await insert(this.#db);
+      return await this.#withTx(async client => {
+        await this.#lockProjectRelations(client, orgId, githubProjectId);
+        validateParentRelation(await this.#projectItems(client, orgId, githubProjectId), undefined, input.parentWorkItemId!);
+        return insert(client);
+      });
     } catch (err) {
       // Concurrent create for the same sourceKey: the partial unique index won
       // the race — fall back to updating the row it protected.
@@ -200,12 +253,31 @@ export class WorkItemsStoragePG extends WorkItemsStorage {
     userId: string,
     now: Date,
   ): Promise<{ item: WorkItemRow; previous: WorkItemPriorState } | null> {
-    const { rows } = await client.query<WorkItemDbRow>(
-      `SELECT * FROM work_items WHERE ${whereSql} FOR UPDATE`,
-      whereParams,
-    );
-    if (!rows[0]) return null;
-    const existing = toRow(rows[0]);
+    let dbRow: WorkItemDbRow | undefined;
+    if (patch.parentWorkItemId === undefined) {
+      const { rows } = await client.query<WorkItemDbRow>(
+        `SELECT * FROM work_items WHERE ${whereSql} FOR UPDATE`,
+        whereParams,
+      );
+      dbRow = rows[0];
+    } else {
+      const candidate = await client.query<WorkItemDbRow>(`SELECT * FROM work_items WHERE ${whereSql}`, whereParams);
+      if (!candidate.rows[0]) return null;
+      await this.#lockProjectRelations(client, candidate.rows[0].org_id, candidate.rows[0].github_project_id);
+      const locked = await client.query<WorkItemDbRow>('SELECT * FROM work_items WHERE id = $1 FOR UPDATE', [
+        candidate.rows[0].id,
+      ]);
+      dbRow = locked.rows[0];
+    }
+    if (!dbRow) return null;
+    const existing = toRow(dbRow);
+    if (patch.parentWorkItemId !== undefined) {
+      validateParentRelation(
+        await this.#projectItems(client, existing.orgId, existing.githubProjectId),
+        existing.id,
+        patch.parentWorkItemId,
+      );
+    }
     const { changes, previous } = computeWorkItemPatch(existing, patch, userId, now);
 
     const sets: string[] = [];
