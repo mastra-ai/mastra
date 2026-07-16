@@ -604,11 +604,23 @@ function messagesToEntries(messages: MastraDBMessage[]): TimelineEntry[] {
   return messages.map(message => toMessageEntry(message, { streaming: false }));
 }
 
+function messageParts(message: MastraDBMessage): MastraMessagePart[] {
+  if (Array.isArray(message.content.parts)) return message.content.parts;
+  const content = message.content.content;
+  return typeof content === 'string' && content.length > 0 ? [{ type: 'text', text: content }] : [];
+}
+
+function normalizeMessageContent(message: MastraDBMessage): MastraDBMessage {
+  if (Array.isArray(message.content.parts)) return message;
+  return { ...message, content: { ...message.content, parts: messageParts(message) } };
+}
+
 function toMessageEntry(
   message: MastraDBMessage,
   options: { streaming?: boolean; steer?: boolean; runtimeTools?: Record<string, ToolCall> } = {},
 ): MessageEntry {
-  const signalMetadata = message.role === 'signal' ? message.content.metadata?.signal : undefined;
+  const normalizedMessage = normalizeMessageContent(message);
+  const signalMetadata = normalizedMessage.role === 'signal' ? normalizedMessage.content.metadata?.signal : undefined;
   const signal =
     signalMetadata && typeof signalMetadata === 'object' && !Array.isArray(signalMetadata)
       ? (signalMetadata as Record<string, unknown>)
@@ -618,11 +630,11 @@ function toMessageEntry(
     signal?.attributes && typeof signal.attributes === 'object' && !Array.isArray(signal.attributes)
       ? (signal.attributes as Record<string, unknown>)
       : undefined;
-  const displayMessage = isUserSignal ? { ...message, role: 'user' as const } : message;
+  const displayMessage = isUserSignal ? { ...normalizedMessage, role: 'user' as const } : normalizedMessage;
 
   return {
     kind: 'message',
-    id: message.id,
+    id: normalizedMessage.id,
     message: displayMessage,
     runtimeTools: options.runtimeTools,
     streaming: options.streaming,
@@ -654,10 +666,10 @@ function upsertMessage(state: TranscriptState, message: MastraDBMessage, streami
 function preserveRuntimeToolParts(message: MastraDBMessage, previous?: MastraDBMessage): MastraDBMessage {
   if (!previous) return message;
 
-  const parts = [...message.content.parts];
+  const parts = [...messageParts(message)];
   const existingToolIds = new Set(parts.map(toolCallIdForPart).filter((id): id is string => Boolean(id)));
 
-  for (const part of previous.content.parts) {
+  for (const part of messageParts(previous)) {
     const toolCallId = toolCallIdForPart(part);
     if (toolCallId && !existingToolIds.has(toolCallId)) {
       parts.push(part);
@@ -674,9 +686,7 @@ function hasAssistantText(state: TranscriptState): boolean {
   if (idx === -1) return false;
   const entry = state.entries[idx];
   if (entry.kind !== 'message') return false;
-  return entry.message.content.parts.some(
-    part => part.type === 'text' && 'text' in part && part.text.trim().length > 0,
-  );
+  return messageParts(entry.message).some(part => part.type === 'text' && 'text' in part && part.text.trim().length > 0);
 }
 
 /** Find the latest assistant entry, creating one if none exists. */
@@ -710,7 +720,7 @@ function withTool(
   const entry = entries[idx];
   if (entry.kind !== 'message') return state;
 
-  const parts = [...entry.message.content.parts];
+  const parts = [...messageParts(entry.message)];
   const runtimeTools = { ...(entry.runtimeTools ?? {}) };
   const existing =
     runtimeTools[toolCallId] ?? toolCallFromPart(parts.find(part => toolCallIdForPart(part) === toolCallId));
