@@ -91851,6 +91851,11 @@ export type PostAgentControllerControllerIdSessionsResourceIdMessages_QueryParam
 
 export type PostAgentControllerControllerIdSessionsResourceIdMessages_Body = {
   message: string;
+  requestContext?:
+    | {
+        [key: string]: any;
+      }
+    | undefined;
   files?:
     | {
         data: string;
@@ -91903,6 +91908,11 @@ export type PostAgentControllerControllerIdSessionsResourceIdSteer_QueryParams =
 
 export type PostAgentControllerControllerIdSessionsResourceIdSteer_Body = {
   message: string;
+  requestContext?:
+    | {
+        [key: string]: any;
+      }
+    | undefined;
 };
 
 export type PostAgentControllerControllerIdSessionsResourceIdSteer_Response = {
@@ -91948,6 +91958,11 @@ export type PostAgentControllerControllerIdSessionsResourceIdFollowUp_QueryParam
 
 export type PostAgentControllerControllerIdSessionsResourceIdFollowUp_Body = {
   message: string;
+  requestContext?:
+    | {
+        [key: string]: any;
+      }
+    | undefined;
 };
 
 export type PostAgentControllerControllerIdSessionsResourceIdFollowUp_Response = {
@@ -92031,6 +92046,11 @@ export type PostAgentControllerControllerIdSessionsResourceIdToolApproval_QueryP
 export type PostAgentControllerControllerIdSessionsResourceIdToolApproval_Body = {
   toolCallId: string;
   approved: boolean;
+  requestContext?:
+    | {
+        [key: string]: any;
+      }
+    | undefined;
 };
 
 export type PostAgentControllerControllerIdSessionsResourceIdToolApproval_Response = {
@@ -92077,6 +92097,11 @@ export type PostAgentControllerControllerIdSessionsResourceIdToolSuspension_Quer
 export type PostAgentControllerControllerIdSessionsResourceIdToolSuspension_Body = {
   toolCallId: string;
   resumeData: any;
+  requestContext?:
+    | {
+        [key: string]: any;
+      }
+    | undefined;
 };
 
 export type PostAgentControllerControllerIdSessionsResourceIdToolSuspension_Response = {
