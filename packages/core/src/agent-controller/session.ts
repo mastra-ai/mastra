@@ -3032,6 +3032,7 @@ export class Session<TState = unknown> {
     const signal = createSignal(
       'content' in input ? { type: 'user', tagName: 'user', contents: input.content } : input,
     );
+    const shouldForwardGoalEvaluations = signal.attributes?.type === 'goal';
     const accepted = Promise.resolve().then(async () => {
       if (!this.thread.getId()) {
         const thread = await this.thread.create();
@@ -3091,15 +3092,21 @@ export class Session<TState = unknown> {
       } catch (error) {
         throw error;
       }
-      // Idle signals can wake a new run whose output is not attached to the session. Process it here so
-      // late chunks, including goal evaluations emitted after `finish`, still reach session listeners.
       void result.accepted
         .then(accepted => {
-          if (accepted.action === 'wake') {
-            void this.runEngine.processStream(accepted.output, requestContextInput).catch(error => {
-              this.emit({ type: 'error', error: error instanceof Error ? error : new Error(String(error)) });
-            });
-          }
+          if (accepted.action !== 'wake' || !shouldForwardGoalEvaluations) return;
+          // Goal evaluations are emitted after the model's finish chunk and are not forwarded by
+          // the per-thread subscription. Read only those lifecycle chunks from the owned wake output;
+          // processing the whole output here would duplicate message and suspension events.
+          void (async () => {
+            for await (const chunk of accepted.output.fullStream) {
+              if (chunk.type === 'goal') {
+                this.emit({ type: 'goal_evaluation', payload: chunk.payload });
+              }
+            }
+          })().catch(error => {
+            this.emit({ type: 'error', error: error instanceof Error ? error : new Error(String(error)) });
+          });
         })
         .catch(() => {});
       return { accepted: true as const, runId: undefined };

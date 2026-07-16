@@ -290,10 +290,10 @@ describe('in-loop goal scoring', () => {
 
   it('goal judge activity observation does not block structured-output fallback', async () => {
     const streamCalls: any[] = [];
-    const generateCalls: any[] = [];
     const judge = new MockLanguageModelV2({
       doStream: async props => {
         streamCalls.push(props);
+        const fallbackText = '{"decision":"done","reason":"stream fallback"}';
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
           warnings: [],
@@ -305,18 +305,15 @@ describe('in-loop goal scoring', () => {
               modelId: 'mock-judge-id',
               timestamp: new Date(0),
             },
-            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 0, totalTokens: 1 } },
+            ...(streamCalls.length > 1
+              ? [
+                  { type: 'text-start' as const, id: 'text-1' },
+                  { type: 'text-delta' as const, id: 'text-1', delta: fallbackText },
+                  { type: 'text-end' as const, id: 'text-1' },
+                ]
+              : []),
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
           ]),
-        };
-      },
-      doGenerate: async props => {
-        generateCalls.push(props);
-        return {
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-          content: [{ type: 'text', text: '{"decision":"done","reason":"generated fallback"}' }],
-          warnings: [],
         };
       },
     });
@@ -332,11 +329,10 @@ describe('in-loop goal scoring', () => {
       if (chunk.type === 'goal') goalChunks.push(chunk);
     }
 
-    expect(streamCalls.length).toBeGreaterThan(0);
-    expect(generateCalls.length).toBeGreaterThan(0);
+    expect(streamCalls).toHaveLength(2);
     expect(goalChunks.filter(c => !c.payload.pending).at(-1)?.payload).toMatchObject({
       status: 'done',
-      reason: 'generated fallback',
+      reason: 'stream fallback',
     });
   });
 

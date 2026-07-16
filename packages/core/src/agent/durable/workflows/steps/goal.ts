@@ -144,7 +144,7 @@ export function createDurableGoalStep() {
       // The objective and its progress are isolated by thread and loaded from storage below.
       let goalConfig = registryEntry?.goal;
       if (!goalConfig && initData.agentId) {
-        goalConfig = (mastra as any)?.getAgent?.(initData.agentId)?.__getGoalConfig?.();
+        goalConfig = (mastra as any)?.getAgentById?.(initData.agentId)?.__getGoalConfig?.();
       }
 
       // No goal mode configured → nothing to do.
