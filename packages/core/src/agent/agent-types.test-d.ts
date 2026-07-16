@@ -153,12 +153,9 @@ describe('Agent Type Tests', () => {
     });
 
     it('should type requestContext in skills function based on requestContextSchema', () => {
-      const config: AgentConfig<
-        'test-agent',
-        Record<string, never>,
-        undefined,
-        { documentId: string; userId: string }
-      > = {
+      // No explicit TRequestContext generic — the type must be inferred from
+      // requestContextSchema so a regression to RequestContext<unknown> fails.
+      new Agent({
         id: 'test-agent',
         name: 'Test Agent',
         model: {} as any,
@@ -181,9 +178,7 @@ describe('Agent Type Tests', () => {
 
           return [];
         },
-      };
-
-      expectTypeOf(config.id).toEqualTypeOf<'test-agent'>();
+      });
     });
   });
 
