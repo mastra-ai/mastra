@@ -75,12 +75,15 @@ describe('registry-generator', () => {
       tempDirs.push(dir);
       const jsonPath = path.join(dir, 'provider-registry.json');
       const typesPath = path.join(dir, 'provider-types.generated.d.ts');
+      const stalePath = path.join(dir, 'capabilities', 'stale.json');
       const legacyPath = path.join(dir, 'capabilities', 'netlify', 'anthropic.json');
 
       await fs.mkdir(path.dirname(legacyPath), { recursive: true });
+      await fs.writeFile(stalePath, '{}');
       await fs.writeFile(legacyPath, '{}');
       await writeRegistryFiles(jsonPath, typesPath, {}, {}, undefined, undefined, { openai: ['gpt-4o'] });
 
+      await expect(fs.stat(stalePath)).rejects.toMatchObject({ code: 'ENOENT' });
       await expect(fs.stat(legacyPath)).rejects.toMatchObject({ code: 'ENOENT' });
       await expect(fs.readFile(path.join(dir, 'capabilities', 'openai.json'), 'utf8')).resolves.toContain('gpt-4o');
     });
