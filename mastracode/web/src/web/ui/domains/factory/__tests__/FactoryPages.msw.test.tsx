@@ -31,7 +31,7 @@ const GITHUB_PROJECT_ID = 'github-project-1';
 
 const githubProject: Project = {
   id: 'project-gh',
-  name: 'Mastra',
+  name: 'mastra-ai/mastra',
   source: 'github',
   githubProjectId: GITHUB_PROJECT_ID,
   sandboxWorkdir: '/sandbox/mastra',
@@ -447,6 +447,114 @@ describe('Factory Board — Intake candidates', () => {
     expect(await within(column('intake')).findByText('Add factory pages')).toBeInTheDocument();
     expect(within(column('intake')).queryByText('Fix flaky test')).not.toBeInTheDocument();
     expect(within(column('review')).queryByTestId('candidate-card')).not.toBeInTheDocument();
+  });
+
+  it('given GitHub Intake is configured, when the Board renders, then Intake offers repository issue creation in a new tab', async () => {
+    useBoardHandlers();
+    renderAt('/factory/board');
+
+    const intake = await screen.findByTestId('board-column-intake');
+    expect(within(intake).getByRole('link', { name: 'Create GitHub issue' })).toMatchObject({
+      href: 'https://github.com/mastra-ai/mastra/issues/new',
+      target: '_blank',
+      rel: 'noopener noreferrer',
+    });
+  });
+
+  it('given GitHub Intake is unavailable, when the Board renders, then issue creation is hidden', async () => {
+    useBoardHandlers();
+    renderAt('/factory/board', githubProject, connectedStatus, {
+      intakeConfig: {
+        github: { enabled: false, projectIds: [] },
+        linear: { enabled: false, projectIds: [] },
+      },
+    });
+
+    const intake = await screen.findByTestId('board-column-intake');
+    expect(within(intake).queryByRole('link', { name: 'Create GitHub issue' })).not.toBeInTheDocument();
+  });
+
+  it('given the first board content is in Review, when all feeds settle, then the Board positions Review in view', async () => {
+    useBoardHandlers({
+      workItems: [
+        makeWorkItem({
+          id: '00000000-0000-4000-8000-000000000042',
+          title: 'Add factory pages',
+          source: 'github-pr',
+          sourceKey: 'github-pr:42',
+          stages: ['review'],
+        }),
+      ],
+    });
+    let resolveIssues!: () => void;
+    const issuesReady = new Promise<void>(resolve => {
+      resolveIssues = resolve;
+    });
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues`, async ({ request }) => {
+        if (new URL(request.url).searchParams.has('label')) return HttpResponse.json({ issues: [], nextPage: null });
+        await issuesReady;
+        return HttpResponse.json({ issues: [], nextPage: null });
+      }),
+    );
+    const scrollTo = vi.fn();
+    const originalScrollTo = HTMLElement.prototype.scrollTo;
+    HTMLElement.prototype.scrollTo = scrollTo;
+
+    try {
+      const { client } = renderAt('/factory/board');
+      const review = await screen.findByTestId('board-column-review');
+      Object.defineProperty(review, 'offsetLeft', { configurable: true, value: 864 });
+      resolveIssues();
+
+      expect(await within(review).findByText('Add factory pages')).toBeInTheDocument();
+      await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ left: 864, behavior: 'auto' }));
+
+      scrollTo.mockClear();
+      await client.invalidateQueries();
+      expect(scrollTo).not.toHaveBeenCalled();
+    } finally {
+      HTMLElement.prototype.scrollTo = originalScrollTo;
+    }
+  });
+
+  it('given the user moves the Board before feeds settle, when content loads, then automatic positioning does not override them', async () => {
+    useBoardHandlers({
+      workItems: [
+        makeWorkItem({
+          id: '00000000-0000-4000-8000-000000000042',
+          title: 'Add factory pages',
+          source: 'github-pr',
+          sourceKey: 'github-pr:42',
+          stages: ['review'],
+        }),
+      ],
+    });
+    let resolveIssues!: () => void;
+    const issuesReady = new Promise<void>(resolve => {
+      resolveIssues = resolve;
+    });
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues`, async ({ request }) => {
+        if (new URL(request.url).searchParams.has('label')) return HttpResponse.json({ issues: [], nextPage: null });
+        await issuesReady;
+        return HttpResponse.json({ issues: [], nextPage: null });
+      }),
+    );
+    const scrollTo = vi.fn();
+    const originalScrollTo = HTMLElement.prototype.scrollTo;
+    HTMLElement.prototype.scrollTo = scrollTo;
+
+    try {
+      renderAt('/factory/board');
+      fireEvent.wheel(await screen.findByLabelText('Board columns'));
+      resolveIssues();
+
+      expect(await within(column('review')).findByText('Add factory pages')).toBeInTheDocument();
+      await waitFor(() => expect(scrollTo).not.toHaveBeenCalled());
+    } finally {
+      HTMLElement.prototype.scrollTo = originalScrollTo;
+    }
   });
 
   it('given an untriaged issue candidate, when Triage issue is chosen, then the server triage run starts and the Board stays open', async () => {

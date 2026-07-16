@@ -39,16 +39,16 @@ afterEach(() => {
   vi.mocked(redirectToLogin).mockClear();
 });
 
-function seedProject() {
-  const project: Project = {
+function seedProject(project?: Project) {
+  const selectedProject: Project = project ?? {
     id: 'project-test',
     name: 'MastraCode Test',
     path: '/tmp/mastracode-test',
     resourceId: RESOURCE_ID,
     createdAt: 1,
   };
-  localStorage.setItem('mastracode-projects', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-project', project.id);
+  localStorage.setItem('mastracode-projects', JSON.stringify([selectedProject]));
+  localStorage.setItem('mastracode-active-project', selectedProject.id);
 }
 
 function sessionState(): AgentControllerSessionState {
@@ -95,10 +95,26 @@ const UNAUTHENTICATED = () => HttpResponse.json({ authenticated: false, user: nu
 const AUTHENTICATED = () =>
   HttpResponse.json({ authenticated: true, user: { name: 'Ada Lovelace', email: 'ada@example.com' } });
 
-function renderRoutes(initialEntry: string, authMe: () => Response | Promise<Response>) {
-  seedProject();
+function renderRoutes(
+  initialEntry: string,
+  authMe: () => Response | Promise<Response>,
+  options?: { project?: Project; workItemCount?: number; workItemsReady?: Promise<void> },
+) {
+  seedProject(options?.project);
   useAgentControllerHandlers();
   server.use(http.get(`${TEST_BASE_URL}/auth/me`, authMe));
+  if (options?.project?.githubProjectId) {
+    const workItems = Array.from({ length: options.workItemCount ?? 0 }, (_, index) => ({ id: `work-${index}` }));
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${options.project.githubProjectId}/work-items`, async () => {
+        await options.workItemsReady;
+        return HttpResponse.json({ workItems });
+      }),
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({ enabled: true, connected: false, installations: [] }),
+      ),
+    );
+  }
 
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [initialEntry] });
@@ -140,6 +156,57 @@ describe('MastraCode web routing', () => {
     expect(await screen.findByText('What do you want to work on?')).toBeInTheDocument();
   });
 
+  it('given a GitHub project has persisted Factory work, when visiting /, then the user lands on the board', async () => {
+    const project: Project = {
+      id: 'github-project',
+      name: 'mastra-ai/mastra',
+      source: 'github',
+      githubProjectId: 'github-project-id',
+      resourceId: RESOURCE_ID,
+      createdAt: 1,
+    };
+    const { router } = renderRoutes('/', AUTHENTICATED, { project, workItemCount: 1 });
+
+    await expectPathname(router, '/factory/board');
+    expect(await screen.findByText(/Factory requires a GitHub connection/)).toBeInTheDocument();
+  });
+
+  it('given Factory work is still loading, when visiting /, then the app waits before choosing a destination', async () => {
+    const project: Project = {
+      id: 'github-project',
+      name: 'mastra-ai/mastra',
+      source: 'github',
+      githubProjectId: 'github-project-id',
+      resourceId: RESOURCE_ID,
+      createdAt: 1,
+    };
+    let resolveWorkItems!: () => void;
+    const workItemsReady = new Promise<void>(resolve => {
+      resolveWorkItems = resolve;
+    });
+    const { router } = renderRoutes('/', AUTHENTICATED, { project, workItemCount: 1, workItemsReady });
+
+    await screen.findByRole('status', { name: 'Loading Factory board' });
+    expect(router.state.location.pathname).toBe('/');
+    resolveWorkItems();
+    await expectPathname(router, '/factory/board');
+  });
+
+  it('given a GitHub project has no persisted Factory work, when visiting /, then the user lands on /new', async () => {
+    const project: Project = {
+      id: 'github-project',
+      name: 'mastra-ai/mastra',
+      source: 'github',
+      githubProjectId: 'github-project-id',
+      resourceId: RESOURCE_ID,
+      createdAt: 1,
+    };
+    const { router } = renderRoutes('/', AUTHENTICATED, { project });
+
+    await expectPathname(router, '/new');
+    expect(await screen.findByText('What do you want to work on?')).toBeInTheDocument();
+  });
+
   it('given auth is disabled, when visiting an unknown path, then the user is redirected to /new', async () => {
     const { router } = renderRoutes('/does-not-exist', AUTH_DISABLED);
 
@@ -150,6 +217,7 @@ describe('MastraCode web routing', () => {
     const { router } = renderRoutes('/new', UNAUTHENTICATED);
 
     await expectPathname(router, '/signin');
+    expect(router.state.location.search).toBe('?returnTo=%2Fnew');
     expect(await screen.findByRole('button', { name: /sign in/i })).toBeInTheDocument();
     expect(screen.queryByText('What do you want to work on?')).not.toBeInTheDocument();
   });
@@ -181,8 +249,20 @@ describe('MastraCode web routing', () => {
     expect(screen.queryByRole('button', { name: /sign in/i })).not.toBeInTheDocument();
   });
 
-  it('given an authenticated session, when visiting /signin, then the user is redirected to /new', async () => {
+  it('given an authenticated session, when visiting /signin, then the user is redirected through the root landing', async () => {
     const { router } = renderRoutes('/signin', AUTHENTICATED);
+
+    await expectPathname(router, '/new');
+  });
+
+  it('given an authenticated session and a safe returnTo, when visiting /signin, then the explicit destination wins', async () => {
+    const { router } = renderRoutes('/signin?returnTo=%2Ffactory%2Fmetrics', AUTHENTICATED);
+
+    await expectPathname(router, '/factory/metrics');
+  });
+
+  it('given an authenticated session and an unsafe returnTo, when visiting /signin, then it falls back through root landing', async () => {
+    const { router } = renderRoutes('/signin?returnTo=https%3A%2F%2Fevil.example', AUTHENTICATED);
 
     await expectPathname(router, '/new');
   });
