@@ -1555,7 +1555,9 @@ async function saveSingleScore({
       // Include additionalContext with groundTruth
       additionalContext: Object.keys(additionalContext).length > 0 ? additionalContext : undefined,
       // Per-turn scores carry their turn index in metadata for UI grouping/labeling.
-      ...(turn ? { metadata: { turnIndex: turn.index } } : {}),
+      // Merge onto any existing score metadata; the system-owned turnIndex is applied
+      // last so it always wins over a caller-supplied `turnIndex`.
+      ...(turn ? { metadata: { ...(scoreResult?.metadata ?? {}), turnIndex: turn.index } } : {}),
       ...(turn?.threadId ? { threadId: turn.threadId } : {}),
       // Include tracing information
       traceId,
