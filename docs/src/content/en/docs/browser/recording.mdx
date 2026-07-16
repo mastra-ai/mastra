@@ -1,5 +1,5 @@
 ---
-title: "Browser recording (alpha)"
+title: "Browser recording (beta)"
 description: "Record browser sessions as Motion-JPEG AVI videos with optional agent captions."
 packages:
   - "@mastra/core"
@@ -7,13 +7,15 @@ packages:
   - "@mastra/stagehand"
 ---
 
-# Browser recording (alpha)
+# Browser recording (beta)
+
+**Added in:** `@mastra/core@1.43.0`
 
 Browser recording adds two opt-in tools that let an agent save a browser session as a Motion-JPEG AVI video. The agent can also add short captions while it works.
 
-:::caution
+:::experimental
 
-Browser recording is an alpha feature. The API and output format may change.
+This feature is in beta. Breaking changes may occur without a major version bump until the API is stable.
 
 :::
 
@@ -30,11 +32,11 @@ Recording tools are disabled by default. Enable them only for agents that need t
 
 ## Enable recording
 
-Pass `recording.outputDir` to `AgentBrowser` or `StagehandBrowser`. The browser provider adds the `browser_record` and `browser_record_caption` tools to the agent's toolset.
+Pass a `recording` object to `AgentBrowser` or `StagehandBrowser`. The only required field is `outputDir`. You can also set `maxDurationMs`, `maxWidth`, and `maxHeight` as defaults for every recording started by this browser.
 
 The following example enables recording for `AgentBrowser`:
 
-```typescript title="src/mastra/browsers.ts"
+```typescript title="src/mastra/browsers/agent-browser.ts"
 import { join } from 'node:path'
 import { AgentBrowser } from '@mastra/agent-browser'
 
@@ -42,13 +44,16 @@ export const browser = new AgentBrowser({
   headless: false,
   recording: {
     outputDir: join(process.cwd(), 'browser-recordings'),
+    maxDurationMs: 60_000,
+    maxWidth: 1280,
+    maxHeight: 720,
   },
 })
 ```
 
 The same option works with `StagehandBrowser`:
 
-```typescript title="src/mastra/browsers.ts"
+```typescript title="src/mastra/browsers/stagehand-browser.ts"
 import { join } from 'node:path'
 import { StagehandBrowser } from '@mastra/stagehand'
 
@@ -56,9 +61,14 @@ export const browser = new StagehandBrowser({
   headless: false,
   recording: {
     outputDir: join(process.cwd(), 'browser-recordings'),
+    maxDurationMs: 60_000,
+    maxWidth: 1280,
+    maxHeight: 720,
   },
 })
 ```
+
+The agent can still override these defaults per-recording by passing `maxDurationMs`, `maxWidth`, or `maxHeight` to the `browser_record` tool at start time.
 
 ## Recording tools
 
@@ -102,7 +112,7 @@ When the user asks for a recording:
 
 ## Output format and limits
 
-Recordings are saved as Motion-JPEG AVI files. This format is encoded in JavaScript and does not require `ffmpeg` or native dependencies.
+Recordings are saved as Motion-JPEG AVI files. This format is encoded in JavaScript and doesn't require `ffmpeg` or native dependencies.
 
 Default limits:
 

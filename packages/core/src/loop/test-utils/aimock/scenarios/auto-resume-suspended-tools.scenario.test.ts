@@ -51,6 +51,7 @@ describeForAllEngines(
         defaultOptions: {
           autoResumeSuspendedTools: true,
         },
+        engine,
       });
 
       const threadId = randomUUID();
@@ -161,6 +162,7 @@ describeForAllEngines(
         defaultOptions: {
           autoResumeSuspendedTools: false,
         },
+        engine,
       });
 
       const threadId = randomUUID();
@@ -215,10 +217,5 @@ describeForAllEngines(
       expect(toolExecuted).toBe(false);
     });
   },
-  // TODO(durable-parity): unskip 'durable' after Phase 3 fixes the auto-resume
-  // output wrapper shape across iterations (durable's `output` is undefined on
-  // the second `runLoopScenario` call when sharedAgent is re-used). The Phase 2
-  // system-message rewrite itself works — verified by the unit test for
-  // `applyAutoResumeSystemMessage`.
-  { skip: ['durable', 'fs'] },
+  { skip: ['fs'] },
 );

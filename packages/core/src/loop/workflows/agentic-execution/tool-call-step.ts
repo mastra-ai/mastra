@@ -742,6 +742,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   toolCallSuspended: suspendPayload,
                   __streamState: streamState.serialize(),
                   __agentId: agentId,
+                  toolCallId: inputData.toolCallId,
                   toolName: inputData.toolName,
                   resumeLabel: options?.resumeLabel,
                 },
@@ -1230,8 +1231,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               // bubbles up through the AI-SDK-v5 tool builder and gets
               // wrapped as `TOOL_EXECUTION_FAILED: Invalid state:
               // Controller is already closed`.
-              safeEnqueue(controller, {
-                type: 'background-task-started' as any,
+              const backgroundTaskStartedChunk = {
+                type: 'background-task-started' as const,
                 runId,
                 from: ChunkFrom.AGENT,
                 payload: {
@@ -1239,7 +1240,19 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   toolName: inputData.toolName,
                   toolCallId: inputData.toolCallId,
                 },
-              });
+              };
+              safeEnqueue(controller, backgroundTaskStartedChunk);
+              try {
+                await options?.onChunk?.(backgroundTaskStartedChunk);
+              } catch (error) {
+                logger?.warn?.('Error invoking onChunk for background-task-started', {
+                  toolCallId: inputData.toolCallId,
+                  toolName: inputData.toolName,
+                  error,
+                  errorMessage: error instanceof Error ? error.message : undefined,
+                  errorStack: error instanceof Error ? error.stack : undefined,
+                });
+              }
 
               // Return placeholder result so the LLM can continue
               return {

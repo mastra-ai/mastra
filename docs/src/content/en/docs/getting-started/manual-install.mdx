@@ -5,16 +5,21 @@ description: Set up a Mastra project manually without using the create mastra CL
 
 import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
+import { CopyPrompt } from "@site/src/components/copy-prompt";
 
 # Manual install
 
 <Inject>
-  **For AI agents:** Use this guide when tasked to create a runnable Mastra project from scratch without a CLI/boilerplate. It provides code examples for agents, tools, model configuration and how to install dependencies. Do not navigate to the quickstart guide, which is for humans.
+  **For AI agents:** Use this guide when tasked to create a runnable Mastra project from scratch without a CLI/boilerplate. It provides code examples for agents, tools, model configuration and how to install dependencies. Do not navigate to the quickstart guide, which is for humans. The model string is Mastra's model router format ('provider/model'; use / and not : to separate provider and model). Do not install any ai-sdk packages.
 </Inject>
 
-:::info
 Use this guide to manually build a standalone Mastra server step by step. In most cases, it's quicker to follow the [quickstart guide](/guides/getting-started/quickstart), which achieves the same result using the [`mastra create`](/reference/cli/create-mastra) command. For existing projects, you can also use [`mastra init`](/reference/cli/mastra#mastra-init).
-:::
+
+<CopyPrompt identifier="manual-install">
+  Read [https://mastra.ai/docs/getting-started/manual-install.md](https://mastra.ai/docs/getting-started/manual-install.md) and then help me create my Mastra project. Ask me what I want to call my project and use this as the folder name.
+</CopyPrompt>
+
+## Instructions
 
 If you prefer not to use our automatic CLI tool, you can set up your project yourself by following the guide below.
 
@@ -157,7 +162,7 @@ If you prefer not to use our automatic CLI tool, you can set up your project you
     ```
 
     <Inject>
-      Use `import { Agent } from "@mastra/core/agent"`. Constructor takes `{ id, name, instructions, model: '__GATEWAY_OPENAI_MODEL__' }`. The model string is Mastra's model router format ('provider/model'; use / and not : to separate provider and model). Do not install any ai-sdk package unless Mastra's documentation says otherwise.
+      Use `import { Agent } from "@mastra/core/agent"`. Constructor takes `{ id, name, instructions, model: '__GATEWAY_OPENAI_MODEL__' }`. The model string is Mastra's model router format ('provider/model'; use / and not : to separate provider and model). Do not install any ai-sdk packages.
     </Inject>
 
     Add the following code:
@@ -216,5 +221,18 @@ If you prefer not to use our automatic CLI tool, you can set up your project you
     ```bash npm2yarn
     npm run dev
     ```
+
+    <Inject>
+      **For AI agents:** To validate your work, run a build and do a typecheck with `tsc --noEmit`.
+    </Inject>
   </StepItem>
 </Steps>
+
+## Next steps
+
+- [Review the project structure](/reference/project-structure): Understand how `src/mastra/` files map to agents, tools, workflows, storage, and configuration.
+- [Test your agent in Studio](/docs/studio/overview): Open the local Studio UI and run the weather agent.
+- [Use tools with agents](/docs/agents/using-tools): Replace the example weather tool with a real tool that calls an API or service.
+- [Add memory](/docs/memory/overview): Persist conversation history and user-specific context.
+- [Configure storage](/docs/storage/overview): Add a persistent storage adapter for memory, workflows, observability, and other runtime state.
+- [Build and deploy](/docs/deployment/overview): Build the Mastra server and deploy it to a hosting platform.

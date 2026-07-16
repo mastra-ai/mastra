@@ -7,6 +7,7 @@ import type { AddressInfo } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { RequestContext } from '@mastra/core/di';
+import { toStandardSchema } from '@mastra/schema-compat';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -403,9 +404,8 @@ describe('MastraMCPClient with Streamable HTTP', () => {
 describe('MastraMCPClient - outputSchema without structuredContent', () => {
   // When MCP servers (e.g. FastMCP) define outputSchema on a tool but don't
   // return structuredContent in the response, the full CallToolResult envelope
-  // should be returned as-is. We don't pass outputSchema to createTool, so
-  // Zod won't strip unrecognised keys. The MCP SDK validates structuredContent
-  // against outputSchema internally via AJV.
+  // should be returned as-is. outputSchema is attached for documentation with a
+  // no-op validator; the MCP SDK validates structuredContent via AJV.
   let testServer: {
     httpServer: HttpServer;
     mcpServer: McpServer;
@@ -522,6 +522,56 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
 
     expect(storedSchema.properties?.root?.$ref).toBe('#/$defs/node');
     expect(storedSchema.$defs?.node?.properties?.children?.items?.$ref).toBe('#/$defs/node');
+  });
+
+  it('exposes output JSON schema for documentation while Mastra validation always succeeds', async () => {
+    const sdkClient = (client as any).client as Client;
+    const outputSchema = {
+      type: 'object' as const,
+      properties: {
+        result: { type: 'number' },
+        expression: { type: 'string' },
+      },
+      required: ['result'],
+    };
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'calculate',
+          description: 'Calculates a math expression',
+          inputSchema: {
+            type: 'object' as const,
+            properties: { expression: { type: 'string' } },
+          },
+          outputSchema,
+        },
+      ],
+    });
+
+    const tools = await client.tools();
+    const calculateTool = tools['calculate'];
+    expect(calculateTool).toBeDefined();
+
+    const documentedSchema = calculateTool.outputSchema?.['~standard'].jsonSchema.output({ target: 'draft-07' });
+    expect(documentedSchema).toMatchObject({
+      type: 'object',
+      properties: {
+        result: { type: 'number' },
+        expression: { type: 'string' },
+      },
+    });
+
+    const invalidOutput = { result: 'not-a-number', extraField: true };
+    expect(calculateTool.outputSchema?.['~standard'].validate(invalidOutput)).toEqual({ value: invalidOutput });
+    expect(toStandardSchema(outputSchema)['~standard'].validate(invalidOutput)).toHaveProperty('issues');
+
+    const callToolResult = {
+      content: [{ type: 'text', text: JSON.stringify({ result: 2, expression: '1 + 1' }) }],
+      isError: false,
+    };
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue(callToolResult);
+    await expect(calculateTool.execute?.({ expression: '1 + 1' })).resolves.toEqual(callToolResult);
   });
 });
 
@@ -1061,6 +1111,34 @@ describe('MastraMCPClient - Elicitation Tests', () => {
         };
       },
     );
+
+    testServer.mcpServer.tool(
+      'workflowNeedingOptionalInput',
+      'Only elicits when the client advertised elicitation support',
+      {},
+      async (): Promise<CallToolResult> => {
+        if (!testServer.mcpServer.server.getClientCapabilities()?.elicitation) {
+          return {
+            content: [{ type: 'text', text: 'NEEDS_INPUT: please confirm' }],
+          };
+        }
+
+        const result = await testServer.mcpServer.server.elicitInput({
+          message: 'Please confirm',
+          requestedSchema: {
+            type: 'object',
+            properties: {
+              confirm: { type: 'boolean', title: 'Confirm' },
+            },
+            required: ['confirm'],
+          },
+        });
+
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result) }],
+        };
+      },
+    );
   });
 
   afterEach(async () => {
@@ -1193,9 +1271,7 @@ describe('MastraMCPClient - Elicitation Tests', () => {
 
     // The tool reports the failure in-band (isError: true), which the client now
     // surfaces on the failed-tool-call path by throwing.
-    await expect(
-      collectUserInfoTool?.execute?.({ message: 'This will cause handler to throw' }, {}),
-    ).rejects.toThrow();
+    await expect(collectUserInfoTool?.execute?.({ message: 'This will cause handler to throw' }, {})).rejects.toThrow();
 
     expect(mockHandler).toHaveBeenCalledTimes(1);
   });
@@ -1216,9 +1292,39 @@ describe('MastraMCPClient - Elicitation Tests', () => {
     expect(collectUserInfoTool).toBeDefined();
 
     // Call the tool which will trigger elicitation; the in-band error is surfaced by throwing.
-    await expect(
-      collectUserInfoTool?.execute?.({ message: 'This should fail gracefully' }, {}),
-    ).rejects.toThrow();
+    await expect(collectUserInfoTool?.execute?.({ message: 'This should fail gracefully' }, {})).rejects.toThrow();
+  });
+
+  it('should not advertise elicitation without a handler', async () => {
+    client = new InternalMastraMCPClient({
+      name: 'no-elicitation-advertisement-client',
+      server: {
+        url: testServer.baseUrl,
+      },
+    });
+    await client.connect();
+
+    const tools = await client.tools();
+    const workflowTool = tools['workflowNeedingOptionalInput'];
+    expect(workflowTool).toBeDefined();
+
+    const result = await workflowTool?.execute?.({}, {});
+
+    expect(result.content).toEqual([{ type: 'text', text: 'NEEDS_INPUT: please confirm' }]);
+  });
+
+  it('should throw when registering an elicitation handler after connecting without capability', async () => {
+    client = new InternalMastraMCPClient({
+      name: 'late-elicitation-handler-client',
+      server: {
+        url: testServer.baseUrl,
+      },
+    });
+    await client.connect();
+
+    expect(() => client.elicitation.onRequest(async () => ({ action: 'decline' }))).toThrow(
+      'Cannot register an elicitation handler after connecting',
+    );
   });
 
   it('should validate elicitation request schema structure', async () => {
@@ -1950,12 +2056,46 @@ describe('MastraMCPClient - Roots Capability (Issue #8660)', () => {
     });
 
     const internalClient = (client as any).client;
-    const capabilities = internalClient._options?.capabilities;
+    const capabilities = internalClient._capabilities;
 
     expect(capabilities).toMatchObject({
       roots: { listChanged: true },
-      elicitation: {},
     });
+    expect(capabilities.elicitation).toBeUndefined();
+
+    await client.disconnect().catch(() => {});
+  });
+
+  it('should not advertise elicitation by default', async () => {
+    const client = new InternalMastraMCPClient({
+      name: 'default-capability-test-client',
+      server: {
+        url: testServer.baseUrl,
+      },
+    });
+
+    const internalClient = (client as any).client;
+    const capabilities = internalClient._capabilities;
+
+    expect(capabilities.elicitation).toBeUndefined();
+
+    await client.disconnect().catch(() => {});
+  });
+
+  it('should advertise form elicitation when a handler is registered before connecting', async () => {
+    const client = new InternalMastraMCPClient({
+      name: 'registered-elicitation-capability-test-client',
+      server: {
+        url: testServer.baseUrl,
+      },
+    });
+
+    client.elicitation.onRequest(async () => ({ action: 'decline' }));
+
+    const internalClient = (client as any).client;
+    const capabilities = internalClient._capabilities;
+
+    expect(capabilities.elicitation).toMatchObject({ form: {} });
 
     await client.disconnect().catch(() => {});
   });
@@ -1976,7 +2116,7 @@ describe('MastraMCPClient - Roots Capability (Issue #8660)', () => {
     });
 
     const internalClient = (client as any).client;
-    const capabilities = internalClient._options?.capabilities;
+    const capabilities = internalClient._capabilities;
 
     expect(capabilities).toMatchObject({
       elicitation: customElicitationCapabilities,
@@ -2002,7 +2142,7 @@ describe('MastraMCPClient - Roots Capability (Issue #8660)', () => {
     });
 
     const internalClient = (client as any).client;
-    const capabilities = internalClient._options?.capabilities;
+    const capabilities = internalClient._capabilities;
 
     expect(capabilities).toMatchObject({
       roots: { listChanged: true },

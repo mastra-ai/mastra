@@ -7,13 +7,7 @@ packages:
 
 # AppleContainerSandbox
 
-Executes commands inside local OCI Linux containers through Apple's [`container`](https://github.com/apple/container) CLI. The provider starts a long-lived container and uses `container exec` for workspace commands.
-
-:::info
-
-For interface details, see [WorkspaceSandbox interface](/reference/workspace/sandbox).
-
-:::
+Executes commands inside local OCI Linux containers through Apple's [`container`](https://github.com/apple/container) CLI. The provider starts a long-lived container and uses `container exec` for workspace commands. For interface details, see [WorkspaceSandbox interface](/reference/workspace/sandbox).
 
 ## Installation
 
@@ -358,7 +352,7 @@ const sandbox = new AppleContainerSandbox({
 ```
 
 These options are only applied when a new container is created. If the sandbox reconnects to an existing container with the same name, destroy and recreate the sandbox to apply changed runtime options.
-Apple `--tmpfs` accepts container paths only, such as `/tmp`; it does not accept Docker-style option specs like `/tmp:rw,size=256m`.
+Apple `--tmpfs` accepts container paths only, such as `/tmp`; it doesn't accept Docker-style option specs like `/tmp:rw,size=256m`.
 When `readonlyRootfs` is enabled, make sure `workingDir` points to a path supplied by the image, a bind mount, or a writable tmpfs.
 
 ## Security model
@@ -369,15 +363,15 @@ When `readonlyRootfs` is enabled, make sure `workingDir` points to a path suppli
 - `publishedPorts` can expose in-container services on the host or network; bind to `127.0.0.1` when only local access is intended.
 - `ssh` forwards the host SSH agent socket.
 - `capAdd` and `virtualization` can expand what containerized code can do.
-- `containerBinary` is a constructor-only escape hatch for trusted code and is not part of the serializable editor provider schema.
+- `containerBinary` is a constructor-only escape hatch for trusted code and isn't part of the serializable editor provider schema.
 
 Use the narrowest mounts and capabilities your workload needs. Existing containers are only reconnected when they carry Mastra ownership labels for the sandbox ID. Containers created by this provider also include a config-hash label; when that label is present, reconnect fails if immutable runtime options such as image, command, mounts, ports, capabilities, or working directory changed.
 
 ## Limitations
 
-`AppleContainerSandbox` implements foreground workspace command execution with `executeCommand()`. It does not yet expose a `SandboxProcessManager` for background processes or LSP sessions.
+`AppleContainerSandbox` implements foreground workspace command execution with `executeCommand()`. It doesn't yet expose a `SandboxProcessManager` for background processes or LSP sessions.
 
-Command timeouts are enforced inside the container so timed-out commands are cleaned up by the container runtime. Abort signals cancel the host CLI wait path and should not be used as a substitute for command timeouts when in-container cleanup matters.
+Command timeouts are enforced inside the container so timed-out commands are cleaned up by the container runtime. Abort signals cancel the host CLI wait path and shouldn't be used as a substitute for command timeouts when in-container cleanup matters.
 
 ## Reconnection
 
@@ -387,7 +381,7 @@ Command timeouts are enforced inside the container so timed-out commands are cle
 - A stopped container is restarted.
 - A missing container is created from the configured image.
 - A container with the configured name but without matching Mastra ownership labels fails instead of being managed.
-- A Mastra-owned container with a config-hash label that does not match immutable runtime options fails instead of being reused.
+- A Mastra-owned container with a config-hash label that doesn't match immutable runtime options fails instead of being reused.
 
 ```typescript
 const sandbox = new AppleContainerSandbox({ id: 'persistent-sandbox' })

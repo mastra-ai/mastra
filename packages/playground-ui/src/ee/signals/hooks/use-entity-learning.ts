@@ -1,9 +1,5 @@
 import { skipToken, useQuery } from '@tanstack/react-query';
-import type {
-  EntityLearningPointsParams,
-  EntityLearningTopicExamplesParams,
-  EntityLearningOutlierExamplesParams,
-} from '../services';
+import type { EntityLearningTopicExamplesParams, EntityLearningOutlierExamplesParams } from '../services';
 import { useEntityLearningConfig } from './use-entity-learning-config';
 
 const KEY = 'entity-learning';
@@ -58,20 +54,18 @@ export function useEntityLearning(entityId: string | undefined, signalName: stri
   });
 }
 
-/** GET /entity-learning/entities/:entityId/topics?signalName=&runId= — the clusters. */
-export function useEntityTopics(
-  entityId: string | undefined,
-  signalName: string | undefined,
-  runId: string | undefined,
-) {
+/**
+ * GET /entity-learning/entities/:entityId/topics?signalName=&runId? — the clusters.
+ * Omit `runId` to let the API resolve the latest run for that signal — an
+ * entity-level `latestRunId` belongs to a single signal and must not be
+ * reused across signals.
+ */
+export function useEntityTopics(entityId: string | undefined, signalName: string | undefined, runId?: string) {
   const { service } = useEntityLearningConfig();
 
   return useQuery({
-    queryKey: [KEY, 'topics', entityId, signalName, runId],
-    queryFn:
-      service && entityId && signalName && runId
-        ? () => service.getEntityTopics(entityId, signalName, runId)
-        : skipToken,
+    queryKey: [KEY, 'topics', entityId, signalName, runId ?? 'latest'],
+    queryFn: service && entityId && signalName ? () => service.getEntityTopics(entityId, signalName, runId) : skipToken,
     retry: false,
   });
 }
@@ -109,28 +103,6 @@ export function useEntityTopicExamples(
     queryFn:
       service && entityId && topicId && params?.signalName && params?.runId
         ? () => service.getEntityTopicExamples(entityId, topicId, params)
-        : skipToken,
-    retry: false,
-  });
-}
-
-/** GET /entity-learning/entities/:entityId/points?signalName=&runId=&includeOutliers=&limit= */
-export function useEntityPoints(entityId: string | undefined, params: EntityLearningPointsParams | undefined) {
-  const { service } = useEntityLearningConfig();
-
-  return useQuery({
-    queryKey: [
-      KEY,
-      'points',
-      entityId,
-      params?.signalName,
-      params?.runId,
-      params?.includeOutliers ?? null,
-      params?.limit ?? null,
-    ],
-    queryFn:
-      service && entityId && params?.signalName && params?.runId
-        ? () => service.getEntityPoints(entityId, params)
         : skipToken,
     retry: false,
   });

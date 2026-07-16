@@ -64,8 +64,8 @@ const StoryLink = forwardRef<HTMLAnchorElement, LinkComponentProps>(({ href, chi
 
 const HelperCopy = () => (
   <>
-    <p className="text-neutral5 text-ui-md font-medium">Main content area</p>
-    <p className="text-neutral4 text-ui-sm mt-2 max-w-[40ch]">
+    <p className="text-ui-md font-medium text-neutral5">Main content area</p>
+    <p className="mt-2 max-w-[40ch] text-ui-sm text-neutral4">
       Hover the sidebar edge to reveal the handle. Drag to resize, click to toggle, or hit{' '}
       <kbd className="rounded bg-surface5 px-1 font-mono text-[0.65rem] text-neutral4">⌘B</kbd>.
     </p>
@@ -73,16 +73,16 @@ const HelperCopy = () => (
 );
 
 const DefaultFrame = ({ children }: { children: React.ReactNode }) => (
-  <div className="flex h-[500px] w-[840px] bg-surface1 border border-border1 rounded-lg">
+  <div className="h-125 w-210 flex rounded-lg border border-border1 bg-surface1">
     {children}
-    <div className="flex-1 min-w-0 p-6">
+    <div className="min-w-0 flex-1 p-6">
       <HelperCopy />
     </div>
   </div>
 );
 
 const StudioFrame = ({ children }: { children: React.ReactNode }) => (
-  <div className="flex h-[720px] w-[1080px] overflow-hidden bg-surface1">
+  <div className="h-180 w-270 flex overflow-hidden bg-surface1">
     {children}
     <main className="flex min-w-0 flex-1 flex-col">
       <header className="mx-2 mt-1.5 flex h-12 shrink-0 items-center justify-between px-3">
@@ -103,7 +103,7 @@ const StudioFrame = ({ children }: { children: React.ReactNode }) => (
               ['Error rate', '0.8%'],
             ].map(([label, value]) => (
               <div key={label} className="rounded-studio-panel border border-border1 bg-surface3 p-4">
-                <p className="text-ui-xs font-medium uppercase text-neutral3">{label}</p>
+                <p className="text-ui-xs font-medium text-neutral3 uppercase">{label}</p>
                 <p className="mt-2 text-2xl font-semibold text-neutral6">{value}</p>
               </div>
             ))}
@@ -154,15 +154,15 @@ const StudioFrame = ({ children }: { children: React.ReactNode }) => (
 );
 
 const MobileFrame = ({ children }: { children: React.ReactNode }) => (
-  <div className="flex flex-col h-screen w-screen bg-surface1 overflow-hidden">
+  <div className="flex h-screen w-screen flex-col overflow-hidden bg-surface1">
     <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border1 px-3">
       <MainSidebar.MobileTrigger />
-      <span className="text-neutral6 text-sm font-medium">Mastra Studio</span>
+      <span className="text-sm font-medium text-neutral6">Mastra Studio</span>
     </header>
     {children}
-    <div className="flex-1 min-w-0 p-4">
-      <p className="text-neutral5 text-ui-md font-medium">Mobile viewport</p>
-      <p className="text-neutral4 text-ui-sm mt-2 max-w-[34ch]">
+    <div className="min-w-0 flex-1 p-4">
+      <p className="text-ui-md font-medium text-neutral5">Mobile viewport</p>
+      <p className="mt-2 max-w-[34ch] text-ui-sm text-neutral4">
         Switch viewports in the toolbar. The sidebar auto-detects via <code>matchMedia</code> against the iframe
         viewport — no manual prop needed.
       </p>
@@ -231,7 +231,7 @@ const StudioSidebarBody = () => {
             <div className="relative grid size-9 place-items-center">
               <LogoWithoutText
                 className={cn(
-                  'h-[1.5rem] w-[1.5rem] shrink-0 transition-opacity duration-150',
+                  'size-[1.5rem] shrink-0 transition-opacity duration-150',
                   !isMobile && 'group-hover/sidebar:opacity-0',
                 )}
               />
@@ -244,10 +244,10 @@ const StudioSidebarBody = () => {
             <span className="size-6 rounded-full border border-border1 bg-surface4" aria-label="Signed in" />
           </div>
         ) : (
-          <span className="flex items-center justify-between pl-3 pr-2">
+          <span className="flex items-center justify-between pr-2 pl-3">
             <span className="flex min-w-0 flex-1 items-center gap-2">
-              <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-              <span className="truncate whitespace-nowrap font-display text-sm font-semibold tracking-tight">
+              <LogoWithoutText className="size-[1.5rem] shrink-0" />
+              <span className="truncate font-display text-sm font-semibold tracking-tight whitespace-nowrap">
                 Mastra Studio
               </span>
               {!isMobile && <MainSidebar.Trigger />}
@@ -304,7 +304,7 @@ const StudioSidebarBody = () => {
         {state !== 'collapsed' && (
           <>
             <hr className="mx-6 my-2 h-px border-0 bg-border1" />
-            <span className="ml-3 inline-flex h-5 items-center rounded-full bg-sidebar-nav-active px-2.5 font-sans text-ui-xs font-semibold leading-none text-black/80 dark:text-neutral6">
+            <span className="ml-3 inline-flex h-5 items-center rounded-full bg-sidebar-nav-active px-2.5 font-sans text-ui-xs leading-none font-semibold text-black/80 dark:text-neutral6">
               v0.0.0
             </span>
           </>
@@ -579,7 +579,7 @@ export const Floating: Story = {
   },
   render: () => (
     <DefaultFrame>
-      <MainSidebar className="m-1 bg-surface2 border border-border1/30 rounded-2xl shadow-xl">
+      <MainSidebar className="m-1 rounded-2xl border border-border1/30 bg-surface2 shadow-xl">
         <MainSidebar.Nav>
           <MainSidebar.NavSection>
             <MainSidebar.NavHeader>Workspace</MainSidebar.NavHeader>
@@ -603,11 +603,11 @@ export const Floating: Story = {
 /* ------------------------------------------------------------------------- */
 
 const ParityFrame = ({ children }: { children: React.ReactNode }) => (
-  <div className="flex h-[500px] w-[840px] gap-4 bg-surface1 border border-border1 rounded-lg p-3">{children}</div>
+  <div className="h-125 w-210 flex gap-4 rounded-lg border border-border1 bg-surface1 p-3">{children}</div>
 );
 
 const ParityBody = () => (
-  <MainSidebar className="border border-border1 bg-surface2 rounded-md">
+  <MainSidebar className="rounded-md border border-border1 bg-surface2">
     <MainSidebar.Nav>
       <MainSidebar.NavSection>
         <MainSidebar.NavHeader>Workspace</MainSidebar.NavHeader>
@@ -708,7 +708,7 @@ export const AsChild: Story = {
                       <DialogTitle>Contact support</DialogTitle>
                       <DialogDescription>asChild lets a NavLink act as a Dialog trigger.</DialogDescription>
                     </DialogHeader>
-                    <p className="text-neutral4 text-ui-sm">Anything that can be clicked can be a sidebar item.</p>
+                    <p className="text-ui-sm text-neutral4">Anything that can be clicked can be a sidebar item.</p>
                   </DialogContent>
                 </Dialog>
 

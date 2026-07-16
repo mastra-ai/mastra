@@ -16,7 +16,7 @@ const SERIES_COLORS = [
   CHART_COLORS.orange,
   CHART_COLORS.pink,
   CHART_COLORS.yellow,
-];
+] as const;
 
 export interface ScoresCardViewProps {
   data:
@@ -39,7 +39,7 @@ export function ScoresCardView({ data, isLoading, isError }: ScoresCardViewProps
     return data.scorerNames.map((name, i) => ({
       dataKey: name,
       label: name,
-      color: SERIES_COLORS[i % SERIES_COLORS.length],
+      color: SERIES_COLORS[i % SERIES_COLORS.length] ?? SERIES_COLORS[0],
       aggregate: (points: Record<string, unknown>[]) => ({
         value:
           points.length > 0

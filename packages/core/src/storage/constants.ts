@@ -131,6 +131,15 @@ export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   source: { type: 'text' },
   resourceId: { type: 'text', nullable: true },
   threadId: { type: 'text', nullable: true },
+  organizationId: { type: 'text', nullable: true },
+  projectId: { type: 'text', nullable: true },
+  // Batch handle: groups all per-trace scores produced by one batch scoring call.
+  // Each score keeps its own per-execution `runId`; `batchId` is shared across the batch.
+  batchId: { type: 'text', nullable: true },
+  // Dataset provenance: which curated dataset item this score was produced against.
+  // Lets baseline scores join back to dataset items (ground truth) without re-running.
+  datasetId: { type: 'text', nullable: true },
+  datasetItemId: { type: 'text', nullable: true },
   createdAt: { type: 'timestamp' },
   updatedAt: { type: 'timestamp' },
 };
@@ -234,6 +243,8 @@ export const SCORER_DEFINITIONS_SCHEMA: Record<string, StorageColumn> = {
   status: { type: 'text', nullable: false }, // 'draft', 'published', or 'archived'
   activeVersionId: { type: 'text', nullable: true }, // FK to scorer_definition_versions.id
   authorId: { type: 'text', nullable: true },
+  organizationId: { type: 'text', nullable: true },
+  projectId: { type: 'text', nullable: true },
   metadata: { type: 'jsonb', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
@@ -533,6 +544,7 @@ export const DATASET_ITEMS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false },
   datasetId: { type: 'text', nullable: false, references: { table: 'mastra_datasets', column: 'id' } },
   datasetVersion: { type: 'integer', nullable: false },
+  externalId: { type: 'text', nullable: true },
   organizationId: { type: 'text', nullable: true },
   projectId: { type: 'text', nullable: true },
   validTo: { type: 'integer', nullable: true },
