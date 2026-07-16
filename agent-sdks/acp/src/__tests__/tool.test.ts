@@ -396,6 +396,23 @@ describe('ACPConnection', () => {
     ).resolves.toEqual({ outcome: { outcome: 'selected', optionId: 'allow_once' } });
   });
 
+  it('kills the agent process and rejects when createClient throws', async () => {
+    const { ACPConnection } = await import('../connection');
+
+    const connection = new ACPConnection({
+      id: 'grok',
+      description: 'Grok via ACP',
+      command: 'grok',
+      persistSession: true,
+      createClient: () => {
+        throw new Error('bad client factory');
+      },
+    });
+
+    await expect(connection.prompt('never runs')).rejects.toThrow('bad client factory');
+    expect((mocks.spawn.mock.results[0]?.value as ReturnType<typeof createProcess>).kill).toHaveBeenCalledTimes(1);
+  });
+
   it('uses the default client when createClient is omitted', async () => {
     const { ACPConnection } = await import('../connection');
 

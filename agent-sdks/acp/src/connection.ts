@@ -278,12 +278,12 @@ export class ACPConnection {
         filesystem: new LocalFilesystem({ basePath: this.options.cwd ?? process.cwd() }),
       });
 
-    this.connection = new ClientSideConnection(() => {
-      const defaultClient = new ACPClient(() => this.currentPrompt, workspace, this.options.onPermissionRequest);
-      return this.options.createClient?.(defaultClient) ?? defaultClient;
-    }, stream);
-
     try {
+      this.connection = new ClientSideConnection(() => {
+        const defaultClient = new ACPClient(() => this.currentPrompt, workspace, this.options.onPermissionRequest);
+        return this.options.createClient?.(defaultClient) ?? defaultClient;
+      }, stream);
+
       await Promise.race([processFailure, this.initializeSession()]);
     } catch (error) {
       this.disconnect();
