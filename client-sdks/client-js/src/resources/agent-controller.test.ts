@@ -33,6 +33,17 @@ describe('AgentController Resource', () => {
     );
   };
 
+  const sseResponse = (frames: string[]) =>
+    new Response(
+      new ReadableStream({
+        start(controller) {
+          for (const frame of frames) controller.enqueue(new TextEncoder().encode(frame));
+          controller.close();
+        },
+      }),
+      { status: 200, headers: new Headers({ 'Content-Type': 'text/event-stream' }) },
+    );
+
   const lastCall = () => (global.fetch as any).mock.calls.at(-1) as [string, RequestInit];
 
   beforeEach(() => {
@@ -265,6 +276,193 @@ describe('AgentController Resource', () => {
     sub.unsubscribe();
 
     expect(received).toEqual([event]);
+  });
+
+  it('parses CRLF-delimited SSE frames', async () => {
+    const event = { type: 'agent_start' };
+    mockSse([`data: ${JSON.stringify(event)}\r\n\r\n`]);
+
+    const received: AgentControllerEvent[] = [];
+    const sub = await client
+      .getAgentController('code')
+      .session('user-1')
+      .subscribe({
+        onEvent: e => received.push(e),
+      });
+
+    await new Promise(r => setTimeout(r, 10));
+    sub.unsubscribe();
+
+    expect(received).toEqual([event]);
+  });
+
+  it('calls onError when the stream ends without reconnect enabled', async () => {
+    mockSse([`data: ${JSON.stringify({ type: 'agent_start' })}\n\n`]);
+
+    const onError = vi.fn();
+    const sub = await client
+      .getAgentController('code')
+      .session('user-1')
+      .subscribe({
+        onEvent: () => {},
+        onError,
+      });
+
+    await new Promise(r => setTimeout(r, 10));
+    sub.unsubscribe();
+
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect((onError.mock.calls[0]![0] as Error).message).toBe('Agent controller session stream ended unexpectedly');
+    expect((global.fetch as any).mock.calls).toHaveLength(1);
+  });
+
+  it('reconnects when the stream ends cleanly and reconnect is enabled', async () => {
+    const firstEvent = { type: 'agent_start' };
+    const secondEvent = { type: 'agent_end', reason: 'complete' };
+    (global.fetch as any)
+      .mockResolvedValueOnce(sseResponse([`data: ${JSON.stringify(firstEvent)}\n\n`]))
+      .mockResolvedValueOnce(sseResponse([`data: ${JSON.stringify(secondEvent)}\n\n`]));
+
+    const received: AgentControllerEvent[] = [];
+    const done = new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('timeout')), 2000);
+      void client
+        .getAgentController('code')
+        .session('user-1')
+        .subscribe({
+          onEvent: event => {
+            received.push(event);
+            if (received.length === 2) {
+              clearTimeout(timer);
+              resolve();
+            }
+          },
+          onError: error => {
+            clearTimeout(timer);
+            reject(error);
+          },
+          reconnect: { maxRetries: 1, delayMs: 0 },
+        })
+        .then(sub => {
+          void done.then(() => sub.unsubscribe());
+        });
+    });
+
+    await done;
+
+    expect((global.fetch as any).mock.calls).toHaveLength(2);
+    expect(received).toEqual([firstEvent, secondEvent]);
+  });
+
+  it('retries failed resubscribe requests within the reconnect limit', async () => {
+    const firstEvent = { type: 'agent_start' };
+    const secondEvent = { type: 'agent_end', reason: 'complete' };
+    (global.fetch as any)
+      .mockResolvedValueOnce(sseResponse([`data: ${JSON.stringify(firstEvent)}\n\n`]))
+      .mockRejectedValueOnce(new Error('temporary reconnect failure'))
+      .mockResolvedValueOnce(sseResponse([`data: ${JSON.stringify(secondEvent)}\n\n`]));
+
+    const received: AgentControllerEvent[] = [];
+    const done = new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('timeout')), 2000);
+      void client
+        .getAgentController('code')
+        .session('user-1')
+        .subscribe({
+          onEvent: event => {
+            received.push(event);
+            if (received.length === 2) {
+              clearTimeout(timer);
+              resolve();
+            }
+          },
+          onError: error => {
+            clearTimeout(timer);
+            reject(error);
+          },
+          reconnect: { maxRetries: 2, delayMs: 0 },
+        })
+        .then(sub => {
+          void done.then(() => sub.unsubscribe());
+        });
+    });
+
+    await done;
+
+    expect((global.fetch as any).mock.calls).toHaveLength(3);
+    expect(received).toEqual([firstEvent, secondEvent]);
+  });
+
+  it('does not reconnect after unsubscribe', async () => {
+    const firstEvent = { type: 'agent_start' };
+    (global.fetch as any).mockResolvedValueOnce(sseResponse([`data: ${JSON.stringify(firstEvent)}\n\n`]));
+
+    const sub = await client
+      .getAgentController('code')
+      .session('user-1')
+      .subscribe({
+        onEvent: () => {},
+        reconnect: { maxRetries: 5, delayMs: 100 },
+      });
+
+    await new Promise(r => setTimeout(r, 10));
+    sub.unsubscribe();
+    await new Promise(r => setTimeout(r, 250));
+
+    expect((global.fetch as any).mock.calls).toHaveLength(1);
+  });
+
+  it('calls onError with the stream read failure when reconnect is exhausted', async () => {
+    const readError = new Error('stream read failed');
+    (global.fetch as any).mockResolvedValueOnce(
+      new Response(
+        new ReadableStream({
+          pull() {
+            throw readError;
+          },
+        }),
+        { status: 200, headers: new Headers({ 'Content-Type': 'text/event-stream' }) },
+      ),
+    );
+
+    const onError = vi.fn();
+    const sub = await client
+      .getAgentController('code')
+      .session('user-1')
+      .subscribe({
+        onEvent: () => {},
+        onError,
+        reconnect: { maxRetries: 0, delayMs: 0 },
+      });
+
+    await new Promise(r => setTimeout(r, 50));
+    sub.unsubscribe();
+
+    expect(onError).toHaveBeenCalledWith(readError);
+    expect((global.fetch as any).mock.calls).toHaveLength(1);
+  });
+
+  it('does not reconnect when the onEvent callback throws', async () => {
+    mockSse([`data: ${JSON.stringify({ type: 'agent_start' })}\n\n`]);
+
+    const callbackError = new Error('boom from onEvent');
+    const onError = vi.fn();
+    const sub = await client
+      .getAgentController('code')
+      .session('user-1')
+      .subscribe({
+        onEvent: () => {
+          throw callbackError;
+        },
+        onError,
+        reconnect: { maxRetries: 5, delayMs: 0 },
+      });
+
+    await new Promise(r => setTimeout(r, 10));
+    sub.unsubscribe();
+
+    expect(onError).toHaveBeenCalledWith(callbackError);
+    expect((global.fetch as any).mock.calls).toHaveLength(1);
   });
 
   it('sends a notification signal', async () => {
