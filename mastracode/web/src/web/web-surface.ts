@@ -13,6 +13,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 
+import { buildAuditRoutes } from './audit/routes.js';
 import { buildConfigRoutes } from './config-routes.js';
 import { buildFsRoutes } from './fs-routes.js';
 import {
@@ -334,5 +335,6 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
     ...(deps.linearReady ? buildLinearRoutes({ baseUrl: deps.publicOrigin }) : []),
     ...(deps.intakeReady ? buildIntakeRoutes() : []),
     ...(deps.factoryReady ? buildFactoryRoutes() : []),
+    ...(deps.factoryReady ? buildAuditRoutes({ baseUrl: deps.publicOrigin }) : []),
   ];
 }
