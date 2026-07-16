@@ -1,6 +1,7 @@
 import type {
   MastraCodePluginConfigSchema,
   MastraCodePluginConfigValue,
+  MastraCodePluginSignalProvider,
   MastraCodePluginTools,
   MastraCodeToolRenderConfig,
 } from '../plugin.js';
@@ -38,6 +39,7 @@ export type LoadedPlugin = ScopedInstalledPluginRecord & {
   status: PluginStatus;
   error?: string;
   tools: MastraCodePluginTools;
+  signalProviders?: MastraCodePluginSignalProvider[];
   renderConfigs?: Record<string, MastraCodeToolRenderConfig>;
   toolNames: string[];
   skillPaths?: string[];

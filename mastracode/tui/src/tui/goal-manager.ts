@@ -41,6 +41,11 @@ export interface GoalState {
   activeDurationMs?: number;
 }
 
+export type GoalSyncResult =
+  | { status: 'synced'; goal: GoalState; replaced: boolean }
+  | { status: 'no-record' }
+  | { status: 'read-error'; error: Error };
+
 // =============================================================================
 // Constants
 // =============================================================================
@@ -209,6 +214,37 @@ export class GoalManager {
     this.activeStartedAt = null;
     this.activeDurationMs = 0;
     this.persistGoalOnNextThreadCreate = false;
+  }
+
+  /**
+   * Hydrate objectives created through the Agent API before rendering an
+   * evaluation chunk. Unlike thread-switch loading, this preserves display
+   * timers and pending thread-create state when the objective is unchanged.
+   */
+  async syncFromThread(state: TUIState): Promise<GoalSyncResult> {
+    const threadId = state.session.thread.getId();
+    const agent = this.getAgent(state);
+    if (!agent || !threadId) return { status: 'no-record' };
+
+    let durable: GoalObjectiveRecord | undefined;
+    try {
+      durable = await agent.getObjective({ threadId });
+    } catch (error) {
+      return { status: 'read-error', error: error instanceof Error ? error : new Error(String(error)) };
+    }
+    if (!durable) return { status: 'no-record' };
+
+    const durableId = durable.id ?? `external:${durable.startedAt}:${durable.objective}`;
+    const current = this.record;
+    if (current && current.id === durableId && current.objective === durable.objective) {
+      this.record = { ...durable, id: durableId };
+      return { status: 'synced', goal: this.getGoal()!, replaced: false };
+    }
+
+    this.record = { ...durable, id: durableId };
+    this.activeStartedAt = durable.status === 'active' ? new Date().toISOString() : null;
+    this.activeDurationMs = 0;
+    return { status: 'synced', goal: this.getGoal()!, replaced: true };
   }
 
   /**

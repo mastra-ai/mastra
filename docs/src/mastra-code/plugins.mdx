@@ -1,0 +1,61 @@
+---
+title: 'Plugins'
+description: 'Extend Mastra Code with instructions, tools, skills, commands, and signal providers.'
+packages:
+  - 'mastracode'
+---
+
+# Plugins
+
+Mastra Code plugins can add instructions, tools, skills, commands, and signal providers. A signal provider can contribute processors and tools through Mastra's existing `SignalProvider` API.
+
+## Add a signal provider
+
+Define `signalProviders` as a function on the plugin. Mastra Code calls the function with the resolved plugin context before it constructs the coding agent.
+
+```typescript title="src/index.ts"
+import { defineMastraCodePlugin, SignalProvider } from '@mastra/code-sdk/plugin'
+
+class PolicySignals extends SignalProvider<'policy-signals'> {
+  readonly id = 'policy-signals'
+
+  getInputProcessors() {
+    return [policyProcessor]
+  }
+}
+
+export default defineMastraCodePlugin({
+  id: 'acme.policy',
+  config: {
+    enabled: { type: 'boolean', default: true },
+  },
+  signalProviders: async context => {
+    if (!context.config.enabled) return []
+    return [new PolicySignals()]
+  },
+})
+```
+
+The factory receives the same `cwd`, `scope`, `pluginDir`, and resolved `config` values as tool and instruction factories. It can return synchronously or asynchronously.
+
+Every provider must be a `SignalProvider` instance with an ID that is unique across enabled plugins. Mastra Code marks all plugins that declare a duplicate provider ID as load failures. A rejected factory or invalid return value also fails the plugin without partially applying its providers.
+
+## Reload lifecycle
+
+Mastra Code registers a stable plugin-provider bridge when it creates the coding agent. On plugin reload, the bridge validates the complete replacement provider set and then swaps its delegates. The coding agent, controller, sessions, thread IDs, and state remain unchanged.
+
+Input and output processors are resolved from the current provider set for each request. Provider tools use stable live proxies, so a reload updates their implementations without replacing the coding agent. Providers that define `pollInterval` use the standard `SignalProvider` polling lifecycle.
+
+Mastra Code calls `stop()` on every removed or replaced provider. A provider can also implement `dispose()` to release plugin-owned resources such as file watchers or schedulers:
+
+```typescript
+class WatchedSignals extends SignalProvider<'watched-signals'> {
+  readonly id = 'watched-signals'
+
+  async dispose() {
+    await this.watcher.close()
+  }
+}
+```
+
+Cleanup runs once for each provider instance. If a replacement plugin fails to load, Mastra Code retains the previous provider snapshot and does not dispose it.

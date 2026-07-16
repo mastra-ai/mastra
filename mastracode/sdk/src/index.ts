@@ -497,6 +497,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     : (config?.pluginManager ?? new PluginManager({ projectRoot: project.rootPath, configDir, homeDir }));
   const loadedPlugins = pluginManager ? await pluginManager.reload() : [];
   const pluginTools = pluginManager?.getPluginTools() ?? {};
+  const pluginSignalProviders = pluginManager?.getPluginSignalProviders() ?? [];
 
   // Scorers (live evaluation with sampling)
   const outcomeScorer = createOutcomeScorer();
@@ -588,7 +589,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     // TaskSignalProvider bundles the task tools + TaskStateProcessor: it merges
     // the tools into the toolset and registers the task state-signal processor,
     // so the task list persists across turns and survives OM truncation.
-    signals: [new TaskSignalProvider(), ...(githubSignals ? [githubSignals] : [])],
+    signals: [new TaskSignalProvider(), ...(githubSignals ? [githubSignals] : []), ...pluginSignalProviders],
     // Native goal mechanism: the in-loop goal step judges the thread's active
     // objective each qualifying iteration. The judge model is required for any
     // gating to occur; when unset the goal step is a complete no-op. A6 auto-wires
@@ -612,7 +613,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       // per-request from the active workspace (mirrors `judge`).
       tools: getGoalJudgeTools,
     },
-    inputProcessors: [
+    inputProcessors: async () => [
+      ...(pluginManager?.getPluginInputProcessors() ?? []),
       new PlanRejectionAbortProcessor(),
       new AgentsMDInjector({
         getIgnoredInstructionPaths: ({ requestContext }) => {
@@ -625,6 +627,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       }),
       new ProviderHistoryCompat(),
     ],
+    outputProcessors: async () => pluginManager?.getPluginOutputProcessors() ?? [],
     errorProcessors: [
       new StreamErrorRetryProcessor({
         matchers: [

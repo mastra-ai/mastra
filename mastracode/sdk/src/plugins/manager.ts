@@ -12,6 +12,7 @@ import { ensureMastraCodePackageLink } from './package-link.js';
 import { getPluginScopePaths } from './paths.js';
 import type { PluginPathOptions } from './paths.js';
 import { loadPluginRegistry, removePluginRecord, savePluginRegistry, setPluginRecord } from './registry.js';
+import { PluginSignalProviderBridge } from './signal-provider-bridge.js';
 import type { LoadedPlugin, PluginScope } from './types.js';
 
 const GITHUB_PLUGIN_POLL_INTERVAL_MS = 60_000;
@@ -33,6 +34,8 @@ export class PluginManager {
   private loadedPlugins: LoadedPlugin[] = [];
   private readonly pluginTools: ReturnType<typeof collectActivePluginTools> = {};
   private readonly rawPluginTools: ReturnType<typeof collectActivePluginTools> = {};
+  private readonly signalProviderBridge = new PluginSignalProviderBridge();
+  private hasLoadedSignalProviders = false;
   private readonly toolRenderConfigs = new Map<string, NonNullable<LoadedPlugin['renderConfigs']>[string]>();
   private readonly watchedLocalEntries = new Set<string>();
   private readonly localEntryVersions = new Map<string, string>();
@@ -52,11 +55,24 @@ export class PluginManager {
     if (this.reloadInFlight) return this.reloadInFlight;
 
     this.reloadInFlight = (async () => {
-      this.loadedPlugins = await loadPlugins(this.options);
+      const nextPlugins = await loadPlugins(this.options);
+      const providerReloadFailed =
+        nextPlugins.some(plugin => plugin.status === 'load failed') && this.hasLoadedSignalProviders;
+      if (!providerReloadFailed) {
+        const nextProviders = nextPlugins.flatMap(plugin =>
+          plugin.status === 'active' ? (plugin.signalProviders ?? []) : [],
+        );
+        await this.signalProviderBridge.replace(nextProviders);
+        this.hasLoadedSignalProviders = true;
+      }
+      this.loadedPlugins = providerReloadFailed ? this.loadedPlugins : nextPlugins;
       this.updateLocalEntryWatchers(this.loadedPlugins);
       this.updateGithubPoller(this.loadedPlugins);
       this.updatePluginRenderConfigs(this.loadedPlugins);
-      this.updatePluginTools(collectActivePluginTools(this.loadedPlugins));
+      this.updatePluginTools({
+        ...collectActivePluginTools(this.loadedPlugins),
+        ...this.collectSignalProviderTools(),
+      });
       await this.notifyReloadListeners(this.loadedPlugins);
       return this.loadedPlugins;
     })().finally(() => {
@@ -81,6 +97,18 @@ export class PluginManager {
     return this.pluginTools;
   }
 
+  getPluginSignalProviders() {
+    return [this.signalProviderBridge];
+  }
+
+  getPluginInputProcessors() {
+    return this.signalProviderBridge.getCurrentInputProcessors();
+  }
+
+  getPluginOutputProcessors() {
+    return this.signalProviderBridge.getCurrentOutputProcessors();
+  }
+
   getToolRenderConfig(toolName: string) {
     return this.toolRenderConfigs.get(toolName);
   }
@@ -97,6 +125,14 @@ export class PluginManager {
     return this.loadedPlugins.flatMap(plugin =>
       plugin.status === 'active' && plugin.instructions ? [plugin.instructions] : [],
     );
+  }
+
+  private collectSignalProviderTools(): ReturnType<typeof collectActivePluginTools> {
+    const tools: ReturnType<typeof collectActivePluginTools> = {};
+    for (const provider of this.signalProviderBridge.currentProviders) {
+      Object.assign(tools, provider.getTools?.() ?? {});
+    }
+    return tools;
   }
 
   private async notifyReloadListeners(plugins: LoadedPlugin[]): Promise<void> {
@@ -373,6 +409,16 @@ export class PluginManager {
   private async readGitHead(cwd: string): Promise<string> {
     const { stdout } = await execa('git', ['rev-parse', 'HEAD'], gitExecOptions(cwd));
     return stdout.trim();
+  }
+
+  async dispose(): Promise<void> {
+    for (const entryPath of this.watchedLocalEntries) fs.unwatchFile(entryPath);
+    this.watchedLocalEntries.clear();
+    this.localEntryVersions.clear();
+    if (this.githubPollTimer) clearInterval(this.githubPollTimer);
+    this.githubPollTimer = undefined;
+    this.reloadListeners.clear();
+    await this.signalProviderBridge.replace([]);
   }
 
   discoverLocal(searchRoot = '.'): ReturnType<typeof discoverLocalPlugins> {

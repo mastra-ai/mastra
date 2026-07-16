@@ -146,6 +146,112 @@ describe('GoalManager adapter', () => {
     expect(manager.isActive()).toBe(false);
   });
 
+  it('syncs the first objective created through the Agent API', async () => {
+    const agent = createAgent();
+    agent.getObjective.mockResolvedValue(makeRecord({ id: 'external-1', objective: 'external goal', runsUsed: 2 }));
+    const manager = new GoalManager();
+
+    const result = await manager.syncFromThread(createState(agent));
+
+    expect(result).toMatchObject({ status: 'synced', replaced: true });
+    expect(manager.getGoal()).toMatchObject({ id: 'external-1', objective: 'external goal', turnsUsed: 2 });
+  });
+
+  it('merges the same durable objective without resetting timers or persistence flags', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-15T10:00:00.000Z'));
+    const agent = createAgent();
+    agent.getObjective.mockResolvedValue(makeRecord({ id: 'external-1', objective: 'external goal' }));
+    const manager = new GoalManager();
+    await manager.syncFromThread(createState(agent));
+    const startedAt = manager.getGoal()?.activeStartedAt;
+    manager.persistOnNextThreadCreate();
+
+    vi.setSystemTime(new Date('2026-05-15T10:05:00.000Z'));
+    agent.getObjective.mockResolvedValue(
+      makeRecord({ id: 'external-1', objective: 'external goal', runsUsed: 3, maxRuns: 25 }),
+    );
+    const result = await manager.syncFromThread(createState(agent));
+
+    expect(result).toMatchObject({ status: 'synced', replaced: false });
+    expect(manager.getGoal()).toMatchObject({ turnsUsed: 3, maxTurns: 25, activeStartedAt: startedAt });
+    expect(manager.consumePersistOnNextThreadCreate()).toBe(true);
+    vi.useRealTimers();
+  });
+
+  it('treats a different durable ID with the same objective as a replacement exactly once', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-15T10:00:00.000Z'));
+    const agent = createAgent();
+    const manager = new GoalManager();
+    agent.getObjective.mockResolvedValue(makeRecord({ id: 'external-1', objective: 'same text' }));
+    await manager.syncFromThread(createState(agent));
+
+    vi.setSystemTime(new Date('2026-05-15T10:05:00.000Z'));
+    agent.getObjective.mockResolvedValue(makeRecord({ id: 'external-2', objective: 'same text' }));
+    const replaced = await manager.syncFromThread(createState(agent));
+    const replacedStartedAt = manager.getGoal()?.activeStartedAt;
+
+    vi.setSystemTime(new Date('2026-05-15T10:10:00.000Z'));
+    const repeated = await manager.syncFromThread(createState(agent));
+
+    expect(replaced).toMatchObject({ status: 'synced', replaced: true });
+    expect(repeated).toMatchObject({ status: 'synced', replaced: false });
+    expect(manager.getGoal()).toMatchObject({
+      id: 'external-2',
+      objective: 'same text',
+      activeStartedAt: replacedStartedAt,
+    });
+    expect(replacedStartedAt).toBe('2026-05-15T10:05:00.000Z');
+    vi.useRealTimers();
+  });
+
+  it('replaces the mirror when the durable objective text changes', async () => {
+    const agent = createAgent();
+    const manager = new GoalManager();
+    agent.getObjective.mockResolvedValue(makeRecord({ id: 'external-1', objective: 'first goal' }));
+    await manager.syncFromThread(createState(agent));
+    agent.getObjective.mockResolvedValue(makeRecord({ id: 'external-2', objective: 'second goal', status: 'paused' }));
+
+    const result = await manager.syncFromThread(createState(agent));
+
+    expect(result).toMatchObject({ status: 'synced', replaced: true });
+    expect(manager.getGoal()).toMatchObject({ id: 'external-2', objective: 'second goal', status: 'paused' });
+    expect(manager.getGoal()?.activeStartedAt).toBeUndefined();
+  });
+
+  it('leaves the current mirror untouched when no durable objective exists', async () => {
+    const agent = createAgent();
+    const manager = new GoalManager();
+    await manager.setGoal(createState(agent), 'rendering goal', '__GATEWAY_OPENAI_MODEL__');
+    const before = manager.getGoal();
+    agent.getObjective.mockResolvedValue(undefined);
+
+    const result = await manager.syncFromThread(createState(agent));
+
+    expect(result).toEqual({ status: 'no-record' });
+    expect(manager.getGoal()).toEqual(before);
+  });
+
+  it('returns a typed read error without changing the mirror or timers', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-15T10:00:00.000Z'));
+    const agent = createAgent();
+    const manager = new GoalManager();
+    await manager.setGoal(createState(agent), 'rendering goal', '__GATEWAY_OPENAI_MODEL__');
+    manager.persistOnNextThreadCreate();
+    const before = manager.getGoal();
+    const failure = new Error('storage unavailable');
+    agent.getObjective.mockRejectedValue(failure);
+
+    const result = await manager.syncFromThread(createState(agent));
+
+    expect(result).toEqual({ status: 'read-error', error: failure });
+    expect(manager.getGoal()).toEqual(before);
+    expect(manager.consumePersistOnNextThreadCreate()).toBe(true);
+    vi.useRealTimers();
+  });
+
   it('loads an objective from ThreadState via the agent', async () => {
     const agent = createAgent();
     agent.getObjective.mockResolvedValue(makeRecord({ objective: 'persisted goal', runsUsed: 4, status: 'paused' }));

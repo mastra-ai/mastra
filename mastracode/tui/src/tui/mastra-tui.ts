@@ -558,6 +558,7 @@ export class MastraTUI {
       this.cleanupPluginReloadListener();
       this.cleanupPluginReloadListener = undefined;
     }
+    void this.state.pluginManager?.dispose();
 
     if (this.state.unsubscribe) {
       this.state.unsubscribe();
