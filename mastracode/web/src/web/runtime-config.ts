@@ -14,6 +14,7 @@
  */
 
 import type { WebAuthAdapter } from './auth-adapter.js';
+import type { WebSandboxProvider } from './sandbox-provider.js';
 
 export interface WebRuntimeConfig {
   /** Postgres connection string for the application database + agent storage. */
@@ -22,6 +23,8 @@ export interface WebRuntimeConfig {
   publicUrl?: string;
   /** Active web auth adapter, or `undefined` when auth is disabled. */
   authAdapter?: WebAuthAdapter;
+  /** Active sandbox provider, or `undefined` when sandboxes are disabled. */
+  sandbox?: WebSandboxProvider;
 }
 
 let seeded: WebRuntimeConfig | undefined;
@@ -58,6 +61,15 @@ export function isRuntimeConfigSeeded(): boolean {
  */
 export function getSeededAuthAdapter(): WebAuthAdapter | undefined {
   return seeded?.authAdapter;
+}
+
+/**
+ * Active sandbox provider seeded by the factory. `undefined` when the factory
+ * was configured without a `sandbox` slot (or never ran) — GitHub-backed
+ * projects stay off in that case.
+ */
+export function getSeededSandboxProvider(): WebSandboxProvider | undefined {
+  return seeded?.sandbox;
 }
 
 /** Reset the registry for test isolation. */

@@ -40,6 +40,9 @@ import {
 } from './sandbox';
 import type { MaterializationSandbox, RepoMaterializeInfo, SandboxCommandResult } from './sandbox';
 import type { GithubProjectSandboxRow } from './schema';
+import { __resetRuntimeConfigForTests, seedRuntimeConfig } from '../runtime-config';
+import { LocalSandboxProvider } from '../sandbox-local-provider';
+import { RailwaySandboxProvider } from '../sandbox-railway-provider';
 
 type Responder = (script: string) => SandboxCommandResult;
 const OK: SandboxCommandResult = { exitCode: 0, stdout: '', stderr: '' };
@@ -89,92 +92,79 @@ function makeRepoInfo(overrides: Partial<RepoMaterializeInfo> = {}): RepoMateria
 
 beforeEach(() => {
   dbUpdates.length = 0;
+  // RailwaySandboxProvider.isEnabled() honors the SDK's own env credential fallback;
+  // clear it so host-machine env can't leak into these tests.
+  delete process.env.RAILWAY_API_TOKEN;
 });
 
 afterEach(() => {
   resetSandboxFactory();
-  delete process.env.RAILWAY_API_TOKEN;
-  delete process.env.MASTRACODE_SANDBOX_PROVIDER;
-  delete process.env.MASTRACODE_SANDBOX_WORKDIR;
-  delete process.env.MASTRACODE_SANDBOX_IDLE_MINUTES;
+  __resetRuntimeConfigForTests();
 });
 
 describe('getSandboxProvider', () => {
-  it('defaults to railway when a Railway token is set', () => {
-    process.env.RAILWAY_API_TOKEN = 'tok';
+  it('reports the seeded adapter kind', () => {
+    seedRuntimeConfig({ sandbox: new RailwaySandboxProvider({ token: 'tok' }) });
     expect(getSandboxProvider()).toBe('railway');
-  });
-
-  it('falls back to local when no Railway token is set', () => {
+    __resetRuntimeConfigForTests();
+    seedRuntimeConfig({ sandbox: new LocalSandboxProvider() });
     expect(getSandboxProvider()).toBe('local');
   });
 
-  it('honors an explicit provider override', () => {
-    process.env.MASTRACODE_SANDBOX_PROVIDER = 'railway';
-    expect(getSandboxProvider()).toBe('railway');
+  it('reports none when no sandbox provider is configured', () => {
+    expect(getSandboxProvider()).toBe('none');
   });
 });
 
 describe('isSandboxEnabled', () => {
-  it('is true for railway when a token is set', () => {
-    process.env.RAILWAY_API_TOKEN = 'tok';
+  it('is true for railway when a token is configured', () => {
+    seedRuntimeConfig({ sandbox: new RailwaySandboxProvider({ token: 'tok' }) });
     expect(isSandboxEnabled()).toBe(true);
   });
 
-  it('is true without a token (auto-falls back to local)', () => {
-    expect(isSandboxEnabled()).toBe(true);
-  });
-
-  it('is false when railway is explicitly selected without a token', () => {
-    process.env.MASTRACODE_SANDBOX_PROVIDER = 'railway';
-    expect(isSandboxEnabled()).toBe(false);
-  });
-
-  it('is false for an unknown provider', () => {
-    process.env.MASTRACODE_SANDBOX_PROVIDER = 'mystery';
-    process.env.RAILWAY_API_TOKEN = 'tok';
+  it('is false for railway without a token', () => {
+    seedRuntimeConfig({ sandbox: new RailwaySandboxProvider() });
     expect(isSandboxEnabled()).toBe(false);
   });
 
   it('is true for the local provider without any token', () => {
-    process.env.MASTRACODE_SANDBOX_PROVIDER = 'local';
+    seedRuntimeConfig({ sandbox: new LocalSandboxProvider() });
     expect(isSandboxEnabled()).toBe(true);
+  });
+
+  it('is false when no sandbox provider is configured', () => {
+    expect(isSandboxEnabled()).toBe(false);
   });
 });
 
 describe('computeSandboxWorkdir', () => {
   it('defaults to /workspace/<repo> for the railway provider', () => {
-    process.env.RAILWAY_API_TOKEN = 'tok';
+    seedRuntimeConfig({ sandbox: new RailwaySandboxProvider({ token: 'tok' }) });
     expect(computeSandboxWorkdir('octocat/hello')).toBe('/workspace/hello');
   });
 
   it('appends the repo name to a configured base', () => {
-    process.env.RAILWAY_API_TOKEN = 'tok';
-    process.env.MASTRACODE_SANDBOX_WORKDIR = '/srv/checkouts';
+    seedRuntimeConfig({ sandbox: new RailwaySandboxProvider({ token: 'tok', workdirBase: '/srv/checkouts' }) });
     expect(computeSandboxWorkdir('octocat/hello')).toBe('/srv/checkouts/hello');
   });
 
   it('does not double-append when the base already ends in the repo name', () => {
-    process.env.RAILWAY_API_TOKEN = 'tok';
-    process.env.MASTRACODE_SANDBOX_WORKDIR = '/srv/hello';
+    seedRuntimeConfig({ sandbox: new RailwaySandboxProvider({ token: 'tok', workdirBase: '/srv/hello' }) });
     expect(computeSandboxWorkdir('octocat/hello')).toBe('/srv/hello');
   });
 
-  it('checks out under the local sandbox root for the local provider', () => {
-    process.env.MASTRACODE_SANDBOX_PROVIDER = 'local';
-    process.env.MASTRACODE_LOCAL_SANDBOX_ROOT = '/tmp/mc-sandboxes';
+  it('checks out under the configured root for the local provider', () => {
+    seedRuntimeConfig({ sandbox: new LocalSandboxProvider({ root: '/tmp/mc-sandboxes' }) });
     expect(computeSandboxWorkdir('octocat/hello')).toBe('/tmp/mc-sandboxes/hello');
-    delete process.env.MASTRACODE_LOCAL_SANDBOX_ROOT;
   });
 
-  it('ignores the cloud-only workdir base for the local provider', () => {
-    // The schema defaults MASTRACODE_SANDBOX_WORKDIR to /workspace, which is
-    // not writable on a host filesystem — the local provider must ignore it.
-    process.env.MASTRACODE_SANDBOX_PROVIDER = 'local';
-    process.env.MASTRACODE_SANDBOX_WORKDIR = '/workspace';
-    process.env.MASTRACODE_LOCAL_SANDBOX_ROOT = '/tmp/mc-sandboxes';
-    expect(computeSandboxWorkdir('octocat/hello')).toBe('/tmp/mc-sandboxes/hello');
-    delete process.env.MASTRACODE_LOCAL_SANDBOX_ROOT;
+  it('defaults the local root to ~/.mastracode/web/sandboxes', () => {
+    seedRuntimeConfig({ sandbox: new LocalSandboxProvider() });
+    expect(computeSandboxWorkdir('octocat/hello')).toMatch(/\.mastracode\/web\/sandboxes\/hello$/);
+  });
+
+  it('throws when no sandbox provider is configured', () => {
+    expect(() => computeSandboxWorkdir('octocat/hello')).toThrow(/No sandbox provider configured/);
   });
 });
 
@@ -205,7 +195,7 @@ describe('ensureProjectSandbox', () => {
   });
 
   it('passes the idle timeout to the provider on provision', async () => {
-    process.env.MASTRACODE_SANDBOX_IDLE_MINUTES = '15';
+    seedRuntimeConfig({ sandbox: new LocalSandboxProvider({ idleMinutes: 15 }) });
     const sandbox = new FakeSandbox();
     let factoryArgs: { idleTimeoutMinutes?: number } | undefined;
     setSandboxFactory(opts => {
@@ -244,24 +234,18 @@ describe('ensureProjectSandbox', () => {
 });
 
 describe('getSandboxIdleMinutes', () => {
-  afterEach(() => {
-    delete process.env.MASTRACODE_SANDBOX_IDLE_MINUTES;
-  });
-
-  it('defaults to 30 minutes when unset', () => {
+  it('defaults to 30 minutes when the adapter does not specify one', () => {
+    seedRuntimeConfig({ sandbox: new LocalSandboxProvider() });
     expect(getSandboxIdleMinutes()).toBe(30);
   });
 
-  it('reads a positive integer from the env', () => {
-    process.env.MASTRACODE_SANDBOX_IDLE_MINUTES = '45';
+  it('defaults to 30 minutes when no adapter is configured', () => {
+    expect(getSandboxIdleMinutes()).toBe(30);
+  });
+
+  it('reads the adapter-configured window', () => {
+    seedRuntimeConfig({ sandbox: new LocalSandboxProvider({ idleMinutes: 45 }) });
     expect(getSandboxIdleMinutes()).toBe(45);
-  });
-
-  it('falls back to 30 for non-positive or invalid values', () => {
-    process.env.MASTRACODE_SANDBOX_IDLE_MINUTES = '0';
-    expect(getSandboxIdleMinutes()).toBe(30);
-    process.env.MASTRACODE_SANDBOX_IDLE_MINUTES = 'nope';
-    expect(getSandboxIdleMinutes()).toBe(30);
   });
 });
 

@@ -23,6 +23,17 @@ import { BetterAuthWebAuth } from '../web/auth-better-adapter.js';
 import type { WebAuthAdapter } from '../web/auth-adapter.js';
 import { WorkOSWebAuth } from '../web/auth-workos-adapter.js';
 import { MastraFactory } from '../web/factory-entry.js';
+import type { WebSandboxProvider } from '../web/sandbox-provider.js';
+import { LocalSandboxProvider } from '../web/sandbox-local-provider.js';
+import { RailwaySandboxProvider } from '../web/sandbox-railway-provider.js';
+
+/** Parse a positive-integer env knob; anything else means "use the default". */
+function positiveInt(raw: string | undefined): number | undefined {
+  if (!raw) return undefined;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) return undefined;
+  return Math.floor(parsed);
+}
 
 // Distributed pub/sub: when `REDIS_URL` is set, events (streams, workflows,
 // signals) ride Redis Streams so multiple web server processes can share one
@@ -64,8 +75,43 @@ if (workosConfigured) {
   });
 }
 
+// Sandbox provider, by env precedence:
+//   1. MASTRACODE_SANDBOX_PROVIDER=railway|local — explicit selection. Railway
+//      selected without a token boots with sandboxes (and GitHub projects)
+//      disabled, surfaced in the feature diagnostics.
+//   2. RAILWAY_API_TOKEN set → Railway (isolated cloud VMs, multi-tenant safe).
+//   3. Neither → local host-process checkouts (single-user dev; no isolation).
+// Budget/GC knobs: MASTRACODE_SANDBOX_IDLE_MINUTES (default 30),
+// MASTRACODE_MAX_SANDBOXES (default unlimited), MASTRACODE_SANDBOX_WORKDIR
+// (cloud checkout base, default /workspace), MASTRACODE_LOCAL_SANDBOX_ROOT
+// (local checkout root, default ~/.mastracode/web/sandboxes).
+const sandboxKind = process.env.MASTRACODE_SANDBOX_PROVIDER ?? (process.env.RAILWAY_API_TOKEN ? 'railway' : 'local');
+const idleMinutes = positiveInt(process.env.MASTRACODE_SANDBOX_IDLE_MINUTES);
+const maxSandboxes = positiveInt(process.env.MASTRACODE_MAX_SANDBOXES);
+let sandbox: WebSandboxProvider;
+if (sandboxKind === 'railway') {
+  sandbox = new RailwaySandboxProvider({
+    token: process.env.RAILWAY_API_TOKEN,
+    workdirBase: process.env.MASTRACODE_SANDBOX_WORKDIR,
+    idleMinutes,
+    maxSandboxes,
+  });
+} else if (sandboxKind === 'local') {
+  sandbox = new LocalSandboxProvider({
+    root: process.env.MASTRACODE_LOCAL_SANDBOX_ROOT,
+    idleMinutes,
+    maxSandboxes,
+  });
+} else {
+  throw new Error(
+    `Unknown MASTRACODE_SANDBOX_PROVIDER "${sandboxKind}" — expected "railway" or "local" ` +
+      '(or pass a custom WebSandboxProvider to MastraFactory).',
+  );
+}
+
 export const factory = new MastraFactory({
   auth,
+  sandbox,
   // Agent state (threads, messages, memory, OM, recall vectors) lives in the
   // single app Postgres alongside the github/app tables — one shared DB for
   // all users, separated by `resourceId` scoping. Unset (bare local dev) →

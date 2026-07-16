@@ -33,6 +33,7 @@ import {
 } from './github/session-subscriptions.js';
 import { buildLinearAgentTools } from './linear/agent-tools.js';
 import { seedRuntimeConfig } from './runtime-config.js';
+import type { WebSandboxProvider } from './sandbox-provider.js';
 import { handleServerError } from './server-error.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import {
@@ -89,6 +90,15 @@ export interface MastraFactoryConfig {
    * static host, so credentialed requests must be explicitly allowed.
    */
   allowedOrigins?: string[];
+  /**
+   * Sandbox provider instance — `RailwaySandboxProvider`, `LocalSandboxProvider`, or any
+   * custom `WebSandboxProvider` implementation. GitHub-backed projects clone
+   * and run commands inside sandboxes built by this provider. Whatever instance
+   * is passed is the active provider; the factory never selects or constructs
+   * one itself. Omitted → sandboxes disabled and GitHub-backed projects stay
+   * off.
+   */
+  sandbox?: WebSandboxProvider;
 }
 
 const CONTROLLER_ID = 'code';
@@ -116,9 +126,15 @@ export class MastraFactory {
     const auth = this.#config.auth;
 
     // Seed the registry FIRST: the readiness checks below reach the app DB
-    // through `getAppDatabaseUrl()` and gate on the active auth adapter via
-    // `isWebAuthEnabled()`.
-    seedRuntimeConfig({ databaseUrl: database, publicUrl: publicOrigin, authAdapter: auth });
+    // through `getAppDatabaseUrl()`, gate on the active auth adapter via
+    // `isWebAuthEnabled()`, and probe the sandbox provider via
+    // `isSandboxEnabled()`.
+    seedRuntimeConfig({
+      databaseUrl: database,
+      publicUrl: publicOrigin,
+      authAdapter: auth,
+      sandbox: this.#config.sandbox,
+    });
 
     // One-time adapter initialization with factory-level context (e.g.
     // better-auth builds its default instance on the app database). Failures

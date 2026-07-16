@@ -2,7 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { WebAuthAdapter, WebAuthAdapterInitContext } from './auth-adapter.js';
 import { MastraFactory } from './factory-entry.js';
-import { __resetRuntimeConfigForTests, getAppDatabaseUrl, getSeededAuthAdapter } from './runtime-config.js';
+import {
+  __resetRuntimeConfigForTests,
+  getAppDatabaseUrl,
+  getSeededAuthAdapter,
+  getSeededSandboxProvider,
+} from './runtime-config.js';
+import { LocalSandboxProvider } from './sandbox-local-provider.js';
 
 /**
  * `MastraFactory.prepare()` wiring: explicit config flows through to the SDK
@@ -58,9 +64,16 @@ describe('MastraFactory.prepare', () => {
 
   it('seeds the runtime-config registry with the explicit config', async () => {
     const auth = fakeAdapter();
-    await prepareFactory({ database: 'postgres://cfg/app', auth });
+    const sandbox = new LocalSandboxProvider({ root: '/tmp/mc-factory-test' });
+    await prepareFactory({ database: 'postgres://cfg/app', auth, sandbox });
     expect(getAppDatabaseUrl()).toBe('postgres://cfg/app');
     expect(getSeededAuthAdapter()).toBe(auth);
+    expect(getSeededSandboxProvider()).toBe(sandbox);
+  });
+
+  it('leaves the sandbox provider unset when the slot is omitted', async () => {
+    await prepareFactory({});
+    expect(getSeededSandboxProvider()).toBeUndefined();
   });
 
   it('maps database onto the pg storage config for the SDK mount', async () => {
