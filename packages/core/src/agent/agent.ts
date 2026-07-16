@@ -6300,30 +6300,6 @@ export class Agent<
   }
 
   /**
-   * Lazily build (and cache) an ephemeral in-memory Mastra. A `new Agent(...)`
-   * that isn't wired into a Mastra still needs *some* storage for internal
-   * snapshot lookups (agentic-loop resume, suspended-run discovery). Reused
-   * for every subsequent call on this agent; `__registerMastra(real)` clears
-   * it.
-   */
-  async #getOrCreateEphemeralMastra(): Promise<Mastra> {
-    if (this.#ephemeralMastra) {
-      return this.#ephemeralMastra;
-    }
-    const ephemeral = new MastraClass({
-      logger: false,
-      storage: new InMemoryStore(),
-      pubsub: new EventEmitterPubSub(),
-      // Skip module-level scorer-hook registration: the hook can never resolve
-      // a scorer on this registry-less instance, and it would pin the whole
-      // ephemeral graph against GC for the process lifetime (#19404).
-      __ephemeral: true,
-    });
-    this.#ephemeralMastra = ephemeral;
-    return ephemeral;
-  }
-
-  /**
    * Loads the agentic-loop workflow snapshot for resume, or throws an actionable error.
    * Used by resumeStream and resumeGenerate to fail fast at the agent boundary.
    * @internal
@@ -6612,6 +6588,12 @@ export class Agent<
     if (this.#ephemeralMastra) {
       return this.#ephemeralMastra;
     }
+    // Resolve the Mastra constructor without a static `agent → mastra` runtime
+    // edge (see the type-only import at the top of this file). In any app that
+    // constructed a Mastra, the holder is already populated and no dynamic
+    // import runs; the `await import` is a fallback for standalone agents that
+    // never loaded the Mastra module.
+    const MastraClass = mastraCtorHolder.ctor ?? (await import('../mastra')).Mastra;
     const ephemeral = new MastraClass({
       logger: false,
       storage: new InMemoryStore(),
