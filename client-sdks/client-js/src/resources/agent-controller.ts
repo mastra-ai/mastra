@@ -1,5 +1,7 @@
-import type { ClientOptions } from '../types';
+import type { RequestContext } from '@mastra/core/request-context';
 
+import type { ClientOptions } from '../types';
+import { parseClientRequestContext } from '../utils';
 import { BaseResource } from './base';
 
 /**
@@ -333,6 +335,16 @@ export interface PlanResume {
   feedback?: string;
 }
 
+/**
+ * Options accepted by session methods that trigger or resume agent execution.
+ * The `requestContext` is merged into the server-derived request context for
+ * that run (server-controlled keys win), so it reaches dynamic instructions,
+ * tools, and workspace resolution — mirroring `agent.generate()`.
+ */
+export interface AgentControllerRequestOptions {
+  requestContext?: RequestContext | Record<string, any>;
+}
+
 /** Options for subscribing to an agent controller session's event stream. */
 export interface SubscribeAgentControllerSessionOptions {
   /** Called for each event received over the stream. */
@@ -450,14 +462,21 @@ export class AgentControllerSession extends BaseResource {
    * Send a user message. The reply streams over `subscribe()`.
    * Pass a structured message to attach files (e.g. pasted images) as base64-encoded data:
    * `sendMessage({ content: 'What is in this image?', files })`.
+   * Pass `options.requestContext` to merge custom context into the run's request context.
    */
   async sendMessage(
     message: string | { content: string; files?: Array<{ data: string; mediaType: string; filename?: string }> },
+    options?: AgentControllerRequestOptions,
   ): Promise<void> {
     const { content, files } = typeof message === 'string' ? { content: message, files: undefined } : message;
+    const requestContext = parseClientRequestContext(options?.requestContext);
     await this.request(this.url(`${this.base()}/messages`), {
       method: 'POST',
-      body: { message: content, ...(files?.length ? { files } : {}) },
+      body: {
+        message: content,
+        ...(files?.length ? { files } : {}),
+        ...(requestContext ? { requestContext } : {}),
+      },
     });
   }
 
@@ -467,10 +486,11 @@ export class AgentControllerSession extends BaseResource {
   }
 
   /** Approve or decline a pending tool call (`tool_approval_required`). */
-  async approveTool(toolCallId: string, approved: boolean): Promise<void> {
+  async approveTool(toolCallId: string, approved: boolean, options?: AgentControllerRequestOptions): Promise<void> {
+    const requestContext = parseClientRequestContext(options?.requestContext);
     await this.request(this.url(`${this.base()}/tool-approval`), {
       method: 'POST',
-      body: { toolCallId, approved },
+      body: { toolCallId, approved, ...(requestContext ? { requestContext } : {}) },
     });
   }
 
@@ -479,16 +499,25 @@ export class AgentControllerSession extends BaseResource {
    * depends on the tool: a string (or string[]) for `ask_user`, "Yes"/"No" for
    * `request_access`, and a {@link PlanResume} for `submit_plan`.
    */
-  async respondToToolSuspension(toolCallId: string, resumeData: string | string[] | PlanResume): Promise<void> {
+  async respondToToolSuspension(
+    toolCallId: string,
+    resumeData: string | string[] | PlanResume,
+    options?: AgentControllerRequestOptions,
+  ): Promise<void> {
+    const requestContext = parseClientRequestContext(options?.requestContext);
     await this.request(this.url(`${this.base()}/tool-suspension`), {
       method: 'POST',
-      body: { toolCallId, resumeData },
+      body: { toolCallId, resumeData, ...(requestContext ? { requestContext } : {}) },
     });
   }
 
   /** Inject a message into the in-flight run without starting a new turn. */
-  async steer(message: string): Promise<void> {
-    await this.request(this.url(`${this.base()}/steer`), { method: 'POST', body: { message } });
+  async steer(message: string, options?: AgentControllerRequestOptions): Promise<void> {
+    const requestContext = parseClientRequestContext(options?.requestContext);
+    await this.request(this.url(`${this.base()}/steer`), {
+      method: 'POST',
+      body: { message, ...(requestContext ? { requestContext } : {}) },
+    });
   }
 
   /** Get the current mode, model, and thread (for initial UI hydration). */
@@ -584,8 +613,12 @@ export class AgentControllerSession extends BaseResource {
    * Queue a follow-up message. If the session is idle it sends immediately;
    * if a run is active it queues for after completion.
    */
-  async followUp(message: string): Promise<void> {
-    await this.request(this.url(`${this.base()}/follow-up`), { method: 'POST', body: { message } });
+  async followUp(message: string, options?: AgentControllerRequestOptions): Promise<void> {
+    const requestContext = parseClientRequestContext(options?.requestContext);
+    await this.request(this.url(`${this.base()}/follow-up`), {
+      method: 'POST',
+      body: { message, ...(requestContext ? { requestContext } : {}) },
+    });
   }
 
   /** Get the observational memory record for this session's thread. */
