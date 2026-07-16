@@ -361,6 +361,7 @@
     "google/gemini-3.1-pro-preview-high",
     "google/gemini-3.1-pro-preview-low",
     "google/gemini-3.5-flash",
+    "google/gemini-flash-latest",
     "google/gemini-flash-lite-latest",
     "google/gemini-pro-latest",
     "google/gemma-4-26b-a4b-it",
