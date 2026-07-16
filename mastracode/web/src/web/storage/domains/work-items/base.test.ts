@@ -6,7 +6,7 @@
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it } from 'vitest';
 
-import { WorkItemsStorage } from './base';
+import { WorkItemRelationError, WorkItemsStorage } from './base';
 
 const input = {
   externalSource: {
@@ -88,5 +88,62 @@ describe('WorkItemsStorage', () => {
     const deleted = await storage.delete({ orgId: 'org1', id: a.item.id });
     expect(deleted?.id).toBe(a.item.id);
     expect(await storage.delete({ orgId: 'org1', id: a.item.id })).toBeNull();
+  });
+
+  it('validates parent relationships within a project and prevents cycles', async () => {
+    const storage = await makeStorage();
+    const parent = await storage.upsert({ orgId: 'org1', userId: 'u', factoryProjectId: 'p1', input });
+    const child = await storage.upsert({
+      orgId: 'org1',
+      userId: 'u',
+      factoryProjectId: 'p1',
+      input: {
+        ...input,
+        externalSource: { integrationId: 'github', type: 'pull-request', externalId: '42' },
+        parentWorkItemId: parent.item.id,
+      },
+    });
+
+    expect(child.item.parentWorkItemId).toBe(parent.item.id);
+    await expect(
+      storage.update({
+        orgId: 'org1',
+        id: parent.item.id,
+        userId: 'u',
+        patch: { parentWorkItemId: child.item.id },
+      }),
+    ).rejects.toBeInstanceOf(WorkItemRelationError);
+    await expect(
+      storage.upsert({
+        orgId: 'org1',
+        userId: 'u',
+        factoryProjectId: 'p2',
+        input: {
+          ...input,
+          externalSource: { integrationId: 'github', type: 'pull-request', externalId: '43' },
+          parentWorkItemId: parent.item.id,
+        },
+      }),
+    ).rejects.toBeInstanceOf(WorkItemRelationError);
+  });
+
+  it('clears child relationships when deleting a parent', async () => {
+    const storage = await makeStorage();
+    const parent = await storage.upsert({ orgId: 'org1', userId: 'u', factoryProjectId: 'p1', input });
+    const child = await storage.upsert({
+      orgId: 'org1',
+      userId: 'u',
+      factoryProjectId: 'p1',
+      input: {
+        ...input,
+        externalSource: { integrationId: 'github', type: 'pull-request', externalId: '42' },
+        parentWorkItemId: parent.item.id,
+      },
+    });
+
+    await storage.delete({ orgId: 'org1', id: parent.item.id });
+
+    const items = await storage.list({ orgId: 'org1', factoryProjectId: 'p1' });
+    expect(items.find(item => item.id === child.item.id)?.parentWorkItemId).toBeNull();
   });
 });

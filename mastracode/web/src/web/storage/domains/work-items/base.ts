@@ -46,6 +46,7 @@ export interface WorkItemRow {
   orgId: string;
   factoryProjectId: string;
   externalSource: ExternalWorkItemSource | null;
+  parentWorkItemId: string | null;
   title: string;
   stages: WorkItemStage[];
   stageHistory: WorkItemStageEntry[];
@@ -58,6 +59,7 @@ export interface WorkItemRow {
 
 export interface CreateWorkItemInput {
   externalSource?: ExternalWorkItemSource | null;
+  parentWorkItemId?: string | null;
   title: string;
   stages?: WorkItemStage[];
   sessions?: Record<string, WorkItemSessionInput>;
@@ -65,6 +67,7 @@ export interface CreateWorkItemInput {
 }
 
 export interface UpdateWorkItemInput {
+  parentWorkItemId?: string | null;
   title?: string;
   stages?: WorkItemStage[];
   sessions?: Record<string, WorkItemSessionInput>;
@@ -90,6 +93,7 @@ export const WORK_ITEMS_SCHEMA: CollectionSchema = {
     factory_project_id: { type: 'text' },
     external_source: { type: 'json', nullable: true },
     source_key: { type: 'text', nullable: true },
+    parent_work_item_id: { type: 'text', nullable: true },
     title: { type: 'text' },
     stages: { type: 'json' },
     stage_history: { type: 'json' },
@@ -110,6 +114,10 @@ export const WORK_ITEMS_SCHEMA: CollectionSchema = {
       name: 'work_items_org_project_updated_at_idx',
       columns: ['org_id', 'factory_project_id', 'updated_at'],
     },
+    {
+      name: 'work_items_project_parent_idx',
+      columns: ['org_id', 'factory_project_id', 'parent_work_item_id'],
+    },
   ],
 };
 
@@ -119,6 +127,7 @@ interface WorkItemDbRow extends Record<string, unknown> {
   factory_project_id: string;
   external_source: ExternalWorkItemSource | null;
   source_key: string | null;
+  parent_work_item_id: string | null;
   title: string;
   stages: WorkItemStage[];
   stage_history: WorkItemStageEntry[];
@@ -139,6 +148,7 @@ function toWorkItem(row: WorkItemDbRow): WorkItemRow {
     orgId: row.org_id,
     factoryProjectId: row.factory_project_id,
     externalSource: row.external_source,
+    parentWorkItemId: row.parent_work_item_id,
     title: row.title,
     stages: row.stages,
     stageHistory: row.stage_history,
@@ -156,6 +166,33 @@ function emptyPrior(): WorkItemPriorState {
 
 function priorState(row: WorkItemDbRow): WorkItemPriorState {
   return { stages: row.stages, sessionRoles: Object.keys(row.sessions) };
+}
+
+export class WorkItemRelationError extends Error {
+  readonly code = 'invalid_work_item_relation';
+}
+
+export function validateParentRelation(
+  projectItems: WorkItemRow[],
+  itemId: string | undefined,
+  parentWorkItemId: string | null,
+): void {
+  if (parentWorkItemId === null) return;
+  const byId = new Map(projectItems.map(item => [item.id, item]));
+  const parent = byId.get(parentWorkItemId);
+  if (!parent) throw new WorkItemRelationError('Related work item not found in this project.');
+  if (itemId === parentWorkItemId) throw new WorkItemRelationError('A work item cannot relate to itself.');
+
+  const visited = new Set<string>();
+  let cursor: WorkItemRow | undefined = parent;
+  while (cursor?.parentWorkItemId) {
+    if (cursor.parentWorkItemId === itemId) {
+      throw new WorkItemRelationError('This relationship would create a cycle.');
+    }
+    if (visited.has(cursor.id)) throw new WorkItemRelationError('The related work item chain contains a cycle.');
+    visited.add(cursor.id);
+    cursor = byId.get(cursor.parentWorkItemId);
+  }
 }
 
 export function applyStageTransition(
@@ -198,6 +235,7 @@ function applyUpdate({
 }): Partial<WorkItemDbRow> {
   const now = new Date();
   return {
+    ...(input.parentWorkItemId !== undefined ? { parent_work_item_id: input.parentWorkItemId } : {}),
     ...(input.title !== undefined ? { title: input.title } : {}),
     ...(input.stages !== undefined
       ? {
@@ -264,11 +302,19 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       const updated = await this.#db.updateAtomic<WorkItemDbRow>(
         'work_items',
         { org_id: orgId, factory_project_id: factoryProjectId, source_key: key },
-        current => {
+        async current => {
           previous = priorState(current);
+          const patch = input.parentWorkItemId === null ? { ...input, parentWorkItemId: undefined } : input;
+          if (patch.parentWorkItemId !== undefined) {
+            validateParentRelation(
+              await this.list({ orgId, factoryProjectId }),
+              current.id,
+              patch.parentWorkItemId,
+            );
+          }
           return {
             external_source: input.externalSource ?? null,
-            ...applyUpdate({ current, userId, input }),
+            ...applyUpdate({ current, userId, input: patch }),
           };
         },
       );
@@ -281,11 +327,17 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     const now = new Date();
     const stages = input.stages ?? ['intake'];
     try {
+      validateParentRelation(
+        await this.list({ orgId, factoryProjectId }),
+        undefined,
+        input.parentWorkItemId ?? null,
+      );
       const row = await this.#db.insertOne<WorkItemDbRow>('work_items', {
         org_id: orgId,
         factory_project_id: factoryProjectId,
         external_source: input.externalSource ?? null,
         source_key: key,
+        parent_work_item_id: input.parentWorkItemId ?? null,
         title: input.title,
         stages,
         stage_history: stages.map(stage => ({ stage, enteredAt: now.toISOString(), by: userId })),
@@ -316,8 +368,15 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     patch: UpdateWorkItemInput;
   }): Promise<{ item: WorkItemRow; previous: WorkItemPriorState } | null> {
     let previous = emptyPrior();
-    const row = await this.#db.updateAtomic<WorkItemDbRow>('work_items', { org_id: orgId, id }, current => {
+    const row = await this.#db.updateAtomic<WorkItemDbRow>('work_items', { org_id: orgId, id }, async current => {
       previous = priorState(current);
+      if (patch.parentWorkItemId !== undefined) {
+        validateParentRelation(
+          await this.list({ orgId, factoryProjectId: current.factory_project_id }),
+          current.id,
+          patch.parentWorkItemId,
+        );
+      }
       return applyUpdate({ current, userId, input: patch });
     });
     return row ? { item: toWorkItem(row), previous } : null;
@@ -327,6 +386,12 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     const existing = await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: orgId, id });
     if (!existing) return null;
     const deleted = await this.#db.deleteMany('work_items', { org_id: orgId, id });
-    return deleted > 0 ? toWorkItem(existing) : null;
+    if (deleted === 0) return null;
+    await this.#db.updateMany(
+      'work_items',
+      { org_id: orgId, parent_work_item_id: id },
+      { parent_work_item_id: null, updated_at: new Date() },
+    );
+    return toWorkItem(existing);
   }
 }

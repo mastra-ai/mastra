@@ -222,6 +222,7 @@ function makeWorkItem(overrides: Partial<WorkItem> & Pick<WorkItem, 'id' | 'titl
     githubProjectId: FACTORY_PROJECT_ID,
     source: 'manual',
     sourceKey: null,
+    parentWorkItemId: null,
     url: null,
     stages: ['intake'],
     stageHistory: [],

@@ -307,6 +307,106 @@ describe('DELETE /web/factory/work-items/:id', () => {
   });
 });
 
+// ── Related Work / Review items ──────────────────────────────────────────
+describe('work item relations', () => {
+  const create = async (externalId: string, overrides: Record<string, unknown> = {}) => {
+    const response = await json(
+      'POST',
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      createBody({
+        externalSource: { integrationId: 'github', type: 'issue', externalId },
+        ...overrides,
+      }),
+    );
+    return { response, body: await response.json() };
+  };
+
+  it('creates separate related items and preserves the relation on source-key reuse', async () => {
+    const { body: parent } = await create('parent');
+    const { body: child } = await create('child', {
+      externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'child' },
+      parentWorkItemId: parent.workItem.id,
+    });
+
+    expect(child.workItem.parentWorkItemId).toBe(parent.workItem.id);
+
+    const { body: repeated } = await create('child', {
+      externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'child' },
+      parentWorkItemId: null,
+      title: 'Updated review title',
+    });
+    expect(repeated.workItem).toMatchObject({
+      id: child.workItem.id,
+      parentWorkItemId: parent.workItem.id,
+      title: 'Updated review title',
+    });
+  });
+
+  it('attaches a parent when a repeated source-key upsert supplies one', async () => {
+    const { body: parent } = await create('late-parent');
+    const pullRequestSource = { integrationId: 'github', type: 'pull-request', externalId: 'late-child' };
+    const { body: existing } = await create('late-child', { externalSource: pullRequestSource });
+    const { body: related } = await create('late-child', {
+      externalSource: pullRequestSource,
+      parentWorkItemId: parent.workItem.id,
+    });
+
+    expect(related.workItem).toMatchObject({ id: existing.workItem.id, parentWorkItemId: parent.workItem.id });
+  });
+
+  it('rejects missing, cross-project, self, and cyclic relations', async () => {
+    const missing = await create('missing', {
+      parentWorkItemId: '00000000-0000-4000-8000-000000000099',
+    });
+    expect(missing.response.status).toBe(400);
+
+    const otherProject = await seed.projects.create({
+      orgId: 'org1',
+      userId: 'u1',
+      input: { name: 'Other project' },
+    });
+    const otherParentResponse = await json(
+      'POST',
+      `/web/factory/projects/${otherProject.id}/work-items`,
+      createBody({
+        externalSource: { integrationId: 'github', type: 'issue', externalId: 'other-project' },
+      }),
+    );
+    const otherParent = (await otherParentResponse.json()).workItem;
+    const crossProject = await create('cross-project', { parentWorkItemId: otherParent.id });
+    expect(crossProject.response.status).toBe(400);
+
+    const { body: first } = await create('first');
+    const { body: second } = await create('second', { parentWorkItemId: first.workItem.id });
+    expect(
+      (
+        await json('PATCH', `/web/factory/work-items/${first.workItem.id}`, {
+          parentWorkItemId: first.workItem.id,
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await json('PATCH', `/web/factory/work-items/${first.workItem.id}`, {
+          parentWorkItemId: second.workItem.id,
+        })
+      ).status,
+    ).toBe(400);
+  });
+
+  it('clears a relation explicitly and when the parent is deleted', async () => {
+    const { body: parent } = await create('delete-parent');
+    const { body: child } = await create('delete-child', { parentWorkItemId: parent.workItem.id });
+
+    const cleared = await json('PATCH', `/web/factory/work-items/${child.workItem.id}`, { parentWorkItemId: null });
+    expect((await cleared.json()).workItem.parentWorkItemId).toBeNull();
+
+    await json('PATCH', `/web/factory/work-items/${child.workItem.id}`, { parentWorkItemId: parent.workItem.id });
+    expect((await json('DELETE', `/web/factory/work-items/${parent.workItem.id}`)).status).toBe(200);
+    expect((await listItems())[0]?.parentWorkItemId).toBeNull();
+  });
+});
+
 // ── Metrics ──────────────────────────────────────────────────────────────
 describe('GET /web/factory/projects/:id/metrics', () => {
   it('401s without a user and 404s for projects outside the org', async () => {

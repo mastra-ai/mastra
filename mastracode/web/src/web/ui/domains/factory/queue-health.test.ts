@@ -19,6 +19,7 @@ function makeItem(overrides: Partial<QueueHealthWorkItem> = {}): QueueHealthWork
     githubProjectId: 'proj1',
     source: 'github-issue',
     sourceKey: null,
+    parentWorkItemId: null,
     title: `Item ${nextId}`,
     url: null,
     stages: ['intake'],

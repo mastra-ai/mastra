@@ -4,6 +4,7 @@
 
 import { getFactoryStorage } from '../runtime-config';
 import { getWorkItemsStorage } from '../storage/domains';
+import { WorkItemRelationError } from '../storage/domains/work-items/base';
 import type {
   CreateWorkItemInput,
   ExternalWorkItemSource,
@@ -16,6 +17,7 @@ import type {
   WorkItemStage,
 } from '../storage/domains/work-items/base';
 
+export { WorkItemRelationError };
 export type {
   CreateWorkItemInput,
   ExternalWorkItemSource,
@@ -68,6 +70,14 @@ function parseExternalSource(value: unknown): ExternalWorkItemSource | null | un
   return { integrationId, type, externalId, ...(url !== undefined ? { url } : {}) };
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function parseParentWorkItemId(value: unknown): string | null | undefined {
+  if (value === null) return null;
+  if (typeof value !== 'string' || !UUID_RE.test(value)) return undefined;
+  return value;
+}
+
 function parseSessions(value: unknown): Record<string, WorkItemSessionInput> | undefined {
   if (!isRecord(value)) return undefined;
   const out: Record<string, WorkItemSessionInput> = {};
@@ -88,6 +98,9 @@ export function parseCreateWorkItem(body: unknown): CreateWorkItemInput | null {
   const { externalSource, title, stages, sessions, metadata } = body;
   if (typeof title !== 'string' || title.trim().length === 0 || title.length > 500) return null;
 
+  const hasParentWorkItemId = 'parentWorkItemId' in body;
+  const parentWorkItemId = hasParentWorkItemId ? parseParentWorkItemId(body.parentWorkItemId) : undefined;
+  if (hasParentWorkItemId && parentWorkItemId === undefined) return null;
   const parsedSource = parseExternalSource(externalSource);
   if (externalSource !== undefined && parsedSource === undefined) return null;
   if (stages !== undefined && !validStages(stages)) return null;
@@ -98,6 +111,7 @@ export function parseCreateWorkItem(body: unknown): CreateWorkItemInput | null {
   return {
     title: title.trim(),
     ...(parsedSource !== undefined ? { externalSource: parsedSource } : {}),
+    ...(hasParentWorkItemId ? { parentWorkItemId: parentWorkItemId ?? null } : {}),
     ...(stages !== undefined ? { stages } : {}),
     ...(parsedSessions !== undefined ? { sessions: parsedSessions } : {}),
     ...(metadata !== undefined ? { metadata } : {}),
@@ -108,7 +122,11 @@ export function parseCreateWorkItem(body: unknown): CreateWorkItemInput | null {
 export function parseUpdateWorkItem(body: unknown): UpdateWorkItemInput | null {
   if (!isRecord(body)) return null;
   const { title, stages, sessions, metadata } = body;
-  if (title === undefined && stages === undefined && sessions === undefined && metadata === undefined) return null;
+  const hasParentWorkItemId = 'parentWorkItemId' in body;
+  if (title === undefined && stages === undefined && sessions === undefined && metadata === undefined && !hasParentWorkItemId)
+    return null;
+  const parentWorkItemId = hasParentWorkItemId ? parseParentWorkItemId(body.parentWorkItemId) : undefined;
+  if (hasParentWorkItemId && parentWorkItemId === undefined) return null;
   if (title !== undefined && (typeof title !== 'string' || title.trim().length === 0 || title.length > 500))
     return null;
   if (stages !== undefined && !validStages(stages)) return null;
@@ -117,6 +135,7 @@ export function parseUpdateWorkItem(body: unknown): UpdateWorkItemInput | null {
   if (metadata !== undefined && !validMetadata(metadata)) return null;
 
   return {
+    ...(hasParentWorkItemId ? { parentWorkItemId: parentWorkItemId ?? null } : {}),
     ...(title !== undefined ? { title: title.trim() } : {}),
     ...(stages !== undefined ? { stages } : {}),
     ...(parsedSessions !== undefined ? { sessions: parsedSessions } : {}),
