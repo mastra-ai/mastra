@@ -26,7 +26,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "better-auth": "^1.5.5"
+    "better-auth": "^1.6.13"
   },
   "peerDependencies": {
     "hono": "^4.0.0"
