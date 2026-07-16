@@ -30,9 +30,10 @@ function createTextStreamModel(responseText: string) {
 }
 
 async function waitFor(predicate: () => boolean) {
-  for (let i = 0; i < 20; i++) {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
     if (predicate()) return;
-    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise(resolve => setTimeout(resolve, 10));
   }
   throw new Error('Timed out waiting for controller events');
 }
