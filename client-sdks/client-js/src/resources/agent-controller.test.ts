@@ -278,6 +278,24 @@ describe('AgentController Resource', () => {
     expect(received).toEqual([event]);
   });
 
+  it('parses CRLF-delimited SSE frames', async () => {
+    const event = { type: 'agent_start' };
+    mockSse([`data: ${JSON.stringify(event)}\r\n\r\n`]);
+
+    const received: AgentControllerEvent[] = [];
+    const sub = await client
+      .getAgentController('code')
+      .session('user-1')
+      .subscribe({
+        onEvent: e => received.push(e),
+      });
+
+    await new Promise(r => setTimeout(r, 10));
+    sub.unsubscribe();
+
+    expect(received).toEqual([event]);
+  });
+
   it('calls onError when the stream ends without reconnect enabled', async () => {
     mockSse([`data: ${JSON.stringify({ type: 'agent_start' })}\n\n`]);
 
@@ -377,16 +395,7 @@ describe('AgentController Resource', () => {
 
   it('does not reconnect after unsubscribe', async () => {
     const firstEvent = { type: 'agent_start' };
-    (global.fetch as any).mockResolvedValueOnce(
-      new Response(
-        new ReadableStream({
-          start(controller) {
-            controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(firstEvent)}\n\n`));
-          },
-        }),
-        { status: 200, headers: new Headers({ 'Content-Type': 'text/event-stream' }) },
-      ),
-    );
+    (global.fetch as any).mockResolvedValueOnce(sseResponse([`data: ${JSON.stringify(firstEvent)}\n\n`]));
 
     const sub = await client
       .getAgentController('code')
@@ -400,6 +409,36 @@ describe('AgentController Resource', () => {
     sub.unsubscribe();
     await new Promise(r => setTimeout(r, 250));
 
+    expect((global.fetch as any).mock.calls).toHaveLength(1);
+  });
+
+  it('calls onError with the stream read failure when reconnect is exhausted', async () => {
+    const readError = new Error('stream read failed');
+    (global.fetch as any).mockResolvedValueOnce(
+      new Response(
+        new ReadableStream({
+          pull() {
+            throw readError;
+          },
+        }),
+        { status: 200, headers: new Headers({ 'Content-Type': 'text/event-stream' }) },
+      ),
+    );
+
+    const onError = vi.fn();
+    const sub = await client
+      .getAgentController('code')
+      .session('user-1')
+      .subscribe({
+        onEvent: () => {},
+        onError,
+        reconnect: { maxRetries: 0, delayMs: 0 },
+      });
+
+    await new Promise(r => setTimeout(r, 50));
+    sub.unsubscribe();
+
+    expect(onError).toHaveBeenCalledWith(readError);
     expect((global.fetch as any).mock.calls).toHaveLength(1);
   });
 
