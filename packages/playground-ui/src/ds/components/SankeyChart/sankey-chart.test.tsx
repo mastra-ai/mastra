@@ -107,14 +107,40 @@ describe('SankeyChart', () => {
     const chartLabels = [...container.querySelectorAll('svg text')].map(element => element.textContent);
 
     expect(chartLabels).toEqual(expect.arrayContaining(['Channel', 'Region', 'Outcome']));
+    const channelLabel = [...container.querySelectorAll('svg text')].find(element => element.textContent === 'Channel');
+    const outcomeLabel = [...container.querySelectorAll('svg text')].find(element => element.textContent === 'Outcome');
+    expect(channelLabel?.getAttribute('text-anchor')).toBe('start');
+    expect(outcomeLabel?.getAttribute('text-anchor')).toBe('end');
     const node = container.querySelector('svg rect[rx="3"]');
+    expect(node?.getAttribute('x')).toBe('120');
     expect(node?.getAttribute('width')).toBe('7');
+    expect(channelLabel?.getAttribute('x')).toBe('128');
     const searchLabel = [...container.querySelectorAll('svg text')].find(element => element.textContent === 'Search');
     expect(searchLabel?.getAttribute('font-size')).toBe('12.5');
     expect(searchLabel?.getAttribute('paint-order')).toBe('stroke');
     const lostLabel = [...container.querySelectorAll('svg text')].find(element => element.textContent === 'Lost');
     expect(lostLabel?.getAttribute('text-anchor')).toBe('end');
     expect(container.querySelector('svg text[font-size="10.5"]')).not.toBeNull();
+  });
+
+  it('shows each node count with its percentage of the column total', async () => {
+    render(<Example />);
+
+    expect(await screen.findAllByText('3 (75%)')).toHaveLength(2);
+    expect(screen.getAllByText('2 (50%)')).toHaveLength(2);
+    expect(screen.getAllByText('1 (25%)')).toHaveLength(2);
+  });
+
+  it('uses caller-provided chart margins', async () => {
+    const { container } = render(
+      <Sankey data={data} columns={columns}>
+        <SankeyChart margin={{ top: 40, right: 24, bottom: 12, left: 24 }} />
+      </Sankey>,
+    );
+
+    await screen.findByText('Search');
+
+    expect(container.querySelector('svg rect[rx="3"]')?.getAttribute('x')).toBe('24');
   });
 
   it('uses one repelled hue map for colored nodes and gradient ribbon links', async () => {

@@ -12,11 +12,7 @@ describe('SignalsOverviewPage', () => {
     it('explains the ordered trace analysis pipeline and its four signal dimensions', () => {
       render(<SignalsOverviewPage />);
 
-      expect(screen.getByText('SIGNALS')).not.toBeNull();
       expect(screen.getByRole('heading', { name: 'Understand what drives every agent interaction' })).not.toBeNull();
-      expect(
-        screen.getByText(/Mastra observes your traces, groups recurring patterns, and turns them into signals/),
-      ).not.toBeNull();
 
       const pipeline = screen.getByRole('list', { name: 'Signals analysis pipeline' });
       const stageHeadings = within(pipeline)
@@ -43,14 +39,25 @@ describe('SignalsOverviewPage', () => {
       }
     });
 
+    it('defines each supported signal in plain language', () => {
+      render(<SignalsOverviewPage />);
+
+      const definitions = screen.getByRole('list', { name: 'Signal definitions' });
+      expect(within(definitions).getByText(/what the user is trying to achieve or have completed/i)).not.toBeNull();
+      expect(within(definitions).getByText(/the user's emotional state or attitude/i)).not.toBeNull();
+      expect(
+        within(definitions).getByText(
+          /observable actions and patterns, including tool use, omissions, retries, failures, and recovery/i,
+        ),
+      ).not.toBeNull();
+      expect(within(definitions).getByText(/the final completed, unresolved, or blocked state/i)).not.toBeNull();
+    });
+
     it('previews grouped relationships and offers persistent activation actions', () => {
       render(<SignalsOverviewPage />);
 
       expect(screen.getByText(/grouped trace relationships will appear here/i)).not.toBeNull();
       expect(screen.getByText('Waiting for traces.')).not.toBeNull();
-      expect(
-        screen.getByText(/Signals activate automatically once your agents start receiving traffic/),
-      ).not.toBeNull();
 
       const docsLink = screen.getByRole('link', { name: 'Read the docs' });
       expect(docsLink.getAttribute('href')).toBe('https://mastra.ai/en/docs/observability/tracing/overview');

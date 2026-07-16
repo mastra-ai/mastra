@@ -9,6 +9,7 @@ import { SankeySignals } from '../sankey-signals';
 import { themeFlowToSankeyData } from '../sankey-signals-data';
 import {
   emptyThemeSnapshotsResponse,
+  fourStageThemeFlowResponse,
   singleStageThemeFlowResponse,
   themeFlowResponse,
   themeSnapshotsResponse,
@@ -21,7 +22,7 @@ function renderSankeySignals() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <SankeySignals entityId="support-agent" signalNames={['goal', 'outcome']} />
+      <SankeySignals entityId="support-agent" signalNames={['goal', 'sentiment', 'behavior', 'outcome']} />
     </QueryClientProvider>,
   );
 }
@@ -71,6 +72,20 @@ describe('SankeySignals', () => {
     });
   });
 
+  describe('when the snapshot request fails', () => {
+    it('shows the signal flow error state', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json({ error: 'Snapshot unavailable' }, { status: 500 }),
+        ),
+      );
+
+      renderSankeySignals();
+
+      expect(await screen.findByText('Unable to load signal flow.')).not.toBeNull();
+    });
+  });
+
   describe('when no theme snapshot exists', () => {
     it('shows the Signals onboarding empty state', async () => {
       server.use(
@@ -103,6 +118,35 @@ describe('SankeySignals', () => {
       expect(
         await screen.findByRole('heading', { name: 'Understand what drives every agent interaction' }),
       ).not.toBeNull();
+    });
+  });
+
+  describe('when a snapshot contains four populated signal stages', () => {
+    beforeEach(() => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(themeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
+          HttpResponse.json(fourStageThemeFlowResponse),
+        ),
+      );
+    });
+
+    it('labels the Sankey analysis', async () => {
+      renderSankeySignals();
+
+      expect(
+        await screen.findByRole('heading', { name: 'Understand what drives every agent interaction' }),
+      ).not.toBeNull();
+    });
+
+    it('renders the API-defined signal order without filtering or reordering controls', async () => {
+      renderSankeySignals();
+
+      expect(await screen.findByRole('region', { name: 'Signal theme flow' })).not.toBeNull();
+      expect(screen.queryByRole('checkbox')).toBeNull();
+      expect(screen.queryByRole('button', { name: /Reorder/ })).toBeNull();
     });
   });
 

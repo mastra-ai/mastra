@@ -40,9 +40,17 @@ export function SankeySignals({ entityId, entityType = 'agent', signalNames, hei
   const { columns, records } = themeFlowToSankeyData(flow);
 
   return (
-    <section aria-label="Signal theme flow">
+    <section aria-label="Signal theme flow" className="flex min-h-full min-w-0 flex-col gap-6 p-6">
+      <header>
+        <h1 className="text-header-xl font-medium tracking-tight text-neutral6">
+          Understand what drives every agent interaction
+        </h1>
+      </header>
+
       <Sankey data={records} columns={columns}>
-        <SankeyChart height={height} />
+        <div className="min-h-0 min-w-0 flex-1 w-full">
+          <SankeyChart height={height ?? 640} margin={{ top: 40, right: 0, bottom: 12, left: 0 }} />
+        </div>
       </Sankey>
     </section>
   );

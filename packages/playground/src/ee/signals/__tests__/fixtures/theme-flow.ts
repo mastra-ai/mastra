@@ -75,6 +75,68 @@ export const themeFlowResponse: ThemeFlowResponse = {
   ],
 };
 
+export const fourStageThemeFlowResponse: ThemeFlowResponse = {
+  snapshot: {
+    ...themeSnapshotsResponse.snapshots[0],
+    availableSignals: ['goal', 'sentiment', 'behavior', 'outcome'],
+  },
+  stages: [
+    themeFlowResponse.stages[0],
+    {
+      signalName: 'sentiment',
+      traceCount: 3,
+      nodes: [
+        {
+          nodeId: 'sentiment-frustrated',
+          kind: 'theme',
+          themeId: 'theme-sentiment-frustrated',
+          label: 'Frustrated user',
+          traceCount: 3,
+          stageShare: 1,
+        },
+      ],
+    },
+    {
+      signalName: 'behavior',
+      traceCount: 3,
+      nodes: [
+        {
+          nodeId: 'behavior-search',
+          kind: 'theme',
+          themeId: 'theme-behavior-search',
+          label: 'Search knowledge base',
+          traceCount: 3,
+          stageShare: 1,
+        },
+      ],
+    },
+    themeFlowResponse.stages[1],
+  ],
+  links: [
+    {
+      sourceNodeId: 'goal-support',
+      targetNodeId: 'sentiment-frustrated',
+      traceCount: 3,
+      sourceShare: 1,
+      targetShare: 1,
+    },
+    {
+      sourceNodeId: 'sentiment-frustrated',
+      targetNodeId: 'behavior-search',
+      traceCount: 3,
+      sourceShare: 1,
+      targetShare: 1,
+    },
+    {
+      sourceNodeId: 'behavior-search',
+      targetNodeId: 'outcome-resolved',
+      traceCount: 3,
+      sourceShare: 1,
+      targetShare: 1,
+    },
+  ],
+};
+
 export const singleStageThemeFlowResponse: ThemeFlowResponse = {
   ...themeFlowResponse,
   stages: themeFlowResponse.stages.slice(0, 1),

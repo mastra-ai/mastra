@@ -5,7 +5,17 @@ import { Button } from '../../../ds/components/Button';
 import { buildSankeyHueMap, nodeColorVivid } from '../../../ds/components/SankeyChart/sankeyColor';
 import type { LinkComponent } from '../../../ds/types/link-component';
 
-const signalLabels = ['Outcome', 'Goal', 'Behavior', 'Sentiment'];
+const signalDefinitions = [
+  { label: 'Goal', description: 'What the user is trying to achieve or have completed.' },
+  { label: 'Sentiment', description: "The user's emotional state or attitude." },
+  {
+    label: 'Behavior',
+    description:
+      "The entity's observable actions and patterns, including tool use, omissions, retries, failures, and recovery.",
+  },
+  { label: 'Outcome', description: 'The final completed, unresolved, or blocked state.' },
+];
+const signalLabels = signalDefinitions.map(signal => signal.label);
 const signalHues = buildSankeyHueMap(signalLabels);
 
 const traceRows = [
@@ -35,18 +45,9 @@ export const SignalsEmptyState = ({ actionSlot, LinkComponent = 'a' }: SignalsEm
     <section className="min-h-full w-full bg-surface1 p-6 md:px-10 lg:px-12 xl:px-[4.375rem]">
       <div className="max-w-260 mx-auto w-full">
         <header>
-          <div className="flex items-center gap-2 font-mono text-ui-xs font-medium tracking-[0.28em] text-warning1 uppercase">
-            <span aria-hidden="true" className="size-1.5 rounded-full bg-warning1 shadow-[0_0_8px_currentColor]" />
-            SIGNALS
-          </div>
-          <h1 className="mt-7 text-header-xl font-medium tracking-tight text-neutral6">
+          <h1 className="text-header-xl font-medium tracking-tight text-neutral6">
             Understand what drives every agent interaction
           </h1>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-neutral3">
-            Mastra observes your traces, groups recurring patterns, and turns them into signals—
-            <br className="hidden sm:block" />
-            so you can see what users are trying to do, where they struggle, and what succeeds.
-          </p>
         </header>
 
         <div
@@ -110,6 +111,22 @@ export const SignalsEmptyState = ({ actionSlot, LinkComponent = 'a' }: SignalsEm
             </div>
           </article>
         </div>
+
+        <section className="mt-10" aria-labelledby="signal-definitions-heading">
+          <h2 id="signal-definitions-heading" className="text-lg font-semibold text-neutral6">
+            What each signal means
+          </h2>
+          <div aria-label="Signal definitions" className="mt-4 grid gap-3 sm:grid-cols-2" role="list">
+            {signalDefinitions.map(signal => (
+              <article className="rounded-md border border-border1 bg-surface2 p-4" key={signal.label} role="listitem">
+                <h3 className="text-sm font-semibold" style={signalStyle(signal.label)}>
+                  {signal.label}
+                </h3>
+                <p className="mt-1.5 text-xs leading-5 text-neutral3">{signal.description}</p>
+              </article>
+            ))}
+          </div>
+        </section>
 
         <section className="mt-10" aria-label="Signal relationship preview">
           <p className="font-mono text-[0.5625rem] tracking-[0.2em] text-neutral2 uppercase">
