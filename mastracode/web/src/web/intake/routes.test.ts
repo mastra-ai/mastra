@@ -14,6 +14,27 @@ vi.mock('drizzle-orm', async () => {
 // In-memory intake_settings table.
 let settings: Array<Record<string, any>> = [];
 
+// Capture audit events at the store boundary so the real `emitAudit` path
+// (actor resolution, never-throws) is exercised end to end.
+let auditRecorded: Array<Record<string, any>> = [];
+let auditFailure: Error | undefined;
+
+vi.mock('../audit/store', () => ({
+  recordAuditEvent: async (input: any) => {
+    if (auditFailure) throw auditFailure;
+    auditRecorded.push(input);
+    return {
+      id: `00000000-0000-4000-9000-${String(auditRecorded.length).padStart(12, '0')}`,
+      occurredAt: new Date(),
+      ...input,
+      githubProjectId: input.githubProjectId ?? null,
+      metadata: input.metadata ?? {},
+      context: input.context ?? {},
+    };
+  },
+  listAuditEvents: async () => ({ events: [] }),
+}));
+
 function matches(table: any, row: any, cond: any): boolean {
   if (!cond) return true;
   if (cond.kind === 'and') return cond.conds.every((c: any) => matches(table, row, c));
@@ -65,6 +86,8 @@ const orgUser = { workosId: 'u1', organizationId: 'org1' };
 
 beforeEach(() => {
   settings = [];
+  auditRecorded = [];
+  auditFailure = undefined;
 });
 
 afterEach(() => {
@@ -149,6 +172,41 @@ describe('PUT /web/intake/config', () => {
       body: 'not-json',
     });
     expect(res.status).toBe(400);
+  });
+
+  it('records intake.config_updated with a bounded source summary', async () => {
+    await put({
+      github: { enabled: true, projectIds: ['gp-1', 'gp-2'] },
+      linear: { enabled: false, projectIds: null },
+    });
+    expect(auditRecorded).toHaveLength(1);
+    expect(auditRecorded[0]).toMatchObject({
+      orgId: 'org1',
+      actorId: 'u1',
+      action: 'factory.intake.config_updated',
+      targets: [{ type: 'intake_config', id: 'org1' }],
+      metadata: {
+        github: { enabled: true, projects: 2 },
+        linear: { enabled: false, projects: null },
+      },
+    });
+  });
+
+  it('does not record an audit event when the config is rejected', async () => {
+    await put({ github: { enabled: 'yes' }, linear: { enabled: true } });
+    expect(auditRecorded).toHaveLength(0);
+  });
+
+  it('still saves the config when the audit insert throws', async () => {
+    auditFailure = new Error('audit db down');
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const config = { github: { enabled: true, projectIds: null }, linear: { enabled: true, projectIds: null } };
+    const res = await put(config);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ config });
+    expect(settings).toHaveLength(1);
+    expect(warnSpy).toHaveBeenCalledWith('[Audit] Failed to emit audit event', expect.anything());
+    warnSpy.mockRestore();
   });
 });
 
