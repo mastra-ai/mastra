@@ -762,6 +762,12 @@ describe('safeStringify', () => {
     const result = safeStringify(obj);
     expect(JSON.parse(result)).toEqual({ count: '42', name: 'test' });
   });
+
+  it('should normalize unsupported top-level values to "null"', () => {
+    expect(safeStringify(undefined)).toBe('null');
+    expect(safeStringify(() => {})).toBe('null');
+    expect(safeStringify(Symbol('test'))).toBe('null');
+  });
 });
 
 describe('ensureSerializable', () => {

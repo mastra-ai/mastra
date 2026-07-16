@@ -4,7 +4,7 @@
  */
 export function safeStringify(value: unknown, space?: string | number): string {
   const stack: unknown[] = [];
-  return JSON.stringify(
+  const result: string | undefined = JSON.stringify(
     value,
     function (this: unknown, _key: string, val: unknown) {
       if (typeof val === 'bigint') return val.toString();
@@ -19,6 +19,8 @@ export function safeStringify(value: unknown, space?: string | number): string {
     },
     space,
   );
+  // JSON.stringify returns undefined for unsupported top-level values (undefined, functions, symbols).
+  return result ?? 'null';
 }
 
 /**
