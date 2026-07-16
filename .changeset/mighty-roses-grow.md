@@ -2,4 +2,4 @@
 '@mastra/dynamodb': patch
 ---
 
-Fix listMessages dateRange filter
+Fixed listMessages date-range filtering so exclusive boundaries are excluded.
