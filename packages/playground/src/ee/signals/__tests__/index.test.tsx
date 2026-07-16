@@ -56,19 +56,17 @@ describe('Signals page', () => {
   });
 
   describe('when no Agent Learning entities exist', () => {
-    it('explains what data is needed before signal analysis is available', async () => {
+    it('shows that the analysis is waiting for traces', async () => {
       server.use(http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(emptyThemeEntitiesResponse)));
 
       renderSignalsPage();
 
-      expect(
-        await screen.findByText(/Agent Learning needs enough traces across at least two signal types/i),
-      ).not.toBeNull();
+      expect(await screen.findByText('Waiting for traces.')).not.toBeNull();
     });
   });
 
   describe('when an agent has theme flow data', () => {
-    it('explains what the populated Sankey analysis shows', async () => {
+    beforeEach(() => {
       server.use(
         http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(populatedThemeEntitiesResponse)),
         http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
@@ -78,18 +76,25 @@ describe('Signals page', () => {
           HttpResponse.json(themeFlowResponse),
         ),
       );
+    });
 
+    it('labels the populated analysis', async () => {
       renderSignalsPage();
 
-      expect(await screen.findByRole('heading', { name: 'Signals Sankey' })).not.toBeNull();
       expect(
-        screen.getByText(/themes flow between the selected signal dimensions across your agent interactions/i),
+        await screen.findByRole('heading', { name: 'Understand what drives every agent interaction' }),
       ).not.toBeNull();
+    });
+
+    it('exposes the theme flow as a named region', async () => {
+      renderSignalsPage();
+
+      expect(await screen.findByRole('region', { name: 'Signal theme flow' })).not.toBeNull();
     });
   });
 
   describe('when an agent has no theme snapshots', () => {
-    it('explains what data is needed before signal analysis is available', async () => {
+    it('shows that the analysis is waiting for traces', async () => {
       server.use(
         http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(populatedThemeEntitiesResponse)),
         http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
@@ -99,9 +104,7 @@ describe('Signals page', () => {
 
       renderSignalsPage();
 
-      expect(
-        await screen.findByText(/Agent Learning needs enough traces across at least two signal types/i),
-      ).not.toBeNull();
+      expect(await screen.findByText('Waiting for traces.')).not.toBeNull();
     });
   });
 });

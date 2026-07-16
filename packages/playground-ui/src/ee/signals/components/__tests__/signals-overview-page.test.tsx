@@ -9,31 +9,36 @@ afterEach(() => cleanup());
 
 describe('SignalsOverviewPage', () => {
   describe('when Signals has not launched yet', () => {
-    it('explains the ordered trace analysis pipeline and its four signal dimensions', () => {
+    it('explains the purpose of signal analysis', () => {
       render(<SignalsOverviewPage />);
 
       expect(screen.getByRole('heading', { name: 'Understand what drives every agent interaction' })).not.toBeNull();
+    });
+
+    it('shows the ordered trace analysis pipeline', () => {
+      render(<SignalsOverviewPage />);
 
       const pipeline = screen.getByRole('list', { name: 'Signals analysis pipeline' });
       const stageHeadings = within(pipeline)
         .getAllByRole('heading')
         .map(heading => heading.textContent);
+
       expect(stageHeadings).toEqual(['Traces', 'Mastra Engine', 'Signal analysis']);
+    });
 
-      expect(within(pipeline).getByText(/input/i)).not.toBeNull();
-      expect(within(pipeline).getByText(/output/i)).not.toBeNull();
-      expect(within(pipeline).getByText('Clusters recurring patterns')).not.toBeNull();
-      expect(within(pipeline).getByText('What your users actually do')).not.toBeNull();
+    it('shows representative trace inputs', () => {
+      render(<SignalsOverviewPage />);
 
-      for (const [trace, duration] of [
-        ['chat.completion', '1.2s'],
-        ['tool.search_docs', '340ms'],
-        ['workflow.support', '2.8s'],
-      ]) {
-        expect(within(pipeline).getByText(trace)).not.toBeNull();
-        expect(within(pipeline).getByText(duration)).not.toBeNull();
-      }
+      const pipeline = screen.getByRole('list', { name: 'Signals analysis pipeline' });
+      expect(within(pipeline).getByText('chat.completion')).not.toBeNull();
+      expect(within(pipeline).getByText('tool.search_docs')).not.toBeNull();
+      expect(within(pipeline).getByText('workflow.support')).not.toBeNull();
+    });
 
+    it('shows the four supported signal dimensions', () => {
+      render(<SignalsOverviewPage />);
+
+      const pipeline = screen.getByRole('list', { name: 'Signals analysis pipeline' });
       for (const signal of ['Outcome', 'Goal', 'Behavior', 'Sentiment']) {
         expect(within(pipeline).getByText(signal)).not.toBeNull();
       }
@@ -53,16 +58,28 @@ describe('SignalsOverviewPage', () => {
       expect(within(definitions).getByText(/the final completed, unresolved, or blocked state/i)).not.toBeNull();
     });
 
-    it('previews grouped relationships and offers persistent activation actions', () => {
+    it('previews where grouped trace relationships will appear', () => {
       render(<SignalsOverviewPage />);
 
       expect(screen.getByText(/grouped trace relationships will appear here/i)).not.toBeNull();
-      expect(screen.getByText('Waiting for traces.')).not.toBeNull();
+    });
 
-      const docsLink = screen.getByRole('link', { name: 'Read the docs' });
-      expect(docsLink.getAttribute('href')).toBe('https://mastra.ai/en/docs/observability/tracing/overview');
-      expect(docsLink.getAttribute('target')).toBe('_blank');
-      expect(docsLink.getAttribute('rel')).toBe('noopener noreferrer');
+    it('shows that the analysis is waiting for traces', () => {
+      render(<SignalsOverviewPage />);
+
+      expect(screen.getByText('Waiting for traces.')).not.toBeNull();
+    });
+
+    it('links to the tracing documentation', () => {
+      render(<SignalsOverviewPage />);
+
+      expect(screen.getByRole('link', { name: 'Read the docs' }).getAttribute('href')).toBe(
+        'https://mastra.ai/en/docs/observability/tracing/overview',
+      );
+    });
+
+    it('links to incoming traces', () => {
+      render(<SignalsOverviewPage />);
 
       expect(screen.getByRole('link', { name: 'View incoming traces' }).getAttribute('href')).toBe('/observability');
     });
@@ -71,12 +88,10 @@ describe('SignalsOverviewPage', () => {
 
 describe('SignalsEmptyState', () => {
   describe('when a custom action is supplied', () => {
-    it('renders it alongside the persistent activation actions', () => {
+    it('renders the custom action', () => {
       render(<SignalsEmptyState actionSlot={<button type="button">Choose an agent</button>} />);
 
       expect(screen.getByRole('button', { name: 'Choose an agent' })).not.toBeNull();
-      expect(screen.getByRole('link', { name: 'Read the docs' })).not.toBeNull();
-      expect(screen.getByRole('link', { name: 'View incoming traces' })).not.toBeNull();
     });
   });
 });

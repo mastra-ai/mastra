@@ -141,10 +141,16 @@ describe('SankeySignals', () => {
       ).not.toBeNull();
     });
 
-    it('renders the API-defined signal order without filtering or reordering controls', async () => {
+    it('renders the API-defined signal flow', async () => {
       renderSankeySignals();
 
       expect(await screen.findByRole('region', { name: 'Signal theme flow' })).not.toBeNull();
+    });
+
+    it('does not expose signal customization controls', async () => {
+      renderSankeySignals();
+
+      await screen.findByRole('region', { name: 'Signal theme flow' });
       expect(screen.queryByRole('checkbox')).toBeNull();
       expect(screen.queryByRole('button', { name: /Reorder/ })).toBeNull();
     });
@@ -166,15 +172,26 @@ describe('SankeySignals', () => {
       expect(await screen.findByRole('region', { name: 'Signal theme flow' })).not.toBeNull();
     });
 
-    it('preserves the API link weight in the playground-ui chart graph', () => {
-      const { columns, records } = themeFlowToSankeyData(themeFlowResponse);
-      const graph = buildSankeyChartGraph(records, columns);
+    it('preserves the API-defined signal order', () => {
+      const { columns } = themeFlowToSankeyData(themeFlowResponse);
 
       expect(columns).toEqual([
         { id: 'goal', label: 'Goal' },
         { id: 'outcome', label: 'Outcome' },
       ]);
+    });
+
+    it('preserves the API-defined theme labels', () => {
+      const { columns, records } = themeFlowToSankeyData(themeFlowResponse);
+      const graph = buildSankeyChartGraph(records, columns);
+
       expect(graph.nodes.map(node => node.name)).toEqual(['Resolve support request', 'Request resolved']);
+    });
+
+    it('preserves the API link weight in the playground-ui chart graph', () => {
+      const { columns, records } = themeFlowToSankeyData(themeFlowResponse);
+      const graph = buildSankeyChartGraph(records, columns);
+
       expect(graph.links[0]?.value).toBe(3);
     });
   });

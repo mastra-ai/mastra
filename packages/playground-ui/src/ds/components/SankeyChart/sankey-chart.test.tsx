@@ -131,16 +131,18 @@ describe('SankeyChart', () => {
     expect(screen.getAllByText('1 (25%)')).toHaveLength(2);
   });
 
-  it('uses caller-provided chart margins', async () => {
-    const { container } = render(
-      <Sankey data={data} columns={columns}>
-        <SankeyChart margin={{ top: 40, right: 24, bottom: 12, left: 24 }} />
-      </Sankey>,
-    );
+  describe('when the caller provides chart margins', () => {
+    it('positions the first node at the requested left margin', async () => {
+      const { container } = render(
+        <Sankey data={data} columns={columns}>
+          <SankeyChart margin={{ top: 40, right: 24, bottom: 12, left: 24 }} />
+        </Sankey>,
+      );
 
-    await screen.findByText('Search');
+      await screen.findByText('Search');
 
-    expect(container.querySelector('svg rect[rx="3"]')?.getAttribute('x')).toBe('24');
+      expect(container.querySelector('svg rect[rx="3"]')?.getAttribute('x')).toBe('24');
+    });
   });
 
   it('uses one repelled hue map for colored nodes and gradient ribbon links', async () => {
