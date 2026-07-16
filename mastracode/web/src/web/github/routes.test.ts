@@ -85,6 +85,7 @@ const listRepoOpenIssues = vi.fn(
 const addIssueLabels = vi.fn(
   async (_installationId: number, _repoFullName: string, _issueNumber: number, _labels: string[]) => {},
 );
+const upsertWorkItem = vi.hoisted(() => vi.fn(async (_input: any) => ({})));
 const listRepoOpenPullRequests = vi.fn(async (_installationId: number, _repoFullName: string, _page: number) => ({
   pullRequests: [
     {
@@ -99,6 +100,10 @@ const listRepoOpenPullRequests = vi.fn(async (_installationId: number, _repoFull
     },
   ],
   nextPage: null as number | null,
+}));
+
+vi.mock('../factory/store', () => ({
+  upsertWorkItem: (input: any) => upsertWorkItem(input),
 }));
 
 vi.mock('./client', () => ({
@@ -371,6 +376,7 @@ beforeEach(() => {
   pushBranch.mockClear();
   createPullRequest.mockClear();
   addIssueLabels.mockClear();
+  upsertWorkItem.mockClear();
   listRepoOpenIssues.mockClear();
   listRepoOpenPullRequests.mockClear();
 });
@@ -440,6 +446,27 @@ describe('webhook route', () => {
       resourceId: 'p1',
       projectPath: '/workspace/worktrees/factory-issue-12-aeab418d',
       branch: 'factory/issue-12',
+    });
+    await vi.waitFor(() => expect(upsertWorkItem).toHaveBeenCalled());
+    expect(upsertWorkItem).toHaveBeenCalledWith({
+      orgId: 'org1',
+      userId: 'github-installation-7',
+      githubProjectId: 'p1',
+      input: {
+        source: 'github-issue',
+        sourceKey: 'github-issue:12',
+        title: 'Fix flaky test',
+        url: 'https://github.com/octo/hello/issues/12',
+        stages: ['triage'],
+        sessions: {
+          triage: {
+            projectPath: '/workspace/worktrees/factory-issue-12-aeab418d',
+            branch: 'factory/issue-12',
+            threadId: 'thread-triage',
+          },
+        },
+        metadata: { number: 12, labels: ['bug'] },
+      },
     });
   });
 
@@ -1113,22 +1140,41 @@ describe('issues route', () => {
     expect(res.status).toBe(202);
     expect(await res.json()).toEqual({
       ok: true,
-      status: 'queued',
       threadId: 'thread-triage',
       projectPath: '/workspace/worktrees/factory-issue-12-aeab418d',
       branch: 'factory/issue-12',
     });
-    expect(addIssueLabels).toHaveBeenCalledWith(7, 'octo/hello', 12, ['queued', 'auto-triaged']);
+    expect(addIssueLabels).not.toHaveBeenCalled();
     expect(runIssueTriage).toHaveBeenCalledWith({
       repository: 'octo/hello',
       issueNumber: 12,
       issueTitle: 'Fix flaky test',
       issueUrl: 'https://github.com/octo/hello/issues/12',
-      labels: ['bug', 'queued', 'auto-triaged'],
+      labels: ['bug'],
       installationId: 7,
       resourceId: 'p1',
       projectPath: '/workspace/worktrees/factory-issue-12-aeab418d',
       branch: 'factory/issue-12',
+    });
+    expect(upsertWorkItem).toHaveBeenCalledWith({
+      orgId: 'org1',
+      userId: 'github-installation-7',
+      githubProjectId: 'p1',
+      input: {
+        source: 'github-issue',
+        sourceKey: 'github-issue:12',
+        title: 'Fix flaky test',
+        url: 'https://github.com/octo/hello/issues/12',
+        stages: ['triage'],
+        sessions: {
+          triage: {
+            projectPath: '/workspace/worktrees/factory-issue-12-aeab418d',
+            branch: 'factory/issue-12',
+            threadId: 'thread-triage',
+          },
+        },
+        metadata: { number: 12, labels: ['bug'] },
+      },
     });
   });
 

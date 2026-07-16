@@ -1,10 +1,8 @@
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import type { InfiniteData } from '@tanstack/react-query';
+import { useInfiniteQuery } from '@tanstack/react-query';
 
 import { useApiConfig } from '../../../../../shared/api/config';
 import { queryKeys } from '../../../../../shared/api/keys';
-import { listProjectIssues, listProjectPullRequests, startProjectIssueTriage } from '../services/factory';
-import type { GithubIssue, GithubIssuePage } from '../services/factory';
+import { listProjectIssues, listProjectPullRequests } from '../services/factory';
 
 /**
  * Open issues for a GitHub project, loaded one page at a time as the list is
@@ -24,61 +22,6 @@ export function useProjectIssuesQuery(
     enabled: Boolean(githubProjectId),
     refetchInterval: options?.refetchInterval,
     select: data => data.pages.flatMap(page => page.issues),
-  });
-}
-
-function removeIssueFromPages(
-  data: InfiniteData<GithubIssuePage> | undefined,
-  issueNumber: number,
-): InfiniteData<GithubIssuePage> | undefined {
-  if (!data) return data;
-  return {
-    ...data,
-    pages: data.pages.map(page => ({
-      ...page,
-      issues: page.issues.filter(issue => issue.number !== issueNumber),
-    })),
-  };
-}
-
-function upsertIssueInFirstPage(
-  data: InfiniteData<GithubIssuePage> | undefined,
-  issue: GithubIssue,
-): InfiniteData<GithubIssuePage> | undefined {
-  if (!data) return data;
-  const pages = data.pages.map((page, index) => {
-    const issues = page.issues.filter(candidate => candidate.number !== issue.number);
-    return { ...page, issues: index === 0 ? [issue, ...issues] : issues };
-  });
-  return { ...data, pages };
-}
-
-export function useStartIssueTriageMutation(githubProjectId: string | undefined) {
-  const { baseUrl } = useApiConfig();
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (issue: GithubIssue) => startProjectIssueTriage(baseUrl, githubProjectId!, issue),
-    onSuccess: async (_result, issue) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.githubIssues(githubProjectId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.githubIssues(githubProjectId, 'queued') }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.githubIssues(githubProjectId, 'auto-triaged') }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.githubIssues(githubProjectId, 'needs-approval') }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.workItems(githubProjectId) }),
-      ]);
-
-      const queuedIssue = {
-        ...issue,
-        labels: Array.from(new Set([...issue.labels, 'queued', 'auto-triaged'])),
-      };
-      queryClient.setQueryData<InfiniteData<GithubIssuePage>>(queryKeys.githubIssues(githubProjectId), data =>
-        removeIssueFromPages(data, issue.number),
-      );
-      queryClient.setQueryData<InfiniteData<GithubIssuePage>>(
-        queryKeys.githubIssues(githubProjectId, 'auto-triaged'),
-        data => upsertIssueInFirstPage(data, queuedIssue),
-      );
-    },
   });
 }
 

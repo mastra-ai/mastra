@@ -100,8 +100,10 @@ function ChatSessionBoundary({ children, threadId }: { children: ReactNode; thre
     );
   }
 
+  const transcriptKey = `${projectPath ?? 'default'}:${threadId ?? 'draft'}`;
+
   return (
-    <ChatTranscriptProvider key={threadId ?? 'draft'} threadId={threadId} initialMessages={messagesQuery.data}>
+    <ChatTranscriptProvider key={transcriptKey} threadId={threadId} initialMessages={messagesQuery.data}>
       <ChatModesProvider>
         <ChatModelsProvider>
           <ChatPermissionsProvider>{children}</ChatPermissionsProvider>

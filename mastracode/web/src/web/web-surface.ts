@@ -264,8 +264,7 @@ export function buildIssueTriagePrompt(input: GithubIssueTriageRunInput): string
     'Issue triage output:',
     '- Post or update one GitHub issue comment with the triage result.',
     '- Use the configured Mastra/GitHub App identity for GitHub writes; do not use a personal GitHub account.',
-    '- Remove the queued label after successful triage.',
-    '- Ensure the auto-triaged label remains present after successful triage.',
+    '- Ensure the auto-triaged label is present after successful triage.',
     '- Apply needs-approval only when the issue needs explicit human approval before investigation or implementation.',
   ].join('\n');
 }
@@ -285,7 +284,7 @@ async function runIssueTriage(
   const resourceId = input.resourceId;
   const scope = projectPath;
   const tags = buildIssueTriageTags(input, projectPath);
-  const title = `Triage #${input.issueNumber}: ${input.issueTitle}`;
+  const title = `Triage #${input.issueNumber}`;
   const session = await createScopedSession(deps.controller, {
     id: scope,
     ownerId: `github-installation-${input.installationId}`,

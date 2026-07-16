@@ -126,7 +126,7 @@ export function UserSessionsSection() {
       });
       // A fresh thread has no messages; seed the cache to skip the skeleton.
       queryClient.setQueryData(
-        queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, userResourceId, thread.id),
+        queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, userResourceId, result.worktreePath, thread.id),
         [],
       );
       return thread.id;

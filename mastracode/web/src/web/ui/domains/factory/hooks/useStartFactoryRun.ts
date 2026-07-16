@@ -1,4 +1,5 @@
 import type { AgentControllerMessage } from '@mastra/client-js';
+import type { QueryClient } from '@tanstack/react-query';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 
@@ -9,7 +10,11 @@ import { createAgentControllerClient, requireAgentControllerSession } from '../.
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 // Deep imports (not the workspaces barrel) to avoid provider/component cycles.
 import { useActiveProjectContext } from '../../workspaces/context/ActiveProjectProvider';
-import { deriveProjectPath, useCreateWorkspaceMutation } from '../../workspaces/hooks/useWorkspaces';
+import {
+  deriveProjectPath,
+  useCreateWorkspaceMutation,
+  useSelectWorkspaceMutation,
+} from '../../workspaces/hooks/useWorkspaces';
 import type { Project } from '../../workspaces/services/projects';
 import { createWorkItem, updateWorkItem } from '../services/workItems';
 import type { WorkItemSource } from '../services/workItems';
@@ -72,6 +77,10 @@ export function useStartFactoryRun() {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
   });
+  const selectWorkspace = useSelectWorkspaceMutation(activeProject, {
+    agentControllerId: AGENT_CONTROLLER_ID,
+    resourceId,
+  });
 
   const mutation = useMutation({
     mutationFn: async ({ branch, threadTitle, threadTags, prompt, workItem }: StartFactoryRunInput) => {
@@ -103,6 +112,16 @@ export function useStartFactoryRun() {
       // the same item, reuse that thread: the prompt lands as a follow-up
       // message instead of leaving a stray second thread in the worktree.
       const threadId = await resolveRunThread(scopedSession, created.threadId, threadTitle, projectPath, threadTags);
+      const messagesKey = queryKeys.agentControllerThreadMessages(
+        AGENT_CONTROLLER_ID,
+        resourceId,
+        projectPath,
+        threadId,
+      );
+      await queryClient.prefetchQuery({
+        queryKey: messagesKey,
+        queryFn: () => scopedSession.listMessages(threadId),
+      });
       await scopedSession.sendMessage(prompt);
 
       // Append the prompt to the thread's message cache so it renders
@@ -114,15 +133,15 @@ export function useStartFactoryRun() {
         role: 'user',
         content: [{ type: 'text', text: prompt }],
       };
-      queryClient.setQueryData(
-        queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, threadId),
-        (existing: AgentControllerMessage[] | undefined) => [...(existing ?? []), message],
-      );
-      // The thread now exists under the new worktree's project path; refresh
-      // its thread list so the sidebar shows it once the UI lands there.
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.agentControllerThreads(AGENT_CONTROLLER_ID, resourceId, projectPath),
-      });
+      queryClient.setQueryData(messagesKey, (existing: AgentControllerMessage[] | undefined) => [
+        ...(existing ?? []),
+        message,
+      ]);
+      // The thread now exists under the new worktree's project path. Seed the
+      // scoped thread-list cache before navigation so route sync does not see
+      // an empty/stale worktree scope and redirect the new route to /new.
+      const threadsKey = queryKeys.agentControllerThreads(AGENT_CONTROLLER_ID, resourceId, projectPath);
+      seedThreadList(queryClient, threadsKey, threadId, threadTitle, projectPath);
 
       // File the board card now that the run is underway, hanging the run's
       // session ref off the requested role. Best-effort: the run itself
@@ -155,12 +174,42 @@ export function useStartFactoryRun() {
           console.error('Failed to file the board card for this run', err);
         }
       }
-      return threadId;
+      await selectWorkspace.mutateAsync(projectPath);
+      await queryClient.invalidateQueries({ queryKey: threadsKey });
+      seedThreadList(queryClient, threadsKey, threadId, threadTitle, projectPath);
+      return { threadId, projectPath };
     },
-    onSuccess: threadId => void navigate(`/threads/${threadId}`),
+    onSuccess: ({ threadId, projectPath }) =>
+      void navigate(`/threads/${threadId}`, { state: { factoryRunProjectPath: projectPath } }),
   });
 
   return { start: mutation, enabled: sessionEnabled };
+}
+
+type AgentControllerThread = Awaited<ReturnType<AgentControllerSession['listThreads']>>[number];
+
+function seedThreadList(
+  queryClient: QueryClient,
+  queryKey: readonly unknown[],
+  threadId: string,
+  title: string,
+  projectPath: string,
+) {
+  const now = new Date().toISOString();
+  const seededThread: AgentControllerThread = {
+    id: threadId,
+    title,
+    resourceId: '',
+    metadata: { tags: { projectPath } },
+    createdAt: now,
+    updatedAt: now,
+  } as AgentControllerThread;
+
+  queryClient.setQueryData(queryKey, (threads: AgentControllerThread[] | undefined) => {
+    const existing = threads ?? [];
+    if (existing.some(thread => thread.id === threadId)) return existing;
+    return [seededThread, ...existing];
+  });
 }
 
 /**
@@ -195,11 +244,21 @@ async function resolveRunThread(
   }
 
   if (!threadId) return (await session.createThread(title)).id;
-  const [threads, messages] = await Promise.all([session.listThreads(), session.listMessages(threadId, 1)]);
-  const existing = threads.find(thread => thread.id === threadId);
-  if (!existing) return (await session.createThread(title)).id;
-  if (isUntitledThread(existing.title) && messages.length === 0) await session.renameThread(threadId, title);
-  return threadId;
+
+  // `session.create({ tags })` may return a freshly seeded thread before the
+  // scoped thread list has caught up. Use that returned thread directly instead
+  // of creating another titled thread; otherwise Factory runs can leave two
+  // conversations for the same worktree.
+  try {
+    const existing = (await session.listThreads()).find(thread => thread.id === threadId);
+    if (existing && !isUntitledThread(existing.title)) return threadId;
+
+    const messages = await session.listMessages(threadId, 1);
+    if (messages.length === 0) await session.renameThread(threadId, title);
+    return threadId;
+  } catch {
+    return (await session.createThread(title)).id;
+  }
 }
 
 function isUntitledThread(title: string | null | undefined): boolean {

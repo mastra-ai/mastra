@@ -29,7 +29,7 @@ export function useAgentControllerThreadMessages({
   });
 
   return useQuery({
-    queryKey: queryKeys.agentControllerThreadMessages(agentControllerId, resourceId, threadId),
+    queryKey: queryKeys.agentControllerThreadMessages(agentControllerId, resourceId, projectPath, threadId),
     queryFn: () => session!.listMessages(threadId!),
     enabled: enabled && Boolean(session) && Boolean(threadId),
     refetchOnWindowFocus: false,

@@ -71,12 +71,14 @@ export const queryKeys = {
     resourceId: string | undefined,
     projectPath: string | undefined,
   ) => [...queryKeys.agentControllerSession(agentControllerId, resourceId, projectPath), 'threads'] as const,
-  // Thread ids are unique across the resource, so messages are keyed by threadId
-  // alone (no projectPath) — caches survive worktree switches and seeding does
-  // not need to know the thread's scope.
+  // Sessions are scoped per worktree, and some scoped controllers can expose
+  // the same seeded thread id while the worktree switch is settling. Include
+  // projectPath so a newly opened worktree never renders another scope's
+  // cached transcript before its own messages load.
   agentControllerThreadMessages: (
     agentControllerId: string | undefined,
     resourceId: string | undefined,
+    projectPath: string | undefined,
     threadId: string | undefined,
   ) =>
     [
@@ -84,6 +86,7 @@ export const queryKeys = {
       agentControllerId ?? null,
       'sessions',
       resourceId ?? null,
+      projectPath ?? null,
       'threads',
       threadId ?? null,
       'messages',

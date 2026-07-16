@@ -66,6 +66,14 @@ const nextProject: Project = {
   createdAt: 2,
 };
 
+const sameResourceNextWorktree: Project = {
+  id: 'project-next-worktree',
+  name: 'MastraCode Next Worktree',
+  path: '/tmp/mastracode-next-worktree',
+  resourceId: RESOURCE_ID,
+  createdAt: 3,
+};
+
 function seedProject(projects: Project[] = [project], activeProject: Project = project) {
   localStorage.setItem('mastracode-projects', JSON.stringify(projects));
   localStorage.setItem('mastracode-active-project', activeProject.id);
@@ -228,6 +236,12 @@ function SessionContextProbe() {
       <span data-testid="session-base-url">{baseUrl}</span>
     </div>
   );
+}
+
+function SameResourceWorktreeSwitchProbe() {
+  const { selectProject } = useActiveProjectContext();
+
+  return <button onClick={() => void selectProject(sameResourceNextWorktree)}>switch same-resource worktree</button>;
 }
 
 function PaletteCommandProbe({ commandName }: { commandName: string }) {
@@ -414,6 +428,42 @@ describe('ChatSessionProvider', () => {
       expect(screen.getByTestId('focused-thread-id')).toHaveTextContent(ROUTE_THREAD_ID);
       expect(screen.getByTestId('focused-message-text')).toHaveTextContent('Persisted user question');
       expect(screen.getByTestId('focused-message-text')).toHaveTextContent('Persisted assistant answer');
+    });
+
+    it('given two worktrees share a resource and thread id, when the active worktree changes, then transcript messages are scoped by project path', async () => {
+      const messagesByFetch: AgentControllerMessage[][] = [
+        [{ id: 'old-worktree-message', role: 'user', content: [{ type: 'text', text: 'Old worktree chat' }] }],
+        [{ id: 'new-worktree-message', role: 'user', content: [{ type: 'text', text: 'New worktree chat' }] }],
+      ];
+      let messageFetches = 0;
+      seedProject([project, sameResourceNextWorktree], project);
+      useAgentControllerHandlers();
+      server.use(
+        http.get(`${SESSION}/threads/${ROUTE_THREAD_ID}/messages`, () => {
+          const messages = messagesByFetch[Math.min(messageFetches, messagesByFetch.length - 1)] ?? [];
+          messageFetches += 1;
+          return HttpResponse.json({ messages });
+        }),
+      );
+
+      renderFocusedProbe(
+        <>
+          <SameResourceWorktreeSwitchProbe />
+          <SessionContextProbe />
+          <TranscriptProbe />
+        </>,
+        ROUTE_THREAD_ID,
+      );
+
+      await waitFor(() => expect(screen.getByTestId('focused-message-text')).toHaveTextContent('Old worktree chat'));
+
+      await userEvent.click(screen.getByRole('button', { name: 'switch same-resource worktree' }));
+
+      await waitFor(() =>
+        expect(screen.getByTestId('session-project-path')).toHaveTextContent(sameResourceNextWorktree.path!),
+      );
+      await waitFor(() => expect(screen.getByTestId('focused-message-text')).toHaveTextContent('New worktree chat'));
+      expect(screen.getByTestId('focused-message-text')).not.toHaveTextContent('Old worktree chat');
     });
 
     it('given /new with no threadId, when a transcript consumer renders, then it remains an empty draft session', async () => {

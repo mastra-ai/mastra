@@ -106,7 +106,7 @@ export function WorkspacesSection() {
         // scope, the route-thread sync settles on it instead of erroring on
         // the stale one.
         await queryClient.prefetchQuery({
-          queryKey: queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, latest.id),
+          queryKey: queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, worktreePath, latest.id),
           queryFn: () => chatSession.listMessages(latest.id),
         });
         void navigate(`/threads/${latest.id}`, { replace: true });
@@ -120,7 +120,7 @@ export function WorkspacesSection() {
       const created = await chatSession.createThread();
       // A fresh thread has no messages; seed the cache to skip the skeleton.
       queryClient.setQueryData(
-        queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, created.id),
+        queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, worktreePath, created.id),
         [],
       );
       void queryClient.invalidateQueries({ queryKey: threadsKey });

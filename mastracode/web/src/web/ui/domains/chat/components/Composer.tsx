@@ -142,9 +142,10 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
         ...files.map(f => ({ type: 'image' as const, data: f.data, mimeType: f.mediaType })),
       ],
     };
-    queryClient.setQueryData(queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, threadId), [
-      message,
-    ]);
+    queryClient.setQueryData(
+      queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, projectPath, threadId),
+      [message],
+    );
   };
 
   const addImageFiles = async (fileList: Iterable<File>) => {

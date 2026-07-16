@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useEffectEvent, useRef } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { useLocation, useNavigate, useParams } from 'react-router';
 
 import { queryKeys } from '../../../../../shared/api/keys';
 import { useChatConnection } from '../context/useChatConnection';
@@ -30,6 +30,7 @@ export function useRouteThreadSync() {
     enabled: sessionEnabled,
   });
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const { session } = createAgentControllerClient({
     agentControllerId: AGENT_CONTROLLER_ID,
@@ -46,6 +47,35 @@ export function useRouteThreadSync() {
     const isLatestRequest = () => latestRouteThreadId.current === threadId;
 
     if (!threadsQuery.data?.some(thread => thread.id === threadId)) {
+      const routeMessagesKey = queryKeys.agentControllerThreadMessages(
+        AGENT_CONTROLLER_ID,
+        resourceId,
+        projectPath,
+        threadId,
+      );
+      const routeMessages = queryClient.getQueryData(routeMessagesKey);
+      const factoryRunProjectPath = (location.state as { factoryRunProjectPath?: unknown } | null)
+        ?.factoryRunProjectPath;
+      if (factoryRunProjectPath === projectPath) {
+        if (transcript.threadId !== threadId) reset(threadId);
+        return;
+      }
+      if (Array.isArray(routeMessages) && routeMessages.length > 0) {
+        if (transcript.threadId !== threadId) reset(threadId);
+        void switchThreadMutation
+          .mutateAsync(threadId)
+          .then(state => {
+            if (!isLatestRequest()) return;
+            syncState(state);
+          })
+          .catch(() => {
+            // The startup path already seeded the target thread's messages.
+            // If the scoped thread list lags behind, keep the route stable and
+            // let the next connection/thread-list refresh reconcile state.
+          });
+        return;
+      }
+
       // The route thread does not exist in the current scope. This is the
       // normal outcome of a worktree switch (threads are scoped per
       // worktree), so settle on the scope's most recent thread instead of
@@ -60,7 +90,12 @@ export function useRouteThreadSync() {
         // instead of a loading skeleton.
         const warm = session
           ? queryClient.prefetchQuery({
-              queryKey: queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, latest.id),
+              queryKey: queryKeys.agentControllerThreadMessages(
+                AGENT_CONTROLLER_ID,
+                resourceId,
+                projectPath,
+                latest.id,
+              ),
               queryFn: () => session.listMessages(latest.id),
             })
           : Promise.resolve();
