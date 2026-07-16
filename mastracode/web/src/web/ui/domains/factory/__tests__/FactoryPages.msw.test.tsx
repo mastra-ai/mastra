@@ -301,6 +301,7 @@ function useBoardHandlers(options: BoardHandlerOptions = {}): BoardState {
         title: body.title,
         source: body.source,
         sourceKey: body.sourceKey,
+        parentWorkItemId: body.parentWorkItemId ?? null,
         url: body.url ?? null,
         stages: body.stages,
         sessions,
@@ -320,6 +321,7 @@ function useBoardHandlers(options: BoardHandlerOptions = {}): BoardState {
       const updated: WorkItem = {
         ...existing,
         ...(body.title !== undefined ? { title: body.title } : {}),
+        ...(body.parentWorkItemId !== undefined ? { parentWorkItemId: body.parentWorkItemId } : {}),
         ...(body.stages !== undefined ? { stages: body.stages } : {}),
         sessions: { ...existing.sessions, ...stampedSessions },
         metadata: { ...existing.metadata, ...(body.metadata ?? {}) },
@@ -822,6 +824,39 @@ describe('Factory Board — persisted cards', () => {
     // Each card chips the item's other stage.
     expect(within(executeCard).getByText('Review')).toBeInTheDocument();
     expect(within(reviewCard).getByText('Building')).toBeInTheDocument();
+  });
+
+  it('given related issue and PR review items, when they share a lane, then they stay separate with explicit sources and a restrained relationship marker', async () => {
+    useBoardHandlers({
+      workItems: [
+        makeWorkItem({
+          id: 'wi-issue',
+          title: 'Fix flaky test',
+          source: 'github-issue',
+          sourceKey: 'github-issue:12',
+          stages: ['review'],
+        }),
+        makeWorkItem({
+          id: 'wi-review',
+          parentWorkItemId: 'wi-issue',
+          title: 'Fix flaky test',
+          source: 'github-pr',
+          sourceKey: 'github-pr:34',
+          stages: ['review'],
+        }),
+      ],
+    });
+    renderAt('/factory/board');
+
+    await screen.findByTestId('board-column-intake');
+    const cards = within(column('review')).getAllByTestId('work-item-card');
+    expect(cards).toHaveLength(2);
+    expect(within(cards[0]).getByText('Issue:')).toBeInTheDocument();
+    expect(within(cards[1]).getByText('PR Review:')).toBeInTheDocument();
+    expect(within(cards[0]).getByText(/^Related /)).toBeInTheDocument();
+    expect(within(cards[1]).getByText(/^Related /)).toBeInTheDocument();
+    expect(cards[0]).toHaveAccessibleName('Fix flaky test');
+    expect(cards[1]).toHaveAccessibleName('Fix flaky test');
   });
 
   // A project that still has the worktree the cards' session refs point at:
