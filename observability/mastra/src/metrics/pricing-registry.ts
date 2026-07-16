@@ -6,6 +6,10 @@ import type { PricingMeter, PricingConditionOperator, PricingConditionField } fr
 
 const DATA_FILE_NAME = 'pricing-data.jsonl';
 const BEDROCK_GEOGRAPHY_PREFIXES = new Set(['global', 'us', 'eu', 'apac', 'jp', 'au']);
+// Provider ID emitted by @ai-sdk/gateway for Vercel AI Gateway models.
+const AI_SDK_VERCEL_GATEWAY_PROVIDER_ID = 'gateway';
+// Canonical provider ID used by the embedded pricing snapshot for those models.
+const VERCEL_PRICING_PROVIDER_ID = 'vercel';
 
 type MinifiedMeterKey = 'it' | 'ot' | 'icrt' | 'icwt' | 'iat' | 'oat' | 'ort';
 type MinifiedConditionFieldKey = 'tit';
@@ -193,12 +197,21 @@ function normalizeProvider(provider: string): string {
 
 function resolvePricingProvider(provider: string, model: string): string {
   const normalizedProvider = normalizeProvider(provider);
-  const modelSegments = model.split('/');
-  const hasCreatorModelShape = modelSegments.length === 2 && modelSegments.every(segment => segment.trim().length > 0);
 
-  // AI SDK calls the Vercel AI Gateway provider "gateway", while the pricing
-  // snapshot stores its model-level prices under "vercel".
-  return normalizedProvider === 'gateway' && hasCreatorModelShape ? 'vercel' : normalizedProvider;
+  if (normalizedProvider !== AI_SDK_VERCEL_GATEWAY_PROVIDER_ID) {
+    return normalizedProvider;
+  }
+
+  if (!hasCreatorModelIdShape(model)) {
+    return normalizedProvider;
+  }
+
+  return VERCEL_PRICING_PROVIDER_ID;
+}
+
+function hasCreatorModelIdShape(model: string): boolean {
+  const segments = model.split('/');
+  return segments.length === 2 && segments.every(segment => segment.trim().length > 0);
 }
 
 /**
