@@ -69,7 +69,7 @@ if (!spaPath) {
 
 // 4. Web Factory skills
 for (const skillName of ['understand-issue', 'understand-pr']) {
-  const relativeSkillPath = path.join('public', 'factory-skills', skillName, 'SKILL.md');
+  const relativeSkillPath = path.join('factory-skills', skillName, 'SKILL.md');
   const skillPath = path.join(outputDir, relativeSkillPath);
   if (!fs.existsSync(skillPath)) {
     fail(`Factory skill not found: ${relativeSkillPath}`);

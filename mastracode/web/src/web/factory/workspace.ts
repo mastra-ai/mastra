@@ -6,7 +6,7 @@ import type { WorkspaceSkillExtension } from '@mastra/code-sdk/agents/workspace'
 import { LocalSkillSource } from '@mastra/core/workspace';
 import type { SkillSource, SkillSourceEntry, SkillSourceStat } from '@mastra/core/workspace';
 
-const bundledFactorySkillsPath = join(dirname(fileURLToPath(import.meta.url)), 'public', 'factory-skills');
+const bundledFactorySkillsPath = join(dirname(fileURLToPath(import.meta.url)), 'factory-skills');
 const FACTORY_SKILLS_SOURCE_PATH =
   [join(process.cwd(), 'src', 'mastra', 'public', 'factory-skills'), bundledFactorySkillsPath].find(existsSync) ??
   bundledFactorySkillsPath;
