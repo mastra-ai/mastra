@@ -159,7 +159,7 @@ export function buildSkillRoutes({
         const content = `${formatSkillActivation(skill)}${args ? `\n\nARGUMENTS: ${args}` : ''}`.trim();
         const message = `<skill name="${skill.name}">\n${escapeSkillBoundary(content)}\n</skill>`;
         await session.sendMessage({ content: message });
-        return c.json({ ok: true, skill: skill.name });
+        return c.json({ ok: true, skill: skill.name, message });
       },
     }),
   ];

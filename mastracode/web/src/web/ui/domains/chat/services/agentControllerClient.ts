@@ -82,7 +82,7 @@ export async function invokeWorkspaceSkill({
   name,
   arguments: skillArguments,
   baseUrl = '',
-}: InvokeWorkspaceSkillArgs): Promise<void> {
+}: InvokeWorkspaceSkillArgs): Promise<{ skill: string; message: string }> {
   const response = await fetch(
     `${baseUrl}/web/agent-controller/${encodeURIComponent(agentControllerId)}/skills/invoke`,
     {
@@ -92,7 +92,13 @@ export async function invokeWorkspaceSkill({
       body: JSON.stringify({ resourceId, scope, name, arguments: skillArguments }),
     },
   );
-  if (response.ok) return;
+  if (response.ok) {
+    const result = (await response.json()) as { skill?: unknown; message?: unknown };
+    if (typeof result.skill === 'string' && typeof result.message === 'string') {
+      return { skill: result.skill, message: result.message };
+    }
+    throw new WorkspaceSkillInvocationError('Skill invocation returned an invalid response.', 502, 'invalid_response');
+  }
 
   let error: { error?: unknown; message?: unknown } = {};
   try {

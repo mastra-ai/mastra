@@ -67,9 +67,12 @@ describe('createAgentControllerClient', () => {
 
 describe('invokeWorkspaceSkill', () => {
   it('posts the scoped skill request with browser credentials', async () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ ok: true })));
+    const message = '<skill name="understand-pr">\nReview it.\n</skill>';
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(JSON.stringify({ ok: true, skill: 'understand-pr', message })));
 
-    await invokeWorkspaceSkill({
+    const result = await invokeWorkspaceSkill({
       agentControllerId: 'code',
       resourceId: 'project-1',
       scope: '/worktrees/review-42',
@@ -78,6 +81,7 @@ describe('invokeWorkspaceSkill', () => {
       baseUrl: 'https://code.example',
     });
 
+    expect(result).toEqual({ skill: 'understand-pr', message });
     expect(fetchSpy).toHaveBeenCalledWith('https://code.example/web/agent-controller/code/skills/invoke', {
       method: 'POST',
       credentials: 'include',

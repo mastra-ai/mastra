@@ -1035,11 +1035,12 @@ interface CapturedRun {
   worktree?: Record<string, unknown>;
   threadTitles: string[];
   messages: Record<string, unknown>[];
+  skillInvocations: Record<string, unknown>[];
 }
 
 /** Registers handlers for the investigate flow: worktree + thread + message. */
 function useFactoryRunHandlers(branchDir: string): CapturedRun {
-  const captured: CapturedRun = { threadTitles: [], messages: [] };
+  const captured: CapturedRun = { threadTitles: [], messages: [], skillInvocations: [] };
   server.use(
     http.post(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/worktree`, async ({ request }) => {
       captured.worktree = (await request.json()) as Record<string, unknown>;
@@ -1059,13 +1060,20 @@ function useFactoryRunHandlers(branchDir: string): CapturedRun {
       captured.messages.push((await request.json()) as Record<string, unknown>);
       return HttpResponse.json({ ok: true });
     }),
+    http.post(`${TEST_BASE_URL}/web/agent-controller/code/skills/invoke`, async ({ request }) => {
+      const body = (await request.json()) as Record<string, unknown>;
+      captured.skillInvocations.push(body);
+      const name = body.name as string;
+      const message = `<skill name="${name}">\nActivated ${name}.\n\nARGUMENTS: ${body.arguments as string}\n</skill>`;
+      return HttpResponse.json({ ok: true, skill: name, message });
+    }),
     http.get(`${SESSION}/threads/:threadId/messages`, () => HttpResponse.json({ messages: [] })),
   );
   return captured;
 }
 
 describe('Factory Board — investigate flow', () => {
-  it('given an issue candidate, when Investigate is clicked, then a worktree, thread, and prompt are created, a work item materializes into Planning, and the app navigates to the thread', async () => {
+  it('given an issue candidate, when Investigate is clicked, then a worktree, thread, and direct skill activation are created, a work item materializes into Planning, and the app navigates to the thread', async () => {
     const state = useBoardHandlers({ issues });
     const captured = useFactoryRunHandlers('factory-issue-12');
     const { router } = renderAt('/factory/board');
@@ -1077,10 +1085,20 @@ describe('Factory Board — investigate flow', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
     expect(captured.threadTitles).toEqual(['Issue #12: Fix flaky test']);
-    expect(captured.messages).toHaveLength(1);
-    expect(captured.messages[0]!.message).toContain('understand-issue skill');
-    expect(captured.messages[0]!.message).toContain('GitHub issue #12 (https://github.com/mastra-ai/mastra/issues/12)');
-    expect(captured.messages[0]!.message).not.toContain('Fix flaky test');
+    expect(captured.messages).toHaveLength(0);
+    expect(captured.skillInvocations).toEqual([
+      {
+        resourceId: RESOURCE_ID,
+        scope: '/sandbox/mastra/worktrees/factory-issue-12',
+        name: 'understand-issue',
+        arguments:
+          'GitHub issue #12 (https://github.com/mastra-ai/mastra/issues/12)\n\n' +
+          'Prepared workspace context:\n' +
+          '- Worktree: /sandbox/mastra/worktrees/factory-issue-12\n' +
+          '- Branch: factory/issue-12',
+      },
+    ]);
+    expect(JSON.stringify(captured.skillInvocations)).not.toContain('Fix flaky test');
     // The run files a board record in the planning stage with the plan session ref.
     expect(state.posts).toMatchObject([
       {
@@ -1099,6 +1117,31 @@ describe('Factory Board — investigate flow', () => {
     ]);
   });
 
+  it('given a missing workspace skill, when Investigate is clicked, then the error is visible and no fallback prompt or card is dispatched', async () => {
+    const state = useBoardHandlers({ issues });
+    const captured = useFactoryRunHandlers('factory-issue-12');
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/agent-controller/code/skills/invoke`, async ({ request }) => {
+        captured.skillInvocations.push((await request.json()) as Record<string, unknown>);
+        return HttpResponse.json(
+          { error: 'skill_not_found', message: 'Skill not found: understand-issue.' },
+          { status: 404 },
+        );
+      }),
+    );
+    const { router } = renderAt('/factory/board');
+
+    const intake = await screen.findByTestId('board-column-intake');
+    await within(intake).findByText('Fix flaky test');
+    await userEvent.click(within(intake).getByRole('button', { name: 'Investigate Fix flaky test' }));
+
+    expect(await screen.findByText('Skill not found: understand-issue.')).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/factory/board');
+    expect(captured.skillInvocations).toHaveLength(1);
+    expect(captured.messages).toHaveLength(0);
+    expect(state.posts).toHaveLength(0);
+  });
+
   it('given an issue candidate, when Build is chosen from the menu, then a work item materializes into Building with a work session', async () => {
     const state = useBoardHandlers({ issues });
     const captured = useFactoryRunHandlers('factory-issue-12');
@@ -1111,6 +1154,7 @@ describe('Factory Board — investigate flow', () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
+    expect(captured.skillInvocations).toHaveLength(0);
     expect(captured.messages[0]!.message).toContain('Implement a fix for GitHub issue #12');
     expect(state.posts).toMatchObject([
       {
@@ -1141,7 +1185,7 @@ describe('Factory Board — investigate flow', () => {
 
       // Filing is best-effort: the user still lands on the running thread.
       await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
-      expect(captured.messages).toHaveLength(1);
+      expect(captured.skillInvocations).toHaveLength(1);
       expect(errorSpy).toHaveBeenCalledWith('Failed to file the board card for this run', expect.anything());
     } finally {
       errorSpy.mockRestore();
@@ -1162,13 +1206,21 @@ describe('Factory Board — investigate flow', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
     expect(captured.worktree).toMatchObject({ branch: 'factory/pr-34' });
     expect(captured.threadTitles).toEqual(['PR #34: Add factory pages']);
-    expect(captured.messages[0]!.message).toContain('understand-pr skill');
-    expect(captured.messages[0]!.message).toContain(
-      'GitHub pull request #34 (https://github.com/mastra-ai/mastra/pull/34)',
-    );
-    expect(captured.messages[0]!.message).toContain('gh pr checkout 34');
-    expect(captured.messages[0]!.message).not.toContain('Add factory pages');
-    expect(captured.messages[0]!.message).not.toContain('feat/factory-pages');
+    expect(captured.messages).toHaveLength(0);
+    expect(captured.skillInvocations).toEqual([
+      {
+        resourceId: RESOURCE_ID,
+        scope: '/sandbox/mastra/worktrees/factory-pr-34',
+        name: 'understand-pr',
+        arguments:
+          'GitHub pull request #34 (https://github.com/mastra-ai/mastra/pull/34)\n\n' +
+          'Prepared workspace context:\n' +
+          '- Worktree: /sandbox/mastra/worktrees/factory-pr-34\n' +
+          '- Branch: factory/pr-34',
+      },
+    ]);
+    expect(JSON.stringify(captured.skillInvocations)).not.toContain('Add factory pages');
+    expect(JSON.stringify(captured.skillInvocations)).not.toContain('feat/factory-pages');
     expect(state.posts).toMatchObject([
       {
         source: 'github-pr',
@@ -1194,10 +1246,14 @@ describe('Factory Board — investigate flow', () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
     expect(captured.worktree).toMatchObject({ branch: 'factory/linear-eng-42' });
-    expect(captured.messages[0]!.message).toContain('understand-issue skill');
-    expect(captured.messages[0]!.message).toContain('Linear issue ENG-42 (https://linear.app/acme/issue/ENG-42)');
-    expect(captured.messages[0]!.message).toContain('linear_get_issue');
-    expect(captured.messages[0]!.message).not.toContain('Fix intake sync');
+    expect(captured.messages).toHaveLength(0);
+    expect(captured.skillInvocations).toHaveLength(1);
+    expect(captured.skillInvocations[0]).toMatchObject({
+      name: 'understand-issue',
+      arguments: expect.stringContaining('Linear issue ENG-42 (https://linear.app/acme/issue/ENG-42)'),
+    });
+    expect(captured.skillInvocations[0]!.arguments).toContain('linear_get_issue');
+    expect(captured.skillInvocations[0]!.arguments).not.toContain('Fix intake sync');
   });
 
   it('given an issue candidate, when a custom prompt is submitted, then the run keeps the issue context and adds the typed guidance', async () => {
@@ -1252,9 +1308,13 @@ describe('Factory Board — investigate flow', () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
-    expect(captured.messages[0]!.message).toContain('understand-issue skill');
-    expect(captured.messages[0]!.message).toContain('GitHub issue #12 (https://github.com/mastra-ai/mastra/issues/12)');
-    expect(captured.messages[0]!.message).not.toContain('Fix flaky test');
+    expect(captured.messages).toHaveLength(0);
+    expect(captured.skillInvocations).toHaveLength(1);
+    expect(captured.skillInvocations[0]).toMatchObject({
+      name: 'understand-issue',
+      arguments: expect.stringContaining('GitHub issue #12 (https://github.com/mastra-ai/mastra/issues/12)'),
+    });
+    expect(JSON.stringify(captured.skillInvocations)).not.toContain('Fix flaky test');
     expect(state.patches).toMatchObject([
       {
         id: 'wi-1',
@@ -1344,8 +1404,9 @@ describe('Factory Board — investigate flow', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe(`/threads/${THREAD_ID}`));
     // No new thread was created — the resumed thread carried the follow-up run.
     expect(captured.threadTitles).toEqual([]);
-    expect(captured.messages).toHaveLength(1);
-    expect(captured.messages[0]!.message).toContain('understand-pr skill');
+    expect(captured.messages).toHaveLength(0);
+    expect(captured.skillInvocations).toHaveLength(1);
+    expect(captured.skillInvocations[0]).toMatchObject({ name: 'understand-pr' });
     expect(state.patches).toMatchObject([
       {
         id: 'wi-pr',

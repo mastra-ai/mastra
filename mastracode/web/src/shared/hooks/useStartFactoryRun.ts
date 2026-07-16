@@ -7,6 +7,7 @@ import { queryKeys } from '../api/keys';
 import type { AgentControllerSession } from '../../web/ui/domains/chat/services/agentControllerClient';
 import {
   createAgentControllerClient,
+  invokeWorkspaceSkill,
   requireAgentControllerSession,
 } from '../../web/ui/domains/chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../web/ui/domains/chat/services/constants';
@@ -42,6 +43,10 @@ export interface StartFactoryRunWorkItem {
   metadata?: Record<string, unknown>;
 }
 
+export type FactoryRunInvocation =
+  | { type: 'prompt'; prompt: string }
+  | { type: 'skill'; skillName: string; arguments: string };
+
 export interface StartFactoryRunInput {
   /** Feature branch for the new worktree (e.g. `factory/issue-12`). */
   branch: string;
@@ -49,8 +54,8 @@ export interface StartFactoryRunInput {
   threadTitle: string;
   /** Existing thread tags to prefer before falling back to the session thread. */
   threadTags?: Record<string, string>;
-  /** First user message sent to the agent (e.g. a skill invocation). */
-  prompt: string;
+  /** First user action dispatched to the agent. */
+  invocation: FactoryRunInvocation;
   /** Board card to file for this run (kanban record; optional). */
   workItem?: StartFactoryRunWorkItem;
 }
@@ -77,7 +82,7 @@ export function useStartFactoryRun() {
   });
 
   const mutation = useMutation({
-    mutationFn: async ({ branch, threadTitle, threadTags, prompt, workItem }: StartFactoryRunInput) => {
+    mutationFn: async ({ branch, threadTitle, threadTags, invocation, workItem }: StartFactoryRunInput) => {
       const updatedProject = await createWorkspace.mutateAsync(branch);
       queryClient.setQueryData(queryKeys.projects(), (projects: Project[] | undefined) =>
         projects?.map(project => (project.id === updatedProject.id ? updatedProject : project)),
@@ -106,9 +111,24 @@ export function useStartFactoryRun() {
       // the same item, reuse that thread: the prompt lands as a follow-up
       // message instead of leaving a stray second thread in the worktree.
       const threadId = await resolveRunThread(scopedSession, created.threadId, threadTitle, projectPath, threadTags);
-      await scopedSession.sendMessage(prompt);
+      let dispatchedMessage: string;
+      if (invocation.type === 'skill') {
+        const skillArguments = `${invocation.arguments.trim()}\n\nPrepared workspace context:\n- Worktree: ${projectPath}\n- Branch: ${branch}`;
+        const result = await invokeWorkspaceSkill({
+          agentControllerId: AGENT_CONTROLLER_ID,
+          resourceId,
+          scope: projectPath,
+          name: invocation.skillName,
+          arguments: skillArguments,
+          baseUrl,
+        });
+        dispatchedMessage = result.message;
+      } else {
+        await scopedSession.sendMessage(invocation.prompt);
+        dispatchedMessage = invocation.prompt;
+      }
 
-      // Append the prompt to the thread's message cache so it renders
+      // Append the dispatched message to the thread cache so it renders
       // immediately when the thread page mounts, before the server transcript
       // catches up. Appending (not replacing) preserves any prior conversation
       // when the run reuses an existing thread.
@@ -116,7 +136,7 @@ export function useStartFactoryRun() {
         id: `local-${Date.now()}`,
         role: 'user',
         createdAt: new Date(),
-        content: { format: 2, parts: [{ type: 'text', text: prompt }] },
+        content: { format: 2, parts: [{ type: 'text', text: dispatchedMessage }] },
       };
       queryClient.setQueryData(
         queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, threadId),
