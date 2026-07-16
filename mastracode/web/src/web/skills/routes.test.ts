@@ -1,3 +1,4 @@
+import type { Skill } from '@mastra/core/workspace';
 import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -13,8 +14,10 @@ import { getAppDb } from '../github/db';
 import { mountApiRoutes } from '../test-utils';
 import { buildSkillRoutes } from './routes';
 
-const skill = {
+const skill: Skill = {
   name: 'understand-pr',
+  path: '/workspace/.mastracode/skills/understand-pr',
+  source: { type: 'local', projectPath: '/workspace' },
   description: 'Review a pull request',
   instructions: 'Inspect the pull request carefully.',
   references: ['checklist.md'],
@@ -92,7 +95,11 @@ function invoke(app: Hono, body: Record<string, unknown>, controllerId = 'code')
 }
 
 describe('workspace skill invocation route', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(webAuthTenant).mockReset();
+    vi.mocked(getAppDb).mockReset();
+  });
 
   it('formats and dispatches a workspace skill once with escaped arguments', async () => {
     const harness = createHarness();
@@ -154,6 +161,24 @@ describe('workspace skill invocation route', () => {
     expect(await response.json()).toEqual({
       error: 'skill_not_found',
       message: 'Skill not found: missing-skill.',
+    });
+    expect(harness.sendA).not.toHaveBeenCalled();
+  });
+
+  it('does not dispatch a skill that is not user-invocable', async () => {
+    const harness = createHarness();
+    harness.getA.mockResolvedValueOnce({ ...skill, 'user-invocable': false });
+
+    const response = await invoke(harness.app, {
+      resourceId: 'resource-1',
+      scope: '/worktrees/a',
+      name: 'understand-pr',
+    });
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({
+      error: 'skill_not_found',
+      message: 'Skill not found: understand-pr.',
     });
     expect(harness.sendA).not.toHaveBeenCalled();
   });
