@@ -1,0 +1,244 @@
+---
+title: "Deploy to a sandbox | Deployment"
+description: "Deploy a Mastra server into an ephemeral workspace sandbox and get a live public URL in seconds."
+packages:
+  - "@mastra/deployer-sandbox"
+---
+
+# Deploy to a sandbox
+
+`@mastra/deployer-sandbox` deploys a full Mastra server, including Studio, into a workspace sandbox and returns a live public URL. Deploys finish in seconds because the sandbox is already a running VM.
+
+Sandbox deployments are ephemeral environments. Use them for:
+
+- Agent-built apps: An agent generates a Mastra project and deploys it to verify the result
+- Instant previews: Share a working agent with your team before merging
+- Multi-tenant untrusted code: Run per-user Mastra instances isolated from your infrastructure
+- PR and CI smoke deploys: Spin up a real server for checks, then tear it down
+
+Sandboxes have provider-enforced runtime caps and expire. They aren't production hosting. For production, see the [deployment overview](/docs/deployment/overview).
+
+## Supported sandboxes
+
+The deployer works with any workspace sandbox that supports networking (public port URLs):
+
+- [Vercel Sandbox](/reference/workspace/vercel-sandbox) (`@mastra/vercel`)
+- [E2B](/reference/workspace/e2b-sandbox) (`@mastra/e2b`)
+
+Provider authors can add support by implementing the optional `networking` capability on [`WorkspaceSandbox`](/reference/workspace/sandbox).
+
+## Quick start
+
+Install the deployer and a sandbox provider:
+
+```bash npm2yarn
+npm install @mastra/deployer-sandbox @mastra/vercel
+```
+
+Configure the deployer in your Mastra entry file. The sandbox instance is the deployment identity: deploying again with the same `sandboxName` reuses the same sandbox.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { SandboxDeployer } from '@mastra/deployer-sandbox'
+import { VercelSandbox } from '@mastra/vercel'
+
+export const mastra = new Mastra({
+  // ...
+  deployer: new SandboxDeployer({
+    sandbox: new VercelSandbox({
+      sandboxName: 'my-preview',
+      timeout: 3_600_000, // 1 hour
+      ports: [4111],
+    }),
+  }),
+})
+```
+
+Vercel Sandbox reads credentials from `VERCEL_TOKEN`, `VERCEL_TEAM_ID`, and `VERCEL_PROJECT_ID` environment variables.
+
+Build and deploy in one command:
+
+```bash
+mastra build
+```
+
+When a `SandboxDeployer` is configured, `mastra build` bundles your project and deploys it into the sandbox. The deploy prints the API and Studio URLs and writes a `sandbox-deployment.json` manifest into `.mastra/output`:
+
+```
+API:    https://<sandbox-id>-4111.vercel.run/api
+Studio: https://<sandbox-id>-4111.vercel.run
+Expires: 2026-07-16T15:00:00.000Z
+```
+
+Redeploys to the same sandbox skip the dependency install when `package.json` is unchanged, so iterating takes seconds.
+
+### Using E2B
+
+The same configuration works with any supported provider. For E2B the `id` option is the deployment identity: deploying again with the same `id` reconnects to the existing sandbox (running or paused) instead of creating a new one.
+
+```typescript title="src/mastra/index.ts"
+import { SandboxDeployer } from '@mastra/deployer-sandbox'
+import { E2BSandbox } from '@mastra/e2b'
+
+const deployer = new SandboxDeployer({
+  sandbox: new E2BSandbox({
+    id: 'my-preview',
+    template: 'base',
+    timeout: 3_600_000, // 1 hour
+  }),
+})
+```
+
+E2B reads its API key from the `E2B_API_KEY` environment variable. Pass `template: 'base'` unless you need filesystem mounts; without it, the provider builds a custom FUSE-enabled template on first use.
+
+E2B pauses instead of stopping: `stop()` snapshots the whole VM, including memory and running processes. When a paused sandbox wakes, the Mastra server resumes where it left off, and there's no relaunch step like on Vercel.
+
+## Deploying programmatically
+
+`deployToSandbox()` deploys a prebuilt output directory without the bundler. Use it in CI or from agent code:
+
+```typescript
+import { deployToSandbox } from '@mastra/deployer-sandbox'
+import { VercelSandbox } from '@mastra/vercel'
+
+const deployment = await deployToSandbox({
+  sandbox: new VercelSandbox({ sandboxName: 'ci-smoke', ports: [4111] }),
+  dir: '.mastra/output',
+})
+
+console.info(deployment.url) // https://<sandbox-id>-4111.vercel.run
+await deployment.logs() // tail the server log
+await deployment.stop() // snapshot-stop (resumable)
+await deployment.destroy() // permanently delete the sandbox
+```
+
+## Lifecycle
+
+### Managing a deployment
+
+`getDeployment()` from the server-only `@mastra/deployer-sandbox/client` export retrieves a deployment by its sandbox identity. Because the sandbox name is the identity, this works from any process or codebase: a script in the same repo, a separate admin service, or CI.
+
+```typescript title="scripts/stop.ts"
+import { getDeployment } from '@mastra/deployer-sandbox/client'
+import { VercelSandbox } from '@mastra/vercel'
+
+const deployment = await getDeployment({
+  sandbox: new VercelSandbox({ sandboxName: 'my-preview', ports: [4111] }),
+  port: 4111,
+})
+
+console.info(deployment.status, deployment.url)
+await deployment.logs() // tail the server log
+await deployment.stop() // snapshot-stop (resumable)
+await deployment.destroy() // permanently delete the sandbox
+```
+
+Pass `wake: true` to resume a stopped sandbox and relaunch the server before returning. Provider tooling works too, for example `vercel sandbox ls`, `vercel sandbox stop`, and `vercel sandbox rm`.
+
+### Expiry and URLs
+
+Sandboxes expire at the provider's runtime cap. The deploy logs the expiry time, and `deployment.expiresAt` exposes it programmatically.
+
+Sandbox URLs can change when a sandbox stops and resumes. Treat the URL as plumbing and the sandbox identity (for example, the `sandboxName`) as the stable handle. The routing tiers below deal with URL rotation.
+
+## Routing tiers
+
+### Tier 1: Direct URL
+
+Use the printed URL directly. Good for development, demos, and CI where a fresh URL per deploy is fine.
+
+### Tier 2: Resolve at runtime
+
+`getDeployment()` resolves the current URL at runtime, so consumers never hold a stale URL. Any server that knows the sandbox name can resolve it, including one in a different codebase than the Mastra project:
+
+```typescript title="app/api/agent-url/route.ts"
+import { getDeployment } from '@mastra/deployer-sandbox/client'
+import { VercelSandbox } from '@mastra/vercel'
+
+const deployment = await getDeployment({
+  sandbox: new VercelSandbox({ sandboxName: 'my-preview', ports: [4111] }),
+  wake: true,
+})
+
+console.info(deployment.url, deployment.status)
+```
+
+With `wake: false` (the default) the sandbox isn't started and you get `{ url, status }` to act on. Resolving the URL, `stop()`, and `destroy()` attach to the existing sandbox by name without resuming it, so lifecycle operations on a stopped sandbox never wake it or start billing. With `wake: true` the sandbox resumes and the server is relaunched if it isn't answering, since a snapshot resume restores the filesystem but not running processes.
+
+:::warning
+
+`@mastra/deployer-sandbox/client` is server-only. Resolving a sandbox uses provider credentials that must never reach the browser. The module throws if imported in a browser context.
+
+:::
+
+### Tier 3: Stable URL for end users
+
+Give end users a stable URL on your own domain and forward to the sandbox server-side, using either a route handler proxy or an Edge Config alias.
+
+**Route handler proxy.** `createSandboxHandler()` caches the sandbox URL and re-resolves when a forwarded request fails, which covers URL rotation and cold wakes:
+
+```typescript title="app/api/[...path]/route.ts"
+import { createSandboxHandler, getDeployment } from '@mastra/deployer-sandbox/client'
+import { VercelSandbox } from '@mastra/vercel'
+
+const handler = createSandboxHandler({
+  resolve: async () => {
+    const deployment = await getDeployment({
+      sandbox: new VercelSandbox({ sandboxName: 'my-preview', ports: [4111] }),
+      wake: true,
+    })
+    return deployment.url!
+  },
+})
+
+export { handler as GET, handler as POST }
+```
+
+**Edge Config alias.** Set the `alias` option on the deployer to keep a [Vercel Edge Config](https://vercel.com/docs/edge-config) item pointed at the current URL on every deploy:
+
+```typescript title="src/mastra/index.ts"
+const deployer = new SandboxDeployer({
+  sandbox: new VercelSandbox({ sandboxName: 'my-preview', ports: [4111] }),
+  alias: { edgeConfigId: 'ecfg_...', key: 'my-preview' },
+})
+```
+
+Then rewrite requests in Next.js middleware with `createSandboxProxy()`:
+
+```typescript title="middleware.ts"
+import { createSandboxProxy } from '@mastra/deployer-sandbox/client'
+
+export const middleware = createSandboxProxy({ key: 'my-preview' })
+export const config = { matcher: '/api/:path*' }
+```
+
+## CI example
+
+Deploy a preview on every pull request:
+
+```yaml title=".github/workflows/preview.yml"
+name: Sandbox preview
+on: pull_request
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npx mastra build
+      - run: curl --fail "$(jq -r .url .mastra/output/sandbox-deployment.json)/api"
+```
+
+## Security
+
+- The sandbox URL is public. Anyone with the URL can reach your Mastra server, including Studio. Enable [server auth](/docs/server/auth) for anything beyond throwaway previews.
+- Environment variables from your `.env` files are injected into the remote sandbox VM so the server can run. The deploy logs a warning when this happens. Don't deploy secrets you wouldn't put on a shared preview server.
+- To restrict access to Tier 3 traffic, pass a `secret` to `createSandboxHandler()` or `createSandboxProxy()`. The helpers attach it as the `x-mastra-sandbox-secret` header on forwarded requests. Configure [server auth](/docs/server/auth) to require that header, and direct hits to the sandbox URL get rejected while traffic through your domain works.

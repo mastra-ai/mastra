@@ -979,6 +979,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'deployment/sandbox',
+              label: 'Sandbox',
+            },
+            {
+              type: 'doc',
               id: 'deployment/web-framework',
               label: 'Web Framework',
             },

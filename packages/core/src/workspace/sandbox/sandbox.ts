@@ -34,6 +34,52 @@ import type { SandboxProcessManager } from './process-manager';
 import type { CommandResult, ExecuteCommandOptions, SandboxInfo } from './types';
 
 // =============================================================================
+// Networking Capability
+// =============================================================================
+
+/**
+ * Optional networking capability for sandboxes that can expose ports publicly.
+ *
+ * Providers that support public port exposure (Vercel Sandbox, E2B, Daytona,
+ * Modal, Blaxel, etc.) implement this to surface public URLs through the
+ * abstraction. Enables preview URLs and sandbox deploys.
+ */
+export interface SandboxNetworking {
+  /**
+   * Get the public URL for an exposed port.
+   *
+   * @param port - The port number inside the sandbox
+   * @returns The public URL for the port, or null if the port is not exposed
+   *   or the sandbox is not running
+   */
+  getPortUrl(port: number): Promise<string | null>;
+}
+
+/** A file to write into the sandbox filesystem via {@link WorkspaceSandbox.writeFiles}. */
+export interface SandboxFileInput {
+  /** Destination path inside the sandbox */
+  path: string;
+  /** File contents */
+  content: string | Buffer;
+}
+
+/**
+ * Type guard: does this sandbox support the networking capability?
+ *
+ * @example
+ * ```typescript
+ * if (supportsNetworking(sandbox)) {
+ *   const url = await sandbox.networking.getPortUrl(4111);
+ * }
+ * ```
+ */
+export function supportsNetworking(
+  sandbox: WorkspaceSandbox,
+): sandbox is WorkspaceSandbox & { networking: SandboxNetworking } {
+  return typeof sandbox.networking?.getPortUrl === 'function';
+}
+
+// =============================================================================
 // Sandbox Interface
 // =============================================================================
 
@@ -95,6 +141,38 @@ export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
    * @throws {SandboxTimeoutError} if command times out
    */
   executeCommand?(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult>;
+
+  // ---------------------------------------------------------------------------
+  // Networking (Optional)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Networking capability for sandboxes that can expose ports publicly.
+   * Optional - only available on providers that support public port exposure.
+   * Enables preview URLs and sandbox deploys.
+   *
+   * @example
+   * ```typescript
+   * const url = await sandbox.networking?.getPortUrl(4111);
+   * ```
+   */
+  readonly networking?: SandboxNetworking;
+
+  // ---------------------------------------------------------------------------
+  // File Upload (Optional)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Bulk-write files into the sandbox's own filesystem.
+   * Optional fast path - providers with a native file-upload API implement this.
+   * Callers should fall back to `executeCommand` when unavailable.
+   *
+   * @example
+   * ```typescript
+   * await sandbox.writeFiles?.([{ path: '/app/index.mjs', content: bundle }]);
+   * ```
+   */
+  writeFiles?(files: SandboxFileInput[]): Promise<void>;
 
   // ---------------------------------------------------------------------------
   // Process Management (Optional)
