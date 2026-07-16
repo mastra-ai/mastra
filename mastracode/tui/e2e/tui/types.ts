@@ -110,6 +110,7 @@ export type ScenarioName =
   | 'state-signal-browser-processor'
   | 'state-signal-reload'
   | 'state-signal-rendering'
+  | 'subconscious-activity-rendering'
   | 'setup-completion-persistence'
   | 'setup-custom-pack-completion'
   | 'setup-login-refresh'

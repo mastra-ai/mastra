@@ -29,6 +29,10 @@ import { ReactiveSignalComponent } from './components/reactive-signal.js';
 import { SlashCommandComponent } from './components/slash-command.js';
 import { StateSignalComponent } from './components/state-signal.js';
 import { SubagentExecutionComponent } from './components/subagent-execution.js';
+import {
+  parseSubconsciousActivitySnapshot,
+  SubconsciousActivityComponent,
+} from './components/subconscious-activity.js';
 import { SystemReminderComponent } from './components/system-reminder.js';
 import { formatTaskProgressLine } from './components/task-progress.js';
 import { TemporalGapComponent } from './components/temporal-gap.js';
@@ -420,7 +424,7 @@ export function addUserMessage(state: TUIState, message: AgentControllerMessage,
   }
 
   const stateSignalPart = message.content.find(content => (content as { type?: string }).type === 'state_signal') as
-    | { type: 'state_signal'; stateId: string; mode: 'snapshot' | 'delta'; version?: number; message?: string }
+    | Extract<AgentControllerMessageContent, { type: 'state_signal' }>
     | undefined;
 
   // The `tasks` state signal is rendered by the pinned task list UI (replayed
@@ -435,12 +439,18 @@ export function addUserMessage(state: TUIState, message: AgentControllerMessage,
   }
 
   if (stateSignalPart) {
-    const component = new StateSignalComponent({
-      stateId: stateSignalPart.stateId,
-      mode: stateSignalPart.mode,
-      version: stateSignalPart.version,
-      message: stateSignalPart.message,
-    });
+    const subconsciousActivity =
+      stateSignalPart.stateId === 'subconscious-activity'
+        ? parseSubconsciousActivitySnapshot(stateSignalPart.value)
+        : undefined;
+    const component = subconsciousActivity
+      ? new SubconsciousActivityComponent(subconsciousActivity)
+      : new StateSignalComponent({
+          stateId: stateSignalPart.stateId,
+          mode: stateSignalPart.mode,
+          version: stateSignalPart.version,
+          message: stateSignalPart.message,
+        });
     addChildBeforeFollowUps(state, component);
     state.messageComponentsById.set(message.id, component);
     state.ui.requestRender();

@@ -128,6 +128,7 @@ import { streamingToolArgsScenario } from './streaming-tool-args.js';
 import { subagentDelegationScenario } from './subagent-delegation.js';
 import { subagentModelStartupRestoreScenario } from './subagent-model-startup-restore.js';
 import { subagentPlanExecuteToolsScenario } from './subagent-plan-execute-tools.js';
+import { subconsciousActivityRenderingScenario } from './subconscious-activity-rendering.js';
 import { taskInlineTransitionsScenario } from './task-inline-transitions.js';
 import { taskPatchToolsScenario } from './task-patch-tools.js';
 import { taskProgressEventsScenario } from './task-progress-events.js';
@@ -260,6 +261,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'state-signal-browser-processor': stateSignalBrowserProcessorScenario,
   'state-signal-reload': stateSignalReloadScenario,
   'state-signal-rendering': stateSignalRenderingScenario,
+  'subconscious-activity-rendering': subconsciousActivityRenderingScenario,
   'setup-completion-persistence': setupCompletionPersistenceScenario,
   'setup-custom-pack-completion': setupCustomPackCompletionScenario,
   'setup-login-refresh': setupLoginRefreshScenario,
