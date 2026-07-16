@@ -1,5 +1,84 @@
 # @mastra/core
 
+## 1.52.0-alpha.2
+
+### Minor Changes
+
+- Added multi-turn support to `runEvals`. Data items can now include an `inputs: string[]` array — each entry is sent sequentially to the agent on the same thread, and scorers see the accumulated output from all turns. ([#18395](https://github.com/mastra-ai/mastra/pull/18395))
+
+  **What changed**
+  - `RunEvalsDataItem` accepts an optional `inputs` array for multi-turn conversations
+  - Each turn runs `agent.generate()` with the same `threadId`, preserving conversation history
+  - `runEvals` injects both a shared `threadId` and a `resourceId` (Mastra memory scopes messages by resource + thread, so both are needed for recall); the resource defaults to the generated thread and a caller-provided `targetOptions.memory.resource` is preserved. `thread` is now optional in `targetOptions.memory` since `runEvals` owns it.
+  - Scorers receive the accumulated output messages from all turns
+  - Works with gates, thresholds, and all existing scorer configurations
+  - Validation rejects empty `inputs` arrays with a `MastraError`
+
+  Also added a `turns` API for **per-turn assertions**. Instead of a single holistic score over the accumulated conversation (which can hide a broken follow-up turn), each turn colocates its `input` with `gates`/`scorers` that evaluate only that turn's input and output. Per-turn outcomes are reported in `result.turnResults` and folded into the overall `verdict`. When the agent has storage configured, per-turn scorer/gate results are persisted like top-level scores. `turns` is Agent-only and mutually exclusive with `input`/`inputs`.
+
+  **Example — holistic multi-turn (`inputs`)**
+
+  ```ts
+  import { runEvals } from '@mastra/core/evals';
+  import { checks } from '@mastra/evals/checks';
+
+  const result = await runEvals({
+    target: weatherAgent,
+    data: [
+      {
+        inputs: ['What is the weather in Brooklyn?', 'What about tomorrow?', 'Compare the two forecasts.'],
+      },
+    ],
+    scorers: [checks.calledTool('get_weather', { times: 2 }), checks.includes('Brooklyn')],
+  });
+  ```
+
+  **Example — per-turn assertions (`turns`)**
+
+  ```ts
+  const result = await runEvals({
+    target: weatherAgent,
+    data: [
+      {
+        turns: [
+          {
+            input: 'What is the weather in Brooklyn?',
+            gates: [checks.calledTool('get_weather')],
+          },
+          {
+            input: 'What about tomorrow?',
+            gates: [checks.calledTool('get_weather')], // must call again this turn
+            scorers: [{ scorer: checks.similarity('tomorrow forecast'), threshold: 0.5 }],
+          },
+        ],
+      },
+    ],
+  });
+
+  result.verdict; // folds in per-turn gate/threshold outcomes
+  result.turnResults; // [{ index, gateResults, thresholdResults, scores }]
+  ```
+
+### Patch Changes
+
+- Added native structured-output support lookup through the model provider registry. ([#19440](https://github.com/mastra-ai/mastra/pull/19440))
+
+  ```ts
+  import { modelSupportsStructuredOutput } from '@mastra/core/llm';
+
+  const supportsStructuredOutput = modelSupportsStructuredOutput('openai/gpt-5.5');
+  ```
+
+- Fixed answering an ask_user question failing with a misleading "could not find a suspended run" error when the suspended run died before its state was saved (for example when persisting the suspended snapshot failed). The unresumable question is now retracted, a late answer is ignored, and the original error is surfaced instead. ([#19444](https://github.com/mastra-ai/mastra/pull/19444))
+
+- Aligned A2AAgent streams with the regular Agent stream contract. A2A streams now emit a leading start chunk on fresh runs (skipped when resuming, matching Agent behavior) and the finish chunk now carries the Agent-shaped payload (stepResult.reason, output.usage) so downstream consumers can treat sub-agent streams uniformly. The previous flat finishReason and usage fields are still included for backward compatibility but are deprecated. ([#19517](https://github.com/mastra-ai/mastra/pull/19517))
+
+- Updated the bundled provider SDKs used by the model router for Cerebras, DeepInfra, DeepSeek, Perplexity, Together AI, and OpenAI-compatible endpoints (including custom provider URLs and the Netlify gateway) to their AI SDK v6-compatible versions. This aligns them with the other providers in the model router (OpenAI, Anthropic, Google, Groq, Mistral, xAI, OpenRouter) which already use v6-compatible SDKs, and picks up upstream provider fixes. No changes to the public API: model strings like cerebras/llama-3.3-70b or deepseek/deepseek-chat keep working as before. Unused v5-track provider SDK bundles (Groq, Mistral, xAI, and the migrated providers above) were removed from the bundle. ([#19495](https://github.com/mastra-ai/mastra/pull/19495))
+
+- Updated embedding model routing to use the AI SDK v6 provider SDKs (OpenAI, Google, and OpenAI-compatible) while preserving the existing embedding interface. Existing embedding model configurations continue to work without code changes. ([#19500](https://github.com/mastra-ai/mastra/pull/19500))
+
+- Add `jsonPromptInjection: 'auto'` to select native structured output when model capability data confirms support and inline JSON prompt injection otherwise. Scorer judges use this automatic path by default while preserving explicit `jsonPromptInjection` overrides and fallback retries for unexpected provider failures. ([#19442](https://github.com/mastra-ai/mastra/pull/19442))
+
 ## 1.51.1-alpha.1
 
 ## 1.51.1-alpha.0

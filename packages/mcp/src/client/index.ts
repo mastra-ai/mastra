@@ -14,4 +14,5 @@ export type {
 export * from './client';
 export * from './configuration';
 export * from './oauth-provider';
+export * from './oauth-callback-server';
 export { MCPClientServerProxy } from './server-proxy';
