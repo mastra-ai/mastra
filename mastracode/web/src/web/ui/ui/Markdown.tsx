@@ -73,7 +73,7 @@ export function renderMarkdown(src: string): string {
   try {
     return marked.parse(src) as string;
   } catch {
-    return src;
+    return escapeHtml(src);
   }
 }
 
