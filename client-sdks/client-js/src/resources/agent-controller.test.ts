@@ -494,29 +494,7 @@ describe('AgentController Resource', () => {
     expect((global.fetch as any).mock.calls).toHaveLength(1);
   });
 
-  it('retries the initial connection under the reconnect policy before resolving', async () => {
-    const event = { type: 'agent_start' };
-    (global.fetch as any)
-      .mockRejectedValueOnce(new Error('connect refused'))
-      .mockResolvedValueOnce(openSseResponse([`data: ${JSON.stringify(event)}\n\n`]));
-
-    const received: AgentControllerEvent[] = [];
-    const sub = await noRetryClient()
-      .getAgentController('code')
-      .session('user-1')
-      .subscribe({
-        onEvent: e => received.push(e),
-        reconnect: { maxRetries: 1, delayMs: 0 },
-      });
-
-    await new Promise(r => setTimeout(r, 10));
-    sub.unsubscribe();
-
-    expect((global.fetch as any).mock.calls).toHaveLength(2);
-    expect(received).toEqual([event]);
-  });
-
-  it('rejects subscribe when initial connection retries are exhausted', async () => {
+  it('rejects subscribe on initial connection failure even with reconnect enabled', async () => {
     (global.fetch as any).mockRejectedValue(new Error('still down'));
 
     await expect(
@@ -525,12 +503,15 @@ describe('AgentController Resource', () => {
         .session('user-1')
         .subscribe({
           onEvent: () => {},
-          reconnect: { maxRetries: 2, delayMs: 0 },
+          reconnect: true,
         }),
     ).rejects.toThrow('still down');
 
-    // Initial attempt + 2 retries.
-    expect((global.fetch as any).mock.calls).toHaveLength(3);
+    // Reconnect governs only re-establishment after an established stream
+    // drops — a rejected subscribe leaves no retry loop running.
+    expect((global.fetch as any).mock.calls).toHaveLength(1);
+    await new Promise(r => setTimeout(r, 30));
+    expect((global.fetch as any).mock.calls).toHaveLength(1);
   });
 
   it('calls onReconnect when the stream is re-established, but not on first connect', async () => {

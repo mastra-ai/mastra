@@ -2,4 +2,4 @@
 '@mastra/client-js': patch
 ---
 
-Fixed AgentControllerSession.subscribe() so it resolves only after the stream is established (rejecting when it cannot connect), retries with exponential backoff, and notifies consumers of re-established streams via a new onReconnect callback so they can re-sync missed events.
+Fixed AgentControllerSession.subscribe() so it resolves only after the stream is established and rejects when it cannot connect (leaving no background retry loop). Reconnect now applies only after an established stream drops, backs off exponentially, and fires a new onReconnect callback on each re-established stream so consumers can re-sync missed events.

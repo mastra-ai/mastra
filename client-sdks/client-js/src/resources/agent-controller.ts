@@ -362,11 +362,13 @@ export interface SubscribeAgentControllerSessionOptions {
    */
   onReconnect?: () => void;
   /**
-   * Automatically re-establish the stream after a clean close or transport
-   * error. Retries back off exponentially from `delayMs` (default 1s) up to
-   * `maxDelayMs` (default 30s); `maxRetries` (default Infinity) bounds the
-   * attempts per outage — the counter resets once a connection is
-   * re-established. When retries are exhausted, `onError` fires.
+   * Automatically re-establish the stream after an established stream drops
+   * (clean close or transport error). Does not apply to the initial
+   * connection — `subscribe()` rejects if it can't connect. Retries back off
+   * exponentially from `delayMs` (default 1s) up to `maxDelayMs` (default
+   * 30s); `maxRetries` (default Infinity) bounds the attempts per outage —
+   * the counter resets once a connection is re-established. When retries are
+   * exhausted, `onError` fires.
    */
   reconnect?:
     | boolean
@@ -433,8 +435,10 @@ export class AgentControllerSession extends BaseResource {
    * message arrives here as `message_*` events, not on the sendMessage call.
    *
    * The returned promise resolves once the stream is actually established and
-   * rejects when it cannot be — with `reconnect` enabled, initial connection
-   * failures are retried under the same policy before rejecting.
+   * rejects when it cannot be. A rejected subscribe leaves nothing running —
+   * `reconnect` governs only re-establishment after an established stream
+   * drops, so callers that want connect-time retry can loop around
+   * `subscribe()` themselves and keep cancellation control.
    */
   async subscribe(options: SubscribeAgentControllerSessionOptions): Promise<AgentControllerSubscription> {
     const reconnectOptions =
@@ -561,22 +565,12 @@ export class AgentControllerSession extends BaseResource {
     };
 
     // Establish the FIRST stream before resolving so callers can trust that a
-    // resolved subscribe() means events are flowing. Unsubscribe isn't
-    // available yet, so no cancellation checks are needed here. Initial
-    // failures retry under the reconnect policy; when retries are exhausted
-    // (or reconnect is off) the promise rejects.
-    const firstResponse = await (async (): Promise<Response> => {
-      let attempts = 0;
-      while (true) {
-        try {
-          return await requestStream();
-        } catch (error) {
-          if (!reconnectOptions || attempts >= reconnectOptions.maxRetries) throw error;
-          attempts++;
-          await delay(backoffDelay(attempts));
-        }
-      }
-    })();
+    // resolved subscribe() means events are flowing, and a rejected one means
+    // nothing is running in the background. Reconnect deliberately does not
+    // apply here: retrying before a subscription handle exists would leave the
+    // caller with no way to cancel the loop (e.g. reconnect: true would hang
+    // forever against a down server).
+    const firstResponse = await requestStream();
 
     // Background loop: pump the current stream; on drop, re-establish it under
     // the reconnect policy (exponential backoff, per-outage retry budget) and
