@@ -1,6 +1,6 @@
 import type { TimeTravelContext, WorkflowRunState } from '@mastra/core/workflows';
 import { z } from 'zod/v4';
-import { createCombinedPaginationSchema, tracingOptionsSchema, messageResponseSchema } from './common';
+import { createCombinedPaginationSchema, tracingOptionsSchema, messageResponseSchema, typedPermissive } from './common';
 
 export const workflowRunStatusSchema = z.enum([
   'running',
@@ -80,9 +80,7 @@ export const listWorkflowsResponseSchema = z.record(z.string(), workflowInfoSche
 const workflowRunSchema = z.object({
   workflowName: z.string(),
   runId: z.string(),
-  // Runtime validation stays permissive; the assertion matches the storage
-  // WorkflowRun.snapshot type that handlers return.
-  snapshot: z.union([z.record(z.string(), z.unknown()), z.string()]) as unknown as z.ZodType<WorkflowRunState | string>,
+  snapshot: typedPermissive<WorkflowRunState | string>(z.union([z.record(z.string(), z.unknown()), z.string()])),
   createdAt: z.date(),
   updatedAt: z.date(),
   resourceId: z.string().optional(),
@@ -166,15 +164,11 @@ export const timeTravelBodySchema = z.object({
   resumeData: z.unknown().optional(),
   initialState: z.unknown().optional(),
   step: z.union([z.string(), z.array(z.string())]),
-  // Runtime validation stays permissive; the assertion matches the context
-  // type expected by run.timeTravel/timeTravelStream.
-  context: (
-    z.record(z.string(), z.unknown()) as unknown as z.ZodType<TimeTravelContext<unknown, unknown, unknown, unknown>>
+  context: typedPermissive<TimeTravelContext<unknown, unknown, unknown, unknown>>(
+    z.record(z.string(), z.unknown()),
   ).optional(),
-  nestedStepsContext: (
-    z.record(z.string(), z.record(z.string(), z.unknown())) as unknown as z.ZodType<
-      Record<string, TimeTravelContext<unknown, unknown, unknown, unknown>>
-    >
+  nestedStepsContext: typedPermissive<Record<string, TimeTravelContext<unknown, unknown, unknown, unknown>>>(
+    z.record(z.string(), z.record(z.string(), z.unknown())),
   ).optional(),
   requestContext: z.record(z.string(), z.unknown()).optional(),
   tracingOptions: tracingOptionsSchema.optional(),

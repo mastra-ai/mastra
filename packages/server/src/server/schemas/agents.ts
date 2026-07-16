@@ -42,7 +42,7 @@ type ModelSettings = {
   headers?: Record<string, string | undefined>;
   reasoning?: ReasoningLevel;
 };
-import { tracingOptionsSchema, coreMessageSchema, messageResponseSchema } from './common';
+import { tracingOptionsSchema, coreMessageSchema, messageResponseSchema, typedPermissive } from './common';
 import { defaultOptionsSchema } from './default-options';
 
 export {
@@ -207,14 +207,14 @@ export const serializedAgentDefinitionSchema = z.object({
  * Schema for SystemMessage type
  * Can be string, string[], or various message objects
  */
-// Runtime validation stays permissive; the assertion gives handlers the
-// SystemMessage type expected by agent.generate/stream.
-const systemMessageSchema = z.union([
-  z.string(),
-  z.array(z.string()),
-  z.unknown(), // CoreSystemMessage or SystemModelMessage
-  z.array(z.unknown()),
-]) as unknown as z.ZodType<SystemMessage>;
+const systemMessageSchema = typedPermissive<SystemMessage>(
+  z.union([
+    z.string(),
+    z.array(z.string()),
+    z.unknown(), // CoreSystemMessage or SystemModelMessage
+    z.array(z.unknown()),
+  ]),
+);
 
 /**
  * Schema for model configuration in model list
@@ -381,32 +381,30 @@ export const agentExecutionBodySchema = z
 
     // Execution Control
     maxSteps: z.number().optional(),
-    stopWhen: (z.unknown() as z.ZodType<StopConditionArg | StopConditionArg[]>).optional(),
+    // Stop conditions are functions and cannot be validated by zod.
+    stopWhen: typedPermissive<StopConditionArg | StopConditionArg[]>(z.unknown()).optional(),
 
     // Model Configuration
-    // Runtime validation stays permissive; the assertion matches the
-    // ProviderOptions type expected by agent.generate/stream.
-    providerOptions: (
+    providerOptions: typedPermissive<Record<string, Record<string, JSONValue>>>(
       z.object({
         anthropic: z.record(z.string(), z.unknown()).optional(),
         google: z.record(z.string(), z.unknown()).optional(),
         openai: z.record(z.string(), z.unknown()).optional(),
         xai: z.record(z.string(), z.unknown()).optional(),
-      }) as unknown as z.ZodType<Record<string, Record<string, JSONValue>>>
+      }),
     ).optional(),
-    modelSettings: (z.unknown() as z.ZodType<ModelSettings>).optional(),
+    modelSettings: typedPermissive<ModelSettings>(z.unknown()).optional(),
 
     // Tool Configuration
     activeTools: z.array(z.string()).optional(),
-    toolsets: (z.record(z.string(), z.unknown()) as unknown as z.ZodType<ToolsetsInput>).optional(),
-    clientTools: (z.record(z.string(), z.unknown()) as unknown as z.ZodType<ToolsInput>).optional(),
+    // Tool entries contain execute functions and cannot be validated by zod.
+    toolsets: typedPermissive<ToolsetsInput>(z.record(z.string(), z.unknown())).optional(),
+    clientTools: typedPermissive<ToolsInput>(z.record(z.string(), z.unknown())).optional(),
     toolChoice: toolChoiceSchema.optional(),
     requireToolApproval: z.boolean().optional(),
 
     // Evaluation
-    // Runtime validation stays permissive; the assertion matches the scorers
-    // type expected by agent.generate/stream.
-    scorers: (
+    scorers: typedPermissive<Record<string, { scorer: string; sampling?: ScoringSamplingConfig }>>(
       z.union([
         z.record(z.string(), z.unknown()),
         z.record(
@@ -416,7 +414,7 @@ export const agentExecutionBodySchema = z
             sampling: z.unknown().optional(),
           }),
         ),
-      ]) as unknown as z.ZodType<Record<string, { scorer: string; sampling?: ScoringSamplingConfig }>>
+      ]),
     ).optional(),
     returnScorerData: z.boolean().optional(),
 
@@ -424,13 +422,11 @@ export const agentExecutionBodySchema = z
     tracingOptions: tracingOptionsSchema.optional(),
 
     // Structured Output
-    // Zod schema, JSON schema, or structured output object. Runtime validation
-    // stays permissive; the assertion matches the OutputType expected by handlers.
-    output: (z.unknown() as z.ZodType<OutputType>).optional(),
-    // Runtime validation stays permissive; the assertion gives handlers the
-    // concrete options type expected by agent.generate/stream (which cannot be
-    // expressed field-by-field because of the fallback discriminated union).
-    structuredOutput: (
+    // Zod schema, JSON schema, or structured output object — cannot be validated by zod.
+    output: typedPermissive<OutputType>(z.unknown()).optional(),
+    // The concrete options type cannot be expressed field-by-field because of
+    // the fallback discriminated union.
+    structuredOutput: typedPermissive<PublicStructuredOutputOptions<Record<string, unknown>>>(
       z.object({
         schema: z.object({}).passthrough(),
         model: z.union([z.string(), z.unknown()]).optional(),
@@ -438,7 +434,7 @@ export const agentExecutionBodySchema = z
         jsonPromptInjection: z.boolean().optional(),
         errorStrategy: z.enum(['strict', 'warn', 'fallback']).optional(),
         fallbackValue: z.unknown().optional(),
-      }) as unknown as z.ZodType<PublicStructuredOutputOptions<Record<string, unknown>>>
+      }),
     ).optional(),
 
     // Idle-loop streaming (collapses streamUntilIdle into stream)
@@ -455,8 +451,8 @@ export const agentExecutionLegacyBodySchema = agentExecutionBodySchema.extend({
   resourceid: z.string().optional(), // lowercase variant
   threadId: z.string().optional(),
   // Legacy generate/stream expect AI SDK v4 CoreMessage context and a string system message.
-  context: (z.array(coreMessageSchema) as unknown as z.ZodType<CoreMessageV4[]>).optional(),
-  system: (systemMessageSchema as unknown as z.ZodType<string>).optional(),
+  context: typedPermissive<CoreMessageV4[]>(z.array(coreMessageSchema)).optional(),
+  system: typedPermissive<string>(systemMessageSchema).optional(),
 });
 
 export const streamUntilIdleBodySchema = agentExecutionBodySchema.extend({
@@ -766,7 +762,7 @@ export const sendToolApprovalBodySchema = z.object({
   resumeData: z.unknown().optional(),
   format: z.string().optional(),
   messages: z.array(coreMessageSchema).optional(),
-  streamOptions: (z.unknown() as z.ZodType<AgentExecutionOptions<undefined>>).optional(),
+  streamOptions: typedPermissive<AgentExecutionOptions<undefined>>(z.unknown()).optional(),
 });
 
 export const abortAgentThreadResponseSchema = z.object({
