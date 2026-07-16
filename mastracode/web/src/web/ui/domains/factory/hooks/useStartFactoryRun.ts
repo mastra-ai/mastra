@@ -1,4 +1,4 @@
-import type { AgentControllerMessage } from '@mastra/client-js';
+import type { MastraDBMessage } from '@mastra/client-js';
 import type { QueryClient } from '@tanstack/react-query';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
@@ -128,12 +128,13 @@ export function useStartFactoryRun() {
       // immediately when the thread page mounts, before the server transcript
       // catches up. Appending (not replacing) preserves any prior conversation
       // when the run reuses an existing thread.
-      const message: AgentControllerMessage = {
+      const message: MastraDBMessage = {
         id: `local-${Date.now()}`,
         role: 'user',
-        content: [{ type: 'text', text: prompt }],
+        createdAt: new Date(),
+        content: { format: 2, parts: [{ type: 'text', text: prompt }] },
       };
-      queryClient.setQueryData(messagesKey, (existing: AgentControllerMessage[] | undefined) => [
+      queryClient.setQueryData(messagesKey, (existing: MastraDBMessage[] | undefined) => [
         ...(existing ?? []),
         message,
       ]);

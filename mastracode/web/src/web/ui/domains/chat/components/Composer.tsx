@@ -1,4 +1,4 @@
-import type { AgentControllerMessage } from '@mastra/client-js';
+import type { MastraDBMessage } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import {
@@ -134,13 +134,17 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   };
 
   const seedThreadMessageCache = (threadId: string, text: string, files: PendingImage[]) => {
-    const message: AgentControllerMessage = {
+    const message: MastraDBMessage = {
       id: `local-${Date.now()}`,
       role: 'user',
-      content: [
-        { type: 'text', text },
-        ...files.map(f => ({ type: 'image' as const, data: f.data, mimeType: f.mediaType })),
-      ],
+      createdAt: new Date(),
+      content: {
+        format: 2,
+        parts: [
+          { type: 'text', text },
+          ...files.map(f => ({ type: 'file' as const, data: f.data, mimeType: f.mediaType })),
+        ],
+      },
     };
     queryClient.setQueryData(
       queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, projectPath, threadId),

@@ -8,8 +8,8 @@
  */
 import type {
   AgentControllerEvent,
-  AgentControllerMessage,
   AgentControllerSessionState,
+  MastraDBMessage,
   PermissionPolicy,
   PermissionRules,
 } from '@mastra/client-js';
@@ -41,9 +41,19 @@ const SESSION = `${API}/sessions/${RESOURCE_ID}`;
 const NEXT_SESSION = `${API}/sessions/${NEXT_RESOURCE_ID}`;
 const THREAD_ID = 'thread-test';
 const ROUTE_THREAD_ID = 'route-thread-test';
-const PERSISTED_MESSAGES: AgentControllerMessage[] = [
-  { id: 'persisted-user', role: 'user', content: [{ type: 'text', text: 'Persisted user question' }] },
-  { id: 'persisted-assistant', role: 'assistant', content: [{ type: 'text', text: 'Persisted assistant answer' }] },
+const PERSISTED_MESSAGES: MastraDBMessage[] = [
+  {
+    id: 'persisted-user',
+    role: 'user',
+    createdAt: new Date('2026-06-01T00:00:00.000Z'),
+    content: { format: 2, parts: [{ type: 'text', text: 'Persisted user question' }] },
+  },
+  {
+    id: 'persisted-assistant',
+    role: 'assistant',
+    createdAt: new Date('2026-06-01T00:00:01.000Z'),
+    content: { format: 2, parts: [{ type: 'text', text: 'Persisted assistant answer' }] },
+  },
 ];
 
 afterEach(() => {
@@ -665,14 +675,24 @@ describe('ChatSessionProvider', () => {
         http.get(`${SESSION}/threads/thread-one/messages`, () =>
           HttpResponse.json({
             messages: [
-              { id: 'thread-one-message', role: 'user', content: [{ type: 'text', text: 'Thread one text' }] },
+              {
+                id: 'thread-one-message',
+                role: 'user',
+                createdAt: new Date().toISOString(),
+                content: { format: 2, parts: [{ type: 'text', text: 'Thread one text' }] },
+              },
             ],
           }),
         ),
         http.get(`${SESSION}/threads/thread-two/messages`, () =>
           HttpResponse.json({
             messages: [
-              { id: 'thread-two-message', role: 'user', content: [{ type: 'text', text: 'Thread two text' }] },
+              {
+                id: 'thread-two-message',
+                role: 'user',
+                createdAt: new Date().toISOString(),
+                content: { format: 2, parts: [{ type: 'text', text: 'Thread two text' }] },
+              },
             ],
           }),
         ),
@@ -875,7 +895,12 @@ describe('ChatSessionProvider', () => {
       { type: 'agent_start' },
       {
         type: 'message_update',
-        message: { id: 'assistant-stream', role: 'assistant', content: [{ type: 'text', text: 'Streaming now' }] },
+        message: {
+          id: 'assistant-stream',
+          role: 'assistant',
+          createdAt: new Date(),
+          content: { format: 2, parts: [{ type: 'text', text: 'Streaming now' }] },
+        },
       },
     ]);
     renderProbe();
