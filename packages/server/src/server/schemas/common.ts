@@ -1,3 +1,4 @@
+import type { MessageInput } from '@mastra/core/agent/message-list';
 import { z } from 'zod/v4';
 
 // Path parameter schemas
@@ -96,7 +97,10 @@ export const tracingOptionsSchema = z.object({
  * Represents messages exchanged with AI models
  * Content can be string, array of content parts, or object (for complex message types)
  */
-export const coreMessageSchema = z.unknown();
+// Runtime validation stays permissive (z.unknown()) so generated route types
+// don't leak `any`; the assertion gives handlers the concrete message type
+// expected by agent APIs (agent.generate/stream/network).
+export const coreMessageSchema = z.unknown() as z.ZodType<MessageInput>;
 // .object({
 //   role: z.enum(['system', 'user', 'assistant', 'tool']),
 //   content: z.union([

@@ -7,6 +7,7 @@ import type {
   DurableAgentLike,
 } from '@mastra/core/agent';
 import { AGENT_STREAM_TOPIC, DurableStepIds } from '@mastra/core/agent/durable';
+import type { AIV5Type } from '@mastra/core/agent/message-list';
 import type { VersionOverrides } from '@mastra/core/di';
 import { mergeVersionOverrides, MASTRA_VERSIONS_KEY } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -1304,6 +1305,8 @@ export const GENERATE_AGENT_ROUTE = createRoute({
 
       const options = {
         ...restOptions,
+        // Schema validates context permissively; runtime values are ModelMessages.
+        context: restOptions.context as AIV5Type.ModelMessage[] | undefined,
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
         abortSignal,
@@ -1459,7 +1462,14 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
       // and setting it explicitly causes duplicate headers which break HTTP protocol.
       const streamResponse = rest.output
         ? streamResult.toTextStreamResponse()
-        : streamResult.toDataStreamResponse({
+        : // Without `output`, streamLegacy returns a StreamTextResult which has
+          // toDataStreamResponse; TS resolves the object-stream overload because
+          // `output` is optionally typed on the body schema.
+          (
+            streamResult as unknown as {
+              toDataStreamResponse: (options: Record<string, unknown>) => Response;
+            }
+          ).toDataStreamResponse({
             sendUsage: true,
             sendReasoning: true,
             getErrorMessage: (error: any) => {
@@ -2199,6 +2209,8 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
 
       const options = {
         ...restOptions,
+        // Schema validates context permissively; runtime values are ModelMessages.
+        context: restOptions.context as AIV5Type.ModelMessage[] | undefined,
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
         abortSignal,
@@ -2866,6 +2878,8 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
         runId,
         toolCallId,
         ...restOptions,
+        // Schema validates context permissively; runtime values are ModelMessages.
+        context: restOptions.context as AIV5Type.ModelMessage[] | undefined,
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
         abortSignal,

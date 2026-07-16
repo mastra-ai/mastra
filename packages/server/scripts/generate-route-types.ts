@@ -55,18 +55,17 @@ function createAuxiliaryTypeStore(prefix: string) {
 const globalAuxiliaryTypeStore = createAuxiliaryTypeStore('Shared');
 
 function renderSchemaType(aliasName: string, schema: z4.$ZodType, deprecated: boolean): string {
+  // `unrepresentable: 'any'` is the only fallback zod-to-ts supports for schemas it
+  // cannot represent (e.g. transforms); any other value makes it throw.
   const { node } = zodToTs(schema, {
     auxiliaryTypeStore: globalAuxiliaryTypeStore,
-    unrepresentable: 'unknown',
+    unrepresentable: 'any',
     io: 'output',
   });
 
-  // We will collect auxiliaryDeclarations globally at the end, so we don't emit them here inline anymore!
-  // Wait, zodToTs might unroll them anyway unless they are registered in the store with a name?
-  // zodToTs unrolls unless `withName` is used. However, sharing the store is still correct and better.
-  const aliasDeclaration = `${deprecated ? '/** @deprecated */\n' : ''}export type ${aliasName} = ${printNode(node)};`;
-
-  return aliasDeclaration;
+  // Auxiliary declarations are collected in the shared global store and emitted once
+  // at the top of the generated file instead of inline per alias.
+  return `${deprecated ? '/** @deprecated */\n' : ''}export type ${aliasName} = ${printNode(node)};`;
 }
 
 function getRoutePart(

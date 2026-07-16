@@ -7,6 +7,24 @@
 
 export type Simplify<T> = { [K in keyof T]: T[K] } & {};
 
+type Shared_Auxiliary_557 =
+  | string
+  | number
+  | boolean
+  | null
+  | Shared_Auxiliary_557[]
+  | {
+      [key: string]: Shared_Auxiliary_557;
+    };
+
+type Shared_Auxiliary_7587 = {
+  id?: string | undefined;
+  name: string;
+  type: 'file' | 'folder';
+  content?: string | undefined;
+  children?: Shared_Auxiliary_7587[] | undefined;
+};
+
 // ============================================================================
 // Route: GET /agents
 // ============================================================================
@@ -23,7 +41,7 @@ export type GetAgents_Response = {
           [key: string]: unknown;
         }
       | undefined;
-    instructions?: (string | string[] | any | any[]) | undefined;
+    instructions?: (string | string[] | unknown | unknown[]) | undefined;
     tools: {
       [key: string]: {
         id: string;
@@ -127,12 +145,12 @@ export type GetAgents_Response = {
       | undefined;
     defaultGenerateOptionsLegacy?:
       | {
-          [key: string]: any;
+          [key: string]: unknown;
         }
       | undefined;
     defaultStreamOptionsLegacy?:
       | {
-          [key: string]: any;
+          [key: string]: unknown;
         }
       | undefined;
     source?: ('code' | 'stored' | 'fs') | undefined;
@@ -231,7 +249,7 @@ export type GetAgentsAgentId_Response = {
         [key: string]: unknown;
       }
     | undefined;
-  instructions?: (string | string[] | any | any[]) | undefined;
+  instructions?: (string | string[] | unknown | unknown[]) | undefined;
   tools: {
     [key: string]: {
       id: string;
@@ -335,12 +353,12 @@ export type GetAgentsAgentId_Response = {
     | undefined;
   defaultGenerateOptionsLegacy?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   defaultStreamOptionsLegacy?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   source?: ('code' | 'stored' | 'fs') | undefined;
@@ -4861,10 +4879,10 @@ export type PostAgentsAgentIdGenerate_PathParams = {
 };
 
 export type PostAgentsAgentIdGenerate_Body = {
-  messages: any[] | string;
-  instructions?: (string | string[] | any | any[]) | undefined;
-  system?: (string | string[] | any | any[]) | undefined;
-  context?: any[] | undefined;
+  messages: unknown[] | string;
+  instructions?: (string | string[] | unknown | unknown[]) | undefined;
+  system?: (string | string[] | unknown | unknown[]) | undefined;
+  context?: unknown[] | undefined;
   memory?:
     | {
         thread:
@@ -4876,7 +4894,7 @@ export type PostAgentsAgentIdGenerate_Body = {
         resource?: string | undefined;
         options?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         readOnly?: boolean | undefined;
@@ -4886,7 +4904,7 @@ export type PostAgentsAgentIdGenerate_Body = {
   savePerStep?: boolean | undefined;
   requestContext?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   versions?:
@@ -4906,41 +4924,41 @@ export type PostAgentsAgentIdGenerate_Body = {
       }
     | undefined;
   maxSteps?: number | undefined;
-  stopWhen?: any | undefined;
+  stopWhen?: unknown | undefined;
   providerOptions?:
     | {
         anthropic?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         google?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         openai?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         xai?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
       }
     | undefined;
-  modelSettings?: any | undefined;
+  modelSettings?: unknown | undefined;
   activeTools?: string[] | undefined;
   toolsets?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   clientTools?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   toolChoice?:
@@ -4956,12 +4974,12 @@ export type PostAgentsAgentIdGenerate_Body = {
   scorers?:
     | (
         | {
-            [key: string]: any;
+            [key: string]: unknown;
           }
         | {
             [key: string]: {
               scorer: string;
-              sampling?: any | undefined;
+              sampling?: unknown | undefined;
             };
           }
       )
@@ -4982,17 +5000,17 @@ export type PostAgentsAgentIdGenerate_Body = {
         hideOutput?: boolean | undefined;
       }
     | undefined;
-  output?: any | undefined;
+  output?: unknown | undefined;
   structuredOutput?:
     | {
         schema: {
           [x: string]: unknown;
         };
-        model?: (string | any) | undefined;
+        model?: (string | unknown) | undefined;
         instructions?: string | undefined;
         jsonPromptInjection?: boolean | undefined;
         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
-        fallbackValue?: any | undefined;
+        fallbackValue?: unknown | undefined;
       }
     | undefined;
   untilIdle?:
@@ -5006,7 +5024,7 @@ export type PostAgentsAgentIdGenerate_Body = {
   [x: string]: unknown;
 };
 
-export type PostAgentsAgentIdGenerate_Response = any;
+export type PostAgentsAgentIdGenerate_Response = unknown;
 
 export type PostAgentsAgentIdGenerate_Request = Simplify<
   (PostAgentsAgentIdGenerate_PathParams extends never ? {} : { params: PostAgentsAgentIdGenerate_PathParams }) &
@@ -5036,10 +5054,10 @@ export type PostAgentsAgentIdGenerateVnext_PathParams = {
 };
 
 export type PostAgentsAgentIdGenerateVnext_Body = {
-  messages: any[] | string;
-  instructions?: (string | string[] | any | any[]) | undefined;
-  system?: (string | string[] | any | any[]) | undefined;
-  context?: any[] | undefined;
+  messages: unknown[] | string;
+  instructions?: (string | string[] | unknown | unknown[]) | undefined;
+  system?: (string | string[] | unknown | unknown[]) | undefined;
+  context?: unknown[] | undefined;
   memory?:
     | {
         thread:
@@ -5051,7 +5069,7 @@ export type PostAgentsAgentIdGenerateVnext_Body = {
         resource?: string | undefined;
         options?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         readOnly?: boolean | undefined;
@@ -5061,7 +5079,7 @@ export type PostAgentsAgentIdGenerateVnext_Body = {
   savePerStep?: boolean | undefined;
   requestContext?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   versions?:
@@ -5081,41 +5099,41 @@ export type PostAgentsAgentIdGenerateVnext_Body = {
       }
     | undefined;
   maxSteps?: number | undefined;
-  stopWhen?: any | undefined;
+  stopWhen?: unknown | undefined;
   providerOptions?:
     | {
         anthropic?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         google?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         openai?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         xai?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
       }
     | undefined;
-  modelSettings?: any | undefined;
+  modelSettings?: unknown | undefined;
   activeTools?: string[] | undefined;
   toolsets?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   clientTools?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   toolChoice?:
@@ -5131,12 +5149,12 @@ export type PostAgentsAgentIdGenerateVnext_Body = {
   scorers?:
     | (
         | {
-            [key: string]: any;
+            [key: string]: unknown;
           }
         | {
             [key: string]: {
               scorer: string;
-              sampling?: any | undefined;
+              sampling?: unknown | undefined;
             };
           }
       )
@@ -5157,17 +5175,17 @@ export type PostAgentsAgentIdGenerateVnext_Body = {
         hideOutput?: boolean | undefined;
       }
     | undefined;
-  output?: any | undefined;
+  output?: unknown | undefined;
   structuredOutput?:
     | {
         schema: {
           [x: string]: unknown;
         };
-        model?: (string | any) | undefined;
+        model?: (string | unknown) | undefined;
         instructions?: string | undefined;
         jsonPromptInjection?: boolean | undefined;
         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
-        fallbackValue?: any | undefined;
+        fallbackValue?: unknown | undefined;
       }
     | undefined;
   untilIdle?:
@@ -5181,7 +5199,7 @@ export type PostAgentsAgentIdGenerateVnext_Body = {
   [x: string]: unknown;
 };
 
-export type PostAgentsAgentIdGenerateVnext_Response = any;
+export type PostAgentsAgentIdGenerateVnext_Response = unknown;
 
 export type PostAgentsAgentIdGenerateVnext_Request = Simplify<
   (PostAgentsAgentIdGenerateVnext_PathParams extends never
@@ -5213,10 +5231,10 @@ export type PostAgentsAgentIdStream_PathParams = {
 };
 
 export type PostAgentsAgentIdStream_Body = {
-  messages: any[] | string;
-  instructions?: (string | string[] | any | any[]) | undefined;
-  system?: (string | string[] | any | any[]) | undefined;
-  context?: any[] | undefined;
+  messages: unknown[] | string;
+  instructions?: (string | string[] | unknown | unknown[]) | undefined;
+  system?: (string | string[] | unknown | unknown[]) | undefined;
+  context?: unknown[] | undefined;
   memory?:
     | {
         thread:
@@ -5228,7 +5246,7 @@ export type PostAgentsAgentIdStream_Body = {
         resource?: string | undefined;
         options?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         readOnly?: boolean | undefined;
@@ -5238,7 +5256,7 @@ export type PostAgentsAgentIdStream_Body = {
   savePerStep?: boolean | undefined;
   requestContext?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   versions?:
@@ -5258,41 +5276,41 @@ export type PostAgentsAgentIdStream_Body = {
       }
     | undefined;
   maxSteps?: number | undefined;
-  stopWhen?: any | undefined;
+  stopWhen?: unknown | undefined;
   providerOptions?:
     | {
         anthropic?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         google?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         openai?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         xai?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
       }
     | undefined;
-  modelSettings?: any | undefined;
+  modelSettings?: unknown | undefined;
   activeTools?: string[] | undefined;
   toolsets?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   clientTools?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   toolChoice?:
@@ -5308,12 +5326,12 @@ export type PostAgentsAgentIdStream_Body = {
   scorers?:
     | (
         | {
-            [key: string]: any;
+            [key: string]: unknown;
           }
         | {
             [key: string]: {
               scorer: string;
-              sampling?: any | undefined;
+              sampling?: unknown | undefined;
             };
           }
       )
@@ -5334,17 +5352,17 @@ export type PostAgentsAgentIdStream_Body = {
         hideOutput?: boolean | undefined;
       }
     | undefined;
-  output?: any | undefined;
+  output?: unknown | undefined;
   structuredOutput?:
     | {
         schema: {
           [x: string]: unknown;
         };
-        model?: (string | any) | undefined;
+        model?: (string | unknown) | undefined;
         instructions?: string | undefined;
         jsonPromptInjection?: boolean | undefined;
         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
-        fallbackValue?: any | undefined;
+        fallbackValue?: unknown | undefined;
       }
     | undefined;
   untilIdle?:
@@ -5358,7 +5376,7 @@ export type PostAgentsAgentIdStream_Body = {
   [x: string]: unknown;
 };
 
-export type PostAgentsAgentIdStream_Response = any;
+export type PostAgentsAgentIdStream_Response = unknown;
 
 export type PostAgentsAgentIdStream_Request = Simplify<
   (PostAgentsAgentIdStream_PathParams extends never ? {} : { params: PostAgentsAgentIdStream_PathParams }) &
@@ -5388,10 +5406,10 @@ export type PostAgentsAgentIdStreamUntilIdle_PathParams = {
 };
 
 export type PostAgentsAgentIdStreamUntilIdle_Body = {
-  messages: any[] | string;
-  instructions?: (string | string[] | any | any[]) | undefined;
-  system?: (string | string[] | any | any[]) | undefined;
-  context?: any[] | undefined;
+  messages: unknown[] | string;
+  instructions?: (string | string[] | unknown | unknown[]) | undefined;
+  system?: (string | string[] | unknown | unknown[]) | undefined;
+  context?: unknown[] | undefined;
   memory?:
     | {
         thread:
@@ -5403,7 +5421,7 @@ export type PostAgentsAgentIdStreamUntilIdle_Body = {
         resource?: string | undefined;
         options?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         readOnly?: boolean | undefined;
@@ -5413,7 +5431,7 @@ export type PostAgentsAgentIdStreamUntilIdle_Body = {
   savePerStep?: boolean | undefined;
   requestContext?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   versions?:
@@ -5433,41 +5451,41 @@ export type PostAgentsAgentIdStreamUntilIdle_Body = {
       }
     | undefined;
   maxSteps?: number | undefined;
-  stopWhen?: any | undefined;
+  stopWhen?: unknown | undefined;
   providerOptions?:
     | {
         anthropic?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         google?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         openai?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         xai?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
       }
     | undefined;
-  modelSettings?: any | undefined;
+  modelSettings?: unknown | undefined;
   activeTools?: string[] | undefined;
   toolsets?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   clientTools?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   toolChoice?:
@@ -5483,12 +5501,12 @@ export type PostAgentsAgentIdStreamUntilIdle_Body = {
   scorers?:
     | (
         | {
-            [key: string]: any;
+            [key: string]: unknown;
           }
         | {
             [key: string]: {
               scorer: string;
-              sampling?: any | undefined;
+              sampling?: unknown | undefined;
             };
           }
       )
@@ -5509,17 +5527,17 @@ export type PostAgentsAgentIdStreamUntilIdle_Body = {
         hideOutput?: boolean | undefined;
       }
     | undefined;
-  output?: any | undefined;
+  output?: unknown | undefined;
   structuredOutput?:
     | {
         schema: {
           [x: string]: unknown;
         };
-        model?: (string | any) | undefined;
+        model?: (string | unknown) | undefined;
         instructions?: string | undefined;
         jsonPromptInjection?: boolean | undefined;
         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
-        fallbackValue?: any | undefined;
+        fallbackValue?: unknown | undefined;
       }
     | undefined;
   untilIdle?:
@@ -5534,7 +5552,7 @@ export type PostAgentsAgentIdStreamUntilIdle_Body = {
   [x: string]: unknown;
 };
 
-export type PostAgentsAgentIdStreamUntilIdle_Response = any;
+export type PostAgentsAgentIdStreamUntilIdle_Response = unknown;
 
 export type PostAgentsAgentIdStreamUntilIdle_Request = Simplify<
   (PostAgentsAgentIdStreamUntilIdle_PathParams extends never
@@ -5568,10 +5586,10 @@ export type PostAgentsAgentIdStreamVnext_PathParams = {
 
 /** @deprecated */
 export type PostAgentsAgentIdStreamVnext_Body = {
-  messages: any[] | string;
-  instructions?: (string | string[] | any | any[]) | undefined;
-  system?: (string | string[] | any | any[]) | undefined;
-  context?: any[] | undefined;
+  messages: unknown[] | string;
+  instructions?: (string | string[] | unknown | unknown[]) | undefined;
+  system?: (string | string[] | unknown | unknown[]) | undefined;
+  context?: unknown[] | undefined;
   memory?:
     | {
         thread:
@@ -5583,7 +5601,7 @@ export type PostAgentsAgentIdStreamVnext_Body = {
         resource?: string | undefined;
         options?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         readOnly?: boolean | undefined;
@@ -5593,7 +5611,7 @@ export type PostAgentsAgentIdStreamVnext_Body = {
   savePerStep?: boolean | undefined;
   requestContext?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   versions?:
@@ -5613,41 +5631,41 @@ export type PostAgentsAgentIdStreamVnext_Body = {
       }
     | undefined;
   maxSteps?: number | undefined;
-  stopWhen?: any | undefined;
+  stopWhen?: unknown | undefined;
   providerOptions?:
     | {
         anthropic?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         google?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         openai?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         xai?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
       }
     | undefined;
-  modelSettings?: any | undefined;
+  modelSettings?: unknown | undefined;
   activeTools?: string[] | undefined;
   toolsets?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   clientTools?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   toolChoice?:
@@ -5663,12 +5681,12 @@ export type PostAgentsAgentIdStreamVnext_Body = {
   scorers?:
     | (
         | {
-            [key: string]: any;
+            [key: string]: unknown;
           }
         | {
             [key: string]: {
               scorer: string;
-              sampling?: any | undefined;
+              sampling?: unknown | undefined;
             };
           }
       )
@@ -5689,17 +5707,17 @@ export type PostAgentsAgentIdStreamVnext_Body = {
         hideOutput?: boolean | undefined;
       }
     | undefined;
-  output?: any | undefined;
+  output?: unknown | undefined;
   structuredOutput?:
     | {
         schema: {
           [x: string]: unknown;
         };
-        model?: (string | any) | undefined;
+        model?: (string | unknown) | undefined;
         instructions?: string | undefined;
         jsonPromptInjection?: boolean | undefined;
         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
-        fallbackValue?: any | undefined;
+        fallbackValue?: unknown | undefined;
       }
     | undefined;
   untilIdle?:
@@ -5714,7 +5732,7 @@ export type PostAgentsAgentIdStreamVnext_Body = {
 };
 
 /** @deprecated */
-export type PostAgentsAgentIdStreamVnext_Response = any;
+export type PostAgentsAgentIdStreamVnext_Response = unknown;
 
 /** @deprecated */
 export type PostAgentsAgentIdStreamVnext_Request = Simplify<
@@ -5752,7 +5770,7 @@ export type PostAgentsAgentIdObserve_Body = {
   offset?: number | undefined;
 };
 
-export type PostAgentsAgentIdObserve_Response = any;
+export type PostAgentsAgentIdObserve_Response = unknown;
 
 export type PostAgentsAgentIdObserve_Request = Simplify<
   (PostAgentsAgentIdObserve_PathParams extends never ? {} : { params: PostAgentsAgentIdObserve_PathParams }) &
@@ -5781,16 +5799,6 @@ export type PostAgentsAgentIdSendMessage_PathParams = {
   agentId: string;
 };
 
-type PostAgentsAgentIdSendMessage_Body_Auxiliary_3 =
-  | string
-  | number
-  | boolean
-  | null
-  | PostAgentsAgentIdSendMessage_Body_Auxiliary_3[]
-  | {
-      [key: string]: PostAgentsAgentIdSendMessage_Body_Auxiliary_3;
-    };
-
 export type PostAgentsAgentIdSendMessage_Body =
   | {
       ifActive?:
@@ -5817,7 +5825,7 @@ export type PostAgentsAgentIdSendMessage_Body =
                     providerOptions?:
                       | {
                           [key: string]: {
-                            [key: string]: PostAgentsAgentIdSendMessage_Body_Auxiliary_3;
+                            [key: string]: Shared_Auxiliary_557;
                           };
                         }
                       | undefined;
@@ -5830,7 +5838,7 @@ export type PostAgentsAgentIdSendMessage_Body =
                     providerOptions?:
                       | {
                           [key: string]: {
-                            [key: string]: PostAgentsAgentIdSendMessage_Body_Auxiliary_3;
+                            [key: string]: Shared_Auxiliary_557;
                           };
                         }
                       | undefined;
@@ -5847,7 +5855,7 @@ export type PostAgentsAgentIdSendMessage_Body =
                       providerOptions?:
                         | {
                             [key: string]: {
-                              [key: string]: PostAgentsAgentIdSendMessage_Body_Auxiliary_3;
+                              [key: string]: Shared_Auxiliary_557;
                             };
                           }
                         | undefined;
@@ -5860,7 +5868,7 @@ export type PostAgentsAgentIdSendMessage_Body =
                       providerOptions?:
                         | {
                             [key: string]: {
-                              [key: string]: PostAgentsAgentIdSendMessage_Body_Auxiliary_3;
+                              [key: string]: Shared_Auxiliary_557;
                             };
                           }
                         | undefined;
@@ -5873,13 +5881,13 @@ export type PostAgentsAgentIdSendMessage_Body =
               | undefined;
             metadata?:
               | {
-                  [key: string]: PostAgentsAgentIdSendMessage_Body_Auxiliary_3;
+                  [key: string]: Shared_Auxiliary_557;
                 }
               | undefined;
             providerOptions?:
               | {
                   [key: string]: {
-                    [key: string]: PostAgentsAgentIdSendMessage_Body_Auxiliary_3;
+                    [key: string]: Shared_Auxiliary_557;
                   };
                 }
               | undefined;
@@ -5904,9 +5912,9 @@ export type PostAgentsAgentIdSendMessage_Body =
             behavior?: ('wake' | 'persist' | 'discard') | undefined;
             streamOptions?:
               | {
-                  instructions?: (string | string[] | any | any[]) | undefined;
-                  system?: (string | string[] | any | any[]) | undefined;
-                  context?: any[] | undefined;
+                  instructions?: (string | string[] | unknown | unknown[]) | undefined;
+                  system?: (string | string[] | unknown | unknown[]) | undefined;
+                  context?: unknown[] | undefined;
                   memory?:
                     | {
                         thread:
@@ -5918,7 +5926,7 @@ export type PostAgentsAgentIdSendMessage_Body =
                         resource?: string | undefined;
                         options?:
                           | {
-                              [key: string]: any;
+                              [key: string]: unknown;
                             }
                           | undefined;
                         readOnly?: boolean | undefined;
@@ -5928,7 +5936,7 @@ export type PostAgentsAgentIdSendMessage_Body =
                   savePerStep?: boolean | undefined;
                   requestContext?:
                     | {
-                        [key: string]: any;
+                        [key: string]: unknown;
                       }
                     | undefined;
                   versions?:
@@ -5948,41 +5956,41 @@ export type PostAgentsAgentIdSendMessage_Body =
                       }
                     | undefined;
                   maxSteps?: number | undefined;
-                  stopWhen?: any | undefined;
+                  stopWhen?: unknown | undefined;
                   providerOptions?:
                     | {
                         anthropic?:
                           | {
-                              [key: string]: any;
+                              [key: string]: unknown;
                             }
                           | undefined;
                         google?:
                           | {
-                              [key: string]: any;
+                              [key: string]: unknown;
                             }
                           | undefined;
                         openai?:
                           | {
-                              [key: string]: any;
+                              [key: string]: unknown;
                             }
                           | undefined;
                         xai?:
                           | {
-                              [key: string]: any;
+                              [key: string]: unknown;
                             }
                           | undefined;
                       }
                     | undefined;
-                  modelSettings?: any | undefined;
+                  modelSettings?: unknown | undefined;
                   activeTools?: string[] | undefined;
                   toolsets?:
                     | {
-                        [key: string]: any;
+                        [key: string]: unknown;
                       }
                     | undefined;
                   clientTools?:
                     | {
-                        [key: string]: any;
+                        [key: string]: unknown;
                       }
                     | undefined;
                   toolChoice?:
@@ -5998,12 +6006,12 @@ export type PostAgentsAgentIdSendMessage_Body =
                   scorers?:
                     | (
                         | {
-                            [key: string]: any;
+                            [key: string]: unknown;
                           }
                         | {
                             [key: string]: {
                               scorer: string;
-                              sampling?: any | undefined;
+                              sampling?: unknown | undefined;
                             };
                           }
                       )
@@ -6024,17 +6032,17 @@ export type PostAgentsAgentIdSendMessage_Body =
                         hideOutput?: boolean | undefined;
                       }
                     | undefined;
-                  output?: any | undefined;
+                  output?: unknown | undefined;
                   structuredOutput?:
                     | {
                         schema: {
                           [x: string]: unknown;
                         };
-                        model?: (string | any) | undefined;
+                        model?: (string | unknown) | undefined;
                         instructions?: string | undefined;
                         jsonPromptInjection?: boolean | undefined;
                         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
-                        fallbackValue?: any | undefined;
+                        fallbackValue?: unknown | undefined;
                       }
                     | undefined;
                   untilIdle?:
@@ -6065,7 +6073,7 @@ export type PostAgentsAgentIdSendMessage_Body =
                     providerOptions?:
                       | {
                           [key: string]: {
-                            [key: string]: PostAgentsAgentIdSendMessage_Body_Auxiliary_3;
+                            [key: string]: Shared_Auxiliary_557;
                           };
                         }
                       | undefined;
@@ -6078,7 +6086,7 @@ export type PostAgentsAgentIdSendMessage_Body =
                     providerOptions?:
                       | {
                           [key: string]: {
-                            [key: string]: PostAgentsAgentIdSendMessage_Body_Auxiliary_3;
+                            [key: string]: Shared_Auxiliary_557;
                           };
                         }
                       | undefined;
@@ -6095,7 +6103,7 @@ export type PostAgentsAgentIdSendMessage_Body =
                       providerOptions?:
                         | {
                             [key: string]: {
-                              [key: string]: PostAgentsAgentIdSendMessage_Body_Auxiliary_3;
+                              [key: string]: Shared_Auxiliary_557;
                             };
                           }
                         | undefined;
@@ -6108,7 +6116,7 @@ export type PostAgentsAgentIdSendMessage_Body =
                       providerOptions?:
                         | {
                             [key: string]: {
-                              [key: string]: PostAgentsAgentIdSendMessage_Body_Auxiliary_3;
+                              [key: string]: Shared_Auxiliary_557;
                             };
                           }
                         | undefined;
@@ -6121,13 +6129,13 @@ export type PostAgentsAgentIdSendMessage_Body =
               | undefined;
             metadata?:
               | {
-                  [key: string]: PostAgentsAgentIdSendMessage_Body_Auxiliary_3;
+                  [key: string]: Shared_Auxiliary_557;
                 }
               | undefined;
             providerOptions?:
               | {
                   [key: string]: {
-                    [key: string]: PostAgentsAgentIdSendMessage_Body_Auxiliary_3;
+                    [key: string]: Shared_Auxiliary_557;
                   };
                 }
               | undefined;
@@ -6167,16 +6175,6 @@ export type PostAgentsAgentIdQueueMessage_PathParams = {
   agentId: string;
 };
 
-type PostAgentsAgentIdQueueMessage_Body_Auxiliary_3 =
-  | string
-  | number
-  | boolean
-  | null
-  | PostAgentsAgentIdQueueMessage_Body_Auxiliary_3[]
-  | {
-      [key: string]: PostAgentsAgentIdQueueMessage_Body_Auxiliary_3;
-    };
-
 export type PostAgentsAgentIdQueueMessage_Body =
   | {
       ifActive?:
@@ -6203,7 +6201,7 @@ export type PostAgentsAgentIdQueueMessage_Body =
                     providerOptions?:
                       | {
                           [key: string]: {
-                            [key: string]: PostAgentsAgentIdQueueMessage_Body_Auxiliary_3;
+                            [key: string]: Shared_Auxiliary_557;
                           };
                         }
                       | undefined;
@@ -6216,7 +6214,7 @@ export type PostAgentsAgentIdQueueMessage_Body =
                     providerOptions?:
                       | {
                           [key: string]: {
-                            [key: string]: PostAgentsAgentIdQueueMessage_Body_Auxiliary_3;
+                            [key: string]: Shared_Auxiliary_557;
                           };
                         }
                       | undefined;
@@ -6233,7 +6231,7 @@ export type PostAgentsAgentIdQueueMessage_Body =
                       providerOptions?:
                         | {
                             [key: string]: {
-                              [key: string]: PostAgentsAgentIdQueueMessage_Body_Auxiliary_3;
+                              [key: string]: Shared_Auxiliary_557;
                             };
                           }
                         | undefined;
@@ -6246,7 +6244,7 @@ export type PostAgentsAgentIdQueueMessage_Body =
                       providerOptions?:
                         | {
                             [key: string]: {
-                              [key: string]: PostAgentsAgentIdQueueMessage_Body_Auxiliary_3;
+                              [key: string]: Shared_Auxiliary_557;
                             };
                           }
                         | undefined;
@@ -6259,13 +6257,13 @@ export type PostAgentsAgentIdQueueMessage_Body =
               | undefined;
             metadata?:
               | {
-                  [key: string]: PostAgentsAgentIdQueueMessage_Body_Auxiliary_3;
+                  [key: string]: Shared_Auxiliary_557;
                 }
               | undefined;
             providerOptions?:
               | {
                   [key: string]: {
-                    [key: string]: PostAgentsAgentIdQueueMessage_Body_Auxiliary_3;
+                    [key: string]: Shared_Auxiliary_557;
                   };
                 }
               | undefined;
@@ -6290,9 +6288,9 @@ export type PostAgentsAgentIdQueueMessage_Body =
             behavior?: ('wake' | 'persist' | 'discard') | undefined;
             streamOptions?:
               | {
-                  instructions?: (string | string[] | any | any[]) | undefined;
-                  system?: (string | string[] | any | any[]) | undefined;
-                  context?: any[] | undefined;
+                  instructions?: (string | string[] | unknown | unknown[]) | undefined;
+                  system?: (string | string[] | unknown | unknown[]) | undefined;
+                  context?: unknown[] | undefined;
                   memory?:
                     | {
                         thread:
@@ -6304,7 +6302,7 @@ export type PostAgentsAgentIdQueueMessage_Body =
                         resource?: string | undefined;
                         options?:
                           | {
-                              [key: string]: any;
+                              [key: string]: unknown;
                             }
                           | undefined;
                         readOnly?: boolean | undefined;
@@ -6314,7 +6312,7 @@ export type PostAgentsAgentIdQueueMessage_Body =
                   savePerStep?: boolean | undefined;
                   requestContext?:
                     | {
-                        [key: string]: any;
+                        [key: string]: unknown;
                       }
                     | undefined;
                   versions?:
@@ -6334,41 +6332,41 @@ export type PostAgentsAgentIdQueueMessage_Body =
                       }
                     | undefined;
                   maxSteps?: number | undefined;
-                  stopWhen?: any | undefined;
+                  stopWhen?: unknown | undefined;
                   providerOptions?:
                     | {
                         anthropic?:
                           | {
-                              [key: string]: any;
+                              [key: string]: unknown;
                             }
                           | undefined;
                         google?:
                           | {
-                              [key: string]: any;
+                              [key: string]: unknown;
                             }
                           | undefined;
                         openai?:
                           | {
-                              [key: string]: any;
+                              [key: string]: unknown;
                             }
                           | undefined;
                         xai?:
                           | {
-                              [key: string]: any;
+                              [key: string]: unknown;
                             }
                           | undefined;
                       }
                     | undefined;
-                  modelSettings?: any | undefined;
+                  modelSettings?: unknown | undefined;
                   activeTools?: string[] | undefined;
                   toolsets?:
                     | {
-                        [key: string]: any;
+                        [key: string]: unknown;
                       }
                     | undefined;
                   clientTools?:
                     | {
-                        [key: string]: any;
+                        [key: string]: unknown;
                       }
                     | undefined;
                   toolChoice?:
@@ -6384,12 +6382,12 @@ export type PostAgentsAgentIdQueueMessage_Body =
                   scorers?:
                     | (
                         | {
-                            [key: string]: any;
+                            [key: string]: unknown;
                           }
                         | {
                             [key: string]: {
                               scorer: string;
-                              sampling?: any | undefined;
+                              sampling?: unknown | undefined;
                             };
                           }
                       )
@@ -6410,17 +6408,17 @@ export type PostAgentsAgentIdQueueMessage_Body =
                         hideOutput?: boolean | undefined;
                       }
                     | undefined;
-                  output?: any | undefined;
+                  output?: unknown | undefined;
                   structuredOutput?:
                     | {
                         schema: {
                           [x: string]: unknown;
                         };
-                        model?: (string | any) | undefined;
+                        model?: (string | unknown) | undefined;
                         instructions?: string | undefined;
                         jsonPromptInjection?: boolean | undefined;
                         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
-                        fallbackValue?: any | undefined;
+                        fallbackValue?: unknown | undefined;
                       }
                     | undefined;
                   untilIdle?:
@@ -6451,7 +6449,7 @@ export type PostAgentsAgentIdQueueMessage_Body =
                     providerOptions?:
                       | {
                           [key: string]: {
-                            [key: string]: PostAgentsAgentIdQueueMessage_Body_Auxiliary_3;
+                            [key: string]: Shared_Auxiliary_557;
                           };
                         }
                       | undefined;
@@ -6464,7 +6462,7 @@ export type PostAgentsAgentIdQueueMessage_Body =
                     providerOptions?:
                       | {
                           [key: string]: {
-                            [key: string]: PostAgentsAgentIdQueueMessage_Body_Auxiliary_3;
+                            [key: string]: Shared_Auxiliary_557;
                           };
                         }
                       | undefined;
@@ -6481,7 +6479,7 @@ export type PostAgentsAgentIdQueueMessage_Body =
                       providerOptions?:
                         | {
                             [key: string]: {
-                              [key: string]: PostAgentsAgentIdQueueMessage_Body_Auxiliary_3;
+                              [key: string]: Shared_Auxiliary_557;
                             };
                           }
                         | undefined;
@@ -6494,7 +6492,7 @@ export type PostAgentsAgentIdQueueMessage_Body =
                       providerOptions?:
                         | {
                             [key: string]: {
-                              [key: string]: PostAgentsAgentIdQueueMessage_Body_Auxiliary_3;
+                              [key: string]: Shared_Auxiliary_557;
                             };
                           }
                         | undefined;
@@ -6507,13 +6505,13 @@ export type PostAgentsAgentIdQueueMessage_Body =
               | undefined;
             metadata?:
               | {
-                  [key: string]: PostAgentsAgentIdQueueMessage_Body_Auxiliary_3;
+                  [key: string]: Shared_Auxiliary_557;
                 }
               | undefined;
             providerOptions?:
               | {
                   [key: string]: {
-                    [key: string]: PostAgentsAgentIdQueueMessage_Body_Auxiliary_3;
+                    [key: string]: Shared_Auxiliary_557;
                   };
                 }
               | undefined;
@@ -6553,16 +6551,6 @@ export type PostAgentsAgentIdSignals_PathParams = {
   agentId: string;
 };
 
-type PostAgentsAgentIdSignals_Body_Auxiliary_3 =
-  | string
-  | number
-  | boolean
-  | null
-  | PostAgentsAgentIdSignals_Body_Auxiliary_3[]
-  | {
-      [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_3;
-    };
-
 export type PostAgentsAgentIdSignals_Body =
   | {
       ifActive?:
@@ -6584,7 +6572,7 @@ export type PostAgentsAgentIdSignals_Body =
         createdAt?: (string | Date) | undefined;
         metadata?:
           | {
-              [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_3;
+              [key: string]: Shared_Auxiliary_557;
             }
           | undefined;
         attributes?:
@@ -6603,7 +6591,7 @@ export type PostAgentsAgentIdSignals_Body =
                   providerOptions?:
                     | {
                         [key: string]: {
-                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_3;
+                          [key: string]: Shared_Auxiliary_557;
                         };
                       }
                     | undefined;
@@ -6616,7 +6604,7 @@ export type PostAgentsAgentIdSignals_Body =
                   providerOptions?:
                     | {
                         [key: string]: {
-                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_3;
+                          [key: string]: Shared_Auxiliary_557;
                         };
                       }
                     | undefined;
@@ -6625,7 +6613,7 @@ export type PostAgentsAgentIdSignals_Body =
         providerOptions?:
           | {
               [key: string]: {
-                [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_3;
+                [key: string]: Shared_Auxiliary_557;
               };
             }
           | undefined;
@@ -6650,9 +6638,9 @@ export type PostAgentsAgentIdSignals_Body =
             behavior?: ('wake' | 'persist' | 'discard') | undefined;
             streamOptions?:
               | {
-                  instructions?: (string | string[] | any | any[]) | undefined;
-                  system?: (string | string[] | any | any[]) | undefined;
-                  context?: any[] | undefined;
+                  instructions?: (string | string[] | unknown | unknown[]) | undefined;
+                  system?: (string | string[] | unknown | unknown[]) | undefined;
+                  context?: unknown[] | undefined;
                   memory?:
                     | {
                         thread:
@@ -6664,7 +6652,7 @@ export type PostAgentsAgentIdSignals_Body =
                         resource?: string | undefined;
                         options?:
                           | {
-                              [key: string]: any;
+                              [key: string]: unknown;
                             }
                           | undefined;
                         readOnly?: boolean | undefined;
@@ -6674,7 +6662,7 @@ export type PostAgentsAgentIdSignals_Body =
                   savePerStep?: boolean | undefined;
                   requestContext?:
                     | {
-                        [key: string]: any;
+                        [key: string]: unknown;
                       }
                     | undefined;
                   versions?:
@@ -6694,41 +6682,41 @@ export type PostAgentsAgentIdSignals_Body =
                       }
                     | undefined;
                   maxSteps?: number | undefined;
-                  stopWhen?: any | undefined;
+                  stopWhen?: unknown | undefined;
                   providerOptions?:
                     | {
                         anthropic?:
                           | {
-                              [key: string]: any;
+                              [key: string]: unknown;
                             }
                           | undefined;
                         google?:
                           | {
-                              [key: string]: any;
+                              [key: string]: unknown;
                             }
                           | undefined;
                         openai?:
                           | {
-                              [key: string]: any;
+                              [key: string]: unknown;
                             }
                           | undefined;
                         xai?:
                           | {
-                              [key: string]: any;
+                              [key: string]: unknown;
                             }
                           | undefined;
                       }
                     | undefined;
-                  modelSettings?: any | undefined;
+                  modelSettings?: unknown | undefined;
                   activeTools?: string[] | undefined;
                   toolsets?:
                     | {
-                        [key: string]: any;
+                        [key: string]: unknown;
                       }
                     | undefined;
                   clientTools?:
                     | {
-                        [key: string]: any;
+                        [key: string]: unknown;
                       }
                     | undefined;
                   toolChoice?:
@@ -6744,12 +6732,12 @@ export type PostAgentsAgentIdSignals_Body =
                   scorers?:
                     | (
                         | {
-                            [key: string]: any;
+                            [key: string]: unknown;
                           }
                         | {
                             [key: string]: {
                               scorer: string;
-                              sampling?: any | undefined;
+                              sampling?: unknown | undefined;
                             };
                           }
                       )
@@ -6770,17 +6758,17 @@ export type PostAgentsAgentIdSignals_Body =
                         hideOutput?: boolean | undefined;
                       }
                     | undefined;
-                  output?: any | undefined;
+                  output?: unknown | undefined;
                   structuredOutput?:
                     | {
                         schema: {
                           [x: string]: unknown;
                         };
-                        model?: (string | any) | undefined;
+                        model?: (string | unknown) | undefined;
                         instructions?: string | undefined;
                         jsonPromptInjection?: boolean | undefined;
                         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
-                        fallbackValue?: any | undefined;
+                        fallbackValue?: unknown | undefined;
                       }
                     | undefined;
                   untilIdle?:
@@ -6806,7 +6794,7 @@ export type PostAgentsAgentIdSignals_Body =
         createdAt?: (string | Date) | undefined;
         metadata?:
           | {
-              [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_3;
+              [key: string]: Shared_Auxiliary_557;
             }
           | undefined;
         attributes?:
@@ -6825,7 +6813,7 @@ export type PostAgentsAgentIdSignals_Body =
                   providerOptions?:
                     | {
                         [key: string]: {
-                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_3;
+                          [key: string]: Shared_Auxiliary_557;
                         };
                       }
                     | undefined;
@@ -6838,7 +6826,7 @@ export type PostAgentsAgentIdSignals_Body =
                   providerOptions?:
                     | {
                         [key: string]: {
-                          [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_3;
+                          [key: string]: Shared_Auxiliary_557;
                         };
                       }
                     | undefined;
@@ -6847,7 +6835,7 @@ export type PostAgentsAgentIdSignals_Body =
         providerOptions?:
           | {
               [key: string]: {
-                [key: string]: PostAgentsAgentIdSignals_Body_Auxiliary_3;
+                [key: string]: Shared_Auxiliary_557;
               };
             }
           | undefined;
@@ -6928,7 +6916,7 @@ export type PostAgentsAgentIdThreadsSubscribe_Body = {
   threadId: string;
 };
 
-export type PostAgentsAgentIdThreadsSubscribe_Response = any;
+export type PostAgentsAgentIdThreadsSubscribe_Response = unknown;
 
 export type PostAgentsAgentIdThreadsSubscribe_Request = Simplify<
   (PostAgentsAgentIdThreadsSubscribe_PathParams extends never
@@ -6965,12 +6953,12 @@ export type PostAgentsAgentIdToolsToolIdExecute_Body = {
   data: unknown;
   requestContext?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
 };
 
-export type PostAgentsAgentIdToolsToolIdExecute_Response = any;
+export type PostAgentsAgentIdToolsToolIdExecute_Response = unknown;
 
 export type PostAgentsAgentIdToolsToolIdExecute_Request = Simplify<
   (PostAgentsAgentIdToolsToolIdExecute_PathParams extends never
@@ -7005,7 +6993,7 @@ export type PostAgentsAgentIdApproveToolCall_Body = {
   runId: string;
   requestContext?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   toolCallId: string;
@@ -7013,7 +7001,7 @@ export type PostAgentsAgentIdApproveToolCall_Body = {
 };
 
 export type PostAgentsAgentIdApproveToolCall_Response = {
-  fullStream: any;
+  fullStream: unknown;
 };
 
 export type PostAgentsAgentIdApproveToolCall_Request = Simplify<
@@ -7050,15 +7038,15 @@ export type PostAgentsAgentIdSendToolApproval_Body = {
   threadId: string;
   requestContext?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   toolCallId: string;
   approved: boolean;
-  resumeData?: any | undefined;
+  resumeData?: unknown | undefined;
   format?: string | undefined;
-  messages?: any[] | undefined;
-  streamOptions?: any | undefined;
+  messages?: unknown[] | undefined;
+  streamOptions?: unknown | undefined;
 };
 
 export type PostAgentsAgentIdSendToolApproval_Response = {
@@ -7154,7 +7142,7 @@ export type PostAgentsAgentIdDeclineToolCall_Body = {
   runId: string;
   requestContext?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   toolCallId: string;
@@ -7162,7 +7150,7 @@ export type PostAgentsAgentIdDeclineToolCall_Body = {
 };
 
 export type PostAgentsAgentIdDeclineToolCall_Response = {
-  fullStream: any;
+  fullStream: unknown;
 };
 
 export type PostAgentsAgentIdDeclineToolCall_Request = Simplify<
@@ -7195,9 +7183,9 @@ export type PostAgentsAgentIdResumeStream_PathParams = {
 };
 
 export type PostAgentsAgentIdResumeStream_Body = {
-  instructions?: (string | string[] | any | any[]) | undefined;
-  system?: (string | string[] | any | any[]) | undefined;
-  context?: any[] | undefined;
+  instructions?: (string | string[] | unknown | unknown[]) | undefined;
+  system?: (string | string[] | unknown | unknown[]) | undefined;
+  context?: unknown[] | undefined;
   memory?:
     | {
         thread:
@@ -7209,7 +7197,7 @@ export type PostAgentsAgentIdResumeStream_Body = {
         resource?: string | undefined;
         options?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         readOnly?: boolean | undefined;
@@ -7219,7 +7207,7 @@ export type PostAgentsAgentIdResumeStream_Body = {
   savePerStep?: boolean | undefined;
   requestContext?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   versions?:
@@ -7239,41 +7227,41 @@ export type PostAgentsAgentIdResumeStream_Body = {
       }
     | undefined;
   maxSteps?: number | undefined;
-  stopWhen?: any | undefined;
+  stopWhen?: unknown | undefined;
   providerOptions?:
     | {
         anthropic?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         google?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         openai?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         xai?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
       }
     | undefined;
-  modelSettings?: any | undefined;
+  modelSettings?: unknown | undefined;
   activeTools?: string[] | undefined;
   toolsets?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   clientTools?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   toolChoice?:
@@ -7289,12 +7277,12 @@ export type PostAgentsAgentIdResumeStream_Body = {
   scorers?:
     | (
         | {
-            [key: string]: any;
+            [key: string]: unknown;
           }
         | {
             [key: string]: {
               scorer: string;
-              sampling?: any | undefined;
+              sampling?: unknown | undefined;
             };
           }
       )
@@ -7315,17 +7303,17 @@ export type PostAgentsAgentIdResumeStream_Body = {
         hideOutput?: boolean | undefined;
       }
     | undefined;
-  output?: any | undefined;
+  output?: unknown | undefined;
   structuredOutput?:
     | {
         schema: {
           [x: string]: unknown;
         };
-        model?: (string | any) | undefined;
+        model?: (string | unknown) | undefined;
         instructions?: string | undefined;
         jsonPromptInjection?: boolean | undefined;
         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
-        fallbackValue?: any | undefined;
+        fallbackValue?: unknown | undefined;
       }
     | undefined;
   untilIdle?:
@@ -7341,7 +7329,7 @@ export type PostAgentsAgentIdResumeStream_Body = {
   [x: string]: unknown;
 };
 
-export type PostAgentsAgentIdResumeStream_Response = any;
+export type PostAgentsAgentIdResumeStream_Response = unknown;
 
 export type PostAgentsAgentIdResumeStream_Request = Simplify<
   (PostAgentsAgentIdResumeStream_PathParams extends never ? {} : { params: PostAgentsAgentIdResumeStream_PathParams }) &
@@ -7374,7 +7362,7 @@ export type PostAgentsAgentIdRecover_Body = {
   runId: string;
   requestContext?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   versions?:
@@ -7395,7 +7383,7 @@ export type PostAgentsAgentIdRecover_Body = {
     | undefined;
 };
 
-export type PostAgentsAgentIdRecover_Response = any;
+export type PostAgentsAgentIdRecover_Response = unknown;
 
 export type PostAgentsAgentIdRecover_Request = Simplify<
   (PostAgentsAgentIdRecover_PathParams extends never ? {} : { params: PostAgentsAgentIdRecover_PathParams }) &
@@ -7428,14 +7416,14 @@ export type PostAgentsAgentIdApproveToolCallGenerate_Body = {
   runId: string;
   requestContext?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   toolCallId: string;
   format?: string | undefined;
 };
 
-export type PostAgentsAgentIdApproveToolCallGenerate_Response = any;
+export type PostAgentsAgentIdApproveToolCallGenerate_Response = unknown;
 
 export type PostAgentsAgentIdApproveToolCallGenerate_Request = Simplify<
   (PostAgentsAgentIdApproveToolCallGenerate_PathParams extends never
@@ -7470,14 +7458,14 @@ export type PostAgentsAgentIdDeclineToolCallGenerate_Body = {
   runId: string;
   requestContext?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   toolCallId: string;
   format?: string | undefined;
 };
 
-export type PostAgentsAgentIdDeclineToolCallGenerate_Response = any;
+export type PostAgentsAgentIdDeclineToolCallGenerate_Response = unknown;
 
 export type PostAgentsAgentIdDeclineToolCallGenerate_Request = Simplify<
   (PostAgentsAgentIdDeclineToolCallGenerate_PathParams extends never
@@ -7512,13 +7500,13 @@ export type PostAgentsAgentIdApproveNetworkToolCall_Body = {
   runId: string;
   requestContext?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   format?: string | undefined;
 };
 
-export type PostAgentsAgentIdApproveNetworkToolCall_Response = any;
+export type PostAgentsAgentIdApproveNetworkToolCall_Response = unknown;
 
 export type PostAgentsAgentIdApproveNetworkToolCall_Request = Simplify<
   (PostAgentsAgentIdApproveNetworkToolCall_PathParams extends never
@@ -7553,13 +7541,13 @@ export type PostAgentsAgentIdDeclineNetworkToolCall_Body = {
   runId: string;
   requestContext?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   format?: string | undefined;
 };
 
-export type PostAgentsAgentIdDeclineNetworkToolCall_Response = any;
+export type PostAgentsAgentIdDeclineNetworkToolCall_Response = unknown;
 
 export type PostAgentsAgentIdDeclineNetworkToolCall_Request = Simplify<
   (PostAgentsAgentIdDeclineNetworkToolCall_PathParams extends never
@@ -7591,9 +7579,9 @@ export type PostAgentsAgentIdResumeStreamUntilIdle_PathParams = {
 };
 
 export type PostAgentsAgentIdResumeStreamUntilIdle_Body = {
-  instructions?: (string | string[] | any | any[]) | undefined;
-  system?: (string | string[] | any | any[]) | undefined;
-  context?: any[] | undefined;
+  instructions?: (string | string[] | unknown | unknown[]) | undefined;
+  system?: (string | string[] | unknown | unknown[]) | undefined;
+  context?: unknown[] | undefined;
   memory?:
     | {
         thread:
@@ -7605,7 +7593,7 @@ export type PostAgentsAgentIdResumeStreamUntilIdle_Body = {
         resource?: string | undefined;
         options?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         readOnly?: boolean | undefined;
@@ -7615,7 +7603,7 @@ export type PostAgentsAgentIdResumeStreamUntilIdle_Body = {
   savePerStep?: boolean | undefined;
   requestContext?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   versions?:
@@ -7635,41 +7623,41 @@ export type PostAgentsAgentIdResumeStreamUntilIdle_Body = {
       }
     | undefined;
   maxSteps?: number | undefined;
-  stopWhen?: any | undefined;
+  stopWhen?: unknown | undefined;
   providerOptions?:
     | {
         anthropic?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         google?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         openai?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         xai?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
       }
     | undefined;
-  modelSettings?: any | undefined;
+  modelSettings?: unknown | undefined;
   activeTools?: string[] | undefined;
   toolsets?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   clientTools?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   toolChoice?:
@@ -7685,12 +7673,12 @@ export type PostAgentsAgentIdResumeStreamUntilIdle_Body = {
   scorers?:
     | (
         | {
-            [key: string]: any;
+            [key: string]: unknown;
           }
         | {
             [key: string]: {
               scorer: string;
-              sampling?: any | undefined;
+              sampling?: unknown | undefined;
             };
           }
       )
@@ -7711,17 +7699,17 @@ export type PostAgentsAgentIdResumeStreamUntilIdle_Body = {
         hideOutput?: boolean | undefined;
       }
     | undefined;
-  output?: any | undefined;
+  output?: unknown | undefined;
   structuredOutput?:
     | {
         schema: {
           [x: string]: unknown;
         };
-        model?: (string | any) | undefined;
+        model?: (string | unknown) | undefined;
         instructions?: string | undefined;
         jsonPromptInjection?: boolean | undefined;
         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
-        fallbackValue?: any | undefined;
+        fallbackValue?: unknown | undefined;
       }
     | undefined;
   untilIdle?:
@@ -7738,7 +7726,7 @@ export type PostAgentsAgentIdResumeStreamUntilIdle_Body = {
   [x: string]: unknown;
 };
 
-export type PostAgentsAgentIdResumeStreamUntilIdle_Response = any;
+export type PostAgentsAgentIdResumeStreamUntilIdle_Response = unknown;
 
 export type PostAgentsAgentIdResumeStreamUntilIdle_Request = Simplify<
   (PostAgentsAgentIdResumeStreamUntilIdle_PathParams extends never
@@ -7770,10 +7758,10 @@ export type PostAgentsAgentIdNetwork_PathParams = {
 };
 
 export type PostAgentsAgentIdNetwork_Body = {
-  messages: any[] | string;
-  instructions?: (string | string[] | any | any[]) | undefined;
-  system?: (string | string[] | any | any[]) | undefined;
-  context?: any[] | undefined;
+  messages: unknown[] | string;
+  instructions?: (string | string[] | unknown | unknown[]) | undefined;
+  system?: (string | string[] | unknown | unknown[]) | undefined;
+  context?: unknown[] | undefined;
   memory?:
     | {
         thread:
@@ -7785,7 +7773,7 @@ export type PostAgentsAgentIdNetwork_Body = {
         resource?: string | undefined;
         options?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         readOnly?: boolean | undefined;
@@ -7795,7 +7783,7 @@ export type PostAgentsAgentIdNetwork_Body = {
   savePerStep?: boolean | undefined;
   requestContext?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   versions?:
@@ -7815,41 +7803,41 @@ export type PostAgentsAgentIdNetwork_Body = {
       }
     | undefined;
   maxSteps?: number | undefined;
-  stopWhen?: any | undefined;
+  stopWhen?: unknown | undefined;
   providerOptions?:
     | {
         anthropic?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         google?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         openai?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         xai?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
       }
     | undefined;
-  modelSettings?: any | undefined;
+  modelSettings?: unknown | undefined;
   activeTools?: string[] | undefined;
   toolsets?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   clientTools?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   toolChoice?:
@@ -7865,12 +7853,12 @@ export type PostAgentsAgentIdNetwork_Body = {
   scorers?:
     | (
         | {
-            [key: string]: any;
+            [key: string]: unknown;
           }
         | {
             [key: string]: {
               scorer: string;
-              sampling?: any | undefined;
+              sampling?: unknown | undefined;
             };
           }
       )
@@ -7891,17 +7879,17 @@ export type PostAgentsAgentIdNetwork_Body = {
         hideOutput?: boolean | undefined;
       }
     | undefined;
-  output?: any | undefined;
+  output?: unknown | undefined;
   structuredOutput?:
     | {
         schema: {
           [x: string]: unknown;
         };
-        model?: (string | any) | undefined;
+        model?: (string | unknown) | undefined;
         instructions?: string | undefined;
         jsonPromptInjection?: boolean | undefined;
         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
-        fallbackValue?: any | undefined;
+        fallbackValue?: unknown | undefined;
       }
     | undefined;
   untilIdle?:
@@ -7915,7 +7903,7 @@ export type PostAgentsAgentIdNetwork_Body = {
   [x: string]: unknown;
 };
 
-export type PostAgentsAgentIdNetwork_Response = any;
+export type PostAgentsAgentIdNetwork_Response = unknown;
 
 export type PostAgentsAgentIdNetwork_Request = Simplify<
   (PostAgentsAgentIdNetwork_PathParams extends never ? {} : { params: PostAgentsAgentIdNetwork_PathParams }) &
@@ -8421,10 +8409,10 @@ export type PostAgentsAgentIdStreamVNext_PathParams = {
 
 /** @deprecated */
 export type PostAgentsAgentIdStreamVNext_Body = {
-  messages: any[] | string;
-  instructions?: (string | string[] | any | any[]) | undefined;
-  system?: (string | string[] | any | any[]) | undefined;
-  context?: any[] | undefined;
+  messages: unknown[] | string;
+  instructions?: (string | string[] | unknown | unknown[]) | undefined;
+  system?: (string | string[] | unknown | unknown[]) | undefined;
+  context?: unknown[] | undefined;
   memory?:
     | {
         thread:
@@ -8436,7 +8424,7 @@ export type PostAgentsAgentIdStreamVNext_Body = {
         resource?: string | undefined;
         options?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         readOnly?: boolean | undefined;
@@ -8446,7 +8434,7 @@ export type PostAgentsAgentIdStreamVNext_Body = {
   savePerStep?: boolean | undefined;
   requestContext?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   versions?:
@@ -8466,41 +8454,41 @@ export type PostAgentsAgentIdStreamVNext_Body = {
       }
     | undefined;
   maxSteps?: number | undefined;
-  stopWhen?: any | undefined;
+  stopWhen?: unknown | undefined;
   providerOptions?:
     | {
         anthropic?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         google?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         openai?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         xai?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
       }
     | undefined;
-  modelSettings?: any | undefined;
+  modelSettings?: unknown | undefined;
   activeTools?: string[] | undefined;
   toolsets?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   clientTools?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   toolChoice?:
@@ -8516,12 +8504,12 @@ export type PostAgentsAgentIdStreamVNext_Body = {
   scorers?:
     | (
         | {
-            [key: string]: any;
+            [key: string]: unknown;
           }
         | {
             [key: string]: {
               scorer: string;
-              sampling?: any | undefined;
+              sampling?: unknown | undefined;
             };
           }
       )
@@ -8542,17 +8530,17 @@ export type PostAgentsAgentIdStreamVNext_Body = {
         hideOutput?: boolean | undefined;
       }
     | undefined;
-  output?: any | undefined;
+  output?: unknown | undefined;
   structuredOutput?:
     | {
         schema: {
           [x: string]: unknown;
         };
-        model?: (string | any) | undefined;
+        model?: (string | unknown) | undefined;
         instructions?: string | undefined;
         jsonPromptInjection?: boolean | undefined;
         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
-        fallbackValue?: any | undefined;
+        fallbackValue?: unknown | undefined;
       }
     | undefined;
   untilIdle?:
@@ -8567,7 +8555,7 @@ export type PostAgentsAgentIdStreamVNext_Body = {
 };
 
 /** @deprecated */
-export type PostAgentsAgentIdStreamVNext_Response = any;
+export type PostAgentsAgentIdStreamVNext_Response = unknown;
 
 /** @deprecated */
 export type PostAgentsAgentIdStreamVNext_Request = Simplify<
@@ -8601,10 +8589,10 @@ export type PostAgentsAgentIdStreamVnextUi_PathParams = {
 
 /** @deprecated */
 export type PostAgentsAgentIdStreamVnextUi_Body = {
-  messages: any[] | string;
-  instructions?: (string | string[] | any | any[]) | undefined;
-  system?: (string | string[] | any | any[]) | undefined;
-  context?: any[] | undefined;
+  messages: unknown[] | string;
+  instructions?: (string | string[] | unknown | unknown[]) | undefined;
+  system?: (string | string[] | unknown | unknown[]) | undefined;
+  context?: unknown[] | undefined;
   memory?:
     | {
         thread:
@@ -8616,7 +8604,7 @@ export type PostAgentsAgentIdStreamVnextUi_Body = {
         resource?: string | undefined;
         options?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         readOnly?: boolean | undefined;
@@ -8626,7 +8614,7 @@ export type PostAgentsAgentIdStreamVnextUi_Body = {
   savePerStep?: boolean | undefined;
   requestContext?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   versions?:
@@ -8646,41 +8634,41 @@ export type PostAgentsAgentIdStreamVnextUi_Body = {
       }
     | undefined;
   maxSteps?: number | undefined;
-  stopWhen?: any | undefined;
+  stopWhen?: unknown | undefined;
   providerOptions?:
     | {
         anthropic?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         google?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         openai?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         xai?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
       }
     | undefined;
-  modelSettings?: any | undefined;
+  modelSettings?: unknown | undefined;
   activeTools?: string[] | undefined;
   toolsets?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   clientTools?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   toolChoice?:
@@ -8696,12 +8684,12 @@ export type PostAgentsAgentIdStreamVnextUi_Body = {
   scorers?:
     | (
         | {
-            [key: string]: any;
+            [key: string]: unknown;
           }
         | {
             [key: string]: {
               scorer: string;
-              sampling?: any | undefined;
+              sampling?: unknown | undefined;
             };
           }
       )
@@ -8722,17 +8710,17 @@ export type PostAgentsAgentIdStreamVnextUi_Body = {
         hideOutput?: boolean | undefined;
       }
     | undefined;
-  output?: any | undefined;
+  output?: unknown | undefined;
   structuredOutput?:
     | {
         schema: {
           [x: string]: unknown;
         };
-        model?: (string | any) | undefined;
+        model?: (string | unknown) | undefined;
         instructions?: string | undefined;
         jsonPromptInjection?: boolean | undefined;
         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
-        fallbackValue?: any | undefined;
+        fallbackValue?: unknown | undefined;
       }
     | undefined;
   untilIdle?:
@@ -8747,7 +8735,7 @@ export type PostAgentsAgentIdStreamVnextUi_Body = {
 };
 
 /** @deprecated */
-export type PostAgentsAgentIdStreamVnextUi_Response = any;
+export type PostAgentsAgentIdStreamVnextUi_Response = unknown;
 
 /** @deprecated */
 export type PostAgentsAgentIdStreamVnextUi_Request = Simplify<
@@ -8783,10 +8771,10 @@ export type PostAgentsAgentIdStreamUi_PathParams = {
 
 /** @deprecated */
 export type PostAgentsAgentIdStreamUi_Body = {
-  messages: any[] | string;
-  instructions?: (string | string[] | any | any[]) | undefined;
-  system?: (string | string[] | any | any[]) | undefined;
-  context?: any[] | undefined;
+  messages: unknown[] | string;
+  instructions?: (string | string[] | unknown | unknown[]) | undefined;
+  system?: (string | string[] | unknown | unknown[]) | undefined;
+  context?: unknown[] | undefined;
   memory?:
     | {
         thread:
@@ -8798,7 +8786,7 @@ export type PostAgentsAgentIdStreamUi_Body = {
         resource?: string | undefined;
         options?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         readOnly?: boolean | undefined;
@@ -8808,7 +8796,7 @@ export type PostAgentsAgentIdStreamUi_Body = {
   savePerStep?: boolean | undefined;
   requestContext?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   versions?:
@@ -8828,41 +8816,41 @@ export type PostAgentsAgentIdStreamUi_Body = {
       }
     | undefined;
   maxSteps?: number | undefined;
-  stopWhen?: any | undefined;
+  stopWhen?: unknown | undefined;
   providerOptions?:
     | {
         anthropic?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         google?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         openai?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         xai?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
       }
     | undefined;
-  modelSettings?: any | undefined;
+  modelSettings?: unknown | undefined;
   activeTools?: string[] | undefined;
   toolsets?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   clientTools?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   toolChoice?:
@@ -8878,12 +8866,12 @@ export type PostAgentsAgentIdStreamUi_Body = {
   scorers?:
     | (
         | {
-            [key: string]: any;
+            [key: string]: unknown;
           }
         | {
             [key: string]: {
               scorer: string;
-              sampling?: any | undefined;
+              sampling?: unknown | undefined;
             };
           }
       )
@@ -8904,17 +8892,17 @@ export type PostAgentsAgentIdStreamUi_Body = {
         hideOutput?: boolean | undefined;
       }
     | undefined;
-  output?: any | undefined;
+  output?: unknown | undefined;
   structuredOutput?:
     | {
         schema: {
           [x: string]: unknown;
         };
-        model?: (string | any) | undefined;
+        model?: (string | unknown) | undefined;
         instructions?: string | undefined;
         jsonPromptInjection?: boolean | undefined;
         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
-        fallbackValue?: any | undefined;
+        fallbackValue?: unknown | undefined;
       }
     | undefined;
   untilIdle?:
@@ -8929,7 +8917,7 @@ export type PostAgentsAgentIdStreamUi_Body = {
 };
 
 /** @deprecated */
-export type PostAgentsAgentIdStreamUi_Response = any;
+export type PostAgentsAgentIdStreamUi_Response = unknown;
 
 /** @deprecated */
 export type PostAgentsAgentIdStreamUi_Request = Simplify<
@@ -9445,7 +9433,7 @@ export type GetWorkflowsWorkflowIdRuns_Response = {
     runId: string;
     snapshot:
       | {
-          [key: string]: any;
+          [key: string]: unknown;
         }
       | string;
     createdAt: Date;
@@ -9511,7 +9499,7 @@ export type GetWorkflowsWorkflowIdRunsRunId_Response = {
     | 'skipped';
   initialState?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   result?: unknown | undefined;
@@ -9519,7 +9507,7 @@ export type GetWorkflowsWorkflowIdRunsRunId_Response = {
   payload?: unknown | undefined;
   steps?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   activeStepsPath?:
@@ -9736,7 +9724,7 @@ export type PostWorkflowsWorkflowIdResumeStream_Body = {
   forEachIndex?: number | undefined;
 };
 
-export type PostWorkflowsWorkflowIdResumeStream_Response = any;
+export type PostWorkflowsWorkflowIdResumeStream_Response = unknown;
 
 export type PostWorkflowsWorkflowIdResumeStream_Request = Simplify<
   (PostWorkflowsWorkflowIdResumeStream_PathParams extends never
@@ -9824,7 +9812,7 @@ export type PostWorkflowsWorkflowIdStartAsync_Response = {
   initialState?: unknown | undefined;
   steps?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   activeStepsPath?:
@@ -9946,7 +9934,7 @@ export type PostWorkflowsWorkflowIdObserve_QueryParams = {
   offset?: number | undefined;
 };
 
-export type PostWorkflowsWorkflowIdObserve_Response = any;
+export type PostWorkflowsWorkflowIdObserve_Response = unknown;
 
 export type PostWorkflowsWorkflowIdObserve_Request = Simplify<
   (PostWorkflowsWorkflowIdObserve_PathParams extends never
@@ -10031,7 +10019,7 @@ export type PostWorkflowsWorkflowIdResumeAsync_Response = {
   initialState?: unknown | undefined;
   steps?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   activeStepsPath?:
@@ -10258,13 +10246,13 @@ export type PostWorkflowsWorkflowIdTimeTravel_Body = {
   step: string | string[];
   context?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   nestedStepsContext?:
     | {
         [key: string]: {
-          [key: string]: any;
+          [key: string]: unknown;
         };
       }
     | undefined;
@@ -10340,13 +10328,13 @@ export type PostWorkflowsWorkflowIdTimeTravelAsync_Body = {
   step: string | string[];
   context?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   nestedStepsContext?:
     | {
         [key: string]: {
-          [key: string]: any;
+          [key: string]: unknown;
         };
       }
     | undefined;
@@ -10395,7 +10383,7 @@ export type PostWorkflowsWorkflowIdTimeTravelAsync_Response = {
   initialState?: unknown | undefined;
   steps?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   activeStepsPath?:
@@ -10455,13 +10443,13 @@ export type PostWorkflowsWorkflowIdTimeTravelStream_Body = {
   step: string | string[];
   context?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   nestedStepsContext?:
     | {
         [key: string]: {
-          [key: string]: any;
+          [key: string]: unknown;
         };
       }
     | undefined;
@@ -10636,7 +10624,7 @@ export type PostWorkflowsWorkflowIdRestartAsync_Response = {
   initialState?: unknown | undefined;
   steps?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   activeStepsPath?:
@@ -10903,12 +10891,12 @@ export type PostToolsToolIdExecute_Body = {
   data: unknown;
   requestContext?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
 };
 
-export type PostToolsToolIdExecute_Response = any;
+export type PostToolsToolIdExecute_Response = unknown;
 
 export type PostToolsToolIdExecute_Request = Simplify<
   (PostToolsToolIdExecute_PathParams extends never ? {} : { params: PostToolsToolIdExecute_PathParams }) &
@@ -11019,7 +11007,7 @@ export type PostProcessorsProcessorIdExecute_Body = {
     content:
       | {
           format?: 2 | undefined;
-          parts?: any[] | undefined;
+          parts?: unknown[] | undefined;
           content?: string | undefined;
           [x: string]: unknown;
         }
@@ -11029,7 +11017,7 @@ export type PostProcessorsProcessorIdExecute_Body = {
   agentId?: string | undefined;
   requestContext?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
 };
@@ -11045,7 +11033,7 @@ export type PostProcessorsProcessorIdExecute_Response = {
         content:
           | {
               format?: 2 | undefined;
-              parts?: any[] | undefined;
+              parts?: unknown[] | undefined;
               content?: string | undefined;
               [x: string]: unknown;
             }
@@ -11062,7 +11050,7 @@ export type PostProcessorsProcessorIdExecute_Response = {
           content:
             | {
                 format?: 2 | undefined;
-                parts?: any[] | undefined;
+                parts?: unknown[] | undefined;
                 content?: string | undefined;
                 [x: string]: unknown;
               }
@@ -11075,7 +11063,7 @@ export type PostProcessorsProcessorIdExecute_Response = {
     | {
         triggered: boolean;
         reason?: string | undefined;
-        metadata?: any | undefined;
+        metadata?: unknown | undefined;
       }
     | undefined;
   error?: string | undefined;
@@ -11689,8 +11677,8 @@ export type GetMemoryConfig_Response = {
   memoryType?: ('local' | 'gateway') | undefined;
   config: {
     lastMessages?: (number | false) | undefined;
-    semanticRecall?: (boolean | any) | undefined;
-    workingMemory?: any | undefined;
+    semanticRecall?: (boolean | unknown) | undefined;
+    workingMemory?: unknown | undefined;
     observationalMemory?:
       | {
           enabled: boolean;
@@ -11989,7 +11977,7 @@ export type GetMemoryThreads_QueryParams = {
   resourceId?: string | undefined;
   metadata?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   orderBy?:
@@ -12133,8 +12121,8 @@ export type GetMemoryThreadsThreadIdMessages_QueryParams = {
 };
 
 export type GetMemoryThreadsThreadIdMessages_Response = {
-  messages: any[];
-  uiMessages: any[] | null;
+  messages: unknown[];
+  uiMessages: unknown[] | null;
 };
 
 export type GetMemoryThreadsThreadIdMessages_Request = Simplify<
@@ -12212,11 +12200,11 @@ export type PostMemorySaveMessages_QueryParams = {
 };
 
 export type PostMemorySaveMessages_Body = {
-  messages: any[];
+  messages: unknown[];
 };
 
 export type PostMemorySaveMessages_Response = {
-  messages: any[];
+  messages: unknown[];
 };
 
 export type PostMemorySaveMessages_Request = Simplify<
@@ -12438,7 +12426,7 @@ export type PostMemoryThreadsThreadIdClone_Response = {
         }
       | undefined;
   };
-  clonedMessages: any[];
+  clonedMessages: unknown[];
 };
 
 export type PostMemoryThreadsThreadIdClone_Request = Simplify<
@@ -12661,7 +12649,7 @@ export type GetMemoryNetworkThreads_QueryParams = {
   resourceId?: string | undefined;
   metadata?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   orderBy?:
@@ -12806,8 +12794,8 @@ export type GetMemoryNetworkThreadsThreadIdMessages_QueryParams = {
 };
 
 export type GetMemoryNetworkThreadsThreadIdMessages_Response = {
-  messages: any[];
-  uiMessages: any[] | null;
+  messages: unknown[];
+  uiMessages: unknown[] | null;
 };
 
 export type GetMemoryNetworkThreadsThreadIdMessages_Request = Simplify<
@@ -12839,11 +12827,11 @@ export type PostMemoryNetworkSaveMessages_QueryParams = {
 };
 
 export type PostMemoryNetworkSaveMessages_Body = {
-  messages: any[];
+  messages: unknown[];
 };
 
 export type PostMemoryNetworkSaveMessages_Response = {
-  messages: any[];
+  messages: unknown[];
 };
 
 export type PostMemoryNetworkSaveMessages_Request = Simplify<
@@ -19309,7 +19297,7 @@ export type PostVectorVectorNameUpsert_Body = {
   vectors: number[][];
   metadata?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }[]
     | undefined;
   ids?: string[] | undefined;
@@ -19391,7 +19379,7 @@ export type PostVectorVectorNameQuery_Body = {
   topK?: number | undefined;
   filter?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   includeVector?: boolean | undefined;
@@ -21085,10 +21073,10 @@ export type PostAgentsAgentIdGenerateLegacy_PathParams = {
 };
 
 export type PostAgentsAgentIdGenerateLegacy_Body = {
-  messages: any[] | string;
-  instructions?: (string | string[] | any | any[]) | undefined;
-  system?: (string | string[] | any | any[]) | undefined;
-  context?: any[] | undefined;
+  messages: unknown[] | string;
+  instructions?: (string | string[] | unknown | unknown[]) | undefined;
+  system?: (string | string[] | unknown | unknown[]) | undefined;
+  context?: unknown[] | undefined;
   memory?:
     | {
         thread:
@@ -21100,7 +21088,7 @@ export type PostAgentsAgentIdGenerateLegacy_Body = {
         resource?: string | undefined;
         options?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         readOnly?: boolean | undefined;
@@ -21110,7 +21098,7 @@ export type PostAgentsAgentIdGenerateLegacy_Body = {
   savePerStep?: boolean | undefined;
   requestContext?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   versions?:
@@ -21130,41 +21118,41 @@ export type PostAgentsAgentIdGenerateLegacy_Body = {
       }
     | undefined;
   maxSteps?: number | undefined;
-  stopWhen?: any | undefined;
+  stopWhen?: unknown | undefined;
   providerOptions?:
     | {
         anthropic?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         google?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         openai?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         xai?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
       }
     | undefined;
-  modelSettings?: any | undefined;
+  modelSettings?: unknown | undefined;
   activeTools?: string[] | undefined;
   toolsets?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   clientTools?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   toolChoice?:
@@ -21180,12 +21168,12 @@ export type PostAgentsAgentIdGenerateLegacy_Body = {
   scorers?:
     | (
         | {
-            [key: string]: any;
+            [key: string]: unknown;
           }
         | {
             [key: string]: {
               scorer: string;
-              sampling?: any | undefined;
+              sampling?: unknown | undefined;
             };
           }
       )
@@ -21206,17 +21194,17 @@ export type PostAgentsAgentIdGenerateLegacy_Body = {
         hideOutput?: boolean | undefined;
       }
     | undefined;
-  output?: any | undefined;
+  output?: unknown | undefined;
   structuredOutput?:
     | {
         schema: {
           [x: string]: unknown;
         };
-        model?: (string | any) | undefined;
+        model?: (string | unknown) | undefined;
         instructions?: string | undefined;
         jsonPromptInjection?: boolean | undefined;
         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
-        fallbackValue?: any | undefined;
+        fallbackValue?: unknown | undefined;
       }
     | undefined;
   untilIdle?:
@@ -21233,7 +21221,7 @@ export type PostAgentsAgentIdGenerateLegacy_Body = {
   [x: string]: unknown;
 };
 
-export type PostAgentsAgentIdGenerateLegacy_Response = any;
+export type PostAgentsAgentIdGenerateLegacy_Response = unknown;
 
 export type PostAgentsAgentIdGenerateLegacy_Request = Simplify<
   (PostAgentsAgentIdGenerateLegacy_PathParams extends never
@@ -21265,10 +21253,10 @@ export type PostAgentsAgentIdStreamLegacy_PathParams = {
 };
 
 export type PostAgentsAgentIdStreamLegacy_Body = {
-  messages: any[] | string;
-  instructions?: (string | string[] | any | any[]) | undefined;
-  system?: (string | string[] | any | any[]) | undefined;
-  context?: any[] | undefined;
+  messages: unknown[] | string;
+  instructions?: (string | string[] | unknown | unknown[]) | undefined;
+  system?: (string | string[] | unknown | unknown[]) | undefined;
+  context?: unknown[] | undefined;
   memory?:
     | {
         thread:
@@ -21280,7 +21268,7 @@ export type PostAgentsAgentIdStreamLegacy_Body = {
         resource?: string | undefined;
         options?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         readOnly?: boolean | undefined;
@@ -21290,7 +21278,7 @@ export type PostAgentsAgentIdStreamLegacy_Body = {
   savePerStep?: boolean | undefined;
   requestContext?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   versions?:
@@ -21310,41 +21298,41 @@ export type PostAgentsAgentIdStreamLegacy_Body = {
       }
     | undefined;
   maxSteps?: number | undefined;
-  stopWhen?: any | undefined;
+  stopWhen?: unknown | undefined;
   providerOptions?:
     | {
         anthropic?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         google?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         openai?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
         xai?:
           | {
-              [key: string]: any;
+              [key: string]: unknown;
             }
           | undefined;
       }
     | undefined;
-  modelSettings?: any | undefined;
+  modelSettings?: unknown | undefined;
   activeTools?: string[] | undefined;
   toolsets?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   clientTools?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   toolChoice?:
@@ -21360,12 +21348,12 @@ export type PostAgentsAgentIdStreamLegacy_Body = {
   scorers?:
     | (
         | {
-            [key: string]: any;
+            [key: string]: unknown;
           }
         | {
             [key: string]: {
               scorer: string;
-              sampling?: any | undefined;
+              sampling?: unknown | undefined;
             };
           }
       )
@@ -21386,17 +21374,17 @@ export type PostAgentsAgentIdStreamLegacy_Body = {
         hideOutput?: boolean | undefined;
       }
     | undefined;
-  output?: any | undefined;
+  output?: unknown | undefined;
   structuredOutput?:
     | {
         schema: {
           [x: string]: unknown;
         };
-        model?: (string | any) | undefined;
+        model?: (string | unknown) | undefined;
         instructions?: string | undefined;
         jsonPromptInjection?: boolean | undefined;
         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
-        fallbackValue?: any | undefined;
+        fallbackValue?: unknown | undefined;
       }
     | undefined;
   untilIdle?:
@@ -21413,7 +21401,7 @@ export type PostAgentsAgentIdStreamLegacy_Body = {
   [x: string]: unknown;
 };
 
-export type PostAgentsAgentIdStreamLegacy_Response = any;
+export type PostAgentsAgentIdStreamLegacy_Response = unknown;
 
 export type PostAgentsAgentIdStreamLegacy_Request = Simplify<
   (PostAgentsAgentIdStreamLegacy_PathParams extends never ? {} : { params: PostAgentsAgentIdStreamLegacy_PathParams }) &
@@ -21475,7 +21463,7 @@ export type PostWorkflowsWorkflowIdStreamLegacy_Body = {
   closeOnSuspend?: boolean | undefined;
 };
 
-export type PostWorkflowsWorkflowIdStreamLegacy_Response = any;
+export type PostWorkflowsWorkflowIdStreamLegacy_Response = unknown;
 
 export type PostWorkflowsWorkflowIdStreamLegacy_Request = Simplify<
   (PostWorkflowsWorkflowIdStreamLegacy_PathParams extends never
@@ -21515,7 +21503,7 @@ export type PostWorkflowsWorkflowIdObserveStreamLegacy_QueryParams = {
   runId: string;
 };
 
-export type PostWorkflowsWorkflowIdObserveStreamLegacy_Response = any;
+export type PostWorkflowsWorkflowIdObserveStreamLegacy_Response = unknown;
 
 export type PostWorkflowsWorkflowIdObserveStreamLegacy_Request = Simplify<
   (PostWorkflowsWorkflowIdObserveStreamLegacy_PathParams extends never
@@ -84379,14 +84367,6 @@ export type GetStoredSkills_QueryParams = {
   pinFavoritedFor?: string | undefined;
 };
 
-type GetStoredSkills_Response_Auxiliary_5 = {
-  id?: string | undefined;
-  name: string;
-  type: 'file' | 'folder';
-  content?: string | undefined;
-  children?: GetStoredSkills_Response_Auxiliary_5[] | undefined;
-};
-
 export type GetStoredSkills_Response = {
   total: number;
   page: number;
@@ -84442,7 +84422,7 @@ export type GetStoredSkills_Response = {
     /** List of asset file paths */
     assets?: string[] | undefined;
     /** Full file tree structure for the skill */
-    files?: GetStoredSkills_Response_Auxiliary_5[] | undefined;
+    files?: Shared_Auxiliary_7587[] | undefined;
     /** Additional metadata for the skill */
     metadata?:
       | {
@@ -84477,14 +84457,6 @@ export interface GetStoredSkills_RouteContract {
 export type GetStoredSkillsStoredSkillId_PathParams = {
   /** Unique identifier for the stored skill */
   storedSkillId: string;
-};
-
-type GetStoredSkillsStoredSkillId_Response_Auxiliary_4 = {
-  id?: string | undefined;
-  name: string;
-  type: 'file' | 'folder';
-  content?: string | undefined;
-  children?: GetStoredSkillsStoredSkillId_Response_Auxiliary_4[] | undefined;
 };
 
 export type GetStoredSkillsStoredSkillId_Response = {
@@ -84537,7 +84509,7 @@ export type GetStoredSkillsStoredSkillId_Response = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: GetStoredSkillsStoredSkillId_Response_Auxiliary_4[] | undefined;
+  files?: Shared_Auxiliary_7587[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -84564,14 +84536,6 @@ export interface GetStoredSkillsStoredSkillId_RouteContract {
 // ============================================================================
 // Route: POST /stored/skills
 // ============================================================================
-type PostStoredSkills_Body_Auxiliary_4 = {
-  id?: string | undefined;
-  name: string;
-  type: 'file' | 'folder';
-  content?: string | undefined;
-  children?: PostStoredSkills_Body_Auxiliary_4[] | undefined;
-};
-
 export type PostStoredSkills_Body = {
   /** Unique identifier. If not provided, derived from name. */
   id?: string | undefined;
@@ -84616,21 +84580,13 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: PostStoredSkills_Body_Auxiliary_4[] | undefined;
+  files?: Shared_Auxiliary_7587[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
         [key: string]: unknown;
       }
     | undefined;
-};
-
-type PostStoredSkills_Response_Auxiliary_4 = {
-  id?: string | undefined;
-  name: string;
-  type: 'file' | 'folder';
-  content?: string | undefined;
-  children?: PostStoredSkills_Response_Auxiliary_4[] | undefined;
 };
 
 export type PostStoredSkills_Response = {
@@ -84683,7 +84639,7 @@ export type PostStoredSkills_Response = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: PostStoredSkills_Response_Auxiliary_4[] | undefined;
+  files?: Shared_Auxiliary_7587[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -84717,14 +84673,6 @@ export interface PostStoredSkills_RouteContract {
 export type PatchStoredSkillsStoredSkillId_PathParams = {
   /** Unique identifier for the stored skill */
   storedSkillId: string;
-};
-
-type PatchStoredSkillsStoredSkillId_Body_Auxiliary_4 = {
-  id?: string | undefined;
-  name: string;
-  type: 'file' | 'folder';
-  content?: string | undefined;
-  children?: PatchStoredSkillsStoredSkillId_Body_Auxiliary_4[] | undefined;
 };
 
 export type PatchStoredSkillsStoredSkillId_Body = {
@@ -84771,7 +84719,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (PatchStoredSkillsStoredSkillId_Body_Auxiliary_4[] | undefined) | undefined;
+  files?: (Shared_Auxiliary_7587[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -84781,14 +84729,6 @@ export type PatchStoredSkillsStoredSkillId_Body = {
         | undefined
       )
     | undefined;
-};
-
-type PatchStoredSkillsStoredSkillId_Response_Auxiliary_5 = {
-  id?: string | undefined;
-  name: string;
-  type: 'file' | 'folder';
-  content?: string | undefined;
-  children?: PatchStoredSkillsStoredSkillId_Response_Auxiliary_5[] | undefined;
 };
 
 export type PatchStoredSkillsStoredSkillId_Response =
@@ -84851,7 +84791,7 @@ export type PatchStoredSkillsStoredSkillId_Response =
       /** List of asset file paths */
       assets?: string[] | undefined;
       /** Full file tree structure for the skill */
-      files?: PatchStoredSkillsStoredSkillId_Response_Auxiliary_5[] | undefined;
+      files?: Shared_Auxiliary_7587[] | undefined;
       /** Additional metadata for the skill */
       metadata?:
         | {
@@ -84924,14 +84864,6 @@ export type PostStoredSkillsStoredSkillIdPublish_Body = {
   skillPath: string;
 };
 
-type PostStoredSkillsStoredSkillIdPublish_Response_Auxiliary_4 = {
-  id?: string | undefined;
-  name: string;
-  type: 'file' | 'folder';
-  content?: string | undefined;
-  children?: PostStoredSkillsStoredSkillIdPublish_Response_Auxiliary_4[] | undefined;
-};
-
 export type PostStoredSkillsStoredSkillIdPublish_Response = {
   id: string;
   /** Skill status: draft, published, or archived */
@@ -84982,7 +84914,7 @@ export type PostStoredSkillsStoredSkillIdPublish_Response = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: PostStoredSkillsStoredSkillIdPublish_Response_Auxiliary_4[] | undefined;
+  files?: Shared_Auxiliary_7587[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -86324,7 +86256,7 @@ export type PostDatasetsDatasetIdItems_Body = {
                               }
                             | undefined;
                           /** Nested trajectory expectation (untyped at this depth) */
-                          children?: any | undefined;
+                          children?: unknown | undefined;
                           stepType: 'tool_call';
                           toolArgs?:
                             | {
@@ -86348,7 +86280,7 @@ export type PostDatasetsDatasetIdItems_Body = {
                               }
                             | undefined;
                           /** Nested trajectory expectation (untyped at this depth) */
-                          children?: any | undefined;
+                          children?: unknown | undefined;
                           stepType: 'mcp_tool_call';
                           toolArgs?:
                             | {
@@ -86373,7 +86305,7 @@ export type PostDatasetsDatasetIdItems_Body = {
                               }
                             | undefined;
                           /** Nested trajectory expectation (untyped at this depth) */
-                          children?: any | undefined;
+                          children?: unknown | undefined;
                           stepType: 'model_generation';
                           modelId?: string | undefined;
                           promptTokens?: number | undefined;
@@ -86390,7 +86322,7 @@ export type PostDatasetsDatasetIdItems_Body = {
                               }
                             | undefined;
                           /** Nested trajectory expectation (untyped at this depth) */
-                          children?: any | undefined;
+                          children?: unknown | undefined;
                           stepType: 'agent_run';
                           agentId?: string | undefined;
                         }
@@ -86404,7 +86336,7 @@ export type PostDatasetsDatasetIdItems_Body = {
                               }
                             | undefined;
                           /** Nested trajectory expectation (untyped at this depth) */
-                          children?: any | undefined;
+                          children?: unknown | undefined;
                           stepType: 'workflow_step';
                           stepId?: string | undefined;
                           status?: string | undefined;
@@ -86424,7 +86356,7 @@ export type PostDatasetsDatasetIdItems_Body = {
                               }
                             | undefined;
                           /** Nested trajectory expectation (untyped at this depth) */
-                          children?: any | undefined;
+                          children?: unknown | undefined;
                           stepType: 'workflow_run';
                           workflowId?: string | undefined;
                           status?: string | undefined;
@@ -86439,7 +86371,7 @@ export type PostDatasetsDatasetIdItems_Body = {
                               }
                             | undefined;
                           /** Nested trajectory expectation (untyped at this depth) */
-                          children?: any | undefined;
+                          children?: unknown | undefined;
                           stepType: 'workflow_conditional';
                           conditionCount?: number | undefined;
                           selectedSteps?: string[] | undefined;
@@ -86454,7 +86386,7 @@ export type PostDatasetsDatasetIdItems_Body = {
                               }
                             | undefined;
                           /** Nested trajectory expectation (untyped at this depth) */
-                          children?: any | undefined;
+                          children?: unknown | undefined;
                           stepType: 'workflow_parallel';
                           branchCount?: number | undefined;
                           parallelSteps?: string[] | undefined;
@@ -86469,7 +86401,7 @@ export type PostDatasetsDatasetIdItems_Body = {
                               }
                             | undefined;
                           /** Nested trajectory expectation (untyped at this depth) */
-                          children?: any | undefined;
+                          children?: unknown | undefined;
                           stepType: 'workflow_loop';
                           loopType?: string | undefined;
                           totalIterations?: number | undefined;
@@ -86484,7 +86416,7 @@ export type PostDatasetsDatasetIdItems_Body = {
                               }
                             | undefined;
                           /** Nested trajectory expectation (untyped at this depth) */
-                          children?: any | undefined;
+                          children?: unknown | undefined;
                           stepType: 'workflow_sleep';
                           sleepDurationMs?: number | undefined;
                           sleepType?: string | undefined;
@@ -86499,7 +86431,7 @@ export type PostDatasetsDatasetIdItems_Body = {
                               }
                             | undefined;
                           /** Nested trajectory expectation (untyped at this depth) */
-                          children?: any | undefined;
+                          children?: unknown | undefined;
                           stepType: 'workflow_wait_event';
                           eventName?: string | undefined;
                           eventReceived?: boolean | undefined;
@@ -86514,7 +86446,7 @@ export type PostDatasetsDatasetIdItems_Body = {
                               }
                             | undefined;
                           /** Nested trajectory expectation (untyped at this depth) */
-                          children?: any | undefined;
+                          children?: unknown | undefined;
                           stepType: 'processor_run';
                           processorId?: string | undefined;
                         }
@@ -86529,7 +86461,7 @@ export type PostDatasetsDatasetIdItems_Body = {
                           }
                         | undefined;
                       /** Nested trajectory expectation (untyped at this depth) */
-                      children?: any | undefined;
+                      children?: unknown | undefined;
                       stepType?: undefined | undefined;
                     }
                 )[]
@@ -86690,7 +86622,7 @@ export type PostDatasetsDatasetIdItemsBatch_Body = {
                                 }
                               | undefined;
                             /** Nested trajectory expectation (untyped at this depth) */
-                            children?: any | undefined;
+                            children?: unknown | undefined;
                             stepType: 'tool_call';
                             toolArgs?:
                               | {
@@ -86714,7 +86646,7 @@ export type PostDatasetsDatasetIdItemsBatch_Body = {
                                 }
                               | undefined;
                             /** Nested trajectory expectation (untyped at this depth) */
-                            children?: any | undefined;
+                            children?: unknown | undefined;
                             stepType: 'mcp_tool_call';
                             toolArgs?:
                               | {
@@ -86739,7 +86671,7 @@ export type PostDatasetsDatasetIdItemsBatch_Body = {
                                 }
                               | undefined;
                             /** Nested trajectory expectation (untyped at this depth) */
-                            children?: any | undefined;
+                            children?: unknown | undefined;
                             stepType: 'model_generation';
                             modelId?: string | undefined;
                             promptTokens?: number | undefined;
@@ -86756,7 +86688,7 @@ export type PostDatasetsDatasetIdItemsBatch_Body = {
                                 }
                               | undefined;
                             /** Nested trajectory expectation (untyped at this depth) */
-                            children?: any | undefined;
+                            children?: unknown | undefined;
                             stepType: 'agent_run';
                             agentId?: string | undefined;
                           }
@@ -86770,7 +86702,7 @@ export type PostDatasetsDatasetIdItemsBatch_Body = {
                                 }
                               | undefined;
                             /** Nested trajectory expectation (untyped at this depth) */
-                            children?: any | undefined;
+                            children?: unknown | undefined;
                             stepType: 'workflow_step';
                             stepId?: string | undefined;
                             status?: string | undefined;
@@ -86790,7 +86722,7 @@ export type PostDatasetsDatasetIdItemsBatch_Body = {
                                 }
                               | undefined;
                             /** Nested trajectory expectation (untyped at this depth) */
-                            children?: any | undefined;
+                            children?: unknown | undefined;
                             stepType: 'workflow_run';
                             workflowId?: string | undefined;
                             status?: string | undefined;
@@ -86805,7 +86737,7 @@ export type PostDatasetsDatasetIdItemsBatch_Body = {
                                 }
                               | undefined;
                             /** Nested trajectory expectation (untyped at this depth) */
-                            children?: any | undefined;
+                            children?: unknown | undefined;
                             stepType: 'workflow_conditional';
                             conditionCount?: number | undefined;
                             selectedSteps?: string[] | undefined;
@@ -86820,7 +86752,7 @@ export type PostDatasetsDatasetIdItemsBatch_Body = {
                                 }
                               | undefined;
                             /** Nested trajectory expectation (untyped at this depth) */
-                            children?: any | undefined;
+                            children?: unknown | undefined;
                             stepType: 'workflow_parallel';
                             branchCount?: number | undefined;
                             parallelSteps?: string[] | undefined;
@@ -86835,7 +86767,7 @@ export type PostDatasetsDatasetIdItemsBatch_Body = {
                                 }
                               | undefined;
                             /** Nested trajectory expectation (untyped at this depth) */
-                            children?: any | undefined;
+                            children?: unknown | undefined;
                             stepType: 'workflow_loop';
                             loopType?: string | undefined;
                             totalIterations?: number | undefined;
@@ -86850,7 +86782,7 @@ export type PostDatasetsDatasetIdItemsBatch_Body = {
                                 }
                               | undefined;
                             /** Nested trajectory expectation (untyped at this depth) */
-                            children?: any | undefined;
+                            children?: unknown | undefined;
                             stepType: 'workflow_sleep';
                             sleepDurationMs?: number | undefined;
                             sleepType?: string | undefined;
@@ -86865,7 +86797,7 @@ export type PostDatasetsDatasetIdItemsBatch_Body = {
                                 }
                               | undefined;
                             /** Nested trajectory expectation (untyped at this depth) */
-                            children?: any | undefined;
+                            children?: unknown | undefined;
                             stepType: 'workflow_wait_event';
                             eventName?: string | undefined;
                             eventReceived?: boolean | undefined;
@@ -86880,7 +86812,7 @@ export type PostDatasetsDatasetIdItemsBatch_Body = {
                                 }
                               | undefined;
                             /** Nested trajectory expectation (untyped at this depth) */
-                            children?: any | undefined;
+                            children?: unknown | undefined;
                             stepType: 'processor_run';
                             processorId?: string | undefined;
                           }
@@ -86895,7 +86827,7 @@ export type PostDatasetsDatasetIdItemsBatch_Body = {
                             }
                           | undefined;
                         /** Nested trajectory expectation (untyped at this depth) */
-                        children?: any | undefined;
+                        children?: unknown | undefined;
                         stepType?: undefined | undefined;
                       }
                   )[]
@@ -87173,7 +87105,7 @@ export type PatchDatasetsDatasetIdItemsItemId_Body = {
                               }
                             | undefined;
                           /** Nested trajectory expectation (untyped at this depth) */
-                          children?: any | undefined;
+                          children?: unknown | undefined;
                           stepType: 'tool_call';
                           toolArgs?:
                             | {
@@ -87197,7 +87129,7 @@ export type PatchDatasetsDatasetIdItemsItemId_Body = {
                               }
                             | undefined;
                           /** Nested trajectory expectation (untyped at this depth) */
-                          children?: any | undefined;
+                          children?: unknown | undefined;
                           stepType: 'mcp_tool_call';
                           toolArgs?:
                             | {
@@ -87222,7 +87154,7 @@ export type PatchDatasetsDatasetIdItemsItemId_Body = {
                               }
                             | undefined;
                           /** Nested trajectory expectation (untyped at this depth) */
-                          children?: any | undefined;
+                          children?: unknown | undefined;
                           stepType: 'model_generation';
                           modelId?: string | undefined;
                           promptTokens?: number | undefined;
@@ -87239,7 +87171,7 @@ export type PatchDatasetsDatasetIdItemsItemId_Body = {
                               }
                             | undefined;
                           /** Nested trajectory expectation (untyped at this depth) */
-                          children?: any | undefined;
+                          children?: unknown | undefined;
                           stepType: 'agent_run';
                           agentId?: string | undefined;
                         }
@@ -87253,7 +87185,7 @@ export type PatchDatasetsDatasetIdItemsItemId_Body = {
                               }
                             | undefined;
                           /** Nested trajectory expectation (untyped at this depth) */
-                          children?: any | undefined;
+                          children?: unknown | undefined;
                           stepType: 'workflow_step';
                           stepId?: string | undefined;
                           status?: string | undefined;
@@ -87273,7 +87205,7 @@ export type PatchDatasetsDatasetIdItemsItemId_Body = {
                               }
                             | undefined;
                           /** Nested trajectory expectation (untyped at this depth) */
-                          children?: any | undefined;
+                          children?: unknown | undefined;
                           stepType: 'workflow_run';
                           workflowId?: string | undefined;
                           status?: string | undefined;
@@ -87288,7 +87220,7 @@ export type PatchDatasetsDatasetIdItemsItemId_Body = {
                               }
                             | undefined;
                           /** Nested trajectory expectation (untyped at this depth) */
-                          children?: any | undefined;
+                          children?: unknown | undefined;
                           stepType: 'workflow_conditional';
                           conditionCount?: number | undefined;
                           selectedSteps?: string[] | undefined;
@@ -87303,7 +87235,7 @@ export type PatchDatasetsDatasetIdItemsItemId_Body = {
                               }
                             | undefined;
                           /** Nested trajectory expectation (untyped at this depth) */
-                          children?: any | undefined;
+                          children?: unknown | undefined;
                           stepType: 'workflow_parallel';
                           branchCount?: number | undefined;
                           parallelSteps?: string[] | undefined;
@@ -87318,7 +87250,7 @@ export type PatchDatasetsDatasetIdItemsItemId_Body = {
                               }
                             | undefined;
                           /** Nested trajectory expectation (untyped at this depth) */
-                          children?: any | undefined;
+                          children?: unknown | undefined;
                           stepType: 'workflow_loop';
                           loopType?: string | undefined;
                           totalIterations?: number | undefined;
@@ -87333,7 +87265,7 @@ export type PatchDatasetsDatasetIdItemsItemId_Body = {
                               }
                             | undefined;
                           /** Nested trajectory expectation (untyped at this depth) */
-                          children?: any | undefined;
+                          children?: unknown | undefined;
                           stepType: 'workflow_sleep';
                           sleepDurationMs?: number | undefined;
                           sleepType?: string | undefined;
@@ -87348,7 +87280,7 @@ export type PatchDatasetsDatasetIdItemsItemId_Body = {
                               }
                             | undefined;
                           /** Nested trajectory expectation (untyped at this depth) */
-                          children?: any | undefined;
+                          children?: unknown | undefined;
                           stepType: 'workflow_wait_event';
                           eventName?: string | undefined;
                           eventReceived?: boolean | undefined;
@@ -87363,7 +87295,7 @@ export type PatchDatasetsDatasetIdItemsItemId_Body = {
                               }
                             | undefined;
                           /** Nested trajectory expectation (untyped at this depth) */
-                          children?: any | undefined;
+                          children?: unknown | undefined;
                           stepType: 'processor_run';
                           processorId?: string | undefined;
                         }
@@ -87378,7 +87310,7 @@ export type PatchDatasetsDatasetIdItemsItemId_Body = {
                           }
                         | undefined;
                       /** Nested trajectory expectation (untyped at this depth) */
-                      children?: any | undefined;
+                      children?: unknown | undefined;
                       stepType?: undefined | undefined;
                     }
                 )[]
@@ -88423,7 +88355,7 @@ export type GetBackgroundTasksStream_QueryParams = {
   taskId?: string | undefined;
 };
 
-export type GetBackgroundTasksStream_Response = any;
+export type GetBackgroundTasksStream_Response = unknown;
 
 export type GetBackgroundTasksStream_Request = Simplify<
   (never extends never ? {} : { params: never }) &
@@ -89198,7 +89130,7 @@ export type GetAgentBuilderActionIdRuns_Response = {
     runId: string;
     snapshot:
       | {
-          [key: string]: any;
+          [key: string]: unknown;
         }
       | string;
     createdAt: Date;
@@ -89264,7 +89196,7 @@ export type GetAgentBuilderActionIdRunsRunId_Response = {
     | 'skipped';
   initialState?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   result?: unknown | undefined;
@@ -89272,7 +89204,7 @@ export type GetAgentBuilderActionIdRunsRunId_Response = {
   payload?: unknown | undefined;
   steps?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   activeStepsPath?:
@@ -89386,7 +89318,7 @@ export type PostAgentBuilderActionIdStream_Body = {
   closeOnSuspend?: boolean | undefined;
 };
 
-export type PostAgentBuilderActionIdStream_Response = any;
+export type PostAgentBuilderActionIdStream_Response = unknown;
 
 export type PostAgentBuilderActionIdStream_Request = Simplify<
   (PostAgentBuilderActionIdStream_PathParams extends never
@@ -89453,7 +89385,7 @@ export type PostAgentBuilderActionIdStreamLegacy_Body = {
   perStep?: boolean | undefined;
 };
 
-export type PostAgentBuilderActionIdStreamLegacy_Response = any;
+export type PostAgentBuilderActionIdStreamLegacy_Response = unknown;
 
 export type PostAgentBuilderActionIdStreamLegacy_Request = Simplify<
   (PostAgentBuilderActionIdStreamLegacy_PathParams extends never
@@ -89541,7 +89473,7 @@ export type PostAgentBuilderActionIdStartAsync_Response = {
   initialState?: unknown | undefined;
   steps?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   activeStepsPath?:
@@ -89661,7 +89593,7 @@ export type PostAgentBuilderActionIdObserve_QueryParams = {
   runId: string;
 };
 
-export type PostAgentBuilderActionIdObserve_Response = any;
+export type PostAgentBuilderActionIdObserve_Response = unknown;
 
 export type PostAgentBuilderActionIdObserve_Request = Simplify<
   (PostAgentBuilderActionIdObserve_PathParams extends never
@@ -89697,7 +89629,7 @@ export type PostAgentBuilderActionIdObserveStreamLegacy_QueryParams = {
   runId: string;
 };
 
-export type PostAgentBuilderActionIdObserveStreamLegacy_Response = any;
+export type PostAgentBuilderActionIdObserveStreamLegacy_Response = unknown;
 
 export type PostAgentBuilderActionIdObserveStreamLegacy_Request = Simplify<
   (PostAgentBuilderActionIdObserveStreamLegacy_PathParams extends never
@@ -89782,7 +89714,7 @@ export type PostAgentBuilderActionIdResumeAsync_Response = {
   initialState?: unknown | undefined;
   steps?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   activeStepsPath?:
@@ -90000,7 +89932,7 @@ export type PostAgentBuilderActionIdResumeStream_Body = {
   forEachIndex?: number | undefined;
 };
 
-export type PostAgentBuilderActionIdResumeStream_Response = any;
+export type PostAgentBuilderActionIdResumeStream_Response = unknown;
 
 export type PostAgentBuilderActionIdResumeStream_Request = Simplify<
   (PostAgentBuilderActionIdResumeStream_PathParams extends never
