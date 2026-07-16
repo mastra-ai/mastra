@@ -144,25 +144,6 @@ describe('ChatMessageList', () => {
     await waitFor(() => expect(screen.getByText('Hello from the agent')).toBeInTheDocument());
   });
 
-  it('given an assistant message with legacy content text and no parts, then it renders the transcript entry', async () => {
-    seedProject();
-    useAgentControllerHandlers([
-      {
-        type: 'message_update',
-        message: {
-          id: 'assistant-without-parts',
-          role: 'assistant',
-          createdAt: new Date(),
-          content: { format: 2, content: 'Visible legacy content' },
-        },
-      },
-    ]);
-    renderMessageList();
-
-    await waitFor(() => expect(screen.getByText('Visible legacy content')).toBeInTheDocument());
-    expect(screen.queryByText('Unexpected Application Error!')).not.toBeInTheDocument();
-  });
-
   it('given a streamed notification signal, then it renders the notification provenance in the transcript', async () => {
     seedProject();
     useAgentControllerHandlers([

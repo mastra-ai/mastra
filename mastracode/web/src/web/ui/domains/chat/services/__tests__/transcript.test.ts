@@ -177,37 +177,6 @@ describe('transcript reducer message entries', () => {
     expect(messageParts(state.entries[1])).toEqual([{ type: 'text', text: 'Streaming text' }]);
   });
 
-  it('does not crash when assistant message content is missing parts', () => {
-    const message = {
-      id: 'assistant-empty',
-      role: 'assistant',
-      createdAt: new Date(),
-      content: { format: 2 },
-    } as MastraDBMessage;
-
-    const state = transcriptReducer({ ...initialTranscript, pending: true }, {
-      type: 'event',
-      event: { type: 'message_update', message },
-    });
-
-    expect(state.entries[0]).toMatchObject({ kind: 'message', id: 'assistant-empty', streaming: true });
-    expect(state.pending).toBe(true);
-  });
-
-  it('normalizes legacy content text into renderable message parts', () => {
-    const message = {
-      id: 'assistant-legacy-text',
-      role: 'assistant',
-      createdAt: new Date(),
-      content: { format: 2, content: 'Visible persisted content' },
-    } as MastraDBMessage;
-
-    const state = createInitialTranscript({ messages: [message] });
-
-    expect(state.entries[0]).toMatchObject({ kind: 'message', id: 'assistant-legacy-text' });
-    expect(messageParts(state.entries[0])).toEqual([{ type: 'text', text: 'Visible persisted content' }]);
-  });
-
   it('retains live signal messages between assistant segments without changing assistant decode state', () => {
     const firstAssistant = dbMessage('assistant-1', 'assistant', [{ type: 'text', text: 'Before signals' }]);
     const reminder = signalMessage({

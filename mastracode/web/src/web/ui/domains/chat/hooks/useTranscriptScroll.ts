@@ -4,14 +4,13 @@ import type { TranscriptState } from '../services/transcript';
 
 function getStreamingLength(transcript: TranscriptState) {
   const lastTranscriptEntry = transcript.entries[transcript.entries.length - 1];
-  if (lastTranscriptEntry?.kind !== 'message' || lastTranscriptEntry.message.role !== 'assistant') return 0;
-
-  let length = 0;
-  for (const part of lastTranscriptEntry.message.content.parts ?? []) {
-    if (part.type === 'text') length += part.text.length;
-    if (part.type === 'reasoning') length += part.reasoning.length;
-  }
-  return length;
+  return lastTranscriptEntry?.kind === 'message' && lastTranscriptEntry.message.role === 'assistant'
+    ? lastTranscriptEntry.message.content.parts.reduce((n, part) => {
+        if (part.type === 'text') return n + part.text.length;
+        if (part.type === 'reasoning') return n + part.reasoning.length;
+        return n;
+      }, 0)
+    : 0;
 }
 
 export function useTranscriptScroll(transcript: TranscriptState) {
