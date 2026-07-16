@@ -284,20 +284,13 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
   }
 
   const { runIssueTriage } = options;
-  const runBoardIssueTriage = runIssueTriage
-    ? async (input: GithubIssueTriageRunInput): Promise<GithubIssueTriageRunResult> => {
-        const branch = `factory/issue-${input.issueNumber}`;
-        const [project] = await getAppDb()
-          .select()
-          .from(githubProjects)
-          .where(
-            and(
-              eq(githubProjects.installationId, input.installationId),
-              eq(githubProjects.repoFullName, input.repository),
-            ),
-          );
-        if (!project) throw new Error(`GitHub project not found for ${input.repository}`);
-        const projectPath = input.projectPath ?? computeWorktreePath(project.sandboxWorkdir, branch);
+  const runIssueTriageForProject = runIssueTriage
+    ? async (
+        input: GithubIssueTriageRunInput,
+        project: GithubProjectRow,
+        projectPath: string,
+        branch: string,
+      ): Promise<GithubIssueTriageRunResult> => {
         const result = await runIssueTriage({
           ...input,
           resourceId: project.id,
@@ -333,6 +326,32 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
           },
         });
         return { ...result, projectPath: resolvedProjectPath, branch: resolvedBranch };
+      }
+    : undefined;
+  const runBoardIssueTriage = runIssueTriageForProject
+    ? async (input: GithubIssueTriageRunInput): Promise<GithubIssueTriageRunResult> => {
+        const branch = `factory/issue-${input.issueNumber}`;
+        const projects = await getAppDb()
+          .select()
+          .from(githubProjects)
+          .where(
+            and(
+              eq(githubProjects.installationId, input.installationId),
+              eq(githubProjects.repoFullName, input.repository),
+            ),
+          );
+        if (projects.length === 0) throw new Error(`GitHub project not found for ${input.repository}`);
+        const results = await Promise.all(
+          projects.map(project =>
+            runIssueTriageForProject(
+              input,
+              project,
+              input.projectPath ?? computeWorktreePath(project.sandboxWorkdir, branch),
+              branch,
+            ),
+          ),
+        );
+        return results[0] ?? {};
       }
     : undefined;
 
@@ -734,20 +753,25 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
           return c.json({ error: 'invalid_url' }, 400);
         }
 
-        if (!runBoardIssueTriage) return c.json({ error: 'triage_unavailable' }, 503);
+        if (!runIssueTriageForProject) return c.json({ error: 'triage_unavailable' }, 503);
         const branch = `factory/issue-${issueNumber}`;
         const projectPath = computeWorktreePath(sandboxRow.sandboxWorkdir, branch);
-        const result = await runBoardIssueTriage({
-          repository: project.repoFullName,
-          issueNumber,
-          issueTitle: body.title,
-          issueUrl: body.url,
-          labels: parseStringList(body.labels),
-          installationId: project.installationId,
-          resourceId: project.id,
+        const result = await runIssueTriageForProject(
+          {
+            repository: project.repoFullName,
+            issueNumber,
+            issueTitle: body.title,
+            issueUrl: body.url,
+            labels: parseStringList(body.labels),
+            installationId: project.installationId,
+            resourceId: project.id,
+            projectPath,
+            branch,
+          },
+          project,
           projectPath,
           branch,
-        });
+        );
         await emitAudit(loose(c), {
           action: 'factory.triage.started',
           projectId: project.id,

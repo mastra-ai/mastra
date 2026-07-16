@@ -493,6 +493,56 @@ describe('webhook route', () => {
     });
   });
 
+  it('runs webhook issue triage for each matching tenant project', async () => {
+    seedMaterializedProject();
+    tables.projects.push({
+      id: 'p2',
+      orgId: 'org2',
+      userId: 'u2',
+      installationId: 7,
+      repoFullName: 'octo/hello',
+      repoId: 99,
+      defaultBranch: 'main',
+      sandboxWorkdir: '/workspace/org2/hello',
+      setupCommand: null,
+    });
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const runIssueTriage = vi.fn(async input => ({ threadId: `thread-${input.resourceId}` }));
+    const res = await buildApp(null, { runIssueTriage }).request(
+      signedGithubWebhookRequest('issues', {
+        action: 'opened',
+        repository: { full_name: 'octo/hello' },
+        issue: {
+          number: 12,
+          title: 'Fix flaky test',
+          html_url: 'https://github.com/octo/hello/issues/12',
+          labels: [{ name: 'bug' }],
+        },
+        sender: { login: 'ada' },
+        installation: { id: 7 },
+      }),
+    );
+
+    expect(res.status).toBe(202);
+    await vi.waitFor(() => expect(runIssueTriage).toHaveBeenCalledTimes(2));
+    expect(runIssueTriage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resourceId: 'p1',
+        projectPath: '/workspace/worktrees/factory-issue-12-aeab418d',
+      }),
+    );
+    expect(runIssueTriage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resourceId: 'p2',
+        projectPath: '/workspace/org2/worktrees/factory-issue-12-aeab418d',
+      }),
+    );
+    await vi.waitFor(() => expect(upsertWorkItem).toHaveBeenCalledTimes(2));
+    expect(upsertWorkItem).toHaveBeenCalledWith(expect.objectContaining({ orgId: 'org1', githubProjectId: 'p1' }));
+    expect(upsertWorkItem).toHaveBeenCalledWith(expect.objectContaining({ orgId: 'org2', githubProjectId: 'p2' }));
+    logSpy.mockRestore();
+  });
+
   it('accepts a valid signed PR review comment event and logs normalized PR metadata', async () => {
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     const res = await buildApp(null).request(
@@ -1146,6 +1196,17 @@ describe('issues route', () => {
   });
 
   it('runs issue triage for the project repo and returns the triage thread', async () => {
+    tables.projects.push({
+      id: 'p-other',
+      orgId: 'other-org',
+      userId: 'u2',
+      installationId: 7,
+      repoFullName: 'octo/hello',
+      repoId: 99,
+      defaultBranch: 'main',
+      sandboxWorkdir: '/other/hello',
+      setupCommand: null,
+    });
     seedMaterializedProject();
     const runIssueTriage = vi.fn(async () => ({ threadId: 'thread-triage' }));
     const res = await buildApp({ workosId: 'u1' }, { runIssueTriage }).request(
@@ -1168,6 +1229,7 @@ describe('issues route', () => {
       branch: 'factory/issue-12',
     });
     expect(addIssueLabels).not.toHaveBeenCalled();
+    expect(runIssueTriage).toHaveBeenCalledTimes(1);
     expect(runIssueTriage).toHaveBeenCalledWith({
       repository: 'octo/hello',
       issueNumber: 12,
