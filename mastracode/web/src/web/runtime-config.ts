@@ -13,11 +13,15 @@
  * seed the registry.
  */
 
+import type { WebAuthAdapter } from './auth-adapter.js';
+
 export interface WebRuntimeConfig {
   /** Postgres connection string for the application database + agent storage. */
   databaseUrl?: string;
   /** Browser-facing origin, normalized without a trailing slash. */
   publicUrl?: string;
+  /** Active web auth adapter, or `undefined` when auth is disabled. */
+  authAdapter?: WebAuthAdapter;
 }
 
 let seeded: WebRuntimeConfig | undefined;
@@ -40,6 +44,20 @@ export function getAppDatabaseUrl(): string | undefined {
 /** Browser-facing origin resolved by the factory, if seeded. */
 export function getPublicUrl(): string | undefined {
   return seeded?.publicUrl;
+}
+
+/** Whether the factory has seeded the registry. */
+export function isRuntimeConfigSeeded(): boolean {
+  return seeded !== undefined;
+}
+
+/**
+ * Active web auth adapter seeded by the factory. `undefined` either because
+ * auth is disabled (seeded without an adapter) or because the factory never
+ * ran — callers that need the distinction check {@link isRuntimeConfigSeeded}.
+ */
+export function getSeededAuthAdapter(): WebAuthAdapter | undefined {
+  return seeded?.authAdapter;
 }
 
 /** Reset the registry for test isolation. */

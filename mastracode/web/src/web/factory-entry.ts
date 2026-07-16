@@ -2,9 +2,9 @@
  * `MastraFactory` — the single entry point to the whole MastraCode web factory.
  *
  * The deploy entry (`src/mastra/index.ts`) is the ONE place deployment env is
- * read: it constructs config instances (pubsub, later an auth adapter) and
- * passes them here explicitly. The factory itself never reads deployment env
- * vars and never constructs providers on the caller's behalf.
+ * read: it constructs config instances (auth adapter, pubsub) and passes them
+ * here explicitly. The factory itself never reads deployment env vars and
+ * never constructs providers on the caller's behalf.
  *
  * `prepare()` resolves feature readiness, seeds the runtime-config registry,
  * assembles the web routes/middleware, and returns the constructor args for
@@ -24,7 +24,8 @@ import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import { observeAgentGitAction } from './audit/agent-audit.js';
-import { buildAuthRoutes, createWebAuthGate, createWebAuthProvider, isWebAuthEnabled } from './auth.js';
+import type { WebAuthAdapter } from './auth-adapter.js';
+import { buildAuthRoutes, createWebAuthGate } from './auth.js';
 import {
   createGithubSubscriptionTools,
   parseCreatedPullRequest,
@@ -49,6 +50,13 @@ type BuildApiRoutesDeps = Pick<WebApiRoutesDeps, 'controller' | 'authStorage'>;
 export type MastraArgs = NonNullable<ConstructorParameters<typeof Mastra>[0]>;
 
 export interface MastraFactoryConfig {
+  /**
+   * Web auth adapter instance — `WorkOSWebAuth`, `BetterAuthWebAuth`, or any
+   * custom `WebAuthAdapter` implementation. Whatever instance is passed is the
+   * active provider; the factory never selects or constructs one itself.
+   * Omitted → auth disabled (open server, local-dev behavior).
+   */
+  auth?: WebAuthAdapter;
   /**
    * Postgres connection string powering BOTH agent storage (threads, messages,
    * memory, OM, recall vectors) and the app tables (github/factory/audit/
@@ -105,10 +113,17 @@ export class MastraFactory {
     const allowedOrigins = (this.#config.allowedOrigins ?? []).map(o => o.replace(/\/+$/, '')).filter(Boolean);
     const database = this.#config.database;
     const pubsub = this.#config.pubsub;
+    const auth = this.#config.auth;
 
     // Seed the registry FIRST: the readiness checks below reach the app DB
-    // through `getAppDatabaseUrl()`.
-    seedRuntimeConfig({ databaseUrl: database, publicUrl: publicOrigin });
+    // through `getAppDatabaseUrl()` and gate on the active auth adapter via
+    // `isWebAuthEnabled()`.
+    seedRuntimeConfig({ databaseUrl: database, publicUrl: publicOrigin, authAdapter: auth });
+
+    // One-time adapter initialization with factory-level context (e.g.
+    // better-auth builds its default instance on the app database). Failures
+    // surface here, at prepare() — a misconfigured adapter must not boot.
+    await auth?.init?.({ databaseUrl: database, publicUrl: publicOrigin });
 
     // GitHub App + cloud-sandbox readiness, resolved BEFORE constructing the
     // Mastra args so the github routes are simply omitted from `apiRoutes`
@@ -123,16 +138,6 @@ export class MastraFactory {
 
     // Factory work-item board — hangs off GitHub projects, same fail-soft pattern.
     const factoryReady = await resolveFactoryReady(githubReady);
-
-    // TEMP: WorkOS auth is still resolved from its own env here, verbatim from
-    // the pre-factory entry. The auth adapter slot (`auth?: WebAuthAdapter`)
-    // replaces this in the adapter-seam step.
-    const webAuthEnabled = isWebAuthEnabled();
-    const redirectUri = process.env.WORKOS_REDIRECT_URI ?? `${publicOrigin}/auth/callback`;
-    // One WorkOS provider for the process, shared by the gate middleware and
-    // the public `/auth/*` routes so session encryption/validation stays
-    // consistent.
-    const authProvider = webAuthEnabled ? createWebAuthProvider(redirectUri) : undefined;
 
     // Build the real production controller (agents, modes, tools, memory, OM,
     // MCP, providers) — identical to the terminal app. Agent state lives in
@@ -179,7 +184,7 @@ export class MastraFactory {
         // `apiRoutes` (not plain Hono routes) because the entry can't touch the
         // Hono app the deployer generates. `requiresAuth: false`; the gate
         // skips `/auth/*`.
-        ...(authProvider ? buildAuthRoutes(authProvider, redirectUri) : []),
+        ...(auth ? buildAuthRoutes(auth) : []),
         // Custom `/web/*` routes (fs / config / github / factory / audit).
         ...assembleWebApiRoutes({
           controller,
@@ -202,7 +207,7 @@ export class MastraFactory {
         // enabled) covers it; it always passes `/api`, `/web`, `/auth` through.
         const uiDist = resolveUiDistDir();
         const spa = uiDist ? [createSpaStaticMiddleware(uiDist)] : [];
-        if (!webAuthEnabled || !authProvider) {
+        if (!auth) {
           // Auth disabled: no gate. SPA + CORS only.
           return { ...(spa.length ? { middleware: spa } : {}), ...cors, ...onError };
         }
@@ -213,7 +218,7 @@ export class MastraFactory {
         //              redirects unauthenticated requests. Skips public `/auth/*`.
         //   2. spa   — serves the built UI for everything the server doesn't own.
         return {
-          middleware: [createWebAuthGate(authProvider), ...spa],
+          middleware: [createWebAuthGate(auth), ...spa],
           ...cors,
           ...onError,
         };

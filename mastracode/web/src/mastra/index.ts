@@ -19,6 +19,7 @@
 
 import { Mastra } from '@mastra/core/mastra';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
+import { WorkOSWebAuth } from '../web/auth-workos-adapter.js';
 import { MastraFactory } from '../web/factory-entry.js';
 
 // Distributed pub/sub: when `REDIS_URL` is set, events (streams, workflows,
@@ -41,7 +42,17 @@ if (redisUrl) {
   console.log(`[PubSub] REDIS_URL set — event bus on Redis Streams (${redisTarget}), cross-process leases enabled.`);
 }
 
+// Web auth: when the WorkOS credentials are present, the whole server sits
+// behind WorkOS AuthKit (hosted login). The WorkOS SDK reads WORKOS_API_KEY /
+// WORKOS_CLIENT_ID itself; the redirect URI falls back to
+// `<publicUrl>/auth/callback` inside the adapter's init(). Swap in
+// `new BetterAuthWebAuth({ secret })` (or any custom `WebAuthAdapter`) to run
+// without an external identity vendor. Unset → auth disabled (open server).
+const workosConfigured = Boolean(process.env.WORKOS_API_KEY && process.env.WORKOS_CLIENT_ID);
+const auth = workosConfigured ? new WorkOSWebAuth({ redirectUri: process.env.WORKOS_REDIRECT_URI }) : undefined;
+
 export const factory = new MastraFactory({
+  auth,
   // Agent state (threads, messages, memory, OM, recall vectors) lives in the
   // single app Postgres alongside the github/app tables — one shared DB for
   // all users, separated by `resourceId` scoping. Unset (bare local dev) →
