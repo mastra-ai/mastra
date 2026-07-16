@@ -1,5 +1,60 @@
 # @mastra/server
 
+## 1.52.0-alpha.3
+
+### Patch Changes
+
+- Documented the optional `requestContext` body field on agent controller run routes (send message, steer, follow-up, tool approval, tool suspension) so it appears in the generated OpenAPI spec. The server already merged this field into the request context; only the route schemas were missing it. ([#19531](https://github.com/mastra-ai/mastra/pull/19531))
+
+- Added stable metrics and logs capability reporting for observability storage. The system packages response now includes `observabilityStorageCapabilities` with `metrics` and `logs` flags, enabling capability-based detection that is resilient to bundler-generated constructor name changes. ([#19305](https://github.com/mastra-ai/mastra/pull/19305))
+
+  ```typescript
+  const packages = await client.getSystemPackages();
+  console.log(packages.observabilityStorageCapabilities?.metrics); // true
+  console.log(packages.observabilityStorageCapabilities?.logs); // true
+  ```
+
+  Studio now uses the capability response instead of relying on constructor names, with a fallback for older servers.
+
+- Updated dependencies [[`1426af2`](https://github.com/mastra-ai/mastra/commit/1426af24975879c000d13ac75673f630fcc970c1), [`975295d`](https://github.com/mastra-ai/mastra/commit/975295d418552f0d46a59edfef4c3ee555f9930a), [`85e4fb5`](https://github.com/mastra-ai/mastra/commit/85e4fb50087a81c74df3a762f53b56373db0b912), [`ef03c0c`](https://github.com/mastra-ai/mastra/commit/ef03c0cfc62367a458e4cc56462e2148b35681c5), [`4fb4d88`](https://github.com/mastra-ai/mastra/commit/4fb4d881bc107acee13890ad4d78661016c510ed), [`4eba27a`](https://github.com/mastra-ai/mastra/commit/4eba27adcf60f991df0e62f94b3e75b4e67f3b4b), [`c701be3`](https://github.com/mastra-ai/mastra/commit/c701be32d7d9aa94a66da8c6cc38dcac6856f464)]:
+  - @mastra/core@1.52.0-alpha.3
+
+## 1.52.0-alpha.2
+
+### Patch Changes
+
+- Fixed agent generate and stream requests being rejected with a 400 error when `memory.resource` was omitted but server auth was configured with `mapUserToResourceId`. The request body schema required `memory.resource` even though the server derives the resource ID from the authenticated user and overrides any client-provided value. ([#19524](https://github.com/mastra-ai/mastra/pull/19524))
+
+  Clients no longer need to send a placeholder resource ID:
+
+  ```json
+  {
+    "messages": ["what was my last message?"],
+    "memory": { "thread": "test-thread" }
+  }
+  ```
+
+  If a request uses memory and neither the body nor the authenticated request context provides a resource ID, the server now returns a clear 400 error. Fixes [#19518](https://github.com/mastra-ai/mastra/issues/19518).
+
+- Updated dependencies [[`8b20926`](https://github.com/mastra-ai/mastra/commit/8b20926cd59e2ba3d66458e062fa0e6e2ada3e68), [`74faf8b`](https://github.com/mastra-ai/mastra/commit/74faf8bd9c1018f2492653c06b1e25fc8300e9e6), [`1fadac4`](https://github.com/mastra-ai/mastra/commit/1fadac44537caeefe81f9f775ae2f2f3d94e9069), [`792ec9a`](https://github.com/mastra-ai/mastra/commit/792ec9a0869bab8274cf5e0ed2840738737a1607), [`712b864`](https://github.com/mastra-ai/mastra/commit/712b864aa1ed12b14c54390ec17b69de163c37f7), [`8f7a5de`](https://github.com/mastra-ai/mastra/commit/8f7a5dedc246cdc938bb65516703cf9b27b03756), [`c0bec73`](https://github.com/mastra-ai/mastra/commit/c0bec732c93d1a22ae5e51ed66cf8cacca8bd6a6)]:
+  - @mastra/core@1.52.0-alpha.2
+
+## 1.51.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/core@1.51.1-alpha.1
+
+## 1.51.1-alpha.0
+
+### Patch Changes
+
+- Prevented redundant agent controller thread switches from interrupting active responses. ([#19333](https://github.com/mastra-ai/mastra/pull/19333))
+
+- Updated dependencies [[`8a0d145`](https://github.com/mastra-ai/mastra/commit/8a0d145aadbdf7278665aceaaec364b35dd9bd94), [`bd2f1d2`](https://github.com/mastra-ai/mastra/commit/bd2f1d274d05e60e2366f005ea0d94d5cea0d5ff), [`21a0eb8`](https://github.com/mastra-ai/mastra/commit/21a0eb86746ba0b703acea360d4f84c6a5a493f2), [`de86fd7`](https://github.com/mastra-ai/mastra/commit/de86fd7119f0438381d1a642e3d258143c0b9c29), [`2745031`](https://github.com/mastra-ai/mastra/commit/2745031d1d4a4978f037092da371428c32e2842a), [`db650ce`](https://github.com/mastra-ai/mastra/commit/db650ce490348914e85b93651d83acdf8f2a4c31), [`6354eeb`](https://github.com/mastra-ai/mastra/commit/6354eeb32efa9f5f68f51dda394e90e2ee76f1fb)]:
+  - @mastra/core@1.51.1-alpha.0
+
 ## 1.51.0
 
 ### Minor Changes

@@ -270,7 +270,13 @@ export const listToolsResponseSchema = z.record(z.string(), serializedToolSchema
  */
 const agentMemoryOptionSchema = z.object({
   thread: z.union([z.string(), z.object({ id: z.string() }).passthrough()]),
-  resource: z.string(),
+  /**
+   * Optional so authenticated setups can rely on the server-derived resource ID
+   * (`mapUserToResourceId` sets MASTRA_RESOURCE_ID_KEY in the request context, which
+   * takes precedence over this value). Handlers return a 400 when neither the body
+   * nor the request context provides a resource ID.
+   */
+  resource: z.string().optional(),
   options: z.record(z.string(), z.any()).optional(),
   readOnly: z.boolean().optional(),
 });

@@ -1,5 +1,54 @@
 # @mastra/playground-ui
 
+## 42.0.0-alpha.3
+
+### Minor Changes
+
+- Added ClampedText, a design-system component that clamps text to a number of lines and shows a "Read more" toggle only when the clamp actually cuts content. Detection is based on the rendered layout (element measurement, re-checked on resize and after fonts load), not on character count. ([#19565](https://github.com/mastra-ai/mastra/pull/19565))
+
+### Patch Changes
+
+- Fixed the ClampedText read-more button to announce its expanded state to screen readers, and fixed clamp measurement so font-load re-measure and effect cleanup still run in browsers without ResizeObserver. ([#19582](https://github.com/mastra-ai/mastra/pull/19582))
+
+- Updated dependencies [[`1426af2`](https://github.com/mastra-ai/mastra/commit/1426af24975879c000d13ac75673f630fcc970c1), [`4696604`](https://github.com/mastra-ai/mastra/commit/4696604a8db7517459e7075ed4a6924114cdbdfb), [`975295d`](https://github.com/mastra-ai/mastra/commit/975295d418552f0d46a59edfef4c3ee555f9930a), [`85e4fb5`](https://github.com/mastra-ai/mastra/commit/85e4fb50087a81c74df3a762f53b56373db0b912), [`22c7ca8`](https://github.com/mastra-ai/mastra/commit/22c7ca85b893ebc9bf0113309e13d238a896bdaf), [`85e4fb5`](https://github.com/mastra-ai/mastra/commit/85e4fb50087a81c74df3a762f53b56373db0b912), [`ef03c0c`](https://github.com/mastra-ai/mastra/commit/ef03c0cfc62367a458e4cc56462e2148b35681c5), [`4fb4d88`](https://github.com/mastra-ai/mastra/commit/4fb4d881bc107acee13890ad4d78661016c510ed), [`4eba27a`](https://github.com/mastra-ai/mastra/commit/4eba27adcf60f991df0e62f94b3e75b4e67f3b4b), [`c701be3`](https://github.com/mastra-ai/mastra/commit/c701be32d7d9aa94a66da8c6cc38dcac6856f464), [`50e0ec5`](https://github.com/mastra-ai/mastra/commit/50e0ec5a1b2f3dec9eb1333487be733ac499173c)]:
+  - @mastra/core@1.52.0-alpha.3
+  - @mastra/client-js@1.33.0-alpha.3
+  - @mastra/react@1.2.6-alpha.3
+
+## 41.1.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`8b20926`](https://github.com/mastra-ai/mastra/commit/8b20926cd59e2ba3d66458e062fa0e6e2ada3e68), [`74faf8b`](https://github.com/mastra-ai/mastra/commit/74faf8bd9c1018f2492653c06b1e25fc8300e9e6), [`1fadac4`](https://github.com/mastra-ai/mastra/commit/1fadac44537caeefe81f9f775ae2f2f3d94e9069), [`bed6cf4`](https://github.com/mastra-ai/mastra/commit/bed6cf440860395c3a6e5c17c0af477b8741233e), [`792ec9a`](https://github.com/mastra-ai/mastra/commit/792ec9a0869bab8274cf5e0ed2840738737a1607), [`712b864`](https://github.com/mastra-ai/mastra/commit/712b864aa1ed12b14c54390ec17b69de163c37f7), [`8f7a5de`](https://github.com/mastra-ai/mastra/commit/8f7a5dedc246cdc938bb65516703cf9b27b03756), [`c0bec73`](https://github.com/mastra-ai/mastra/commit/c0bec732c93d1a22ae5e51ed66cf8cacca8bd6a6)]:
+  - @mastra/core@1.52.0-alpha.2
+  - @mastra/client-js@1.32.1-alpha.2
+  - @mastra/react@1.2.6-alpha.2
+
+## 41.1.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/core@1.51.1-alpha.1
+  - @mastra/client-js@1.32.1-alpha.1
+  - @mastra/react@1.2.6-alpha.1
+
+## 41.1.0-alpha.0
+
+### Minor Changes
+
+- Added a composable Sankey provider and chart with customizable controls through the `useSankey` hook, curve selection metadata, deterministic node colors, gradient ribbons, and connected hover feedback. ([#19472](https://github.com/mastra-ai/mastra/pull/19472))
+
+### Patch Changes
+
+- Added reusable Composer compound components for building controlled chat inputs. ([#19470](https://github.com/mastra-ai/mastra/pull/19470))
+
+- Updated dependencies [[`8a0d145`](https://github.com/mastra-ai/mastra/commit/8a0d145aadbdf7278665aceaaec364b35dd9bd94), [`bd2f1d2`](https://github.com/mastra-ai/mastra/commit/bd2f1d274d05e60e2366f005ea0d94d5cea0d5ff), [`21a0eb8`](https://github.com/mastra-ai/mastra/commit/21a0eb86746ba0b703acea360d4f84c6a5a493f2), [`de86fd7`](https://github.com/mastra-ai/mastra/commit/de86fd7119f0438381d1a642e3d258143c0b9c29), [`2fd1a51`](https://github.com/mastra-ai/mastra/commit/2fd1a510946ede90bd42de32c315f7586bfcfd20), [`2745031`](https://github.com/mastra-ai/mastra/commit/2745031d1d4a4978f037092da371428c32e2842a), [`db650ce`](https://github.com/mastra-ai/mastra/commit/db650ce490348914e85b93651d83acdf8f2a4c31), [`6354eeb`](https://github.com/mastra-ai/mastra/commit/6354eeb32efa9f5f68f51dda394e90e2ee76f1fb), [`21a0eb8`](https://github.com/mastra-ai/mastra/commit/21a0eb86746ba0b703acea360d4f84c6a5a493f2)]:
+  - @mastra/core@1.51.1-alpha.0
+  - @mastra/react@1.2.6-alpha.0
+  - @mastra/memory@1.23.1-alpha.0
+  - @mastra/client-js@1.32.1-alpha.0
+
 ## 41.0.0
 
 ### Minor Changes

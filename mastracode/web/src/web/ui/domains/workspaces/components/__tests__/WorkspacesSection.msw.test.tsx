@@ -204,8 +204,37 @@ describe('WorkspacesSection', () => {
 
     renderSection();
 
-    expect(await screen.findByRole('status', { name: 'Agent working in feat-ui' })).toBeInTheDocument();
-    expect(screen.queryByRole('status', { name: 'Agent working in feat-api' })).not.toBeInTheDocument();
+    // The same listing names each row after its thread title.
+    expect(await screen.findByRole('status', { name: 'Agent working in Feature work' })).toBeInTheDocument();
+    expect(screen.queryByRole('status', { name: /Agent working in (API work|feat-api)/ })).not.toBeInTheDocument();
+  });
+
+  it('labels rows with their thread title and falls back to the branch when there is none', async () => {
+    seedActiveProject(githubProject);
+    useAgentControllerHandlers();
+    server.use(
+      http.get(`${API}/sessions/:resourceId/threads`, () =>
+        HttpResponse.json({
+          threads: [
+            {
+              id: 'thread-feat',
+              title: 'Fix flaky sidebar test',
+              tags: { projectPath: '/sandbox/mastra-worktrees/feat-ui' },
+              state: 'idle',
+            },
+          ],
+        }),
+      ),
+    );
+
+    renderSection();
+
+    // feat-ui has a titled thread: the title is the row label, the branch is the tooltip.
+    const titled = await screen.findByRole('button', { name: 'Fix flaky sidebar test' });
+    expect(titled).toHaveAttribute('title', 'feat-ui');
+    expect(screen.queryByRole('button', { name: 'feat-ui' })).not.toBeInTheDocument();
+    // feat-api has no titled thread yet: the branch remains the label.
+    expect(screen.getByRole('button', { name: 'feat-api' })).toBeInTheDocument();
   });
 
   it('given a run that finishes, then the dot turns solid and chimes, and opening the workspace dismisses it', async () => {
@@ -229,21 +258,21 @@ describe('WorkspacesSection', () => {
     );
     const { client } = renderSection();
 
-    expect(await screen.findByRole('status', { name: 'Agent working in feat-ui' })).toBeInTheDocument();
+    expect(await screen.findByRole('status', { name: 'Agent working in Feature work' })).toBeInTheDocument();
 
     // The run finishes; the next activity poll reports the thread idle.
     featState = 'idle';
     await client.invalidateQueries({ queryKey: queryKeys.agentControllerActivity('code', 'resource-gh') });
 
-    const doneDot = await screen.findByRole('status', { name: 'Agent finished in feat-ui' });
+    const doneDot = await screen.findByRole('status', { name: 'Agent finished in Feature work' });
     expect(doneDot).not.toHaveClass('animate-pulse');
-    expect(screen.queryByRole('status', { name: 'Agent working in feat-ui' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('status', { name: 'Agent working in Feature work' })).not.toBeInTheDocument();
     expect(playDoneSound).toHaveBeenCalledTimes(1);
 
     // Opening the workspace marks it seen and clears the indicator.
-    await userEvent.click(screen.getByRole('button', { name: /feat-ui/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Feature work/ }));
     await waitFor(() =>
-      expect(screen.queryByRole('status', { name: 'Agent finished in feat-ui' })).not.toBeInTheDocument(),
+      expect(screen.queryByRole('status', { name: 'Agent finished in Feature work' })).not.toBeInTheDocument(),
     );
     // Let the open-thread flow settle so its requests can't leak into later tests.
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-feat'));
@@ -269,9 +298,9 @@ describe('WorkspacesSection', () => {
     );
     const { client } = renderSection();
 
-    await screen.findByRole('button', { name: 'feat-ui' });
+    await screen.findByRole('button', { name: 'Feature work' });
     await waitFor(() => expect(client.isFetching()).toBe(0));
-    expect(screen.queryByRole('status', { name: 'Agent finished in feat-ui' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('status', { name: 'Agent finished in Feature work' })).not.toBeInTheDocument();
     expect(playDoneSound).not.toHaveBeenCalled();
   });
 
@@ -283,7 +312,9 @@ describe('WorkspacesSection', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'feat-ui' }));
 
     await waitFor(() =>
-      expect(stateUpdates).toContainEqual({ state: { projectPath: '/sandbox/mastra-worktrees/feat-ui' } }),
+      expect(stateUpdates).toContainEqual({
+        state: { projectPath: '/sandbox/mastra-worktrees/feat-ui' },
+      }),
     );
     await waitFor(() => expect(loadProjects()[0]?.selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-ui'));
     // Let the open-thread flow settle so its requests can't leak into later tests.
@@ -347,71 +378,35 @@ describe('WorkspacesSection', () => {
     expect(created).toBe(1);
   });
 
-  it('stays on non-thread routes when switching workspaces', async () => {
+  it('opens the session thread when switching workspaces from a Factory page', async () => {
     seedActiveProject(githubProject);
     useAgentControllerHandlers();
+    server.use(
+      http.get(`${API}/sessions/:resourceId/threads`, () =>
+        HttpResponse.json({
+          threads: [
+            { id: 'thread-latest', title: 'Latest', resourceId: 'resource-gh', updatedAt: '2026-06-09T00:00:00.000Z' },
+          ],
+        }),
+      ),
+    );
     renderSection('/factory/board');
 
     await userEvent.click(await screen.findByRole('button', { name: 'feat-ui' }));
 
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'feat-ui' })).toHaveAttribute('aria-current', 'true'),
-    );
-    expect(screen.getByTestId('location')).toHaveTextContent('/factory/board');
+    // A session row IS its conversation — clicking it opens the thread even
+    // from worktree-independent pages like the board.
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-latest'));
   });
 
-  it('creates a new workspace and selects it', async () => {
+  it('offers no ad-hoc workspace creation — factory sessions come from board runs', async () => {
     seedActiveProject(githubProject);
-    const { stateUpdates } = useAgentControllerHandlers();
-    let received: unknown;
-    server.use(
-      http.post(`${ORIGIN}/web/github/projects/${GITHUB_PROJECT_ID}/worktree`, async ({ request }) => {
-        received = await request.json();
-        return HttpResponse.json({
-          branch: 'feat-new',
-          worktreePath: '/sandbox/mastra-worktrees/feat-new',
-          baseBranch: 'main',
-          resourceId: 'resource-gh',
-        });
-      }),
-    );
+    useAgentControllerHandlers();
     renderSection();
 
-    await userEvent.click(await screen.findByRole('button', { name: 'New workspace' }));
-    const form = screen.getByRole('form', { name: 'Create workspace' });
-    await userEvent.type(within(form).getByRole('textbox', { name: 'Branch name' }), 'feat-new{Enter}');
-
-    expect(received).toEqual({ branch: 'feat-new' });
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'feat-new' })).toHaveAttribute('aria-current', 'true'),
-    );
-    await waitFor(() =>
-      expect(stateUpdates).toContainEqual({ state: { projectPath: '/sandbox/mastra-worktrees/feat-new' } }),
-    );
-    // Let the open-thread flow settle so its requests can't leak into later tests.
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-generic'));
-  });
-
-  it('shows an error and keeps the current selection when create fails', async () => {
-    seedActiveProject(githubProject);
-    const { stateUpdates } = useAgentControllerHandlers();
-    server.use(
-      http.post(`${ORIGIN}/web/github/projects/${GITHUB_PROJECT_ID}/worktree`, () =>
-        HttpResponse.json({ error: 'Invalid branch', message: 'branch name is invalid' }, { status: 400 }),
-      ),
-    );
-    renderSection();
-
-    await userEvent.click(await screen.findByRole('button', { name: 'New workspace' }));
-    const form = screen.getByRole('form', { name: 'Create workspace' });
-    await userEvent.type(within(form).getByRole('textbox', { name: 'Branch name' }), 'bad branch{Enter}');
-
-    expect(await screen.findAllByText('branch name is invalid')).not.toHaveLength(0);
-    expect(screen.getByRole('button', { name: 'feat-api' })).toHaveAttribute('aria-current', 'true');
-    expect(loadProjects()[0]?.selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-api');
-    // Only the provider's initial project-path sync may write state — never a failed create.
-    const paths = stateUpdates.map(update => (update.state as { projectPath?: string })?.projectPath);
-    expect(paths.filter(path => path !== '/sandbox/mastra-worktrees/feat-api')).toEqual([]);
+    await screen.findByRole('button', { name: 'feat-ui' });
+    expect(screen.queryByRole('button', { name: 'New workspace' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('form', { name: 'Create workspace' })).not.toBeInTheDocument();
   });
 
   it('offers a delete action on every factory worktree', async () => {

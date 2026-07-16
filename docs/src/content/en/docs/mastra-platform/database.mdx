@@ -117,6 +117,7 @@ Turso exposes two environment variables: `TURSO_DATABASE_URL` and `TURSO_AUTH_TO
 import { LibSQLStore } from '@mastra/libsql'
 
 export const storage = new LibSQLStore({
+  id: 'mastra-storage',
   url: process.env.TURSO_DATABASE_URL!,
   authToken: process.env.TURSO_AUTH_TOKEN!,
 })

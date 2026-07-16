@@ -151,6 +151,35 @@ describe('Agent Type Tests', () => {
 
       expectTypeOf(config.id).toEqualTypeOf<'test-agent'>();
     });
+
+    it('should type requestContext in skills function based on requestContextSchema', () => {
+      // No explicit TRequestContext generic — the type must be inferred from
+      // requestContextSchema so a regression to RequestContext<unknown> fails.
+      new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        model: {} as any,
+        requestContextSchema: z.object({
+          documentId: z.string(),
+          userId: z.string(),
+        }),
+        instructions: 'You are a helpful assistant',
+        skills: ({ requestContext }) => {
+          // Verify requestContext is typed
+          expectTypeOf(requestContext).toEqualTypeOf<RequestContext<{ documentId: string; userId: string }>>();
+
+          // Verify get() returns the correct type
+          const documentId = requestContext.get('documentId');
+          expectTypeOf(documentId).toEqualTypeOf<string>();
+
+          // Verify unknown keys are rejected
+          // @ts-expect-error - key does not exist in the request context schema
+          requestContext.get('nonexistentKey');
+
+          return [];
+        },
+      });
+    });
   });
 
   describe('Issue #16732: AgentExecutionOptions<undefined> should not require structuredOutput', () => {

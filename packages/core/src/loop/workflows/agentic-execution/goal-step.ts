@@ -181,7 +181,8 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
       // judge configured) → no-op.
       let judgeModelConfig: unknown = nonStringAgentJudge ?? effective.judgeModelId;
       if (typeof judgeModelConfig === 'function') {
-        judgeModelConfig = await (judgeModelConfig as (args: any) => unknown)({ requestContext, mastra });
+        judgeModelConfig =
+          (await (judgeModelConfig as (args: any) => unknown)({ requestContext, mastra })) ?? effective.judgeModelId;
       }
       if (!judgeModelConfig) {
         return inputData;
