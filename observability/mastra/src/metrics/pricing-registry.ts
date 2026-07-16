@@ -10,6 +10,11 @@ const BEDROCK_GEOGRAPHY_PREFIXES = new Set(['global', 'us', 'eu', 'apac', 'jp', 
 const AI_SDK_VERCEL_GATEWAY_PROVIDER_ID = 'gateway';
 // Canonical provider ID used by the embedded pricing snapshot for those models.
 const VERCEL_PRICING_PROVIDER_ID = 'vercel';
+const AI_SDK_PROVIDER_NAMESPACE_ALIASES = new Map([
+  ['google.vertex', 'google-vertex'],
+  ['vertex.anthropic', 'google-vertex-anthropic'],
+  ['vertex.maas', 'google-vertex'],
+]);
 
 type MinifiedMeterKey = 'it' | 'ot' | 'icrt' | 'icwt' | 'iat' | 'oat' | 'ort';
 type MinifiedConditionFieldKey = 'tit';
@@ -78,13 +83,14 @@ export class PricingRegistry {
   }
 
   get(args: { provider: string; model: string }): PricingModel | null {
-    const provider = resolvePricingProvider(args.provider, args.model);
-    // Try all model name variants in order of preference
-    const variants = getModelVariants(args.model, provider);
-    for (const variant of variants) {
-      const key = makePricingKey({ provider, model: variant });
-      const match = this.pricingModels.get(key);
-      if (match) return match;
+    for (const provider of getPricingProviderCandidates(args.provider, args.model)) {
+      // Try all model name variants in order of preference
+      const variants = getModelVariants(args.model, provider);
+      for (const variant of variants) {
+        const key = makePricingKey({ provider, model: variant });
+        const match = this.pricingModels.get(key);
+        if (match) return match;
+      }
     }
     return null;
   }
@@ -177,7 +183,7 @@ function getPackageRoot(): string {
 }
 
 function makePricingKey(args: { provider: string; model: string }): string {
-  return `${normalizeProvider(args.provider)}::${normalizeKeyPart(args.model)}`;
+  return `${normalizeKeyPart(args.provider)}::${normalizeKeyPart(args.model)}`;
 }
 
 function normalizeKeyPart(value: string): string {
@@ -185,28 +191,37 @@ function normalizeKeyPart(value: string): string {
 }
 
 /**
- * Normalize a provider string by stripping AI SDK capability suffixes
- * (e.g. "openai.chat" → "openai", "anthropic.messages" → "anthropic").
- * The pricing data uses bare provider names without these suffixes.
+ * Return provider keys in lookup order: the exact runtime value, a known
+ * namespace alias, or the ordinary AI SDK base-provider fallback.
  */
-function normalizeProvider(provider: string): string {
-  const normalized = provider.trim().toLowerCase();
-  const dotIndex = normalized.indexOf('.');
-  return dotIndex !== -1 ? normalized.substring(0, dotIndex) : normalized;
-}
+function getPricingProviderCandidates(provider: string, model: string): string[] {
+  const normalizedProvider = normalizeKeyPart(provider);
+  const candidates = new Set([normalizedProvider]);
 
-function resolvePricingProvider(provider: string, model: string): string {
-  const normalizedProvider = normalizeProvider(provider);
-
-  if (normalizedProvider !== AI_SDK_VERCEL_GATEWAY_PROVIDER_ID) {
-    return normalizedProvider;
+  for (const [providerNamespace, pricingProvider] of AI_SDK_PROVIDER_NAMESPACE_ALIASES) {
+    if (normalizedProvider === providerNamespace || normalizedProvider.startsWith(`${providerNamespace}.`)) {
+      candidates.add(providerNamespace);
+      candidates.add(pricingProvider);
+      // Known multi-segment namespaces must not fall through to their first
+      // segment (for example, Vertex pricing must not fall back to Google).
+      return [...candidates];
+    }
   }
 
-  if (!hasCreatorModelIdShape(model)) {
-    return normalizedProvider;
+  // Most AI SDK providers append a capability suffix, such as "openai.chat" or
+  // "anthropic.messages", while the pricing data uses the base provider name.
+  const capabilitySeparator = normalizedProvider.indexOf('.');
+  const baseProvider =
+    capabilitySeparator === -1 ? normalizedProvider : normalizedProvider.substring(0, capabilitySeparator);
+  candidates.add(baseProvider);
+
+  // @ai-sdk/gateway uses "gateway" for Vercel AI Gateway. Preserve exact
+  // gateway pricing entries, then fall back to the snapshot's "vercel" rows.
+  if (baseProvider === AI_SDK_VERCEL_GATEWAY_PROVIDER_ID && hasCreatorModelIdShape(model)) {
+    candidates.add(VERCEL_PRICING_PROVIDER_ID);
   }
 
-  return VERCEL_PRICING_PROVIDER_ID;
+  return [...candidates];
 }
 
 function hasCreatorModelIdShape(model: string): boolean {
@@ -279,11 +294,16 @@ function getModelVariants(model: string, provider: string): string[] {
  * Handles multiple date formats used by different providers:
  * - OpenAI: YYYY-MM-DD at end (e.g., "gpt-5-4-mini-2026-03-17" → "gpt-5-4-mini")
  * - Anthropic: YYYYMMDD with optional suffix (e.g., "claude-sonnet-4-5-20250929-thinking" → "claude-sonnet-4-5-thinking")
+ * - Vertex Anthropic: @YYYYMMDD at end (e.g., "claude-sonnet-4-5@20250929" → "claude-sonnet-4-5")
  * - Cohere/Gemini: MM-YYYY at end (e.g., "command-r-08-2024" → "command-r")
  */
 function stripDateSuffix(model: string): string {
+  // Vertex Anthropic format: @YYYYMMDD at end
+  let stripped = model.replace(/@20\d{6}$/, '');
+  if (stripped !== model) return stripped;
+
   // OpenAI format: -YYYY-MM-DD at end
-  let stripped = model.replace(/-20\d{2}-\d{2}-\d{2}$/, '');
+  stripped = model.replace(/-20\d{2}-\d{2}-\d{2}$/, '');
   if (stripped !== model) return stripped;
 
   // Anthropic format: -YYYYMMDD, possibly followed by suffix like -thinking
