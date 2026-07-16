@@ -19,5 +19,10 @@
     "qwen/qwenCoder/models/Qwen3-Coder-30B-A3B-Instruct",
     "qwen/qwenLM/models/Qwen3-30B-A3B-Instruct-2507",
     "qwen/qwenLM/models/Qwen3-30B-A3B-Thinking-2507"
+  ],
+  "structuredOutput": [
+    "moonshotai/chat-completion/models/Kimi-K2_6",
+    "qwen/qwenLM/models/Qwen3-30B-A3B-Instruct-2507",
+    "qwen/qwenLM/models/Qwen3-30B-A3B-Thinking-2507"
   ]
 }

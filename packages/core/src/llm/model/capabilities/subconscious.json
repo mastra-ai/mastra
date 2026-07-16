@@ -1,3 +1,4 @@
 {
-  "temperature": ["subconscious/glm-5.2", "subconscious/tim-qwen3.6-27b"]
+  "temperature": ["subconscious/glm-5.2", "subconscious/tim-qwen3.6-27b"],
+  "structuredOutput": ["subconscious/glm-5.2", "subconscious/tim-qwen3.6-27b"]
 }
