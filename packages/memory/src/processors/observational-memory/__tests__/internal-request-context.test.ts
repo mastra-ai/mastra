@@ -1,7 +1,9 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 
+import { Extractor } from '../extractor';
 import { withOmInternalThreadId } from '../internal-request-context';
 import { ObserverRunner } from '../observer-runner';
 import { ReflectorRunner } from '../reflector-runner';
@@ -20,7 +22,7 @@ function createMessage(id: string, threadId = 'parent-thread'): MastraDBMessage 
   } as MastraDBMessage;
 }
 
-function createObserverRunner() {
+function createObserverRunner(extractors?: Extractor<any>[]) {
   return new ObserverRunner({
     observationConfig: {
       model: 'mock/model',
@@ -28,6 +30,7 @@ function createObserverRunner() {
       bufferTokens: false,
       previousObserverTokens: 1000,
       observeAttachments: false,
+      extractors,
     } as any,
     observedMessageIds: new Set(),
     resolveModel: () => ({ model: 'mock/model' as any }),
@@ -37,11 +40,12 @@ function createObserverRunner() {
   });
 }
 
-function createReflectorRunner() {
+function createReflectorRunner(extractors?: Extractor<any>[]) {
   return new ReflectorRunner({
     reflectionConfig: {
       model: 'mock/model',
       observationTokens: 1000,
+      extractors,
     } as any,
     observationConfig: {
       model: 'mock/model',
@@ -74,14 +78,26 @@ describe('withOmInternalThreadId', () => {
     expect(withOmInternalThreadId(undefined, 'observational-memory-observer')).toBeUndefined();
   });
 
-  it('returns the original request context when there is no parent thread id', () => {
+  it('isolates the nested agent context when there is no reserved parent thread id', () => {
     const requestContext = new RequestContext();
     requestContext.set('tenantId', 'tenant-1');
+    requestContext.set('MastraMemory', {
+      thread: { id: 'parent-thread' },
+      resourceId: 'resource-1',
+    });
 
     const result = withOmInternalThreadId(requestContext, 'observational-memory-observer');
+    result?.set('MastraMemory', {
+      thread: { id: 'structured-observer-temporary' },
+      resourceId: 'structured-observer',
+    });
 
-    expect(result).toBe(requestContext);
+    expect(result).not.toBe(requestContext);
     expect(result?.get('tenantId')).toBe('tenant-1');
+    expect(requestContext.get('MastraMemory')).toEqual({
+      thread: { id: 'parent-thread' },
+      resourceId: 'resource-1',
+    });
   });
 
   it('derives an OM-internal thread id from the parent thread id and OM agent id', () => {
@@ -124,6 +140,36 @@ describe('OM internal agent request contexts', () => {
     expect(capturedRequestContext?.get(MASTRA_RESOURCE_ID_KEY)).toBe('resource-1');
     expect(capturedRequestContext?.get('tenantId')).toBe('tenant-1');
     expect(parentRequestContext.get(MASTRA_THREAD_ID_KEY)).toBe('parent-thread');
+  });
+
+  it('keeps structured observer extraction on the isolated context', async () => {
+    const extractor = new Extractor({ name: 'Profile', instructions: 'Extract a profile.', schema: z.string() });
+    const observer = createObserverRunner([extractor]);
+    const parentRequestContext = createParentRequestContext();
+    let capturedRequestContext: RequestContext | undefined;
+
+    vi.spyOn(observer as any, 'createAgent').mockReturnValue({
+      id: 'observational-memory-observer',
+      stream: async () => ({
+        getFullOutput: async () => ({
+          text: '<observations>\n- learned something\n</observations>',
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        }),
+      }),
+      generate: async (_prompt: unknown, options: { requestContext?: RequestContext }) => {
+        capturedRequestContext = options.requestContext;
+        capturedRequestContext?.set('MastraMemory', { threadId: 'nested-thread' });
+        return { object: { profile: 'stable' } };
+      },
+    });
+
+    await observer.call(undefined, [createMessage('msg-1')], undefined, { requestContext: parentRequestContext });
+
+    expect(capturedRequestContext).toBeDefined();
+    expect(capturedRequestContext).not.toBe(parentRequestContext);
+    expect(capturedRequestContext?.get(MASTRA_THREAD_ID_KEY)).toBe('parent-thread-observational-memory-observer');
+    expect(parentRequestContext.get(MASTRA_THREAD_ID_KEY)).toBe('parent-thread');
+    expect(parentRequestContext.get('MastraMemory')).toBeUndefined();
   });
 
   it('passes a derived thread id to the multi-thread observer stream call', async () => {
@@ -195,5 +241,44 @@ describe('OM internal agent request contexts', () => {
     expect(capturedRequestContext?.get(MASTRA_RESOURCE_ID_KEY)).toBe('resource-1');
     expect(capturedRequestContext?.get('tenantId')).toBe('tenant-1');
     expect(parentRequestContext.get(MASTRA_THREAD_ID_KEY)).toBe('parent-thread');
+  });
+
+  it('keeps structured reflector extraction on the isolated context', async () => {
+    const extractor = new Extractor({ name: 'Summary', instructions: 'Extract a summary.', schema: z.string() });
+    const reflector = createReflectorRunner([extractor]);
+    const parentRequestContext = createParentRequestContext();
+    let capturedRequestContext: RequestContext | undefined;
+
+    vi.spyOn(reflector as any, 'createAgent').mockReturnValue({
+      id: 'observational-memory-reflector',
+      stream: async () => ({
+        getFullOutput: async () => ({
+          text: '<observations>\n- compressed memory\n</observations>',
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        }),
+      }),
+      generate: async (_prompt: unknown, options: { requestContext?: RequestContext }) => {
+        capturedRequestContext = options.requestContext;
+        capturedRequestContext?.set('MastraMemory', { threadId: 'nested-thread' });
+        return { object: { summary: 'stable' } };
+      },
+    });
+
+    await reflector.call(
+      'existing observations',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      0,
+      parentRequestContext,
+    );
+
+    expect(capturedRequestContext).toBeDefined();
+    expect(capturedRequestContext).not.toBe(parentRequestContext);
+    expect(capturedRequestContext?.get(MASTRA_THREAD_ID_KEY)).toBe('parent-thread-observational-memory-reflector');
+    expect(parentRequestContext.get(MASTRA_THREAD_ID_KEY)).toBe('parent-thread');
+    expect(parentRequestContext.get('MastraMemory')).toBeUndefined();
   });
 });
