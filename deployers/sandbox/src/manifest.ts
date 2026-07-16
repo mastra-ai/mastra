@@ -11,10 +11,16 @@ export async function writeDeploymentManifest(outputDir: string, manifest: Sandb
 
 /** Read `sandbox-deployment.json` from the build output directory, or null when absent. */
 export async function readDeploymentManifest(outputDir: string): Promise<SandboxDeploymentManifest | null> {
+  let raw: string;
   try {
-    const raw = await readFile(join(outputDir, MANIFEST_FILENAME), 'utf-8');
-    return JSON.parse(raw) as SandboxDeploymentManifest;
-  } catch {
-    return null;
+    raw = await readFile(join(outputDir, MANIFEST_FILENAME), 'utf-8');
+  } catch (error) {
+    // Only "no manifest" maps to null — anything else (permissions, a
+    // corrupted file, malformed JSON below) should surface, not be hidden.
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return null;
+    }
+    throw error;
   }
+  return JSON.parse(raw) as SandboxDeploymentManifest;
 }

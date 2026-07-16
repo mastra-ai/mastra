@@ -105,20 +105,25 @@ export async function deployToSandbox(options: DeployToSandboxOptions): Promise<
     timeout: 120_000,
   });
 
-  // 3. Install dependencies, skipped when package.json is unchanged since the last install.
-  const packageJsonHash = await hashFile(join(dir, 'package.json'));
+  // 3. Install dependencies, skipped when the install inputs (package.json,
+  // bundled lockfiles, and the install command itself) are unchanged since
+  // the last completed install.
+  const installHash = await hashInstallInputs(dir, installCommand);
   const marker = `${remoteDir}/${INSTALL_MARKER}`;
   const markerCheck = await runInSandbox(sandbox, `cat ${shellQuote(marker)} 2>/dev/null || true`, {
     allowFailure: true,
   });
 
-  if (packageJsonHash && markerCheck.stdout.trim() === packageJsonHash) {
+  if (installHash && markerCheck.stdout.trim() === installHash) {
     logger.info('Dependencies unchanged — skipping install.');
   } else {
     logger.info(`Installing dependencies (${installCommand})...`);
-    await runInSandbox(sandbox, `cd ${shellQuote(remoteDir)} && ${installCommand}`, { timeout: 600_000 });
-    if (packageJsonHash) {
-      await runInSandbox(sandbox, `printf '%s' ${shellQuote(packageJsonHash)} > ${shellQuote(marker)}`);
+    await runInSandbox(sandbox, `cd ${shellQuote(remoteDir)} && ${installCommand}`, {
+      timeout: 600_000,
+      label: `install dependencies (${installCommand})`,
+    });
+    if (installHash) {
+      await runInSandbox(sandbox, `printf '%s' ${shellQuote(installHash)} > ${shellQuote(marker)}`);
     }
   }
 
@@ -169,15 +174,17 @@ export async function deployToSandbox(options: DeployToSandboxOptions): Promise<
 export function buildLaunchScript(opts: { remoteDir: string; port: number; env: Record<string, string> }): string {
   const lines = ['#!/bin/sh', `cd ${shellQuote(opts.remoteDir)}`];
 
-  // MASTRA_HOST=0.0.0.0 so the server is reachable from the sandbox's public
-  // port proxy (the default bind host is localhost). MASTRA_AUTO_DETECT_URL so
-  // Studio connects to the sandbox's public URL (same origin) instead of
-  // localhost:4111. All are overridable.
+  // MASTRA_AUTO_DETECT_URL so Studio connects to the sandbox's public URL
+  // (same origin) instead of localhost:4111 — overridable. PORT and
+  // MASTRA_HOST are applied AFTER custom env: networking (`getPortUrl`) and
+  // health checks target the configured port, and the server must bind
+  // 0.0.0.0 to be reachable through the public port proxy. Change the port
+  // via the deploy `port` option, not env.
   const env: Record<string, string> = {
-    PORT: String(opts.port),
-    MASTRA_HOST: '0.0.0.0',
     MASTRA_AUTO_DETECT_URL: 'true',
     ...opts.env,
+    PORT: String(opts.port),
+    MASTRA_HOST: '0.0.0.0',
   };
   for (const [key, value] of Object.entries(env)) {
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
@@ -219,19 +226,42 @@ async function uploadFile(sandbox: WorkspaceSandbox, remotePath: string, content
   await runInSandbox(sandbox, `rm -f ${shellQuote(tmpPath)}`);
   for (let i = 0; i < b64.length; i += UPLOAD_CHUNK_SIZE) {
     const chunk = b64.slice(i, i + UPLOAD_CHUNK_SIZE);
-    await runInSandbox(sandbox, `printf '%s' ${shellQuote(chunk)} >> ${shellQuote(tmpPath)}`);
+    await runInSandbox(sandbox, `printf '%s' ${shellQuote(chunk)} >> ${shellQuote(tmpPath)}`, {
+      label: `upload chunk to ${remotePath}`,
+    });
   }
   await runInSandbox(
     sandbox,
     `base64 -d ${shellQuote(tmpPath)} > ${shellQuote(remotePath)} && rm -f ${shellQuote(tmpPath)}`,
+    { label: `decode upload at ${remotePath}` },
   );
 }
 
-async function hashFile(path: string): Promise<string | null> {
+/** Lockfiles that, when present in the build output, participate in the install-skip hash. */
+const LOCKFILES = ['package-lock.json', 'npm-shrinkwrap.json', 'pnpm-lock.yaml', 'yarn.lock', 'bun.lock'];
+
+/**
+ * Hash everything that determines the outcome of a dependency install:
+ * package.json, any bundled lockfile, and the install command itself. A
+ * matching hash means the previous `node_modules` can be reused.
+ */
+async function hashInstallInputs(dir: string, installCommand: string): Promise<string | null> {
+  const hash = createHash('sha256');
   try {
-    const content = await readFile(path);
-    return createHash('sha256').update(content).digest('hex');
+    hash.update(await readFile(join(dir, 'package.json')));
   } catch {
     return null;
   }
+  for (const lockfile of LOCKFILES) {
+    let content: Buffer;
+    try {
+      content = await readFile(join(dir, lockfile));
+    } catch {
+      // Lockfile not part of the build output.
+      continue;
+    }
+    hash.update(lockfile).update(content);
+  }
+  hash.update(installCommand);
+  return hash.digest('hex');
 }

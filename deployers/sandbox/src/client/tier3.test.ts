@@ -48,6 +48,47 @@ describe('createSandboxHandler', () => {
     expect(String(fetchMock.mock.calls[1]![0])).toContain('https://new.example');
   });
 
+  it('does not retry non-idempotent requests, and re-resolves on the next request', async () => {
+    fetchMock.mockRejectedValueOnce(new Error('ECONNREFUSED')).mockResolvedValueOnce(new Response('ok'));
+    const resolve = vi.fn().mockResolvedValueOnce('https://old.example').mockResolvedValueOnce('https://new.example');
+    const handler = createSandboxHandler({ resolve });
+
+    await expect(handler(new Request('https://myapp.com/api/agents', { method: 'POST', body: '{}' }))).rejects.toThrow(
+      'ECONNREFUSED',
+    );
+    expect(resolve).toHaveBeenCalledTimes(1);
+
+    // The failed URL was evicted — the next request resolves fresh.
+    await handler(new Request('https://myapp.com/api/agents'));
+    expect(resolve).toHaveBeenCalledTimes(2);
+    expect(String(fetchMock.mock.calls[1]![0])).toContain('https://new.example');
+  });
+
+  it('rewrites sandbox-host redirects onto the incoming origin', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(null, { status: 302, headers: { location: 'https://sbx-1.example/login?next=%2Fapi' } }),
+    );
+    const handler = createSandboxHandler({ resolve: async () => 'https://sbx-1.example' });
+
+    const res = await handler(new Request('https://myapp.com/api/agents'));
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe('https://myapp.com/login?next=%2Fapi');
+  });
+
+  it('rewrites relative redirects and leaves external redirects untouched', async () => {
+    fetchMock
+      .mockResolvedValueOnce(new Response(null, { status: 307, headers: { location: '/agents/dice' } }))
+      .mockResolvedValueOnce(new Response(null, { status: 302, headers: { location: 'https://other.example/x' } }));
+    const handler = createSandboxHandler({ resolve: async () => 'https://sbx-1.example' });
+
+    const relative = await handler(new Request('https://myapp.com/api/agents'));
+    expect(relative.headers.get('location')).toBe('https://myapp.com/agents/dice');
+
+    const external = await handler(new Request('https://myapp.com/api/agents'));
+    expect(external.headers.get('location')).toBe('https://other.example/x');
+  });
+
   it('attaches the shared secret header and strips host', async () => {
     const handler = createSandboxHandler({ resolve: async () => 'https://sbx-1.example', secret: 's3cret' });
 
@@ -115,5 +156,11 @@ describe('createSandboxProxy', () => {
     const proxy = createSandboxProxy({ key: 'agent-url' });
 
     await expect(proxy(new Request('https://myapp.com/api/agents'))).rejects.toThrow(/EDGE_CONFIG/);
+  });
+
+  it('throws when created in a browser context', () => {
+    vi.stubGlobal('window', {});
+
+    expect(() => createSandboxProxy({ key: 'agent-url' })).toThrow(/server-only/);
   });
 });

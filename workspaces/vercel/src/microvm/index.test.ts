@@ -397,6 +397,28 @@ describe('VercelSandbox', () => {
       expect(fake.stop).not.toHaveBeenCalled();
       expect(sandbox.status).toBe('destroyed');
     });
+
+    it('stop propagates failure so callers do not assume the sandbox snapshotted', async () => {
+      const fake = makeFakeSandbox();
+      fake.stop.mockRejectedValueOnce(new Error('stop failed'));
+      createMock.mockResolvedValue(fake);
+
+      const sandbox = new VercelSandbox();
+      await sandbox._start();
+
+      await expect(sandbox._stop()).rejects.toThrow('stop failed');
+    });
+
+    it('destroy propagates failure so callers do not assume cleanup completed', async () => {
+      const fake = makeFakeSandbox();
+      fake.delete.mockRejectedValueOnce(new Error('delete failed'));
+      createMock.mockResolvedValue(fake);
+
+      const sandbox = new VercelSandbox();
+      await sandbox._start();
+
+      await expect(sandbox._destroy()).rejects.toThrow('delete failed');
+    });
   });
 
   describe('resume-less attach (named lookup without start)', () => {

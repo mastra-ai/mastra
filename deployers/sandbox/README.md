@@ -32,7 +32,7 @@ mastra build
 
 `mastra build` bundles the project and deploys it into the sandbox in one step, printing the live API and Studio URLs.
 
-Manage the deployment afterwards with `getDeployment()` from the server-only `client` export — the sandbox name is the identity, so this works from any process or codebase:
+Manage the deployment afterward with `getDeployment()` from the server-only `client` export — the sandbox name is the identity, so this works from any process or codebase:
 
 ```typescript
 import { getDeployment } from '@mastra/deployer-sandbox/client';
@@ -52,14 +52,20 @@ One-shot programmatic deploy (CI / agents), no bundler — takes a prebuilt outp
 
 ```typescript
 import { deployToSandbox } from '@mastra/deployer-sandbox';
+import { VercelSandbox } from '@mastra/vercel';
 
+const sandbox = new VercelSandbox({ sandboxName: 'ci-preview', ports: [4111] });
 const deployment = await deployToSandbox({ sandbox, dir: '.mastra/output', port: 4111 });
 console.log(deployment.url);
 ```
 
-Pass `wake: true` to resume a stopped sandbox and relaunch the server before returning — useful in a route handler that fronts the sandbox:
+Pass `wake: true` to resume a stopped sandbox before returning — useful in a route handler that fronts the sandbox. If the server isn't healthy after the resume (some providers restore the filesystem but not processes), the wake relaunches it:
 
 ```typescript
+import { getDeployment } from '@mastra/deployer-sandbox/client';
+import { VercelSandbox } from '@mastra/vercel';
+
+const sandbox = new VercelSandbox({ sandboxName: 'my-preview', ports: [4111] });
 const dep = await getDeployment({ sandbox, wake: true });
 ```
 

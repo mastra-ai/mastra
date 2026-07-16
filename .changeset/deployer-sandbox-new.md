@@ -7,6 +7,7 @@ New package: deploy a full Mastra server (including Studio) into any workspace s
 **Deploy from your Mastra config**
 
 ```typescript
+import { Mastra } from '@mastra/core/mastra';
 import { SandboxDeployer } from '@mastra/deployer-sandbox';
 import { VercelSandbox } from '@mastra/vercel';
 
@@ -17,7 +18,7 @@ export const mastra = new Mastra({
 });
 ```
 
-Then run `mastra build` — it bundles the project and deploys it into the sandbox in one step. Redeploys reuse the same sandbox and skip dependency installs when `package.json` is unchanged.
+Then run `mastra build` — it bundles the project and deploys it into the sandbox in one step. Redeploys reuse the same sandbox and skip dependency installs when the install inputs (`package.json`, bundled lockfiles, and the install command) are unchanged.
 
 **Manage the deployment**
 
@@ -38,7 +39,9 @@ await dep.destroy(); // permanent delete
 
 ```typescript
 import { deployToSandbox } from '@mastra/deployer-sandbox';
+import { VercelSandbox } from '@mastra/vercel';
 
+const sandbox = new VercelSandbox({ sandboxName: 'ci-preview', ports: [4111] });
 const deployment = await deployToSandbox({ sandbox, dir: '.mastra/output' });
 console.info(deployment.url);
 ```

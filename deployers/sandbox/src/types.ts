@@ -57,7 +57,13 @@ export interface DeployToSandboxOptions {
   healthCheckTimeoutMs?: number;
   /** Poll interval for the health check, in ms. Defaults to 1000. */
   healthCheckIntervalMs?: number;
-  /** Install command run inside the sandbox. Defaults to `npm install --omit=dev`. */
+  /**
+   * Install command run inside the sandbox. Defaults to `npm install --omit=dev`.
+   *
+   * Executed verbatim as a shell command (so flags, `&&`, env prefixes, etc.
+   * work). Only ever pass trusted, developer-authored values — never derive
+   * this from user input.
+   */
   installCommand?: string;
   logger?: SandboxDeployLogger;
 }

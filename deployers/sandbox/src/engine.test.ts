@@ -78,8 +78,11 @@ describe('deployToSandbox', () => {
     const { createHash } = await import('node:crypto');
     const { readFile } = await import('node:fs/promises');
     const { join } = await import('node:path');
+    // Mirror hashInstallInputs: package.json + bundled lockfiles (none in the
+    // fixture) + the install command itself.
     const hash = createHash('sha256')
       .update(await readFile(join(buildDir, 'package.json')))
+      .update('npm install --omit=dev')
       .digest('hex');
 
     const sandbox = new FakeSandbox({ installMarker: hash });
@@ -162,10 +165,16 @@ describe('buildLaunchScript', () => {
     expect(script).toContain('exec node index.mjs');
   });
 
-  it('lets callers override PORT and MASTRA_HOST', () => {
-    const script = buildLaunchScript({ remoteDir: '/app', port: 4111, env: { MASTRA_HOST: '127.0.0.1' } });
-    expect(script).toContain(`export MASTRA_HOST='127.0.0.1'`);
-    expect(script).not.toContain(`0.0.0.0`);
+  it('does not let custom env override PORT or MASTRA_HOST', () => {
+    const script = buildLaunchScript({
+      remoteDir: '/app',
+      port: 4111,
+      env: { PORT: '9999', MASTRA_HOST: '127.0.0.1' },
+    });
+    expect(script).toContain(`export PORT='4111'`);
+    expect(script).toContain(`export MASTRA_HOST='0.0.0.0'`);
+    expect(script).not.toContain('9999');
+    expect(script).not.toContain('127.0.0.1');
   });
 
   it('rejects invalid environment variable names', () => {

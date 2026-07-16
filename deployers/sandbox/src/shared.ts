@@ -47,7 +47,12 @@ export function shellQuote(value: string): string {
 export async function runInSandbox(
   sandbox: WorkspaceSandbox,
   script: string,
-  opts?: { allowFailure?: boolean; timeout?: number },
+  opts?: {
+    allowFailure?: boolean;
+    timeout?: number;
+    /** Safe description used in error messages instead of the script itself. */
+    label?: string;
+  },
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   if (!sandbox.executeCommand) {
     throw new Error(
@@ -62,21 +67,39 @@ export async function runInSandbox(
     opts?.timeout ? { timeout: opts.timeout } : undefined,
   );
   if (!result.success && !opts?.allowFailure) {
+    // Never echo the full script back: it can contain secrets (env values)
+    // or entire base64 upload chunks. Use the label or a bounded excerpt.
+    const what = opts?.label ?? truncate(script, 120);
     throw new Error(
-      `Command failed inside sandbox (exit ${result.exitCode}): ${script}\n${result.stderr || result.stdout}`,
+      `Command failed inside sandbox (exit ${result.exitCode}): ${what}\n${truncate(result.stderr || result.stdout, 4_000)}`,
     );
   }
   return { stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode };
 }
 
-/** Kill the previously launched server (if any) using its pidfile. Safe when nothing is running. */
+function truncate(value: string, max: number): string {
+  return value.length > max ? `${value.slice(0, max)}… (truncated)` : value;
+}
+
+/**
+ * Kill the previously launched server (if any) using its pidfile, waiting for
+ * the process to exit (bounded, then SIGKILL) so the replacement never races
+ * the old server for the port. Safe when nothing is running.
+ */
 export async function killPreviousServer(sandbox: WorkspaceSandbox, remoteDir: string): Promise<void> {
-  const pidfile = `${remoteDir}/${SERVER_PIDFILE}`;
-  await runInSandbox(
-    sandbox,
-    `if [ -f ${shellQuote(pidfile)} ]; then kill "$(cat ${shellQuote(pidfile)})" 2>/dev/null || true; rm -f ${shellQuote(pidfile)}; fi`,
-    { allowFailure: true },
-  );
+  const pidfile = shellQuote(`${remoteDir}/${SERVER_PIDFILE}`);
+  const script = [
+    `if [ -f ${pidfile} ]; then`,
+    `  pid="$(cat ${pidfile})"`,
+    `  kill "$pid" 2>/dev/null || true`,
+    // Wait up to ~5s for the old server to release the port, then force-kill.
+    `  i=0`,
+    `  while kill -0 "$pid" 2>/dev/null && [ "$i" -lt 50 ]; do sleep 0.1; i=$((i + 1)); done`,
+    `  kill -9 "$pid" 2>/dev/null || true`,
+    `  rm -f ${pidfile}`,
+    `fi`,
+  ].join('\n');
+  await runInSandbox(sandbox, script, { allowFailure: true, timeout: 15_000 });
 }
 
 /**

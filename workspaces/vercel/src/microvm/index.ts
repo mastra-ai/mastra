@@ -255,11 +255,9 @@ export class VercelSandbox extends MastraSandbox {
     if (!sandbox) {
       return;
     }
-    try {
-      await sandbox.stop();
-    } catch (error) {
-      this.logger.warn(`${LOG_PREFIX} Error stopping sandbox:`, error);
-    }
+    // Stop failures propagate — a sandbox that failed to stop is still
+    // running (and billing), so callers must not assume it snapshotted.
+    await sandbox.stop();
     this._sandbox = null;
     this._attachedWithoutResume = false;
   }
@@ -272,11 +270,9 @@ export class VercelSandbox extends MastraSandbox {
     if (!sandbox) {
       return;
     }
-    try {
-      await sandbox.delete();
-    } catch (error) {
-      this.logger.warn(`${LOG_PREFIX} Error deleting sandbox:`, error);
-    }
+    // Delete failures propagate — a sandbox that failed to delete still
+    // exists, so callers must not assume cleanup completed.
+    await sandbox.delete();
     this._sandbox = null;
     this._attachedWithoutResume = false;
   }
@@ -417,7 +413,9 @@ export class VercelSandbox extends MastraSandbox {
     return [
       'Vercel Sandbox: an ephemeral Firecracker MicroVM running Amazon Linux 2023.',
       `- Runtime: ${this._runtime}. Working directory defaults to /vercel/sandbox.`,
-      '- Persistent filesystem within the session; state is lost when the sandbox stops.',
+      this._sandboxName
+        ? '- Persistent filesystem: stopping snapshots the filesystem and the named sandbox resumes it on the next start. Processes do not survive a stop.'
+        : '- Persistent filesystem within the session; state is lost when the sandbox stops.',
       '- Runs as the vercel-sandbox user with sudo access (install packages via dnf).',
       `- The sandbox auto-terminates after ${Math.round(this._timeout / 1000)} seconds.`,
       ...(this._ports?.length

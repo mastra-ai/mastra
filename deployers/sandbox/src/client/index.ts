@@ -41,8 +41,9 @@ export interface GetDeploymentOptions {
   port?: number;
   /**
    * Wake the sandbox when it is not running. Waking starts (resumes) the
-   * sandbox and relaunches the server from the recorded launch script —
-   * snapshot resume restores the filesystem, not processes. Defaults to false.
+   * sandbox and, only if the server is not answering, relaunches it from the
+   * recorded launch script — some providers (e.g. E2B) resume processes on
+   * wake, others (e.g. Vercel) restore just the filesystem. Defaults to false.
    */
   wake?: boolean;
   /** Directory the app was deployed into. Defaults to `$HOME/mastra-app` resolved inside the sandbox. */
@@ -192,7 +193,7 @@ export function createSandboxHandler(options: CreateSandboxHandlerOptions): (req
       headers.set('x-mastra-sandbox-secret', options.secret);
     }
 
-    return fetch(target, {
+    const response = await fetch(target, {
       method: request.method,
       headers,
       body: request.body,
@@ -200,6 +201,26 @@ export function createSandboxHandler(options: CreateSandboxHandlerOptions): (req
       duplex: 'half',
       redirect: 'manual',
     } as RequestInit);
+
+    // Redirects are passed through manually — rewrite sandbox-host Locations
+    // onto the incoming origin so the rotating sandbox URL never reaches the
+    // browser (and subsequent requests keep flowing through this handler).
+    const location = response.headers.get('location');
+    if (location) {
+      const resolved = new URL(location, target);
+      if (resolved.origin === new URL(baseUrl).origin) {
+        const rewritten = new URL(resolved.pathname + resolved.search + resolved.hash, incoming.origin);
+        const responseHeaders = new Headers(response.headers);
+        responseHeaders.set('location', rewritten.toString());
+        return new Response(response.body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: responseHeaders,
+        });
+      }
+    }
+
+    return response;
   };
 
   return async (request: Request): Promise<Response> => {
@@ -207,11 +228,23 @@ export function createSandboxHandler(options: CreateSandboxHandlerOptions): (req
 
     try {
       return await forward(request, await cachedUrl);
-    } catch {
+    } catch (error) {
       // Connection-level failure: the sandbox may have rotated its URL or gone
-      // to sleep. Re-resolve once (waking is up to the resolve fn) and retry.
+      // to sleep. Drop the cached URL so the next request re-resolves, and
+      // retry once — but only for idempotent, bodyless methods. A failed
+      // connection doesn't prove a write never landed, and a streamed body is
+      // already consumed.
+      cachedUrl = null;
+      if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method)) {
+        throw error;
+      }
       cachedUrl = options.resolve();
-      return forward(request, await cachedUrl);
+      try {
+        return await forward(request, await cachedUrl);
+      } catch (retryError) {
+        cachedUrl = null;
+        throw retryError;
+      }
     }
   };
 }
@@ -243,6 +276,10 @@ export interface CreateSandboxProxyOptions {
 export function createSandboxProxy(
   options: CreateSandboxProxyOptions,
 ): (request: Request) => Promise<Response | undefined> {
+  // Reads (and would transmit) the Edge Config bearer token — same
+  // server-only contract as the rest of this module.
+  assertServerOnly();
+
   return async (request: Request): Promise<Response | undefined> => {
     const connection = options.edgeConfig ?? process.env.EDGE_CONFIG;
     if (!connection) {

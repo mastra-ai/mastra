@@ -6,14 +6,18 @@ import { VercelSandbox } from '@mastra/vercel';
 // deploy, and the lifecycle scripts use it to resolve the same deployment
 // later. Switch providers with SANDBOX_PROVIDER=e2b|daytona (default: vercel).
 export function createSandbox() {
-  if (process.env.SANDBOX_PROVIDER === 'e2b') {
+  const provider = process.env.SANDBOX_PROVIDER ?? 'vercel';
+  if (!['vercel', 'e2b', 'daytona'].includes(provider)) {
+    throw new Error(`Unknown SANDBOX_PROVIDER "${provider}" — expected vercel, e2b, or daytona.`);
+  }
+  if (provider === 'e2b') {
     return new E2BSandbox({
       id: 'mastra-sandbox-deployer-example',
       template: 'base',
       timeout: 30 * 60 * 1000, // pauses (resumable) on timeout
     });
   }
-  if (process.env.SANDBOX_PROVIDER === 'daytona') {
+  if (provider === 'daytona') {
     return new DaytonaSandbox({
       id: 'mastra-sandbox-deployer-example',
       public: true, // tokenless preview URLs

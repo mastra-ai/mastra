@@ -67,7 +67,7 @@ API:    https://<sandbox-id>-4111.vercel.run/api
 Studio: https://<sandbox-id>-4111.vercel.run
 ```
 
-The manifest includes `expiresAt` when the sandbox provider reports an expiration time.
+The manifest includes `expiresAt` when the sandbox provider reports an expiration time. Redeploys to the same sandbox skip the dependency install when the install inputs (`package.json`, bundled lockfiles, and the install command) are unchanged.
 
 ### Using E2B
 
@@ -147,7 +147,7 @@ await deployment.stop() // stop the sandbox (resumable)
 await deployment.destroy() // permanently delete the sandbox
 ```
 
-Pass `wake: true` to resume a stopped sandbox and relaunch the server before returning. Provider tooling works too, for example `vercel sandbox ls`, `vercel sandbox stop`, and `vercel sandbox rm`.
+Pass `wake: true` to resume a stopped sandbox before returning. The server is relaunched only if it isn't healthy after the resume. Provider tooling works too, for example `vercel sandbox ls`, `vercel sandbox stop`, and `vercel sandbox rm`.
 
 ### Expiry and URLs
 
@@ -177,7 +177,7 @@ const deployment = await getDeployment({
 console.info(deployment.url, deployment.status)
 ```
 
-With `wake: false` (the default) the sandbox isn't started and you get `{ url, status }` to act on. Resolving the URL, `stop()`, and `destroy()` attach to the existing sandbox by name without resuming it, so lifecycle operations on a stopped sandbox never wake it or start billing. With `wake: true` the sandbox resumes and the server is relaunched if it isn't answering, since a snapshot resume restores the filesystem but not running processes.
+With `wake: false` (the default) the sandbox isn't started and you get `{ url, status }` to act on. Resolving the URL, `stop()`, and `destroy()` attach to the existing sandbox by name without resuming it, so lifecycle operations on a stopped sandbox never wake it or start billing. With `wake: true` the sandbox resumes and the server is relaunched if it isn't answering. Whether a relaunch is needed depends on the provider: Vercel and Daytona restore the filesystem but not running processes, while E2B resumes the whole VM including the server process.
 
 :::warning
 

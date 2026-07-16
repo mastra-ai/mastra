@@ -369,21 +369,18 @@ export class E2BSandbox extends MastraSandbox {
       }
     }
 
-    try {
-      if (this._sandbox) {
-        await this._sandbox.pause();
-        this.logger.debug(`${LOG_PREFIX} Paused sandbox ${this._sandbox.sandboxId} for: ${this.id}`);
-      } else {
-        // Not attached in this process — pause by identity without resuming.
-        const info = await this.lookupExistingSandboxInfo();
-        if (info?.state === 'running') {
-          await Sandbox.pause(info.sandboxId, this.connectionOpts);
-          this.logger.debug(`${LOG_PREFIX} Paused detached sandbox ${info.sandboxId} for: ${this.id}`);
-        }
+    // Pause failures propagate — a sandbox that failed to pause is still
+    // running (and billing), so callers must not assume it stopped.
+    if (this._sandbox) {
+      await this._sandbox.pause();
+      this.logger.debug(`${LOG_PREFIX} Paused sandbox ${this._sandbox.sandboxId} for: ${this.id}`);
+    } else {
+      // Not attached in this process — pause by identity without resuming.
+      const info = await this.lookupExistingSandboxInfo();
+      if (info?.state === 'running') {
+        await Sandbox.pause(info.sandboxId, this.connectionOpts);
+        this.logger.debug(`${LOG_PREFIX} Paused detached sandbox ${info.sandboxId} for: ${this.id}`);
       }
-    } catch (e) {
-      // Best-effort: sandbox may already be paused or dead
-      this.logger.debug(`${LOG_PREFIX} Error pausing sandbox:`, e);
     }
 
     this._sandbox = null;
@@ -414,23 +411,17 @@ export class E2BSandbox extends MastraSandbox {
         }
       }
 
-      try {
-        await this._sandbox.kill();
-      } catch {
-        // Ignore errors during destroy
-      }
+      // Kill failures propagate — a sandbox that failed to delete is still
+      // alive, so callers must not assume cleanup completed.
+      await this._sandbox.kill();
 
       this._sandbox = null;
     } else {
       // Not attached in this process — kill by identity without resuming.
-      try {
-        const info = await this.lookupExistingSandboxInfo();
-        if (info) {
-          await Sandbox.kill(info.sandboxId, this.connectionOpts);
-          this.logger.debug(`${LOG_PREFIX} Killed detached sandbox ${info.sandboxId} for: ${this.id}`);
-        }
-      } catch (e) {
-        this.logger.debug(`${LOG_PREFIX} Error killing detached sandbox:`, e);
+      const info = await this.lookupExistingSandboxInfo();
+      if (info) {
+        await Sandbox.kill(info.sandboxId, this.connectionOpts);
+        this.logger.debug(`${LOG_PREFIX} Killed detached sandbox ${info.sandboxId} for: ${this.id}`);
       }
     }
 

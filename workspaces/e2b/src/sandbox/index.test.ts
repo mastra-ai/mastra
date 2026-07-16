@@ -423,14 +423,12 @@ describe('E2BSandbox', () => {
       expect(sandbox.status).toBe('stopped');
     });
 
-    it('stop tolerates pause failure', async () => {
-      mockSandbox.pause.mockRejectedValueOnce(new Error('already paused'));
+    it('stop propagates pause failure so callers do not assume the sandbox stopped', async () => {
+      mockSandbox.pause.mockRejectedValueOnce(new Error('pause failed'));
       const sandbox = new E2BSandbox();
       await sandbox._start();
 
-      await sandbox._stop();
-
-      expect(sandbox.status).toBe('stopped');
+      await expect(sandbox._stop()).rejects.toThrow('pause failed');
     });
 
     it('stop pauses a detached running sandbox by identity without resuming', async () => {
@@ -480,6 +478,14 @@ describe('E2BSandbox', () => {
 
       expect(mockSandbox.kill).toHaveBeenCalled();
       expect(sandbox.status).toBe('destroyed');
+    });
+
+    it('destroy propagates kill failure so callers do not assume cleanup completed', async () => {
+      mockSandbox.kill.mockRejectedValueOnce(new Error('kill failed'));
+      const sandbox = new E2BSandbox();
+      await sandbox._start();
+
+      await expect(sandbox._destroy()).rejects.toThrow('kill failed');
     });
   });
 

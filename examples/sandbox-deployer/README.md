@@ -71,6 +71,6 @@ Set `SANDBOX_PROVIDER=e2b` (or `daytona`) on these too when managing a deploymen
 
 Both work from a fresh process: the provider attaches to the named sandbox without resuming it, so stopping or destroying never wakes (or bills) a stopped sandbox first. The Vercel CLI works too (`vercel sandbox ls|stop|rm`).
 
-Redeploys (`pnpm build` again) reuse the named sandbox and skip `npm install` when `package.json` is unchanged.
+Redeploys (`pnpm build` again) reuse the named sandbox and skip `npm install` when the install inputs (`package.json`, bundled lockfiles, and the install command) are unchanged.
 
 See the [sandbox deployment docs](https://mastra.ai/docs/deployment/sandbox) for routing tiers, security notes, and CI recipes.
