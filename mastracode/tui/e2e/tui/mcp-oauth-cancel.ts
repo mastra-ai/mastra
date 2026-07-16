@@ -74,7 +74,14 @@ export const mcpOauthCancelScenario = {
     runtime.startLiveOutput(terminal);
     terminal.resize(400, 50);
 
-    await runtime.waitForScreenText(/MCP: Failed to connect to "oauth_server"/i, terminal, 15_000);
+    // A server that only needs OAuth shows the needs-auth notification at
+    // startup, not a raw connect error.
+    await runtime.waitForScreenText(
+      /MCP: .*"oauth_server" needs authentication .* run \/mcp to authenticate/i,
+      terminal,
+      15_000,
+    );
+    await runtime.waitForScreenTextAbsent(/MCP: Failed to connect to "oauth_server"/i, terminal, 2_000);
 
     terminal.submit('/mcp');
     await runtime.waitForScreenText(/Manage MCP servers/i, terminal, 8_000);

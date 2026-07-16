@@ -473,7 +473,11 @@ export class McpSelectorComponent extends Box implements Focusable {
         const totalTools = connected.reduce((sum, s) => sum + s.toolCount, 0);
         this.showInfoCallback(`MCP: Reloaded. ${connected.length} server(s) connected, ${totalTools} tool(s).`);
         for (const s of result.statuses.filter(s => !s.connected)) {
-          this.showInfoCallback(`MCP: Failed to connect to "${s.name}": ${s.error ?? 'Unknown error'}`);
+          if (s.needsAuth) {
+            this.showInfoCallback(`MCP: \u26a0 "${s.name}" needs authentication \u2192 run /mcp to authenticate`);
+          } else {
+            this.showInfoCallback(`MCP: Failed to connect to "${s.name}": ${s.error ?? 'Unknown error'}`);
+          }
         }
       })
       .catch(() => {
