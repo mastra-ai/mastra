@@ -2,7 +2,7 @@ import pg from 'pg';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
 import type { PoolAdapter } from './storage';
-import { PostgresStore } from './storage';
+import { PostgresStore, PostgresStoreVNext } from './storage';
 import { resolvePgConfig } from './storage/db';
 import { PgVector } from './vector';
 
@@ -61,6 +61,37 @@ describe('pool error listeners', () => {
 
     try {
       // Error handling on a user-owned pool stays the user's, mirroring close().
+      expect(userPool.listenerCount('error')).toBe(0);
+    } finally {
+      await store.close();
+      await userPool.end();
+    }
+  });
+
+  it('PostgresStoreVNext attaches an error listener to the observability pool it creates', async () => {
+    const userPool = new pg.Pool({ connectionString: DEAD_CONNECTION_STRING });
+    // The observability pool lives in a native private field, so track
+    // listener registration through the shared Pool prototype instead.
+    const onSpy = vi.spyOn(pg.Pool.prototype, 'on');
+
+    const store = new PostgresStoreVNext({
+      id: 'pool-error-test',
+      pool: userPool,
+      observability: { connectionString: 'postgresql://user:pass@127.0.0.1:2/db' },
+    });
+
+    try {
+      const errorRegistrations = onSpy.mock.calls
+        .map((call, i) => ({ event: call[0], instance: onSpy.mock.instances[i] as pg.Pool }))
+        .filter(({ event }) => event === 'error');
+
+      // Exactly one 'error' listener was attached during construction — on the
+      // store-created observability pool, not the caller-supplied primary pool.
+      expect(errorRegistrations).toHaveLength(1);
+      const obsPool = errorRegistrations[0]!.instance;
+      expect(obsPool).not.toBe(userPool);
+      expect(obsPool.listenerCount('error')).toBe(1);
+      expect(() => obsPool.emit('error', new Error('idle client dropped'))).not.toThrow();
       expect(userPool.listenerCount('error')).toBe(0);
     } finally {
       await store.close();
