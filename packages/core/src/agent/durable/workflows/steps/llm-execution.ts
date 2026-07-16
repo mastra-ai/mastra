@@ -27,7 +27,7 @@ import { PrepareStepProcessor } from '../../../../processors/processors/prepare-
 import { ProcessorRunner } from '../../../../processors/runner';
 import { execute } from '../../../../stream/aisdk/v5/execute';
 import { MastraModelOutput } from '../../../../stream/base/output';
-import type { TextDeltaPayload, ToolCallPayload } from '../../../../stream/types';
+import type { ChunkType, TextDeltaPayload, ToolCallPayload } from '../../../../stream/types';
 import { ChunkFrom } from '../../../../stream/types';
 import { findProviderToolByName, inferProviderExecuted } from '../../../../tools/provider-tool-utils';
 import type { ToolToConvert } from '../../../../tools/tool-builder/builder';
@@ -457,6 +457,13 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                           workspace: registryEntry?.workspace,
                           requireApproval: (tool as any).requireApproval,
                           backgroundConfig: (tool as any).background,
+                          // Emit context.writer.write() / .custom() output through pubsub,
+                          // matching how the durable tool-call step builds its writer.
+                          outputWriter: pubsub
+                            ? async (chunk: any) => {
+                                await emitChunkEvent(pubsub, runId, chunk as ChunkType);
+                              }
+                            : undefined,
                         },
                         undefined,
                         execOptions.autoResumeSuspendedTools,
@@ -467,7 +474,14 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   }
                   currentTools = convertedTools as unknown as ToolSet;
                   if (registryEntry) {
-                    registryEntry.tools = { ...registryEntry.tools, ...convertedTools };
+                    // Store the exact per-step snapshot rather than merging onto the
+                    // previous step's set. `currentTools` already starts from the full
+                    // toolset resolved at the top of this step, so a snapshot keeps the
+                    // static tools while dropping processor-injected tools the current
+                    // step no longer exposes (e.g. a ToolSearchProcessor entry that hit
+                    // its TTL). Merging would leave those stale tools executable by the
+                    // tool-call step even though the model was never shown them.
+                    registryEntry.tools = convertedTools;
                   }
                 }
               } catch (error) {
