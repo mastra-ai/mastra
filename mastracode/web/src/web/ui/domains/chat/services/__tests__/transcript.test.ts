@@ -1,4 +1,4 @@
-import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
+import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent/message-list';
 import { describe, expect, it } from 'vitest';
 
 import { createInitialTranscript, initialTranscript, transcriptReducer } from '../transcript';
@@ -175,6 +175,43 @@ describe('transcript reducer message entries', () => {
     expect(state.entries[0]).toMatchObject({ kind: 'notice', text: 'Command handled' });
     expect(state.entries[1]).toMatchObject({ kind: 'message', id: 'assistant-1', streaming: true });
     expect(messageParts(state.entries[1])).toEqual([{ type: 'text', text: 'Streaming text' }]);
+  });
+
+  it('normalizes live message updates that omit parts', () => {
+    const state = transcriptReducer({ ...initialTranscript, pending: true }, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        message: {
+          id: 'assistant-1',
+          role: 'assistant',
+          createdAt: new Date(),
+          content: { format: 2 },
+        } as MastraDBMessage,
+      },
+    });
+
+    expect(state.pending).toBe(true);
+    expect(state.entries[0]).toMatchObject({ kind: 'message', id: 'assistant-1', streaming: true });
+    expect(messageParts(state.entries[0])).toEqual([]);
+  });
+
+  it('normalizes legacy content text into renderable message parts', () => {
+    const state = transcriptReducer({ ...initialTranscript, pending: true }, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        message: {
+          id: 'assistant-legacy',
+          role: 'assistant',
+          createdAt: new Date(),
+          content: { format: 2, content: 'Legacy streamed text' },
+        } as unknown as MastraDBMessage,
+      },
+    });
+
+    expect(state.pending).toBe(false);
+    expect(messageParts(state.entries[0])).toEqual([{ type: 'text', text: 'Legacy streamed text' }]);
   });
 
   it('retains live signal messages between assistant segments without changing assistant decode state', () => {

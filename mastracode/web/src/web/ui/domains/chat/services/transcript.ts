@@ -4,7 +4,7 @@ import type {
   AgentControllerTaskSnapshot,
   AgentControllerOMProgress,
 } from '@mastra/client-js';
-import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
+import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent/message-list';
 
 import { stripAnsi } from './ansi';
 
@@ -311,7 +311,7 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent): Transcri
 
     case 'message_start':
     case 'message_update': {
-      const message = event.message as MastraDBMessage;
+      const message = event.message as unknown as MastraDBMessage;
       const next = upsertMessage(state, message, true);
       if (message.role !== 'assistant') return next;
       // Only streamed assistant content opens the decode window — empty or
@@ -328,8 +328,9 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent): Transcri
       return { ...decoded, pending: false };
     }
     case 'message_end': {
-      const next = upsertMessage(state, event.message, false);
-      return event.message.role === 'assistant' ? { ...next, pending: false } : next;
+      const message = event.message as unknown as MastraDBMessage;
+      const next = upsertMessage(state, message, false);
+      return message.role === 'assistant' ? { ...next, pending: false } : next;
     }
 
     case 'tool_input_start':
@@ -604,11 +605,28 @@ function messagesToEntries(messages: MastraDBMessage[]): TimelineEntry[] {
   return messages.map(message => toMessageEntry(message, { streaming: false }));
 }
 
+function messageParts(message: MastraDBMessage): MastraMessagePart[] {
+  const parts = message.content.parts;
+  if (Array.isArray(parts)) return parts;
+
+  const legacyContent = (message.content as { content?: unknown }).content;
+  if (typeof legacyContent === 'string' && legacyContent.length > 0) {
+    return [{ type: 'text', text: legacyContent }];
+  }
+
+  return [];
+}
+
+function normalizeMessage(message: MastraDBMessage): MastraDBMessage {
+  return { ...message, content: { ...message.content, parts: messageParts(message) } };
+}
+
 function toMessageEntry(
   message: MastraDBMessage,
   options: { streaming?: boolean; steer?: boolean; runtimeTools?: Record<string, ToolCall> } = {},
 ): MessageEntry {
-  const signalMetadata = message.role === 'signal' ? message.content.metadata?.signal : undefined;
+  const normalizedMessage = normalizeMessage(message);
+  const signalMetadata = normalizedMessage.role === 'signal' ? normalizedMessage.content.metadata?.signal : undefined;
   const signal =
     signalMetadata && typeof signalMetadata === 'object' && !Array.isArray(signalMetadata)
       ? (signalMetadata as Record<string, unknown>)
@@ -618,11 +636,11 @@ function toMessageEntry(
     signal?.attributes && typeof signal.attributes === 'object' && !Array.isArray(signal.attributes)
       ? (signal.attributes as Record<string, unknown>)
       : undefined;
-  const displayMessage = isUserSignal ? { ...message, role: 'user' as const } : message;
+  const displayMessage = isUserSignal ? { ...normalizedMessage, role: 'user' as const } : normalizedMessage;
 
   return {
     kind: 'message',
-    id: message.id,
+    id: normalizedMessage.id,
     message: displayMessage,
     runtimeTools: options.runtimeTools,
     streaming: options.streaming,
@@ -652,12 +670,12 @@ function upsertMessage(state: TranscriptState, message: MastraDBMessage, streami
 }
 
 function preserveRuntimeToolParts(message: MastraDBMessage, previous?: MastraDBMessage): MastraDBMessage {
-  if (!previous) return message;
+  if (!previous) return normalizeMessage(message);
 
-  const parts = [...message.content.parts];
+  const parts = [...messageParts(message)];
   const existingToolIds = new Set(parts.map(toolCallIdForPart).filter((id): id is string => Boolean(id)));
 
-  for (const part of previous.content.parts) {
+  for (const part of messageParts(previous)) {
     const toolCallId = toolCallIdForPart(part);
     if (toolCallId && !existingToolIds.has(toolCallId)) {
       parts.push(part);
@@ -674,7 +692,7 @@ function hasAssistantText(state: TranscriptState): boolean {
   if (idx === -1) return false;
   const entry = state.entries[idx];
   if (entry.kind !== 'message') return false;
-  return entry.message.content.parts.some(
+  return messageParts(entry.message).some(
     part => part.type === 'text' && 'text' in part && part.text.trim().length > 0,
   );
 }
