@@ -1285,6 +1285,62 @@ describe('Factory Board — persisted cards', () => {
     }
   });
 
+  it('given two actions on one card start concurrently, then both exact actions remain pending', async () => {
+    useBoardHandlers({
+      workItems: [
+        makeWorkItem({
+          id: 'wi-1',
+          title: 'Fix flaky test',
+          source: 'github-issue',
+          sourceKey: 'github-issue:12',
+          stages: ['triage'],
+          metadata: { number: 12 },
+        }),
+      ],
+    });
+    const captured = useFactoryRunHandlers('factory-issue-12');
+    let releaseWorktrees!: () => void;
+    const worktreesBlocked = new Promise<void>(resolve => {
+      releaseWorktrees = resolve;
+    });
+    let requestCount = 0;
+    let markBothRequested!: () => void;
+    const bothRequested = new Promise<void>(resolve => {
+      markBothRequested = resolve;
+    });
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/worktree`, async () => {
+        requestCount += 1;
+        if (requestCount === 2) markBothRequested();
+        await worktreesBlocked;
+        return HttpResponse.json({
+          worktreePath: '/sandbox/mastra/worktrees/factory-issue-12',
+          branch: 'factory/issue-12',
+          baseBranch: 'main',
+          resourceId: RESOURCE_ID,
+        });
+      }),
+    );
+    renderAt('/factory/board');
+
+    try {
+      const triageColumn = await screen.findByTestId('board-column-triage');
+      const actions = within(triageColumn).getByRole('button', { name: 'Actions for Fix flaky test' });
+      await userEvent.click(actions);
+      await userEvent.click(await screen.findByRole('menuitem', { name: 'Investigate' }));
+      await waitFor(() => expect(requestCount).toBe(1));
+      await userEvent.click(actions);
+      await userEvent.click(await screen.findByRole('menuitem', { name: 'Build' }));
+      await bothRequested;
+
+      await userEvent.click(actions);
+      expect(await screen.findAllByRole('menuitem', { name: 'Starting…' })).toHaveLength(2);
+    } finally {
+      releaseWorktrees();
+      await waitFor(() => expect(captured.messages).toHaveLength(2));
+    }
+  });
+
   it('given a card in Planning, when Build is chosen, then planning exits and the card moves to Building', async () => {
     const state = useBoardHandlers({
       workItems: [
