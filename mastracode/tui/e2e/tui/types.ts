@@ -76,6 +76,7 @@ export type ScenarioName =
   | 'prune-command'
   | 'visible-commands'
   | 'integration-commands'
+  | 'knowledge-browser'
   | 'lifecycle-hooks-configured'
   | 'lifecycle-hooks-events'
   | 'login-dialog-masked-input'

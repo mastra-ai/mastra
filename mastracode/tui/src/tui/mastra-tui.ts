@@ -1179,6 +1179,7 @@ export class MastraTUI {
       pluginManager: this.state.pluginManager,
       analytics: this.state.analytics,
       authStorage: this.state.authStorage,
+      knowledgeInspector: this.state.options.knowledgeInspector,
       customSlashCommands: this.state.customSlashCommands,
       showInfo: msg => showInfo(this.state, msg),
       showError: msg => showError(this.state, msg),

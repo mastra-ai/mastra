@@ -44,6 +44,7 @@ import { githubSignalsPollingInboxScenario } from './github-signals-polling-inbo
 import { githubSignalsUnsubscribeReloadScenario } from './github-signals-unsubscribe-reload.js';
 import { headlessMcpToolAvailabilityScenario } from './headless-mcp-tool-availability.js';
 import { integrationCommandsScenario } from './integration-commands.js';
+import { knowledgeBrowserScenario } from './knowledge-browser.js';
 import { lifecycleHooksConfiguredScenario } from './lifecycle-hooks-configured.js';
 import { lifecycleHooksEventsScenario } from './lifecycle-hooks-events.js';
 import { loginDialogMaskedInputScenario } from './login-dialog-masked-input.js';
@@ -218,6 +219,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'notification-inbox-reload': notificationInboxReloadScenario,
   'notification-inbox-tool-flow': notificationInboxToolFlowScenario,
   'notification-signal-rendering': notificationSignalRenderingScenario,
+  'knowledge-browser': knowledgeBrowserScenario,
   'om-attachment-observation': omAttachmentObservationScenario,
   'om-global-settings-persistence': omGlobalSettingsPersistenceScenario,
   'om-model-override-reload': omModelOverrideReloadScenario,

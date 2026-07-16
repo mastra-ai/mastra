@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   handleReportIssueCommand: vi.fn().mockResolvedValue(undefined),
   handleMcpCommand: vi.fn().mockResolvedValue(undefined),
   handleOMCommand: vi.fn().mockResolvedValue(undefined),
+  handleKnowledgeCommand: vi.fn().mockResolvedValue(undefined),
   handleMastraGatewayCommand: vi.fn().mockResolvedValue(undefined),
   handlePluginsCommand: vi.fn().mockResolvedValue(undefined),
   processSlashCommand: vi.fn().mockResolvedValue('custom output'),
@@ -45,6 +46,7 @@ vi.mock('../commands/index.js', () => ({
   handleCustomProvidersCommand: mocks.handleCustomProvidersCommand,
   handleSubagentsCommand: vi.fn(),
   handleOMCommand: mocks.handleOMCommand,
+  handleKnowledgeCommand: mocks.handleKnowledgeCommand,
   handleSettingsCommand: vi.fn(),
   handleLoginCommand: vi.fn(),
   handleReviewCommand: vi.fn(),
@@ -93,6 +95,7 @@ describe('dispatchSlashCommand models routing', () => {
     mocks.handleReportIssueCommand.mockClear();
     mocks.handleMcpCommand.mockClear();
     mocks.handleOMCommand.mockClear();
+    mocks.handleKnowledgeCommand.mockClear();
     mocks.handleMastraGatewayCommand.mockClear();
     mocks.handlePluginsCommand.mockClear();
     mocks.processSlashCommand.mockClear();
@@ -161,6 +164,14 @@ describe('dispatchSlashCommand models routing', () => {
     expect(mocks.handleOMCommand).toHaveBeenNthCalledWith(1, ctx);
     expect(mocks.handleOMCommand).toHaveBeenNthCalledWith(2, ctx);
     expect(mocks.handleMastraGatewayCommand).not.toHaveBeenCalled();
+  });
+
+  it('routes /knowledge to the scoped knowledge browser', async () => {
+    const state = { customSlashCommands: [] } as any;
+    const ctx = {} as any;
+
+    expect(await dispatchSlashCommand('/knowledge', state, () => ctx)).toBe(true);
+    expect(mocks.handleKnowledgeCommand).toHaveBeenCalledWith(ctx);
   });
 
   it('routes /gateway and the legacy /memory-gateway alias separately from Observational Memory settings', async () => {

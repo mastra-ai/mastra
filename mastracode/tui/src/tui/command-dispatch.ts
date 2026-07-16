@@ -30,6 +30,7 @@ import {
   handleCustomProvidersCommand,
   handleSubagentsCommand,
   handleOMCommand,
+  handleKnowledgeCommand,
   handleSettingsCommand,
   handleLoginCommand,
   handleReviewCommand as handleReviewCmd,
@@ -186,6 +187,9 @@ export async function dispatchSlashCommand(
     case 'memory':
     case 'om':
       await handleOMCommand(ctx);
+      return true;
+    case 'knowledge':
+      await handleKnowledgeCommand(ctx);
       return true;
     case 'think':
       await handleThinkCommand(ctx, args);

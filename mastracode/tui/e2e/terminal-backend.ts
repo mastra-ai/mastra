@@ -382,6 +382,7 @@ async function startMastraCodeApp(
     inlineQuestions: true,
     githubSignals: result.githubSignals,
     storageMaintenance: result.storageMaintenance,
+    knowledgeInspector: result.knowledgeInspector,
     terminal,
     ...(options?.tui ?? {}),
   });
