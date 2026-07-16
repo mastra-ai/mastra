@@ -3,6 +3,7 @@ import { Button } from '@/ds/components/Button';
 import type { TxtProps } from '@/ds/components/Txt';
 import { Txt } from '@/ds/components/Txt';
 import { ChevronIcon } from '@/ds/icons/ChevronIcon';
+import { useIsClamped } from '@/hooks/use-is-clamped';
 import { cn } from '@/lib/utils';
 
 // Tailwind needs static class names — map instead of interpolating.
@@ -40,28 +41,11 @@ export function ClampedText({
   ...txtProps
 }: ClampedTextProps) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [isClamped, setIsClamped] = useState(false);
+  const { ref, isClamped } = useIsClamped({ enabled: !isExpanded });
 
   return (
     <>
-      <Txt
-        {...txtProps}
-        className={cn(!isExpanded && clampClasses[lines], className)}
-        ref={el => {
-          if (!el || isExpanded) return;
-          const measure = () => setIsClamped(el.scrollHeight > el.clientHeight);
-          if (typeof ResizeObserver === 'undefined') {
-            measure();
-            return;
-          }
-          // Clamping depends on rendered layout — re-measure when the element
-          // resizes (fires once on observe) and once fonts finish loading.
-          const observer = new ResizeObserver(measure);
-          observer.observe(el);
-          document.fonts?.ready.then(measure).catch(() => {});
-          return () => observer.disconnect();
-        }}
-      >
+      <Txt {...txtProps} className={cn(!isExpanded && clampClasses[lines], className)} ref={ref}>
         {children}
       </Txt>
       {(isClamped || isExpanded) && (
