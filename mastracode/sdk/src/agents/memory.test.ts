@@ -13,6 +13,13 @@ vi.mock('@mastra/memory', () => ({
       this.config = config;
     }
   },
+  Subconscious: class {
+    config: unknown;
+
+    constructor(config: unknown) {
+      this.config = config;
+    }
+  },
 }));
 
 vi.mock('@mastra/fastembed', () => ({
@@ -36,6 +43,7 @@ type MemoryConfig = {
       enabled: boolean;
       temporalMarkers: boolean;
       retrieval: unknown;
+      subconscious?: { config: unknown };
       scope: 'thread' | 'resource';
       activateAfterIdle: unknown;
       activateOnProviderChange: boolean;
@@ -63,16 +71,31 @@ type MemoryConfig = {
 
 type RequestContextStub = {
   get: (key: string) => unknown;
+  set: (key: string, value: unknown) => void;
 };
 
 function createRequestContext(state: Record<string, unknown>): RequestContextStub {
   const getState = () => state;
+  const values = new Map<string, unknown>([
+    [
+      'controller',
+      {
+        getState,
+        session: { ownerId: 'mastracode-owner', state: { get: getState } },
+      },
+    ],
+  ]);
   return {
-    get: vi.fn(key => (key === 'controller' ? { getState, session: { state: { get: getState } } } : undefined)),
+    get: vi.fn(key => values.get(key)),
+    set: vi.fn((key, value) => values.set(key, value)),
   };
 }
 
-async function createMemoryConfig(state: Record<string, unknown>, projectScope: 'thread' | 'resource' = 'thread') {
+async function createMemoryConfig(
+  state: Record<string, unknown>,
+  projectScope: 'thread' | 'resource' = 'thread',
+  vector?: unknown,
+) {
   vi.resetModules();
   memoryConstructorMock.mockClear();
   getOmScopeMock.mockReturnValue(projectScope);
@@ -81,7 +104,10 @@ async function createMemoryConfig(state: Record<string, unknown>, projectScope: 
   const storage = { storage: true };
   const requestContext = createRequestContext(state);
 
-  const memory = getDynamicMemory(storage as never)({ requestContext: requestContext as never }) as unknown as {
+  const memory = getDynamicMemory(
+    storage as never,
+    vector as never,
+  )({ requestContext: requestContext as never }) as unknown as {
     config: MemoryConfig;
   };
 
@@ -136,6 +162,19 @@ describe('getDynamicMemory', () => {
       remapForCodexOAuth: true,
       requestContext,
     });
+  });
+
+  it('enables project-scoped Subconscious memory when vector storage is available', async () => {
+    const vector = { vector: true };
+    const { config, requestContext } = await createMemoryConfig({ projectPath: '/tmp/project' }, 'thread', vector);
+
+    expect(config.vector).toBe(vector);
+    expect(config.embedder).toBe('fastembed-small');
+    expect(config.options.observationalMemory.subconscious?.config).toEqual({
+      defaultScope: 'resource',
+      maxScope: 'resource',
+    });
+    expect(requestContext.get('organizationId')).toBe('mastracode-owner');
   });
 
   it('uses controller state overrides and disables async buffering for resource-scoped OM', async () => {
