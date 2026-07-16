@@ -2,17 +2,15 @@ import type { AgentController } from '@mastra/core/agent-controller';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import { formatSkillActivation } from '@mastra/core/workspace';
-import type { Skill, Workspace } from '@mastra/core/workspace';
+import type { Workspace } from '@mastra/core/workspace';
 import { and, eq } from 'drizzle-orm';
 import type { Context } from 'hono';
 
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 
-import { SKILL_ACTIVATION_MARKER } from '../../shared/skillActivation';
 import { ensureWebAuthUser, isWebAuthEnabled, webAuthTenant } from '../auth';
 import { getAppDb } from '../github/db';
 import { githubWorktrees } from '../github/schema';
-import { factoryBuiltinSkills } from './builtins';
 
 const MAX_RESOURCE_ID_LENGTH = 512;
 const MAX_SCOPE_LENGTH = 2048;
@@ -41,7 +39,6 @@ interface SkillSession {
 export interface BuildSkillRoutesDeps {
   controllerId: string;
   controller: Pick<AgentController<MastraCodeState>, 'getSessionByResource'>;
-  builtinSkills?: Readonly<Record<string, Skill>>;
   authorizeSessionAddress?: (
     context: Context,
     address: { resourceId: string; scope?: string },
@@ -116,7 +113,6 @@ async function authorizeSessionAddress(
 export function buildSkillRoutes({
   controllerId,
   controller,
-  builtinSkills = factoryBuiltinSkills,
   authorizeSessionAddress: authorize = authorizeSessionAddress,
 }: BuildSkillRoutesDeps): ApiRoute[] {
   return [
@@ -152,21 +148,16 @@ export function buildSkillRoutes({
           return c.json({ error: 'session_not_found', message: 'Agent controller session not found.' }, 404);
         }
 
-        // Factory workflow IDs resolve to immutable server-owned definitions.
-        // Unknown IDs retain generic workspace skill behavior for user-provided skills.
-        let skill = Object.hasOwn(builtinSkills, body.name) ? builtinSkills[body.name] : undefined;
-        if (!skill) {
-          const skills = session.getWorkspace().skills;
-          await skills?.maybeRefresh();
-          skill = (await skills?.get(body.name)) ?? undefined;
-        }
+        const skills = session.getWorkspace().skills;
+        await skills?.maybeRefresh();
+        const skill = await skills?.get(body.name);
         if (!skill || skill['user-invocable'] === false) {
           return c.json({ error: 'skill_not_found', message: `Skill not found: ${body.name}.` }, 404);
         }
 
         const args = body.arguments?.trim();
         const content = `${formatSkillActivation(skill)}${args ? `\n\nARGUMENTS: ${args}` : ''}`.trim();
-        const message = `<skill name="${skill.name}">\n${SKILL_ACTIVATION_MARKER}\n${escapeSkillBoundary(content)}\n</skill>`;
+        const message = `<skill name="${skill.name}">\n${escapeSkillBoundary(content)}\n</skill>`;
         await session.sendMessage({ content: message });
         return c.json({ ok: true, skill: skill.name });
       },

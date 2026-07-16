@@ -6,8 +6,14 @@ import type { ToolsInput } from '@mastra/core/agent';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
-import { Workspace, LocalFilesystem, LocalSandbox, createWorkspaceTools } from '@mastra/core/workspace';
-import type { LSPConfig } from '@mastra/core/workspace';
+import {
+  Workspace,
+  LocalFilesystem,
+  LocalSandbox,
+  LocalSkillSource,
+  createWorkspaceTools,
+} from '@mastra/core/workspace';
+import type { LSPConfig, SkillSource, SkillSourceEntry, SkillSourceStat } from '@mastra/core/workspace';
 import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import { loadSettings } from '../onboarding/settings.js';
 import type { MastraCodeState } from '../schema.js';
@@ -146,6 +152,66 @@ export function buildSkillPaths(
   });
 }
 
+const FACTORY_SKILLS_SOURCE_PATH = join(dirname(fileURLToPath(import.meta.url)), 'factory-skills');
+const FACTORY_SKILLS_MOUNT = path.resolve(path.parse(process.cwd()).root, '__mastracode_server_skills__');
+const FACTORY_SKILL_NAMES = new Set(['understand-issue', 'understand-pr']);
+
+class FactorySkillSource implements SkillSource {
+  readonly #builtinSource = new LocalSkillSource();
+  readonly #fallbackSkillRoots: Set<string>;
+
+  constructor(
+    readonly fallback: SkillSource,
+    fallbackSkillRoots: string[],
+  ) {
+    this.#fallbackSkillRoots = new Set(fallbackSkillRoots.map(skillPath => path.normalize(skillPath)));
+  }
+
+  #isBuiltinPath(skillPath: string): boolean {
+    const normalized = path.normalize(skillPath);
+    return normalized === FACTORY_SKILLS_MOUNT || normalized.startsWith(`${FACTORY_SKILLS_MOUNT}${path.sep}`);
+  }
+
+  #builtinPath(skillPath: string): string {
+    const relative = path.relative(FACTORY_SKILLS_MOUNT, path.normalize(skillPath));
+    return path.join(FACTORY_SKILLS_SOURCE_PATH, relative);
+  }
+
+  exists(skillPath: string): Promise<boolean> {
+    return this.#isBuiltinPath(skillPath)
+      ? this.#builtinSource.exists(this.#builtinPath(skillPath))
+      : this.fallback.exists(skillPath);
+  }
+
+  stat(skillPath: string): Promise<SkillSourceStat> {
+    return this.#isBuiltinPath(skillPath)
+      ? this.#builtinSource.stat(this.#builtinPath(skillPath))
+      : this.fallback.stat(skillPath);
+  }
+
+  readFile(skillPath: string): Promise<string | Buffer> {
+    return this.#isBuiltinPath(skillPath)
+      ? this.#builtinSource.readFile(this.#builtinPath(skillPath))
+      : this.fallback.readFile(skillPath);
+  }
+
+  async readdir(skillPath: string): Promise<SkillSourceEntry[]> {
+    if (this.#isBuiltinPath(skillPath)) {
+      return this.#builtinSource.readdir(this.#builtinPath(skillPath));
+    }
+    const entries = await this.fallback.readdir(skillPath);
+    if (this.#fallbackSkillRoots.has(path.normalize(skillPath))) {
+      return entries.filter(entry => !FACTORY_SKILL_NAMES.has(entry.name));
+    }
+    return entries;
+  }
+
+  realpath(skillPath: string): Promise<string> {
+    if (this.#isBuiltinPath(skillPath)) return Promise.resolve(path.normalize(skillPath));
+    return this.fallback.realpath ? this.fallback.realpath(skillPath) : Promise.resolve(skillPath);
+  }
+}
+
 /**
  * Paths the agent is always allowed to access (in addition to the project root
  * and any per-thread sandboxAllowedPaths). The OS temp directory is included
@@ -181,12 +247,14 @@ async function getSandboxWorkspace({
   sandboxId,
   workdir,
   worktreePath,
+  configDir,
   mastra,
 }: {
   githubProjectId: string;
   sandboxId: string;
   workdir: string;
   worktreePath?: string;
+  configDir: string;
   mastra?: Mastra;
 }): Promise<Workspace> {
   // Bind the workspace to the active worktree when one is set, so file tools and
@@ -214,6 +282,8 @@ async function getSandboxWorkspace({
 
   const sandbox = await reattachProjectSandbox(sandboxId);
   const filesystem = new SandboxFilesystem({ sandbox, workdir: boundWorkdir });
+  const projectSkillPaths = [path.join(configDir, 'skills'), '.claude/skills', '.agents/skills'];
+  const skillPaths = [FACTORY_SKILLS_MOUNT, ...projectSkillPaths];
 
   return new Workspace({
     id: workspaceId,
@@ -221,6 +291,8 @@ async function getSandboxWorkspace({
     filesystem,
     sandbox: sandbox as unknown as ConstructorParameters<typeof Workspace>[0]['sandbox'],
     tools: MASTRACODE_WORKSPACE_TOOLS,
+    skills: skillPaths,
+    skillSource: new FactorySkillSource(filesystem, projectSkillPaths),
   });
 }
 
@@ -237,14 +309,15 @@ export async function getDynamicWorkspace({
   // GitHub/cloud-sandbox-backed project: the repo lives inside a remote sandbox,
   // not on the server host. Reattach to the already-provisioned + materialized
   // sandbox (the SPA called `.../ensure` first, persisting sandboxId/workdir on
-  // controller state) and build a sandbox-backed Workspace. LSP/host skill paths
-  // are skipped for these workspaces (follow-up).
+  // controller state) and build a sandbox-backed Workspace. Server-owned skills
+  // remain on the host while project skills resolve through the sandbox filesystem.
   if (state?.githubProjectId && state.sandboxId && state.sandboxWorkdir) {
     return getSandboxWorkspace({
       githubProjectId: state.githubProjectId,
       sandboxId: state.sandboxId,
       workdir: state.sandboxWorkdir,
       worktreePath: state.worktreePath,
+      configDir: state.configDir ?? DEFAULT_CONFIG_DIR,
       mastra,
     });
   }
@@ -257,10 +330,15 @@ export async function getDynamicWorkspace({
 
   const projectPath = path.resolve(rawProjectPath);
   const configDir = state?.configDir ?? DEFAULT_CONFIG_DIR;
-  const skillPaths = buildSkillPaths(projectPath, configDir, state?.homeDir, state?.pluginSkillPaths ?? []);
+  const projectSkillPaths = buildSkillPaths(projectPath, configDir, state?.homeDir, state?.pluginSkillPaths ?? []);
+  const skillPaths = [FACTORY_SKILLS_MOUNT, ...projectSkillPaths];
   const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectPath}`;
   const sandboxPaths = state?.sandboxAllowedPaths ?? [];
-  const allowedPaths = [...skillPaths, ...DEFAULT_ALLOWED_PATHS, ...sandboxPaths.map((p: string) => path.resolve(p))];
+  const allowedPaths = [
+    ...projectSkillPaths,
+    ...DEFAULT_ALLOWED_PATHS,
+    ...sandboxPaths.map((p: string) => path.resolve(p)),
+  ];
 
   // All modes share the same workspace tool configuration.  Per-mode tool
   // visibility is enforced at LLM-call time via `availableTools` /
@@ -290,19 +368,21 @@ export async function getDynamicWorkspace({
   };
 
   // First call for this project — create the workspace
+  const filesystem = new LocalFilesystem({
+    basePath: projectPath,
+    allowedPaths,
+  });
   return new Workspace({
     id: workspaceId,
     name: 'Mastra Code Workspace',
-    filesystem: new LocalFilesystem({
-      basePath: projectPath,
-      allowedPaths,
-    }),
+    filesystem,
     sandbox: new LocalSandbox({
       workingDirectory: projectPath,
       env: buildSandboxEnv(),
     }),
     tools: workspaceTools,
-    ...(skillPaths.length > 0 ? { skills: skillPaths } : {}),
+    skills: skillPaths,
+    skillSource: new FactorySkillSource(filesystem, projectSkillPaths),
     lsp: lspConfig,
   });
 }

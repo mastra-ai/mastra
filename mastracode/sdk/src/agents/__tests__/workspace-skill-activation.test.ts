@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
 import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
+import type { LocalFilesystem } from '@mastra/core/workspace';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const originalCwd = process.cwd();
@@ -130,6 +131,39 @@ describe('mastracode workspace skill activation', () => {
       expect(toolResultChunk.payload.result).toContain('# Temp Symlink Skill');
       expect(toolResultChunk.payload.result).toContain('Use the canonical skill.');
       expect(capturedPrompts).toHaveLength(2);
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('loads packaged Factory skills without granting file tools write access to their source', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastracode-factory-skill-'));
+
+    try {
+      const { getDynamicWorkspace } = await import('../workspace.js');
+      const requestContext = new RequestContext();
+      const getState = () => ({
+        projectPath: tempDir,
+        homeDir: tempDir,
+        sandboxAllowedPaths: [],
+      });
+      requestContext.set('controller', {
+        modeId: 'build',
+        getState,
+        session: { state: { get: getState } },
+      });
+
+      const workspace = await getDynamicWorkspace({ requestContext });
+      const skill = await workspace.skills?.get('understand-issue');
+      const filesystem = workspace.filesystem as LocalFilesystem;
+
+      expect(skill?.instructions).toContain('# Understand Issue');
+      expect(filesystem.allowedPaths).not.toContain('/__mastracode_server_skills__');
+      await expect(filesystem.writeFile(path.join(skill!.path, 'SKILL.md'), 'mutated')).rejects.toMatchObject({
+        name: 'PermissionError',
+        code: 'EACCES',
+      });
+      expect((await workspace.skills?.get('understand-issue'))?.instructions).toContain('# Understand Issue');
     } finally {
       await fs.rm(tempDir, { recursive: true, force: true });
     }

@@ -296,7 +296,7 @@ describe('ChatMessageList', () => {
                 parts: [
                   {
                     type: 'text',
-                    text: '<skill name="understand-issue">\n<!-- mastracode:skill-activation:v1 -->\n# Understand Issue\n\nInvestigate every relevant code path.\n\nARGUMENTS: https://github.com/mastra-ai/mastra/issues/15\n</skill>',
+                    text: '<skill name="understand-issue">\n# Understand Issue\n\nInvestigate every relevant code path.\n\nARGUMENTS: https://github.com/mastra-ai/mastra/issues/15\n</skill>',
                   },
                 ],
               },
@@ -321,7 +321,7 @@ describe('ChatMessageList', () => {
     expect(screen.queryByText('Investigate every relevant code path.')).not.toBeInTheDocument();
   });
 
-  it('given an ordinary user message containing skill-like markup, then it remains a normal message', async () => {
+  it('given skill-like markup outside the exact TUI envelope, then it remains a normal message', async () => {
     seedProject();
     useAgentControllerHandlers();
     server.use(
@@ -337,7 +337,7 @@ describe('ChatMessageList', () => {
                 parts: [
                   {
                     type: 'text',
-                    text: '<skill name="understand-issue">\nnot an invocation\n</skill>',
+                    text: 'Please inspect this literal example:\n<skill name="understand-issue">\nnot an invocation\n</skill>',
                   },
                 ],
               },
