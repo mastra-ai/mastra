@@ -15,30 +15,26 @@ vi.mock('./db', () => ({
   }),
 }));
 
+import { resetSandboxFactory, setSandboxFactory } from '../sandbox/fleet';
+import type { MaterializationSandbox, SandboxCommandResult } from '../sandbox/fleet';
 import {
-  computeSandboxWorkdir,
   computeWorktreePath,
   configureGitIdentity,
   createPullRequest,
   ensureProjectSandbox,
   ensureWorktree,
-  getSandboxIdleMinutes,
-  getSandboxProvider,
-  isSandboxEnabled,
   isValidGitRef,
   materializeRepo,
   MaterializeError,
   pushBranch,
-  resetSandboxFactory,
   resolveGitIdentity,
   runWorktreeSetup,
   safeBranchDir,
-  setSandboxFactory,
   shellQuote,
   withInstallToken,
   WorktreeError,
 } from './sandbox';
-import type { MaterializationSandbox, RepoMaterializeInfo, SandboxCommandResult } from './sandbox';
+import type { RepoMaterializeInfo } from './sandbox';
 import type { GithubProjectSandboxRow } from './schema';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { __resetRuntimeConfigForTests, seedRuntimeConfig } from '../runtime-config';
@@ -123,52 +119,6 @@ afterEach(() => {
   __resetRuntimeConfigForTests();
 });
 
-describe('getSandboxProvider', () => {
-  it('reports the seeded template provider', () => {
-    seedSandboxRuntime({ provider: 'railway' });
-    expect(getSandboxProvider()).toBe('railway');
-    __resetRuntimeConfigForTests();
-    seedSandboxRuntime({ provider: 'local' });
-    expect(getSandboxProvider()).toBe('local');
-  });
-
-  it('reports none when no sandbox is configured', () => {
-    expect(getSandboxProvider()).toBe('none');
-  });
-});
-
-describe('isSandboxEnabled', () => {
-  it('is true when a sandbox template is seeded', () => {
-    seedSandboxRuntime();
-    expect(isSandboxEnabled()).toBe(true);
-  });
-
-  it('is false when no sandbox is configured', () => {
-    expect(isSandboxEnabled()).toBe(false);
-  });
-});
-
-describe('computeSandboxWorkdir', () => {
-  it('nests owner/name under the default /workspace base', () => {
-    seedSandboxRuntime();
-    expect(computeSandboxWorkdir('octocat/hello')).toBe('/workspace/octocat/hello');
-  });
-
-  it('nests owner/name under a configured base', () => {
-    seedSandboxRuntime({ workdirBase: '/srv/checkouts' });
-    expect(computeSandboxWorkdir('octocat/hello')).toBe('/srv/checkouts/octocat/hello');
-  });
-
-  it('sanitizes unsafe path segments', () => {
-    seedSandboxRuntime();
-    expect(computeSandboxWorkdir('ac me/.hidden repo')).toBe('/workspace/ac-me/hidden-repo');
-  });
-
-  it('throws when no sandbox is configured', () => {
-    expect(() => computeSandboxWorkdir('octocat/hello')).toThrow(/No sandbox configured/);
-  });
-});
-
 describe('ensureProjectSandbox', () => {
   it('provisions a new sandbox and persists the provider id on first open', async () => {
     const sandbox = new FakeSandbox();
@@ -231,22 +181,6 @@ describe('ensureProjectSandbox', () => {
     expect(fresh.startCount).toBe(1);
     // The stale id is cleared, then the new provider id persisted.
     expect(dbUpdates).toEqual([{ sandboxId: null }, { sandboxId: 'railway-vm-new' }]);
-  });
-});
-
-describe('getSandboxIdleMinutes', () => {
-  it('defaults to 30 minutes when the template does not expose one', () => {
-    seedSandboxRuntime();
-    expect(getSandboxIdleMinutes()).toBe(30);
-  });
-
-  it('defaults to 30 minutes when no sandbox is configured', () => {
-    expect(getSandboxIdleMinutes()).toBe(30);
-  });
-
-  it('reads the window back from the template sandbox', () => {
-    seedSandboxRuntime({ idleTimeoutMinutes: 45 });
-    expect(getSandboxIdleMinutes()).toBe(45);
   });
 });
 

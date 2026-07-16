@@ -123,14 +123,13 @@ import { mountApiRoutes } from '../test-utils';
 import type * as RoutesModule from './routes';
 import {
   __resetLiveSandboxCount,
-  ensureProjectSandbox,
   getLiveSandboxCount,
   resetSandboxFactory,
   SandboxBudgetError,
   setSandboxFactory,
-  teardownProjectSandbox,
-} from './sandbox';
-import type { MaterializationSandbox } from './sandbox';
+} from '../sandbox/fleet';
+import type { MaterializationSandbox } from '../sandbox/fleet';
+import { ensureProjectSandbox, teardownProjectSandbox } from './sandbox';
 import { githubProjectSandboxes } from './schema';
 import type { GithubProjectSandboxRow } from './schema';
 
