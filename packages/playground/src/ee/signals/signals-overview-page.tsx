@@ -1,4 +1,30 @@
-export {
-  SignalsOverviewPage,
-  SignalsOverviewPage as default,
-} from '@mastra/playground-ui/ee/signals/components/signals-overview-page';
+import { SignalsOverviewPage as SignalsEmptyState } from '@mastra/playground-ui/ee/signals';
+
+import { useThemeEntities } from './hooks';
+import { SankeySignals } from './sankey-signals';
+import { SignalsLoadingSkeleton } from './signals-loading-skeleton';
+import type { TraceSignalName } from './types';
+
+const SIGNAL_ORDER: TraceSignalName[] = ['goal', 'outcome', 'behavior', 'sentiment'];
+
+export function SignalsOverviewPage() {
+  const entitiesQuery = useThemeEntities('agent');
+
+  if (entitiesQuery.isPending) {
+    return <SignalsLoadingSkeleton />;
+  }
+
+  const entity = entitiesQuery.data?.entities.find(currentEntity => currentEntity.availableSignals.length >= 2);
+
+  if (!entity) {
+    return <SignalsEmptyState />;
+  }
+
+  const signalNames = SIGNAL_ORDER.filter(signalName => entity.availableSignals.includes(signalName));
+
+  if (signalNames.length < 2) {
+    return <SignalsEmptyState />;
+  }
+
+  return <SankeySignals entityId={entity.entityId} entityType="agent" signalNames={signalNames} />;
+}

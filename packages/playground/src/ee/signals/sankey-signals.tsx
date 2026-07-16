@@ -1,7 +1,9 @@
 import { Sankey, SankeyChart } from '@mastra/playground-ui/components/SankeyChart';
+import { SignalsOverviewPage as SignalsEmptyState } from '@mastra/playground-ui/ee/signals';
 
 import { useThemeFlow, useThemeSnapshots } from './hooks';
 import { themeFlowToSankeyData } from './sankey-signals-data';
+import { SignalsLoadingSkeleton } from './signals-loading-skeleton';
 import type { TraceSignalName } from './types';
 
 export interface SankeySignalsProps {
@@ -12,19 +14,34 @@ export interface SankeySignalsProps {
 }
 
 export function SankeySignals({ entityId, entityType = 'agent', signalNames, height }: SankeySignalsProps) {
-  const snapshots = useThemeSnapshots(entityId, entityType, signalNames);
-  const snapshotId = snapshots.data?.snapshots[0]?.snapshotId;
-  const flow = useThemeFlow(entityId, entityType, signalNames, snapshotId);
+  const snapshotsQuery = useThemeSnapshots(entityId, entityType, signalNames);
+  const snapshot = snapshotsQuery.data?.snapshots[0];
+  const flowQuery = useThemeFlow(entityId, entityType, signalNames, snapshot?.snapshotId);
 
-  if (snapshots.isPending || (snapshotId && flow.isPending)) return <p>Loading signal flow…</p>;
-  if (snapshots.isError || flow.isError) return <p>Unable to load signal flow.</p>;
-  if (!snapshotId || !flow.data) return <p>No signal flow is available for this entity.</p>;
+  if (snapshotsQuery.isPending || (snapshot !== undefined && flowQuery.isPending)) {
+    return <SignalsLoadingSkeleton />;
+  }
 
-  const { columns, records } = themeFlowToSankeyData(flow.data);
+  if (snapshotsQuery.isError || flowQuery.isError) {
+    return <p>Unable to load signal flow.</p>;
+  }
+
+  if (!snapshot) {
+    return <SignalsEmptyState />;
+  }
+
+  const flow = flowQuery.data;
+  const populatedStageCount = flow?.stages.filter(stage => stage.nodes.length > 0).length ?? 0;
+
+  if (!flow || populatedStageCount < 2) {
+    return <SignalsEmptyState />;
+  }
+
+  const { columns, records } = themeFlowToSankeyData(flow);
 
   return (
     <section aria-label="Signal theme flow">
-      <Sankey columns={columns} data={records}>
+      <Sankey data={records} columns={columns}>
         <SankeyChart height={height} />
       </Sankey>
     </section>

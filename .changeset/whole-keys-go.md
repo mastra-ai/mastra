@@ -2,4 +2,4 @@
 '@mastra/playground-ui': patch
 ---
 
-Simplified the Signals page to a focused onboarding state and added Agent Learning theme-flow wiring that composes the existing Sankey chart.
+Updated the Signals page to show Agent Learning theme-flow data when available and added an animated onboarding pipeline with persistent documentation and incoming-trace actions when no usable signal data exists.

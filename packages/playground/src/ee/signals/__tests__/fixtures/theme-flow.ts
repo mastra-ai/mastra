@@ -1,4 +1,20 @@
-import type { ThemeFlowResponse, ThemeSnapshotsResponse } from '../../types';
+import type { ThemeEntitiesResponse, ThemeFlowResponse, ThemeSnapshotsResponse } from '../../types';
+
+export const emptyThemeEntitiesResponse: ThemeEntitiesResponse = { entities: [] };
+
+export const populatedThemeEntitiesResponse: ThemeEntitiesResponse = {
+  entities: [
+    {
+      entityId: 'support-agent',
+      entityType: 'agent',
+      availableSignals: ['behavior', 'goal', 'outcome', 'sentiment'],
+      latestWindow: {
+        startedAt: '2026-07-01T00:00:00.000Z',
+        endedAt: '2026-07-08T00:00:00.000Z',
+      },
+    },
+  ],
+};
 
 export const themeSnapshotsResponse: ThemeSnapshotsResponse = {
   snapshots: [
@@ -13,6 +29,8 @@ export const themeSnapshotsResponse: ThemeSnapshotsResponse = {
     },
   ],
 };
+
+export const emptyThemeSnapshotsResponse: ThemeSnapshotsResponse = { snapshots: [] };
 
 export const themeFlowResponse: ThemeFlowResponse = {
   snapshot: themeSnapshotsResponse.snapshots[0],
@@ -55,4 +73,10 @@ export const themeFlowResponse: ThemeFlowResponse = {
       targetShare: 1,
     },
   ],
+};
+
+export const singleStageThemeFlowResponse: ThemeFlowResponse = {
+  ...themeFlowResponse,
+  stages: themeFlowResponse.stages.slice(0, 1),
+  links: [],
 };
