@@ -222,22 +222,29 @@ export async function listWorkItems(orgId: string, githubProjectId: string): Pro
   return rows.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
 }
 
+/** Discriminated result of `upsertWorkItem`: fresh insert vs source-key reuse. */
+export type UpsertWorkItemResult =
+  | { created: true; item: WorkItemRow }
+  | { created: false; item: WorkItemRow; previous: WorkItemPriorState };
+
 /**
  * Create a work item, reusing the existing record when `sourceKey` already has
  * one for the project (acting twice on the same issue must not duplicate the
  * card). On reuse the provided stages replace the current ones (with the
- * transition recorded in history) and sessions/metadata are merged in.
+ * transition recorded in history) and sessions/metadata are merged in. The
+ * result discriminates insert from reuse so callers can audit the actual
+ * outcome.
  */
 export async function upsertWorkItem(params: {
   orgId: string;
   userId: string;
   githubProjectId: string;
   input: CreateWorkItemInput;
-}): Promise<WorkItemRow> {
+}): Promise<UpsertWorkItemResult> {
   const { orgId, userId, githubProjectId, input } = params;
   const now = new Date();
 
-  const reuseExisting = async (): Promise<WorkItemRow | null> => {
+  const reuseExisting = async (): Promise<UpsertWorkItemResult | null> => {
     if (input.sourceKey === null) return null;
     const updated = await getAppDb().transaction(tx =>
       applyUpdateLocked(
@@ -248,7 +255,7 @@ export async function upsertWorkItem(params: {
         now,
       ),
     );
-    return updated?.item ?? null;
+    return updated ? { created: false, item: updated.item, previous: updated.previous } : null;
   };
 
   const reused = await reuseExisting();
@@ -272,7 +279,7 @@ export async function upsertWorkItem(params: {
 
   try {
     const [inserted] = await getAppDb().insert(workItems).values(row).returning();
-    return inserted!;
+    return { created: true, item: inserted! };
   } catch (err) {
     // Concurrent create for the same sourceKey: the partial unique index won
     // the race — fall back to updating the row it protected.
@@ -345,13 +352,11 @@ export async function updateWorkItem(
   );
 }
 
-/** Delete an org's work item. Returns the deleted row, or `null` when it doesn't exist in the org. */
+/** Delete an org's work item. Returns the row actually deleted, or `null` when it doesn't exist in the org. */
 export async function deleteWorkItem(orgId: string, id: string): Promise<WorkItemRow | null> {
-  const [existing] = await getAppDb()
-    .select()
-    .from(workItems)
-    .where(and(eq(workItems.id, id), eq(workItems.orgId, orgId)));
-  if (!existing) return null;
-  await getAppDb().delete(workItems).where(eq(workItems.id, id));
-  return existing;
+  const [deleted] = await getAppDb()
+    .delete(workItems)
+    .where(and(eq(workItems.id, id), eq(workItems.orgId, orgId)))
+    .returning();
+  return deleted ?? null;
 }

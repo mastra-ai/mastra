@@ -237,7 +237,7 @@ describe('Factory Audit page', () => {
               actorType: 'agent',
               action: 'factory.agent.push',
               targets: [{ type: 'worktree', id: '/sandbox/mastra-worktrees/feat-audit' }],
-              metadata: { command: 'git push origin feat/audit', branch: 'feat/audit', startedBy: 'user_alice' },
+              metadata: { branch: 'feat/audit', startedBy: 'user_alice' },
             }),
           ],
         },

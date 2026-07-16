@@ -117,12 +117,19 @@ vi.mock('../github/db', () => {
       }),
     }),
     delete: (table: any) => ({
-      where: async (cond: any) => {
-        const rows = rowsOf(table);
-        const remaining = rows.filter(row => !matches(table, row, cond));
-        rows.length = 0;
-        rows.push(...remaining);
-      },
+      where: (cond: any) => ({
+        returning: async () => {
+          // Yield like the select does so concurrent deletes interleave and
+          // only one caller wins the row (regression coverage for atomicity).
+          await new Promise(resolve => setTimeout(resolve, 0));
+          const rows = rowsOf(table);
+          const deleted = rows.filter(row => matches(table, row, cond));
+          const remaining = rows.filter(row => !matches(table, row, cond));
+          rows.length = 0;
+          rows.push(...remaining);
+          return deleted;
+        },
+      }),
     }),
     transaction: (fn: (tx: any) => Promise<unknown>) => {
       const run = txTail.then(() => fn(makeDbClient()));
@@ -478,6 +485,28 @@ describe('audit events', () => {
       targets: [{ type: 'work_item', id: item.id, name: 'Fix the login flow' }],
       metadata: { source: 'github-issue', sourceKey: 'github-issue:42', stages: ['intake'] },
     });
+  });
+
+  it('records updated (not created) when a POST reuses an existing sourceKey', async () => {
+    const item = await createItem();
+    auditRecorded = [];
+
+    const session = { projectPath: '/sb/wt/issue-42', branch: 'factory/issue-42', threadId: 't-1' };
+    await json(
+      'POST',
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      createBody({ stages: ['execute'], sessions: { work: session } }),
+    );
+    expect(auditRecorded.map(e => e.action)).toEqual([
+      'factory.work_item.updated',
+      'factory.work_item.stage_moved',
+      'factory.run.started',
+    ]);
+    expect(auditRecorded[1]).toMatchObject({
+      targets: [{ type: 'work_item', id: item.id, name: 'Fix the login flow' }],
+      metadata: { from: ['intake'], to: ['execute'] },
+    });
+    expect(auditRecorded[2].metadata).toMatchObject({ role: 'work', branch: 'factory/issue-42' });
   });
 
   it('records updated + stage_moved with the server-diffed from/to on a stage PATCH', async () => {

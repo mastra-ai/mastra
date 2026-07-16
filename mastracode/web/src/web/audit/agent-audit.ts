@@ -26,9 +26,6 @@ import { forwardToWorkOS } from './workos-sink';
 
 type GithubSessionState = { githubProjectId?: string };
 
-/** Bounded excerpt of the matched command line stored in event metadata. */
-const MAX_COMMAND_EXCERPT_LENGTH = 200;
-
 export interface EmitAgentAuditInput {
   /** Dot-namespaced action, e.g. 'factory.agent.commit'. */
   action: string;
@@ -85,12 +82,6 @@ const GIT_COMMIT_RE = /(?:^|\n|;|&&|\|\|)\s*git\s+commit(?:\s|$)/;
 const GIT_PUSH_RE = /(?:^|\n|;|&&|\|\|)\s*git\s+push(?:\s|$)/;
 const GH_PR_CREATE_RE = /(?:^|\n|;|&&|\|\|)\s*gh\s+pr\s+create(?:\s|$)/;
 
-/** First line of the command that contains the given pattern, truncated. */
-function commandExcerpt(command: string, pattern: RegExp): string | undefined {
-  const line = command.split('\n').find(l => pattern.test(l));
-  return line?.trim().slice(0, MAX_COMMAND_EXCERPT_LENGTH);
-}
-
 /** Parse the branch from a plain `git push <remote> <branch>` invocation. */
 function parsePushedBranch(command: string): string | undefined {
   const match = command.match(
@@ -120,7 +111,6 @@ export async function observeAgentGitAction(toolContext: ToolObserverContext): P
       await emitAgentAudit(toolContext.context, {
         action: 'factory.agent.commit',
         targets: worktreePath ? [{ type: 'worktree', id: worktreePath }] : [],
-        metadata: { command: commandExcerpt(command, /\bgit\s+commit\b/) },
       });
     }
 
@@ -129,10 +119,7 @@ export async function observeAgentGitAction(toolContext: ToolObserverContext): P
       await emitAgentAudit(toolContext.context, {
         action: 'factory.agent.push',
         targets: worktreePath ? [{ type: 'worktree', id: worktreePath }] : [],
-        metadata: {
-          command: commandExcerpt(command, /\bgit\s+push\b/),
-          ...(branch ? { branch } : {}),
-        },
+        ...(branch ? { metadata: { branch } } : {}),
       });
     }
 
@@ -141,7 +128,6 @@ export async function observeAgentGitAction(toolContext: ToolObserverContext): P
       await emitAgentAudit(toolContext.context, {
         action: 'factory.agent.pr_opened',
         targets: url ? [{ type: 'pull_request', id: url }] : [],
-        metadata: { command: commandExcerpt(command, /\bgh\s+pr\s+create\b/) },
       });
     }
   } catch (err) {

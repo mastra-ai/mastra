@@ -80,7 +80,7 @@ describe('emitAgentAudit', () => {
     await emitAgentAudit(makeRequestContext(), {
       action: 'factory.agent.commit',
       targets: [{ type: 'worktree', id: SCOPE }],
-      metadata: { command: 'git commit -m "x"' },
+      metadata: { branch: 'main' },
     });
 
     expect(recorded).toHaveLength(1);
@@ -91,7 +91,7 @@ describe('emitAgentAudit', () => {
       action: 'factory.agent.commit',
       githubProjectId: PROJECT,
       context: {},
-      metadata: { command: 'git commit -m "x"', startedBy: 'user_abc' },
+      metadata: { branch: 'main', startedBy: 'user_abc' },
     });
     expect(forwardToWorkOS).toHaveBeenCalledTimes(1);
   });
@@ -125,7 +125,7 @@ describe('emitAgentAudit', () => {
 
 // ── observeAgentGitAction ────────────────────────────────────────────────
 describe('observeAgentGitAction', () => {
-  it('records a commit event with the worktree target and a bounded command excerpt', async () => {
+  it('records a commit event with the worktree target', async () => {
     await observeAgentGitAction(toolCall('git commit -m "feat: add audit trail"'));
 
     expect(recorded).toHaveLength(1);
@@ -134,13 +134,18 @@ describe('observeAgentGitAction', () => {
       actorId: `agent:${THREAD}`,
       actorType: 'agent',
       targets: [{ type: 'worktree', id: SCOPE }],
-      metadata: { command: 'git commit -m "feat: add audit trail"', startedBy: 'user_abc' },
+      metadata: { startedBy: 'user_abc' },
     });
   });
 
-  it('truncates long command excerpts to 200 characters', async () => {
-    await observeAgentGitAction(toolCall(`git commit -m "${'x'.repeat(400)}"`));
-    expect((recorded[0].metadata.command as string).length).toBe(200);
+  it('never persists the raw command in event metadata', async () => {
+    await observeAgentGitAction(
+      toolCall('git commit -m "x" && git push https://token@github.com/mastra-ai/mastra.git main'),
+    );
+    expect(recorded.length).toBeGreaterThan(0);
+    for (const row of recorded) {
+      expect(row.metadata.command).toBeUndefined();
+    }
   });
 
   it('records a push event with the branch parsed from the command', async () => {
@@ -149,7 +154,7 @@ describe('observeAgentGitAction', () => {
     expect(recorded).toHaveLength(1);
     expect(recorded[0]).toMatchObject({
       action: 'factory.agent.push',
-      metadata: { command: 'git push origin feat/audit-logging', branch: 'feat/audit-logging' },
+      metadata: { branch: 'feat/audit-logging' },
     });
   });
 

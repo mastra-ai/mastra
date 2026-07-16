@@ -148,9 +148,10 @@ const prepared = await prepareAgentControllerMount({
           const pullRequestUrl = parseCreatedPullRequest(context);
           const requestContext = (context.context as { requestContext?: RequestContext } | undefined)?.requestContext;
           // Audit externally-visible git side effects performed by the agent
-          // (commit / push / PR creation). Fire-and-forget; never throws.
+          // (commit / push / PR creation). Awaited so the local audit write
+          // completes before teardown; never throws (failures are swallowed).
           if (requestContext) {
-            void observeAgentGitAction({ ...context, context: requestContext });
+            await observeAgentGitAction({ ...context, context: requestContext });
           }
           if (pullRequestUrl && requestContext) {
             await subscribeCurrentSessionToPullRequest(requestContext, pullRequestUrl, 'auto-gh-pr-create');

@@ -177,18 +177,25 @@ export function buildFactoryRoutes(): ApiRoute[] {
         const input = parseCreateWorkItem(body);
         if (!input) return c.json({ error: 'invalid_work_item' }, 400);
 
-        const item = await upsertWorkItem({
+        const result = await upsertWorkItem({
           orgId: resolved.orgId,
           userId: resolved.userId,
           githubProjectId: resolved.projectId,
           input,
         });
-        await emitAudit(loose(c), {
-          action: 'factory.work_item.created',
-          projectId: resolved.projectId,
-          targets: [{ type: 'work_item', id: item.id, name: item.title }],
-          metadata: { source: item.source, sourceKey: item.sourceKey, stages: item.stages },
-        });
+        const item = result.item;
+        if (result.created) {
+          await emitAudit(loose(c), {
+            action: 'factory.work_item.created',
+            projectId: resolved.projectId,
+            targets: [{ type: 'work_item', id: item.id, name: item.title }],
+            metadata: { source: item.source, sourceKey: item.sourceKey, stages: item.stages },
+          });
+        } else {
+          // Source-key reuse: the POST updated an existing card, so audit it
+          // as an update (plus stage/run events) instead of a false creation.
+          await auditWorkItemPatch(loose(c), item, result.previous, input as unknown as Record<string, unknown>);
+        }
         return c.json({ workItem: item });
       },
     }),
