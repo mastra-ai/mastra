@@ -309,11 +309,23 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
         values: result.extractedValues,
         failures: result.extractionFailures,
         previousValues,
+        rawObservations: result.observations,
         threadId,
         resourceId: this.resourceId,
         mainAgent: this.opts.agent,
         memory: this.deps.memory,
-        sendSignal: this.opts.sendSignal,
+        sendSignal: this.opts.agent
+          ? async signal => {
+              const delivery = this.opts.agent!.sendSignal(signal, {
+                resourceId: this.resourceId,
+                threadId,
+                ifActive: { behavior: 'deliver' },
+                ifIdle: { behavior: 'persist' },
+              });
+              await delivery.accepted;
+              return delivery.signal;
+            }
+          : undefined,
         sendStateSignal: this.opts.sendStateSignal,
         requestContext: this.opts.requestContext,
       });

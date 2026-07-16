@@ -49,6 +49,7 @@ export {
   SUBCONSCIOUS_ACTIVITY_STATE_ID,
   SubconsciousCaptureExtractor,
   subconsciousCaptureSchema,
+  SubconsciousRemindExtractor,
 } from './subconscious';
 export type {
   KnowledgeSemanticIndexCoordinatorConfig,

@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 import type { Memory } from '../..';
 
-type ExtractorMode = 'inline' | 'structured';
+type ExtractorMode = 'inline' | 'structured' | 'hook';
 export type ExtractorSource = 'observer' | 'reflector';
 
 export interface ExtractorRuntimeContext {
@@ -21,6 +21,7 @@ export interface ExtractorOnExtractedContext<T = unknown> extends ExtractorRunti
   threadId: string;
   previous?: T;
   current: T;
+  rawObservations?: string;
   sendSignal?: ProcessorContext['sendSignal'];
   sendStateSignal?: ProcessorContext['sendStateSignal'];
 }
@@ -31,8 +32,10 @@ type ExtractorConfigValue<TValue> = TValue | ((context: ExtractorRuntimeContext)
 export interface ExtractorConfig<T = unknown> {
   /** Human-readable extractor name. Converted to a stable kebab-case slug for XML tags and metadata keys. */
   name: string;
-  /** Instructions describing what this extractor should return. */
-  instructions: ExtractorConfigValue<string>;
+  /** Hook extractors run after observation without contributing to the extraction prompt. */
+  mode?: 'hook';
+  /** Instructions describing what this extractor should return. Not used by hook extractors. */
+  instructions?: ExtractorConfigValue<string>;
   /** Zod schema used for structured extraction. Omit to extract an inline string value from the observer/reflector output. */
   schema?: ExtractorConfigValue<z.ZodType<T> | undefined>;
   /** Whether the previous extraction should be shown to the extractor prompt. Defaults to true. */
@@ -130,12 +133,22 @@ export class Extractor<T = unknown> {
     const name = config.name.trim();
     const instructions = typeof config.instructions === 'string' ? config.instructions.trim() : undefined;
     const slug = slugifyExtractorName(name);
+    const isHook = config.mode === 'hook';
 
     if (!name) {
       throw new Error('Extractor name is required.');
     }
+    if (!isHook && !config.instructions) {
+      throw new Error(`Extractor "${name}" must include instructions.`);
+    }
     if (instructions !== undefined && !instructions) {
       throw new Error(`Extractor "${name}" must include instructions.`);
+    }
+    if (isHook && !config.onExtracted) {
+      throw new Error(`Hook extractor "${name}" must include an onExtracted handler.`);
+    }
+    if (isHook && (config.instructions || config.schema)) {
+      throw new Error(`Hook extractor "${name}" cannot include instructions or a schema.`);
     }
     assertValidSlug(slug, name);
     if (!internal && RESERVED_XML_TAGS.has(slug)) {
@@ -144,18 +157,24 @@ export class Extractor<T = unknown> {
 
     this.name = name;
     this.slug = slug;
-    this.instructionsConfig = config.instructions;
+    this.instructionsConfig = config.instructions ?? '';
     this.schemaConfig = config.schema;
     this.instructions = instructions ?? '';
-    this.schema = (typeof config.schema === 'function' ? z.string() : (config.schema ?? z.string())) as z.ZodType<T>;
-    this.mode = internal || !config.schema ? 'inline' : 'structured';
-    this.includePreviousExtraction = config.includePreviousExtraction ?? true;
-    this.metadataKeyPath = config.metadataKeyPath ?? `extracted.${slug}`;
+    this.schema = (
+      isHook ? z.unknown() : typeof config.schema === 'function' ? z.string() : (config.schema ?? z.string())
+    ) as z.ZodType<T>;
+    this.mode = isHook ? 'hook' : internal || !config.schema ? 'inline' : 'structured';
+    this.includePreviousExtraction = isHook ? false : (config.includePreviousExtraction ?? true);
+    this.metadataKeyPath = isHook ? false : (config.metadataKeyPath ?? `extracted.${slug}`);
     this.onExtracted = config.onExtracted;
     this.internal = internal;
   }
 
   async resolve(context: ExtractorRuntimeContext): Promise<Extractor<T>> {
+    if (this.mode === 'hook') {
+      return this;
+    }
+
     const instructions =
       typeof this.instructionsConfig === 'function'
         ? (await this.instructionsConfig(context)).trim()
