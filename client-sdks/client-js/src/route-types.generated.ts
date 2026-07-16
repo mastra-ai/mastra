@@ -3654,7 +3654,7 @@ export type PostAgentsAgentIdSendMessage_Body =
 export type PostAgentsAgentIdSendMessage_Response = {
   accepted: true;
   runId: string;
-  signal?: any | undefined;
+  signal?: unknown | undefined;
 };
 
 export type PostAgentsAgentIdSendMessage_Request = Simplify<
@@ -4693,7 +4693,7 @@ export type PostAgentsAgentIdVoiceSpeak_Body = {
   speakerId?: string | undefined;
 };
 
-export type PostAgentsAgentIdVoiceSpeak_Response = any;
+export type PostAgentsAgentIdVoiceSpeak_Response = PostAgentsAgentIdGenerate_Response;
 
 export type PostAgentsAgentIdVoiceSpeak_Request = Simplify<
   (PostAgentsAgentIdVoiceSpeak_PathParams extends never ? {} : { params: PostAgentsAgentIdVoiceSpeak_PathParams }) &
@@ -4724,7 +4724,7 @@ export type PostAgentsAgentIdSpeak_PathParams = GetAgentsAgentIdVoiceSpeakers_Pa
 export type PostAgentsAgentIdSpeak_Body = PostAgentsAgentIdVoiceSpeak_Body;
 
 /** @deprecated */
-export type PostAgentsAgentIdSpeak_Response = PostAgentsAgentIdVoiceSpeak_Response;
+export type PostAgentsAgentIdSpeak_Response = PostAgentsAgentIdGenerate_Response;
 
 /** @deprecated */
 export type PostAgentsAgentIdSpeak_Request = Simplify<
@@ -4753,10 +4753,10 @@ export interface PostAgentsAgentIdSpeak_RouteContract {
 export type PostAgentsAgentIdVoiceListen_PathParams = GetAgentsAgentIdVoiceSpeakers_PathParams;
 
 export type PostAgentsAgentIdVoiceListen_Body = {
-  audio: any;
+  audio: unknown;
   options?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
 };
@@ -4822,7 +4822,7 @@ export interface PostAgentsAgentIdListen_RouteContract {
 // ============================================================================
 export type GetAgentsAgentIdVoiceListener_PathParams = GetAgentsAgentIdVoiceSpeakers_PathParams;
 
-export type GetAgentsAgentIdVoiceListener_Response = PostAgentsAgentIdVoiceSpeak_Response;
+export type GetAgentsAgentIdVoiceListener_Response = PostAgentsAgentIdGenerate_Response;
 
 export type GetAgentsAgentIdVoiceListener_Request = Simplify<
   (GetAgentsAgentIdVoiceListener_PathParams extends never ? {} : { params: GetAgentsAgentIdVoiceListener_PathParams }) &
@@ -6116,16 +6116,16 @@ export type PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Body = {
   stepId: string;
   executionPath: number[];
   stepResults: {
-    [key: string]: any;
+    [key: string]: unknown;
   };
   state: {
-    [key: string]: any;
+    [key: string]: unknown;
   };
   requestContext: {
-    [key: string]: any;
+    [key: string]: unknown;
   };
-  input?: any | undefined;
-  resumeData?: any | undefined;
+  input?: unknown | undefined;
+  resumeData?: unknown | undefined;
   retryCount?: number | undefined;
   foreachIdx?: number | undefined;
   format?: ('legacy' | 'vnext') | undefined;
@@ -6133,7 +6133,7 @@ export type PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Body = {
   validateInputs?: boolean | undefined;
 };
 
-export type PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Response = PostAgentsAgentIdVoiceSpeak_Response;
+export type PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Response = PostAgentsAgentIdGenerate_Response;
 
 export type PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Request = Simplify<
   (PostWorkflowsWorkflowIdRunsRunIdStepsExecute_PathParams extends never
@@ -19799,7 +19799,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdMessages_Body = {
   message: string;
   requestContext?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
   files?:
@@ -19852,7 +19852,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdSteer_Body = {
   message: string;
   requestContext?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
 };
@@ -19972,7 +19972,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdToolApproval_Body =
   approved: boolean;
   requestContext?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
 };
@@ -20016,10 +20016,10 @@ export type PostAgentControllerControllerIdSessionsResourceIdToolSuspension_Quer
 
 export type PostAgentControllerControllerIdSessionsResourceIdToolSuspension_Body = {
   toolCallId: string;
-  resumeData: any;
+  resumeData: unknown;
   requestContext?:
     | {
-        [key: string]: any;
+        [key: string]: unknown;
       }
     | undefined;
 };
@@ -20191,7 +20191,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdNotifications_Body 
   kind: string;
   summary: string;
   priority?: ('low' | 'medium' | 'high' | 'urgent') | undefined;
-  payload?: any | undefined;
+  payload?: unknown | undefined;
   sourceId?: string | undefined;
   dedupeKey?: string | undefined;
   coalesceKey?: string | undefined;
@@ -20276,7 +20276,7 @@ export type GetAgentControllerControllerIdSessionsResourceIdOm_QueryParams =
   GetAgentControllerControllerIdSessionsResourceId_QueryParams;
 
 export type GetAgentControllerControllerIdSessionsResourceIdOm_Response = {
-  record?: any | undefined;
+  record?: unknown | undefined;
 };
 
 export type GetAgentControllerControllerIdSessionsResourceIdOm_Request = Simplify<

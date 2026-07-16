@@ -1,15 +1,14 @@
+import * as fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
+import ts from 'typescript';
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import type * as z4 from 'zod/v4/core';
 
-import { messageSendBodySchema } from './a2a';
-import { serializedAgentSchema, agentExecutionBodySchema } from './agents';
+import { SERVER_ROUTES } from '../server-adapter/routes';
 import { backgroundTaskStreamResponseSchema } from './background-tasks';
 import { coreMessageSchema } from './common';
-import { listMessagesResponseSchema } from './memory';
-import { executeProcessorBodySchema } from './processors';
-import { upsertVectorsBodySchema, queryVectorsBodySchema } from './vectors';
-import { timeTravelBodySchema, workflowExecutionResultSchema, workflowRunResultSchema } from './workflows';
 
 /**
  * Regression tests ensuring route schemas use `z.unknown()` instead of `z.any()`.
@@ -70,27 +69,31 @@ function collectDefTypes(schema: z4.$ZodType): Set<string> {
 }
 
 describe('route schemas must not use z.any()', () => {
-  const schemas: Record<string, z4.$ZodType> = {
-    messageSendBodySchema,
-    serializedAgentSchema,
-    agentExecutionBodySchema,
-    backgroundTaskStreamResponseSchema,
-    coreMessageSchema,
-    listMessagesResponseSchema,
-    executeProcessorBodySchema,
-    upsertVectorsBodySchema,
-    queryVectorsBodySchema,
-    timeTravelBodySchema,
-    workflowExecutionResultSchema,
-    workflowRunResultSchema,
-  };
+  it('checks every schema used by SERVER_ROUTES', () => {
+    const offenders: string[] = [];
 
-  for (const [name, schema] of Object.entries(schemas)) {
-    it(`${name} contains no z.any()`, () => {
-      const defTypes = collectDefTypes(schema);
-      expect([...defTypes]).not.toContain('any');
-    });
-  }
+    for (const route of SERVER_ROUTES) {
+      const schemas = route as typeof route & {
+        pathParamSchema?: z4.$ZodType;
+        queryParamSchema?: z4.$ZodType;
+        bodySchema?: z4.$ZodType;
+        responseSchema?: z4.$ZodType;
+      };
+
+      for (const [kind, schema] of Object.entries({
+        pathParams: schemas.pathParamSchema,
+        queryParams: schemas.queryParamSchema,
+        body: schemas.bodySchema,
+        response: schemas.responseSchema,
+      })) {
+        if (schema && collectDefTypes(schema).has('any')) {
+          offenders.push(`${route.method} ${route.path} (${kind})`);
+        }
+      }
+    }
+
+    expect(offenders).toEqual([]);
+  });
 
   it('coreMessageSchema is z.unknown()', () => {
     expect((coreMessageSchema as unknown as { def: { type: string } }).def.type).toBe('unknown');
@@ -98,6 +101,32 @@ describe('route schemas must not use z.any()', () => {
 
   it('backgroundTaskStreamResponseSchema is z.unknown()', () => {
     expect((backgroundTaskStreamResponseSchema as unknown as { def: { type: string } }).def.type).toBe('unknown');
+  });
+});
+
+describe('generated route types', () => {
+  it('contain no any keywords', () => {
+    const generatedPath = fileURLToPath(
+      new URL('../../../../../client-sdks/client-js/src/route-types.generated.ts', import.meta.url),
+    );
+    const sourceFile = ts.createSourceFile(
+      generatedPath,
+      fs.readFileSync(generatedPath, 'utf8'),
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TS,
+    );
+    const anyKeywordPositions: number[] = [];
+
+    function walk(node: ts.Node): void {
+      if (node.kind === ts.SyntaxKind.AnyKeyword) {
+        anyKeywordPositions.push(sourceFile.getLineAndCharacterOfPosition(node.getStart()).line + 1);
+      }
+      ts.forEachChild(node, walk);
+    }
+
+    walk(sourceFile);
+    expect(anyKeywordPositions).toEqual([]);
   });
 });
 

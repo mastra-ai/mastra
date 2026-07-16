@@ -104,7 +104,7 @@ const MAX_TOTAL_FILE_DATA_LENGTH = 28 * 1024 * 1024;
  * server-controlled). Declared on run-triggering body schemas so the OpenAPI
  * spec documents it.
  */
-const bodyRequestContextSchema = z.record(z.string(), z.any()).optional();
+const bodyRequestContextSchema = z.record(z.string(), z.unknown()).optional();
 
 const sendMessageBodySchema = z.object({
   message: z.string(),
@@ -135,7 +135,7 @@ const toolSuspensionBodySchema = z.object({
   // Free-form resume payload. For ask_user this is a string (or string[] for
   // multi-select); for submit_plan it's `{ action, feedback? }`; for
   // request_access it's "Yes"/"No".
-  resumeData: z.any(),
+  resumeData: z.unknown(),
   requestContext: bodyRequestContextSchema,
 });
 const switchModeBodySchema = z.object({ modeId: z.string() });
@@ -180,7 +180,7 @@ const sendNotificationBodySchema = z.object({
   kind: z.string(),
   summary: z.string(),
   priority: z.enum(['low', 'medium', 'high', 'urgent']).optional(),
-  payload: z.any().optional(),
+  payload: z.unknown().optional(),
   sourceId: z.string().optional(),
   dedupeKey: z.string().optional(),
   coalesceKey: z.string().optional(),
@@ -288,7 +288,7 @@ const workspaceStatusResponseSchema = z.object({
   isReady: z.boolean(),
 });
 const omRecordResponseSchema = z.object({
-  record: z.any().optional(),
+  record: z.unknown().optional(),
 });
 const permissionPolicyEnum = z.enum(['allow', 'ask', 'deny']);
 const toolCategoryEnum = z.enum(['read', 'edit', 'execute', 'mcp', 'other']);

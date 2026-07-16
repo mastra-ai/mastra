@@ -1713,7 +1713,7 @@ export const STREAM_GENERATE_ROUTE = createRoute({
 const sendAgentSignalResponseSchema: z.ZodType<{ accepted: true; runId: string; signal?: unknown }> = z.object({
   accepted: z.literal(true),
   runId: z.string(),
-  signal: z.any().optional(),
+  signal: z.unknown().optional(),
 });
 
 /**
