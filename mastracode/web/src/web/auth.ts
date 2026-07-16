@@ -191,12 +191,17 @@ async function handleAuthMe(adapter: WebAuthAdapter, c: Context): Promise<Respon
   } catch {
     user = null;
   }
+  // Provider identity for the SPA: `/signin` renders the hosted-login button
+  // for WorkOS and an email/password form for better-auth (with sign-up hidden
+  // when the adapter disables it).
+  const provider = { provider: adapter.kind, ...(adapter.signUpDisabled ? { signUpDisabled: true } : {}) };
   if (!user) {
-    return c.json({ authenticated: false, user: null });
+    return c.json({ authenticated: false, user: null, ...provider });
   }
   return c.json({
     authenticated: true,
     user: { userId: getWebAuthUserId(user), email: user.email, name: user.name, organizationId: user.organizationId },
+    ...provider,
   });
 }
 

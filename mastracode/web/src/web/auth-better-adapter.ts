@@ -75,6 +75,11 @@ export class BetterAuthWebAuth implements WebAuthAdapter {
     this.#instance = options.instance;
   }
 
+  /** Surfaced through `/auth/me` so the SPA hides the sign-up form when disabled. */
+  get signUpDisabled(): boolean {
+    return this.#signUpDisabled;
+  }
+
   /** The active better-auth instance. Throws before `init()` on the default path. */
   get instance(): BetterAuthInstance {
     if (!this.#instance) {

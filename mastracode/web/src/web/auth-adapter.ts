@@ -80,6 +80,14 @@ export interface WebAuthAdapter {
   readonly kind: string;
 
   /**
+   * Whether self-serve sign-up is disabled for providers that host their own
+   * credential forms (e.g. better-auth email/password). Surfaced through
+   * `/auth/me` so the SPA hides the sign-up affordance. Hosted-login providers
+   * (WorkOS) leave this undefined.
+   */
+  readonly signUpDisabled?: boolean;
+
+  /**
    * Optional one-time initialization, called by `MastraFactory.prepare()` with
    * factory-level context (database, public origin) so adapters can use it
    * without the deploy entry passing it twice.

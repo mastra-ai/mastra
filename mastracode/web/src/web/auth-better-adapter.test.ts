@@ -317,3 +317,31 @@ describe('public routes', () => {
     expect(res.headers.getSetCookie().some(c => c.startsWith('better-auth.session_token=;'))).toBe(true);
   });
 });
+
+describe('/auth/me under better-auth', () => {
+  it('reports the better-auth provider so the SPA renders the credential form', async () => {
+    const { registerAuthRoutes } = await import('./auth.js');
+    const { instance } = mockInstance();
+    const app = new Hono();
+    registerAuthRoutes(app, new BetterAuthWebAuth({ instance }));
+
+    const res = await app.request('/auth/me');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ authenticated: false, user: null, provider: 'better-auth' });
+  });
+
+  it('surfaces signUpDisabled so the SPA hides the sign-up affordance', async () => {
+    const { registerAuthRoutes } = await import('./auth.js');
+    const { instance } = mockInstance();
+    const app = new Hono();
+    registerAuthRoutes(app, new BetterAuthWebAuth({ instance, signUpDisabled: true }));
+
+    const res = await app.request('/auth/me');
+    expect(await res.json()).toEqual({
+      authenticated: false,
+      user: null,
+      provider: 'better-auth',
+      signUpDisabled: true,
+    });
+  });
+});

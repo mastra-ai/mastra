@@ -162,6 +162,7 @@ describe('mountWebAuth with a seeded custom adapter', () => {
     expect(await res.json()).toEqual({
       authenticated: true,
       user: { userId: 'user_fake', email: 'fake@example.com', organizationId: 'org_fake' },
+      provider: 'fake',
     });
   });
 });
