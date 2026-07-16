@@ -88,7 +88,8 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   }
 
   async createEntity(input: CreateKnowledgeEntityInput): Promise<KnowledgeEntity> {
-    if (input.kind === 'page') throw new Error('Entity kind "page" is reserved for knowledge pages');
+    if (input.kind?.trim().toLocaleLowerCase() === 'page')
+      throw new Error('Entity kind "page" is reserved for knowledge pages');
     const scope = canonicalizeKnowledgeScope(input.scope);
     const key = recordKey(input.name, scope);
     const existingId = this.#db.knowledgeEntityKeys.get(key);
@@ -177,7 +178,8 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     if (!existing) throw new KnowledgeNotFoundError('entity', input.id);
     if (existing.version !== input.version) throw new KnowledgeConflictError(input.id);
     if (existing.mergedInto) throw new Error(`Cannot update merged knowledge entity: ${input.id}`);
-    if (input.kind === 'page') throw new Error('Entity kind "page" is reserved for knowledge pages');
+    if (input.kind?.trim().toLocaleLowerCase() === 'page')
+      throw new Error('Entity kind "page" is reserved for knowledge pages');
 
     const scope = canonicalizeKnowledgeScope(input.scope ?? existing.scope);
     const name = (input.name ?? existing.name).trim();

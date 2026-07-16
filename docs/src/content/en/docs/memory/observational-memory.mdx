@@ -770,7 +770,7 @@ The default configuration enables four built-in agents:
 - `curate`: Merges duplicate entities, repairs facts, and writes pages after reflection.
 - `learn`: Distills repeated procedures into scoped skill records after reflection.
 
-Use `observation` and `reflection` to select agents or override their instructions, model, and `maxSteps`. Set `tools: false` to remove the `knowledge_search`, `knowledge_read`, and `knowledge_browse` tools from the main agent.
+Use `observation` and `reflection` to select built-ins. Capture accepts custom instructions or a custom schema and hook, but always shares the Observer's structured call and model. The agent-backed remind, curate, and learn built-ins accept instruction, model, and `maxSteps` overrides. Set `tools: false` to remove the `knowledge_search`, `knowledge_read`, and `knowledge_browse` tools from the main agent.
 
 ```typescript title="src/mastra/memory.ts"
 const subconscious = new Subconscious({
@@ -792,9 +792,9 @@ Curator removal soft-deletes facts. Normal reads and search exclude deleted fact
 
 ### Signals, costs, and failures
 
-Activity uses a bounded state signal with cache-key deduplication. Unchanged snapshots don't add another signal. Reminders use the reactive signal lane and remain quiet when no relevant knowledge is found.
+Activity uses a bounded state signal with cache-key deduplication. Unchanged snapshots don't add another signal. Set `activity: false` to suppress routine snapshots; failure states still emit so clients can surface background errors. Reminders use the reactive signal lane and remain quiet when no relevant knowledge is found.
 
-Capture shares the Observer's structured call. Remind adds at most one bounded agent run per observation cycle. Curate and learn run sequentially after a committed reflection and use separate durable cursors. All built-ins enforce `maxSteps`, propagate cancellation, and can't recursively enable Subconscious memory.
+Capture shares the Observer's structured call and model. Remind adds at most one bounded agent run per observation cycle. Curate and learn run sequentially after a committed reflection and use separate durable cursors. The agent-backed built-ins enforce `maxSteps`; all built-ins propagate cancellation and can't recursively enable Subconscious memory.
 
 Background failures don't roll back observation or reflection. Mastra adds the failure to the activity state's `errors` array and emits a `data-subconscious-error` part for clients that display runtime status.
 

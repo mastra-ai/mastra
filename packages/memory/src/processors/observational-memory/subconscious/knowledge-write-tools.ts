@@ -110,7 +110,7 @@ export function createKnowledgeWriteTools(
           entityId: { type: 'string', minLength: 1 },
           expectedVersion: { type: 'integer', minimum: 1 },
           name: { type: 'string', minLength: 1 },
-          kind: { type: 'string', minLength: 1, not: { const: 'page' } },
+          kind: { type: 'string', minLength: 1, pattern: '^(?!\\s*[Pp][Aa][Gg][Ee]\\s*$).+' },
         },
         required: ['entityId', 'expectedVersion'],
         anyOf: [{ required: ['name'] }, { required: ['kind'] }],

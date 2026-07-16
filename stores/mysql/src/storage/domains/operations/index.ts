@@ -709,7 +709,7 @@ export function generateTableSQL({
     const constraints: string[] = [];
     if (def.primaryKey && !compositePrimaryKey?.includes(name)) constraints.push('PRIMARY KEY');
     if (!def.nullable) constraints.push('NOT NULL');
-    const sqlType = mapToMySqlType(def.type);
+    const sqlType = mapToMySqlType(def.type, Boolean(def.primaryKey || compositePrimaryKey?.includes(name)));
     return `${colName} ${sqlType} ${constraints.join(' ')}`;
   });
 
@@ -744,10 +744,10 @@ export function generateIndexSQL(options: CreateIndexOptions): string {
   return `CREATE ${uniqueStr}INDEX ${indexName} ON ${tableName} (${columnsStr});`;
 }
 
-function mapToMySqlType(type: StorageColumn['type']): string {
+function mapToMySqlType(type: StorageColumn['type'], isKey = false): string {
   switch (type) {
     case 'text':
-      return 'TEXT';
+      return isKey ? 'VARCHAR(191)' : 'TEXT';
     case 'timestamp':
       return 'DATETIME(3)';
     case 'bigint':
