@@ -47,6 +47,7 @@ export function useAgentControllerEvents({
 
     void session
       .subscribe({
+        reconnect: true,
         onEvent: event => onEventRef.current(event),
         onError: () => {
           if (!disposed) disconnect();
