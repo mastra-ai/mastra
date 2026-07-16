@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 
 import { createTool } from './tool';
-import { validateToolInput } from './validation';
+import { validateToolInput, validateToolOutput } from './validation';
 
 describe('Tool Input Validation Integration Tests', () => {
   describe('createTool validation', () => {
@@ -2281,5 +2281,28 @@ describe('prompt alias normalization (GitHub #14154)', () => {
     });
     expect(result.error).toBeUndefined();
     expect(result.data).toEqual({ prompt: 'from message' });
+  });
+});
+
+describe('Standard Schema object path segments (#19124)', () => {
+  // The Standard Schema spec allows an issue's path segments to be either a plain
+  // key (used by Zod) or a `{ key }` object (used by Valibot and ArkType). Error
+  // messages must resolve the field name in both cases, not print `[object Object]`.
+  const objectPathSchema = {
+    '~standard': {
+      version: 1,
+      vendor: 'test',
+      validate: () => ({
+        issues: [{ message: 'Invalid type', path: [{ key: 'user' }, { key: 'name' }] }],
+      }),
+    },
+  } as unknown as NonNullable<Parameters<typeof validateToolOutput>[0]>;
+
+  it('shows field names for object-form path segments instead of [object Object]', () => {
+    const result = validateToolOutput(objectPathSchema, { user: { name: 123 } }, 'my-tool');
+
+    expect(result.error).toBeDefined();
+    expect(result.error!.message).toContain('user.name');
+    expect(result.error!.message).not.toContain('[object Object]');
   });
 });

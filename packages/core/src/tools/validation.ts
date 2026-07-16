@@ -159,7 +159,9 @@ export function validateToolSuspendData<T = unknown>(
   }
 
   // Validation failed, return error
-  const errorMessages = validation.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
+  const errorMessages = validation.issues
+    .map(e => `- ${e.path?.map(getPathKey).join('.') || 'root'}: ${e.message}`)
+    .join('\n');
 
   const error: ValidationError<T> = {
     error: true,
@@ -557,7 +559,9 @@ export function validateToolInput<T = unknown>(
 
   // All attempts failed - return the original (non-stripped) error since it's
   // more informative about what the schema actually expects
-  const errorMessages = validation.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
+  const errorMessages = validation.issues
+    .map(e => `- ${e.path?.map(getPathKey).join('.') || 'root'}: ${e.message}`)
+    .join('\n');
 
   const error: ValidationError<T> = {
     error: true,
@@ -595,7 +599,9 @@ export function validateToolOutput<T = unknown>(
   }
 
   // Validation failed, return error
-  const errorMessages = validation.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
+  const errorMessages = validation.issues
+    .map(e => `- ${e.path?.map(getPathKey).join('.') || 'root'}: ${e.message}`)
+    .join('\n');
 
   const error: ValidationError<T> = {
     error: true,
@@ -675,7 +681,9 @@ export function validateRequestContext<T = any>(
   }
 
   // Validation failed, return error
-  const errorMessages = validation.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
+  const errorMessages = validation.issues
+    .map(e => `- ${e.path?.map(getPathKey).join('.') || 'root'}: ${e.message}`)
+    .join('\n');
 
   // Redact sensitive keys before including in error message
   const redactedContext = redactSensitiveKeys(contextValues);
