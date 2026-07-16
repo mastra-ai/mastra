@@ -92,5 +92,30 @@
     "stepfun-ai/step-3.7-flash",
     "upstage/solar-10_7b-instruct",
     "z-ai/glm-5.2"
+  ],
+  "structuredOutput": [
+    "bytedance/seed-oss-36b-instruct",
+    "deepseek-ai/deepseek-v4-flash",
+    "deepseek-ai/deepseek-v4-pro",
+    "google/gemma-2-2b-it",
+    "google/gemma-3n-e2b-it",
+    "google/gemma-3n-e4b-it",
+    "meta/llama-3.1-70b-instruct",
+    "meta/llama-3.2-11b-vision-instruct",
+    "meta/llama-3.2-1b-instruct",
+    "meta/llama-3.2-3b-instruct",
+    "meta/llama-3.3-70b-instruct",
+    "meta/llama-4-maverick-17b-128e-instruct",
+    "mistralai/mistral-7b-instruct-v03",
+    "mistralai/mistral-large-3-675b-instruct-2512",
+    "mistralai/mistral-small-4-119b-2603",
+    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+    "nvidia/nemotron-3-ultra-550b-a55b",
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b",
+    "qwen/qwen2.5-coder-32b-instruct",
+    "qwen/qwen3.5-122b-a10b",
+    "qwen/qwen3.5-397b-a17b",
+    "z-ai/glm-5.2"
   ]
 }

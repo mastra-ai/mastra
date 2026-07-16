@@ -109,6 +109,16 @@ function getSessionProvider(): MastraAuthWorkos {
   return sessionProvider;
 }
 
+/**
+ * Shared module-level WorkOS auth provider, exposed for features that need the
+ * raw WorkOS client (audit-log export, Admin Portal links). Callers must gate
+ * on {@link isWebAuthEnabled} first — constructing the provider without the
+ * WorkOS env vars throws.
+ */
+export function getWorkOSProvider(): MastraAuthWorkos {
+  return getSessionProvider();
+}
+
 /** Build a predictable personal-org name from the user's profile. */
 function personalOrgName(user: WebAuthUser, userId: string): string {
   const label = user.email ?? user.name ?? userId;

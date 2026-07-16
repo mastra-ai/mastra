@@ -1,5 +1,7 @@
-import type { ClientOptions } from '../types';
+import type { RequestContext } from '@mastra/core/request-context';
 
+import type { ClientOptions } from '../types';
+import { parseClientRequestContext } from '../utils';
 import { BaseResource } from './base';
 
 /**
@@ -333,12 +335,28 @@ export interface PlanResume {
   feedback?: string;
 }
 
+/**
+ * Options accepted by session methods that trigger or resume agent execution.
+ * The `requestContext` is merged into the server-derived request context for
+ * that run (server-controlled keys win), so it reaches dynamic instructions,
+ * tools, and workspace resolution — mirroring `agent.generate()`.
+ */
+export interface AgentControllerRequestOptions {
+  requestContext?: RequestContext | Record<string, any>;
+}
+
 /** Options for subscribing to an agent controller session's event stream. */
 export interface SubscribeAgentControllerSessionOptions {
   /** Called for each event received over the stream. */
   onEvent: (event: AgentControllerEvent) => void;
   /** Called when the stream errors or ends unexpectedly. */
   onError?: (error: unknown) => void;
+  reconnect?:
+    | boolean
+    | {
+        maxRetries?: number;
+        delayMs?: number;
+      };
 }
 
 export interface AgentControllerSubscription {
@@ -397,51 +415,171 @@ export class AgentControllerSession extends BaseResource {
    * message arrives here as `message_*` events, not on the sendMessage call.
    */
   async subscribe(options: SubscribeAgentControllerSessionOptions): Promise<AgentControllerSubscription> {
-    const response = (await this.request(this.url(`${this.base()}/stream`), { stream: true })) as Response;
-    if (!response.body) {
-      throw new Error('No response body for agent controller session stream');
-    }
+    const reconnectOptions =
+      options.reconnect === true
+        ? { maxRetries: Infinity, delayMs: 1000 }
+        : options.reconnect
+          ? { maxRetries: options.reconnect.maxRetries ?? Infinity, delayMs: options.reconnect.delayMs ?? 1000 }
+          : null;
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
     let cancelled = false;
-    let buffer = '';
+    let currentReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+    let delayResolve: (() => void) | undefined;
 
-    const pump = async () => {
+    const settleDelay = () => {
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = undefined;
+      }
+      const resolve = delayResolve;
+      delayResolve = undefined;
+      resolve?.();
+    };
+
+    const delay = (ms: number) =>
+      new Promise<void>(resolve => {
+        delayResolve = resolve;
+        reconnectTimer = setTimeout(settleDelay, ms);
+      });
+
+    const requestStream = () => this.request(this.url(`${this.base()}/stream`), { stream: true }) as Promise<Response>;
+
+    const streamEndedError = () => new Error('Agent controller session stream ended unexpectedly');
+
+    const findFrameSeparator = (text: string): { index: number; length: number } | null => {
+      const candidates = [
+        { index: text.indexOf('\r\n\r\n'), length: 4 },
+        { index: text.indexOf('\n\n'), length: 2 },
+        { index: text.indexOf('\r\r'), length: 2 },
+      ].filter(candidate => candidate.index !== -1);
+      if (candidates.length === 0) return null;
+      return candidates.reduce((earliest, candidate) => (candidate.index < earliest.index ? candidate : earliest));
+    };
+
+    type PumpResult =
+      | { kind: 'done' }
+      | { kind: 'cancelled' }
+      | { kind: 'consumer_error' }
+      | { kind: 'transport_error'; error: unknown };
+
+    const pump = async (response: Response): Promise<PumpResult> => {
+      if (!response.body) {
+        throw new Error('No response body for agent controller session stream');
+      }
+
+      const reader = response.body.getReader();
+      currentReader = reader;
+      const decoder = new TextDecoder();
+      let buffer = '';
+
       try {
         while (!cancelled) {
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done) return cancelled ? { kind: 'cancelled' } : { kind: 'done' };
           buffer += decoder.decode(value, { stream: true });
 
-          // SSE frames are separated by a blank line.
-          let sep: number;
-          while ((sep = buffer.indexOf('\n\n')) !== -1) {
-            const frame = buffer.slice(0, sep);
-            buffer = buffer.slice(sep + 2);
-            for (const line of frame.split('\n')) {
-              if (!line.startsWith('data:')) continue; // skip ": heartbeat" comments
+          let separator: { index: number; length: number } | null;
+          while ((separator = findFrameSeparator(buffer)) !== null) {
+            const frame = buffer.slice(0, separator.index);
+            buffer = buffer.slice(separator.index + separator.length);
+            for (const line of frame.split(/\r\n|\n|\r/)) {
+              if (!line.startsWith('data:')) continue;
               const data = line.slice(5).trim();
               if (!data) continue;
+              let event: AgentControllerEvent;
               try {
-                options.onEvent(JSON.parse(data) as AgentControllerEvent);
+                event = JSON.parse(data) as AgentControllerEvent;
               } catch {
-                // ignore malformed frame
+                continue;
+              }
+              try {
+                options.onEvent(event);
+              } catch (cause) {
+                if (!cancelled) options.onError?.(cause);
+                return { kind: 'consumer_error' };
               }
             }
           }
         }
+        return { kind: 'cancelled' };
       } catch (error) {
-        if (!cancelled) options.onError?.(error);
+        return cancelled ? { kind: 'cancelled' } : { kind: 'transport_error', error };
+      } finally {
+        if (currentReader === reader) currentReader = null;
+        void reader.cancel().catch(() => {});
       }
     };
 
-    void pump();
+    const reportTerminalError = (result: Extract<PumpResult, { kind: 'done' } | { kind: 'transport_error' }>) => {
+      if (result.kind === 'transport_error') {
+        options.onError?.(result.error);
+        return;
+      }
+      options.onError?.(streamEndedError());
+    };
+
+    const run = async () => {
+      let attempts = 0;
+
+      while (!cancelled) {
+        let response: Response;
+        try {
+          response = await requestStream();
+        } catch (error) {
+          if (cancelled) return;
+          if (!reconnectOptions || attempts >= reconnectOptions.maxRetries) {
+            options.onError?.(error);
+            return;
+          }
+          attempts++;
+          await delay(reconnectOptions.delayMs);
+          if (cancelled) return;
+          continue;
+        }
+
+        let result: PumpResult;
+        try {
+          result = await pump(response);
+        } catch (error) {
+          if (cancelled) return;
+          if (!reconnectOptions) {
+            options.onError?.(error);
+            return;
+          }
+          result = { kind: 'transport_error', error };
+        }
+
+        if (cancelled || result.kind === 'cancelled') return;
+        if (result.kind === 'consumer_error') return;
+
+        if (!reconnectOptions) {
+          if (result.kind === 'done' || result.kind === 'transport_error') {
+            reportTerminalError(result);
+          }
+          return;
+        }
+
+        if (result.kind === 'done' || result.kind === 'transport_error') {
+          if (attempts >= reconnectOptions.maxRetries) {
+            reportTerminalError(result);
+            return;
+          }
+          attempts++;
+          await delay(reconnectOptions.delayMs);
+          if (cancelled) return;
+          continue;
+        }
+      }
+    };
+
+    void run();
 
     return {
       unsubscribe: () => {
         cancelled = true;
-        void reader.cancel().catch(() => {});
+        settleDelay();
+        void currentReader?.cancel().catch(() => {});
       },
     };
   }
@@ -450,14 +588,21 @@ export class AgentControllerSession extends BaseResource {
    * Send a user message. The reply streams over `subscribe()`.
    * Pass a structured message to attach files (e.g. pasted images) as base64-encoded data:
    * `sendMessage({ content: 'What is in this image?', files })`.
+   * Pass `options.requestContext` to merge custom context into the run's request context.
    */
   async sendMessage(
     message: string | { content: string; files?: Array<{ data: string; mediaType: string; filename?: string }> },
+    options?: AgentControllerRequestOptions,
   ): Promise<void> {
     const { content, files } = typeof message === 'string' ? { content: message, files: undefined } : message;
+    const requestContext = parseClientRequestContext(options?.requestContext);
     await this.request(this.url(`${this.base()}/messages`), {
       method: 'POST',
-      body: { message: content, ...(files?.length ? { files } : {}) },
+      body: {
+        message: content,
+        ...(files?.length ? { files } : {}),
+        ...(requestContext ? { requestContext } : {}),
+      },
     });
   }
 
@@ -467,10 +612,11 @@ export class AgentControllerSession extends BaseResource {
   }
 
   /** Approve or decline a pending tool call (`tool_approval_required`). */
-  async approveTool(toolCallId: string, approved: boolean): Promise<void> {
+  async approveTool(toolCallId: string, approved: boolean, options?: AgentControllerRequestOptions): Promise<void> {
+    const requestContext = parseClientRequestContext(options?.requestContext);
     await this.request(this.url(`${this.base()}/tool-approval`), {
       method: 'POST',
-      body: { toolCallId, approved },
+      body: { toolCallId, approved, ...(requestContext ? { requestContext } : {}) },
     });
   }
 
@@ -479,16 +625,25 @@ export class AgentControllerSession extends BaseResource {
    * depends on the tool: a string (or string[]) for `ask_user`, "Yes"/"No" for
    * `request_access`, and a {@link PlanResume} for `submit_plan`.
    */
-  async respondToToolSuspension(toolCallId: string, resumeData: string | string[] | PlanResume): Promise<void> {
+  async respondToToolSuspension(
+    toolCallId: string,
+    resumeData: string | string[] | PlanResume,
+    options?: AgentControllerRequestOptions,
+  ): Promise<void> {
+    const requestContext = parseClientRequestContext(options?.requestContext);
     await this.request(this.url(`${this.base()}/tool-suspension`), {
       method: 'POST',
-      body: { toolCallId, resumeData },
+      body: { toolCallId, resumeData, ...(requestContext ? { requestContext } : {}) },
     });
   }
 
   /** Inject a message into the in-flight run without starting a new turn. */
-  async steer(message: string): Promise<void> {
-    await this.request(this.url(`${this.base()}/steer`), { method: 'POST', body: { message } });
+  async steer(message: string, options?: AgentControllerRequestOptions): Promise<void> {
+    const requestContext = parseClientRequestContext(options?.requestContext);
+    await this.request(this.url(`${this.base()}/steer`), {
+      method: 'POST',
+      body: { message, ...(requestContext ? { requestContext } : {}) },
+    });
   }
 
   /** Get the current mode, model, and thread (for initial UI hydration). */
@@ -584,8 +739,12 @@ export class AgentControllerSession extends BaseResource {
    * Queue a follow-up message. If the session is idle it sends immediately;
    * if a run is active it queues for after completion.
    */
-  async followUp(message: string): Promise<void> {
-    await this.request(this.url(`${this.base()}/follow-up`), { method: 'POST', body: { message } });
+  async followUp(message: string, options?: AgentControllerRequestOptions): Promise<void> {
+    const requestContext = parseClientRequestContext(options?.requestContext);
+    await this.request(this.url(`${this.base()}/follow-up`), {
+      method: 'POST',
+      body: { message, ...(requestContext ? { requestContext } : {}) },
+    });
   }
 
   /** Get the observational memory record for this session's thread. */
