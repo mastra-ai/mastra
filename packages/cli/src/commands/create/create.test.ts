@@ -25,6 +25,8 @@ vi.mock('@clack/prompts', () => ({
   log: {
     error: vi.fn(),
     info: vi.fn(),
+    success: vi.fn(),
+    warn: vi.fn(),
   },
   spinner: vi.fn(() => ({
     start: vi.fn(),
@@ -462,6 +464,7 @@ describe('create materialization lifecycle', () => {
       resolveVersionTag: vi.fn().mockResolvedValue('latest'),
     });
 
+    expect(prompts.note).toHaveBeenCalledWith(expect.stringContaining('.env.example'));
     expect(prompts.note).toHaveBeenCalledWith(expect.stringContaining('ANTHROPIC_API_KEY'));
   });
 });
@@ -470,6 +473,7 @@ describe('create skills and git automation', () => {
   it('installs detected skills in the published project before initializing git', async () => {
     const { create } = await import('./create');
     const { publishStagedProject } = await import('./utils');
+    const prompts = await import('@clack/prompts');
     const codingAgents = await import('./coding-agents');
     const skills = await import('../init/skills-install');
     const commandUtils = await import('../utils.js');
@@ -491,6 +495,7 @@ describe('create skills and git automation', () => {
     });
     expect(publishStagedProject).toHaveBeenCalledBefore(vi.mocked(skills.installMastraSkills));
     expect(skills.installMastraSkills).toHaveBeenCalledBefore(vi.mocked(commandUtils.gitInit));
+    expect(prompts.log.success).toHaveBeenCalledWith('Installed skills for claude-code, universal. Initialized git.');
   });
 
   it.each([
@@ -548,10 +553,7 @@ describe('create skills and git automation', () => {
     });
 
     expect(commandUtils.gitInit).toHaveBeenCalledOnce();
-    expect(prompts.note).toHaveBeenCalledWith(
-      expect.stringContaining('installation failed for universal'),
-      'Setup warnings',
-    );
+    expect(prompts.log.warn).toHaveBeenCalledWith('Could not install skills for universal. Initialized git.');
     expect(prompts.outro).toHaveBeenCalledOnce();
   });
 
@@ -612,7 +614,7 @@ describe('create skills and git automation', () => {
     ).resolves.toBeUndefined();
 
     expect(publishStagedProject).toHaveBeenCalledOnce();
-    expect(prompts.note).toHaveBeenCalledWith(expect.stringContaining('Git: initialization failed'), 'Setup warnings');
+    expect(prompts.log.warn).toHaveBeenCalledWith('Installed skills for universal. Could not initialize git.');
     expect(prompts.outro).toHaveBeenCalledOnce();
   });
 });

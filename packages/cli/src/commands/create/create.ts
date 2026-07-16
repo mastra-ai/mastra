@@ -145,6 +145,7 @@ async function promptForProvider(): Promise<CreateLLMProvider> {
       message: 'Select a default model provider:',
       options: [...CREATE_LLM_PROVIDERS],
       signal,
+      showInstructions: false,
     }),
   );
 }
@@ -316,13 +317,15 @@ export const create = async (args: CreateOptions): Promise<void> => {
     skills_outcome: postSetup.skillsOutcome,
     git_outcome: postSetup.gitOutcome,
   });
-  p.note(formatPostCreateSetup(postSetup), postSetup.hasFailure ? 'Setup warnings' : 'Project setup');
+  const setupSummary = formatPostCreateSetup(postSetup);
+  if (postSetup.hasFailure) p.log.warn(setupSummary);
+  else p.log.success(setupSummary);
 
   if (mode === 'managed') {
     p.note(
       llmApiKey
         ? `${color.green('Success!')}\n\nYour ${selectedApiKeyEnv} value was written to ${color.cyan('.env')}.`
-        : `${color.green('Success!')}\n\nSet ${selectedApiKeyEnv} in your ${color.cyan('.env')} file before starting.`,
+        : `${color.green('Success!')}\n\nCopy ${color.cyan('.env.example')} to ${color.cyan('.env')} and set ${selectedApiKeyEnv} before starting.`,
     );
   } else if (mode === 'template') {
     p.note(`${color.green('Success!')}\n\nAdd any required environment variables in your ${color.cyan('.env')} file.`);
@@ -390,20 +393,20 @@ function formatPostCreateSetup(result: PostCreateSetupResult): string {
   const agents = result.skillsAgents.join(', ');
   const skillsSummary =
     result.skillsOutcome === 'opted_out'
-      ? 'Skills: skipped (--no-skills)'
+      ? 'Skipped skills (--no-skills).'
       : result.skillsOutcome === 'installed'
-        ? `Skills: installed for ${agents}`
-        : `Skills: installation failed${agents ? ` for ${agents}` : ''}`;
+        ? `Installed skills for ${agents}.`
+        : `Could not install skills${agents ? ` for ${agents}` : ''}.`;
 
   const gitSummaries: Record<PostCreateSetupResult['gitOutcome'], string> = {
-    initialized: 'Git: initialized with an initial commit',
-    failed: 'Git: initialization failed',
-    opted_out: 'Git: skipped (--no-git)',
-    parent_worktree: 'Git: skipped because the project is inside an existing worktree',
-    target_worktree: 'Git: skipped because the project already contains git metadata',
+    initialized: 'Initialized git.',
+    failed: 'Could not initialize git.',
+    opted_out: 'Skipped git (--no-git).',
+    parent_worktree: 'Skipped git because the project is inside an existing worktree.',
+    target_worktree: 'Skipped git because the project already contains git metadata.',
   };
 
-  return `${skillsSummary}\n${gitSummaries[result.gitOutcome]}`;
+  return `${skillsSummary} ${gitSummaries[result.gitOutcome]}`;
 }
 
 const postCreate = ({ projectName, packageManager }: { projectName: string; packageManager: string }) => {

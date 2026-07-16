@@ -203,21 +203,28 @@ describe('adaptDefaultTemplate', () => {
     const envExamplePath = path.join(projectPath, '.env.example');
     await fs.writeFile(envExamplePath, '# Storage\nTURSO_DATABASE_URL=\nOPENAI_API_KEY=\n', 'utf8');
 
-    await adaptDefaultTemplate({ projectPath, provider: 'anthropic', versionTag: 'latest' });
+    await adaptDefaultTemplate({
+      projectPath,
+      provider: 'anthropic',
+      apiKey: 'provider-secret',
+      versionTag: 'latest',
+    });
 
     expect(await fs.readFile(envExamplePath, 'utf8')).toBe('# Storage\nTURSO_DATABASE_URL=\nANTHROPIC_API_KEY=\n');
     expect(await fs.readFile(path.join(projectPath, '.env'), 'utf8')).toBe(
-      '# Storage\nTURSO_DATABASE_URL=\nANTHROPIC_API_KEY=\n',
+      '# Storage\nTURSO_DATABASE_URL=\nANTHROPIC_API_KEY=provider-secret\n',
     );
   });
 
-  it('keeps the example placeholder actionable when the API key is skipped', async () => {
+  it('keeps only .env.example when the API key is skipped', async () => {
     const projectPath = await createFixture();
+    const envPath = path.join(projectPath, '.env');
+    expect(await fs.stat(envPath)).toBeDefined();
 
     await adaptDefaultTemplate({ projectPath, provider: 'anthropic', versionTag: 'latest' });
 
     expect(await fs.readFile(path.join(projectPath, '.env.example'), 'utf8')).toContain('ANTHROPIC_API_KEY=\n');
-    expect(await fs.readFile(path.join(projectPath, '.env'), 'utf8')).toContain('ANTHROPIC_API_KEY=\n');
+    await expect(fs.stat(envPath)).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   it('fails before writing when a required runtime site is missing', async () => {

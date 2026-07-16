@@ -141,6 +141,7 @@ describe('create-mastra published binaries', () => {
       );
       expect(await getInstalledVersions(projectPath)).toEqual(publishedVersions);
       expect(await readFile(join(projectPath, 'src/mastra/agents/agent.ts'), 'utf8')).toContain("id: 'agent'");
+      await expect(readFile(join(projectPath, '.env'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
     }
   });
 

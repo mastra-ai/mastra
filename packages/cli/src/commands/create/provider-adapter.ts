@@ -244,20 +244,20 @@ function adaptReadme(source: string, provider: CreateLLMProvider, config: Manage
 
 function assertNoProviderResidue(
   provider: CreateLLMProvider,
-  files: { agent: string; manifest: string; envExample: string; env: string },
+  files: { agent: string; manifest: string; envExample: string; env?: string },
 ): void {
   for (const [otherProvider, config] of Object.entries(MANAGED_PROVIDER_CONFIGS) as Array<
     [CreateLLMProvider, ManagedProviderConfig]
   >) {
     if (otherProvider === provider) continue;
 
-    const checks = [
+    const checks: Array<[string, string]> = [
       [files.manifest, config.sdkPackage],
       [files.agent, `${config.providerIdentifier}/`],
       [files.agent, `${config.providerIdentifier}.tools`],
       [files.envExample, config.apiKeyEnv],
-      [files.env, config.apiKeyEnv],
-    ] as const;
+    ];
+    if (files.env !== undefined) checks.push([files.env, config.apiKeyEnv]);
     for (const [content, residue] of checks) {
       if (content.includes(residue)) {
         throw new Error(
@@ -305,7 +305,7 @@ export async function adaptDefaultTemplate({
   const nextAgent = adaptAgentSource(agentSource, provider, config);
   const normalizedManifest = normalizeManagedManifest(packageJsonSource, config, versionTag);
   const nextEnvExample = replaceEnvKey(envExampleSource, config.apiKeyEnv);
-  const nextEnv = setEnvValue(nextEnvExample, config.apiKeyEnv, apiKey ?? '');
+  const nextEnv = apiKey ? setEnvValue(nextEnvExample, config.apiKeyEnv, apiKey) : undefined;
   const nextReadme = readmeSource === undefined ? undefined : adaptReadme(readmeSource, provider, config);
 
   assertNoProviderResidue(provider, {
@@ -319,11 +319,11 @@ export async function adaptDefaultTemplate({
     fs.writeFile(agentPath, nextAgent, 'utf8'),
     fs.writeFile(packageJsonPath, normalizedManifest.content, 'utf8'),
     fs.writeFile(envExamplePath, nextEnvExample, 'utf8'),
-    fs.writeFile(envPath, nextEnv, 'utf8'),
+    nextEnv === undefined ? fs.rm(envPath, { force: true }) : fs.writeFile(envPath, nextEnv, 'utf8'),
   ];
   if (nextReadme !== undefined) writes.push(fs.writeFile(readmePath, nextReadme, 'utf8'));
   await Promise.all(writes);
-  if (process.platform !== 'win32') await fs.chmod(envPath, 0o600);
+  if (nextEnv !== undefined && process.platform !== 'win32') await fs.chmod(envPath, 0o600);
 
   return { ...config, sdkVersion: normalizedManifest.sdkVersion };
 }
