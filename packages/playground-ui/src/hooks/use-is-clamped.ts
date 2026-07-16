@@ -4,11 +4,7 @@ import type { RefCallback } from 'react';
 import { useIsomorphicLayoutEffect } from './use-isomorphic-layout-effect';
 
 export interface UseIsClampedOptions {
-  /**
-   * Keep measuring while true. Pass false when the clamp is lifted (e.g. the
-   * text is expanded) to freeze the last measurement instead of reporting the
-   * unclamped element as not cut off.
-   */
+  /** Set false while the clamp is lifted (e.g. text expanded) to freeze the last measurement. */
   enabled?: boolean;
 }
 
@@ -17,13 +13,7 @@ export interface UseIsClampedResult<TElement extends HTMLElement> {
   isClamped: boolean;
 }
 
-/**
- * Whether a line-clamped (or otherwise overflow-hidden) element actually has
- * content cut off, measured from the rendered layout
- * (`scrollHeight > clientHeight`) — never from a character count.
- * Re-measures when the element resizes and once fonts finish loading, since
- * both change line wrapping.
- */
+/** Measures whether a clamped element has content cut off (`scrollHeight > clientHeight`), re-measuring on resize and font load. */
 export function useIsClamped<TElement extends HTMLElement = HTMLElement>({
   enabled = true,
 }: UseIsClampedOptions = {}): UseIsClampedResult<TElement> {

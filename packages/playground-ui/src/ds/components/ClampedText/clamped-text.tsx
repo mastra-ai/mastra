@@ -26,12 +26,7 @@ export interface ClampedTextProps extends Omit<TxtProps, 'children' | 'ref'> {
   showLessLabel?: string;
 }
 
-/**
- * Text clamped to a number of lines with a "read more" toggle. The toggle only
- * appears when the clamp actually cuts content: the rendered element is measured
- * (`scrollHeight > clientHeight`), so the detection follows layout — element
- * width, font loading — rather than any character count.
- */
+/** Text clamped to a number of lines, with a "read more" toggle shown only when the clamp actually cuts content. */
 export function ClampedText({
   children,
   lines = 2,

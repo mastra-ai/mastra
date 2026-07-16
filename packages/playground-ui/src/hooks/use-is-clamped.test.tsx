@@ -89,7 +89,6 @@ describe('useIsClamped', () => {
     act(() => result.current.ref(element));
     expect(result.current.isClamped).toBe(true);
 
-    // The element grew tall enough to fit its content.
     setElementSize(element, { scrollHeight: 60, clientHeight: 60 });
     act(() => lastObserver().resize());
 
@@ -105,8 +104,6 @@ describe('useIsClamped', () => {
     act(() => result.current.ref(element));
     expect(result.current.isClamped).toBe(true);
 
-    // Disabling (clamp lifted, e.g. text expanded) stops observing and keeps
-    // the last value even though the element no longer overflows.
     setElementSize(element, { scrollHeight: 60, clientHeight: 60 });
     rerender({ enabled: false });
 
