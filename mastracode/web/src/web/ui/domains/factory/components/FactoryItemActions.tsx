@@ -92,7 +92,9 @@ export function FactoryItemActions({
               {action.starting ? 'Starting…' : action.label}
             </DropdownMenu.Item>
           ))}
-          <DropdownMenu.Item onClick={() => setPromptOpen(true)}>Custom prompt…</DropdownMenu.Item>
+          <DropdownMenu.Item disabled={starting} onClick={() => setPromptOpen(true)}>
+            Custom prompt…
+          </DropdownMenu.Item>
           {menuExtras}
         </DropdownMenu.Content>
       </DropdownMenu>
