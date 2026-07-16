@@ -1,5 +1,35 @@
 # @mastra/code-sdk
 
+## 0.2.0-alpha.2
+
+### Minor Changes
+
+- Add goal execution to the headless `runMC` API. Goal runs use the same GoalManager and system-reminder signal path as the TUI and resolve on terminal `goal_evaluation` events without manual continuation messages. ([#19441](https://github.com/mastra-ai/mastra/pull/19441))
+
+  ```ts
+  const run = runMC({
+    controller,
+    session,
+    goal: {
+      objective: 'Implement and verify the requested change',
+      judgeModelId: 'openai/gpt-5-mini',
+      maxRuns: 20,
+    },
+  });
+
+  for await (const event of run) {
+    console.log(event.type);
+  }
+
+  const result = await run.result;
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`8b20926`](https://github.com/mastra-ai/mastra/commit/8b20926cd59e2ba3d66458e062fa0e6e2ada3e68), [`74faf8b`](https://github.com/mastra-ai/mastra/commit/74faf8bd9c1018f2492653c06b1e25fc8300e9e6), [`1fadac4`](https://github.com/mastra-ai/mastra/commit/1fadac44537caeefe81f9f775ae2f2f3d94e9069), [`970c032`](https://github.com/mastra-ai/mastra/commit/970c032502751ee5dd4d0b603331d9838cb538fc), [`792ec9a`](https://github.com/mastra-ai/mastra/commit/792ec9a0869bab8274cf5e0ed2840738737a1607), [`712b864`](https://github.com/mastra-ai/mastra/commit/712b864aa1ed12b14c54390ec17b69de163c37f7), [`8f7a5de`](https://github.com/mastra-ai/mastra/commit/8f7a5dedc246cdc938bb65516703cf9b27b03756), [`c0bec73`](https://github.com/mastra-ai/mastra/commit/c0bec732c93d1a22ae5e51ed66cf8cacca8bd6a6)]:
+  - @mastra/core@1.52.0-alpha.2
+  - @mastra/mcp@1.15.0-alpha.0
+
 ## 0.1.1-alpha.1
 
 ### Patch Changes

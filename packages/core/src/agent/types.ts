@@ -380,9 +380,10 @@ export type StructuredOutputOptionsBase<OUTPUT = {}> = {
    * Whether to use prompt injection instead of native response format to coerce the LLM to respond with JSON text.
    * true and 'system' inject JSON instructions into the leading system message.
    * 'inline' appends JSON instructions to the latest user message.
+   * 'auto' uses native structured output when supported and inline injection otherwise.
    * false or omitted uses the provider's native response format.
    */
-  jsonPromptInjection?: boolean | 'system' | 'inline';
+  jsonPromptInjection?: boolean | 'system' | 'inline' | 'auto';
 
   /**
    * Optional logger instance for structured logging
@@ -777,7 +778,7 @@ interface AgentConfigBase<
    * }
    * ```
    */
-  skills?: AgentSkillsInput;
+  skills?: AgentSkillsInput<TRequestContext>;
   /**
    * Format for skill information injection when workspace has skills.
    * @default 'xml'

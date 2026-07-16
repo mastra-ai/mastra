@@ -47,6 +47,7 @@ async function runGoalStep(
     throwingScorer?: boolean;
     throwMessage?: string;
     throwingToolsResolver?: string;
+    undefinedJudgeResolver?: boolean;
     dbMessages?: any[];
     useMemory?: boolean;
   },
@@ -122,7 +123,9 @@ async function runGoalStep(
 
   const step = createGoalStep({
     goal: {
-      judge: createMockModel({ objectGenerationMode: 'json', mockText: { decision, reason: `r:${decision}` } }) as any,
+      judge: opts?.undefinedJudgeResolver
+        ? () => undefined
+        : (createMockModel({ objectGenerationMode: 'json', mockText: { decision, reason: `r:${decision}` } }) as any),
       ...(opts?.throwingScorer ? { scorer: throwingScorer } : {}),
       // A `goal.tools` resolver that throws exercises a resolution-time judge
       // failure (before scoring) — the default scorer resolves tools eagerly.
@@ -262,6 +265,19 @@ describe('goal step waiting semantics', () => {
     expect(chunk.payload.reason).toBe('r:waiting');
     // It scored the waiting signal (visible on the per-scorer result).
     expect(chunk.payload.results.some((r: any) => r.score === GOAL_SCORE_WAITING)).toBe(true);
+  });
+
+  it('falls back to the objective judge when a dynamic judge resolver returns undefined', async () => {
+    const fallbackJudge = createMockModel({
+      objectGenerationMode: 'json',
+      mockText: { decision: 'done', reason: 'fallback judge resolved' },
+    });
+    const { record, chunk } = await runGoalStep('done', makeRecord({ judgeModelId: fallbackJudge as any }), {
+      undefinedJudgeResolver: true,
+    });
+
+    expect(record.status).toBe('done');
+    expect(chunk.payload.reason).toBe('fallback judge resolved');
   });
 
   it('marks the objective done and stops the loop on a done decision', async () => {
