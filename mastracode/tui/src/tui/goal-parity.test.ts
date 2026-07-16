@@ -99,10 +99,6 @@ function formatEventTypes(events: AgentControllerEvent[]) {
 
 function waitForTerminalGoalEvent(events: AgentControllerEvent[]) {
   return new Promise<Extract<AgentControllerEvent, { type: 'goal_evaluation' }>>((resolve, reject) => {
-    const timeout = setTimeout(
-      () => reject(new Error(`Timed out waiting for goal_evaluation. Events: ${formatEventTypes(events)}`)),
-      10_000,
-    );
     const interval = setInterval(() => {
       const terminal = events.find(
         (event): event is Extract<AgentControllerEvent, { type: 'goal_evaluation' }> =>
@@ -114,15 +110,15 @@ function waitForTerminalGoalEvent(events: AgentControllerEvent[]) {
         resolve(terminal);
       }
     }, 5);
+    const timeout = setTimeout(() => {
+      clearInterval(interval);
+      reject(new Error(`Timed out waiting for goal_evaluation. Events: ${formatEventTypes(events)}`));
+    }, 10_000);
   });
 }
 
 function waitForEvent(events: AgentControllerEvent[], type: AgentControllerEvent['type']) {
   return new Promise<void>((resolve, reject) => {
-    const timeout = setTimeout(
-      () => reject(new Error(`Timed out waiting for ${type}. Events: ${formatEventTypes(events)}`)),
-      10_000,
-    );
     const interval = setInterval(() => {
       if (events.some(event => event.type === type)) {
         clearTimeout(timeout);
@@ -130,6 +126,10 @@ function waitForEvent(events: AgentControllerEvent[], type: AgentControllerEvent
         resolve();
       }
     }, 5);
+    const timeout = setTimeout(() => {
+      clearInterval(interval);
+      reject(new Error(`Timed out waiting for ${type}. Events: ${formatEventTypes(events)}`));
+    }, 10_000);
   });
 }
 

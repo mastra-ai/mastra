@@ -70,7 +70,7 @@ interface RunMCBaseOptions<TState extends Record<string, unknown> = Record<strin
   resourceId?: string;
   /** Set or rename the thread title before running. */
   title?: string;
-  /** Abort with `status: 'timeout'` (exit code 2) if not complete within this many ms. */
+  /** Abort with `status: 'timeout'` (exit code 2) after this many ms without an event. */
   timeoutMs?: number;
   /**
    * Maximum number of agentic turns (assistant responses). When the limit is
@@ -91,14 +91,19 @@ export interface RunMCGoalOptions {
   goalManager?: GoalManager;
 }
 
-export interface RunMCOptions<
-  TState extends Record<string, unknown> = Record<string, unknown>,
-> extends RunMCBaseOptions<TState> {
-  /** The task to run as a regular headless turn. */
-  prompt?: string;
-  /** Run a persisted goal instead of a regular prompt. */
-  goal?: RunMCGoalOptions;
-}
+export type RunMCOptions<TState extends Record<string, unknown> = Record<string, unknown>> = RunMCBaseOptions<TState> &
+  (
+    | {
+        /** The task to run as a regular headless turn. */
+        prompt: string;
+        goal?: never;
+      }
+    | {
+        prompt?: never;
+        /** Run a persisted goal instead of a regular prompt. */
+        goal: RunMCGoalOptions;
+      }
+  );
 
 export type RunMCStatus = 'completed' | 'done' | 'paused' | 'error' | 'aborted' | 'timeout' | 'max_turns';
 
