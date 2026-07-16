@@ -7,6 +7,13 @@ import { handleError } from './error';
 
 const SOURCE_PROVIDER_CAPABILITIES_TIMEOUT_MS = 3000;
 
+/**
+ * Default path of liveKitConnectionRoute() from @mastra/livekit — the exact route Studio's
+ * voice call posts to. Change it in lockstep with that default and with Studio's
+ * use-voice-call hook.
+ */
+const LIVEKIT_CONNECTION_DETAILS_PATH = '/voice/livekit/connection-details';
+
 async function getSourceProviderCapabilities(
   getCapabilities: () => Promise<{
     canWrite: boolean;
@@ -173,7 +180,7 @@ export const GET_SYSTEM_PACKAGES_ROUTE = createRoute({
       const liveKitConnectionRouteEnabled =
         mastra
           .getServer()
-          ?.apiRoutes?.some(route => route.method === 'POST' && route.path === '/voice/livekit/connection-details') ??
+          ?.apiRoutes?.some(route => route.method === 'POST' && route.path === LIVEKIT_CONNECTION_DETAILS_PATH) ??
         false;
 
       return {
