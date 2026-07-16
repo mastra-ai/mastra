@@ -1,6 +1,8 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { getDynamicWorkspace } from '@mastra/code-sdk/agents/workspace';
 import { RequestContext } from '@mastra/core/request-context';
 import type { LocalFilesystem } from '@mastra/core/workspace';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -28,6 +30,29 @@ function createRequestContext(projectPath: string) {
 }
 
 describe('getFactoryWorkspace', () => {
+  it('keeps Factory and default workspace cache identities separate', async () => {
+    const projectPath = await fs.mkdtemp(path.join(os.tmpdir(), 'mastracode-web-factory-cache-'));
+    tempDirs.push(projectPath);
+    const requestContext = createRequestContext(projectPath);
+
+    const defaultWorkspace = await getDynamicWorkspace({ requestContext });
+    const factoryWorkspace = await getFactoryWorkspace({ requestContext });
+
+    expect(defaultWorkspace.id).toBe(`mastra-code-workspace-${projectPath}`);
+    expect(factoryWorkspace.id).toBe(`mastra-code-workspace-${projectPath}-web-factory`);
+    expect(factoryWorkspace.id).not.toBe(defaultWorkspace.id);
+  });
+
+  it('keeps the reserved skill list aligned with packaged Factory assets', async () => {
+    const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), 'factory-skills');
+    const assetNames = (await fs.readdir(assetRoot)).sort();
+
+    expect(assetNames).toEqual(['understand-issue', 'understand-pr']);
+    await Promise.all(
+      assetNames.map(skillName => expect(fs.stat(path.join(assetRoot, skillName, 'SKILL.md'))).resolves.toBeDefined()),
+    );
+  });
+
   it('adds read-only Web Factory skills and keeps them authoritative over project shadows', async () => {
     const projectPath = await fs.mkdtemp(path.join(os.tmpdir(), 'mastracode-web-factory-skills-'));
     tempDirs.push(projectPath);

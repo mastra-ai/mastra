@@ -10,7 +10,7 @@ const FACTORY_SKILLS_MOUNT = path.resolve(path.parse(process.cwd()).root, '__mas
 const FACTORY_SKILL_NAMES = new Set(['understand-issue', 'understand-pr']);
 
 class FactorySkillSource implements SkillSource {
-  readonly #factorySource = new LocalSkillSource();
+  readonly #factorySource = new LocalSkillSource({ basePath: FACTORY_SKILLS_SOURCE_PATH });
   readonly #fallbackSkillRoots: Set<string>;
 
   constructor(
@@ -26,8 +26,7 @@ class FactorySkillSource implements SkillSource {
   }
 
   #factoryPath(skillPath: string): string {
-    const relative = path.relative(FACTORY_SKILLS_MOUNT, path.normalize(skillPath));
-    return path.join(FACTORY_SKILLS_SOURCE_PATH, relative);
+    return path.relative(FACTORY_SKILLS_MOUNT, path.normalize(skillPath));
   }
 
   exists(skillPath: string): Promise<boolean> {
