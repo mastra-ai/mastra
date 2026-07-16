@@ -134,3 +134,27 @@ export const WithHelpTextAndError: Story = {
     errorMsg: 'Selection is required.',
   },
 };
+
+export const InBoundedScrollContainer: Story = {
+  args: {
+    name: 'fruit',
+    label: 'Fruit',
+    value: 'apple',
+  },
+  decorators: [
+    Story => (
+      <div className="h-32 overflow-auto border border-border1 p-4" data-testid="bounded-scroll-container">
+        <div className="h-16" />
+        <Story />
+      </div>
+    ),
+  ],
+  play: async ({ canvasElement }) => {
+    const namedInput = canvasElement.querySelector<HTMLInputElement>('input[name="fruit"]');
+    const containingBlock = namedInput?.offsetParent;
+
+    if (!(containingBlock instanceof HTMLElement) || getComputedStyle(containingBlock).position !== 'relative') {
+      throw new Error('Named field inputs must be contained by the field block layout.');
+    }
+  },
+};
