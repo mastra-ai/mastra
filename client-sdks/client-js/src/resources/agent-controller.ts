@@ -354,9 +354,7 @@ export interface SubscribeAgentControllerSessionOptions {
   reconnect?:
     | boolean
     | {
-        /** Maximum reconnect attempts after the initial stream ends or errors. Defaults to Infinity. */
         maxRetries?: number;
-        /** Delay between reconnect attempts in milliseconds. Defaults to 1000. */
         delayMs?: number;
       };
 }
@@ -456,20 +454,19 @@ export class AgentControllerSession extends BaseResource {
           if (done) return cancelled ? 'cancelled' : 'done';
           buffer += decoder.decode(value, { stream: true });
 
-          // SSE frames are separated by a blank line.
           let sep: number;
           while ((sep = buffer.indexOf('\n\n')) !== -1) {
             const frame = buffer.slice(0, sep);
             buffer = buffer.slice(sep + 2);
             for (const line of frame.split('\n')) {
-              if (!line.startsWith('data:')) continue; // skip ": heartbeat" comments
+              if (!line.startsWith('data:')) continue;
               const data = line.slice(5).trim();
               if (!data) continue;
               let event: AgentControllerEvent;
               try {
                 event = JSON.parse(data) as AgentControllerEvent;
               } catch {
-                continue; // ignore malformed frame
+                continue;
               }
               try {
                 options.onEvent(event);
