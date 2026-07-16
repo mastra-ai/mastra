@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { executeWithContext } from '../observability/context-storage';
 import type {
   AnySpan,
   LoggerContext,
@@ -8,10 +7,11 @@ import type {
   ObservabilityInstance,
   WorkspaceActivityEvent,
 } from '../observability';
+import { executeWithContext } from '../observability/context-storage';
 import type { WorkspaceFilesystem } from './filesystem/filesystem';
-import type { WorkspaceSandbox } from './sandbox/sandbox';
 import type { WorkspaceInstrumentationMeta } from './observability';
 import { SANDBOX_OUTPUT_CHUNK_LIMIT, truncateChunk, wrapFilesystem, wrapSandbox } from './observability';
+import type { WorkspaceSandbox } from './sandbox/sandbox';
 
 /**
  * Minimal `ObservabilityInstance` stub. Records every call so tests can assert

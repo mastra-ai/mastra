@@ -24,7 +24,6 @@
 
 import type { Mastra } from '../mastra';
 import { getCurrentSpan } from '../observability/context-storage';
-import { generateSignalId } from '../observability/utils';
 import type {
   AnySpan,
   ExportedFilesystemChange,
@@ -39,6 +38,7 @@ import type {
   SandboxOutputStream,
 } from '../observability/types';
 import { SpanType } from '../observability/types';
+import { generateSignalId } from '../observability/utils';
 import type { WorkspaceFilesystem } from './filesystem/filesystem';
 import type { WorkspaceSandbox } from './sandbox/sandbox';
 

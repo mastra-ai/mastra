@@ -39,8 +39,6 @@ import { RequestContext } from '../request-context';
 import type { MastraVector } from '../vector';
 
 import { WorkspaceError, SearchNotAvailableError } from './errors';
-import { createWorkspaceInstrumentation } from './observability';
-import type { WorkspaceInstrumentation, WorkspaceProviderWrapCache } from './observability';
 import { CompositeFilesystem, LocalFilesystem } from './filesystem';
 import type { WorkspaceFilesystem, FilesystemInfo } from './filesystem';
 import { MastraFilesystem } from './filesystem/mastra-filesystem';
@@ -49,6 +47,8 @@ import type { ReaddirEntry } from './glob';
 import { callLifecycle } from './lifecycle';
 import { findProjectRoot, isLSPAvailable, LSPManager } from './lsp';
 import type { LSPConfig } from './lsp/types';
+import type { WorkspaceInstrumentation, WorkspaceProviderWrapCache } from './observability';
+import { createWorkspaceInstrumentation } from './observability';
 import type { WorkspaceSandbox, OnMountHook } from './sandbox';
 import { LocalSandbox } from './sandbox/local-sandbox';
 import { MastraSandbox } from './sandbox/mastra-sandbox';

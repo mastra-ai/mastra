@@ -14,7 +14,6 @@ import type { FeedbackEvent, FeedbackInput } from './feedback';
 import type { LoggerContext, LogEvent } from './logging';
 import type { MetricsContext, MetricEvent } from './metrics';
 import type { ScoreEvent, ScoreInput } from './scores';
-import type { WorkspaceActivityEvent } from './workspace-activity';
 import type {
   AnySpan,
   AnyExportedSpan,
@@ -30,6 +29,7 @@ import type {
   TracingContext,
   TracingEvent,
 } from './tracing';
+import type { WorkspaceActivityEvent } from './workspace-activity';
 
 // ============================================================================
 // ObservabilityContext
