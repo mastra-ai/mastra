@@ -6,9 +6,7 @@ import type { PricingMeter, PricingConditionOperator, PricingConditionField } fr
 
 const DATA_FILE_NAME = 'pricing-data.jsonl';
 const BEDROCK_GEOGRAPHY_PREFIXES = new Set(['global', 'us', 'eu', 'apac', 'jp', 'au']);
-// Provider ID emitted by @ai-sdk/gateway for Vercel AI Gateway models.
 const AI_SDK_VERCEL_GATEWAY_PROVIDER_ID = 'gateway';
-// Canonical provider ID used by the embedded pricing snapshot for those models.
 const VERCEL_PRICING_PROVIDER_ID = 'vercel';
 const AI_SDK_PROVIDER_NAMESPACE_ALIASES = new Map([
   ['google.vertex', 'google-vertex'],
@@ -84,7 +82,6 @@ export class PricingRegistry {
 
   get(args: { provider: string; model: string }): PricingModel | null {
     for (const provider of getPricingProviderCandidates(args.provider, args.model)) {
-      // Try all model name variants in order of preference
       const variants = getModelVariants(args.model, provider);
       for (const variant of variants) {
         const key = makePricingKey({ provider, model: variant });
@@ -190,38 +187,40 @@ function normalizeKeyPart(value: string): string {
   return value.trim().toLowerCase();
 }
 
-/**
- * Return provider keys in lookup order: the exact runtime value, a known
- * namespace alias, or the ordinary AI SDK base-provider fallback.
- */
 function getPricingProviderCandidates(provider: string, model: string): string[] {
   const normalizedProvider = normalizeKeyPart(provider);
-  const candidates = new Set([normalizedProvider]);
+  const providerCandidates =
+    getNamespacedProviderCandidates(normalizedProvider) ?? getBaseProviderCandidates(normalizedProvider, model);
 
+  return [...new Set([normalizedProvider, ...providerCandidates])];
+}
+
+function getNamespacedProviderCandidates(provider: string): string[] | null {
   for (const [providerNamespace, pricingProvider] of AI_SDK_PROVIDER_NAMESPACE_ALIASES) {
-    if (normalizedProvider === providerNamespace || normalizedProvider.startsWith(`${providerNamespace}.`)) {
-      candidates.add(providerNamespace);
-      candidates.add(pricingProvider);
-      // Known multi-segment namespaces must not fall through to their first
-      // segment (for example, Vertex pricing must not fall back to Google).
-      return [...candidates];
+    if (matchesProviderNamespace(provider, providerNamespace)) {
+      return [providerNamespace, pricingProvider];
     }
   }
 
-  // Most AI SDK providers append a capability suffix, such as "openai.chat" or
-  // "anthropic.messages", while the pricing data uses the base provider name.
-  const capabilitySeparator = normalizedProvider.indexOf('.');
-  const baseProvider =
-    capabilitySeparator === -1 ? normalizedProvider : normalizedProvider.substring(0, capabilitySeparator);
-  candidates.add(baseProvider);
+  return null;
+}
 
-  // @ai-sdk/gateway uses "gateway" for Vercel AI Gateway. Preserve exact
-  // gateway pricing entries, then fall back to the snapshot's "vercel" rows.
-  if (baseProvider === AI_SDK_VERCEL_GATEWAY_PROVIDER_ID && hasCreatorModelIdShape(model)) {
-    candidates.add(VERCEL_PRICING_PROVIDER_ID);
-  }
+function matchesProviderNamespace(provider: string, providerNamespace: string): boolean {
+  return provider === providerNamespace || provider.startsWith(`${providerNamespace}.`);
+}
 
-  return [...candidates];
+function getBaseProviderCandidates(provider: string, model: string): string[] {
+  const baseProvider = getBaseProvider(provider);
+  return isVercelGatewayModel(baseProvider, model) ? [baseProvider, VERCEL_PRICING_PROVIDER_ID] : [baseProvider];
+}
+
+function getBaseProvider(provider: string): string {
+  const capabilitySeparator = provider.indexOf('.');
+  return capabilitySeparator === -1 ? provider : provider.substring(0, capabilitySeparator);
+}
+
+function isVercelGatewayModel(provider: string, model: string): boolean {
+  return provider === AI_SDK_VERCEL_GATEWAY_PROVIDER_ID && hasCreatorModelIdShape(model);
 }
 
 function hasCreatorModelIdShape(model: string): boolean {
