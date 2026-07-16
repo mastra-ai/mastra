@@ -473,8 +473,8 @@ export const resumeStreamUntilIdleBodySchema = agentExecutionBodySchema.omit({ m
 /**
  * Body schema for tool execute endpoint
  * Simple schema - tool validates its own input data
- * Note: Using z.unknown().refine() instead of z.unknown() to ensure data is required
- * (z.unknown() is treated as optional by Zod)
+ * Note: The .refine() ensures data is required
+ * (bare z.unknown() is treated as optional by Zod)
  */
 const executeToolDataBodySchema = z.object({
   data: z.unknown().refine(x => x !== undefined, { message: 'data is required' }),
