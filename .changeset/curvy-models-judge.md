@@ -2,4 +2,10 @@
 '@mastra/core': patch
 ---
 
-Track native structured-output support in generated model capabilities and expose it through the model provider registry.
+Added native structured-output support lookup through the model provider registry.
+
+```ts
+import { modelSupportsStructuredOutput } from '@mastra/core/llm';
+
+const supportsStructuredOutput = modelSupportsStructuredOutput('openai/gpt-5.5');
+```
