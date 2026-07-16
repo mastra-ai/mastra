@@ -45,6 +45,27 @@ function rowsOf(table: any): Array<Record<string, any>> {
 // for the previous one to finish, so a locked read always sees prior writes.
 let txTail: Promise<unknown> = Promise.resolve();
 
+// Capture audit events at the store boundary so the real `emitAudit` path
+// (actor resolution, request context, never-throws) is exercised end to end.
+let auditRecorded: Array<Record<string, any>> = [];
+let auditFailure: Error | undefined;
+
+vi.mock('../audit/store', () => ({
+  recordAuditEvent: async (input: any) => {
+    if (auditFailure) throw auditFailure;
+    auditRecorded.push(input);
+    return {
+      id: `00000000-0000-4000-9000-${String(auditRecorded.length).padStart(12, '0')}`,
+      occurredAt: new Date(),
+      ...input,
+      githubProjectId: input.githubProjectId ?? null,
+      metadata: input.metadata ?? {},
+      context: input.context ?? {},
+    };
+  },
+  listAuditEvents: async () => ({ events: [] }),
+}));
+
 vi.mock('../github/db', () => {
   const makeDbClient = (): any => ({
     select: () => ({
@@ -96,12 +117,19 @@ vi.mock('../github/db', () => {
       }),
     }),
     delete: (table: any) => ({
-      where: async (cond: any) => {
-        const rows = rowsOf(table);
-        const remaining = rows.filter(row => !matches(table, row, cond));
-        rows.length = 0;
-        rows.push(...remaining);
-      },
+      where: (cond: any) => ({
+        returning: async () => {
+          // Yield like the select does so concurrent deletes interleave and
+          // only one caller wins the row (regression coverage for atomicity).
+          await new Promise(resolve => setTimeout(resolve, 0));
+          const rows = rowsOf(table);
+          const deleted = rows.filter(row => matches(table, row, cond));
+          const remaining = rows.filter(row => !matches(table, row, cond));
+          rows.length = 0;
+          rows.push(...remaining);
+          return deleted;
+        },
+      }),
     }),
     transaction: (fn: (tx: any) => Promise<unknown>) => {
       const run = txTail.then(() => fn(makeDbClient()));
@@ -155,6 +183,8 @@ beforeEach(() => {
   tables = {};
   nextId = 1;
   txTail = Promise.resolve();
+  auditRecorded = [];
+  auditFailure = undefined;
   seedProject();
 });
 
@@ -434,6 +464,123 @@ describe('GET /web/factory/projects/:id/metrics', () => {
     expect(metrics.cycleTime).toEqual({ medianMs: null, p90Ms: null, samples: 0 });
     expect(metrics.wip).toEqual([]);
     expect(metrics.agingWip).toEqual([]);
+  });
+});
+
+// ── Audit events ─────────────────────────────────────────────────────────
+describe('audit events', () => {
+  async function createItem(overrides: Record<string, unknown> = {}) {
+    const res = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody(overrides));
+    return (await res.json()).workItem;
+  }
+
+  it('records work_item.created on POST with actor, project, and target', async () => {
+    const item = await createItem();
+    expect(auditRecorded).toHaveLength(1);
+    expect(auditRecorded[0]).toMatchObject({
+      orgId: 'org1',
+      actorId: 'u1',
+      action: 'factory.work_item.created',
+      githubProjectId: PROJECT_ID,
+      targets: [{ type: 'work_item', id: item.id, name: 'Fix the login flow' }],
+      metadata: { source: 'github-issue', sourceKey: 'github-issue:42', stages: ['intake'] },
+    });
+  });
+
+  it('records updated (not created) when a POST reuses an existing sourceKey', async () => {
+    const item = await createItem();
+    auditRecorded = [];
+
+    const session = { projectPath: '/sb/wt/issue-42', branch: 'factory/issue-42', threadId: 't-1' };
+    await json(
+      'POST',
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      createBody({ stages: ['execute'], sessions: { work: session } }),
+    );
+    expect(auditRecorded.map(e => e.action)).toEqual([
+      'factory.work_item.updated',
+      'factory.work_item.stage_moved',
+      'factory.run.started',
+    ]);
+    expect(auditRecorded[1]).toMatchObject({
+      targets: [{ type: 'work_item', id: item.id, name: 'Fix the login flow' }],
+      metadata: { from: ['intake'], to: ['execute'] },
+    });
+    expect(auditRecorded[2].metadata).toMatchObject({ role: 'work', branch: 'factory/issue-42' });
+  });
+
+  it('records updated + stage_moved with the server-diffed from/to on a stage PATCH', async () => {
+    const item = await createItem();
+    auditRecorded = [];
+
+    await json('PATCH', `/web/factory/work-items/${item.id}`, { stages: ['execute'] });
+    expect(auditRecorded.map(e => e.action)).toEqual(['factory.work_item.updated', 'factory.work_item.stage_moved']);
+    expect(auditRecorded[0].metadata).toEqual({ fields: ['stages'] });
+    expect(auditRecorded[1]).toMatchObject({
+      githubProjectId: PROJECT_ID,
+      targets: [{ type: 'work_item', id: item.id, name: 'Fix the login flow' }],
+      metadata: { from: ['intake'], to: ['execute'] },
+    });
+  });
+
+  it('records run.started when a PATCH introduces a new session role, but not on re-file', async () => {
+    const item = await createItem();
+    auditRecorded = [];
+
+    const session = { projectPath: '/sb/wt/issue-42', branch: 'factory/issue-42', threadId: 't-1' };
+    await json('PATCH', `/web/factory/work-items/${item.id}`, { sessions: { work: session } });
+    expect(auditRecorded.map(e => e.action)).toEqual(['factory.work_item.updated', 'factory.run.started']);
+    expect(auditRecorded[1].metadata).toEqual({
+      role: 'work',
+      branch: 'factory/issue-42',
+      threadId: 't-1',
+      projectPath: '/sb/wt/issue-42',
+    });
+
+    // Re-filing the same role is not a new run.
+    auditRecorded = [];
+    await json('PATCH', `/web/factory/work-items/${item.id}`, { sessions: { work: session } });
+    expect(auditRecorded.map(e => e.action)).toEqual(['factory.work_item.updated']);
+  });
+
+  it('records only updated when the patch does not move stages', async () => {
+    const item = await createItem();
+    auditRecorded = [];
+
+    await json('PATCH', `/web/factory/work-items/${item.id}`, { title: 'Renamed card' });
+    expect(auditRecorded.map(e => e.action)).toEqual(['factory.work_item.updated']);
+    expect(auditRecorded[0].metadata).toEqual({ fields: ['title'] });
+  });
+
+  it('records work_item.deleted on DELETE', async () => {
+    const item = await createItem();
+    auditRecorded = [];
+
+    await json('DELETE', `/web/factory/work-items/${item.id}`);
+    expect(auditRecorded).toHaveLength(1);
+    expect(auditRecorded[0]).toMatchObject({
+      action: 'factory.work_item.deleted',
+      githubProjectId: PROJECT_ID,
+      targets: [{ type: 'work_item', id: item.id, name: 'Fix the login flow' }],
+    });
+  });
+
+  it('never blocks the mutation when the audit insert throws', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    auditFailure = new Error('audit db down');
+
+    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
+    expect(created.status).toBe(200);
+    const { workItem } = await created.json();
+
+    const patched = await json('PATCH', `/web/factory/work-items/${workItem.id}`, { stages: ['done'] });
+    expect(patched.status).toBe(200);
+
+    const deleted = await json('DELETE', `/web/factory/work-items/${workItem.id}`);
+    expect(deleted.status).toBe(200);
+    expect(tables['work_items']).toHaveLength(0);
+
+    warn.mockRestore();
   });
 });
 

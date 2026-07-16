@@ -1,3 +1,5 @@
+import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
+export type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
 
 import type { ClientOptions } from '../types';
@@ -21,47 +23,6 @@ import { BaseResource } from './base';
 
 export interface AgentControllerInfo {
   id: string;
-}
-
-export interface AgentControllerMessageContent {
-  type: 'text' | 'thinking' | 'tool_call' | 'tool_result' | 'image' | 'file' | string;
-  /** Correlates a `tool_call` part with its `tool_result` part. */
-  id?: string;
-  text?: string;
-  thinking?: string;
-  name?: string;
-  args?: unknown;
-  result?: unknown;
-  isError?: boolean;
-  /** Structured notification and notification-summary fields. */
-  notificationId?: string;
-  message?: string;
-  source?: string;
-  kind?: string;
-  priority?: string;
-  status?: string;
-  attributes?: Record<string, unknown>;
-  metadata?: Record<string, unknown>;
-  pending?: number;
-  bySource?: Record<string, number>;
-  byPriority?: Record<string, number>;
-  notificationIds?: string[];
-  /** Base64 payload for `image` and `file` parts. */
-  data?: string;
-  /** MIME type for `image` parts. */
-  mimeType?: string;
-  /** MIME type for `file` parts. */
-  mediaType?: string;
-  /** Optional filename for `file` parts. */
-  filename?: string;
-}
-
-export interface AgentControllerMessage {
-  id: string;
-  role: 'user' | 'assistant' | 'system';
-  content: AgentControllerMessageContent[];
-  stopReason?: string;
-  errorMessage?: string;
 }
 
 /**
@@ -92,9 +53,9 @@ export type KnownAgentControllerEvent =
   | { type: 'agent_start' }
   | { type: 'agent_end'; reason?: 'complete' | 'aborted' | 'error' | 'suspended' }
   // Assistant message streaming.
-  | { type: 'message_start'; message: AgentControllerMessage }
-  | { type: 'message_update'; message: AgentControllerMessage }
-  | { type: 'message_end'; message: AgentControllerMessage }
+  | { type: 'message_start'; message: MastraDBMessage }
+  | { type: 'message_update'; message: MastraDBMessage }
+  | { type: 'message_end'; message: MastraDBMessage }
   // Tool lifecycle.
   | { type: 'tool_input_start'; toolCallId: string; toolName: string }
   | { type: 'tool_input_delta'; toolCallId: string; argsTextDelta: string; toolName?: string }
@@ -198,6 +159,24 @@ export interface OtherAgentControllerEvent {
  * event types fall through to {@link OtherAgentControllerEvent}.
  */
 export type AgentControllerEvent = KnownAgentControllerEvent | OtherAgentControllerEvent;
+
+type SerializedMastraDBMessage = Omit<MastraDBMessage, 'createdAt'> & { createdAt: Date | string };
+
+function hydrateMessage(message: SerializedMastraDBMessage): MastraDBMessage {
+  return {
+    ...message,
+    createdAt: message.createdAt instanceof Date ? message.createdAt : new Date(message.createdAt),
+  };
+}
+
+function hydrateEventMessage(event: AgentControllerEvent): AgentControllerEvent {
+  if (event.type !== 'message_start' && event.type !== 'message_update' && event.type !== 'message_end') return event;
+
+  return {
+    ...event,
+    message: hydrateMessage(event.message as SerializedMastraDBMessage),
+  } as AgentControllerEvent;
+}
 
 /** Response from creating or resuming an agent controller session. */
 export interface CreateAgentControllerSessionResponse {
@@ -351,6 +330,12 @@ export interface SubscribeAgentControllerSessionOptions {
   onEvent: (event: AgentControllerEvent) => void;
   /** Called when the stream errors or ends unexpectedly. */
   onError?: (error: unknown) => void;
+  reconnect?:
+    | boolean
+    | {
+        maxRetries?: number;
+        delayMs?: number;
+      };
 }
 
 export interface AgentControllerSubscription {
@@ -409,51 +394,171 @@ export class AgentControllerSession extends BaseResource {
    * message arrives here as `message_*` events, not on the sendMessage call.
    */
   async subscribe(options: SubscribeAgentControllerSessionOptions): Promise<AgentControllerSubscription> {
-    const response = (await this.request(this.url(`${this.base()}/stream`), { stream: true })) as Response;
-    if (!response.body) {
-      throw new Error('No response body for agent controller session stream');
-    }
+    const reconnectOptions =
+      options.reconnect === true
+        ? { maxRetries: Infinity, delayMs: 1000 }
+        : options.reconnect
+          ? { maxRetries: options.reconnect.maxRetries ?? Infinity, delayMs: options.reconnect.delayMs ?? 1000 }
+          : null;
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
     let cancelled = false;
-    let buffer = '';
+    let currentReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+    let delayResolve: (() => void) | undefined;
 
-    const pump = async () => {
+    const settleDelay = () => {
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = undefined;
+      }
+      const resolve = delayResolve;
+      delayResolve = undefined;
+      resolve?.();
+    };
+
+    const delay = (ms: number) =>
+      new Promise<void>(resolve => {
+        delayResolve = resolve;
+        reconnectTimer = setTimeout(settleDelay, ms);
+      });
+
+    const requestStream = () => this.request(this.url(`${this.base()}/stream`), { stream: true }) as Promise<Response>;
+
+    const streamEndedError = () => new Error('Agent controller session stream ended unexpectedly');
+
+    const findFrameSeparator = (text: string): { index: number; length: number } | null => {
+      const candidates = [
+        { index: text.indexOf('\r\n\r\n'), length: 4 },
+        { index: text.indexOf('\n\n'), length: 2 },
+        { index: text.indexOf('\r\r'), length: 2 },
+      ].filter(candidate => candidate.index !== -1);
+      if (candidates.length === 0) return null;
+      return candidates.reduce((earliest, candidate) => (candidate.index < earliest.index ? candidate : earliest));
+    };
+
+    type PumpResult =
+      | { kind: 'done' }
+      | { kind: 'cancelled' }
+      | { kind: 'consumer_error' }
+      | { kind: 'transport_error'; error: unknown };
+
+    const pump = async (response: Response): Promise<PumpResult> => {
+      if (!response.body) {
+        throw new Error('No response body for agent controller session stream');
+      }
+
+      const reader = response.body.getReader();
+      currentReader = reader;
+      const decoder = new TextDecoder();
+      let buffer = '';
+
       try {
         while (!cancelled) {
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done) return cancelled ? { kind: 'cancelled' } : { kind: 'done' };
           buffer += decoder.decode(value, { stream: true });
 
-          // SSE frames are separated by a blank line.
-          let sep: number;
-          while ((sep = buffer.indexOf('\n\n')) !== -1) {
-            const frame = buffer.slice(0, sep);
-            buffer = buffer.slice(sep + 2);
-            for (const line of frame.split('\n')) {
-              if (!line.startsWith('data:')) continue; // skip ": heartbeat" comments
+          let separator: { index: number; length: number } | null;
+          while ((separator = findFrameSeparator(buffer)) !== null) {
+            const frame = buffer.slice(0, separator.index);
+            buffer = buffer.slice(separator.index + separator.length);
+            for (const line of frame.split(/\r\n|\n|\r/)) {
+              if (!line.startsWith('data:')) continue;
               const data = line.slice(5).trim();
               if (!data) continue;
+              let event: AgentControllerEvent;
               try {
-                options.onEvent(JSON.parse(data) as AgentControllerEvent);
+                event = hydrateEventMessage(JSON.parse(data) as AgentControllerEvent);
               } catch {
-                // ignore malformed frame
+                continue;
+              }
+              try {
+                options.onEvent(event);
+              } catch (cause) {
+                if (!cancelled) options.onError?.(cause);
+                return { kind: 'consumer_error' };
               }
             }
           }
         }
+        return { kind: 'cancelled' };
       } catch (error) {
-        if (!cancelled) options.onError?.(error);
+        return cancelled ? { kind: 'cancelled' } : { kind: 'transport_error', error };
+      } finally {
+        if (currentReader === reader) currentReader = null;
+        void reader.cancel().catch(() => {});
       }
     };
 
-    void pump();
+    const reportTerminalError = (result: Extract<PumpResult, { kind: 'done' } | { kind: 'transport_error' }>) => {
+      if (result.kind === 'transport_error') {
+        options.onError?.(result.error);
+        return;
+      }
+      options.onError?.(streamEndedError());
+    };
+
+    const run = async () => {
+      let attempts = 0;
+
+      while (!cancelled) {
+        let response: Response;
+        try {
+          response = await requestStream();
+        } catch (error) {
+          if (cancelled) return;
+          if (!reconnectOptions || attempts >= reconnectOptions.maxRetries) {
+            options.onError?.(error);
+            return;
+          }
+          attempts++;
+          await delay(reconnectOptions.delayMs);
+          if (cancelled) return;
+          continue;
+        }
+
+        let result: PumpResult;
+        try {
+          result = await pump(response);
+        } catch (error) {
+          if (cancelled) return;
+          if (!reconnectOptions) {
+            options.onError?.(error);
+            return;
+          }
+          result = { kind: 'transport_error', error };
+        }
+
+        if (cancelled || result.kind === 'cancelled') return;
+        if (result.kind === 'consumer_error') return;
+
+        if (!reconnectOptions) {
+          if (result.kind === 'done' || result.kind === 'transport_error') {
+            reportTerminalError(result);
+          }
+          return;
+        }
+
+        if (result.kind === 'done' || result.kind === 'transport_error') {
+          if (attempts >= reconnectOptions.maxRetries) {
+            reportTerminalError(result);
+            return;
+          }
+          attempts++;
+          await delay(reconnectOptions.delayMs);
+          if (cancelled) return;
+          continue;
+        }
+      }
+    };
+
+    void run();
 
     return {
       unsubscribe: () => {
         cancelled = true;
-        void reader.cancel().catch(() => {});
+        settleDelay();
+        void currentReader?.cancel().catch(() => {});
       },
     };
   }
@@ -601,12 +706,12 @@ export class AgentControllerSession extends BaseResource {
   }
 
   /** List messages for a specific thread. */
-  async listMessages(threadId: string, limit?: number): Promise<AgentControllerMessage[]> {
+  async listMessages(threadId: string, limit?: number): Promise<MastraDBMessage[]> {
     const params = limit != null ? `?limit=${limit}` : '';
-    const body = await this.request<{ messages: AgentControllerMessage[] }>(
+    const body = await this.request<{ messages: SerializedMastraDBMessage[] }>(
       this.url(`${this.base()}/threads/${encodeURIComponent(threadId)}/messages${params}`),
     );
-    return body.messages;
+    return body.messages.map(hydrateMessage);
   }
 
   /**
@@ -755,10 +860,10 @@ export class AgentController extends BaseResource {
   }
 }
 
-/** Pull the plain text out of an assistant message's content parts. */
-export function agentControllerMessageText(message: AgentControllerMessage): string {
-  return message.content
-    .filter(c => c.type === 'text' && typeof c.text === 'string')
-    .map(c => c.text)
+/** Pull the plain text out of an assistant message's nested content parts. */
+export function agentControllerMessageText(message: MastraDBMessage): string {
+  return message.content.parts
+    .filter((p): p is MastraMessagePart & { text: string } => p.type === 'text' && typeof p.text === 'string')
+    .map(p => p.text)
     .join('');
 }
