@@ -14,12 +14,12 @@
 
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { EventEmitterPubSub } from '../../../events/event-emitter';
-import type { Event } from '../../../events/types';
-import { Agent } from '../../agent';
-import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '../constants';
-import { createDurableAgent } from '../create-durable-agent';
-import { emitStepStartEvent } from '../stream-adapter';
+import { EventEmitterPubSub } from '../../events/event-emitter';
+import type { Event } from '../../events/types';
+import { Agent } from '../agent';
+import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from './constants';
+import { createDurableAgent } from './create-durable-agent';
+import { emitStepStartEvent } from './stream-adapter';
 
 function createTextStreamModel(text: string) {
   return new MockLanguageModelV2({
