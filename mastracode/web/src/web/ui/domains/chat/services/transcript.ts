@@ -144,8 +144,6 @@ export interface GoalSnapshot {
 
 export interface TranscriptState {
   entries: TimelineEntry[];
-  /** Whether the agent is mid-run (driven by agent_start/agent_end events). */
-  running: boolean;
   /**
    * Whether a turn the user just initiated is awaiting its first response.
    * Set the instant the user sends/steers (synchronously, before any SSE
@@ -182,7 +180,6 @@ export interface TranscriptState {
 
 export const initialTranscript: TranscriptState = {
   entries: [],
-  running: false,
   pending: false,
   tasks: [],
   followUpCount: 0,
@@ -210,23 +207,6 @@ type Action =
       threadId?: string;
       omProgress?: AgentControllerOMProgress;
       usage?: UsageSnapshot;
-      running?: boolean;
-    }
-  | {
-      /**
-       * Patch transcript-owned metadata (OM/usage/running) from an authoritative
-       * `session.state()` fetch without touching the timeline or thread binding.
-       * Used after thread switches, where the state fetch can resolve *after*
-       * history hydration — it must never wipe already-rendered entries.
-       */
-      type: 'syncState';
-      omProgress?: AgentControllerOMProgress;
-      usage?: UsageSnapshot;
-      /**
-       * Whether the agent is mid-run per the server snapshot. Only applied when
-       * present — an older server that omits it must not clear a live indicator.
-       */
-      running?: boolean;
     };
 
 /**
@@ -254,16 +234,6 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
         threadId: action.threadId,
         omProgress: action.omProgress,
         usage: action.usage,
-        running: action.running ?? false,
-      };
-    case 'syncState':
-      // Fields absent from the snapshot are preserved, so a running-only sync
-      // (or a stale snapshot) never rolls back live OM progress/usage.
-      return {
-        ...state,
-        omProgress: action.omProgress ?? state.omProgress,
-        usage: action.usage ?? state.usage,
-        running: action.running ?? state.running,
       };
     case 'localUser':
       return {
@@ -303,11 +273,11 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent): Transcri
       // Reset the rate at the start of a new turn (not at the end) so the last
       // turn's tokens/sec stays visible while idle — short single-step turns
       // would otherwise zero it before it could be read.
-      return { ...state, running: true, tokensPerSec: 0, _decodeStartedAt: 0 };
+      return { ...state, tokensPerSec: 0, _decodeStartedAt: 0 };
     case 'agent_end':
       // Keep tokensPerSec as the last turn's reading; only clear the in-flight
       // decode window so a stale start can't bleed into the next turn.
-      return { ...state, running: false, pending: false, _decodeStartedAt: 0 };
+      return { ...state, pending: false, _decodeStartedAt: 0 };
 
     case 'message_start':
     case 'message_update': {
@@ -508,9 +478,6 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent): Transcri
         ...state,
         omProgress: ds.omProgress ?? state.omProgress,
         usage: (ds.tokenUsage as UsageSnapshot | undefined) ?? state.usage,
-        // Canonical run flag: keeps the working indicator honest even when the
-        // paired agent_start/agent_end event was missed (e.g. attach mid-run).
-        running: typeof ds.isRunning === 'boolean' ? ds.isRunning : state.running,
       };
     }
 
@@ -582,13 +549,11 @@ export function createInitialTranscript({
   threadId,
   omProgress,
   usage,
-  running,
 }: {
   messages?: MastraDBMessage[];
   threadId?: string;
   omProgress?: AgentControllerOMProgress;
   usage?: UsageSnapshot;
-  running?: boolean;
 } = {}): TranscriptState {
   return {
     ...initialTranscript,
@@ -596,7 +561,6 @@ export function createInitialTranscript({
     threadId,
     omProgress,
     usage,
-    running: running ?? false,
   };
 }
 

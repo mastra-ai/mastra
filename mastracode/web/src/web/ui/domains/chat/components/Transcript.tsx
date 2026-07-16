@@ -33,7 +33,7 @@ import { useChatTranscript } from '../context/useChatTranscript';
 import {
   useApproveAgentControllerToolMutation,
   useRespondAgentControllerSuspensionMutation,
-} from '../hooks/useAgentControllerRunMutations';
+} from '../../../../../shared/hooks/useAgentControllerRunMutations';
 import { stripSerializedAnsi } from '../services/ansi';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 

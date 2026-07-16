@@ -8,11 +8,10 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 
 import { useApiConfig } from '../../../../shared/api/config';
+import { useSelectWorkspaceMutation, useWorkspacesQuery } from '../../../../shared/hooks/useWorkspaces';
 import { relativeTime } from '../../../../shared/lib/date';
 import { SkeletonRows } from '../../ui';
 import { AGENT_CONTROLLER_ID } from '../chat/services/constants';
-// Deep imports (not the workspaces barrel) to avoid provider/component cycles.
-import { useSelectWorkspaceMutation, useWorkspacesQuery } from '../workspaces/hooks/useWorkspaces';
 import type { Project } from '../workspaces/services/projects';
 import { FactoryItemActions } from './components/FactoryItemActions';
 import { FactoryPageShell } from './components/FactoryPageShell';
@@ -21,12 +20,16 @@ import {
   useProjectIssuesQuery,
   useProjectPullRequestsQuery,
   useStartIssueTriageMutation,
-} from './hooks/useFactoryData';
-import { useIntakeConfigQuery } from './hooks/useIntakeConfig';
-import { useLinearIssuesQuery, useLinearStatusQuery } from './hooks/useLinearData';
-import { useStartFactoryRun } from './hooks/useStartFactoryRun';
-import { useDeleteWorkItemMutation, useUpdateWorkItemMutation, useUpsertWorkItemMutation } from './hooks/useWorkItems';
-import { useWorkItemsQuery } from './hooks/useWorkItems';
+} from '../../../../shared/hooks/useFactoryData';
+import { useIntakeConfigQuery } from '../../../../shared/hooks/useIntakeConfig';
+import { useLinearIssuesQuery, useLinearStatusQuery } from '../../../../shared/hooks/useLinearData';
+import { useStartFactoryRun } from '../../../../shared/hooks/useStartFactoryRun';
+import {
+  useDeleteWorkItemMutation,
+  useUpdateWorkItemMutation,
+  useUpsertWorkItemMutation,
+} from '../../../../shared/hooks/useWorkItems';
+import { useWorkItemsQuery } from '../../../../shared/hooks/useWorkItems';
 import type { GithubIssue, GithubPullRequest } from './services/factory';
 import type { LinearIssue } from './services/linear';
 import { connectLinear, isLinearReauthError } from './services/linear';
