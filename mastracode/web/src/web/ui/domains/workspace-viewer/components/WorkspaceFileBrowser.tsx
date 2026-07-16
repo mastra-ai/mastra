@@ -211,7 +211,7 @@ export function WorkspaceFileBrowser({
               >
                 <Tree.FolderTrigger>
                   <Tree.Icon>{getFolderIcon(isOpen)}</Tree.Icon>
-                  <Tree.Label>{path.root}</Tree.Label>
+                  <Tree.Label>{path.label}</Tree.Label>
                 </Tree.FolderTrigger>
                 {isSelectedRoot ? (
                   <Tree.FolderContent>

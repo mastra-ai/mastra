@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const COMPACT_RIGHT_PANEL_WIDTH = 320;
 const EXPANDED_RIGHT_PANEL_WIDTH = 760;
@@ -36,24 +36,34 @@ export function ChatLayout({
 }: ChatLayoutProps) {
   const backdropVisibilityClass = sidebarOpen ? 'opacity-100' : 'pointer-events-none opacity-0';
   const [rightPanelWidth, setRightPanelWidth] = useState(COMPACT_RIGHT_PANEL_WIDTH);
+  const resizeCleanupRef = useRef<(() => void) | undefined>(undefined);
 
   useEffect(() => {
     setRightPanelWidth(rightPanelExpanded ? EXPANDED_RIGHT_PANEL_WIDTH : COMPACT_RIGHT_PANEL_WIDTH);
   }, [rightPanelExpanded]);
 
+  useEffect(() => () => resizeCleanupRef.current?.(), []);
+
   const startResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    resizeCleanupRef.current?.();
     const startX = event.clientX;
     const startWidth = rightPanelWidth;
+    const containerWidth = event.currentTarget.parentElement?.clientWidth ?? window.innerWidth;
+    const maxWidth = Math.max(COMPACT_RIGHT_PANEL_WIDTH, containerWidth - COMPACT_RIGHT_PANEL_WIDTH);
     const onPointerMove = (moveEvent: PointerEvent) => {
       const nextWidth = startWidth - (moveEvent.clientX - startX);
-      setRightPanelWidth(Math.min(960, Math.max(COMPACT_RIGHT_PANEL_WIDTH, nextWidth)));
+      setRightPanelWidth(Math.min(maxWidth, Math.max(COMPACT_RIGHT_PANEL_WIDTH, nextWidth)));
     };
-    const onPointerUp = () => {
+    const cleanup = () => {
       window.removeEventListener('pointermove', onPointerMove);
-      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointerup', cleanup);
+      window.removeEventListener('pointercancel', cleanup);
+      resizeCleanupRef.current = undefined;
     };
+    resizeCleanupRef.current = cleanup;
     window.addEventListener('pointermove', onPointerMove);
-    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointerup', cleanup);
+    window.addEventListener('pointercancel', cleanup);
   };
 
   return (

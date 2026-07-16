@@ -88,7 +88,7 @@ describe('WorkspaceViewerPanel', () => {
     const user = userEvent.setup();
     renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} renderedPaths={renderedPaths} />);
 
-    const root = await screen.findByRole('button', { name: '.artifacts' });
+    const root = await screen.findByRole('button', { name: 'Artifacts' });
     expect(root).toHaveAttribute('aria-expanded', 'true');
 
     const folder = await screen.findByRole('button', { name: 'understand-pr' });
@@ -120,7 +120,7 @@ describe('WorkspaceViewerPanel', () => {
       />,
     );
 
-    await user.click(await screen.findByRole('button', { name: '.reports' }));
+    await user.click(await screen.findByRole('button', { name: 'Reports' }));
 
     expect(await screen.findByText('summary.md')).toBeInTheDocument();
   });

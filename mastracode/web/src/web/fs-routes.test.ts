@@ -87,6 +87,16 @@ describe('listWorkspaceRenderedPath', () => {
     await expect(listWorkspaceRenderedPath(root, workspace, '../outside')).rejects.toThrow('root escapes workspace');
   });
 
+  it('rejects roots outside the approved rendered-path allowlist', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mc-rendered-root-'));
+    const workspace = join(root, 'workspace');
+    await mkdir(workspace);
+
+    await expect(listWorkspaceRenderedPath(root, workspace, '.ssh')).rejects.toThrow(
+      'Root is not approved for rendered workspace access',
+    );
+  });
+
   it('does not follow symlink escapes in rendered roots', async () => {
     const root = await mkdtemp(join(tmpdir(), 'mc-rendered-root-'));
     const outside = await mkdtemp(join(tmpdir(), 'mc-rendered-outside-'));
@@ -142,6 +152,17 @@ describe('readWorkspaceFile', () => {
     await mkdir(workspace);
 
     await expect(readWorkspaceFile(root, workspace, '../secret.md')).rejects.toThrow('path escapes workspace');
+  });
+
+  it('rejects file reads outside approved rendered roots', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mc-file-root-'));
+    const workspace = join(root, 'workspace');
+    await mkdir(join(workspace, '.ssh'), { recursive: true });
+    await writeFile(join(workspace, '.ssh', 'config'), 'secret');
+
+    await expect(readWorkspaceFile(root, workspace, '.ssh/config')).rejects.toThrow(
+      'Root is not approved for rendered workspace access',
+    );
   });
 
   it('rejects symlink escapes', async () => {

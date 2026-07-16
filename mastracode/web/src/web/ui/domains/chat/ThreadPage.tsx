@@ -24,8 +24,11 @@ export function ThreadPage() {
   const { activeProject } = useActiveProjectContext();
   const { threadId } = useParams<{ threadId: string }>();
   const [workspaceViewerExpanded, setWorkspaceViewerExpanded] = useState(false);
-  const userSession = threadId ? findUserSessionByThreadId(threadId)?.worktree : undefined;
-  const workspacePath = activeProject ? activeWorkspacePath(activeProject, userSession) : undefined;
+  const userSessionMatch = threadId ? findUserSessionByThreadId(threadId) : undefined;
+  const workspaceProject = userSessionMatch?.project ?? activeProject;
+  const workspacePath = workspaceProject
+    ? activeWorkspacePath(workspaceProject, userSessionMatch?.worktree)
+    : undefined;
 
   return (
     <ChatLayout

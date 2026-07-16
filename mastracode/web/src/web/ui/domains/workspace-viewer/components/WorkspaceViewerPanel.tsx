@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { useWorkspaceFile, useWorkspaceRenderedListing } from '../../../../../shared/hooks/use-fs';
 import type { RenderedWorkspacePath } from '../config';
@@ -24,6 +24,7 @@ export function WorkspaceViewerPanel({
   const [selectedFilePath, setSelectedFilePath] = useState<string | undefined>();
   const [viewerOpen, setViewerOpen] = useState(false);
   const [browserWidth, setBrowserWidth] = useState(320);
+  const resizeCleanupRef = useRef<(() => void) | undefined>(undefined);
 
   const selectedRenderedPath = renderedPaths.find(path => path.id === selectedRenderedPathId) ?? renderedPaths[0];
   const listing = useWorkspaceRenderedListing(workspacePath, selectedRenderedPath?.root);
@@ -39,21 +40,28 @@ export function WorkspaceViewerPanel({
     onExpandedChange?.(viewerOpen);
   }, [onExpandedChange, viewerOpen]);
 
+  useEffect(() => () => resizeCleanupRef.current?.(), []);
+
   if (!selectedRenderedPath) return null;
 
   const startResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    resizeCleanupRef.current?.();
     const startX = event.clientX;
     const startWidth = browserWidth;
     const onPointerMove = (moveEvent: PointerEvent) => {
       const nextWidth = startWidth - (moveEvent.clientX - startX);
       setBrowserWidth(Math.min(420, Math.max(220, nextWidth)));
     };
-    const onPointerUp = () => {
+    const cleanup = () => {
       window.removeEventListener('pointermove', onPointerMove);
-      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointerup', cleanup);
+      window.removeEventListener('pointercancel', cleanup);
+      resizeCleanupRef.current = undefined;
     };
+    resizeCleanupRef.current = cleanup;
     window.addEventListener('pointermove', onPointerMove);
-    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointerup', cleanup);
+    window.addEventListener('pointercancel', cleanup);
   };
 
   return (

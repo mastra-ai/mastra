@@ -81,6 +81,7 @@ export interface ArtifactListing {
 
 const MAX_TEXT_FILE_BYTES = 512 * 1024;
 const TEXT_DECODER = new TextDecoder('utf-8', { fatal: true });
+const APPROVED_RENDERED_ROOTS = new Set(['.artifacts']);
 
 /** Resolve the browsable root, defaulting to the user's home directory. */
 export function resolveFsRoot(root?: string): string {
@@ -126,6 +127,12 @@ function assertRelativePath(path: string, label: string): string {
   if (!normalized || normalized === '..' || normalized.startsWith(`..${sep}`))
     throw new Error(`${label} escapes workspace`);
   return normalized;
+}
+
+function assertApprovedRenderedRoot(renderedRoot: string): string {
+  const safeRoot = assertRelativePath(renderedRoot, 'root');
+  if (!APPROVED_RENDERED_ROOTS.has(safeRoot)) throw new Error('Root is not approved for rendered workspace access');
+  return safeRoot;
 }
 
 async function confinedWorkspacePath(
@@ -239,7 +246,7 @@ export async function listWorkspaceRenderedPath(
   workspacePath: string,
   renderedRoot: string,
 ): Promise<WorkspaceRenderedListing> {
-  const safeRoot = assertRelativePath(renderedRoot, 'root');
+  const safeRoot = assertApprovedRenderedRoot(renderedRoot);
   const { workspace } = await confinedWorkspacePath(root, workspacePath);
   const renderedPath = resolve(workspace, safeRoot);
   if (!isWithinRoot(renderedPath, workspace)) throw new Error('Root escapes workspace');
@@ -259,6 +266,9 @@ export async function listWorkspaceRenderedPath(
 }
 
 export async function readWorkspaceFile(root: string, workspacePath: string, path: string): Promise<WorkspaceFile> {
+  const safePath = assertRelativePath(path, 'path');
+  const relativeRoot = safePath.split('/')[0] ?? '';
+  assertApprovedRenderedRoot(relativeRoot);
   const {
     workspace,
     path: confinedPath,
@@ -393,7 +403,12 @@ export function buildFsRoutes(options: { root?: string } = {}): ApiRoute[] {
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           const status =
-            message.includes('outside') || message.includes('relative') || message.includes('escapes') ? 403 : 500;
+            message.includes('outside') ||
+            message.includes('relative') ||
+            message.includes('escapes') ||
+            message.includes('not approved')
+              ? 403
+              : 500;
           return c.json({ error: message }, status);
         }
       },
@@ -411,7 +426,10 @@ export function buildFsRoutes(options: { root?: string } = {}): ApiRoute[] {
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           const status =
-            message.includes('outside') || message.includes('relative') || message.includes('escapes')
+            message.includes('outside') ||
+            message.includes('relative') ||
+            message.includes('escapes') ||
+            message.includes('not approved')
               ? 403
               : message.includes('directory')
                 ? 400
