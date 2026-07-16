@@ -381,16 +381,6 @@ export interface IFGAProvider<TUser = unknown> {
    * @throws FGADeniedError if the actor may not perform the action.
    */
   requireActor?(actor: ActorSignal, params: FGACheckParams): Promise<void>;
-
-  /**
-   * Non-throwing sibling of {@link requireActor}. Returns whether the system
-   * actor may perform `permission` on `resource`. Use when branching or
-   * filtering without throwing.
-   *
-   * Provider-facing primitive: like {@link check}, core does not call this
-   * itself — it exists for consumers that need a non-throwing actor check.
-   */
-  checkActor?(actor: ActorSignal, params: FGACheckParams): Promise<boolean>;
 }
 
 // ──────────────────────────────────────────────────────────────
