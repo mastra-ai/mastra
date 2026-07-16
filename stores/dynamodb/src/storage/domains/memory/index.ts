@@ -437,10 +437,17 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         const endOp = dateRange?.endExclusive ? 'lt' : 'lte';
 
         if (startIso && endIso) {
-          if (startOp === 'gte' && endOp === 'lte') {
-            query = query.between({ createdAt: startIso }, { createdAt: endIso });
-          } else {
-            query = query[startOp]({ createdAt: startIso })[endOp]({ createdAt: endIso });
+          query = query.between({ createdAt: startIso }, { createdAt: endIso });
+          if (dateRange.startExclusive || dateRange.endExclusive) {
+            query = query.where(({ createdAt }: any, { gt, lt }: any) => {
+              if (dateRange.startExclusive && dateRange.endExclusive) {
+                return `${gt(createdAt, startIso)} AND ${lt(createdAt, endIso)}`;
+              }
+              if (dateRange.startExclusive) {
+                return gt(createdAt, startIso);
+              }
+              return lt(createdAt, endIso);
+            });
           }
         } else if (startIso) {
           query = query[startOp]({ createdAt: startIso });
@@ -533,15 +540,8 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       // Sort all messages (paginated + included) for final output
       finalMessages = this._sortMessages(finalMessages, field, direction);
 
-      // Calculate hasMore based on pagination window
-      // If all thread messages have been returned (through pagination or include), hasMore = false
-      // Otherwise, check if there are more pages in the pagination window
-      const threadIdSet = new Set(threadIds);
-      const returnedThreadMessageIds = new Set(
-        finalMessages.filter(m => m.threadId && threadIdSet.has(m.threadId)).map(m => m.id),
-      );
-      const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
-      const hasMore = perPageInput !== false && !allThreadMessagesReturned && offset + perPage < total;
+      // hasMore reflects filtered pagination only; included context must not suppress it.
+      const hasMore = perPageInput !== false && offset + perPage < total;
 
       return {
         messages: finalMessages,

@@ -289,6 +289,68 @@ describe('DynamoDB listMessages pagination', () => {
     expect(result.hasMore).toBe(true);
   });
 
+  it('keeps hasMore true when include context is present but filtered pages remain', async () => {
+    const thread = createSampleThread();
+    await memory.saveThread({ thread });
+
+    const base = Date.now();
+    const messages: MastraDBMessage[] = Array.from({ length: 30 }, (_, i) =>
+      createSampleMessageV2({
+        threadId: thread.id,
+        createdAt: new Date(base + i * 1000),
+        content: { content: `msg-${i}` },
+      }),
+    );
+    await memory.saveMessages({ messages });
+    const target = messages[20]!;
+
+    const result = await memory.listMessages({
+      threadId: thread.id,
+      perPage: 5,
+      page: 0,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+      include: [{ id: target.id, withPreviousMessages: 10, withNextMessages: 10 }],
+    });
+
+    expect(result.total).toBe(30);
+    expect(result.messages.length).toBeGreaterThan(5);
+    expect(result.hasMore).toBe(true);
+  });
+
+  it('supports exclusive date range boundaries via between() plus where()', async () => {
+    const thread = createSampleThread();
+    await memory.saveThread({ thread });
+
+    const base = Date.now();
+    const messages: MastraDBMessage[] = [
+      createSampleMessageV2({ threadId: thread.id, createdAt: new Date(base), content: { content: 'm0' } }),
+      createSampleMessageV2({ threadId: thread.id, createdAt: new Date(base + 1000), content: { content: 'm1' } }),
+      createSampleMessageV2({ threadId: thread.id, createdAt: new Date(base + 2000), content: { content: 'm2' } }),
+      createSampleMessageV2({ threadId: thread.id, createdAt: new Date(base + 3000), content: { content: 'm3' } }),
+      createSampleMessageV2({ threadId: thread.id, createdAt: new Date(base + 4000), content: { content: 'm4' } }),
+    ];
+    await memory.saveMessages({ messages });
+
+    const result = await memory.listMessages({
+      threadId: thread.id,
+      perPage: 10,
+      page: 0,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+      filter: {
+        dateRange: {
+          start: new Date(base + 1000),
+          end: new Date(base + 3000),
+          startExclusive: true,
+          endExclusive: true,
+        },
+      },
+    });
+
+    expect(result.total).toBe(1);
+    expect(result.messages.map(getMessageText)).toEqual(['m2']);
+    expect(result.hasMore).toBe(false);
+  });
+
   it('does not drop messages when threadId is an array (multi-thread)', async () => {
     const threadA = createSampleThread();
     const threadB = createSampleThread();
