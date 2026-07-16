@@ -66,7 +66,7 @@ const ToolExecutorContent = ({
               onSubmit={data => {
                 handleExecuteTool(data, schemaValues);
               }}
-              className="h-auto"
+              className="space-y-4"
             >
               {!hasInputFields && <Notice variant="info">No input is required to run this tool.</Notice>}
             </DynamicForm>
