@@ -33,8 +33,8 @@ import {
   subscribeCurrentSessionToPullRequest,
 } from './github/session-subscriptions.js';
 import { buildLinearAgentTools } from './linear/agent-tools.js';
+import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { seedRuntimeConfig } from './runtime-config.js';
-import type { WebSandboxProvider } from './sandbox-provider.js';
 import { handleServerError } from './server-error.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import {
@@ -92,17 +92,40 @@ export interface MastraFactoryConfig {
    */
   allowedOrigins?: string[];
   /**
-   * Sandbox provider instance — `RailwaySandboxProvider`, `LocalSandboxProvider`, or any
-   * custom `WebSandboxProvider` implementation. GitHub-backed projects clone
-   * and run commands inside sandboxes built by this provider. Whatever instance
-   * is passed is the active provider; the factory never selects or constructs
-   * one itself. Omitted → sandboxes disabled and GitHub-backed projects stay
-   * off.
+   * Template sandbox instance — `RailwaySandbox` (`@mastra/railway`), core
+   * `LocalSandbox` (`@mastra/core/workspace`), or any `WorkspaceSandbox` that
+   * implements `derive()`. Each GitHub-backed project gets its own sandbox
+   * derived from this template (credentials and defaults inherited, per-project
+   * env/id overridden); the template itself is never started. `prepare()`
+   * fails fast when the instance does not implement `derive()`. Omitted →
+   * sandboxes disabled and GitHub-backed projects stay off.
    */
-  sandbox?: WebSandboxProvider;
+  sandbox?: WorkspaceSandbox;
+  /**
+   * In-sandbox base directory repos check out under (nested `owner/name` per
+   * repo). Default: the template sandbox's own `workingDirectory` when it
+   * exposes one (core `LocalSandbox` does), else `/workspace`.
+   */
+  sandboxWorkdir?: string;
+  /**
+   * Per-replica cap on concurrently provisioned sandboxes. `0`/omitted means
+   * unlimited. A lightweight per-process budget, not a cross-replica scheduler.
+   */
+  maxSandboxes?: number;
 }
 
 const CONTROLLER_ID = 'code';
+
+/**
+ * The template sandbox's own working directory, when it exposes one as a
+ * string (core `LocalSandbox` does; remote providers generally don't).
+ * Used as the default checkout base so a local template rooted at a host
+ * directory checks repos out under that same root.
+ */
+function templateWorkingDirectory(sandbox: WorkspaceSandbox): string | undefined {
+  const wd = (sandbox as { workingDirectory?: unknown }).workingDirectory;
+  return typeof wd === 'string' && wd.length > 0 ? wd : undefined;
+}
 
 export class MastraFactory {
   readonly #config: MastraFactoryConfig;
@@ -131,15 +154,38 @@ export class MastraFactory {
     const pubsub = this.#config.pubsub;
     const auth = this.#config.auth;
 
+    // Sandbox template validation: GitHub projects need one sandbox per
+    // project, derived from the configured template. A sandbox without
+    // `derive()` would only fail at first project open — fail fast at boot
+    // instead, with the fix spelled out.
+    const sandbox = this.#config.sandbox;
+    if (sandbox && typeof sandbox.derive !== 'function') {
+      throw new Error(
+        `MastraFactory: the configured sandbox (provider '${sandbox.provider}') does not implement derive(). ` +
+          `GitHub-backed projects each get their own sandbox derived from the configured template. ` +
+          `Pass a sandbox that implements derive() — e.g. RailwaySandbox (@mastra/railway) or ` +
+          `LocalSandbox (@mastra/core/workspace) — or omit 'sandbox' to disable sandboxes.`,
+      );
+    }
+
     // Seed the registry FIRST: the readiness checks below reach the app DB
     // through `getAppDatabaseUrl()`, gate on the active auth adapter via
-    // `isWebAuthEnabled()`, and probe the sandbox provider via
+    // `isWebAuthEnabled()`, and probe the sandbox runtime via
     // `isSandboxEnabled()`.
     seedRuntimeConfig({
       databaseUrl: database,
       publicUrl: publicOrigin,
       authAdapter: auth,
-      sandbox: this.#config.sandbox,
+      sandbox: sandbox
+        ? {
+            template: sandbox,
+            workdirBase: (this.#config.sandboxWorkdir ?? templateWorkingDirectory(sandbox) ?? '/workspace').replace(
+              /\/+$/,
+              '',
+            ),
+            maxSandboxes: this.#config.maxSandboxes,
+          }
+        : undefined,
     });
 
     // One-time adapter initialization with factory-level context (e.g.

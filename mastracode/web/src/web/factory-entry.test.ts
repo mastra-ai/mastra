@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { LocalSandbox } from '@mastra/core/workspace';
+import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import type { WebAuthAdapter, WebAuthAdapterInitContext } from './auth-adapter.js';
 import { MastraFactory } from './factory-entry.js';
 import { getFactoryWorkspace } from './factory/workspace.js';
@@ -7,9 +9,8 @@ import {
   __resetRuntimeConfigForTests,
   getAppDatabaseUrl,
   getSeededAuthAdapter,
-  getSeededSandboxProvider,
+  getSeededSandbox,
 } from './runtime-config.js';
-import { LocalSandboxProvider } from './sandbox-local-provider.js';
 
 /**
  * `MastraFactory.prepare()` wiring: explicit config flows through to the SDK
@@ -77,16 +78,53 @@ describe('MastraFactory.prepare', () => {
 
   it('seeds the runtime-config registry with the explicit config', async () => {
     const auth = fakeAdapter();
-    const sandbox = new LocalSandboxProvider({ root: '/tmp/mc-factory-test' });
+    const sandbox = new LocalSandbox({ workingDirectory: '/tmp/mc-factory-test' });
     await prepareFactory({ database: 'postgres://cfg/app', auth, sandbox });
     expect(getAppDatabaseUrl()).toBe('postgres://cfg/app');
     expect(getSeededAuthAdapter()).toBe(auth);
-    expect(getSeededSandboxProvider()).toBe(sandbox);
+    expect(getSeededSandbox()?.template).toBe(sandbox);
   });
 
-  it('leaves the sandbox provider unset when the slot is omitted', async () => {
+  it('leaves the sandbox runtime unset when the slot is omitted', async () => {
     await prepareFactory({});
-    expect(getSeededSandboxProvider()).toBeUndefined();
+    expect(getSeededSandbox()).toBeUndefined();
+  });
+
+  it('rejects a sandbox that does not implement derive()', async () => {
+    const underivable = {
+      id: 'sb-1',
+      name: 'Underivable',
+      provider: 'custom',
+    } as unknown as WorkspaceSandbox;
+    const factory = new MastraFactory({ sandbox: underivable });
+    await expect(factory.prepare()).rejects.toThrow(/does not implement derive\(\)/);
+  });
+
+  it("defaults the workdir base to the template's workingDirectory, else /workspace", async () => {
+    await prepareFactory({ sandbox: new LocalSandbox({ workingDirectory: '/srv/checkouts/' }) });
+    expect(getSeededSandbox()?.workdirBase).toBe('/srv/checkouts');
+
+    prepareMock.mockClear();
+    __resetRuntimeConfigForTests();
+
+    const remote = {
+      id: 'sb-2',
+      name: 'Remote',
+      provider: 'railway',
+      derive: () => remote,
+    } as unknown as WorkspaceSandbox;
+    await prepareFactory({ sandbox: remote });
+    expect(getSeededSandbox()?.workdirBase).toBe('/workspace');
+  });
+
+  it('honors an explicit sandboxWorkdir override and passes maxSandboxes through', async () => {
+    await prepareFactory({
+      sandbox: new LocalSandbox({ workingDirectory: '/tmp/mc-factory-test' }),
+      sandboxWorkdir: '/custom/base/',
+      maxSandboxes: 5,
+    });
+    expect(getSeededSandbox()?.workdirBase).toBe('/custom/base');
+    expect(getSeededSandbox()?.maxSandboxes).toBe(5);
   });
 
   it('maps database onto the pg storage config for the SDK mount', async () => {

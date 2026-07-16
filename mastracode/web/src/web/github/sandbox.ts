@@ -12,21 +12,50 @@
  *   (re-open) inside the sandbox, using a short-lived installation token that is
  *   scrubbed from the git remote afterwards so it never persists in the VM.
  *
- * The provider is whatever `WebSandboxProvider` the factory was configured
- * with (`sandbox` slot, seeded into the runtime-config registry) — this
- * module never selects a provider or reads deployment env itself. Tests can
- * additionally swap the low-level construction via `setSandboxFactory`.
+ * Per-project sandboxes are `derive()`d from the template `WorkspaceSandbox`
+ * the factory was configured with (`sandbox` slot, seeded into the
+ * runtime-config registry) — this module never selects a provider or reads
+ * deployment env itself. Tests can additionally swap the low-level
+ * construction via `setSandboxFactory`.
  */
 
 import { createHash } from 'node:crypto';
 import { eq } from 'drizzle-orm';
-import type { MaterializationSandbox, SandboxCommandResult, SandboxCreateOptions } from '../sandbox-provider';
-import { getSeededSandboxProvider } from '../runtime-config';
+import type { WorkspaceSandbox } from '@mastra/core/workspace';
+import { getSeededSandbox } from '../runtime-config';
 import { getAppDb } from './db';
 import { githubProjectSandboxes } from './schema';
 import type { GithubProjectSandboxRow } from './schema';
 
-export type { MaterializationSandbox, SandboxCommandResult, SandboxCreateOptions } from '../sandbox-provider';
+/** Minimal command result shape the repo materializer depends on. */
+export interface SandboxCommandResult {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+}
+
+/**
+ * Minimal live-sandbox surface the github machinery needs: an id, a way to
+ * start it, a way to learn the provider's reattach id, and command execution.
+ */
+export interface MaterializationSandbox {
+  readonly id: string;
+  start(): Promise<void>;
+  getInfo(): Promise<{ metadata?: Record<string, unknown> }>;
+  executeCommand(command: string, args?: string[], options?: { timeout?: number }): Promise<SandboxCommandResult>;
+  /** Tear down the underlying VM. Optional: providers without it are no-ops. */
+  stop?(): Promise<void>;
+}
+
+/** Options for building (or reattaching) one sandbox. */
+export interface SandboxCreateOptions {
+  /** Reattach to this existing provider VM instead of provisioning a new one. */
+  providerSandboxId?: string;
+  /** Environment variables baked into the sandbox. */
+  env?: Record<string, string>;
+  /** Idle teardown window (minutes). The provider stops the VM after this idle period. */
+  idleTimeoutMinutes?: number;
+}
 
 /**
  * A coarse-grained step of the sandbox-preparation flow, reported as it happens
@@ -59,42 +88,57 @@ function reportProgress(onProgress: ProgressFn | undefined, event: PrepareProgre
 export type SandboxFactory = (opts: SandboxCreateOptions) => MaterializationSandbox;
 
 /**
- * Name of the active sandbox provider — the seeded provider's `kind`, or
- * `'none'` when the factory was configured without a `sandbox` slot.
- * Diagnostic only; feature gating goes through {@link isSandboxEnabled}.
+ * Name of the active sandbox provider — the template sandbox's `provider`
+ * discriminator (`'railway'`, `'local'`, …), or `'none'` when the factory was
+ * configured without a `sandbox` slot. Diagnostic only; feature gating goes
+ * through {@link isSandboxEnabled}.
  */
 export function getSandboxProvider(): string {
-  return getSeededSandboxProvider()?.kind ?? 'none';
+  return getSeededSandbox()?.template.provider ?? 'none';
 }
 
 /**
- * True when the configured sandbox provider is usable. `false` when no
- * `sandbox` provider was configured or the provider reports itself
- * misconfigured (e.g. Railway without a token) — GitHub-backed projects stay
- * off in both cases.
+ * True when a sandbox template was configured. The factory validates the
+ * template implements `derive()` at boot, so a seeded runtime is usable —
+ * GitHub-backed projects stay off only when the slot was omitted.
  */
 export function isSandboxEnabled(): boolean {
-  return getSeededSandboxProvider()?.isEnabled() ?? false;
+  return getSeededSandbox() !== undefined;
 }
 
 /**
- * Compute the in-sandbox working directory for a repo. Server-side only; never
- * derived from client input. Delegates to the active provider, which owns the
- * provider-specific layout (cloud `/workspace` base vs local checkout root).
+ * Compute the in-sandbox working directory for a repo: a nested
+ * `<base>/<owner>/<name>` layout under the factory-resolved checkout base.
+ * Nesting keeps same-name repos apart (`acme/api` vs `other/api`) — cloud
+ * sandboxes are one-per-project so it's merely tidy there, but local
+ * checkouts share one host root where it prevents collisions. Server-side
+ * only; never derived from client input.
  */
 export function computeSandboxWorkdir(repoFullName: string): string {
-  const provider = getSeededSandboxProvider();
-  if (!provider) throw new Error('No sandbox provider configured');
-  return provider.workdirFor(repoFullName);
+  const seeded = getSeededSandbox();
+  if (!seeded) throw new Error('No sandbox configured');
+  const [owner, name] = repoFullName.split('/', 2);
+  return `${seeded.workdirBase}/${sanitizeSegment(owner || 'unknown')}/${sanitizeSegment(name || 'repo')}`;
+}
+
+/** Keep each path piece a single safe segment (no separators or traversal). */
+function sanitizeSegment(segment: string): string {
+  const cleaned = segment.replace(/[^A-Za-z0-9._-]/g, '-').replace(/^\.+/, '');
+  return cleaned || 'repo';
 }
 
 /**
  * Idle teardown window for provisioned sandboxes, in minutes; defaults to 30.
- * The provider stops an idle VM after this window so abandoned sandboxes don't
- * linger (GC). A re-open detects the stopped VM and re-provisions cleanly.
+ * Read back from the template sandbox's own config when it exposes one
+ * (Railway's `idleTimeoutMinutes`) — the knob lives on the sandbox, this
+ * module only needs it to schedule GC and stamp derived sandboxes. Advisory:
+ * providers without idle GC ignore it, and a re-open detects a torn-down VM
+ * and re-provisions cleanly.
  */
 export function getSandboxIdleMinutes(): number {
-  return getSeededSandboxProvider()?.idleMinutes ?? 30;
+  const template = getSeededSandbox()?.template as { idleTimeoutMinutes?: unknown } | undefined;
+  const minutes = template?.idleTimeoutMinutes;
+  return typeof minutes === 'number' && Number.isFinite(minutes) && minutes > 0 ? minutes : 30;
 }
 
 /**
@@ -104,7 +148,7 @@ export function getSandboxIdleMinutes(): number {
  * (that is a deferred follow-up).
  */
 export function getMaxSandboxes(): number {
-  return getSeededSandboxProvider()?.maxSandboxes ?? 0;
+  return getSeededSandbox()?.maxSandboxes ?? 0;
 }
 
 /**
@@ -137,13 +181,48 @@ export class SandboxBudgetError extends Error {
 }
 
 /**
- * Default factory: build via the provider the factory was configured with.
- * Resolved per call so seeding order doesn't matter at import time.
+ * Adapt a derived `WorkspaceSandbox` to the minimal surface this module needs.
+ * Lifecycle goes through the `_`-prefixed wrappers when present (they add
+ * status tracking and concurrency safety on `MastraSandbox` subclasses),
+ * falling back to the plain methods for interface-only implementations.
+ */
+function toMaterializationSandbox(sandbox: WorkspaceSandbox): MaterializationSandbox {
+  if (typeof sandbox.executeCommand !== 'function') {
+    throw new Error(
+      `Sandbox provider '${sandbox.provider}' does not implement executeCommand() — cannot materialize repos.`,
+    );
+  }
+  const lifecycle = sandbox as { _start?(): Promise<void>; _stop?(): Promise<void> };
+  return {
+    id: sandbox.id,
+    start: async () => {
+      await (lifecycle._start ?? sandbox.start)?.call(sandbox);
+    },
+    getInfo: async () => (await sandbox.getInfo?.()) ?? {},
+    executeCommand: (command, args, options) => sandbox.executeCommand!(command, args, options),
+    stop: async () => {
+      await (lifecycle._stop ?? sandbox.stop)?.call(sandbox);
+    },
+  };
+}
+
+/**
+ * Default factory: derive a per-project sibling from the template sandbox the
+ * factory was configured with. Resolved per call so seeding order doesn't
+ * matter at import time. The stored id is passed both as the logical `id`
+ * (providers that reattach by construction id, e.g. local) and as the
+ * provider-native `sandboxId` hint (Railway) so reattach works across the
+ * provider matrix.
  */
 const defaultFactory: SandboxFactory = opts => {
-  const provider = getSeededSandboxProvider();
-  if (!provider) throw new Error('No sandbox provider configured');
-  return provider.create(opts);
+  const seeded = getSeededSandbox();
+  if (!seeded) throw new Error('No sandbox configured');
+  const derived = seeded.template.derive!({
+    ...(opts.providerSandboxId ? { id: opts.providerSandboxId, sandboxId: opts.providerSandboxId } : {}),
+    ...(opts.env ? { env: opts.env } : {}),
+    ...(opts.idleTimeoutMinutes !== undefined ? { idleTimeoutMinutes: opts.idleTimeoutMinutes } : {}),
+  });
+  return toMaterializationSandbox(derived);
 };
 
 let sandboxFactory: SandboxFactory = defaultFactory;
@@ -160,12 +239,14 @@ export function resetSandboxFactory(): void {
 
 /**
  * The provider's reattach id for a started sandbox. For Railway this is the
- * underlying `railwaySandboxId` in `getInfo().metadata`.
+ * underlying `railwaySandboxId` in `getInfo().metadata`. Providers without a
+ * provider-native id (e.g. local) reattach by construction id, so fall back
+ * to the sandbox's own logical id.
  */
 async function readProviderSandboxId(sandbox: MaterializationSandbox): Promise<string | undefined> {
   const info = await sandbox.getInfo();
   const id = info.metadata?.railwaySandboxId ?? info.metadata?.sandboxId;
-  return typeof id === 'string' ? id : undefined;
+  return typeof id === 'string' ? id : sandbox.id;
 }
 
 /**

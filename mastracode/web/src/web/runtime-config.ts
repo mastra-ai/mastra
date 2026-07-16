@@ -13,8 +13,26 @@
  * seed the registry.
  */
 
+import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import type { WebAuthAdapter } from './auth-adapter.js';
-import type { WebSandboxProvider } from './sandbox-provider.js';
+
+/**
+ * Factory-resolved sandbox runtime: the template sandbox GitHub projects
+ * derive their per-project sandboxes from, plus the web-level knobs the
+ * factory resolved around it.
+ */
+export interface WebSandboxRuntime {
+  /**
+   * Template sandbox (validated by the factory to implement `derive()`).
+   * Never started — acts purely as the credential/default holder that
+   * per-project sandboxes are derived from.
+   */
+  template: WorkspaceSandbox;
+  /** In-sandbox base directory repos check out under (no trailing slash). */
+  workdirBase: string;
+  /** Per-replica cap on concurrently provisioned sandboxes. 0 = unlimited. */
+  maxSandboxes?: number;
+}
 
 export interface WebRuntimeConfig {
   /** Postgres connection string for the application database + agent storage. */
@@ -23,8 +41,8 @@ export interface WebRuntimeConfig {
   publicUrl?: string;
   /** Active web auth adapter, or `undefined` when auth is disabled. */
   authAdapter?: WebAuthAdapter;
-  /** Active sandbox provider, or `undefined` when sandboxes are disabled. */
-  sandbox?: WebSandboxProvider;
+  /** Active sandbox runtime, or `undefined` when sandboxes are disabled. */
+  sandbox?: WebSandboxRuntime;
 }
 
 let seeded: WebRuntimeConfig | undefined;
@@ -64,11 +82,11 @@ export function getSeededAuthAdapter(): WebAuthAdapter | undefined {
 }
 
 /**
- * Active sandbox provider seeded by the factory. `undefined` when the factory
- * was configured without a `sandbox` slot (or never ran) — GitHub-backed
- * projects stay off in that case.
+ * Sandbox runtime seeded by the factory. `undefined` when the factory was
+ * configured without a `sandbox` slot (or never ran) — GitHub-backed projects
+ * stay off in that case.
  */
-export function getSeededSandboxProvider(): WebSandboxProvider | undefined {
+export function getSeededSandbox(): WebSandboxRuntime | undefined {
   return seeded?.sandbox;
 }
 
