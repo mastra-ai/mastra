@@ -1,6 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { LoggerContext, MetricsContext, ObservabilityInstance, WorkspaceActivityEvent } from '../observability';
+import { executeWithContext } from '../observability/context-storage';
+import type {
+  AnySpan,
+  LoggerContext,
+  MetricsContext,
+  ObservabilityInstance,
+  WorkspaceActivityEvent,
+} from '../observability';
 import type { WorkspaceFilesystem } from './filesystem/filesystem';
 import type { WorkspaceSandbox } from './sandbox/sandbox';
 import type { WorkspaceInstrumentationMeta } from './observability';
@@ -11,28 +18,90 @@ import { SANDBOX_OUTPUT_CHUNK_LIMIT, truncateChunk, wrapFilesystem, wrapSandbox 
  * on metrics, logs, and workspace_activity events without pulling in the full
  * `@mastra/observability` runtime.
  */
+interface RecordedSpan {
+  kind: 'root' | 'child';
+  name: string;
+  traceId: string;
+  spanId: string;
+  attributes?: Record<string, unknown>;
+  input?: unknown;
+  output?: unknown;
+  ended: boolean;
+  errored: boolean;
+}
+
+let spanCounter = 0;
+
+/** Build a fake span with just the surface the wrapper touches. */
+function makeFakeSpan(kind: 'root' | 'child', name: string, records: RecordedSpan[], parentTraceId?: string): AnySpan {
+  spanCounter += 1;
+  const traceId = parentTraceId ?? `trace-${spanCounter}`;
+  const spanId = `span-${spanCounter}`;
+  const record: RecordedSpan = { kind, name, traceId, spanId, ended: false, errored: false };
+  records.push(record);
+
+  const span: any = {
+    id: spanId,
+    traceId,
+    name,
+    isValid: true,
+    end: (opts?: any) => {
+      record.ended = true;
+      if (opts?.output !== undefined) record.output = opts.output;
+      if (opts?.attributes) record.attributes = { ...(record.attributes ?? {}), ...opts.attributes };
+    },
+    error: (opts?: any) => {
+      record.errored = true;
+      if (opts?.attributes) record.attributes = { ...(record.attributes ?? {}), ...opts.attributes };
+    },
+    createChildSpan: (childOpts: any) => {
+      const child = makeFakeSpan('child', childOpts.name, records, traceId);
+      if (childOpts.attributes) {
+        // Attach attributes to the RecordedSpan we just pushed.
+        records[records.length - 1].attributes = childOpts.attributes;
+      }
+      if (childOpts.input !== undefined) {
+        records[records.length - 1].input = childOpts.input;
+      }
+      return child;
+    },
+    getCorrelationContext: () => undefined,
+  };
+  if (kind === 'root' && arguments) {
+    // no-op; kept for symmetry
+  }
+  return span as AnySpan;
+}
+
 function makeObservabilityStub() {
   const metrics: Array<{ name: string; value: number; labels?: Record<string, unknown> }> = [];
   const logs: Array<{ level: 'info' | 'error'; message: string; data?: Record<string, unknown> }> = [];
   const activity: WorkspaceActivityEvent[] = [];
+  const spans: RecordedSpan[] = [];
 
-  const logger: LoggerContext = {
-    debug: vi.fn(),
-    info: vi.fn((message: string, data?: Record<string, unknown>) => {
-      logs.push({ level: 'info', message, data });
-    }),
-    warn: vi.fn(),
-    error: vi.fn((message: string, data?: Record<string, unknown>) => {
-      logs.push({ level: 'error', message, data });
-    }),
-    fatal: vi.fn(),
-  };
+  const buildLogger = (span?: AnySpan): LoggerContext =>
+    ({
+      debug: vi.fn(),
+      info: vi.fn((message: string, data?: Record<string, unknown>) => {
+        logs.push({ level: 'info', message, data: { ...data, traceId: span?.traceId, spanId: span?.id } });
+      }),
+      warn: vi.fn(),
+      error: vi.fn((message: string, data?: Record<string, unknown>) => {
+        logs.push({ level: 'error', message, data: { ...data, traceId: span?.traceId, spanId: span?.id } });
+      }),
+      fatal: vi.fn(),
+    }) as unknown as LoggerContext;
 
-  const metricsCtx: MetricsContext = {
-    emit(name: string, value: number, labels?: Record<string, unknown>) {
-      metrics.push({ name, value, labels });
-    },
-  } as unknown as MetricsContext;
+  const buildMetricsContext = (span?: AnySpan): MetricsContext =>
+    ({
+      emit(name: string, value: number, labels?: Record<string, unknown>) {
+        metrics.push({
+          name,
+          value,
+          labels: { ...labels, traceId: span?.traceId, spanId: span?.id },
+        });
+      },
+    }) as unknown as MetricsContext;
 
   const instance: ObservabilityInstance = {
     getConfig: () => ({}) as any,
@@ -40,19 +109,19 @@ function makeObservabilityStub() {
     getSpanOutputProcessors: () => [],
     getLogger: () => ({}) as any,
     getBridge: () => undefined,
-    startSpan: () => ({}) as any,
+    startSpan: ((opts: any) => makeFakeSpan('root', opts.name, spans)) as any,
     rebuildSpan: () => ({}) as any,
     flush: async () => {},
     shutdown: async () => {},
     __setLogger: () => {},
-    getLoggerContext: () => logger,
-    getMetricsContext: () => metricsCtx,
+    getLoggerContext: (span?: AnySpan) => buildLogger(span),
+    getMetricsContext: (span?: AnySpan) => buildMetricsContext(span),
     emitWorkspaceActivityEvent: (event: WorkspaceActivityEvent) => {
       activity.push(event);
     },
   };
 
-  return { instance, metrics, logs, activity };
+  return { instance, metrics, logs, activity, spans };
 }
 
 const META: WorkspaceInstrumentationMeta = {
@@ -216,6 +285,95 @@ describe('wrapFilesystem', () => {
     expect(errorLog?.message).toBe('workspace.filesystem.readFile');
   });
 
+  it('opens a ROOT workspace:filesystem:<op> span when no ambient parent exists', async () => {
+    const { instance, metrics, logs, activity, spans } = makeObservabilityStub();
+    const fs = makeFakeFilesystem();
+    const wrapped = wrapFilesystem(fs, META, instance);
+
+    await wrapped.writeFile('/foo.txt', 'hi');
+
+    // Exactly one span, kind=root, name follows the workspace:filesystem:<op> pattern.
+    expect(spans).toHaveLength(1);
+    expect(spans[0].kind).toBe('root');
+    expect(spans[0].name).toBe('workspace:filesystem:writeFile');
+    expect(spans[0].ended).toBe(true);
+    expect(spans[0].errored).toBe(false);
+
+    // Logs, metrics, and the filesystem_change event all share the SAME
+    // traceId/spanId as the operation span.
+    const { traceId, spanId } = spans[0];
+    const durationMetric = metrics.find(m => m.name === 'mastra.workspace.filesystem.duration_ms');
+    expect(durationMetric?.labels).toMatchObject({ traceId, spanId });
+
+    const infoLog = logs.find(l => l.message === 'workspace.filesystem.writeFile');
+    expect(infoLog?.data).toMatchObject({ traceId, spanId });
+
+    const change = activity[0];
+    expect(change?.type).toBe('filesystem_change');
+    if (change?.type === 'filesystem_change') {
+      expect(change.change.traceId).toBe(traceId);
+      expect(change.change.spanId).toBe(spanId);
+    }
+  });
+
+  it('nests a CHILD span under the ambient parent when one exists', async () => {
+    const { instance, metrics, activity, spans } = makeObservabilityStub();
+    const fs = makeFakeFilesystem();
+    const wrapped = wrapFilesystem(fs, META, instance);
+
+    // Simulate an outer AGENT_RUN span in the ambient context. Share the same
+    // records array so parent + child are captured in one place.
+    const parent = makeFakeSpan('root', 'agent-run', spans);
+    // Reset counter so assertions can compare simple values.
+    expect(spans).toHaveLength(1);
+
+    await executeWithContext({
+      span: parent,
+      fn: async () => {
+        await wrapped.writeFile('/foo.txt', 'hi');
+      },
+    });
+
+    // Two spans: the pre-existing parent and one child created by the wrapper.
+    expect(spans).toHaveLength(2);
+    const child = spans[1];
+    expect(child.kind).toBe('child');
+    expect(child.name).toBe('workspace:filesystem:writeFile');
+    expect(child.traceId).toBe(parent.traceId);
+    expect(child.ended).toBe(true);
+
+    // Instance.startSpan MUST NOT have been called — we nest, not root.
+    // (No easy assert; verify by counting root spans instead.)
+    const roots = spans.filter(s => s.kind === 'root');
+    expect(roots).toHaveLength(1); // just the parent
+
+    const durationMetric = metrics.find(m => m.name === 'mastra.workspace.filesystem.duration_ms');
+    expect(durationMetric?.labels).toMatchObject({ traceId: parent.traceId, spanId: child.spanId });
+
+    const change = activity[0];
+    if (change?.type === 'filesystem_change') {
+      expect(change.change.traceId).toBe(parent.traceId);
+      expect(change.change.spanId).toBe(child.spanId);
+    }
+  });
+
+  it('marks the operation span errored when the underlying call throws', async () => {
+    const { instance, spans } = makeObservabilityStub();
+    const boom = new Error('boom');
+    const fs = makeFakeFilesystem({
+      writeFile: vi.fn(async () => {
+        throw boom;
+      }),
+    });
+    const wrapped = wrapFilesystem(fs, META, instance);
+
+    await expect(wrapped.writeFile('/foo.txt', 'x')).rejects.toBe(boom);
+
+    expect(spans).toHaveLength(1);
+    expect(spans[0].errored).toBe(true);
+    expect(spans[0].attributes).toMatchObject({ success: false });
+  });
+
   it('reports read byte count when readFile returns a string', async () => {
     const { instance, metrics } = makeObservabilityStub();
     const fs = makeFakeFilesystem({
@@ -269,6 +427,25 @@ function makeFakeSandbox(overrides: Partial<WorkspaceSandbox> = {}): WorkspaceSa
 }
 
 describe('wrapSandbox', () => {
+  it('opens a ROOT workspace:sandbox:executeCommand span when no ambient parent exists', async () => {
+    const { instance, activity, spans } = makeObservabilityStub();
+    const sb = makeFakeSandbox();
+    const wrapped = wrapSandbox(sb, META, instance);
+
+    await wrapped.executeCommand!('echo hello');
+
+    expect(spans).toHaveLength(1);
+    expect(spans[0].kind).toBe('root');
+    expect(spans[0].name).toBe('workspace:sandbox:executeCommand');
+    expect(spans[0].ended).toBe(true);
+
+    const output = activity.find(e => e.type === 'sandbox_output');
+    if (output?.type === 'sandbox_output') {
+      expect(output.output.traceId).toBe(spans[0].traceId);
+      expect(output.output.spanId).toBe(spans[0].spanId);
+    }
+  });
+
   it('emits duration + info log + stdout activity event on executeCommand', async () => {
     const { instance, metrics, logs, activity } = makeObservabilityStub();
     const sb = makeFakeSandbox();

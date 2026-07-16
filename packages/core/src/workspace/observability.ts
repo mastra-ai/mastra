@@ -152,20 +152,33 @@ function beginCall(
   provider: string,
   input?: unknown,
 ): CallCtx {
+  const name = `workspace:${category}:${operation}`;
+  const attributes = {
+    category,
+    workspaceId: meta.workspaceId,
+    workspaceName: meta.workspaceName,
+    ...(category === 'filesystem' ? { filesystemProvider: provider } : { sandboxProvider: provider }),
+  };
+
+  // Every wrapped call gets its own span. When an ambient parent span exists
+  // (agent tool call, workflow step, etc.) the wrapper nests as a child.
+  // Otherwise it opens a root span via `instance.startSpan` so signals
+  // emitted from a direct workspace call still have a stable traceId/spanId
+  // to correlate against.
   const parentSpan = getCurrentSpan();
-  const span = parentSpan
+  const span: AnySpan | undefined = parentSpan
     ? parentSpan.createChildSpan<SpanType.WORKSPACE_ACTION>({
         type: SpanType.WORKSPACE_ACTION,
-        name: `workspace:${category}:${operation}`,
+        name,
         input,
-        attributes: {
-          category,
-          workspaceId: meta.workspaceId,
-          workspaceName: meta.workspaceName,
-          ...(category === 'filesystem' ? { filesystemProvider: provider } : { sandboxProvider: provider }),
-        },
+        attributes,
       })
-    : undefined;
+    : instance.startSpan?.<SpanType.WORKSPACE_ACTION>({
+        type: SpanType.WORKSPACE_ACTION,
+        name,
+        input,
+        attributes,
+      });
 
   return {
     span,

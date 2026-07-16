@@ -12,8 +12,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { Mastra } from '@mastra/core';
-import { SpanType } from '@mastra/core/observability';
-import { executeWithContext } from '@mastra/core/observability/context-storage';
 import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
 import { Observability } from '@mastra/observability';
 
@@ -91,25 +89,12 @@ const sb = workspace.sandbox;
 process.stdout.write(`fs is Proxy (wrapped): ${fs !== workspace._fs}\n`);
 process.stdout.write(`sb is Proxy (wrapped): ${sb !== workspace._sandbox}\n`);
 
-// Open an ambient root span so the wrapper opens child spans (mirrors how tool
-// calls nest workspace ops under an AGENT_RUN span at runtime).
-const observabilityInstance = observability.getDefaultInstance();
-const rootSpan = observabilityInstance.startSpan({
-  type: SpanType.AGENT_RUN,
-  name: 'smoke-root',
-  input: { probe: true },
-});
-
-let exec;
-await executeWithContext({
-  span: rootSpan,
-  fn: async () => {
-    await fs.writeFile('smoke.txt', 'hi');
-    await fs.readFile('smoke.txt');
-    exec = await sb.executeCommand('echo hello');
-  },
-});
-rootSpan.end();
+// Direct calls — no ambient span. The wrapper is expected to open its own root
+// workspace:{filesystem|sandbox}:<op> span per call and correlate metrics,
+// logs, and activity events against it.
+await fs.writeFile('smoke.txt', 'hi');
+await fs.readFile('smoke.txt');
+const exec = await sb.executeCommand('echo hello');
 process.stdout.write(`exec.exitCode=${exec.exitCode} exec.stdout=${JSON.stringify(exec.stdout)}\n`);
 
 await observability.flush();

@@ -32,7 +32,17 @@ function makeObservabilityEntrypoint(): {
     getSpanOutputProcessors: () => [],
     getLogger: () => ({}) as any,
     getBridge: () => undefined,
-    startSpan: () => ({}) as any,
+    // Minimal fake span: only the surface the wrapper touches.
+    startSpan: (opts: any) =>
+      ({
+        id: `span-${Math.random().toString(36).slice(2)}`,
+        traceId: `trace-${Math.random().toString(36).slice(2)}`,
+        name: opts?.name ?? 'span',
+        isValid: true,
+        end: () => {},
+        error: () => {},
+        createChildSpan: (_c: any) => ({}) as any,
+      }) as any,
     rebuildSpan: () => ({}) as any,
     flush: async () => {},
     shutdown: async () => {},
