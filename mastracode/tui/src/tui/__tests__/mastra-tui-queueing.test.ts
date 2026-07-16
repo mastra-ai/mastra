@@ -395,7 +395,7 @@ describe('MastraTUI queueing', () => {
     expect(mocks.addUserMessage).toHaveBeenCalledWith(state, {
       id: 'signal-after-new',
       role: 'user',
-      content: [{ type: 'text', text: 'new thread follow-up' }],
+      content: { format: 2, parts: [{ type: 'text', text: 'new thread follow-up' }] },
       createdAt: expect.any(Date),
     });
     expect(state.pendingNewThread).toBe(false);
@@ -432,7 +432,7 @@ describe('MastraTUI queueing', () => {
     expect(mocks.addUserMessage).toHaveBeenCalledWith(state, {
       id: 'signal-idle-1',
       role: 'user',
-      content: [{ type: 'text', text: 'render directly' }],
+      content: { format: 2, parts: [{ type: 'text', text: 'render directly' }] },
       createdAt: expect.any(Date),
     });
   });
@@ -469,10 +469,13 @@ describe('MastraTUI queueing', () => {
     expect(mocks.addUserMessage).toHaveBeenCalledWith(state, {
       id: 'signal-image-1',
       role: 'user',
-      content: [
-        { type: 'text', text: "what's in this image?" },
-        { type: 'image', data: 'data:image/png;base64,abc', mimeType: 'image/png' },
-      ],
+      content: {
+        format: 2,
+        parts: [
+          { type: 'text', text: "what's in this image?" },
+          { type: 'file', data: 'data:image/png;base64,abc', mimeType: 'image/png' },
+        ],
+      },
       createdAt: expect.any(Date),
     });
   });
@@ -549,7 +552,7 @@ describe('MastraTUI queueing', () => {
     expect(ctx.addUserMessage).toHaveBeenCalledWith({
       id: expect.stringMatching(/^user-/),
       role: 'user',
-      content: [{ type: 'text', text: 'first' }],
+      content: { format: 2, parts: [{ type: 'text', text: 'first' }] },
       createdAt: expect.any(Date),
     });
     expect(ctx.fireMessage).toHaveBeenCalledWith('first', undefined);
@@ -562,7 +565,7 @@ describe('MastraTUI queueing', () => {
     expect(ctx.addUserMessage).toHaveBeenLastCalledWith({
       id: expect.stringMatching(/^user-/),
       role: 'user',
-      content: [{ type: 'text', text: 'third' }],
+      content: { format: 2, parts: [{ type: 'text', text: 'third' }] },
       createdAt: expect.any(Date),
     });
     expect(ctx.fireMessage).toHaveBeenLastCalledWith('third', undefined);

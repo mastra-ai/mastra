@@ -1,3 +1,4 @@
+export { AuditPage } from './AuditPage';
 export { BoardPage } from './BoardPage';
 export { MetricsPage } from './MetricsPage';
 export { FactorySection } from './components/FactorySection';

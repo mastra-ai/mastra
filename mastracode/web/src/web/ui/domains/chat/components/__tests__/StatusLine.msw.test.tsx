@@ -303,16 +303,23 @@ describe('StatusLine', () => {
             message: {
               id: 'notification-message',
               role: 'assistant',
-              content: [
-                {
-                  type: 'notification',
-                  notificationId: 'notification-merged',
-                  message: 'octo/hello#42 was merged',
-                  source: 'github',
-                  kind: 'pull-request-merged',
-                  priority: 'urgent',
+              createdAt: new Date(),
+              content: {
+                format: 2,
+                parts: [],
+                metadata: {
+                  harnessContent: [
+                    {
+                      type: 'notification',
+                      notificationId: 'notification-merged',
+                      message: 'octo/hello#42 was merged',
+                      source: 'github',
+                      kind: 'pull-request-merged',
+                      priority: 'urgent',
+                    },
+                  ],
                 },
-              ],
+              },
             },
           },
         ],
@@ -435,7 +442,12 @@ describe('StatusLine', () => {
           { type: 'agent_start' },
           {
             type: 'message_update',
-            message: { id: 'assistant-1', role: 'assistant', content: [{ type: 'text', text: 'Working…' }] },
+            message: {
+              id: 'assistant-1',
+              role: 'assistant',
+              createdAt: new Date(),
+              content: { format: 2, parts: [{ type: 'text', text: 'Working…' }] },
+            },
           },
         ],
         [{ type: 'usage_update', usage: { completionTokens: 120 } }],

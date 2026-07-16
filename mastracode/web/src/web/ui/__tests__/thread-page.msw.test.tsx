@@ -9,7 +9,7 @@
  * page. Driven through a memory router over the real route table with MSW at
  * the network boundary.
  */
-import type { AgentControllerMessage, AgentControllerSessionState, AgentControllerThreadInfo } from '@mastra/client-js';
+import type { AgentControllerSessionState, AgentControllerThreadInfo, MastraDBMessage } from '@mastra/client-js';
 import { QueryClient } from '@tanstack/react-query';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -43,9 +43,23 @@ const threadTwo = thread('thread-two', 'Second thread', '2026-06-02T00:00:00.000
 const newThread = thread('thread-new', 'New thread', '2026-06-05T00:00:00.000Z');
 
 /** Persisted history per thread; unknown threads have no messages. */
-const MESSAGES: Record<string, AgentControllerMessage[]> = {
-  [threadOne.id]: [{ id: 'm-one', role: 'assistant', content: [{ type: 'text', text: 'Reply from thread one' }] }],
-  [threadTwo.id]: [{ id: 'm-two', role: 'assistant', content: [{ type: 'text', text: 'Reply from thread two' }] }],
+const MESSAGES: Record<string, MastraDBMessage[]> = {
+  [threadOne.id]: [
+    {
+      id: 'm-one',
+      role: 'assistant',
+      createdAt: new Date('2026-06-04T00:00:00.000Z'),
+      content: { format: 2, parts: [{ type: 'text', text: 'Reply from thread one' }] },
+    },
+  ],
+  [threadTwo.id]: [
+    {
+      id: 'm-two',
+      role: 'assistant',
+      createdAt: new Date('2026-06-02T00:00:00.000Z'),
+      content: { format: 2, parts: [{ type: 'text', text: 'Reply from thread two' }] },
+    },
+  ],
 };
 
 afterEach(() => {
@@ -148,10 +162,11 @@ function useAgentControllerHandlers({
       const messagesDelay = messagesDelayMsByThread[threadId] ?? messagesDelayMs;
       if (messagesDelay > 0) await delay(messagesDelay);
       if (threadId === newThread.id && captured.sent.length > 0) {
-        const messages: AgentControllerMessage[] = captured.sent.map((text, index) => ({
+        const messages: MastraDBMessage[] = captured.sent.map((text, index) => ({
           id: `sent-${index}`,
           role: 'user',
-          content: [{ type: 'text', text }],
+          createdAt: new Date(),
+          content: { format: 2, parts: [{ type: 'text', text }] },
         }));
         return HttpResponse.json({ messages });
       }

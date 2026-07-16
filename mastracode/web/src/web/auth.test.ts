@@ -284,7 +284,7 @@ describe('mountWebAuth /auth routes (enabled)', () => {
     const { app } = buildApp();
     const res = await app.request('/auth/me');
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ authenticated: false, user: null });
+    expect(await res.json()).toEqual({ authenticated: false, user: null, provider: 'workos' });
   });
 
   it('/auth/me reports the user when authenticated', async () => {
@@ -292,7 +292,11 @@ describe('mountWebAuth /auth routes (enabled)', () => {
     const { app } = buildApp();
     const res = await app.request('/auth/me');
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ authenticated: true, user: { email: 'user@example.com', name: 'User' } });
+    expect(await res.json()).toEqual({
+      authenticated: true,
+      user: { email: 'user@example.com', name: 'User' },
+      provider: 'workos',
+    });
   });
 
   it('/auth/me surfaces the organization id and stable user id to the SPA', async () => {
@@ -308,6 +312,7 @@ describe('mountWebAuth /auth routes (enabled)', () => {
     expect(await res.json()).toEqual({
       authenticated: true,
       user: { email: 'user@example.com', name: 'User', organizationId: 'org_a', userId: 'user_1' },
+      provider: 'workos',
     });
   });
 });

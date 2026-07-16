@@ -6,6 +6,8 @@ export {
   logoutUrl,
   redirectToLogin,
   redirectToLogout,
+  signInWithPassword,
+  signUpWithPassword,
   userSessionResourceId,
 } from './services/auth';
 export type { WebAuthState } from './services/auth';
