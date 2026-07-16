@@ -395,53 +395,28 @@ html.light {
   --shadow-glow-accent2: 0 0 20px oklch(0.637 0.237 25.331 / 0.25);
   --shadow-focus-ring: 0 0 0 3px oklch(0.723 0.219 149.579 / 0.12);
 
-  --animate-signals-trace-row: signals-trace-row 3.6s ease-in-out infinite;
-  --animate-signals-connector: signals-connector 2.4s ease-in-out infinite;
-  --animate-signals-engine-ring: signals-engine-ring 4s linear infinite;
-  --animate-signals-engine-pulse: signals-engine-pulse 2.4s ease-in-out infinite;
-  --animate-signals-chip: signals-chip 3.2s ease-in-out infinite;
+  --animate-signals-connector: signals-connector 2.8s ease-in-out infinite;
+  --animate-signals-engine-pulse: signals-engine-pulse 3.2s ease-in-out infinite;
+  --animate-signals-chip: signals-chip 3.6s ease-in-out infinite;
 
-  @keyframes signals-trace-row {
+  @keyframes signals-connector {
     0%,
     100% {
       opacity: 0.45;
-      transform: translateX(0);
     }
     50% {
       opacity: 1;
-      transform: translateX(0.5rem);
-    }
-  }
-
-  @keyframes signals-connector {
-    0% {
-      opacity: 0;
-      transform: translateX(-100%);
-    }
-    35%,
-    65% {
-      opacity: 1;
-    }
-    100% {
-      opacity: 0;
-      transform: translateX(300%);
-    }
-  }
-
-  @keyframes signals-engine-ring {
-    to {
-      transform: rotate(360deg);
     }
   }
 
   @keyframes signals-engine-pulse {
     0%,
     100% {
-      opacity: 0.35;
-      transform: scale(0.92);
+      opacity: 0.5;
+      transform: scale(0.96);
     }
     50% {
-      opacity: 0.8;
+      opacity: 0.9;
       transform: scale(1.04);
     }
   }
@@ -449,12 +424,10 @@ html.light {
   @keyframes signals-chip {
     0%,
     100% {
-      opacity: 0.55;
-      transform: translateY(0);
+      opacity: 0.72;
     }
     50% {
       opacity: 1;
-      transform: translateY(-0.125rem);
     }
   }
 

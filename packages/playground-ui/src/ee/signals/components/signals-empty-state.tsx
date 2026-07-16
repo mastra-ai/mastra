@@ -1,162 +1,158 @@
-import {
-  ArrowDownIcon,
-  ArrowRightIcon,
-  ChartNoAxesColumnIncreasingIcon,
-  CpuIcon,
-  ExternalLinkIcon,
-  Rows3Icon,
-} from 'lucide-react';
-import type { ReactNode } from 'react';
+import { CpuIcon } from 'lucide-react';
+import type { CSSProperties, ReactNode } from 'react';
 
-import { Button } from '@/ds/components/Button';
-import { buildSankeyHueMap, nodeColorVivid } from '@/ds/components/SankeyChart';
+import { Button } from '../../../ds/components/Button';
+import { buildSankeyHueMap, nodeColorVivid } from '../../../ds/components/SankeyChart/sankeyColor';
 
-const signalNames = ['Outcome', 'Goal', 'Behavior', 'Sentiment'];
-const signalHues = buildSankeyHueMap(signalNames);
+const signalLabels = ['Outcome', 'Goal', 'Behavior', 'Sentiment'];
+const signalHues = buildSankeyHueMap(signalLabels);
 
-export interface SignalsEmptyStateProps {
+const traceRows = [
+  ['chat.completion', '1.2s'],
+  ['tool.search_docs', '340ms'],
+  ['workflow.support', '2.8s'],
+];
+
+const signalStyle = (label: string): CSSProperties => ({
+  color: nodeColorVivid(signalHues[label] ?? 0),
+});
+
+const PipelineConnector = () => (
+  <div aria-hidden="true" className="relative hidden h-full items-center lg:flex">
+    <div className="w-full border-t border-dashed border-border1" />
+    <span className="absolute left-1/2 size-2.5 -translate-x-1/2 rounded-full bg-positive1 shadow-[0_0_12px_currentColor] motion-safe:animate-signals-connector motion-reduce:animate-none" />
+  </div>
+);
+
+export type SignalsEmptyStateProps = {
   actionSlot?: ReactNode;
-}
+};
 
-function PipelineConnector({ delay }: { delay: string }) {
+export const SignalsEmptyState = ({ actionSlot }: SignalsEmptyStateProps) => {
   return (
-    <li aria-hidden="true" className="flex items-center justify-center text-neutral3">
-      <div className="relative hidden h-px w-full overflow-hidden bg-border1 md:block">
-        <span
-          className="absolute inset-y-0 left-0 w-1/3 bg-accent1 motion-safe:animate-signals-connector motion-reduce:animate-none"
-          style={{ animationDelay: delay }}
-        />
-      </div>
-      <ArrowRightIcon className="ml-2 hidden size-4 shrink-0 md:block" />
-      <ArrowDownIcon className="size-5 md:hidden" />
-    </li>
-  );
-}
-
-export function SignalsEmptyState({ actionSlot }: SignalsEmptyStateProps) {
-  return (
-    <section className="flex min-h-full w-full items-center justify-center p-4 sm:p-8" aria-labelledby="signals-title">
-      <div className="w-full max-w-6xl overflow-hidden rounded-xl border border-border1 bg-surface2 shadow-card">
-        <div className="px-5 py-8 text-center sm:px-8 sm:py-10">
-          <p className="text-ui-xs font-semibold tracking-widest text-accent1">SIGNALS</p>
-          <h1 id="signals-title" className="mt-3 text-header-xl font-semibold text-neutral6">
+    <section className="min-h-full w-full bg-surface1 p-6 md:px-10 lg:px-12 xl:px-[4.375rem]">
+      <div className="max-w-260 mx-auto w-full">
+        <header>
+          <div className="flex items-center gap-2 font-mono text-ui-xs font-medium tracking-[0.28em] text-warning1 uppercase">
+            <span aria-hidden="true" className="size-1.5 rounded-full bg-warning1 shadow-[0_0_8px_currentColor]" />
+            SIGNALS
+          </div>
+          <h1 className="mt-7 text-header-xl font-medium tracking-tight text-neutral6">
             Understand what drives every agent interaction
           </h1>
-          <p className="mx-auto mt-3 max-w-2xl text-ui-md text-neutral4">
-            Mastra transforms incoming traces into structured signal analysis, revealing outcomes, goals, behaviors, and
-            sentiment across your agents.
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-neutral3">
+            Mastra observes your traces, groups recurring patterns, and turns them into signals—
+            <br className="hidden sm:block" />
+            so you can see what users are trying to do, where they struggle, and what succeeds.
           </p>
+        </header>
 
-          <ol
-            className="mx-auto mt-10 grid max-w-5xl grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_3rem_minmax(0,1fr)_3rem_minmax(0,1fr)] md:items-stretch md:gap-4"
-            aria-label="Signals analysis pipeline"
-          >
-            <li className="rounded-lg border border-border1 bg-surface3 p-5 text-left">
-              <div className="flex items-center gap-2 text-neutral6">
-                <Rows3Icon className="size-4 text-accent1" />
-                <h2 className="text-ui-md font-semibold">Traces</h2>
-              </div>
-              <p className="mt-2 text-ui-sm text-neutral4">Agent interactions arrive as connected execution spans.</p>
-              <div className="mt-5 space-y-2" aria-hidden="true">
-                {[0, 0.35, 0.7].map((delay, index) => (
-                  <div
-                    key={delay}
-                    className="flex items-center gap-2 rounded-md border border-border1 bg-surface2 px-3 py-2 motion-safe:animate-signals-trace-row motion-reduce:animate-none"
-                    style={{ animationDelay: `${delay}s` }}
-                  >
-                    <span className="size-1.5 rounded-full bg-accent1" />
-                    <span
-                      className={
-                        index === 1 ? 'h-1.5 w-1/2 rounded-full bg-neutral3' : 'h-1.5 w-2/3 rounded-full bg-neutral3'
-                      }
-                    />
-                  </div>
-                ))}
-              </div>
-            </li>
-
-            <PipelineConnector delay="0s" />
-
-            <li className="flex min-h-48 flex-col items-center justify-center rounded-lg border border-border1 bg-surface3 p-5 text-center">
-              <div className="relative flex size-24 items-center justify-center" aria-hidden="true">
-                <span className="absolute inset-0 rounded-full border border-dashed border-accent1 motion-safe:animate-signals-engine-ring motion-reduce:animate-none" />
-                <span className="absolute inset-3 rounded-full border border-accent1/60 motion-safe:animate-signals-engine-pulse motion-reduce:animate-none" />
-                <span className="flex size-12 items-center justify-center rounded-full bg-accent1Darker text-accent1">
-                  <CpuIcon className="size-5" />
-                </span>
-              </div>
-              <h2 className="mt-4 text-ui-md font-semibold text-neutral6">Mastra Engine</h2>
-              <p className="mt-2 text-ui-sm text-neutral4">Aggregates and labels patterns across every trace.</p>
-            </li>
-
-            <PipelineConnector delay="1.2s" />
-
-            <li className="rounded-lg border border-border1 bg-surface3 p-5 text-left">
-              <div className="flex items-center gap-2 text-neutral6">
-                <ChartNoAxesColumnIncreasingIcon className="size-4 text-accent1" />
-                <h2 className="text-ui-md font-semibold">Signal analysis</h2>
-              </div>
-              <p className="mt-2 text-ui-sm text-neutral4">Four dimensions make agent performance understandable.</p>
-              <ul className="mt-5 grid grid-cols-2 gap-2">
-                {signalNames.map((signal, index) => (
-                  <li
-                    key={signal}
-                    className="rounded-md border border-current bg-surface2 px-3 py-2 motion-safe:animate-signals-chip motion-reduce:animate-none"
-                    style={{ color: nodeColorVivid(signalHues[signal] ?? 0), animationDelay: `${index * 0.3}s` }}
-                  >
-                    <span className="flex items-center gap-2">
-                      <span className="size-1.5 rounded-full bg-current" aria-hidden="true" />
-                      <span className="text-ui-xs font-medium text-neutral5">{signal}</span>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </li>
-          </ol>
-        </div>
-
-        <div className="border-t border-border1 bg-surface1/50 p-5 sm:px-8" aria-label="Signal preview">
-          <div className="mx-auto max-w-5xl opacity-60">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-ui-xs font-semibold tracking-wider text-neutral4 uppercase">
-                  Your analysis will appear here
-                </p>
-                <p className="mt-1 text-ui-sm text-neutral3">Trace groups will flow into comparable signal paths.</p>
-              </div>
-              <div className="hidden items-end gap-1 sm:flex" aria-hidden="true">
-                {[6, 10, 8, 12, 7, 11].map((height, index) => (
-                  <span
-                    key={`${height}-${index}`}
-                    className="w-2 rounded-sm bg-neutral3"
-                    style={{ height: `${height * 2}px` }}
-                  />
-                ))}
-              </div>
+        <div
+          aria-label="Signals analysis pipeline"
+          className="mt-14 grid gap-4 lg:grid-cols-[17.5rem_4.5rem_17.5rem_4.5rem_minmax(0,1fr)] lg:gap-0"
+          role="list"
+        >
+          <article className="h-50 rounded-md border border-border1 bg-surface2 p-5 shadow-sm" role="listitem">
+            <h2 className="text-lg font-semibold text-neutral6">Traces</h2>
+            <p className="mt-0.5 text-xs text-neutral3">Every agent interaction</p>
+            <p className="mt-5 font-mono text-[0.5625rem] tracking-[0.24em] text-neutral2 uppercase">Input</p>
+            <div className="mt-2.5 space-y-2">
+              {traceRows.map(([name, duration]) => (
+                <div
+                  className="flex items-center justify-between rounded border border-border1 bg-surface3 px-3 py-1.5 font-mono text-ui-xs"
+                  key={name}
+                >
+                  <span className="text-neutral4">{name}</span>
+                  <span className="text-neutral2">{duration}</span>
+                </div>
+              ))}
             </div>
-          </div>
+          </article>
+
+          <PipelineConnector />
+
+          <article
+            className="h-50 flex flex-col items-center rounded-md border border-border1 bg-surface2 p-5 text-center shadow-sm"
+            role="listitem"
+          >
+            <h2 className="text-lg font-semibold text-neutral6">Mastra Engine</h2>
+            <p className="mt-0.5 text-xs text-neutral3">Clusters recurring patterns</p>
+            <div aria-hidden="true" className="relative mt-5 flex size-20 items-center justify-center">
+              <span className="absolute size-20 rounded-full border border-positive1/15 motion-safe:animate-signals-engine-pulse motion-reduce:animate-none" />
+              <span className="absolute size-14 rounded-full border border-positive1/25" />
+              <span className="absolute size-9 rounded-full border border-positive1/40 bg-positive1/5 shadow-[0_0_24px_var(--color-positive1)]" />
+              <CpuIcon className="relative size-4 text-positive1" />
+            </div>
+            <p className="mt-3 max-w-40 text-ui-xs leading-4 text-neutral2">
+              Finds relationships across conversations, tools, and workflows
+            </p>
+          </article>
+
+          <PipelineConnector />
+
+          <article className="h-50 rounded-md border border-border1 bg-surface2 p-5 shadow-sm" role="listitem">
+            <h2 className="text-lg font-semibold text-neutral6">Signal analysis</h2>
+            <p className="mt-0.5 text-xs text-neutral3">What your users actually do</p>
+            <p className="mt-5 font-mono text-[0.5625rem] tracking-[0.24em] text-neutral2 uppercase">Output</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {signalLabels.map(label => (
+                <span
+                  className="inline-flex items-center gap-2 rounded border border-current/25 bg-surface3 px-2.5 py-1.5 text-xs font-medium shadow-[0_0_14px_color-mix(in_oklch,currentColor_12%,transparent)] motion-safe:animate-signals-chip motion-reduce:animate-none"
+                  key={label}
+                  style={signalStyle(label)}
+                >
+                  <span aria-hidden="true" className="size-1.5 rounded-full bg-current shadow-[0_0_7px_currentColor]" />
+                  {label}
+                </span>
+              ))}
+            </div>
+          </article>
         </div>
 
-        <div className="flex flex-col gap-4 border-t border-border1 bg-surface2 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8">
-          <p className="text-ui-sm text-neutral4">Run your agents to start turning traces into signals.</p>
-          <div className="flex flex-wrap items-center gap-2">
+        <section className="mt-10" aria-label="Signal relationship preview">
+          <p className="font-mono text-[0.5625rem] tracking-[0.2em] text-neutral2 uppercase">
+            Grouped trace relationships will appear here
+          </p>
+          <div aria-hidden="true" className="h-18 mt-3 grid grid-cols-3 gap-5 opacity-35">
+            {[0, 1, 2].map(index => (
+              <div className="rounded-md border border-dashed border-border1 bg-surface2/30 p-4" key={index}>
+                <div className="h-1.5 w-16 rounded-full bg-neutral1" />
+                <div className="mt-3 h-1 w-full rounded-full bg-neutral1/60" />
+                <div className="mt-2 h-1 w-2/3 rounded-full bg-neutral1/40" />
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <aside className="mt-9 flex min-h-16 flex-col gap-4 rounded-md border border-border1 bg-surface2 px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-start gap-3 sm:items-center">
+            <span
+              aria-hidden="true"
+              className="mt-1.5 size-2 shrink-0 rounded-full bg-warning1 shadow-[0_0_9px_currentColor] sm:mt-0"
+            />
+            <p className="text-xs leading-5 text-neutral3">
+              <strong className="font-semibold text-neutral5">Waiting for traces.</strong> Signals activate
+              automatically once your agents start receiving traffic.
+            </p>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
             {actionSlot}
             <Button
-              variant="ghost"
-              size="sm"
               as="a"
               href="https://mastra.ai/en/docs/observability/tracing/overview"
               target="_blank"
               rel="noopener noreferrer"
+              variant="outline"
+              size="sm"
             >
-              Read the docs <ExternalLinkIcon />
+              Read the docs
             </Button>
-            <Button variant="primary" size="sm" as="a" href="/observability">
-              View incoming traces <ArrowRightIcon />
+            <Button as="a" href="/observability" variant="primary" size="sm">
+              View incoming traces
             </Button>
           </div>
-        </div>
+        </aside>
       </div>
     </section>
   );
-}
+};

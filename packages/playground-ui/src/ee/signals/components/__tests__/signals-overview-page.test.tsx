@@ -14,6 +14,9 @@ describe('SignalsOverviewPage', () => {
 
       expect(screen.getByText('SIGNALS')).not.toBeNull();
       expect(screen.getByRole('heading', { name: 'Understand what drives every agent interaction' })).not.toBeNull();
+      expect(
+        screen.getByText(/Mastra observes your traces, groups recurring patterns, and turns them into signals/),
+      ).not.toBeNull();
 
       const pipeline = screen.getByRole('list', { name: 'Signals analysis pipeline' });
       const stageHeadings = within(pipeline)
@@ -21,15 +24,33 @@ describe('SignalsOverviewPage', () => {
         .map(heading => heading.textContent);
       expect(stageHeadings).toEqual(['Traces', 'Mastra Engine', 'Signal analysis']);
 
+      expect(within(pipeline).getByText(/input/i)).not.toBeNull();
+      expect(within(pipeline).getByText(/output/i)).not.toBeNull();
+      expect(within(pipeline).getByText('Clusters recurring patterns')).not.toBeNull();
+      expect(within(pipeline).getByText('What your users actually do')).not.toBeNull();
+
+      for (const [trace, duration] of [
+        ['chat.completion', '1.2s'],
+        ['tool.search_docs', '340ms'],
+        ['workflow.support', '2.8s'],
+      ]) {
+        expect(within(pipeline).getByText(trace)).not.toBeNull();
+        expect(within(pipeline).getByText(duration)).not.toBeNull();
+      }
+
       for (const signal of ['Outcome', 'Goal', 'Behavior', 'Sentiment']) {
         expect(within(pipeline).getByText(signal)).not.toBeNull();
       }
     });
 
-    it('previews the future analysis and offers persistent activation actions', () => {
+    it('previews grouped relationships and offers persistent activation actions', () => {
       render(<SignalsOverviewPage />);
 
-      expect(screen.getByText('Your analysis will appear here')).not.toBeNull();
+      expect(screen.getByText(/grouped trace relationships will appear here/i)).not.toBeNull();
+      expect(screen.getByText('Waiting for traces.')).not.toBeNull();
+      expect(
+        screen.getByText(/Signals activate automatically once your agents start receiving traffic/),
+      ).not.toBeNull();
 
       const docsLink = screen.getByRole('link', { name: 'Read the docs' });
       expect(docsLink.getAttribute('href')).toBe('https://mastra.ai/en/docs/observability/tracing/overview');
