@@ -349,13 +349,31 @@ export interface AgentControllerRequestOptions {
 export interface SubscribeAgentControllerSessionOptions {
   /** Called for each event received over the stream. */
   onEvent: (event: AgentControllerEvent) => void;
-  /** Called when the stream errors or ends unexpectedly. */
+  /**
+   * Called when the stream errors or ends and no (further) reconnect will be
+   * attempted — the subscription is dead after this fires.
+   */
   onError?: (error: unknown) => void;
+  /**
+   * Called each time the stream is re-established after a drop (reconnect
+   * only). The server does NOT replay events missed while disconnected, so
+   * stateful consumers MUST re-sync from here (e.g. `session.state()`) or
+   * they will silently lose the gap.
+   */
+  onReconnect?: () => void;
+  /**
+   * Automatically re-establish the stream after a clean close or transport
+   * error. Retries back off exponentially from `delayMs` (default 1s) up to
+   * `maxDelayMs` (default 30s); `maxRetries` (default Infinity) bounds the
+   * attempts per outage — the counter resets once a connection is
+   * re-established. When retries are exhausted, `onError` fires.
+   */
   reconnect?:
     | boolean
     | {
         maxRetries?: number;
         delayMs?: number;
+        maxDelayMs?: number;
       };
 }
 
@@ -413,14 +431,26 @@ export class AgentControllerSession extends BaseResource {
   /**
    * Subscribe to this session's event stream (SSE). The assistant's reply to a
    * message arrives here as `message_*` events, not on the sendMessage call.
+   *
+   * The returned promise resolves once the stream is actually established and
+   * rejects when it cannot be — with `reconnect` enabled, initial connection
+   * failures are retried under the same policy before rejecting.
    */
   async subscribe(options: SubscribeAgentControllerSessionOptions): Promise<AgentControllerSubscription> {
     const reconnectOptions =
       options.reconnect === true
-        ? { maxRetries: Infinity, delayMs: 1000 }
+        ? { maxRetries: Infinity, delayMs: 1000, maxDelayMs: 30_000 }
         : options.reconnect
-          ? { maxRetries: options.reconnect.maxRetries ?? Infinity, delayMs: options.reconnect.delayMs ?? 1000 }
+          ? {
+              maxRetries: options.reconnect.maxRetries ?? Infinity,
+              delayMs: options.reconnect.delayMs ?? 1000,
+              maxDelayMs: options.reconnect.maxDelayMs ?? 30_000,
+            }
           : null;
+
+    /** Exponential backoff for the Nth (1-based) retry of an outage streak. */
+    const backoffDelay = (attempt: number) =>
+      reconnectOptions ? Math.min(reconnectOptions.delayMs * 2 ** (attempt - 1), reconnectOptions.maxDelayMs) : 0;
 
     let cancelled = false;
     let currentReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
@@ -443,7 +473,13 @@ export class AgentControllerSession extends BaseResource {
         reconnectTimer = setTimeout(settleDelay, ms);
       });
 
-    const requestStream = () => this.request(this.url(`${this.base()}/stream`), { stream: true }) as Promise<Response>;
+    const requestStream = async (): Promise<Response> => {
+      const response = (await this.request(this.url(`${this.base()}/stream`), { stream: true })) as Response;
+      if (!response.body) {
+        throw new Error('No response body for agent controller session stream');
+      }
+      return response;
+    };
 
     const streamEndedError = () => new Error('Agent controller session stream ended unexpectedly');
 
@@ -464,11 +500,7 @@ export class AgentControllerSession extends BaseResource {
       | { kind: 'transport_error'; error: unknown };
 
     const pump = async (response: Response): Promise<PumpResult> => {
-      if (!response.body) {
-        throw new Error('No response body for agent controller session stream');
-      }
-
-      const reader = response.body.getReader();
+      const reader = response.body!.getReader();
       currentReader = reader;
       const decoder = new TextDecoder();
       let buffer = '';
@@ -519,61 +551,83 @@ export class AgentControllerSession extends BaseResource {
       options.onError?.(streamEndedError());
     };
 
-    const run = async () => {
+    /** Pump one established stream, mapping unexpected throws to transport errors. */
+    const pumpSafe = async (response: Response): Promise<PumpResult> => {
+      try {
+        return await pump(response);
+      } catch (error) {
+        return cancelled ? { kind: 'cancelled' } : { kind: 'transport_error', error };
+      }
+    };
+
+    // Establish the FIRST stream before resolving so callers can trust that a
+    // resolved subscribe() means events are flowing. Unsubscribe isn't
+    // available yet, so no cancellation checks are needed here. Initial
+    // failures retry under the reconnect policy; when retries are exhausted
+    // (or reconnect is off) the promise rejects.
+    const firstResponse = await (async (): Promise<Response> => {
       let attempts = 0;
+      while (true) {
+        try {
+          return await requestStream();
+        } catch (error) {
+          if (!reconnectOptions || attempts >= reconnectOptions.maxRetries) throw error;
+          attempts++;
+          await delay(backoffDelay(attempts));
+        }
+      }
+    })();
+
+    // Background loop: pump the current stream; on drop, re-establish it under
+    // the reconnect policy (exponential backoff, per-outage retry budget) and
+    // notify the consumer via onReconnect so it can re-sync missed state.
+    const run = async (initial: Response) => {
+      let response = initial;
 
       while (!cancelled) {
-        let response: Response;
-        try {
-          response = await requestStream();
-        } catch (error) {
-          if (cancelled) return;
-          if (!reconnectOptions || attempts >= reconnectOptions.maxRetries) {
-            options.onError?.(error);
-            return;
-          }
-          attempts++;
-          await delay(reconnectOptions.delayMs);
-          if (cancelled) return;
-          continue;
-        }
+        let result = await pumpSafe(response);
 
-        let result: PumpResult;
-        try {
-          result = await pump(response);
-        } catch (error) {
-          if (cancelled) return;
-          if (!reconnectOptions) {
-            options.onError?.(error);
-            return;
-          }
-          result = { kind: 'transport_error', error };
-        }
+        if (cancelled || result.kind === 'cancelled' || result.kind === 'consumer_error') return;
 
-        if (cancelled || result.kind === 'cancelled') return;
-        if (result.kind === 'consumer_error') return;
-
+        // result is 'done' or 'transport_error' — the stream dropped.
         if (!reconnectOptions) {
-          if (result.kind === 'done' || result.kind === 'transport_error') {
-            reportTerminalError(result);
-          }
+          reportTerminalError(result);
           return;
         }
 
-        if (result.kind === 'done' || result.kind === 'transport_error') {
+        // Retry until a new stream is established or the budget is exhausted.
+        let attempts = 0;
+        let reconnectedResponse: Response | undefined;
+        while (!reconnectedResponse) {
           if (attempts >= reconnectOptions.maxRetries) {
             reportTerminalError(result);
             return;
           }
           attempts++;
-          await delay(reconnectOptions.delayMs);
+          await delay(backoffDelay(attempts));
           if (cancelled) return;
-          continue;
+          try {
+            reconnectedResponse = await requestStream();
+          } catch (error) {
+            result = { kind: 'transport_error', error };
+          }
+        }
+
+        if (cancelled) {
+          void reconnectedResponse.body?.cancel().catch(() => {});
+          return;
+        }
+
+        response = reconnectedResponse;
+        try {
+          options.onReconnect?.();
+        } catch {
+          // Consumer callback failures must not kill the stream loop.
         }
       }
     };
 
-    void run();
+    void run(firstResponse);
 
     return {
       unsubscribe: () => {
