@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const sessionSpy = vi.fn((resourceId: string, scope?: string) => ({ resourceId, scope }));
 
@@ -15,6 +15,8 @@ import {
   invokeWorkspaceSkill,
   WorkspaceSkillInvocationError,
 } from '../agentControllerClient';
+
+afterEach(() => vi.restoreAllMocks());
 
 describe('createAgentControllerClient', () => {
   it('given a worktree scope, then the server session is created with that scope (regression: dropping it merged all worktrees into one session)', () => {
@@ -87,11 +89,10 @@ describe('invokeWorkspaceSkill', () => {
         arguments: 'octo/repo#42',
       }),
     });
-    fetchSpy.mockRestore();
   });
 
   it('surfaces typed server errors', async () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ error: 'skill_not_found', message: 'Skill not found: understand-pr.' }), {
         status: 404,
         headers: { 'content-type': 'application/json' },
@@ -113,6 +114,5 @@ describe('invokeWorkspaceSkill', () => {
         code: 'skill_not_found',
       }),
     );
-    fetchSpy.mockRestore();
   });
 });

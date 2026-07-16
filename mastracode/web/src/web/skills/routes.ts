@@ -148,7 +148,9 @@ export function buildSkillRoutes({
           return c.json({ error: 'session_not_found', message: 'Agent controller session not found.' }, 404);
         }
 
-        const skill = await session.getWorkspace().skills?.get(body.name);
+        const skills = session.getWorkspace().skills;
+        await skills?.maybeRefresh();
+        const skill = await skills?.get(body.name);
         if (!skill || skill['user-invocable'] === false) {
           return c.json({ error: 'skill_not_found', message: `Skill not found: ${body.name}.` }, 404);
         }

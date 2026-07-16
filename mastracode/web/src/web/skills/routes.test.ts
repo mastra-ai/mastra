@@ -26,20 +26,22 @@ const skill = {
 function createHarness(options: { authorized?: boolean } = {}) {
   const sendA = vi.fn(async () => {});
   const sendB = vi.fn(async () => {});
+  const refreshA = vi.fn(async () => {});
+  const refreshB = vi.fn(async () => {});
   const getA = vi.fn(async (name: string) => (name === skill.name ? skill : undefined));
   const getB = vi.fn(async () => undefined);
   const sessions = new Map([
     [
       'resource-1::/worktrees/a',
       {
-        getWorkspace: () => ({ skills: { get: getA } }),
+        getWorkspace: () => ({ skills: { maybeRefresh: refreshA, get: getA } }),
         sendMessage: sendA,
       },
     ],
     [
       'resource-1::/worktrees/b',
       {
-        getWorkspace: () => ({ skills: { get: getB } }),
+        getWorkspace: () => ({ skills: { maybeRefresh: refreshB, get: getB } }),
         sendMessage: sendB,
       },
     ],
@@ -66,7 +68,17 @@ function createHarness(options: { authorized?: boolean } = {}) {
       authorizeSessionAddress,
     }),
   );
-  return { app, sendA, sendB, getA, getB, getSessionByResource, authorizeSessionAddress };
+  return {
+    app,
+    sendA,
+    sendB,
+    refreshA,
+    refreshB,
+    getA,
+    getB,
+    getSessionByResource,
+    authorizeSessionAddress,
+  };
 }
 
 function invoke(app: Hono, body: Record<string, unknown>, controllerId = 'code'): Promise<Response> {
@@ -98,6 +110,8 @@ describe('workspace skill invocation route', () => {
       scope: '/worktrees/a',
     });
     expect(harness.getSessionByResource).toHaveBeenCalledWith('resource-1', '/worktrees/a');
+    expect(harness.refreshA).toHaveBeenCalledOnce();
+    expect(harness.refreshA.mock.invocationCallOrder[0]!).toBeLessThan(harness.getA.mock.invocationCallOrder[0]!);
     expect(harness.sendA).toHaveBeenCalledOnce();
     expect(harness.sendA).toHaveBeenCalledWith({
       content:
@@ -174,7 +188,9 @@ describe('workspace skill invocation route', () => {
     } as never);
     const sendMessage = vi.fn(async () => {});
     const getSessionByResource = vi.fn(async () => ({
-      getWorkspace: () => ({ skills: { get: async () => skill } }),
+      getWorkspace: () => ({
+        skills: { maybeRefresh: vi.fn(async () => {}), get: async () => skill },
+      }),
       sendMessage,
     }));
     const app = new Hono();
