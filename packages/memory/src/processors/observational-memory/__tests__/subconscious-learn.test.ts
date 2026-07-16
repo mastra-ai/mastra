@@ -72,6 +72,23 @@ describe('Subconscious learner', () => {
     expect(calls).toEqual(['curate', 'learn']);
   });
 
+  it('propagates aborts instead of starting the next reflection agent', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const learn = vi.fn();
+    const abortedContext = { ...context(), abortSignal: controller.signal };
+
+    await expect(
+      composeReflectionAgentHandlers([
+        async () => {
+          throw new Error('aborted');
+        },
+        learn,
+      ])(abortedContext),
+    ).rejects.toThrow('aborted');
+    expect(learn).not.toHaveBeenCalled();
+  });
+
   it('records one scoped skill with retry-safe evidence from repeated source facts', async () => {
     const memory = new Memory({ storage: new InMemoryStore() });
     const { store, first, second } = await seed(memory);

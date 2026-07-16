@@ -327,6 +327,8 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
             }
           : undefined,
         sendStateSignal: this.opts.sendStateSignal,
+        writer: this.opts.writer,
+        abortSignal: this.opts.abortSignal,
         requestContext: this.opts.requestContext,
       });
       this.observationResults.push({

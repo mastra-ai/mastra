@@ -732,6 +732,76 @@ If you're using working memory to store conversation summaries or ongoing state 
 
 In practical terms, OM replaces both working memory and message history, and has greater accuracy (and lower cost) than Semantic Recall.
 
+## Subconscious memory
+
+Subconscious memory extends OM with durable, scoped knowledge. It captures entities and facts during observation, surfaces relevant reminders, and maintains curated pages and reusable skills during reflection.
+
+Subconscious memory requires a storage adapter with knowledge support, an embedder, and a vector store. Semantic retrieval is required and doesn't fall back to lexical-only search.
+
+```typescript title="src/mastra/memory.ts"
+import { openai } from '@ai-sdk/openai'
+import { LibSQLStore, LibSQLVector } from '@mastra/libsql'
+import { Memory, Subconscious } from '@mastra/memory'
+
+const storage = new LibSQLStore({
+  id: 'memory-storage',
+  url: 'file:./mastra.db',
+})
+
+export const memory = new Memory({
+  storage,
+  vector: new LibSQLVector({
+    id: 'memory-vector',
+    url: 'file:./mastra.db',
+  }),
+  embedder: openai.embedding('__AI_SDK_OPENAI_EMBEDDING_MODEL__'),
+  options: {
+    observationalMemory: {
+      subconscious: new Subconscious(),
+    },
+  },
+})
+```
+
+The default configuration enables four built-in agents:
+
+- `capture`: Extracts entities and facts in the Observer's structured call.
+- `remind`: Searches scoped knowledge after observation and sends at most one grouped `<remembered>` signal.
+- `curate`: Merges duplicate entities, repairs facts, and writes pages after reflection.
+- `learn`: Distills repeated procedures into scoped skill records after reflection.
+
+Use `observation` and `reflection` to select agents or override their instructions, model, and `maxSteps`. Set `tools: false` to remove the `knowledge_search`, `knowledge_read`, and `knowledge_browse` tools from the main agent.
+
+```typescript title="src/mastra/memory.ts"
+const subconscious = new Subconscious({
+  observation: ['capture', { name: 'remind', maxSteps: 3 }],
+  reflection: ['curate', 'learn'],
+  defaultScope: 'resource',
+  maxScope: 'resource',
+  activity: { recentUpdates: 10 },
+})
+```
+
+### Scopes and records
+
+Knowledge uses the scope chain `org → resource → thread`. Reads include the current scope and visible ancestors but exclude sibling-thread data. `maxScope` is a mechanical ceiling: neither agents nor tools can promote a fact above it.
+
+Entities provide identity. Facts contain scoped prose, provenance, capture time, and an optional event time. Pages are curated documents with wikilinks; they aren't graph entities. `knowledge_search` combines lexical and semantic ranking, while `knowledge_read` and `knowledge_browse` retrieve records, mentions, and backlinks within the caller's scope.
+
+Curator removal soft-deletes facts. Normal reads and search exclude deleted facts. Restoration is available only through the application storage API, not through agent tools.
+
+### Signals, costs, and failures
+
+Activity uses a bounded state signal with cache-key deduplication. Unchanged snapshots don't add another signal. Reminders use the reactive signal lane and remain quiet when no relevant knowledge is found.
+
+Capture shares the Observer's structured call. Remind adds at most one bounded agent run per observation cycle. Curate and learn run sequentially after a committed reflection and use separate durable cursors. All built-ins enforce `maxSteps`, propagate cancellation, and can't recursively enable Subconscious memory.
+
+Background failures don't roll back observation or reflection. Mastra adds the failure to the activity state's `errors` array and emits a `data-subconscious-error` part for clients that display runtime status.
+
+:::note
+Subconscious memory depends on the current request context for organization, resource, and thread scope. Knowledge tools fail closed when required scope identifiers are missing.
+:::
+
 ## Related
 
 - [Observational Memory Reference](/reference/memory/observational-memory)
