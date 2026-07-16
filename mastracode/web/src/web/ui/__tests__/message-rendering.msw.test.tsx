@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { AgentControllerEvent, AgentControllerMessage, AgentControllerSessionState } from '@mastra/client-js';
+import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/client-js';
+import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -43,6 +44,10 @@ const RESOURCE_ID = 'resource-test';
 const SESSION = `${API}/sessions/${RESOURCE_ID}`;
 const THREAD_ID = 'thread-test';
 const PROJECT_PATH = '/tmp/mastracode-test';
+
+function dbMessage(id: string, role: MastraDBMessage['role'], parts: MastraMessagePart[]): MastraDBMessage {
+  return { id, role, createdAt: new Date(), content: { format: 2, parts } };
+}
 
 describe('web UI stylesheet entry', () => {
   it('imports the shared Playground UI stylesheet instead of the removed local stylesheet', () => {
@@ -113,7 +118,7 @@ function useAgentControllerHandlers({
   messages = [],
   events = [],
 }: {
-  messages?: AgentControllerMessage[];
+  messages?: MastraDBMessage[];
   events?: AgentControllerEvent[];
 } = {}) {
   const onState = vi.fn();
@@ -244,16 +249,20 @@ describe('MastraCode message rendering', () => {
     seedProject();
     useAgentControllerHandlers({
       messages: [
-        {
-          id: 'assistant-1',
-          role: 'assistant',
-          content: [
-            { type: 'text', text: '**Hello** from hydrate' },
-            { type: 'thinking', thinking: 'checking files' },
-            { type: 'tool_call', id: 'tool-1', name: 'view', args: { path: 'README.md' } },
-            { type: 'tool_result', id: 'tool-1', name: 'view', result: 'readme contents' },
-          ],
-        },
+        dbMessage('assistant-1', 'assistant', [
+          { type: 'text', text: '**Hello** from hydrate' },
+          { type: 'reasoning', reasoning: 'checking files', details: [{ type: 'text', text: 'checking files' }] },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'view',
+              args: { path: 'README.md' },
+              result: 'readme contents',
+            },
+          },
+        ]),
       ],
     });
 
@@ -271,16 +280,28 @@ describe('MastraCode message rendering', () => {
     seedProject();
     useAgentControllerHandlers({
       messages: [
-        {
-          id: 'assistant-tools',
-          role: 'assistant',
-          content: [
-            { type: 'tool_call', id: 'tool-a', name: 'view', args: { path: 'a.ts' } },
-            { type: 'tool_result', id: 'tool-a', name: 'view', result: 'a' },
-            { type: 'tool_call', id: 'tool-b', name: 'search', args: { pattern: 'x' } },
-            { type: 'tool_result', id: 'tool-b', name: 'search', result: 'b' },
-          ],
-        },
+        dbMessage('assistant-tools', 'assistant', [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-a',
+              toolName: 'view',
+              args: { path: 'a.ts' },
+              result: 'a',
+            },
+          },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-b',
+              toolName: 'search',
+              args: { pattern: 'x' },
+              result: 'b',
+            },
+          },
+        ]),
       ],
     });
 
@@ -305,7 +326,7 @@ describe('MastraCode message rendering', () => {
     seedProject();
     const stream = delayedSse({
       type: 'message_update',
-      message: { id: 'assistant-stream', role: 'assistant', content: [{ type: 'text', text: 'Streaming now' }] },
+      message: dbMessage('assistant-stream', 'assistant', [{ type: 'text', text: 'Streaming now' }]),
     });
     useAgentControllerHandlers();
     server.use(http.get(`${SESSION}/stream`, () => stream.response));
@@ -349,7 +370,14 @@ describe('MastraCode message rendering', () => {
         {
           id: 'assistant-status',
           role: 'assistant',
-          content: [{ type: 'om_thread_title_updated', text: 'Thread title updated: Better title' }],
+          createdAt: new Date(),
+          content: {
+            format: 2,
+            parts: [],
+            metadata: {
+              harnessContent: [{ type: 'om_thread_title_updated', text: 'Thread title updated: Better title' }],
+            },
+          },
         },
       ],
     });
@@ -365,14 +393,18 @@ describe('MastraCode message rendering', () => {
       seedProject();
       useAgentControllerHandlers({
         messages: [
-          {
-            id: 'assistant-args',
-            role: 'assistant',
-            content: [
-              { type: 'tool_call', id: 'tool-args', name: 'view', args: { path: 'src/deep/config.ts' } },
-              { type: 'tool_result', id: 'tool-args', name: 'view', result: 'file contents' },
-            ],
-          },
+          dbMessage('assistant-args', 'assistant', [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'tool-args',
+                toolName: 'view',
+                args: { path: 'src/deep/config.ts' },
+                result: 'file contents',
+              },
+            },
+          ]),
         ],
       });
 
@@ -562,19 +594,18 @@ describe('MastraCode message rendering', () => {
     seedProject();
     useAgentControllerHandlers({
       messages: [
-        {
-          id: 'assistant-edit',
-          role: 'assistant',
-          content: [
-            {
-              type: 'tool_call',
-              id: 'tool-edit',
-              name: 'string_replace',
+        dbMessage('assistant-edit', 'assistant', [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-edit',
+              toolName: 'string_replace',
               args: { path: 'src/example.ts', old_string: 'const value = 1', new_string: 'const value = 2' },
+              result: 'updated',
             },
-            { type: 'tool_result', id: 'tool-edit', name: 'string_replace', result: 'updated' },
-          ],
-        },
+          },
+        ]),
       ],
     });
 

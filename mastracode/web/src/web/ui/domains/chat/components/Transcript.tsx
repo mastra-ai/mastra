@@ -780,7 +780,7 @@ function MessageBubble({ entry }: { entry: MessageEntry }) {
             <NotificationSummaryCard key={notification.id} entry={notification} />
           ),
         )}
-        {hasRenderablePart && (
+        {hasRenderablePart && entry.message.role !== 'signal' && (
           <MessageFactory message={entry.message} roles={roles} {...renderers} fallback={() => null} />
         )}
       </div>
@@ -822,6 +822,8 @@ function toolFromInvocationPart(part: ToolInvocationPart, runtime?: ToolCall): T
 }
 
 function notificationMetadata(entry: MessageEntry): Array<NotificationEntry | NotificationSummaryEntry> {
+  if (entry.message.role === 'signal') return signalNotifications(entry);
+
   const harnessContent = entry.message.content.metadata?.harnessContent;
   if (!Array.isArray(harnessContent)) return [];
 
@@ -864,6 +866,55 @@ function notificationMetadata(entry: MessageEntry): Array<NotificationEntry | No
     });
   }
   return notifications;
+}
+
+/**
+ * Persisted notification signals are DB-native `role: 'signal'` rows whose
+ * original signal payload lives under `content.metadata.signal` (see
+ * `signalToDBMessage` in @mastra/core). Rebuild notification cards from it so
+ * they survive transcript hydration.
+ */
+function signalNotifications(entry: MessageEntry): Array<NotificationEntry | NotificationSummaryEntry> {
+  const signal = entry.message.content.metadata?.signal;
+  if (!isRecord(signal) || signal.type !== 'notification') return [];
+
+  const text = (entry.message.content.parts ?? [])
+    .map(part => (part.type === 'text' ? part.text : ''))
+    .filter(Boolean)
+    .join('\n')
+    .trim();
+  const attributes = isRecord(signal.attributes) ? signal.attributes : {};
+  const metadata = isRecord(signal.metadata) ? signal.metadata : {};
+
+  if (signal.tagName === 'notification-summary') {
+    const summary = isRecord(metadata.notificationSummary) ? metadata.notificationSummary : {};
+    return [
+      {
+        kind: 'notification_summary',
+        id: `${entry.id}-signal-summary`,
+        message: text,
+        pending: typeof summary.pending === 'number' ? summary.pending : 0,
+        bySource: isNumberRecord(summary.bySource) ? summary.bySource : {},
+        byPriority: isNumberRecord(summary.byPriority) ? summary.byPriority : {},
+        notificationIds: Array.isArray(summary.notificationIds)
+          ? summary.notificationIds.filter((id: unknown): id is string => typeof id === 'string')
+          : [],
+      },
+    ];
+  }
+
+  return [
+    {
+      kind: 'notification',
+      id: `${entry.id}-signal-notification`,
+      notificationId: typeof attributes.id === 'string' ? attributes.id : undefined,
+      message: text,
+      source: typeof attributes.source === 'string' ? attributes.source : undefined,
+      notifKind: typeof attributes.kind === 'string' ? attributes.kind : undefined,
+      priority: typeof attributes.priority === 'string' ? attributes.priority : undefined,
+      metadata,
+    },
+  ];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
