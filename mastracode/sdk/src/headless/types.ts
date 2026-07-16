@@ -7,6 +7,8 @@
  */
 import type { AgentController, AgentControllerEvent, Session } from '@mastra/core/agent-controller';
 
+import type { GoalManager } from '../goal-manager.js';
+
 export type RunMode = 'build' | 'plan' | 'fast';
 export type ThinkingLevel = 'off' | 'low' | 'medium' | 'high' | 'xhigh';
 
@@ -48,13 +50,11 @@ export interface RunMCThreadOptions {
   clone?: boolean;
 }
 
-export interface RunMCOptions<TState extends Record<string, unknown> = Record<string, unknown>> {
+interface RunMCBaseOptions<TState extends Record<string, unknown> = Record<string, unknown>> {
   /** Controller built via `createMastraCode(...)`. */
   controller: AgentController<TState>;
   /** Session built via `createMastraCode(...)`. */
   session: Session<TState>;
-  /** The task to run. */
-  prompt: string;
 
   /** Explicit model id override. Takes precedence over `mode`. */
   model?: string;
@@ -70,7 +70,7 @@ export interface RunMCOptions<TState extends Record<string, unknown> = Record<st
   resourceId?: string;
   /** Set or rename the thread title before running. */
   title?: string;
-  /** Abort with `status: 'timeout'` (exit code 2) if not complete within this many ms. */
+  /** Abort with `status: 'timeout'` (exit code 2) after this many ms without an event. */
   timeoutMs?: number;
   /**
    * Maximum number of agentic turns (assistant responses). When the limit is
@@ -84,7 +84,28 @@ export interface RunMCOptions<TState extends Record<string, unknown> = Record<st
   signal?: AbortSignal;
 }
 
-export type RunMCStatus = 'completed' | 'error' | 'aborted' | 'timeout' | 'max_turns';
+export interface RunMCGoalOptions {
+  objective: string;
+  judgeModelId: string;
+  maxRuns: number;
+  goalManager?: GoalManager;
+}
+
+export type RunMCOptions<TState extends Record<string, unknown> = Record<string, unknown>> = RunMCBaseOptions<TState> &
+  (
+    | {
+        /** The task to run as a regular headless turn. */
+        prompt: string;
+        goal?: never;
+      }
+    | {
+        prompt?: never;
+        /** Run a persisted goal instead of a regular prompt. */
+        goal: RunMCGoalOptions;
+      }
+  );
+
+export type RunMCStatus = 'completed' | 'done' | 'paused' | 'error' | 'aborted' | 'timeout' | 'max_turns';
 
 export interface RunMCUsage {
   inputTokens?: number;
@@ -115,6 +136,13 @@ export interface RunMCResult {
   status: RunMCStatus;
   /** Aggregated assistant text across all message_end events. */
   text: string;
+  /** Goal objective when this was a goal run. */
+  objective?: string;
+  /** Terminal goal evaluation when this was a goal run. */
+  goalEvent?: Extract<AgentControllerEvent, { type: 'goal_evaluation' }>;
+  reason?: string;
+  iterations?: number;
+  maxRuns?: number;
   /** Underlying finish reason from `agent_end`, when the run finished normally. */
   finishReason?: string;
   usage?: RunMCUsage;
