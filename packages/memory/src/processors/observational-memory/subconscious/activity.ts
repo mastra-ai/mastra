@@ -35,10 +35,20 @@ async function getActivityTarget(
   scope: KnowledgeScope,
 ): Promise<{ id: string; name?: string; type: 'entity' | 'page' }> {
   if (event.recordType === 'entity') {
-    return { id: event.recordId, name: (await store.getEntity(event.recordId))?.name, type: 'entity' };
+    const entity = await store.getEntity(event.recordId);
+    return {
+      id: event.recordId,
+      name: entity && isKnowledgeScopeVisible(entity.scope, scope) ? entity.name : undefined,
+      type: 'entity',
+    };
   }
   if (event.recordType === 'page') {
-    return { id: event.recordId, name: (await store.getPage(event.recordId))?.name, type: 'page' };
+    const page = await store.getPage(event.recordId);
+    return {
+      id: event.recordId,
+      name: page && isKnowledgeScopeVisible(page.scope, scope) ? page.name : undefined,
+      type: 'page',
+    };
   }
   const fact = await store.getFact({ id: event.recordId, includeDeleted: true });
   const entity = fact ? await store.getEntity(fact.parentEntityId) : undefined;
@@ -95,7 +105,7 @@ export async function buildSubconsciousActivitySnapshot(input: {
 
 export function renderSubconsciousActivity(snapshot: SubconsciousActivitySnapshot): string {
   const lines = snapshot.updates.map(update => {
-    const target = update.name ? `${update.type} [[${update.name}]]` : `${update.type} ${update.recordId}`;
+    const target = update.name ? `${update.type} [[${update.name}]]` : `${update.type} (details unavailable)`;
     return `- ${update.action}: ${target}`;
   });
   const hot = snapshot.hot.map(record => `[[${record.name}]] (${record.updates})`).join(', ');

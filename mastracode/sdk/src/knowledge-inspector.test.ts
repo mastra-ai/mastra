@@ -233,6 +233,22 @@ describe('KnowledgeInspector', () => {
     expect(JSON.stringify(activity)).not.toContain('private-source-thread');
   });
 
+  it('wraps activity pagination cursors from newest to oldest', async () => {
+    for (let index = 0; index < 5; index++) {
+      await harness.knowledge.createEntity({ name: `Activity ${index}`, kind: 'note', scope: resourceScope });
+    }
+
+    const first = await harness.inspector.listActivity({ level: 'resource', limit: 2 });
+    const second = await harness.inspector.listActivity({ level: 'resource', cursor: first.nextCursor, limit: 2 });
+    const firstNames = first.items.map(item => item.record?.name);
+    const secondNames = second.items.map(item => item.record?.name);
+
+    expect(first.nextCursor).toBeTruthy();
+    expect(secondNames).toHaveLength(2);
+    expect(secondNames.some(name => firstNames.includes(name))).toBe(false);
+    expect([...firstNames, ...secondNames]).toEqual(['Activity 4', 'Activity 3', 'Activity 2', 'Activity 1']);
+  });
+
   it('rejects a response when the session scope changes during a storage read', async () => {
     await harness.knowledge.createEntity({ name: 'Delayed', kind: 'note', scope: resourceScope });
     const listEntities = harness.knowledge.listEntities.bind(harness.knowledge);

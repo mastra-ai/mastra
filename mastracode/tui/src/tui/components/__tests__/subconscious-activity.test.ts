@@ -2,10 +2,9 @@ import { visibleWidth } from '@earendil-works/pi-tui';
 import stripAnsi from 'strip-ansi';
 import { describe, expect, it } from 'vitest';
 
-import type { SubconsciousActivitySnapshot } from '../subconscious-activity.js';
 import { parseSubconsciousActivitySnapshot, SubconsciousActivityComponent } from '../subconscious-activity.js';
 
-function snapshot(overrides: Partial<SubconsciousActivitySnapshot> = {}): SubconsciousActivitySnapshot {
+function snapshot(overrides: Record<string, unknown> = {}): any {
   return {
     updates: [
       {
@@ -40,6 +39,17 @@ describe('SubconsciousActivityComponent', () => {
     expect(rendered).toContain('Hot: Atlas launch (3)');
   });
 
+  it('does not render or retain raw record ids when activity details are unavailable', () => {
+    const parsed = parseSubconsciousActivitySnapshot(
+      snapshot({ updates: [{ ...snapshot().updates[0], name: undefined, recordId: 'private-record-id' }], hot: [] }),
+    );
+    const rendered = text(new SubconsciousActivityComponent(parsed!));
+
+    expect(rendered).toContain('fact (details unavailable)');
+    expect(rendered).not.toContain('private-record-id');
+    expect(JSON.stringify(parsed)).not.toContain('private-record-id');
+  });
+
   it('renders errors without losing activity', () => {
     const rendered = text(new SubconsciousActivityComponent(snapshot({ errors: ['remind model failed'] })));
     expect(rendered).toContain('1 error');
@@ -69,12 +79,18 @@ describe('SubconsciousActivityComponent', () => {
     expect(rendered).not.toContain('error 9');
   });
 
-  it('rejects malformed and unbounded payloads', () => {
+  it('accepts configured activity bounds and rejects larger payloads', () => {
     expect(parseSubconsciousActivitySnapshot({ updates: 'invalid', hot: [] })).toBeUndefined();
     expect(parseSubconsciousActivitySnapshot({ updates: [], hot: [], errors: [1] })).toBeUndefined();
     expect(
       parseSubconsciousActivitySnapshot({
-        updates: Array.from({ length: 11 }, () => snapshot().updates[0]),
+        updates: Array.from({ length: 100 }, (_, index) => ({ ...snapshot().updates[0], id: `activity-${index}` })),
+        hot: [],
+      }),
+    ).toBeDefined();
+    expect(
+      parseSubconsciousActivitySnapshot({
+        updates: Array.from({ length: 101 }, () => snapshot().updates[0]),
         hot: [],
       }),
     ).toBeUndefined();
