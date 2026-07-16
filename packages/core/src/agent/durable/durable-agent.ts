@@ -623,6 +623,9 @@ export class DurableAgent<
       (defaultOptions ?? {}) as Record<string, unknown>,
       (options ?? {}) as Record<string, unknown>,
     ) as DurableAgentStreamOptions<TOutput>;
+    if ((options as any)?.[CLOSE_ON_SUSPEND] === true) {
+      Object.defineProperty(resolvedOptions, CLOSE_ON_SUSPEND, { value: true, enumerable: true });
+    }
     // Preserve the marker when the until-idle wrapper spreads these options.
     Object.defineProperty(resolvedOptions, RESOLVED_EXECUTION_OPTIONS, { value: true, enumerable: true });
     return resolvedOptions;
@@ -1821,7 +1824,7 @@ export class DurableAgent<
       memory,
       saveQueueManager,
       requestContext,
-      actor: workflowInput.options.actor,
+      actor: workflowInput.options?.actor,
       agentSpan: recoverAgentSpan,
       abortController,
       abortSignal: abortController.signal,
