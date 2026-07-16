@@ -13,10 +13,10 @@
  * duplicated here.
  *
  * Usage:
- *   RAILWAY_API_TOKEN=... \
- *   RAILWAY_PROJECT_ID=... \
- *   RAILWAY_ENVIRONMENT_ID=... \
+ *   RAILWAY_API_TOKEN=... RAILWAY_ENVIRONMENT_ID=... \
  *     pnpm --filter ./mastracode/web smoke:railway
+ *
+ * `RAILWAY_TOKEN` (project token) works in place of `RAILWAY_API_TOKEN`.
  *
  * Optional env:
  *   MASTRACODE_SANDBOX_IDLE_MINUTES=5   # tear-down window (default 30)
@@ -30,10 +30,12 @@
 import { ensureGhInstalled, getSandboxProvider, provisionFreshSandbox } from '../src/web/github/sandbox';
 import type { MaterializationSandbox, SandboxCommandResult } from '../src/web/github/sandbox';
 
-const REQUIRED = ['RAILWAY_API_TOKEN', 'RAILWAY_PROJECT_ID', 'RAILWAY_ENVIRONMENT_ID'];
-const missing = REQUIRED.filter(k => !process.env[k]);
-if (missing.length > 0) {
-  console.error(`Missing required env: ${missing.join(', ')}`);
+if (!process.env.RAILWAY_API_TOKEN && !process.env.RAILWAY_TOKEN) {
+  console.error('Missing required env: set RAILWAY_API_TOKEN (or RAILWAY_TOKEN project token).');
+  process.exit(1);
+}
+if (!process.env.RAILWAY_ENVIRONMENT_ID) {
+  console.error('Missing required env: RAILWAY_ENVIRONMENT_ID');
   process.exit(1);
 }
 
