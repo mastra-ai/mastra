@@ -2,4 +2,14 @@
 '@mastra/core': patch
 ---
 
-Fixed trace-derived dataset items with circular values so they remain saveable, and made direct dataset writes reject invalid circular payloads before storage.
+Fixed dataset item writes to reject circular payloads with a clear validation error before storage, instead of failing with database-specific serialization errors. Added a public `safeStringify` utility for serializing values that may contain circular references.
+
+```ts
+import { safeStringify, ensureSerializable } from '@mastra/core/utils/safe-stringify';
+
+const value: Record<string, unknown> = { prompt: 'hello' };
+value.self = value;
+
+safeStringify(value); // '{"prompt":"hello","self":"[Circular]"}'
+ensureSerializable(value); // { prompt: 'hello', self: '[Circular]' }
+```
