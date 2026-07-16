@@ -1,8 +1,8 @@
 import * as p from '@clack/prompts';
 import color from 'picocolors';
 
-import { DOCKER_DATABASE_URL  } from '../context.js';
-import type {CreateContext} from '../context.js';
+import { DOCKER_DATABASE_URL } from '../context.js';
+import type { CreateContext } from '../context.js';
 
 const DB_DOCS_URL = 'https://mastra.ai/docs/software-factory/database';
 
@@ -19,7 +19,10 @@ export function isPostgresUrl(value: string): boolean {
  * Database step. Integrations (GitHub/Linear) and shared agent state need
  * Postgres with pgvector; without it the app still boots (local libSQL).
  */
-export async function databaseStep(ctx: CreateContext, preset: { dbUrl?: string; useDefaults?: boolean }): Promise<void> {
+export async function databaseStep(
+  ctx: CreateContext,
+  preset: { dbUrl?: string; useDefaults?: boolean },
+): Promise<void> {
   if (preset.dbUrl) {
     if (!isPostgresUrl(preset.dbUrl)) {
       throw new Error(`--db-url must be a postgres:// URL (got ${preset.dbUrl})`);

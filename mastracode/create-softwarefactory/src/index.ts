@@ -30,6 +30,13 @@ program
     if (args.llm !== undefined && !isLlmProvider(String(args.llm))) {
       throw new Error(`--llm must be "openai" or "anthropic" (got ${String(args.llm)})`);
     }
+    let timeout: number | undefined;
+    if (args.timeout !== undefined) {
+      timeout = args.timeout === true ? 60_000 : Number(args.timeout);
+      if (!Number.isInteger(timeout) || timeout <= 0) {
+        throw new Error(`--timeout must be a positive integer in milliseconds (got ${String(args.timeout)})`);
+      }
+    }
     await create({
       projectName: projectNameArg,
       llm: args.llm !== undefined && isLlmProvider(String(args.llm)) ? (String(args.llm) as never) : undefined,
@@ -38,7 +45,7 @@ program
       useDefaults: Boolean(args.default),
       templateRef: args.templateRef ? String(args.templateRef) : undefined,
       templateDir: args.templateDir ? String(args.templateDir) : undefined,
-      timeout: args.timeout ? (args.timeout === true ? 60_000 : parseInt(String(args.timeout), 10)) : undefined,
+      timeout,
       analytics,
     });
   });

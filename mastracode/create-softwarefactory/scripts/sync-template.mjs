@@ -44,6 +44,20 @@ function argValue(flag) {
 const outDir = path.resolve(argValue('--out') ?? path.join(pkgRoot, 'template-out'));
 const pinTag = argValue('--tag'); // undefined = local monorepo versions
 
+/** True when `candidate` is `parent` or nested inside it. */
+function containsPath(parent, candidate) {
+  const relative = path.relative(parent, candidate);
+  return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
+}
+
+// The output tree gets cleared before copying — refuse destinations that
+// would wipe the source web project or (unless it's the default
+// template-out) this package / the monorepo.
+if (containsPath(outDir, webRoot) || containsPath(webRoot, outDir) || containsPath(outDir, pkgRoot)) {
+  console.error(`sync-template: unsafe output directory ${outDir} (overlaps the source tree)`);
+  process.exit(1);
+}
+
 /** Package name -> monorepo directory (mirrors mastracode/web/scripts/monorepo-deps.mjs). */
 const LINKED_PACKAGES = {
   '@mastra/auth-workos': 'auth/workos',
@@ -88,12 +102,14 @@ const EXCLUDE_TOP_LEVEL = new Set([
 
 /** Path predicates (relative, posix separators) for excluded files anywhere. */
 function isExcluded(rel) {
+  const basename = path.posix.basename(rel);
   if (rel.startsWith('src/mastra/public/')) return true; // vite build output
   if (rel === 'scripts/monorepo-deps.mjs') return true;
   if (rel === 'src/web/test-utils.ts') return true;
   if (/(^|\/)__tests__(\/|$)/.test(rel)) return true;
   if (/\.test\.(ts|tsx|mts|mjs)$/.test(rel)) return true;
-  if (/(^|\/)\.env$/.test(rel)) return true; // never ship someone's local env
+  // Never ship someone's local env (.env, .env.local, ...) — only the schema.
+  if (basename === '.env' || (basename.startsWith('.env.') && basename !== '.env.schema')) return true;
   return false;
 }
 
@@ -129,7 +145,9 @@ function monorepoVersion(name, relPath) {
 function resolvePinnedVersion(name, relPath) {
   if (pinTag) {
     try {
-      return execFileSync('npm', ['view', name, `dist-tags.${pinTag}`], { stdio: 'pipe' }).toString().trim();
+      return execFileSync('npm', ['view', name, `dist-tags.${pinTag}`], { stdio: 'pipe' })
+        .toString()
+        .trim();
     } catch {
       throw new Error(`sync-template: could not resolve ${name}@${pinTag} on npm.`);
     }
@@ -263,7 +281,10 @@ function writeEnvExample() {
     }
     out.push(line);
   }
-  const body = out.join('\n').replace(/\n{3,}/g, '\n\n').trimStart();
+  const body = out
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trimStart();
   const header = [
     '# Mastra Software Factory environment.',
     '# Copied to .env by `npm create softwarefactory`; every value is optional —',

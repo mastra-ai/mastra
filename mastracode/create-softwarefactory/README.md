@@ -1,16 +1,16 @@
 # create-softwarefactory
 
-Scaffolding CLI for the **Mastra Software Factory** — an open source, agent-powered software delivery environment built on [Mastra](https://mastra.ai).
+Scaffolding CLI for the **Mastra Software Factory** — an open-source, agent-powered software delivery environment built on [Mastra](https://mastra.ai).
 
 ```bash
 npm create softwarefactory
 ```
 
-The CLI clones the [softwarefactory-template](https://github.com/mastra-ai/softwarefactory-template), walks you through configuration (model provider, database, WorkOS sign-in, GitHub App via the manifest flow, optionally Linear), writes a ready-to-run `.env`, and installs dependencies. Everything is skippable — the app boots with zero configuration in local mode, and anything skipped can be finished later from the web UI settings or `.env`.
+The CLI clones the [softwarefactory-template](https://github.com/mastra-ai/softwarefactory-template), walks you through configuration (model provider, database, WorkOS sign-in, optionally a GitHub App and Linear), writes a ready-to-run `.env`, and installs dependencies. Everything is skippable — the app boots with zero configuration in local mode, and anything skipped can be finished later from the web UI settings or `.env`.
 
 ## Flags
 
-```
+```text
 npm create softwarefactory [project-name] -- [options]
 
 -l, --llm <provider>       Model provider (openai or anthropic)
@@ -24,7 +24,7 @@ npm create softwarefactory [project-name] -- [options]
 
 ## Development (monorepo)
 
-This package lives in the `mastra-ai/mastra` monorepo at `mastracode/create-softwarefactory` and is published manually (it is excluded from the changeset release train).
+This package lives in the `mastra-ai/mastra` monorepo at `mastracode/create-softwarefactory` and is currently versioned and published manually.
 
 ```bash
 pnpm --filter ./mastracode/create-softwarefactory build   # bundle src -> dist

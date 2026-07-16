@@ -16,21 +16,30 @@ export function runInherit(
       shell: process.platform === 'win32',
     });
     let timeout: NodeJS.Timeout | undefined;
+    let killTimer: NodeJS.Timeout | undefined;
+    let timedOut = false;
     if (options.timeoutMs) {
       timeout = setTimeout(() => {
+        // Don't reject yet — wait for `close` so the caller never proceeds
+        // while the child is still running. Escalate if SIGTERM is ignored.
+        timedOut = true;
         child.kill('SIGTERM');
-        reject(new Error(`${command} ${args.join(' ')} timed out after ${options.timeoutMs}ms`));
+        killTimer = setTimeout(() => child.kill('SIGKILL'), 5_000);
       }, options.timeoutMs);
     }
-    child.on('error', err => {
+    const clearTimers = () => {
       if (timeout) clearTimeout(timeout);
+      if (killTimer) clearTimeout(killTimer);
+    };
+    child.on('error', err => {
+      clearTimers();
       reject(err);
     });
     child.on('close', code => {
-      if (timeout) clearTimeout(timeout);
-      if (code === 0) resolve();
+      clearTimers();
+      if (timedOut) reject(new Error(`${command} ${args.join(' ')} timed out after ${options.timeoutMs}ms`));
+      else if (code === 0) resolve();
       else reject(new Error(`${command} ${args.join(' ')} exited with code ${code}`));
     });
   });
 }
-

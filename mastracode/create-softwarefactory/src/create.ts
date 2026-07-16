@@ -4,14 +4,14 @@ import * as p from '@clack/prompts';
 import color from 'picocolors';
 
 import type { Analytics } from './analytics.js';
-import { DEFAULT_PUBLIC_URL  } from './context.js';
-import type {CreateContext} from './context.js';
+import { DEFAULT_PUBLIC_URL } from './context.js';
+import type { CreateContext } from './context.js';
 import { EnvWriter } from './env.js';
 import { databaseStep } from './steps/database.js';
 import { githubAppStep } from './steps/github-app.js';
 import { linearStep } from './steps/linear.js';
-import { modelStep  } from './steps/model.js';
-import type {LlmProvider} from './steps/model.js';
+import { modelStep } from './steps/model.js';
+import type { LlmProvider } from './steps/model.js';
 import { workosStep } from './steps/workos.js';
 import { cloneTemplate, renameProject, DEFAULT_TEMPLATE_REPO } from './utils/clone.js';
 import { runInherit } from './utils/exec.js';
@@ -129,7 +129,7 @@ export async function create(args: CreateArgs): Promise<void> {
     installSpinner.stop('Dependencies installed.');
   } catch (err) {
     installSpinner.stop('Dependency install failed.');
-    p.log.warn(
+    throw new Error(
       `${err instanceof Error ? err.message : String(err)}\nYou can retry manually: cd ${projectName} && ${ctx.packageManager} install`,
     );
   }

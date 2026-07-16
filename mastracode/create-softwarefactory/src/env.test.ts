@@ -114,4 +114,11 @@ describe('serializeValue', () => {
   it('escapes embedded double quotes', () => {
     expect(serializeValue('a"b')).toBe('"a\\"b"');
   });
+
+  it('escapes backslashes before newline escaping', () => {
+    expect(serializeValue('a\\b')).toBe('"a\\\\b"');
+    // A literal backslash-n sequence must survive escape expansion as-is.
+    expect(serializeValue('a\\nb')).toBe('"a\\\\nb"');
+    expect(serializeValue('line1\nline2')).toBe('"line1\\nline2"');
+  });
 });

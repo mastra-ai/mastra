@@ -11,7 +11,7 @@ const PROVIDERS = {
 export type LlmProvider = keyof typeof PROVIDERS;
 
 export function isLlmProvider(value: string): value is LlmProvider {
-  return value in PROVIDERS;
+  return Object.hasOwn(PROVIDERS, value);
 }
 
 /**

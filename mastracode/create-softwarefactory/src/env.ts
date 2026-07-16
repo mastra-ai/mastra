@@ -46,14 +46,15 @@ export class EnvWriter {
 }
 
 /**
- * Serialize a value for a dotenv line. Embedded newlines become literal `\n`
- * escapes (the server's PEM normalization turns them back into newlines, and
- * escape-expanding parsers already deliver real newlines). Values containing
- * whitespace, `#`, or quotes are double-quoted.
+ * Serialize a value for a dotenv line. Backslashes are escaped first, then
+ * embedded newlines become literal `\n` escapes (the server's PEM
+ * normalization turns them back into newlines, and escape-expanding parsers
+ * already deliver real newlines). Values containing whitespace, `#`, quotes,
+ * or escapes are double-quoted.
  */
 export function serializeValue(value: string): string {
-  const escaped = value.replace(/\n/g, '\\n');
-  if (/[\s#'"]/.test(escaped) || escaped.includes('\\n')) {
+  const escaped = value.replace(/\\/g, '\\\\').replace(/\n/g, '\\n');
+  if (/[\s#'"]/.test(escaped) || escaped.includes('\\')) {
     return `"${escaped.replace(/"/g, '\\"')}"`;
   }
   return escaped;

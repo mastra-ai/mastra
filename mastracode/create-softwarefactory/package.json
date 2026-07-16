@@ -13,6 +13,7 @@
   ],
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
+    "prepack": "npm run build",
     "check": "tsc --noEmit",
     "test": "vitest run",
     "lint": "eslint ."
