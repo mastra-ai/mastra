@@ -1051,6 +1051,25 @@ export class SessionSuspensions {
     this.#pending.delete(toolCallId);
   }
 
+  /**
+   * Drop every suspension parked on `runId`, returning the dropped toolCallIds.
+   * Used when a run reaches a terminal failure after emitting `tool_suspended`
+   * (e.g. persisting the suspended snapshot failed): those suspensions can never
+   * be resumed, so keeping them parked would leave the user with prompts whose
+   * answers fail with a misleading "could not find a suspended run" error.
+   * Suspensions parked on other runs are left intact.
+   */
+  deleteForRun({ runId }: { runId: string }): Array<{ toolCallId: string; toolName: string }> {
+    const dropped: Array<{ toolCallId: string; toolName: string }> = [];
+    for (const [toolCallId, suspension] of this.#pending) {
+      if (suspension.runId === runId) {
+        this.#pending.delete(toolCallId);
+        dropped.push({ toolCallId, toolName: suspension.toolName });
+      }
+    }
+    return dropped;
+  }
+
   /** Drop all parked suspensions (e.g. on abort or thread switch). */
   clear(): void {
     this.#pending.clear();
@@ -2272,6 +2291,10 @@ export class SessionDisplayState {
         });
         break;
 
+      case 'tool_suspension_cancelled':
+        ds.pendingSuspensions.delete(event.toolCallId);
+        break;
+
       // ── Subagent tracking ──────────────────────────────────────────────
       case 'subagent_start': {
         const displayName = this.deps.getSubagentDisplayName(event.agentType);
@@ -3009,6 +3032,7 @@ export class Session<TState = unknown> {
     const signal = createSignal(
       'content' in input ? { type: 'user', tagName: 'user', contents: input.content } : input,
     );
+    const shouldForwardGoalEvaluations = signal.attributes?.type === 'goal';
     const accepted = Promise.resolve().then(async () => {
       if (!this.thread.getId()) {
         const thread = await this.thread.create();
@@ -3068,7 +3092,23 @@ export class Session<TState = unknown> {
       } catch (error) {
         throw error;
       }
-      void result.accepted.catch(() => {});
+      void result.accepted
+        .then(accepted => {
+          if (accepted.action !== 'wake' || !shouldForwardGoalEvaluations) return;
+          // Goal evaluations are emitted after the model's finish chunk and are not forwarded by
+          // the per-thread subscription. Read only those lifecycle chunks from the owned wake output;
+          // processing the whole output here would duplicate message and suspension events.
+          void (async () => {
+            for await (const chunk of accepted.output.fullStream) {
+              if (chunk.type === 'goal') {
+                this.emit({ type: 'goal_evaluation', payload: chunk.payload });
+              }
+            }
+          })().catch(error => {
+            this.emit({ type: 'error', error: error instanceof Error ? error : new Error(String(error)) });
+          });
+        })
+        .catch(() => {});
       return { accepted: true as const, runId: undefined };
     });
 

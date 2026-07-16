@@ -10,7 +10,7 @@ import { RequestContext } from '../../request-context';
 import { Agent } from '../agent';
 import { getSingleDummyResponseModel } from './mock-model';
 
-function toolhandlingTests(version: 'v1' | 'v2' | 'v3') {
+function toolhandlingTests(version: 'v1' | 'v2' | 'v3' | 'v4') {
   const dummyModel = getSingleDummyResponseModel(version);
 
   describe(`${version} - agent tool handling`, () => {
@@ -609,3 +609,4 @@ function toolhandlingTests(version: 'v1' | 'v2' | 'v3') {
 toolhandlingTests('v1');
 toolhandlingTests('v2');
 toolhandlingTests('v3');
+toolhandlingTests('v4');

@@ -84,6 +84,7 @@ import {
   sanitizeBody,
   validateBody,
   getEffectiveResourceId,
+  requireEffectiveResourceId,
   getEffectiveThreadId,
   enforceThreadAccess,
   validateThreadOwnership,
@@ -1270,6 +1271,7 @@ export const GENERATE_AGENT_ROUTE = createRoute({
         const clientThreadId = typeof memoryOption.thread === 'string' ? memoryOption.thread : memoryOption.thread?.id;
 
         const effectiveResourceId = getEffectiveResourceId(serverRequestContext, memoryOption.resource);
+        requireEffectiveResourceId(effectiveResourceId);
         const effectiveThreadId = getEffectiveThreadId(serverRequestContext, clientThreadId);
 
         // Validate thread ownership if accessing an existing thread
@@ -1643,6 +1645,7 @@ export const STREAM_GENERATE_ROUTE = createRoute({
         const clientThreadId = typeof memoryOption.thread === 'string' ? memoryOption.thread : memoryOption.thread?.id;
 
         const effectiveResourceId = getEffectiveResourceId(serverRequestContext, memoryOption.resource);
+        requireEffectiveResourceId(effectiveResourceId);
         const effectiveThreadId = getEffectiveThreadId(serverRequestContext, clientThreadId);
 
         // Validate thread ownership if accessing an existing thread
@@ -2172,6 +2175,7 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
         const clientThreadId = typeof memoryOption.thread === 'string' ? memoryOption.thread : memoryOption.thread?.id;
 
         const effectiveResourceId = getEffectiveResourceId(serverRequestContext, memoryOption.resource);
+        requireEffectiveResourceId(effectiveResourceId);
         const effectiveThreadId = getEffectiveThreadId(serverRequestContext, clientThreadId);
 
         // Validate thread ownership if accessing an existing thread
@@ -2623,6 +2627,9 @@ export const RESUME_STREAM_ROUTE = createRoute({
       let authorizedMemoryOption = memoryOption;
       const clientThreadId = typeof memoryOption?.thread === 'string' ? memoryOption.thread : memoryOption?.thread?.id;
       const effectiveResourceId = getEffectiveResourceId(serverRequestContext, memoryOption?.resource);
+      if (memoryOption) {
+        requireEffectiveResourceId(effectiveResourceId);
+      }
       const effectiveThreadId = getEffectiveThreadId(serverRequestContext, clientThreadId);
 
       if (effectiveThreadId) {
@@ -2816,6 +2823,9 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
       let authorizedMemoryOption = memoryOption;
       const clientThreadId = typeof memoryOption?.thread === 'string' ? memoryOption.thread : memoryOption?.thread?.id;
       const effectiveResourceId = getEffectiveResourceId(serverRequestContext, memoryOption?.resource);
+      if (memoryOption) {
+        requireEffectiveResourceId(effectiveResourceId);
+      }
       const effectiveThreadId = getEffectiveThreadId(serverRequestContext, clientThreadId);
 
       // Use the same FGA-aware ownership gate as RESUME_STREAM_ROUTE — the
@@ -2986,8 +2996,17 @@ export const STREAM_NETWORK_ROUTE = createRoute({
 
       validateBody({ messages });
 
+      // Authorization: context values take precedence over client-provided values
+      let authorizedMemoryOption = params.memory;
+      if (params.memory) {
+        const effectiveResourceId = getEffectiveResourceId(requestContext, params.memory.resource);
+        requireEffectiveResourceId(effectiveResourceId);
+        authorizedMemoryOption = { ...params.memory, resource: effectiveResourceId };
+      }
+
       const streamResult = await agent.network(messages, {
         ...params,
+        memory: authorizedMemoryOption,
       });
 
       return streamResult;
