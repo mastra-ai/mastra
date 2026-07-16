@@ -77,12 +77,25 @@ describe('LocalSandboxProvider', () => {
 
   it('defaults the checkout root to ~/.mastracode/web/sandboxes', () => {
     const provider = new LocalSandboxProvider();
-    expect(provider.workdirFor('acme/widgets')).toBe(join(homedir(), '.mastracode', 'web', 'sandboxes', 'widgets'));
+    expect(provider.workdirFor('acme/widgets')).toBe(
+      join(homedir(), '.mastracode', 'web', 'sandboxes', 'acme', 'widgets'),
+    );
   });
 
   it('honors a custom root and strips trailing slashes', () => {
     const provider = new LocalSandboxProvider({ root: '/tmp/mc-sandboxes/' });
-    expect(provider.workdirFor('acme/widgets')).toBe('/tmp/mc-sandboxes/widgets');
+    expect(provider.workdirFor('acme/widgets')).toBe('/tmp/mc-sandboxes/acme/widgets');
+  });
+
+  it('keeps same-name repos from different owners on distinct checkouts', () => {
+    const provider = new LocalSandboxProvider({ root: '/tmp/mc-sandboxes' });
+    expect(provider.workdirFor('acme/api')).not.toBe(provider.workdirFor('other/api'));
+  });
+
+  it('sanitizes path-hostile owner/name segments', () => {
+    const provider = new LocalSandboxProvider({ root: '/tmp/mc-sandboxes' });
+    expect(provider.workdirFor('../etc/passwd')).toBe('/tmp/mc-sandboxes/repo/etc');
+    expect(provider.workdirFor('ow ner/re;po')).toBe('/tmp/mc-sandboxes/ow-ner/re-po');
   });
 
   it('creates sandboxes with a stable root-keyed id', () => {

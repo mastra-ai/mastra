@@ -17,6 +17,7 @@ import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web
 import { navigateAfterSignIn, redirectToLogin } from '../../services/auth';
 import type * as AuthService from '../../services/auth';
 import { createAppRoutes } from '../../../../router';
+import { safeReturnTo } from '../SignInPage';
 
 // jsdom's `window.location.assign` is unforgeable (cannot be spied on), so the
 // service-level navigation helpers are stubbed instead; `fetchAuthState` and
@@ -131,6 +132,22 @@ describe('SignInPage', () => {
 
       expect(await screen.findByLabelText('Email')).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'New here? Sign up' })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('returnTo sanitization', () => {
+    it.each([
+      ['/factory/board?x=1#frag', '/factory/board?x=1#frag'],
+      ['//attacker.example', '/'],
+      // Browsers normalize `/\` to `//` — an encoded backslash must not
+      // become a protocol-relative cross-origin redirect.
+      ['/\\attacker.example', '/'],
+      ['/\\/attacker.example', '/'],
+      ['https://attacker.example/x', '/'],
+      ['javascript:alert(1)', '/'],
+      [undefined, '/'],
+    ])('resolves %s to %s against the page origin', (raw, expected) => {
+      expect(safeReturnTo(raw)).toBe(expected);
     });
   });
 });

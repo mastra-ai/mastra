@@ -66,6 +66,12 @@ export interface WebAuthAdapterInitContext {
   databaseUrl?: string;
   /** Browser-facing origin (no trailing slash), e.g. `https://factory.acme.com`. */
   publicUrl?: string;
+  /**
+   * Extra browser origins allowed to talk to this API (cross-origin SPA
+   * deploys). Providers that enforce their own origin allow-list (e.g.
+   * better-auth `trustedOrigins`) must honor these.
+   */
+  allowedOrigins?: string[];
 }
 
 /**

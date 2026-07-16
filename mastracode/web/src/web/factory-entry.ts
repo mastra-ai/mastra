@@ -106,6 +106,7 @@ const CONTROLLER_ID = 'code';
 export class MastraFactory {
   readonly #config: MastraFactoryConfig;
   #prepared: Awaited<ReturnType<typeof prepareAgentControllerMount>> | undefined;
+  #preparing = false;
 
   constructor(config: MastraFactoryConfig = {}) {
     this.#config = config;
@@ -117,7 +118,11 @@ export class MastraFactory {
    * for the `new Mastra(...)` literal that must live in the entry file.
    */
   async prepare(): Promise<MastraArgs> {
-    if (this.#prepared) throw new Error('MastraFactory.prepare() called twice');
+    // Guard set synchronously (before the first await) so overlapping calls —
+    // not just strictly sequential ones — can't double-seed the runtime
+    // registry or double-run one-time adapter init.
+    if (this.#preparing) throw new Error('MastraFactory.prepare() called twice');
+    this.#preparing = true;
 
     const publicOrigin = (this.#config.publicUrl ?? 'http://localhost:4111').replace(/\/+$/, '');
     const allowedOrigins = (this.#config.allowedOrigins ?? []).map(o => o.replace(/\/+$/, '')).filter(Boolean);
@@ -139,7 +144,7 @@ export class MastraFactory {
     // One-time adapter initialization with factory-level context (e.g.
     // better-auth builds its default instance on the app database). Failures
     // surface here, at prepare() — a misconfigured adapter must not boot.
-    await auth?.init?.({ databaseUrl: database, publicUrl: publicOrigin });
+    await auth?.init?.({ databaseUrl: database, publicUrl: publicOrigin, allowedOrigins });
 
     // GitHub App + cloud-sandbox readiness, resolved BEFORE constructing the
     // Mastra args so the github routes are simply omitted from `apiRoutes`

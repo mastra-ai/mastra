@@ -85,6 +85,21 @@ describe('construction and init', () => {
     const adapter = new BetterAuthWebAuth({ secret: 's3cret' });
     expect(() => adapter.instance).toThrow(/not initialized/);
   });
+
+  it('trusts the factory allowedOrigins on the default instance', async () => {
+    // SameSite=None only lets the browser send the cookie — better-auth still
+    // rejects requests from origins outside trustedOrigins, so cross-origin
+    // SPA deploys must have their origins forwarded.
+    const adapter = new BetterAuthWebAuth({ secret: 's3cret' });
+    await adapter.init?.({
+      databaseUrl: 'postgres://user:pw@localhost:5432/app',
+      publicUrl: 'https://api.acme.com',
+      allowedOrigins: ['https://app.acme.com'],
+    });
+    expect((adapter.instance as { options: { trustedOrigins?: unknown } }).options.trustedOrigins).toEqual([
+      'https://app.acme.com',
+    ]);
+  });
 });
 
 describe('authenticate', () => {
@@ -206,6 +221,41 @@ describe('ensureOrg (personal-org bootstrap)', () => {
     );
   });
 
+  it('does not adopt a slug-squatted org owned by another user', async () => {
+    // An attacker pre-created `personal-user_1` through the public org API and
+    // is its owner. Recovery must NOT attach the victim there — it creates a
+    // fresh personal org with an unguessable slug instead.
+    const createdOrgs: Array<{ slug: string }> = [];
+    const dbAdapter = mockDbAdapter({
+      create: vi.fn(async (input: { model: string; data?: { slug?: string } }) => {
+        if (input.model === 'organization') {
+          if (input.data?.slug === 'personal-user_1') throw new Error('duplicate key value violates unique constraint');
+          createdOrgs.push({ slug: input.data!.slug! });
+          return { id: 'org_fallback' };
+        }
+        return { id: 'member_new' };
+      }),
+      findOne: vi.fn(async (input: { model: string }) =>
+        input.model === 'organization' ? { id: 'org_squatted' } : null,
+      ),
+      findMany: vi.fn(async (input: { model: string; where?: Array<{ field: string }> }) => {
+        // First call: the victim's memberships (none). Second: the squatted org's members.
+        if (input.model === 'member' && input.where?.[0]?.field === 'organizationId') {
+          return [{ organizationId: 'org_squatted', userId: 'attacker_1' }];
+        }
+        return [];
+      }),
+    });
+    const { instance } = mockInstance({ dbAdapter });
+    const adapter = new BetterAuthWebAuth({ instance });
+
+    expect(await adapter.ensureOrg(user)).toBe('org_fallback');
+    expect(createdOrgs[0]!.slug).toMatch(/^personal-user_1-[0-9a-f-]{36}$/);
+    // The victim's owner membership lands on the fallback org, never the squatted one.
+    const memberCall = dbAdapter.create.mock.calls.find(([input]) => input.model === 'member')![0];
+    expect(memberCall.data).toMatchObject({ organizationId: 'org_fallback', userId: 'user_1', role: 'owner' });
+  });
+
   it('tolerates a membership a concurrent bootstrap already created', async () => {
     const dbAdapter = mockDbAdapter({
       create: vi.fn(async (input: { model: string }) => {
@@ -260,6 +310,14 @@ describe('session cookie', () => {
     const { instance } = mockInstance({ options: { baseURL: 'https://factory.acme.com' } });
     const adapter = new BetterAuthWebAuth({ instance });
     expect(adapter.sessionClearCookie()).toMatch(/^__Secure-better-auth\.session_token=/);
+  });
+
+  it('honors a renamed session cookie via advanced.cookies.session_token.name', () => {
+    const { instance } = mockInstance({
+      options: { advanced: { cookies: { session_token: { name: 'acme_session' } } } },
+    });
+    const adapter = new BetterAuthWebAuth({ instance });
+    expect(adapter.sessionClearCookie()).toMatch(/^acme_session=/);
   });
 });
 

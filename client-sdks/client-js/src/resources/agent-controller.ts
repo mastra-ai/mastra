@@ -441,14 +441,21 @@ export class AgentControllerSession extends BaseResource {
    * `subscribe()` themselves and keep cancellation control.
    */
   async subscribe(options: SubscribeAgentControllerSessionOptions): Promise<AgentControllerSubscription> {
+    // Normalize reconnect knobs defensively: NaN/negative delays would produce
+    // zero-delay timers and a NaN retry cap would never exhaust (`n >= NaN` is
+    // always false), turning an outage into a hot retry loop.
+    const finiteOr = (value: number | undefined, fallback: number) =>
+      typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : fallback;
+    const retriesOr = (value: number | undefined, fallback: number) =>
+      value === Infinity || (typeof value === 'number' && Number.isFinite(value) && value >= 0) ? value : fallback;
     const reconnectOptions =
       options.reconnect === true
         ? { maxRetries: Infinity, delayMs: 1000, maxDelayMs: 30_000 }
         : options.reconnect
           ? {
-              maxRetries: options.reconnect.maxRetries ?? Infinity,
-              delayMs: options.reconnect.delayMs ?? 1000,
-              maxDelayMs: options.reconnect.maxDelayMs ?? 30_000,
+              maxRetries: retriesOr(options.reconnect.maxRetries, Infinity),
+              delayMs: finiteOr(options.reconnect.delayMs, 1000),
+              maxDelayMs: finiteOr(options.reconnect.maxDelayMs, 30_000),
             }
           : null;
 
@@ -532,7 +539,7 @@ export class AgentControllerSession extends BaseResource {
               try {
                 options.onEvent(event);
               } catch (cause) {
-                if (!cancelled) options.onError?.(cause);
+                if (!cancelled) safeOnError(cause);
                 return { kind: 'consumer_error' };
               }
             }
@@ -547,12 +554,19 @@ export class AgentControllerSession extends BaseResource {
       }
     };
 
-    const reportTerminalError = (result: Extract<PumpResult, { kind: 'done' } | { kind: 'transport_error' }>) => {
-      if (result.kind === 'transport_error') {
-        options.onError?.(result.error);
-        return;
+    // Consumer callbacks run inside the detached stream loop (`void run(...)`),
+    // so a throwing onError would surface as an unhandled promise rejection —
+    // and, thrown from inside pump(), would be misread as a transport error.
+    const safeOnError = (error: unknown) => {
+      try {
+        options.onError?.(error);
+      } catch {
+        // Consumer callback failures must not kill (or reroute) the stream loop.
       }
-      options.onError?.(streamEndedError());
+    };
+
+    const reportTerminalError = (result: Extract<PumpResult, { kind: 'done' } | { kind: 'transport_error' }>) => {
+      safeOnError(result.kind === 'transport_error' ? result.error : streamEndedError());
     };
 
     /** Pump one established stream, mapping unexpected throws to transport errors. */

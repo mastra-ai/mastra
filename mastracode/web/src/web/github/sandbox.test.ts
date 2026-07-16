@@ -90,16 +90,24 @@ function makeRepoInfo(overrides: Partial<RepoMaterializeInfo> = {}): RepoMateria
   return { repoFullName: 'octocat/hello', defaultBranch: 'main', ...overrides };
 }
 
+// RailwaySandboxProvider.isEnabled() honors the SDK's own env credential
+// fallback; clear it per test so host-machine env can't leak in, and restore
+// the pre-suite value afterwards so later suites see an unchanged environment.
+const ORIGINAL_RAILWAY_API_TOKEN = process.env.RAILWAY_API_TOKEN;
+
 beforeEach(() => {
   dbUpdates.length = 0;
-  // RailwaySandboxProvider.isEnabled() honors the SDK's own env credential fallback;
-  // clear it so host-machine env can't leak into these tests.
   delete process.env.RAILWAY_API_TOKEN;
 });
 
 afterEach(() => {
   resetSandboxFactory();
   __resetRuntimeConfigForTests();
+  if (ORIGINAL_RAILWAY_API_TOKEN === undefined) {
+    delete process.env.RAILWAY_API_TOKEN;
+  } else {
+    process.env.RAILWAY_API_TOKEN = ORIGINAL_RAILWAY_API_TOKEN;
+  }
 });
 
 describe('getSandboxProvider', () => {
@@ -153,14 +161,14 @@ describe('computeSandboxWorkdir', () => {
     expect(computeSandboxWorkdir('octocat/hello')).toBe('/srv/hello');
   });
 
-  it('checks out under the configured root for the local provider', () => {
+  it('checks out under the configured root for the local provider, keyed by owner + name', () => {
     seedRuntimeConfig({ sandbox: new LocalSandboxProvider({ root: '/tmp/mc-sandboxes' }) });
-    expect(computeSandboxWorkdir('octocat/hello')).toBe('/tmp/mc-sandboxes/hello');
+    expect(computeSandboxWorkdir('octocat/hello')).toBe('/tmp/mc-sandboxes/octocat/hello');
   });
 
   it('defaults the local root to ~/.mastracode/web/sandboxes', () => {
     seedRuntimeConfig({ sandbox: new LocalSandboxProvider() });
-    expect(computeSandboxWorkdir('octocat/hello')).toMatch(/\.mastracode\/web\/sandboxes\/hello$/);
+    expect(computeSandboxWorkdir('octocat/hello')).toMatch(/\.mastracode\/web\/sandboxes\/octocat\/hello$/);
   });
 
   it('throws when no sandbox provider is configured', () => {

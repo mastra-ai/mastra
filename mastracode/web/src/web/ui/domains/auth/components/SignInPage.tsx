@@ -12,12 +12,19 @@ import { navigateAfterSignIn, redirectToLogin, signInWithPassword, signUpWithPas
 
 /**
  * Only accept same-origin paths so a crafted `?returnTo=` can't bounce the
- * user to an external site after login. `//host` is protocol-relative, so it
- * is rejected too.
+ * user to an external site after login. Prefix checks alone are not enough —
+ * browsers normalize `/\host` to the protocol-relative `//host` — so the value
+ * is resolved against the page origin and rejected when it leaves it.
  */
-function safeReturnTo(raw?: string): string {
-  if (raw && raw.startsWith('/') && !raw.startsWith('//')) return raw;
-  return '/';
+export function safeReturnTo(raw?: string): string {
+  if (!raw || !raw.startsWith('/') || raw.startsWith('//')) return '/';
+  try {
+    const resolved = new URL(raw, window.location.origin);
+    if (resolved.origin !== window.location.origin) return '/';
+    return `${resolved.pathname}${resolved.search}${resolved.hash}`;
+  } catch {
+    return '/';
+  }
 }
 
 /**

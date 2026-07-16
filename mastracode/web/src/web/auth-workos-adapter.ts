@@ -186,6 +186,14 @@ export class WorkOSWebAuth implements WebAuthAdapter {
     if (!this.#redirectUri && ctx.publicUrl) {
       this.#redirectUri = `${ctx.publicUrl}/auth/callback`;
     }
+    // Fail the deploy at prepare() rather than handing WorkOS an empty
+    // redirect URI on the first /auth/login (which breaks hosted login for
+    // every user with an opaque provider error).
+    if (!this.#redirectUri) {
+      throw new Error(
+        'WorkOSWebAuth could not resolve a callback URL: pass `redirectUri` (WORKOS_REDIRECT_URI) or configure the MastraFactory `publicUrl` slot.',
+      );
+    }
   }
 
   async authenticate(token: string, raw: Request): Promise<WebAuthUser | null> {

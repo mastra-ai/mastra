@@ -27,12 +27,17 @@ import type { WebSandboxProvider } from '../web/sandbox-provider.js';
 import { LocalSandboxProvider } from '../web/sandbox-local-provider.js';
 import { RailwaySandboxProvider } from '../web/sandbox-railway-provider.js';
 
-/** Parse a positive-integer env knob; anything else means "use the default". */
+/**
+ * Parse a positive-integer env knob; anything else means "use the default".
+ * Fractional values are rejected rather than floored — flooring `0.5` to `0`
+ * would silently disable a capacity knob or turn an idle window into
+ * immediate expiry.
+ */
 function positiveInt(raw: string | undefined): number | undefined {
   if (!raw) return undefined;
   const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed <= 0) return undefined;
-  return Math.floor(parsed);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) return undefined;
+  return parsed;
 }
 
 // Distributed pub/sub: when `REDIS_URL` is set, events (streams, workflows,
@@ -80,15 +85,18 @@ if (workosConfigured) {
 //      selected without a token boots with sandboxes (and GitHub projects)
 //      disabled, surfaced in the feature diagnostics.
 //   2. RAILWAY_API_TOKEN set → Railway (isolated cloud VMs, multi-tenant safe).
-//   3. Neither → local host-process checkouts (single-user dev; no isolation).
+//   3. Neither → sandboxes disabled. The local host-process provider is NEVER
+//      an implicit default: it runs repo checkouts and agent commands as the
+//      server process with no tenant isolation, so it must be opted into with
+//      MASTRACODE_SANDBOX_PROVIDER=local (single-user local dev only).
 // Budget/GC knobs: MASTRACODE_SANDBOX_IDLE_MINUTES (default 30),
 // MASTRACODE_MAX_SANDBOXES (default unlimited), MASTRACODE_SANDBOX_WORKDIR
 // (cloud checkout base, default /workspace), MASTRACODE_LOCAL_SANDBOX_ROOT
 // (local checkout root, default ~/.mastracode/web/sandboxes).
-const sandboxKind = process.env.MASTRACODE_SANDBOX_PROVIDER ?? (process.env.RAILWAY_API_TOKEN ? 'railway' : 'local');
+const sandboxKind = process.env.MASTRACODE_SANDBOX_PROVIDER ?? (process.env.RAILWAY_API_TOKEN ? 'railway' : undefined);
 const idleMinutes = positiveInt(process.env.MASTRACODE_SANDBOX_IDLE_MINUTES);
 const maxSandboxes = positiveInt(process.env.MASTRACODE_MAX_SANDBOXES);
-let sandbox: WebSandboxProvider;
+let sandbox: WebSandboxProvider | undefined;
 if (sandboxKind === 'railway') {
   sandbox = new RailwaySandboxProvider({
     token: process.env.RAILWAY_API_TOKEN,
@@ -102,7 +110,7 @@ if (sandboxKind === 'railway') {
     idleMinutes,
     maxSandboxes,
   });
-} else {
+} else if (sandboxKind !== undefined) {
   throw new Error(
     `Unknown MASTRACODE_SANDBOX_PROVIDER "${sandboxKind}" — expected "railway" or "local" ` +
       '(or pass a custom WebSandboxProvider to MastraFactory).',

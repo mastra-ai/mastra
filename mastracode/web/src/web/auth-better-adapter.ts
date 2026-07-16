@@ -98,6 +98,7 @@ export class BetterAuthWebAuth implements WebAuthAdapter {
       );
     }
     const crossSite = isCrossSiteAuth();
+    const allowedOrigins = ctx.allowedOrigins ?? [];
     // Widen to BetterAuthOptions before calling betterAuth(): its return type
     // is generic over the exact options object, which would make the instance
     // incompatible with the plain `Auth<BetterAuthOptions>` alias we expose.
@@ -108,6 +109,10 @@ export class BetterAuthWebAuth implements WebAuthAdapter {
       // which the gate treats as public like every /auth/* path.
       basePath: '/auth/api',
       ...(ctx.publicUrl ? { baseURL: ctx.publicUrl } : {}),
+      // Cross-origin SPA deploys: SameSite=None only lets the browser SEND the
+      // cookie — better-auth still rejects requests from origins outside its
+      // own allow-list, so the SPA origins must be trusted too.
+      ...(allowedOrigins.length ? { trustedOrigins: allowedOrigins } : {}),
       emailAndPassword: { enabled: true, disableSignUp: this.#signUpDisabled },
       plugins: [organization()],
       // Cross-origin SPA deploys need SameSite=None; Secure for the browser to
@@ -119,15 +124,24 @@ export class BetterAuthWebAuth implements WebAuthAdapter {
   }
 
   /**
-   * Session cookie name, honoring better-auth's `cookiePrefix` and the
-   * `__Secure-` prefix it applies when secure cookies are active.
+   * Session cookie name, honoring better-auth's `cookiePrefix`, a caller
+   * override via `advanced.cookies.session_token.name` (bring-your-own
+   * instances), and the `__Secure-` prefix it applies when secure cookies are
+   * active.
    */
   #sessionCookieName(): string {
     const options = (this.#instance as { options?: { baseURL?: string; advanced?: Record<string, unknown> } })?.options;
-    const advanced = options?.advanced as { cookiePrefix?: string; useSecureCookies?: boolean } | undefined;
+    const advanced = options?.advanced as
+      | {
+          cookiePrefix?: string;
+          useSecureCookies?: boolean;
+          cookies?: { session_token?: { name?: string } };
+        }
+      | undefined;
     const prefix = advanced?.cookiePrefix ?? 'better-auth';
     const secure = advanced?.useSecureCookies ?? options?.baseURL?.startsWith('https://') ?? false;
-    return `${secure ? '__Secure-' : ''}${prefix}.session_token`;
+    const baseName = advanced?.cookies?.session_token?.name ?? `${prefix}.session_token`;
+    return `${secure ? '__Secure-' : ''}${baseName}`;
   }
 
   /**
@@ -236,7 +250,32 @@ export class BetterAuthWebAuth implements WebAuthAdapter {
           where: [{ field: 'slug', value: slug }],
         })) as OrganizationRow | null;
         if (!existing) throw error;
-        organizationId = existing.id;
+        // Slug alone is NOT proof of ownership: the organization API is
+        // reachable by any authenticated user, so an attacker could squat
+        // `personal-<victimId>` and be granted the victim's tenant if we
+        // blindly adopted it. Only adopt the slug-matched org when nobody
+        // else is a member (zero members = a concurrent bootstrap of this
+        // same user that hasn't attached yet). Otherwise fall back to a
+        // fresh org with an unguessable slug.
+        const existingMembers = (await ctx.adapter.findMany({
+          model: 'member',
+          where: [{ field: 'organizationId', value: existing.id }],
+        })) as Array<MemberRow & { userId?: string }>;
+        const foreignMember = existingMembers.some(m => m.userId !== userId);
+        if (foreignMember) {
+          const fallback = (await ctx.adapter.create({
+            model: 'organization',
+            data: {
+              name: personalOrgName(user, userId),
+              slug: `personal-${userId}-${crypto.randomUUID()}`,
+              createdAt: new Date(),
+              metadata: JSON.stringify({ mastracodePersonalOrg: 'true' }),
+            },
+          })) as OrganizationRow;
+          organizationId = fallback.id;
+        } else {
+          organizationId = existing.id;
+        }
       }
 
       // Idempotently attach the user: tolerate a membership a concurrent

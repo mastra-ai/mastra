@@ -95,6 +95,23 @@ describe('active adapter resolution', () => {
   });
 });
 
+describe('WorkOSWebAuth.init callback-URL resolution', () => {
+  it('derives the callback URL from the factory publicUrl', async () => {
+    const adapter = new WorkOSWebAuth();
+    await expect(adapter.init?.({ publicUrl: 'https://factory.acme.com' })).resolves.toBeUndefined();
+  });
+
+  it('keeps an explicit redirectUri without needing a publicUrl', async () => {
+    const adapter = new WorkOSWebAuth({ redirectUri: 'http://localhost:4111/auth/callback' });
+    await expect(adapter.init?.({})).resolves.toBeUndefined();
+  });
+
+  it('fails init when no callback URL can be resolved', async () => {
+    const adapter = new WorkOSWebAuth();
+    await expect(adapter.init?.({})).rejects.toThrow(/could not resolve a callback URL/);
+  });
+});
+
 describe('mountWebAuth with a seeded custom adapter', () => {
   function buildApp(adapter: WebAuthAdapter) {
     seedRuntimeConfig({ authAdapter: adapter });

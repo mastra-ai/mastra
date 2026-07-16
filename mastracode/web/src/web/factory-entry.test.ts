@@ -62,6 +62,18 @@ describe('MastraFactory.prepare', () => {
     await expect(factory.prepare()).rejects.toThrow(/called twice/);
   });
 
+  it('rejects overlapping concurrent calls (guard set before the first await)', async () => {
+    const auth = fakeAdapter();
+    const factory = new MastraFactory({ auth });
+    const [first, second] = await Promise.allSettled([factory.prepare(), factory.prepare()]);
+    expect(first.status).toBe('fulfilled');
+    expect(second.status).toBe('rejected');
+    expect((second as PromiseRejectedResult).reason.message).toMatch(/called twice/);
+    // The overlapping call must not double-run one-time adapter init.
+    expect(auth.init).toHaveBeenCalledOnce();
+    expect(prepareMock).toHaveBeenCalledOnce();
+  });
+
   it('seeds the runtime-config registry with the explicit config', async () => {
     const auth = fakeAdapter();
     const sandbox = new LocalSandboxProvider({ root: '/tmp/mc-factory-test' });
@@ -95,10 +107,16 @@ describe('MastraFactory.prepare', () => {
 
   it('calls adapter.init once with the factory context', async () => {
     const auth = fakeAdapter();
-    await prepareFactory({ auth, database: 'postgres://cfg/app', publicUrl: 'https://factory.acme.com/' });
+    await prepareFactory({
+      auth,
+      database: 'postgres://cfg/app',
+      publicUrl: 'https://factory.acme.com/',
+      allowedOrigins: ['https://app.acme.com/'],
+    });
     expect(auth.init).toHaveBeenCalledExactlyOnceWith({
       databaseUrl: 'postgres://cfg/app',
       publicUrl: 'https://factory.acme.com',
+      allowedOrigins: ['https://app.acme.com'],
     } satisfies WebAuthAdapterInitContext);
   });
 

@@ -582,6 +582,59 @@ describe('AgentController Resource', () => {
     sub.unsubscribe();
   });
 
+  it('normalizes invalid reconnect options instead of hot-looping', async () => {
+    (global.fetch as any)
+      .mockResolvedValueOnce(sseResponse([`data: ${JSON.stringify({ type: 'agent_start' })}\n\n`]))
+      .mockRejectedValue(new Error('still down'));
+
+    const onError = vi.fn();
+    const sub = await noRetryClient()
+      .getAgentController('code')
+      .session('user-1')
+      .subscribe({
+        onEvent: () => {},
+        onError,
+        // NaN delays would fire zero-delay timers; NaN maxRetries would never
+        // exhaust (`n >= NaN` is false). Both must fall back to defaults.
+        reconnect: { maxRetries: NaN, delayMs: NaN, maxDelayMs: -1 },
+      });
+
+    // Default delayMs is 1000 — nothing should have retried this fast.
+    await new Promise(r => setTimeout(r, 50));
+    expect((global.fetch as any).mock.calls).toHaveLength(1);
+    expect(onError).not.toHaveBeenCalled();
+
+    sub.unsubscribe();
+  });
+
+  it('does not treat a throwing onError callback as an unhandled rejection or transport error', async () => {
+    mockSse([`data: ${JSON.stringify({ type: 'agent_start' })}\n\n`]);
+
+    const unhandled = vi.fn();
+    process.on('unhandledRejection', unhandled);
+    try {
+      const sub = await client
+        .getAgentController('code')
+        .session('user-1')
+        .subscribe({
+          onEvent: () => {},
+          onError: () => {
+            throw new Error('consumer onError blew up');
+          },
+        });
+
+      await new Promise(r => setTimeout(r, 20));
+      sub.unsubscribe();
+
+      // Terminal onError threw inside the detached loop — must be swallowed,
+      // not surfaced as an unhandled rejection, and must not trigger a retry.
+      expect(unhandled).not.toHaveBeenCalled();
+      expect((global.fetch as any).mock.calls).toHaveLength(1);
+    } finally {
+      process.removeListener('unhandledRejection', unhandled);
+    }
+  });
+
   it('sends a notification signal', async () => {
     mockJson({ accepted: true, notificationId: 'n-1', decision: 'deliver', runId: 'run-1' });
     const result = await client

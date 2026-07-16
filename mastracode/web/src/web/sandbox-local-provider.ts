@@ -18,7 +18,6 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { LocalSandbox } from './github/local-sandbox.js';
 import type { MaterializationSandbox, SandboxCreateOptions, WebSandboxProvider } from './sandbox-provider.js';
-import { repoDirName } from './sandbox-provider.js';
 
 export interface LocalSandboxProviderOptions {
   /** Host directory checkouts live under. Default `~/.mastracode/web/sandboxes`. */
@@ -51,7 +50,19 @@ export class LocalSandboxProvider implements WebSandboxProvider {
     return new LocalSandbox({ root: this.#root, ...(providerSandboxId ? { sandboxId: providerSandboxId } : {}) });
   }
 
+  /**
+   * Nested `<root>/<owner>/<name>` layout: unlike cloud providers (one VM per
+   * project), every local checkout shares this host root, so `acme/api` and
+   * `other/api` must not resolve to the same directory.
+   */
   workdirFor(repoFullName: string): string {
-    return `${this.#root}/${repoDirName(repoFullName)}`;
+    const [owner, name] = repoFullName.split('/', 2);
+    return `${this.#root}/${sanitizeSegment(owner || 'unknown')}/${sanitizeSegment(name || 'repo')}`;
   }
+}
+
+/** Keep each path piece a single safe segment (no separators or traversal). */
+function sanitizeSegment(segment: string): string {
+  const cleaned = segment.replace(/[^A-Za-z0-9._-]/g, '-').replace(/^\.+/, '');
+  return cleaned || 'repo';
 }
