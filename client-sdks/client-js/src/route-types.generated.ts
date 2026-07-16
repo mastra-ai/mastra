@@ -7940,8 +7940,8 @@ export interface PostScores_RouteContract {
 // Route: GET /observability/traces
 // ============================================================================
 export type GetObservabilityTraces_QueryParams = {
-  startedAt?: ((Shared_Type_68 | undefined) | undefined) | any;
-  endedAt?: ((Shared_Type_68 | undefined) | undefined) | any;
+  startedAt?: ((Shared_Type_68 | undefined) | undefined) | unknown;
+  endedAt?: ((Shared_Type_68 | undefined) | undefined) | unknown;
   spanType?: (Shared_Type_69 | undefined) | undefined;
   /** Filter by trace ID (matches root span) */
   traceId?: (string | undefined) | undefined;
@@ -7973,7 +7973,7 @@ export type GetObservabilityTraces_QueryParams = {
           )
         | undefined
       )
-    | any;
+    | unknown;
   entityVersionId?: ((string | null) | undefined) | undefined;
   parentEntityVersionId?: ((string | null) | undefined) | undefined;
   rootEntityVersionId?: ((string | null) | undefined) | undefined;
@@ -7989,11 +7989,11 @@ export type GetObservabilityTraces_QueryParams = {
           )
         | undefined
       )
-    | any;
-  tags?: (((string[] | null) | undefined) | undefined) | any;
+    | unknown;
+  tags?: (((string[] | null) | undefined) | undefined) | unknown;
   status?: (('success' | 'error' | 'running') | undefined) | undefined;
   hasChildError?: (boolean | undefined) | undefined;
-  dateRange?: ((Shared_Type_68 | undefined) | undefined) | any;
+  dateRange?: ((Shared_Type_68 | undefined) | undefined) | unknown;
   name?: (string | undefined) | undefined;
   page?: (number | undefined) | undefined;
   perPage?: (number | undefined) | undefined;
@@ -8039,8 +8039,8 @@ export interface GetObservabilityTraces_RouteContract {
 // Route: GET /observability/traces/light
 // ============================================================================
 export type GetObservabilityTracesLight_QueryParams = {
-  startedAt?: ((Shared_Type_68 | undefined) | undefined) | any;
-  endedAt?: ((Shared_Type_68 | undefined) | undefined) | any;
+  startedAt?: ((Shared_Type_68 | undefined) | undefined) | unknown;
+  endedAt?: ((Shared_Type_68 | undefined) | undefined) | unknown;
   spanType?: (Shared_Type_69 | undefined) | undefined;
   /** Filter by trace ID (matches root span) */
   traceId?: (string | undefined) | undefined;
@@ -8072,7 +8072,7 @@ export type GetObservabilityTracesLight_QueryParams = {
           )
         | undefined
       )
-    | any;
+    | unknown;
   entityVersionId?: ((string | null) | undefined) | undefined;
   parentEntityVersionId?: ((string | null) | undefined) | undefined;
   rootEntityVersionId?: ((string | null) | undefined) | undefined;
@@ -8088,8 +8088,8 @@ export type GetObservabilityTracesLight_QueryParams = {
           )
         | undefined
       )
-    | any;
-  tags?: (((string[] | null) | undefined) | undefined) | any;
+    | unknown;
+  tags?: (((string[] | null) | undefined) | undefined) | unknown;
   status?: (('success' | 'error' | 'running') | undefined) | undefined;
   hasChildError?: (boolean | undefined) | undefined;
   /** Zero-indexed page number */
@@ -8100,7 +8100,7 @@ export type GetObservabilityTracesLight_QueryParams = {
   field?: ('startedAt' | 'endedAt') | undefined;
   /** Sort direction */
   direction?: ('ASC' | 'DESC') | undefined;
-  dateRange?: ((Shared_Type_68 | undefined) | undefined) | any;
+  dateRange?: ((Shared_Type_68 | undefined) | undefined) | unknown;
   name?: (string | undefined) | undefined;
 };
 
@@ -8132,8 +8132,8 @@ export interface GetObservabilityTracesLight_RouteContract {
 // Route: GET /observability/branches
 // ============================================================================
 export type GetObservabilityBranches_QueryParams = {
-  startedAt?: ((Shared_Type_68 | undefined) | undefined) | any;
-  endedAt?: ((Shared_Type_68 | undefined) | undefined) | any;
+  startedAt?: ((Shared_Type_68 | undefined) | undefined) | unknown;
+  endedAt?: ((Shared_Type_68 | undefined) | undefined) | unknown;
   spanType?: (Shared_Type_69 | undefined) | undefined;
   /** Filter by parent trace ID */
   traceId?: (string | undefined) | undefined;
@@ -8165,7 +8165,7 @@ export type GetObservabilityBranches_QueryParams = {
           )
         | undefined
       )
-    | any;
+    | unknown;
   entityVersionId?: ((string | null) | undefined) | undefined;
   parentEntityVersionId?: ((string | null) | undefined) | undefined;
   rootEntityVersionId?: ((string | null) | undefined) | undefined;
@@ -8181,8 +8181,8 @@ export type GetObservabilityBranches_QueryParams = {
           )
         | undefined
       )
-    | any;
-  tags?: (((string[] | null) | undefined) | undefined) | any;
+    | unknown;
+  tags?: (((string[] | null) | undefined) | undefined) | unknown;
   status?: (('success' | 'error' | 'running') | undefined) | undefined;
   page?: (number | undefined) | undefined;
   perPage?: (number | undefined) | undefined;
@@ -8560,7 +8560,7 @@ export interface GetObservabilityTracesTraceIdSpanIdScores_RouteContract {
 // Route: GET /observability/metrics
 // ============================================================================
 export type GetObservabilityMetrics_QueryParams = {
-  timestamp?: ((Shared_Type_68 | undefined) | undefined) | any;
+  timestamp?: ((Shared_Type_68 | undefined) | undefined) | unknown;
   /** Filter by trace ID */
   traceId?: (string | undefined) | undefined;
   /** Filter by span ID */
@@ -8585,8 +8585,8 @@ export type GetObservabilityMetrics_QueryParams = {
   threadId?: (string | undefined) | undefined;
   requestId?: (string | undefined) | undefined;
   executionSource?: (string | undefined) | undefined;
-  tags?: ((string[] | undefined) | undefined) | any;
-  name?: ((string[] | undefined) | undefined) | any;
+  tags?: ((string[] | undefined) | undefined) | unknown;
+  name?: ((string[] | undefined) | undefined) | unknown;
   /** Filter by execution source */
   source?: (string | undefined) | undefined;
   provider?: (string | undefined) | undefined;
@@ -8602,7 +8602,7 @@ export type GetObservabilityMetrics_QueryParams = {
           )
         | undefined
       )
-    | any;
+    | unknown;
   page?: (number | undefined) | undefined;
   perPage?: (number | undefined) | undefined;
   /** Field to order by: 'timestamp' */
@@ -8713,7 +8713,7 @@ export interface GetObservabilityMetrics_RouteContract {
 // Route: GET /observability/logs
 // ============================================================================
 export type GetObservabilityLogs_QueryParams = {
-  timestamp?: ((Shared_Type_68 | undefined) | undefined) | any;
+  timestamp?: ((Shared_Type_68 | undefined) | undefined) | unknown;
   /** Filter by trace ID */
   traceId?: (string | undefined) | undefined;
   /** Filter by span ID */
@@ -8738,7 +8738,7 @@ export type GetObservabilityLogs_QueryParams = {
   threadId?: (string | undefined) | undefined;
   requestId?: (string | undefined) | undefined;
   executionSource?: (string | undefined) | undefined;
-  tags?: ((string[] | undefined) | undefined) | any;
+  tags?: ((string[] | undefined) | undefined) | unknown;
   /** Filter by execution source */
   source?: (string | undefined) | undefined;
   /** Filter by log level(s) */
@@ -8844,7 +8844,7 @@ export interface GetObservabilityLogs_RouteContract {
 // Route: GET /observability/scores
 // ============================================================================
 export type GetObservabilityScores_QueryParams = {
-  timestamp?: ((Shared_Type_68 | undefined) | undefined) | any;
+  timestamp?: ((Shared_Type_68 | undefined) | undefined) | unknown;
   /** Filter by trace ID */
   traceId?: (string | undefined) | undefined;
   /** Filter by span ID */
@@ -8869,7 +8869,7 @@ export type GetObservabilityScores_QueryParams = {
   threadId?: (string | undefined) | undefined;
   requestId?: (string | undefined) | undefined;
   executionSource?: (string | undefined) | undefined;
-  tags?: ((string[] | undefined) | undefined) | any;
+  tags?: ((string[] | undefined) | undefined) | unknown;
   /** Filter by scorer ID(s) */
   scorerId?: ((string | string[]) | undefined) | undefined;
   /** Filter by how the score was produced */
@@ -9216,7 +9216,7 @@ export interface PostObservabilityScoresPercentiles_RouteContract {
 // Route: GET /observability/feedback
 // ============================================================================
 export type GetObservabilityFeedback_QueryParams = {
-  timestamp?: ((Shared_Type_68 | undefined) | undefined) | any;
+  timestamp?: ((Shared_Type_68 | undefined) | undefined) | unknown;
   /** Filter by trace ID */
   traceId?: (string | undefined) | undefined;
   /** Filter by span ID */
@@ -9241,7 +9241,7 @@ export type GetObservabilityFeedback_QueryParams = {
   threadId?: (string | undefined) | undefined;
   requestId?: (string | undefined) | undefined;
   executionSource?: (string | undefined) | undefined;
-  tags?: ((string[] | undefined) | undefined) | any;
+  tags?: ((string[] | undefined) | undefined) | unknown;
   /** Filter by feedback type(s) */
   feedbackType?: ((string | string[]) | undefined) | undefined;
   feedbackSource?: (string | undefined) | undefined;

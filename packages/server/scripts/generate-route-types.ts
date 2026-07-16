@@ -77,7 +77,21 @@ const promotionInProgress = new Set<z4.$ZodType>();
 const sharedTypeDeclarations: string[] = [];
 let sharedTypeIndex = 0;
 
+/**
+ * zod-to-ts cannot represent these schema types (their TypeScript type is only known
+ * at runtime, e.g. a transform's return value), so we emit `unknown` instead of
+ * letting `any` leak into the generated SDK types. Any *new* unrepresentable type
+ * not listed here makes zod-to-ts throw at generation time (the default
+ * `unrepresentable: 'throw'` behavior), so it gets caught in CI instead of
+ * silently widening client types.
+ */
+const UNREPRESENTABLE_SCHEMA_TYPES = new Set(['transform', 'custom']);
+
 function schemaOverrideFunction(schema: z4.$ZodType, tsLib: typeof ts): ts.TypeNode | undefined {
+  if (UNREPRESENTABLE_SCHEMA_TYPES.has(schema._zod.def.type)) {
+    return tsLib.factory.createKeywordTypeNode(tsLib.SyntaxKind.UnknownKeyword);
+  }
+
   if (countingPass) {
     nestedOccurrenceCounts.set(schema, (nestedOccurrenceCounts.get(schema) ?? 0) + 1);
     return undefined;
@@ -98,7 +112,6 @@ function schemaOverrideFunction(schema: z4.$ZodType, tsLib: typeof ts): ts.TypeN
     promotionInProgress.add(schema);
     const { node } = zodToTs(schema, {
       auxiliaryTypeStore: globalAuxiliaryTypeStore,
-      unrepresentable: 'any',
       io: 'output',
       overrideFunction: schemaOverrideFunction,
     });
@@ -150,11 +163,10 @@ function renderSchemaType(aliasName: string, schema: z4.$ZodType, deprecated: bo
     return `${deprecatedComment}export type ${aliasName} = ${existingAlias};`;
   }
 
-  // `unrepresentable: 'any'` is the only fallback zod-to-ts supports for schemas it
-  // cannot represent (e.g. transforms); any other value makes it throw.
+  // Unrepresentable schemas (transforms, customs) are intercepted as `unknown` in
+  // schemaOverrideFunction; anything unexpected throws at generation time.
   const { node } = zodToTs(schema, {
     auxiliaryTypeStore: globalAuxiliaryTypeStore,
-    unrepresentable: 'any',
     io: 'output',
     overrideFunction: schemaOverrideFunction,
   });
