@@ -13,6 +13,20 @@ const createMastraCodeGatewayMock = vi.fn(() => mastraCodeGatewayMock);
 const mastraCodeCatalogProviderMock = vi.fn();
 const createMastraCodeModelCatalogProviderMock = vi.fn(() => mastraCodeCatalogProviderMock);
 const resolveModelMock = vi.fn();
+const knowledgeScopeTreeMock = vi.fn(async () => ({
+  identityKey: 'identity-key',
+  defaultLevel: 'resource' as const,
+  roots: [
+    { level: 'org' as const, id: 'owner-1', available: true },
+    { level: 'resource' as const, id: 'project-resource', available: true },
+    { level: 'thread' as const, id: 'thread-1', available: true },
+  ],
+}));
+const createKnowledgeInspectorMock = vi.fn(async () => ({ getScopeTree: knowledgeScopeTreeMock }));
+
+vi.mock('../knowledge-inspector.js', () => ({
+  createKnowledgeInspector: createKnowledgeInspectorMock,
+}));
 
 vi.mock('@mastra/core/llm', () => ({
   MastraModelGateway: class {},
@@ -128,10 +142,17 @@ vi.mock('@mastra/core/agent-controller', () => ({
       return {
         subscribe: (eventHandler: unknown) => controllerSubscribeMock(eventHandler),
         identity: {
+          getOwnerId: () => 'owner-1',
           getResourceId: () => 'project-resource',
         },
         thread: {
           getId: () => controllerGetCurrentThreadIdMock(),
+          getById: async ({ threadId }: { threadId: string }) => ({
+            id: threadId,
+            resourceId: 'project-resource',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          }),
           list: (options: unknown) => controllerListThreadsMock(options),
           setSetting: (setting: unknown) => controllerSetThreadSettingMock(setting),
         },
@@ -331,6 +352,8 @@ describe('createMastraCode', () => {
     createMastraCodeModelCatalogProviderMock.mockClear();
     mastraCodeCatalogProviderMock.mockClear();
     resolveModelMock.mockClear();
+    createKnowledgeInspectorMock.mockClear();
+    knowledgeScopeTreeMock.mockClear();
     mastraCodeGatewayMock.fetchProviders.mockClear();
     mastraCodeGatewayMock.buildUrl.mockClear();
     mastraCodeGatewayMock.getApiKey.mockClear();
@@ -443,6 +466,26 @@ describe('createMastraCode', () => {
     expect(controllerConstructorMock).toHaveBeenCalled();
     const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as { memory?: unknown } | undefined;
     expect(typeof agentControllerConfig?.memory).toBe('function');
+  });
+
+  it('returns a session-scoped knowledge inspector for local consumers', async () => {
+    controllerGetCurrentThreadIdMock.mockReturnValue('thread-1');
+    const { createMastraCode } = await import('../index.js');
+
+    const result = await createMastraCode();
+
+    expect(createKnowledgeInspectorMock).toHaveBeenCalledWith(
+      expect.objectContaining({ session: expect.objectContaining({ identity: expect.any(Object) }) }),
+    );
+    await expect(result.knowledgeInspector?.getScopeTree()).resolves.toMatchObject({
+      defaultLevel: 'resource',
+      roots: [
+        { level: 'org', id: 'owner-1', available: true },
+        { level: 'resource', id: 'project-resource', available: true },
+        { level: 'thread', id: 'thread-1', available: true },
+      ],
+    });
+    expect(result.knowledgeInspectorUnavailableReason).toBeUndefined();
   });
 
   it('uses caller memory while applying configDir to startup services and state', async () => {
