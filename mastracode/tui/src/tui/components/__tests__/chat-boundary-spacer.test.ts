@@ -40,7 +40,11 @@ function completeTool(component: ToolExecutionComponentEnhanced): ToolExecutionC
 }
 
 function assistant(text = 'assistant text'): AssistantMessageComponent {
-  return new AssistantMessageComponent({ id: 'a', role: 'assistant', content: [{ type: 'text', text }] } as any);
+  return new AssistantMessageComponent({
+    id: 'a',
+    role: 'assistant',
+    content: { format: 2, parts: [{ type: 'text', text }] },
+  } as any);
 }
 
 describe('ChatBoundarySpacer', () => {

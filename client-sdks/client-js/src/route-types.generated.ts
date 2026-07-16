@@ -91780,12 +91780,19 @@ export type GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessa
 export type GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_Response = {
   messages: {
     id: string;
-    role: 'user' | 'assistant' | 'system';
+    role: 'user' | 'assistant' | 'system' | 'tool' | 'signal';
     content: {
-      type: string;
+      format: 2;
+      parts: {
+        type: string;
+        [x: string]: unknown;
+      }[];
       [x: string]: unknown;
-    }[];
+    };
     createdAt?: string | undefined;
+    threadId?: string | undefined;
+    resourceId?: string | undefined;
+    type?: string | undefined;
   }[];
 };
 
