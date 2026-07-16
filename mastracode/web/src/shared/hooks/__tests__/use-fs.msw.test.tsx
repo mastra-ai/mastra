@@ -91,7 +91,15 @@ describe('useArtifactListing', () => {
         return HttpResponse.json({
           rootPath: '/home/user/project',
           artifactsPath: '/home/user/project/.artifacts',
-          entries: [{ name: 'HISTORY.md', path: 'understand-pr/HISTORY.md', type: 'file', size: 5, updatedAt: '2026-07-15T00:00:00.000Z' }],
+          entries: [
+            {
+              name: 'HISTORY.md',
+              path: 'understand-pr/HISTORY.md',
+              type: 'file',
+              size: 5,
+              updatedAt: '2026-07-15T00:00:00.000Z',
+            },
+          ],
         });
       }),
     );
@@ -135,7 +143,15 @@ describe('useWorkspaceRenderedListing', () => {
           workspacePath: '/home/user/project',
           root: '.artifacts',
           rootPath: '/home/user/project/.artifacts',
-          entries: [{ name: 'HISTORY.md', path: 'understand-pr/HISTORY.md', type: 'file', size: 5, updatedAt: '2026-07-15T00:00:00.000Z' }],
+          entries: [
+            {
+              name: 'HISTORY.md',
+              path: 'understand-pr/HISTORY.md',
+              type: 'file',
+              size: 5,
+              updatedAt: '2026-07-15T00:00:00.000Z',
+            },
+          ],
         });
       }),
     );
@@ -155,11 +171,21 @@ describe('useWorkspaceFile', () => {
     server.use(
       http.get(WORKSPACE_FILE_URL, () => {
         called = true;
-        return HttpResponse.json({ workspacePath: '', path: '', name: '', size: 0, updatedAt: '', contentType: 'text', content: '' });
+        return HttpResponse.json({
+          workspacePath: '',
+          path: '',
+          name: '',
+          size: 0,
+          updatedAt: '',
+          contentType: 'text',
+          content: '',
+        });
       }),
     );
 
-    const { result } = renderHookWithProviders(() => useWorkspaceFile('/home/user/project', '.artifacts/file.md', { enabled: false }));
+    const { result } = renderHookWithProviders(() =>
+      useWorkspaceFile('/home/user/project', '.artifacts/file.md', { enabled: false }),
+    );
 
     expect(result.current.fetchStatus).toBe('idle');
     expect(called).toBe(false);
@@ -185,7 +211,9 @@ describe('useWorkspaceFile', () => {
       }),
     );
 
-    const { result } = renderHookWithProviders(() => useWorkspaceFile('/home/user/project', '.artifacts/understand-pr/HISTORY.md'));
+    const { result } = renderHookWithProviders(() =>
+      useWorkspaceFile('/home/user/project', '.artifacts/understand-pr/HISTORY.md'),
+    );
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(seenWorkspacePath).toBe('/home/user/project');

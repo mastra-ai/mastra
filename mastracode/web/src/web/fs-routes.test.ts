@@ -110,12 +110,14 @@ describe('readWorkspaceFile', () => {
 
     const result = await readWorkspaceFile(root, join(root, 'workspace'), '.artifacts/understand-pr/HISTORY.md');
 
-    expect(result).toEqual(expect.objectContaining({
-      path: '.artifacts/understand-pr/HISTORY.md',
-      name: 'HISTORY.md',
-      contentType: 'text',
-      content: '# History',
-    }));
+    expect(result).toEqual(
+      expect.objectContaining({
+        path: '.artifacts/understand-pr/HISTORY.md',
+        name: 'HISTORY.md',
+        contentType: 'text',
+        content: '# History',
+      }),
+    );
   });
 
   it('rejects missing file paths', async () => {
@@ -150,6 +152,8 @@ describe('readWorkspaceFile', () => {
     await writeFile(join(outside, 'secret.md'), 'secret');
     await symlink(join(outside, 'secret.md'), join(artifacts, 'secret.md'));
 
-    await expect(readWorkspaceFile(root, join(root, 'workspace'), '.artifacts/secret.md')).rejects.toThrow('Path is outside the workspace');
+    await expect(readWorkspaceFile(root, join(root, 'workspace'), '.artifacts/secret.md')).rejects.toThrow(
+      'Path is outside the workspace',
+    );
   });
 });

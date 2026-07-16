@@ -123,11 +123,15 @@ function assertRelativePath(path: string, label: string): string {
   if (isAbsolute(trimmed)) throw new Error(`${label} must be relative`);
   if (trimmed.split(/[\\/]+/).includes('..')) throw new Error(`${label} escapes workspace`);
   const normalized = resolve('/', trimmed).slice(1);
-  if (!normalized || normalized === '..' || normalized.startsWith(`..${sep}`)) throw new Error(`${label} escapes workspace`);
+  if (!normalized || normalized === '..' || normalized.startsWith(`..${sep}`))
+    throw new Error(`${label} escapes workspace`);
   return normalized;
 }
 
-async function confinedWorkspacePath(root: string, workspacePath: string): Promise<{ resolvedRoot: string; workspace: string }> {
+async function confinedWorkspacePath(
+  root: string,
+  workspacePath: string,
+): Promise<{ resolvedRoot: string; workspace: string }> {
   const resolvedRoot = await realOrResolved(resolveFsRoot(root));
   const candidate = isAbsolute(workspacePath) ? resolve(workspacePath) : resolve(resolvedRoot, workspacePath);
   const workspace = await realPathWithinRoot(candidate, resolvedRoot);
@@ -255,7 +259,11 @@ export async function listWorkspaceRenderedPath(
 }
 
 export async function readWorkspaceFile(root: string, workspacePath: string, path: string): Promise<WorkspaceFile> {
-  const { workspace, path: confinedPath, relativePath } = await confinedWorkspaceRelativePath(root, workspacePath, path);
+  const {
+    workspace,
+    path: confinedPath,
+    relativePath,
+  } = await confinedWorkspaceRelativePath(root, workspacePath, path);
   const info = await lstat(confinedPath);
   if (info.isDirectory()) throw new Error('Path is a directory');
   if (!info.isFile()) throw new Error('Unsupported file type');
@@ -384,7 +392,8 @@ export function buildFsRoutes(options: { root?: string } = {}): ApiRoute[] {
           return c.json(await listWorkspaceRenderedPath(root, workspacePath, renderedRoot));
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
-          const status = message.includes('outside') || message.includes('relative') || message.includes('escapes') ? 403 : 500;
+          const status =
+            message.includes('outside') || message.includes('relative') || message.includes('escapes') ? 403 : 500;
           return c.json({ error: message }, status);
         }
       },

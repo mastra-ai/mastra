@@ -22,7 +22,9 @@ function installHandlers() {
           workspacePath: WORKSPACE,
           root: '.reports',
           rootPath: `${WORKSPACE}/.reports`,
-          entries: [{ name: 'summary.md', path: 'summary.md', type: 'file', size: 7, updatedAt: '2026-07-16T00:00:00.000Z' }],
+          entries: [
+            { name: 'summary.md', path: 'summary.md', type: 'file', size: 7, updatedAt: '2026-07-16T00:00:00.000Z' },
+          ],
         });
       }
       return HttpResponse.json({
@@ -30,8 +32,20 @@ function installHandlers() {
         root: '.artifacts',
         rootPath: `${WORKSPACE}/.artifacts`,
         entries: [
-          { name: 'understand-pr', path: 'understand-pr', type: 'directory', size: 0, updatedAt: '2026-07-16T00:00:00.000Z' },
-          { name: 'HISTORY.md', path: 'understand-pr/HISTORY.md', type: 'file', size: 7, updatedAt: '2026-07-16T00:00:00.000Z' },
+          {
+            name: 'understand-pr',
+            path: 'understand-pr',
+            type: 'directory',
+            size: 0,
+            updatedAt: '2026-07-16T00:00:00.000Z',
+          },
+          {
+            name: 'HISTORY.md',
+            path: 'understand-pr/HISTORY.md',
+            type: 'file',
+            size: 7,
+            updatedAt: '2026-07-16T00:00:00.000Z',
+          },
         ],
       });
     }),
@@ -54,7 +68,12 @@ describe('WorkspaceViewerPanel', () => {
   it('shows an empty state for configured paths with no files', async () => {
     server.use(
       http.get(LIST_URL, () =>
-        HttpResponse.json({ workspacePath: WORKSPACE, root: '.artifacts', rootPath: `${WORKSPACE}/.artifacts`, entries: [] }),
+        HttpResponse.json({
+          workspacePath: WORKSPACE,
+          root: '.artifacts',
+          rootPath: `${WORKSPACE}/.artifacts`,
+          entries: [],
+        }),
       ),
     );
 
@@ -97,10 +116,7 @@ describe('WorkspaceViewerPanel', () => {
     renderWithProviders(
       <WorkspaceViewerPanel
         workspacePath={WORKSPACE}
-        renderedPaths={[
-          ...renderedPaths,
-          { id: 'reports', label: 'Reports', root: '.reports' },
-        ]}
+        renderedPaths={[...renderedPaths, { id: 'reports', label: 'Reports', root: '.reports' }]}
       />,
     );
 
@@ -114,7 +130,12 @@ describe('WorkspaceViewerPanel', () => {
     server.use(
       http.get(LIST_URL, () => {
         calls += 1;
-        return HttpResponse.json({ workspacePath: WORKSPACE, root: '.artifacts', rootPath: `${WORKSPACE}/.artifacts`, entries: [] });
+        return HttpResponse.json({
+          workspacePath: WORKSPACE,
+          root: '.artifacts',
+          rootPath: `${WORKSPACE}/.artifacts`,
+          entries: [],
+        });
       }),
     );
     const user = userEvent.setup();

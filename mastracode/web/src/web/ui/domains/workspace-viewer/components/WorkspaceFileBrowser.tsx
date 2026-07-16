@@ -71,7 +71,13 @@ function addEntry(nodes: WorkspaceTreeNode[], entry: WorkspaceRenderedEntry) {
 
     if (isLeaf) {
       const existing = siblings.find(node => node.path === currentPath);
-      const node = { path: entry.path, name: segment, type: entry.type, size: entry.size, children: existing?.children ?? [] };
+      const node = {
+        path: entry.path,
+        name: segment,
+        type: entry.type,
+        size: entry.size,
+        children: existing?.children ?? [],
+      };
       const existingIndex = siblings.findIndex(item => item.path === currentPath);
       if (existingIndex === -1) siblings.push(node);
       else siblings[existingIndex] = node;

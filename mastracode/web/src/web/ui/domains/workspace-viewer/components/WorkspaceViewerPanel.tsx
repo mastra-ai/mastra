@@ -57,7 +57,10 @@ export function WorkspaceViewerPanel({
   };
 
   return (
-    <div className="hidden h-full w-full min-w-0 border-l border-border1 bg-surface1 lg:flex" data-testid="workspace-viewer-panel">
+    <div
+      className="hidden h-full w-full min-w-0 border-l border-border1 bg-surface1 lg:flex"
+      data-testid="workspace-viewer-panel"
+    >
       {viewerOpen ? (
         <div className="h-full min-w-0 flex-1 overflow-hidden">
           <WorkspaceFileViewer
