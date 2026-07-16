@@ -53,6 +53,7 @@ import { goalJudgeSingleRenderScenario } from './goal-judge-single-render.js';
 import { headlessMcpToolAvailabilityScenario } from './headless-mcp-tool-availability.js';
 import { hiddenReasoningSingleLabelScenario } from './hidden-reasoning-single-label.js';
 import { integrationCommandsScenario } from './integration-commands.js';
+import { knowledgeBrowserScenario } from './knowledge-browser.js';
 import { lifecycleHooksConfiguredScenario } from './lifecycle-hooks-configured.js';
 import { lifecycleHooksEventsScenario } from './lifecycle-hooks-events.js';
 import { loginDialogMaskedInputScenario } from './login-dialog-masked-input.js';
@@ -254,6 +255,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'notification-inbox-tool-flow': notificationInboxToolFlowScenario,
   'notification-signal-rendering': notificationSignalRenderingScenario,
   'notify-input-request-hook': notifyInputRequestHookScenario,
+  'knowledge-browser': knowledgeBrowserScenario,
   'om-attachment-observation': omAttachmentObservationScenario,
   'om-global-settings-persistence': omGlobalSettingsPersistenceScenario,
   'om-model-override-reload': omModelOverrideReloadScenario,
