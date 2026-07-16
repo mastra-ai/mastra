@@ -12,37 +12,21 @@
  *   (re-open) inside the sandbox, using a short-lived installation token that is
  *   scrubbed from the git remote afterwards so it never persists in the VM.
  *
- * The Railway sandbox is constructed behind a swappable factory so tests can
- * inject a fake sandbox and other providers can be added later.
+ * The provider is whatever `WebSandboxProvider` the factory was configured
+ * with (`sandbox` slot, seeded into the runtime-config registry) — this
+ * module never selects a provider or reads deployment env itself. Tests can
+ * additionally swap the low-level construction via `setSandboxFactory`.
  */
 
 import { createHash } from 'node:crypto';
-import { RailwaySandbox } from '@mastra/railway';
 import { eq } from 'drizzle-orm';
+import type { MaterializationSandbox, SandboxCommandResult, SandboxCreateOptions } from '../sandbox-provider';
+import { getSeededSandboxProvider } from '../runtime-config';
 import { getAppDb } from './db';
-import { getLocalSandboxRoot, LocalSandbox } from './local-sandbox';
 import { githubProjectSandboxes } from './schema';
 import type { GithubProjectSandboxRow } from './schema';
 
-/** Minimal command result shape we depend on. */
-export interface SandboxCommandResult {
-  exitCode: number;
-  stdout: string;
-  stderr: string;
-}
-
-/**
- * Minimal live-sandbox surface this module needs: an id, a way to start it, a
- * way to learn the provider's reattach id, and command execution.
- */
-export interface MaterializationSandbox {
-  readonly id: string;
-  start(): Promise<void>;
-  getInfo(): Promise<{ metadata?: Record<string, unknown> }>;
-  executeCommand(command: string, args?: string[], options?: { timeout?: number }): Promise<SandboxCommandResult>;
-  /** Tear down the underlying VM. Optional: providers without it are no-ops. */
-  stop?(): Promise<void>;
-}
+export type { MaterializationSandbox, SandboxCommandResult, SandboxCreateOptions } from '../sandbox-provider';
 
 /**
  * A coarse-grained step of the sandbox-preparation flow, reported as it happens
@@ -72,90 +56,55 @@ function reportProgress(onProgress: ProgressFn | undefined, event: PrepareProgre
  * provided the sandbox should reattach to that existing VM instead of
  * provisioning a new one.
  */
-export type SandboxFactory = (opts: {
-  providerSandboxId?: string;
-  env?: Record<string, string>;
-  /** Idle teardown window (minutes). The provider stops the VM after this idle period. */
-  idleTimeoutMinutes?: number;
-}) => MaterializationSandbox;
+export type SandboxFactory = (opts: SandboxCreateOptions) => MaterializationSandbox;
 
 /**
- * Resolve the active sandbox provider. An explicit `MASTRACODE_SANDBOX_PROVIDER`
- * always wins. Otherwise we pick automatically: Railway when a Railway token is
- * configured, else the local host-process provider. This means a repo can
- * always be opened — Railway in a configured cloud deploy, local in dev — with
- * no extra env wiring.
+ * Name of the active sandbox provider — the seeded provider's `kind`, or
+ * `'none'` when the factory was configured without a `sandbox` slot.
+ * Diagnostic only; feature gating goes through {@link isSandboxEnabled}.
  */
 export function getSandboxProvider(): string {
-  const explicit = process.env.MASTRACODE_SANDBOX_PROVIDER;
-  if (explicit) return explicit;
-  return process.env.RAILWAY_API_TOKEN ? 'railway' : 'local';
+  return getSeededSandboxProvider()?.kind ?? 'none';
 }
 
 /**
- * True when a sandbox provider is usable. The local provider is always usable
- * (it runs git on the host process), so this is only false when an explicit
- * provider is misconfigured (e.g. `railway` selected without a token, or an
- * unknown provider name).
+ * True when the configured sandbox provider is usable. `false` when no
+ * `sandbox` provider was configured or the provider reports itself
+ * misconfigured (e.g. Railway without a token) — GitHub-backed projects stay
+ * off in both cases.
  */
 export function isSandboxEnabled(): boolean {
-  const provider = getSandboxProvider();
-  if (provider === 'railway') {
-    return Boolean(process.env.RAILWAY_API_TOKEN);
-  }
-  if (provider === 'local') {
-    return true;
-  }
-  return false;
+  return getSeededSandboxProvider()?.isEnabled() ?? false;
 }
 
 /**
  * Compute the in-sandbox working directory for a repo. Server-side only; never
- * derived from client input.
+ * derived from client input. Delegates to the active provider, which owns the
+ * provider-specific layout (cloud `/workspace` base vs local checkout root).
  */
 export function computeSandboxWorkdir(repoFullName: string): string {
-  const repoName = repoFullName.split('/').pop() || 'repo';
-  // The local provider runs on the host filesystem, where a cloud path like
-  // `/workspace` is not writable. `MASTRACODE_SANDBOX_WORKDIR` documents
-  // itself as cloud-only (and the schema defaults it to `/workspace`), so the
-  // local provider ignores it and checks out under the local sandbox root.
-  if (getSandboxProvider() === 'local') {
-    return `${getLocalSandboxRoot().replace(/\/$/, '')}/${repoName}`;
-  }
-  const base = process.env.MASTRACODE_SANDBOX_WORKDIR;
-  if (base) {
-    // If the configured base already ends with the repo name, use it as-is.
-    return base.endsWith(`/${repoName}`) ? base : `${base.replace(/\/$/, '')}/${repoName}`;
-  }
-  return `/workspace/${repoName}`;
+  const provider = getSeededSandboxProvider();
+  if (!provider) throw new Error('No sandbox provider configured');
+  return provider.workdirFor(repoFullName);
 }
 
 /**
- * Idle teardown window for provisioned sandboxes, in minutes. Read from
- * `MASTRACODE_SANDBOX_IDLE_MINUTES`; defaults to 30. The provider stops an idle
- * VM after this window so abandoned sandboxes don't linger (GC). A re-open
- * detects the stopped VM and re-provisions cleanly.
+ * Idle teardown window for provisioned sandboxes, in minutes; defaults to 30.
+ * The provider stops an idle VM after this window so abandoned sandboxes don't
+ * linger (GC). A re-open detects the stopped VM and re-provisions cleanly.
  */
-export function getSandboxIdleMinutes(): number | undefined {
-  const raw = process.env.MASTRACODE_SANDBOX_IDLE_MINUTES;
-  if (raw === undefined || raw === '') return 30;
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed <= 0) return 30;
-  return Math.floor(parsed);
+export function getSandboxIdleMinutes(): number {
+  return getSeededSandboxProvider()?.idleMinutes ?? 30;
 }
 
 /**
- * Per-replica cap on concurrently *provisioned* sandboxes. Reads
- * `MASTRACODE_MAX_SANDBOXES`; 0 / unset means unlimited. This is a lightweight
- * per-process budget to keep a single replica from exhausting provider quota —
- * it is not a global, cross-replica scheduler (that is a deferred follow-up).
+ * Per-replica cap on concurrently *provisioned* sandboxes. 0 means unlimited.
+ * This is a lightweight per-process budget to keep a single replica from
+ * exhausting provider quota — it is not a global, cross-replica scheduler
+ * (that is a deferred follow-up).
  */
 export function getMaxSandboxes(): number {
-  const raw = process.env.MASTRACODE_MAX_SANDBOXES;
-  if (raw === undefined || raw === '') return 0;
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed <= 0) return 0;
-  return Math.floor(parsed);
+  return getSeededSandboxProvider()?.maxSandboxes ?? 0;
 }
 
 /**
@@ -180,40 +129,31 @@ export class SandboxBudgetError extends Error {
   readonly code = 'sandbox-budget-exceeded' as const;
   constructor(readonly max: number) {
     super(
-      `Sandbox budget exceeded: this server already has ${max} active sandbox(es) ` +
-        `(MASTRACODE_MAX_SANDBOXES=${max}). Close an existing project's sandbox and try again.`,
+      `Sandbox budget exceeded: this server already has ${max} active sandbox(es), ` +
+        `the configured per-replica maximum. Close an existing project's sandbox and try again.`,
     );
     this.name = 'SandboxBudgetError';
   }
 }
 
-/** Railway-backed sandbox, optionally reattaching by id. */
-const railwayFactory: SandboxFactory = ({ providerSandboxId, env, idleTimeoutMinutes }) =>
-  new RailwaySandbox({
-    ...(providerSandboxId ? { sandboxId: providerSandboxId } : {}),
-    ...(env ? { env } : {}),
-    ...(idleTimeoutMinutes !== undefined ? { idleTimeoutMinutes } : {}),
-  });
-
-/** Local host-process sandbox (single-user dev; no tenant isolation). */
-const localFactory: SandboxFactory = ({ providerSandboxId }) =>
-  new LocalSandbox(providerSandboxId ? { sandboxId: providerSandboxId } : {});
-
 /**
- * Default factory: dispatch on the configured provider. Resolved per call so
- * `MASTRACODE_SANDBOX_PROVIDER` is honored without re-importing the module.
+ * Default factory: build via the provider the factory was configured with.
+ * Resolved per call so seeding order doesn't matter at import time.
  */
-const defaultFactory: SandboxFactory = opts =>
-  getSandboxProvider() === 'local' ? localFactory(opts) : railwayFactory(opts);
+const defaultFactory: SandboxFactory = opts => {
+  const provider = getSeededSandboxProvider();
+  if (!provider) throw new Error('No sandbox provider configured');
+  return provider.create(opts);
+};
 
 let sandboxFactory: SandboxFactory = defaultFactory;
 
-/** Override the sandbox factory (tests / alternative providers). */
+/** Override the sandbox factory (tests). */
 export function setSandboxFactory(factory: SandboxFactory): void {
   sandboxFactory = factory;
 }
 
-/** Reset to the default provider-dispatching factory. */
+/** Reset to the default provider-delegating factory. */
 export function resetSandboxFactory(): void {
   sandboxFactory = defaultFactory;
 }

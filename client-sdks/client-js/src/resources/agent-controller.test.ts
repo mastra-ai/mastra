@@ -511,6 +511,176 @@ describe('AgentController Resource', () => {
     expect((global.fetch as any).mock.calls).toHaveLength(1);
   });
 
+  // A stream that emits frames but never closes, so tests can control when the
+  // subscription ends via unsubscribe instead of racing a clean close.
+  const openSseResponse = (frames: string[]) =>
+    new Response(
+      new ReadableStream({
+        start(controller) {
+          for (const frame of frames) controller.enqueue(new TextEncoder().encode(frame));
+        },
+      }),
+      { status: 200, headers: new Headers({ 'Content-Type': 'text/event-stream' }) },
+    );
+
+  // request() has its own internal retry loop; disable it so these specs
+  // observe subscribe()'s connection policy directly.
+  const noRetryClient = () => new MastraClient({ baseUrl: 'http://localhost:4111', retries: 0 });
+
+  it('rejects subscribe when the initial connection fails without reconnect', async () => {
+    (global.fetch as any).mockRejectedValue(new Error('connect refused'));
+
+    await expect(
+      noRetryClient()
+        .getAgentController('code')
+        .session('user-1')
+        .subscribe({ onEvent: () => {} }),
+    ).rejects.toThrow('connect refused');
+
+    expect((global.fetch as any).mock.calls).toHaveLength(1);
+  });
+
+  it('rejects subscribe on initial connection failure even with reconnect enabled', async () => {
+    (global.fetch as any).mockRejectedValue(new Error('still down'));
+
+    await expect(
+      noRetryClient()
+        .getAgentController('code')
+        .session('user-1')
+        .subscribe({
+          onEvent: () => {},
+          reconnect: true,
+        }),
+    ).rejects.toThrow('still down');
+
+    // Reconnect governs only re-establishment after an established stream
+    // drops — a rejected subscribe leaves no retry loop running.
+    expect((global.fetch as any).mock.calls).toHaveLength(1);
+    await new Promise(r => setTimeout(r, 30));
+    expect((global.fetch as any).mock.calls).toHaveLength(1);
+  });
+
+  it('calls onReconnect when the stream is re-established, but not on first connect', async () => {
+    const firstEvent = { type: 'agent_start' };
+    const secondEvent = { type: 'agent_end', reason: 'complete' };
+    (global.fetch as any)
+      .mockResolvedValueOnce(sseResponse([`data: ${JSON.stringify(firstEvent)}\n\n`]))
+      .mockResolvedValueOnce(openSseResponse([`data: ${JSON.stringify(secondEvent)}\n\n`]));
+
+    const order: string[] = [];
+    const done = new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('timeout')), 2000);
+      void noRetryClient()
+        .getAgentController('code')
+        .session('user-1')
+        .subscribe({
+          onEvent: event => {
+            order.push(`event:${event.type}`);
+            if (event.type === 'agent_end') {
+              clearTimeout(timer);
+              resolve();
+            }
+          },
+          onReconnect: () => order.push('reconnect'),
+          onError: error => {
+            clearTimeout(timer);
+            reject(error);
+          },
+          reconnect: { maxRetries: 1, delayMs: 0 },
+        })
+        .then(sub => {
+          void done.then(() => sub.unsubscribe());
+        });
+    });
+
+    await done;
+
+    expect(order).toEqual(['event:agent_start', 'reconnect', 'event:agent_end']);
+  });
+
+  it('backs off exponentially between reconnect attempts', async () => {
+    (global.fetch as any)
+      .mockResolvedValueOnce(sseResponse([`data: ${JSON.stringify({ type: 'agent_start' })}\n\n`]))
+      .mockRejectedValue(new Error('still down'));
+
+    const onError = vi.fn();
+    const sub = await noRetryClient()
+      .getAgentController('code')
+      .session('user-1')
+      .subscribe({
+        onEvent: () => {},
+        onError,
+        reconnect: { maxRetries: 2, delayMs: 100 },
+      });
+
+    // First retry waits ~100ms, second ~200ms (100 * 2^1).
+    await new Promise(r => setTimeout(r, 50));
+    expect((global.fetch as any).mock.calls).toHaveLength(1);
+
+    await new Promise(r => setTimeout(r, 150));
+    expect((global.fetch as any).mock.calls).toHaveLength(2);
+    expect(onError).not.toHaveBeenCalled();
+
+    await new Promise(r => setTimeout(r, 300));
+    expect((global.fetch as any).mock.calls).toHaveLength(3);
+    expect(onError).toHaveBeenCalledTimes(1);
+
+    sub.unsubscribe();
+  });
+
+  it('normalizes invalid reconnect options instead of hot-looping', async () => {
+    (global.fetch as any)
+      .mockResolvedValueOnce(sseResponse([`data: ${JSON.stringify({ type: 'agent_start' })}\n\n`]))
+      .mockRejectedValue(new Error('still down'));
+
+    const onError = vi.fn();
+    const sub = await noRetryClient()
+      .getAgentController('code')
+      .session('user-1')
+      .subscribe({
+        onEvent: () => {},
+        onError,
+        // NaN delays would fire zero-delay timers; NaN maxRetries would never
+        // exhaust (`n >= NaN` is false). Both must fall back to defaults.
+        reconnect: { maxRetries: NaN, delayMs: NaN, maxDelayMs: -1 },
+      });
+
+    // Default delayMs is 1000 — nothing should have retried this fast.
+    await new Promise(r => setTimeout(r, 50));
+    expect((global.fetch as any).mock.calls).toHaveLength(1);
+    expect(onError).not.toHaveBeenCalled();
+
+    sub.unsubscribe();
+  });
+
+  it('does not treat a throwing onError callback as an unhandled rejection or transport error', async () => {
+    mockSse([`data: ${JSON.stringify({ type: 'agent_start' })}\n\n`]);
+
+    const unhandled = vi.fn();
+    process.on('unhandledRejection', unhandled);
+    try {
+      const sub = await client
+        .getAgentController('code')
+        .session('user-1')
+        .subscribe({
+          onEvent: () => {},
+          onError: () => {
+            throw new Error('consumer onError blew up');
+          },
+        });
+
+      await new Promise(r => setTimeout(r, 20));
+      sub.unsubscribe();
+
+      // Terminal onError threw inside the detached loop — must be swallowed,
+      // not surfaced as an unhandled rejection, and must not trigger a retry.
+      expect(unhandled).not.toHaveBeenCalled();
+      expect((global.fetch as any).mock.calls).toHaveLength(1);
+    } finally {
+      process.removeListener('unhandledRejection', unhandled);
+    }
+  });
+
   it('sends a notification signal', async () => {
     mockJson({ accepted: true, notificationId: 'n-1', decision: 'deliver', runId: 'run-1' });
     const result = await client
