@@ -1,6 +1,8 @@
 # Agent harness
 
-Agent harness is a general-purpose [Mastra](https://mastra.ai) agent that can research current information, manage multi-step tasks, work with local files, run approved shell commands, and create recurring schedules.
+Welcome to your new [Mastra](https://mastra.ai) project! We're excited to see what you build.
+
+This starter provides you with a general-purpose Mastra agent that can research current information, manage multi-step tasks, work with local files, run approved shell commands, and create recurring schedules.
 
 ## Features
 
@@ -12,39 +14,23 @@ Agent harness is a general-purpose [Mastra](https://mastra.ai) agent that can re
 - Local libSQL storage and DuckDB observability, with optional Turso storage
 - A bundled Mastra skill that helps coding agents use current Mastra APIs
 
-## Demo
+## Get started
 
-Open the `Agent` in Mastra Studio and try one of these prompts:
+Set your `OPENAI_API_KEY` in `.env` or in your environment, then run:
+
+```shell
+npm run dev
+```
+
+Open [http://localhost:4111](http://localhost:4111) in your browser to access [Mastra Studio](https://mastra.ai/docs/studio/overview).
+
+Select **Agent** in Mastra Studio and try one of these prompts:
 
 - `Get the weather forecast for Austin this weekend.`
 - `Create a landing page for a Japanese sakura festival.`
 - `Check the SPCX stock price now, then check it every minute.`
 
 The agent asks for approval before it changes files or runs commands. When it creates a schedule, it returns an ID that you can use to pause the schedule.
-
-## Prerequisites
-
-- Node.js 22.13 or newer
-- An [OpenAI API key](https://platform.openai.com/api-keys)
-
-## Quickstart
-
-1. Create the project:
-
-   ```bash
-   npx create-mastra@latest --template agent-harness
-   ```
-
-2. Copy `.env.example` to `.env` and set `OPENAI_API_KEY`.
-
-3. Install dependencies and start Mastra:
-
-   ```bash
-   npm install
-   npm run dev
-   ```
-
-4. Open [localhost:4111](http://localhost:4111), select **Agent**, and send a demo prompt.
 
 ## Workspace safety
 
@@ -63,8 +49,10 @@ Recurring schedules continue to use model tokens until you pause them. Ask the a
 - Edit `src/mastra/index.ts` to change storage and observability.
 - Add files or reusable skills under `workspace/` for the agent to use.
 
-## About Mastra templates
+## Learn more
 
-[Mastra templates](https://mastra.ai/templates) are ready-to-use projects that show what you can build with Mastra. They live in the [Mastra monorepo](https://github.com/mastra-ai/mastra) and are synced to standalone repositories.
+To learn more about Mastra, visit our [documentation](https://mastra.ai/docs/). If you're new to AI agents, check out our [course](https://mastra.ai/learn) and [YouTube videos](https://youtube.com/@mastra-ai). You can also join our [Discord](https://discord.gg/BTYqqHKUrf) community to get help and share your projects.
 
-Want to contribute? See [CONTRIBUTING.md](./CONTRIBUTING.md).
+## Deploy to the Mastra platform
+
+The [Mastra platform](https://projects.mastra.ai) provides two products for deploying and managing AI applications built with the Mastra framework. Learn more in the [Mastra platform documentation](https://mastra.ai/docs/mastra-platform/overview).

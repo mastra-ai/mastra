@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
+import type { PackageManager } from '../../utils/package-manager';
 import type { CreateLLMProvider } from './command';
 
 export interface ManagedProviderConfig {
@@ -234,8 +235,16 @@ function setEnvValue(source: string, key: string, value: string): string {
   );
 }
 
-function adaptReadme(source: string, provider: CreateLLMProvider, config: ManagedProviderConfig): string {
+function adaptReadme(
+  source: string,
+  provider: CreateLLMProvider,
+  config: ManagedProviderConfig,
+  projectName: string,
+  packageManager: PackageManager,
+): string {
   return source
+    .replace(/^# .+$/m, `# ${projectName}`)
+    .replaceAll('npm run dev', `${packageManager} run dev`)
     .replace(/^- .*OpenAI web search.*$/m, `- ${config.featureDescription}`)
     .replace(/^- .*OpenAI API key.*$/m, `- ${config.apiKeyPrerequisite}`)
     .replace(/^([ \t]*)npx create-mastra@\S+.*$/m, `$1npx create-mastra@latest <project-name> --llm ${provider}`)
@@ -270,11 +279,15 @@ function assertNoProviderResidue(
 
 export async function adaptDefaultTemplate({
   projectPath,
+  projectName,
+  packageManager,
   provider,
   apiKey,
   versionTag,
 }: {
   projectPath: string;
+  projectName: string;
+  packageManager: PackageManager;
   provider: CreateLLMProvider;
   apiKey?: string;
   versionTag: string;
@@ -306,7 +319,8 @@ export async function adaptDefaultTemplate({
   const normalizedManifest = normalizeManagedManifest(packageJsonSource, config, versionTag);
   const nextEnvExample = replaceEnvKey(envExampleSource, config.apiKeyEnv);
   const nextEnv = apiKey ? setEnvValue(nextEnvExample, config.apiKeyEnv, apiKey) : undefined;
-  const nextReadme = readmeSource === undefined ? undefined : adaptReadme(readmeSource, provider, config);
+  const nextReadme =
+    readmeSource === undefined ? undefined : adaptReadme(readmeSource, provider, config, projectName, packageManager);
 
   assertNoProviderResidue(provider, {
     agent: nextAgent,

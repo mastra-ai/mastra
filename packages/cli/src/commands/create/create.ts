@@ -283,6 +283,8 @@ export const create = async (args: CreateOptions): Promise<void> => {
       if (isManaged) {
         const providerConfig = await adaptDefaultTemplate({
           projectPath: staging.projectPath,
+          projectName,
+          packageManager,
           provider: llmProvider!,
           apiKey: llmApiKey,
           versionTag: versionTag ?? 'latest',

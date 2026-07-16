@@ -180,6 +180,8 @@ describe('create preflight and mode orchestration', () => {
     const { adaptDefaultTemplate } = await import('./provider-adapter');
     expect(adaptDefaultTemplate).toHaveBeenCalledWith({
       projectPath: '/tmp/.my-project.mastra-create-test/my-project',
+      projectName: 'my-project',
+      packageManager: 'npm',
       provider: 'openai',
       apiKey: undefined,
       versionTag: 'latest',
