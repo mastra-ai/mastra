@@ -790,9 +790,7 @@ To fix this you have three different options:
         for (const controller of this.authAbortControllersByServer.values()) {
           controller.abort();
         }
-        await Promise.allSettled(
-          Array.from(this.authCallbackServersByServer.values()).map(server => server.close()),
-        );
+        await Promise.allSettled(Array.from(this.authCallbackServersByServer.values()).map(server => server.close()));
         await Promise.allSettled(pendingFlows);
         this.authAbortControllersByServer.clear();
         this.authCallbackServersByServer.clear();

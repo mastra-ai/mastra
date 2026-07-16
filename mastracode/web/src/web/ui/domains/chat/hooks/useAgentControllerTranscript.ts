@@ -1,4 +1,4 @@
-import type { AgentControllerEvent, AgentControllerMessage, AgentControllerOMProgress } from '@mastra/client-js';
+import type { AgentControllerEvent, AgentControllerOMProgress, MastraDBMessage } from '@mastra/client-js';
 import { useReducer, useRef } from 'react';
 
 import { createInitialTranscript, transcriptReducer } from '../services/transcript';
@@ -17,7 +17,7 @@ export function useAgentControllerTranscript({
   initialState,
 }: {
   initialThreadId?: string;
-  initialMessages?: AgentControllerMessage[];
+  initialMessages?: MastraDBMessage[];
   initialState?: SessionStateSnapshot;
 } = {}) {
   const [transcript, dispatch] = useReducer(transcriptReducer, undefined, () =>

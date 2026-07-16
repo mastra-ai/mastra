@@ -1,3 +1,5 @@
+import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
+export type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
 
 import type { ClientOptions } from '../types';
@@ -21,47 +23,6 @@ import { BaseResource } from './base';
 
 export interface AgentControllerInfo {
   id: string;
-}
-
-export interface AgentControllerMessageContent {
-  type: 'text' | 'thinking' | 'tool_call' | 'tool_result' | 'image' | 'file' | string;
-  /** Correlates a `tool_call` part with its `tool_result` part. */
-  id?: string;
-  text?: string;
-  thinking?: string;
-  name?: string;
-  args?: unknown;
-  result?: unknown;
-  isError?: boolean;
-  /** Structured notification and notification-summary fields. */
-  notificationId?: string;
-  message?: string;
-  source?: string;
-  kind?: string;
-  priority?: string;
-  status?: string;
-  attributes?: Record<string, unknown>;
-  metadata?: Record<string, unknown>;
-  pending?: number;
-  bySource?: Record<string, number>;
-  byPriority?: Record<string, number>;
-  notificationIds?: string[];
-  /** Base64 payload for `image` and `file` parts. */
-  data?: string;
-  /** MIME type for `image` parts. */
-  mimeType?: string;
-  /** MIME type for `file` parts. */
-  mediaType?: string;
-  /** Optional filename for `file` parts. */
-  filename?: string;
-}
-
-export interface AgentControllerMessage {
-  id: string;
-  role: 'user' | 'assistant' | 'system';
-  content: AgentControllerMessageContent[];
-  stopReason?: string;
-  errorMessage?: string;
 }
 
 /**
@@ -92,9 +53,9 @@ export type KnownAgentControllerEvent =
   | { type: 'agent_start' }
   | { type: 'agent_end'; reason?: 'complete' | 'aborted' | 'error' | 'suspended' }
   // Assistant message streaming.
-  | { type: 'message_start'; message: AgentControllerMessage }
-  | { type: 'message_update'; message: AgentControllerMessage }
-  | { type: 'message_end'; message: AgentControllerMessage }
+  | { type: 'message_start'; message: MastraDBMessage }
+  | { type: 'message_update'; message: MastraDBMessage }
+  | { type: 'message_end'; message: MastraDBMessage }
   // Tool lifecycle.
   | { type: 'tool_input_start'; toolCallId: string; toolName: string }
   | { type: 'tool_input_delta'; toolCallId: string; argsTextDelta: string; toolName?: string }
@@ -198,6 +159,24 @@ export interface OtherAgentControllerEvent {
  * event types fall through to {@link OtherAgentControllerEvent}.
  */
 export type AgentControllerEvent = KnownAgentControllerEvent | OtherAgentControllerEvent;
+
+type SerializedMastraDBMessage = Omit<MastraDBMessage, 'createdAt'> & { createdAt: Date | string };
+
+function hydrateMessage(message: SerializedMastraDBMessage): MastraDBMessage {
+  return {
+    ...message,
+    createdAt: message.createdAt instanceof Date ? message.createdAt : new Date(message.createdAt),
+  };
+}
+
+function hydrateEventMessage(event: AgentControllerEvent): AgentControllerEvent {
+  if (event.type !== 'message_start' && event.type !== 'message_update' && event.type !== 'message_end') return event;
+
+  return {
+    ...event,
+    message: hydrateMessage(event.message as SerializedMastraDBMessage),
+  } as AgentControllerEvent;
+}
 
 /** Response from creating or resuming an agent controller session. */
 export interface CreateAgentControllerSessionResponse {
@@ -489,7 +468,7 @@ export class AgentControllerSession extends BaseResource {
               if (!data) continue;
               let event: AgentControllerEvent;
               try {
-                event = JSON.parse(data) as AgentControllerEvent;
+                event = hydrateEventMessage(JSON.parse(data) as AgentControllerEvent);
               } catch {
                 continue;
               }
@@ -727,12 +706,12 @@ export class AgentControllerSession extends BaseResource {
   }
 
   /** List messages for a specific thread. */
-  async listMessages(threadId: string, limit?: number): Promise<AgentControllerMessage[]> {
+  async listMessages(threadId: string, limit?: number): Promise<MastraDBMessage[]> {
     const params = limit != null ? `?limit=${limit}` : '';
-    const body = await this.request<{ messages: AgentControllerMessage[] }>(
+    const body = await this.request<{ messages: SerializedMastraDBMessage[] }>(
       this.url(`${this.base()}/threads/${encodeURIComponent(threadId)}/messages${params}`),
     );
-    return body.messages;
+    return body.messages.map(hydrateMessage);
   }
 
   /**
@@ -881,10 +860,10 @@ export class AgentController extends BaseResource {
   }
 }
 
-/** Pull the plain text out of an assistant message's content parts. */
-export function agentControllerMessageText(message: AgentControllerMessage): string {
-  return message.content
-    .filter(c => c.type === 'text' && typeof c.text === 'string')
-    .map(c => c.text)
+/** Pull the plain text out of an assistant message's nested content parts. */
+export function agentControllerMessageText(message: MastraDBMessage): string {
+  return message.content.parts
+    .filter((p): p is MastraMessagePart & { text: string } => p.type === 'text' && typeof p.text === 'string')
+    .map(p => p.text)
     .join('');
 }

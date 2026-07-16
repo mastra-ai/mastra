@@ -318,8 +318,8 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   }
 
   override getFeatures() {
-    if (!deltaPollingFeatureEnabled()) return undefined;
-    return ['delta-polling'] as const;
+    if (!deltaPollingFeatureEnabled()) return ['metrics', 'logs'] as const;
+    return ['metrics', 'logs', 'delta-polling'] as const;
   }
 
   async #run<T>(op: string, fn: () => Promise<T>, details?: Record<string, unknown>): Promise<T> {

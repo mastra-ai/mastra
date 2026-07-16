@@ -82,7 +82,7 @@ Rules are prioritized by impact:
 **Type Safety:**
 
 - No `as` type assertions anywhere — production **or tests**; narrow with real type guards, query generics (`querySelector<T>`, `getByRole<T>`), typed fixture factories, or `implements` on mocks. `as const` is the only allowed form. Do not replace a cast with a domain-type predicate that only checks `typeof value === 'object'`; call that an `isRecord` helper or validate the fields used (`types-no-type-assertions`)
-- Use `undefined` and optional `?` for absence, not `null`; convert external `null` at boundaries with `?? undefined` (`types-no-null`)
+- Use `undefined` and optional `?` for absence, not `null`; convert external `null` at boundaries, and keep leaf props strict so callers own absence and fallback rendering (`types-no-null`)
 
 ### Rendering Patterns
 

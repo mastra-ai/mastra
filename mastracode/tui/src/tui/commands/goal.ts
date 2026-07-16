@@ -14,7 +14,8 @@ import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem } from '@earendil-works/pi-tui';
 import { createGoalReminderSignal } from '@mastra/code-sdk/goal-signal';
 import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
-import type { AgentControllerMessage } from '@mastra/core/agent-controller';
+import type { MastraDBMessage } from '@mastra/core/agent-controller';
+import { createSignal } from '@mastra/core/signals';
 import { GoalCyclesDialogComponent } from '../components/goal-cycles-dialog.js';
 import { ModelSelectorComponent } from '../components/model-selector.js';
 import type { ModelItem } from '../components/model-selector.js';
@@ -370,21 +371,15 @@ export function createGoalReminderMessage(
   objective: string,
   maxTurns: number,
   judgeModelId: string,
-): AgentControllerMessage {
-  return {
+): MastraDBMessage {
+  return createSignal({
     id: `goal-${goalId}`,
-    role: 'user',
-    createdAt: new Date(),
-    content: [
-      {
-        type: 'system_reminder',
-        reminderType: 'goal',
-        message: objective,
-        goalMaxTurns: maxTurns,
-        judgeModelId,
-      },
-    ],
-  } as unknown as AgentControllerMessage;
+    type: 'reactive',
+    tagName: 'system-reminder',
+    contents: objective,
+    attributes: { type: 'goal' },
+    metadata: { goalMaxTurns: maxTurns, judgeModelId },
+  } as Parameters<typeof createSignal>[0]).toDBMessage();
 }
 
 export function createGoalReminderXml(message: string): string {

@@ -1,4 +1,4 @@
-import type { AgentControllerMessage } from '@mastra/client-js';
+import type { MastraDBMessage } from '@mastra/client-js';
 import type { ReactNode } from 'react';
 import { useEffect } from 'react';
 
@@ -16,7 +16,7 @@ export function ChatTranscriptProvider({
 }: {
   children: ReactNode;
   threadId?: string;
-  initialMessages?: AgentControllerMessage[];
+  initialMessages?: MastraDBMessage[];
 }) {
   const transcriptApi = useAgentControllerTranscript({
     initialThreadId: threadId,

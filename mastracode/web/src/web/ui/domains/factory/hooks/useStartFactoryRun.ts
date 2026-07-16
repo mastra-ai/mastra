@@ -1,4 +1,4 @@
-import type { AgentControllerMessage } from '@mastra/client-js';
+import type { MastraDBMessage } from '@mastra/client-js';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 
@@ -109,14 +109,15 @@ export function useStartFactoryRun() {
       // immediately when the thread page mounts, before the server transcript
       // catches up. Appending (not replacing) preserves any prior conversation
       // when the run reuses an existing thread.
-      const message: AgentControllerMessage = {
+      const message: MastraDBMessage = {
         id: `local-${Date.now()}`,
         role: 'user',
-        content: [{ type: 'text', text: prompt }],
+        createdAt: new Date(),
+        content: { format: 2, parts: [{ type: 'text', text: prompt }] },
       };
       queryClient.setQueryData(
         queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, threadId),
-        (existing: AgentControllerMessage[] | undefined) => [...(existing ?? []), message],
+        (existing: MastraDBMessage[] | undefined) => [...(existing ?? []), message],
       );
       // The thread now exists under the new worktree's project path; refresh
       // its thread list so the sidebar shows it once the UI lands there.

@@ -47,11 +47,11 @@ const getNotificationTitle = (signal: SignalData) => {
 const getToneClass = (priority: string | undefined) => {
   switch (priority) {
     case 'urgent':
-      return 'border-red-500/40 bg-red-500/10 text-red-200';
+      return 'border-notice-destructive/20 bg-notice-destructive/20 text-notice-destructive-fg';
     case 'high':
-      return 'border-yellow-500/40 bg-yellow-500/10 text-yellow-100';
+      return 'border-notice-warning/20 bg-notice-warning/20 text-notice-warning-fg';
     case 'medium':
-      return 'border-blue-500/40 bg-blue-500/10 text-blue-100';
+      return 'border-notice-info/20 bg-notice-info/20 text-notice-info-fg';
     default:
       return 'border-border1 bg-surface2 text-neutral5';
   }
