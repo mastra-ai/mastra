@@ -62,6 +62,13 @@ export interface TurbopufferVectorOptions {
     dimensions: number;
     schema: Schema;
   };
+  /**
+   * The consistency level for the vector query.
+   * "strong" returns the most up-to-date results.
+   * "eventual" may return slightly stale results but has lower latency.
+   * Default is "strong".
+   */
+  consistency?: 'strong' | 'eventual';
 }
 
 export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
@@ -258,7 +265,7 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
         filters: translatedFilter,
         vector_encoding: includeVector ? 'float' : undefined,
         include_attributes: true,
-        consistency: { level: 'strong' }, // todo: make this configurable somehow?
+        consistency: { level: this.opts.consistency ?? 'strong' },
       });
       return (results.rows ?? []).map(item => {
         const { id, vector, $dist, ...metadata } = item;
