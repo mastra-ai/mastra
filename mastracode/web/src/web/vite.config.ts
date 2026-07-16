@@ -76,13 +76,14 @@ export default defineConfig(({ mode }) => ({
       },
       // Web surface routes (fs/config/github) live under `/web/*` on the API
       // server after the `/api/web` → `/web` path migration. Proxy them so the
-      // dev UI (:5173) can reach them on :4111.
+      // configured dev UI server can reach the configured API server.
       '/web': {
         target: apiTarget,
         changeOrigin: true,
       },
       // Optional WorkOS auth routes live on the API server too; proxy them so
-      // the dev UI (:5173) can reach login/callback/logout/me on :4111.
+      // the configured dev UI server can reach login/callback/logout/me on the
+      // configured API server.
       //
       // Match only the `/auth/<route>` paths — NOT a bare `/auth` prefix.
       // A plain `'/auth'` key prefix-matches Vite module requests like
