@@ -11,6 +11,7 @@
  */
 
 import { getFactoryStore } from '../runtime-config';
+import { WorkItemRelationError } from '../storage/domains/work-items/base';
 import type {
   CreateWorkItemInput,
   UpdateWorkItemInput,
@@ -21,6 +22,7 @@ import type {
   WorkItemSource,
 } from '../storage/domains/work-items/base';
 
+export { WorkItemRelationError };
 export type {
   CreateWorkItemInput,
   UpdateWorkItemInput,
@@ -81,6 +83,14 @@ function sanitizeSourceKey(value: unknown): string | null | undefined {
   return value;
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function sanitizeParentWorkItemId(value: unknown): string | null | undefined {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== 'string' || !UUID_RE.test(value)) return undefined;
+  return value;
+}
+
 /** Role-keyed session refs with bounded string fields, or `undefined` when invalid. */
 function sanitizeSessions(value: unknown): Record<string, WorkItemSessionInput> | undefined {
   if (value === undefined) return {};
@@ -119,14 +129,25 @@ export function parseCreateWorkItem(body: unknown): CreateWorkItemInput | null {
   if (typeof source !== 'string' || !WORK_ITEM_SOURCES.includes(source as WorkItemSource)) return null;
 
   const sourceKey = sanitizeSourceKey(body.sourceKey);
+  const hasParentWorkItemId = 'parentWorkItemId' in body;
+  const parentWorkItemId = hasParentWorkItemId ? sanitizeParentWorkItemId(body.parentWorkItemId) : undefined;
   const title = sanitizeTitle(body.title);
   const url = sanitizeUrl(body.url);
   const stages = sanitizeStages(body.stages);
   const sessions = sanitizeSessions(body.sessions);
   const metadata = sanitizeMetadata(body.metadata);
-  if (sourceKey === undefined || !title || url === undefined || !stages || !sessions || !metadata) return null;
+  if (
+    sourceKey === undefined ||
+    (hasParentWorkItemId && parentWorkItemId === undefined) ||
+    !title ||
+    url === undefined ||
+    !stages ||
+    !sessions ||
+    !metadata
+  )
+    return null;
 
-  return { source: source as WorkItemSource, sourceKey, title, url, stages, sessions, metadata };
+  return { source: source as WorkItemSource, sourceKey, parentWorkItemId, title, url, stages, sessions, metadata };
 }
 
 /** Validate an untrusted PATCH body into an {@link UpdateWorkItemInput}, or `null`. */
@@ -134,6 +155,11 @@ export function parseUpdateWorkItem(body: unknown): UpdateWorkItemInput | null {
   if (!isPlainObject(body)) return null;
   const patch: UpdateWorkItemInput = {};
 
+  if ('parentWorkItemId' in body) {
+    const parentWorkItemId = sanitizeParentWorkItemId(body.parentWorkItemId);
+    if (parentWorkItemId === undefined) return null;
+    patch.parentWorkItemId = parentWorkItemId;
+  }
   if ('title' in body) {
     const title = sanitizeTitle(body.title);
     if (!title) return null;

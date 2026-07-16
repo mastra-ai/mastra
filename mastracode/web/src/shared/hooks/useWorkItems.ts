@@ -56,10 +56,18 @@ export function useUpdateWorkItemMutation(githubProjectId: string | undefined) {
     onMutate: async ({ id, patch }) => {
       await queryClient.cancelQueries({ queryKey: listKey });
       const previous = queryClient.getQueryData<WorkItem[]>(listKey);
-      if (previous && patch.stages) {
+      if (previous && (patch.stages || patch.parentWorkItemId !== undefined)) {
         queryClient.setQueryData<WorkItem[]>(
           listKey,
-          previous.map(item => (item.id === id ? { ...item, stages: patch.stages! } : item)),
+          previous.map(item =>
+            item.id === id
+              ? {
+                  ...item,
+                  ...(patch.stages ? { stages: patch.stages } : {}),
+                  ...(patch.parentWorkItemId !== undefined ? { parentWorkItemId: patch.parentWorkItemId } : {}),
+                }
+              : item,
+          ),
         );
       }
       return { previous };
