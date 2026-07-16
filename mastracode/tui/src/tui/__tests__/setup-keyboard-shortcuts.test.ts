@@ -240,6 +240,15 @@ describe('setupKeyboardShortcuts', () => {
     expect(githubCommand?.getArgumentCompletions?.('un').map(command => command.value)).toEqual(['unsubscribe']);
     expect(commandNames.indexOf('thread')).toBeLessThan(commandNames.indexOf('threads'));
     expect(commandNames).toContain('skill/');
+    expect(commandNames).toContain('memory');
+    expect(commandNames).toContain('om');
+    expect(commandNames.indexOf('memory')).toBeLessThan(commandNames.indexOf('om'));
+    expect(autocompleteProviders[0]?.commands.find(command => command.name === 'memory')?.description).toBe(
+      'Configure Observational Memory',
+    );
+    expect(autocompleteProviders[0]?.commands.find(command => command.name === 'om')?.description).toBe(
+      'Alias for /memory',
+    );
     expect(commandNames).not.toContain('memory-gateway');
     expect(commandNames.indexOf('/deploy')).toBeGreaterThan(commandNames.indexOf('help'));
     expect(commandNames).toContain('skill/lint-fix');

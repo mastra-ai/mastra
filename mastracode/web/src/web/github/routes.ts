@@ -11,6 +11,7 @@
  * so the SPA can cleanly hide all GitHub UI.
  */
 
+import type { MountedMastraCode } from '@mastra/code-sdk';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import { and, eq } from 'drizzle-orm';
@@ -36,17 +37,23 @@ import {
   buildInstallUrl,
   buildOAuthIdentifyUrl,
   exchangeOAuthCode,
+  addIssueLabels,
   getInstallationRepo,
   listInstallationRepos,
+  listRepoOpenIssues,
+  listRepoOpenPullRequests,
   listUserInstallations,
   mintInstallationToken,
 } from './client';
 import { getGithubFeatureDiagnostics, isGithubFeatureEnabled, signState, verifyState } from './config';
 import { getAppDb } from './db';
 import { withProjectLock } from './project-lock';
+import { handleGithubWebhook } from './webhook';
+import type { GithubIssueTriageRunInput, GithubIssueTriageRunResult } from './webhook';
 import {
   commitAll,
   computeSandboxWorkdir,
+  computeWorktreePath,
   createPullRequest,
   ensureProjectSandbox,
   ensureWorktree,
@@ -57,6 +64,8 @@ import {
   MaterializeError,
   pushBranch,
   reattachProjectSandbox,
+  removeWorktree,
+  runWorktreeSetup,
   SandboxBudgetError,
   teardownProjectSandbox,
   WorktreeError,
@@ -64,6 +73,7 @@ import {
 import type { GitIdentity, MaterializationSandbox, PrepareProgress, ProgressFn } from './sandbox';
 import { githubInstallations, githubProjects, githubProjectSandboxes, githubWorktrees } from './schema';
 import type { GithubProjectRow, GithubProjectSandboxRow } from './schema';
+import { listPullRequestSubscriptionsForThread, subscribeToPullRequest } from './subscriptions';
 
 export interface MountGithubRoutesOptions {
   /**
@@ -73,11 +83,49 @@ export interface MountGithubRoutesOptions {
   baseUrl?: string;
   /** Explicit OAuth callback URI; defaults to `<baseUrl>/auth/github/callback`. */
   redirectUri?: string;
+  /** Controller used to route verified webhook notifications to exact subscribed sessions. */
+  controller?: MountedMastraCode['controller'];
+  /** Run seam used by GitHub webhooks and manual Intake triage. */
+  runIssueTriage?: (input: GithubIssueTriageRunInput) => Promise<GithubIssueTriageRunResult>;
+}
+
+function pullRequestNumberFromUrl(value: string, expectedRepo: string): number | undefined {
+  try {
+    const url = new URL(value);
+    const match = url.pathname.match(/^\/([^/]+\/[^/]+)\/pull\/(\d+)\/?$/);
+    if (
+      url.protocol !== 'https:' ||
+      url.hostname !== 'github.com' ||
+      match?.[1]?.toLowerCase() !== expectedRepo.toLowerCase()
+    ) {
+      return undefined;
+    }
+    const number = Number(match[2]);
+    return Number.isInteger(number) && number > 0 ? number : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Validate an `owner/name` repo full name. */
 function isValidRepoFullName(value: unknown): value is string {
   return typeof value === 'string' && value.length <= 256 && /^[\w.-]+\/[\w.-]+$/.test(value);
+}
+
+function isCanonicalGithubIssueUrl(value: string, repoFullName: string, issueNumber: number): boolean {
+  try {
+    const url = new URL(value);
+    const [owner, repo] = repoFullName.split('/');
+    return (
+      url.protocol === 'https:' &&
+      url.hostname === 'github.com' &&
+      url.pathname === `/${owner}/${repo}/issues/${issueNumber}` &&
+      url.search === '' &&
+      url.hash === ''
+    );
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -96,8 +144,17 @@ function isValidGitRef(value: unknown): value is string {
  * organization. Returns the `(orgId, userId)` tenant (with `orgId` narrowed to a
  * non-null string) or a ready-to-return error response: 401 when unauthenticated,
  * 403 when the user has no organization (personal account).
+ *
+ * Resolves the WorkOS session from the request cookie itself (via
+ * `ensureWebAuthUser`) instead of relying on the auth gate's context stash: on
+ * platform deploys custom `apiRoutes` run on an isolated sub-app context where
+ * the gate's `c.set(...)` is invisible. When the gate stash IS visible (local
+ * Hono server), `ensureWebAuthUser` returns the cached user and this is a no-op.
  */
-function resolveOrgTenant(c: RouteContext): { tenant: WebAuthTenant & { orgId: string } } | { response: Response } {
+async function resolveOrgTenant(
+  c: RouteContext,
+): Promise<{ tenant: WebAuthTenant & { orgId: string } } | { response: Response }> {
+  await ensureWebAuthUser(c);
   const tenant = webAuthTenant(c);
   if (!tenant) return { response: c.json({ error: 'unauthorized' }, 401) };
   if (!tenant.orgId) {
@@ -112,6 +169,36 @@ function resolveOrgTenant(c: RouteContext): { tenant: WebAuthTenant & { orgId: s
     };
   }
   return { tenant: { orgId: tenant.orgId, userId: tenant.userId } };
+}
+
+/**
+ * Parse a 1-based `page` query param. Missing means page 1; anything that is
+ * not a small positive integer is rejected (`null`).
+ */
+function parseListPage(raw: string | undefined): number | null {
+  if (raw === undefined) return 1;
+  if (!/^\d{1,5}$/.test(raw)) return null;
+  const page = Number(raw);
+  return page >= 1 ? page : null;
+}
+
+const VALID_ISSUE_LABEL_FILTERS = new Set(['auto-triaged', 'needs-approval']);
+
+function parseIssueLabelFilter(raw: string | undefined): string | undefined | null {
+  if (raw === undefined || raw === '') return undefined;
+  if (VALID_ISSUE_LABEL_FILTERS.has(raw)) return raw;
+  return null;
+}
+
+function parseIssueNumberParam(raw: string | undefined): number | null {
+  if (!raw || !/^\d{1,10}$/.test(raw)) return null;
+  const issueNumber = Number(raw);
+  return Number.isSafeInteger(issueNumber) && issueNumber > 0 ? issueNumber : null;
+}
+
+function parseStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === 'string' && item.length > 0);
 }
 
 /**
@@ -149,6 +236,9 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
             diagnostics: getGithubFeatureDiagnostics(),
           });
         }
+        // Resolve the session from the request cookie: on platform deploys custom
+        // apiRoutes run on an isolated context where the gate's stash is invisible.
+        await ensureWebAuthUser(loose(c));
         const tenant = webAuthTenant(loose(c));
         if (!tenant) return c.json({ error: 'unauthorized', reason: 'auth_required' }, 401);
 
@@ -192,21 +282,111 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
     return routes;
   }
 
+  const { runIssueTriage } = options;
+  const runBoardIssueTriage = runIssueTriage
+    ? async (input: GithubIssueTriageRunInput): Promise<GithubIssueTriageRunResult> => {
+        const branch = `factory/issue-${input.issueNumber}`;
+        const [project] = await getAppDb()
+          .select()
+          .from(githubProjects)
+          .where(
+            and(
+              eq(githubProjects.installationId, input.installationId),
+              eq(githubProjects.repoFullName, input.repository),
+            ),
+          );
+        if (!project) throw new Error(`GitHub project not found for ${input.repository}`);
+        const projectPath = input.projectPath ?? computeWorktreePath(project.sandboxWorkdir, branch);
+        await addIssueLabels(input.installationId, input.repository, input.issueNumber, ['auto-triaged']);
+        return runIssueTriage({
+          ...input,
+          resourceId: project.id,
+          projectPath,
+          branch,
+          labels: input.labels.includes('auto-triaged') ? input.labels : [...input.labels, 'auto-triaged'],
+        });
+      }
+    : undefined;
+
+  routes.push(
+    registerApiRoute('/web/github/subscriptions', {
+      method: 'GET',
+      handler: async c => {
+        await ensureWebAuthUser(loose(c));
+        const tenant = webAuthTenant(loose(c));
+        if (!tenant?.orgId) return c.json({ error: 'unauthorized' }, 401);
+
+        const resourceId = c.req.query('resourceId');
+        const threadId = c.req.query('threadId');
+        const sessionScope = c.req.query('scope');
+        if (!resourceId || !threadId) return c.json({ error: 'resourceId and threadId are required' }, 400);
+
+        const subscriptions = await listPullRequestSubscriptionsForThread({
+          orgId: tenant.orgId,
+          resourceId,
+          threadId,
+          sessionScope,
+        });
+        return c.json({
+          subscriptions: subscriptions.map(subscription => ({
+            id: subscription.id,
+            repoFullName: subscription.repoFullName,
+            pullRequestNumber: subscription.pullRequestNumber,
+            status: subscription.status,
+            url: `https://github.com/${subscription.repoFullName}/pull/${subscription.pullRequestNumber}`,
+          })),
+        });
+      },
+    }),
+    registerApiRoute('/web/github/webhook', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const result = await handleGithubWebhook(loose(c), {
+          runIssueTriage: runBoardIssueTriage,
+          ...(options.controller
+            ? {
+                controller: options.controller,
+                onTargetError: (subscription, error) => {
+                  console.warn(
+                    `[GitHub Webhook] Delivery failed for subscription ${subscription.id} (${subscription.resourceId}/${subscription.threadId}).`,
+                    error,
+                  );
+                },
+              }
+            : {}),
+        });
+        return c.json(result.body, result.status);
+      },
+    }),
+  );
+
   const redirectUri = options.redirectUri ?? `${(options.baseUrl ?? '').replace(/\/$/, '')}/auth/github/callback`;
 
-  // ── Connect: redirect to the GitHub App install URL ─────────────────────
+  // ── Connect: bounce through the OAuth identify flow ─────────────────────
+  // Identify-first (rather than install-first) so an app that is *already*
+  // installed on the org re-syncs into our DB: GitHub's install page dead-ends
+  // on the installation settings screen for existing installs and never
+  // redirects back to us. The callback persists whatever installations the
+  // verified user token can see, and only redirects to the install URL when
+  // there are none.
+  //
+  // `?manage=1` skips the identify bounce and sends the user straight to
+  // GitHub's installation page — used by "Manage GitHub connection" to
+  // add/remove accounts and repo access. For an already-authorized user the
+  // identify flow completes instantly and invisibly, so without this the
+  // manage button would appear to do nothing. GitHub's post-install "Save"
+  // redirect lands back on the callback, which re-syncs installations.
   routes.push(
     registerApiRoute('/auth/github/connect', {
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
-        // Cookie-based browser navigation: the auth gate skips `/auth/*`, so resolve
-        // the session from the request cookie before scoping the tenant.
-        await ensureWebAuthUser(loose(c));
-        const resolved = resolveOrgTenant(loose(c));
+        const resolved = await resolveOrgTenant(loose(c));
         if ('response' in resolved) return resolved.response;
         const state = signState(resolved.tenant.orgId, resolved.tenant.userId);
-        return c.redirect(buildInstallUrl(state));
+        if (c.req.query('manage')) return c.redirect(buildInstallUrl(state));
+        return c.redirect(buildOAuthIdentifyUrl(state, redirectUri));
       },
     }),
   );
@@ -217,14 +397,18 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
-        // Cookie-based browser navigation: the auth gate skips `/auth/*`, so resolve
-        // the session from the request cookie before scoping the tenant.
-        await ensureWebAuthUser(loose(c));
-        const resolved = resolveOrgTenant(loose(c));
+        const resolved = await resolveOrgTenant(loose(c));
         if ('response' in resolved) return resolved.response;
         const { orgId, userId } = resolved.tenant;
 
         const state = c.req.query('state');
+        if (!state) {
+          // GitHub's "Save"/update redirect from the installation settings page
+          // arrives with `installation_id` + `setup_action` but no state. We
+          // never trust the raw installation_id; start a fresh identify bounce
+          // bound to the current session so the update re-syncs installations.
+          return c.redirect(buildOAuthIdentifyUrl(signState(orgId, userId), redirectUri));
+        }
         const stateTenant = verifyState(state);
         if (!stateTenant || stateTenant.userId !== userId || stateTenant.orgId !== orgId) {
           // CSRF / cross-user/org linking protection: the signed state must belong
@@ -255,6 +439,13 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         try {
           const userToken = await exchangeOAuthCode(code, redirectUri);
           const installations = await listUserInstallations(userToken);
+          if (installations.length === 0) {
+            // Verified user has no installations yet — send them to the actual
+            // install page. After installing, GitHub redirects back here with
+            // the same state (and no code), which bounces through identify
+            // again and lands in the persist path below.
+            return c.redirect(buildInstallUrl(signState(orgId, userId)));
+          }
           const db = getAppDb();
           for (const inst of installations) {
             // The installation is org-owned; `userId` records who connected it.
@@ -290,7 +481,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
-        const resolved = resolveOrgTenant(loose(c));
+        const resolved = await resolveOrgTenant(loose(c));
         if ('response' in resolved) return resolved.response;
 
         const installs = await getAppDb()
@@ -301,7 +492,29 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         const query = (c.req.query('q') ?? '').toLowerCase();
         const repos = [];
         for (const inst of installs) {
-          const list = await listInstallationRepos(inst.installationId);
+          let list;
+          try {
+            list = await listInstallationRepos(inst.installationId);
+          } catch (err) {
+            // GitHub 404s when the installation no longer exists for this app
+            // (app uninstalled/reinstalled, or the row was recorded under
+            // different app credentials). Prune the stale row so `/status`
+            // reflects reality and the UI prompts a reconnect, then keep
+            // listing the remaining installations.
+            if ((err as { status?: number }).status !== 404) throw err;
+            console.error(
+              `[MastraCode Web] pruning stale GitHub installation ${inst.installationId} (404 from GitHub)`,
+            );
+            await getAppDb()
+              .delete(githubInstallations)
+              .where(
+                and(
+                  eq(githubInstallations.orgId, resolved.tenant.orgId),
+                  eq(githubInstallations.installationId, inst.installationId),
+                ),
+              );
+            continue;
+          }
           for (const repo of list) {
             if (query && !repo.fullName.toLowerCase().includes(query)) continue;
             repos.push(repo);
@@ -318,7 +531,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
-        const resolved = resolveOrgTenant(loose(c));
+        const resolved = await resolveOrgTenant(loose(c));
         if ('response' in resolved) return resolved.response;
         const { orgId, userId } = resolved.tenant;
 
@@ -385,7 +598,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
-        const resolved = resolveOrgTenant(loose(c));
+        const resolved = await resolveOrgTenant(loose(c));
         if ('response' in resolved) return resolved.response;
         const { orgId, userId } = resolved.tenant;
 
@@ -433,10 +646,202 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
     }),
   );
 
+  // ── List a project's open GitHub issues ──────────────────────────────────
+  routes.push(
+    registerApiRoute('/web/github/projects/:id/issues', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const loaded = await loadOrgProject(loose(c));
+        if ('response' in loaded) return loaded.response;
+        const page = parseListPage(c.req.query('page'));
+        if (page === null) return c.json({ error: 'invalid_page' }, 400);
+        const label = parseIssueLabelFilter(c.req.query('label'));
+        if (label === null) return c.json({ error: 'invalid_label' }, 400);
+        try {
+          const { issues, nextPage } = await listRepoOpenIssues(
+            loaded.project.installationId,
+            loaded.project.repoFullName,
+            page,
+            { label },
+          );
+          return c.json({ issues, nextPage });
+        } catch (err) {
+          return c.json(
+            { error: 'github_fetch_failed', message: err instanceof Error ? err.message : String(err) },
+            502,
+          );
+        }
+      },
+    }),
+  );
+
+  // ── Manually run issue triage using the same run seam as webhooks ──
+  routes.push(
+    registerApiRoute('/web/github/projects/:id/issues/:number/triage', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const owned = await loadOwnedProject(loose(c));
+        if ('response' in owned) return owned.response;
+        const { project, sandboxRow } = owned;
+        const issueNumber = parseIssueNumberParam(c.req.param('number'));
+        if (issueNumber === null) return c.json({ error: 'invalid_issue_number' }, 400);
+
+        let body: { title?: unknown; url?: unknown; labels?: unknown };
+        try {
+          body = await c.req.json();
+        } catch {
+          return c.json({ error: 'Invalid JSON body' }, 400);
+        }
+        if (typeof body.title !== 'string' || body.title.trim().length === 0 || body.title.length > 5000) {
+          return c.json({ error: 'invalid_title' }, 400);
+        }
+        if (
+          typeof body.url !== 'string' ||
+          body.url.trim().length === 0 ||
+          body.url.length > 2048 ||
+          !isCanonicalGithubIssueUrl(body.url, project.repoFullName, issueNumber)
+        ) {
+          return c.json({ error: 'invalid_url' }, 400);
+        }
+
+        if (!runIssueTriage) return c.json({ error: 'triage_unavailable' }, 503);
+        const branch = `factory/issue-${issueNumber}`;
+        const projectPath = computeWorktreePath(sandboxRow.sandboxWorkdir, branch);
+        await addIssueLabels(project.installationId, project.repoFullName, issueNumber, ['auto-triaged']);
+        const result = await runIssueTriage({
+          repository: project.repoFullName,
+          issueNumber,
+          issueTitle: body.title,
+          issueUrl: body.url,
+          labels: parseStringList(body.labels),
+          installationId: project.installationId,
+          resourceId: project.id,
+          projectPath,
+          branch,
+        });
+        return c.json(
+          {
+            ok: true,
+            threadId: result.threadId,
+            projectPath: result.projectPath ?? projectPath,
+            branch: result.branch ?? branch,
+          },
+          202,
+        );
+      },
+    }),
+  );
+
+  // ── List a project's open (non-draft) pull requests ─────────────────────
+  routes.push(
+    registerApiRoute('/web/github/projects/:id/prs', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const loaded = await loadOrgProject(loose(c));
+        if ('response' in loaded) return loaded.response;
+        const page = parseListPage(c.req.query('page'));
+        if (page === null) return c.json({ error: 'invalid_page' }, 400);
+        try {
+          const { pullRequests, nextPage } = await listRepoOpenPullRequests(
+            loaded.project.installationId,
+            loaded.project.repoFullName,
+            page,
+          );
+          return c.json({ pullRequests, nextPage });
+        } catch (err) {
+          return c.json(
+            { error: 'github_fetch_failed', message: err instanceof Error ? err.message : String(err) },
+            502,
+          );
+        }
+      },
+    }),
+  );
+
+  // ── Read per-project settings ────────────────────────────────────────────
+  routes.push(
+    registerApiRoute('/web/github/projects/:id/settings', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const loaded = await loadOrgProject(loose(c));
+        if ('response' in loaded) return loaded.response;
+        return c.json({ setupCommand: loaded.project.setupCommand });
+      },
+    }),
+  );
+
+  // ── Update per-project settings ──────────────────────────────────────────
+  routes.push(
+    registerApiRoute('/web/github/projects/:id/settings', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const loaded = await loadOrgProject(loose(c));
+        if ('response' in loaded) return loaded.response;
+
+        let body: { setupCommand?: unknown };
+        try {
+          body = await c.req.json();
+        } catch {
+          return c.json({ error: 'Invalid JSON body' }, 400);
+        }
+        if (body.setupCommand !== null && typeof body.setupCommand !== 'string') {
+          return c.json({ error: 'Invalid setupCommand' }, 400);
+        }
+        if (typeof body.setupCommand === 'string' && body.setupCommand.length > 2000) {
+          return c.json({ error: 'setupCommand too long (max 2000 characters)' }, 400);
+        }
+        // Reject control characters (except newline/tab). The command is a
+        // shell script by design, but escape sequences and NULs have no
+        // legitimate use and can spoof logs or confuse the sandbox shell.
+        if (typeof body.setupCommand === 'string' && /[\0-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(body.setupCommand)) {
+          return c.json({ error: 'setupCommand contains control characters' }, 400);
+        }
+        // An empty/whitespace command means "no setup step".
+        const setupCommand =
+          typeof body.setupCommand === 'string' && body.setupCommand.trim().length > 0
+            ? body.setupCommand.trim()
+            : null;
+
+        await getAppDb().update(githubProjects).set({ setupCommand }).where(eq(githubProjects.id, loaded.project.id));
+        return c.json({ setupCommand });
+      },
+    }),
+  );
+
   // ── Worktree / branch / commit / push / PR ──────────────────────────────
   routes.push(...buildProjectGitRoutes());
 
   return routes;
+}
+
+/**
+ * Load the org-owned project for a read-only GitHub API route. Unlike
+ * `loadOwnedProject`, this never touches sandbox state — the issues/PR list
+ * routes only need the repo + installation, so they work before a sandbox is
+ * ever provisioned.
+ */
+async function loadOrgProject(c: RouteContext): Promise<{ project: GithubProjectRow } | { response: Response }> {
+  const resolved = await resolveOrgTenant(c);
+  if ('response' in resolved) return { response: resolved.response };
+  const { orgId } = resolved.tenant;
+
+  const projectId = c.req.param('id');
+  if (!projectId) {
+    return { response: c.json({ error: 'Project not found' }, 404) };
+  }
+  const [project] = await getAppDb()
+    .select()
+    .from(githubProjects)
+    .where(and(eq(githubProjects.id, projectId), eq(githubProjects.orgId, orgId)));
+  if (!project) {
+    return { response: c.json({ error: 'Project not found' }, 404) };
+  }
+  return { project };
 }
 
 /** Derive a commit/author identity from the authenticated WorkOS user. */
@@ -573,7 +978,7 @@ async function loadOwnedProject(
   | { orgId: string; userId: string; project: GithubProjectRow; sandboxRow: GithubProjectSandboxRow }
   | { response: Response }
 > {
-  const resolved = resolveOrgTenant(c);
+  const resolved = await resolveOrgTenant(c);
   if ('response' in resolved) return { response: resolved.response };
   const { orgId, userId } = resolved.tenant;
 
@@ -627,7 +1032,21 @@ function buildProjectGitRoutes(): ApiRoute[] {
         try {
           return await withProjectLock(`${project.id}:${userId}`, async () => {
             const sandbox = await resolveProjectSandbox(sandboxRow);
-            const result = await ensureWorktree(sandbox, sandboxRow.sandboxWorkdir, { branch, baseBranch });
+            const token = await mintInstallationToken(project.installationId);
+            const result = await ensureWorktree(sandbox, sandboxRow.sandboxWorkdir, {
+              branch,
+              baseBranch,
+              token,
+              repoFullName: project.repoFullName,
+            });
+
+            // Run the project's setup command in the fresh checkout before the
+            // route resolves — callers only start agent runs after this request
+            // succeeds, so the tree is guaranteed set up before any agent
+            // execution. Reused worktrees were already set up on creation.
+            if (!result.reused && project.setupCommand) {
+              await runWorktreeSetup(sandbox, result.worktreePath, project.setupCommand);
+            }
 
             await getAppDb()
               .insert(githubWorktrees)
@@ -650,6 +1069,55 @@ function buildProjectGitRoutes(): ApiRoute[] {
               baseBranch: result.baseBranch,
               resourceId: project.id,
             });
+          });
+        } catch (err) {
+          return gitErrorResponse(loose(c), err);
+        }
+      },
+    }),
+
+    // ── Delete a worktree + its local feature branch ────────────────────────
+    registerApiRoute('/web/github/projects/:id/worktree/delete', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const owned = await loadOwnedProject(loose(c));
+        if ('response' in owned) return owned.response;
+        const { userId, project, sandboxRow } = owned;
+
+        let body: { branch?: unknown };
+        try {
+          body = await c.req.json();
+        } catch {
+          return c.json({ error: 'Invalid JSON body' }, 400);
+        }
+        if (!isValidGitRefSandbox(body.branch)) {
+          return c.json({ error: 'Invalid branch' }, 400);
+        }
+        const branch = body.branch;
+
+        // Only server-created worktrees (persisted rows owned by this user)
+        // can be deleted; the repo root checkout is never a worktree row.
+        const rowFilter = and(
+          eq(githubWorktrees.githubProjectId, project.id),
+          eq(githubWorktrees.userId, userId),
+          eq(githubWorktrees.branch, branch),
+        );
+        const [worktreeRow] = await getAppDb().select().from(githubWorktrees).where(rowFilter);
+        if (!worktreeRow) return c.json({ error: 'Unknown worktree' }, 404);
+        if (worktreeRow.worktreePath === sandboxRow.sandboxWorkdir) {
+          return c.json({ error: 'Cannot delete the repo root workspace' }, 400);
+        }
+
+        try {
+          return await withProjectLock(`${project.id}:${userId}`, async () => {
+            const sandbox = await resolveProjectSandbox(sandboxRow);
+            await removeWorktree(sandbox, sandboxRow.sandboxWorkdir, {
+              branch,
+              worktreePath: worktreeRow.worktreePath,
+            });
+            await getAppDb().delete(githubWorktrees).where(rowFilter);
+            return c.json({ removed: true, branch, worktreePath: worktreeRow.worktreePath });
           });
         } catch (err) {
           return gitErrorResponse(loose(c), err);
@@ -743,7 +1211,15 @@ function buildProjectGitRoutes(): ApiRoute[] {
         if ('response' in owned) return owned.response;
         const { userId, project, sandboxRow } = owned;
 
-        let body: { branch?: unknown; base?: unknown; title?: unknown; body?: unknown; worktreePath?: unknown };
+        let body: {
+          branch?: unknown;
+          base?: unknown;
+          title?: unknown;
+          body?: unknown;
+          worktreePath?: unknown;
+          sessionId?: unknown;
+          threadId?: unknown;
+        };
         try {
           body = await c.req.json();
         } catch {
@@ -775,6 +1251,35 @@ function buildProjectGitRoutes(): ApiRoute[] {
             const sandbox = await resolveProjectSandbox(sandboxRow);
             const token = await mintInstallationToken(project.installationId);
             const result = await createPullRequest(sandbox, workdir, { token, base, head, title, body: prBody });
+            if (
+              typeof body.sessionId === 'string' &&
+              body.sessionId &&
+              typeof body.threadId === 'string' &&
+              body.threadId
+            ) {
+              const pullRequestNumber = pullRequestNumberFromUrl(result.url, project.repoFullName);
+              if (pullRequestNumber) {
+                await subscribeToPullRequest({
+                  orgId: project.orgId,
+                  installationId: project.installationId,
+                  githubProjectId: project.id,
+                  repoId: project.repoId,
+                  pullRequestNumber,
+                  sessionId: body.sessionId,
+                  ownerId: userId,
+                  resourceId: project.id,
+                  threadId: body.threadId,
+                  sessionScope: workdir,
+                  source: 'factory-pr-create',
+                  subscribedByUserId: userId,
+                }).catch(error => {
+                  console.warn(
+                    `[GitHub] Pull request ${result.url} was created but automatic subscription failed.`,
+                    error,
+                  );
+                });
+              }
+            }
             return c.json({ url: result.url });
           });
         } catch (err) {

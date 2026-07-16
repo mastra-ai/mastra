@@ -753,6 +753,7 @@ export type AgentControllerEvent =
       suspendPayload: unknown;
       resumeSchema?: string;
     }
+  | { type: 'tool_suspension_cancelled'; toolCallId: string; toolName: string; reason: string }
   | { type: 'tool_update'; toolCallId: string; partialResult: unknown }
   | {
       type: 'tool_end';
@@ -1090,6 +1091,9 @@ export interface AgentControllerRequestContext<TState = unknown> {
 
   /** Current resource ID */
   resourceId: string;
+
+  /** Optional isolation scope used to identify this session within its resource. */
+  scope?: string;
 
   /**
    * Snapshot of the relevant session-owned values for this request.

@@ -1,0 +1,36 @@
+---
+title: "Storage | File-based Agents"
+description: Set the default Mastra store by file convention with storage.ts.
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+---
+
+# Storage
+
+Mastra sets the project's default [storage](/docs/storage/overview) from a `storage.ts` file directly under `src/mastra/`. The file default-exports a store, which replaces the built-in in-memory store used for memory, workflows, observability, and other storage domains.
+
+Use this page for the file-based convention. For backend choice, storage domains, retention, and provider details, see [storage overview](/docs/storage/overview).
+
+## Quickstart
+
+Use [`LibSQLStore`](/reference/storage/libsql) for a local file-backed store:
+
+```typescript title="src/mastra/storage.ts"
+import { LibSQLStore } from '@mastra/libsql'
+
+export default new LibSQLStore({
+  id: 'mastra-storage',
+  url: 'file:./mastra.db',
+})
+```
+
+Mastra registers the store before file-based agents and workflows, so storage-dependent primitives bind to this store instead of the default in-memory store.
+
+## Production backends
+
+`storage.ts` can export any Mastra storage adapter, such as LibSQL, PostgreSQL, or MongoDB. For setup patterns, provider support, and schema details, see [storage overview](/docs/storage/overview), [observability storage](/docs/observability/storage), and the [storage reference](/reference/storage/overview).
+
+## Precedence with code
+
+Code-registered storage wins over `storage.ts`. Use `storage.ts` when one project-wide store is enough; use code registration when setup depends on runtime wiring in `src/mastra/index.ts`.

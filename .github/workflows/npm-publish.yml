@@ -50,7 +50,7 @@ jobs:
       id-token: write
     steps:
       - name: Checkout repo
-        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -61,7 +61,7 @@ jobs:
           run_install: false
 
       - name: Setup Node.js 24.x
-        uses: actions/setup-node@7c2c68d20d402ed6a201ada70a81341941093140
+        uses: actions/setup-node@04be95cf3511ea51ebf9f224ddfb99cc7ab87cd4
         with:
           node-version: 24.18.0
           registry-url: 'https://registry.npmjs.org'
@@ -163,7 +163,7 @@ jobs:
       id-token: write
     steps:
       - name: Initial checkout
-        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           fetch-depth: 1
           persist-credentials: false
@@ -179,7 +179,7 @@ jobs:
           permission-issues: write
 
       - name: Re-checkout with app token
-        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           token: ${{ steps.app-auth.outputs.token }}
           fetch-depth: 0
@@ -201,7 +201,7 @@ jobs:
           run_install: false
 
       - name: Setup Node.js 24.x
-        uses: actions/setup-node@7c2c68d20d402ed6a201ada70a81341941093140
+        uses: actions/setup-node@04be95cf3511ea51ebf9f224ddfb99cc7ab87cd4
         with:
           node-version: 24.18.0
           registry-url: 'https://registry.npmjs.org'
@@ -320,7 +320,7 @@ jobs:
       contents: read
     steps:
       - name: Initial checkout
-        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           fetch-depth: 1
           persist-credentials: false
@@ -335,7 +335,7 @@ jobs:
           permission-contents: write
 
       - name: Re-checkout with app token
-        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           token: ${{ steps.app-auth.outputs.token }}
           fetch-depth: 0
@@ -347,7 +347,7 @@ jobs:
           run_install: false
 
       - name: Setup Node.js 24.x
-        uses: actions/setup-node@7c2c68d20d402ed6a201ada70a81341941093140
+        uses: actions/setup-node@04be95cf3511ea51ebf9f224ddfb99cc7ab87cd4
         with:
           node-version: 24.18.0
           registry-url: 'https://registry.npmjs.org'
@@ -396,7 +396,7 @@ jobs:
       TURBO_CACHE: remote:r
     steps:
       - name: Initial checkout
-        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           fetch-depth: 1
           persist-credentials: false
@@ -411,7 +411,7 @@ jobs:
           permission-contents: read
 
       - name: Re-checkout with app token
-        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           token: ${{ steps.app-auth.outputs.token }}
           fetch-depth: 0
@@ -423,7 +423,7 @@ jobs:
           run_install: false
 
       - name: Setup Node.js 24.x
-        uses: actions/setup-node@7c2c68d20d402ed6a201ada70a81341941093140
+        uses: actions/setup-node@04be95cf3511ea51ebf9f224ddfb99cc7ab87cd4
         with:
           node-version: 24.18.0
           registry-url: 'https://registry.npmjs.org'

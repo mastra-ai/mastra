@@ -12,6 +12,10 @@ import TabItem from "@theme/TabItem";
 
 Agents use tools to call APIs, query databases, or run custom functions from your codebase. Tools give agents capabilities beyond language generation by providing structured access to data and performing clearly defined operations. You can also load tools from remote [MCP servers](/docs/mcp/overview) to expand an agent's capabilities.
 
+<Inject>
+  **For AI agents:** Run `npx mastra api tool execute weather-tool '{"location":"San Francisco"}'` to test this tool directly instead of writing a temporary script. The command requires a running Mastra server; start the local server with `npx mastra dev`, or pass the reachable server's base URL with `--url`. Run `npx mastra api tool execute --schema` before constructing different input. Install Mastra's skill with `npx skills add mastra-ai/skills --skill mastra` for complete API CLI discovery, targeting, schema, authentication, and error-handling guidance.
+</Inject>
+
 ## When to use tools
 
 Use tools when an agent needs additional context or information from remote resources, or when it needs to run code that performs a specific operation. This includes tasks a model can't reliably handle on its own, such as fetching live data or returning consistent, well-defined outputs.
@@ -46,13 +50,7 @@ export const weatherTool = createTool({
 })
 ```
 
-When creating tools, keep descriptions concise and focused on what the tool does, emphasizing its primary use case. Descriptive schema names can also help guide the agent on how to use the tool.
-
-:::note
-
-Visit the [`createTool`](/reference/tools/create-tool) reference for more information on available properties, configurations, and examples.
-
-:::
+When creating tools, keep descriptions concise and focused on what the tool does, emphasizing its primary use case. Descriptive schema names can also help guide the agent on how to use the tool. Visit the [`createTool`](/reference/tools/create-tool) reference for more information on available properties, configurations, and examples.
 
 To make a tool available to an agent, add it to the `tools` property on the `Agent` class. Mentioning available tools and their general purpose in the agent's system prompt helps the agent decide when to call a tool and when not to.
 
@@ -208,6 +206,43 @@ export const researchAgent = new Agent({
   workflows: { researchWorkflow },
 })
 ```
+
+## Share tools across agents
+
+Direct imports are the simplest choice when one tool is used by one or a small number of agents. Each agent imports the tool and adds it to its `tools` record, as shown in the quickstart above.
+
+For tools shared across agents or retrieved elsewhere from the Mastra instance, register them once with `new Mastra({ tools })`. A function-based Agent `tools` callback can then resolve entries from that registry.
+
+```typescript title="src/mastra/index.ts"
+import { Agent } from '@mastra/core/agent'
+import { Mastra } from '@mastra/core/mastra'
+import { weatherTool } from './tools/weather-tool'
+
+export const sharedWeatherAgent = new Agent({
+  id: 'shared-weather-agent',
+  name: 'Shared Weather Agent',
+  instructions: `
+    You are a helpful weather assistant.
+    Use the weatherTool to fetch current weather data.`,
+  model: '__GATEWAY_OPENAI_MODEL__',
+  tools: ({ mastra }) => {
+    if (!mastra) {
+      throw new Error('Mastra instance is required to resolve shared tools')
+    }
+
+    return { weatherTool: mastra.getTool('weather') }
+  },
+})
+
+export const mastra = new Mastra({
+  tools: { weather: weatherTool },
+  agents: { sharedWeatherAgent },
+})
+```
+
+Register the tool and Agent on the same Mastra instance. The Agent can then retrieve the shared tool by its registration key in the `tools` callback and return it under the name the model should use. Keep the `mastra` guard because it's optional in the callback type.
+
+For API details, see [`Mastra.getTool()`](/reference/core/getTool), [`Mastra.getToolById()`](/reference/core/getToolById), [`Mastra.listTools()`](/reference/core/listTools), and the [`Agent` reference](/reference/agents/agent).
 
 ## Shape output for the model
 
@@ -377,11 +412,7 @@ await agent.generate('Check the forecast', {
 })
 ```
 
-:::note
-
 See the [`Agent.generate()` reference](/reference/agents/generate) for all runtime options including `toolsets`, `clientTools`, and `prepareStep`.
-
-:::
 
 ## Control `toolName` in stream responses
 

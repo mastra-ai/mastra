@@ -44,6 +44,14 @@ const sidebars = {
           id: 'storage/overview',
           label: 'Storage',
         },
+        {
+          type: 'doc',
+          id: 'getting-started/file-based-agents',
+          label: 'File-based Agents',
+          customProps: {
+            tags: ['beta'],
+          },
+        },
       ],
     },
     {
@@ -91,11 +99,6 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'agents/channels',
-              label: 'Channels',
-            },
-            {
-              type: 'doc',
               id: 'agents/guardrails',
               label: 'Guardrails',
             },
@@ -103,14 +106,6 @@ const sidebars = {
               type: 'doc',
               id: 'agents/processors',
               label: 'Processors',
-            },
-            {
-              type: 'doc',
-              id: 'agents/file-based-agents',
-              label: 'File-based Agents',
-              customProps: {
-                tags: ['beta'],
-              },
             },
             {
               type: 'doc',
@@ -403,6 +398,47 @@ const sidebars = {
               type: 'doc',
               id: 'browser/browser-viewer',
               label: 'BrowserViewer',
+            },
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Channels',
+          items: [
+            {
+              type: 'doc',
+              id: 'capabilities/channels/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'capabilities/channels/slack',
+              label: 'Slack',
+            },
+            {
+              type: 'doc',
+              id: 'capabilities/channels/teams',
+              label: 'Microsoft Teams',
+            },
+            {
+              type: 'doc',
+              id: 'capabilities/channels/discord',
+              label: 'Discord',
+            },
+            {
+              type: 'doc',
+              id: 'capabilities/channels/telegram',
+              label: 'Telegram',
+            },
+            {
+              type: 'doc',
+              id: 'capabilities/channels/whatsapp',
+              label: 'WhatsApp',
+            },
+            {
+              type: 'doc',
+              id: 'capabilities/channels/other-adapters',
+              label: 'More',
             },
           ],
         },
@@ -886,6 +922,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'evals/multi-turn',
+              label: 'Multi-turn Evals',
+            },
+            {
+              type: 'doc',
               id: 'evals/custom-scorers',
               label: 'Custom Scorers',
             },
@@ -965,6 +1006,22 @@ const sidebars = {
           type: 'doc',
           id: 'mastra-platform/overview',
           label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/deploy',
+          label: 'Deploy',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/environments',
+          label: 'Environments',
+          customProps: {
+            tags: ['new'],
+          },
         },
         {
           type: 'doc',

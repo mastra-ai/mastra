@@ -68,6 +68,15 @@ type ResumeStreamParams<OUTPUT extends {}> = StreamParamsBaseWithoutMessages<OUT
   structuredOutput?: StructuredOutputOptions<OUTPUT>;
 };
 
+type RecoverParams = {
+  runId: string;
+  requestContext?: Record<string, unknown>;
+  versions?: {
+    agents?: Record<string, { versionId: string } | { status: 'draft' | 'published' }>;
+    defaultStatus?: 'draft' | 'published';
+  };
+};
+
 type ToolCallRespondFn<OUTPUT> = (
   messages: MessageListInput,
   options: StreamParamsBaseWithoutMessages<OUTPUT> & {
@@ -3008,6 +3017,60 @@ export class Agent extends BaseResource {
       statusText: response.statusText,
       headers: response.headers,
     }) as Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    };
+
+    streamResponse.processDataStream = async ({
+      onChunk,
+    }: {
+      onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+    }) => {
+      await processMastraStream({
+        stream: streamResponse.body as ReadableStream<Uint8Array>,
+        onChunk,
+      });
+    };
+
+    return streamResponse;
+  }
+
+  /**
+   * Re-drives an orphaned RUNNING durable-agent run after a process restart.
+   *
+   * Only supported when the target agent is a durable agent (createDurableAgent).
+   * The server rebuilds the runtime state from the persisted snapshot, replays
+   * past chunks, and continues the loop to completion.
+   */
+  async recover(params: RecoverParams): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  > {
+    const body = {
+      runId: params.runId,
+      requestContext: parseClientRequestContext(params.requestContext),
+      versions: params.versions,
+    };
+
+    const response: Response = await this.request(`/agents/${this.agentId}/recover`, {
+      method: 'POST',
+      body,
+      stream: true,
+    });
+
+    if (!response.body) {
+      throw new Error('No response body');
+    }
+
+    const streamResponse = response as Response & {
       processDataStream: ({
         onChunk,
       }: {

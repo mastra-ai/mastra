@@ -1,16 +1,15 @@
 {
   "meta": {
     "name": "test-626b9daa",
-    "testFile": "packages/core/src/agent/agent-gemini.e2e.test.ts",
+    "testFile": "src/agent/agent-gemini.e2e.test.ts",
     "testName": "Gemini Model Compatibility Tests > Gemini 3 Pro with tool calls > should handle multi-step tool calls with gemini 3 pro",
-    "createdAt": "2026-05-18T10:51:30.990Z",
-    "updatedAt": "2026-05-20T14:05:54.432Z"
+    "createdAt": "2026-07-14T17:16:31.797Z"
   },
   "recordings": [
     {
-      "hash": "91f19f82dbd444fe",
+      "hash": "1e2e14a7db48d56e",
       "request": {
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent",
         "method": "POST",
         "body": {
           "generationConfig": {},
@@ -57,7 +56,7 @@
             }
           }
         },
-        "timestamp": 1779285945035
+        "timestamp": 1784049386807
       },
       "response": {
         "status": 200,
@@ -65,9 +64,9 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-type": "application/json; charset=UTF-8",
-          "date": "Wed, 20 May 2026 14:05:51 GMT",
+          "date": "Tue, 14 Jul 2026 17:16:29 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=6633",
+          "server-timing": "gfet4t7; dur=2754",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
@@ -85,9 +84,9 @@
                       "args": {
                         "location": "San Francisco, CA"
                       },
-                      "id": "hdn4wtwp"
+                      "id": "zr77oswb"
                     },
-                    "thoughtSignature": "EpMHCpAHAQw51seW2H+s9l/L3QgcKLS1qG1LficKhyp8b7VBhzqGiU6jajJfCpYT6a+KQYT/MMB7pVjCyoTq/qCri/A2CFvYIOeooRiA8tK4oqlogPQ9FzQ0pRogBTWYdWRjRYADmZaZQ4jLXeyTfgOGEw7SqQ5m0la6c6CISoVks2XDl1/c8p6mHVCnZFMn62tMRLl8HQUBUiG9qx9nx2A8QKoOjZoPYz4FpHSrbMPma3WT/SzmnnhRbqxIAyOVCqnsFQCxmKSXLWHXtQmXR3ByEqD3gFEqAMQjUM7q7efuMUuE4t+YVjNJ9BVkltcZ6bcLTrSrlvb7LdHK+yaENEmOM/hMGnA7+5x+KO4XBW6y2nOWFfLO5Ag0hP293N0McKFr1cFMVoG7W3RKOqWzMoFhXt2kEgjKzYBpOHvOLYBoCBLxBt/IOlEhqAu8QECZw+OPJMBDoiCVnHVWI6DnT6sutxemh35ew6wbHiEzQ/DQMivs4GRIdTmlF8x1xfVYyUBj0V5gBqbzQYwPrMf79nM2M+BZgeTNuJRzclLS53uUpdZnPCYf826lSg+RLnfqcPnxmL/3PD+7OOK/dj0FZKF4pX7vzLeHtmXNRMHvb+tJwas+J4rjQnytknItUKLmGbhA2MLsVjI4o7HA/I65LVeSb11EktWcbgJEa1D6j+hRvLXwPpFR4C9hCw2FDU6qFlarETe7OaqhUnxTeB8NgqX99dbKp0lCSy6nAXSO62IDhF6FbZNqG8TRTRCW4xGZzBgtjH7vFKZFJkf+KAiteH9NEZF3vkAGiVg9pahVnf2kS0UWmQOv8hO889hVfcYscA59bzUzcJ2+Ve9tWFSl9kMRd6mczM3o0RMvuQlv8hnEmZJr6lF+9nhjg2/xjv9OVzk7SBmUYnTOGngXN3O9DZtB+kvRutKsHlVo8DS0GlXdYcZ7i0OROrOsmeni+L0xh3CnFn+oHWJcIVkZ/j6HK0yPQUU62kqyAO8gTVBznhWvqtHjKE8fP9ChblxGXO75dVP5GM4UGLQxuAv/og3REZ82wX7Y79PqTTUnJtsFasxhjEQHz48Dkv7B9zwPxY1CSmT0bBgWsfnH1rrmZQhqXHbOs3d9Xqac9+935madhmOB+dhHjc8WRoFZ2fG7eqIp42OGyoA6y7Yrq7Bwlq6H63gqNj0RnseY/hu8E57FPL5SMj85QY+PMCGLbH3B/3hhKpj4jnH0"
+                    "thoughtSignature": "EtAFCs0FARFNMg//OhPlL6gcXBd14doxGhF6OyZveDx2KgwxbwYfPVZgds57coS0NOKxCjDXNNUktgZq/QeJAU4mvX7Rnz9vOrZx8lgSBPKEyPMSkYt1JEP91CnwElzLgBE0VqDuISyo4jYlH4Xx7lXPtqKOTHPM1M6MQJgQbfADxepldtv3EOd2bk4FHei2ud/38+IDba8gU5VURfFC+Iqr65WVMunejAmop7HCs0Uf4j7LQrXxuwMW+ml1g6bFAxTqHgm/O2YDTgx6r7GSPNJJaNutuw5cNukHieUHZJVch/K3NVVPHMdXG3vGHPkSUkT4qWoyb3LY1nYEsqk78iyGW7/ZT95/N5qMF5m5nPrhDPD3+GmugU6/A87OS51uu09hK/jUIhvboNjmQgF8+SCeDLzBqcid3a9ntrVzV2IZp/C5vWXn6adsTGV+/aiZ42U9VfuG7P3IhldHKfwuDuujfEzF2V91r/9zWShZ5bmv71CaWedjJyaUSqUTLRvAqflaguqSBxilCuE6b/eaZFDcxS0Q9zr96t/dgn/DdLYnDYpl6MvC148ggApEME5zvkIfSJuwEtQ8nj9+6Af1NGHwpCJIw6DaAx584Cm2ZYqLhWWSyCR/zOiYu7TOamK1DuSkYOuIZv12pefb5v0lBNSg6Cj/QImaV7Kt14tqfOGO5c/yyCmj81dItZ26gZQ59zEqzUQ8JPdLA2vaHS8N4uAlqRuFSvQlDtpUGVIOVSOVduTH1CUtHp0+Zl3KFqD6bCi07EJjWe5qEhXbm4ESNencTeQC4IWREYtoiTlKBw7CctRmxlSDYFnz++Pnc6cN/aGhea1XajWYJV2t37m2zz2kDQ0L584n0J9l7wTxEZcVfRdhQAU/21ny6uL2DO9VudcmcP8AkwYoDXT2cWIjS6/SrxYQb28BUi3NoVw9qBKXxSa3hPfmmAzX1/Hy9D2hsVoc"
                   },
                   {
                     "functionCall": {
@@ -95,7 +94,7 @@
                       "args": {
                         "location": "New York, NY"
                       },
-                      "id": "weirn7ip"
+                      "id": "bkfbcf42"
                     }
                   }
                 ],
@@ -109,26 +108,26 @@
           "usageMetadata": {
             "promptTokenCount": 93,
             "candidatesTokenCount": 36,
-            "totalTokenCount": 401,
+            "totalTokenCount": 297,
             "promptTokensDetails": [
               {
                 "modality": "TEXT",
                 "tokenCount": 93
               }
             ],
-            "thoughtsTokenCount": 272,
+            "thoughtsTokenCount": 168,
             "serviceTier": "standard"
           },
           "modelVersion": "gemini-3.1-pro-preview",
-          "responseId": "ub8NatOlEN6DkdUPuJLf4AM"
+          "responseId": "6m5WasfjM72pnsEP7MWEwAg"
         },
         "isStreaming": false
       }
     },
     {
-      "hash": "c8713b61bfa6e392",
+      "hash": "ac61e8f95548754b",
       "request": {
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent",
         "method": "POST",
         "body": {
           "generationConfig": {},
@@ -146,20 +145,23 @@
               "parts": [
                 {
                   "functionCall": {
+                    "id": "zr77oswb",
                     "name": "weatherTool",
                     "args": {
                       "location": "San Francisco, CA"
                     }
                   },
-                  "thoughtSignature": "EpMHCpAHAQw51seW2H+s9l/L3QgcKLS1qG1LficKhyp8b7VBhzqGiU6jajJfCpYT6a+KQYT/MMB7pVjCyoTq/qCri/A2CFvYIOeooRiA8tK4oqlogPQ9FzQ0pRogBTWYdWRjRYADmZaZQ4jLXeyTfgOGEw7SqQ5m0la6c6CISoVks2XDl1/c8p6mHVCnZFMn62tMRLl8HQUBUiG9qx9nx2A8QKoOjZoPYz4FpHSrbMPma3WT/SzmnnhRbqxIAyOVCqnsFQCxmKSXLWHXtQmXR3ByEqD3gFEqAMQjUM7q7efuMUuE4t+YVjNJ9BVkltcZ6bcLTrSrlvb7LdHK+yaENEmOM/hMGnA7+5x+KO4XBW6y2nOWFfLO5Ag0hP293N0McKFr1cFMVoG7W3RKOqWzMoFhXt2kEgjKzYBpOHvOLYBoCBLxBt/IOlEhqAu8QECZw+OPJMBDoiCVnHVWI6DnT6sutxemh35ew6wbHiEzQ/DQMivs4GRIdTmlF8x1xfVYyUBj0V5gBqbzQYwPrMf79nM2M+BZgeTNuJRzclLS53uUpdZnPCYf826lSg+RLnfqcPnxmL/3PD+7OOK/dj0FZKF4pX7vzLeHtmXNRMHvb+tJwas+J4rjQnytknItUKLmGbhA2MLsVjI4o7HA/I65LVeSb11EktWcbgJEa1D6j+hRvLXwPpFR4C9hCw2FDU6qFlarETe7OaqhUnxTeB8NgqX99dbKp0lCSy6nAXSO62IDhF6FbZNqG8TRTRCW4xGZzBgtjH7vFKZFJkf+KAiteH9NEZF3vkAGiVg9pahVnf2kS0UWmQOv8hO889hVfcYscA59bzUzcJ2+Ve9tWFSl9kMRd6mczM3o0RMvuQlv8hnEmZJr6lF+9nhjg2/xjv9OVzk7SBmUYnTOGngXN3O9DZtB+kvRutKsHlVo8DS0GlXdYcZ7i0OROrOsmeni+L0xh3CnFn+oHWJcIVkZ/j6HK0yPQUU62kqyAO8gTVBznhWvqtHjKE8fP9ChblxGXO75dVP5GM4UGLQxuAv/og3REZ82wX7Y79PqTTUnJtsFasxhjEQHz48Dkv7B9zwPxY1CSmT0bBgWsfnH1rrmZQhqXHbOs3d9Xqac9+935madhmOB+dhHjc8WRoFZ2fG7eqIp42OGyoA6y7Yrq7Bwlq6H63gqNj0RnseY/hu8E57FPL5SMj85QY+PMCGLbH3B/3hhKpj4jnH0"
+                  "thoughtSignature": "EtAFCs0FARFNMg//OhPlL6gcXBd14doxGhF6OyZveDx2KgwxbwYfPVZgds57coS0NOKxCjDXNNUktgZq/QeJAU4mvX7Rnz9vOrZx8lgSBPKEyPMSkYt1JEP91CnwElzLgBE0VqDuISyo4jYlH4Xx7lXPtqKOTHPM1M6MQJgQbfADxepldtv3EOd2bk4FHei2ud/38+IDba8gU5VURfFC+Iqr65WVMunejAmop7HCs0Uf4j7LQrXxuwMW+ml1g6bFAxTqHgm/O2YDTgx6r7GSPNJJaNutuw5cNukHieUHZJVch/K3NVVPHMdXG3vGHPkSUkT4qWoyb3LY1nYEsqk78iyGW7/ZT95/N5qMF5m5nPrhDPD3+GmugU6/A87OS51uu09hK/jUIhvboNjmQgF8+SCeDLzBqcid3a9ntrVzV2IZp/C5vWXn6adsTGV+/aiZ42U9VfuG7P3IhldHKfwuDuujfEzF2V91r/9zWShZ5bmv71CaWedjJyaUSqUTLRvAqflaguqSBxilCuE6b/eaZFDcxS0Q9zr96t/dgn/DdLYnDYpl6MvC148ggApEME5zvkIfSJuwEtQ8nj9+6Af1NGHwpCJIw6DaAx584Cm2ZYqLhWWSyCR/zOiYu7TOamK1DuSkYOuIZv12pefb5v0lBNSg6Cj/QImaV7Kt14tqfOGO5c/yyCmj81dItZ26gZQ59zEqzUQ8JPdLA2vaHS8N4uAlqRuFSvQlDtpUGVIOVSOVduTH1CUtHp0+Zl3KFqD6bCi07EJjWe5qEhXbm4ESNencTeQC4IWREYtoiTlKBw7CctRmxlSDYFnz++Pnc6cN/aGhea1XajWYJV2t37m2zz2kDQ0L584n0J9l7wTxEZcVfRdhQAU/21ny6uL2DO9VudcmcP8AkwYoDXT2cWIjS6/SrxYQb28BUi3NoVw9qBKXxSa3hPfmmAzX1/Hy9D2hsVoc"
                 },
                 {
                   "functionCall": {
+                    "id": "bkfbcf42",
                     "name": "weatherTool",
                     "args": {
                       "location": "New York, NY"
                     }
-                  }
+                  },
+                  "thoughtSignature": "skip_thought_signature_validator"
                 }
               ]
             },
@@ -168,6 +170,7 @@
               "parts": [
                 {
                   "functionResponse": {
+                    "id": "zr77oswb",
                     "name": "weatherTool",
                     "response": {
                       "name": "weatherTool",
@@ -180,6 +183,7 @@
                 },
                 {
                   "functionResponse": {
+                    "id": "bkfbcf42",
                     "name": "weatherTool",
                     "response": {
                       "name": "weatherTool",
@@ -226,7 +230,7 @@
             }
           }
         },
-        "timestamp": 1779285951709
+        "timestamp": 1784049389586
       },
       "response": {
         "status": 200,
@@ -234,9 +238,9 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-type": "application/json; charset=UTF-8",
-          "date": "Wed, 20 May 2026 14:05:54 GMT",
+          "date": "Tue, 14 Jul 2026 17:16:31 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=2689",
+          "server-timing": "gfet4t7; dur=2193",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
@@ -249,8 +253,8 @@
               "content": {
                 "parts": [
                   {
-                    "text": "Currently, the weather in both San Francisco and New York is sunny with a temperature of 72°F.",
-                    "thoughtSignature": "Eu8CCuwCAQw51sfq8yYYZDG1qoPyLO0SjYqjemZb/aLdZj2GEdhR4SQS2tAqltt6Y9OpgWD6fQiREB7bLfW8ziqwTMMu6lW5OOYlyoh3psL7HQqKnnT4vDgezJLmWQyp7OEIUE9oQanQTxvWMCJmaJTZKg+H+3E/mHcTJfxVatlMT/ePMyZGwwVeT+xtOc7PfWYy9y82APR+MwCZgsZCwz7xbfEPu4ioUsimF0owB4YiXSbey7l284d//463vgqsThp+l7J8ZWd+4En2l5C/v2UNZXRLBTXLNOjxGFrZpwmesCgJHnDpMZ1/YnRbLF+kJCAg3GJQbKLIHh/eev+KAADF/JuICVkkX/Tz4b/8uP8El19+yxFmRZd6Z9hsV6jk5+3S7xdQHiAZ9Zt2CuhyYKvlLg6SRAg7GrNeiSQh35VT8+HwjcjvxAs4Vy0mxsau2SbFXSLOpvBHvmfLG9de3VR6D+KX6aLF8/Cu3TAEHgjv7A=="
+                    "text": "The current weather in both San Francisco and New York is sunny with a temperature of 72°F.",
+                    "thoughtSignature": "EqgCCqUCARFNMg8+eAZ2MsTgo9Uf9ey9lSQOVfrAMNNQEcZ1bAQaYoeRov6GsyUqqG23bQ068ARYe4sktL8grkFjvMm+83UrLTkJwXCqv1u8v3LKH340my/mK+oWpffooVtWgMlfHOe+ziAsWQ1BVMZyMZEKNTsJ6WRVAcTOxJo+mI1MiqOgtZM2bqjS6rVduBigJocgpVK1oBabaCKLWUpcZHs6WsPj3k+DoALPIk1uDXLQkwqnXCuxCGIUD8nYbTwzDqNB8tHHJwm8HeX2T4R+SgaB4M3aD5iF4MP/UgwOIB9ZRO8wcefir/FEFS0h3a8MLyFswzZqH5QVKfcyPXvp1u8hlEm28wkbmeA4xnhoFSOI5RWyh3R8NGw79ieWdCoG5YyXB9PevwY="
                   }
                 ],
                 "role": "model"
@@ -260,20 +264,20 @@
             }
           ],
           "usageMetadata": {
-            "promptTokenCount": 418,
-            "candidatesTokenCount": 23,
-            "totalTokenCount": 538,
+            "promptTokenCount": 349,
+            "candidatesTokenCount": 22,
+            "totalTokenCount": 448,
             "promptTokensDetails": [
               {
                 "modality": "TEXT",
-                "tokenCount": 418
+                "tokenCount": 349
               }
             ],
-            "thoughtsTokenCount": 97,
+            "thoughtsTokenCount": 77,
             "serviceTier": "standard"
           },
           "modelVersion": "gemini-3.1-pro-preview",
-          "responseId": "v78NapfQMq-jkdUPwKC7uQI"
+          "responseId": "7W5WaurCJv2nkdUPzuSc8Ag"
         },
         "isStreaming": false
       }

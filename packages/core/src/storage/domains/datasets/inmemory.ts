@@ -31,6 +31,7 @@ function matchesTenancy(
 }
 import type { InMemoryDB } from '../inmemory-db';
 import { DatasetsStorage } from './base';
+import { createDatasetItemIdentityConflictError, datasetItemPayloadsEqual } from './identity';
 
 /** Convert a storage row to the public DatasetItem type (strips validTo/isDeleted) */
 function toDatasetItem(row: DatasetItemRow): DatasetItem {
@@ -38,6 +39,7 @@ function toDatasetItem(row: DatasetItemRow): DatasetItem {
     id: row.id,
     datasetId: row.datasetId,
     datasetVersion: row.datasetVersion,
+    externalId: row.externalId,
     organizationId: row.organizationId,
     projectId: row.projectId,
     input: row.input,
@@ -85,7 +87,15 @@ export class DatasetsInMemory extends DatasetsStorage {
 
   // Dataset CRUD
   async createDataset(input: CreateDatasetInput): Promise<DatasetRecord> {
-    const id = crypto.randomUUID();
+    const id = input.id ?? crypto.randomUUID();
+    if (input.id !== undefined) {
+      this.validateCallerDefinedDatasetId(input.id);
+      const existing = this.db.datasets.get(input.id);
+      if (existing) {
+        return this.resolveExistingDataset(toDatasetRecord(existing), { ...input, id: input.id });
+      }
+    }
+
     const now = new Date();
     const dataset = {
       id,
@@ -234,6 +244,7 @@ export class DatasetsInMemory extends DatasetsStorage {
       id,
       datasetId: args.datasetId,
       datasetVersion: newVersion,
+      externalId: args.externalId ?? null,
       // Tenancy inherited from parent dataset (Option B — never settable per item)
       organizationId: dataset.organizationId ?? null,
       projectId: dataset.projectId ?? null,
@@ -290,6 +301,7 @@ export class DatasetsInMemory extends DatasetsStorage {
       id: args.id,
       datasetId: args.datasetId,
       datasetVersion: newVersion,
+      externalId: currentRow.externalId ?? null,
       // Re-inherit tenancy from parent dataset (handles dataset-level retroactive tenancy backfill)
       organizationId: dataset.organizationId ?? null,
       projectId: dataset.projectId ?? null,
@@ -353,14 +365,18 @@ export class DatasetsInMemory extends DatasetsStorage {
       id,
       datasetId,
       datasetVersion: newVersion,
+      externalId: currentRow.externalId ?? null,
       organizationId: currentRow.organizationId ?? null,
       projectId: currentRow.projectId ?? null,
       validTo: null,
       isDeleted: true,
       input: currentRow.input,
       groundTruth: currentRow.groundTruth,
+      expectedTrajectory: currentRow.expectedTrajectory,
+      toolMocks: currentRow.toolMocks,
       requestContext: currentRow.requestContext,
       metadata: currentRow.metadata,
+      source: currentRow.source,
       createdAt: currentRow.createdAt,
       updatedAt: now,
     });
@@ -520,43 +536,133 @@ export class DatasetsInMemory extends DatasetsStorage {
     if (!dataset) {
       throw new Error(`Dataset not found: ${input.datasetId}`);
     }
+    if (input.items.length === 0) return [];
 
-    // T3.19 — single version increment for all items
+    const acceptedByExternalId = new Map<string, { first: DatasetItemRow; current: DatasetItemRow | null }>();
+    for (const rows of this.db.datasetItems.values()) {
+      const first = rows[0];
+      if (!first || first.datasetId !== input.datasetId || !first.externalId) continue;
+      const existing = acceptedByExternalId.get(first.externalId);
+      if (existing && existing.first.id !== first.id) {
+        throw new Error(`Dataset item identity history is corrupt for externalId: ${first.externalId}`);
+      }
+      acceptedByExternalId.set(first.externalId, {
+        first,
+        current: rows.find(row => row.validTo === null && !row.isDeleted) ?? null,
+      });
+    }
+
+    const conflicts = [];
+    const planned = new Map<string, { id: string; item: (typeof input.items)[number] }>();
+    const plannedByExternalId = new Map<string, { id: string; item: (typeof input.items)[number] }>();
+    const resolvedIds: string[] = [];
+
+    for (const [index, item] of input.items.entries()) {
+      if (!item.externalId) {
+        const id = crypto.randomUUID();
+        planned.set(id, { id, item });
+        resolvedIds.push(id);
+        continue;
+      }
+
+      const accepted = acceptedByExternalId.get(item.externalId);
+      if (accepted) {
+        if (!accepted.current) {
+          conflicts.push({
+            index,
+            externalId: item.externalId,
+            existingItemId: accepted.first.id,
+            reason: 'deleted' as const,
+          });
+        } else if (!datasetItemPayloadsEqual(item, accepted.first)) {
+          conflicts.push({
+            index,
+            externalId: item.externalId,
+            existingItemId: accepted.first.id,
+            reason: 'payload_mismatch' as const,
+          });
+        }
+        resolvedIds.push(accepted.first.id);
+        continue;
+      }
+
+      const requestLocal = plannedByExternalId.get(item.externalId);
+      if (requestLocal) {
+        if (
+          !datasetItemPayloadsEqual(item, {
+            ...requestLocal.item,
+            id: requestLocal.id,
+            datasetId: input.datasetId,
+            datasetVersion: 0,
+            validTo: null,
+            isDeleted: false,
+            createdAt: new Date(0),
+            updatedAt: new Date(0),
+          })
+        ) {
+          conflicts.push({
+            index,
+            externalId: item.externalId,
+            existingItemId: requestLocal.id,
+            reason: 'payload_mismatch' as const,
+          });
+        }
+        resolvedIds.push(requestLocal.id);
+        continue;
+      }
+
+      const id = crypto.randomUUID();
+      const plannedEntry = { id, item };
+      planned.set(id, plannedEntry);
+      plannedByExternalId.set(item.externalId, plannedEntry);
+      resolvedIds.push(id);
+    }
+
+    if (conflicts.length > 0) throw createDatasetItemIdentityConflictError(conflicts);
+    if (planned.size === 0) {
+      return resolvedIds.map(id => {
+        const rows = this.db.datasetItems.get(id)!;
+        return toDatasetItem(rows.find(row => row.validTo === null && !row.isDeleted)!);
+      });
+    }
+
     const newVersion = dataset.version + 1;
     this.db.datasets.set(input.datasetId, { ...dataset, version: newVersion });
-
     const now = new Date();
-    const items: DatasetItem[] = [];
+    const inserted = new Map<string, DatasetItem>();
 
-    for (const itemInput of input.items) {
-      const id = crypto.randomUUID();
+    for (const { id, item } of planned.values()) {
       const row: DatasetItemRow = {
         id,
         datasetId: input.datasetId,
         datasetVersion: newVersion,
-        // Tenancy inherited from parent dataset (Option B)
+        externalId: item.externalId ?? null,
         organizationId: dataset.organizationId ?? null,
         projectId: dataset.projectId ?? null,
         validTo: null,
         isDeleted: false,
-        input: itemInput.input,
-        groundTruth: itemInput.groundTruth,
-        expectedTrajectory: itemInput.expectedTrajectory,
-        toolMocks: itemInput.toolMocks,
-        requestContext: itemInput.requestContext,
-        metadata: itemInput.metadata,
-        source: itemInput.source,
+        input: item.input,
+        groundTruth: item.groundTruth,
+        expectedTrajectory: item.expectedTrajectory,
+        toolMocks: item.toolMocks,
+        requestContext: item.requestContext,
+        metadata: item.metadata,
+        source: item.source,
         createdAt: now,
         updatedAt: now,
       };
       this.db.datasetItems.set(id, [row]);
-      items.push(toDatasetItem(row));
+      inserted.set(id, toDatasetItem(row));
     }
 
-    // T3.11 — single dataset version for the bulk operation
     await this.createDatasetVersion(input.datasetId, newVersion);
 
-    return items;
+    return resolvedIds.map(id => {
+      const newItem = inserted.get(id);
+      if (newItem) return newItem;
+      const rows = this.db.datasetItems.get(id)!;
+      return toDatasetItem(rows.find(row => row.validTo === null && !row.isDeleted)!);
+    });
   }
 
   protected async _doBatchDeleteItems(input: BatchDeleteItemsInput): Promise<void> {
@@ -588,14 +694,18 @@ export class DatasetsInMemory extends DatasetsStorage {
         id: itemId,
         datasetId: input.datasetId,
         datasetVersion: newVersion,
+        externalId: currentRow.externalId ?? null,
         organizationId: currentRow.organizationId ?? null,
         projectId: currentRow.projectId ?? null,
         validTo: null,
         isDeleted: true,
         input: currentRow.input,
         groundTruth: currentRow.groundTruth,
+        expectedTrajectory: currentRow.expectedTrajectory,
+        toolMocks: currentRow.toolMocks,
         requestContext: currentRow.requestContext,
         metadata: currentRow.metadata,
+        source: currentRow.source,
         createdAt: currentRow.createdAt,
         updatedAt: now,
       });

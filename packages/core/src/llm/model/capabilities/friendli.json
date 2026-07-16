@@ -7,5 +7,13 @@
     "google/gemma-4-31B-it",
     "zai-org/GLM-5.1",
     "zai-org/GLM-5.2"
+  ],
+  "structuredOutput": [
+    "MiniMaxAI/MiniMax-M2.5",
+    "Qwen/Qwen3-235B-A22B-Instruct-2507",
+    "deepseek-ai/DeepSeek-V3.2",
+    "google/gemma-4-31B-it",
+    "zai-org/GLM-5.1",
+    "zai-org/GLM-5.2"
   ]
 }

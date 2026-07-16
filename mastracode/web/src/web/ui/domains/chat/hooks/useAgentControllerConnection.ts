@@ -2,7 +2,6 @@ import type { AgentControllerEvent } from '@mastra/client-js';
 import { useState } from 'react';
 import { createAgentControllerClient } from '../services/agentControllerClient';
 import { useAgentControllerEvents } from './useAgentControllerEvents';
-import { useAgentControllerModes } from './useAgentControllerModes';
 import { useAgentControllerSessionInit } from './useAgentControllerSessionInit';
 import { useAgentControllerSessionSync } from './useAgentControllerSessionSync';
 
@@ -13,6 +12,7 @@ interface UseAgentControllerConnectionArgs {
   agentControllerId: string;
   resourceId: string;
   projectPath?: string;
+  projectState?: Record<string, unknown>;
   baseUrl?: string;
   enabled?: boolean;
   onEvent: (event: AgentControllerEvent) => void;
@@ -22,6 +22,7 @@ export function useAgentControllerConnection({
   agentControllerId,
   resourceId,
   projectPath,
+  projectState,
   baseUrl = '',
   enabled = true,
   onEvent,
@@ -29,9 +30,21 @@ export function useAgentControllerConnection({
   const [sseConnectionState, setSseConnectionState] = useState<SseConnectionState>('never');
   const sseConnected = sseConnectionState === 'connected';
   const hasEverConnected = sseConnectionState !== 'never';
-  const { session } = createAgentControllerClient({ agentControllerId, resourceId, baseUrl, enabled });
-  const modesQuery = useAgentControllerModes({ agentControllerId, resourceId, baseUrl, enabled });
-  const initQuery = useAgentControllerSessionInit({ agentControllerId, resourceId, projectPath, baseUrl, enabled });
+  const { session } = createAgentControllerClient({
+    agentControllerId,
+    resourceId,
+    scope: projectPath,
+    baseUrl,
+    enabled,
+  });
+  const initQuery = useAgentControllerSessionInit({
+    agentControllerId,
+    resourceId,
+    projectPath,
+    projectState,
+    baseUrl,
+    enabled,
+  });
   const syncQuery = useAgentControllerSessionSync({
     agentControllerId,
     resourceId,
@@ -67,7 +80,6 @@ export function useAgentControllerConnection({
 
   return {
     status,
-    modes: modesQuery.data ?? [],
     state: syncQuery.data,
     stateUpdatedAt: syncQuery.dataUpdatedAt,
     createdThreadId: initQuery.data?.threadId ?? undefined,

@@ -1,0 +1,112 @@
+---
+title: "File-based agents | Getting Started"
+description: Define agents and project primitives by file convention under src/mastra
+packages:
+  - "@mastra/core"
+---
+
+# File-based agents
+
+**Added in:** `@mastra/core@1.50.0`
+
+:::experimental
+
+This feature is in beta. Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
+File-based agents are an experimental, convention-based way to define [Mastra agents](/docs/agents/overview) and the primitives they use in files under `src/mastra/`, instead of registering them manually on your [`Mastra`](/reference/core/mastra-class) instance.
+
+This approach reduces glue code and makes the file system itself a direct representation of your [project structure](/reference/project-structure), so both you and your coding agent can understand it at a glance.
+
+You can build your entire project with file-based agents or combine this approach with agents and other primitives defined directly in code for incremental adoption.
+
+File-based agents have some limitations while in beta. Not every Mastra feature can be defined in a file yet, and they're not the best fit for dynamic configuration or runtime wiring. When needed, you can define agents and related primitives directly in code.
+
+:::note
+
+All Mastra documentation currently shows agents and primitives defined directly in code. File-based agents use the same underlying concepts and APIs, so the guidance elsewhere in the docs still applies. As file-based agents mature, more examples may use this structure where appropriate.
+
+:::
+
+## Basic layout
+
+A small file-based agent looks like this:
+
+```text
+src/mastra/
+  agents/
+    weather/
+      config.ts
+      instructions.md
+      tools/
+        get-weather.ts
+      skills/
+        forecast-review.md
+```
+
+The main files in an agent directory are:
+
+- [`config.ts`](/reference/file-based-agents/config): Model selection and runtime options
+- [`instructions.md`](/reference/file-based-agents/instructions): The prompt that applies to every response
+- [`tools/`](/reference/file-based-agents/tools): Typed functions the model can call
+- [`skills/`](/reference/file-based-agents/skills): Reusable instructions
+
+You need to define `config.ts` and `instructions.md` at a minimum. Add optional files as needed. Learn more in the [add capabilities](#add-capabilities) section.
+
+## Quickstart
+
+Create a folder at `src/mastra/agents/weather`. Inside, add a `config.ts` and an `instructions.md` file with these contents:
+
+```typescript title="src/mastra/agents/weather/config.ts"
+import { agentConfig } from '@mastra/core/agent'
+
+export default agentConfig({
+  model: '__GATEWAY_OPENAI_MODEL__',
+})
+```
+
+```markdown title="src/mastra/agents/weather/instructions.md"
+You are a helpful weather assistant. Answer questions about current conditions and forecasts.
+```
+
+Start Mastra's development server with `mastra dev`. Inside Studio, you can now call the `weather` agent and ask it about the weather.
+
+## Add capabilities
+
+Map each primitive or feature to its file convention:
+
+| Primitive or feature | File convention |
+| - | - |
+| [Agent config](/reference/file-based-agents/config) | `src/mastra/agents/<agent-id>/config.ts` |
+| [Agent instructions](/reference/file-based-agents/instructions) | `src/mastra/agents/<agent-id>/instructions.md` |
+| [Tools](/reference/file-based-agents/tools) | `src/mastra/agents/<agent-id>/tools/` |
+| [Skills](/reference/file-based-agents/skills) | `src/mastra/agents/<agent-id>/skills/` |
+| [Memory](/reference/file-based-agents/memory) | `src/mastra/agents/<agent-id>/memory.ts` |
+| [Workspace](/reference/file-based-agents/workspace) | `src/mastra/agents/<agent-id>/workspace.ts` and `src/mastra/agents/<agent-id>/workspace/` |
+| [Processors](/reference/file-based-agents/processors) | `src/mastra/agents/<agent-id>/processors/` |
+| [Scorers](/reference/file-based-agents/scorers) | `src/mastra/agents/<agent-id>/scorers/` |
+| [Subagents](/reference/file-based-agents/subagents) | `src/mastra/agents/<agent-id>/subagents/` |
+| [Workflows](/reference/file-based-agents/workflows) | `src/mastra/workflows/` |
+| [Storage](/reference/file-based-agents/storage) | `src/mastra/storage.ts` |
+| [Observability](/reference/file-based-agents/observability) | `src/mastra/observability.ts` |
+| [Logger](/reference/file-based-agents/logger) | `src/mastra/logger.ts` |
+| [Server config](/reference/file-based-agents/server) | `src/mastra/server.ts` |
+| [Studio config](/reference/file-based-agents/studio) | `src/mastra/studio.ts` |
+| [Schedules](/docs/long-running-agents/schedules) | Not yet file-based — create at runtime with `mastra.schedules.create()` |
+
+## Discovery lifecycle
+
+File-based primitives are discovered by the Mastra bundler under `mastra dev` and `mastra build`. During discovery, Mastra reads supported files under `src/mastra/`, imports TypeScript and JavaScript modules, reads markdown instructions and skills, copies workspace seed files, and registers the assembled primitives with your Mastra app.
+
+After discovery, a file-based agent runs as a normal [`Agent`](/reference/agents/agent). Calling it from the Agent API, Studio, workflows, or your application code uses the same runtime as a code-defined agent.
+
+Discovery is source-based and conservative. It skips symlinks, ignores test files, treats workflows and singleton project files as file-routed only when they have a default export, and ignores directories that aren't agent directories.
+
+Start your app through the Mastra CLI so discovery runs:
+
+```bash npm2yarn
+npx mastra dev
+```
+
+If you import your `mastra` instance directly, `agents/<name>/` directories and the other conventions aren't discovered. When you consume Mastra as a library, register those primitives in code instead.

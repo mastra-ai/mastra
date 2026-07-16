@@ -2,7 +2,7 @@
  * BDD coverage for the propless `Sidebar`.
  *
  * The sidebar consumes the domain contexts directly (`useActiveProjectContext`,
- * `useChatSession`, `useOverlays`, `useToast`, `useWebAuth`) instead of a
+ * focused chat hooks, `useOverlays`, `useToast`, `useWebAuth`) instead of a
  * drilled prop bag, so the spec drives it end-to-end: real fetch transport,
  * MSW at the network boundary, assertions on the requests the thread actions
  * produce.
@@ -44,6 +44,22 @@ const project: Project = {
   createdAt: 1,
 };
 
+const githubProject: Project = {
+  id: 'p-github',
+  name: 'Mastra',
+  source: 'github',
+  githubProjectId: 'gh-project-1',
+  sandboxWorkdir: '/sandbox/mastra',
+  resourceId: RESOURCE_ID,
+  gitBranch: 'main',
+  worktrees: [
+    { branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' },
+    { branch: 'feat-ui', worktreePath: '/sandbox/mastra-worktrees/feat-ui', baseBranch: 'main' },
+  ],
+  selectedWorktreePath: '/sandbox/mastra',
+  createdAt: 1,
+};
+
 const threadOne: AgentControllerThreadInfo = {
   id: 'thread-one',
   title: 'First thread',
@@ -65,9 +81,17 @@ afterEach(() => {
   vi.mocked(redirectToLogout).mockClear();
 });
 
-function seedProject() {
-  localStorage.setItem('mastracode-projects', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-project', project.id);
+function seedProject(active: Project = project) {
+  localStorage.setItem('mastracode-projects', JSON.stringify([active]));
+  localStorage.setItem('mastracode-active-project', active.id);
+}
+
+function useGithubStatusHandler() {
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+      HttpResponse.json({ enabled: true, connected: false, installations: [] }),
+    ),
+  );
 }
 
 function sessionState(): AgentControllerSessionState {
@@ -221,6 +245,36 @@ describe('Sidebar', () => {
     });
   });
 
+  describe('when a GitHub project is active', () => {
+    it('nests the factory Sessions list under the Factory menu, without the repo root', async () => {
+      seedProject(githubProject);
+      useAuthHandler();
+      useGithubStatusHandler();
+      useAgentControllerHandlers();
+      renderSidebar();
+
+      const factory = await screen.findByRole('navigation', { name: 'Factory' });
+      expect(await within(factory).findByText('Sessions')).toBeInTheDocument();
+      // Only feature worktrees are sessions: the repo-root checkout is not one.
+      expect(within(factory).getByRole('button', { name: 'feat-ui' })).toBeInTheDocument();
+      expect(within(factory).queryByRole('button', { name: 'main' })).not.toBeInTheDocument();
+    });
+
+    it('renders the User Sessions section and no thread list', async () => {
+      seedProject(githubProject);
+      useAuthHandler();
+      useGithubStatusHandler();
+      useAgentControllerHandlers();
+      renderSidebar();
+
+      expect(await screen.findByRole('region', { name: 'User sessions' })).toBeInTheDocument();
+      // Each worktree holds a single conversation, so GitHub projects have no
+      // thread list — neither nested nor flat.
+      await screen.findByRole('button', { name: 'feat-ui' });
+      expect(screen.queryByText('First thread')).not.toBeInTheDocument();
+    });
+  });
+
   describe('when opening a thread action menu', () => {
     it('clones the thread', async () => {
       seedProject();
@@ -229,7 +283,7 @@ describe('Sidebar', () => {
       renderSidebar();
 
       await openThreadActions('Second thread');
-      await userEvent.click(screen.getByRole('menuitem', { name: 'Clone' }));
+      await userEvent.click(await screen.findByRole('menuitem', { name: 'Clone' }));
 
       await waitFor(() => expect(captured.cloned).toEqual([{ sourceThreadId: 'thread-two' }]));
     });
@@ -241,7 +295,7 @@ describe('Sidebar', () => {
       renderSidebar();
 
       await openThreadActions('Second thread');
-      await userEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
+      await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
 
       await waitFor(() => expect(captured.deleted).toContain('thread-two'));
     });
@@ -253,7 +307,7 @@ describe('Sidebar', () => {
       renderSidebar();
 
       await openThreadActions('Second thread');
-      await userEvent.click(screen.getByRole('menuitem', { name: 'Rename' }));
+      await userEvent.click(await screen.findByRole('menuitem', { name: 'Rename' }));
       const input = screen.getByRole('textbox', { name: 'Thread title' });
       await userEvent.clear(input);
       await userEvent.type(input, 'Renamed{Enter}');

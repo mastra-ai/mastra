@@ -150,6 +150,8 @@ Deletes rows older than their configured `maxAge` across every domain that has a
 
 `prune()` is designed to be safe on tables with millions of rows. It deletes in bounded, batched chunks — each batch is its own transaction — so it never takes a long lock or bloats the transaction log. It never runs a `VACUUM`.
 
+Pass `options.retention` to replace the configured policies for that call only — for example to skip a domain (keep chat history) or prune more aggressively than the standing config. The store's configured `retention` is unchanged.
+
 Anchor-column indexes are created lazily on the first `prune()` call for each table with a policy — never at `init()` — so deployments that don't configure retention pay no extra index write or disk overhead. The first prune of an existing large table pays a one-time index build; subsequent prunes reuse the index.
 
 ```typescript
@@ -161,6 +163,13 @@ const results = await storage.prune({
 for (const r of results) {
   console.log(`${r.domain}.${r.table}: deleted ${r.deleted}, done=${r.done}`)
 }
+
+// One-off pass with different policies (configured retention untouched):
+await storage.prune({
+  retention: {
+    observability: { spans: { maxAge: '1d' } },
+  },
+})
 ```
 
 Returns: `Promise<PruneResult[]>`
@@ -195,6 +204,13 @@ Returns: `Promise<PruneResult[]>`
     isOptional: true,
     description:
       'Cooperative cancellation. The batch loop checks it between batches and stops cleanly, returning partial results with `done: false`.',
+  },
+  {
+    name: 'retention',
+    type: 'RetentionConfig',
+    isOptional: true,
+    description:
+      "Replaces the store's configured retention policies for this call only — e.g. to skip a domain or prune more aggressively. The configured `retention` is unchanged.",
   },
 ]}
 />
@@ -290,7 +306,7 @@ const storage = new MongoDBStore({
 ```
 
 :::tip
-TTL indexes delete documents shortly after they expire (background thread runs every \~60 seconds), but the exact timing is not guaranteed. For precise, immediate cleanup, use `prune()` instead.
+TTL indexes delete documents shortly after they expire (background thread runs every \~60 seconds), but the exact timing isn't guaranteed. For precise, immediate cleanup, use `prune()` instead.
 :::
 
 ## Reclaiming disk

@@ -1,0 +1,73 @@
+---
+title: "More | Channels"
+description: "Use other Chat SDK adapters with Mastra channels."
+packages:
+  - "@mastra/core"
+---
+
+# More
+
+Mastra channels use Chat SDK adapters, so the pages in this section aren't the full list of supported platforms. Use any Chat SDK platform adapter that exports an adapter factory compatible with `channels.adapters`.
+
+## Adapter catalog
+
+The [Chat SDK adapter catalog](https://chat-sdk.dev/adapters) is the canonical source for available adapters. The list below is only a snapshot and may not always be up to date.
+
+At the time of writing, Chat SDK lists adapters for:
+
+- AgentPhone
+- Baileys WhatsApp
+- Discord
+- Google Chat
+- GitHub
+- iMessage
+- Kapso
+- Lark / Feishu
+- Linear
+- Liveblocks
+- Matrix
+- Messenger
+- Mattermost
+- Novu
+- Resend
+- Sendblue
+- Telegram
+- Twilio
+- Velt
+- Web
+- Webex
+- WeChat
+- WhatsApp Business Cloud
+- X
+- Zalo
+- Zernio
+
+Check the adapter's docs for its package name, credential variables, webhook requirements, and platform-specific behavior.
+
+## Use the same Mastra wiring
+
+The Mastra side of each Chat SDK adapter is similar: install the adapter package, add its adapter factory to `channels.adapters`, configure platform credentials, and point the platform webhook to the generated Mastra route.
+
+Use one of the platform pages in this section as a reference for the Mastra wiring:
+
+- [Slack](/docs/capabilities/channels/slack)
+- [Microsoft Teams](/docs/capabilities/channels/teams)
+- [Discord](/docs/capabilities/channels/discord)
+- [Telegram](/docs/capabilities/channels/telegram)
+- [WhatsApp](/docs/capabilities/channels/whatsapp)
+
+## What to check in adapter docs
+
+Before wiring a new adapter into Mastra, check the adapter docs for:
+
+- Credential environment variables.
+- Required platform permissions or scopes.
+- Webhook verification behavior.
+- Whether the platform needs separate routes for setup, events, or interactions.
+- Whether regular messages require long-running listeners or polling.
+- Attachment, card, and rich message support.
+
+## Related
+
+- [Channels overview](/docs/capabilities/channels/overview)
+- [Channels reference](/reference/agents/channels)

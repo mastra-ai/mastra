@@ -90,7 +90,9 @@ export interface IntakeRecord {
 
 export const intakes: IntakeRecord[] = [];
 
-let nextIntakeNumber = 5000;
+// Seeded from the clock so references don't repeat across worker restarts (the mock CRM is
+// in-memory) — a demo the day after yesterday's shouldn't hand out yesterday's MT-INT-5001.
+let nextIntakeNumber = 5000 + (Date.now() % 9000);
 
 export interface ReconcileInput {
   scenario: IntakeScenario;
@@ -185,4 +187,91 @@ export const contactLog: ContactLogEntry[] = [];
 export async function recordContact(entry: Omit<ContactLogEntry, 'loggedAt'>): Promise<void> {
   await simulateBackendLatency();
   contactLog.push({ ...entry, loggedAt: new Date().toISOString() });
+}
+
+// --- Call summary records (end-of-call, consent-gated) -----------------------
+
+export interface CallSummaryRecord {
+  /** The call this summary belongs to (the memory `thread`). */
+  callId: string;
+  /** The caller (the memory `resource`). */
+  callerId?: string;
+  /** Concise human-readable summary of the call. */
+  summary: string;
+  sentiment: 'positive' | 'neutral' | 'negative';
+  /** Services the caller asked about, if any. */
+  requestedServices: string[];
+  savedAt: string;
+}
+
+/** Call summaries keyed by call (thread) id — the business's own system of record. */
+export const callRecords = new Map<string, CallSummaryRecord>();
+
+/**
+ * Upsert the summary record for a finished call. Wired to the call-summary extractor's
+ * `onExtracted` hook (see memory.ts) so the structured summary lands in the app's own storage,
+ * not in Mastra memory — the business queries these records directly (and deletes them on its
+ * own retention schedule).
+ */
+export async function saveCallSummary(record: Omit<CallSummaryRecord, 'savedAt'>): Promise<void> {
+  await simulateBackendLatency();
+  callRecords.set(record.callId, { ...record, savedAt: new Date().toISOString() });
+  // The store is in-memory, so print confirmation — this is how you SEE the end-of-call summary
+  // land when testing live calls (it appears in the worker terminal right after hang-up). Only
+  // non-sensitive metadata is logged; a real backend must not print raw caller PII (callerId,
+  // free-text summary) to stdout.
+  console.info('[backend] call summary saved', { callId: record.callId, sentiment: record.sentiment });
+}
+
+// --- Consent store (companion to configuration.consentPolicy) ---------------
+
+/**
+ * Consent ledger: caller (the memory `resource`) → consent item → granted. A named, per-item set
+ * rather than one global "consented" flag — mirroring `configuration.consentPolicy` and the
+ * `createConsentTool` item set — so a regulated line can capture several independent consents
+ * (call recording, summary storage, data sharing, marketing). Only the REGULATED line uses this:
+ * its `recordConsent` tool (tools/compliance-tools) writes here, and its `onCallEnd` reads it back
+ * to gate the call summary and log the audit trail. The default Meridian workers are deliberately
+ * permissive and never touch consent.
+ */
+const consentLedger = new Map<string, Map<string, boolean>>();
+
+/** Record one consent decision for a caller. Wired to `createConsentTool`'s `onGrant`. */
+export async function recordConsent(resourceId: string, item: string, granted: boolean): Promise<void> {
+  await simulateBackendLatency();
+  let items = consentLedger.get(resourceId);
+  if (!items) {
+    items = new Map();
+    consentLedger.set(resourceId, items);
+  }
+  items.set(item, granted);
+}
+
+/**
+ * Whether the caller granted a given consent item. Defaults to NOT granted (no record → no consent),
+ * the correct compliance default: the agent must obtain and record consent for the gated action to
+ * proceed.
+ */
+export function hasConsent(resourceId: string, item: string): boolean {
+  return consentLedger.get(resourceId)?.get(item) === true;
+}
+
+/** The full set of consent decisions captured for a caller — for the audit trail / end-of-call log. */
+export function getConsentLedger(resourceId: string): Record<string, boolean> {
+  return Object.fromEntries(consentLedger.get(resourceId) ?? []);
+}
+
+/**
+ * Whether the caller granted consent to store a summary of the call. Defaults to NOT granted (no
+ * record → no consent → no summary), the correct compliance behavior for the REGULATED line: its
+ * agent must obtain and record consent during the call for the end-of-call summary to run.
+ */
+export function hasSummaryConsent(resourceId: string): boolean {
+  return hasConsent(resourceId, 'summaryStorage');
+}
+
+/** Whether the deployment requires consent before storing a call summary. */
+export function summaryStorageRequired(consentPolicy?: { summaryStorage?: boolean | { required?: boolean } }): boolean {
+  const req = consentPolicy?.summaryStorage;
+  return req === true || (typeof req === 'object' && req?.required !== false);
 }

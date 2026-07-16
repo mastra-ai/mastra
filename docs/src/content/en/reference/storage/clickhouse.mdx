@@ -87,6 +87,20 @@ const observabilityStore = new ObservabilityStorageClickhouse({
 
 New projects should use `ObservabilityStorageClickhouseVNext` instead.
 
+### Migrating from legacy to vNext
+
+To migrate historical spans from the legacy `mastra_ai_spans` table to the vNext schema, run:
+
+```bash npm2yarn
+npx mastra migrate
+```
+
+The migration copies span data from `mastra_ai_spans` into `mastra_span_events` in day-sized batches. It handles column mapping, deduplicates legacy rows, and preserves the original table as a backup. After migration, traces appear in Studio through the vNext adapter.
+
+:::note
+The legacy table isn't deleted. Drop it manually after verifying the migration.
+:::
+
 ### ClickHouse for every domain
 
 `ClickhouseStoreVNext` backs the `memory`, `workflows`, and `observability` domains with ClickHouse and uses the vNext observability adapter automatically. Use it when you want ClickHouse to back the entire application without wiring a composite store manually.

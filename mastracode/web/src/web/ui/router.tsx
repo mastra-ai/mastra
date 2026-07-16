@@ -16,6 +16,8 @@ import { SignInPage, useWebAuth } from './domains/auth';
 import Chat from './domains/chat/Chat';
 import { NewPage } from './domains/chat/NewPage';
 import { ThreadPage } from './domains/chat/ThreadPage';
+import { BoardPage } from './domains/factory/BoardPage';
+import { MetricsPage } from './domains/factory/MetricsPage';
 
 /**
  * Full-page placeholder while `/auth/me` resolves — a shimmer block instead
@@ -81,6 +83,14 @@ export function createAppRoutes(): RouteObject[] {
           children: [
             { path: 'new', element: <NewPage /> },
             { path: 'threads/:threadId', element: <ThreadPage /> },
+            // Personal (non-factory) sessions: same thread page, but the
+            // session provider binds to the user's own resourceId + worktree.
+            { path: 'user/threads/:threadId', element: <ThreadPage /> },
+            { path: 'factory/board', element: <BoardPage /> },
+            { path: 'factory/metrics', element: <MetricsPage /> },
+            // Legacy Factory pages, folded into the Board.
+            { path: 'factory/intake', element: <Navigate to="/factory/board" replace /> },
+            { path: 'factory/review', element: <Navigate to="/factory/board" replace /> },
           ],
         },
         // Legacy deep links (the app used to serve everything at any path).

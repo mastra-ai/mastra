@@ -69,11 +69,24 @@ const result = await runEvals({
 // result.gateResults: [{ id: 'check-called-tool', passed: true, score: 1 }]
 ```
 
-Any scorer works as a gate. Quick Checks are a natural fit because they return binary 1/0 scores.
+Any scorer works as a gate. Quick Checks are a natural fit because they return binary 1/0 scores. Visit [runEvals() reference](/reference/evals/run-evals) for the full parameter and return type documentation.
 
-:::note
-Visit [runEvals() reference](/reference/evals/run-evals) for the full parameter and return type documentation.
-:::
+### Gate-only runs
+
+`scorers` is optional when at least one gate is provided. This is useful for deterministic CI checks where you only care about pass/fail gates and don't need to track any quality metrics.
+
+```typescript title="src/evals/gate-only.ts"
+import { runEvals } from '@mastra/core/evals'
+import { checks } from '@mastra/evals/checks'
+
+const result = await runEvals({
+  data: [{ input: 'What is the weather in Brooklyn?' }],
+  target: weatherAgent,
+  gates: [checks.calledTool('get_weather'), checks.noToolErrors()],
+})
+```
+
+You must provide at least one scorer or gate — a run with neither throws an error.
 
 ## Thresholds
 

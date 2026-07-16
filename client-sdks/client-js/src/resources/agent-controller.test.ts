@@ -1,3 +1,4 @@
+import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, beforeEach, it, vi } from 'vitest';
 
 import { MastraClient } from '../client';
@@ -64,6 +65,52 @@ describe('AgentController Resource', () => {
     expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/messages');
     expect(init.method).toBe('POST');
     expect(JSON.parse(init.body as string)).toEqual({ message: 'hello' });
+  });
+
+  it('sends a message with file attachments', async () => {
+    mockJson({ ok: true });
+    const files = [{ data: 'aGVsbG8=', mediaType: 'image/png', filename: 'shot.png' }];
+    await client.getAgentController('code').session('user-1').sendMessage({ content: 'see attached', files });
+    const [url, init] = lastCall();
+    expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/messages');
+    expect(JSON.parse(init.body as string)).toEqual({ message: 'see attached', files });
+  });
+
+  it('sends requestContext in the body for run-triggering methods', async () => {
+    const session = client.getAgentController('code').session('user-1');
+    const requestContext = { userId: 'u-42', tier: 'pro' };
+
+    mockJson({ ok: true });
+    await session.sendMessage('hello', { requestContext });
+    expect(JSON.parse(lastCall()[1].body as string)).toEqual({ message: 'hello', requestContext });
+
+    mockJson({ ok: true });
+    await session.steer('focus', { requestContext });
+    expect(JSON.parse(lastCall()[1].body as string)).toEqual({ message: 'focus', requestContext });
+
+    mockJson({ ok: true });
+    await session.followUp('later', { requestContext });
+    expect(JSON.parse(lastCall()[1].body as string)).toEqual({ message: 'later', requestContext });
+
+    mockJson({ ok: true });
+    await session.approveTool('call-7', true, { requestContext });
+    expect(JSON.parse(lastCall()[1].body as string)).toEqual({ toolCallId: 'call-7', approved: true, requestContext });
+
+    mockJson({ ok: true });
+    await session.respondToToolSuspension('call-9', 'answer', { requestContext });
+    expect(JSON.parse(lastCall()[1].body as string)).toEqual({
+      toolCallId: 'call-9',
+      resumeData: 'answer',
+      requestContext,
+    });
+  });
+
+  it('serializes a RequestContext instance passed to sendMessage', async () => {
+    const requestContext = new RequestContext();
+    requestContext.set('userId', 'u-42');
+    mockJson({ ok: true });
+    await client.getAgentController('code').session('user-1').sendMessage('hello', { requestContext });
+    expect(JSON.parse(lastCall()[1].body as string)).toEqual({ message: 'hello', requestContext: { userId: 'u-42' } });
   });
 
   it('aborts the in-flight run', async () => {

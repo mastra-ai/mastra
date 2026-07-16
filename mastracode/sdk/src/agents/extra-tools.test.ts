@@ -42,7 +42,7 @@ function makeRequestContext(
 }
 
 describe('createDynamicTools – extraTools', () => {
-  it('should include extraTools in the returned tool set', () => {
+  it('should include extraTools in the returned tool set', async () => {
     const myCustomTool = createTool({
       id: 'my_custom_tool',
       description: 'A custom tool provided via extraTools',
@@ -51,7 +51,7 @@ describe('createDynamicTools – extraTools', () => {
     });
 
     const getDynamicTools = createDynamicTools(undefined, { my_custom_tool: myCustomTool });
-    const tools = getDynamicTools({ requestContext: makeRequestContext() });
+    const tools = await getDynamicTools({ requestContext: makeRequestContext() });
 
     // The extra tool must be present alongside the built-in tools
     expect(tools).toHaveProperty('my_custom_tool');
@@ -61,7 +61,7 @@ describe('createDynamicTools – extraTools', () => {
     expect(tools).toHaveProperty('request_access');
   });
 
-  it('should not overwrite built-in tools with extraTools of the same name', () => {
+  it('should not overwrite built-in tools with extraTools of the same name', async () => {
     const sneakyTool = createTool({
       id: 'request_access',
       description: 'Trying to overwrite the built-in request_access tool',
@@ -70,13 +70,13 @@ describe('createDynamicTools – extraTools', () => {
     });
 
     const getDynamicTools = createDynamicTools(undefined, { request_access: sneakyTool });
-    const tools = getDynamicTools({ requestContext: makeRequestContext() });
+    const tools = await getDynamicTools({ requestContext: makeRequestContext() });
 
     // Built-in request_access should NOT be replaced by the extra tool
     expect(tools.request_access).not.toBe(sneakyTool);
   });
 
-  it('should include pluginTools without overwriting existing dynamic tools', () => {
+  it('should include pluginTools without overwriting existing dynamic tools', async () => {
     const pluginTool = createTool({
       id: 'plugin_tool',
       description: 'Tool from plugin',
@@ -94,13 +94,13 @@ describe('createDynamicTools – extraTools', () => {
       plugin_tool: pluginTool,
       request_access: sneakyPluginTool,
     });
-    const tools = getDynamicTools({ requestContext: makeRequestContext() });
+    const tools = await getDynamicTools({ requestContext: makeRequestContext() });
 
     expect(tools.plugin_tool).toBe(pluginTool);
     expect(tools.request_access).not.toBe(sneakyPluginTool);
   });
 
-  it('should let extraTools win over pluginTools for embedding overrides', () => {
+  it('should let extraTools win over pluginTools for embedding overrides', async () => {
     const extraTool = createTool({
       id: 'shared_tool',
       description: 'Extra tool',
@@ -117,12 +117,12 @@ describe('createDynamicTools – extraTools', () => {
     const getDynamicTools = createDynamicTools(undefined, { shared_tool: extraTool }, undefined, undefined, {
       shared_tool: pluginTool,
     });
-    const tools = getDynamicTools({ requestContext: makeRequestContext() });
+    const tools = await getDynamicTools({ requestContext: makeRequestContext() });
 
     expect(tools.shared_tool).toBe(extraTool);
   });
 
-  it('should return extraTools even when no MCP manager is provided', () => {
+  it('should return extraTools even when no MCP manager is provided', async () => {
     const toolA = createTool({
       id: 'tool_a',
       description: 'Tool A',
@@ -137,13 +137,13 @@ describe('createDynamicTools – extraTools', () => {
     });
 
     const getDynamicTools = createDynamicTools(undefined, { tool_a: toolA, tool_b: toolB });
-    const tools = getDynamicTools({ requestContext: makeRequestContext() });
+    const tools = await getDynamicTools({ requestContext: makeRequestContext() });
 
     expect(tools).toHaveProperty('tool_a');
     expect(tools).toHaveProperty('tool_b');
   });
 
-  it('should support extraTools as a function that receives requestContext', () => {
+  it('should support extraTools as a function that receives requestContext', async () => {
     const myCustomTool = createTool({
       id: 'dynamic_tool',
       description: 'A dynamically provided tool',
@@ -158,12 +158,52 @@ describe('createDynamicTools – extraTools', () => {
       return { dynamic_tool: myCustomTool };
     });
 
-    const tools = getDynamicTools({ requestContext: makeRequestContext() });
+    const tools = await getDynamicTools({ requestContext: makeRequestContext() });
     expect(tools).toHaveProperty('dynamic_tool');
     expect(tools.dynamic_tool).toBe(myCustomTool);
   });
 
-  it('should support extraTools function that conditionally returns empty', () => {
+  it('should support an async extraTools function and stay sync otherwise', async () => {
+    const asyncTool = createTool({
+      id: 'async_tool',
+      description: 'A tool provided by an async provider (e.g. after a DB lookup)',
+      inputSchema: z.object({}),
+      execute: async () => ({ result: 'async' }),
+    });
+
+    const getDynamicTools = createDynamicTools(undefined, async () => {
+      await Promise.resolve();
+      return { async_tool: asyncTool };
+    });
+
+    const result = getDynamicTools({ requestContext: makeRequestContext() });
+    // Async providers make the tool set a promise…
+    expect(result).toHaveProperty('then');
+    const tools = await result;
+    expect(tools.async_tool).toBe(asyncTool);
+    expect(tools).toHaveProperty('request_access');
+
+    // …while sync providers keep the tool set synchronous.
+    const syncResult = createDynamicTools(undefined, () => ({}))({ requestContext: makeRequestContext() });
+    expect(syncResult).not.toHaveProperty('then');
+  });
+
+  it('should apply disabledTools and deny policies to async extraTools results', async () => {
+    const asyncTool = createTool({
+      id: 'blocked_async_tool',
+      description: 'Should be removed by disabledTools',
+      inputSchema: z.object({}),
+      execute: async () => ({ result: 'blocked' }),
+    });
+
+    const getDynamicTools = createDynamicTools(undefined, async () => ({ blocked_async_tool: asyncTool }), [
+      'blocked_async_tool',
+    ]);
+    const tools = await getDynamicTools({ requestContext: makeRequestContext() });
+    expect(tools).not.toHaveProperty('blocked_async_tool');
+  });
+
+  it('should support extraTools function that conditionally returns empty', async () => {
     const myCustomTool = createTool({
       id: 'conditional_tool',
       description: 'A conditionally provided tool',
@@ -178,13 +218,13 @@ describe('createDynamicTools – extraTools', () => {
       return { conditional_tool: myCustomTool };
     });
 
-    const tools = getDynamicTools({ requestContext: makeRequestContext() });
+    const tools = await getDynamicTools({ requestContext: makeRequestContext() });
     expect(tools).not.toHaveProperty('conditional_tool');
   });
 
-  it('should return only built-in tools when extraTools is undefined', () => {
+  it('should return only built-in tools when extraTools is undefined', async () => {
     const getDynamicTools = createDynamicTools(undefined, undefined);
-    const tools = getDynamicTools({ requestContext: makeRequestContext() });
+    const tools = await getDynamicTools({ requestContext: makeRequestContext() });
 
     // Should have built-in non-workspace tools but nothing extra
     // Note: workspace tools (view, search_content, etc.) are provided by the workspace, not createDynamicTools
@@ -200,7 +240,7 @@ describe('createDynamicTools – extraTools', () => {
       getStore: vi.fn(async (name: string) => (name === 'notifications' ? notificationStore : undefined)),
     };
     const getDynamicTools = createDynamicTools(undefined, undefined, undefined, storage as any);
-    const tools = getDynamicTools({ requestContext: makeRequestContext() });
+    const tools = await getDynamicTools({ requestContext: makeRequestContext() });
 
     expect(tools).toHaveProperty(MC_TOOLS.NOTIFICATION_INBOX);
     await expect(
@@ -237,7 +277,7 @@ describe('createDynamicTools – extraTools', () => {
       persisted: Promise.resolve(),
     }));
     const getDynamicTools = createDynamicTools(undefined, undefined, undefined, storage as any);
-    const tools = getDynamicTools({ requestContext: makeRequestContext() });
+    const tools = await getDynamicTools({ requestContext: makeRequestContext() });
 
     await expect(
       tools[MC_TOOLS.NOTIFICATION_INBOX]?.execute?.(
@@ -264,13 +304,13 @@ describe('createDynamicTools – extraTools', () => {
 });
 
 describe('getToolCategory – extra tools', () => {
-  it('should categorize unknown/extra tools as "mcp"', () => {
+  it('should categorize unknown/extra tools as "mcp"', async () => {
     expect(getToolCategory('my_custom_tool')).toBe('mcp');
     expect(getToolCategory('tool_a')).toBe('mcp');
     expect(getToolCategory('some_random_extra_tool')).toBe('mcp');
   });
 
-  it('should still categorize built-in tools correctly', () => {
+  it('should still categorize built-in tools correctly', async () => {
     expect(getToolCategory(MC_TOOLS.VIEW)).toBe('read');
     expect(getToolCategory(MC_TOOLS.SEARCH_CONTENT)).toBe('read');
     expect(getToolCategory(MC_TOOLS.FIND_FILES)).toBe('read');
@@ -280,7 +320,7 @@ describe('getToolCategory – extra tools', () => {
     expect(getToolCategory(MC_TOOLS.EXECUTE_COMMAND)).toBe('execute');
   });
 
-  it('should return null for always-allowed tools', () => {
+  it('should return null for always-allowed tools', async () => {
     expect(getToolCategory('ask_user')).toBeNull();
     expect(getToolCategory('task_write')).toBeNull();
     expect(getToolCategory('task_update')).toBeNull();
@@ -290,9 +330,9 @@ describe('getToolCategory – extra tools', () => {
 });
 
 describe('createDynamicTools – denied tool filtering', () => {
-  it('should omit tools with a per-tool deny policy', () => {
+  it('should omit tools with a per-tool deny policy', async () => {
     const getDynamicTools = createDynamicTools();
-    const tools = getDynamicTools({
+    const tools = await getDynamicTools({
       requestContext: makeRequestContext({
         permissionRules: { categories: {}, tools: { request_access: 'deny' } },
       }),
@@ -301,7 +341,7 @@ describe('createDynamicTools – denied tool filtering', () => {
     expect(tools).not.toHaveProperty('request_access');
   });
 
-  it('should omit multiple denied tools', () => {
+  it('should omit multiple denied tools', async () => {
     const myTool = createTool({
       id: 'my_tool',
       description: 'A custom tool',
@@ -310,7 +350,7 @@ describe('createDynamicTools – denied tool filtering', () => {
     });
 
     const getDynamicTools = createDynamicTools(undefined, { my_tool: myTool });
-    const tools = getDynamicTools({
+    const tools = await getDynamicTools({
       requestContext: makeRequestContext({
         permissionRules: {
           categories: {},
@@ -323,9 +363,9 @@ describe('createDynamicTools – denied tool filtering', () => {
     expect(tools).not.toHaveProperty('my_tool');
   });
 
-  it('should keep tools with allow or ask policies', () => {
+  it('should keep tools with allow or ask policies', async () => {
     const getDynamicTools = createDynamicTools();
-    const tools = getDynamicTools({
+    const tools = await getDynamicTools({
       requestContext: makeRequestContext({
         permissionRules: {
           categories: {},
@@ -337,7 +377,7 @@ describe('createDynamicTools – denied tool filtering', () => {
     expect(tools).toHaveProperty('request_access');
   });
 
-  it('should also deny extraTools when they have a deny policy', () => {
+  it('should also deny extraTools when they have a deny policy', async () => {
     const myTool = createTool({
       id: 'my_tool',
       description: 'A custom tool',
@@ -346,7 +386,7 @@ describe('createDynamicTools – denied tool filtering', () => {
     });
 
     const getDynamicTools = createDynamicTools(undefined, { my_tool: myTool });
-    const tools = getDynamicTools({
+    const tools = await getDynamicTools({
       requestContext: makeRequestContext({
         permissionRules: { categories: {}, tools: { my_tool: 'deny' } },
       }),
@@ -357,19 +397,19 @@ describe('createDynamicTools – denied tool filtering', () => {
 });
 
 describe('createDynamicTools – disabledTools filtering', () => {
-  it('should omit disabled built-in tools', () => {
+  it('should omit disabled built-in tools', async () => {
     const unfilteredTools = createDynamicTools()({ requestContext: makeRequestContext() });
     expect(unfilteredTools).toHaveProperty('request_access');
 
     const getDynamicTools = createDynamicTools(undefined, undefined, ['request_access']);
 
-    const tools = getDynamicTools({ requestContext: makeRequestContext() });
+    const tools = await getDynamicTools({ requestContext: makeRequestContext() });
     expect(tools).not.toHaveProperty('request_access');
     // web_search is provided by the Anthropic model mock and should survive filtering
     expect(tools).toHaveProperty('web_search');
   });
 
-  it('should omit disabled extraTools', () => {
+  it('should omit disabled extraTools', async () => {
     const myTool = createTool({
       id: 'my_tool',
       description: 'A custom tool',
@@ -378,13 +418,13 @@ describe('createDynamicTools – disabledTools filtering', () => {
     });
 
     const getDynamicTools = createDynamicTools(undefined, { my_tool: myTool }, ['my_tool']);
-    const tools = getDynamicTools({ requestContext: makeRequestContext() });
+    const tools = await getDynamicTools({ requestContext: makeRequestContext() });
     expect(tools).not.toHaveProperty('my_tool');
   });
 });
 
 describe('buildToolGuidance – denied tool filtering', () => {
-  it('should omit guidance for denied tools', () => {
+  it('should omit guidance for denied tools', async () => {
     const guidance = buildToolGuidance('build', {
       deniedTools: new Set([MC_TOOLS.EXECUTE_COMMAND]),
     });
@@ -395,7 +435,7 @@ describe('buildToolGuidance – denied tool filtering', () => {
     expect(guidance).toContain(`**${MC_TOOLS.NOTIFICATION_INBOX}**`);
   });
 
-  it('should omit multiple denied tools from guidance', () => {
+  it('should omit multiple denied tools from guidance', async () => {
     const guidance = buildToolGuidance('build', {
       deniedTools: new Set([MC_TOOLS.EXECUTE_COMMAND, MC_TOOLS.WRITE_FILE, 'subagent']),
     });
@@ -408,7 +448,7 @@ describe('buildToolGuidance – denied tool filtering', () => {
     expect(guidance).toContain(`**${MC_TOOLS.STRING_REPLACE_LSP}**`);
   });
 
-  it('should include all tools when no denied set is provided', () => {
+  it('should include all tools when no denied set is provided', async () => {
     const guidance = buildToolGuidance('build');
 
     expect(guidance).toContain(`**${MC_TOOLS.EXECUTE_COMMAND}**`);
