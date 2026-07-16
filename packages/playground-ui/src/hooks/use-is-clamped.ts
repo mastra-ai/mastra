@@ -1,41 +1,56 @@
-import * as React from 'react';
+import { useState } from 'react';
+import type { RefCallback } from 'react';
 
 import { useIsomorphicLayoutEffect } from './use-isomorphic-layout-effect';
 
+export interface UseIsClampedOptions {
+  /**
+   * Keep measuring while true. Pass false when the clamp is lifted (e.g. the
+   * text is expanded) to freeze the last measurement instead of reporting the
+   * unclamped element as not cut off.
+   */
+  enabled?: boolean;
+}
+
 export interface UseIsClampedResult<TElement extends HTMLElement> {
-  ref: React.RefCallback<TElement>;
+  ref: RefCallback<TElement>;
   isClamped: boolean;
 }
 
 /**
- * Reports whether a line-clamped (or otherwise overflow-hidden) element
- * actually has content cut off, by measuring the rendered layout
- * (`scrollHeight > clientHeight`) — never by counting characters.
- *
+ * Whether a line-clamped (or otherwise overflow-hidden) element actually has
+ * content cut off, measured from the rendered layout
+ * (`scrollHeight > clientHeight`) — never from a character count.
  * Re-measures when the element resizes and once fonts finish loading, since
- * both change line wrapping. Pass `enabled: false` while the clamp is lifted
- * (e.g. text expanded) to keep the last measured value instead of reporting
- * the unclamped element as not cut off.
+ * both change line wrapping.
  */
 export function useIsClamped<TElement extends HTMLElement = HTMLElement>({
   enabled = true,
-}: { enabled?: boolean } = {}): UseIsClampedResult<TElement> {
-  const [element, setElement] = React.useState<TElement | null>(null);
-  const [isClamped, setIsClamped] = React.useState(false);
+}: UseIsClampedOptions = {}): UseIsClampedResult<TElement> {
+  const [element, setElement] = useState<TElement | null>(null);
+  const [isClamped, setIsClamped] = useState(false);
 
   useIsomorphicLayoutEffect(() => {
-    if (!element || !enabled) return undefined;
+    if (!element || !enabled) return;
 
-    const measure = () => setIsClamped(element.scrollHeight > element.clientHeight);
+    let stopped = false;
+    const measure = () => {
+      if (!stopped) setIsClamped(element.scrollHeight > element.clientHeight);
+    };
+
     measure();
 
-    if (typeof ResizeObserver === 'undefined') return undefined;
+    if (typeof ResizeObserver === 'undefined') return;
 
     const observer = new ResizeObserver(measure);
     observer.observe(element);
+    // Font swaps change line wrapping without resizing the observed box.
     document.fonts?.ready.then(measure).catch(() => {});
 
-    return () => observer.disconnect();
+    return () => {
+      stopped = true;
+      observer.disconnect();
+    };
   }, [element, enabled]);
 
   return { ref: setElement, isClamped };

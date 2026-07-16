@@ -1,123 +1,116 @@
 // @vitest-environment jsdom
-import { act, renderHook, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import assert from 'node:assert';
+import { act, renderHook } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useIsClamped } from './use-is-clamped';
 
-const createElement = ({ scrollHeight, clientHeight }: { scrollHeight: number; clientHeight: number }) => {
+interface ElementSize {
+  scrollHeight: number;
+  clientHeight: number;
+}
+
+// jsdom performs no layout, so overflow is stubbed per element.
+const setElementSize = (element: HTMLElement, { scrollHeight, clientHeight }: ElementSize) => {
+  Object.defineProperties(element, {
+    scrollHeight: { configurable: true, value: scrollHeight },
+    clientHeight: { configurable: true, value: clientHeight },
+  });
+};
+
+const createClampableElement = (size: ElementSize) => {
   const element = document.createElement('p');
-  Object.defineProperty(element, 'scrollHeight', { configurable: true, value: scrollHeight });
-  Object.defineProperty(element, 'clientHeight', { configurable: true, value: clientHeight });
+  setElementSize(element, size);
   return element;
 };
 
-class MockResizeObserver implements ResizeObserver {
-  static instances: MockResizeObserver[] = [];
+const observers: MockResizeObserver[] = [];
 
+class MockResizeObserver implements ResizeObserver {
   constructor(private readonly callback: ResizeObserverCallback) {
-    MockResizeObserver.instances.push(this);
+    observers.push(this);
   }
 
   observe = vi.fn();
   unobserve = vi.fn();
   disconnect = vi.fn();
-  takeRecords = () => [];
+  takeRecords = (): ResizeObserverEntry[] => [];
 
-  trigger() {
+  resize() {
     this.callback([], this);
   }
 }
 
+const lastObserver = () => {
+  const observer = observers.at(-1);
+  assert(observer, 'expected the hook to create a ResizeObserver');
+  return observer;
+};
+
+beforeEach(() => {
+  observers.length = 0;
+  vi.stubGlobal('ResizeObserver', MockResizeObserver);
+});
+
 afterEach(() => {
-  MockResizeObserver.instances = [];
-  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
 describe('useIsClamped', () => {
-  it('reports clamped when content overflows the element', async () => {
+  it('reports clamped when content overflows the element', () => {
+    const { result } = renderHook(() => useIsClamped());
+
+    act(() => result.current.ref(createClampableElement({ scrollHeight: 60, clientHeight: 40 })));
+
+    expect(result.current.isClamped).toBe(true);
+  });
+
+  it('reports not clamped when content fits', () => {
+    const { result } = renderHook(() => useIsClamped());
+
+    act(() => result.current.ref(createClampableElement({ scrollHeight: 40, clientHeight: 40 })));
+
+    expect(result.current.isClamped).toBe(false);
+  });
+
+  it('still measures once when ResizeObserver is unsupported', () => {
     vi.stubGlobal('ResizeObserver', undefined);
-
-    const element = createElement({ scrollHeight: 60, clientHeight: 40 });
     const { result } = renderHook(() => useIsClamped());
 
-    act(() => {
-      result.current.ref(element);
-    });
+    act(() => result.current.ref(createClampableElement({ scrollHeight: 60, clientHeight: 40 })));
 
-    await waitFor(() => {
-      expect(result.current.isClamped).toBe(true);
-    });
+    expect(result.current.isClamped).toBe(true);
   });
 
-  it('reports not clamped when content fits', async () => {
-    vi.stubGlobal('ResizeObserver', undefined);
-
-    const element = createElement({ scrollHeight: 40, clientHeight: 40 });
+  it('re-measures when the element resizes', () => {
+    const element = createClampableElement({ scrollHeight: 60, clientHeight: 40 });
     const { result } = renderHook(() => useIsClamped());
 
-    act(() => {
-      result.current.ref(element);
-    });
+    act(() => result.current.ref(element));
+    expect(result.current.isClamped).toBe(true);
 
-    await waitFor(() => {
-      expect(result.current.isClamped).toBe(false);
-    });
+    // The element grew tall enough to fit its content.
+    setElementSize(element, { scrollHeight: 60, clientHeight: 60 });
+    act(() => lastObserver().resize());
+
+    expect(result.current.isClamped).toBe(false);
   });
 
-  it('re-measures when the element resizes', async () => {
-    vi.stubGlobal('ResizeObserver', MockResizeObserver);
-
-    const element = createElement({ scrollHeight: 60, clientHeight: 40 });
-    const { result } = renderHook(() => useIsClamped());
-
-    act(() => {
-      result.current.ref(element);
-    });
-
-    await waitFor(() => {
-      expect(result.current.isClamped).toBe(true);
-    });
-
-    // Element grew tall enough to fit its content.
-    Object.defineProperty(element, 'clientHeight', { configurable: true, value: 60 });
-
-    const observer = MockResizeObserver.instances[0];
-    if (!observer) throw new Error('ResizeObserver was not created.');
-
-    act(() => {
-      observer.trigger();
-    });
-
-    await waitFor(() => {
-      expect(result.current.isClamped).toBe(false);
-    });
-  });
-
-  it('keeps the last measurement while disabled', async () => {
-    vi.stubGlobal('ResizeObserver', MockResizeObserver);
-
-    const element = createElement({ scrollHeight: 60, clientHeight: 40 });
-    const { result, rerender } = renderHook(({ enabled }) => useIsClamped({ enabled }), {
+  it('keeps the last measurement while disabled', () => {
+    const element = createClampableElement({ scrollHeight: 60, clientHeight: 40 });
+    const { result, rerender } = renderHook(({ enabled }: { enabled: boolean }) => useIsClamped({ enabled }), {
       initialProps: { enabled: true },
     });
 
-    act(() => {
-      result.current.ref(element);
-    });
+    act(() => result.current.ref(element));
+    expect(result.current.isClamped).toBe(true);
 
-    await waitFor(() => {
-      expect(result.current.isClamped).toBe(true);
-    });
-
-    // Disabling (e.g. text expanded, clamp lifted) tears down the observer
-    // and keeps the last value even though the element no longer overflows.
-    Object.defineProperty(element, 'clientHeight', { configurable: true, value: 60 });
+    // Disabling (clamp lifted, e.g. text expanded) stops observing and keeps
+    // the last value even though the element no longer overflows.
+    setElementSize(element, { scrollHeight: 60, clientHeight: 60 });
     rerender({ enabled: false });
 
-    const observer = MockResizeObserver.instances[0];
-    if (!observer) throw new Error('ResizeObserver was not created.');
-    expect(observer.disconnect).toHaveBeenCalled();
+    expect(lastObserver().disconnect).toHaveBeenCalled();
     expect(result.current.isClamped).toBe(true);
   });
 });
