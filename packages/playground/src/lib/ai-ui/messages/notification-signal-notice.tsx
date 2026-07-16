@@ -26,7 +26,8 @@ export const NotificationSignalNotice = ({ signal }: NotificationSignalNoticePro
   const pending = formatSignalValue(notification?.pending) ?? formatSignalValue(signal.attributes?.pending);
   const status = notification?.status ?? formatSignalValue(signal.attributes?.status);
   const text = signalContentsToText(signal.contents);
-  const hasMetadata = priority !== undefined || status !== undefined || pending !== undefined;
+  const pendingLabel = pending ? `${pending} pending` : undefined;
+  const hasMetadata = Boolean(priority || status || pendingLabel);
   const hasText = text.length > 0;
 
   return (
@@ -42,7 +43,7 @@ export const NotificationSignalNotice = ({ signal }: NotificationSignalNoticePro
             <div className="flex flex-wrap items-center gap-2">
               {priority ? <Badge size="xs">{priority}</Badge> : null}
               {status ? <Badge size="xs">{status}</Badge> : null}
-              {pending !== undefined ? <Badge size="xs">{pending} pending</Badge> : null}
+              {pendingLabel ? <Badge size="xs">{pendingLabel}</Badge> : null}
             </div>
           ) : null}
           {hasText ? <Notice.Message className="whitespace-pre-wrap break-words">{text}</Notice.Message> : null}

@@ -29,7 +29,7 @@ export const signalContentsToText = (contents: unknown): string => {
   return contents
     .flatMap(part => {
       if (!isRecord(part)) return [];
-      return part.type === 'text' && typeof part.text === 'string' ? [part.text] : [];
+      return part.type === 'text' && typeof part.text === 'string' && part.text.length > 0 ? [part.text] : [];
     })
     .join('\n');
 };

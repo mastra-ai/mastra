@@ -116,6 +116,40 @@ describe('NotificationSignalNotice', () => {
     });
   });
 
+  describe('when content includes empty and unsupported parts', () => {
+    const signal = {
+      type: 'notification',
+      contents: [
+        { type: 'text', text: 'First visible line' },
+        { type: 'text', text: '' },
+        { type: 'file', data: 'ignored' },
+        { type: 'text', text: 'Second visible line' },
+      ],
+    } satisfies SignalData;
+
+    it('preserves visible text without adding blank separators', () => {
+      render(<NotificationSignalNotice signal={signal} />);
+
+      expect(screen.getByText('First visible line Second visible line').textContent).toBe(
+        'First visible line\nSecond visible line',
+      );
+    });
+  });
+
+  describe('when attribute metadata contains empty strings', () => {
+    const signal = {
+      type: 'notification',
+      contents: 'The notification body remains visible.',
+      attributes: { priority: '', status: '', pending: '' },
+    } satisfies SignalData;
+
+    it('does not render empty metadata labels', () => {
+      const { container } = render(<NotificationSignalNotice signal={signal} />);
+
+      expect(container.textContent).toBe('NotificationThe notification body remains visible.');
+    });
+  });
+
   describe('when the signal is a notification summary', () => {
     const signal = {
       type: 'notification',
