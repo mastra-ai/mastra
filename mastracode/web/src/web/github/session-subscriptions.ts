@@ -128,7 +128,7 @@ export function createGithubSubscriptionTools(requestContext: RequestContext) {
   };
 }
 
-function stripHeredocBodies(command: string): string {
+export function stripHeredocBodies(command: string): string {
   const lines = command.split('\n');
   const executableLines: string[] = [];
   let delimiter: string | undefined;
