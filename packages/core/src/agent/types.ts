@@ -732,7 +732,7 @@ interface AgentConfigBase<
    * }
    * ```
    */
-  skills?: AgentSkillsInput;
+  skills?: AgentSkillsInput<TRequestContext>;
   /**
    * Format for skill information injection when workspace has skills.
    * @default 'xml'

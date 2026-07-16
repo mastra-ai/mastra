@@ -487,7 +487,7 @@ export class Agent<
   #pubsub?: PubSub;
   #inheritedPubSub?: PubSub;
   #memory?: DynamicArgument<MastraMemory, TRequestContext>;
-  #skills?: AgentSkillsInput;
+  #skills?: AgentSkillsInput<TRequestContext>;
   #skillsFormat?: SkillFormat;
   #workflows?: DynamicArgument<Record<string, AnyWorkflow>, TRequestContext>;
   #defaultGenerateOptionsLegacy: DynamicArgument<AgentGenerateOptions, TRequestContext>;
@@ -1140,7 +1140,7 @@ export class Agent<
     if (this.#skills) {
       let resolvedInputs: SkillInput[];
       if (typeof this.#skills === 'function') {
-        resolvedInputs = await this.#skills({ requestContext: rc });
+        resolvedInputs = await this.#skills({ requestContext: rc as RequestContext<TRequestContext> });
       } else {
         resolvedInputs = this.#skills;
       }
