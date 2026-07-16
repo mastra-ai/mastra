@@ -351,6 +351,14 @@ export interface SubscribeAgentControllerSessionOptions {
   onEvent: (event: AgentControllerEvent) => void;
   /** Called when the stream errors or ends unexpectedly. */
   onError?: (error: unknown) => void;
+  reconnect?:
+    | boolean
+    | {
+        /** Maximum reconnect attempts after the initial stream ends or errors. Defaults to Infinity. */
+        maxRetries?: number;
+        /** Delay between reconnect attempts in milliseconds. Defaults to 1000. */
+        delayMs?: number;
+      };
 }
 
 export interface AgentControllerSubscription {
@@ -409,21 +417,43 @@ export class AgentControllerSession extends BaseResource {
    * message arrives here as `message_*` events, not on the sendMessage call.
    */
   async subscribe(options: SubscribeAgentControllerSessionOptions): Promise<AgentControllerSubscription> {
-    const response = (await this.request(this.url(`${this.base()}/stream`), { stream: true })) as Response;
-    if (!response.body) {
-      throw new Error('No response body for agent controller session stream');
-    }
+    const reconnectOptions =
+      options.reconnect === true
+        ? { maxRetries: Infinity, delayMs: 1000 }
+        : options.reconnect
+          ? { maxRetries: options.reconnect.maxRetries ?? Infinity, delayMs: options.reconnect.delayMs ?? 1000 }
+          : null;
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
     let cancelled = false;
-    let buffer = '';
+    let currentReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 
-    const pump = async () => {
+    const delay = (ms: number) =>
+      new Promise<void>(resolve => {
+        reconnectTimer = setTimeout(() => {
+          reconnectTimer = undefined;
+          resolve();
+        }, ms);
+      });
+
+    const requestStream = () => this.request(this.url(`${this.base()}/stream`), { stream: true }) as Promise<Response>;
+
+    const streamEndedError = () => new Error('Agent controller session stream ended unexpectedly');
+
+    const pump = async (response: Response): Promise<'done' | 'transport_error' | 'consumer_error' | 'cancelled'> => {
+      if (!response.body) {
+        throw new Error('No response body for agent controller session stream');
+      }
+
+      const reader = response.body.getReader();
+      currentReader = reader;
+      const decoder = new TextDecoder();
+      let buffer = '';
+
       try {
         while (!cancelled) {
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done) return cancelled ? 'cancelled' : 'done';
           buffer += decoder.decode(value, { stream: true });
 
           // SSE frames are separated by a blank line.
@@ -435,25 +465,94 @@ export class AgentControllerSession extends BaseResource {
               if (!line.startsWith('data:')) continue; // skip ": heartbeat" comments
               const data = line.slice(5).trim();
               if (!data) continue;
+              let event: AgentControllerEvent;
               try {
-                options.onEvent(JSON.parse(data) as AgentControllerEvent);
+                event = JSON.parse(data) as AgentControllerEvent;
               } catch {
-                // ignore malformed frame
+                continue; // ignore malformed frame
+              }
+              try {
+                options.onEvent(event);
+              } catch (cause) {
+                if (!cancelled) options.onError?.(cause);
+                return 'consumer_error';
               }
             }
           }
         }
-      } catch (error) {
-        if (!cancelled) options.onError?.(error);
+        return 'cancelled';
+      } catch {
+        return cancelled ? 'cancelled' : 'transport_error';
+      } finally {
+        if (currentReader === reader) currentReader = null;
+        void reader.cancel().catch(() => {});
       }
     };
 
-    void pump();
+    const run = async () => {
+      let attempts = 0;
+
+      while (!cancelled) {
+        let response: Response;
+        try {
+          response = await requestStream();
+        } catch (error) {
+          if (cancelled) return;
+          if (!reconnectOptions || attempts >= reconnectOptions.maxRetries) {
+            options.onError?.(error);
+            return;
+          }
+          attempts++;
+          await delay(reconnectOptions.delayMs);
+          if (cancelled) return;
+          continue;
+        }
+
+        let result: 'done' | 'transport_error' | 'consumer_error' | 'cancelled';
+        try {
+          result = await pump(response);
+        } catch (error) {
+          if (cancelled) return;
+          if (!reconnectOptions) {
+            options.onError?.(error);
+            return;
+          }
+          result = 'transport_error';
+        }
+
+        if (cancelled || result === 'cancelled') return;
+        if (result === 'consumer_error') return;
+
+        if (!reconnectOptions) {
+          if (result === 'done' || result === 'transport_error') {
+            options.onError?.(streamEndedError());
+          }
+          return;
+        }
+
+        if (result === 'done' || result === 'transport_error') {
+          if (attempts >= reconnectOptions.maxRetries) {
+            options.onError?.(streamEndedError());
+            return;
+          }
+          attempts++;
+          await delay(reconnectOptions.delayMs);
+          if (cancelled) return;
+          continue;
+        }
+      }
+    };
+
+    void run();
 
     return {
       unsubscribe: () => {
         cancelled = true;
-        void reader.cancel().catch(() => {});
+        if (reconnectTimer) {
+          clearTimeout(reconnectTimer);
+          reconnectTimer = undefined;
+        }
+        void currentReader?.cancel().catch(() => {});
       },
     };
   }
