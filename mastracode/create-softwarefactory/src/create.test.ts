@@ -26,7 +26,6 @@ vi.mock('@clack/prompts', () => clack);
 vi.mock('./utils/exec.js', () => exec);
 
 import type { Analytics } from './analytics.js';
-import { DEFAULT_PUBLIC_URL, DOCKER_DATABASE_URL } from './context.js';
 import { create } from './create.js';
 
 const analytics = { trackEvent: () => {}, shutdown: async () => {} } as unknown as Analytics;
@@ -79,15 +78,12 @@ describe('create --default', () => {
     const projectPath = path.join(workDir, 'my-factory');
     const env = fs.readFileSync(path.join(projectPath, '.env'), 'utf8');
 
-    // Active values written by the flow.
-    expect(env).toContain(`MASTRACODE_PUBLIC_URL=${DEFAULT_PUBLIC_URL}`);
-    expect(env).toContain(`APP_DATABASE_URL=${DOCKER_DATABASE_URL}`);
-    // Unset vars stay commented placeholders — an active `KEY=` would load as
-    // the empty string and poison `process.env.X ?? default` fallbacks.
-    expect(env).toContain('# ANTHROPIC_API_KEY=');
-    expect(env).toContain('# WORKOS_API_KEY=');
-    expect(env).toContain('# GITHUB_APP_ID=');
-    expect(env).not.toMatch(/^WORKOS_API_KEY=/m);
+    // .env is a verbatim copy of .env.example — the CLI writes no values;
+    // configuration happens in the web UI. Everything stays a commented
+    // placeholder (an active `KEY=` would load as the empty string and poison
+    // `process.env.X ?? default` fallbacks).
+    expect(env).toBe(ENV_EXAMPLE);
+    expect(env).not.toMatch(/^[A-Z][A-Z0-9_]*=/m);
 
     // Project renamed and installed.
     const pkg = JSON.parse(fs.readFileSync(path.join(projectPath, 'package.json'), 'utf8'));
@@ -99,6 +95,9 @@ describe('create --default', () => {
         cwd: projectPath,
       }),
     );
+
+    // Git repo initialized (auto-yes under --default).
+    expect(exec.runInherit).toHaveBeenCalledWith('git', ['init', '-q'], expect.objectContaining({ cwd: projectPath }));
 
     // Success outro shown.
     expect(clack.note).toHaveBeenCalledWith(expect.stringContaining('Your Software Factory is ready!'), 'Next steps');

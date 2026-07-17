@@ -180,8 +180,10 @@ function transformPackageJson() {
   manifest.private = true;
   manifest.license = 'Apache-2.0';
 
+  // Direct mapping of the web project's own scripts (web:dev / web:build /
+  // web:start), minus monorepo-only bits (prebuild, monorepo-deps.mjs).
   manifest.scripts = {
-    dev: 'node scripts/dev.mjs',
+    dev: 'concurrently --kill-others-on-fail --names server,ui "MASTRA_SKIP_PEERDEP_CHECK=1 varlock run -- mastra dev --dir src/mastra" "vite --config src/web/vite.config.ts"',
     'db:up': 'docker compose up -d --wait',
     'db:down': 'docker compose down',
     build: 'npm run build:ui && npm run build:server',
@@ -336,137 +338,6 @@ src/mastra/public/ui/
   );
 }
 
-function writeDevScript() {
-  const dev = `#!/usr/bin/env node
-/**
- * Development runner: starts the Mastra API server (mastra dev, :4111) and
- * the Vite SPA dev server (:5173) side by side, and prints the app URLs once
- * both are ready.
- *
- * Ports are overridable: PORT for the API server, MASTRACODE_UI_PORT for the
- * UI. The UI port is strict (no hopping to a free port): OAuth callbacks are
- * registered against the configured origin, so a silently relocated UI would
- * break every WorkOS/GitHub/Linear redirect. Change MASTRACODE_UI_PORT and
- * MASTRACODE_PUBLIC_URL together.
- *
- * Env is loaded/validated by varlock from .env against .env.schema.
- */
-import { spawn } from 'node:child_process';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const binDir = path.join(root, 'node_modules', '.bin');
-const PATH_KEY = process.platform === 'win32' ? 'Path' : 'PATH';
-
-const serverPort = process.env.PORT ?? '4111';
-const uiPort = process.env.MASTRACODE_UI_PORT ?? '5173';
-const serverUrl = \`http://localhost:\${serverPort}\`;
-
-const env = {
-  ...process.env,
-  [PATH_KEY]: \`\${binDir}\${path.delimiter}\${process.env[PATH_KEY] ?? process.env.PATH ?? ''}\`,
-  MASTRA_SKIP_PEERDEP_CHECK: '1',
-};
-
-const children = [];
-let bannerPrinted = false;
-let serverReady = false;
-let uiUrl; // actual Vite URL, parsed from its output
-
-function printBanner() {
-  if (bannerPrinted || !serverReady || !uiUrl) return;
-  bannerPrinted = true;
-  const rows = [
-    ['Factory UI:', uiUrl],
-    ['Mastra Studio:', serverUrl],
-    ['API:', \`\${serverUrl}/api\`],
-  ];
-  const width = Math.max(38, ...rows.map(([label, url]) => label.length + url.length + 2)) + 6;
-  const line = content => \`  │ \${content.padEnd(width - 4)} │\`;
-  console.log('');
-  console.log(\`  ┌\${'─'.repeat(width - 2)}┐\`);
-  console.log(line(''));
-  console.log(line('Mastra Software Factory is running'));
-  console.log(line(''));
-  for (const [label, url] of rows) console.log(line(\`\${label.padEnd(15)}\${url}\`));
-  console.log(line(''));
-  console.log(\`  └\${'─'.repeat(width - 2)}┘\`);
-  console.log('');
-}
-
-function run(name, command, commandArgs, extraEnv = {}, onLine) {
-  const child = spawn(command, commandArgs, {
-    cwd: root,
-    env: { ...env, ...extraEnv },
-    shell: process.platform === 'win32',
-  });
-  children.push(child);
-  const forward = stream => data => {
-    const text = data.toString();
-    for (const line of text.split('\\n')) {
-      if (line.trim()) stream.write(\`[\${name}] \${line}\\n\`);
-    }
-    onLine?.(text);
-  };
-  child.stdout.on('data', forward(process.stdout));
-  child.stderr.on('data', forward(process.stderr));
-  child.on('close', code => shutdown(code ?? 1));
-  return child;
-}
-
-let shuttingDown = false;
-function shutdown(code) {
-  if (shuttingDown) return;
-  shuttingDown = true;
-  for (const child of children) {
-    if (child.exitCode === null) child.kill('SIGTERM');
-  }
-  process.exitCode = code;
-}
-
-process.on('SIGINT', () => shutdown(130));
-process.on('SIGTERM', () => shutdown(143));
-
-run('server', 'varlock', ['run', '--', 'mastra', 'dev', '--dir', 'src/mastra'], { PORT: serverPort }, text => {
-  if (/Studio available|Mastra API running|ready in/i.test(text)) {
-    serverReady = true;
-    printBanner();
-  }
-});
-
-run(
-  'ui',
-  'vite',
-  ['--config', 'src/web/vite.config.ts'],
-  { MASTRACODE_UI_PORT: uiPort, MASTRACODE_API_TARGET: serverUrl },
-  text => {
-    // eslint-disable-next-line no-control-regex
-    const clean = text.replace(/\\u001b\\[[0-9;]*m/g, '');
-    if (/Port \\d+ is (already )?in use/i.test(clean)) {
-      console.error('');
-      console.error(\`[ui] Port \${uiPort} is already in use — the UI port is strict because OAuth\`);
-      console.error('[ui] callback URLs (WorkOS/GitHub/Linear) are registered against it.');
-      console.error('[ui] Either free the port, or relocate the app:');
-      console.error('[ui]   1. Run with MASTRACODE_UI_PORT=<port> npm run dev');
-      console.error('[ui]   2. Set MASTRACODE_PUBLIC_URL=http://localhost:<port> in .env');
-      console.error('[ui]   3. Update the callback URLs registered on your OAuth apps to match');
-      console.error('');
-      return;
-    }
-    const match = clean.match(/Local:\\s+(https?:\\/\\/\\S+?)\\/?\\s/);
-    if (match) {
-      uiUrl = match[1];
-      printBanner();
-    }
-  },
-);
-`;
-  const scriptsDir = path.join(outDir, 'scripts');
-  fs.mkdirSync(scriptsDir, { recursive: true });
-  fs.writeFileSync(path.join(scriptsDir, 'dev.mjs'), dev);
-}
-
 function writeReadme(pins) {
   const versions = Object.fromEntries(pins);
   const readme = `# Mastra Software Factory
@@ -490,7 +361,7 @@ npm run dev
 - **Mastra Studio** → http://localhost:4111
 - **API** → http://localhost:4111/api
 
-With zero configuration the app runs in local, auth-less mode (agents + local storage, no integrations). Features enable themselves as you add environment variables — see below.
+With zero configuration the app runs in local, auth-less mode (agents + local storage, no integrations). Open the Factory UI to finish setup — model provider keys are added there (Settings › Models). Deployment-level features enable themselves as you add environment variables — see below.
 
 ### Ports
 
@@ -498,11 +369,11 @@ The UI port is **strict**: if 5173 is taken, \`npm run dev\` fails instead of mo
 
 ## Configuration
 
-All configuration lives in \`.env\` (validated against \`.env.schema\` by [varlock](https://varlock.dev)). Every value is optional; each feature activates when its variables are set. Restart \`npm run dev\` after changing \`.env\`.
+Day-to-day configuration (model providers, integrations) happens in the web UI. Deployment-level settings live in \`.env\` (validated against \`.env.schema\` by [varlock](https://varlock.dev)). Every value is optional; each feature activates when its variables are set. Restart \`npm run dev\` after changing \`.env\`.
 
 | Feature | Requires |
 | --- | --- |
-| Agents / model providers | \`ANTHROPIC_API_KEY\` or \`OPENAI_API_KEY\` (or add keys in Settings › Models) |
+| Agents / model providers | add keys in the UI (Settings › Models), or \`ANTHROPIC_API_KEY\` / \`OPENAI_API_KEY\` |
 | Sign-in (WorkOS) | \`WORKOS_API_KEY\`, \`WORKOS_CLIENT_ID\` |
 | GitHub projects & intake | WorkOS + \`GITHUB_APP_ID\`, \`GITHUB_APP_PRIVATE_KEY\`, \`GITHUB_APP_CLIENT_ID\`, \`GITHUB_APP_CLIENT_SECRET\`, \`GITHUB_APP_SLUG\` + \`APP_DATABASE_URL\` |
 | Linear intake | WorkOS + \`LINEAR_CLIENT_ID\`, \`LINEAR_CLIENT_SECRET\` + \`APP_DATABASE_URL\` + a state secret (\`GITHUB_APP_WEBHOOK_SECRET\` or \`WORKOS_COOKIE_PASSWORD\`) |
@@ -528,7 +399,7 @@ Integrations are per-organization, so they require sign-in, powered by [WorkOS](
 
 ### GitHub
 
-The Factory connects to GitHub through a GitHub App you own. \`npm create softwarefactory\` walks you through creating one (guided manual entry); to do it yourself, create an app at https://github.com/settings/apps/new (or under your org) and set the \`GITHUB_APP_*\` variables in \`.env\`.
+The Factory connects to GitHub through a GitHub App you own. Create an app at https://github.com/settings/apps/new (or under your org) and set the \`GITHUB_APP_*\` variables in \`.env\`.
 
 The app needs **Contents, Issues, Pull requests** (Read & write) and **Metadata** (Read-only) permissions. Set its callback URL to \`<your app origin>/auth/github/callback\`.
 
@@ -590,7 +461,6 @@ stripTestingTypesFromUiTsconfig();
 writeEnvExample();
 writeNpmrc();
 writeGitignore();
-writeDevScript();
 writeReadme(pins);
 
 console.log(`sync-template: done. Template written to ${outDir}`);

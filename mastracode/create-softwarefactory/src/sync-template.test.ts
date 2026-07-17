@@ -73,8 +73,11 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
 
     // Generated user-facing files.
     expect(fs.existsSync(path.join(outDir, 'README.md'))).toBe(true);
-    expect(fs.existsSync(path.join(outDir, 'scripts', 'dev.mjs'))).toBe(true);
     expect(fs.existsSync(path.join(outDir, 'tsconfig.json'))).toBe(true);
+
+    // The dev script is a direct mapping of the web project's own dev flow —
+    // no generated wrapper script.
+    expect(fs.existsSync(path.join(outDir, 'scripts', 'dev.mjs'))).toBe(false);
 
     // .env.example: unset vars are commented placeholders, never `KEY=`.
     const envExample = fs.readFileSync(path.join(outDir, '.env.example'), 'utf8');
@@ -92,5 +95,12 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
     // Tests and their dependencies are stripped.
     expect(allDeps.vitest).toBeUndefined();
     expect(fs.existsSync(path.join(outDir, 'e2e'))).toBe(false);
+
+    // Scripts map the web project's own flow, minus monorepo-only bits.
+    expect(pkg.scripts.dev).toContain('concurrently');
+    expect(pkg.scripts.dev).toContain('mastra dev');
+    expect(pkg.scripts.dev).toContain('vite');
+    expect(pkg.scripts.prebuild).toBeUndefined();
+    expect(JSON.stringify(pkg.scripts)).not.toContain('monorepo-deps');
   });
 });

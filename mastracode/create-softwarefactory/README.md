@@ -6,17 +6,14 @@ Scaffolding CLI for the **Mastra Software Factory** — an open-source, agent-po
 npm create softwarefactory
 ```
 
-The CLI clones the [softwarefactory-template](https://github.com/mastra-ai/softwarefactory-template), walks you through configuration (model provider, database, WorkOS sign-in, optionally a GitHub App and Linear), writes a ready-to-run `.env`, and installs dependencies. Everything is skippable — the app boots with zero configuration in local mode, and anything skipped can be finished later from the web UI settings or `.env`.
+The CLI is intentionally minimal: it asks for a project name, clones the [softwarefactory-template](https://github.com/mastra-ai/softwarefactory-template), installs dependencies, and offers to initialize git. That's it — run `npm run dev` and finish setup (model providers, integrations, database) from the web UI on first load. An "auth with the Mastra platform" step is planned as a follow-up.
 
 ## Flags
 
 ```text
 npm create softwarefactory [project-name] -- [options]
 
--l, --llm <provider>       Model provider (openai or anthropic)
--k, --llm-api-key <key>    API key for the model provider
-    --db-url <url>         Postgres connection URL (postgres://...)
-    --default              Quick start: Docker database defaults, skip integrations
+    --default              Non-interactive: default name, init git
     --template-ref <ref>   Pin a template repo tag/branch
     --template-dir <dir>   Use a local template directory (development)
 -t, --timeout [ms]         Timeout for dependency installation

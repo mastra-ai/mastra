@@ -58,14 +58,13 @@ describe('softwarefactory template', () => {
     });
   });
 
-  it('writes a healthy .env', async () => {
+  it('seeds .env with commented placeholders only', async () => {
     const env = await readFile(join(scaffoldDir, '.env'), 'utf8');
-    expect(env).toMatch(/^MASTRACODE_PUBLIC_URL=http:\/\/localhost:5173$/m);
-    expect(env).toMatch(/^APP_DATABASE_URL=/m);
-    // Unset vars must stay commented placeholders: an active `KEY=` loads as
-    // the empty string and poisons `process.env.X ?? default` fallbacks.
+    // The CLI writes no values — configuration happens in the web UI. Unset
+    // vars must stay commented placeholders: an active `KEY=` loads as the
+    // empty string and poisons `process.env.X ?? default` fallbacks.
     expect(env).toMatch(/^# WORKOS_API_KEY=/m);
-    expect(env).not.toMatch(/^[A-Z][A-Z0-9_]*=$/m);
+    expect(env).not.toMatch(/^[A-Z][A-Z0-9_]*=/m);
   });
 
   it('typechecks against the local package set', async () => {
@@ -95,6 +94,8 @@ describe('softwarefactory template', () => {
         ...registryEnv,
         PORT: String(apiPort),
         MASTRACODE_UI_PORT: String(uiPort),
+        // The Vite proxy targets :4111 by default; follow the API port.
+        MASTRACODE_API_TARGET: `http://localhost:${apiPort}`,
       },
       detached: true,
       stdout: 'pipe',
