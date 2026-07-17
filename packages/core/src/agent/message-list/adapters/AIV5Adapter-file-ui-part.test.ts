@@ -137,4 +137,38 @@ describe('AIV5Adapter — FileUIPart (url-based) through fromModelMessage', () =
       expect((filePart as any).mediaType).toBe('application/pdf');
     }
   });
+
+  it('preserves an OpenAI Files API file ID through the full ingestion round trip', () => {
+    const fileId = 'file-XkZk6RV6jeACpVewBphWEX';
+
+    // Ingestion: incoming model message with a file ID as data (the #16408 scenario)
+    const dbMessage = AIV5Adapter.fromModelMessage({
+      role: 'user',
+      content: [
+        {
+          type: 'file',
+          data: fileId,
+          mediaType: 'application/pdf',
+        },
+      ],
+    });
+
+    const dbFilePart = dbMessage.content.parts?.find(p => p.type === 'file');
+    expect(dbFilePart).toBeDefined();
+    if (dbFilePart?.type === 'file') {
+      expect(dbFilePart.data).toBe(fileId);
+      expect(dbFilePart.data).not.toMatch(/^data:/);
+    }
+
+    // Readback: DB message converted back to a UI message keeps the ID intact
+    const uiMsg = AIV5Adapter.toUIMessage(dbMessage);
+    const uiFilePart = uiMsg.parts.find((p: { type: string }) => p.type === 'file');
+
+    expect(uiFilePart).toBeDefined();
+    if (uiFilePart && uiFilePart.type === 'file') {
+      expect((uiFilePart as any).url).toBe(fileId);
+      expect((uiFilePart as any).url).not.toMatch(/^data:/);
+      expect((uiFilePart as any).mediaType).toBe('application/pdf');
+    }
+  });
 });
