@@ -395,45 +395,6 @@ html.light {
   --shadow-glow-accent2: 0 0 20px oklch(0.637 0.237 25.331 / 0.25);
   --shadow-focus-ring: 0 0 0 3px oklch(0.723 0.219 149.579 / 0.12);
 
-  --animate-signals-connector: signals-connector 2.8s ease-in-out infinite;
-  --animate-signals-engine-pulse: signals-engine-pulse 3.2s ease-in-out infinite;
-  --animate-signals-chip: signals-chip 3.6s ease-in-out infinite;
-
-  @keyframes signals-connector {
-    0%,
-    100% {
-      opacity: 0.45;
-    }
-
-    50% {
-      opacity: 1;
-    }
-  }
-
-  @keyframes signals-engine-pulse {
-    0%,
-    100% {
-      opacity: 0.5;
-      transform: scale(0.96);
-    }
-
-    50% {
-      opacity: 0.9;
-      transform: scale(1.04);
-    }
-  }
-
-  @keyframes signals-chip {
-    0%,
-    100% {
-      opacity: 0.72;
-    }
-
-    50% {
-      opacity: 1;
-    }
-  }
-
   @keyframes shimmer {
     100% {
       transform: translateX(100%);

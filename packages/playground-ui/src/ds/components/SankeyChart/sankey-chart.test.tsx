@@ -117,7 +117,8 @@ describe('SankeyChart', () => {
     expect(channelLabel?.getAttribute('x')).toBe('128');
     const searchLabel = [...container.querySelectorAll('svg text')].find(element => element.textContent === 'Search');
     expect(searchLabel?.getAttribute('font-size')).toBe('12.5');
-    expect(searchLabel?.getAttribute('paint-order')).toBe('stroke');
+    expect(searchLabel?.getAttribute('paint-order')).toBeNull();
+    expect(searchLabel?.getAttribute('style')).toContain('drop-shadow');
     const lostLabel = [...container.querySelectorAll('svg text')].find(element => element.textContent === 'Lost');
     expect(lostLabel?.getAttribute('text-anchor')).toBe('end');
     expect(container.querySelector('svg text[font-size="10.5"]')).not.toBeNull();

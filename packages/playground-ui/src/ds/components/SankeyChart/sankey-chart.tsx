@@ -169,10 +169,7 @@ function SankeyNode({
         fill={Colors.neutral5}
         fontSize={12.5}
         fontFamily="var(--font-mono)"
-        paintOrder="stroke"
-        stroke={Colors.surface1}
-        strokeWidth={3}
-        strokeLinejoin="round"
+        style={{ filter: `drop-shadow(0 0 6px ${Colors.surface1})` }}
       >
         {name}
       </text>

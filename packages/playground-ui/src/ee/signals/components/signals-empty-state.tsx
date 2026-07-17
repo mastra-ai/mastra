@@ -1,6 +1,7 @@
 import { CpuIcon } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
 
+import './signals-empty-state.css';
 import { Button } from '../../../ds/components/Button';
 import { buildSankeyHueMap, nodeColorVivid } from '../../../ds/components/SankeyChart/sankeyColor';
 import type { LinkComponent } from '../../../ds/types/link-component';
@@ -31,7 +32,7 @@ const signalStyle = (label: string): CSSProperties => ({
 const PipelineConnector = () => (
   <div aria-hidden="true" className="relative hidden h-full items-center lg:flex">
     <div className="w-full border-t border-dashed border-border1" />
-    <span className="absolute left-1/2 size-2.5 -translate-x-1/2 rounded-full bg-positive1 shadow-[0_0_12px_currentColor] motion-safe:animate-signals-connector motion-reduce:animate-none" />
+    <span className="signals-pipeline-connector absolute left-1/2 size-2.5 -translate-x-1/2 rounded-full bg-positive1 shadow-[0_0_12px_currentColor]" />
   </div>
 );
 
@@ -55,7 +56,7 @@ export const SignalsEmptyState = ({ actionSlot, LinkComponent = 'a' }: SignalsEm
           className="mt-14 grid gap-4 lg:grid-cols-[17.5rem_4.5rem_17.5rem_4.5rem_minmax(0,1fr)] lg:gap-0"
           role="list"
         >
-          <article className="h-50 rounded-md border border-border1 bg-surface2 p-5 shadow-sm" role="listitem">
+          <article className="h-50 p-5" role="listitem">
             <h2 className="text-lg font-semibold text-neutral6">Traces</h2>
             <p className="mt-0.5 text-xs text-neutral3">Every agent interaction</p>
             <p className="mt-5 font-mono text-[0.5625rem] tracking-[0.24em] text-neutral2 uppercase">Input</p>
@@ -74,14 +75,11 @@ export const SignalsEmptyState = ({ actionSlot, LinkComponent = 'a' }: SignalsEm
 
           <PipelineConnector />
 
-          <article
-            className="h-50 flex flex-col items-center rounded-md border border-border1 bg-surface2 p-5 text-center shadow-sm"
-            role="listitem"
-          >
+          <article className="h-50 flex flex-col items-center p-5 text-center" role="listitem">
             <h2 className="text-lg font-semibold text-neutral6">Mastra Engine</h2>
             <p className="mt-0.5 text-xs text-neutral3">Clusters recurring patterns</p>
             <div aria-hidden="true" className="relative mt-5 flex size-20 items-center justify-center">
-              <span className="absolute size-20 rounded-full border border-positive1/15 motion-safe:animate-signals-engine-pulse motion-reduce:animate-none" />
+              <span className="signals-engine-pulse absolute size-20 rounded-full border border-positive1/15" />
               <span className="absolute size-14 rounded-full border border-positive1/25" />
               <span className="absolute size-9 rounded-full border border-positive1/40 bg-positive1/5 shadow-[0_0_24px_var(--color-positive1)]" />
               <CpuIcon className="relative size-4 text-positive1" />
@@ -93,14 +91,14 @@ export const SignalsEmptyState = ({ actionSlot, LinkComponent = 'a' }: SignalsEm
 
           <PipelineConnector />
 
-          <article className="h-50 rounded-md border border-border1 bg-surface2 p-5 shadow-sm" role="listitem">
+          <article className="h-50 p-5" role="listitem">
             <h2 className="text-lg font-semibold text-neutral6">Signal analysis</h2>
             <p className="mt-0.5 text-xs text-neutral3">What your users actually do</p>
             <p className="mt-5 font-mono text-[0.5625rem] tracking-[0.24em] text-neutral2 uppercase">Output</p>
             <div className="mt-3 flex flex-wrap gap-2">
               {signalLabels.map(label => (
                 <span
-                  className="inline-flex items-center gap-2 rounded border border-current/25 bg-surface3 px-2.5 py-1.5 text-xs font-medium shadow-[0_0_14px_color-mix(in_oklch,currentColor_12%,transparent)] motion-safe:animate-signals-chip motion-reduce:animate-none"
+                  className="signals-chip inline-flex items-center gap-2 rounded border border-current/25 bg-surface3 px-2.5 py-1.5 text-xs font-medium shadow-[0_0_14px_color-mix(in_oklch,currentColor_12%,transparent)]"
                   key={label}
                   style={signalStyle(label)}
                 >
@@ -118,7 +116,7 @@ export const SignalsEmptyState = ({ actionSlot, LinkComponent = 'a' }: SignalsEm
           </h2>
           <div aria-label="Signal definitions" className="mt-4 grid gap-3 sm:grid-cols-2" role="list">
             {signalDefinitions.map(signal => (
-              <article className="rounded-md border border-border1 bg-surface2 p-4" key={signal.label} role="listitem">
+              <article className="px-1 py-2" key={signal.label} role="listitem">
                 <h3 className="text-sm font-semibold" style={signalStyle(signal.label)}>
                   {signal.label}
                 </h3>

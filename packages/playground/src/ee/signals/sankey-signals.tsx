@@ -49,8 +49,12 @@ export function SankeySignals({ entityId, entityType = 'agent', signalNames, hei
       </header>
 
       <Sankey data={records} columns={columns} getRecordWeight={record => Number(record.traceCount)}>
-        <div className="min-h-0 min-w-0 flex-1 w-full">
-          <SankeyChart height={height ?? 640} margin={{ top: 40, right: 0, bottom: 12, left: 0 }} />
+        <div className="mx-auto min-h-0 min-w-0 w-full max-w-5xl flex-1">
+          <SankeyChart
+            className="[&_svg]:overflow-visible"
+            height={height ?? 640}
+            margin={{ top: 40, right: 48, bottom: 12, left: 48 }}
+          />
         </div>
       </Sankey>
     </section>

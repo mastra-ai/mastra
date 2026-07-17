@@ -36,12 +36,15 @@ describe('SankeyChart utilities', () => {
   });
 
   describe('when records provide explicit weights', () => {
-    it('uses the weights for link totals without duplicating records', () => {
-      const data = [{ source: 'API', model: 'GPT', count: 3 }];
+    it('sums weights for matching links without duplicating records', () => {
+      const data = [
+        { source: 'API', model: 'GPT', count: 2 },
+        { source: 'API', model: 'GPT', count: 3 },
+      ];
 
       const graph = buildSankeyChartGraph(data, columns.slice(0, 2), record => Number(record.count));
 
-      expect(graph.links[0]).toMatchObject({ value: 3, records: data });
+      expect(graph.links[0]).toMatchObject({ value: 5, records: data });
     });
   });
 
