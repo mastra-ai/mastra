@@ -9,7 +9,6 @@ import type { MastraCodeState } from '@mastra/code-sdk/schema';
 
 import { ensureWebAuthUser, isWebAuthEnabled, webAuthTenant } from '../auth';
 import type { GithubStorage } from '../github/storage/base';
-import { getSeededGithubIntegration } from '../runtime-config';
 
 const MAX_RESOURCE_ID_LENGTH = 512;
 const MAX_SCOPE_LENGTH = 2048;
@@ -100,7 +99,9 @@ async function authorizeSessionAddress(
   if (!tenant.orgId || !address.scope) {
     return { allowed: false, status: 403, code: 'session_forbidden', message: 'Session access denied.' };
   }
-  if (!storage) throw new Error('GitHub storage is not configured.');
+  if (!storage) {
+    return { allowed: false, status: 403, code: 'session_forbidden', message: 'Session access denied.' };
+  }
   const worktree = await storage.findWorktreeByPath(address.resourceId, tenant.userId, address.scope);
   return worktree?.orgId === tenant.orgId
     ? { allowed: true }
@@ -110,7 +111,7 @@ async function authorizeSessionAddress(
 export function buildSkillRoutes({
   controllerId,
   controller,
-  githubStorage = getSeededGithubIntegration()?.storageDomain,
+  githubStorage,
   authorizeSessionAddress: customAuthorize,
 }: BuildSkillRoutesDeps): ApiRoute[] {
   const authorize =

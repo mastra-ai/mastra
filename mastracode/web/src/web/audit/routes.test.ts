@@ -56,13 +56,19 @@ import { buildAuditRoutes } from './routes';
 // ── Test harness ─────────────────────────────────────────────────────────
 let githubStorage!: GithubStorageInMemory;
 
-function buildApp(user: { workosId: string; organizationId?: string } | null) {
+function buildApp(
+  user: { workosId: string; organizationId?: string } | null,
+  storage: GithubStorageInMemory | null = githubStorage,
+) {
   const app = new Hono();
   app.use('*', async (c, next) => {
     if (user) c.set('webAuthUser' as never, user as never);
     await next();
   });
-  mountApiRoutes(app as any, buildAuditRoutes({ baseUrl: 'https://web.example.com', githubStorage }));
+  mountApiRoutes(
+    app as any,
+    buildAuditRoutes({ baseUrl: 'https://web.example.com', githubStorage: storage ?? undefined }),
+  );
   return app;
 }
 
@@ -112,6 +118,12 @@ describe('GET /web/factory/projects/:id/audit', () => {
     seedProject({ orgId: 'other-org' });
     const res = await buildApp(orgUser).request(`/web/factory/projects/${PROJECT_ID}/audit`);
     expect(res.status).toBe(404);
+    expect(listCalls).toHaveLength(0);
+  });
+
+  it('503s when GitHub storage is unavailable', async () => {
+    const res = await buildApp(orgUser, null).request(`/web/factory/projects/${PROJECT_ID}/audit`);
+    expect(res.status).toBe(503);
     expect(listCalls).toHaveLength(0);
   });
 

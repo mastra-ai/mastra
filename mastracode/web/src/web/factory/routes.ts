@@ -14,7 +14,6 @@ import type { Context } from 'hono';
 import { emitAudit } from '../audit/audit';
 import { ensureWebAuthUser, webAuthTenant } from '../auth';
 import type { GithubStorage } from '../github/storage/base';
-import { getSeededGithubIntegration } from '../runtime-config';
 import { clampMetricsWindow, computeFactoryMetrics } from './metrics';
 import type { WorkItemRow } from '../storage/domains/work-items/base';
 import type { WorkItemPriorState } from './store';
@@ -61,7 +60,11 @@ async function resolveProject(
   const tenant = await resolveTenant(c);
   if ('response' in tenant) return tenant;
 
-  if (!storage) throw new Error('GitHub storage is not configured.');
+  if (!storage) {
+    return {
+      response: c.json({ error: 'integration_unavailable', message: 'GitHub integration is unavailable.' }, 503),
+    };
+  }
   const projectId = c.req.param('id');
   if (!projectId || !UUID_RE.test(projectId)) {
     return { response: c.json({ error: 'Project not found' }, 404) };
@@ -136,7 +139,6 @@ async function auditWorkItemPatch(
 
 /** Build the Factory work-item routes as Mastra `apiRoutes`. */
 export function buildFactoryRoutes(storage?: GithubStorage): ApiRoute[] {
-  storage ??= getSeededGithubIntegration()?.storageDomain;
   return [
     // ── List the org's work items for a project ─────────────────────────────
     registerApiRoute('/web/factory/projects/:id/work-items', {

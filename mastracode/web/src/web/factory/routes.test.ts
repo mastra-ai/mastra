@@ -35,13 +35,16 @@ import { parseCreateWorkItem, parseUpdateWorkItem } from './store';
 // ── Test harness ─────────────────────────────────────────────────────────
 let githubStorage!: GithubStorageInMemory;
 
-function buildApp(user: { workosId: string; organizationId?: string } | null) {
+function buildApp(
+  user: { workosId: string; organizationId?: string } | null,
+  storage: GithubStorageInMemory | null = githubStorage,
+) {
   const app = new Hono();
   app.use('*', async (c, next) => {
     if (user) c.set('webAuthUser' as never, user as never);
     await next();
   });
-  mountApiRoutes(app as any, buildFactoryRoutes(githubStorage));
+  mountApiRoutes(app as any, buildFactoryRoutes(storage ?? undefined));
   return app;
 }
 
@@ -115,6 +118,11 @@ describe('auth and scoping', () => {
     seedProject('other-org');
     const res = await json('GET', `/web/factory/projects/${PROJECT_ID}/work-items`);
     expect(res.status).toBe(404);
+  });
+
+  it('503s when GitHub storage is unavailable', async () => {
+    const res = await buildApp(orgUser, null).request(`/web/factory/projects/${PROJECT_ID}/work-items`);
+    expect(res.status).toBe(503);
   });
 
   it('404s on a non-uuid project id', async () => {

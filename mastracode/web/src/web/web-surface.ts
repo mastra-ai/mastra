@@ -375,8 +375,10 @@ function disabledIntegrationStatusRoutes(id: string): ApiRoute[] {
  */
 export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
   const registrations = deps.integrations ?? [];
-  const githubStorage = registrations.find(({ integration }) => integration.id === 'github')?.integration
-    .storageDomain as GithubStorage | undefined;
+  const githubRegistration = registrations.find(({ integration }) => integration.id === 'github');
+  const githubStorage = githubRegistration?.ready
+    ? (githubRegistration.integration.storageDomain as GithubStorage | undefined)
+    : undefined;
   const ctx = deps.stateSigner
     ? {
         baseUrl: deps.publicOrigin,
