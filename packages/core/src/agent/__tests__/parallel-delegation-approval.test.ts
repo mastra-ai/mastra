@@ -205,6 +205,91 @@ describe('parallel sub-agent delegation (suspend/resume)', () => {
     expect(new Set(approvals.map(a => a.toolCallId)).size).toBe(2);
   });
 
+  it('rejects a targeted approval when that tool call is not actually suspended', async () => {
+    processedOrders.length = 0;
+    const supervisor = buildSupervisorAgent();
+
+    const stream = await supervisor.stream('Process both orders in parallel.', {
+      maxSteps: 6,
+      memory: { resource: 'rep_approval', thread: 'thread-wrong-target' },
+    });
+
+    await collectApprovals(stream);
+    const bogusToolCallId = 'sup-tc-nonexistent';
+
+    let resumeError: unknown;
+    try {
+      const resumed = await supervisor.approveToolCall({
+        runId: stream.runId,
+        toolCallId: bogusToolCallId,
+      });
+      for await (const _chunk of resumed.fullStream) {
+        // Drain the stream so unintended tool execution cannot leak into later tests.
+      }
+    } catch (error) {
+      resumeError = error;
+    }
+
+    expect(resumeError).toMatchObject({ id: 'AGENT_RESUME_TOOL_CALL_NOT_SUSPENDED' });
+    await expect(
+      supervisor.resumeGenerate({ approved: true }, { runId: stream.runId, toolCallId: bogusToolCallId }),
+    ).rejects.toMatchObject({ id: 'AGENT_RESUME_TOOL_CALL_NOT_SUSPENDED' });
+    await expect(
+      supervisor.resumeGenerate({ approved: true }, { runId: stream.runId, toolCallId: '' }),
+    ).rejects.toMatchObject({ id: 'AGENT_RESUME_TOOL_CALL_NOT_SUSPENDED' });
+    expect(processedOrders).toEqual([]);
+  }, 30_000);
+
+  it('surfaces BOTH suspended delegations in listSuspendedRuns', async () => {
+    processedOrders.length = 0;
+    const supervisor = buildSupervisorAgent();
+
+    const stream = await supervisor.stream('Process both orders in parallel.', {
+      maxSteps: 6,
+      memory: { resource: 'rep_approval', thread: 'thread-surface' },
+    });
+
+    const approvals = await collectApprovals(stream);
+    expect(approvals.length).toBe(2);
+
+    const [{ toolCalls }] = (await supervisor.listSuspendedRuns()).runs;
+    const suspendedToolCallIds = toolCalls.map(toolCall => toolCall.toolCallId).sort();
+    expect(suspendedToolCallIds).toEqual(['sup-tc-A', 'sup-tc-B']);
+    for (const toolCall of toolCalls) {
+      expect(toolCall.toolName).toBe('agent-subAgent');
+      expect(toolCall.requiresApproval).toBe(true);
+    }
+  });
+
+  it('approving the delegations OUT OF ORDER (B first) processes both orders correctly', async () => {
+    processedOrders.length = 0;
+    const supervisor = buildSupervisorAgent();
+
+    const stream = await supervisor.stream('Process both orders in parallel.', {
+      maxSteps: 6,
+      memory: { resource: 'rep_approval', thread: 'thread-out-of-order' },
+    });
+
+    const approvals = await collectApprovals(stream);
+    const runId = stream.runId;
+    expect(approvals.length).toBe(2);
+
+    // Approve the SECOND emitted card first — the field failure ("approve the
+    // bottom card") that previously resumed the wrong delegation.
+    const outOfOrder = [...approvals].reverse();
+    const resumeErrors: string[] = [];
+    for (const a of outOfOrder) {
+      const resumed = await supervisor.approveToolCall({ runId, toolCallId: a.toolCallId });
+      for await (const chunk of resumed.fullStream) {
+        if (chunk.type === 'tool-error') resumeErrors.push(JSON.stringify((chunk as any).payload ?? chunk));
+      }
+    }
+
+    expect(resumeErrors).toEqual([]);
+    // Approval order must map to execution order: B was approved first.
+    expect(processedOrders).toEqual([ORDER_B, ORDER_A]);
+  });
+
   it('approving both parallel delegations one at a time processes BOTH orders', async () => {
     processedOrders.length = 0;
     const supervisor = buildSupervisorAgent();

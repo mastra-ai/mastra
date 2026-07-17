@@ -69,7 +69,13 @@ export const mastra = new Mastra({
   editor: new MastraEditor({
     sandboxes: { e2b: e2bSandboxProvider },
     toolProviders: {
-      composio: new ComposioToolProvider({ apiKey: process.env.COMPOSIO_API_KEY ?? '', allowedToolkits: ['gmail'] }),
+      composio: new ComposioToolProvider({
+        apiKey: process.env.COMPOSIO_API_KEY ?? '',
+        allowedToolkits: ['gmail', 'github'],
+        // Multi-tenant: each authenticated user gets their own Composio bucket,
+        // keyed by the resourceId set via `mapUserToResourceId` in ./auth.ts.
+        defaultScope: 'caller-supplied',
+      }),
     },
     browsers: {
       stagehand: {

@@ -108,7 +108,7 @@ const borderlessTableStyles = [
   '[&_.data-list-top>.data-list-sticky-start+*]:before:hidden',
 ] as const;
 
-const dataListRootVariants = cva(cn('grid w-max min-w-full max-w-none content-start'), {
+const dataListRootVariants = cva(cn('grid w-max max-w-none min-w-full content-start'), {
   variants: {
     variant: {
       striped: cn(
@@ -118,7 +118,7 @@ const dataListRootVariants = cva(cn('grid w-max min-w-full max-w-none content-st
       ),
       lined: cn(
         ...borderlessTableStyles,
-        '[&_.data-list-row]:after:absolute [&_.data-list-row]:after:h-px [&_.data-list-row]:after:content-[""] [&_.data-list-row]:after:pointer-events-none',
+        '[&_.data-list-row]:after:pointer-events-none [&_.data-list-row]:after:absolute [&_.data-list-row]:after:h-px [&_.data-list-row]:after:content-[""]',
         '[&_.data-list-row]:after:inset-x-2 [&_.data-list-row]:after:-bottom-px [&_.data-list-row]:after:bg-neutral6/10',
       ),
     },
@@ -170,7 +170,7 @@ export function DataListRoot({
       mask={getDataListMask(mask)}
       viewportRef={scrollRef}
       viewPortClassName="max-h-[inherit]"
-      className={cn('h-full w-full rounded-t-xl', className)}
+      className={cn('size-full rounded-t-xl', className)}
     >
       {grid}
     </ScrollArea>

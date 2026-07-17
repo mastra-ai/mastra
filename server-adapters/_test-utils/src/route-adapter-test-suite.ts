@@ -475,21 +475,28 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
                 const testField = 'testBodyField';
                 const testValue = 'testValue123';
 
+                const body = {
+                  ...(typeof request.body === 'object' && request.body !== null ? request.body : {}),
+                  [testField]: testValue,
+                };
+                const strictBody = !route.bodySchema.safeParse(body).success;
+
                 const httpRequest: HttpRequest = {
                   method: request.method,
                   path: request.path,
                   query: request.query,
-                  body: {
-                    ...(typeof request.body === 'object' && request.body !== null ? request.body : {}),
-                    [testField]: testValue,
-                  },
+                  body,
                 };
 
                 const response = await executeHttpRequest(app, httpRequest);
 
-                // Should succeed - body fields should be spread correctly
-                // Handler receives both `body: {...}` AND individual fields
-                expect(response.status).toBeLessThan(400);
+                if (strictBody) {
+                  // strict schema: adapter must surface the validation rejection, exactly 400
+                  expect(response.status).toBe(400);
+                } else {
+                  // lenient schema: unknown field must be ignored, request must succeed
+                  expect(response.status).toBeLessThan(400);
+                }
               });
             }
           });

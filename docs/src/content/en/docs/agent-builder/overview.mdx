@@ -7,17 +7,19 @@ packages:
   - "@mastra/libsql"
 ---
 
-import YouTube from "@site/src/components/YouTube-player";
-
 # Agent Builder overview
 
 :::note
 The Agent Builder is part of the Mastra Enterprise Edition. Production deployments require a valid EE license. [Contact sales](https://mastra.ai/contact) for more information.
 :::
 
-<YouTube id="AbdgIu4Z07I" />
-
 The Agent Builder lets you build, configure, and operate Mastra agents all within the UI. It runs inside your Mastra server, persists everything to `Mastra.storage`, and supports multi-tenant agent workflows with RBAC and channel integrations.
+
+:::tip[📹 Watch]
+
+Watch [Mastra Agent Builder overview](https://www.youtube.com/watch?v=AbdgIu4Z07I) to see how teams create and configure agents from the UI.
+
+:::
 
 - [**Configuration**](/docs/agent-builder/configuration): Toggle UI sections and pin admin-controlled defaults for every new agent.
 - [**Model policy**](/docs/agent-builder/model-policy): Restrict which providers and models the Builder exposes, and pin a default.
@@ -58,7 +60,7 @@ import { createBuilderAgent } from '@mastra/editor/ee'
 import { LibSQLStore } from '@mastra/libsql'
 
 export const mastra = new Mastra({
-  storage: new LibSQLStore({ url: 'file:./mastra.db' }),
+  storage: new LibSQLStore({ id: 'mastra-storage', url: 'file:./mastra.db' }),
   agents: { builderAgent: createBuilderAgent() },
   editor: new MastraEditor({
     builder: {
@@ -100,3 +102,4 @@ Omitting the `builder` field has the same effect.
 - [Configuration](/docs/agent-builder/configuration): Toggle Builder surfaces and pin defaults for new agents.
 - [Access control](/docs/agent-builder/access-control): Gate the Builder with authentication and role-based access control.
 - [Deploying](/docs/agent-builder/deploying): Replace local development primitives with production-ready storage, filesystems, and sandboxes.
+- 📹 [Mastra Agent Builder workshop](https://www.youtube.com/watch?v=p2p_wb-rUPg\&t=666s)

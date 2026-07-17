@@ -34,11 +34,7 @@ export const normalizedAgent = new Agent({
 })
 ```
 
-:::note
-
 Visit [`UnicodeNormalizer()`](/reference/processors/unicode-normalizer) reference for a full list of configuration options.
-
-:::
 
 ### Prevent prompt injection
 
@@ -61,11 +57,7 @@ export const secureAgent = new Agent({
 })
 ```
 
-:::note
-
 Visit [`PromptInjectionDetector()`](/reference/processors/prompt-injection-detector) reference for a full list of configuration options.
-
-:::
 
 ### Detect and translate language
 
@@ -88,11 +80,7 @@ export const multilingualAgent = new Agent({
 })
 ```
 
-:::note
-
 Visit [`LanguageDetector()`](/reference/processors/language-detector) reference for a full list of configuration options.
-
-:::
 
 ## Output processors
 
@@ -118,11 +106,7 @@ export const batchedAgent = new Agent({
 })
 ```
 
-:::note
-
 Visit [`BatchPartsProcessor()`](/reference/processors/batch-parts-processor) reference for a full list of configuration options.
-
-:::
 
 ### Scrub system prompts
 
@@ -149,11 +133,7 @@ const scrubbedAgent = new Agent({
 })
 ```
 
-:::note
-
 Visit [`SystemPromptScrubber()`](/reference/processors/system-prompt-scrubber) reference for a full list of configuration options.
-
-:::
 
 :::note
 When streaming responses over HTTP, Mastra redacts sensitive request data (system prompts, tool definitions, API keys) from stream chunks at the server level by default. See [Stream data redaction](/docs/server/mastra-server#stream-data-redaction) for details.
@@ -185,11 +165,7 @@ export const moderatedAgent = new Agent({
 })
 ```
 
-:::note
-
 Visit [`ModerationProcessor()`](/reference/processors/moderation-processor) reference for a full list of configuration options.
-
-:::
 
 ### Detect and redact PII
 
@@ -215,11 +191,7 @@ export const privateAgent = new Agent({
 })
 ```
 
-:::note
-
 Visit [`PIIDetector()`](/reference/processors/pii-detector) reference for a full list of configuration options.
-
-:::
 
 ### Enforce cost limits
 
@@ -241,11 +213,7 @@ export const budgetedAgent = new Agent({
 })
 ```
 
-:::note
-
 Visit [`CostGuardProcessor()`](/reference/processors/cost-guard-processor) reference for scoping modes, time windows, metric persistence delays, and the `onViolation` callback. Requires observability storage with `getMetricAggregate` support.
-
-:::
 
 ## Processor strategies
 
@@ -426,3 +394,4 @@ outputProcessors: [
 - [Processors](/docs/agents/processors): How processors work, execution order, custom processors, and retry mechanism
 - [`Processor` Interface](/reference/processors/processor-interface): API reference for the `Processor` interface
 - [Memory Processors](/docs/memory/memory-processors): Processors for message history, semantic recall, and working memory
+- 📹 [Mastra processors and guardrails workshop](https://www.youtube.com/watch?v=4Vpp7xQYvl0)

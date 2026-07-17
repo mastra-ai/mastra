@@ -4,6 +4,6 @@
   "type": "module",
   "dependencies": {
     "@mastra/core": "{{TAG}}",
-    "@ast-grep/napi": "^0.40.0"
+    "@ast-grep/napi": "^0.44.1"
   }
 }

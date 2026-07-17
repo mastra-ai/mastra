@@ -58,12 +58,13 @@ function toContextData(records: OMHistoryRecord[], markers: ExtractedOmMarker[],
     ts: String(getObservationTimestamp(r)),
     pendingMessageTokens: r.pendingMessageTokens,
   }));
-  const fromMarkers = markers
-    .filter(m => m.pendingTokens != null)
-    .map(m => ({
+  const fromMarkers = markers.flatMap(m => {
+    if (m.pendingTokens == null) return [];
+    return {
       ts: m.timestamp,
-      pendingMessageTokens: m.pendingTokens!,
-    }));
+      pendingMessageTokens: m.pendingTokens,
+    };
+  });
   return [...fromRecords, ...fromMarkers]
     .sort((a, b) => a.ts.localeCompare(b.ts))
     .map(d => ({ t: toT(d.ts, domain), pendingMessageTokens: d.pendingMessageTokens }));
@@ -75,12 +76,13 @@ function toActiveObservationData(records: OMHistoryRecord[], markers: ExtractedO
       ts: String(getObservationTimestamp(record)),
       observationTokenCount: record.observationTokenCount,
     })),
-    ...markers
-      .filter(marker => marker.type === 'status' && marker.observationTokens != null)
-      .map(marker => ({
+    ...markers.flatMap(marker => {
+      if (marker.type !== 'status' || marker.observationTokens == null) return [];
+      return {
         ts: marker.timestamp,
-        observationTokenCount: marker.observationTokens!,
-      })),
+        observationTokenCount: marker.observationTokens,
+      };
+    }),
   ].sort((a, b) => a.ts.localeCompare(b.ts));
 
   let runningTotal = 0;
@@ -92,14 +94,16 @@ function toActiveObservationData(records: OMHistoryRecord[], markers: ExtractedO
 
 function toBufferedObservationData(markers: ExtractedOmMarker[], domain: TDomain) {
   const points = markers
-    .filter(
-      marker => marker.observationTokens != null && (marker.type === 'buffering-end' || marker.type === 'activation'),
-    )
-    .map(marker => ({
-      ts: marker.timestamp,
-      bufferedObservationTokenCount:
-        marker.type === 'activation' ? -marker.observationTokens! : marker.observationTokens!,
-    }))
+    .flatMap(marker => {
+      if (marker.observationTokens == null || (marker.type !== 'buffering-end' && marker.type !== 'activation')) {
+        return [];
+      }
+      return {
+        ts: marker.timestamp,
+        bufferedObservationTokenCount:
+          marker.type === 'activation' ? -marker.observationTokens : marker.observationTokens,
+      };
+    })
     .sort((a, b) => a.ts.localeCompare(b.ts));
 
   let runningTotal = 0;
@@ -129,10 +133,10 @@ function TimeAxis({ domain }: { domain: TDomain }) {
   const ticks = [0, 0.25, 0.5, 0.75, 1];
   return (
     <div className="grid grid-cols-[6rem_1fr] items-center">
-      <p className="flex items-center self-stretch border-r border-border1/50 pl-3 text-ui-xs font-medium text-icon3">
+      <p className="text-icon3 flex items-center self-stretch border-r border-border1/50 pl-3 text-ui-xs font-medium">
         Time
       </p>
-      <div className="flex justify-between px-1 py-1.5 font-mono text-ui-xs text-icon3">
+      <div className="text-icon3 flex justify-between px-1 py-1.5 font-mono text-ui-xs">
         {ticks.map(t => (
           <span key={t}>{formatTimeDisplay(tToTimestamp(t, domain))}</span>
         ))}
@@ -202,7 +206,7 @@ function AreaRow({ label, data, dataKey, color, gradientId, domain, zoomDomain, 
 
   return (
     <div className="relative grid grid-cols-[6rem_1fr] items-center border-b border-border1/50 hover:z-10">
-      <p className="flex items-center self-stretch border-r border-border1/50 pl-3 text-ui-xs font-medium text-icon3">
+      <p className="text-icon3 flex items-center self-stretch border-r border-border1/50 pl-3 text-ui-xs font-medium">
         {label}
       </p>
       <div>
@@ -251,7 +255,7 @@ interface EventRowProps {
 function EventRow({ label, data, color, height = 32, domain, zoomDomain }: EventRowProps) {
   return (
     <div className="relative grid grid-cols-[6rem_1fr] items-center border-b border-border1/50 hover:z-10">
-      <p className="flex items-center self-stretch border-r border-border1/50 pl-3 text-ui-xs font-medium text-icon3">
+      <p className="text-icon3 flex items-center self-stretch border-r border-border1/50 pl-3 text-ui-xs font-medium">
         {label}
       </p>
       <div>
@@ -308,7 +312,11 @@ function CombinedRow({
   height = 44,
   onSelectT,
 }: CombinedRowProps) {
-  const areaValueByTime = new Map(areaData.map(point => [point.t, Number(point[areaDataKey] ?? 0)]));
+  const areaValueByTime = new Map<number, number>();
+  for (const point of areaData) {
+    if (point.t === undefined) continue;
+    areaValueByTime.set(point.t, Number(point[areaDataKey] ?? 0));
+  }
   const eventsByTime = eventData.reduce<Map<number, Array<(typeof eventData)[number]>>>((acc, event) => {
     const bucket = acc.get(event.t);
     if (bucket) {
@@ -340,7 +348,7 @@ function CombinedRow({
 
   return (
     <div className="relative grid grid-cols-[6rem_1fr] items-center border-b border-border1/50 hover:z-10">
-      <p className="flex items-center self-stretch border-r border-border1/50 pl-3 text-ui-xs font-medium text-icon3">
+      <p className="text-icon3 flex items-center self-stretch border-r border-border1/50 pl-3 text-ui-xs font-medium">
         {label}
       </p>
       <div>
@@ -447,7 +455,7 @@ function ZoomTrack({
   return (
     <div className="grid grid-cols-[6rem_1fr] items-center border-b border-border1/50">
       <div className="flex items-center gap-1 self-stretch border-r border-border1/50 pl-3">
-        <p className="text-ui-xs font-medium text-icon3">Zoom</p>
+        <p className="text-icon3 text-ui-xs font-medium">Zoom</p>
         <Button variant="ghost" size="icon-sm" aria-label="Reset zoom" onClick={onReset}>
           <RotateCcw className="size-3" />
         </Button>
@@ -579,7 +587,7 @@ export function FlameGraph({
   if (!hasData) return null;
 
   return (
-    <div className="flex flex-col pb-2 pr-2 [&_.recharts-surface]:outline-none">
+    <div className="flex flex-col pr-2 pb-2 [&_.recharts-surface]:outline-none">
       <CombinedRow
         label="Messages"
         areaData={contextData}

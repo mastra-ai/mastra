@@ -450,4 +450,183 @@ describe('estimateCosts', () => {
       },
     });
   });
+
+  it.each([
+    ['anthropic/claude-haiku-4.5', 'vercel-claude-haiku-4-5', 0.001],
+    ['amazon/nova-micro', 'vercel-amazon-nova-micro', 0.000035],
+  ])('resolves Vercel AI Gateway model id %s against Vercel pricing', (model, pricingId, estimatedCost) => {
+    const costs = estimateCosts(
+      {
+        provider: 'gateway',
+        model,
+        usage: { inputTokens: 1_000 },
+      },
+      pricingRegistry,
+    );
+
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)).toMatchObject({
+      provider: 'vercel',
+      costMetadata: { pricing_id: pricingId },
+    });
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)?.estimatedCost).toBeCloseTo(estimatedCost);
+  });
+
+  it.each(['claude-haiku-4.5', ' /claude-haiku-4.5', 'anthropic/claude/haiku-4.5'])(
+    'does not treat invalid Gateway model id %s as Vercel pricing',
+    model => {
+      const costs = estimateCosts(
+        {
+          provider: 'gateway',
+          model,
+          usage: { inputTokens: 1_000 },
+        },
+        pricingRegistry,
+      );
+
+      expect(costs.get(TokenMetrics.TOTAL_INPUT)).toEqual({
+        provider: 'gateway',
+        model,
+        costMetadata: { error: 'no_matching_model' },
+      });
+    },
+  );
+
+  it('prefers exact Gateway pricing before the Vercel fallback', () => {
+    const registry = PricingRegistry.fromText(`
+{"i":"gateway-openai-gpt-4o-mini","p":"gateway","m":"openai/gpt-4o-mini","s":{"v":"model_pricing/v1","d":{"u":"USD","t":[{"r":{"it":{"c":2e-7}}}]}}}
+{"i":"vercel-gpt-4o-mini","p":"vercel","m":"gpt-4o-mini","s":{"v":"model_pricing/v1","d":{"u":"USD","t":[{"r":{"it":{"c":1.5e-7}}}]}}}
+`);
+    const costs = estimateCosts(
+      {
+        provider: 'gateway',
+        model: 'openai/gpt-4o-mini',
+        usage: { inputTokens: 1_000 },
+      },
+      registry,
+    );
+
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)).toMatchObject({
+      provider: 'gateway',
+      model: 'openai/gpt-4o-mini',
+      costMetadata: { pricing_id: 'gateway-openai-gpt-4o-mini' },
+    });
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)?.estimatedCost).toBeCloseTo(0.0002);
+  });
+
+  it.each([
+    ['openai.chat', 'gpt-4o-mini', 'openai', 'openai-gpt-4o-mini'],
+    ['google.generative-ai', 'gemini-2.0-flash', 'google', 'google-gemini-2-0-flash'],
+  ])('falls back from AI SDK provider %s to %s pricing', (provider, model, pricingProvider, pricingId) => {
+    const costs = estimateCosts(
+      {
+        provider,
+        model,
+        usage: { inputTokens: 1_000 },
+      },
+      pricingRegistry,
+    );
+
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)).toMatchObject({
+      provider: pricingProvider,
+      costMetadata: { pricing_id: pricingId },
+    });
+  });
+
+  it.each([
+    ['google.vertex.chat', 'gemini-2.0-flash', 'google-vertex', 'google-vertex-gemini-2-0-flash', 0.00015],
+    ['vertex.maas.chat', 'deepseek-ai/deepseek-v3.1-maas', 'google-vertex', 'google-vertex-deepseek-v3-1-maas', 0.0006],
+    [
+      'vertex.anthropic.messages',
+      'claude-sonnet-4-5@20250929',
+      'google-vertex-anthropic',
+      'google-vertex-anthropic-claude-sonnet-4-5',
+      0.003,
+    ],
+  ])('resolves AI SDK provider %s against %s pricing', (provider, model, pricingProvider, pricingId, estimatedCost) => {
+    const costs = estimateCosts(
+      {
+        provider,
+        model,
+        usage: { inputTokens: 1_000 },
+      },
+      pricingRegistry,
+    );
+
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)).toMatchObject({
+      provider: pricingProvider,
+      costMetadata: { pricing_id: pricingId },
+    });
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)?.estimatedCost).toBeCloseTo(estimatedCost);
+  });
+
+  it('does not fall back from Google Vertex to direct Google pricing', () => {
+    const costs = estimateCosts(
+      {
+        provider: 'google.vertex.chat',
+        model: 'gemini-2.5-pro',
+        usage: { inputTokens: 1_000 },
+      },
+      pricingRegistry,
+    );
+
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)).toEqual({
+      provider: 'google.vertex.chat',
+      model: 'gemini-2.5-pro',
+      costMetadata: { error: 'no_matching_model' },
+    });
+  });
+
+  it('resolves Bedrock inference-profile ids and prices all Anthropic token meters', () => {
+    const costs = estimateCosts(
+      {
+        provider: 'amazon-bedrock',
+        model: 'us.anthropic.claude-sonnet-4-6',
+        usage: {
+          inputTokens: 1_150,
+          outputTokens: 100,
+          inputDetails: { text: 1_000, cacheRead: 100, cacheWrite: 50 },
+          outputDetails: { text: 100 },
+        },
+      },
+      pricingRegistry,
+    );
+
+    const expectedCosts = new Map([
+      [TokenMetrics.INPUT_TEXT, 0.0033],
+      [TokenMetrics.INPUT_CACHE_READ, 0.000033],
+      [TokenMetrics.INPUT_CACHE_WRITE, 0.00020625],
+      [TokenMetrics.OUTPUT_TEXT, 0.00165],
+    ]);
+    for (const [metric, estimatedCost] of expectedCosts) {
+      expect(costs.get(metric)).toMatchObject({
+        provider: 'amazon-bedrock',
+        model: 'claude-sonnet-4-6',
+        costMetadata: { pricing_id: 'amazon-bedrock-claude-sonnet-4-6' },
+      });
+      expect(costs.get(metric)?.estimatedCost).toBeCloseTo(estimatedCost);
+    }
+  });
+
+  it.each([
+    ['anthropic.claude-sonnet-4-6-v1', 'amazon-bedrock-claude-sonnet-4-6', 0.0033],
+    ['global.anthropic.claude-sonnet-4-5-20250929-v1:0', 'amazon-bedrock-claude-sonnet-4-5', 0.003],
+    ['jp.anthropic.claude-sonnet-4-5-20250929-v1:0', 'amazon-bedrock-claude-sonnet-4-5', 0.003],
+    ['au.anthropic.claude-sonnet-4-5-20250929-v1:0', 'amazon-bedrock-claude-sonnet-4-5', 0.003],
+    ['us.amazon.nova-pro-v1:0', 'amazon-bedrock-amazon-nova-pro', 0.0008],
+  ])('resolves Bedrock model id %s', (model, pricingId, estimatedCost) => {
+    const costs = estimateCosts(
+      {
+        provider: 'amazon-bedrock',
+        model,
+        usage: { inputTokens: 1_000 },
+      },
+      pricingRegistry,
+    );
+
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)).toMatchObject({
+      provider: 'amazon-bedrock',
+      costMetadata: { pricing_id: pricingId },
+    });
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)?.estimatedCost).toBeCloseTo(estimatedCost);
+  });
 });

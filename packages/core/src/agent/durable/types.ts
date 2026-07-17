@@ -16,7 +16,7 @@ import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { MastraMemory } from '../../memory/memory';
 import type { MemoryConfig } from '../../memory/types';
-import type { AIModelGenerationSpan, Span, SpanType, TracingOptions } from '../../observability';
+import type { AIModelGenerationSpan, Span, SpanType, TracingContext, TracingOptions } from '../../observability';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ErrorProcessorOrWorkflow } from '../../processors';
 import type { ProcessorState } from '../../processors/runner';
 import type { RequestContext } from '../../request-context';
@@ -32,7 +32,8 @@ import type { AgentExecutionOptions } from '../agent.types';
 import type { MessageList } from '../message-list';
 import type { SerializedMessageListState } from '../message-list/state';
 import type { SaveQueueManager } from '../save-queue';
-import type { GoalConfig } from '../types';
+import type { CreatedAgentSignal } from '../signals';
+import type { GoalConfig, StructuredOutputOptions } from '../types';
 
 /**
  * Metadata about a tool that can be serialized (without the execute function)
@@ -136,7 +137,7 @@ export interface SerializableStructuredOutput {
   /** JSON Schema representation of the output schema */
   schema?: JSONSchema7;
   /** Whether to use JSON prompt injection instead of native response format */
-  jsonPromptInjection?: boolean | 'system' | 'inline';
+  jsonPromptInjection?: boolean | 'system' | 'inline' | 'auto';
   /** Whether to use the parent agent's model for structuring */
   useAgent?: boolean;
   /** Model config for a dedicated structuring model (if different from the main model) */
@@ -148,9 +149,9 @@ export interface SerializableStructuredOutput {
  * step of a durable agentic loop. Mirrors `LoopOptions['modelSettings']` minus
  * `abortSignal` (non-serializable; handled separately via the run registry).
  *
- * `headers` is restricted to a plain record of strings so it survives JSON
- * round-trips across workers / persistence; provider extensions belong in
- * `providerOptions` on `SerializableDurableOptions`.
+ * `headers` are intentionally excluded — they are stored on the in-process
+ * `RunRegistryEntry` so they never reach durable storage. The durable
+ * `llm-execution` step merges them back from the registry at call time.
  */
 export interface SerializableModelSettings {
   maxOutputTokens?: number;
@@ -162,7 +163,6 @@ export interface SerializableModelSettings {
   stopSequences?: string[];
   seed?: number;
   maxRetries?: number;
-  headers?: Record<string, string>;
 }
 
 /**
@@ -175,7 +175,7 @@ export interface SerializableDurableOptions {
   toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
   /** Tool names enabled for this execution */
   activeTools?: string[];
-  /** Serializable LLM call settings (temperature, maxOutputTokens, topP, topK, presencePenalty, frequencyPenalty, stopSequences, seed, headers). */
+  /** Serializable LLM call settings (temperature, maxOutputTokens, topP, topK, presencePenalty, frequencyPenalty, stopSequences, seed). Headers are excluded — see RunRegistryEntry. */
   modelSettings?: SerializableModelSettings;
   /** Whether to require tool approval globally */
   requireToolApproval?: boolean;
@@ -321,6 +321,10 @@ export interface DurableLLMStepOutput {
   stepSpanData?: unknown;
   /** Step finish payload data for closing step span later */
   stepFinishPayload?: unknown;
+  /** Deferred step-finish chunk for intermediate steps.
+   *  llm-execution defers emission so llm-mapping can emit it AFTER tool-result
+   *  chunks, matching the regular agent's chunk ordering. */
+  deferredStepFinishChunk?: unknown;
 }
 
 /**
@@ -356,6 +360,16 @@ export interface DurableToolCallOutput extends DurableToolCallInput {
     name: string;
     message: string;
     stack?: string;
+  };
+  /**
+   * Approval decision for a `requireApproval` tool, present once the user has approved or declined.
+   * A declined call carries `approved: false` and no `result`, so it persists as `output-denied`.
+   * An approved call carries `approved: true` alongside the `result`.
+   */
+  approval?: {
+    id: string;
+    approved: boolean;
+    reason?: string;
   };
 }
 
@@ -521,12 +535,22 @@ export interface RegistryModelListEntry {
   model: MastraLanguageModel;
   maxRetries: number;
   enabled: boolean;
+  /** Model-config-level headers (from `AgentModelManagerConfig.headers`). */
+  headers?: Record<string, string>;
 }
 
 /**
  * Registry entry for a single run's non-serializable state
  */
 export interface RunRegistryEntry {
+  /**
+   * Marks a minimal cross-process placeholder entry (e.g. seeded by
+   * @mastra/inngest resume() to carry an abort controller). Placeholder
+   * entries hold no usable tools/model/processors, so
+   * `resolveRuntimeDependencies` must rebuild runtime state from the agent
+   * registered on the Mastra instance instead of trusting the entry.
+   */
+  isPlaceholder?: boolean;
   /** Resolved tools with execute functions */
   tools: Record<string, CoreTool>;
   /** SaveQueueManager for message persistence (undefined when memory is not configured) */
@@ -640,6 +664,45 @@ export interface RunRegistryEntry {
    */
   requireToolApproval?: RequireToolApproval;
   /**
+   * Signal drain closure. When the durable agent inherits `sendSignal()` from
+   * its wrapped `Agent`, signals are queued in `AgentThreadStreamRuntime`. This
+   * closure retrieves and clears those queues, keyed by scope:
+   * - `'pending'` — signals sent while the run is active (between iterations)
+   * - `'pre-run'` — signals sent before the first model request
+   *
+   * Non-serializable (a closure); cross-process engines cannot recover it and
+   * signals sent to a restarted worker will not be drained.
+   */
+  drainPendingSignals?: (scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
+  /**
+   * Thread title generation closure — mirrors the non-durable `#executeOnFinish`
+   * title-generation branch, which was never ported to the durable finish step
+   * (so `memory.options.generateTitle` never fired for durable/evented agents).
+   * Parked here during preparation, where the agent instance is in scope; the
+   * durable finish step invokes it after the run completes. When the merged
+   * memory config has no `generateTitle`, or the thread already has a title, it
+   * is a no-op. Non-serializable (a closure) — cross-process engines lose it and
+   * skip title generation, matching the other registry closures.
+   */
+  generateThreadTitle?: (args: {
+    threadId: string;
+    resourceId: string;
+    memoryConfig?: MemoryConfig;
+    messageListState: SerializedMessageListState;
+    requestContext?: RequestContext;
+    tracingContext?: TracingContext;
+  }) => Promise<void>;
+  /**
+   * Signal messages already present in the `messageList` at run start (from
+   * persisted history). These are echoed as `data-signal` stream data parts
+   * so the client sees them without re-fetching history. The array is spliced
+   * once on the first LLM step, so it is only echoed once per run.
+   *
+   * Non-serializable (contains `CreatedAgentSignal` instances with methods);
+   * populated during `prepareForDurableExecution`.
+   */
+  initialSignalEchoes?: CreatedAgentSignal[];
+  /**
    * Abort signal for the run. Non-serializable, so it lives only on the
    * in-process registry; cross-process resumes cannot recover it.
    *
@@ -669,6 +732,44 @@ export interface RunRegistryEntry {
    * surface — purely an internal coordination primitive.
    */
   workflowExecution?: Promise<unknown>;
+  /**
+   * Tripwire data from `processInput` (initial input processing). When an
+   * input processor calls `abort()` during `runInputProcessors` in
+   * `preparation.ts`, the TripWire is caught and stored here instead of
+   * swallowed. The first durable `llm-execution` step checks this slot and
+   * immediately emits a `tripwire` chunk + bail response, preventing the
+   * model from ever being called.
+   *
+   * Non-serializable (contains metadata of unknown shape); populated during
+   * `prepareForDurableExecution`.
+   */
+  tripwire?: {
+    reason: string;
+    retry?: boolean;
+    metadata?: unknown;
+    processorId?: string;
+  };
+  /**
+   * Call-time headers from `modelSettings.headers`. These are intentionally
+   * excluded from the serialized `workflowInput` so they never reach durable
+   * storage. The durable `llm-execution` step reads them from this in-process
+   * registry slot and passes them as `callTimeHeaders` to `mergeLlmCallHeaders`.
+   *
+   * Cross-process engines (e.g. Inngest after a worker restart) lose this
+   * slot; callers that need credentials on the LLM HTTP call should configure
+   * them on the model factory (e.g. `openai({ apiKey })`) or via environment
+   * variables.
+   */
+  callTimeHeaders?: Record<string, string>;
+  /**
+   * Call-time structured output configuration (with live schema). The schema
+   * is non-serializable (Zod/standard schema instance), so it lives only on
+   * the in-process registry. The durable stream adapter reads it to configure
+   * `MastraModelOutput`'s `createObjectStreamTransformer`, which parses LLM
+   * text into `object-result` chunks. Cross-process engines lose this slot
+   * and structured output degrades to raw text.
+   */
+  structuredOutput?: StructuredOutputOptions;
 }
 
 /**

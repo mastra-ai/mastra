@@ -133,11 +133,14 @@ describe('MesaFilesystem', () => {
 
     it('returns filesystem info without exposing credentials', () => {
       const { fs } = createFs({
+        apiKey: 'mesa-secret',
         org: 'acme',
         repos: [{ name: 'docs', bookmark: 'main' }],
       });
 
-      expect(fs.getInfo()).toEqual(
+      const info = fs.getInfo();
+
+      expect(info).toEqual(
         expect.objectContaining({
           id: fs.id,
           name: 'MesaFilesystem',
@@ -150,6 +153,8 @@ describe('MesaFilesystem', () => {
           },
         }),
       );
+      expect(info).not.toHaveProperty('apiKey');
+      expect(info.metadata).not.toHaveProperty('apiKey');
     });
 
     it('builds instructions with org, repo, and read-only context', () => {

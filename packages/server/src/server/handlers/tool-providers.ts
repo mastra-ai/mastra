@@ -279,8 +279,15 @@ export const AUTHORIZE_TOOL_PROVIDER_ROUTE = createRoute({
       // - 'shared' buckets under SHARED_BUCKET_ID.
       // - 'caller-supplied' buckets under request-context resourceId (400 if missing).
       // - 'per-author' (default) buckets under the caller's resolved authorId.
+      //
+      // Precedence: an explicit request `scope` wins, then the provider's
+      // config-level `defaultScope` (the app author's tenancy decision), then
+      // `'per-author'`. This lets a provider constructed with
+      // `defaultScope: 'caller-supplied'` produce per-tenant connections even
+      // though no UI control selects a scope.
+      const requestedScope = scope ?? provider.defaultScope;
       const effectiveScope: 'shared' | 'per-author' | 'caller-supplied' =
-        scope === 'shared' || scope === 'caller-supplied' ? scope : 'per-author';
+        requestedScope === 'shared' || requestedScope === 'caller-supplied' ? requestedScope : 'per-author';
       const callerResourceId = requestContext?.get(MASTRA_RESOURCE_ID_KEY);
       if (effectiveScope === 'caller-supplied') {
         if (typeof callerResourceId !== 'string' || callerResourceId.length === 0) {

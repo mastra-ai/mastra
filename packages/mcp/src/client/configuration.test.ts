@@ -227,10 +227,33 @@ describe('MCPClient tool discovery retries', () => {
     clients.push(client);
 
     const internalClient = await (client as any).getConnectedClientForServer('weather');
-    const capabilities = (internalClient as any).client._options?.capabilities;
+    const capabilities = (internalClient as any).client._capabilities;
 
     expect(connectSpy).toHaveBeenCalledTimes(1);
     expect(capabilities).toMatchObject(customCapabilities);
+  });
+
+  it('registers elicitation handlers before connecting the server', async () => {
+    const connectSpy = vi.spyOn(InternalMastraMCPClient.prototype, 'connect').mockResolvedValue(true);
+
+    const client = new MCPClient({
+      id: `configuration-test-${++clientId}`,
+      servers: {
+        weather: {
+          url: new URL('http://localhost:1234/sse'),
+        },
+      },
+    });
+
+    clients.push(client);
+
+    await client.elicitation.onRequest('weather', async () => ({ action: 'decline' }));
+
+    const internalClient = (client as any).mcpClientsById.get('weather');
+    const capabilities = internalClient.client._capabilities;
+
+    expect(connectSpy).not.toHaveBeenCalled();
+    expect(capabilities.elicitation).toMatchObject({ form: {} });
   });
 
   it('returns cached server instructions for configured servers', async () => {

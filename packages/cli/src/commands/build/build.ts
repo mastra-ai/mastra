@@ -1,8 +1,8 @@
 import { join } from 'node:path';
 import { getDeployer } from '@mastra/deployer';
 import { prepareFsAgentsEntry, writeFsAgentsEntry, mirrorFsAgentWorkspaces } from '@mastra/deployer/build';
-import { FileService } from '../../services/service.file';
 import { checkMastraPeerDeps, logPeerDepWarnings } from '../../utils/check-peer-deps';
+import { findMastraEntryFile } from '../../utils/find-mastra-entry';
 import { createLogger } from '../../utils/logger';
 import { getMastraPackages } from '../../utils/mastra-packages';
 import { computeSourceHash, writeBuildManifest } from '../../utils/source-hash';
@@ -32,15 +32,21 @@ export async function build({
   logPeerDepWarnings(peerDepMismatches);
 
   try {
-    const fs = new FileService();
-    const mastraEntryFile = fs.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
+    // Look for the user's mastra entry file. When it doesn't exist (fully
+    // file-based project), prepareFsAgentsEntry auto-constructs a Mastra
+    // instance from discovered primitives.
+    const mastraEntryFile = findMastraEntryFile(mastraDir);
 
     // Discover fs-routed agents under agents/* and, if any exist, wrap the entry
     // so they are registered onto the user's mastra instance during the build.
     const fsAgents = await prepareFsAgentsEntry(mastraDir, mastraEntryFile, outputDirectory);
     const bundleEntryFile = fsAgents.entryFile;
 
-    const platformDeployer = await getDeployer(mastraEntryFile, outputDirectory);
+    if (fsAgents.standalone) {
+      logger.info('No index.ts found — auto-constructing Mastra instance from file-based primitives.');
+    }
+
+    const platformDeployer = mastraEntryFile ? await getDeployer(mastraEntryFile, outputDirectory) : undefined;
 
     if (!platformDeployer) {
       const deployer = new BuildBundler({ studio });
@@ -100,6 +106,13 @@ export async function build({
     // Write build manifest with source hash for staleness detection
     const sourceHash = await computeSourceHash(rootDir, mastraDir);
     await writeBuildManifest(outputDirectory, sourceHash);
+
+    // Push-style deployers (e.g. sandbox deploys) opt in to deploying as part
+    // of the build. Platform deployers deploy via their own tooling instead.
+    if (platformDeployer.deployOnBuild) {
+      await platformDeployer.deploy(outputDirectory);
+      return;
+    }
 
     logger.info('You can now deploy the .mastra/output directory to your target platform.');
   } catch (error) {

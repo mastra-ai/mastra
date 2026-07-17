@@ -43,9 +43,9 @@ export function HorizontalBars({
   const isStacked = segments.length > 1;
 
   return (
-    <ScrollArea className={cn('w-full h-full', className)}>
-      <div className="flex items-center gap-3 mb-4 mt-2">
-        <div className="flex-1 flex items-center gap-4">
+    <ScrollArea className={cn('size-full', className)}>
+      <div className="mt-2 mb-4 flex items-center gap-3">
+        <div className="flex flex-1 items-center gap-4">
           {segments.map(seg => (
             <div key={seg.label} className="flex items-center gap-2">
               <div className="size-2 rounded-full" style={{ backgroundColor: seg.color }} />
@@ -53,14 +53,14 @@ export function HorizontalBars({
             </div>
           ))}
         </div>
-        <span className="shrink-0 text-ui-sm text-neutral2 pr-2">Total</span>
+        <span className="shrink-0 pr-2 text-ui-sm text-neutral2">Total</span>
       </div>
       <div className="grid gap-3.5">
         {sorted.map(d => {
           const total = d.values.reduce((s, v) => s + v, 0);
           const rowBody = (
             <>
-              <div className="relative h-full flex-1 min-w-0">
+              <div className="relative h-full min-w-0 flex-1">
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <div
@@ -83,7 +83,7 @@ export function HorizontalBars({
                               isStacked && si === 0 && 'rounded-l',
                               isStacked && isLastWithValue && 'rounded-r',
                               !isStacked && 'rounded',
-                              segHref && 'cursor-pointer hover:opacity-70 transition-opacity',
+                              segHref && 'cursor-pointer transition-opacity hover:opacity-70',
                             )}
                             style={{
                               left: isStacked ? `${left}%` : 0,
@@ -120,11 +120,11 @@ export function HorizontalBars({
                     </div>
                   </TooltipContent>
                 </Tooltip>
-                <span className="absolute inset-y-0 left-2.5 flex items-center text-ui-sm text-neutral4 truncate z-10 pointer-events-none">
+                <span className="pointer-events-none absolute inset-y-0 left-2.5 z-10 flex items-center truncate text-ui-sm text-neutral4">
                   {d.name}
                 </span>
               </div>
-              <span className="text-ui-md text-neutral4 tabular-nums shrink-0 pr-3">{fmt(total)}</span>
+              <span className="shrink-0 pr-3 text-ui-md text-neutral4 tabular-nums">{fmt(total)}</span>
             </>
           );
 
@@ -133,14 +133,14 @@ export function HorizontalBars({
               <LinkComponent
                 key={d.name}
                 href={d.href}
-                className="flex items-center gap-14 h-6 rounded outline-none cursor-pointer hover:bg-surface3 focus-visible:bg-surface3 transition-colors"
+                className="flex h-6 cursor-pointer items-center gap-14 rounded transition-colors outline-none hover:bg-surface3 focus-visible:bg-surface3"
               >
                 {rowBody}
               </LinkComponent>
             );
           }
           return (
-            <div key={d.name} className="flex items-center gap-14 h-6 ">
+            <div key={d.name} className="flex h-6 items-center gap-14 ">
               {rowBody}
             </div>
           );

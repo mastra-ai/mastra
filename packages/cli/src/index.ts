@@ -22,6 +22,9 @@ import { loginAction, logoutAction } from './commands/auth/login';
 import { listOrgsAction, switchOrgAction } from './commands/auth/orgs';
 import { createTokenAction, listTokensAction, revokeTokenAction } from './commands/auth/tokens';
 import { whoamiAction } from './commands/auth/whoami';
+import { registerEnvDbCommands } from './commands/db/index.js';
+import { unifiedDeployAction } from './commands/deploy/index.js';
+import { registerEnvCommands } from './commands/env/index.js';
 import { COMPONENTS, LLMProvider } from './commands/init/utils';
 import { serverDeployAction } from './commands/server/deploy';
 import { serverSuggestionsAction } from './commands/server/deploy-suggestions';
@@ -33,19 +36,10 @@ import { logsAction } from './commands/studio/deploy-logs';
 import { statusAction } from './commands/studio/deploy-status';
 import { suggestionsAction } from './commands/studio/deploy-suggestions';
 import { listProjectsAction, createProjectAction } from './commands/studio/projects';
-import { parseComponents, parseLlmProvider, parseMcp, parseSkills } from './commands/utils';
+import { parseComponents, parseLlmProvider, parseMcp, parseSkills, wrapAction } from './commands/utils';
 import { buildWorker } from './commands/worker/build';
 import { devWorker } from './commands/worker/dev';
 import { startWorker } from './commands/worker/start';
-
-function wrapAction(fn: (...args: any[]) => Promise<void>): (...args: any[]) => void {
-  return (...args: any[]) => {
-    fn(...args).catch((err: Error) => {
-      console.error(`Error: ${err.message}`);
-      process.exit(1);
-    });
-  };
-}
 
 const mastraPkg = pkgJson as PackageJson;
 export const version = mastraPkg.version;
@@ -249,6 +243,25 @@ program
   )
   .action(startProject);
 
+// ---- Unified deploy command (new entry point) ----
+
+program
+  .command('deploy [dir]')
+  .description('Deploy your Mastra application to an environment')
+  .option('--env <name>', 'Target environment (default: production)', 'production')
+  .option('--org <id>', 'Organization ID')
+  .option('--project <id>', 'Project ID, slug, or name (creates new project if not found)')
+  .option('-y, --yes', 'Auto-accept defaults without confirmation')
+  .option('-c, --config <file>', 'Project config file path (default: .mastra-project.json)')
+  .option('--env-file <file>', 'Env file to deploy (for example: .env.production)')
+  .option('--skip-build', 'Skip the build step and use existing .mastra/output')
+  .option('--skip-preflight', 'Skip the pre-deploy build/env validation')
+  .option('--region <region>', 'Region for new environments (e.g., us, eu)')
+  .option('--debug', 'Enable debug logs', false)
+  .action(wrapAction(unifiedDeployAction));
+
+// ---- Studio commands ----
+
 const studioCommand = program
   .command('studio')
   .description('Manage Mastra Studio')
@@ -343,6 +356,13 @@ authTokens.command('create <name>').description('Create a new API token').action
 
 authTokens.command('revoke <token-id>').description('Revoke an API token').action(wrapAction(revokeTokenAction));
 
+// ---- Environment commands ----
+
+const envCommand = registerEnvCommands(program);
+
+// Databases: mastra env db ...
+registerEnvDbCommands(envCommand);
+
 // ---- Server commands ----
 
 const serverCommand = program.command('server').description('Manage Mastra Server deployments');
@@ -412,7 +432,9 @@ serverEnvCommand
 
 serverEnvCommand
   .command('pull [file]')
-  .description('Pull environment variables into a local .env file (default: .env)')
+  .description(
+    'Pull project-level environment variables into a local .env file (default: .env) — use `mastra env vars pull` to include environment-scoped vars',
+  )
   .option('-c, --config <file>', 'Project config file path (default: .mastra-project.json)')
   .option('--project <id>', 'Project ID or slug (overrides linked project when MASTRA_PROJECT_ID is unset)')
   .action(wrapAction(envPullAction));

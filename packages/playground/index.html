@@ -22,13 +22,16 @@
       window.MASTRA_EXPERIMENTAL_UI = '%%MASTRA_EXPERIMENTAL_UI%%';
       window.MASTRA_AGENT_SIGNALS = '%%MASTRA_AGENT_SIGNALS%%';
       window.MASTRA_SIGNALS_UI = '%%MASTRA_SIGNALS_UI%%';
+      window.MASTRA_ORGANIZATION_ID = '%%MASTRA_ORGANIZATION_ID%%';
+      window.MASTRA_PLATFORM_PROJECT_ID = '%%MASTRA_PLATFORM_PROJECT_ID%%';
+      window.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT = '%%MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT%%';
 
       try {
         const storageValue = window.localStorage.getItem('mastra-playground-store');
         const parsedStorage = storageValue ? JSON.parse(storageValue) : null;
         const persistedTheme = parsedStorage?.state?.theme;
 
-        const selectedTheme = persistedTheme === 'light' || persistedTheme === 'system' ? persistedTheme : 'dark';
+        const selectedTheme = persistedTheme === 'light' || persistedTheme === 'dark' ? persistedTheme : 'system';
 
         const resolvedTheme =
           selectedTheme === 'system'

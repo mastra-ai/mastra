@@ -1,9 +1,10 @@
+import { SearchIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { TopicTraceSummary } from '../types';
 import { getVisibleTraceSummaries } from '../utils';
 import { Button } from '@/ds/components/Button';
 import { DataList } from '@/ds/components/DataList/data-list';
-import { Searchbar } from '@/ds/components/Searchbar';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@/ds/components/InputGroup';
 
 export interface TopicTraceSummaryListProps {
   traces: TopicTraceSummary[];
@@ -28,14 +29,20 @@ export function TopicTraceSummaryList({
 
   return (
     <section className="flex min-h-0 flex-1 flex-col gap-4" aria-label="Topic trace summaries">
-      <Searchbar
-        label="Search traces"
-        placeholder="Search traces"
-        onSearch={value => {
-          setSearch(value);
-          setPage(1);
-        }}
-      />
+      <InputGroup variant="outline">
+        <InputGroupAddon align="inline-start">
+          <SearchIcon />
+        </InputGroupAddon>
+        <InputGroupInput
+          type="search"
+          aria-label="Search traces"
+          placeholder="Search traces"
+          onChange={event => {
+            setSearch(event.target.value);
+            setPage(1);
+          }}
+        />
+      </InputGroup>
 
       <DataList columns="minmax(12rem,1fr)" className="min-h-0 flex-1">
         <DataList.Top>

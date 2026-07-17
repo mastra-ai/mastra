@@ -1,0 +1,916 @@
+---
+title: 'Reference: LiveKit | Voice'
+description: 'API reference for @mastra/livekit, which turns Mastra agents into realtime LiveKit voice agents.'
+packages:
+  - '@mastra/livekit'
+---
+
+# LiveKit
+
+The `@mastra/livekit` package connects Mastra agents to the LiveKit Agents framework. LiveKit runs the audio pipeline (voice activity detection, speech-to-text, turn detection, text-to-speech, barge-in) and the package bridges reply generation to a Mastra agent's `stream()` call.
+
+See [Using LiveKit with Mastra](/docs/voice/livekit) for setup and concepts.
+
+The package has three entry points:
+
+- `@mastra/livekit`: server-side APIs — [`liveKitConnectionRoute()`](#livekitconnectionroute), [`dispatchVoiceSession()`](#dispatchvoicesession), [`pipeAgentReplyToWriter()`](#pipeagentreplytowriter), [`serializeSessionMetadata()`](#livekitsessionmetadata), and [`createEndCallTool()`](#createendcalltool). Import these from Mastra server code. This entry never loads the LiveKit agents runtime.
+- `@mastra/livekit/worker`: the worker runtime — [`createLiveKitWorker()`](#createlivekitworker), [`runLiveKitWorker()`](#runlivekitworker), [`chatContextToMessages()`](#chatcontexttomessages), and the session helpers [`speakGreeting()`](#speakgreeting), [`waitForAgentDoneSpeaking()`](#waitforagentdonespeaking), and [`runEndCall()`](#runendcall). Import it only from the worker entry file.
+- `@mastra/livekit/plugin`: the LLM-component plugin — [`MastraLLM`](#mastrallm) and [`createRemoteAgentReplyGenerator()`](#createremoteagentreplygenerator). Import it in workers that build their own `voice.AgentSession`. `createRemoteAgentReplyGenerator()` is also exported from `@mastra/livekit/worker` because it plugs into `createLiveKitWorker()`'s `generate` option; `MastraLLM` is plugin-only.
+
+## `createLiveKitWorker()`
+
+Builds a LiveKit agent definition that answers voice sessions with Mastra agents. Use it as the default export of your worker entry file.
+
+```typescript title="src/mastra/voice-worker.ts"
+import { fileURLToPath } from 'node:url'
+import { createLiveKitWorker, runLiveKitWorker } from '@mastra/livekit/worker'
+import { mastra } from './index'
+
+export default createLiveKitWorker({
+  mastra,
+  agent: 'support',
+  stt: 'deepgram/nova-3',
+  tts: 'cartesia/sonic-3',
+  turnDetection: 'multilingual',
+})
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  runLiveKitWorker({ entry: import.meta.url, agentName: 'mastra-voice' })
+}
+```
+
+### Options
+
+<PropertiesTable
+  content={[
+  {
+    name: 'mastra',
+    type: 'Mastra',
+    description: 'The Mastra instance whose agents handle voice sessions.',
+  },
+  {
+    name: 'agent',
+    type: 'string | (args) => string | Agent | Promise<string | Agent>',
+    description:
+      'Which Mastra agent answers each session: a fixed agent key or id, or a resolver called per session with the dispatch metadata and job context. Defaults to the agentId from the dispatch metadata.',
+    isOptional: true,
+  },
+  {
+    name: 'workflow',
+    type: 'string | Workflow | (args) => string | Promise<string>',
+    description:
+      "Generate each turn's reply with a Mastra workflow instead of an agent: a Workflow instance, a fixed workflow key or id, or a resolver that returns a workflow id per session. The workflow runs once to completion per turn (no suspend or resume). Mutually exclusive with agent; requires workflowInput.",
+    isOptional: true,
+  },
+  {
+    name: 'workflowInput',
+    type: '(args: VoiceTurnContext & { metadata }) => unknown | Promise<unknown>',
+    description:
+      'Maps a turn into the workflow inputData. Required when workflow is set. A stateless mapping that passes the full transcript each turn avoids carrying conversation state in the workflow.',
+    isOptional: true,
+  },
+  {
+    name: 'replyStep',
+    type: 'string',
+    description: 'Only stream text from this workflow step id. Defaults to every step that writes to its writer.',
+    isOptional: true,
+  },
+  {
+    name: 'resultText',
+    type: '(result: unknown) => string | undefined',
+    description:
+      'Fallback when the workflow streams no text via writer: derive the spoken reply from the final run result.',
+    isOptional: true,
+  },
+  {
+    name: 'generate',
+    type: 'VoiceReplyGenerator',
+    description:
+      'Lowest-level escape hatch: supply any reply generator directly (a custom workflow, remote bridge, and so on).',
+    isOptional: true,
+  },
+  {
+    name: 'stt',
+    type: 'STT | string',
+    description:
+      "Speech-to-text: a LiveKit plugin instance or an inference model string such as 'deepgram/nova-3'. For per-call selection, set the configuration.stt resolver — it takes precedence, with this option as the fallback.",
+    isOptional: true,
+  },
+  {
+    name: 'tts',
+    type: 'TTS | string',
+    description:
+      "Text-to-speech: a LiveKit plugin instance or an inference model string such as 'cartesia/sonic-3'. For per-call selection, set the configuration.tts resolver — it takes precedence, with this option as the fallback.",
+    isOptional: true,
+  },
+  {
+    name: 'vad',
+    type: "VAD | 'silero' | false",
+    description:
+      "Voice activity detection. 'silero' loads the Silero VAD from @livekit/agents-plugin-silero during prewarm. Pass an instance to bring your own, or false to disable.",
+    isOptional: true,
+    defaultValue: "'silero'",
+  },
+  {
+    name: 'turnDetection',
+    type: "'multilingual' | 'english' | TurnDetectionMode",
+    description:
+      "End-of-turn detection. 'multilingual' and 'english' load LiveKit's semantic turn detector from @livekit/agents-plugin-livekit. Other values such as 'vad', 'stt', or 'manual' pass through.",
+    isOptional: true,
+  },
+  {
+    name: 'turnHandling',
+    type: 'Partial<TurnHandlingOptions>',
+    description:
+      'Turn handling tuning: endpointing delays, interruption sensitivity, preemptive generation. The worker disables preemptiveGeneration unless set here — each preemptive attempt re-runs the Mastra agent and persists a duplicate user message.',
+    isOptional: true,
+  },
+  {
+    name: 'sessionOptions',
+    type: 'Partial<AgentSessionOptions>',
+    description: 'Extra LiveKit AgentSession options merged over what this helper builds.',
+    isOptional: true,
+  },
+  {
+    name: 'memory',
+    type: 'false | ((args) => { thread, resource } | false)',
+    description:
+      'Memory mapping. Defaults to { thread: metadata.threadId ?? room name, resource: metadata.resourceId ?? thread } when the resolved agent has memory configured. Pass false to disable, or a function to customize.',
+    isOptional: true,
+  },
+  {
+    name: 'toolFeedback',
+    type: '(toolCall) => string | undefined',
+    description:
+      'Called when the Mastra agent starts a tool call mid-reply. Return a short phrase to speak while the tool runs.',
+    isOptional: true,
+  },
+  {
+    name: 'onTurnComplete',
+    type: '(ctx: VoiceTurnCompleteContext) => void | Promise<void>',
+    description:
+      'Called once per turn after the reply finished streaming to text-to-speech. Runs off the audio path and is not awaited. The context carries the produced reply (text, toolCalls, interrupted, usage) and the resolved memory mapping.',
+    isOptional: true,
+  },
+  {
+    name: 'configuration',
+    type: 'LiveKitWorkerConfiguration',
+    description:
+      'Grouped conversation and compliance configuration: the opening greeting and AI disclosure, consent requirements, agent-initiated hang-up, and per-call STT/TTS selection.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'LiveKitWorkerConfiguration',
+        parameters: [
+          {
+            name: 'greeting',
+            type: 'GreetingConfiguration',
+            description:
+              'The opening greeting and AI disclosure: text (a fixed string or a per-call resolver for per-tenant greetings), allowInterruptions, awaitPlayout, persist, and periodic re-disclosure via repeatEvery and repeatText.',
+            isOptional: true,
+          },
+          {
+            name: 'consentPolicy',
+            type: 'ConsentConfiguration',
+            description:
+              "The call's consent policy, as named requirements (starting with summaryStorage). Declarative only — the worker blocks nothing by itself. Capture grants at runtime with createConsentTool and enforce them in your own code; the declared policy surfaces on onCallEnd for cross-checking.",
+            isOptional: true,
+          },
+          {
+            name: 'endCall',
+            type: 'EndCallConfiguration',
+            description:
+              "Agent-initiated hang-up: the worker watches each turn for the end-call tool (pair with createEndCallTool), waits for the agent's closing words to play out, then disconnects — running onCallEnd on the way out.",
+            isOptional: true,
+          },
+          {
+            name: 'stt',
+            type: '(context: VoiceCallContext) => STT | string | undefined',
+            description:
+              'Per-call speech-to-text: a resolver invoked once per call (post-connect) with { metadata, requestContext, roomName, ctx }, returning anything the top-level stt option accepts. Return undefined to fall back to the top-level stt. Cache plugin instances across calls — the resolver runs during call setup.',
+            isOptional: true,
+          },
+          {
+            name: 'tts',
+            type: '(context: VoiceCallContext) => TTS | string | undefined',
+            description:
+              'Per-call text-to-speech: a resolver invoked once per call (post-connect) with { metadata, requestContext, roomName, ctx }, returning anything the top-level tts option accepts — one voice or language per tenant. Return undefined to fall back to the top-level tts. Cache plugin instances across calls.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'greeting',
+    type: 'string',
+    description: 'Static greeting spoken when the session starts. Deprecated: prefer configuration.greeting.text.',
+    isOptional: true,
+  },
+  {
+    name: 'persistGreeting',
+    type: 'boolean',
+    description:
+      'Save the spoken greeting to the memory thread as an assistant message, making the saved thread a faithful call transcript. Only applies when a greeting is set and memory is enabled. Deprecated: prefer configuration.greeting.persist.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'observability',
+    type: 'boolean',
+    description:
+      "Trace each call when the Mastra instance has observability configured. Opens a `voice call` span per session: every turn's agent run nests under it, LiveKit's STT, TTS, end-of-utterance, VAD, and LLM latency metrics become child spans, and the span closes with a per-model usage roll-up. Pass false to disable.",
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'inputOptions',
+    type: 'Partial<RoomInputOptions>',
+    description: 'LiveKit room input options passed to session.start().',
+    isOptional: true,
+  },
+  {
+    name: 'outputOptions',
+    type: 'Partial<RoomOutputOptions>',
+    description: 'LiveKit room output options passed to session.start().',
+    isOptional: true,
+  },
+  {
+    name: 'onSessionStart',
+    type: '(args: { session, ctx, agent, metadata }) => void | Promise<void>',
+    description: 'Called after the session starts. Attach event listeners or trigger replies here.',
+    isOptional: true,
+  },
+]}
+/>
+
+## `runLiveKitWorker()`
+
+Starts the LiveKit worker CLI (`dev`, `start`, and `connect` subcommands) for a worker entry file. Call it from the file that default-exports the worker definition, guarded so it only runs when executed directly (the worker spawns a child process per session that re-imports the same file). Using this helper instead of `cli.runApp` from `@livekit/agents` guarantees the worker runtime and the bridge share one copy of the LiveKit SDK.
+
+### Options
+
+<PropertiesTable
+  content={[
+  {
+    name: 'entry',
+    type: 'string | URL',
+    description: 'The worker entry module whose default export is the agent definition. Pass import.meta.url.',
+  },
+  {
+    name: 'agentName',
+    type: 'string',
+    description: 'LiveKit agent name for explicit dispatch.',
+    isOptional: true,
+    defaultValue: "'mastra-voice'",
+  },
+  {
+    name: 'serverOptions',
+    type: 'Partial<ServerOptions>',
+    description: 'Extra LiveKit ServerOptions merged over what this helper builds.',
+    isOptional: true,
+  },
+]}
+/>
+
+## `pipeAgentReplyToWriter()`
+
+Streams a Mastra agent's reply into a workflow step's `writer` on the workflow reply path. It forwards the agent's text deltas, so text-to-speech starts before the full reply is ready, and its tool-call chunks, so `toolFeedback` fires and `onTurnComplete` sees the tool list. Piping only `stream.textStream` silently drops tool calls. Pass the step's `abortSignal` to `agent.stream()` so barge-in stops generation promptly.
+
+```typescript title="src/mastra/workflows/phone-conversation.ts"
+import { pipeAgentReplyToWriter } from '@mastra/livekit'
+
+const generateResponse = createStep({
+  id: 'generateResponse',
+  // input and output schemas omitted
+  execute: async ({ inputData, mastra, writer, abortSignal }) => {
+    const stream = await mastra.getAgent('support').stream(inputData.turn, { abortSignal })
+    const reply = await pipeAgentReplyToWriter(stream, writer)
+    return { reply }
+  },
+})
+```
+
+Returns: `Promise<string>`, the accumulated reply text.
+
+### Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'agentStream',
+    type: 'AgentReplyStreamLike',
+    description: 'The stream returned by agent.stream() — anything exposing a fullStream async iterable.',
+  },
+  {
+    name: 'writer',
+    type: 'WritableStream<unknown>',
+    description: "The workflow step's writer.",
+  },
+]}
+/>
+
+## `chatContextToMessages()`
+
+Converts a LiveKit chat context into plain messages accepted by `agent.stream()`, excluding instructions and function calls. Use it in `workflowInput` to pass the full transcript into a stateless workflow.
+
+```typescript title="src/mastra/voice-worker.ts"
+import { createLiveKitWorker, chatContextToMessages } from '@mastra/livekit/worker'
+
+export default createLiveKitWorker({
+  mastra,
+  workflow: 'phoneConversation',
+  workflowInput: ({ chatCtx }) => ({ history: chatContextToMessages(chatCtx) }),
+})
+```
+
+Returns: `VoiceTurnMessage[]`, where each entry is `{ role: 'system' | 'user' | 'assistant'; content: string; id?: string }`.
+
+## `MastraLLM`
+
+A standard LiveKit LLM plugin (`llm.LLM`) backed by a Mastra agent. Use it when you build the `voice.AgentSession` yourself and want Mastra in the `llm` slot; [`createLiveKitWorker()`](#createlivekitworker) is the managed alternative. See [Use Mastra as the LLM component](/docs/voice/livekit#use-mastra-as-the-llm-component) for how to choose.
+
+With `remote`, the plugin streams each turn from your Mastra server over HTTP using Server-Sent Events (SSE). The agent loop, tools, and memory run server-side, and interrupting the agent aborts the server-side generation.
+
+```typescript title="src/mastra/voice-worker-plugin.ts"
+import { voice } from '@livekit/agents'
+import { MastraLLM } from '@mastra/livekit/plugin'
+
+const session = new voice.AgentSession({
+  llm: new MastraLLM({
+    remote: { baseUrl: process.env.MASTRA_URL!, agentId: 'support' },
+    memory: { thread: callId, resource: userId },
+  }),
+  stt: 'deepgram/nova-3',
+  tts: 'cartesia/sonic-3',
+  // Required with `memory`: LiveKit enables preemptive generation by default.
+  turnHandling: { preemptiveGeneration: { enabled: false } },
+})
+```
+
+The plugin reports `provider` as `mastra` and `model` as the agent id, so LiveKit metrics and fallback adapters identify it like any other LLM.
+
+### Constructor options
+
+Provide exactly one reply source: `remote`, `agent`, or `generate`.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'remote',
+    type: 'RemoteMastraAgentOptions',
+    description:
+      'Remote Mastra server reached over HTTP. Takes the same connection options as createRemoteAgentReplyGenerator(): baseUrl, agentId, apiPrefix, headers, fetch, timeoutMs, retries, body.',
+    isOptional: true,
+  },
+  {
+    name: 'agent',
+    type: 'Agent',
+    description: 'In-process Mastra agent. Session ownership without a second deployment.',
+    isOptional: true,
+  },
+  {
+    name: 'generate',
+    type: 'VoiceReplyGenerator',
+    description:
+      'Custom reply source. A generate source owns its own hooks; toolFeedback, onToolCall, and onTurnComplete below only apply to the remote and agent sources.',
+    isOptional: true,
+  },
+  {
+    name: 'memory',
+    type: '{ thread: string; resource?: string } | false',
+    description:
+      'Conversation persistence, resolved per call (for example from the SIP caller identity). When set, only messages new since the agent last spoke are sent each turn and Mastra Memory supplies history. When omitted, the full LiveKit chat context is sent every turn.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'requestContext',
+    type: 'RequestContext | Record<string, unknown>',
+    description: 'Request context forwarded to generation (tenant, dialed number, and so on).',
+    isOptional: true,
+  },
+  {
+    name: 'toolFeedback',
+    type: '(toolCall: VoiceToolCall) => string | undefined',
+    description: 'Return a short phrase to speak while a server-side tool runs.',
+    isOptional: true,
+  },
+  {
+    name: 'onToolCall',
+    type: '(toolCall: VoiceToolCall) => void',
+    description:
+      'Called as each tool call starts, mid-stream. Pair with runEndCall() to implement your own agent-initiated hang-up flow.',
+    isOptional: true,
+  },
+  {
+    name: 'onTurnComplete',
+    type: '(ctx: VoiceTurnCompleteContext) => void | Promise<void>',
+    description:
+      'Called once per turn after the reply finished streaming, off the audio path and not awaited. The context carries the produced reply: text, toolCalls, interrupted, and usage.',
+    isOptional: true,
+  },
+]}
+/>
+
+:::warning
+Don't combine `memory` with the session's `preemptiveGeneration` option, which LiveKit enables by default in sessions you build yourself. A speculative turn that completes before LiveKit discards it persists a user message and a never-spoken reply to the thread. Set `turnHandling: { preemptiveGeneration: { enabled: false } }` on the session. Stateless mode (no `memory`) works with preemptive generation.
+:::
+
+### Tools run on the Mastra agent
+
+Tools are defined and executed server-side on the Mastra agent. The plugin never forwards LiveKit tool definitions: if the session passes a non-empty `toolCtx`, it logs a one-time warning naming the ignored tools. Every tool must complete server-side — a tool that requires approval or client-side execution fails the turn with a descriptive error instead of hanging the call.
+
+Tool activity reaches the worker through `toolFeedback`, `onToolCall`, and `onTurnComplete`.
+
+### Instructions
+
+LiveKit injects your `voice.Agent`'s `instructions` into the chat context of every request. The plugin drops them: the server-side Mastra agent's own instructions are authoritative. To change the prompt, change the Mastra agent.
+
+### Interrupted turns
+
+When the user interrupts a reply:
+
+1. The plugin cancels the stream. The server aborts generation and persists nothing from that turn.
+1. LiveKit records the part the user actually heard in its chat context, flagged as interrupted.
+1. On the next turn, the plugin re-sends that heard-only fragment, ordered before the new user message, so the memory thread backfills to match the call. Messages carry LiveKit's message ids and the server deduplicates by id, so retries and re-sends stay idempotent.
+
+A user who hangs up immediately after interrupting leaves that final fragment unrecorded. When the transcript must capture it, reconcile immediately from the session event; the shared message id means the next turn's re-send upserts instead of duplicating:
+
+```typescript title="src/mastra/voice-worker-plugin.ts"
+import { voice } from '@livekit/agents'
+import { MastraClient } from '@mastra/client-js'
+
+const client = new MastraClient({ baseUrl: process.env.MASTRA_URL! })
+
+session.on(voice.AgentSessionEventTypes.ConversationItemAdded, ({ item }) => {
+  if (item.type !== 'message' || item.role !== 'assistant' || !item.interrupted) return
+  void client.saveMessageToMemory({
+    agentId: 'support',
+    messages: [
+      {
+        id: item.id,
+        threadId: callId,
+        resourceId: userId,
+        role: 'assistant',
+        content: item.textContent ?? '',
+        type: 'text',
+        createdAt: new Date(),
+      },
+    ],
+  })
+})
+```
+
+### Usage metrics
+
+When the server reports token usage for a turn, the plugin feeds it to LiveKit, so the session's `metrics_collected` events carry time-to-first-token, duration, and token counts like any LLM plugin. The same usage object (`promptTokens`, `completionTokens`, `promptCachedTokens`, `totalTokens`) arrives on `onTurnComplete` as `result.usage`.
+
+### Errors and timeouts
+
+The transport throws LiveKit's `APIError` types (`APIStatusError`, `APIConnectionError`, `APITimeoutError`), so the session's retry policy (`connOptions.maxRetry`) and `FallbackAdapter` failover work unchanged. A turn is never retried after its first token — a voice reply is better failed fast than replayed half-heard.
+
+A connect and first-token watchdog uses the session's `connOptions.timeoutMs` (10 seconds by default), so a server that accepts the connection but never streams can't cause indefinite dead air.
+
+If the Mastra server goes down mid-call, each reply attempt fails with a typed error after its retries, and LiveKit closes the session after several consecutive failed replies. Restore the server before that budget runs out and the call recovers on the next turn.
+
+### Message content
+
+Message extraction is text-only: image content is dropped, and audio content is included only through its transcript. Voice pipelines aren't affected, but items you inject into the chat context yourself must carry text.
+
+## `createRemoteAgentReplyGenerator()`
+
+Builds a reply generator that runs the agent loop on a **remote** Mastra server over HTTP/SSE. `MastraLLM`'s `remote` mode uses it internally. Use it directly through `createLiveKitWorker`'s `generate` option to run the batteries-included worker against a remote server:
+
+```typescript title="src/mastra/voice-worker.ts"
+import { createLiveKitWorker, createRemoteAgentReplyGenerator } from '@mastra/livekit/worker'
+import { mastra } from './index'
+
+export default createLiveKitWorker({
+  mastra, // local instance for logger and worker config; replies come from the remote server
+  generate: createRemoteAgentReplyGenerator({
+    baseUrl: process.env.MASTRA_URL!,
+    agentId: 'support',
+  }),
+  memory: ({ metadata, roomName }) => ({ thread: metadata.threadId ?? roomName }),
+  stt: 'deepgram/nova-3',
+  tts: 'cartesia/sonic-3',
+})
+```
+
+On the `generate` path the worker-level `toolFeedback` and `onTurnComplete` options don't apply, and the worker's end-call detection doesn't fire; pass the hooks to the generator instead.
+
+Cancelling a turn (barge-in) tears down the HTTP request, which aborts generation on the server. Errors are thrown as LiveKit `APIError` types; `retries` applies to the initial connection only — a turn is never retried after its first chunk.
+
+Returns: `VoiceReplyGenerator`.
+
+### Options
+
+<PropertiesTable
+  content={[
+  {
+    name: 'baseUrl',
+    type: 'string',
+    description: 'Base URL of the remote Mastra server, for example https://my-app.example.com.',
+  },
+  {
+    name: 'agentId',
+    type: 'string',
+    description: "The agent's registered key or id on the remote Mastra instance.",
+  },
+  {
+    name: 'apiPrefix',
+    type: 'string',
+    description: 'Path prefix for the Mastra API.',
+    isOptional: true,
+    defaultValue: "'/api'",
+  },
+  {
+    name: 'headers',
+    type: 'Record<string, string> | () => Record<string, string> | Promise<Record<string, string>>',
+    description: 'Static headers, or a resolver invoked per turn — for example to mint a fresh authorization token.',
+    isOptional: true,
+  },
+  {
+    name: 'fetch',
+    type: 'typeof fetch',
+    description: 'Injectable fetch implementation for tests or proxies.',
+    isOptional: true,
+    defaultValue: 'globalThis.fetch',
+  },
+  {
+    name: 'timeoutMs',
+    type: 'number',
+    description:
+      "Connect and first-token timeout in milliseconds. When used through MastraLLM, defaults to the session's connOptions.timeoutMs instead.",
+    isOptional: true,
+    defaultValue: '10000',
+  },
+  {
+    name: 'retries',
+    type: 'number',
+    description:
+      'Initial-connection retry attempts, before the first chunk only. When used through MastraLLM, the LiveKit session owns retries and this is forced to 0.',
+    isOptional: true,
+    defaultValue: '2',
+  },
+  {
+    name: 'body',
+    type: 'Record<string, unknown>',
+    description: 'Extra fields merged into each stream request body.',
+    isOptional: true,
+  },
+  {
+    name: 'toolFeedback',
+    type: '(toolCall: VoiceToolCall) => string | undefined',
+    description: 'Return a short phrase to speak while a server-side tool runs.',
+    isOptional: true,
+  },
+  {
+    name: 'onToolCall',
+    type: '(toolCall: VoiceToolCall) => void',
+    description: 'Called as each tool call starts, mid-stream.',
+    isOptional: true,
+  },
+  {
+    name: 'onTurnComplete',
+    type: '(ctx: VoiceTurnCompleteContext) => void | Promise<void>',
+    description: 'Called once per turn after the reply finished streaming, off the audio path.',
+    isOptional: true,
+  },
+]}
+/>
+
+## `speakGreeting()`
+
+Speaks an opening greeting on a session you own, honoring interruption and playout options. Returns the LiveKit `SpeechHandle`, or `undefined` when there's no greeting text. `createLiveKitWorker()` uses it internally for its `greeting` configuration.
+
+```typescript
+import { speakGreeting } from '@mastra/livekit/worker'
+
+await speakGreeting(session, {
+  text: "You've reached support. You're speaking with an AI assistant.",
+  allowInterruptions: false,
+  awaitPlayout: true,
+})
+```
+
+### Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'session',
+    type: 'voice.AgentSession',
+    description: 'The session to speak on.',
+  },
+  {
+    name: 'greeting',
+    type: '{ text?: string; allowInterruptions?: boolean; awaitPlayout?: boolean }',
+    description:
+      'The greeting text and playout options. When awaitPlayout is true, the returned promise resolves after the greeting finished playing (or was interrupted).',
+  },
+]}
+/>
+
+## `waitForAgentDoneSpeaking()`
+
+Resolves once the agent is no longer producing or playing a reply — its state has left `thinking` and `speaking`. Resolves immediately when the agent is already idle, and always resolves within `maxWaitMs` (30 seconds by default) as a safety cap. Use it before tearing a session down so closing words play out instead of being cut off.
+
+```typescript
+import { waitForAgentDoneSpeaking } from '@mastra/livekit/worker'
+
+await waitForAgentDoneSpeaking(session)
+```
+
+## `runEndCall()`
+
+Ends the call after the agent asked to: waits for the agent's closing words to finish, speaks an optional final `message` non-interruptibly, then deletes the room (hanging up the caller, SIP included) and shuts the job down, which runs registered shutdown callbacks.
+
+Pair it with [`MastraLLM`](#mastrallm)'s `onToolCall` and an [end-call tool](#createendcalltool) on the server-side agent to rebuild agent-initiated hang-up on a session you own:
+
+```typescript title="src/mastra/voice-worker-plugin.ts"
+import { MastraLLM } from '@mastra/livekit/plugin'
+import { DEFAULT_END_CALL_TOOL, runEndCall } from '@mastra/livekit/worker'
+
+let ending = false
+
+const llm = new MastraLLM({
+  remote: { baseUrl: process.env.MASTRA_URL!, agentId: 'support' },
+  onToolCall: ({ toolName }) => {
+    if (toolName !== DEFAULT_END_CALL_TOOL || ending) return
+    ending = true
+    void runEndCall(session, ctx, {}, console)
+  },
+})
+```
+
+The exported constants `DEFAULT_END_CALL_TOOL` (`'endCall'`), `DEFAULT_END_CALL_REASON`, and `DEFAULT_END_CALL_MAX_WAIT_MS` (30000) hold the defaults.
+
+### Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'session',
+    type: 'voice.AgentSession',
+    description: 'The session whose agent is finishing its closing words.',
+  },
+  {
+    name: 'ctx',
+    type: 'JobContext',
+    description: 'The LiveKit job context used to delete the room and shut down.',
+  },
+  {
+    name: 'config',
+    type: '{ message?: string; reason?: string; maxWaitMs?: number; drainMs?: number }',
+    description:
+      "Optional final message spoken before hang-up, the shutdown reason to record, the safety cap on waiting for closing words, and the post-playout drain (default 800ms) that lets audio buffered at the caller finish playing before the room is deleted — LiveKit's playout accounting is worker-local, so hanging up the instant it clears clips the goodbye.",
+  },
+  {
+    name: 'logger',
+    type: '{ warn: (message: string, ...args: unknown[]) => void }',
+    description: 'Receives warnings when teardown steps fail. Pass your logger or console.',
+  },
+]}
+/>
+
+## `createEndCallTool()`
+
+Builds the Mastra tool an agent calls to end the call itself: say goodbye, then hang up. The tool only signals intent (and runs optional bookkeeping) — the worker owns the actual hang-up. It lives on the server-safe root entry, so add it to agents defined in server code.
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { createEndCallTool } from '@mastra/livekit'
+
+const supportAgent = new Agent({
+  id: 'support',
+  name: 'Support',
+  instructions:
+    'Help the caller. When everything is wrapped up, say goodbye and call endCall as your final action.',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  tools: { endCall: createEndCallTool() },
+})
+```
+
+With `createLiveKitWorker()`, set `configuration: { endCall: {} }` and the worker watches for the tool and hangs up. On a session you own, rebuild the hang-up with [`runEndCall()`](#runendcall).
+
+### Options
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description:
+      "Tool id the agent calls to end the call. Must match the name the worker watches for (the worker's configuration.endCall.tool, or your own onToolCall check).",
+    isOptional: true,
+    defaultValue: "'endCall'",
+  },
+  {
+    name: 'description',
+    type: 'string',
+    description: 'Override the description the model sees when deciding to call the tool.',
+    isOptional: true,
+  },
+  {
+    name: 'onEndCall',
+    type: '(request: { reason?: string; resourceId?: string; threadId?: string }) => void | Promise<void>',
+    description:
+      'Bookkeeping hook called when the agent invokes the tool — record the reason or mark the call resolved. Runs inside the turn; keep it quick. It does not hang up the call.',
+    isOptional: true,
+  },
+]}
+/>
+
+## `liveKitConnectionRoute()`
+
+Returns an [API route](/docs/server/custom-api-routes) that mints a LiveKit access token with the voice agent dispatched into the room. Frontends call it to join a session.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { liveKitConnectionRoute } from '@mastra/livekit'
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [liveKitConnectionRoute({ agentName: 'mastra-voice' })],
+  },
+})
+```
+
+The route accepts a JSON body with optional `agentId`, `threadId`, and `resourceId` fields and responds with `{ serverUrl, roomName, participantName, participantToken }`. The `threadId` defaults to the generated room name.
+
+### Options
+
+<PropertiesTable
+  content={[
+  {
+    name: 'path',
+    type: 'string',
+    description: 'Route path.',
+    isOptional: true,
+    defaultValue: "'/voice/livekit/connection-details'",
+  },
+  {
+    name: 'serverUrl',
+    type: 'string',
+    description: 'LiveKit server URL.',
+    isOptional: true,
+    defaultValue: 'process.env.LIVEKIT_URL',
+  },
+  {
+    name: 'apiKey',
+    type: 'string',
+    description: 'LiveKit API key.',
+    isOptional: true,
+    defaultValue: 'process.env.LIVEKIT_API_KEY',
+  },
+  {
+    name: 'apiSecret',
+    type: 'string',
+    description: 'LiveKit API secret.',
+    isOptional: true,
+    defaultValue: 'process.env.LIVEKIT_API_SECRET',
+  },
+  {
+    name: 'agentName',
+    type: 'string',
+    description: "LiveKit agent name for explicit dispatch. Must match the worker's agentName.",
+    isOptional: true,
+    defaultValue: "'mastra-voice'",
+  },
+  {
+    name: 'ttl',
+    type: 'string | number',
+    description: 'Token time-to-live.',
+    isOptional: true,
+    defaultValue: "'15m'",
+  },
+  {
+    name: 'requiresAuth',
+    type: 'boolean',
+    description: 'Whether the route requires authentication.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'roomName',
+    type: 'string | (args) => string',
+    description: 'Room name or a function that derives one from the request.',
+    isOptional: true,
+  },
+  {
+    name: 'participantIdentity',
+    type: 'string | (args) => string',
+    description: 'Participant identity or a function that derives one from the request.',
+    isOptional: true,
+  },
+  {
+    name: 'metadata',
+    type: '(args) => LiveKitSessionMetadata | Promise<LiveKitSessionMetadata>',
+    description:
+      'Builds the session metadata delivered to the worker. Defaults to passing through agentId, threadId, and resourceId from the request body.',
+    isOptional: true,
+  },
+]}
+/>
+
+## `dispatchVoiceSession()`
+
+Dispatches a Mastra voice agent into a LiveKit room programmatically — for server-initiated sessions such as outbound calls.
+
+```typescript
+import { dispatchVoiceSession } from '@mastra/livekit'
+
+await dispatchVoiceSession({
+  roomName: 'support-call-42',
+  agentName: 'mastra-voice',
+  metadata: { agentId: 'support', threadId: 'thread-42' },
+})
+```
+
+### Options
+
+<PropertiesTable
+  content={[
+  {
+    name: 'roomName',
+    type: 'string',
+    description: 'Room to dispatch the agent into. Created on demand.',
+  },
+  {
+    name: 'agentName',
+    type: 'string',
+    description: "Must match the worker's agentName.",
+    isOptional: true,
+    defaultValue: "'mastra-voice'",
+  },
+  {
+    name: 'metadata',
+    type: 'LiveKitSessionMetadata',
+    description: 'Session metadata: agentId, threadId, resourceId, requestContext.',
+    isOptional: true,
+  },
+  {
+    name: 'serverUrl',
+    type: 'string',
+    description: 'LiveKit server URL.',
+    isOptional: true,
+    defaultValue: 'process.env.LIVEKIT_URL',
+  },
+  {
+    name: 'apiKey',
+    type: 'string',
+    description: 'LiveKit API key.',
+    isOptional: true,
+    defaultValue: 'process.env.LIVEKIT_API_KEY',
+  },
+  {
+    name: 'apiSecret',
+    type: 'string',
+    description: 'LiveKit API secret.',
+    isOptional: true,
+    defaultValue: 'process.env.LIVEKIT_API_SECRET',
+  },
+]}
+/>
+
+## `LiveKitSessionMetadata`
+
+The metadata passed from the Mastra server to the worker through LiveKit job dispatch.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'agentId',
+    type: 'string',
+    description: 'Mastra agent to run, by registered key or agent id.',
+    isOptional: true,
+  },
+  {
+    name: 'threadId',
+    type: 'string',
+    description: 'Memory thread id. Defaults to the LiveKit room name.',
+    isOptional: true,
+  },
+  {
+    name: 'resourceId',
+    type: 'string',
+    description: 'Memory resource id, typically the end user id.',
+    isOptional: true,
+  },
+  {
+    name: 'requestContext',
+    type: 'Record<string, unknown>',
+    description: 'Plain-object entries restored into a RequestContext for agent execution.',
+    isOptional: true,
+  },
+]}
+/>
+
+The metadata travels as a JSON string. `liveKitConnectionRoute()` and `dispatchVoiceSession()` serialize it for you; use `serializeSessionMetadata(metadata)` when dispatching through your own code, or write the JSON directly in LiveKit-side configuration such as a SIP dispatch rule. Entries in `requestContext` reach the agent's dynamic instructions, tools, and input processors on every turn of the call.
+
+## Related
+
+- [Using LiveKit with Mastra](/docs/voice/livekit)
+- [LiveKit Agents docs](https://docs.livekit.io/agents/)

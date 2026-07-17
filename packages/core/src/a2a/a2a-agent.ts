@@ -8,6 +8,7 @@ import type { SubAgent } from '../agent/subagent';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import { RequestContext } from '../request-context';
+import type { ChunkType } from '../stream/types';
 import type { DynamicArgument } from '../types';
 import { MastraA2AError } from './error';
 import type {
@@ -72,6 +73,7 @@ type StreamConsumptionResult = {
 
 type A2AStreamEventData = Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent;
 type A2AAgentFullStreamChunkBase =
+  | { type: 'start'; payload: { id: string } }
   | { type: 'text-start'; payload: { id: string } }
   | { type: 'text-delta'; payload: { id: string; text: string } }
   | { type: 'text-end'; payload: { id: string } }
@@ -87,11 +89,17 @@ type A2AAgentFullStreamChunkBase =
     }
   | {
       type: 'finish';
-      payload: {
-        finishReason: 'stop';
-        usage: typeof EMPTY_USAGE;
-      };
+      payload: A2AAgentFinishPayload;
     };
+
+type AgentFinishPayload = Extract<ChunkType, { type: 'finish' }>['payload'];
+
+type A2AAgentFinishPayload = AgentFinishPayload & {
+  /** @deprecated Use `stepResult.reason`. Kept for consumers of the previous flat payload shape. */
+  finishReason: 'stop';
+  /** @deprecated Use `output.usage`. Kept for consumers of the previous flat payload shape. */
+  usage: typeof EMPTY_USAGE;
+};
 type A2AAgentFullStreamChunk = A2AAgentFullStreamChunkBase & {
   runId: string;
   from: 'AGENT';
@@ -114,6 +122,25 @@ function toAgentStreamChunk(runId: string, chunk: A2AAgentFullStreamChunkBase): 
     ...chunk,
     runId,
     from: 'AGENT',
+  };
+}
+
+function createFinishPayload(): A2AAgentFinishPayload {
+  return {
+    stepResult: {
+      reason: 'stop',
+    },
+    output: {
+      usage: EMPTY_USAGE,
+    },
+    metadata: {},
+    messages: {
+      all: [],
+      user: [],
+      nonUser: [],
+    },
+    finishReason: 'stop',
+    usage: EMPTY_USAGE,
   };
 }
 
@@ -594,8 +621,8 @@ export class A2AAgent implements SubAgent {
     const memoryInfo = resolveMemoryInfo(options);
 
     if (!bootstrap.streamingSupported) {
-      const result = await this.generate(messages, options);
-      return this.#createBufferedStreamResult({ runId, result, ...memoryInfo });
+      const result = await this.generate(messages, { ...options, runId });
+      return this.#createBufferedStreamResult({ runId, result, emitStart: true, ...memoryInfo });
     }
 
     return this.#runRemoteStream({
@@ -603,6 +630,7 @@ export class A2AAgent implements SubAgent {
       runId,
       prompt,
       signal: options?.abortSignal,
+      emitStart: true,
       ...memoryInfo,
     });
   }
@@ -626,7 +654,7 @@ export class A2AAgent implements SubAgent {
 
       if (!bootstrap.streamingSupported) {
         const result = await this.resumeGenerate(resumeData, options);
-        return this.#createBufferedStreamResult({ runId, result, ...memoryInfo });
+        return this.#createBufferedStreamResult({ runId, result, emitStart: false, ...memoryInfo });
       }
 
       return this.#runRemoteStream({
@@ -636,6 +664,8 @@ export class A2AAgent implements SubAgent {
         signal: options?.abortSignal,
         contextId: state.contextId,
         referenceTaskIds: state.taskId ? [state.taskId] : undefined,
+        // Resumed runs skip the `start` chunk, mirroring the regular Agent loop.
+        emitStart: false,
         ...memoryInfo,
       });
     }
@@ -646,7 +676,7 @@ export class A2AAgent implements SubAgent {
 
     if (!bootstrap.streamingSupported) {
       const result = await this.resumeGenerate(resumeData, options);
-      return this.#createBufferedStreamResult({ runId, result, ...memoryInfo });
+      return this.#createBufferedStreamResult({ runId, result, emitStart: false, ...memoryInfo });
     }
 
     return this.#resubscribeToRemoteStream({
@@ -929,6 +959,7 @@ export class A2AAgent implements SubAgent {
     referenceTaskIds,
     threadId,
     resourceId,
+    emitStart,
   }: {
     bootstrap: AgentBootstrap;
     runId: string;
@@ -938,6 +969,7 @@ export class A2AAgent implements SubAgent {
     referenceTaskIds?: string[];
     threadId?: string;
     resourceId?: string;
+    emitStart: boolean;
   }): Promise<A2AAgentStreamResult> {
     const response = await this.#request(bootstrap.executionUrl, {
       method: 'POST',
@@ -966,6 +998,7 @@ export class A2AAgent implements SubAgent {
       stream: await requireResponseBody(response, 'message/stream'),
       threadId,
       resourceId,
+      emitStart,
     });
   }
 
@@ -1005,6 +1038,9 @@ export class A2AAgent implements SubAgent {
       stream: await requireResponseBody(response, 'tasks/resubscribe'),
       threadId,
       resourceId,
+      // Resubscribing continues an existing run; `start` is only emitted for fresh runs,
+      // mirroring the regular Agent loop which skips `start` when resuming.
+      emitStart: false,
     });
   }
 
@@ -1015,6 +1051,7 @@ export class A2AAgent implements SubAgent {
     stream,
     threadId,
     resourceId,
+    emitStart,
   }: {
     bootstrap: AgentBootstrap;
     runId: string;
@@ -1022,6 +1059,7 @@ export class A2AAgent implements SubAgent {
     stream: ReadableStream<Uint8Array>;
     threadId?: string;
     resourceId?: string;
+    emitStart: boolean;
   }): Promise<A2AAgentStreamResult> {
     const [consumerStream, accumulatorStream] = stream.tee();
     const resultDeferred = createDeferred<A2AAgentGenerateResult>();
@@ -1091,7 +1129,7 @@ export class A2AAgent implements SubAgent {
 
     const streamResult = {
       runId,
-      fullStream: this.#streamEvents({ bootstrap, runId, stream: consumerStream }),
+      fullStream: this.#streamEvents({ bootstrap, runId, stream: consumerStream, emitStart }),
       text: textDeferred.promise,
       toolResults: Promise.resolve([]),
       messageList,
@@ -1108,11 +1146,17 @@ export class A2AAgent implements SubAgent {
     bootstrap,
     runId,
     stream,
+    emitStart,
   }: {
     bootstrap: AgentBootstrap;
     runId: string;
     stream: ReadableStream<Uint8Array>;
+    emitStart: boolean;
   }): AsyncIterable<A2AAgentFullStreamChunk> {
+    if (emitStart) {
+      yield toAgentStreamChunk(runId, { type: 'start', payload: { id: this.id } });
+    }
+
     const reader = stream.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
@@ -1237,10 +1281,7 @@ export class A2AAgent implements SubAgent {
         } else {
           yield toAgentStreamChunk(runId, {
             type: 'finish',
-            payload: {
-              finishReason: 'stop',
-              usage: EMPTY_USAGE,
-            },
+            payload: createFinishPayload(),
           });
         }
         return;
@@ -1382,14 +1423,17 @@ export class A2AAgent implements SubAgent {
     result,
     threadId,
     resourceId,
+    emitStart,
   }: {
     runId: string;
     result: A2AAgentGenerateResult;
     threadId?: string;
     resourceId?: string;
+    emitStart: boolean;
   }): A2AAgentStreamResult {
     const messageList = new MessageList({ threadId, resourceId });
     const toolName = this.id;
+    const agentId = this.id;
     const textId = resolveStreamTextId([result.message?.messageId, result.task?.id]);
     if (result.text) {
       messageList.add(
@@ -1402,6 +1446,10 @@ export class A2AAgent implements SubAgent {
     }
 
     const fullStream = (async function* (): AsyncIterable<A2AAgentFullStreamChunk> {
+      if (emitStart) {
+        yield toAgentStreamChunk(runId, { type: 'start', payload: { id: agentId } });
+      }
+
       if (result.text) {
         yield toAgentStreamChunk(runId, { type: 'text-start', payload: { id: textId } });
         yield toAgentStreamChunk(runId, { type: 'text-delta', payload: { id: textId, text: result.text } });
@@ -1424,10 +1472,7 @@ export class A2AAgent implements SubAgent {
 
       yield toAgentStreamChunk(runId, {
         type: 'finish',
-        payload: {
-          finishReason: 'stop',
-          usage: EMPTY_USAGE,
-        },
+        payload: createFinishPayload(),
       });
     })();
 

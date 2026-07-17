@@ -33,12 +33,16 @@ export * from './domains/tool-provider-connections/data';
 export type TestCapabilities = {
   /** Whether the adapter supports listing scores by span (defaults to true) */
   listScoresBySpan?: boolean;
+  /** Whether scorer-based pagination is guaranteed to be ordered newest-first. */
+  deterministicScorePagination?: boolean;
   /**
    * Whether the adapter persists item-level tool mocks and experiment tool mock
    * reports (defaults to true). Adapters that reject them (e.g. MySQL) set this
    * to false so the round-trip suite asserts rejection instead of persistence.
    */
   toolMocks?: boolean;
+  /** Whether identity-aware dataset item insertion is supported (defaults to true). */
+  datasetItemIdentity?: boolean;
 };
 
 export function createTestSuite(storage: MastraStorage, capabilities: TestCapabilities = {}) {

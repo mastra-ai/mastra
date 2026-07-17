@@ -532,6 +532,15 @@ export class MesaFilesystem extends MastraFilesystem {
     } catch (error) {
       const mapped = mapMesaError(error, parent, 'directory');
       if (!(mapped instanceof FileExistsError)) throw mapped;
+      try {
+        const stats = await this.filesystem.stat(parent);
+        if (!stats.isDirectory) {
+          throw new NotDirectoryError(parent);
+        }
+      } catch (statError) {
+        if (statError instanceof NotDirectoryError) throw statError;
+        throw mapMesaError(statError, parent, 'directory');
+      }
     }
   }
 

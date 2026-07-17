@@ -6,7 +6,8 @@ import type {
   AgentSignalInput,
   DurableAgentLike,
 } from '@mastra/core/agent';
-import { AGENT_STREAM_TOPIC } from '@mastra/core/agent/durable';
+import { AGENT_STREAM_TOPIC, DurableStepIds } from '@mastra/core/agent/durable';
+import type { AIV5Type } from '@mastra/core/agent/message-list';
 import type { VersionOverrides } from '@mastra/core/di';
 import { mergeVersionOverrides, MASTRA_VERSIONS_KEY } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -68,6 +69,7 @@ import {
   streamUntilIdleBodySchema,
   resumeStreamBodySchema,
   resumeStreamUntilIdleBodySchema,
+  recoverBodySchema,
 } from '../schemas/agents';
 import type { ProviderListItem } from '../schemas/agents';
 import { createStoredAgentResponseSchema } from '../schemas/stored-agents';
@@ -83,6 +85,7 @@ import {
   sanitizeBody,
   validateBody,
   getEffectiveResourceId,
+  requireEffectiveResourceId,
   getEffectiveThreadId,
   enforceThreadAccess,
   validateThreadOwnership,
@@ -1269,6 +1272,7 @@ export const GENERATE_AGENT_ROUTE = createRoute({
         const clientThreadId = typeof memoryOption.thread === 'string' ? memoryOption.thread : memoryOption.thread?.id;
 
         const effectiveResourceId = getEffectiveResourceId(serverRequestContext, memoryOption.resource);
+        requireEffectiveResourceId(effectiveResourceId);
         const effectiveThreadId = getEffectiveThreadId(serverRequestContext, clientThreadId);
 
         // Validate thread ownership if accessing an existing thread
@@ -1301,6 +1305,8 @@ export const GENERATE_AGENT_ROUTE = createRoute({
 
       const options = {
         ...restOptions,
+        // Schema validates context permissively; runtime values are ModelMessages.
+        context: restOptions.context as AIV5Type.ModelMessage[] | undefined,
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
         abortSignal,
@@ -1456,7 +1462,14 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
       // and setting it explicitly causes duplicate headers which break HTTP protocol.
       const streamResponse = rest.output
         ? streamResult.toTextStreamResponse()
-        : streamResult.toDataStreamResponse({
+        : // Without `output`, streamLegacy returns a StreamTextResult which has
+          // toDataStreamResponse; TS resolves the object-stream overload because
+          // `output` is optionally typed on the body schema.
+          (
+            streamResult as unknown as {
+              toDataStreamResponse: (options: Record<string, unknown>) => Response;
+            }
+          ).toDataStreamResponse({
             sendUsage: true,
             sendReasoning: true,
             getErrorMessage: (error: any) => {
@@ -1642,6 +1655,7 @@ export const STREAM_GENERATE_ROUTE = createRoute({
         const clientThreadId = typeof memoryOption.thread === 'string' ? memoryOption.thread : memoryOption.thread?.id;
 
         const effectiveResourceId = getEffectiveResourceId(serverRequestContext, memoryOption.resource);
+        requireEffectiveResourceId(effectiveResourceId);
         const effectiveThreadId = getEffectiveThreadId(serverRequestContext, clientThreadId);
 
         // Validate thread ownership if accessing an existing thread
@@ -1699,7 +1713,7 @@ export const STREAM_GENERATE_ROUTE = createRoute({
 const sendAgentSignalResponseSchema: z.ZodType<{ accepted: true; runId: string; signal?: unknown }> = z.object({
   accepted: z.literal(true),
   runId: z.string(),
-  signal: z.any().optional(),
+  signal: z.unknown().optional(),
 });
 
 /**
@@ -2171,6 +2185,7 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
         const clientThreadId = typeof memoryOption.thread === 'string' ? memoryOption.thread : memoryOption.thread?.id;
 
         const effectiveResourceId = getEffectiveResourceId(serverRequestContext, memoryOption.resource);
+        requireEffectiveResourceId(effectiveResourceId);
         const effectiveThreadId = getEffectiveThreadId(serverRequestContext, clientThreadId);
 
         // Validate thread ownership if accessing an existing thread
@@ -2194,6 +2209,8 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
 
       const options = {
         ...restOptions,
+        // Schema validates context permissively; runtime values are ModelMessages.
+        context: restOptions.context as AIV5Type.ModelMessage[] | undefined,
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
         abortSignal,
@@ -2622,6 +2639,9 @@ export const RESUME_STREAM_ROUTE = createRoute({
       let authorizedMemoryOption = memoryOption;
       const clientThreadId = typeof memoryOption?.thread === 'string' ? memoryOption.thread : memoryOption?.thread?.id;
       const effectiveResourceId = getEffectiveResourceId(serverRequestContext, memoryOption?.resource);
+      if (memoryOption) {
+        requireEffectiveResourceId(effectiveResourceId);
+      }
       const effectiveThreadId = getEffectiveThreadId(serverRequestContext, clientThreadId);
 
       if (effectiveThreadId) {
@@ -2677,6 +2697,80 @@ export const RESUME_STREAM_ROUTE = createRoute({
       return streamResult.fullStream;
     } catch (error) {
       return handleError(error, 'error resuming agent stream');
+    }
+  },
+});
+
+export const RECOVER_ROUTE = createRoute({
+  method: 'POST',
+  path: '/agents/:agentId/recover',
+  responseType: 'stream' as const,
+  streamFormat: 'sse' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: recoverBodySchema,
+  responseSchema: streamResponseSchema,
+  summary: 'Recover an orphaned durable agent run',
+  description:
+    'Re-drives an orphaned RUNNING durable-agent run after a process restart. Only supported on durable agents (createDurableAgent). Returns a stream that replays past chunks and continues the loop to completion.',
+  tags: ['Agents'],
+  requiresAuth: true,
+  requiresPermission: MastraFGAPermissions.AGENTS_EXECUTE,
+  handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
+    try {
+      if (!params.runId) {
+        throw new HTTPException(400, { message: 'Run id is required' });
+      }
+
+      const { runId, versions } = params;
+      const bodyRequestContext = (params as { requestContext?: Record<string, unknown> }).requestContext;
+
+      const versionOptions = extractVersionOptions(
+        serverRequestContext,
+        bodyRequestContext as Record<string, unknown> | undefined,
+      );
+
+      // Merge body-scoped context and apply version overrides BEFORE
+      // resolving the agent, so that `getAgentFromSystem` picks the
+      // correct draft/published version and any downstream agent lookups
+      // (memory, tools) see the same stashed overrides. Mirrors the order
+      // used by other execute-style routes that predate this one but
+      // needed the same fix.
+      mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
+      stashVersionOverrides(serverRequestContext, versions);
+      ensureDefaultVersionStatus(serverRequestContext, versionOptions);
+
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions,
+      });
+
+      // Durable-agent check via duck-typing to avoid a hard runtime dep on the
+      // DurableAgent class inside @mastra/core (mirrors the pattern used by
+      // Mastra.recoverAllDurableAgents()).
+      if (typeof (agent as any).recover !== 'function') {
+        throw new HTTPException(400, {
+          message: 'Agent does not support recover. Only durable agents (createDurableAgent) can recover runs.',
+        });
+      }
+
+      const workflowsStore = await mastra.getStorage()?.getStore('workflows');
+      const workflowRun = await workflowsStore?.getWorkflowRunById({
+        workflowName: DurableStepIds.AGENTIC_LOOP,
+        runId,
+      });
+      await validateRunOwnership(workflowRun, getEffectiveResourceId(serverRequestContext, undefined));
+
+      // NOTE: DurableAgent.recover() reads the workflow's requestContext from
+      // the persisted snapshot. serverRequestContext is only used above for
+      // ownership checks and version resolution.
+      const streamResult = await (agent as any).recover(runId, {
+        abortSignal,
+      });
+
+      return streamResult.fullStream;
+    } catch (error) {
+      return handleError(error, 'error recovering agent run');
     }
   },
 });
@@ -2741,6 +2835,9 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
       let authorizedMemoryOption = memoryOption;
       const clientThreadId = typeof memoryOption?.thread === 'string' ? memoryOption.thread : memoryOption?.thread?.id;
       const effectiveResourceId = getEffectiveResourceId(serverRequestContext, memoryOption?.resource);
+      if (memoryOption) {
+        requireEffectiveResourceId(effectiveResourceId);
+      }
       const effectiveThreadId = getEffectiveThreadId(serverRequestContext, clientThreadId);
 
       // Use the same FGA-aware ownership gate as RESUME_STREAM_ROUTE — the
@@ -2781,6 +2878,8 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
         runId,
         toolCallId,
         ...restOptions,
+        // Schema validates context permissively; runtime values are ModelMessages.
+        context: restOptions.context as AIV5Type.ModelMessage[] | undefined,
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
         abortSignal,
@@ -2911,8 +3010,17 @@ export const STREAM_NETWORK_ROUTE = createRoute({
 
       validateBody({ messages });
 
+      // Authorization: context values take precedence over client-provided values
+      let authorizedMemoryOption = params.memory;
+      if (params.memory) {
+        const effectiveResourceId = getEffectiveResourceId(requestContext, params.memory.resource);
+        requireEffectiveResourceId(effectiveResourceId);
+        authorizedMemoryOption = { ...params.memory, resource: effectiveResourceId };
+      }
+
       const streamResult = await agent.network(messages, {
         ...params,
+        memory: authorizedMemoryOption,
       });
 
       return streamResult;
