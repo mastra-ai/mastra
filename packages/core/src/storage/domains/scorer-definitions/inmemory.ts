@@ -334,11 +334,11 @@ export class InMemoryScorerDefinitionsStorage extends ScorerDefinitionsStorage {
   private deepCopyVersion(version: ScorerDefinitionVersion): ScorerDefinitionVersion {
     return {
       ...version,
-      model: version.model ? JSON.parse(JSON.stringify(version.model)) : version.model,
-      scoreRange: version.scoreRange ? JSON.parse(JSON.stringify(version.scoreRange)) : version.scoreRange,
-      presetConfig: version.presetConfig ? JSON.parse(JSON.stringify(version.presetConfig)) : version.presetConfig,
+      model: version.model ? structuredClone(version.model) : version.model,
+      scoreRange: version.scoreRange ? structuredClone(version.scoreRange) : version.scoreRange,
+      presetConfig: version.presetConfig ? structuredClone(version.presetConfig) : version.presetConfig,
       defaultSampling: version.defaultSampling
-        ? JSON.parse(JSON.stringify(version.defaultSampling))
+        ? structuredClone(version.defaultSampling)
         : version.defaultSampling,
       changedFields: version.changedFields ? [...version.changedFields] : version.changedFields,
     };

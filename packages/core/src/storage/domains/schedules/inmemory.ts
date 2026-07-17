@@ -4,7 +4,7 @@ import type { Schedule, ScheduleFilter, ScheduleTrigger, ScheduleTriggerListOpti
 import { normalizeScheduleTarget, SchedulesStorage } from './base';
 
 function clone<T>(value: T): T {
-  return value == null ? value : (JSON.parse(JSON.stringify(value)) as T);
+  return value == null ? value : structuredClone(value);
 }
 
 /** Clone a stored row, normalizing legacy target discriminators on the way out. */
