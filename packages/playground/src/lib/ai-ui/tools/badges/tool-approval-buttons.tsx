@@ -45,7 +45,7 @@ export const ToolApprovalButtons = ({
     } else if (isGenerateMode) {
       approveToolcallGenerate(toolCallId);
     } else {
-      approveToolcall(toolCallId);
+      void approveToolcall(toolCallId);
     }
   };
 

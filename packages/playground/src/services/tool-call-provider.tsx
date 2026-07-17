@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { createContext, useContext } from 'react';
 
 interface ToolCallContextValue {
-  approveToolcall: (toolCallId: string, resumeData?: unknown) => void;
+  approveToolcall: (toolCallId: string, resumeData?: unknown) => Promise<void> | void;
   declineToolcall: (toolCallId: string) => void;
   approveToolcallGenerate: (toolCallId: string) => void;
   declineToolcallGenerate: (toolCallId: string) => void;
@@ -17,7 +17,7 @@ const ToolCallContext = createContext<ToolCallContextValue | undefined>(undefine
 
 interface ToolCallProviderProps {
   children: ReactNode;
-  approveToolcall: (toolCallId: string, resumeData?: unknown) => void;
+  approveToolcall: (toolCallId: string, resumeData?: unknown) => Promise<void> | void;
   declineToolcall: (toolCallId: string) => void;
   approveToolcallGenerate: (toolCallId: string) => void;
   declineToolcallGenerate: (toolCallId: string) => void;
@@ -59,6 +59,7 @@ export function ToolCallProvider({
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useToolCall() {
   const context = useContext(ToolCallContext);
 

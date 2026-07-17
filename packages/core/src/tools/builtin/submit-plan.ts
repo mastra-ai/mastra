@@ -21,7 +21,7 @@ export interface SubmitPlanSuspendPayload {
  * means the user wants revisions; the optional `feedback` is surfaced to the model so it
  * can revise and submit again.
  *
- * Hosts that layer additional behavior on approval (e.g. a AgentController switching from a
+ * Hosts that layer additional behavior on approval (e.g. an AgentController switching from a
  * planning mode to an execution mode) drive that from their own response handling; the
  * tool itself only reports the outcome back to the model.
  */
@@ -53,7 +53,7 @@ const resumeSchema = z.object({
  *
  * This tool is deliberately host-agnostic: it does not know about AgentController modes or any
  * UI. A plain Agent (e.g. embedded in Studio or a customer app) can use it directly, and
- * a AgentController can layer mode-switch behavior on top of the approval in its own response
+ * an AgentController can layer mode-switch behavior on top of the approval in its own response
  * handling without the tool needing to change.
  *
  * The tool takes the plan file `path` — never the plan body. The host reads the plan from
@@ -83,6 +83,7 @@ export const submitPlanTool = createTool({
             content: 'Plan approved. Proceed with implementation following the approved plan.',
             isError: false,
             submittedPlan: {
+              action: resumeData.action,
               title: resumeData.title,
               path: resumeData.path,
               plan: resumeData.plan,
@@ -95,6 +96,7 @@ export const submitPlanTool = createTool({
             content: `Plan was not approved. The user wants revisions.\n\nUser feedback: ${resumeData.feedback}\n\nPlease revise the plan based on the feedback and submit again with submit_plan.`,
             isError: false,
             submittedPlan: {
+              action: resumeData.action,
               title: resumeData.title,
               path: resumeData.path,
               plan: resumeData.plan,
@@ -109,6 +111,7 @@ export const submitPlanTool = createTool({
             'Plan was not approved. The user will send revision instructions in their next message. Stop now and wait for the user to provide feedback before revising the plan.',
           isError: false,
           submittedPlan: {
+            action: resumeData.action,
             title: resumeData.title,
             path: resumeData.path,
             plan: resumeData.plan,

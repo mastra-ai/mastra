@@ -1,9 +1,11 @@
 import { Agent } from '@mastra/core/agent';
 import type { ModelRouterModelId } from '@mastra/core/llm';
+import { submitPlanTool } from '@mastra/core/tools';
 import { Memory } from '@mastra/memory';
 import { MODEL_TOKENS } from '../../../../../docs/src/plugins/remark-model-tokens/models';
 import { previewScorers } from '../scorers/preview-scorers';
 import { storage } from '../store';
+import { writePlanFileTool } from '../tools/plan-file';
 import { previewStatusTool } from '../tools/preview-status';
 
 function resolvePreviewModel() {
@@ -31,6 +33,8 @@ Use the preview status tool when a reviewer asks about preview health, routing, 
   model,
   tools: {
     previewStatusTool,
+    write_plan_file: writePlanFileTool,
+    submit_plan: submitPlanTool,
   },
   // Memory is enabled (history only, no semantic recall) so the chat thread
   // sidebar reports memory as available and the seeded threads show up. Live
@@ -50,22 +54,15 @@ Use the preview status tool when a reviewer asks about preview health, routing, 
 });
 
 /**
- * Code-defined agent whose instructions and tools may be overridden from the
- * Studio editor. Registering `MastraEditor` (see `../index.ts`) flips the editor
- * capability on for the preview, so reviewers can open this agent, see the
- * "Editor" capability in the sidebar footer, and exercise the versioning flow.
+ * Agent whose instructions and tools are owned by the Studio editor. Registering
+ * `MastraEditor` (see `../index.ts`) flips the editor capability on for the
+ * preview, so reviewers can open this agent, see the "Editor" capability in the
+ * sidebar footer, and exercise the versioning flow.
  */
 export const editorShowcaseAgent = new Agent({
   id: 'editor-showcase-agent',
   name: 'Editor Showcase Agent',
-  description: 'Code-defined agent that Studio may override (instructions + tools) to demo the editor.',
-  instructions: `
-You are a small demo agent for the Mastra Studio editor.
-Reviewers can edit these instructions and your tools from the editor to try the save/publish versioning flow.
-`,
+  description: 'Editor-owned agent that demos Studio instructions and tools versioning.',
   model,
-  tools: {
-    previewStatusTool,
-  },
   editor: { instructions: true, tools: true },
 });

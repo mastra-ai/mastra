@@ -76,4 +76,35 @@ describe('extractRunIdFromMessages', () => {
 
     expect(extractRunIdFromMessages(messages)).toBe('run-later-123');
   });
+
+  it('returns the latest runId associated with a pending tool call', () => {
+    const messages: MastraDBMessage[] = [
+      assistantWithMetadata('msg-older', {
+        mode: 'stream',
+        suspendedTools: {
+          'tool-older': {
+            toolCallId: 'tool-older',
+            toolName: 'submit_plan',
+            args: {},
+            suspendPayload: { path: '/tmp/older.md' },
+            runId: 'run-older',
+          },
+        },
+      }),
+      assistantWithMetadata('msg-pending', {
+        mode: 'stream',
+        suspendedTools: {
+          'tool-pending': {
+            toolCallId: 'tool-pending',
+            toolName: 'submit_plan',
+            args: {},
+            suspendPayload: { path: '/tmp/pending.md' },
+            runId: 'run-pending',
+          },
+        },
+      }),
+    ];
+
+    expect(extractRunIdFromMessages(messages, new Set(['tool-older', 'tool-pending']))).toBe('run-pending');
+  });
 });

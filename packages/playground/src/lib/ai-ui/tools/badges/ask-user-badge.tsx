@@ -36,7 +36,7 @@ export const AskUserBadge = ({ toolCallId, suspendPayload, result }: AskUserBadg
         setSelectedOptions(prev => (prev.includes(label) ? prev.filter(o => o !== label) : [...prev, label]));
       } else {
         // Single-select: submit immediately
-        approveToolcall(toolCallId, label);
+        void approveToolcall(toolCallId, label);
       }
     },
     [isAnswered, isRunning, resolvedMode, approveToolcall, toolCallId],
@@ -44,13 +44,13 @@ export const AskUserBadge = ({ toolCallId, suspendPayload, result }: AskUserBadg
 
   const handleMultiSubmit = useCallback(() => {
     if (selectedOptions.length === 0 || isAnswered || isRunning) return;
-    approveToolcall(toolCallId, selectedOptions);
+    void approveToolcall(toolCallId, selectedOptions);
   }, [selectedOptions, isAnswered, isRunning, approveToolcall, toolCallId]);
 
   const handleFreeTextSubmit = useCallback(() => {
     const trimmed = freeTextInput.trim();
     if (!trimmed || isAnswered || isRunning) return;
-    approveToolcall(toolCallId, trimmed);
+    void approveToolcall(toolCallId, trimmed);
   }, [freeTextInput, isAnswered, isRunning, approveToolcall, toolCallId]);
 
   const handleKeyDown = useCallback(

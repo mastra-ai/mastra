@@ -5,7 +5,7 @@ This example is a small Vercel target for PR previews of Mastra Studio. It deplo
 The example is intentionally serverless-friendly:
 
 - in-memory storage only — no file-backed storage, no LibSQL or DuckDB dependency
-- one deterministic tool
+- one deterministic status tool, a plan-file helper, and the built-in `submit_plan` tool on the preview agent
 - one memory-enabled agent that can be opened at `/agents/studio-preview-agent/chat/new`
 - deterministic demo data seeded on startup so most Studio surfaces render populated
 
@@ -73,10 +73,13 @@ Recommended preview URLs:
 
 - `/` for the Studio shell
 - `/agents` for the agent list
-- `/agents/studio-preview-agent/chat/new` for the working agent chat (seeded threads in the sidebar)
+- `/agents/studio-preview-agent/chat/new` for the working agent chat, including `submit_plan` approval UI testing (seeded threads in the sidebar)
 - `/observability` for seeded traces
 - `/metrics` for seeded usage, cost, latency, and memory metrics
 - `/scorers` for seeded scorers and scores
+
+To exercise `submit_plan`, ask the Studio Preview Agent to create and submit a plan for review. The helper writes a real Markdown file to temporary server storage, then passes its path to the built-in tool. This preview therefore exercises Studio's path fallback; hosts that include the plan body in suspension metadata render the Markdown view.
+
 - `/datasets` for seeded datasets and items
 
 Protect the project with Vercel Deployment Protection or Studio auth before exposing previews broadly. Studio has access to the agents, tools, and workflows exposed by the Mastra server.
