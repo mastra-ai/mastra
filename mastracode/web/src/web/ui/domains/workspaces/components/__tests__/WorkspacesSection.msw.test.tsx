@@ -207,7 +207,7 @@ function renderSection(initialPath = '/') {
       <ToastProvider>
         <ActiveFactoryProvider>
           <ChatSessionConfigProvider>
-            <WorkspacesSection defaultOpen />
+            <WorkspacesSection />
             <LocationProbe />
           </ChatSessionConfigProvider>
         </ActiveFactoryProvider>
@@ -228,46 +228,86 @@ describe('WorkspacesSection', () => {
 
     renderSection();
 
-    expect(await screen.findByText('Work Items')).toBeInTheDocument();
-    expect(screen.getByText('Reviews')).toBeInTheDocument();
+    expect(await screen.findByText('Work Sessions')).toBeInTheDocument();
+    expect(screen.getByText('Review Sessions')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'feat-api' })).toHaveAttribute('aria-current', 'true');
     expect(screen.getByRole('button', { name: 'feat-ui' })).not.toHaveAttribute('aria-current');
     expect(screen.queryByRole('button', { name: 'main' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'user/alice-notes' })).not.toBeInTheDocument();
   });
 
-  it('groups related issue and PR sessions into Work Items and Reviews with reciprocal indicators', async () => {
+  it('groups related issue and PR sessions into always-visible Work and Review sections with reciprocal indicators', async () => {
     seedActiveFactory(githubProject);
     useAgentControllerHandlers(relatedWorkItems);
 
     renderSection();
 
-    const workGroup = (await screen.findByRole('button', { name: 'Work Items' })).parentElement;
-    const reviewGroup = screen.getByRole('button', { name: 'Reviews' }).parentElement;
-    if (!workGroup || !reviewGroup) throw new Error('Expected both Factory session groups');
+    const workGroup = await screen.findByRole('region', { name: 'Work Sessions' });
+    const reviewGroup = screen.getByRole('region', { name: 'Review Sessions' });
+    expect(screen.queryByRole('button', { name: 'Work Sessions' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Review Sessions' })).not.toBeInTheDocument();
     expect(await within(workGroup).findByRole('button', { name: 'feat-ui' })).toBeInTheDocument();
     expect(await within(workGroup).findByText('Review: PR #25')).toBeInTheDocument();
     expect(await within(reviewGroup).findByRole('button', { name: 'feat-api' })).toBeInTheDocument();
     expect(await within(reviewGroup).findByText('Work item: Issue #24')).toBeInTheDocument();
   });
 
-  it('persists the collapsed state across remounts', async () => {
-    seedActiveFactory(githubProject);
-    useAgentControllerHandlers();
+  it('shows only the five most recently updated sessions in each Factory section', async () => {
+    const worktrees = ['work', 'review'].flatMap(kind =>
+      Array.from({ length: 6 }, (_, index) => ({
+        branch: `${kind}-${index}`,
+        worktreePath: `/sandbox/mastra-worktrees/${kind}-${index}`,
+        baseBranch: 'main',
+      })),
+    );
+    const items: WorkItem[] = worktrees.map((worktree, index) => {
+      const review = worktree.branch.startsWith('review-');
+      return {
+        id: `item-${index}`,
+        orgId: 'org-1',
+        createdBy: 'user-1',
+        githubProjectId: GITHUB_PROJECT_ID,
+        source: review ? 'github-pr' : 'github-issue',
+        sourceKey: `${review ? 'github-pr' : 'github-issue'}:${index}`,
+        parentWorkItemId: null,
+        title: worktree.branch,
+        url: null,
+        stages: [review ? 'review' : 'execute'],
+        stageHistory: [],
+        sessions: {
+          [review ? 'review' : 'work']: {
+            projectPath: worktree.worktreePath,
+            branch: worktree.branch,
+            threadId: `thread-${index}`,
+            startedBy: 'user-1',
+          },
+        },
+        metadata: {},
+        createdAt: `2026-07-17T00:00:${String(index).padStart(2, '0')}Z`,
+        updatedAt: `2026-07-17T00:00:${String(index).padStart(2, '0')}Z`,
+      };
+    });
+    seedActiveFactory({
+      ...githubProject,
+      binding: {
+        ...githubProject.binding,
+        worktrees,
+        selectedWorktreePath: '/sandbox/mastra-worktrees/review-5',
+      },
+    });
+    useAgentControllerHandlers(items);
 
-    const rendered = renderSection();
-    const trigger = await screen.findByRole('button', { name: 'Work Items' });
-    expect(trigger).toHaveAttribute('aria-expanded', 'true');
-
-    await userEvent.click(trigger);
-
-    expect(trigger).toHaveAttribute('aria-expanded', 'false');
-    expect(localStorage.getItem('mastracode-factory-work-items-collapsed')).toBe('true');
-
-    rendered.unmount();
     renderSection();
 
-    expect(await screen.findByRole('button', { name: 'Work Items' })).toHaveAttribute('aria-expanded', 'false');
+    const workGroup = await screen.findByRole('region', { name: 'Work Sessions' });
+    const reviewGroup = screen.getByRole('region', { name: 'Review Sessions' });
+    await within(reviewGroup).findByRole('button', { name: 'review-5' });
+    await waitFor(() => {
+      expect(within(workGroup).getAllByRole('button', { name: /^work-/ })).toHaveLength(5);
+      expect(within(workGroup).queryByRole('button', { name: 'work-0' })).not.toBeInTheDocument();
+      expect(within(reviewGroup).getAllByRole('button', { name: /^review-/ })).toHaveLength(5);
+      expect(within(reviewGroup).queryByRole('button', { name: 'review-0' })).not.toBeInTheDocument();
+    });
   });
 
   it('does not render for local projects', async () => {
@@ -276,7 +316,7 @@ describe('WorkspacesSection', () => {
 
     renderSection();
 
-    await waitFor(() => expect(screen.queryByText('Work Items')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText('Work Sessions')).not.toBeInTheDocument());
   });
 
   it('shows an activity indicator on workspaces with an active thread', async () => {

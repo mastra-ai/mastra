@@ -1,10 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useQueryClient } from '@tanstack/react-query';
-import { ChevronRight, GitBranch, GitCompareArrows, Link2, MessagesSquare, MoreHorizontal } from 'lucide-react';
+import { GitBranch, Link2, MoreHorizontal } from 'lucide-react';
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
@@ -31,17 +30,14 @@ import { useActiveFactoryContext } from '../context/ActiveFactoryProvider';
 import { isServerFactory, selectedRepository } from '../services/factories';
 import type { Worktree } from '../services/factories';
 
-const WORK_ITEMS_COLLAPSED_STORAGE_KEY = 'mastracode-factory-work-items-collapsed';
-const REVIEWS_COLLAPSED_STORAGE_KEY = 'mastracode-factory-reviews-collapsed';
-
 /**
- * Factory sessions: a GitHub project's feature worktrees, rendered as the
- * "Sessions" subsection of the Factory menu. Each worktree holds a single
+ * Factory sessions: a GitHub project's feature worktrees, rendered as separate
+ * Work Sessions and Review Sessions sections. Each worktree holds a single
  * factory-run conversation, so selecting one opens its thread directly —
  * there is no nested thread list. Sessions are created by board runs, not
  * ad hoc, so there is no create affordance here.
  */
-export function WorkspacesSection({ defaultOpen = false }: { defaultOpen?: boolean }) {
+export function WorkspacesSection() {
   const { baseUrl } = useApiConfig();
   const { activeFactory, resourceId, sessionEnabled } = useActiveFactoryContext();
   const workspaces = useWorkspacesQuery(activeFactory);
@@ -98,10 +94,16 @@ export function WorkspacesSection({ defaultOpen = false }: { defaultOpen?: boole
       running: runningByPath[worktree.worktreePath] === true,
       attention: attentionByPath[worktree.worktreePath] === true,
       review: item?.source === 'github-pr',
+      updatedAt: item?.updatedAt ?? '',
     };
   });
-  const workRows = rows.filter(row => !row.review);
-  const reviewRows = rows.filter(row => row.review);
+  const latestRows = (review: boolean) =>
+    rows
+      .filter(row => row.review === review)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .slice(0, 5);
+  const workRows = latestRows(false);
+  const reviewRows = latestRows(true);
 
   // Threads are scoped to a worktree, so entering a session lands on its
   // conversation thread (creating one when it has none) — from anywhere,
@@ -184,11 +186,9 @@ export function WorkspacesSection({ defaultOpen = false }: { defaultOpen?: boole
   };
 
   return (
-    <section className="flex flex-col gap-1" aria-label="Factory sessions">
+    <section className="flex flex-col gap-4" aria-label="Factory sessions">
       <WorkspaceGroup
-        title="Work Items"
-        storageKey={WORK_ITEMS_COLLAPSED_STORAGE_KEY}
-        defaultOpen={defaultOpen}
+        title="Work Sessions"
         rows={workRows}
         pending={pending}
         onSelect={row => {
@@ -204,9 +204,7 @@ export function WorkspacesSection({ defaultOpen = false }: { defaultOpen?: boole
         onDelete={worktree => setConfirmDelete(worktree)}
       />
       <WorkspaceGroup
-        title="Reviews"
-        storageKey={REVIEWS_COLLAPSED_STORAGE_KEY}
-        defaultOpen={defaultOpen}
+        title="Review Sessions"
         rows={reviewRows}
         pending={pending}
         onSelect={row => {
@@ -262,47 +260,30 @@ interface FactoryWorkspaceRow {
   running: boolean;
   attention: boolean;
   review: boolean;
+  updatedAt: string;
 }
 
 function WorkspaceGroup({
   title,
-  storageKey,
-  defaultOpen,
   rows,
   pending,
   onSelect,
   onDelete,
 }: {
-  title: 'Work Items' | 'Reviews';
-  storageKey: string;
-  defaultOpen: boolean;
+  title: 'Work Sessions' | 'Review Sessions';
   rows: FactoryWorkspaceRow[];
   pending: boolean;
   onSelect: (row: FactoryWorkspaceRow) => void;
   onDelete: (worktree: Worktree) => void;
 }) {
-  const [open, setOpen] = useState(() => {
-    const collapsed = localStorage.getItem(storageKey);
-    return collapsed === null ? defaultOpen : collapsed !== 'true';
-  });
-  const Icon = title === 'Reviews' ? GitCompareArrows : MessagesSquare;
-
   return (
-    <Collapsible
-      open={open}
-      onOpenChange={nextOpen => {
-        setOpen(nextOpen);
-        localStorage.setItem(storageKey, String(!nextOpen));
-      }}
-    >
-      <CollapsibleTrigger className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-icon3 transition hover:bg-surface3 hover:text-icon5">
-        <span className="flex items-center">
-          <Icon size={13} />
-        </span>
-        <span className="truncate">{title}</span>
-        <ChevronRight className="ml-auto shrink-0" size={13} />
-      </CollapsibleTrigger>
-      <CollapsibleContent className="flex flex-col gap-1 pt-1">
+    <section className="flex flex-col gap-2" aria-label={title}>
+      <div className="flex items-center px-1">
+        <Txt as="span" variant="ui-xs" className="text-icon3 uppercase tracking-wide">
+          {title}
+        </Txt>
+      </div>
+      <div className="flex flex-col gap-1">
         {rows.map(row => (
           <WorkspaceRow
             key={row.worktree.worktreePath}
@@ -319,13 +300,13 @@ function WorkspaceGroup({
         ))}
         {rows.length === 0 && (
           <Txt as="p" variant="ui-xs" className="m-0 px-2 py-1 text-icon3">
-            {title === 'Reviews'
+            {title === 'Review Sessions'
               ? 'Review sessions appear when a PR review starts.'
-              : 'Work items appear when work starts.'}
+              : 'Work sessions appear when work starts.'}
           </Txt>
         )}
-      </CollapsibleContent>
-    </Collapsible>
+      </div>
+    </section>
   );
 }
 
