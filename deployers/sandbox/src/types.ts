@@ -68,6 +68,56 @@ export interface DeployToSandboxOptions {
   logger?: SandboxDeployLogger;
 }
 
+/** Options for deploying a non-HTTP worker or trusted custom command. */
+export interface DeployWorkerToSandboxOptions {
+  /** The workspace sandbox to deploy into. Only `executeCommand` is required. */
+  sandbox: WorkspaceSandbox;
+  /** Local directory containing the prebuilt worker artifact. */
+  dir: string;
+  /** Process lifecycle. Workers are expected to stay running; jobs may complete. Defaults to `worker`. */
+  mode?: 'worker' | 'job';
+  /** Trusted executable or executable path to launch (not a shell expression). */
+  command: string;
+  /** Trusted arguments passed to the executable. */
+  args?: string[];
+  /** Working directory relative to `remoteDir`. Defaults to the artifact root. */
+  workingDirectory?: string;
+  /** Environment variables injected before worker initialization. */
+  env?: Record<string, string>;
+  /** Persistent directory inside the sandbox. */
+  remoteDir?: string;
+  /** Trusted dependency installation command. Defaults to `npm install --omit=dev`. */
+  installCommand?: string;
+  /** Dependency installation timeout in milliseconds. */
+  installTimeoutMs?: number;
+  /** Time allowed for launch to report a running or exited process. Defaults to 10000. */
+  startupTimeoutMs?: number;
+  /** Optional maximum worker execution time before graceful and then forced termination. */
+  executionTimeoutMs?: number;
+  /** Grace period before forced termination. Defaults to 5000. */
+  terminationGraceMs?: number;
+}
+
+export type SandboxWorkerStatus =
+  | { state: 'running' }
+  | { state: 'exited'; exitCode: number }
+  | { state: 'cancelled' }
+  | { state: 'unknown' };
+
+/** A deployed non-HTTP worker. */
+export interface SandboxWorkerDeployment {
+  sandboxId: string;
+  expiresAt?: Date;
+  status(): Promise<SandboxWorkerStatus>;
+  logs(lines?: number): Promise<string>;
+  cancel(): Promise<void>;
+  /** Snapshot-stop the sandbox. The worker can be relaunched after the sandbox wakes. */
+  stop(): Promise<void>;
+  destroy(): Promise<void>;
+  /** Relaunch the recorded command unless it is already running. */
+  relaunch(): Promise<void>;
+}
+
 /** A live sandbox deployment. */
 export interface SandboxDeployment {
   /** Public URL of the Mastra server. */
