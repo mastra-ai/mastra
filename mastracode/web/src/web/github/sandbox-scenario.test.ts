@@ -12,8 +12,8 @@ vi.mock('./db', () => ({
   }),
 }));
 
+import type { MaterializationSandbox, SandboxCommandResult } from '../sandbox/fleet';
 import { createPullRequest, MaterializeError, pushBranch } from './sandbox';
-import type { MaterializationSandbox, SandboxCommandResult } from './sandbox';
 
 type Responder = (script: string) => SandboxCommandResult;
 const OK: SandboxCommandResult = { exitCode: 0, stdout: '', stderr: '' };

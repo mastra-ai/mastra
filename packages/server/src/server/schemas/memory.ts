@@ -176,7 +176,7 @@ const threadSchema = z.object({
  * Message structure for storage
  * Extends coreMessageSchema with storage-specific fields
  */
-const messageSchema = z.any();
+const messageSchema = z.unknown();
 // const messageSchema = coreMessageSchema.extend({
 //   id: z.string(),
 //   createdAt: z.coerce.date(),
@@ -226,7 +226,7 @@ const listThreadsQueryInnerSchema = createPagePaginationSchema(100).extend({
         }
         return val;
       },
-      z.record(z.string(), z.any()),
+      z.record(z.string(), z.unknown()),
     )
     .optional(),
   orderBy: storageOrderBySchema,
@@ -355,7 +355,7 @@ export const listThreadsNetworkQuerySchema = createPagePaginationSchema(100).ext
         }
         return val;
       },
-      z.record(z.string(), z.any()),
+      z.record(z.string(), z.unknown()),
     )
     .optional(),
   orderBy: storageOrderBySchema,
@@ -468,8 +468,17 @@ export const memoryConfigResponseSchema = z.object({
   config: z
     .object({
       lastMessages: z.union([z.number(), z.literal(false)]).optional(),
-      semanticRecall: z.union([z.boolean(), z.any()]).optional(),
-      workingMemory: z.any().optional(),
+      semanticRecall: z.union([z.boolean(), z.unknown()]).optional(),
+      workingMemory: z
+        .object({
+          enabled: z.boolean().optional(),
+          scope: z.enum(['thread', 'resource']).optional(),
+          template: z.string().optional(),
+          schema: z.unknown().optional(),
+          version: z.enum(['stable', 'vnext']).optional(),
+        })
+        .passthrough() // WorkingMemory has additional experimental fields (useStateSignals, agentManaged)
+        .optional(),
       observationalMemory: observationalMemoryConfigSchema.optional(),
     })
     .nullable(),
@@ -492,7 +501,7 @@ export const getThreadByIdResponseSchema = threadSchema;
  */
 export const listMessagesResponseSchema = z.object({
   messages: z.array(messageSchema),
-  uiMessages: z.array(z.any()).nullable(), // Converted messages in UI format
+  uiMessages: z.array(z.unknown()).nullable(), // Converted messages in UI format
 });
 
 /**

@@ -280,6 +280,78 @@ describe('ChatMessageList', () => {
     });
   });
 
+  it('given a persisted skill activation, then it renders a compact card with expandable contents', async () => {
+    seedProject();
+    useAgentControllerHandlers();
+    server.use(
+      http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () =>
+        HttpResponse.json({
+          messages: [
+            {
+              id: 'skill-activation-1',
+              role: 'user',
+              createdAt: '2026-07-16T18:00:00.000Z',
+              content: {
+                format: 2,
+                parts: [
+                  {
+                    type: 'text',
+                    text: '<skill name="understand-issue">\n# Understand Issue\n\nInvestigate every relevant code path.\n\nARGUMENTS: https://github.com/mastra-ai/mastra/issues/15\n</skill>',
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      ),
+    );
+    renderMessageList();
+
+    const user = userEvent.setup();
+    const trigger = await screen.findByRole('button', { name: 'Show understand-issue skill contents' });
+    expect(screen.getByText('understand-issue')).toBeInTheDocument();
+    expect(screen.getByText('https://github.com/mastra-ai/mastra/issues/15')).toBeInTheDocument();
+    expect(screen.queryByText('Investigate every relevant code path.')).not.toBeInTheDocument();
+
+    await user.click(trigger);
+    expect(screen.getByText('Investigate every relevant code path.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Hide understand-issue skill contents' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Hide understand-issue skill contents' }));
+    expect(screen.queryByText('Investigate every relevant code path.')).not.toBeInTheDocument();
+  });
+
+  it('given skill-like markup outside the exact TUI envelope, then it remains a normal message', async () => {
+    seedProject();
+    useAgentControllerHandlers();
+    server.use(
+      http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () =>
+        HttpResponse.json({
+          messages: [
+            {
+              id: 'ordinary-xml-message',
+              role: 'user',
+              createdAt: '2026-07-16T18:01:00.000Z',
+              content: {
+                format: 2,
+                parts: [
+                  {
+                    type: 'text',
+                    text: 'Please inspect this literal example:\n<skill name="understand-issue">\nnot an invocation\n</skill>',
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      ),
+    );
+    renderMessageList();
+
+    await screen.findByText(/not an invocation/);
+    expect(screen.queryByRole('button', { name: /understand-issue skill contents/ })).not.toBeInTheDocument();
+  });
+
   it('given a persisted notification signal, then it remains visible after transcript hydration', async () => {
     seedProject();
     useAgentControllerHandlers();

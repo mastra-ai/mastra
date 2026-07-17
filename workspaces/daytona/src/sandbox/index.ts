@@ -25,6 +25,7 @@ import type {
   MountManager,
   CommandResult,
   ExecuteCommandOptions,
+  SandboxDeriveOptions,
 } from '@mastra/core/workspace';
 import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 
@@ -232,6 +233,7 @@ export class DaytonaSandbox extends MastraSandbox {
   private readonly networkBlockAll?: boolean;
   private readonly networkAllowList?: string;
   private readonly connectionOpts: { apiKey?: string; apiUrl?: string; target?: string };
+  private readonly _constructorOptions: DaytonaSandboxOptions;
 
   constructor(options: DaytonaSandboxOptions = {}) {
     super({
@@ -267,10 +269,35 @@ export class DaytonaSandbox extends MastraSandbox {
       ...(options.apiUrl !== undefined && { apiUrl: options.apiUrl }),
       ...(options.target !== undefined && { target: options.target }),
     };
+    this._constructorOptions = { ...options };
   }
 
   private generateId(): string {
     return `daytona-sandbox-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  /**
+   * Construct a sibling `DaytonaSandbox` that inherits this sandbox's
+   * configuration (credentials, snapshot/image, resources, network policy)
+   * with per-instance overrides.
+   *
+   * Performs no I/O — the derived sandbox provisions (or reconnects to an
+   * existing Daytona sandbox with the same logical `id`) on its own `start()`.
+   * Use it when one configured sandbox acts as the template for a fleet of
+   * independent sandboxes (e.g. one per project).
+   *
+   * `options.idleTimeoutMinutes` maps to Daytona's `autoStopInterval`
+   * (minutes); `options.sandboxId` is ignored because Daytona reconnects by
+   * logical `id`.
+   */
+  derive(options: SandboxDeriveOptions = {}): DaytonaSandbox {
+    const { id: _id, name: _name, ...base } = this._constructorOptions;
+    return new DaytonaSandbox({
+      ...base,
+      ...(options.id !== undefined && { id: options.id }),
+      ...(options.env !== undefined && { env: options.env }),
+      ...(options.idleTimeoutMinutes !== undefined && { autoStopInterval: options.idleTimeoutMinutes }),
+    });
   }
 
   /**

@@ -767,6 +767,7 @@ const sidebars = {
         { type: 'doc', id: 'voice/inworld-realtime', label: 'Inworld Realtime' },
         { type: 'doc', id: 'voice/livekit', label: 'LiveKit' },
         { type: 'doc', id: 'voice/mastra-voice', label: 'Mastra Voice' },
+        { type: 'doc', id: 'voice/mistral', label: 'Mistral' },
         { type: 'doc', id: 'voice/murf', label: 'Murf' },
         { type: 'doc', id: 'voice/openai', label: 'OpenAI' },
         { type: 'doc', id: 'voice/openai-realtime', label: 'OpenAI Realtime' },
