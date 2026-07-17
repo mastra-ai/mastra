@@ -833,10 +833,28 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
       environment: { id: environment.id, slug: environment.slug },
       autoAccept,
     });
-    issues = autoProvisioned.issues;
     if (autoProvisioned.provisioned.length > 0) {
       const attached = autoProvisioned.provisioned.map(d => `${d.name} (${d.kind})`).join(', ');
       p.log.success(`Attached managed database: ${attached}`);
+
+      // Re-run preflight with the newly-attached vars folded into the
+      // managed set. Without this, MISSING_ENV_VAR issues for the vars we
+      // just provisioned (TURSO_AUTH_TOKEN, TURSO_DATABASE_URL) still show
+      // as "not in the env file being deployed" — misleading right after
+      // we told the user the DB was attached. Merging is enough; no need
+      // to re-fetch the environment because attachDatabase's response is
+      // authoritative for the vars it just injected.
+      const mergedManagedNames = [
+        ...(environment.managedEnvVarNames ?? []),
+        ...autoProvisioned.newlyManagedEnvVarNames,
+      ];
+      issues = await preflightBuildOutput(targetDir, preflightEnv, {
+        hasEnvFile: hasAmbientEnvFile,
+        managedEnvVarNames: mergedManagedNames,
+        environmentName: environment.name,
+      });
+    } else {
+      issues = autoProvisioned.issues;
     }
 
     const outcome = await printPreflightIssues(issues, { autoAccept });
