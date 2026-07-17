@@ -6,9 +6,9 @@ import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { ChatSessionTestProvider as ChatSessionProvider } from '../../../../../../../e2e/web-ui/ChatSessionTestProvider';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
-import { ChatSessionProvider } from '../../../chat/context/ChatSessionProvider';
 import type { Project } from '../../../workspaces';
 import { ActiveProjectProvider } from '../../../workspaces';
 import { SettingsPanel } from '../../index';
@@ -140,7 +140,7 @@ function ThemeProbe() {
 function Harness({ children }: { children: ReactNode }) {
   return (
     <ActiveProjectProvider>
-      <ChatSessionProvider>
+      <ChatSessionProvider threadId={THREAD_ID} deferUntilMessagesReady={false}>
         <ThemeProbe />
         {children}
       </ChatSessionProvider>
@@ -226,15 +226,14 @@ describe('SettingsPanel', () => {
   });
 
   describe('when changing model preferences', () => {
-    it('switches the selected model through the chat model provider', async () => {
+    it('updates the thinking level through the chat settings provider', async () => {
       const user = userEvent.setup();
       const captured = renderSettingsPanel();
 
       await user.click(screen.getByRole('tab', { name: /model/i }));
-      await user.click(await screen.findByRole('button', { name: /openai \/ gpt-4o-mini/i }));
-      await user.click(screen.getByRole('option', { name: /claude-sonnet anthropic/i }));
+      await user.click(await screen.findByRole('button', { name: 'High' }));
 
-      await waitFor(() => expect(captured.modelIds).toContain('anthropic/claude-sonnet'));
+      await waitFor(() => expect(captured.stateUpdates).toContainEqual({ thinkingLevel: 'high' }));
     });
   });
 

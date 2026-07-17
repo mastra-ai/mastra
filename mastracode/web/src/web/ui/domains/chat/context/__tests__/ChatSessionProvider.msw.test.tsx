@@ -20,13 +20,14 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { ChatSessionTestProvider as ChatSessionProvider } from '../../../../../../../e2e/web-ui/ChatSessionTestProvider';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import type { Project } from '../../../workspaces';
 import { ActiveProjectProvider, useActiveProjectContext } from '../../../workspaces';
 import { ChatMessageList } from '../../components/ChatMessageList';
 import { ModesSelection } from '../../components/StatusLine/ModesSelection';
-import { ChatMessageBoundary, ChatSessionProvider } from '../ChatSessionProvider';
+import { ChatMessageBoundary } from '../ChatSessionProvider';
 import { useChatConnection } from '../useChatConnection';
 import { useChatModels } from '../useChatModels';
 import { useChatPermissions } from '../useChatPermissions';

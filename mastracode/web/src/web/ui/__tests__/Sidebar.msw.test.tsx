@@ -15,11 +15,11 @@ import { delay, http, HttpResponse } from 'msw';
 import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { ChatSessionTestProvider as ChatSessionProvider } from '../../../../e2e/web-ui/ChatSessionTestProvider';
 import { server } from '../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/web-ui/render';
 import { redirectToLogout } from '../domains/auth';
 import type * as AuthService from '../domains/auth/services/auth';
-import { ChatSessionProvider } from '../domains/chat';
 import type { Project } from '../domains/workspaces';
 import { ActiveProjectProvider } from '../domains/workspaces';
 import { OverlaysProvider } from '../lib/overlays';
