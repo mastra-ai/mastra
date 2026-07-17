@@ -37,7 +37,7 @@ import {
 } from './github/session-subscriptions.js';
 import { buildLinearAgentTools } from './linear/agent-tools.js';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
-import { seedRuntimeConfig } from './runtime-config.js';
+import { getSeededGithubIntegration, getSeededLinearIntegration, seedRuntimeConfig } from './runtime-config.js';
 import { FactoryStore } from './storage/factory-store.js';
 import { AuditStoragePG } from './storage/domains/audit/pg.js';
 import { ModelCredentialsStoragePG } from './storage/domains/credentials/pg.js';
@@ -45,6 +45,7 @@ import { createTenantCredentialPrimer, registerTenantCredentialResolver } from '
 import { IntakeStoragePG } from './storage/domains/intake/pg.js';
 import { WorkItemsStoragePG } from './storage/domains/work-items/pg.js';
 import { handleServerError } from './server-error.js';
+import { createStateSigner } from './state-signing.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import {
   assembleWebApiRoutes,
@@ -112,6 +113,13 @@ export interface MastraFactoryConfig {
    * projects stay off.
    */
   sandbox?: MastraFactorySandboxConfig;
+  /**
+   * Deployment-stable secret for signing OAuth `state` values (GitHub/Linear
+   * connect flows). Omitted → a per-process random secret is used, which is
+   * fine for single-process local dev but fails the boot assertion when an
+   * OAuth-signing integration is enabled on a multi-replica deploy.
+   */
+  stateSecret?: string;
 }
 
 export interface MastraFactorySandboxConfig {
@@ -218,12 +226,20 @@ export class MastraFactory {
     // through the seeded storage's shared pool (`getSharedAppPool()`), gate on
     // the active auth adapter via `isWebAuthEnabled()`, and probe the sandbox
     // runtime via `isSandboxEnabled()`.
+    // One shared OAuth state signer per boot: explicit `stateSecret` when
+    // provided, else a per-process random secret (`stable: false`) — the
+    // readiness checks fail loud when an OAuth-signing feature is enabled
+    // without a stable signer.
+    const stateSigner = createStateSigner(this.#config.stateSecret);
+
+
     seedRuntimeConfig({
       storage,
       vector,
       factoryStore,
       publicUrl: publicOrigin,
       authAdapter: auth,
+      stateSigner,
       sandbox: machine
         ? {
             machine,
@@ -280,10 +296,14 @@ export class MastraFactory {
       ...(vector ? { vectorStore: vector } : {}),
       ...(githubReady || linearReady
         ? {
-            extraTools: async ({ requestContext }: { requestContext: RequestContext }) => ({
-              ...(linearReady ? await buildLinearAgentTools({ requestContext }) : {}),
-              ...(githubReady ? createGithubSubscriptionTools(requestContext) : {}),
-            }),
+            extraTools: async ({ requestContext }: { requestContext: RequestContext }) => {
+              const github = getSeededGithubIntegration();
+              const linear = getSeededLinearIntegration();
+              return {
+                ...(linearReady && linear ? await buildLinearAgentTools({ requestContext, linear }) : {}),
+                ...(githubReady && github ? createGithubSubscriptionTools(requestContext, github) : {}),
+              };
+            },
           }
         : {}),
       ...(githubReady
@@ -304,8 +324,9 @@ export class MastraFactory {
               if (requestContext) {
                 await observeAgentGitAction({ ...context, context: requestContext });
               }
-              if (pullRequestUrl && requestContext) {
-                await subscribeCurrentSessionToPullRequest(requestContext, pullRequestUrl, 'auto-gh-pr-create');
+              const github = getSeededGithubIntegration();
+              if (pullRequestUrl && requestContext && github) {
+                await subscribeCurrentSessionToPullRequest(requestContext, pullRequestUrl, 'auto-gh-pr-create', github);
               }
             },
           }

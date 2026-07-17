@@ -201,6 +201,11 @@ export const factory = new MastraFactory({
     .split(',')
     .map(o => o.trim())
     .filter(Boolean),
+  // Deployment-stable secret for OAuth `state` signing (GitHub/Linear connect
+  // flows). Same resolution the state signer used before it moved into the
+  // factory: webhook secret first, then the WorkOS cookie password. Unset →
+  // per-process random secret (single-process local dev only).
+  stateSecret: process.env.GITHUB_APP_WEBHOOK_SECRET || process.env.WORKOS_COOKIE_PASSWORD || undefined,
 });
 
 // Construct the server-owned Mastra HERE so the `new Mastra(...)` literal lives

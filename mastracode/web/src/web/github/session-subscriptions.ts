@@ -5,8 +5,8 @@ import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import type { WebAuthUser } from '../auth';
 import { getWebAuthOrgId, getWebAuthUserId } from '../auth';
-import { getInstallationOctokit } from './client';
 import { getAppDb } from './db';
+import type { GithubIntegration } from './integration';
 import { githubProjects } from './schema';
 import { subscribeToPullRequest, unsubscribeFromPullRequest } from './subscriptions';
 
@@ -65,10 +65,10 @@ async function resolveSessionTarget(requestContext: RequestContext): Promise<Ses
   return { context, project, orgId, userId };
 }
 
-async function verifyPullRequest(target: SessionTarget, pullRequest: number) {
+async function verifyPullRequest(target: SessionTarget, pullRequest: number, github: GithubIntegration) {
   const [owner, repo] = target.project.repoFullName.split('/');
   if (!owner || !repo) throw new Error('GitHub project repository is invalid.');
-  const octokit = getInstallationOctokit(target.project.installationId);
+  const octokit = github.getInstallationOctokit(target.project.installationId);
   const { data } = await octokit.pulls.get({ owner, repo, pull_number: pullRequest });
   if (data.base.repo.id !== target.project.repoId)
     throw new Error('Pull request repository does not match the active project.');
@@ -95,6 +95,7 @@ export async function subscribeCurrentSessionToPullRequest(
   requestContext: RequestContext,
   pullRequest: number | string,
   source: 'auto-gh-pr-create' | 'explicit-tool',
+  github: GithubIntegration,
 ) {
   // The auto path observes every successful `gh pr create` in every session,
   // including local and non-GitHub-project sessions where subscriptions can
@@ -103,7 +104,7 @@ export async function subscribeCurrentSessionToPullRequest(
   if (source === 'auto-gh-pr-create' && !isGithubProjectSession(requestContext)) return undefined;
   const target = await resolveSessionTarget(requestContext);
   const number = parsePullRequest(pullRequest, target.project.repoFullName);
-  await verifyPullRequest(target, number);
+  await verifyPullRequest(target, number, github);
   await subscribeToPullRequest({ ...(await subscriptionInput(target, number)), source });
   return number;
 }
@@ -118,7 +119,7 @@ export async function unsubscribeCurrentSessionFromPullRequest(
   return number;
 }
 
-export function createGithubSubscriptionTools(requestContext: RequestContext) {
+export function createGithubSubscriptionTools(requestContext: RequestContext, github: GithubIntegration) {
   const context = requestContext.get('controller') as AgentControllerRequestContext<GithubSessionState> | undefined;
   const user = requestContext.get('user') as WebAuthUser | undefined;
   if (!context?.getState().githubProjectId || !getWebAuthOrgId(user) || !getWebAuthUserId(user)) return {};
@@ -130,7 +131,7 @@ export function createGithubSubscriptionTools(requestContext: RequestContext) {
         'Subscribe this thread to GitHub pull request activity. You usually do not need this tool: successful gh pr create commands subscribe automatically. Use it for an existing PR or to recover when automatic subscription did not occur. Closed or merged PRs are unsubscribed automatically. Accepts a PR number or canonical URL for the active project.',
       inputSchema: pullRequestInputSchema,
       execute: async ({ pullRequest }) => {
-        const number = await subscribeCurrentSessionToPullRequest(requestContext, pullRequest, 'explicit-tool');
+        const number = await subscribeCurrentSessionToPullRequest(requestContext, pullRequest, 'explicit-tool', github);
         return { subscribed: true, pullRequestNumber: number };
       },
     }),

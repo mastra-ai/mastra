@@ -17,15 +17,9 @@ import type { Context } from 'hono';
 
 import { ensureWebAuthUser, webAuthTenant } from '../auth';
 import type { WebAuthTenant } from '../auth';
-import { signState, verifyState } from '../github/config';
 import { getAppDb } from '../github/db';
-import {
-  buildLinearAuthorizeUrl,
-  exchangeLinearOAuthCode,
-  fetchLinearWorkspace,
-  listActiveLinearIssues,
-  listLinearProjects,
-} from './client';
+import type { StateSigner } from '../state-signing';
+import type { LinearIntegration } from './integration';
 import { getIntakeConfig } from '../intake/store';
 import { invalidateLinearConnectionCache } from './agent-tools';
 import { getLinearFeatureDiagnostics, isLinearFeatureEnabled } from './config';
@@ -45,12 +39,23 @@ function loose(c: unknown): RouteContext {
 
 export interface MountLinearRoutesOptions {
   /**
+   * The integration instance providing OAuth + GraphQL access. Required for
+   * everything beyond the disabled `status` route.
+   */
+  linear?: LinearIntegration;
+  /**
    * Absolute base URL of the web server (e.g. `http://localhost:4111`), used to
    * build the OAuth redirect URI when one isn't explicitly configured.
    */
   baseUrl?: string;
   /** Explicit OAuth callback URI; defaults to `<baseUrl>/auth/linear/callback`. */
   redirectUri?: string;
+  /**
+   * Shared OAuth `state` signer (created once per boot by the factory).
+   * Required for the connect/callback flow; when absent, only the disabled
+   * `status` route is served.
+   */
+  stateSigner?: StateSigner;
 }
 
 /**
@@ -146,7 +151,11 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
     }),
   );
 
-  if (!isLinearFeatureEnabled()) {
+  // Without the integration instance or a state signer the connect/callback
+  // flow cannot talk to Linear or bind the OAuth round-trip to a tenant —
+  // serve only the disabled `status` route (mirrors the feature gate).
+  const { linear, stateSigner } = options;
+  if (!isLinearFeatureEnabled() || !linear || !stateSigner) {
     return routes;
   }
 
@@ -160,8 +169,8 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c));
         if ('response' in resolved) return resolved.response;
-        const state = signState(resolved.tenant.orgId, resolved.tenant.userId);
-        return c.redirect(buildLinearAuthorizeUrl(state, redirectUri));
+        const state = stateSigner.sign(resolved.tenant.orgId, resolved.tenant.userId);
+        return c.redirect(linear.buildAuthorizeUrl(state, redirectUri));
       },
     }),
   );
@@ -178,7 +187,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
 
         // CSRF / cross-tenant linking protection: the signed state must belong
         // to the same logged-in user *and* their current org.
-        const stateTenant = verifyState(c.req.query('state'));
+        const stateTenant = stateSigner.verify(c.req.query('state'));
         if (!stateTenant || stateTenant.userId !== userId || stateTenant.orgId !== orgId) {
           console.warn('[Linear] OAuth callback rejected: state/tenant mismatch.');
           return c.redirect('/?linear=error');
@@ -191,8 +200,8 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
         }
 
         try {
-          const tokens = await exchangeLinearOAuthCode(code, redirectUri);
-          const workspace = await fetchLinearWorkspace(tokens.accessToken);
+          const tokens = await linear.exchangeOAuthCode(code, redirectUri);
+          const workspace = await linear.fetchWorkspace(tokens.accessToken);
           await getAppDb()
             .insert(linearConnections)
             .values({
@@ -245,8 +254,8 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
         }
 
         try {
-          const accessToken = await getFreshAccessToken(connection);
-          const projects = await listLinearProjects(accessToken);
+          const accessToken = await getFreshAccessToken(linear, connection);
+          const projects = await linear.listProjects(accessToken);
           return c.json({ projects });
         } catch (err) {
           return linearFetchError(loose(c), err);
@@ -286,8 +295,8 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
         }
 
         try {
-          const accessToken = await getFreshAccessToken(connection);
-          const { issues, nextCursor } = await listActiveLinearIssues(accessToken, after, projectIds);
+          const accessToken = await getFreshAccessToken(linear, connection);
+          const { issues, nextCursor } = await linear.listActiveIssues(accessToken, after, projectIds);
           return c.json({ issues, nextCursor });
         } catch (err) {
           return linearFetchError(loose(c), err);

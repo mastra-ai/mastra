@@ -122,13 +122,16 @@ const listRepoOpenPullRequests = vi.fn(async (_installationId: number, _repoFull
   nextPage: null as number | null,
 }));
 
-vi.mock('./client', () => ({
+// Stub GithubIntegration instance injected into `buildGithubRoutes` — real DI
+// instead of module mocking (github/client.ts no longer exists).
+const githubStub = {
+  webhookSecret: undefined as string | undefined,
   buildInstallUrl: (state: string) => `https://github.com/apps/test/installations/new?state=${state}`,
   buildOAuthIdentifyUrl: (state: string) => `https://github.com/login/oauth/authorize?state=${state}`,
   exchangeOAuthCode: vi.fn(async () => 'user-token'),
   getRepositoryCollaboratorPermission: vi.fn(async () => 'write'),
   listUserInstallations: vi.fn(async () => [{ installationId: 7, accountLogin: 'octo', accountType: 'User' }]),
-  listInstallationRepos: vi.fn(async () => [
+  listInstallationRepos: vi.fn(async (_installationId: number) => [
     {
       id: 99,
       fullName: 'octo/hello',
@@ -159,7 +162,19 @@ vi.mock('./client', () => ({
     listRepoOpenIssues(installationId, repoFullName, page, options),
   listRepoOpenPullRequests: (installationId: number, repoFullName: string, page: number) =>
     listRepoOpenPullRequests(installationId, repoFullName, page),
-}));
+};
+
+// Deterministic state signer stub (replaces the old signState/verifyState mocks).
+const stateSigner = {
+  stable: true,
+  sign: (orgId: string, userId: string) => `state.${orgId}.${userId}`,
+  verify: (state: string | undefined) => {
+    if (!state?.startsWith('state.')) return null;
+    const [orgId, userId] = state.slice('state.'.length).split('.');
+    if (!orgId || !userId) return null;
+    return { orgId, userId };
+  },
+};
 
 const ensureProjectSandbox = vi.fn(async (_row: any, onProgress?: (e: any) => void) => {
   onProgress?.({ phase: 'provisioning', message: 'Provisioning a new sandbox…' });
@@ -234,14 +249,6 @@ let featureEnabled = true;
 vi.mock('./config', () => ({
   isGithubFeatureEnabled: () => featureEnabled,
   getGithubFeatureDiagnostics: () => ({}),
-  getGithubWebhookSecret: () => process.env.GITHUB_APP_WEBHOOK_SECRET || undefined,
-  signState: (orgId: string, userId: string) => `state.${orgId}.${userId}`,
-  verifyState: (state: string | undefined) => {
-    if (!state?.startsWith('state.')) return null;
-    const [orgId, userId] = state.slice('state.'.length).split('.');
-    if (!orgId || !userId) return null;
-    return { orgId, userId };
-  },
 }));
 
 // Partially mock `../auth`: keep all real helpers (getWebAuthUser/webAuthTenant)
@@ -352,8 +359,9 @@ function deleteRows(table: any, cond?: any): void {
 }
 
 // Resolve schema refs after import.
-import { listInstallationRepos, listUserInstallations } from './client';
 import { githubInstallations, githubProjectSandboxes, githubSignalSubscriptions, githubWorktrees } from './schema';
+
+const { listInstallationRepos, listUserInstallations } = githubStub;
 installationsRef = githubInstallations;
 worktreesRef = githubWorktrees;
 sandboxesRef = githubProjectSandboxes;
@@ -377,7 +385,10 @@ function buildApp(
     }
     await next();
   });
-  mountApiRoutes(app as any, buildGithubRoutes({ baseUrl: 'http://localhost:4111', ...options }));
+  mountApiRoutes(
+    app as any,
+    buildGithubRoutes({ baseUrl: 'http://localhost:4111', github: githubStub as any, stateSigner, ...options }),
+  );
   return app;
 }
 
@@ -393,6 +404,8 @@ beforeEach(() => {
   auditRecorded = [];
   auditFailure = undefined;
   process.env.GITHUB_APP_WEBHOOK_SECRET = 'test-webhook-secret';
+  // The webhook route verifies deliveries against the injected instance's secret.
+  githubStub.webhookSecret = 'test-webhook-secret';
   // No Postgres in these unit tests: keep the project lock purely in-process.
   process.env.MASTRACODE_DISTRIBUTED_LOCK = '0';
   ensureProjectSandbox.mockClear();

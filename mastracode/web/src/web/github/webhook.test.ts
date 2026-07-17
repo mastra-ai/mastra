@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GithubSignalSubscriptionRow } from './schema';
 
-const getRepositoryCollaboratorPermission = vi.hoisted(() =>
-  vi.fn<() => Promise<'admin' | 'maintain' | 'write' | 'triage' | 'read' | 'none' | undefined>>(async () => 'write'),
-);
-vi.mock('./client', () => ({ getRepositoryCollaboratorPermission }));
+const getRepositoryCollaboratorPermission = vi.fn<
+  () => Promise<'admin' | 'maintain' | 'write' | 'triage' | 'read' | 'none' | undefined>
+>(async () => 'write');
+// Stub integration: dispatch consumes the injected instance for permission checks.
+const githubStub = { getRepositoryCollaboratorPermission } as unknown as import('./integration').GithubIntegration;
 import { classifyGithubWebhook, dispatchGithubWebhook, type ParsedGithubWebhook } from './webhook';
 
 function parsed(event: string, action: string, extra: Record<string, unknown> = {}): ParsedGithubWebhook {
@@ -100,6 +101,7 @@ describe('dispatchGithubWebhook', () => {
       }),
       {
         controller: {} as never,
+        github: githubStub,
         listSubscriptions,
       },
     );
@@ -119,7 +121,7 @@ describe('dispatchGithubWebhook', () => {
           issue: { number: 34, pull_request: { url: 'https://api.github.test/pr/34' } },
           pull_request: undefined,
         }),
-        { controller: {} as never, listSubscriptions },
+        { controller: {} as never, github: githubStub, listSubscriptions },
       );
 
       await vi.advanceTimersByTimeAsync(5_000);
@@ -140,12 +142,16 @@ describe('dispatchGithubWebhook', () => {
       sender: { login: 'coderabbitai[bot]', type: 'Bot' },
     });
 
-    await expect(dispatchGithubWebhook(unauthorized, { controller: {} as never, listSubscriptions })).resolves.toEqual({
+    await expect(
+      dispatchGithubWebhook(unauthorized, { controller: {} as never, github: githubStub, listSubscriptions }),
+    ).resolves.toEqual({
       delivered: 0,
       failed: 0,
       ignored: true,
     });
-    await expect(dispatchGithubWebhook(authorized, { controller: {} as never, listSubscriptions })).resolves.toEqual({
+    await expect(
+      dispatchGithubWebhook(authorized, { controller: {} as never, github: githubStub, listSubscriptions }),
+    ).resolves.toEqual({
       delivered: 0,
       failed: 0,
       ignored: false,

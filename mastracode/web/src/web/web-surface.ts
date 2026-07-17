@@ -17,12 +17,7 @@ import { buildAuditRoutes } from './audit/routes.js';
 import { buildConfigRoutes } from './config-routes.js';
 import { buildOAuthRoutes } from './oauth-routes.js';
 import { buildFsRoutes } from './fs-routes.js';
-import {
-  assertReplicaStableStateSecret,
-  getGithubFeatureDiagnostics,
-  hasExplicitStateSecret,
-  isGithubFeatureEnabled,
-} from './github/config.js';
+import { getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './github/config.js';
 import { buildFactoryRoutes } from './factory/routes.js';
 import { ensureAppDbReady } from './github/db.js';
 import { buildGithubRoutes } from './github/routes.js';
@@ -32,6 +27,7 @@ import { getFactoryStore } from './runtime-config.js';
 import { getLinearFeatureDiagnostics, isLinearFeatureEnabled } from './linear/config.js';
 import { ensureLinearDbReady } from './linear/db.js';
 import { buildLinearRoutes } from './linear/routes.js';
+import { getSeededGithubIntegration, getSeededStateSigner } from './runtime-config.js';
 import { registerSandboxReattach } from './sandbox-reattach-registration.js';
 import { buildSkillRoutes } from './skills/routes.js';
 
@@ -117,12 +113,11 @@ export async function resolveIntakeReady(anySourceReady: boolean): Promise<boole
 export async function resolveLinearReady(): Promise<boolean> {
   if (!isLinearFeatureEnabled()) {
     const diag = getLinearFeatureDiagnostics();
-    const missing = diag.missingLinearEnvVars;
     process.stderr.write(
       [
         'MastraCode Web: Linear routes disabled',
         `  WorkOS auth:          ${diag.webAuthEnabled ? 'enabled' : 'disabled'}`,
-        `  Linear OAuth config:  ${diag.linearAppConfigured ? 'configured' : `missing ${missing.join(', ')}`}`,
+        `  Linear integration:   ${diag.linearAppConfigured ? 'registered' : 'not registered (LINEAR_CLIENT_ID / LINEAR_CLIENT_SECRET)'}`,
         `  App DB:               ${diag.appDbConfigured ? 'configured' : 'not configured (no PostgresStore in the factory storage slot)'}`,
       ].join('\n') + '\n',
     );
@@ -130,10 +125,10 @@ export async function resolveLinearReady(): Promise<boolean> {
   }
 
   // Fail loud if state signing wouldn't be stable across replicas. Linear's
-  // OAuth `state` is signed with the shared secret from `./github/config`, and
-  // the GitHub-side assertion is a no-op when the GitHub feature is off — so a
+  // OAuth `state` is signed with the shared signer the factory seeds, and the
+  // GitHub-side assertion is a no-op when the GitHub feature is off — so a
   // Linear-only deployment must run its own check.
-  if (!hasExplicitStateSecret()) {
+  if (!getSeededStateSigner()?.stable) {
     throw new Error(
       'Linear intake is enabled but no replica-stable state secret is set. ' +
         'Set GITHUB_APP_WEBHOOK_SECRET (or WORKOS_COOKIE_PASSWORD) so the OAuth ' +
@@ -188,7 +183,14 @@ export async function resolveGithubReady(): Promise<boolean> {
   // Fail loud if state signing wouldn't be stable across replicas. A random
   // per-process secret silently breaks the OAuth/install callback on a replica
   // that didn't sign the `state`.
-  assertReplicaStableStateSecret();
+  if (!getSeededStateSigner()?.stable) {
+    throw new Error(
+      'The GitHub App integration is enabled but no replica-stable state secret is set. ' +
+        'Set GITHUB_APP_WEBHOOK_SECRET (or WORKOS_COOKIE_PASSWORD) so the OAuth/install ' +
+        '`state` can be verified across replicas. Without it, the connect callback fails ' +
+        'whenever it lands on a different replica than the one that signed it.',
+    );
+  }
 
   try {
     await ensureAppDbReady();
@@ -331,12 +333,14 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
     ...buildSkillRoutes({ controllerId: deps.controllerId, controller: deps.controller }),
     ...(deps.githubReady
       ? buildGithubRoutes({
+          github: getSeededGithubIntegration(),
+          stateSigner: getSeededStateSigner(),
           baseUrl: deps.publicOrigin,
           controller: deps.controller,
           runIssueTriage: input => runIssueTriage(deps, input),
         })
       : []),
-    ...(deps.linearReady ? buildLinearRoutes({ baseUrl: deps.publicOrigin }) : []),
+    ...(deps.linearReady ? buildLinearRoutes({ baseUrl: deps.publicOrigin, stateSigner: getSeededStateSigner() }) : []),
     ...(deps.intakeReady ? buildIntakeRoutes() : []),
     ...(deps.factoryReady ? buildFactoryRoutes() : []),
     ...(deps.factoryReady ? buildAuditRoutes({ baseUrl: deps.publicOrigin }) : []),

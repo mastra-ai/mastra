@@ -59,7 +59,9 @@ vi.mock('./db', () => {
   return { getAppDb: () => makeDb() };
 });
 
-vi.mock('./client', () => ({
+// Stub integration instance: routes consume the injected `github` instance —
+// real DI instead of module mocking (client.ts no longer exists).
+const githubStub = {
   buildInstallUrl: (state: string) => `https://github.com/apps/test/installations/new?state=${state}`,
   buildOAuthIdentifyUrl: (state: string) => `https://github.com/login/oauth/authorize?state=${state}`,
   exchangeOAuthCode: vi.fn(async () => 'user-token'),
@@ -90,7 +92,19 @@ vi.mock('./client', () => ({
   ),
   // A fresh token string per call so the scenario can prove per-op minting.
   mintInstallationToken: vi.fn(async () => `install-token-${++mintCount}`),
-}));
+};
+
+// Deterministic state signer stub (replaces the old signState/verifyState mocks).
+const stateSigner = {
+  stable: true,
+  sign: (orgId: string, userId: string) => `state.${orgId}.${userId}`,
+  verify: (state: string | undefined) => {
+    if (!state?.startsWith('state.')) return null;
+    const [orgId, userId] = state.slice('state.'.length).split('.');
+    if (!orgId || !userId) return null;
+    return { orgId, userId };
+  },
+};
 
 let mintCount = 0;
 
@@ -160,13 +174,7 @@ vi.mock('./sandbox', () => {
 let featureEnabled = true;
 vi.mock('./config', () => ({
   isGithubFeatureEnabled: () => featureEnabled,
-  signState: (orgId: string, userId: string) => `state.${orgId}.${userId}`,
-  verifyState: (state: string | undefined) => {
-    if (!state?.startsWith('state.')) return null;
-    const [orgId, userId] = state.slice('state.'.length).split('.');
-    if (!orgId || !userId) return null;
-    return { orgId, userId };
-  },
+  getGithubFeatureDiagnostics: () => ({}),
 }));
 
 import { mountApiRoutes } from '../test-utils';
@@ -255,7 +263,10 @@ function buildApp(user: { workosId: string; organizationId?: string } | null) {
     if (user) c.set('webAuthUser' as never, user as never);
     await next();
   });
-  mountApiRoutes(app as any, buildGithubRoutes({ baseUrl: 'http://localhost:4111' }));
+  mountApiRoutes(
+    app as any,
+    buildGithubRoutes({ baseUrl: 'http://localhost:4111', github: githubStub as any, stateSigner }),
+  );
   return app;
 }
 
@@ -297,10 +308,7 @@ afterEach(() => {
 // ── S1: full write-back journey ──────────────────────────────────────────
 describe('S1: full write-back journey through the real route handlers', () => {
   it('drives create → ensure → worktree → commit → push → pr for one user', async () => {
-    const mintModule = (await import('./client')) as unknown as {
-      mintInstallationToken: ReturnType<typeof vi.fn>;
-    };
-    const mint = mintModule.mintInstallationToken;
+    const mint = githubStub.mintInstallationToken;
     tables.installations.push({
       orgId: 'org1',
       userId: 'u1',

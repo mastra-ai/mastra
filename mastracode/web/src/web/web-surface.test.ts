@@ -8,49 +8,38 @@ vi.mock('./linear/db', () => ({ ensureLinearDbReady: vi.fn().mockResolvedValue(u
 import { PostgresStore } from '@mastra/pg';
 import type { WebAuthAdapter } from './auth-adapter';
 import { __resetRuntimeConfigForTests, seedRuntimeConfig } from './runtime-config';
+import { createStateSigner } from './state-signing';
 import { buildIssueTriagePrompt, resolveLinearReady } from './web-surface';
 
 // ── Linear-only state-secret deploy scenario ─────────────────────────────
-// Linear's OAuth `state` is signed with the secret shared with the GitHub
-// feature. GitHub's own `assertReplicaStableStateSecret()` is a no-op when the
-// GitHub feature is off, so a Linear-only deployment relies on
-// `resolveLinearReady()` running its own fail-loud check.
+// Linear's OAuth `state` is signed with the shared factory signer. The
+// GitHub-side stability assertion is a no-op when the GitHub feature is off,
+// so a Linear-only deployment relies on `resolveLinearReady()` running its
+// own fail-loud check against the seeded signer.
 
-const ENV_KEYS = [
-  'LINEAR_CLIENT_ID',
-  'LINEAR_CLIENT_SECRET',
-  'WORKOS_API_KEY',
-  'WORKOS_CLIENT_ID',
-  'GITHUB_APP_WEBHOOK_SECRET',
-  'WORKOS_COOKIE_PASSWORD',
-] as const;
-
-const saved: Record<string, string | undefined> = {};
 let stderrSpy: ReturnType<typeof vi.spyOn>;
 
-function enableLinearFeature(): void {
-  process.env.LINEAR_CLIENT_ID = 'linear-client';
-  process.env.LINEAR_CLIENT_SECRET = 'linear-secret';
+/** Marker method makes the stub pass `getSeededLinearIntegration`'s type probe. */
+const linearStub = { id: 'linear', listActiveIssues: vi.fn() } as any;
+
+function enableLinearFeature(options?: { stableStateSigner?: boolean }): void {
   // The app DB gate checks the seeded storage instance, and seeding the
   // registry makes it authoritative for auth too — seed both slots.
   seedRuntimeConfig({
     storage: new PostgresStore({ id: 'web-surface-test', connectionString: 'postgres://localhost/app' }),
     authAdapter: { kind: 'workos' } as WebAuthAdapter,
+    integrations: [linearStub],
+    // No explicit secret ⇒ per-process random signer (stable: false).
+    stateSigner: createStateSigner(options?.stableStateSigner ? 'explicit-secret' : undefined),
   });
 }
 
 beforeEach(() => {
-  for (const k of ENV_KEYS) saved[k] = process.env[k];
-  for (const k of ENV_KEYS) delete process.env[k];
   __resetRuntimeConfigForTests();
   stderrSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
 });
 
 afterEach(() => {
-  for (const k of ENV_KEYS) {
-    if (saved[k] === undefined) delete process.env[k];
-    else process.env[k] = saved[k];
-  }
   __resetRuntimeConfigForTests();
   stderrSpy.mockRestore();
 });
@@ -85,12 +74,12 @@ describe('resolveLinearReady startup guard', () => {
   });
 
   it('resolves when Linear is enabled and an explicit secret is set', async () => {
-    enableLinearFeature();
-    process.env.WORKOS_COOKIE_PASSWORD = 'cookie-pw-stable';
+    enableLinearFeature({ stableStateSigner: true });
     await expect(resolveLinearReady()).resolves.toBe(true);
   });
 
   it('returns false without throwing when the Linear feature is off', async () => {
+    seedRuntimeConfig({});
     await expect(resolveLinearReady()).resolves.toBe(false);
   });
 });

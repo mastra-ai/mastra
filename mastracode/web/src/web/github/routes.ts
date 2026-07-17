@@ -34,19 +34,9 @@ import { streamSSE } from 'hono/streaming';
 import { emitAudit } from '../audit/audit';
 import { ensureWebAuthUser, getWebAuthUser, webAuthTenant } from '../auth';
 import type { WebAuthTenant } from '../auth';
-import {
-  buildInstallUrl,
-  buildOAuthIdentifyUrl,
-  exchangeOAuthCode,
-  addIssueLabels,
-  getInstallationRepo,
-  listInstallationRepos,
-  listRepoOpenIssues,
-  listRepoOpenPullRequests,
-  listUserInstallations,
-  mintInstallationToken,
-} from './client';
-import { getGithubFeatureDiagnostics, isGithubFeatureEnabled, signState, verifyState } from './config';
+import type { StateSigner } from '../state-signing';
+import { getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './config';
+import type { GithubIntegration } from './integration';
 import { getAppDb } from './db';
 import { withProjectLock } from './project-lock';
 import { handleGithubWebhook } from './webhook';
@@ -80,6 +70,18 @@ import type { GithubProjectRow, GithubProjectSandboxRow } from './schema';
 import { listPullRequestSubscriptionsForThread, subscribeToPullRequest } from './subscriptions';
 
 export interface MountGithubRoutesOptions {
+  /**
+   * The GitHub App integration the handlers operate on (Octokit access, token
+   * minting, OAuth URLs). Normally supplied by `GithubIntegration.routes()`;
+   * when absent, only the disabled `status` route is served.
+   */
+  github?: GithubIntegration;
+  /**
+   * Shared OAuth/install `state` signer (created once per boot by the
+   * factory). Required for the OAuth/install flow; when absent, only the
+   * disabled `status` route is served.
+   */
+  stateSigner?: StateSigner;
   /**
    * Absolute base URL of the web server (e.g. `http://localhost:4111`), used to
    * build the OAuth/install redirect URI when one isn't explicitly configured.
@@ -282,9 +284,15 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
     }),
   );
 
-  if (!isGithubFeatureEnabled()) {
+  // Without an integration instance + state signer there is nothing the
+  // remaining handlers can do — serve only the disabled `status` route
+  // (mirrors the feature gate).
+  const { github, stateSigner } = options;
+  if (!isGithubFeatureEnabled() || !github || !stateSigner) {
     return routes;
   }
+  const signState = (orgId: string, userId: string): string => stateSigner.sign(orgId, userId);
+  const verifyState = (state: string | undefined) => stateSigner.verify(state);
 
   const { runIssueTriage } = options;
   const runBoardIssueTriage = runIssueTriage
@@ -301,7 +309,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
           );
         if (!project) throw new Error(`GitHub project not found for ${input.repository}`);
         const projectPath = input.projectPath ?? computeWorktreePath(project.sandboxWorkdir, branch);
-        await addIssueLabels(input.installationId, input.repository, input.issueNumber, ['auto-triaged']);
+        await github.addIssueLabels(input.installationId, input.repository, input.issueNumber, ['auto-triaged']);
         return runIssueTriage({
           ...input,
           resourceId: project.id,
@@ -347,6 +355,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
       requiresAuth: false,
       handler: async c => {
         const result = await handleGithubWebhook(loose(c), {
+          github,
           runIssueTriage: runBoardIssueTriage,
           ...(options.controller
             ? {
@@ -389,8 +398,8 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         const resolved = await resolveOrgTenant(loose(c));
         if ('response' in resolved) return resolved.response;
         const state = signState(resolved.tenant.orgId, resolved.tenant.userId);
-        if (c.req.query('manage')) return c.redirect(buildInstallUrl(state));
-        return c.redirect(buildOAuthIdentifyUrl(state, redirectUri));
+        if (c.req.query('manage')) return c.redirect(github.buildInstallUrl(state));
+        return c.redirect(github.buildOAuthIdentifyUrl(state, redirectUri));
       },
     }),
   );
@@ -411,7 +420,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
           // arrives with `installation_id` + `setup_action` but no state. We
           // never trust the raw installation_id; start a fresh identify bounce
           // bound to the current session so the update re-syncs installations.
-          return c.redirect(buildOAuthIdentifyUrl(signState(orgId, userId), redirectUri));
+          return c.redirect(github.buildOAuthIdentifyUrl(signState(orgId, userId), redirectUri));
         }
         const stateTenant = verifyState(state);
         if (!stateTenant || stateTenant.userId !== userId || stateTenant.orgId !== orgId) {
@@ -437,18 +446,18 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         // an arbitrary id — so when no code is present we bounce through the OAuth
         // identify flow to obtain a verified user token first.
         if (!code) {
-          return c.redirect(buildOAuthIdentifyUrl(signState(orgId, userId), redirectUri));
+          return c.redirect(github.buildOAuthIdentifyUrl(signState(orgId, userId), redirectUri));
         }
 
         try {
-          const userToken = await exchangeOAuthCode(code, redirectUri);
-          const installations = await listUserInstallations(userToken);
+          const userToken = await github.exchangeOAuthCode(code, redirectUri);
+          const installations = await github.listUserInstallations(userToken);
           if (installations.length === 0) {
             // Verified user has no installations yet — send them to the actual
             // install page. After installing, GitHub redirects back here with
             // the same state (and no code), which bounces through identify
             // again and lands in the persist path below.
-            return c.redirect(buildInstallUrl(signState(orgId, userId)));
+            return c.redirect(github.buildInstallUrl(signState(orgId, userId)));
           }
           const db = getAppDb();
           for (const inst of installations) {
@@ -498,7 +507,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         for (const inst of installs) {
           let list;
           try {
-            list = await listInstallationRepos(inst.installationId);
+            list = await github.listInstallationRepos(inst.installationId);
           } catch (err) {
             // GitHub 404s when the installation no longer exists for this app
             // (app uninstalled/reinstalled, or the row was recorded under
@@ -566,7 +575,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         // Verify the repo is actually accessible to the installation and use the
         // server-returned metadata rather than trusting the client's repoId /
         // defaultBranch. This prevents creating a project for an arbitrary repo.
-        const repo = await getInstallationRepo(installationId, body.repoFullName);
+        const repo = await github.getInstallationRepo(installationId, body.repoFullName);
         if (!repo) {
           return c.json({ error: 'Repository not accessible to installation' }, 404);
         }
@@ -628,6 +637,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
           return streamSSE(loose(c), async stream => {
             try {
               const result = await prepareProject(
+                github,
                 project,
                 userId,
                 ev => void stream.writeSSE({ event: 'progress', data: JSON.stringify(ev) }),
@@ -640,7 +650,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         }
 
         try {
-          const result = await prepareProject(project, userId);
+          const result = await prepareProject(github, project, userId);
           return c.json(result);
         } catch (err) {
           const { status, body } = ensureErrorPayload(err);
@@ -663,7 +673,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         const label = parseIssueLabelFilter(c.req.query('label'));
         if (label === null) return c.json({ error: 'invalid_label' }, 400);
         try {
-          const { issues, nextPage } = await listRepoOpenIssues(
+          const { issues, nextPage } = await github.listRepoOpenIssues(
             loaded.project.installationId,
             loaded.project.repoFullName,
             page,
@@ -713,7 +723,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         if (!runIssueTriage) return c.json({ error: 'triage_unavailable' }, 503);
         const branch = `factory/issue-${issueNumber}`;
         const projectPath = computeWorktreePath(sandboxRow.sandboxWorkdir, branch);
-        await addIssueLabels(project.installationId, project.repoFullName, issueNumber, ['auto-triaged']);
+        await github.addIssueLabels(project.installationId, project.repoFullName, issueNumber, ['auto-triaged']);
         const result = await runIssueTriage({
           repository: project.repoFullName,
           issueNumber,
@@ -755,7 +765,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         const page = parseListPage(c.req.query('page'));
         if (page === null) return c.json({ error: 'invalid_page' }, 400);
         try {
-          const { pullRequests, nextPage } = await listRepoOpenPullRequests(
+          const { pullRequests, nextPage } = await github.listRepoOpenPullRequests(
             loaded.project.installationId,
             loaded.project.repoFullName,
             page,
@@ -824,7 +834,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
   );
 
   // ── Worktree / branch / commit / push / PR ──────────────────────────────
-  routes.push(...buildProjectGitRoutes());
+  routes.push(...buildProjectGitRoutes(github));
 
   return routes;
 }
@@ -916,6 +926,7 @@ interface EnsureResult {
  * caller can shape the response (HTTP status vs SSE `error` event).
  */
 async function prepareProject(
+  github: GithubIntegration,
   project: GithubProjectRow,
   userId: string,
   onProgress?: ProgressFn,
@@ -927,7 +938,7 @@ async function prepareProject(
     .select()
     .from(githubProjectSandboxes)
     .where(eq(githubProjectSandboxes.id, sandboxRow.id));
-  const token = await mintInstallationToken(project.installationId);
+  const token = await github.mintInstallationToken(project.installationId);
   const finalRow = fresh ?? sandboxRow;
   await materializeRepo(
     finalRow,
@@ -1013,7 +1024,7 @@ async function loadOwnedProject(
   return { orgId, userId, project, sandboxRow };
 }
 
-function buildProjectGitRoutes(): ApiRoute[] {
+function buildProjectGitRoutes(github: GithubIntegration): ApiRoute[] {
   return [
     // ── Create / reuse a worktree + feature branch ──────────────────────────
     registerApiRoute('/web/github/projects/:id/worktree', {
@@ -1042,7 +1053,7 @@ function buildProjectGitRoutes(): ApiRoute[] {
         try {
           return await withProjectLock(`${project.id}:${userId}`, async () => {
             const sandbox = await resolveProjectSandbox(sandboxRow);
-            const token = await mintInstallationToken(project.installationId);
+            const token = await github.mintInstallationToken(project.installationId);
             const result = await ensureWorktree(sandbox, sandboxRow.sandboxWorkdir, {
               branch,
               baseBranch,
@@ -1229,7 +1240,7 @@ function buildProjectGitRoutes(): ApiRoute[] {
         try {
           return await withProjectLock(`${project.id}:${userId}`, async () => {
             const sandbox = await resolveProjectSandbox(sandboxRow);
-            const token = await mintInstallationToken(project.installationId);
+            const token = await github.mintInstallationToken(project.installationId);
             await pushBranch(sandbox, workdir, branch, token, project.repoFullName);
             await emitAudit(loose(c), {
               action: 'factory.git.push',
@@ -1292,7 +1303,7 @@ function buildProjectGitRoutes(): ApiRoute[] {
         try {
           return await withProjectLock(`${project.id}:${userId}`, async () => {
             const sandbox = await resolveProjectSandbox(sandboxRow);
-            const token = await mintInstallationToken(project.installationId);
+            const token = await github.mintInstallationToken(project.installationId);
             const result = await createPullRequest(sandbox, workdir, { token, base, head, title, body: prBody });
             await emitAudit(loose(c), {
               action: 'factory.git.pr_opened',

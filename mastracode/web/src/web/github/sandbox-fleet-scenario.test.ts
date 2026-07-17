@@ -41,14 +41,23 @@ vi.mock('drizzle-orm', () => ({
 // Enable the GitHub feature so the project git routes (incl. DELETE) mount.
 vi.mock('./config', () => ({
   isGithubFeatureEnabled: () => true,
-  signState: (orgId: string, userId: string) => `state.${orgId}.${userId}`,
-  verifyState: (state: string | undefined) => {
+}));
+
+// Minimal injected instances: this suite only exercises sandbox teardown
+// routes, so the integration stub needs no real API methods.
+const githubStub = {
+  mintInstallationToken: vi.fn(async () => 'install-token'),
+} as any;
+const stateSigner = {
+  stable: true,
+  sign: (orgId: string, userId: string) => `state.${orgId}.${userId}`,
+  verify: (state: string | undefined) => {
     if (!state?.startsWith('state.')) return null;
     const [orgId, userId] = state.slice('state.'.length).split('.');
     if (!orgId || !userId) return null;
     return { orgId, userId };
   },
-}));
+};
 
 // ── Shared in-memory DB shaped like routes.test.ts ────────────────────────
 interface Tables {
@@ -287,7 +296,7 @@ describe('S7 — cross-user teardown isolation (route level)', () => {
       (c as any).set('webAuthUser', { id: workosId, workosId, organizationId: 'org1', name: 'Test', email: 't@e.co' });
       await next();
     });
-    mountApiRoutes(app as any, buildGithubRoutes({}));
+    mountApiRoutes(app as any, buildGithubRoutes({ github: githubStub, stateSigner }));
     return app;
   }
 

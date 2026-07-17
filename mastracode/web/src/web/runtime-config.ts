@@ -18,6 +18,10 @@ import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { PostgresStore } from '@mastra/pg';
 import type pg from 'pg';
 import type { WebAuthAdapter } from './auth-adapter.js';
+import type { FactoryIntegration } from './factory-integration.js';
+import type { GithubIntegration } from './github/integration.js';
+import type { LinearIntegration } from './linear/integration.js';
+import type { StateSigner } from './state-signing.js';
 import type { FactoryStore } from './storage/factory-store.js';
 
 /**
@@ -61,6 +65,10 @@ export interface WebRuntimeConfig {
    * was configured without pg-backed storage — app-DB features stay off.
    */
   factoryStore?: FactoryStore;
+  /** Registered integrations (GitHub, Linear, third-party), keyed by their stable id. */
+  integrations?: FactoryIntegration[];
+  /** Shared OAuth state signer created by the factory (see `./state-signing.ts`). */
+  stateSigner?: StateSigner;
 }
 
 let seeded: WebRuntimeConfig | undefined;
@@ -133,6 +141,47 @@ export function getFactoryStore(): FactoryStore {
     );
   }
   return store;
+}
+
+/** Look up a registered integration by its stable id. */
+export function getSeededIntegration(id: string): FactoryIntegration | undefined {
+  return seeded?.integrations?.find(integration => integration.id === id);
+}
+
+/**
+ * GitHub App integration seeded by the factory. Typed convenience over
+ * {@link getSeededIntegration} for the sandbox fleet + session tooling, which
+ * need GitHub-typed API methods. `undefined` when no GitHub integration was
+ * registered (or the factory never ran) — GitHub-backed projects stay off in
+ * that case.
+ */
+export function getSeededGithubIntegration(): GithubIntegration | undefined {
+  const integration = getSeededIntegration('github');
+  return integration instanceof Object && 'getInstallationOctokit' in integration
+    ? (integration as GithubIntegration)
+    : undefined;
+}
+
+/**
+ * Linear integration seeded by the factory. Typed convenience over
+ * {@link getSeededIntegration}. `undefined` when no Linear integration was
+ * registered (or the factory never ran) — Linear intake stays off in that case.
+ */
+export function getSeededLinearIntegration(): LinearIntegration | undefined {
+  const integration = getSeededIntegration('linear');
+  return integration instanceof Object && 'listActiveIssues' in integration
+    ? (integration as LinearIntegration)
+    : undefined;
+}
+
+/**
+ * Shared OAuth state signer seeded by the factory. `undefined` before the
+ * factory runs — feature diagnostics report `stateSecretConfigured: false`
+ * in that window (integration routes receive the signer explicitly through
+ * `IntegrationContext`, so route handlers never read this).
+ */
+export function getSeededStateSigner(): StateSigner | undefined {
+  return seeded?.stateSigner;
 }
 
 /** Reset the registry for test isolation. */

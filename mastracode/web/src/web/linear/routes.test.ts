@@ -58,16 +58,6 @@ vi.mock('./config', () => ({
   getLinearFeatureDiagnostics: () => ({}),
 }));
 
-vi.mock('../github/config', () => ({
-  signState: (orgId: string, userId: string) => `state.${orgId}.${userId}`,
-  verifyState: (state: string | undefined) => {
-    if (!state?.startsWith('state.')) return null;
-    const [orgId, userId] = state.slice('state.'.length).split('.');
-    if (!orgId || !userId) return null;
-    return { orgId, userId };
-  },
-}));
-
 const exchangeLinearOAuthCode = vi.fn(async () => ({
   accessToken: 'linear-token',
   refreshToken: 'linear-refresh',
@@ -102,16 +92,32 @@ const listActiveLinearIssues = vi.fn(async (_token: string, _after?: string, _pr
   nextCursor: 'cursor-2',
 }));
 
-vi.mock('./client', () => ({
-  buildLinearAuthorizeUrl: (state: string, redirectUri: string) =>
+// Stub integration instance: real DI through `MountLinearRoutesOptions.linear`
+// instead of module mocking — mirrors how the factory hands the instance to
+// `buildLinearRoutes` in production.
+const linearStub = {
+  id: 'linear',
+  buildAuthorizeUrl: (state: string, redirectUri: string) =>
     `https://linear.app/oauth/authorize?state=${state}&redirect_uri=${encodeURIComponent(redirectUri)}`,
-  exchangeLinearOAuthCode: (...args: any[]) => exchangeLinearOAuthCode(...(args as [])),
-  refreshLinearAccessToken: (...args: any[]) => refreshLinearAccessToken(...(args as [])),
-  fetchLinearWorkspace: (...args: any[]) => fetchLinearWorkspace(...(args as [])),
-  listLinearProjects: (...args: any[]) => listLinearProjects(...(args as [])),
-  listActiveLinearIssues: (token: string, after?: string, projectIds?: string[]) =>
+  exchangeOAuthCode: (...args: any[]) => exchangeLinearOAuthCode(...(args as [])),
+  refreshAccessToken: (...args: any[]) => refreshLinearAccessToken(...(args as [])),
+  fetchWorkspace: (...args: any[]) => fetchLinearWorkspace(...(args as [])),
+  listProjects: (...args: any[]) => listLinearProjects(...(args as [])),
+  listActiveIssues: (token: string, after?: string, projectIds?: string[]) =>
     listActiveLinearIssues(token, after, projectIds),
-}));
+} as unknown as import('./integration').LinearIntegration;
+
+// Deterministic state signer injected the same way the factory does it.
+const stateSigner: import('../state-signing').StateSigner = {
+  stable: true,
+  sign: (orgId: string, userId: string) => `state.${orgId}.${userId}`,
+  verify: (state: string | undefined) => {
+    if (!state?.startsWith('state.')) return null;
+    const [orgId, userId] = state.slice('state.'.length).split('.');
+    if (!orgId || !userId) return null;
+    return { orgId, userId };
+  },
+};
 
 const getIntakeConfig = vi.fn(async () => ({
   github: { enabled: true, projectIds: null as string[] | null },
@@ -153,7 +159,7 @@ function buildApp(user: { workosId: string; organizationId?: string | null } | n
     }
     await next();
   });
-  mountApiRoutes(app as any, buildLinearRoutes({ baseUrl: 'http://localhost:4111' }));
+  mountApiRoutes(app as any, buildLinearRoutes({ baseUrl: 'http://localhost:4111', linear: linearStub, stateSigner }));
   return app;
 }
 

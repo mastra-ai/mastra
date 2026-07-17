@@ -21,8 +21,8 @@ import { z } from 'zod';
 
 import { getAppDb } from '../github/db';
 import { githubProjects } from '../github/schema';
-import { createLinearIssueComment, fetchLinearIssueDetail } from './client';
 import { isLinearFeatureEnabled } from './config';
+import type { LinearIntegration } from './integration';
 import {
   canPostLinearComments,
   getFreshLinearAccessToken,
@@ -102,7 +102,7 @@ export function invalidateLinearConnectionCache(orgId: string): void {
   connectionCheckByOrg.delete(orgId);
 }
 
-function createLinearGetIssueTool(orgId: string) {
+function createLinearGetIssueTool(linear: LinearIntegration, orgId: string) {
   return createTool({
     id: 'linear_get_issue',
     description:
@@ -116,8 +116,8 @@ function createLinearGetIssueTool(orgId: string) {
         return { error: 'Linear is not connected for this project. Connect Linear in Settings to fetch issues.' };
       }
       try {
-        const accessToken = await getFreshLinearAccessToken(connection);
-        const detail = await fetchLinearIssueDetail(accessToken, issue.trim());
+        const accessToken = await getFreshLinearAccessToken(linear, connection);
+        const detail = await linear.fetchIssueDetail(accessToken, issue.trim());
         if (!detail) {
           return { error: `Linear issue "${issue}" was not found in this workspace.` };
         }
@@ -132,7 +132,7 @@ function createLinearGetIssueTool(orgId: string) {
   });
 }
 
-function createLinearCommentTool(orgId: string) {
+function createLinearCommentTool(linear: LinearIntegration, orgId: string) {
   return createTool({
     id: 'linear_create_comment',
     description:
@@ -152,8 +152,8 @@ function createLinearCommentTool(orgId: string) {
         };
       }
       try {
-        const accessToken = await getFreshLinearAccessToken(connection);
-        const comment = await createLinearIssueComment(accessToken, issue.trim(), body);
+        const accessToken = await getFreshLinearAccessToken(linear, connection);
+        const comment = await linear.createIssueComment(accessToken, issue.trim(), body);
         if (!comment) {
           return { error: `Linear issue "${issue}" was not found in this workspace.` };
         }
@@ -174,8 +174,11 @@ function createLinearCommentTool(orgId: string) {
  */
 export async function buildLinearAgentTools({
   requestContext,
+  linear,
 }: {
   requestContext: RequestContext;
+  /** The integration instance providing the Linear API client. */
+  linear: LinearIntegration;
 }): Promise<Record<string, ReturnType<typeof createLinearGetIssueTool> | ReturnType<typeof createLinearCommentTool>>> {
   if (!isLinearFeatureEnabled()) return {};
 
@@ -189,10 +192,10 @@ export async function buildLinearAgentTools({
   if (!check.connected) return {};
 
   return {
-    linear_get_issue: createLinearGetIssueTool(orgId),
+    linear_get_issue: createLinearGetIssueTool(linear, orgId),
     // Only offered when the granted OAuth scope allows posting comments —
     // connections made before `comments:create` was requested are read-only
     // until the org reconnects Linear.
-    ...(check.canComment ? { linear_create_comment: createLinearCommentTool(orgId) } : {}),
+    ...(check.canComment ? { linear_create_comment: createLinearCommentTool(linear, orgId) } : {}),
   };
 }
