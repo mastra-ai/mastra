@@ -450,6 +450,27 @@ describe('createMastraCode', () => {
     expect(typeof agentControllerConfig?.memory).toBe('function');
   });
 
+  it('passes an injected vector to dynamic memory', async () => {
+    const vector = { id: 'custom-vector' };
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode({ vector: vector as any });
+
+    expect(getDynamicMemoryMock).toHaveBeenCalledWith(expect.anything(), vector);
+    expect(createVectorStoreMock).not.toHaveBeenCalled();
+  });
+
+  it('requires an explicit backend for unknown injected storage implementations', async () => {
+    const { MastraCompositeStore } = await import('@mastra/core/storage');
+    const storage = Object.create(MastraCompositeStore.prototype) as InstanceType<typeof MastraCompositeStore>;
+    const { createMastraCode } = await import('../index.js');
+
+    await expect(createMastraCode({ storage })).rejects.toThrow(
+      'storageBackend is required when injecting a custom storage instance.',
+    );
+    expect(createStorageMock).not.toHaveBeenCalled();
+  });
+
   it('uses caller memory while applying configDir to startup services and state', async () => {
     const projectPath = '/tmp/mastracode-project';
     const customMemory = { id: 'custom-memory' };

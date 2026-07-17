@@ -29,15 +29,11 @@ import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import { observeAgentGitAction } from './audit/agent-audit.js';
 import type { WebAuthAdapter } from './auth-adapter.js';
 import { buildAuthRoutes, createWebAuthGate } from './auth.js';
+import type { FactoryIntegration, IntegrationTools } from './factory-integration.js';
 import { getFactoryWorkspace } from './factory/workspace.js';
-import {
-  createGithubSubscriptionTools,
-  parseCreatedPullRequest,
-  subscribeCurrentSessionToPullRequest,
-} from './github/session-subscriptions.js';
-import { buildLinearAgentTools } from './linear/agent-tools.js';
+import { parseCreatedPullRequest, subscribeCurrentSessionToPullRequest } from './github/session-subscriptions.js';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
-import { seedRuntimeConfig } from './runtime-config.js';
+import { getSeededGithubIntegration, seedRuntimeConfig } from './runtime-config.js';
 import { FactoryStore } from './storage/factory-store.js';
 import { AuditStoragePG } from './storage/domains/audit/pg.js';
 import { ModelCredentialsStoragePG } from './storage/domains/credentials/pg.js';
@@ -45,6 +41,7 @@ import { createTenantCredentialPrimer, registerTenantCredentialResolver } from '
 import { IntakeStoragePG } from './storage/domains/intake/pg.js';
 import { WorkItemsStoragePG } from './storage/domains/work-items/pg.js';
 import { handleServerError } from './server-error.js';
+import { createStateSigner } from './state-signing.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import {
   assembleWebApiRoutes,
@@ -112,6 +109,22 @@ export interface MastraFactoryConfig {
    * projects stay off.
    */
   sandbox?: MastraFactorySandboxConfig;
+  /**
+   * Deployment-stable secret for signing OAuth `state` values (GitHub/Linear
+   * connect flows). Omitted → the GitHub integration's webhook secret is used
+   * when one is registered, else a per-process random secret — fine for
+   * single-process local dev but fails the boot assertion when an
+   * OAuth-signing integration is enabled on a multi-replica deploy.
+   */
+  stateSecret?: string;
+  /**
+   * Registered integrations (`GithubIntegration`, `LinearIntegration`, or any
+   * custom `FactoryIntegration`). The factory registers the pieces each
+   * instance provides — HTTP routes, storage domain, agent/session tools,
+   * diagnostics — into the system. An absent integration means its routes
+   * never mount, its tools never register, and the server boots fine.
+   */
+  integrations?: FactoryIntegration[];
 }
 
 export interface MastraFactorySandboxConfig {
@@ -189,14 +202,29 @@ export class MastraFactory {
       );
     }
 
+    // Registered integrations: validate ids up front so a copy-paste duplicate
+    // fails loud instead of one instance silently shadowing the other.
+    const integrations = this.#config.integrations ?? [];
+    const integrationIds = new Set<string>();
+    for (const integration of integrations) {
+      if (integrationIds.has(integration.id)) {
+        throw new Error(`MastraFactory: duplicate integration id '${integration.id}' in 'integrations'.`);
+      }
+      integrationIds.add(integration.id);
+    }
+
     // Registry of factory app-table storage domains. Built-ins register here;
-    // integration-provided domains will flow through the same register() path.
+    // integration-provided domains flow through the same register() path and
+    // initialize with everything else in the single prepare() init below.
     const factoryStore = appPool ? new FactoryStore() : undefined;
     if (factoryStore) {
       factoryStore.register(new IntakeStoragePG());
       factoryStore.register(new AuditStoragePG());
       factoryStore.register(new WorkItemsStoragePG());
       factoryStore.register(new ModelCredentialsStoragePG());
+      for (const integration of integrations) {
+        if (integration.storageDomain) factoryStore.register(integration.storageDomain);
+      }
     }
 
     // Sandbox machine validation: GitHub projects need one sandbox per
@@ -218,12 +246,26 @@ export class MastraFactory {
     // through the seeded storage's shared pool (`getSharedAppPool()`), gate on
     // the active auth adapter via `isWebAuthEnabled()`, and probe the sandbox
     // runtime via `isSandboxEnabled()`.
+    // One shared OAuth state signer per boot: explicit `stateSecret` when
+    // provided, else the GitHub integration's webhook secret (deployment-stable
+    // by construction), else a per-process random secret (`stable: false`) —
+    // the readiness checks fail loud when an OAuth-signing feature is enabled
+    // without a stable signer.
+    const githubWebhookSecret = (
+      integrations.find(integration => integration.id === 'github') as { webhookSecret?: unknown } | undefined
+    )?.webhookSecret;
+    const stateSigner = createStateSigner(
+      this.#config.stateSecret ?? (typeof githubWebhookSecret === 'string' ? githubWebhookSecret : undefined),
+    );
+
     seedRuntimeConfig({
       storage,
       vector,
       factoryStore,
+      integrations,
       publicUrl: publicOrigin,
       authAdapter: auth,
+      stateSigner,
       sandbox: machine
         ? {
             machine,
@@ -268,6 +310,47 @@ export class MastraFactory {
     // Factory work-item board — hangs off GitHub projects, same fail-soft pattern.
     const factoryReady = await resolveFactoryReady(githubReady);
 
+    // Per-integration readiness. The built-ins keep their composite gates
+    // (auth + app DB + signer stability); custom integrations are ready when
+    // registered, plus a successful storage-domain init when they bring one.
+    const integrationReady = new Map<string, boolean>();
+    for (const integration of integrations) {
+      if (integration.id === 'github') integrationReady.set('github', githubReady);
+      else if (integration.id === 'linear') integrationReady.set('linear', linearReady);
+      else if (integration.storageDomain) {
+        integrationReady.set(integration.id, factoryStore?.isReady(integration.storageDomain.name) ?? false);
+      } else {
+        integrationReady.set(integration.id, true);
+      }
+    }
+    const readyIntegrations = integrations.map(integration => ({
+      integration,
+      ready: integrationReady.get(integration.id) ?? false,
+      ...(integration.storageDomain && factoryStore
+        ? { ensureReady: () => factoryStore.ensureReady(integration.storageDomain!.name) }
+        : {}),
+    }));
+
+    // Boot assertion: an active integration that signs OAuth `state` needs a
+    // replica-stable signer — a per-process random secret silently breaks the
+    // OAuth callback on any replica that didn't sign the state. Fail loud now
+    // instead. (The built-ins also assert this inside their readiness gates.)
+    for (const { integration } of readyIntegrations) {
+      if (integration.requiresStableStateSigner && !stateSigner.stable) {
+        throw new Error(
+          `MastraFactory: integration '${integration.id}' signs OAuth state and requires a ` +
+            `replica-stable state secret, but none is configured. Set 'stateSecret' on the ` +
+            `factory config (or register a GitHub integration with a webhook secret).`,
+        );
+      }
+    }
+
+    // Integrations contributing tools to agent sessions: org-scoped
+    // `agentTools` (resolved per request) + session-scoped `sessionTools`.
+    const toolIntegrations = readyIntegrations.filter(
+      ({ integration }) => integration.agentTools || integration.sessionTools,
+    );
+
     // Build the real production controller (agents, modes, tools, memory, OM,
     // MCP, providers) — identical to the terminal app. Agent state lives in
     // the injected storage alongside the github/app tables — one shared DB
@@ -277,13 +360,41 @@ export class MastraFactory {
       workspace: getFactoryWorkspace,
       disableGithubSignals: true,
       ...(storage ? { storage } : {}),
-      ...(vector ? { vectorStore: vector } : {}),
-      ...(githubReady || linearReady
+      ...(vector ? { vector } : {}),
+      ...(toolIntegrations.length > 0
         ? {
-            extraTools: async ({ requestContext }: { requestContext: RequestContext }) => ({
-              ...(linearReady ? await buildLinearAgentTools({ requestContext }) : {}),
-              ...(githubReady ? createGithubSubscriptionTools(requestContext) : {}),
-            }),
+            extraTools: async ({ requestContext }: { requestContext: RequestContext }) => {
+              const tools: IntegrationTools = {};
+              const toolOwners = new Map<string, string>();
+              const mergeTools = (integration: FactoryIntegration, contributed: IntegrationTools) => {
+                for (const [name, tool] of Object.entries(contributed)) {
+                  const owner = toolOwners.get(name);
+                  if (owner) {
+                    throw new Error(
+                      `MastraFactory: integration tool '${name}' from '${integration.id}' conflicts with '${owner}'.`,
+                    );
+                  }
+                  toolOwners.set(name, integration.id);
+                  tools[name] = tool;
+                }
+              };
+              for (const { integration, ready, ensureReady } of toolIntegrations) {
+                if (!ready && ensureReady) {
+                  try {
+                    await ensureReady();
+                  } catch {
+                    continue;
+                  }
+                }
+                if (integration.agentTools) {
+                  mergeTools(integration, await integration.agentTools({ requestContext }));
+                }
+                if (integration.sessionTools) {
+                  mergeTools(integration, integration.sessionTools(requestContext));
+                }
+              }
+              return tools;
+            },
           }
         : {}),
       ...(githubReady
@@ -304,8 +415,9 @@ export class MastraFactory {
               if (requestContext) {
                 await observeAgentGitAction({ ...context, context: requestContext });
               }
-              if (pullRequestUrl && requestContext) {
-                await subscribeCurrentSessionToPullRequest(requestContext, pullRequestUrl, 'auto-gh-pr-create');
+              const github = getSeededGithubIntegration();
+              if (pullRequestUrl && requestContext && github) {
+                await subscribeCurrentSessionToPullRequest(requestContext, pullRequestUrl, 'auto-gh-pr-create', github);
               }
             },
           }
@@ -317,14 +429,14 @@ export class MastraFactory {
         // Hono app the deployer generates. `requiresAuth: false`; the gate
         // skips `/auth/*`.
         ...(auth ? buildAuthRoutes(auth) : []),
-        // Custom `/web/*` routes (fs / config / github / factory / audit).
+        // Custom `/web/*` routes (fs / config / integrations / factory / audit).
         ...assembleWebApiRoutes({
           controllerId: CONTROLLER_ID,
           controller,
           authStorage,
           publicOrigin,
-          githubReady,
-          linearReady,
+          stateSigner,
+          integrations: readyIntegrations,
           intakeReady,
           factoryReady,
         }),

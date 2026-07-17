@@ -42,6 +42,7 @@ import {
   MastraPlatformExporter,
   SensitiveDataFilter,
 } from '@mastra/observability';
+import { PostgresStore } from '@mastra/pg';
 
 import { hasCredentialStoreProvider } from './agents/credential-resolver.js';
 import { getDynamicInstructions } from './agents/instructions.js';
@@ -193,8 +194,10 @@ export interface MastraCodeConfig {
    * LibSQL fallback — if the injected store fails, that's a hard error.
    */
   storage?: StorageConfig | MastraCompositeStore;
+  /** Backend for an injected custom storage instance. Inferred for LibSQLStore and PostgresStore. */
+  storageBackend?: 'libsql' | 'pg';
   /** Pre-built vector store instance for recall search. Skips the default vector store creation. */
-  vectorStore?: MastraVector;
+  vector?: MastraVector;
   /** Observational memory scope. Default: auto-detected from env/config files, falls back to 'thread' */
   omScope?: 'thread' | 'resource';
   /** Path to a custom settings.json file. Default: global settings */
@@ -223,7 +226,7 @@ export interface MastraCodeConfig {
   pluginManager?: PluginManager;
   /**
    * Override the memory instance (or dynamic factory) passed to the AgentController.
-   * When provided, this replaces the default `getDynamicMemory(storage, vectorStore)` which
+   * When provided, this replaces the default `getDynamicMemory(storage, vector)` which
    * uses mastracode's built-in model gateway (Anthropic OAuth, OpenAI Codex,
    * custom providers, and models.dev fallback).
    *
@@ -280,6 +283,16 @@ function resolveCloudObservabilityConfig(
  *
  * See {@link bootLocalAgentController} (Case 3) and `mountAgentControllerOnMastra` (Cases 1 & 2).
  */
+function resolveInjectedStorageBackend(
+  storage: MastraCompositeStore,
+  configuredBackend?: 'libsql' | 'pg',
+): 'libsql' | 'pg' {
+  if (configuredBackend) return configuredBackend;
+  if (storage instanceof LibSQLStore) return 'libsql';
+  if (storage instanceof PostgresStore) return 'pg';
+  throw new Error('storageBackend is required when injecting a custom storage instance.');
+}
+
 export async function createMastraCodeAgentController(config?: MastraCodeConfig) {
   const cwd = config?.cwd ?? process.cwd();
   const homeDir = config?.homeDir ?? config?.initialState?.homeDir;
@@ -389,7 +402,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     : ((config?.storage as StorageConfig | undefined) ??
       getStorageConfig(project.rootPath, globalSettings.storage, configDir));
   const storageResult: StorageResult = injectedStorage
-    ? { storage: injectedStorage, backend: injectedStorage instanceof LibSQLStore ? 'libsql' : 'pg' }
+    ? { storage: injectedStorage, backend: resolveInjectedStorageBackend(injectedStorage, config?.storageBackend) }
     : await createStorage(storageConfig!);
   const storageWarning = storageResult.warning;
 
@@ -491,9 +504,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
 
   // Vector store for recall search (separate DB file to avoid bloating main
   // storage). An injected instance is used as-is; with an injected storage
-  // instance and no injected vector store, recall search stays vector-less.
-  const vectorStore =
-    config?.vectorStore ?? (storageConfig ? await createVectorStore(storageConfig, storageResult.backend) : undefined);
+  // instance and no injected vector, recall search stays vector-less.
+  const vector =
+    config?.vector ?? (storageConfig ? await createVectorStore(storageConfig, storageResult.backend) : undefined);
 
   // Maintenance handle for /prune: prunes via the inner store (whose retention
   // config covers every domain, including legacy libsql observability spans)
@@ -505,10 +518,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     backend: storageResult.backend,
     retention: DEFAULT_RETENTION,
     localDbFiles: storageConfig ? resolveLocalDbFiles(storageConfig, storageResult.backend) : [],
-    closeVector: vectorStore instanceof LibSQLVector ? () => vectorStore.close() : undefined,
+    closeVector: vector instanceof LibSQLVector ? () => vector.close() : undefined,
   });
 
-  const memory = config?.memory === false ? undefined : (config?.memory ?? getDynamicMemory(storage, vectorStore));
+  const memory = config?.memory === false ? undefined : (config?.memory ?? getDynamicMemory(storage, vector));
 
   // MCP
   const mcpManager = config?.disableMcp ? undefined : createMcpManager(project.rootPath, configDir, config?.mcpServers);

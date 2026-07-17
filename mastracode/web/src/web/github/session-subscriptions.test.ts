@@ -12,27 +12,21 @@ vi.mock('./subscriptions', () => ({
   unsubscribeFromPullRequest: mocks.unsubscribe,
 }));
 
-vi.mock('./client', () => ({
+// Stub integration: entry points consume the injected instance for PR verification and persistence.
+const githubStub = {
+  storageDomain: {
+    getOrgProject: vi.fn(async () => ({
+      id: 'project-1',
+      orgId: 'org-1',
+      installationId: 7,
+      repoId: 99,
+      repoFullName: 'mastra-ai/mastra',
+    })),
+    subscribeToPullRequest: mocks.subscribe,
+    unsubscribeFromPullRequest: mocks.unsubscribe,
+  },
   getInstallationOctokit: () => ({ pulls: { get: mocks.getPullRequest } }),
-}));
-
-vi.mock('./db', () => ({
-  getAppDb: () => ({
-    select: () => ({
-      from: () => ({
-        where: async () => [
-          {
-            id: 'project-1',
-            orgId: 'org-1',
-            installationId: 7,
-            repoId: 99,
-            repoFullName: 'mastra-ai/mastra',
-          },
-        ],
-      }),
-    }),
-  }),
-}));
+} as unknown as import('./integration').GithubIntegration;
 
 import {
   createGithubSubscriptionTools,
@@ -109,7 +103,7 @@ describe('GitHub subscription entry points', () => {
     const requestContext = new RequestContext();
     requestContext.set('controller', { getState: () => ({ githubProjectId: 'project-1' }) });
 
-    expect(createGithubSubscriptionTools(requestContext)).toEqual({});
+    expect(createGithubSubscriptionTools(requestContext, githubStub)).toEqual({});
   });
 
   it('silently skips auto-subscription outside GitHub-project sessions', async () => {
@@ -138,8 +132,8 @@ describe('GitHub subscription entry points', () => {
   it('subscribes the exact scoped session after verifying the active-project PR', async () => {
     const requestContext = authenticatedRequestContext('/worktrees/a');
 
-    await subscribeCurrentSessionToPullRequest(requestContext, 123, 'auto-gh-pr-create');
-    await subscribeCurrentSessionToPullRequest(requestContext, 123, 'auto-gh-pr-create');
+    await subscribeCurrentSessionToPullRequest(requestContext, 123, 'auto-gh-pr-create', githubStub);
+    await subscribeCurrentSessionToPullRequest(requestContext, 123, 'auto-gh-pr-create', githubStub);
 
     expect(mocks.getPullRequest).toHaveBeenCalledWith({ owner: 'mastra-ai', repo: 'mastra', pull_number: 123 });
     expect(mocks.subscribe).toHaveBeenCalledTimes(2);
@@ -160,14 +154,25 @@ describe('GitHub subscription entry points', () => {
         authenticatedRequestContext(),
         'https://github.com/other/repo/pull/123',
         'explicit-tool',
+        githubStub,
       ),
     ).rejects.toThrow('Pull request must belong to mastra-ai/mastra.');
     expect(mocks.subscribe).not.toHaveBeenCalled();
   });
 
   it('keeps parallel worktree scopes isolated', async () => {
-    await subscribeCurrentSessionToPullRequest(authenticatedRequestContext('/worktrees/a'), 123, 'explicit-tool');
-    await subscribeCurrentSessionToPullRequest(authenticatedRequestContext('/worktrees/b'), 123, 'explicit-tool');
+    await subscribeCurrentSessionToPullRequest(
+      authenticatedRequestContext('/worktrees/a'),
+      123,
+      'explicit-tool',
+      githubStub,
+    );
+    await subscribeCurrentSessionToPullRequest(
+      authenticatedRequestContext('/worktrees/b'),
+      123,
+      'explicit-tool',
+      githubStub,
+    );
 
     expect(mocks.subscribe.mock.calls.map(([input]) => input.sessionScope)).toEqual(['/worktrees/a', '/worktrees/b']);
   });
@@ -176,6 +181,7 @@ describe('GitHub subscription entry points', () => {
     const number = await unsubscribeCurrentSessionFromPullRequest(
       authenticatedRequestContext('/worktrees/a'),
       'https://github.com/mastra-ai/mastra/pull/123',
+      githubStub,
     );
 
     expect(number).toBe(123);
