@@ -204,6 +204,34 @@ export function getSignalContentsText(message: MastraDBMessage): string {
   return contentsToText(getSignalView(message).contents);
 }
 
+export interface UserSignalView {
+  message: string;
+  imageCount: number;
+  fileCount: number;
+}
+
+/** Fields needed to render a user-kind signal as a user message. */
+export function getUserSignalView(message: MastraDBMessage): UserSignalView {
+  const contents = getSignalView(message).contents;
+  if (typeof contents === 'string') {
+    return { message: contents, imageCount: 0, fileCount: 0 };
+  }
+
+  let imageCount = 0;
+  let fileCount = 0;
+  for (const part of contents) {
+    if (part.type !== 'file') continue;
+    if (part.mediaType.startsWith('image/')) imageCount++;
+    else fileCount++;
+  }
+
+  return {
+    message: contentsToText(contents),
+    imageCount,
+    fileCount,
+  };
+}
+
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }
@@ -247,6 +275,13 @@ export function getReminderView(message: MastraDBMessage): ReminderView {
     judgeModelId: asString(metadata.judgeModelId),
     goalEvaluation: metadata.goalEvaluation,
   };
+}
+
+/** True for the persisted mirror of a live goal evaluation lifecycle event. */
+export function isGoalJudgeEvaluationSignal(message: MastraDBMessage): boolean {
+  if (!isSignalMessage(message) || getSignalKind(message) !== 'reminder') return false;
+  const reminder = getReminderView(message);
+  return reminder.reminderType === 'goal-judge' && reminder.goalEvaluation !== undefined;
 }
 
 export interface StateSignalView {

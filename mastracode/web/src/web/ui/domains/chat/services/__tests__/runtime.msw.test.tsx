@@ -53,4 +53,17 @@ describe('chat runtime reducer', () => {
 
     vi.useRealTimers();
   });
+
+  it('accepts persisted messages whose content uses the format-2 parts envelope', () => {
+    const event = {
+      type: 'message_update',
+      message: {
+        id: 'assistant-2',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'Working' }] },
+      },
+    } as Parameters<typeof runtimeReducer>[1];
+
+    expect(runtimeReducer(initialChatRuntime, event)._decodeStartedAt).toBeGreaterThan(0);
+  });
 });
