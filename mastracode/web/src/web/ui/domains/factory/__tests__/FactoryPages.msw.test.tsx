@@ -506,6 +506,35 @@ describe('Factory Work and Review intake candidates', () => {
     expect(state.posts).toHaveLength(0);
   });
 
+  it('given a PR from a Factory issue branch, when it is added to Review, then the issue relation is persisted', async () => {
+    const state = useBoardHandlers({
+      pullRequests: [{ ...pullRequests[0], headBranch: 'factory/issue-12' }],
+      workItems: [
+        makeWorkItem({
+          id: 'wi-issue',
+          title: 'Fix flaky test',
+          source: 'github-issue',
+          sourceKey: 'github-issue:12',
+          sessions: {
+            work: {
+              projectPath: '/sandbox/mastra/worktrees/factory-issue-12',
+              branch: 'factory/issue-12',
+              threadId: 'thread-work',
+              startedBy: 'user-1',
+            },
+          },
+        }),
+      ],
+    });
+    renderAt('/factory/review');
+
+    const intake = await screen.findByTestId('board-column-intake');
+    await userEvent.click(await within(intake).findByRole('button', { name: 'More actions for Add factory pages' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Add to board' }));
+
+    await waitFor(() => expect(state.posts).toEqual([expect.objectContaining({ parentWorkItemId: 'wi-issue' })]));
+  });
+
   it('given GitHub Intake is configured, when the Board renders, then Intake offers repository issue creation in a new tab', async () => {
     useBoardHandlers();
     renderAt('/factory/board');
@@ -842,14 +871,22 @@ describe('Factory Board — persisted cards', () => {
           source: 'github-issue',
           sourceKey: 'github-issue:12',
           stages: ['review'],
+          sessions: {
+            work: {
+              projectPath: '/sandbox/mastra/worktrees/factory-issue-12',
+              branch: 'factory/issue-12',
+              threadId: 'thread-work',
+              startedBy: 'user-1',
+            },
+          },
         }),
         makeWorkItem({
           id: 'wi-review',
-          parentWorkItemId: 'wi-issue',
           title: 'Fix flaky test',
           source: 'github-pr',
           sourceKey: 'github-pr:34',
           stages: ['review'],
+          metadata: { headBranch: 'factory/issue-12' },
         }),
       ],
     });
@@ -859,7 +896,10 @@ describe('Factory Board — persisted cards', () => {
     const workCard = within(workColumn).getByTestId('work-item-card');
     expect(within(workCard).getByText('Issue:')).toBeInTheDocument();
     expect(within(workCard).queryByText('PR Review:')).not.toBeInTheDocument();
-    expect(within(workCard).getByText('Review: PR #34')).toBeInTheDocument();
+    expect(within(workCard).getByRole('link', { name: 'Open Review: PR #34' })).toHaveAttribute(
+      'href',
+      '/factory/review',
+    );
 
     const nav = screen.getByRole('navigation', { name: 'Factory' });
     await userEvent.click(within(nav).getByRole('link', { name: 'Review' }));
@@ -867,7 +907,10 @@ describe('Factory Board — persisted cards', () => {
     const reviewCard = within(column('review')).getByTestId('work-item-card');
     expect(within(reviewCard).getByText('PR Review:')).toBeInTheDocument();
     expect(within(reviewCard).queryByText('Issue:')).not.toBeInTheDocument();
-    expect(within(reviewCard).getByText('Work item: Issue #12')).toBeInTheDocument();
+    expect(within(reviewCard).getByRole('link', { name: 'Open Work item: Issue #12' })).toHaveAttribute(
+      'href',
+      '/factory/work',
+    );
   });
 
   // A project that still has the worktree the cards' session refs point at:
@@ -908,11 +951,11 @@ describe('Factory Board — persisted cards', () => {
     }),
     makeWorkItem({
       id: 'wi-review',
-      parentWorkItemId: 'wi-issue',
       title: 'Review fix flaky test',
       source: 'github-pr',
       sourceKey: 'github-pr:34',
       stages: ['review'],
+      metadata: { number: 34, headBranch: 'factory/issue-12' },
       sessions: {
         review: {
           projectPath: reviewWorktreePath,
@@ -978,6 +1021,26 @@ describe('Factory Board — persisted cards', () => {
       ).toBe(destinationWorktreePath);
     },
   );
+
+  it('given a related work session whose worktree is gone, when the review thread renders, then it still links to the work item', async () => {
+    const reviewOnlyProject: Factory = {
+      ...githubProject,
+      binding: {
+        ...githubProject.binding,
+        selectedWorktreePath: reviewWorktreePath,
+        worktrees: [{ branch: 'factory/pr-34', worktreePath: reviewWorktreePath, baseBranch: 'main' }],
+      },
+    };
+    useBoardHandlers({ workItems: relatedWorkItems });
+    renderAt('/threads/thread-related-review', reviewOnlyProject, connectedStatus, {
+      sessionThreadId: 'thread-related-review',
+    });
+
+    expect(await screen.findByRole('link', { name: 'Open Work item: Issue #12: Fix flaky test' })).toHaveAttribute(
+      'href',
+      '/factory/work',
+    );
+  });
 
   it('given a work item with sessions, when the Board renders, then the card title links to its thread', async () => {
     useBoardHandlers({

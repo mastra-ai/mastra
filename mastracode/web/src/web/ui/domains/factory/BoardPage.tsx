@@ -5,7 +5,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { CircleDot, EllipsisVertical, ExternalLink, GitCompareArrows, Link2, Plus } from 'lucide-react';
 import type { ComponentType, DragEvent } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 
 import { useApiConfig } from '../../../../shared/api/config';
 import { useSelectWorkspaceMutation, useWorkspacesQuery } from '../../../../shared/hooks/useWorkspaces';
@@ -36,7 +36,12 @@ import { useWorkItemsQuery } from '../../../../shared/hooks/useWorkItems';
 import type { GithubIssue, GithubPullRequest } from './services/factory';
 import type { LinearIssue } from './services/linear';
 import { connectLinear, isLinearReauthError } from './services/linear';
-import { relatedWorkItems, relationshipLabel } from './services/relationships';
+import {
+  inferredParentWorkItemId,
+  relatedWorkItems,
+  relationshipLabel,
+  relationshipPath,
+} from './services/relationships';
 import type { WorkItem, WorkItemSessionRef, WorkItemSource } from './services/workItems';
 import { BOARD_STAGES, stageLabel } from './stages';
 import type { BoardStageId } from './stages';
@@ -629,7 +634,8 @@ function BoardContent({
     }
     // Filing a candidate never starts a run — it only creates the card.
     const { source, sourceKey, title, url, metadata } = payload.candidate;
-    upsert.mutate({ source, sourceKey, title, url, stages: [toStage], metadata });
+    const parentWorkItemId = source === 'github-pr' ? inferredParentWorkItemId(metadata, allWorkItems) : undefined;
+    upsert.mutate({ source, sourceKey, parentWorkItemId, title, url, stages: [toStage], metadata });
   };
 
   if (items.isPending) return <SkeletonRows label="Loading board" rows={4} rowClassName="h-24 w-full" />;
@@ -789,6 +795,10 @@ function BoardContent({
                         stages: [action.stage],
                         source: candidate.source,
                         sourceKey: candidate.sourceKey,
+                        parentWorkItemId:
+                          candidate.source === 'github-pr'
+                            ? inferredParentWorkItemId(candidate.metadata, allWorkItems)
+                            : undefined,
                         title: candidate.title,
                         url: candidate.url,
                         metadata: candidate.metadata,
@@ -804,6 +814,10 @@ function BoardContent({
                         stages: [candidate.column],
                         source: candidate.source,
                         sourceKey: candidate.sourceKey,
+                        parentWorkItemId:
+                          candidate.source === 'github-pr'
+                            ? inferredParentWorkItemId(candidate.metadata, allWorkItems)
+                            : undefined,
                         title: candidate.title,
                         url: candidate.url,
                         metadata: candidate.metadata,
@@ -1032,10 +1046,15 @@ function WorkItemCard({
       {relatedItems.map(related => {
         const relationText = relationshipLabel(related);
         return (
-          <div key={related.id} className="flex items-center gap-1 text-ui-xs text-accent2" aria-label={relationText}>
+          <Link
+            key={related.id}
+            to={relationshipPath(related)}
+            className="flex items-center gap-1 text-ui-xs text-accent2 hover:underline"
+            aria-label={`Open ${relationText}`}
+          >
             <Link2 size={11} aria-hidden />
             <span className="truncate">{relationText}</span>
-          </div>
+          </Link>
         );
       })}
       {otherStages.length > 0 && (
