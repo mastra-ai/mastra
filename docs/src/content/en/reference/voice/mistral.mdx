@@ -215,7 +215,7 @@ Transcribes audio using Mistral's Voxtral transcription model. Supports diarizat
           {
             name: 'contextBias',
             type: 'string[]',
-            description: 'Up to 100 words or phrases for vocabulary guidance.',
+            description: 'Words or phrases for vocabulary guidance.',
             isOptional: true,
           },
           {
@@ -285,4 +285,4 @@ Returns `{ enabled: true }`.
 - TTS input text should be kept under 300 words per request for best results
 - STT supports up to 3 hours of audio per request
 - Voice cloning via `refAudio` requires a minimum of 2-3 seconds of reference audio
-- `language` and `timestampGranularities` cannot be used together in `listen()`
+- `getSpeakers()` returns preset voices with UUID identifiers. The default `en_paul_neutral` is a named alias accepted by the TTS endpoint but not included in the list
