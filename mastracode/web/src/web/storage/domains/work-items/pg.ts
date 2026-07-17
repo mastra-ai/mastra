@@ -227,7 +227,11 @@ export class WorkItemsStoragePG extends WorkItemsStorage {
       if (input.parentWorkItemId == null) return await insert(this.#db);
       return await this.#withTx(async client => {
         await this.#lockProjectRelations(client, orgId, githubProjectId);
-        validateParentRelation(await this.#projectItems(client, orgId, githubProjectId), undefined, input.parentWorkItemId!);
+        validateParentRelation(
+          await this.#projectItems(client, orgId, githubProjectId),
+          undefined,
+          input.parentWorkItemId!,
+        );
         return insert(client);
       });
     } catch (err) {

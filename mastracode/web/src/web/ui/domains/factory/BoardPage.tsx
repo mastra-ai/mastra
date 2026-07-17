@@ -2,14 +2,7 @@ import { Button, buttonVariants } from '@mastra/playground-ui/components/Button'
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import {
-  CircleDot,
-  EllipsisVertical,
-  GitCompareArrows,
-  Link2,
-  MessageSquare,
-  Plus,
-} from 'lucide-react';
+import { CircleDot, EllipsisVertical, GitCompareArrows, Link2, MessageSquare, Plus } from 'lucide-react';
 import type { ComponentType, DragEvent } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
