@@ -26,24 +26,24 @@ Create the default managed project:
 
 ```bash
 # Before
-mastra create --project-name my-app --default
+npx create-mastra@latest --project-name my-app --default
 
 # After
-mastra create my-app --yes
+npx create-mastra@latest my-app --llm openai
 ```
 
 Create a minimal project instead of configuring components or examples:
 
 ```bash
 # Before
-mastra create --project-name my-app --components agents,tools --no-example
+npx create-mastra@latest --project-name my-app --components agents,tools --no-example
 
 # After
-mastra create my-app --empty --yes
+npx create-mastra@latest my-app --empty
 ```
 
 Skip the new automatic post-create setup when needed:
 
 ```bash
-mastra create my-app --yes --no-skills --no-git
+npx create-mastra@latest my-app --llm openai --no-skills --no-git
 ```

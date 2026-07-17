@@ -16,7 +16,6 @@ type NormalizedCreateOptions = ReturnType<typeof normalizeCreateCommandOptions>;
 function createOptions(overrides: Partial<NormalizedCreateOptions> = {}): NormalizedCreateOptions {
   return {
     projectName: 'project',
-    yes: false,
     empty: false,
     llmProvider: undefined,
     llmApiKey: undefined,
@@ -104,14 +103,6 @@ describe('create option validation', () => {
       overrides: { template: 'agent-harness', llmApiKey: 'secret' },
       message: 'The --llm-api-key option can only be used with the default template',
     },
-    {
-      overrides: { template: true, yes: true },
-      message: 'The --yes option requires a template value when --template is used',
-    },
-    {
-      overrides: { projectName: undefined, yes: true },
-      message: 'The --yes option requires a positional project name',
-    },
   ])('rejects $message', ({ overrides, message }) => {
     expect(() => validateCreateOptionConflicts(createOptions(overrides))).toThrow(message);
   });
@@ -159,7 +150,6 @@ describe('shared create Commander wiring', () => {
 
     expect(action).toHaveBeenCalledWith({
       projectName: 'project',
-      yes: false,
       empty: false,
       llmProvider: undefined,
       llmApiKey: undefined,
@@ -175,7 +165,6 @@ describe('shared create Commander wiring', () => {
     const subAction = vi.fn();
     const args = [
       'project',
-      '--yes',
       '--llm',
       'anthropic',
       '--llm-api-key',
@@ -191,7 +180,6 @@ describe('shared create Commander wiring', () => {
 
     expect(rootAction.mock.calls[0]?.[0]).toEqual({
       projectName: 'project',
-      yes: true,
       empty: false,
       llmProvider: 'anthropic',
       llmApiKey: 'secret',

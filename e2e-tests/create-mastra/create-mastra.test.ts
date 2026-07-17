@@ -35,7 +35,7 @@ async function runCreate(binary: 'create-mastra' | 'mastra', projectName: string
   if (binary === 'mastra') {
     args.push('create');
   }
-  args.push(projectName, '--yes', '--no-skills', '--no-git', ...extraArgs);
+  args.push(projectName, '--no-skills', '--no-git', ...extraArgs);
 
   await execa('pnpm', args, {
     cwd: testRoot,

@@ -75,7 +75,6 @@ export function getCreateCommandAnalyticsArgs(args: CreateCommandOptions) {
 
 export interface CreateOptions {
   projectName?: string;
-  yes?: boolean;
   empty?: boolean;
   llmProvider?: CreateLLMProvider;
   llmApiKey?: string;
@@ -183,7 +182,6 @@ async function promptForApiKey(provider: CreateLLMProvider): Promise<string | un
 function normalizeDirectCreateOptions(args: CreateOptions): NormalizedCreateOptions {
   return {
     projectName: args.projectName,
-    yes: args.yes ?? false,
     empty: args.empty ?? false,
     llmProvider: args.llmProvider,
     llmApiKey: args.llmApiKey,
@@ -218,20 +216,18 @@ export const create = async (args: CreateOptions): Promise<void> => {
 
   let llmProvider = options.llmProvider;
   let llmApiKey = options.llmApiKey;
-  let providerSelectionMethod: 'cli_args' | 'interactive' | 'default' | undefined;
+  let providerSelectionMethod: 'cli_args' | 'interactive' | undefined;
 
   if (mode === 'managed') {
+    const providerProvidedByCli = llmProvider !== undefined;
     if (llmProvider) {
       providerSelectionMethod = 'cli_args';
-    } else if (options.yes) {
-      llmProvider = 'openai';
-      providerSelectionMethod = 'default';
     } else {
       llmProvider = await promptForProvider();
       providerSelectionMethod = 'interactive';
     }
 
-    if (llmApiKey === undefined && !options.yes) {
+    if (llmApiKey === undefined && !providerProvidedByCli) {
       llmApiKey = await promptForApiKey(llmProvider);
     }
   }

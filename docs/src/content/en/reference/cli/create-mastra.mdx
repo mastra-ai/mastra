@@ -19,11 +19,13 @@ npx create-mastra@latest
 
 The default starter creates an agent harness with workspace tools, memory, task tracking, web access, recurring schedules, storage, and observability. Select OpenAI, Anthropic, Gemini, or xAI as your model provider.
 
-Provide a project name like `my-mastra-project` to directly select your model provider:
+Provide both the project name and provider to create the project without prompts. This example uses Anthropic; you can also pass `openai`, `google`, or `xai`:
 
 ```bash npm2yarn
-npx create-mastra@latest my-mastra-project
+npx create-mastra@latest my-mastra-project --llm anthropic
 ```
+
+Omit `--llm` to select the provider and optionally enter its API key interactively.
 
 ### Template
 
@@ -50,7 +52,7 @@ Template authors own their dependencies, models, environment variables, and sour
 Use `--empty` to create a provider-free project without agents, examples, model SDKs, or environment files:
 
 ```bash npm2yarn
-npx create-mastra@latest my-empty-project --empty --yes
+npx create-mastra@latest my-empty-project --empty
 ```
 
 ## Automatic setup
@@ -66,8 +68,6 @@ Use `--no-skills` or `--no-git` to skip these steps. Skills and Git setup failur
 
 - `--empty` and `--template` can't be used together.
 - `--llm` and `--llm-api-key` are only valid for the default starter project.
-- A bare `--template` can't be used with `--yes` because it requires template selection.
-- `--yes` requires a positional project name.
 - The project name must be a safe, lowercase, single directory name and the target must not already exist.
 
 Invalid input is rejected before templates are fetched or files are created.
@@ -79,13 +79,7 @@ Invalid input is rejected before templates are fetched or files are created.
   {
     name: '[project-name]',
     type: 'string',
-    description: 'Project directory and package name. Required with --yes.',
-    isOptional: true,
-  },
-  {
-    name: '--yes',
-    type: 'boolean',
-    description: 'Skip prompts. Requires a project name and defaults the managed provider to OpenAI.',
+    description: 'Project directory and package name. When omitted, the command prompts for it.',
     isOptional: true,
   },
   {
@@ -152,5 +146,5 @@ Mastra collects anonymous CLI usage information, such as the operating system, M
 Set `MASTRA_TELEMETRY_DISABLED=1` to opt out:
 
 ```bash
-MASTRA_TELEMETRY_DISABLED=1 npx create-mastra@latest my-project --yes
+MASTRA_TELEMETRY_DISABLED=1 npx create-mastra@latest my-project --empty
 ```

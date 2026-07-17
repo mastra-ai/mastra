@@ -47,7 +47,6 @@ describe('createProject', () => {
     const analytics = { trackCommandExecution } as never;
     const { createProjectWithDependencies } = await import('./create-project');
     const args = {
-      yes: true,
       empty: false,
       llm: 'anthropic' as const,
       llmApiKey: 'secret',

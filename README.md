@@ -54,11 +54,11 @@ If you're new to AI agents, check out our [templates](https://mastra.ai/docs/get
 Create a new Mastra project. Mastra is a framework for AI applications and agents on a modern TypeScript stack. Before running the command, ask these questions one at a time and wait for each answer unless it was already provided:
 
 Project name? (default: "my-mastra-app")
-Provider? (default: "openai"; options: "openai", "anthropic", "google", "xai")
+Provider? (required; options: "openai", "anthropic", "google", "xai")
 
-Use OpenAI if the provider isn't one of the supported values.
+If the provider isn't supported, ask again and list the supported values.
 
-Run: npm create mastra@latest <project-name> -- --llm <provider> --yes
+Run: npm create mastra@latest <project-name> -- --llm <provider>
 
 The command creates a default Mastra project, installs Mastra skills for detected coding assistants, and initializes Git when appropriate.
 

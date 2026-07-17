@@ -819,14 +819,14 @@ List all available scorer templates. Use the ID for the `add` command.
 Create a standalone Mastra project with the same project-creation flow as [`create-mastra`](/reference/cli/create-mastra).
 
 ```bash npm2yarn
-npx mastra@latest create my-mastra-project --yes
+npx mastra@latest create
 ```
 
-By default, the command uses a default starter project. Use `--llm <provider>` to select OpenAI, Anthropic, Google Gemini, or xAI, `--template [template]` to use an arbitrary template, or `--empty` to create a minimal provider-free scaffold.
+Providing both the project name and `--llm` skips the interactive setup prompts. Use `--template [template]` for an arbitrary template or `--empty` for a minimal provider-free scaffold.
 
 The command installs Mastra skills for detected coding assistants and initializes Git when appropriate. Use `--no-skills` or `--no-git` to opt out.
 
-`mastra create` accepts the positional `[project-name]` argument and these options: `--yes`, `--empty`, `-l, --llm <provider>`, `-k, --llm-api-key <key>`, `--no-skills`, `--no-git`, `-t, --template [template]`, and `--timeout <milliseconds>`. See the [`create-mastra` reference](/reference/cli/create-mastra) for mode behavior, conflicts, validation, and complete flag descriptions.
+See the [`create-mastra` reference](/reference/cli/create-mastra) for mode behavior, conflicts, validation, and complete flag descriptions.
 
 ## `mastra init`
 

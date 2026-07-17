@@ -13,7 +13,6 @@ export type CreateLLMProvider = (typeof CREATE_LLM_PROVIDERS)[number]['value'];
 export type CreateMode = 'managed' | 'template' | 'empty';
 
 export interface CreateCommandOptions {
-  yes?: boolean;
   empty?: boolean;
   llm?: CreateLLMProvider;
   llmApiKey?: string;
@@ -25,7 +24,6 @@ export interface CreateCommandOptions {
 
 export interface NormalizedCreateOptions {
   projectName?: string;
-  yes: boolean;
   empty: boolean;
   llmProvider?: CreateLLMProvider;
   llmApiKey?: string;
@@ -62,7 +60,6 @@ export function configureCreateCommand(command: Command) {
   return command
     .description('Create a new Mastra project')
     .argument('[project-name]', 'Directory name of the project')
-    .option('--yes', 'Skip prompts and use defaults')
     .option('--empty', 'Create an empty project')
     .option(
       '-l, --llm <provider>',
@@ -85,7 +82,6 @@ export function normalizeCreateCommandOptions(
 ): NormalizedCreateOptions {
   return {
     projectName,
-    yes: options.yes ?? false,
     empty: options.empty ?? false,
     llmProvider: options.llm,
     llmApiKey: options.llmApiKey,
@@ -113,12 +109,6 @@ export function validateCreateOptionConflicts(options: NormalizedCreateOptions):
   }
   if (mode !== 'managed' && options.llmApiKey !== undefined) {
     throw new Error('The --llm-api-key option can only be used with the default template');
-  }
-  if (options.yes && options.template === true) {
-    throw new Error('The --yes option requires a template value when --template is used');
-  }
-  if (options.yes && !options.projectName) {
-    throw new Error('The --yes option requires a positional project name');
   }
 
   return mode;

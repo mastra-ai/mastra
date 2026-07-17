@@ -8,7 +8,7 @@ import QuickstartPrompt from "@site/src/content/en/docs/getting-started/_partial
 # Mastra Quickstart
 
 <Inject>
-  **For AI agents:** Create a new Mastra project non-interactively with `npm create mastra@latest <project-name> -- --yes`. For a minimal project without an agent or model provider, use `npm create mastra@latest <project-name> -- --empty --yes`. To build a Mastra project from scratch, see the [manual installation guide](https://mastra.ai/docs/getting-started/manual-install).
+  **For AI agents:** Create a new Mastra project non-interactively with `npm create mastra@latest <project-name> -- --llm <provider>`, replacing `<provider>` with `openai`, `anthropic`, `google`, or `xai`. For a minimal project without an agent or model provider, use `npm create mastra@latest <project-name> -- --empty`. To build a Mastra project from scratch, see the [manual installation guide](https://mastra.ai/docs/getting-started/manual-install).
 </Inject>
 
 The `create-mastra` CLI is the quickest way to start a Mastra project. It creates an agent harness with workspace tools, memory, task tracking, web access, schedules, storage, and observability.

@@ -157,14 +157,14 @@ beforeEach(async () => {
 });
 
 describe('create preflight and mode orchestration', () => {
-  it('uses default template by default and --yes supplies OpenAI without prompts', async () => {
+  it('uses the default template and an explicit provider skips model prompts', async () => {
     const { create } = await import('./create');
     const { cloneTemplate } = await import('../../utils/clone-template');
     const { loadTemplates } = await import('../../utils/template-utils');
     const prompts = await import('@clack/prompts');
     const resolveVersionTag = vi.fn().mockResolvedValue('latest');
 
-    await create({ projectName: 'my-project', yes: true, resolveVersionTag });
+    await create({ projectName: 'my-project', llmProvider: 'openai', resolveVersionTag });
 
     expect(resolveVersionTag).toHaveBeenCalledOnce();
     expect(prompts.text).not.toHaveBeenCalled();
@@ -298,6 +298,21 @@ describe('create preflight and mode orchestration', () => {
     });
   });
 
+  it('empty mode with an explicit project name skips every prompt', async () => {
+    const { create } = await import('./create');
+    const prompts = await import('@clack/prompts');
+
+    await create({
+      projectName: 'my-project',
+      empty: true,
+      resolveVersionTag: vi.fn().mockResolvedValue('latest'),
+    });
+
+    expect(prompts.text).not.toHaveBeenCalled();
+    expect(prompts.select).not.toHaveBeenCalled();
+    expect(prompts.password).not.toHaveBeenCalled();
+  });
+
   it('rejects conflicting options before prompts or side effects', async () => {
     const { create } = await import('./create');
     const prompts = await import('@clack/prompts');
@@ -369,7 +384,11 @@ describe('create preflight and mode orchestration', () => {
     const { create } = await import('./create');
     const { cloneTemplate } = await import('../../utils/clone-template');
 
-    await create({ projectName: 'my-project', yes: true, resolveVersionTag: vi.fn().mockResolvedValue('beta') });
+    await create({
+      projectName: 'my-project',
+      llmProvider: 'openai',
+      resolveVersionTag: vi.fn().mockResolvedValue('beta'),
+    });
 
     expect(cloneTemplate).toHaveBeenCalledWith(expect.objectContaining({ branch: 'beta' }));
   });
@@ -407,7 +426,11 @@ describe('create materialization lifecycle', () => {
     vi.mocked(adaptDefaultTemplate).mockRejectedValueOnce(new Error('compatibility failure'));
 
     await expect(
-      create({ projectName: 'my-project', yes: true, resolveVersionTag: vi.fn().mockResolvedValue('latest') }),
+      create({
+        projectName: 'my-project',
+        llmProvider: 'openai',
+        resolveVersionTag: vi.fn().mockResolvedValue('latest'),
+      }),
     ).rejects.toThrow('compatibility failure');
 
     expect(installDependencies).not.toHaveBeenCalled();
@@ -462,7 +485,6 @@ describe('create materialization lifecycle', () => {
     await create({
       projectName: 'my-project',
       llmProvider: 'anthropic',
-      yes: true,
       resolveVersionTag: vi.fn().mockResolvedValue('latest'),
     });
 
@@ -485,7 +507,11 @@ describe('create skills and git automation', () => {
       agents: ['claude-code', 'universal'],
     });
 
-    await create({ projectName: 'my-project', yes: true, resolveVersionTag: vi.fn().mockResolvedValue('latest') });
+    await create({
+      projectName: 'my-project',
+      llmProvider: 'openai',
+      resolveVersionTag: vi.fn().mockResolvedValue('latest'),
+    });
 
     expect(commandUtils.isGitInitialized).toHaveBeenNthCalledWith(1, { cwd: process.cwd() });
     expect(commandUtils.isGitInitialized).toHaveBeenNthCalledWith(2, {
@@ -612,7 +638,11 @@ describe('create skills and git automation', () => {
     vi.mocked(commandUtils.gitInit).mockRejectedValueOnce(new Error('git unavailable'));
 
     await expect(
-      create({ projectName: 'my-project', yes: true, resolveVersionTag: vi.fn().mockResolvedValue('latest') }),
+      create({
+        projectName: 'my-project',
+        llmProvider: 'openai',
+        resolveVersionTag: vi.fn().mockResolvedValue('latest'),
+      }),
     ).resolves.toBeUndefined();
 
     expect(publishStagedProject).toHaveBeenCalledOnce();
