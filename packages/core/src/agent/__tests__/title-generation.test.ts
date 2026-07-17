@@ -3097,4 +3097,38 @@ describe('onTitleGenerated callback', () => {
     // Should not throw — error is caught in the .catch() handler
     await new Promise(resolve => setTimeout(resolve, 200));
   });
+
+  it('should generate title from current thread messages only, not foreign-thread messages under resource scope', async () => {
+    const { agentModel, titleModel } = createMockModels();
+    const { agent } = createAgentWithTitleGen(agentModel, titleModel);
+
+    let capturedMessages: any[] = [];
+    const originalGenTitle = agent.genTitle.bind(agent);
+    agent.genTitle = async (userMessage, reqCtx, obsCtx, model, instructions, uiMessages) => {
+      capturedMessages = uiMessages ?? [];
+      return originalGenTitle(userMessage, reqCtx, obsCtx, model, instructions, uiMessages);
+    };
+
+    // First thread — generates messages under resource 'user-1'
+    await agent.generate('Message from thread A', {
+      memory: {
+        resource: 'user-1',
+        thread: { id: 'thread-cross-1', title: 'Existing' },
+      },
+    });
+
+    // Second thread — new thread, should only see its own messages
+    await agent.generate('Message from thread B', {
+      memory: {
+        resource: 'user-1',
+        thread: { id: 'thread-cross-2', title: '' },
+      },
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    // All captured messages should belong to thread-cross-2 only
+    const foreignMessages = capturedMessages.filter((m: any) => m.threadId && m.threadId !== 'thread-cross-2');
+    expect(foreignMessages).toHaveLength(0);
+  });
 });

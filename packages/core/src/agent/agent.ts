@@ -7179,7 +7179,8 @@ export class Agent<
             | undefined,
         );
 
-        const uiMessages = messageList.get.all.ui();
+        const allUiMessages = messageList.get.all.ui();
+        const uiMessages = allUiMessages.filter((m: any) => !m.threadId || m.threadId === thread.id);
         const messages = messageList.get.all.core();
         const requiredMessages = minMessages ?? 1;
 
