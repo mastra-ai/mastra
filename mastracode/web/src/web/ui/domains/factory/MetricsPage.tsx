@@ -5,14 +5,14 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 
+import { useApiConfig } from '../../../../shared/api/config';
+import { useFactoryMetrics } from '../../../../shared/hooks/useFactoryMetrics';
+import { useWorkspaceActivity } from '../../../../shared/hooks/useWorkspaceActivity';
+import { deriveProjectPath, useWorkspacesQuery } from '../../../../shared/hooks/useWorkspaces';
 import { formatDuration, relativeTime } from '../../../../shared/lib/date';
 import { AGENT_CONTROLLER_ID } from '../chat/services/constants';
 import { useActiveProjectContext } from '../workspaces';
-import { useApiConfig } from '../../../../shared/api/config';
-import { deriveProjectPath, useWorkspacesQuery } from '../workspaces/hooks/useWorkspaces';
-import { useWorkspaceActivity } from '../workspaces/hooks/useWorkspaceActivity';
 import { FactoryPageShell } from './components/FactoryPageShell';
-import { useFactoryMetrics } from './hooks/useFactoryMetrics';
 import type { FactoryMetrics } from './services/metrics';
 import { BOARD_STAGES, stageLabel, stageOrder } from './stages';
 

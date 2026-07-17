@@ -31,10 +31,11 @@ import type { ApiRoute } from '@mastra/core/server';
 import { TaskSignalProvider } from '@mastra/core/signals';
 import { InMemoryHarness, MastraCompositeStore } from '@mastra/core/storage';
 import { DEFAULT_GOAL_JUDGE_PROMPT } from '@mastra/core/tools';
+import type { MastraVector } from '@mastra/core/vector';
 import { DuckDBStore } from '@mastra/duckdb';
 
 import { GithubSignals } from '@mastra/github-signals';
-import { LibSQLVector } from '@mastra/libsql';
+import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import {
   Observability,
   MastraStorageExporter,
@@ -95,6 +96,7 @@ import {
 import type { StorageConfig } from './utils/project.js';
 import { createSignalsPubSub } from './utils/signals-pubsub.js';
 import { createStorage, createVectorStore } from './utils/storage-factory.js';
+import type { StorageResult } from './utils/storage-factory.js';
 import { createStorageMaintenance, DEFAULT_RETENTION, resolveLocalDbFiles } from './utils/storage-maintenance.js';
 import type { StorageMaintenance } from './utils/storage-maintenance.js';
 import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
@@ -183,8 +185,14 @@ export interface MastraCodeConfig {
   postToolObserver?: PostToolObserver;
   /** Tools removed from the dynamic tool set before exposure to the model */
   disabledTools?: string[];
-  /** Custom storage config instead of auto-detected default */
-  storage?: StorageConfig;
+  /**
+   * Custom storage config instead of auto-detected default, or a pre-built
+   * store instance. An instance is used as-is: no connection test and no
+   * LibSQL fallback — if the injected store fails, that's a hard error.
+   */
+  storage?: StorageConfig | MastraCompositeStore;
+  /** Pre-built vector store instance for recall search. Skips the default vector store creation. */
+  vectorStore?: MastraVector;
   /** Observational memory scope. Default: auto-detected from env/config files, falls back to 'thread' */
   omScope?: 'thread' | 'resource';
   /** Path to a custom settings.json file. Default: global settings */
@@ -365,9 +373,16 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     throw new Error('crossProcessPubSub requires a pubsub instance');
   }
 
-  // Storage
-  const storageConfig = config?.storage ?? getStorageConfig(project.rootPath, globalSettings.storage, configDir);
-  const storageResult = await createStorage(storageConfig);
+  // Storage. An injected instance is used as-is — no connection test, no
+  // LibSQL fallback: if the injected store fails, that's a hard error.
+  const injectedStorage = config?.storage instanceof MastraCompositeStore ? config.storage : undefined;
+  const storageConfig = injectedStorage
+    ? undefined
+    : ((config?.storage as StorageConfig | undefined) ??
+      getStorageConfig(project.rootPath, globalSettings.storage, configDir));
+  const storageResult: StorageResult = injectedStorage
+    ? { storage: injectedStorage, backend: injectedStorage instanceof LibSQLStore ? 'libsql' : 'pg' }
+    : await createStorage(storageConfig!);
   const storageWarning = storageResult.warning;
 
   // Observability storage (DuckDB — separate file for OLAP-style trace/score/feedback queries).
@@ -466,8 +481,11 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     },
   });
 
-  // Vector store for recall search (separate DB file to avoid bloating main storage)
-  const vectorStore = await createVectorStore(storageConfig, storageResult.backend);
+  // Vector store for recall search (separate DB file to avoid bloating main
+  // storage). An injected instance is used as-is; with an injected storage
+  // instance and no injected vector store, recall search stays vector-less.
+  const vectorStore =
+    config?.vectorStore ?? (storageConfig ? await createVectorStore(storageConfig, storageResult.backend) : undefined);
 
   // Maintenance handle for /prune: prunes via the inner store (whose retention
   // config covers every domain, including legacy libsql observability spans)
@@ -478,7 +496,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     storage: storageResult.storage,
     backend: storageResult.backend,
     retention: DEFAULT_RETENTION,
-    localDbFiles: resolveLocalDbFiles(storageConfig, storageResult.backend),
+    localDbFiles: storageConfig ? resolveLocalDbFiles(storageConfig, storageResult.backend) : [],
     closeVector: vectorStore instanceof LibSQLVector ? () => vectorStore.close() : undefined,
   });
 

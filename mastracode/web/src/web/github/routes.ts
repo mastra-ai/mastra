@@ -31,6 +31,7 @@ function loose(c: unknown): RouteContext {
   return c as RouteContext;
 }
 import { streamSSE } from 'hono/streaming';
+import { emitAudit } from '../audit/audit';
 import { ensureWebAuthUser, getWebAuthUser, webAuthTenant } from '../auth';
 import type { WebAuthTenant } from '../auth';
 import {
@@ -51,26 +52,29 @@ import { withProjectLock } from './project-lock';
 import { handleGithubWebhook } from './webhook';
 import type { GithubIssueTriageRunInput, GithubIssueTriageRunResult } from './webhook';
 import {
-  commitAll,
   computeSandboxWorkdir,
+  getSandboxProvider,
+  isSandboxEnabled,
+  reattachSandbox,
+  SandboxBudgetError,
+} from '../sandbox/fleet';
+import type { MaterializationSandbox, PrepareProgress, ProgressFn } from '../sandbox/fleet';
+import {
+  commitAll,
   computeWorktreePath,
   createPullRequest,
   ensureProjectSandbox,
   ensureWorktree,
-  getSandboxProvider,
-  isSandboxEnabled,
   isValidGitRef as isValidGitRefSandbox,
   materializeRepo,
   MaterializeError,
   pushBranch,
-  reattachProjectSandbox,
   removeWorktree,
   runWorktreeSetup,
-  SandboxBudgetError,
   teardownProjectSandbox,
   WorktreeError,
 } from './sandbox';
-import type { GitIdentity, MaterializationSandbox, PrepareProgress, ProgressFn } from './sandbox';
+import type { GitIdentity } from './sandbox';
 import { githubInstallations, githubProjects, githubProjectSandboxes, githubWorktrees } from './schema';
 import type { GithubProjectRow, GithubProjectSandboxRow } from './schema';
 import { listPullRequestSubscriptionsForThread, subscribeToPullRequest } from './subscriptions';
@@ -721,6 +725,12 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
           projectPath,
           branch,
         });
+        await emitAudit(loose(c), {
+          action: 'factory.triage.started',
+          projectId: project.id,
+          targets: [{ type: 'issue', id: String(issueNumber), name: body.title }],
+          metadata: { issueNumber, branch, threadId: result.threadId },
+        });
         return c.json(
           {
             ok: true,
@@ -858,7 +868,7 @@ async function resolveProjectSandbox(sandboxRow: GithubProjectSandboxRow): Promi
   if (!sandboxRow.sandboxId) {
     throw new MaterializeError('Project sandbox is not provisioned. Open the project first.', 'clone-failed');
   }
-  return reattachProjectSandbox(sandboxRow.sandboxId);
+  return reattachSandbox(sandboxRow.sandboxId);
 }
 
 /**
@@ -1063,6 +1073,19 @@ function buildProjectGitRoutes(): ApiRoute[] {
                 set: { baseBranch: result.baseBranch, worktreePath: result.worktreePath },
               });
 
+            if (!result.reused) {
+              await emitAudit(loose(c), {
+                action: 'factory.worktree.created',
+                projectId: project.id,
+                targets: [{ type: 'worktree', id: result.worktreePath, name: result.branch }],
+                metadata: {
+                  branch: result.branch,
+                  baseBranch: result.baseBranch,
+                  worktreePath: result.worktreePath,
+                },
+              });
+            }
+
             return c.json({
               worktreePath: result.worktreePath,
               branch: result.branch,
@@ -1117,6 +1140,12 @@ function buildProjectGitRoutes(): ApiRoute[] {
               worktreePath: worktreeRow.worktreePath,
             });
             await getAppDb().delete(githubWorktrees).where(rowFilter);
+            await emitAudit(loose(c), {
+              action: 'factory.worktree.deleted',
+              projectId: project.id,
+              targets: [{ type: 'worktree', id: worktreeRow.worktreePath, name: branch }],
+              metadata: { branch, worktreePath: worktreeRow.worktreePath },
+            });
             return c.json({ removed: true, branch, worktreePath: worktreeRow.worktreePath });
           });
         } catch (err) {
@@ -1157,6 +1186,14 @@ function buildProjectGitRoutes(): ApiRoute[] {
               body.message as string,
               identityFromUser(getWebAuthUser(loose(c))),
             );
+            if (result.committed) {
+              await emitAudit(loose(c), {
+                action: 'factory.git.commit',
+                projectId: project.id,
+                targets: [{ type: 'worktree', id: workdir }],
+                metadata: { worktreePath: workdir },
+              });
+            }
             return c.json({ committed: result.committed });
           });
         } catch (err) {
@@ -1194,6 +1231,12 @@ function buildProjectGitRoutes(): ApiRoute[] {
             const sandbox = await resolveProjectSandbox(sandboxRow);
             const token = await mintInstallationToken(project.installationId);
             await pushBranch(sandbox, workdir, branch, token, project.repoFullName);
+            await emitAudit(loose(c), {
+              action: 'factory.git.push',
+              projectId: project.id,
+              targets: [{ type: 'branch', id: branch }],
+              metadata: { branch, worktreePath: workdir },
+            });
             return c.json({ pushed: true, branch });
           });
         } catch (err) {
@@ -1251,6 +1294,12 @@ function buildProjectGitRoutes(): ApiRoute[] {
             const sandbox = await resolveProjectSandbox(sandboxRow);
             const token = await mintInstallationToken(project.installationId);
             const result = await createPullRequest(sandbox, workdir, { token, base, head, title, body: prBody });
+            await emitAudit(loose(c), {
+              action: 'factory.git.pr_opened',
+              projectId: project.id,
+              targets: [{ type: 'pull_request', id: result.url, name: title }],
+              metadata: { branch: head, base, url: result.url },
+            });
             if (
               typeof body.sessionId === 'string' &&
               body.sessionId &&
@@ -1307,7 +1356,7 @@ function buildProjectGitRoutes(): ApiRoute[] {
 
         try {
           return await withProjectLock(`${project.id}:${userId}`, async () => {
-            const sandbox = await reattachProjectSandbox(sandboxRow.sandboxId!);
+            const sandbox = await reattachSandbox(sandboxRow.sandboxId!);
             await teardownProjectSandbox(sandboxRow, sandbox);
             return c.json({ tornDown: true });
           });

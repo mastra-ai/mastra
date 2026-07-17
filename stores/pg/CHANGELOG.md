@@ -1,5 +1,28 @@
 # @mastra/pg
 
+## 1.16.1-alpha.0
+
+### Patch Changes
+
+- Fixed an issue where the process could crash when Postgres drops an idle database connection (e.g., due to a backend restart, failover, or network failure). ([#19469](https://github.com/mastra-ai/mastra/pull/19469))
+
+  Previously, a dropped idle connection caused an uncaught exception that terminated the process. Now the connection drop is caught and logged as a warning, and the store automatically reconnects on the next database operation.
+
+  User-provided connection pools are unaffected and keep their existing error handling.
+
+- Added stable metrics and logs capability reporting for observability storage. The system packages response now includes `observabilityStorageCapabilities` with `metrics` and `logs` flags, enabling capability-based detection that is resilient to bundler-generated constructor name changes. ([#19305](https://github.com/mastra-ai/mastra/pull/19305))
+
+  ```typescript
+  const packages = await client.getSystemPackages();
+  console.log(packages.observabilityStorageCapabilities?.metrics); // true
+  console.log(packages.observabilityStorageCapabilities?.logs); // true
+  ```
+
+  Studio now uses the capability response instead of relying on constructor names, with a fallback for older servers.
+
+- Updated dependencies [[`1426af2`](https://github.com/mastra-ai/mastra/commit/1426af24975879c000d13ac75673f630fcc970c1), [`975295d`](https://github.com/mastra-ai/mastra/commit/975295d418552f0d46a59edfef4c3ee555f9930a), [`85e4fb5`](https://github.com/mastra-ai/mastra/commit/85e4fb50087a81c74df3a762f53b56373db0b912), [`ef03c0c`](https://github.com/mastra-ai/mastra/commit/ef03c0cfc62367a458e4cc56462e2148b35681c5), [`4fb4d88`](https://github.com/mastra-ai/mastra/commit/4fb4d881bc107acee13890ad4d78661016c510ed), [`4eba27a`](https://github.com/mastra-ai/mastra/commit/4eba27adcf60f991df0e62f94b3e75b4e67f3b4b), [`c701be3`](https://github.com/mastra-ai/mastra/commit/c701be32d7d9aa94a66da8c6cc38dcac6856f464)]:
+  - @mastra/core@1.52.0-alpha.3
+
 ## 1.16.0
 
 ### Minor Changes

@@ -304,11 +304,6 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
 
   fixtures(llm);
 
-  // For evented engine, set env var before building the agent
-  if (engine === 'evented') {
-    process.env.MASTRA_EVENTED_EXECUTION = 'true';
-  }
-
   // Use shared agent/mastra if provided (for suspend/resume flows across calls),
   // otherwise build a fresh one.
   let agent: any;
@@ -472,11 +467,6 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     } catch {
       // cleanup may race
     }
-  }
-
-  // Clean up evented env var
-  if (engine === 'evented') {
-    delete process.env.MASTRA_EVENTED_EXECUTION;
   }
 
   return {

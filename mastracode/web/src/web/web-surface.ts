@@ -13,6 +13,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 
+import { buildAuditRoutes } from './audit/routes.js';
 import { buildConfigRoutes } from './config-routes.js';
 import { buildFsRoutes } from './fs-routes.js';
 import {
@@ -21,23 +22,24 @@ import {
   hasExplicitStateSecret,
   isGithubFeatureEnabled,
 } from './github/config.js';
-import { ensureFactoryDbReady } from './factory/db.js';
 import { buildFactoryRoutes } from './factory/routes.js';
 import { ensureAppDbReady } from './github/db.js';
 import { buildGithubRoutes } from './github/routes.js';
 import type { GithubIssueTriageRunInput, GithubIssueTriageRunResult } from './github/webhook.js';
-import { ensureIntakeDbReady } from './intake/db.js';
 import { buildIntakeRoutes } from './intake/routes.js';
+import { getFactoryStore } from './runtime-config.js';
 import { getLinearFeatureDiagnostics, isLinearFeatureEnabled } from './linear/config.js';
 import { ensureLinearDbReady } from './linear/db.js';
 import { buildLinearRoutes } from './linear/routes.js';
 import { registerSandboxReattach } from './sandbox-reattach-registration.js';
+import { buildSkillRoutes } from './skills/routes.js';
 
 // Wire the core workspace seam to this package's sandbox provisioning as soon
 // as the web surface is loaded, so sandbox-backed workspaces can reattach.
 registerSandboxReattach();
 
 export interface WebApiRoutesDeps {
+  controllerId: string;
   controller: AgentController<MastraCodeState>;
   authStorage: AuthStorage;
   /** Root directory the project picker may browse. Defaults to the user's home. */
@@ -75,7 +77,7 @@ export interface WebApiRoutesDeps {
 export async function resolveFactoryReady(githubReady: boolean): Promise<boolean> {
   if (!githubReady) return false;
   try {
-    await ensureFactoryDbReady();
+    await getFactoryStore().ensureReady('work-items');
     return true;
   } catch (err) {
     process.stderr.write(
@@ -95,7 +97,7 @@ export async function resolveFactoryReady(githubReady: boolean): Promise<boolean
 export async function resolveIntakeReady(anySourceReady: boolean): Promise<boolean> {
   if (!anySourceReady) return false;
   try {
-    await ensureIntakeDbReady();
+    await getFactoryStore().ensureReady('intake');
     return true;
   } catch (err) {
     process.stderr.write(
@@ -120,7 +122,7 @@ export async function resolveLinearReady(): Promise<boolean> {
         'MastraCode Web: Linear routes disabled',
         `  WorkOS auth:          ${diag.webAuthEnabled ? 'enabled' : 'disabled'}`,
         `  Linear OAuth config:  ${diag.linearAppConfigured ? 'configured' : `missing ${missing.join(', ')}`}`,
-        `  App DB:               ${diag.appDbConfigured ? 'configured' : 'not configured (APP_DATABASE_URL missing)'}`,
+        `  App DB:               ${diag.appDbConfigured ? 'configured' : 'not configured (no PostgresStore in the factory storage slot)'}`,
       ].join('\n') + '\n',
     );
     return false;
@@ -174,7 +176,7 @@ export async function resolveGithubReady(): Promise<boolean> {
       'MastraCode Web: GitHub routes disabled',
       `  WorkOS auth:          ${diag.webAuthEnabled ? 'enabled' : 'disabled'}`,
       `  GitHub App config:    ${diag.githubAppConfigured ? 'configured' : `missing ${missing.join(', ')}`}`,
-      `  App DB:               ${diag.appDbConfigured ? 'configured' : 'not configured (APP_DATABASE_URL missing)'}`,
+      `  App DB:               ${diag.appDbConfigured ? 'configured' : 'not configured (no PostgresStore in the factory storage slot)'}`,
       `  State secret:         ${diag.stateSecretConfigured ? 'configured' : 'random per-process (multi-replica unsafe)'}`,
       `  Sandbox provider:     ${diag.sandboxProvider} (${diag.sandboxEnabled ? 'enabled' : 'disabled'})`,
     ];
@@ -324,6 +326,7 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
   return [
     ...buildFsRoutes({ root: deps.fsRoot }),
     ...buildConfigRoutes({ controller: deps.controller, authStorage: deps.authStorage }),
+    ...buildSkillRoutes({ controllerId: deps.controllerId, controller: deps.controller }),
     ...(deps.githubReady
       ? buildGithubRoutes({
           baseUrl: deps.publicOrigin,
@@ -334,5 +337,6 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
     ...(deps.linearReady ? buildLinearRoutes({ baseUrl: deps.publicOrigin }) : []),
     ...(deps.intakeReady ? buildIntakeRoutes() : []),
     ...(deps.factoryReady ? buildFactoryRoutes() : []),
+    ...(deps.factoryReady ? buildAuditRoutes({ baseUrl: deps.publicOrigin }) : []),
   ];
 }

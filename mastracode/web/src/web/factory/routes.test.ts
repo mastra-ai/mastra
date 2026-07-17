@@ -11,9 +11,10 @@ vi.mock('drizzle-orm', async () => {
   };
 });
 
-// In-memory tables keyed by their Postgres names.
-let tables: Record<string, Array<Record<string, any>>> = {};
-let nextId = 1;
+// In-memory github_projects rows served by the getAppDb mock — the routes
+// still resolve project ownership through the (temporary) app-DB bridge;
+// work items themselves go through the in-memory factory storage domain.
+let projects: Array<Record<string, any>> = [];
 
 function columnJsKey(table: any, columnName: string): string | undefined {
   for (const [jsKey, col] of Object.entries(table)) {
@@ -32,86 +33,40 @@ function matches(table: any, row: any, cond: any): boolean {
   return true;
 }
 
-function rowsOf(table: any): Array<Record<string, any>> {
-  const name = table?.[Symbol.for('drizzle:Name')] ?? table?.name;
-  // Resolve by matching a known column set instead when the symbol isn't set.
-  if (typeof name === 'string' && tables[name]) return tables[name];
-  if (columnJsKey(table, 'source_key')) return (tables['work_items'] ??= []);
-  if (columnJsKey(table, 'repo_full_name')) return (tables['github_projects'] ??= []);
-  return (tables['unknown'] ??= []);
-}
+// Capture audit events at the store boundary so the real `emitAudit` path
+// (actor resolution, request context, never-throws) is exercised end to end.
+let auditRecorded: Array<Record<string, any>> = [];
+let auditFailure: Error | undefined;
 
-// Serialize transactions the way row locks would: each `db.transaction` waits
-// for the previous one to finish, so a locked read always sees prior writes.
-let txTail: Promise<unknown> = Promise.resolve();
+vi.mock('../audit/store', () => ({
+  recordAuditEvent: async (input: any) => {
+    if (auditFailure) throw auditFailure;
+    auditRecorded.push(input);
+    return {
+      id: `00000000-0000-4000-9000-${String(auditRecorded.length).padStart(12, '0')}`,
+      occurredAt: new Date(),
+      ...input,
+      githubProjectId: input.githubProjectId ?? null,
+      metadata: input.metadata ?? {},
+      context: input.context ?? {},
+    };
+  },
+  listAuditEvents: async () => ({ events: [] }),
+}));
 
-vi.mock('../github/db', () => {
-  const makeDbClient = (): any => ({
+vi.mock('../github/db', () => ({
+  getAppDb: () => ({
     select: () => ({
       from: (table: any) => ({
-        where: (cond: any) => {
-          const result = (async () => {
-            // Yield a macrotask so unlocked concurrent read-modify-writes
-            // genuinely interleave (regression coverage for the row lock).
-            await new Promise(resolve => setTimeout(resolve, 0));
-            return rowsOf(table).filter(row => matches(table, row, cond));
-          })();
-          // Support the chained `.for('update')` row lock as a no-op; locking
-          // is emulated by the serialized `transaction` queue below.
-          return Object.assign(result, { for: () => result });
-        },
+        where: async (cond: any) => projects.filter(row => matches(table, row, cond)),
       }),
     }),
-    insert: (table: any) => ({
-      values: (vals: any) => ({
-        returning: async () => {
-          const rows = rowsOf(table);
-          if (vals.sourceKey != null) {
-            const dupe = rows.find(r => r.githubProjectId === vals.githubProjectId && r.sourceKey === vals.sourceKey);
-            if (dupe) throw new Error('duplicate key value violates unique constraint');
-          }
-          const row = { id: `00000000-0000-4000-8000-${String(nextId++).padStart(12, '0')}`, ...vals };
-          rows.push(row);
-          return [row];
-        },
-      }),
-    }),
-    update: (table: any) => ({
-      set: (set: any) => ({
-        where: (cond: any) => ({
-          returning: async () => {
-            // Yield like the select does so read-modify-write pairs from
-            // concurrent callers interleave unless serialized by transaction.
-            await new Promise(resolve => setTimeout(resolve, 0));
-            const updated: any[] = [];
-            for (const row of rowsOf(table)) {
-              if (matches(table, row, cond)) {
-                Object.assign(row, set);
-                updated.push(row);
-              }
-            }
-            return updated;
-          },
-        }),
-      }),
-    }),
-    delete: (table: any) => ({
-      where: async (cond: any) => {
-        const rows = rowsOf(table);
-        const remaining = rows.filter(row => !matches(table, row, cond));
-        rows.length = 0;
-        rows.push(...remaining);
-      },
-    }),
-    transaction: (fn: (tx: any) => Promise<unknown>) => {
-      const run = txTail.then(() => fn(makeDbClient()));
-      txTail = run.catch(() => undefined);
-      return run;
-    },
-  });
-  return { getAppDb: () => makeDbClient() };
-});
+  }),
+}));
 
+import { __resetRuntimeConfigForTests } from '../runtime-config';
+import { seedInMemoryFactoryStoreForTests } from '../storage/test-utils';
+import type { InMemoryFactoryStoreSeed } from '../storage/test-utils';
 import { mountApiRoutes } from '../test-utils';
 import { buildFactoryRoutes } from './routes';
 import { parseCreateWorkItem, parseUpdateWorkItem } from './store';
@@ -131,8 +86,10 @@ const orgUser = { workosId: 'u1', organizationId: 'org1' };
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 
 function seedProject(orgId = 'org1', id = PROJECT_ID) {
-  (tables['github_projects'] ??= []).push({ id, orgId, repoFullName: 'acme/app' });
+  projects.push({ id, orgId, repoFullName: 'acme/app' });
 }
+
+const listItems = () => seed.workItems.list('org1', PROJECT_ID);
 
 function json(method: string, path: string, body?: unknown, user: typeof orgUser | null = orgUser) {
   return buildApp(user).request(path, {
@@ -151,14 +108,18 @@ const createBody = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
-beforeEach(() => {
-  tables = {};
-  nextId = 1;
-  txTail = Promise.resolve();
+let seed: InMemoryFactoryStoreSeed;
+
+beforeEach(async () => {
+  seed = await seedInMemoryFactoryStoreForTests();
+  projects = [];
+  auditRecorded = [];
+  auditFailure = undefined;
   seedProject();
 });
 
 afterEach(() => {
+  __resetRuntimeConfigForTests();
   vi.clearAllMocks();
 });
 
@@ -175,7 +136,7 @@ describe('auth and scoping', () => {
   });
 
   it('404s when the project belongs to another org', async () => {
-    tables = {};
+    projects = [];
     seedProject('other-org');
     const res = await json('GET', `/web/factory/projects/${PROJECT_ID}/work-items`);
     expect(res.status).toBe(404);
@@ -230,7 +191,7 @@ describe('POST /web/factory/projects/:id/work-items', () => {
       }),
     );
     const { workItem } = await res.json();
-    expect(tables['work_items']).toHaveLength(1);
+    expect(await listItems()).toHaveLength(1);
     expect(workItem.stages).toEqual(['execute']);
     // History: intake entered+exited, execute entered.
     expect(workItem.stageHistory.map((e: any) => [e.stage, e.exitedAt !== undefined])).toEqual([
@@ -257,7 +218,7 @@ describe('POST /web/factory/projects/:id/work-items', () => {
       `/web/factory/projects/${PROJECT_ID}/work-items`,
       createBody({ source: 'manual', sourceKey: null }),
     );
-    expect(tables['work_items']).toHaveLength(2);
+    expect(await listItems()).toHaveLength(2);
   });
 
   it('400s on an invalid body', async () => {
@@ -365,7 +326,7 @@ describe('DELETE /web/factory/work-items/:id', () => {
     const { workItem } = await created.json();
     const res = await json('DELETE', `/web/factory/work-items/${workItem.id}`);
     expect((await res.json()).ok).toBe(true);
-    expect(tables['work_items']).toHaveLength(0);
+    expect(await listItems()).toHaveLength(0);
   });
 
   it('404s for unknown or cross-org items', async () => {
@@ -378,7 +339,7 @@ describe('GET /web/factory/projects/:id/metrics', () => {
   it('401s without a user and 404s for projects outside the org', async () => {
     expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/metrics`, undefined, null)).status).toBe(401);
 
-    tables = {};
+    projects = [];
     seedProject('other-org');
     expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/metrics`)).status).toBe(404);
   });
@@ -434,6 +395,123 @@ describe('GET /web/factory/projects/:id/metrics', () => {
     expect(metrics.cycleTime).toEqual({ medianMs: null, p90Ms: null, samples: 0 });
     expect(metrics.wip).toEqual([]);
     expect(metrics.agingWip).toEqual([]);
+  });
+});
+
+// ── Audit events ─────────────────────────────────────────────────────────
+describe('audit events', () => {
+  async function createItem(overrides: Record<string, unknown> = {}) {
+    const res = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody(overrides));
+    return (await res.json()).workItem;
+  }
+
+  it('records work_item.created on POST with actor, project, and target', async () => {
+    const item = await createItem();
+    expect(auditRecorded).toHaveLength(1);
+    expect(auditRecorded[0]).toMatchObject({
+      orgId: 'org1',
+      actorId: 'u1',
+      action: 'factory.work_item.created',
+      githubProjectId: PROJECT_ID,
+      targets: [{ type: 'work_item', id: item.id, name: 'Fix the login flow' }],
+      metadata: { source: 'github-issue', sourceKey: 'github-issue:42', stages: ['intake'] },
+    });
+  });
+
+  it('records updated (not created) when a POST reuses an existing sourceKey', async () => {
+    const item = await createItem();
+    auditRecorded = [];
+
+    const session = { projectPath: '/sb/wt/issue-42', branch: 'factory/issue-42', threadId: 't-1' };
+    await json(
+      'POST',
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      createBody({ stages: ['execute'], sessions: { work: session } }),
+    );
+    expect(auditRecorded.map(e => e.action)).toEqual([
+      'factory.work_item.updated',
+      'factory.work_item.stage_moved',
+      'factory.run.started',
+    ]);
+    expect(auditRecorded[1]).toMatchObject({
+      targets: [{ type: 'work_item', id: item.id, name: 'Fix the login flow' }],
+      metadata: { from: ['intake'], to: ['execute'] },
+    });
+    expect(auditRecorded[2].metadata).toMatchObject({ role: 'work', branch: 'factory/issue-42' });
+  });
+
+  it('records updated + stage_moved with the server-diffed from/to on a stage PATCH', async () => {
+    const item = await createItem();
+    auditRecorded = [];
+
+    await json('PATCH', `/web/factory/work-items/${item.id}`, { stages: ['execute'] });
+    expect(auditRecorded.map(e => e.action)).toEqual(['factory.work_item.updated', 'factory.work_item.stage_moved']);
+    expect(auditRecorded[0].metadata).toEqual({ fields: ['stages'] });
+    expect(auditRecorded[1]).toMatchObject({
+      githubProjectId: PROJECT_ID,
+      targets: [{ type: 'work_item', id: item.id, name: 'Fix the login flow' }],
+      metadata: { from: ['intake'], to: ['execute'] },
+    });
+  });
+
+  it('records run.started when a PATCH introduces a new session role, but not on re-file', async () => {
+    const item = await createItem();
+    auditRecorded = [];
+
+    const session = { projectPath: '/sb/wt/issue-42', branch: 'factory/issue-42', threadId: 't-1' };
+    await json('PATCH', `/web/factory/work-items/${item.id}`, { sessions: { work: session } });
+    expect(auditRecorded.map(e => e.action)).toEqual(['factory.work_item.updated', 'factory.run.started']);
+    expect(auditRecorded[1].metadata).toEqual({
+      role: 'work',
+      branch: 'factory/issue-42',
+      threadId: 't-1',
+      projectPath: '/sb/wt/issue-42',
+    });
+
+    // Re-filing the same role is not a new run.
+    auditRecorded = [];
+    await json('PATCH', `/web/factory/work-items/${item.id}`, { sessions: { work: session } });
+    expect(auditRecorded.map(e => e.action)).toEqual(['factory.work_item.updated']);
+  });
+
+  it('records only updated when the patch does not move stages', async () => {
+    const item = await createItem();
+    auditRecorded = [];
+
+    await json('PATCH', `/web/factory/work-items/${item.id}`, { title: 'Renamed card' });
+    expect(auditRecorded.map(e => e.action)).toEqual(['factory.work_item.updated']);
+    expect(auditRecorded[0].metadata).toEqual({ fields: ['title'] });
+  });
+
+  it('records work_item.deleted on DELETE', async () => {
+    const item = await createItem();
+    auditRecorded = [];
+
+    await json('DELETE', `/web/factory/work-items/${item.id}`);
+    expect(auditRecorded).toHaveLength(1);
+    expect(auditRecorded[0]).toMatchObject({
+      action: 'factory.work_item.deleted',
+      githubProjectId: PROJECT_ID,
+      targets: [{ type: 'work_item', id: item.id, name: 'Fix the login flow' }],
+    });
+  });
+
+  it('never blocks the mutation when the audit insert throws', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    auditFailure = new Error('audit db down');
+
+    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
+    expect(created.status).toBe(200);
+    const { workItem } = await created.json();
+
+    const patched = await json('PATCH', `/web/factory/work-items/${workItem.id}`, { stages: ['done'] });
+    expect(patched.status).toBe(200);
+
+    const deleted = await json('DELETE', `/web/factory/work-items/${workItem.id}`);
+    expect(deleted.status).toBe(200);
+    expect(await listItems()).toHaveLength(0);
+
+    warn.mockRestore();
   });
 });
 

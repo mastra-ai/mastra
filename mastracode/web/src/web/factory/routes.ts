@@ -12,10 +12,13 @@ import { registerApiRoute } from '@mastra/core/server';
 import { and, eq } from 'drizzle-orm';
 import type { Context } from 'hono';
 
+import { emitAudit } from '../audit/audit';
 import { ensureWebAuthUser, webAuthTenant } from '../auth';
 import { getAppDb } from '../github/db';
 import { githubProjects } from '../github/schema';
 import { clampMetricsWindow, computeFactoryMetrics } from './metrics';
+import type { WorkItemRow } from '../storage/domains/work-items/base';
+import type { WorkItemPriorState } from './store';
 import {
   deleteWorkItem,
   listWorkItems,
@@ -80,6 +83,59 @@ async function readJson(c: Context): Promise<unknown | undefined> {
   }
 }
 
+/** Fields a PATCH touched, for the bounded `updated` event summary. */
+function patchedFields(patch: Record<string, unknown>): string[] {
+  return Object.keys(patch).filter(key => patch[key] !== undefined);
+}
+
+/**
+ * Emit the audit events a successful work-item PATCH implies: always
+ * `updated`, plus `stage_moved` when the stages actually changed and one
+ * `run.started` per session role the patch introduced.
+ */
+async function auditWorkItemPatch(
+  c: Context,
+  item: WorkItemRow,
+  previous: WorkItemPriorState,
+  patch: Record<string, unknown>,
+): Promise<void> {
+  const target = { type: 'work_item', id: item.id, name: item.title };
+  await emitAudit(c, {
+    action: 'factory.work_item.updated',
+    projectId: item.githubProjectId,
+    targets: [target],
+    metadata: { fields: patchedFields(patch) },
+  });
+
+  const stagesChanged =
+    patch.stages !== undefined &&
+    (previous.stages.length !== item.stages.length || previous.stages.some((s, i) => s !== item.stages[i]));
+  if (stagesChanged) {
+    await emitAudit(c, {
+      action: 'factory.work_item.stage_moved',
+      projectId: item.githubProjectId,
+      targets: [target],
+      metadata: { from: previous.stages, to: item.stages },
+    });
+  }
+
+  const newRoles = Object.keys(item.sessions).filter(role => !previous.sessionRoles.includes(role));
+  for (const role of newRoles) {
+    const session = item.sessions[role];
+    await emitAudit(c, {
+      action: 'factory.run.started',
+      projectId: item.githubProjectId,
+      targets: [target],
+      metadata: {
+        role,
+        branch: session?.branch,
+        threadId: session?.threadId,
+        projectPath: session?.projectPath,
+      },
+    });
+  }
+}
+
 /** Build the Factory work-item routes as Mastra `apiRoutes`. */
 export function buildFactoryRoutes(): ApiRoute[] {
   return [
@@ -121,12 +177,25 @@ export function buildFactoryRoutes(): ApiRoute[] {
         const input = parseCreateWorkItem(body);
         if (!input) return c.json({ error: 'invalid_work_item' }, 400);
 
-        const item = await upsertWorkItem({
+        const result = await upsertWorkItem({
           orgId: resolved.orgId,
           userId: resolved.userId,
           githubProjectId: resolved.projectId,
           input,
         });
+        const item = result.item;
+        if (result.created) {
+          await emitAudit(loose(c), {
+            action: 'factory.work_item.created',
+            projectId: resolved.projectId,
+            targets: [{ type: 'work_item', id: item.id, name: item.title }],
+            metadata: { source: item.source, sourceKey: item.sourceKey, stages: item.stages },
+          });
+        } else {
+          // Source-key reuse: the POST updated an existing card, so audit it
+          // as an update (plus stage/run events) instead of a false creation.
+          await auditWorkItemPatch(loose(c), item, result.previous, input as unknown as Record<string, unknown>);
+        }
         return c.json({ workItem: item });
       },
     }),
@@ -147,9 +216,10 @@ export function buildFactoryRoutes(): ApiRoute[] {
         const patch = parseUpdateWorkItem(body);
         if (!patch) return c.json({ error: 'invalid_work_item_patch' }, 400);
 
-        const item = await updateWorkItem(tenant.orgId, id, tenant.userId, patch);
-        if (!item) return c.json({ error: 'Work item not found' }, 404);
-        return c.json({ workItem: item });
+        const updated = await updateWorkItem(tenant.orgId, id, tenant.userId, patch);
+        if (!updated) return c.json({ error: 'Work item not found' }, 404);
+        await auditWorkItemPatch(loose(c), updated.item, updated.previous, patch as Record<string, unknown>);
+        return c.json({ workItem: updated.item });
       },
     }),
 
@@ -166,6 +236,11 @@ export function buildFactoryRoutes(): ApiRoute[] {
 
         const deleted = await deleteWorkItem(tenant.orgId, id);
         if (!deleted) return c.json({ error: 'Work item not found' }, 404);
+        await emitAudit(loose(c), {
+          action: 'factory.work_item.deleted',
+          projectId: deleted.githubProjectId,
+          targets: [{ type: 'work_item', id: deleted.id, name: deleted.title }],
+        });
         return c.json({ ok: true });
       },
     }),
