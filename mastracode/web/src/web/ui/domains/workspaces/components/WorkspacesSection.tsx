@@ -24,6 +24,8 @@ import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { useActiveProjectContext } from '../context/ActiveProjectProvider';
 import type { Worktree } from '../services/projects';
 
+const SESSIONS_COLLAPSED_STORAGE_KEY = 'mastracode-factory-sessions-collapsed';
+
 /**
  * Factory sessions: a GitHub project's feature worktrees, rendered as the
  * "Sessions" subsection of the Factory menu. Each worktree holds a single
@@ -50,6 +52,10 @@ export function WorkspacesSection({ defaultOpen = false }: { defaultOpen?: boole
   });
   const deleteWorkspace = useDeleteWorkspaceMutation(activeProject, session, scope);
   const [confirmDelete, setConfirmDelete] = useState<Worktree | null>(null);
+  const [open, setOpen] = useState(() => {
+    const collapsed = localStorage.getItem(SESSIONS_COLLAPSED_STORAGE_KEY);
+    return collapsed === null ? defaultOpen : collapsed !== 'true';
+  });
   const worktrees = workspaces.data?.worktrees ?? [];
   const activityOptions = {
     agentControllerId: AGENT_CONTROLLER_ID,
@@ -152,7 +158,13 @@ export function WorkspacesSection({ defaultOpen = false }: { defaultOpen?: boole
 
   return (
     <section aria-label="Factory sessions">
-      <Collapsible defaultOpen={defaultOpen}>
+      <Collapsible
+        open={open}
+        onOpenChange={nextOpen => {
+          setOpen(nextOpen);
+          localStorage.setItem(SESSIONS_COLLAPSED_STORAGE_KEY, String(!nextOpen));
+        }}
+      >
         <CollapsibleTrigger className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-icon3 transition hover:bg-surface3 hover:text-icon5">
           <span className="flex items-center">
             <MessagesSquare size={13} />
@@ -172,7 +184,6 @@ export function WorkspacesSection({ defaultOpen = false }: { defaultOpen?: boole
                 running={runningByPath[worktree.worktreePath] === true}
                 attention={attentionByPath[worktree.worktreePath] === true}
                 disabled={pending}
-                onSeen={() => clearAttention(worktree.worktreePath)}
                 onSelect={() => {
                   clearAttention(worktree.worktreePath);
                   selectWorkspace.mutate(worktree.worktreePath, {
@@ -231,7 +242,6 @@ export function WorkspaceRow({
   attention,
   disabled,
   onSelect,
-  onSeen,
   onDelete,
 }: {
   worktree: Worktree;
@@ -243,22 +253,16 @@ export function WorkspaceRow({
   attention: boolean;
   disabled: boolean;
   onSelect: () => void;
-  onSeen: () => void;
   onDelete?: () => void;
 }) {
-  // Selecting a row marks it seen (the parent clears attention in onSelect);
-  // the already-active row can't be re-selected, so clicking it just clears
-  // the done indicator.
-  const onClick = active ? (attention ? onSeen : undefined) : onSelect;
   const name = label ?? worktree.branch;
   return (
     <div className={`group relative rounded-md ${active ? 'bg-surface4' : 'hover:bg-surface3'}`}>
       <button
         type="button"
         aria-current={active ? 'true' : undefined}
-        aria-disabled={(active && !attention) || undefined}
         disabled={disabled}
-        onClick={onClick}
+        onClick={onSelect}
         title={worktree.branch}
         className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition ${active ? 'text-icon6' : 'text-icon3 hover:text-icon5'} disabled:cursor-default disabled:opacity-70`}
       >

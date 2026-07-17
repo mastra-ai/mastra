@@ -26,7 +26,7 @@ export function Sidebar() {
 
   return (
     <MainSidebar className="bg-transparent h-full">
-      <MainSidebar.Nav className="p-3">
+      <MainSidebar.Nav>
         <div className="flex min-h-0 flex-1 flex-col gap-4">
           <section aria-label="Project switcher">
             <ProjectSwitcher />
