@@ -33,6 +33,7 @@ import { getDeployEnvFiles, loadDeployEnvFromDotenv, readEnvVars, getMastraVersi
 import { createProject } from '../studio/platform-api.js';
 import { getProjectConfigToSave, loadProjectConfig, saveProjectConfig } from '../studio/project-config.js';
 import { getOverwrittenEnvKeys } from './env-vars.js';
+import { assertDeployDir } from './validate-dir.js';
 
 /**
  * Derive the public studio/server URLs from the environment slug.
@@ -554,6 +555,7 @@ export async function unifiedDeployAction(dir: string | undefined, opts: DeployO
 
 async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
   const targetDir = resolve(dir || process.cwd());
+  await assertDeployDir(dir, targetDir);
   loadDeployEnvFromDotenv(targetDir);
 
   const isHeadless = Boolean(process.env.MASTRA_API_TOKEN);
@@ -845,10 +847,9 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
 
   if (finalStatus.status === 'running') {
     const { studioUrl, serverUrl } = derivePublicUrls(environment.slug);
-    p.log.success(`Deploy succeeded in ${elapsed(performance.now() - tTotal)}!`);
     p.log.info(`  Studio: ${pc.cyan(studioUrl)}`);
     p.log.info(`  Server: ${pc.cyan(serverUrl)}`);
-    p.outro('');
+    p.outro(`Deploy succeeded in ${elapsed(performance.now() - tTotal)}!`);
   } else if (finalStatus.status === 'failed') {
     p.log.error(`Deploy failed: ${finalStatus.error}`);
     process.exit(1);

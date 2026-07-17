@@ -13,6 +13,72 @@ interface UseAgentControllerEventsArgs {
   onConnectedChange: (connected: boolean) => void;
 }
 
+interface SharedSubscription {
+  state: SseConnectionState;
+  eventListeners: Set<(event: AgentControllerEvent) => void>;
+  stateListeners: Set<(state: SseConnectionState) => void>;
+  unsubscribe?: () => void;
+  teardown?: ReturnType<typeof setTimeout>;
+  disposed?: boolean;
+}
+
+const subscriptions = new WeakMap<AgentControllerSession, Map<number, SharedSubscription>>();
+
+function getSubscription(session: AgentControllerSession, epoch: number) {
+  let sessionSubscriptions = subscriptions.get(session);
+  if (!sessionSubscriptions) {
+    sessionSubscriptions = new Map();
+    subscriptions.set(session, sessionSubscriptions);
+  }
+
+  let subscription = sessionSubscriptions.get(epoch);
+  if (subscription) {
+    if (subscription.teardown) {
+      clearTimeout(subscription.teardown);
+      subscription.teardown = undefined;
+    }
+    return subscription;
+  }
+
+  subscription = {
+    state: 'never',
+    eventListeners: new Set(),
+    stateListeners: new Set(),
+  };
+  sessionSubscriptions.set(epoch, subscription);
+
+  const setState = (state: SseConnectionState) => {
+    if (subscription?.state === state) return;
+    subscription!.state = state;
+    for (const listener of subscription!.stateListeners) listener(state);
+  };
+
+  void session
+    .subscribe({
+      onEvent: event => {
+        for (const listener of subscription!.eventListeners) listener(event);
+      },
+      onError: () => {
+        if (subscription?.state === 'connected') setState('dropped');
+      },
+    })
+    .then(
+      sub => {
+        if (subscription!.disposed) {
+          sub.unsubscribe();
+          return;
+        }
+        subscription!.unsubscribe = sub.unsubscribe;
+        setState('connected');
+      },
+      () => {
+        if (subscription?.state === 'connected') setState('dropped');
+      },
+    );
+
+  return subscription;
+}
+
 export function useAgentControllerEvents({
   session,
   enabled,
@@ -20,8 +86,7 @@ export function useAgentControllerEvents({
   onEvent,
   onConnectedChange,
 }: UseAgentControllerEventsArgs) {
-  const [connectionState, setConnectionStateSnapshot] = useState<SseConnectionState>('never');
-  const connectedSnapshotRef = useRef<SseConnectionState>('never');
+  const [connectionState, setConnectionState] = useState<SseConnectionState>('never');
   const onEventRef = useRef(onEvent);
   const onConnectedChangeRef = useRef(onConnectedChange);
 
@@ -31,44 +96,28 @@ export function useAgentControllerEvents({
   useEffect(() => {
     if (!enabled || !session || !epoch) return;
 
-    let disposed = false;
-    let unsubscribe: (() => void) | undefined;
-
-    const setConnectionState = (state: SseConnectionState) => {
-      if (connectedSnapshotRef.current === state) return;
-      connectedSnapshotRef.current = state;
+    const subscription = getSubscription(session, epoch);
+    const handleEvent = (event: AgentControllerEvent) => onEventRef.current(event);
+    const handleState = (state: SseConnectionState) => {
       onConnectedChangeRef.current(state === 'connected');
-      setConnectionStateSnapshot(state);
+      setConnectionState(state);
     };
 
-    const disconnect = () => {
-      if (connectedSnapshotRef.current === 'connected') setConnectionState('dropped');
-    };
-
-    void session
-      .subscribe({
-        onEvent: event => onEventRef.current(event),
-        onError: () => {
-          if (!disposed) disconnect();
-        },
-      })
-      .then(
-        sub => {
-          if (disposed) {
-            sub.unsubscribe();
-            return;
-          }
-          unsubscribe = sub.unsubscribe;
-          setConnectionState('connected');
-        },
-        () => {
-          if (!disposed) disconnect();
-        },
-      );
+    subscription.eventListeners.add(handleEvent);
+    subscription.stateListeners.add(handleState);
+    handleState(subscription.state);
 
     return () => {
-      disposed = true;
-      unsubscribe?.();
+      subscription.eventListeners.delete(handleEvent);
+      subscription.stateListeners.delete(handleState);
+      if (subscription.eventListeners.size > 0 || subscription.stateListeners.size > 0) return;
+
+      subscription.teardown = setTimeout(() => {
+        if (subscription.eventListeners.size > 0 || subscription.stateListeners.size > 0) return;
+        subscription.disposed = true;
+        subscription.unsubscribe?.();
+        subscriptions.get(session)?.delete(epoch);
+      }, 0);
     };
   }, [enabled, session, epoch]);
 

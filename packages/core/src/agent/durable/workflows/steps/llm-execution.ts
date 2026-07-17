@@ -9,6 +9,8 @@ import { buildLlmPromptArgs } from '../../../../loop/shared/build-llm-prompt-arg
 import { composeStepInput } from '../../../../loop/shared/compose-step-input';
 import { injectBackgroundTaskPrompt } from '../../../../loop/shared/inject-background-task-prompt';
 import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../../../loop/shared/merge-llm-call-headers';
+import { buildMessagesFromChunks } from '../../../../loop/workflows/agentic-execution/build-messages-from-chunks';
+import type { CollectedChunk } from '../../../../loop/workflows/agentic-execution/build-messages-from-chunks';
 import type { Mastra } from '../../../../mastra';
 import type {
   SpanType,
@@ -31,7 +33,6 @@ import type { CoreTool } from '../../../../tools/types';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { createStep } from '../../../../workflows/workflow';
 import { MessageList } from '../../../message-list';
-import type { MastraDBMessage } from '../../../message-list';
 import { TripWire } from '../../../trip-wire';
 import { isSupportedLanguageModel } from '../../../utils';
 import { DurableStepIds } from '../../constants';
@@ -851,10 +852,14 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             });
             modelSpanTracker?.startInference?.();
 
-            // Collect chunks for the processLLMResponse hook (pairs with
-            // processLLMRequest — lets processors like ResponseCache persist
-            // the model's response). Only populated when there's no cache hit.
-            const collectedChunks: Array<{ type: string; payload: unknown }> = [];
+            // Collect chunks for post-stream message building (via
+            // buildMessagesFromChunks) and for the processLLMResponse hook
+            // (pairs with processLLMRequest — lets processors like
+            // ResponseCache persist the model's response). Always populated
+            // so reasoning/text/tool parts are reconstructed in stream order,
+            // including empty reasoning spans that carry providerMetadata
+            // (e.g. OpenAI itemId) required by subsequent turns (#19365).
+            const collectedChunks: CollectedChunk[] = [];
 
             // 10. Execute LLM call (or replay cached response)
             let modelResult: ReturnType<typeof execute>;
@@ -1084,16 +1089,17 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   }
                 }
 
-                // Collect every chunk for post-stream processLLMResponse hook.
-                // Skipped on cache hit because the processor already handled
-                // the original response, and skipped when no request/response
-                // processors exist to avoid buffering the entire stream in memory.
-                if (!cachedResponse && requestStepRunner) {
-                  collectedChunks.push({
-                    type: rawChunk.type,
-                    payload: 'payload' in rawChunk ? rawChunk.payload : undefined,
-                  });
-                }
+                // Collect every chunk for post-stream message building and the
+                // processLLMResponse hook. Always collect — reasoning parts
+                // (including empty spans with providerMetadata carrying
+                // OpenAI itemIds) are required to correctly reconstruct the
+                // assistant message and preserve pairing with subsequent
+                // tool-calls (#19365).
+                collectedChunks.push({
+                  type: rawChunk.type,
+                  payload: 'payload' in rawChunk ? rawChunk.payload : undefined,
+                  metadata: (rawChunk as { metadata?: Record<string, unknown> }).metadata,
+                });
 
                 // Process different chunk types — always from the raw chunk so
                 // internal state (tool args, finish reason, usage, metadata) is
@@ -1423,40 +1429,39 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               }
             }
 
-            // 12. Add assistant response to message list
-            if (textDeltas.length > 0 || toolCalls.length > 0) {
-              const parts: any[] = [];
-
-              if (textDeltas.length > 0) {
-                parts.push({
-                  type: 'text' as const,
-                  text: textDeltas.join(''),
-                });
+            // 12. Add assistant response to message list.
+            // Build parts from the full chunk sequence via the same helper
+            // the regular Agent uses, so reasoning spans (including empty
+            // reasoning with providerMetadata.openai.itemId) are preserved
+            // alongside text and tool-calls in stream order. Without this
+            // OpenAI reasoning models fail on the next turn with
+            // "Item 'fc_...' of type 'function_call' was provided without
+            // its required 'reasoning' item" (#19365).
+            //
+            // Mirror the regular Agent's buildResponseModelMetadata so the
+            // persisted assistant message carries the same content.metadata
+            // (modelId/provider): prefer the static model, fall back to the
+            // response-metadata chunk.
+            const responseModelId = currentModel.modelId ?? responseMetadata?.modelId;
+            const responseModelMetadata =
+              responseModelId || currentModel.provider
+                ? {
+                    metadata: {
+                      ...(responseModelId ? { modelId: responseModelId } : {}),
+                      ...(currentModel.provider ? { provider: currentModel.provider } : {}),
+                    },
+                  }
+                : undefined;
+            const builtMessages = buildMessagesFromChunks({
+              chunks: collectedChunks,
+              messageId: currentMessageId,
+              tools: currentTools,
+              responseModelMetadata,
+            });
+            if (builtMessages.length > 0) {
+              for (const msg of builtMessages) {
+                messageList.add(msg, 'response');
               }
-
-              for (const tc of toolCalls) {
-                parts.push({
-                  type: 'tool-invocation' as const,
-                  toolInvocation: {
-                    state: 'call' as const,
-                    toolCallId: tc.toolCallId,
-                    toolName: tc.toolName,
-                    args: tc.args,
-                  },
-                });
-              }
-
-              const assistantMessage: MastraDBMessage = {
-                id: currentMessageId,
-                role: 'assistant' as const,
-                content: {
-                  format: 2,
-                  parts,
-                },
-                createdAt: new Date(),
-              };
-
-              messageList.add(assistantMessage, 'response');
 
               // Sync the updated messageList to the in-process registry so
               // downstream steps (e.g. tool-call.ts's doFlush()) see the

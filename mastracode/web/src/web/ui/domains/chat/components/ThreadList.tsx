@@ -13,13 +13,12 @@ import { useOverlays } from '../../../lib/overlays';
 import { useToast } from '../../../ui';
 import { useActiveProjectContext } from '../../workspaces/context/ActiveProjectProvider';
 import { useChatSessionContext } from '../context/useChatSessionContext';
-import { useChatTranscript } from '../context/useChatTranscript';
 import {
   useCloneAgentControllerThreadMutation,
   useDeleteAgentControllerThreadMutation,
   useRenameAgentControllerThreadMutation,
-} from '../hooks/useAgentControllerThreadMutations';
-import { useAgentControllerThreads } from '../hooks/useAgentControllerThreads';
+} from '../../../../../shared/hooks/useAgentControllerThreadMutations';
+import { useAgentControllerThreads } from '../../../../../shared/hooks/useAgentControllerThreads';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 
 const MAX_THREADS = 5;
@@ -41,11 +40,11 @@ export function ThreadList() {
 
   if (!activeProject) return null;
 
-  // Feature worktrees hold a single conversation: show its title for context,
-  // but no "Threads" header/count, no rename/clone/delete actions, and no way
-  // to create more threads.
-  const readOnly =
-    activeProject.source === 'github' && Boolean(projectPath) && projectPath !== activeProject.sandboxWorkdir;
+  // Worktrees hold a single conversation: show its title for context, but no
+  // "Threads" header/count, no rename/clone/delete actions, and no way to
+  // create more threads. Every GitHub chat target is a worktree (the repo
+  // root is not a workspace), so any GitHub project path is read-only here.
+  const readOnly = activeProject.source === 'github' && Boolean(projectPath);
 
   const threads = threadsQuery.data ?? [];
   const activeThreadId = routeThreadId;
@@ -174,7 +173,6 @@ function ThreadRow({
   onStartRename: () => void;
 }) {
   const hookArgs = useThreadHookArgs();
-  const { reset } = useChatTranscript();
   const overlays = useOverlays();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -190,7 +188,6 @@ function ThreadRow({
 
   const cloneThread = async () => {
     const clonedThread = await cloneThreadMutation.mutateAsync({ sourceThreadId: thread.id });
-    reset(clonedThread.id);
     toast('Thread cloned', 'success');
     void navigate(`/threads/${clonedThread.id}`);
   };
@@ -199,7 +196,6 @@ function ThreadRow({
     await deleteThreadMutation.mutateAsync(thread.id);
     toast('Thread deleted');
     if (thread.id === routeThreadId) {
-      reset();
       void navigate('/new');
     }
   };

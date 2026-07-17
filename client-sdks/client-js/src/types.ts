@@ -2620,6 +2620,7 @@ export interface DatasetItem {
   id: string;
   datasetId: string;
   datasetVersion: number;
+  externalId?: string | null;
   input: unknown;
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
@@ -2735,6 +2736,7 @@ export interface UpdateDatasetParams {
 
 export interface AddDatasetItemParams {
   datasetId: string;
+  externalId?: string;
   input: unknown;
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
@@ -2759,6 +2761,7 @@ export interface UpdateDatasetItemParams {
 export interface BatchInsertDatasetItemsParams {
   datasetId: string;
   items: Array<{
+    externalId?: string;
     input: unknown;
     groundTruth?: unknown;
     expectedTrajectory?: unknown;

@@ -2,15 +2,17 @@
  * Application database layer for the GitHub App integration.
  *
  * This is a *separate* Postgres from Mastra's own storage: it is created lazily
- * from `APP_DATABASE_URL` and holds only the GitHub installations/projects
- * tables defined in `./schema`. The connection is a singleton so the whole
- * process shares one pg Pool.
+ * from the factory-resolved database URL (`getAppDatabaseUrl()`, seeded by
+ * `MastraFactory` with an `APP_DATABASE_URL` env fallback) and holds only the
+ * GitHub installations/projects tables defined in `./schema`. The connection
+ * is a singleton so the whole process shares one pg Pool.
  */
 
 import { sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import pkg from 'pg';
+import { getAppDatabaseUrl } from '../runtime-config';
 import { MIGRATION_SQL } from './schema';
 import * as schema from './schema';
 
@@ -26,16 +28,16 @@ let migrationPromise: Promise<void> | undefined;
  * True when the app database is configured. Required for the GitHub feature.
  */
 export function isAppDbConfigured(): boolean {
-  return Boolean(process.env.APP_DATABASE_URL);
+  return Boolean(getAppDatabaseUrl());
 }
 
 /**
- * Get (lazily creating) the Drizzle client bound to `APP_DATABASE_URL`.
- * @throws if `APP_DATABASE_URL` is not set.
+ * Get (lazily creating) the Drizzle client bound to the app database URL.
+ * @throws if no app database is configured.
  */
 export function getAppDb(): AppDb {
   if (db) return db;
-  const connectionString = process.env.APP_DATABASE_URL;
+  const connectionString = getAppDatabaseUrl();
   if (!connectionString) {
     throw new Error('APP_DATABASE_URL is not set; the GitHub App feature requires an application database.');
   }

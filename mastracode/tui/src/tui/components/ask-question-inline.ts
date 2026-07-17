@@ -592,6 +592,19 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
     this.onCancel?.();
   }
 
+  /**
+   * Retract the question without invoking any submit/cancel callback. Used when
+   * the underlying tool suspension was cancelled (the suspended run died, e.g.
+   * its snapshot failed to persist), so an answer could never be delivered.
+   */
+  dismiss(): void {
+    if (this.answered) return;
+    this.answered = true;
+    this.focused = false;
+
+    this.borderedBox.setCancelled();
+  }
+
   handleInput(data: string): void {
     if (this.answered) return;
 

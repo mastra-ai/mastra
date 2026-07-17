@@ -98,8 +98,17 @@ const createSessionBodySchema = z.object({
 // file, 20MB total), adjusted for base64 overhead (~4/3x).
 const MAX_FILE_DATA_LENGTH = 14 * 1024 * 1024;
 const MAX_TOTAL_FILE_DATA_LENGTH = 28 * 1024 * 1024;
+/**
+ * Optional client-supplied request context, merged into the server-derived
+ * request context by the adapter context middleware (reserved keys are
+ * server-controlled). Declared on run-triggering body schemas so the OpenAPI
+ * spec documents it.
+ */
+const bodyRequestContextSchema = z.record(z.string(), z.any()).optional();
+
 const sendMessageBodySchema = z.object({
   message: z.string(),
+  requestContext: bodyRequestContextSchema,
   // Optional attachments (e.g. pasted images). `data` is base64-encoded.
   files: z
     .array(
@@ -115,10 +124,11 @@ const sendMessageBodySchema = z.object({
     })
     .optional(),
 });
-const steerBodySchema = z.object({ message: z.string() });
+const steerBodySchema = z.object({ message: z.string(), requestContext: bodyRequestContextSchema });
 const toolApprovalBodySchema = z.object({
   toolCallId: z.string(),
   approved: z.boolean(),
+  requestContext: bodyRequestContextSchema,
 });
 const toolSuspensionBodySchema = z.object({
   toolCallId: z.string(),
@@ -126,6 +136,7 @@ const toolSuspensionBodySchema = z.object({
   // multi-select); for submit_plan it's `{ action, feedback? }`; for
   // request_access it's "Yes"/"No".
   resumeData: z.any(),
+  requestContext: bodyRequestContextSchema,
 });
 const switchModeBodySchema = z.object({ modeId: z.string() });
 const switchModelBodySchema = z.object({
@@ -162,7 +173,7 @@ const listThreadsQuerySchema = z.object({
     }, z.record(z.string(), z.string()).optional())
     .optional(),
 });
-const followUpBodySchema = z.object({ message: z.string() });
+const followUpBodySchema = z.object({ message: z.string(), requestContext: bodyRequestContextSchema });
 
 const sendNotificationBodySchema = z.object({
   source: z.string(),
@@ -246,18 +257,29 @@ const threadResponseSchema = z.object({
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
 });
-const messageContentSchema = z
+const messagePartSchema = z
   .object({
     type: z.string(),
+  })
+  .passthrough();
+// Mirrors the persisted `MastraMessageContentV2` shape (AI-SDK-v4 `UIMessage`-style):
+// `format: 2` plus a nested `parts` array, with optional companion fields preserved.
+const messageContentV2Schema = z
+  .object({
+    format: z.literal(2),
+    parts: z.array(messagePartSchema),
   })
   .passthrough();
 const listMessagesResponseSchema = z.object({
   messages: z.array(
     z.object({
       id: z.string(),
-      role: z.enum(['user', 'assistant', 'system']),
-      content: z.array(messageContentSchema),
+      role: z.enum(['user', 'assistant', 'system', 'tool', 'signal']),
+      content: messageContentV2Schema,
       createdAt: z.string().optional(),
+      threadId: z.string().optional(),
+      resourceId: z.string().optional(),
+      type: z.string().optional(),
     }),
   ),
 });
@@ -655,7 +677,9 @@ export const SWITCH_AGENT_CONTROLLER_THREAD_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope });
-      await session.thread.switch({ threadId });
+      if (session.thread.getId() !== threadId) {
+        await session.thread.switch({ threadId });
+      }
       return { ok: true };
     } catch (error) {
       return handleError(error, 'error switching controller thread');
@@ -1017,8 +1041,11 @@ export const LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE = createRoute({
         messages: messages.map(m => ({
           id: m.id,
           role: m.role,
-          content: m.content as Array<{ type: string; [key: string]: unknown }>,
+          content: m.content as { format: 2; parts: Array<{ type: string; [key: string]: unknown }> },
           createdAt: m.createdAt instanceof Date ? m.createdAt.toISOString() : undefined,
+          threadId: m.threadId,
+          resourceId: m.resourceId,
+          type: m.type,
         })),
       };
     } catch (error) {
