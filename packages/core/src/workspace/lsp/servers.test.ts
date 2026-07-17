@@ -322,15 +322,33 @@ describe('BUILTIN_SERVERS command()', () => {
     rmSync(tempDir, { recursive: true, force: true });
   });
 
+  /** Create a fake typescript install: package.json (+ optional tsserver.js) and a tsc bin shim. */
+  function installFakeTypescript(dir: string, version: string, opts?: { tsserver?: boolean; tscBin?: boolean }) {
+    const pkgDir = join(dir, 'node_modules', 'typescript');
+    mkdirSync(join(pkgDir, 'lib'), { recursive: true });
+    writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({ name: 'typescript', version, main: 'lib/x.js' }));
+    writeFileSync(join(pkgDir, 'lib', 'x.js'), '');
+    if (opts?.tsserver) writeFileSync(join(pkgDir, 'lib', 'tsserver.js'), '');
+    if (opts?.tscBin !== false) {
+      mkdirSync(join(dir, 'node_modules', '.bin'), { recursive: true });
+      writeFileSync(join(dir, 'node_modules', '.bin', 'tsc'), '');
+    }
+  }
+
   describe('typescript (TS ≤6 — tsserver.js exists)', () => {
     const tsCommand = BUILTIN_SERVERS.typescript!.command;
 
     it('finds typescript-language-server binary in root node_modules', () => {
-      const bin = join(tempDir, 'node_modules', '.bin', 'typescript-language-server');
-      mkdirSync(join(tempDir, 'node_modules', '.bin'), { recursive: true });
-      writeFileSync(bin, '');
+      const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(tempDir);
+      try {
+        installFakeTypescript(tempDir, '5.9.3', { tsserver: true });
+        const bin = join(tempDir, 'node_modules', '.bin', 'typescript-language-server');
+        writeFileSync(bin, '');
 
-      expect(tsCommand(tempDir)).toBe(`${bin} --stdio`);
+        expect(tsCommand(tempDir)).toBe(`${bin} --stdio`);
+      } finally {
+        cwdSpy.mockRestore();
+      }
     });
 
     it('returns undefined when no typescript install and no binaries are found', () => {
@@ -345,19 +363,6 @@ describe('BUILTIN_SERVERS command()', () => {
 
   describe('typescript (TS 7+ — tsserver.js removed)', () => {
     let isolatedDir: string;
-
-    /** Create a fake typescript install: package.json (+ optional tsserver.js) and a tsc bin shim. */
-    function installFakeTypescript(dir: string, version: string, opts?: { tsserver?: boolean; tscBin?: boolean }) {
-      const pkgDir = join(dir, 'node_modules', 'typescript');
-      mkdirSync(join(pkgDir, 'lib'), { recursive: true });
-      writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({ name: 'typescript', version, main: 'lib/x.js' }));
-      writeFileSync(join(pkgDir, 'lib', 'x.js'), '');
-      if (opts?.tsserver) writeFileSync(join(pkgDir, 'lib', 'tsserver.js'), '');
-      if (opts?.tscBin !== false) {
-        mkdirSync(join(dir, 'node_modules', '.bin'), { recursive: true });
-        writeFileSync(join(dir, 'node_modules', '.bin', 'tsc'), '');
-      }
-    }
 
     beforeEach(() => {
       isolatedDir = realpathSync(mkdtempSync(join(tmpdir(), 'lsp-ts7-')));
@@ -403,6 +408,14 @@ describe('BUILTIN_SERVERS command()', () => {
       expect(defs.typescript!.command(isolatedDir)).toBeUndefined();
     });
 
+    it('returns undefined when typescript >=7 is installed but no tsc bin can be resolved', () => {
+      // No PATH fallback: a bare `tsc` on PATH must never be used
+      installFakeTypescript(isolatedDir, '7.0.2', { tscBin: false });
+
+      const defs = buildServerDefs();
+      expect(defs.typescript!.command(isolatedDir)).toBeUndefined();
+    });
+
     it('returns undefined when installed typescript is older than 7 and has no tsserver.js', () => {
       installFakeTypescript(isolatedDir, '5.9.3');
 
@@ -425,10 +438,16 @@ describe('BUILTIN_SERVERS command()', () => {
     const tsInit = BUILTIN_SERVERS.typescript!.initialization!;
 
     it('returns tsserver config when tsserver.js exists (TS ≤6)', () => {
-      const result = tsInit(tempDir);
-      expect(result).toBeDefined();
-      expect(result.tsserver.path).toContain('tsserver.js');
-      expect(result.tsserver.logVerbosity).toBe('off');
+      const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(tempDir);
+      try {
+        installFakeTypescript(tempDir, '5.9.3', { tsserver: true });
+        const result = tsInit(tempDir);
+        expect(result).toBeDefined();
+        expect(result.tsserver.path).toContain('tsserver.js');
+        expect(result.tsserver.logVerbosity).toBe('off');
+      } finally {
+        cwdSpy.mockRestore();
+      }
     });
 
     it('returns undefined when tsserver.js is absent (TS 7+)', () => {

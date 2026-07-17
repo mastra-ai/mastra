@@ -257,9 +257,10 @@ export function buildServerDefs(config?: LSPConfig): Record<string, LSPServerDef
         // (handles hoisted/monorepo installs where root has no node_modules/.bin).
         const siblingBin = join(dirname(dirname(pkg.resolved)), '.bin', 'tsc');
         if (existsSync(siblingBin)) return `${siblingBin} --lsp --stdio`;
+        // No PATH fallback: a bare `tsc` on PATH cannot be verified to belong
+        // to the typescript install whose version we just validated.
         const tscBin = resolveNodeBin(root, 'tsc', searchPaths);
         if (tscBin) return `${tscBin} --lsp --stdio`;
-        if (whichSync('tsc')) return 'tsc --lsp --stdio';
         return undefined;
       },
       initialization: (root: string) => {
