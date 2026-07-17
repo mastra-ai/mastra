@@ -31,11 +31,15 @@ export function registerEnvDbCommands(envCommand: Command) {
 
   db.command('create')
     .description('Provision a database, attach it, and wait until it is ready')
-    .argument('[environment]', 'Environment name, slug, or ID (default: shared by all environments)')
+    .argument(
+      '[environment]',
+      "Environment name, slug, or ID (default: the project's only environment, or prompt if there are several)",
+    )
     .requiredOption('--kind <kind>', 'Database provider (turso, neon)')
     .option(...PROJECT_OPTION)
     .option('--name <name>', 'Database name (default: derived from the project slug)')
     .option('--region <region>', 'Provider region ID (shared databases only; environment region wins otherwise)')
+    .option('--shared', 'Attach as a project-scoped database shared by all environments')
     .option('--no-wait', 'Return immediately instead of polling until the database is ready')
     .option('--json', 'Output as JSON')
     .action(wrapAction(createDatabaseAction));
@@ -193,13 +197,31 @@ function parseKind(kind: string): DatabaseKind {
 
 async function createDatabaseAction(
   envArg: string | undefined,
-  options: { project?: string; kind: string; name?: string; region?: string; wait: boolean; json?: boolean },
+  options: {
+    project?: string;
+    kind: string;
+    name?: string;
+    region?: string;
+    shared?: boolean;
+    wait: boolean;
+    json?: boolean;
+  },
 ) {
   const kind = parseKind(options.kind);
+
+  if (envArg && options.shared) {
+    throw new Error('Cannot combine an environment argument with --shared. Pick one scope.');
+  }
+
   const token = await getToken();
   const { orgId } = await resolveCurrentOrg(token);
   const project = await resolveProject(token, orgId, options.project);
-  const environment = envArg ? await findEnvironment(token, orgId, project, envArg) : undefined;
+
+  const environment = options.shared
+    ? undefined
+    : envArg
+      ? await findEnvironment(token, orgId, project, envArg)
+      : await resolveDefaultEnvironment(token, orgId, project, { json: options.json });
 
   if (environment && options.region && !options.json) {
     console.info(`Note: --region is ignored for environment-scoped databases; the environment's region is used.`);
@@ -216,6 +238,63 @@ async function createDatabaseAction(
     wait: options.wait,
     json: options.json,
   });
+}
+
+function isInteractive(): boolean {
+  return Boolean(process.stdin.isTTY && process.stdout.isTTY) && !process.env.CI;
+}
+
+/**
+ * When the user runs `mastra env db create` without an environment argument
+ * and without --shared, pick the environment to scope the new database to:
+ *  - exactly one environment → use it
+ *  - multiple environments + interactive TTY → prompt with a picker
+ *  - multiple environments + non-interactive → fail with a clear message
+ *  - zero environments → fail (nothing to attach to)
+ */
+export async function resolveDefaultEnvironment(
+  token: string,
+  orgId: string,
+  project: Project,
+  opts: { json?: boolean } = {},
+): Promise<Environment> {
+  const environments = await fetchEnvironments(token, orgId, project.id);
+
+  if (environments.length === 0) {
+    throw new Error(`Project ${project.name} has no environments. Create one with: mastra env create <name>`);
+  }
+
+  if (environments.length === 1) {
+    return environments[0]!;
+  }
+
+  if (opts.json || !isInteractive()) {
+    const slugs = environments.map(e => e.slug).join(', ');
+    throw new Error(
+      `Project ${project.name} has multiple environments (${slugs}). Pass an environment name (e.g. ` +
+        `\`mastra env db create <env> --kind ...\`) or use --shared to attach a project-scoped database.`,
+    );
+  }
+
+  // Prefer production as the pre-selected option when it exists.
+  const preferred = environments.find(e => e.type === 'production') ?? environments[0]!;
+
+  const selected = await p.select({
+    message: 'Which environment should this database be scoped to?',
+    initialValue: preferred.id,
+    options: environments.map(e => ({
+      value: e.id,
+      label: `${e.slug} (${e.type})`,
+      hint: e.region ?? undefined,
+    })),
+  });
+
+  if (p.isCancel(selected)) {
+    p.cancel('Cancelled.');
+    process.exit(0);
+  }
+
+  return environments.find(e => e.id === selected)!;
 }
 
 async function createDatabase(opts: {

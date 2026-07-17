@@ -1,6 +1,27 @@
-import { describe, expect, it } from 'vitest';
-import type { Environment } from '../env/platform-api.js';
-import { defaultDatabaseName, formatScope } from './db.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as EnvPlatformApi from '../env/platform-api.js';
+import type { Environment, Project } from '../env/platform-api.js';
+import { defaultDatabaseName, formatScope, resolveDefaultEnvironment } from './db.js';
+
+const selectMock = vi.fn();
+const cancelMock = vi.fn();
+const isCancelMock = vi.fn().mockReturnValue(false);
+
+vi.mock('@clack/prompts', () => ({
+  select: (args: unknown) => selectMock(args),
+  cancel: (args: unknown) => cancelMock(args),
+  isCancel: (v: unknown) => isCancelMock(v),
+  spinner: () => ({ start: vi.fn(), stop: vi.fn(), message: vi.fn() }),
+}));
+
+const fetchEnvironmentsMock = vi.fn();
+vi.mock('../env/platform-api.js', async () => {
+  const actual = await vi.importActual<typeof EnvPlatformApi>('../env/platform-api.js');
+  return {
+    ...actual,
+    fetchEnvironments: (...args: unknown[]) => fetchEnvironmentsMock(...args),
+  };
+});
 
 const environment = {
   id: 'env-1',
@@ -17,6 +38,21 @@ const environment = {
   createdAt: '2026-07-09T00:00:00.000Z',
   updatedAt: '2026-07-09T00:00:00.000Z',
 } as Environment;
+
+function makeEnv(overrides: Partial<Environment> & Pick<Environment, 'id' | 'slug' | 'type'>): Environment {
+  return {
+    ...environment,
+    name: overrides.slug,
+    ...overrides,
+  } as Environment;
+}
+
+const project = {
+  id: 'proj-1',
+  name: 'My App',
+  slug: 'my-app',
+  organizationId: 'org-1',
+} as Project;
 
 describe('formatScope', () => {
   it('labels project-scoped databases as shared by all environments', () => {
@@ -43,5 +79,96 @@ describe('defaultDatabaseName', () => {
 
   it('never returns leading/trailing hyphens or an empty base', () => {
     expect(defaultDatabaseName({ name: '---', slug: null })).toBe('mastra-db');
+  });
+});
+
+describe('resolveDefaultEnvironment', () => {
+  const originalStdinTTY = process.stdin.isTTY;
+  const originalStdoutTTY = process.stdout.isTTY;
+  const originalCI = process.env.CI;
+
+  beforeEach(() => {
+    fetchEnvironmentsMock.mockReset();
+    selectMock.mockReset();
+    isCancelMock.mockReset().mockReturnValue(false);
+    // Default to interactive TTY; individual tests override as needed.
+    (process.stdin as unknown as { isTTY: boolean }).isTTY = true;
+    (process.stdout as unknown as { isTTY: boolean }).isTTY = true;
+    delete process.env.CI;
+  });
+
+  afterEach(() => {
+    (process.stdin as unknown as { isTTY: boolean | undefined }).isTTY = originalStdinTTY;
+    (process.stdout as unknown as { isTTY: boolean | undefined }).isTTY = originalStdoutTTY;
+    if (originalCI === undefined) {
+      delete process.env.CI;
+    } else {
+      process.env.CI = originalCI;
+    }
+  });
+
+  it('errors when the project has no environments', async () => {
+    fetchEnvironmentsMock.mockResolvedValue([]);
+    await expect(resolveDefaultEnvironment('t', 'org-1', project)).rejects.toThrow(/has no environments/);
+  });
+
+  it('auto-selects the sole environment without prompting', async () => {
+    const only = makeEnv({ id: 'env-prod', slug: 'my-app-production', type: 'production' });
+    fetchEnvironmentsMock.mockResolvedValue([only]);
+
+    const result = await resolveDefaultEnvironment('t', 'org-1', project);
+
+    expect(result).toBe(only);
+    expect(selectMock).not.toHaveBeenCalled();
+  });
+
+  it('errors in non-interactive mode when multiple environments exist', async () => {
+    (process.stdin as unknown as { isTTY: boolean }).isTTY = false;
+    fetchEnvironmentsMock.mockResolvedValue([
+      makeEnv({ id: 'env-prod', slug: 'prod', type: 'production' }),
+      makeEnv({ id: 'env-stg', slug: 'stg', type: 'staging' }),
+    ]);
+
+    await expect(resolveDefaultEnvironment('t', 'org-1', project)).rejects.toThrow(/multiple environments/);
+    expect(selectMock).not.toHaveBeenCalled();
+  });
+
+  it('errors when --json is set and multiple environments exist, even on a TTY', async () => {
+    fetchEnvironmentsMock.mockResolvedValue([
+      makeEnv({ id: 'env-prod', slug: 'prod', type: 'production' }),
+      makeEnv({ id: 'env-stg', slug: 'stg', type: 'staging' }),
+    ]);
+
+    await expect(resolveDefaultEnvironment('t', 'org-1', project, { json: true })).rejects.toThrow(
+      /multiple environments/,
+    );
+    expect(selectMock).not.toHaveBeenCalled();
+  });
+
+  it('prompts with production pre-selected when multiple environments exist and TTY is interactive', async () => {
+    const prod = makeEnv({ id: 'env-prod', slug: 'prod', type: 'production' });
+    const staging = makeEnv({ id: 'env-stg', slug: 'stg', type: 'staging' });
+    fetchEnvironmentsMock.mockResolvedValue([staging, prod]);
+    selectMock.mockResolvedValue('env-stg');
+
+    const result = await resolveDefaultEnvironment('t', 'org-1', project);
+
+    expect(selectMock).toHaveBeenCalledTimes(1);
+    const call = selectMock.mock.calls[0]![0] as { initialValue: string; options: { value: string }[] };
+    expect(call.initialValue).toBe('env-prod');
+    expect(call.options.map(o => o.value)).toEqual(['env-stg', 'env-prod']);
+    expect(result).toBe(staging);
+  });
+
+  it('falls back to the first environment when no production environment exists', async () => {
+    const staging = makeEnv({ id: 'env-stg', slug: 'stg', type: 'staging' });
+    const preview = makeEnv({ id: 'env-prev', slug: 'prev', type: 'preview' });
+    fetchEnvironmentsMock.mockResolvedValue([staging, preview]);
+    selectMock.mockResolvedValue('env-prev');
+
+    await resolveDefaultEnvironment('t', 'org-1', project);
+
+    const call = selectMock.mock.calls[0]![0] as { initialValue: string };
+    expect(call.initialValue).toBe('env-stg');
   });
 });
