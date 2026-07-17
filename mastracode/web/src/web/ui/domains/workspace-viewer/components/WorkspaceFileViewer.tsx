@@ -17,10 +17,9 @@ interface WorkspaceFileViewerProps {
   file?: WorkspaceFile;
   isLoading: boolean;
   error?: Error;
-  onClose: () => void;
 }
 
-export function WorkspaceFileViewer({ filePath, file, isLoading, error, onClose }: WorkspaceFileViewerProps) {
+export function WorkspaceFileViewer({ filePath, file, isLoading, error }: WorkspaceFileViewerProps) {
   const content = file?.content ?? '';
   const language = languageForPath(file?.path ?? filePath);
   const isMarkdown = language === 'markdown';
@@ -35,7 +34,7 @@ export function WorkspaceFileViewer({ filePath, file, isLoading, error, onClose 
       className="flex h-full min-w-0 flex-col border-l border-border1 bg-surface1"
       aria-label="Workspace file viewer"
     >
-      <div className="flex items-center justify-between gap-2 border-b border-border1 px-3 py-2">
+      <div className="flex items-center justify-between gap-2 border-b border-border1 px-3 py-2 pl-10">
         <div className="min-w-0">
           <Txt variant="ui-sm" className="truncate font-medium text-icon6">
             {file?.name ?? filePath ?? 'Select a file'}
@@ -44,15 +43,12 @@ export function WorkspaceFileViewer({ filePath, file, isLoading, error, onClose 
             {file?.path ?? filePath ?? 'No file selected'}
           </Txt>
         </div>
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="ml-auto flex shrink-0 items-center justify-end">
           {file?.contentType === 'text' ? (
             <Button size="sm" variant="ghost" onClick={copy} aria-label="Copy file contents">
               <CopyIcon />
             </Button>
           ) : null}
-          <Button size="sm" variant="ghost" onClick={onClose} aria-label="Close file viewer">
-            Close
-          </Button>
         </div>
       </div>
 

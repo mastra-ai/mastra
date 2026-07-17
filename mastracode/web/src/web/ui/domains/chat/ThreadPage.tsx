@@ -28,6 +28,7 @@ export function ThreadPage() {
   const { activeProject } = useActiveProjectContext();
   const { threadId } = useParams();
   const [workspaceViewerExpanded, setWorkspaceViewerExpanded] = useState(false);
+  const [workspaceViewerVisible, setWorkspaceViewerVisible] = useState(true);
   const userSessionMatch = threadId ? findUserSessionByThreadId(threadId) : undefined;
   const workspaceProject = userSessionMatch?.project ?? activeProject;
   const workspacePath = workspaceProject
@@ -41,14 +42,17 @@ export function ThreadPage() {
       sidebarOpen={overlays.isOpen('sidebar')}
       onSidebarClose={() => overlays.close('sidebar')}
       rightPanelExpanded={workspaceViewerExpanded}
+      rightPanelAvailable={Boolean(workspacePath)}
+      onRightPanelOpen={() => setWorkspaceViewerVisible(true)}
       rightPanel={
-        workspacePath ? (
+        workspacePath && workspaceViewerVisible ? (
           <WorkspaceViewerPanel
             workspacePath={workspacePath}
             renderedPaths={renderedPaths}
             title="Workspace files"
             context={workspaceProject?.name}
             onExpandedChange={setWorkspaceViewerExpanded}
+            onCollapse={() => setWorkspaceViewerVisible(false)}
           />
         ) : undefined
       }

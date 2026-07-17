@@ -1,7 +1,7 @@
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../../e2e/web-ui/render';
@@ -126,6 +126,28 @@ describe('WorkspaceViewerPanel', () => {
     await user.click(await screen.findByRole('button', { name: 'Reports' }));
 
     expect(await screen.findByText('summary.md')).toBeInTheDocument();
+  });
+
+  it('closes the file viewer before collapsing the files panel', async () => {
+    installHandlers();
+    const onCollapse = vi.fn();
+    const user = userEvent.setup();
+    renderWithProviders(
+      <WorkspaceViewerPanel workspacePath={WORKSPACE} renderedPaths={renderedPaths} onCollapse={onCollapse} />,
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Artifacts' }));
+    await user.click(await screen.findByRole('button', { name: 'understand-pr' }));
+    await user.click(await screen.findByText('HISTORY.md'));
+
+    expect(await screen.findByLabelText('Workspace file viewer')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Close workspace file viewer' }));
+
+    expect(screen.queryByLabelText('Workspace file viewer')).not.toBeInTheDocument();
+    expect(onCollapse).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Close workspace files' }));
+    expect(onCollapse).toHaveBeenCalledTimes(1);
   });
 
   it('refreshes the current listing', async () => {

@@ -1,3 +1,4 @@
+import { Button } from '@mastra/playground-ui/components/Button';
 import { useEffect, useRef, useState } from 'react';
 
 import { useWorkspaceFile, useWorkspaceRenderedListing } from '../../../../../shared/hooks/use-fs';
@@ -5,12 +6,21 @@ import type { RenderedWorkspacePath } from '../config';
 import { WorkspaceFileBrowser } from './WorkspaceFileBrowser';
 import { WorkspaceFileViewer } from './WorkspaceFileViewer';
 
+function FilledArrowRight() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true" focusable="false">
+      <path d="M3 1.5L7 5L3 8.5V1.5Z" fill="currentColor" />
+    </svg>
+  );
+}
+
 interface WorkspaceViewerPanelProps {
   workspacePath: string;
   renderedPaths: RenderedWorkspacePath[];
   title?: string;
   context?: string;
   onExpandedChange?: (expanded: boolean) => void;
+  onCollapse?: () => void;
 }
 
 export function WorkspaceViewerPanel({
@@ -19,6 +29,7 @@ export function WorkspaceViewerPanel({
   title,
   context,
   onExpandedChange,
+  onCollapse,
 }: WorkspaceViewerPanelProps) {
   const [selectedRenderedPathId, setSelectedRenderedPathId] = useState(renderedPaths[0]?.id ?? '');
   const [selectedFilePath, setSelectedFilePath] = useState<string | undefined>();
@@ -44,6 +55,15 @@ export function WorkspaceViewerPanel({
 
   if (!selectedRenderedPath) return null;
 
+  const collapse = () => {
+    if (viewerOpen) {
+      setViewerOpen(false);
+      return;
+    }
+
+    onCollapse?.();
+  };
+
   const startResize = (event: React.PointerEvent<HTMLDivElement>) => {
     resizeCleanupRef.current?.();
     const startX = event.clientX;
@@ -66,9 +86,18 @@ export function WorkspaceViewerPanel({
 
   return (
     <div
-      className="hidden h-full w-full min-w-0 border-l border-border1 bg-surface1 lg:flex"
+      className="relative hidden h-full w-full min-w-0 border-l border-border1 bg-surface1 lg:flex"
       data-testid="workspace-viewer-panel"
     >
+      <Button
+        size="sm"
+        variant="ghost"
+        className="absolute -left-1 top-2 z-10 h-6 w-6 -translate-x-1/2 rounded-md border border-border2 bg-surface1 p-0 text-icon6 shadow-sm hover:bg-surface2"
+        onClick={collapse}
+        aria-label={viewerOpen ? 'Close workspace file viewer' : 'Close workspace files'}
+      >
+        <FilledArrowRight />
+      </Button>
       {viewerOpen ? (
         <div className="h-full min-w-0 flex-1 overflow-hidden">
           <WorkspaceFileViewer
@@ -76,7 +105,6 @@ export function WorkspaceViewerPanel({
             file={file.data}
             isLoading={file.isLoading}
             error={file.error instanceof Error ? file.error : undefined}
-            onClose={() => setViewerOpen(false)}
           />
         </div>
       ) : null}

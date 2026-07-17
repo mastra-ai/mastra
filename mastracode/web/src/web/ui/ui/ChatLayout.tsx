@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
+function FilledArrowLeft() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true" focusable="false">
+      <path d="M7 1.5L3 5L7 8.5V1.5Z" fill="currentColor" />
+    </svg>
+  );
+}
+
 type ChatLayoutProps = {
   sidebar: ReactNode;
   /** Optional bar above the chat content (e.g. mobile sidebar toggle). */
@@ -13,6 +21,8 @@ type ChatLayoutProps = {
   /** Optional desktop-only panel attached to the right side of chat. */
   rightPanel?: ReactNode;
   rightPanelExpanded?: boolean;
+  rightPanelAvailable?: boolean;
+  onRightPanelOpen?: () => void;
   /** Mobile-only: whether the sidebar overlay is open (controls the backdrop). */
   sidebarOpen?: boolean;
   onSidebarClose?: () => void;
@@ -36,6 +46,8 @@ export function ChatLayout({
   footer,
   rightPanel,
   rightPanelExpanded = false,
+  rightPanelAvailable = false,
+  onRightPanelOpen,
   sidebarOpen = false,
   onSidebarClose,
 }: ChatLayoutProps) {
@@ -87,7 +99,7 @@ export function ChatLayout({
         aria-hidden="true"
       />
 
-      <div ref={frameRef} className="relative z-1 flex h-full min-w-0 flex-1 overflow-hidden">
+      <div ref={frameRef} className="relative z-1 flex h-full min-w-0 flex-1 overflow-visible">
         <div className="flex h-full min-w-0 flex-1 flex-col overflow-y-scroll">
           {header}
           {main ?? (
@@ -106,10 +118,23 @@ export function ChatLayout({
               aria-label="Resize workspace panel"
               onPointerDown={startRightPanelResize}
             />
-            <div className="hidden h-full min-w-0 shrink-0 overflow-hidden lg:block" style={{ width: rightPanelWidth }}>
+            <div className="hidden h-full min-w-0 shrink-0 overflow-visible lg:block" style={{ width: rightPanelWidth }}>
               {rightPanel}
             </div>
           </>
+        ) : null}
+        {!rightPanel && rightPanelAvailable ? (
+          <button
+            type="button"
+            className="absolute right-2 top-2 hidden items-center gap-1.5 text-icon6 lg:inline-flex"
+            onClick={onRightPanelOpen}
+            aria-label="Open workspace files"
+          >
+            <span className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border2 bg-surface1 shadow-sm hover:bg-surface2">
+              <FilledArrowLeft />
+            </span>
+            <span className="text-ui-xs font-medium">Files</span>
+          </button>
         ) : null}
       </div>
     </div>
