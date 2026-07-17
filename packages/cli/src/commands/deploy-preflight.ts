@@ -154,9 +154,16 @@ export async function preflightBuildOutput(
      *   severity falls back to `hasEnvFile`.
      */
     managedEnvVarNames?: string[] | null;
+    /**
+     * Slug of the environment being deployed to. Threaded into remediation
+     * text so `mastra env db create <slug> --kind ...` is copy-pasteable in
+     * non-interactive shells (CI), where the plain form errors when multiple
+     * environments exist. Omit for lint / studio contexts.
+     */
+    environmentSlug?: string;
   } = {},
 ): Promise<PreflightIssue[]> {
-  const { hasEnvFile = true, managedEnvVarNames } = options;
+  const { hasEnvFile = true, managedEnvVarNames, environmentSlug } = options;
   const outputDir = join(targetDir, '.mastra', 'output');
   const entryPath = join(outputDir, 'index.mjs');
 
@@ -188,7 +195,9 @@ export async function preflightBuildOutput(
   // plugin `mastra-local-storage-detector` runs during bundling and only
   // reports paths from user modules (not node_modules) that survived
   // tree-shaking, so library examples are structurally excluded.
-  issues.push(...(await checkLocalStoragePaths(outputDir, metadata, envVars, hasEnvFile, managedEnvVarNames)));
+  issues.push(
+    ...(await checkLocalStoragePaths(outputDir, metadata, envVars, hasEnvFile, managedEnvVarNames, environmentSlug)),
+  );
 
   return issues;
 }
@@ -390,11 +399,17 @@ async function readPreflightMetadata(outputDir: string): Promise<PreflightMetada
  * when the guarded var maps to a known provider (issue 35-B: the remediation
  * previously said "attach a managed database" without ever naming the command).
  */
-export function dbCreateCommandFor(envVarName: string): string {
+export function dbCreateCommandFor(envVarName: string, environmentSlug?: string): string {
+  // env slug goes BEFORE flags because it's a positional argument on
+  // `mastra env db create`, not a flag. Scoping to the target environment
+  // matters after 8816f47: `mastra env db create` with no arg errors in
+  // non-interactive shells when multiple environments exist, which is
+  // exactly where preflight failures land (CI).
+  const envArg = environmentSlug ? ` ${environmentSlug}` : '';
   for (const [kind, names] of Object.entries(DB_ENV_VAR_NAMES)) {
-    if (names.includes(envVarName)) return `mastra env db create --kind ${kind}`;
+    if (names.includes(envVarName)) return `mastra env db create${envArg} --kind ${kind}`;
   }
-  return 'mastra env db create';
+  return `mastra env db create${envArg}`;
 }
 
 /**
@@ -418,6 +433,7 @@ async function checkLocalStoragePaths(
   envVars: Record<string, string>,
   hasEnvFile: boolean,
   managedEnvVarNames?: string[] | null,
+  environmentSlug?: string,
 ): Promise<PreflightIssue[]> {
   let detections: LocalStorageDetection[];
   if (metadata) {
@@ -483,7 +499,7 @@ async function checkLocalStoragePaths(
           code: 'LOCAL_STORAGE_PATH',
           severity: 'error',
           message: `${truncate(d.value, 80)} will be used at runtime because ${d.guardedBy} is not set (${d.hint})`,
-          fix: `Set ${d.guardedBy} in your env file or the environment's stored vars, or create a managed database that provides it: ${dbCreateCommandFor(d.guardedBy)}`,
+          fix: `Set ${d.guardedBy} in your env file or the environment's stored vars, or create a managed database that provides it: ${dbCreateCommandFor(d.guardedBy, environmentSlug)}`,
           autofix: dbAutofixFor(d.guardedBy),
         });
       }
@@ -492,7 +508,7 @@ async function checkLocalStoragePaths(
         code: 'LOCAL_STORAGE_PATH',
         severity: 'error',
         message: `${truncate(d.value, 80)} will be used at runtime because ${d.guardedBy} is not set (${d.hint})`,
-        fix: `Set ${d.guardedBy} in your env file, or create a managed database that provides it: ${dbCreateCommandFor(d.guardedBy)}. If the platform already injects it, re-run with --skip-preflight.`,
+        fix: `Set ${d.guardedBy} in your env file, or create a managed database that provides it: ${dbCreateCommandFor(d.guardedBy, environmentSlug)}. If the platform already injects it, re-run with --skip-preflight.`,
         autofix: dbAutofixFor(d.guardedBy),
       });
     } else {

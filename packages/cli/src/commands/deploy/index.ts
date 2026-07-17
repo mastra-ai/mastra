@@ -812,6 +812,7 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
       // time; the platform exposes their names on the environment. Absent
       // field = older platform = incomplete env picture (soften to warnings).
       managedEnvVarNames: environment.managedEnvVarNames ?? null,
+      environmentSlug: environment.slug,
     });
 
     // If preflight flagged a blocking issue that a managed database would

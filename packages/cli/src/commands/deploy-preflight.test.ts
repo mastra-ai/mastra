@@ -352,6 +352,31 @@ describe('preflightBuildOutput', () => {
       expect(issue?.fix).not.toContain('--kind');
     });
 
+    it('scopes the db create command to the target environment when a slug is provided', async () => {
+      writeBundle(`export {};`);
+      writeMetadata({ localPaths: [guardedDetection] });
+
+      const issues = await preflightBuildOutput(
+        tmpDir,
+        {},
+        { hasEnvFile: false, managedEnvVarNames: [], environmentSlug: 'production' },
+      );
+      const issue = issues.find(i => i.code === 'LOCAL_STORAGE_PATH');
+      // Positional arg BEFORE the flag — `mastra env db create` accepts the
+      // environment as an argument, not as `--env`.
+      expect(issue?.fix).toContain('mastra env db create production --kind turso');
+    });
+
+    it('scopes the bare db create command too when a slug is provided', async () => {
+      writeBundle(`export {};`);
+      writeMetadata({ localPaths: [{ ...guardedDetection, guardedBy: 'MY_CUSTOM_DB_URL' }] });
+
+      const issues = await preflightBuildOutput(tmpDir, {}, { hasEnvFile: true, environmentSlug: 'staging' });
+      const issue = issues.find(i => i.code === 'LOCAL_STORAGE_PATH');
+      expect(issue?.fix).toContain('mastra env db create staging');
+      expect(issue?.fix).not.toContain('--kind');
+    });
+
     it('warns (not errors) on guarded misses when platform context lacks managedEnvVarNames (older platform)', async () => {
       writeBundle(`export {};`);
       writeMetadata({ localPaths: [guardedDetection] });
