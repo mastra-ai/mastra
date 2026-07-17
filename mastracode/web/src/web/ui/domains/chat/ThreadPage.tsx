@@ -1,9 +1,16 @@
-import { useParams } from 'react-router';
+import { useState } from 'react';
+import { useLocation, useParams } from 'react-router';
 
 import { useOverlays } from '../../lib/overlays';
 import { Sidebar } from '../../Sidebar';
 import { ChatLayout } from '../../ui';
-import { EmptyProjectState, useActiveProjectContext } from '../workspaces';
+import { renderedPaths, WorkspaceViewerPanel } from '../workspace-viewer';
+import {
+  activeWorkspacePath,
+  EmptyProjectState,
+  findUserSessionByThreadId,
+  useActiveProjectContext,
+} from '../workspaces';
 import { ChatHeader } from './components/ChatHeader';
 import { ChatMessageList } from './components/ChatMessageList';
 import { ChatOverlays } from './components/ChatOverlays';
@@ -20,11 +27,37 @@ export function ThreadPage() {
   const overlays = useOverlays();
   const { activeProject } = useActiveProjectContext();
   const { threadId } = useParams();
+  const location = useLocation();
+  const [workspaceViewerExpanded, setWorkspaceViewerExpanded] = useState(false);
+  const [workspaceViewerVisible, setWorkspaceViewerVisible] = useState(true);
+  const userSessionMatch = threadId ? findUserSessionByThreadId(threadId) : undefined;
+  const activeUserSessionMatch =
+    userSessionMatch && activeProject?.id === userSessionMatch.project.id ? userSessionMatch : undefined;
+  const isUserThreadRoute = location.pathname.startsWith('/user/threads/');
+  const workspaceProject = isUserThreadRoute ? activeUserSessionMatch?.project : activeProject;
+  const workspacePath = workspaceProject
+    ? activeWorkspacePath(workspaceProject, activeUserSessionMatch?.worktree)
+    : undefined;
 
   return (
     <ChatLayout
       sidebar={<Sidebar />}
       header={<ChatHeader />}
+      rightPanelExpanded={workspaceViewerExpanded}
+      rightPanelAvailable={Boolean(workspacePath)}
+      onRightPanelOpen={() => setWorkspaceViewerVisible(true)}
+      rightPanel={
+        workspacePath && workspaceViewerVisible ? (
+          <WorkspaceViewerPanel
+            workspacePath={workspacePath}
+            renderedPaths={renderedPaths}
+            title="Workspace files"
+            context={workspaceProject?.name}
+            onExpandedChange={setWorkspaceViewerExpanded}
+            onCollapse={() => setWorkspaceViewerVisible(false)}
+          />
+        ) : undefined
+      }
       main={
         <ChatSessionBoundary threadId={threadId}>
           {activeProject ? <ThreadPageMain /> : <EmptyProjectState onOpenProjects={() => overlays.open('projects')} />}
