@@ -158,7 +158,7 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
         ...(chunk.payload?.messageId ? { messageId: chunk.payload.messageId } : {}),
       };
     case 'step-start':
-      const { messageId: _messageId, ...rest } = chunk.payload;
+      const { messageId: _messageId, ...rest } = chunk.payload ?? {};
       return {
         type: 'start-step',
         request: rest.request,
