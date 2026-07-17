@@ -14,9 +14,9 @@ export interface SandboxAliasOptions {
   edgeConfigId: string;
   /** Item key to upsert with the sandbox URL */
   key: string;
-  /** Vercel API token with Edge Config write access. Defaults to `process.env.VERCEL_TOKEN`. */
-  token?: string;
-  /** Vercel team ID (optional). Defaults to `process.env.VERCEL_TEAM_ID`. */
+  /** Vercel API token with Edge Config write access. */
+  token: string;
+  /** Vercel team ID (optional). */
   teamId?: string;
 }
 

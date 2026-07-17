@@ -215,7 +215,7 @@ The example below shows a Vercel & Next.js setup, but the concept applies to any
   ```typescript title="src/mastra/index.ts"
   const deployer = new SandboxDeployer({
     sandbox: new VercelSandbox({ sandboxName: 'my-preview', ports: [4111] }),
-    alias: { edgeConfigId: 'ecfg_...', key: 'my-preview' },
+    alias: { edgeConfigId: 'ecfg_...', key: 'my-preview', token: process.env.VERCEL_TOKEN! },
   })
   ```
 

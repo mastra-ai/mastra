@@ -7,13 +7,10 @@ describe('updateEdgeConfigAlias', () => {
   beforeEach(() => {
     fetchMock = vi.fn(async () => new Response('{}', { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
-    vi.stubEnv('VERCEL_TOKEN', '');
-    vi.stubEnv('VERCEL_TEAM_ID', '');
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
-    vi.unstubAllEnvs();
   });
 
   it('upserts the key with the fresh sandbox URL', async () => {
@@ -45,21 +42,10 @@ describe('updateEdgeConfigAlias', () => {
     expect(String(fetchMock.mock.calls[0]![0])).toContain('teamId=team_1');
   });
 
-  it('falls back to VERCEL_TOKEN / VERCEL_TEAM_ID env vars', async () => {
-    vi.stubEnv('VERCEL_TOKEN', 'env-tok');
-    vi.stubEnv('VERCEL_TEAM_ID', 'env-team');
-
-    await updateEdgeConfigAlias({ edgeConfigId: 'ecfg_abc', key: 'k', url: 'https://x' });
-
-    const [url, init] = fetchMock.mock.calls[0]!;
-    expect(init.headers.Authorization).toBe('Bearer env-tok');
-    expect(String(url)).toContain('teamId=env-team');
-  });
-
-  it('throws when no token is available', async () => {
-    await expect(updateEdgeConfigAlias({ edgeConfigId: 'ecfg_abc', key: 'k', url: 'https://x' })).rejects.toThrow(
-      /Vercel API token/,
-    );
+  it('throws when no token is provided', async () => {
+    await expect(
+      updateEdgeConfigAlias({ edgeConfigId: 'ecfg_abc', key: 'k', token: '', url: 'https://x' }),
+    ).rejects.toThrow(/Vercel API token/);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

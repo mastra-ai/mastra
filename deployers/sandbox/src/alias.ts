@@ -6,14 +6,11 @@ import type { SandboxAliasOptions } from './types';
  * Config (e.g. in middleware) instead of hardcoding the rotating sandbox URL.
  */
 export async function updateEdgeConfigAlias(options: SandboxAliasOptions & { url: string }): Promise<void> {
-  const token = options.token ?? process.env.VERCEL_TOKEN;
+  const { token, teamId } = options;
   if (!token) {
-    throw new Error(
-      'Updating the Edge Config alias requires a Vercel API token. Pass `alias.token` or set VERCEL_TOKEN.',
-    );
+    throw new Error('Updating the Edge Config alias requires a Vercel API token. Pass `alias.token`.');
   }
 
-  const teamId = options.teamId ?? process.env.VERCEL_TEAM_ID;
   const endpoint = new URL(`https://api.vercel.com/v1/edge-config/${options.edgeConfigId}/items`);
   if (teamId) {
     endpoint.searchParams.set('teamId', teamId);
