@@ -177,7 +177,11 @@ function useAppHandlers(githubStatus: GithubStatus, options: AppHandlerOptions =
     ),
     http.post(`${API}/sessions`, async ({ request }) => {
       const body = (await request.json()) as { sessionScope?: string };
-      if (body.sessionScope) boundThreadId = 'thread-factory';
+      if (body.sessionScope && options.sessionThreadId) {
+        boundThreadId = body.sessionScope.includes('factory-pr-34') ? 'thread-related-review' : THREAD_ID;
+      } else if (body.sessionScope) {
+        boundThreadId = 'thread-factory';
+      }
       return HttpResponse.json({ controllerId: 'code', resourceId: RESOURCE_ID, threadId: boundThreadId });
     }),
     http.get(`${API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', label: 'Build' }] })),
@@ -188,9 +192,12 @@ function useAppHandlers(githubStatus: GithubStatus, options: AppHandlerOptions =
     http.get(`${SESSION}/threads`, ({ request }) => {
       const scoped = new URL(request.url).searchParams.has('sessionScope');
       return HttpResponse.json({
-        threads: scoped
-          ? [{ id: 'thread-factory', resourceId: RESOURCE_ID, title: 'Untitled thread' }]
-          : [{ id: boundThreadId, resourceId: RESOURCE_ID, title: 'Existing thread' }],
+        threads: [
+          ...(scoped ? [{ id: 'thread-factory', resourceId: RESOURCE_ID, title: 'Untitled thread' }] : []),
+          { id: THREAD_ID, resourceId: RESOURCE_ID, title: 'Existing thread' },
+          { id: 'thread-work', resourceId: RESOURCE_ID, title: 'Worker thread' },
+          { id: 'thread-related-review', resourceId: RESOURCE_ID, title: 'Related review thread' },
+        ],
       });
     }),
     http.post(`${SESSION}/thread`, async ({ request }) => {
@@ -509,8 +516,8 @@ describe('Factory Work and Review intake candidates', () => {
         makeWorkItem({
           id: '00000000-0000-4000-8000-000000000042',
           title: 'Add factory pages',
-          source: 'github-pr',
-          sourceKey: 'github-pr:42',
+          source: 'github-issue',
+          sourceKey: 'github-issue:42',
           stages: ['review'],
         }),
       ],
@@ -553,8 +560,8 @@ describe('Factory Work and Review intake candidates', () => {
         makeWorkItem({
           id: '00000000-0000-4000-8000-000000000042',
           title: 'Add factory pages',
-          source: 'github-pr',
-          sourceKey: 'github-pr:42',
+          source: 'github-issue',
+          sourceKey: 'github-issue:42',
           stages: ['review'],
         }),
       ],
