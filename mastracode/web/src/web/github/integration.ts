@@ -82,6 +82,38 @@ export interface IssueSummary {
 /** Page size for issue/PR listings; one GitHub API call per page. */
 export const LIST_PAGE_SIZE = 30;
 
+const TASK_TITLE_STATE_MAX_LENGTH = 512;
+const TASK_DESCRIPTION_MAX_LENGTH = 64_000;
+const TASK_URL_MAX_LENGTH = 2_048;
+const TASK_LIST_MAX_ITEMS = 50;
+const TASK_LIST_ITEM_MAX_LENGTH = 100;
+
+function boundedOptionalText(value: string | null | undefined, maxLength: number): string | undefined {
+  if (!value) return undefined;
+  return value.slice(0, maxLength);
+}
+
+function boundedTaskUrl(value: string | null | undefined): string | undefined {
+  if (!value || value.length > TASK_URL_MAX_LENGTH) return undefined;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:' ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function boundedTaskNames(values: Array<string | null | undefined>): string[] {
+  return values
+    .filter((value): value is string => Boolean(value))
+    .slice(0, TASK_LIST_MAX_ITEMS)
+    .map(value => value.slice(0, TASK_LIST_ITEM_MAX_LENGTH));
+}
+
+function isGithubNotFound(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'status' in error && error.status === 404;
+}
+
 export interface IssuePage {
   issues: IssueSummary[];
   /** Next page number to request, or `null` when this was the last page. */
@@ -107,6 +139,17 @@ export interface PullRequestPage {
   pullRequests: PullRequestSummary[];
   /** Next page number to request, or `null` when this was the last page. */
   nextPage: number | null;
+}
+
+/** Basic bounded fields needed by the Factory task-context panel. */
+export interface GithubTaskDetail {
+  number: number;
+  title: string;
+  description?: string;
+  state: string;
+  labels: string[];
+  assignees: string[];
+  url?: string;
 }
 
 export interface GithubIntegrationConfig {
@@ -313,6 +356,69 @@ export class GithubIntegration implements FactoryIntegration {
       };
     } catch {
       return null;
+    }
+  }
+
+  /** Fetch the basic fields for one issue through the project's installation. */
+  async getIssueDetail(
+    installationId: number,
+    repoFullName: string,
+    issueNumber: number,
+  ): Promise<GithubTaskDetail | null> {
+    const parts = splitRepoFullName(repoFullName);
+    if (!parts) return null;
+    try {
+      const { data } = await this.getInstallationOctokit(installationId).issues.get({
+        ...parts,
+        issue_number: issueNumber,
+      });
+      const description = boundedOptionalText(data.body, TASK_DESCRIPTION_MAX_LENGTH);
+      const url = boundedTaskUrl(data.html_url);
+      return {
+        number: data.number,
+        title: data.title.slice(0, TASK_TITLE_STATE_MAX_LENGTH),
+        ...(description !== undefined ? { description } : {}),
+        state: data.state.slice(0, TASK_TITLE_STATE_MAX_LENGTH),
+        labels: boundedTaskNames(
+          data.labels.map(label => (typeof label === 'string' ? label : label.name)),
+        ),
+        assignees: boundedTaskNames(data.assignees?.map(assignee => assignee.login) ?? []),
+        ...(url !== undefined ? { url } : {}),
+      };
+    } catch (error) {
+      if (isGithubNotFound(error)) return null;
+      throw error;
+    }
+  }
+
+  /** Fetch the basic fields for one pull request through the project's installation. */
+  async getPullRequestDetail(
+    installationId: number,
+    repoFullName: string,
+    pullRequestNumber: number,
+  ): Promise<GithubTaskDetail | null> {
+    const parts = splitRepoFullName(repoFullName);
+    if (!parts) return null;
+    try {
+      const { data } = await this.getInstallationOctokit(installationId).pulls.get({
+        ...parts,
+        pull_number: pullRequestNumber,
+      });
+      const state = data.merged ? 'merged' : data.state;
+      const description = boundedOptionalText(data.body, TASK_DESCRIPTION_MAX_LENGTH);
+      const url = boundedTaskUrl(data.html_url);
+      return {
+        number: data.number,
+        title: data.title.slice(0, TASK_TITLE_STATE_MAX_LENGTH),
+        ...(description !== undefined ? { description } : {}),
+        state: state.slice(0, TASK_TITLE_STATE_MAX_LENGTH),
+        labels: boundedTaskNames(data.labels.map(label => label.name)),
+        assignees: boundedTaskNames(data.assignees?.map(assignee => assignee.login) ?? []),
+        ...(url !== undefined ? { url } : {}),
+      };
+    } catch (error) {
+      if (isGithubNotFound(error)) return null;
+      throw error;
     }
   }
 

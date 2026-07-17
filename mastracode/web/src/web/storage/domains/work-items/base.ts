@@ -110,6 +110,12 @@ export interface WorkItemPriorState {
 export type UpsertWorkItemResult =
   { created: true; item: WorkItemRow } | { created: false; item: WorkItemRow; previous: WorkItemPriorState };
 
+/** Scoped reverse lookup result for the work item linked to one thread. */
+export type FindWorkItemByThreadIdResult =
+  | { status: 'none' }
+  | { status: 'match'; item: WorkItemRow }
+  | { status: 'ambiguous' };
+
 /**
  * Diff `oldStages` → `newStages` and return the updated history: exited stages
  * get `exitedAt` stamped on their open entry, entered stages get a new entry.
@@ -311,6 +317,20 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       return patchColumns(computed.changes);
     });
     return updated && previous ? { item: toRow(updated), previous } : null;
+  }
+
+  /** Find the single project work item linked to a thread, refusing ambiguous linkage. */
+  async findByThreadId(
+    orgId: string,
+    githubProjectId: string,
+    threadId: string,
+  ): Promise<FindWorkItemByThreadIdResult> {
+    const matches = (await this.list(orgId, githubProjectId)).filter(item =>
+      Object.values(item.sessions).some(session => session.threadId === threadId),
+    );
+    if (matches.length === 0) return { status: 'none' };
+    if (matches.length > 1) return { status: 'ambiguous' };
+    return { status: 'match', item: matches[0]! };
   }
 
   /**

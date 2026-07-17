@@ -68,4 +68,46 @@ describe('WorkItemsStorage', () => {
     expect(deleted?.id).toBe(a.item.id);
     expect(await storage.delete('org1', a.item.id)).toBeNull();
   });
+
+  it('finds scoped thread linkage and refuses ambiguous matches', async () => {
+    const storage = await makeStorage();
+    const threadId = 'thread:/opaque?value=1';
+
+    await storage.upsert({
+      orgId: 'org1',
+      userId: 'u',
+      githubProjectId: 'p1',
+      input: {
+        ...input,
+        sessions: { review: { projectPath: '/repo', branch: 'feature/one', threadId } },
+      },
+    });
+    await storage.upsert({
+      orgId: 'org2',
+      userId: 'u',
+      githubProjectId: 'p1',
+      input: {
+        ...input,
+        sessions: { work: { projectPath: '/other', branch: 'feature/other', threadId } },
+      },
+    });
+
+    const match = await storage.findByThreadId('org1', 'p1', threadId);
+    expect(match.status).toBe('match');
+    if (match.status === 'match') expect(match.item.orgId).toBe('org1');
+    expect(await storage.findByThreadId('org1', 'other-project', threadId)).toEqual({ status: 'none' });
+
+    await storage.upsert({
+      orgId: 'org1',
+      userId: 'u',
+      githubProjectId: 'p1',
+      input: {
+        ...input,
+        sourceKey: 'github-issue:43',
+        sessions: { custom: { projectPath: '/repo', branch: 'feature/two', threadId } },
+      },
+    });
+
+    expect(await storage.findByThreadId('org1', 'p1', threadId)).toEqual({ status: 'ambiguous' });
+  });
 });

@@ -25,8 +25,10 @@ import type {
 import { buildFsRoutes } from './fs-routes.js';
 import { buildOAuthRoutes } from './oauth-routes.js';
 import { getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './github/config.js';
+import { GithubIntegration } from './github/integration.js';
 import { buildFactoryRoutes } from './factory/routes.js';
 import { buildIntakeRoutes } from './intake/routes.js';
+import { LinearIntegration } from './linear/integration.js';
 import { getFactoryStorage, getSeededStateSigner } from './runtime-config.js';
 import { getLinearFeatureDiagnostics, isLinearFeatureEnabled } from './linear/config.js';
 import type { IntegrationStorage } from './storage/domains/integrations/base.js';
@@ -413,7 +415,21 @@ function disabledIntegrationStatusRoutes(id: string): ApiRoute[] {
 export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
   const registrations = deps.integrations ?? [];
   const githubRegistration = registrations.find(({ integration }) => integration.id === 'github');
+  const linearRegistration = registrations.find(({ integration }) => integration.id === 'linear');
   const githubStorage = githubRegistration ? deps.sourceControlStorage.forIntegration('github') : undefined;
+  const githubIntegration =
+    githubRegistration?.integration instanceof GithubIntegration ? githubRegistration.integration : undefined;
+  const linearIntegration =
+    linearRegistration?.integration instanceof LinearIntegration ? linearRegistration.integration : undefined;
+  const factoryRoutes = deps.factoryReady
+    ? buildFactoryRoutes({
+        sourceControlStorage: githubStorage,
+        ...(githubIntegration ? { githubIntegration } : {}),
+        ...(githubRegistration?.ensureReady ? { ensureGithubReady: githubRegistration.ensureReady } : {}),
+        ...(linearIntegration ? { linearIntegration } : {}),
+        ...(linearRegistration?.ensureReady ? { ensureLinearReady: linearRegistration.ensureReady } : {}),
+      })
+    : [];
   const integrationRoutes = registrations.flatMap(registration => {
     const { integration, ready, ensureReady } = registration;
     if (!deps.stateSigner) return disabledIntegrationStatusRoutes(integration.id);
@@ -475,7 +491,7 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
     ...integrationRoutes,
     ...absentStubs,
     ...(deps.intakeReady ? buildIntakeRoutes() : []),
-    ...(deps.factoryReady ? buildFactoryRoutes(githubStorage) : []),
+    ...factoryRoutes,
     ...(deps.factoryReady ? buildAuditRoutes({ baseUrl: deps.publicOrigin, githubStorage }) : []),
   ];
 }

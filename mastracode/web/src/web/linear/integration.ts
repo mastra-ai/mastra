@@ -112,6 +112,17 @@ export interface LinearIssueDetail extends LinearIssue {
   comments: LinearIssueComment[];
 }
 
+/** Basic bounded fields needed by the Factory task-context panel. */
+export interface LinearIssueContext {
+  identifier: string;
+  title: string;
+  description?: string;
+  state: string;
+  labels: string[];
+  assignees: string[];
+  url?: string;
+}
+
 /** The comment created by {@link LinearIntegration.createIssueComment}. */
 export interface LinearCreatedComment {
   id: string;
@@ -122,6 +133,30 @@ const LINEAR_ISSUES_PAGE_SIZE = 30;
 const ISSUE_COMMENTS_PAGE_SIZE = 50;
 /** Hard stop for comment pagination so a misbehaving cursor can't loop forever. */
 const ISSUE_COMMENTS_MAX_PAGES = 20;
+
+const TASK_IDENTIFIER_MAX_LENGTH = 128;
+const TASK_TITLE_STATE_MAX_LENGTH = 512;
+const TASK_DESCRIPTION_MAX_LENGTH = 64_000;
+const TASK_URL_MAX_LENGTH = 2_048;
+const TASK_LIST_MAX_ITEMS = 50;
+const TASK_LIST_ITEM_MAX_LENGTH = 100;
+
+function boundedTaskUrl(value: string | null | undefined): string | undefined {
+  if (!value || value.length > TASK_URL_MAX_LENGTH) return undefined;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:' ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function boundedTaskNames(values: Array<string | null | undefined>): string[] {
+  return values
+    .filter((value): value is string => Boolean(value))
+    .slice(0, TASK_LIST_MAX_ITEMS)
+    .map(value => value.slice(0, TASK_LIST_ITEM_MAX_LENGTH));
+}
 
 interface IssuesQueryData {
   issues: {
@@ -168,6 +203,18 @@ interface IssueDetailQueryData {
     team: { key: string } | null;
     labels: { nodes: Array<{ name: string }> };
     comments: IssueCommentsPage;
+  } | null;
+}
+
+interface IssueContextQueryData {
+  issue: {
+    identifier: string;
+    title: string;
+    description: string | null;
+    url: string;
+    state: { name: string };
+    assignee: { name: string } | null;
+    labels: { nodes: Array<{ name: string }> };
   } | null;
 }
 
@@ -399,6 +446,46 @@ export class LinearIntegration implements FactoryIntegration {
         updatedAt: node.updatedAt,
       })),
       nextCursor: pageInfo.hasNextPage ? pageInfo.endCursor : null,
+    };
+  }
+
+  /** Fetch one issue's basic panel fields without requesting comments. */
+  async fetchIssueContext(accessToken: string, idOrIdentifier: string): Promise<LinearIssueContext | null> {
+    let data: IssueContextQueryData;
+    try {
+      data = await linearGraphql<IssueContextQueryData>(
+        accessToken,
+        `query IssueContext($id: String!) {
+          issue(id: $id) {
+            identifier
+            title
+            description
+            url
+            state { name }
+            assignee { name }
+            labels { nodes { name } }
+          }
+        }`,
+        { id: idOrIdentifier },
+      );
+    } catch (error) {
+      if (error instanceof Error && /entity not found/i.test(error.message)) return null;
+      throw error;
+    }
+    const issue = data.issue;
+    if (!issue) return null;
+    const description = issue.description?.trim()
+      ? issue.description.slice(0, TASK_DESCRIPTION_MAX_LENGTH)
+      : undefined;
+    const url = boundedTaskUrl(issue.url);
+    return {
+      identifier: issue.identifier.slice(0, TASK_IDENTIFIER_MAX_LENGTH),
+      title: issue.title.slice(0, TASK_TITLE_STATE_MAX_LENGTH),
+      ...(description !== undefined ? { description } : {}),
+      state: issue.state.name.slice(0, TASK_TITLE_STATE_MAX_LENGTH),
+      labels: boundedTaskNames(issue.labels.nodes.map(label => label.name)),
+      assignees: boundedTaskNames([issue.assignee?.name]),
+      ...(url !== undefined ? { url } : {}),
     };
   }
 

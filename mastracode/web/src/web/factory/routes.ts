@@ -13,7 +13,9 @@ import type { Context } from 'hono';
 
 import { emitAudit } from '../audit/audit';
 import { ensureWebAuthUser, webAuthTenant } from '../auth';
-import type { SourceControlStorageHandle } from '../storage/domains/source-control/base';
+import type { GithubIntegration } from '../github/integration';
+import type { LinearIntegration } from '../linear/integration';
+import type { SourceControlProject, SourceControlStorageHandle } from '../storage/domains/source-control/base';
 import { clampMetricsWindow, computeFactoryMetrics } from './metrics';
 import { getFactoryStorage } from '../runtime-config';
 import { getQueueHealthStorage } from '../storage/domains';
@@ -22,18 +24,29 @@ import { thresholdsOrDefault } from '../storage/domains/queue-health/base';
 import type { WorkItemPriorState } from './store';
 import {
   deleteWorkItem,
+  findWorkItemByThreadId,
   listWorkItems,
   parseCreateWorkItem,
   parseUpdateWorkItem,
   updateWorkItem,
   upsertWorkItem,
 } from './store';
+import { loadFactoryThreadTaskContext } from './thread-context';
 
 function loose(c: unknown): Context {
   return c as Context;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MAX_THREAD_ID_LENGTH = 1_024;
+
+export interface FactoryRoutesDeps {
+  sourceControlStorage?: SourceControlStorageHandle;
+  githubIntegration?: GithubIntegration;
+  ensureGithubReady?: () => Promise<void>;
+  linearIntegration?: LinearIntegration;
+  ensureLinearReady?: () => Promise<void>;
+}
 
 /** Resolve the `(orgId, userId)` tenant or a ready-to-return error response. */
 async function resolveTenant(c: Context): Promise<{ orgId: string; userId: string } | { response: Response }> {
@@ -59,7 +72,9 @@ async function resolveTenant(c: Context): Promise<{ orgId: string; userId: strin
 async function resolveGithubRepository(
   c: Context,
   storage?: SourceControlStorageHandle,
-): Promise<{ orgId: string; userId: string; projectId: string } | { response: Response }> {
+): Promise<
+  { orgId: string; userId: string; projectId: string; project: SourceControlProject } | { response: Response }
+> {
   const tenant = await resolveTenant(c);
   if ('response' in tenant) return tenant;
 
@@ -76,7 +91,7 @@ async function resolveGithubRepository(
   if (!project) {
     return { response: c.json({ error: 'Repository not found' }, 404) };
   }
-  return { ...tenant, projectId };
+  return { ...tenant, projectId, project };
 }
 
 async function readJson(c: Context): Promise<unknown | undefined> {
@@ -141,14 +156,43 @@ async function auditWorkItemPatch(
 }
 
 /** Build the Factory work-item routes as Mastra `apiRoutes`. */
-export function buildFactoryRoutes(storage?: SourceControlStorageHandle): ApiRoute[] {
+export function buildFactoryRoutes(deps: FactoryRoutesDeps = {}): ApiRoute[] {
   return [
+    // ── Read the task context linked to one Factory thread ─────────────────
+    registerApiRoute('/web/factory/repositories/:id/threads/:threadId/context', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveGithubRepository(loose(c), deps.sourceControlStorage);
+        if ('response' in resolved) return resolved.response;
+        const threadId = loose(c).req.param('threadId');
+        if (!threadId || threadId.length > MAX_THREAD_ID_LENGTH) {
+          return c.json({ error: 'invalid_thread_id' }, 400);
+        }
+        const linked = await findWorkItemByThreadId(resolved.orgId, resolved.projectId, threadId);
+        if (linked.status === 'none') return c.json({ context: null });
+        if (linked.status === 'ambiguous') {
+          return c.json({ error: 'ambiguous_thread_context', message: 'Multiple work items reference this thread.' }, 409);
+        }
+        const context = await loadFactoryThreadTaskContext({
+          orgId: resolved.orgId,
+          project: resolved.project,
+          workItem: linked.item,
+          ...(deps.githubIntegration ? { githubIntegration: deps.githubIntegration } : {}),
+          ...(deps.ensureGithubReady ? { ensureGithubReady: deps.ensureGithubReady } : {}),
+          ...(deps.linearIntegration ? { linearIntegration: deps.linearIntegration } : {}),
+          ...(deps.ensureLinearReady ? { ensureLinearReady: deps.ensureLinearReady } : {}),
+        });
+        return c.json({ context });
+      },
+    }),
+
     // ── List the org's work items for a repository ─────────────────────────
     registerApiRoute('/web/factory/repositories/:id/work-items', {
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
-        const resolved = await resolveGithubRepository(loose(c), storage);
+        const resolved = await resolveGithubRepository(loose(c), deps.sourceControlStorage);
         if ('response' in resolved) return resolved.response;
         const items = await listWorkItems(resolved.orgId, resolved.projectId);
         return c.json({ workItems: items });
@@ -160,7 +204,7 @@ export function buildFactoryRoutes(storage?: SourceControlStorageHandle): ApiRou
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
-        const resolved = await resolveGithubRepository(loose(c), storage);
+        const resolved = await resolveGithubRepository(loose(c), deps.sourceControlStorage);
         if ('response' in resolved) return resolved.response;
         const days = clampMetricsWindow(loose(c).req.query('days'));
         const items = await listWorkItems(resolved.orgId, resolved.projectId);
@@ -173,7 +217,7 @@ export function buildFactoryRoutes(storage?: SourceControlStorageHandle): ApiRou
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
-        const resolved = await resolveGithubRepository(loose(c), storage);
+        const resolved = await resolveGithubRepository(loose(c), deps.sourceControlStorage);
         if ('response' in resolved) return resolved.response;
         const factoryStorage = getFactoryStorage();
         await factoryStorage.ensureDomainReady('queue-health');
@@ -191,7 +235,7 @@ export function buildFactoryRoutes(storage?: SourceControlStorageHandle): ApiRou
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
-        const resolved = await resolveGithubRepository(loose(c), storage);
+        const resolved = await resolveGithubRepository(loose(c), deps.sourceControlStorage);
         if ('response' in resolved) return resolved.response;
 
         const body = await readJson(loose(c));

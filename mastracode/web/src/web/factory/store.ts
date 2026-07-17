@@ -14,6 +14,7 @@ import { getFactoryStorage } from '../runtime-config';
 import { getWorkItemsStorage } from '../storage/domains';
 import type {
   CreateWorkItemInput,
+  FindWorkItemByThreadIdResult,
   UpdateWorkItemInput,
   UpsertWorkItemResult,
   WorkItemPriorState,
@@ -24,6 +25,7 @@ import type {
 
 export type {
   CreateWorkItemInput,
+  FindWorkItemByThreadIdResult,
   UpdateWorkItemInput,
   UpsertWorkItemResult,
   WorkItemPriorState,
@@ -174,6 +176,15 @@ async function workItemsDomain() {
 /** List the org's work items for a project, newest first. */
 export async function listWorkItems(orgId: string, githubProjectId: string): Promise<WorkItemRow[]> {
   return (await workItemsDomain()).list(orgId, githubProjectId);
+}
+
+/** Find the single scoped work item linked to a thread, refusing ambiguous linkage. */
+export async function findWorkItemByThreadId(
+  orgId: string,
+  githubProjectId: string,
+  threadId: string,
+): Promise<FindWorkItemByThreadIdResult> {
+  return (await workItemsDomain()).findByThreadId(orgId, githubProjectId, threadId);
 }
 
 /**

@@ -10,6 +10,7 @@
  * into the shared/platform-agnostic bundle.
  */
 import type { CustomProviderInfo, ModelPackInfo, OMConfigInfo, ProviderInfo } from '../../web/config-routes.js';
+import type { FactoryThreadTaskContext } from '../../web/factory/thread-context.js';
 import type {
   ArtifactEntry,
   ArtifactListing,
@@ -20,7 +21,7 @@ import type {
   WorkspaceRenderedListing,
 } from '../../web/fs-routes.js';
 
-export type { ProviderInfo, CustomProviderInfo, ModelPackInfo, OMConfigInfo };
+export type { ProviderInfo, CustomProviderInfo, ModelPackInfo, OMConfigInfo, FactoryThreadTaskContext };
 export type {
   ArtifactEntry,
   ArtifactListing,
