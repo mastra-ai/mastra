@@ -169,7 +169,7 @@ const materializeRepo = vi.fn(async (..._args: any[]) => {
   const onProgress = _args[4] as ((e: any) => void) | undefined;
   onProgress?.({ phase: 'cloning', message: 'Cloning octo/hello…' });
 });
-const reattachProjectSandbox = vi.fn(async (_id: string) => ({ id: 'sb' }));
+const reattachSandbox = vi.fn(async (_id: string) => ({ id: 'sb' }));
 const ensureWorktree = vi.fn(async (_sb: any, _workdir: string, opts: { branch: string; baseBranch: string }) => ({
   worktreePath: `/workspace/hello/../worktrees/${opts.branch}`,
   branch: opts.branch,
@@ -181,6 +181,21 @@ const commitAll = vi.fn(async () => ({ committed: true }));
 const pushBranch = vi.fn(async () => {});
 const createPullRequest = vi.fn(async () => ({ url: 'https://github.com/octo/hello/pull/1' }));
 let sandboxEnabled = true;
+vi.mock('../sandbox/fleet', () => {
+  class SandboxBudgetError extends Error {
+    readonly code = 'sandbox-budget-exceeded';
+    constructor(readonly max: number) {
+      super(`Sandbox budget exceeded: ${max}`);
+    }
+  }
+  return {
+    computeSandboxWorkdir: (repo: string) => `/workspace/${repo.split('/').pop()}`,
+    getSandboxProvider: () => 'railway',
+    isSandboxEnabled: () => sandboxEnabled,
+    reattachSandbox: (id: string) => reattachSandbox(id),
+    SandboxBudgetError,
+  };
+});
 vi.mock('./sandbox', () => {
   class MaterializeError extends Error {
     code: string;
@@ -197,14 +212,10 @@ vi.mock('./sandbox', () => {
     }
   }
   return {
-    computeSandboxWorkdir: (repo: string) => `/workspace/${repo.split('/').pop()}`,
     computeWorktreePath: (repoWorkdir: string, branch: string) =>
       `${repoWorkdir.replace(/\/+$/, '').split('/').slice(0, -1).join('/')}/worktrees/${branch.replace('/', '-')}-aeab418d`,
-    getSandboxProvider: () => 'railway',
-    isSandboxEnabled: () => sandboxEnabled,
     ensureProjectSandbox: (row: any, onProgress?: any) => ensureProjectSandbox(row, onProgress),
     materializeRepo: (...args: any[]) => materializeRepo(...(args as [])),
-    reattachProjectSandbox: (id: string) => reattachProjectSandbox(id),
     ensureWorktree: (sb: any, workdir: string, opts: any) => ensureWorktree(sb, workdir, opts),
     removeWorktree: (sb: any, workdir: string, opts: any) => removeWorktree(sb, workdir, opts),
     runWorktreeSetup: (sb: any, worktreePath: string, command: string) => runWorktreeSetup(sb, worktreePath, command),
@@ -386,7 +397,7 @@ beforeEach(() => {
   process.env.MASTRACODE_DISTRIBUTED_LOCK = '0';
   ensureProjectSandbox.mockClear();
   materializeRepo.mockClear();
-  reattachProjectSandbox.mockClear();
+  reattachSandbox.mockClear();
   ensureWorktree.mockClear();
   removeWorktree.mockClear();
   runWorktreeSetup.mockClear();
@@ -1367,7 +1378,7 @@ describe('worktree route', () => {
     expect(json.branch).toBe('feat/x');
     expect(json.baseBranch).toBe('main');
     expect(json.resourceId).toBe('p1');
-    expect(reattachProjectSandbox).toHaveBeenCalledWith('sb-1');
+    expect(reattachSandbox).toHaveBeenCalledWith('sb-1');
     expect(ensureWorktree).toHaveBeenCalledOnce();
     // A freshly minted install token + repo name are passed through so the
     // worktree forks from the latest fetched origin/<base>, not local state.

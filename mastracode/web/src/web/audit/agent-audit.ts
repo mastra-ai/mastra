@@ -20,7 +20,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { WebAuthUser } from '../auth';
 import { getWebAuthOrgId, getWebAuthUserId } from '../auth';
 import { parseCreatedPullRequest, stripHeredocBodies } from '../github/session-subscriptions';
-import type { AuditTarget } from './schema';
+import type { AuditTarget } from '../storage/domains/audit/base';
 import { recordAuditEvent } from './store';
 import { forwardToWorkOS } from './workos-sink';
 

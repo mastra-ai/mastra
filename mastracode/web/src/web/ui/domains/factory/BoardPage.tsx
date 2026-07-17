@@ -378,11 +378,7 @@ function readDragPayload(event: DragEvent): DragPayload | null {
  */
 export function BoardPage() {
   return (
-    <FactoryPageShell
-      title="Board"
-      description="Issues and pull requests across intake, work, review, and done."
-      maxWidthClassName="max-w-7xl"
-    >
+    <FactoryPageShell title="Board" description="Issues and pull requests across intake, work, review, and done.">
       {project => <Board project={project} />}
     </FactoryPageShell>
   );

@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { PostgresStore } from '@mastra/pg';
 import type { BetterAuthInstance } from './auth-better-adapter.js';
 import { BetterAuthWebAuth } from './auth-better-adapter.js';
 
@@ -92,7 +93,7 @@ describe('construction and init', () => {
     // SPA deploys must have their origins forwarded.
     const adapter = new BetterAuthWebAuth({ secret: 's3cret' });
     await adapter.init?.({
-      databaseUrl: 'postgres://user:pw@localhost:5432/app',
+      storage: new PostgresStore({ id: 'auth-test', connectionString: 'postgres://user:pw@localhost:5432/app' }),
       publicUrl: 'https://api.acme.com',
       allowedOrigins: ['https://app.acme.com'],
     });

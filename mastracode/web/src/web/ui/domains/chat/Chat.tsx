@@ -1,12 +1,12 @@
+import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
 import type { ReactNode } from 'react';
 import { Outlet, useLocation } from 'react-router';
 
 import { OverlaysProvider } from '../../lib/overlays';
 import { ActiveProjectProvider } from '../workspaces';
 import { ChatOverlays } from './components/ChatOverlays';
-import { ChatCommandsProvider } from './context/ChatCommandsProvider';
-import { ChatSessionProvider } from './context/ChatSessionProvider';
-import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
+import { ChatSessionConfigProvider } from './context/ChatSessionProvider';
+import { ChatPermissionsProvider } from './context/ChatPermissionsProvider';
 
 /**
  * Shared chat app providers. Route leaves render their own pages so `/new` is a
@@ -14,15 +14,15 @@ import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
  */
 export default function Chat() {
   return (
-    <ActiveProjectProvider>
-      <ChatSessionRouteProvider>
-        <OverlaysProvider>
-          <ChatCommandsProvider>
+    <MainSidebarProvider storageKey="mastracode-web" collapsedWidth={0} mobileBreakpoint={768}>
+      <ActiveProjectProvider>
+        <ChatSessionRouteProvider>
+          <OverlaysProvider>
             <ChatShell />
-          </ChatCommandsProvider>
-        </OverlaysProvider>
-      </ChatSessionRouteProvider>
-    </ActiveProjectProvider>
+          </OverlaysProvider>
+        </ChatSessionRouteProvider>
+      </ActiveProjectProvider>
+    </MainSidebarProvider>
   );
 }
 
@@ -36,15 +36,13 @@ function ChatSessionRouteProvider({ children }: { children: ReactNode }) {
       : undefined;
 
   return (
-    <ChatSessionProvider threadId={threadId} userScoped={userScoped}>
-      {children}
-    </ChatSessionProvider>
+    <ChatSessionConfigProvider threadId={threadId} userScoped={userScoped}>
+      <ChatPermissionsProvider>{children}</ChatPermissionsProvider>
+    </ChatSessionConfigProvider>
   );
 }
 
 function ChatShell() {
-  useGlobalShortcuts();
-
   return (
     <>
       <Outlet />

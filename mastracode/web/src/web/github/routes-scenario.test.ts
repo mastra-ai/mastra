@@ -101,7 +101,7 @@ vi.mock('./subscriptions', () => ({
 
 const ensureProjectSandbox = vi.fn(async (_row: any) => ({ id: 'sb' }));
 const materializeRepo = vi.fn(async () => {});
-const reattachProjectSandbox = vi.fn(async (_id: string) => ({ id: 'sb' }));
+const reattachSandbox = vi.fn(async (_id: string) => ({ id: 'sb' }));
 const ensureWorktree = vi.fn(async (_sb: any, _workdir: string, opts: { branch: string; baseBranch: string }) => ({
   worktreePath: `/workspace/hello/../worktrees/${opts.branch}`,
   branch: opts.branch,
@@ -113,6 +113,21 @@ let pushImpl: (...args: any[]) => Promise<void> = async () => {};
 const pushBranch = vi.fn((...args: any[]) => pushImpl(...args));
 const createPullRequest = vi.fn(async () => ({ url: 'https://github.com/octo/hello/pull/1' }));
 let sandboxEnabled = true;
+vi.mock('../sandbox/fleet', () => {
+  class SandboxBudgetError extends Error {
+    readonly code = 'sandbox-budget-exceeded';
+    constructor(readonly max: number) {
+      super(`Sandbox budget exceeded: ${max}`);
+    }
+  }
+  return {
+    computeSandboxWorkdir: (repo: string) => `/workspace/${repo.split('/').pop()}`,
+    getSandboxProvider: () => 'railway',
+    isSandboxEnabled: () => sandboxEnabled,
+    reattachSandbox: (id: string) => reattachSandbox(id),
+    SandboxBudgetError,
+  };
+});
 vi.mock('./sandbox', () => {
   class MaterializeError extends Error {
     code: string;
@@ -129,12 +144,8 @@ vi.mock('./sandbox', () => {
     }
   }
   return {
-    computeSandboxWorkdir: (repo: string) => `/workspace/${repo.split('/').pop()}`,
-    getSandboxProvider: () => 'railway',
-    isSandboxEnabled: () => sandboxEnabled,
     ensureProjectSandbox: (row: any) => ensureProjectSandbox(row),
     materializeRepo: (...args: any[]) => materializeRepo(...(args as [])),
-    reattachProjectSandbox: (id: string) => reattachProjectSandbox(id),
     ensureWorktree: (sb: any, workdir: string, opts: any) => ensureWorktree(sb, workdir, opts),
     commitAll: (...args: any[]) => commitAll(...(args as [])),
     pushBranch: (...args: any[]) => pushBranch(...(args as [])),
@@ -270,7 +281,7 @@ beforeEach(() => {
   pushImpl = async () => {};
   ensureProjectSandbox.mockClear();
   materializeRepo.mockClear();
-  reattachProjectSandbox.mockClear();
+  reattachSandbox.mockClear();
   ensureWorktree.mockClear();
   commitAll.mockClear();
   pushBranch.mockClear();

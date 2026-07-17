@@ -20,12 +20,14 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { ChatSessionTestProvider as ChatSessionProvider } from '../ChatSessionTestProvider';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import type { Project } from '../../../workspaces';
 import { ActiveProjectProvider, useActiveProjectContext } from '../../../workspaces';
 import { ChatMessageList } from '../../components/ChatMessageList';
-import { ChatMessageBoundary, ChatSessionProvider } from '../ChatSessionProvider';
+import { ModesSelection } from '../../components/StatusLine/ModesSelection';
+import { ChatMessageBoundary } from '../ChatSessionProvider';
 import { useChatConnection } from '../useChatConnection';
 import { useChatModels } from '../useChatModels';
 import { useChatPermissions } from '../useChatPermissions';
@@ -306,6 +308,10 @@ describe('ChatSessionProvider', () => {
     it('given a seeded project and synced session, when a mode consumer renders, then it reads modes and switches through the mode mutation path', async () => {
       const requests: string[] = [];
       let activeModeId = 'build';
+      let completeModeSwitch: (() => void) | undefined;
+      const modeSwitchPending = new Promise<void>(resolve => {
+        completeModeSwitch = resolve;
+      });
       seedProject();
       useAgentControllerHandlers([], requests);
       server.use(
@@ -341,6 +347,7 @@ describe('ChatSessionProvider', () => {
         http.post(`${SESSION}/mode`, async ({ request }) => {
           const body = await request.json();
           requests.push(`mode:${JSON.stringify(body)}`);
+          await modeSwitchPending;
           if (typeof body === 'object' && body && 'modeId' in body && typeof body.modeId === 'string') {
             activeModeId = body.modeId;
           }
@@ -348,9 +355,15 @@ describe('ChatSessionProvider', () => {
         }),
       );
 
-      renderFocusedProbe(<ModesProbe />);
+      renderFocusedProbe(
+        <>
+          <ModesProbe />
+          <ModesSelection />
+        </>,
+      );
 
       await waitFor(() => expect(screen.getByTestId('active-mode-label')).toHaveTextContent('Build'));
+      expect(screen.getByRole('button', { name: 'Build' })).toHaveAttribute('aria-pressed', 'true');
       expect(screen.getByTestId('active-mode-id')).toHaveTextContent('build');
       expect(screen.getByTestId('modes-count')).toHaveTextContent('2');
       const readsBeforeSwitch = {
@@ -363,11 +376,21 @@ describe('ChatSessionProvider', () => {
         messages: requestCount(requests, 'messages'),
       };
 
-      await userEvent.click(screen.getByRole('button', { name: 'switch to plan' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Plan' }));
 
       await waitFor(() => expect(requests).toContain('mode:{"modeId":"plan"}'));
+      const pendingModeButton = screen.getByRole('button', { name: 'Plan' });
+      expect(pendingModeButton).toHaveAttribute('aria-pressed', 'true');
+      expect(pendingModeButton).toHaveAttribute('aria-busy', 'true');
+      expect(pendingModeButton).toBeEnabled();
+      expect(screen.getByRole('button', { name: 'Build' })).toBeEnabled();
+      expect(requestCount(requests, 'state')).toBe(readsBeforeSwitch.state);
+
+      completeModeSwitch?.();
+
       await waitFor(() => expect(screen.getByTestId('active-mode-label')).toHaveTextContent('Plan'));
-      expect(requestCount(requests, 'state')).toBe(readsBeforeSwitch.state + 1);
+      await waitFor(() => expect(pendingModeButton).toHaveAttribute('aria-busy', 'false'));
+      expect(requestCount(requests, 'state')).toBe(readsBeforeSwitch.state);
       for (const request of ['create', 'modes', 'models', 'permissions', 'threads', 'messages'] as const) {
         expect(requestCount(requests, request)).toBe(readsBeforeSwitch[request]);
       }
@@ -654,6 +677,20 @@ describe('ChatSessionProvider', () => {
       expect(screen.getByTestId('session-project-path')).toHaveTextContent('/tmp/mastracode-github-test');
       await waitFor(() => expect(requests).toContain('create'));
     });
+
+    it('binds a GitHub project session with the githubProjectId in session state', async () => {
+      const requests: string[] = [];
+      seedProject([githubProjectWithWorktree], githubProjectWithWorktree);
+      useAgentControllerHandlers([], requests);
+
+      renderFocusedProbe(<SessionContextProbe />);
+
+      await waitFor(() =>
+        expect(requests).toContain(
+          'setState:{"state":{"projectPath":"/tmp/mastracode-github-test","githubProjectId":"github-project-id"}}',
+        ),
+      );
+    });
   });
 
   describe('when route thread messages fail to load', () => {
@@ -752,7 +789,8 @@ describe('ChatSessionProvider', () => {
           message: {
             id: 'first-project-message',
             role: 'assistant',
-            content: [{ type: 'text', text: 'First project response' }],
+            createdAt: new Date().toISOString(),
+            content: { format: 2, parts: [{ type: 'text', text: 'First project response' }] },
           },
         },
         { type: 'usage_update', usage: { completionTokens: 12, totalTokens: 12 } },
