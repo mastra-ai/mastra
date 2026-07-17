@@ -38,6 +38,17 @@ function findSerializationIssue(
     return { path, referencePath, reason: `circular reference at ${path} references ${referencePath}` };
   }
 
+  if (!Array.isArray(value)) {
+    const proto = Object.getPrototypeOf(value);
+    if (proto !== Object.prototype && proto !== null) {
+      // Date, Map, Set, class instances, custom toJSON() objects, etc. change
+      // shape during JSON persistence, so identical retries would no longer
+      // deep-equal the persisted payload. Require explicit conversion instead.
+      const constructorName = (value as object).constructor?.name || 'unknown class';
+      return { path, reason: `non-plain object (${constructorName}) at ${path} would change during JSON persistence` };
+    }
+  }
+
   ancestors.set(value, path);
   try {
     if (Array.isArray(value)) {
