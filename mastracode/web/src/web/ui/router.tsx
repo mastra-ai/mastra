@@ -21,7 +21,7 @@ import { useActiveFactory } from '../../shared/hooks/useActiveFactory';
 import { useWorkItemsQuery } from '../../shared/hooks/useWorkItems';
 import { isServerFactory } from './domains/workspaces/services/factories';
 import { AuditPage } from './domains/factory/AuditPage';
-import { BoardPage } from './domains/factory/BoardPage';
+import { ReviewBoardPage, WorkBoardPage } from './domains/factory/BoardPage';
 import { MetricsPage } from './domains/factory/MetricsPage';
 import { OverviewPage } from './domains/factory/OverviewPage';
 
@@ -114,13 +114,14 @@ export function createAppRoutes(): RouteObject[] {
             // Personal (non-factory) sessions: same thread page, but the
             // session provider binds to the user's own resourceId + worktree.
             { path: 'user/threads/:threadId', element: <ThreadPage /> },
-            { path: 'factory/board', element: <BoardPage /> },
             { path: 'factory/overview', element: <OverviewPage /> },
+            { path: 'factory/work', element: <WorkBoardPage /> },
+            { path: 'factory/review', element: <ReviewBoardPage /> },
             { path: 'factory/metrics', element: <MetricsPage /> },
             { path: 'factory/audit', element: <AuditPage /> },
-            // Legacy Factory pages, folded into the Board.
-            { path: 'factory/intake', element: <Navigate to="/factory/board" replace /> },
-            { path: 'factory/review', element: <Navigate to="/factory/board" replace /> },
+            // Compatibility routes from the former combined Board.
+            { path: 'factory/board', element: <Navigate to="/factory/work" replace /> },
+            { path: 'factory/intake', element: <Navigate to="/factory/work" replace /> },
           ],
         },
         // Legacy deep links (the app used to serve everything at any path).

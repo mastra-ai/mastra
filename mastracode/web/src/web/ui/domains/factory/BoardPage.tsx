@@ -98,6 +98,34 @@ const INTAKE_SOURCES = [
 ] as const;
 
 type IntakeSource = (typeof INTAKE_SOURCES)[number]['id'];
+type BoardKind = 'work' | 'review';
+
+const REVIEW_BOARD_STAGES: ReadonlyArray<{ id: BoardStageId; label: string }> = [
+  { id: 'intake', label: 'Intake' },
+  { id: 'review', label: 'Reviewing' },
+  { id: 'done', label: 'Done' },
+];
+
+function boardStages(kind: BoardKind): ReadonlyArray<{ id: BoardStageId; label: string }> {
+  return kind === 'review' ? REVIEW_BOARD_STAGES : BOARD_STAGES;
+}
+
+function belongsToBoard(item: WorkItem, kind: BoardKind): boolean {
+  return kind === 'review' ? item.source === 'github-pr' : item.source !== 'github-pr';
+}
+
+function itemAppearsInStage(item: WorkItem, stage: BoardStageId, stages: ReadonlyArray<{ id: BoardStageId }>): boolean {
+  if (item.stages.includes(stage)) return true;
+  return stage === 'intake' && !stages.some(candidate => item.stages.includes(candidate.id));
+}
+
+function itemStageOptions(item: WorkItem): ReadonlyArray<{ id: BoardStageId; label: string }> {
+  return boardStages(item.source === 'github-pr' ? 'review' : 'work');
+}
+
+function itemStageLabel(item: WorkItem, stage: string): string {
+  return itemStageOptions(item).find(candidate => candidate.id === stage)?.label ?? stageLabel(stage);
+}
 
 /**
  * Stage list after moving a card out of `from` into `to`. Other concurrent
@@ -417,19 +445,38 @@ function readDragPayload(event: DragEvent): DragPayload | null {
  * by drag-and-drop or the card menu; moves only file/move cards, never start
  * agent runs.
  */
+export function WorkBoardPage() {
+  return <FactoryBoardPage kind="work" />;
+}
+
+export function ReviewBoardPage() {
+  return <FactoryBoardPage kind="review" />;
+}
+
+/** @deprecated Use WorkBoardPage. */
 export function BoardPage() {
+  return <WorkBoardPage />;
+}
+
+function FactoryBoardPage({ kind }: { kind: BoardKind }) {
+  const review = kind === 'review';
   return (
-    <FactoryPageShell title="Board" description="Issues and pull requests across intake, work, review, and done.">
-      {factory => <Board factory={factory} />}
+    <FactoryPageShell
+      title={review ? 'Review' : 'Work'}
+      description={
+        review
+          ? 'Pull requests moving through review intake, active review, and completion.'
+          : 'Issues moving through intake, planning, building, receiving review, and completion.'
+      }
+    >
+      {factory => <Board factory={factory} kind={kind} />}
     </FactoryPageShell>
   );
 }
 
-function Board({ factory }: { factory: ServerFactory }) {
+function Board({ factory, kind }: { factory: ServerFactory; kind: BoardKind }) {
   const repository = selectedRepository(factory);
 
-  // A Factory with no linked repositories is a valid state: the Board exists,
-  // it just has nothing to intake yet. Offer the connect flow inline.
   if (!repository) {
     return (
       <div className="flex max-w-xl flex-col gap-3">
@@ -439,12 +486,22 @@ function Board({ factory }: { factory: ServerFactory }) {
     );
   }
 
-  return <BoardContent factory={factory} repository={repository} />;
+  return <BoardContent factory={factory} repository={repository} kind={kind} />;
 }
 
-function BoardContent({ factory, repository }: { factory: ServerFactory; repository: FactoryRepository }) {
+function BoardContent({
+  factory,
+  repository,
+  kind,
+}: {
+  factory: ServerFactory;
+  repository: FactoryRepository;
+  kind: BoardKind;
+}) {
   const projectRepositoryId = repository.projectRepositoryId;
   const factoryProjectId = factory.binding.factoryProjectId;
+  const review = kind === 'review';
+  const stages = boardStages(kind);
   const items = useWorkItemsQuery(factoryProjectId);
   const configQuery = useIntakeConfigQuery();
   const linearStatusQuery = useLinearStatusQuery();
@@ -460,16 +517,15 @@ function BoardContent({ factory, repository }: { factory: ServerFactory; reposit
   const linearReady =
     (config?.linear.enabled ?? false) && linearConnected && (config?.linear.projectIds?.length ?? 0) > 0;
 
-  // The Intake swimlane browses one candidate feed at a time; a pill switcher
-  // inside the column filters between Issues, PRs, and Linear as available.
+  // Work intake owns issues; Review intake owns pull requests. Keeping the
+  // feeds on separate routes prevents review-producing PR work from being
+  // confused with the Work board's review-receiving lane.
   const githubIntakeActive = githubEnabled && githubSelected;
-  const availableIntakeSources: IntakeSource[] = [
-    ...(githubIntakeActive ? (['github'] as const) : []),
-    'github-prs' as const,
-    ...(linearReady ? (['linear'] as const) : []),
-  ];
-  const newIssueUrl = config && githubIntakeActive ? githubNewIssueUrl(repository.slug) : undefined;
-  const [intakeSource, setIntakeSource] = useState<IntakeSource>('github');
+  const availableIntakeSources: IntakeSource[] = review
+    ? ['github-prs']
+    : [...(githubIntakeActive ? (['github'] as const) : []), ...(linearReady ? (['linear'] as const) : [])];
+  const newIssueUrl = !review && config && githubIntakeActive ? githubNewIssueUrl(repository.slug) : undefined;
+  const [intakeSource, setIntakeSource] = useState<IntakeSource>(review ? 'github-prs' : 'github');
   const showIntakeSourceSwitch = availableIntakeSources.length > 1;
   const activeIntakeSource: IntakeSource | null = availableIntakeSources.includes(intakeSource)
     ? intakeSource
@@ -477,7 +533,7 @@ function BoardContent({ factory, repository }: { factory: ServerFactory; reposit
 
   // Only the active intake feed fetches; the other feeds load on switch.
   const issues = useProjectIssuesQuery(activeIntakeSource === 'github' ? projectRepositoryId : undefined);
-  const triageIssues = useProjectIssuesQuery(projectRepositoryId, AUTO_TRIAGED_LABEL);
+  const triageIssues = useProjectIssuesQuery(!review ? projectRepositoryId : undefined, AUTO_TRIAGED_LABEL);
   const pulls = useProjectPullRequestsQuery(activeIntakeSource === 'github-prs' ? projectRepositoryId : undefined);
   const linearIssues = useLinearIssuesQuery(activeIntakeSource === 'linear');
 
@@ -489,8 +545,9 @@ function BoardContent({ factory, repository }: { factory: ServerFactory; reposit
   const navigate = useNavigate();
   const boardContainerRef = useRef<HTMLDivElement>(null);
   const laneRefs = useRef(new Map<BoardStageId, HTMLElement>());
-  const autoPositionedFactoryRef = useRef<string | undefined>(undefined);
-  const userPositionedFactoryRef = useRef<string | undefined>(undefined);
+  const boardPositionKey = `${factory.id}:${kind}`;
+  const autoPositionedBoardRef = useRef<string | undefined>(undefined);
+  const userPositionedBoardRef = useRef<string | undefined>(undefined);
 
   // Worktrees that still exist. A card's session ref whose worktree was
   // deleted is stale: its thread is gone (worktree deletion cascades onto its
@@ -513,38 +570,39 @@ function BoardContent({ factory, repository }: { factory: ServerFactory; reposit
     navigate(`/threads/${session.threadId}`);
   };
 
-  const workItems = useMemo(() => items.data ?? [], [items.data]);
+  const allWorkItems = useMemo(() => items.data ?? [], [items.data]);
+  const workItems = allWorkItems.filter(item => belongsToBoard(item, kind));
 
-  // Live candidates minus anything already on the board (any stage).
+  // Live candidates minus anything already persisted in either workflow.
   const candidates = useMemo(() => {
-    const known = new Set(workItems.map(item => item.sourceKey).filter(Boolean));
+    const known = new Set(allWorkItems.map(item => item.sourceKey).filter(Boolean));
     const intakeIssues = (activeIntakeSource === 'github' ? (issues.data ?? []) : []).filter(
       issue => !hasLabel(issue.labels, AUTO_TRIAGED_LABEL),
     );
-    const all: BoardCandidate[] = [
-      ...intakeIssues.map(issueCandidate),
-      ...(triageIssues.data ?? []).map(issueCandidate),
-      ...(activeIntakeSource === 'github-prs' ? (pulls.data ?? []).map(pullRequestCandidate) : []),
-      ...(activeIntakeSource === 'linear' ? (linearIssues.data ?? []).map(linearCandidate) : []),
-    ];
+    const all: BoardCandidate[] = review
+      ? (pulls.data ?? []).map(pullRequestCandidate)
+      : [
+          ...intakeIssues.map(issueCandidate),
+          ...(triageIssues.data ?? []).map(issueCandidate),
+          ...(activeIntakeSource === 'linear' ? (linearIssues.data ?? []).map(linearCandidate) : []),
+        ];
     return all.filter(candidate => !known.has(candidate.sourceKey));
-  }, [workItems, issues.data, triageIssues.data, pulls.data, linearIssues.data, activeIntakeSource]);
+  }, [allWorkItems, issues.data, triageIssues.data, pulls.data, linearIssues.data, activeIntakeSource, review]);
 
   const boardDataPending =
     items.isPending ||
     configQuery.isPending ||
     linearStatusQuery.isPending ||
-    triageIssues.isPending ||
+    (!review && triageIssues.isPending) ||
     (activeIntakeSource === 'github' && issues.isPending) ||
     (activeIntakeSource === 'github-prs' && pulls.isPending) ||
     (activeIntakeSource === 'linear' && linearIssues.isPending);
 
   useEffect(() => {
-    if (boardDataPending || autoPositionedFactoryRef.current === factory.id) return;
-    autoPositionedFactoryRef.current = factory.id;
-    if (userPositionedFactoryRef.current === factory.id) return;
+    if (boardDataPending || autoPositionedBoardRef.current === boardPositionKey) return;
+    if (userPositionedBoardRef.current === boardPositionKey) return;
 
-    const firstPopulatedStage = BOARD_STAGES.find(
+    const firstPopulatedStage = stages.find(
       stage =>
         workItems.some(item => item.stages.includes(stage.id)) ||
         candidates.some(candidate => candidate.column === stage.id),
@@ -552,13 +610,16 @@ function BoardContent({ factory, repository }: { factory: ServerFactory; reposit
     const container = boardContainerRef.current;
     const lane = firstPopulatedStage ? laneRefs.current.get(firstPopulatedStage.id) : undefined;
     if (!container || !lane) return;
+    autoPositionedBoardRef.current = boardPositionKey;
     container.scrollTo?.({ left: Math.max(0, lane.offsetLeft - container.offsetLeft), behavior: 'auto' });
-  }, [boardDataPending, candidates, factory.id, workItems]);
+  }, [boardDataPending, boardPositionKey, candidates, stages, workItems]);
 
   const moveItem = (id: string, fromStage: string | null, toStage: string) => {
     const item = workItems.find(i => i.id === id);
     if (!item) return;
-    const next = stagesAfterMove(item.stages, fromStage, toStage);
+    const allowedStages = new Set<string>(stages.map(stage => stage.id));
+    const currentStages = item.stages.filter(stage => allowedStages.has(stage));
+    const next = stagesAfterMove(currentStages, fromStage, toStage);
     if (next.length === item.stages.length && next.every(stage => item.stages.includes(stage))) return;
     update.mutate({ id, patch: { stages: next } });
   };
@@ -597,17 +658,13 @@ function BoardContent({ factory, repository }: { factory: ServerFactory; reposit
         className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-2"
         aria-label="Board columns"
         onPointerDown={() => {
-          userPositionedFactoryRef.current = factory.id;
+          userPositionedBoardRef.current = boardPositionKey;
         }}
         onWheel={() => {
-          userPositionedFactoryRef.current = factory.id;
-        }}
-        onScroll={() => {
-          // Ignore the scroll event emitted by our own initial scrollTo call.
-          if (autoPositionedFactoryRef.current !== factory.id) userPositionedFactoryRef.current = factory.id;
+          userPositionedBoardRef.current = boardPositionKey;
         }}
       >
-        {BOARD_STAGES.map(stage => (
+        {stages.map(stage => (
           <BoardColumn
             key={stage.id}
             stage={stage.id}
@@ -654,13 +711,13 @@ function BoardContent({ factory, repository }: { factory: ServerFactory; reposit
             }
           >
             {workItems
-              .filter(item => item.stages.includes(stage.id))
+              .filter(item => itemAppearsInStage(item, stage.id, stages))
               .map(item => (
                 <WorkItemCard
                   key={`${item.id}:${stage.id}`}
                   item={item}
                   columnStage={stage.id}
-                  allItems={workItems}
+                  allItems={allWorkItems}
                   liveWorktreePaths={liveWorktreePaths}
                   // Until the worktree listing settles, liveness is unknown and
                   // every session ref looks stale — the title would render as a
@@ -895,10 +952,7 @@ function WorkItemCard({
   const runActions = runSpec === null ? [] : runSpec.actions.filter(action => !(action.role in liveSessions));
   const threadSession = itemThreadSession(liveSessions);
   const relatedItems = allItems.filter(
-    other =>
-      other.id !== item.id &&
-      other.stages.includes(columnStage) &&
-      (other.parentWorkItemId === item.id || item.parentWorkItemId === other.id),
+    other => other.id !== item.id && (other.parentWorkItemId === item.id || item.parentWorkItemId === other.id),
   );
 
   return (
@@ -969,11 +1023,13 @@ function WorkItemCard({
                   </DropdownMenu.Item>
                 );
               })}
-            {BOARD_STAGES.filter(stage => stage.id !== columnStage).map(stage => (
-              <DropdownMenu.Item key={stage.id} onClick={() => onMove(stage.id)}>
-                {stage.id === 'done' ? 'Mark done' : `Move to ${stage.label}`}
-              </DropdownMenu.Item>
-            ))}
+            {itemStageOptions(item)
+              .filter(stage => stage.id !== columnStage)
+              .map(stage => (
+                <DropdownMenu.Item key={stage.id} onClick={() => onMove(stage.id)}>
+                  {stage.id === 'done' ? 'Mark done' : `Move to ${stage.label}`}
+                </DropdownMenu.Item>
+              ))}
             <DropdownMenu.Item onClick={onRemove}>Remove</DropdownMenu.Item>
           </DropdownMenu.Content>
         </DropdownMenu>
@@ -994,7 +1050,7 @@ function WorkItemCard({
         <div className="flex flex-wrap items-center gap-1.5">
           {otherStages.map(stage => (
             <span key={stage} className="rounded-full bg-surface5 px-1.5 py-0.5 text-ui-xs text-icon4">
-              {stageLabel(stage)}
+              {itemStageLabel(item, stage)}
             </span>
           ))}
         </div>
