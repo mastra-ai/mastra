@@ -10,7 +10,11 @@ import { useLocation, useNavigate } from 'react-router';
 import { useApiConfig } from '../../../../../shared/api/config';
 import { queryKeys } from '../../../../../shared/api/keys';
 import { AGENT_CONTROLLER_THREAD_PAGE_SIZE } from '../../../../../shared/hooks/useAgentControllerThreads';
-import { useWorkspaceActivity, useWorkspaceThreadTitles } from '../../../../../shared/hooks/useWorkspaceActivity';
+import {
+  conversationThread,
+  useWorkspaceActivity,
+  useWorkspaceThreadTitles,
+} from '../../../../../shared/hooks/useWorkspaceActivity';
 import { useWorkspaceAttention } from '../../../../../shared/hooks/useWorkspaceAttention';
 import {
   deriveProjectPath,
@@ -69,7 +73,7 @@ export function WorkspacesSection() {
   const pending = selectWorkspace.isPending || deleteWorkspace.isPending;
 
   // Threads are scoped to a worktree, so entering a session lands on its
-  // most recent thread (creating one when it has none) — from anywhere,
+  // conversation thread (creating one when it has none) — from anywhere,
   // including Factory pages: a session row IS its conversation.
   const openWorktreeThread = async (worktreePath: string) => {
     try {
@@ -94,11 +98,10 @@ export function WorkspacesSection() {
             tags: { projectPath: worktreePath },
           }),
       });
-      const latest = [...threads].sort((a, b) => {
-        const ta = a.updatedAt ?? a.createdAt ?? '';
-        const tb = b.updatedAt ?? b.createdAt ?? '';
-        return tb.localeCompare(ta);
-      })[0];
+      // Same selection rule as the row label (latest titled thread first), so
+      // the row can never open a different thread than the one it is named
+      // after — e.g. a newer empty untitled thread seeded by session creation.
+      const latest = conversationThread(threads);
       if (latest) {
         // Warm the message cache first so the thread page renders content
         // instead of a loading skeleton, then jump straight to the target
@@ -169,9 +172,15 @@ export function WorkspacesSection() {
               running={runningByPath[worktree.worktreePath] === true}
               attention={attentionByPath[worktree.worktreePath] === true}
               disabled={pending}
-              onSeen={() => clearAttention(worktree.worktreePath)}
               onSelect={() => {
                 clearAttention(worktree.worktreePath);
+                // The active row is already the selected workspace — skip the
+                // redundant re-select and jump straight to its conversation
+                // (the user may be on the board, /new, or another page).
+                if (active) {
+                  void openWorktreeThread(worktree.worktreePath);
+                  return;
+                }
                 selectWorkspace.mutate(worktree.worktreePath, {
                   onSuccess: () => void openWorktreeThread(worktree.worktreePath),
                 });
@@ -222,7 +231,6 @@ export function WorkspaceRow({
   attention,
   disabled,
   onSelect,
-  onSeen,
   onDelete,
 }: {
   worktree: Worktree;
@@ -234,22 +242,16 @@ export function WorkspaceRow({
   attention: boolean;
   disabled: boolean;
   onSelect: () => void;
-  onSeen: () => void;
   onDelete?: () => void;
 }) {
-  // Selecting a row marks it seen (the parent clears attention in onSelect);
-  // the already-active row can't be re-selected, so clicking it just clears
-  // the done indicator.
-  const onClick = active ? (attention ? onSeen : undefined) : onSelect;
   const name = label ?? worktree.branch;
   return (
     <div className={`group relative rounded-md ${active ? 'bg-surface4' : 'hover:bg-surface3'}`}>
       <button
         type="button"
         aria-current={active ? 'true' : undefined}
-        aria-disabled={(active && !attention) || undefined}
         disabled={disabled}
-        onClick={onClick}
+        onClick={onSelect}
         title={worktree.branch}
         className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition ${active ? 'text-icon6' : 'text-icon3 hover:text-icon5'} disabled:cursor-default disabled:opacity-70`}
       >

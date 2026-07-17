@@ -49,8 +49,8 @@ export interface StartFactoryRunInput {
   threadTitle: string;
   /** Existing thread tags to prefer before falling back to the session thread. */
   threadTags?: Record<string, string>;
-  /** First user message sent to the agent (e.g. a skill invocation). */
-  prompt: string;
+  /** First user message sent to the agent (e.g. a skill invocation). Omit to open the session without starting a run. */
+  prompt?: string;
   /** Board card to file for this run (kanban record; optional). */
   workItem?: StartFactoryRunWorkItem;
 }
@@ -58,7 +58,9 @@ export interface StartFactoryRunInput {
 /**
  * Start an agent run for a Factory item: create (or reuse) a worktree for the
  * item's branch, create a fresh thread in that workspace, send the kickoff
- * prompt, and navigate to the new thread.
+ * prompt, and navigate to the new thread. Without a `prompt` it opens an
+ * empty session instead: same worktree/thread/card filing, but no message is
+ * sent — the user lands on the thread and types the first message.
  *
  * Sessions are scoped per worktree, so the run targets the NEW worktree's own
  * session (created here with its `projectPath` tag) instead of repointing the
@@ -106,22 +108,24 @@ export function useStartFactoryRun() {
       // the same item, reuse that thread: the prompt lands as a follow-up
       // message instead of leaving a stray second thread in the worktree.
       const threadId = await resolveRunThread(scopedSession, created.threadId, threadTitle, projectPath, threadTags);
-      await scopedSession.sendMessage(prompt);
+      if (prompt !== undefined) {
+        await scopedSession.sendMessage(prompt);
 
-      // Append the prompt to the thread's message cache so it renders
-      // immediately when the thread page mounts, before the server transcript
-      // catches up. Appending (not replacing) preserves any prior conversation
-      // when the run reuses an existing thread.
-      const message: MastraDBMessage = {
-        id: `local-${Date.now()}`,
-        role: 'user',
-        createdAt: new Date(),
-        content: { format: 2, parts: [{ type: 'text', text: prompt }] },
-      };
-      queryClient.setQueryData(
-        queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, threadId),
-        (existing: MastraDBMessage[] | undefined) => [...(existing ?? []), message],
-      );
+        // Append the prompt to the thread's message cache so it renders
+        // immediately when the thread page mounts, before the server transcript
+        // catches up. Appending (not replacing) preserves any prior conversation
+        // when the run reuses an existing thread.
+        const message: MastraDBMessage = {
+          id: `local-${Date.now()}`,
+          role: 'user',
+          createdAt: new Date(),
+          content: { format: 2, parts: [{ type: 'text', text: prompt }] },
+        };
+        queryClient.setQueryData(
+          queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, threadId),
+          (existing: MastraDBMessage[] | undefined) => [...(existing ?? []), message],
+        );
+      }
       // The thread now exists under the new worktree's project path; refresh
       // its thread list so the sidebar shows it once the UI lands there.
       void queryClient.invalidateQueries({

@@ -432,14 +432,14 @@ describe('Factory Board — Intake candidates', () => {
     expect(await within(intake).findByText('Fix flaky test')).toBeInTheDocument();
     expect(within(intake).getByText('Improve docs')).toBeInTheDocument();
     expect(within(intake).getAllByTestId('candidate-card')).toHaveLength(2);
-    // Candidates link out to GitHub without exposing implementation label chips.
-    expect(within(intake).getByText('Fix flaky test').closest('a')).toHaveAttribute(
+    // Candidates link out to GitHub via the external-link icon (the title
+    // opens the session) without exposing implementation label chips.
+    const flakyCandidate = within(intake).getByRole('article', { name: 'Fix flaky test' });
+    expect(within(flakyCandidate).getByRole('link', { name: 'Open in GitHub' })).toHaveAttribute(
       'href',
       'https://github.com/mastra-ai/mastra/issues/12',
     );
-    expect(
-      within(within(intake).getByRole('article', { name: 'Fix flaky test' })).queryByText('bug'),
-    ).not.toBeInTheDocument();
+    expect(within(flakyCandidate).queryByText('bug')).not.toBeInTheDocument();
     // PRs start in Intake too — behind the PRs feed pill, never in Review.
     expect(within(column('review')).queryByTestId('candidate-card')).not.toBeInTheDocument();
     const sources = within(intake).getByRole('group', { name: 'Intake source' });
@@ -642,7 +642,7 @@ describe('Factory Board — persisted cards', () => {
   });
 
   // A project that still has the worktree the cards' session refs point at:
-  // Thread links only render while the ref's worktree exists.
+  // the title only links to the thread while the ref's worktree exists.
   const issueWorktreePath = '/sandbox/mastra/worktrees/factory-issue-12';
   const projectWithIssueWorktree: Project = {
     ...githubProject,
@@ -658,7 +658,7 @@ describe('Factory Board — persisted cards', () => {
     startedBy: 'user-1',
   };
 
-  it('given a work item with sessions, when the Board renders, then the card links to its thread', async () => {
+  it('given a work item with sessions, when the Board renders, then the card title links to its thread', async () => {
     useBoardHandlers({
       workItems: [
         makeWorkItem({
@@ -675,10 +675,10 @@ describe('Factory Board — persisted cards', () => {
 
     await screen.findByTestId('board-column-intake');
     const card = within(column('execute')).getByTestId('work-item-card');
-    expect(within(card).getByRole('link', { name: 'Thread' })).toHaveAttribute('href', '/threads/thread-work');
+    expect(within(card).getByRole('link', { name: 'Fix flaky test' })).toHaveAttribute('href', '/threads/thread-work');
   });
 
-  it('given plan and work sessions on the same thread, when the Board renders, then the card shows a single Thread link', async () => {
+  it('given plan and work sessions on the same thread, when the Board renders, then the card shows a single thread link', async () => {
     const sharedThread = { ...issueWorkSession, threadId: 'thread-shared' };
     useBoardHandlers({
       workItems: [
@@ -696,13 +696,13 @@ describe('Factory Board — persisted cards', () => {
 
     await screen.findByTestId('board-column-intake');
     const card = within(column('execute')).getByTestId('work-item-card');
-    const links = within(card).getAllByRole('link', { name: /thread/i });
+    const links = within(card).getAllByRole('link');
     expect(links).toHaveLength(1);
-    expect(links[0]).toHaveAccessibleName('Thread');
+    expect(links[0]).toHaveAccessibleName('Fix flaky test');
     expect(links[0]).toHaveAttribute('href', '/threads/thread-shared');
   });
 
-  it('given legacy sessions that diverged onto different threads, when the Board renders, then the card still shows a single Thread link', async () => {
+  it('given legacy sessions that diverged onto different threads, when the Board renders, then the card still shows a single thread link', async () => {
     useBoardHandlers({
       workItems: [
         makeWorkItem({
@@ -721,14 +721,14 @@ describe('Factory Board — persisted cards', () => {
 
     await screen.findByTestId('board-column-intake');
     const card = within(column('execute')).getByTestId('work-item-card');
-    const links = within(card).getAllByRole('link', { name: /thread/i });
+    const links = within(card).getAllByRole('link');
     expect(links).toHaveLength(1);
-    expect(links[0]).toHaveAccessibleName('Thread');
+    expect(links[0]).toHaveAccessibleName('Fix flaky test');
     // The last-filed ref wins until the next run converges them.
     expect(links[0]).toHaveAttribute('href', '/threads/thread-work');
   });
 
-  it('given a session ref whose worktree was deleted, when the Board renders, then the stale thread link is hidden and runs are offered again', async () => {
+  it('given a session ref whose worktree was deleted, when the Board renders, then the title offers to open a fresh session and runs are offered again', async () => {
     useBoardHandlers({
       workItems: [
         makeWorkItem({
@@ -747,13 +747,15 @@ describe('Factory Board — persisted cards', () => {
 
     await screen.findByTestId('board-column-intake');
     const card = within(column('execute')).getByTestId('work-item-card');
-    expect(within(card).queryByRole('link', { name: /thread/i })).not.toBeInTheDocument();
+    // The stale ref renders no thread link: the title is a create-session button.
+    expect(within(card).queryByRole('link')).not.toBeInTheDocument();
+    expect(within(card).getByRole('button', { name: 'Fix flaky test' })).toBeInTheDocument();
     // The stale ref no longer occupies the run slot: runs are offered again.
     await userEvent.click(within(card).getByRole('button', { name: 'Actions for Fix flaky test' }));
     expect(await screen.findByRole('menuitem', { name: 'Investigate' })).toBeInTheDocument();
   });
 
-  it('given a thread link, when clicked, then its worktree becomes the selected workspace and the app navigates to the thread', async () => {
+  it('given a card title linking to a thread, when clicked, then its worktree becomes the selected workspace and the app navigates to the thread', async () => {
     useBoardHandlers({
       workItems: [
         makeWorkItem({
@@ -766,15 +768,29 @@ describe('Factory Board — persisted cards', () => {
         }),
       ],
     });
+    // Opening an existing session must never create a worktree or send a
+    // message — record those endpoints without registering the run handlers.
+    const sideEffects: string[] = [];
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/worktree`, () => {
+        sideEffects.push('worktree');
+        return HttpResponse.json({}, { status: 500 });
+      }),
+      http.post(`${SESSION}/messages`, () => {
+        sideEffects.push('message');
+        return HttpResponse.json({ ok: true });
+      }),
+    );
     const { router } = renderAt('/factory/board', projectWithIssueWorktree);
 
     await screen.findByTestId('board-column-intake');
     const card = within(column('execute')).getByTestId('work-item-card');
-    await userEvent.click(within(card).getByRole('link', { name: 'Thread' }));
+    await userEvent.click(within(card).getByRole('link', { name: 'Fix flaky test' }));
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-work'));
     const stored = JSON.parse(localStorage.getItem('mastracode-projects') ?? '[]') as Project[];
     expect(stored[0]?.selectedWorktreePath).toBe(issueWorktreePath);
+    expect(sideEffects).toEqual([]);
   });
 
   it('given a card in Intake, when Move to Triage is chosen from the menu, then the card lands in the Triage swimlane', async () => {
@@ -1371,5 +1387,162 @@ describe('Factory Board — investigate flow', () => {
     expect(await screen.findByText('worktree failed')).toBeInTheDocument();
     expect(state.posts).toEqual([]);
     expect(router.state.location.pathname).toBe('/factory/board');
+  });
+});
+
+describe('Factory Board — open session from the card title', () => {
+  const issueWorktreePath = '/sandbox/mastra/worktrees/factory-issue-12';
+  const projectWithIssueWorktree: Project = {
+    ...githubProject,
+    worktrees: [
+      ...(githubProject.worktrees ?? []),
+      { branch: 'factory/issue-12', worktreePath: issueWorktreePath, baseBranch: 'main' },
+    ],
+  };
+
+  it('given a persisted card without a session, when the title is clicked, then an empty session is created and filed under chat with no prompt sent', async () => {
+    const state = useBoardHandlers({
+      workItems: [
+        makeWorkItem({
+          id: 'wi-1',
+          title: 'Fix flaky test',
+          source: 'github-issue',
+          sourceKey: 'github-issue:12',
+          url: 'https://github.com/mastra-ai/mastra/issues/12',
+          stages: ['intake'],
+          metadata: { number: 12 },
+        }),
+      ],
+    });
+    const captured = useFactoryRunHandlers('factory-issue-12');
+    const { router } = renderAt('/factory/board');
+
+    await screen.findByTestId('board-column-intake');
+    const card = within(column('intake')).getByTestId('work-item-card');
+    await userEvent.click(within(card).getByRole('button', { name: 'Fix flaky test' }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
+    expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
+    expect(captured.threadTitles).toEqual(['Issue #12: Fix flaky test']);
+    // No agent run: nothing was sent to the session.
+    expect(captured.messages).toEqual([]);
+    // Opening a session is not a run: the card keeps its stages.
+    expect(state.patches).toMatchObject([
+      {
+        id: 'wi-1',
+        stages: ['intake'],
+        sessions: { chat: { branch: 'factory/issue-12', threadId: 'thread-factory' } },
+      },
+    ]);
+  });
+
+  it('given a candidate, when the title is clicked, then the card materializes with a chat session in its own column and no prompt is sent', async () => {
+    const state = useBoardHandlers({ issues });
+    const captured = useFactoryRunHandlers('factory-issue-12');
+    const { router } = renderAt('/factory/board');
+
+    const intake = await screen.findByTestId('board-column-intake');
+    await within(intake).findByText('Fix flaky test');
+    await userEvent.click(within(intake).getByRole('button', { name: 'Fix flaky test' }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
+    expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
+    expect(captured.messages).toEqual([]);
+    expect(state.posts).toMatchObject([
+      {
+        source: 'github-issue',
+        sourceKey: 'github-issue:12',
+        title: 'Fix flaky test',
+        url: 'https://github.com/mastra-ai/mastra/issues/12',
+        stages: ['intake'],
+        metadata: { number: 12 },
+        sessions: { chat: { branch: 'factory/issue-12', threadId: 'thread-factory' } },
+      },
+    ]);
+  });
+
+  it('given a manual card without run metadata, when the title is clicked, then the session opens on an id-derived branch', async () => {
+    const state = useBoardHandlers({
+      workItems: [makeWorkItem({ id: 'wi-manual', title: 'Manual card' })],
+    });
+    const captured = useFactoryRunHandlers('factory-item-wi-manual');
+    const { router } = renderAt('/factory/board');
+
+    await screen.findByTestId('board-column-intake');
+    const card = within(column('intake')).getByTestId('work-item-card');
+    await userEvent.click(within(card).getByRole('button', { name: 'Manual card' }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
+    expect(captured.worktree).toMatchObject({ branch: 'factory/item-wi-manual' });
+    expect(captured.threadTitles).toEqual(['Manual card']);
+    expect(captured.messages).toEqual([]);
+    expect(state.patches).toMatchObject([
+      { id: 'wi-manual', stages: ['intake'], sessions: { chat: { branch: 'factory/item-wi-manual' } } },
+    ]);
+  });
+
+  it('given a card whose only session is a chat session, when the Board renders, then the title links to the thread and runs are still offered', async () => {
+    useBoardHandlers({
+      workItems: [
+        makeWorkItem({
+          id: 'wi-1',
+          title: 'Fix flaky test',
+          source: 'github-issue',
+          sourceKey: 'github-issue:12',
+          stages: ['intake'],
+          metadata: { number: 12 },
+          sessions: {
+            chat: { projectPath: issueWorktreePath, branch: 'factory/issue-12', threadId: 'thread-work', startedBy: 'user-1' },
+          },
+        }),
+      ],
+    });
+    renderAt('/factory/board', projectWithIssueWorktree);
+
+    await screen.findByTestId('board-column-intake');
+    const card = within(column('intake')).getByTestId('work-item-card');
+    expect(within(card).getByRole('link', { name: 'Fix flaky test' })).toHaveAttribute('href', '/threads/thread-work');
+    // A chat session occupies no run slot: Investigate and Build stay offered.
+    await userEvent.click(within(card).getByRole('button', { name: 'Actions for Fix flaky test' }));
+    expect(await screen.findByRole('menuitem', { name: 'Investigate' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Build' })).toBeInTheDocument();
+  });
+
+  it('given cards from different sources, when the Board renders, then each shows a source-appropriate external link', async () => {
+    useBoardHandlers({
+      workItems: [
+        makeWorkItem({
+          id: 'wi-gh',
+          title: 'GitHub card',
+          source: 'github-issue',
+          sourceKey: 'github-issue:12',
+          url: 'https://github.com/mastra-ai/mastra/issues/12',
+        }),
+        makeWorkItem({
+          id: 'wi-lin',
+          title: 'Linear card',
+          source: 'linear-issue',
+          sourceKey: 'linear:ENG-42',
+          url: 'https://linear.app/acme/issue/ENG-42',
+        }),
+        makeWorkItem({ id: 'wi-man', title: 'Manual card' }),
+      ],
+    });
+    renderAt('/factory/board');
+
+    await screen.findByTestId('board-column-intake');
+    const githubCard = within(column('intake')).getByRole('article', { name: 'GitHub card' });
+    expect(within(githubCard).getByRole('link', { name: 'Open in GitHub' })).toHaveAttribute(
+      'href',
+      'https://github.com/mastra-ai/mastra/issues/12',
+    );
+    const linearCard = within(column('intake')).getByRole('article', { name: 'Linear card' });
+    expect(within(linearCard).getByRole('link', { name: 'Open in Linear' })).toHaveAttribute(
+      'href',
+      'https://linear.app/acme/issue/ENG-42',
+    );
+    // No URL means no external link — and with no session, no links at all.
+    const manualCard = within(column('intake')).getByRole('article', { name: 'Manual card' });
+    expect(within(manualCard).queryByRole('link')).not.toBeInTheDocument();
   });
 });

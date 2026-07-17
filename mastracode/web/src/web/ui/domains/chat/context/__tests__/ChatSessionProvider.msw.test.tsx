@@ -752,7 +752,8 @@ describe('ChatSessionProvider', () => {
           message: {
             id: 'first-project-message',
             role: 'assistant',
-            content: [{ type: 'text', text: 'First project response' }],
+            createdAt: '2026-07-10T15:00:00Z',
+            content: { format: 2, parts: [{ type: 'text', text: 'First project response' }] },
           },
         },
         { type: 'usage_update', usage: { completionTokens: 12, totalTokens: 12 } },

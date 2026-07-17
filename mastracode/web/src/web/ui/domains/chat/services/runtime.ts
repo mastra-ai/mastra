@@ -1,8 +1,8 @@
 import type {
   AgentControllerEvent,
-  AgentControllerMessage,
   AgentControllerOMProgress,
   KnownAgentControllerEvent,
+  MastraDBMessage,
 } from '@mastra/client-js';
 
 export interface UsageSnapshot {
@@ -109,6 +109,9 @@ export function runtimeReducer(state: ChatRuntimeState, event: AgentControllerEv
   }
 }
 
-function hasAssistantText(message: AgentControllerMessage) {
-  return message.role === 'assistant' && message.content.some(part => part.type === 'text' && part.text?.trim());
+function hasAssistantText(message: MastraDBMessage) {
+  return (
+    message.role === 'assistant' &&
+    (message.content.parts ?? []).some(part => part.type === 'text' && part.text.trim())
+  );
 }
