@@ -15,8 +15,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { ChatSessionTestProvider as ChatSessionProvider } from '../../context/ChatSessionTestProvider';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
-import type { Project } from '../../../workspaces';
-import { ActiveProjectProvider } from '../../../workspaces';
+import type { Factory } from '../../../workspaces';
+import { ActiveFactoryProvider } from '../../../workspaces';
 import { ChatMessageList } from '../ChatMessageList';
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
@@ -29,16 +29,19 @@ afterEach(() => {
 });
 
 function seedProject() {
-  const project: Project = {
-    id: 'project-test',
-    name: 'MastraCode Test',
+  const project: Factory = {
+  id: 'project-test',
+  name: 'MastraCode Test',
+  resourceId: RESOURCE_ID,
+  createdAt: 1,
+  binding: {
+    kind: 'local',
     path: '/tmp/mastracode-test',
-    resourceId: RESOURCE_ID,
     gitBranch: 'main',
-    createdAt: 1,
-  };
-  localStorage.setItem('mastracode-projects', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-project', project.id);
+  },
+};
+  localStorage.setItem('mastracode-factories', JSON.stringify([project]));
+  localStorage.setItem('mastracode-active-factory', project.id);
 }
 
 function sessionState(): AgentControllerSessionState {
@@ -95,11 +98,11 @@ function renderMessageList() {
         <Route
           path="/threads/:threadId"
           element={
-            <ActiveProjectProvider>
+            <ActiveFactoryProvider>
               <ChatSessionProvider threadId={THREAD_ID}>
                 <ChatMessageList />
               </ChatSessionProvider>
-            </ActiveProjectProvider>
+            </ActiveFactoryProvider>
           }
         />
       </Routes>

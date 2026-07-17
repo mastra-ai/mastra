@@ -3,16 +3,16 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Trash2 } from 'lucide-react';
 
-import { useRemoveProjectMutation } from '../../../../../shared/hooks/useProjects';
-import { useActiveProjectContext } from '../../workspaces';
+import { useRemoveFactoryMutation } from '../../../../../shared/hooks/useFactories';
+import { isGithubFactory, useActiveFactoryContext } from '../../workspaces';
 import { deriveProjectPath } from '../../../../../shared/hooks/useWorkspaces';
 
 export function ProjectsSection() {
-  const { projects } = useActiveProjectContext();
-  const removeMutation = useRemoveProjectMutation();
+  const { factories } = useActiveFactoryContext();
+  const removeMutation = useRemoveFactoryMutation();
 
-  if (projects.length === 0) {
-    return <Notice variant="info">No configured projects.</Notice>;
+  if (factories.length === 0) {
+    return <Notice variant="info">No configured factories.</Notice>;
   }
 
   return (
@@ -31,17 +31,16 @@ export function ProjectsSection() {
       )}
 
       <div className="flex flex-col gap-2">
-        {projects.map(project => {
-          const detail =
-            project.source === 'github'
-              ? [project.gitBranch, project.sandboxWorkdir ?? 'Cloud sandbox'].filter(Boolean).join(' · ')
-              : deriveProjectPath(project);
+        {factories.map(factory => {
+          const detail = isGithubFactory(factory)
+            ? [factory.binding.gitBranch, factory.binding.sandboxWorkdir ?? 'Cloud sandbox'].filter(Boolean).join(' · ')
+            : deriveProjectPath(factory);
 
           return (
-            <div key={project.id} className="flex items-center justify-between gap-4 py-2">
+            <div key={factory.id} className="flex items-center justify-between gap-4 py-2">
               <div className="min-w-0 flex flex-col">
                 <Txt variant="ui-md" className="truncate font-medium">
-                  {project.name}
+                  {factory.name}
                 </Txt>
                 <Txt variant="ui-xs" className="truncate">
                   {detail}
@@ -51,8 +50,8 @@ export function ProjectsSection() {
                 size="xs"
                 variant="ghost"
                 disabled={removeMutation.isPending}
-                aria-label={`Remove ${project.name}`}
-                onClick={() => removeMutation.mutate(project.id)}
+                aria-label={`Remove ${factory.name}`}
+                onClick={() => removeMutation.mutate(factory.id)}
               >
                 <Trash2 size={14} />
                 Remove

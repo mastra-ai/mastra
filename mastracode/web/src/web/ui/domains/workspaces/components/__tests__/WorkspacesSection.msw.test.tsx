@@ -1,7 +1,7 @@
 /**
  * BDD coverage for the propless `WorkspacesSection` (factory Sessions).
  *
- * The section reads the active project from `useActiveProjectContext` and the
+ * The section reads the active project from `useActiveFactoryContext` and the
  * agent session from focused chat hooks, so the spec renders it inside the real
  * provider stack and asserts worktree selection through the MSW-captured
  * session-state requests instead of a session spy.
@@ -21,11 +21,17 @@ import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web
 import { queryKeys } from '../../../../../../shared/api/keys';
 import { ToastProvider } from '../../../../ui';
 import { ChatSessionConfigProvider } from '../../../chat/context/ChatSessionProvider';
-import { ActiveProjectProvider } from '../../context/ActiveProjectProvider';
-import type { Project } from '../../services/projects';
+import { ActiveFactoryProvider } from '../../context/ActiveFactoryProvider';
+import type { Factory, GithubFactory } from '../../services/factories';
+import { isGithubFactory, loadFactories, saveFactories } from '../../services/factories';
 import { playDoneSound } from '../../../settings/services/doneSound';
-import { loadProjects, saveProjects } from '../../services/projects';
 import { WorkspacesSection } from '../WorkspacesSection';
+
+function storedGithubFactory(): GithubFactory {
+  const factory = loadFactories()[0];
+  if (!factory || !isGithubFactory(factory)) throw new Error('expected github factory');
+  return factory;
+}
 
 // The completion sound synthesizes audio via AudioContext, which jsdom
 // doesn't provide; mock playback so specs can assert the notification fired.
@@ -38,15 +44,18 @@ const ORIGIN = TEST_BASE_URL;
 const GITHUB_PROJECT_ID = 'github-project-1';
 const API = `${ORIGIN}/api/agent-controller/code`;
 
-const githubProject: Project = {
+const githubProject: Factory = {
   id: 'project-gh',
   name: 'Mastra',
-  source: 'github',
-  githubProjectId: GITHUB_PROJECT_ID,
-  sandboxWorkdir: '/sandbox/mastra',
   resourceId: 'resource-gh',
-  gitBranch: 'main',
-  worktrees: [
+  createdAt: 1,
+  binding: {
+    kind: 'github',
+    githubProjectId: GITHUB_PROJECT_ID,
+    gitBranch: 'main',
+    sandboxWorkdir: '/sandbox/mastra',
+    selectedWorktreePath: '/sandbox/mastra-worktrees/feat-api',
+    worktrees: [
     // Legacy repo-root entry persisted by older builds — never a workspace.
     { branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' },
     { branch: 'feat-ui', worktreePath: '/sandbox/mastra-worktrees/feat-ui', baseBranch: 'main' },
@@ -59,16 +68,18 @@ const githubProject: Project = {
       threadId: 'thread-user',
     },
   ],
-  selectedWorktreePath: '/sandbox/mastra-worktrees/feat-api',
-  createdAt: 1,
+  },
 };
 
-const localProject: Project = {
+const localProject: Factory = {
   id: 'project-local',
   name: 'Local',
-  path: '/projects/local',
   resourceId: 'resource-local',
   createdAt: 1,
+  binding: {
+    kind: 'local',
+    path: '/projects/local',
+  },
 };
 
 afterEach(() => {
@@ -119,9 +130,9 @@ function useAgentControllerHandlers() {
   );
 }
 
-function seedActiveProject(project: Project) {
-  saveProjects([project]);
-  localStorage.setItem('mastracode-active-project', project.id);
+function seedActiveProject(project: Factory) {
+  saveFactories([project]);
+  localStorage.setItem('mastracode-active-factory', project.id);
 }
 
 function LocationProbe() {
@@ -133,12 +144,12 @@ function renderSection(initialPath = '/') {
   return renderWithProviders(
     <MemoryRouter initialEntries={[initialPath]}>
       <ToastProvider>
-        <ActiveProjectProvider>
+        <ActiveFactoryProvider>
           <ChatSessionConfigProvider>
             <WorkspacesSection defaultOpen />
             <LocationProbe />
           </ChatSessionConfigProvider>
-        </ActiveProjectProvider>
+        </ActiveFactoryProvider>
       </ToastProvider>
     </MemoryRouter>,
   );
@@ -326,7 +337,7 @@ describe('WorkspacesSection', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: 'feat-ui' }));
 
-    await waitFor(() => expect(loadProjects()[0]?.selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-ui'));
+    await waitFor(() => expect(storedGithubFactory().binding.selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-ui'));
     // Let the open-thread flow settle so its requests can't leak into later tests.
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-generic'));
   });
@@ -453,7 +464,7 @@ describe('WorkspacesSection', () => {
 
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-generic'));
     // No re-select happened — the workspace selection is unchanged.
-    expect(loadProjects()[0]?.selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-api');
+    expect(storedGithubFactory().binding.selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-api');
   });
 
   it('offers no ad-hoc workspace creation — factory sessions come from board runs', async () => {
@@ -522,8 +533,11 @@ describe('WorkspacesSection', () => {
     expect(deletedThreads).toEqual(['thread-doomed']);
     // The user-session worktree survives; the legacy repo-root entry is
     // dropped for good when the worktree list is rewritten.
-    expect(loadProjects()[0]?.worktrees?.map(worktree => worktree.branch)).toEqual(['feat-api', 'user/alice-notes']);
-    expect(loadProjects()[0]?.selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-api');
+    expect(storedGithubFactory().binding.worktrees.map(worktree => worktree.branch)).toEqual([
+      'feat-api',
+      'user/alice-notes',
+    ]);
+    expect(storedGithubFactory().binding.selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-api');
   });
 
   it('keeps the worktree when the delete confirmation is cancelled', async () => {
@@ -551,7 +565,7 @@ describe('WorkspacesSection', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Delete workspace?' })).not.toBeInTheDocument());
     expect(deleteCalled).toBe(false);
     expect(screen.getByRole('button', { name: 'feat-ui' })).toBeInTheDocument();
-    expect(loadProjects()[0]?.worktrees?.map(worktree => worktree.branch)).toEqual([
+    expect(storedGithubFactory().binding.worktrees.map(worktree => worktree.branch)).toEqual([
       'main',
       'feat-ui',
       'feat-api',

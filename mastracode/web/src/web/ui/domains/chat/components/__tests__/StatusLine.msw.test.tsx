@@ -16,8 +16,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ChatSessionTestProvider as ChatSessionProvider } from '../../context/ChatSessionTestProvider';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
-import type { Project } from '../../../workspaces';
-import { ActiveProjectProvider } from '../../../workspaces';
+import type { Factory } from '../../../workspaces';
+import { ActiveFactoryProvider } from '../../../workspaces';
 import { StatusLine } from '../StatusLine';
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
@@ -30,30 +30,35 @@ afterEach(() => {
 });
 
 function seedProject(source: 'local' | 'github' = 'local') {
-  const project: Project =
+  const project: Factory =
     source === 'github'
       ? {
           id: 'project-test',
           name: 'octo/hello',
-          source: 'github',
-          githubProjectId: 'github-project-test',
-          sandboxWorkdir: '/tmp/mastracode-test',
           resourceId: RESOURCE_ID,
-          gitBranch: 'main',
-          worktrees: [{ branch: 'feature', worktreePath: '/tmp/mastracode-test-worktree', baseBranch: 'main' }],
-          selectedWorktreePath: '/tmp/mastracode-test-worktree',
           createdAt: 1,
+          binding: {
+            kind: 'github',
+            githubProjectId: 'github-project-test',
+            gitBranch: 'main',
+            sandboxWorkdir: '/tmp/mastracode-test',
+            selectedWorktreePath: '/tmp/mastracode-test-worktree',
+            worktrees: [{ branch: 'feature', worktreePath: '/tmp/mastracode-test-worktree', baseBranch: 'main' }],
+          },
         }
       : {
           id: 'project-test',
           name: 'MastraCode Test',
-          path: '/tmp/mastracode-test',
           resourceId: RESOURCE_ID,
-          gitBranch: 'main',
           createdAt: 1,
+          binding: {
+            kind: 'local',
+            path: '/tmp/mastracode-test',
+            gitBranch: 'main',
+          },
         };
-  localStorage.setItem('mastracode-projects', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-project', project.id);
+  localStorage.setItem('mastracode-factories', JSON.stringify([project]));
+  localStorage.setItem('mastracode-active-factory', project.id);
 }
 
 function sessionState(modeId = 'build'): AgentControllerSessionState {
@@ -144,11 +149,11 @@ function renderStatusLine() {
         <Route
           path="/threads/:threadId"
           element={
-            <ActiveProjectProvider>
+            <ActiveFactoryProvider>
               <ChatSessionProvider>
                 <StatusLine />
               </ChatSessionProvider>
-            </ActiveProjectProvider>
+            </ActiveFactoryProvider>
           }
         />
       </Routes>

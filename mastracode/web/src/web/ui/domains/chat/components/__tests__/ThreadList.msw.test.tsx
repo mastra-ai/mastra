@@ -18,37 +18,42 @@ import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import { OverlaysProvider, useOverlays } from '../../../../lib/overlays';
 import { ToastProvider } from '../../../../ui';
-import type { Project } from '../../../workspaces';
-import { ActiveProjectProvider } from '../../../workspaces';
+import type { Factory } from '../../../workspaces';
+import { ActiveFactoryProvider } from '../../../workspaces';
 import { ThreadList } from '../ThreadList';
 
 const RESOURCE_ID = 'res-alpha';
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
 const SESSION = `${API}/sessions/${RESOURCE_ID}`;
 
-const project: Project = {
+const project: Factory = {
   id: 'p-alpha',
   name: 'Alpha',
-  path: '/projects/alpha',
   resourceId: RESOURCE_ID,
   createdAt: 1,
+  binding: {
+    kind: 'local',
+    path: '/projects/alpha',
+  },
 };
 
 /** GitHub project with a feature worktree selected — thread list is read-only. */
-const worktreeProject: Project = {
+const worktreeProject: Factory = {
   id: 'p-gh',
   name: 'Mastra',
-  source: 'github',
-  githubProjectId: 'gh-1',
-  sandboxWorkdir: '/sandbox/mastra',
   resourceId: RESOURCE_ID,
-  gitBranch: 'main',
-  worktrees: [
+  createdAt: 1,
+  binding: {
+    kind: 'github',
+    githubProjectId: 'gh-1',
+    gitBranch: 'main',
+    sandboxWorkdir: '/sandbox/mastra',
+    selectedWorktreePath: '/sandbox/mastra-worktrees/feat-ui',
+    worktrees: [
     { branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' },
     { branch: 'feat-ui', worktreePath: '/sandbox/mastra-worktrees/feat-ui', baseBranch: 'main' },
   ],
-  selectedWorktreePath: '/sandbox/mastra-worktrees/feat-ui',
-  createdAt: 1,
+  },
 };
 
 function thread(id: string, title: string, updatedAt: string): AgentControllerThreadInfo {
@@ -62,9 +67,9 @@ afterEach(() => {
   localStorage.clear();
 });
 
-function seedProject(seeded: Project = project) {
-  localStorage.setItem('mastracode-projects', JSON.stringify([seeded]));
-  localStorage.setItem('mastracode-active-project', seeded.id);
+function seedProject(seeded: Factory = project) {
+  localStorage.setItem('mastracode-factories', JSON.stringify([seeded]));
+  localStorage.setItem('mastracode-active-factory', seeded.id);
 }
 
 function sessionState(): AgentControllerSessionState {
@@ -159,7 +164,7 @@ function renderThreadList() {
   return renderWithProviders(
     <MemoryRouter initialEntries={['/chat']}>
       <ToastProvider>
-        <ActiveProjectProvider>
+        <ActiveFactoryProvider>
           <ChatSessionProvider>
             <OverlaysProvider>
               <ThreadList />
@@ -167,7 +172,7 @@ function renderThreadList() {
               <LocationProbe />
             </OverlaysProvider>
           </ChatSessionProvider>
-        </ActiveProjectProvider>
+        </ActiveFactoryProvider>
       </ToastProvider>
     </MemoryRouter>,
   );
@@ -235,7 +240,7 @@ describe('ThreadList', () => {
   it('given a GitHub project, then the list is read-only even when the repo-root path was persisted as selected', async () => {
     // Legacy projects could persist the repo root as the selected worktree;
     // it is no longer a workspace, so GitHub lists never expose thread controls.
-    seedProject({ ...worktreeProject, selectedWorktreePath: '/sandbox/mastra' });
+    seedProject({ ...worktreeProject, binding: { ...worktreeProject.binding, selectedWorktreePath: '/sandbox/mastra'  } });
     useAgentControllerHandlers([threadOne]);
     renderThreadList();
 

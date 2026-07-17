@@ -5,14 +5,14 @@ import { useKeyDown } from '../../../lib/hooks';
 import { CloseIcon, FolderIcon, LogoMark, SearchIcon } from '../../../ui/icons';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useGithubReposQuery } from '../../../../../shared/hooks/useGithubRepos';
-import { useCreateGithubProjectMutation } from '../../../../../shared/hooks/useProjects';
+import { useCreateGithubFactoryMutation } from '../../../../../shared/hooks/useFactories';
 import type { GithubRepo, GithubStatus } from '../services/github';
 import { connectGithub, manageGithubConnection } from '../services/github';
-import type { Project } from '../services/projects';
+import type { Factory } from '../services/factories';
 
 interface GithubConnectModalProps {
   status: GithubStatus;
-  onProjectCreated: (project: Project) => void;
+  onProjectCreated: (factory: Factory) => void;
   onClose: () => void;
 }
 
@@ -30,7 +30,7 @@ export function GithubConnectModal({ status, onProjectCreated, onClose }: Github
   const connected = status.connected;
   const [query, setQuery] = useState('');
   const reposQuery = useGithubReposQuery(query || undefined, connected);
-  const createProject = useCreateGithubProjectMutation();
+  const createProject = useCreateGithubFactoryMutation();
   const repos = reposQuery.data ?? [];
   const loading = reposQuery.isPending;
   const error = reposQuery.error ?? createProject.error;
@@ -77,7 +77,7 @@ export function GithubConnectModal({ status, onProjectCreated, onClose }: Github
         {!connected ? (
           <>
             <p className="mb-4 mt-0 text-ui-sm leading-relaxed text-icon3">
-              Install the MastraCode GitHub App to pick repositories you have access to and turn them into projects.
+              Install the MastraCode GitHub App to pick repositories you have access to and turn them into factories.
               Each repo is cloned into its own isolated cloud sandbox when you open it.
             </p>
             {/* Hide the connect button when the feature is disabled — /auth/github/connect won't exist */}
@@ -194,7 +194,7 @@ function StatusCallout({ status, connected, empty }: { status: GithubStatus; con
   if (status.organizationRequired || status.reason === 'organization_required') {
     return (
       <div className={calloutClass}>
-        Your account has no WorkOS organization. GitHub projects require an org. Sign out and back in to auto-create
+        Your account has no WorkOS organization. GitHub factories require an org. Sign out and back in to auto-create
         one, or ask your admin to add you to an org.
       </div>
     );

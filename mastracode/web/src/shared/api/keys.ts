@@ -8,7 +8,7 @@
  */
 export const queryKeys = {
   webAuth: () => ['web-auth'] as const,
-  projects: () => ['projects'] as const,
+  factories: () => ['factories'] as const,
   githubStatus: () => ['github', 'status'] as const,
   githubRepos: (query: string | undefined) => ['github', 'repos', query ?? null] as const,
   githubIssues: (githubProjectId: string | undefined, label?: string) =>

@@ -11,7 +11,7 @@
  * still reaches the Mastra server — same pattern as the shared API client.
  */
 
-import type { Project } from './projects';
+import type { GithubConnectedRepositoryPayload } from './factories';
 
 export interface GithubInstallation {
   installationId: number;
@@ -115,10 +115,14 @@ export async function listGithubRepos(baseUrl: string, query?: string): Promise<
 }
 
 /**
- * Create a project from a repo. The server persists a `github_projects` row
- * (no sandbox, no clone yet) and returns a `Project` payload of `source: github`.
+ * Create a connected GitHub repository binding. The server persists a
+ * `github_projects` row (no sandbox, no clone yet) and returns a temporary
+ * repository DTO. The browser wraps it into a Factory with its own UUID.
  */
-export async function createProjectFromRepo(baseUrl: string, repo: GithubRepo): Promise<Project> {
+export async function createProjectFromRepo(
+  baseUrl: string,
+  repo: GithubRepo,
+): Promise<GithubConnectedRepositoryPayload> {
   const res = await fetch(`${baseUrl}/web/github/projects`, {
     method: 'POST',
     credentials: 'include',
@@ -131,7 +135,7 @@ export async function createProjectFromRepo(baseUrl: string, repo: GithubRepo): 
     }),
   });
   if (!res.ok) throw new Error(`Failed to create project (${res.status})`);
-  const body = (await res.json()) as { project: Project };
+  const body = (await res.json()) as { project: GithubConnectedRepositoryPayload };
   return body.project;
 }
 

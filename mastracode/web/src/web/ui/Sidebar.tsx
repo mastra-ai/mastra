@@ -6,23 +6,29 @@ import { useApiConfig } from '../../shared/api/config';
 import { redirectToLogout, useWebAuth } from './domains/auth';
 import { ThreadList } from './domains/chat';
 import { FactorySection } from './domains/factory';
-import { ProjectSwitcher, useActiveProjectContext, UserSessionsSection, WorkspacesSection } from './domains/workspaces';
+import {
+  isGithubFactory,
+  ProjectSwitcher,
+  useActiveFactoryContext,
+  UserSessionsSection,
+  WorkspacesSection,
+} from './domains/workspaces';
 import { useOverlays } from './lib/overlays';
 
 /**
  * Composition shell: each section owns its data through the domain contexts
- * (`useActiveProjectContext`, focused chat hooks, `useOverlays`), so nothing is
+ * (`useActiveFactoryContext`, focused chat hooks, `useOverlays`), so nothing is
  * wired through props here.
  *
- * Everything runs in a worktree branched from the repo's HEAD. GitHub projects
+ * Everything runs in a worktree branched from the repo's HEAD. GitHub factories
  * show the Factory menu (Board + org-level factory Sessions) and the current
  * user's personal User Sessions; each worktree holds a single conversation, so
- * there is no nested thread list. Local projects (no worktrees) keep the flat
+ * there is no nested thread list. Local factories (no worktrees) keep the flat
  * thread list.
  */
 export function Sidebar() {
-  const { activeProject } = useActiveProjectContext();
-  const isGithubProject = activeProject?.source === 'github';
+  const { activeFactory } = useActiveFactoryContext();
+  const isGithub = activeFactory ? isGithubFactory(activeFactory) : false;
 
   return (
     <MainSidebar className="bg-transparent h-full">
@@ -32,7 +38,7 @@ export function Sidebar() {
             <ProjectSwitcher />
           </section>
           <section className="flex min-h-0 flex-1 flex-col gap-4" aria-label="Navigation">
-            {isGithubProject ? (
+            {isGithub ? (
               <>
                 <FactorySection>
                   <WorkspacesSection />

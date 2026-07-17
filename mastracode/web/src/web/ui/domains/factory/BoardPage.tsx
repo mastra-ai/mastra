@@ -12,7 +12,7 @@ import { useSelectWorkspaceMutation, useWorkspacesQuery } from '../../../../shar
 import { relativeTime } from '../../../../shared/lib/date';
 import { SkeletonRows } from '../../ui';
 import { AGENT_CONTROLLER_ID } from '../chat/services/constants';
-import type { Project } from '../workspaces/services/projects';
+import type { GithubFactory } from '../workspaces/services/factories';
 import { FactoryItemActions } from './components/FactoryItemActions';
 import { FactoryPageShell } from './components/FactoryPageShell';
 import { LoadMoreSentinel } from './components/LoadMoreSentinel';
@@ -403,8 +403,8 @@ export function BoardPage() {
   );
 }
 
-function Board({ project }: { project: Project & { githubProjectId: string } }) {
-  const githubProjectId = project.githubProjectId;
+function Board({ project }: { project: GithubFactory }) {
+  const githubProjectId = project.binding.githubProjectId;
   const items = useWorkItemsQuery(githubProjectId);
   const configQuery = useIntakeConfigQuery();
   const linearStatusQuery = useLinearStatusQuery();

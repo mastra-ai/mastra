@@ -1,23 +1,23 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
-import { useAddProjectMutation } from '../../../../../shared/hooks/useProjects';
+import { useAddFactoryMutation } from '../../../../../shared/hooks/useFactories';
 import { useOverlays } from '../../../lib/overlays';
-import { useActiveProjectContext } from '../context/ActiveProjectProvider';
+import { useActiveFactoryContext } from '../context/ActiveFactoryProvider';
 import { DirectoryBrowser } from './DirectoryPicker';
 
 /** Dedicated local-folder picker. Project selection and removal live elsewhere. */
 export function ProjectsModal() {
   const { close } = useOverlays();
-  const { selectProject } = useActiveProjectContext();
-  const addProject = useAddProjectMutation();
+  const { selectFactory } = useActiveFactoryContext();
+  const addLocalFactory = useAddFactoryMutation();
   const error =
-    addProject.error instanceof Error ? addProject.error.message : addProject.error ? String(addProject.error) : null;
+    addLocalFactory.error instanceof Error ? addLocalFactory.error.message : addLocalFactory.error ? String(addLocalFactory.error) : null;
 
   const handlePick = async (path: string, name: string) => {
     try {
-      const project = await addProject.mutateAsync({ name: name || path, path });
-      await selectProject(project);
+      const project = await addLocalFactory.mutateAsync({ name: name || path, path });
+      await selectFactory(project);
       close('projects');
     } catch {
       // Mutation state owns the rendered error.
@@ -38,7 +38,7 @@ export function ProjectsModal() {
           <DirectoryBrowser
             onPick={(path, name) => void handlePick(path, name)}
             onCancel={() => close('projects')}
-            busy={addProject.isPending}
+            busy={addLocalFactory.isPending}
             error={error}
           />
         </div>

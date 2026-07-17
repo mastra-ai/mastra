@@ -16,7 +16,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/web-ui/render';
-import type { GithubStatus, Project } from '../../workspaces';
+import type { GithubStatus, Factory } from '../../workspaces';
 import { createAppRoutes } from '../../../router';
 import type { GithubIssue, GithubPullRequest } from '../services/factory';
 import type { IntakeConfig } from '../services/intake';
@@ -29,25 +29,30 @@ const SESSION = `${API}/sessions/${RESOURCE_ID}`;
 const THREAD_ID = 'thread-test';
 const GITHUB_PROJECT_ID = 'github-project-1';
 
-const githubProject: Project = {
+const githubProject: Factory = {
   id: 'project-gh',
   name: 'mastra-ai/mastra',
-  source: 'github',
-  githubProjectId: GITHUB_PROJECT_ID,
-  sandboxWorkdir: '/sandbox/mastra',
   resourceId: RESOURCE_ID,
-  gitBranch: 'main',
-  worktrees: [{ branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' }],
-  selectedWorktreePath: '/sandbox/mastra',
   createdAt: 1,
+  binding: {
+    kind: 'github',
+    githubProjectId: GITHUB_PROJECT_ID,
+    gitBranch: 'main',
+    sandboxWorkdir: '/sandbox/mastra',
+    selectedWorktreePath: '/sandbox/mastra',
+    worktrees: [{ branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' }],
+  },
 };
 
-const localProject: Project = {
+const localProject: Factory = {
   id: 'project-local',
   name: 'Local',
-  path: '/projects/local',
   resourceId: RESOURCE_ID,
   createdAt: 1,
+  binding: {
+    kind: 'local',
+    path: '/projects/local',
+  },
 };
 
 const issues: GithubIssue[] = [
@@ -323,14 +328,14 @@ function useBoardHandlers(options: BoardHandlerOptions = {}): BoardState {
   return state;
 }
 
-function seedActiveProject(project: Project) {
-  localStorage.setItem('mastracode-projects', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-project', project.id);
+function seedActiveProject(project: Factory) {
+  localStorage.setItem('mastracode-factories', JSON.stringify([project]));
+  localStorage.setItem('mastracode-active-factory', project.id);
 }
 
 function renderAt(
   initialEntry: string,
-  project: Project = githubProject,
+  project: Factory = githubProject,
   githubStatus: GithubStatus = connectedStatus,
   options: AppHandlerOptions = {},
 ) {
@@ -424,7 +429,7 @@ describe('Factory Board routing', () => {
   it('given a local project, when visiting the Board, then a GitHub-only notice renders instead of columns', async () => {
     renderAt('/factory/board', localProject);
 
-    expect(await screen.findByText(/only available for GitHub projects/)).toBeInTheDocument();
+    expect(await screen.findByText(/only available for GitHub factories/)).toBeInTheDocument();
     expect(screen.queryByTestId('board-column-intake')).not.toBeInTheDocument();
   });
 
@@ -776,12 +781,15 @@ describe('Factory Board — persisted cards', () => {
   // A project that still has the worktree the cards' session refs point at:
   // the title only links to the thread while the ref's worktree exists.
   const issueWorktreePath = '/sandbox/mastra/worktrees/factory-issue-12';
-  const projectWithIssueWorktree: Project = {
+  const projectWithIssueWorktree: Factory = {
     ...githubProject,
-    worktrees: [
-      ...(githubProject.worktrees ?? []),
-      { branch: 'factory/issue-12', worktreePath: issueWorktreePath, baseBranch: 'main' },
-    ],
+    binding: {
+      ...githubProject.binding,
+      worktrees: [
+        ...githubProject.binding.worktrees,
+        { branch: 'factory/issue-12', worktreePath: issueWorktreePath, baseBranch: 'main' },
+      ],
+    },
   };
   const issueWorkSession = {
     projectPath: issueWorktreePath,
@@ -920,8 +928,10 @@ describe('Factory Board — persisted cards', () => {
     await userEvent.click(within(card).getByRole('link', { name: 'Fix flaky test' }));
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-work'));
-    const stored = JSON.parse(localStorage.getItem('mastracode-projects') ?? '[]') as Project[];
-    expect(stored[0]?.selectedWorktreePath).toBe(issueWorktreePath);
+    const stored = JSON.parse(localStorage.getItem('mastracode-factories') ?? '[]') as Factory[];
+    expect(stored[0]?.binding.kind === 'github' ? stored[0].binding.selectedWorktreePath : undefined).toBe(
+      issueWorktreePath,
+    );
     expect(sideEffects).toEqual([]);
   });
 
@@ -1700,12 +1710,15 @@ describe('Factory Board — investigate flow', () => {
 
 describe('Factory Board — open session from the card title', () => {
   const issueWorktreePath = '/sandbox/mastra/worktrees/factory-issue-12';
-  const projectWithIssueWorktree: Project = {
+  const projectWithIssueWorktree: Factory = {
     ...githubProject,
-    worktrees: [
-      ...(githubProject.worktrees ?? []),
-      { branch: 'factory/issue-12', worktreePath: issueWorktreePath, baseBranch: 'main' },
-    ],
+    binding: {
+      ...githubProject.binding,
+      worktrees: [
+        ...githubProject.binding.worktrees,
+        { branch: 'factory/issue-12', worktreePath: issueWorktreePath, baseBranch: 'main' },
+      ],
+    },
   };
 
   it('given a persisted card without a session, when the title is clicked, then an empty session is created and filed under chat with no prompt sent', async () => {

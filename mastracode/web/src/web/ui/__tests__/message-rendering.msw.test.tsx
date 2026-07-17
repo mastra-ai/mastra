@@ -14,7 +14,7 @@ import { loginUrl, logoutUrl } from '../domains/auth';
 import Chat from '../domains/chat/Chat';
 import { NewPage } from '../domains/chat/NewPage';
 import { ThreadPage } from '../domains/chat/ThreadPage';
-import type { Project } from '../domains/workspaces';
+import type { Factory } from '../domains/workspaces';
 
 /**
  * Renders <Chat /> inside a memory router mirroring the app's pathless chat
@@ -59,15 +59,18 @@ describe('web UI stylesheet entry', () => {
 });
 
 function seedProject() {
-  const project: Project = {
-    id: 'project-test',
-    name: 'MastraCode Test',
+  const project: Factory = {
+  id: 'project-test',
+  name: 'MastraCode Test',
+  resourceId: RESOURCE_ID,
+  createdAt: 1,
+  binding: {
+    kind: 'local',
     path: PROJECT_PATH,
-    resourceId: RESOURCE_ID,
-    createdAt: 1,
-  };
-  localStorage.setItem('mastracode-projects', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-project', project.id);
+  },
+};
+  localStorage.setItem('mastracode-factories', JSON.stringify([project]));
+  localStorage.setItem('mastracode-active-factory', project.id);
 }
 
 function sessionState(): AgentControllerSessionState {

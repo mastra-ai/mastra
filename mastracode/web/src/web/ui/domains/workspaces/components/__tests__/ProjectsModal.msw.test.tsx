@@ -11,7 +11,7 @@ import {
 } from '../../../chat/components/__tests__/overlay-test-utils';
 import type { DirectoryListing } from '../../../../../../shared/api/types';
 import { ProjectsModal } from '../../index';
-import { loadProjects } from '../../services/projects';
+import { loadFactories } from '../../services/factories';
 
 const FS_URL = `${TEST_BASE_URL}/web/fs/list`;
 
@@ -63,10 +63,14 @@ describe('ProjectsModal', () => {
     await user.click(await screen.findByRole('button', { name: 'Use this folder' }));
 
     await waitFor(() => {
-      expect(loadProjects()).toEqual([
-        expect.objectContaining({ name: 'projects', path: '/projects', resourceId: expect.any(String) }),
+      expect(loadFactories()).toEqual([
+        expect.objectContaining({
+          name: 'projects',
+          resourceId: expect.any(String),
+          binding: expect.objectContaining({ kind: 'local', path: '/projects' }),
+        }),
       ]);
     });
-    expect(localStorage.getItem('mastracode-active-project')).toBe(loadProjects()[0]?.id);
+    expect(localStorage.getItem('mastracode-active-factory')).toBe(loadFactories()[0]?.id);
   });
 });

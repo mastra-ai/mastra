@@ -9,8 +9,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ChatSessionTestProvider as ChatSessionProvider } from '../../../chat/context/ChatSessionTestProvider';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
-import type { Project } from '../../../workspaces';
-import { ActiveProjectProvider } from '../../../workspaces';
+import type { Factory } from '../../../workspaces';
+import { ActiveFactoryProvider } from '../../../workspaces';
 import { SettingsPanel } from '../../index';
 import { loadDoneSound, playDoneSound } from '../../services/doneSound';
 
@@ -27,12 +27,15 @@ const RESOURCE_ID = 'resource-settings-panel';
 const SESSION = `${API}/sessions/${RESOURCE_ID}`;
 const THREAD_ID = 'thread-settings-panel';
 
-const project: Project = {
+const project: Factory = {
   id: 'project-settings-panel',
   name: 'Settings Panel Project',
-  path: '/tmp/settings-panel',
   resourceId: RESOURCE_ID,
   createdAt: 1,
+  binding: {
+    kind: 'local',
+    path: '/tmp/settings-panel',
+  },
 };
 
 interface CapturedRequests {
@@ -128,8 +131,8 @@ function useAgentControllerHandlers(): CapturedRequests {
 }
 
 function seedProject() {
-  localStorage.setItem('mastracode-projects', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-project', project.id);
+  localStorage.setItem('mastracode-factories', JSON.stringify([project]));
+  localStorage.setItem('mastracode-active-factory', project.id);
 }
 
 function ThemeProbe() {
@@ -139,12 +142,12 @@ function ThemeProbe() {
 
 function Harness({ children }: { children: ReactNode }) {
   return (
-    <ActiveProjectProvider>
+    <ActiveFactoryProvider>
       <ChatSessionProvider threadId={THREAD_ID} deferUntilMessagesReady={false}>
         <ThemeProbe />
         {children}
       </ChatSessionProvider>
-    </ActiveProjectProvider>
+    </ActiveFactoryProvider>
   );
 }
 
@@ -202,10 +205,10 @@ describe('SettingsPanel', () => {
 
       await user.click(screen.getByRole('button', { name: 'Remove Settings Panel Project' }));
 
-      await waitFor(() => expect(localStorage.getItem('mastracode-active-project')).toBeNull());
+      await waitFor(() => expect(localStorage.getItem('mastracode-active-factory')).toBeNull());
       await user.click(screen.getByRole('tab', { name: 'Projects' }));
-      await screen.findByText('No configured projects.');
-      expect(JSON.parse(localStorage.getItem('mastracode-projects') ?? '[]')).toEqual([]);
+      await screen.findByText('No configured factories.');
+      expect(JSON.parse(localStorage.getItem('mastracode-factories') ?? '[]')).toEqual([]);
     });
 
     it('keeps the project visible and reports storage failures', async () => {

@@ -9,7 +9,7 @@ import {
   activeWorkspacePath,
   EmptyProjectState,
   findUserSessionByThreadId,
-  useActiveProjectContext,
+  useActiveFactoryContext,
 } from '../workspaces';
 import { ChatHeader } from './components/ChatHeader';
 import { ChatMessageList } from './components/ChatMessageList';
@@ -25,18 +25,18 @@ const threadComposerInnerClass = 'mx-auto w-full max-w-[80ch]';
 
 export function ThreadPage() {
   const overlays = useOverlays();
-  const { activeProject } = useActiveProjectContext();
+  const { activeFactory } = useActiveFactoryContext();
   const { threadId } = useParams();
   const location = useLocation();
   const [workspaceViewerExpanded, setWorkspaceViewerExpanded] = useState(false);
   const [workspaceViewerVisible, setWorkspaceViewerVisible] = useState(true);
   const userSessionMatch = threadId ? findUserSessionByThreadId(threadId) : undefined;
   const activeUserSessionMatch =
-    userSessionMatch && activeProject?.id === userSessionMatch.project.id ? userSessionMatch : undefined;
+    userSessionMatch && activeFactory?.id === userSessionMatch.factory.id ? userSessionMatch : undefined;
   const isUserThreadRoute = location.pathname.startsWith('/user/threads/');
-  const workspaceProject = isUserThreadRoute ? activeUserSessionMatch?.project : activeProject;
-  const workspacePath = workspaceProject
-    ? activeWorkspacePath(workspaceProject, activeUserSessionMatch?.worktree)
+  const workspaceFactory = isUserThreadRoute ? activeUserSessionMatch?.factory : activeFactory;
+  const workspacePath = workspaceFactory
+    ? activeWorkspacePath(workspaceFactory, activeUserSessionMatch?.worktree)
     : undefined;
 
   return (
@@ -52,7 +52,7 @@ export function ThreadPage() {
             workspacePath={workspacePath}
             renderedPaths={renderedPaths}
             title="Workspace files"
-            context={workspaceProject?.name}
+            context={workspaceFactory?.name}
             onExpandedChange={setWorkspaceViewerExpanded}
             onCollapse={() => setWorkspaceViewerVisible(false)}
           />
@@ -60,7 +60,7 @@ export function ThreadPage() {
       }
       main={
         <ChatSessionBoundary threadId={threadId}>
-          {activeProject ? <ThreadPageMain /> : <EmptyProjectState onOpenProjects={() => overlays.open('projects')} />}
+          {activeFactory ? <ThreadPageMain /> : <EmptyProjectState onOpenProjects={() => overlays.open('projects')} />}
           <ChatOverlays />
         </ChatSessionBoundary>
       }

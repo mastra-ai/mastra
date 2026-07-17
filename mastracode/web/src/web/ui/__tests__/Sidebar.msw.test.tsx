@@ -1,7 +1,7 @@
 /**
  * BDD coverage for the propless `Sidebar`.
  *
- * The sidebar consumes the domain contexts directly (`useActiveProjectContext`,
+ * The sidebar consumes the domain contexts directly (`useActiveFactoryContext`,
  * focused chat hooks, `useOverlays`, `useToast`, `useWebAuth`) instead of a
  * drilled prop bag, so the spec drives it end-to-end: real fetch transport,
  * MSW at the network boundary, assertions on the requests the thread actions
@@ -20,8 +20,8 @@ import { server } from '../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/web-ui/render';
 import { redirectToLogout } from '../domains/auth';
 import type * as AuthService from '../domains/auth/services/auth';
-import type { Project } from '../domains/workspaces';
-import { ActiveProjectProvider } from '../domains/workspaces';
+import type { Factory } from '../domains/workspaces';
+import { ActiveFactoryProvider } from '../domains/workspaces';
 import { OverlaysProvider } from '../lib/overlays';
 import { Sidebar } from '../Sidebar';
 import { ToastProvider } from '../ui';
@@ -37,36 +37,44 @@ const RESOURCE_ID = 'res-alpha';
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
 const SESSION = `${API}/sessions/${RESOURCE_ID}`;
 
-const project: Project = {
+const project: Factory = {
   id: 'p-alpha',
   name: 'Alpha',
-  path: '/projects/alpha',
   resourceId: RESOURCE_ID,
   createdAt: 1,
+  binding: {
+    kind: 'local',
+    path: '/projects/alpha',
+  },
 };
 
-const secondLocalProject: Project = {
+const secondLocalProject: Factory = {
   id: 'p-beta',
   name: 'Beta',
-  path: '/projects/beta',
   resourceId: 'res-beta',
   createdAt: 2,
+  binding: {
+    kind: 'local',
+    path: '/projects/beta',
+  },
 };
 
-const githubProject: Project = {
+const githubProject: Factory = {
   id: 'p-github',
   name: 'Mastra',
-  source: 'github',
-  githubProjectId: 'gh-project-1',
-  sandboxWorkdir: '/sandbox/mastra',
   resourceId: RESOURCE_ID,
-  gitBranch: 'main',
-  worktrees: [
+  createdAt: 1,
+  binding: {
+    kind: 'github',
+    githubProjectId: 'gh-project-1',
+    gitBranch: 'main',
+    sandboxWorkdir: '/sandbox/mastra',
+    selectedWorktreePath: '/sandbox/mastra',
+    worktrees: [
     { branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' },
     { branch: 'feat-ui', worktreePath: '/sandbox/mastra-worktrees/feat-ui', baseBranch: 'main' },
   ],
-  selectedWorktreePath: '/sandbox/mastra',
-  createdAt: 1,
+  },
 };
 
 const threadOne: AgentControllerThreadInfo = {
@@ -90,9 +98,9 @@ afterEach(() => {
   vi.mocked(redirectToLogout).mockClear();
 });
 
-function seedProject(active: Project = project, projects: Project[] = [active]) {
-  localStorage.setItem('mastracode-projects', JSON.stringify(projects));
-  localStorage.setItem('mastracode-active-project', active.id);
+function seedProject(active: Factory = project, projects: Factory[] = [active]) {
+  localStorage.setItem('mastracode-factories', JSON.stringify(projects));
+  localStorage.setItem('mastracode-active-factory', active.id);
 }
 
 function useGithubStatusHandler() {
@@ -200,14 +208,14 @@ function renderSidebar() {
     <MemoryRouter initialEntries={['/chat']}>
       <MainSidebarProvider storageKey="sidebar-test" mobileBreakpoint={0}>
         <ToastProvider>
-          <ActiveProjectProvider>
+          <ActiveFactoryProvider>
             <ChatSessionProvider>
               <OverlaysProvider>
                 <Sidebar />
                 <LocationProbe />
               </OverlaysProvider>
             </ChatSessionProvider>
-          </ActiveProjectProvider>
+          </ActiveFactoryProvider>
         </ToastProvider>
       </MainSidebarProvider>
     </MemoryRouter>,
@@ -290,7 +298,7 @@ describe('Sidebar', () => {
 
       await userEvent.click(screen.getByRole('menuitem', { name: 'Beta' }));
 
-      await waitFor(() => expect(localStorage.getItem('mastracode-active-project')).toBe(secondLocalProject.id));
+      await waitFor(() => expect(localStorage.getItem('mastracode-active-factory')).toBe(secondLocalProject.id));
       expect(await screen.findByText('Beta')).toBeInTheDocument();
     });
   });
@@ -317,7 +325,10 @@ describe('Sidebar', () => {
     });
 
     it('explains how factory Sessions are created when none exist', async () => {
-      seedProject({ ...githubProject, worktrees: [githubProject.worktrees![0]!] });
+      seedProject({
+        ...githubProject,
+        binding: { ...githubProject.binding, worktrees: [githubProject.binding.worktrees[0]!] },
+      });
       useAuthHandler();
       useGithubStatusHandler();
       useAgentControllerHandlers();

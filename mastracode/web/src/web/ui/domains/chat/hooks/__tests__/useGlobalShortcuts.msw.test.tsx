@@ -2,7 +2,7 @@
  * BDD coverage for `useGlobalShortcuts` (`domains/chat/hooks`).
  *
  * The hook is now zero-args: it observes `useOverlays()`,
- * `useChatTranscript()` (busy + abort), and `useActiveProjectContext()` (zero
+ * `useChatTranscript()` (busy + abort), and `useActiveFactoryContext()` (zero
  * projects force the projects modal open) directly. Specs preserve the
  * `?` shortcuts toggle unless typing, and the Escape priority cascade.
  */
@@ -17,8 +17,8 @@ import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import type { OverlayName } from '../../../../lib/overlays';
 import { OverlaysProvider, useOverlays } from '../../../../lib/overlays';
-import type { Project } from '../../../workspaces';
-import { ActiveProjectProvider } from '../../../workspaces';
+import type { Factory } from '../../../workspaces';
+import { ActiveFactoryProvider } from '../../../workspaces';
 import { useChatConnection } from '../../context/useChatConnection';
 import { useChatTranscript } from '../../context/useChatTranscript';
 import { useGlobalShortcuts } from '../useGlobalShortcuts';
@@ -35,15 +35,18 @@ afterEach(() => {
 });
 
 function seedProject() {
-  const project: Project = {
-    id: 'project-test',
-    name: 'MastraCode Test',
+  const project: Factory = {
+  id: 'project-test',
+  name: 'MastraCode Test',
+  resourceId: RESOURCE_ID,
+  createdAt: 1,
+  binding: {
+    kind: 'local',
     path: '/tmp/mastracode-test',
-    resourceId: RESOURCE_ID,
-    createdAt: 1,
-  };
-  localStorage.setItem('mastracode-projects', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-project', project.id);
+  },
+};
+  localStorage.setItem('mastracode-factories', JSON.stringify([project]));
+  localStorage.setItem('mastracode-active-factory', project.id);
 }
 
 function sse(events: AgentControllerEvent[] = []): Response {
@@ -109,13 +112,13 @@ function Probe() {
 
 function renderProbe(threadId?: string) {
   return renderWithProviders(
-    <ActiveProjectProvider>
+    <ActiveFactoryProvider>
       <ChatSessionProvider threadId={threadId}>
         <OverlaysProvider>
           <Probe />
         </OverlaysProvider>
       </ChatSessionProvider>
-    </ActiveProjectProvider>,
+    </ActiveFactoryProvider>,
   );
 }
 

@@ -10,7 +10,8 @@ import { useLinearProjectsQuery, useLinearStatusQuery } from '../../../../../sha
 import { connectLinear, isLinearReauthError } from '../../factory/services/linear';
 import type { LinearProject } from '../../factory/services/linear';
 import type { IntakeConfig } from '../../factory/services/intake';
-import { useProjectsQuery } from '../../../../../shared/hooks/useProjects';
+import { useFactoriesQuery } from '../../../../../shared/hooks/useFactories';
+import { isGithubFactory } from '../../workspaces/services/factories';
 
 /**
  * Toggle `id` in the selection list. `null` means "nothing selected" (nothing
@@ -84,8 +85,8 @@ function SourceCheckbox({
 
 /**
  * Settings › General › Intake sources: choose which sources feed the Factory
- * Intake page. Both sources sync only the explicitly selected projects —
- * nothing is synced until something is picked. Linear projects are grouped by
+ * Intake page. Both sources sync only the explicitly selected factories —
+ * nothing is synced until something is picked. Linear factories are grouped by
  * team. Every change persists immediately.
  */
 export function IntakeSection() {
@@ -93,7 +94,7 @@ export function IntakeSection() {
   const { toast } = useToast();
   const configQuery = useIntakeConfigQuery();
   const saveMutation = useSaveIntakeConfigMutation();
-  const projectsQuery = useProjectsQuery();
+  const factoriesQuery = useFactoriesQuery();
   const linearStatusQuery = useLinearStatusQuery();
 
   const linearStatus = linearStatusQuery.data;
@@ -101,7 +102,7 @@ export function IntakeSection() {
   const linearProjectsQuery = useLinearProjectsQuery(linearConnected);
 
   const config = configQuery.data;
-  const githubProjects = (projectsQuery.data ?? []).filter(p => p.source === 'github' && p.githubProjectId);
+  const githubProjects = (factoriesQuery.data ?? []).filter(isGithubFactory);
 
   const heading = (
     <Txt variant="ui-lg" className="text-icon6 font-medium">
@@ -142,7 +143,7 @@ export function IntakeSection() {
       <section className="flex flex-col gap-2" aria-label="GitHub intake">
         <SourceHeader
           title="GitHub"
-          hint="Sync open issues from the selected projects. Nothing syncs until you pick one."
+          hint="Sync open issues from the selected factories. Nothing syncs until you pick one."
           enabled={config.github.enabled}
           disabled={busy}
           onToggle={enabled => update({ ...config, github: { ...config.github, enabled } })}
@@ -151,21 +152,21 @@ export function IntakeSection() {
           <div className="flex flex-wrap gap-1.5 pl-1">
             {githubProjects.length === 0 ? (
               <Txt as="span" variant="ui-xs" className="text-icon3">
-                No GitHub projects yet — open a repo from GitHub to add one.
+                No GitHub factories yet — open a repo from GitHub to add one.
               </Txt>
             ) : (
               githubProjects.map(project => (
                 <SourceCheckbox
-                  key={project.githubProjectId}
+                  key={project.binding.githubProjectId}
                   label={project.name}
-                  checked={config.github.projectIds?.includes(project.githubProjectId!) ?? false}
+                  checked={config.github.projectIds?.includes(project.binding.githubProjectId!) ?? false}
                   disabled={busy}
                   onChange={() =>
                     update({
                       ...config,
                       github: {
                         ...config.github,
-                        projectIds: toggleId(config.github.projectIds, project.githubProjectId!),
+                        projectIds: toggleId(config.github.projectIds, project.binding.githubProjectId!),
                       },
                     })
                   }
@@ -179,7 +180,7 @@ export function IntakeSection() {
       <section className="flex flex-col gap-2" aria-label="Linear intake">
         <SourceHeader
           title="Linear"
-          hint="Sync active issues from the projects picked per team. Nothing syncs until you pick one."
+          hint="Sync active issues from the factories picked per team. Nothing syncs until you pick one."
           enabled={config.linear.enabled}
           disabled={busy || !linearConnected}
           onToggle={enabled => update({ ...config, linear: { ...config.linear, enabled } })}
@@ -271,8 +272,8 @@ interface LinearTeamGroup {
 }
 
 /**
- * Group projects under each team they belong to (shared projects appear in
- * every team), sorted by team key. Team-less projects land in a trailing
+ * Group Linear projects under each team they belong to (shared projects appear
+ * in every team), sorted by team key. Team-less projects land in a trailing
  * "No team" group.
  */
 function groupLinearProjectsByTeam(projects: LinearProject[]): LinearTeamGroup[] {

@@ -1,7 +1,7 @@
 /**
  * BDD coverage for the propless `ProjectSwitcher` (`domains/workspaces/components`).
  *
- * The switcher reads the active project from `useActiveProjectContext` and
+ * The switcher reads the active project from `useActiveFactoryContext` and
  * drives the projects modal through `useOverlays` — no props. Opening the
  * projects overlay also closes the sidebar drawer (mobile behavior).
  */
@@ -11,25 +11,28 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { renderWithProviders } from '../../../../../../../e2e/web-ui/render';
 import { OverlaysProvider, useOverlays } from '../../../../lib/overlays';
-import { ActiveProjectProvider } from '../../context/ActiveProjectProvider';
-import type { Project } from '../../services/projects';
+import { ActiveFactoryProvider } from '../../context/ActiveFactoryProvider';
+import type { Factory } from '../../services/factories';
 import { ProjectSwitcher } from '../ProjectSwitcher';
 
-const PROJECT: Project = {
+const PROJECT: Factory = {
   id: 'project-test',
   name: 'MastraCode Test',
-  path: '/tmp/mastracode-test',
   resourceId: 'resource-test',
   createdAt: 1,
+  binding: {
+    kind: 'local',
+    path: '/tmp/mastracode-test',
+  },
 };
 
 afterEach(() => {
   localStorage.clear();
 });
 
-function seedProject(project: Project = PROJECT) {
-  localStorage.setItem('mastracode-projects', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-project', project.id);
+function seedProject(project: Factory = PROJECT) {
+  localStorage.setItem('mastracode-factories', JSON.stringify([project]));
+  localStorage.setItem('mastracode-active-factory', project.id);
 }
 
 function OverlayProbe() {
@@ -45,12 +48,12 @@ function OverlayProbe() {
 
 function renderSwitcher() {
   return renderWithProviders(
-    <ActiveProjectProvider>
+    <ActiveFactoryProvider>
       <OverlaysProvider>
         <ProjectSwitcher />
         <OverlayProbe />
       </OverlaysProvider>
-    </ActiveProjectProvider>,
+    </ActiveFactoryProvider>,
   );
 }
 

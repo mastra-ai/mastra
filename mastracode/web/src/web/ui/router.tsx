@@ -17,8 +17,9 @@ import { safeReturnTo, SignInPage, useWebAuth } from './domains/auth';
 import Chat from './domains/chat/Chat';
 import { NewPage } from './domains/chat/NewPage';
 import { ThreadPage } from './domains/chat/ThreadPage';
-import { useActiveProject } from '../../shared/hooks/useActiveProject';
+import { useActiveFactory } from '../../shared/hooks/useActiveFactory';
 import { useWorkItemsQuery } from '../../shared/hooks/useWorkItems';
+import { isGithubFactory } from './domains/workspaces/services/factories';
 import { AuditPage } from './domains/factory/AuditPage';
 import { BoardPage } from './domains/factory/BoardPage';
 import { MetricsPage } from './domains/factory/MetricsPage';
@@ -69,8 +70,9 @@ function SignInGate() {
 }
 
 function RootLanding() {
-  const { activeProject } = useActiveProject();
-  const githubProjectId = activeProject?.source === 'github' ? activeProject.githubProjectId : undefined;
+  const { activeFactory } = useActiveFactory();
+  const githubProjectId =
+    activeFactory && isGithubFactory(activeFactory) ? activeFactory.binding.githubProjectId : undefined;
   const workItems = useWorkItemsQuery(githubProjectId);
 
   if (githubProjectId && workItems.isPending) return <AuthPendingSkeleton label="Loading Factory board" />;

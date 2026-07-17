@@ -7,17 +7,18 @@ import {
   useProjectSettingsQuery,
   useSaveProjectSettingsMutation,
 } from '../../../../../shared/hooks/useProjectSettings';
-import { useProjectsQuery } from '../../../../../shared/hooks/useProjects';
-import type { Project } from '../../workspaces/services/projects';
+import { useFactoriesQuery } from '../../../../../shared/hooks/useFactories';
+import type { GithubFactory } from '../../workspaces/services/factories';
+import { isGithubFactory } from '../../workspaces/services/factories';
 
 /**
- * One editable setup-command row per GitHub project. The field is a draft —
+ * One editable setup-command row per GitHub factory. The field is a draft —
  * nothing persists until Save — so typing a long command never spams the
  * server. Saving a blank field clears the command.
  */
-function ProjectSetupRow({ project }: { project: Project }) {
+function ProjectSetupRow({ factory }: { factory: GithubFactory }) {
   const { toast } = useToast();
-  const githubProjectId = project.githubProjectId!;
+  const githubProjectId = factory.binding.githubProjectId;
   const settingsQuery = useProjectSettingsQuery(githubProjectId);
   const saveMutation = useSaveProjectSettingsMutation();
 
@@ -40,12 +41,12 @@ function ProjectSetupRow({ project }: { project: Project }) {
   return (
     <div className="flex flex-col gap-1.5">
       <Txt as="span" variant="ui-sm" className="text-icon5">
-        {project.name}
+        {factory.name}
       </Txt>
       <div className="flex items-center gap-2">
         <input
           type="text"
-          aria-label={`Setup command for ${project.name}`}
+          aria-label={`Setup command for ${factory.name}`}
           placeholder="e.g. pnpm i && pnpm build"
           value={draft}
           disabled={settingsQuery.isPending || saveMutation.isPending}
@@ -64,15 +65,15 @@ function ProjectSetupRow({ project }: { project: Project }) {
 }
 
 /**
- * Settings › General › Worktree setup: a per-project shell command (e.g.
+ * Settings › General › Worktree setup: a per-factory shell command (e.g.
  * `pnpm i && pnpm build`) that runs inside every freshly created worktree
  * before any agent execution, so agents always start from a built tree.
- * Rendered only when at least one GitHub project exists.
+ * Rendered only when at least one GitHub factory exists.
  */
 export function ProjectSetupSection() {
-  const projectsQuery = useProjectsQuery();
-  const githubProjects = (projectsQuery.data ?? []).filter(p => p.source === 'github' && p.githubProjectId);
-  if (githubProjects.length === 0) return null;
+  const factoriesQuery = useFactoriesQuery();
+  const githubFactories = (factoriesQuery.data ?? []).filter(isGithubFactory);
+  if (githubFactories.length === 0) return null;
 
   return (
     <div className="mt-6 pt-4 border-t border-border1/40 flex flex-col gap-4">
@@ -84,8 +85,8 @@ export function ProjectSetupSection() {
           Runs in every new worktree before any agent starts. Leave blank to skip setup.
         </Txt>
       </div>
-      {githubProjects.map(project => (
-        <ProjectSetupRow key={project.githubProjectId} project={project} />
+      {githubFactories.map(factory => (
+        <ProjectSetupRow key={factory.binding.githubProjectId} factory={factory} />
       ))}
     </div>
   );

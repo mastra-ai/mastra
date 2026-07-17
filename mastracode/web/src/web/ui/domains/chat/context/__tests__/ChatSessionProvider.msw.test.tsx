@@ -23,8 +23,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ChatSessionTestProvider as ChatSessionProvider } from '../ChatSessionTestProvider';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
-import type { Project } from '../../../workspaces';
-import { ActiveProjectProvider, useActiveProjectContext } from '../../../workspaces';
+import type { Factory } from '../../../workspaces';
+import { ActiveFactoryProvider, useActiveFactoryContext } from '../../../workspaces';
 import { ChatMessageList } from '../../components/ChatMessageList';
 import { ModesSelection } from '../../components/StatusLine/ModesSelection';
 import { ChatMessageBoundary } from '../ChatSessionProvider';
@@ -62,41 +62,52 @@ afterEach(() => {
   localStorage.clear();
 });
 
-const project: Project = {
+const project: Factory = {
   id: 'project-test',
   name: 'MastraCode Test',
-  path: '/tmp/mastracode-test',
   resourceId: RESOURCE_ID,
   createdAt: 1,
+  binding: {
+    kind: 'local',
+    path: '/tmp/mastracode-test',
+  },
 };
 
-const nextProject: Project = {
+const nextProject: Factory = {
   id: 'project-next',
   name: 'MastraCode Next',
-  path: '/tmp/mastracode-next',
   resourceId: NEXT_RESOURCE_ID,
   createdAt: 2,
+  binding: {
+    kind: 'local',
+    path: '/tmp/mastracode-next',
+  },
 };
 
-const githubProject: Project = {
+const githubProject: Factory = {
   id: 'github-project-test',
   name: 'MastraCode GitHub Test',
-  source: 'github',
-  githubProjectId: 'github-project-id',
   resourceId: RESOURCE_ID,
-  worktrees: [],
   createdAt: 3,
+  binding: {
+    kind: 'github',
+    githubProjectId: 'github-project-id',
+    worktrees: [],
+  },
 };
 
-const githubProjectWithWorktree: Project = {
+const githubProjectWithWorktree: Factory = {
   ...githubProject,
-  worktrees: [{ branch: 'feature/test', baseBranch: 'main', worktreePath: '/tmp/mastracode-github-test' }],
-  selectedWorktreePath: '/tmp/mastracode-github-test',
+  binding: {
+    ...githubProject.binding,
+    worktrees: [{ branch: 'feature/test', baseBranch: 'main', worktreePath: '/tmp/mastracode-github-test' }],
+    selectedWorktreePath: '/tmp/mastracode-github-test',
+  },
 };
 
-function seedProject(projects: Project[] = [project], activeProject: Project = project) {
-  localStorage.setItem('mastracode-projects', JSON.stringify(projects));
-  localStorage.setItem('mastracode-active-project', activeProject.id);
+function seedProject(projects: Factory[] = [project], activeFactory: Factory = project) {
+  localStorage.setItem('mastracode-factories', JSON.stringify(projects));
+  localStorage.setItem('mastracode-active-factory', activeFactory.id);
 }
 
 function sessionState(resourceId = RESOURCE_ID): AgentControllerSessionState {
@@ -172,7 +183,7 @@ function Probe() {
   const { status, threadId } = useChatConnection();
   const { transcript, busy, showWorkingIndicator, localUser } = useChatTranscript();
   const { usage, followUpCount, omPhase, goal } = useChatRuntime();
-  const { selectProject } = useActiveProjectContext();
+  const { selectFactory } = useActiveFactoryContext();
   const messageText = transcript.entries
     .filter(entry => entry.kind === 'message')
     .flatMap(entry => entry.message.content.parts)
@@ -194,7 +205,7 @@ function Probe() {
       <span data-testid="om-phase">{omPhase}</span>
       <span data-testid="goal-objective">{goal?.objective ?? '(none)'}</span>
       <button onClick={() => localUser('Hello')}>send local message</button>
-      <button onClick={() => void selectProject(nextProject)}>switch project</button>
+      <button onClick={() => void selectFactory(nextProject)}>switch project</button>
     </div>
   );
 }
@@ -277,9 +288,9 @@ function SessionContextProbe() {
 
 function ProbeSession({ threadId, children }: { threadId?: string; children?: ReactNode }) {
   return (
-    <ActiveProjectProvider>
+    <ActiveFactoryProvider>
       <ChatSessionProvider threadId={threadId}>{children ?? <Probe />}</ChatSessionProvider>
-    </ActiveProjectProvider>
+    </ActiveFactoryProvider>
   );
 }
 
@@ -293,13 +304,13 @@ function renderFocusedProbe(children: ReactNode, threadId?: string) {
 
 function renderMessageList(threadId?: string) {
   return renderWithProviders(
-    <ActiveProjectProvider>
+    <ActiveFactoryProvider>
       <ChatSessionProvider threadId={threadId}>
         <ChatMessageBoundary>
           <ChatMessageList />
         </ChatMessageBoundary>
       </ChatSessionProvider>
-    </ActiveProjectProvider>,
+    </ActiveFactoryProvider>,
   );
 }
 

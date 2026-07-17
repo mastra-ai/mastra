@@ -11,7 +11,7 @@ import { useWorkspaceActivity } from '../../../../shared/hooks/useWorkspaceActiv
 import { deriveProjectPath, useWorkspacesQuery } from '../../../../shared/hooks/useWorkspaces';
 import { formatDuration, relativeTime } from '../../../../shared/lib/date';
 import { AGENT_CONTROLLER_ID } from '../chat/services/constants';
-import { useActiveProjectContext } from '../workspaces';
+import { isGithubFactory, useActiveFactoryContext } from '../workspaces';
 import { FactoryPageShell } from './components/FactoryPageShell';
 import type { FactoryMetrics } from './services/metrics';
 import { BOARD_STAGES, stageLabel, stageOrder } from './stages';
@@ -45,7 +45,7 @@ export function MetricsPage() {
       title="Metrics"
       description="Flow health for this project's factory: throughput, where work stalls, and what's aging."
     >
-      {project => <MetricsContent githubProjectId={project.githubProjectId} />}
+      {project => <MetricsContent githubProjectId={project.binding.githubProjectId} />}
     </FactoryPageShell>
   );
 }
@@ -122,16 +122,16 @@ function MetricsContent({ githubProjectId }: { githubProjectId: string }) {
 /** Live count of worktrees with an agent run in flight (sidebar dot source). */
 function useAgentsRunningCount(): number {
   const { baseUrl } = useApiConfig();
-  const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
-  const workspaces = useWorkspacesQuery(activeProject);
+  const { activeFactory, resourceId, sessionEnabled } = useActiveFactoryContext();
+  const workspaces = useWorkspacesQuery(activeFactory);
   const worktrees = workspaces.data?.worktrees ?? [];
   const runningByPath = useWorkspaceActivity({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    projectPath: deriveProjectPath(activeProject) || undefined,
+    projectPath: deriveProjectPath(activeFactory) || undefined,
     worktreePaths: worktrees.map(worktree => worktree.worktreePath),
     baseUrl,
-    enabled: sessionEnabled && activeProject?.source === 'github',
+    enabled: sessionEnabled && Boolean(activeFactory && isGithubFactory(activeFactory)),
   });
   return Object.values(runningByPath).filter(Boolean).length;
 }

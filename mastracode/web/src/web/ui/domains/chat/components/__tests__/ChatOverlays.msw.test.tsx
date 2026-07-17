@@ -4,16 +4,19 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { renderWithProviders } from '../../../../../../../e2e/web-ui/render';
 import { useOverlays } from '../../../../lib/overlays';
-import type { Project } from '../../../workspaces';
+import type { Factory } from '../../../workspaces';
 import { ChatOverlays } from '../ChatOverlays';
 import { OverlayTestProviders, useOverlayControllerHandlers } from './overlay-test-utils';
 
-const project: Project = {
+const project: Factory = {
   id: 'project-test',
   name: 'Test',
-  path: '/tmp/test',
   resourceId: 'resource-test',
   createdAt: 1,
+  binding: {
+    kind: 'local',
+    path: '/tmp/test',
+  },
 };
 
 function OverlayLauncher() {
@@ -41,8 +44,8 @@ afterEach(() => localStorage.clear());
 
 describe('ChatOverlays', () => {
   it('given a project, when contextual overlays are opened, then it mounts settings, shortcuts, and projects', async () => {
-    localStorage.setItem('mastracode-projects', JSON.stringify([project]));
-    localStorage.setItem('mastracode-active-project', project.id);
+    localStorage.setItem('mastracode-factories', JSON.stringify([project]));
+    localStorage.setItem('mastracode-active-factory', project.id);
     const user = userEvent.setup();
     renderOverlays();
 

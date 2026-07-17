@@ -39,15 +39,18 @@ const linearProjects: LinearProject[] = [
 
 function seedGithubProject() {
   localStorage.setItem(
-    'mastracode-projects',
+    'mastracode-factories',
     JSON.stringify([
       {
         id: 'project-gh',
         name: 'mastra',
-        source: 'github',
-        githubProjectId: 'ghp-1',
         resourceId: 'resource-gh',
         createdAt: 1,
+        binding: {
+          kind: 'github',
+          githubProjectId: 'ghp-1',
+          worktrees: [],
+        },
       },
     ]),
   );
