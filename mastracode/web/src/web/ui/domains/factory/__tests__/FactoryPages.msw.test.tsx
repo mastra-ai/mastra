@@ -16,7 +16,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/web-ui/render';
-import { queryKeys } from '../../../../../shared/api/keys';
 import type { GithubStatus, Project } from '../../workspaces';
 import { createAppRoutes } from '../../../router';
 import type { GithubIssue, GithubPullRequest } from '../services/factory';
@@ -101,13 +100,13 @@ function emptySse(): Response {
   );
 }
 
-function sessionState() {
+function sessionState(threadId = THREAD_ID) {
   return {
     controllerId: 'code',
     resourceId: RESOURCE_ID,
     modeId: 'build',
     modelId: 'openai/gpt-4o-mini',
-    threadId: THREAD_ID,
+    threadId,
     settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
   };
 }
@@ -164,24 +163,39 @@ interface AppHandlerOptions {
 }
 
 function useAppHandlers(githubStatus: GithubStatus, options: AppHandlerOptions = {}) {
+  let boundThreadId = THREAD_ID;
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () => new Response(null, { status: 404 })),
     http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(githubStatus)),
+    http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions: [] })),
     http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
       HttpResponse.json({ config: options.intakeConfig ?? defaultIntakeConfig }),
     ),
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json(options.linearStatus ?? linearDisabledStatus),
     ),
-    http.post(`${API}/sessions`, () =>
-      HttpResponse.json({ controllerId: 'code', resourceId: RESOURCE_ID, threadId: THREAD_ID }),
-    ),
+    http.post(`${API}/sessions`, async ({ request }) => {
+      const body = (await request.json()) as { sessionScope?: string };
+      boundThreadId = body.sessionScope ? 'thread-factory' : THREAD_ID;
+      return HttpResponse.json({ controllerId: 'code', resourceId: RESOURCE_ID, threadId: boundThreadId });
+    }),
     http.get(`${API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', label: 'Build' }] })),
     http.get(`${API}/models`, () => HttpResponse.json({ models: [] })),
-    http.get(SESSION, () => HttpResponse.json(sessionState())),
-    http.put(`${SESSION}/state`, () => HttpResponse.json(sessionState())),
+    http.get(SESSION, () => HttpResponse.json(sessionState(boundThreadId))),
+    http.put(`${SESSION}/state`, () => HttpResponse.json(sessionState(boundThreadId))),
     http.get(`${SESSION}/permissions`, () => HttpResponse.json({ categories: {}, tools: {} })),
-    http.get(`${SESSION}/threads`, () => HttpResponse.json({ threads: [] })),
+    http.get(`${SESSION}/threads`, ({ request }) => {
+      const scoped = new URL(request.url).searchParams.has('sessionScope');
+      return HttpResponse.json({
+        threads: scoped
+          ? [{ id: 'thread-factory', resourceId: RESOURCE_ID, title: 'Untitled thread' }]
+          : [{ id: THREAD_ID, resourceId: RESOURCE_ID, title: 'Existing thread' }],
+      });
+    }),
+    http.post(`${SESSION}/thread`, async ({ request }) => {
+      boundThreadId = ((await request.json()) as { threadId: string }).threadId;
+      return HttpResponse.json({ ok: true });
+    }),
     http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () => HttpResponse.json({ messages: [] })),
     http.get(`${SESSION}/stream`, () => emptySse()),
   );
@@ -817,7 +831,7 @@ describe('Factory Board — persisted cards', () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
-    expect(state.patches).toMatchObject([{ id: 'wi-1', stages: ['planning'] }]);
+    await waitFor(() => expect(state.patches).toMatchObject([{ id: 'wi-1', stages: ['planning'] }]));
   });
 
   it('given a persisted issue card needing approval, when Prepare approval is chosen, then the triage session ref is recorded without leaving Triage', async () => {
@@ -843,17 +857,21 @@ describe('Factory Board — persisted cards', () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-21' });
-    expect(captured.messages[0]!.message).toContain(
-      'Prepare approval for GitHub issue #21 (https://github.com/mastra-ai/mastra/issues/21)',
+    await waitFor(() =>
+      expect(captured.messages[0]!.message).toContain(
+        'Prepare approval for GitHub issue #21 (https://github.com/mastra-ai/mastra/issues/21)',
+      ),
     );
     expect(captured.messages[0]!.message).not.toContain('Add OAuth support');
-    expect(state.patches).toMatchObject([
-      {
-        id: 'wi-approval',
-        stages: ['triage'],
-        sessions: { triage: { branch: 'factory/issue-21', threadId: 'thread-factory' } },
-      },
-    ]);
+    await waitFor(() =>
+      expect(state.patches).toMatchObject([
+        {
+          id: 'wi-approval',
+          stages: ['triage'],
+          sessions: { triage: { branch: 'factory/issue-21', threadId: 'thread-factory' } },
+        },
+      ]),
+    );
   });
 
   it('given a card in Triage, when Move to Planning is chosen from the menu, then the card lands in the Planning swimlane', async () => {
@@ -901,7 +919,7 @@ describe('Factory Board — persisted cards', () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
-    expect(captured.messages[0]!.message).toContain('Implement a fix for GitHub issue #12');
+    await waitFor(() => expect(captured.messages[0]!.message).toContain('Implement a fix for GitHub issue #12'));
     expect(state.patches).toMatchObject([{ id: 'wi-1', stages: ['execute'] }]);
   });
 
@@ -1057,11 +1075,16 @@ function useFactoryRunHandlers(branchDir: string): CapturedRun {
       captured.threadTitles.push(body.title ?? '');
       return HttpResponse.json({ id: 'thread-factory', resourceId: RESOURCE_ID, title: body.title });
     }),
+    http.put(`${SESSION}/threads/:threadId`, async ({ request }) => {
+      const body = (await request.json()) as { title?: string };
+      captured.threadTitles.push(body.title ?? '');
+      return HttpResponse.json({ ok: true });
+    }),
     http.post(`${SESSION}/messages`, async ({ request }) => {
       captured.messages.push((await request.json()) as Record<string, unknown>);
       return HttpResponse.json({ ok: true });
     }),
-    http.post(`${TEST_BASE_URL}/web/agent-controller/code/skills/invoke`, async ({ request }) => {
+    http.post(`${TEST_BASE_URL}/web/agent-controller/code/skills/prepare`, async ({ request }) => {
       const body = (await request.json()) as Record<string, unknown>;
       captured.skillInvocations.push(body);
       const name = body.name as string;
@@ -1086,7 +1109,8 @@ describe('Factory Board — investigate flow', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
     expect(captured.threadTitles).toEqual(['Issue #12: Fix flaky test']);
-    expect(captured.messages).toHaveLength(0);
+    await waitFor(() => expect(captured.messages).toHaveLength(1));
+    expect(captured.messages[0]?.message).toContain('<skill name="understand-issue">');
     expect(captured.skillInvocations).toEqual([
       {
         resourceId: RESOURCE_ID,
@@ -1118,60 +1142,36 @@ describe('Factory Board — investigate flow', () => {
     ]);
   });
 
-  it('given the user opens the active thread before dispatch returns, when the run settles, then the skill activation is not projected twice', async () => {
+  it('given a prepared skill, when Factory starts the run, then the destination thread is mounted before exactly one dispatch', async () => {
     const state = useBoardHandlers({ issues });
-    useFactoryRunHandlers('factory-issue-12');
-    const skillMessage =
-      '<skill name="understand-issue">\nActivated understand-issue.\n\nARGUMENTS: GitHub issue #12\n</skill>';
-    let releaseSkill!: () => void;
-    let markSkillRequested!: () => void;
-    const skillRequested = new Promise<void>(resolve => {
-      markSkillRequested = resolve;
-    });
-    const skillResponse = new Promise<void>(resolve => {
-      releaseSkill = resolve;
-    });
+    const captured = useFactoryRunHandlers('factory-issue-12');
+    let pathWhenDispatched: string | undefined;
+    let router!: ReturnType<typeof renderAt>['router'];
     server.use(
-      http.post(`${TEST_BASE_URL}/web/agent-controller/code/skills/invoke`, async () => {
-        markSkillRequested();
-        await skillResponse;
-        return HttpResponse.json({ ok: true, skill: 'understand-issue', message: skillMessage });
+      http.post(`${SESSION}/messages`, async ({ request }) => {
+        pathWhenDispatched = router.state.location.pathname;
+        captured.messages.push((await request.json()) as Record<string, unknown>);
+        return HttpResponse.json({ ok: true });
       }),
-      http.get(`${SESSION}/threads/:threadId/messages`, () =>
-        HttpResponse.json({
-          messages: [
-            {
-              id: 'persisted-skill-activation',
-              role: 'user',
-              createdAt: '2026-07-16T00:00:00.000Z',
-              content: { format: 2, parts: [{ type: 'text', text: skillMessage }] },
-            },
-          ],
-        }),
-      ),
     );
-    const { router, client } = renderAt('/factory/board');
+    ({ router } = renderAt('/factory/board'));
 
     const intake = await screen.findByTestId('board-column-intake');
     await within(intake).findByText('Fix flaky test');
     await userEvent.click(within(intake).getByRole('button', { name: 'Investigate Fix flaky test' }));
-    await skillRequested;
 
-    await router.navigate('/threads/thread-factory');
-    expect(await screen.findByRole('button', { name: /Show understand-issue skill contents/ })).toBeInTheDocument();
-    const messagesKey = queryKeys.agentControllerThreadMessages('code', RESOURCE_ID, 'thread-factory');
-    expect(client.getQueryData<unknown[]>(messagesKey)).toHaveLength(1);
-
-    releaseSkill();
+    await waitFor(() => expect(captured.messages).toHaveLength(1));
+    expect(pathWhenDispatched).toBe('/threads/thread-factory');
+    expect(captured.skillInvocations).toHaveLength(1);
+    expect(captured.messages[0]?.message).toContain('<skill name="understand-issue">');
     await waitFor(() => expect(state.posts).toHaveLength(1));
-    expect(client.getQueryData<unknown[]>(messagesKey)).toHaveLength(1);
   });
 
   it('given a missing workspace skill, when Investigate is clicked, then the error is visible and no fallback prompt or card is dispatched', async () => {
     const state = useBoardHandlers({ issues });
     const captured = useFactoryRunHandlers('factory-issue-12');
     server.use(
-      http.post(`${TEST_BASE_URL}/web/agent-controller/code/skills/invoke`, async ({ request }) => {
+      http.post(`${TEST_BASE_URL}/web/agent-controller/code/skills/prepare`, async ({ request }) => {
         captured.skillInvocations.push((await request.json()) as Record<string, unknown>);
         return HttpResponse.json(
           { error: 'skill_not_found', message: 'Skill not found: understand-issue.' },
@@ -1255,7 +1255,9 @@ describe('Factory Board — investigate flow', () => {
       // Filing is best-effort: the user still lands on the running thread.
       await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
       expect(captured.skillInvocations).toHaveLength(1);
-      expect(errorSpy).toHaveBeenCalledWith('Failed to file the board card for this run', expect.anything());
+      await waitFor(() =>
+        expect(errorSpy).toHaveBeenCalledWith('Failed to file the board card for this run', expect.anything()),
+      );
     } finally {
       errorSpy.mockRestore();
     }
@@ -1275,7 +1277,8 @@ describe('Factory Board — investigate flow', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
     expect(captured.worktree).toMatchObject({ branch: 'factory/pr-34' });
     expect(captured.threadTitles).toEqual(['PR #34: Add factory pages']);
-    expect(captured.messages).toHaveLength(0);
+    await waitFor(() => expect(captured.messages).toHaveLength(1));
+    expect(captured.messages[0]?.message).toContain('<skill name="understand-pr">');
     expect(captured.skillInvocations).toEqual([
       {
         resourceId: RESOURCE_ID,
@@ -1290,14 +1293,16 @@ describe('Factory Board — investigate flow', () => {
       },
     ]);
     expect(JSON.stringify(captured.skillInvocations)).not.toContain('Add factory pages');
-    expect(state.posts).toMatchObject([
-      {
-        source: 'github-pr',
-        sourceKey: 'github-pr:34',
-        stages: ['review'],
-        sessions: { review: { branch: 'factory/pr-34', threadId: 'thread-factory' } },
-      },
-    ]);
+    await waitFor(() =>
+      expect(state.posts).toMatchObject([
+        {
+          source: 'github-pr',
+          sourceKey: 'github-pr:34',
+          stages: ['review'],
+          sessions: { review: { branch: 'factory/pr-34', threadId: 'thread-factory' } },
+        },
+      ]),
+    );
   });
 
   it('given a Linear candidate, when Investigate is clicked, then the prompt mentions the linear_get_issue tool', async () => {
@@ -1315,7 +1320,8 @@ describe('Factory Board — investigate flow', () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
     expect(captured.worktree).toMatchObject({ branch: 'factory/linear-eng-42' });
-    expect(captured.messages).toHaveLength(0);
+    await waitFor(() => expect(captured.messages).toHaveLength(1));
+    expect(captured.messages[0]?.message).toContain('<skill name="understand-issue">');
     expect(captured.skillInvocations).toHaveLength(1);
     expect(captured.skillInvocations[0]).toMatchObject({
       name: 'understand-issue',
@@ -1343,7 +1349,7 @@ describe('Factory Board — investigate flow', () => {
     await userEvent.click(within(form).getByRole('button', { name: 'Run' }));
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
-    expect(captured.messages).toHaveLength(1);
+    await waitFor(() => expect(captured.messages).toHaveLength(1));
     // The base issue context survives; the typed text guides the run instead
     // of the explicit skill directive.
     expect(captured.messages[0]!.message).toContain(
@@ -1377,7 +1383,8 @@ describe('Factory Board — investigate flow', () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
-    expect(captured.messages).toHaveLength(0);
+    await waitFor(() => expect(captured.messages).toHaveLength(1));
+    expect(captured.messages[0]?.message).toContain('<skill name="understand-issue">');
     expect(captured.skillInvocations).toHaveLength(1);
     expect(captured.skillInvocations[0]).toMatchObject({
       name: 'understand-issue',
@@ -1426,16 +1433,18 @@ describe('Factory Board — investigate flow', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
     // One thread per item: every role ref converges onto the run's thread.
-    expect(state.patches).toMatchObject([
-      {
-        id: 'wi-1',
-        stages: ['execute'],
-        sessions: {
-          plan: { branch: 'factory/issue-12', threadId: 'thread-factory' },
-          work: { branch: 'factory/issue-12', threadId: 'thread-factory' },
+    await waitFor(() =>
+      expect(state.patches).toMatchObject([
+        {
+          id: 'wi-1',
+          stages: ['execute'],
+          sessions: {
+            plan: { branch: 'factory/issue-12', threadId: 'thread-factory' },
+            work: { branch: 'factory/issue-12', threadId: 'thread-factory' },
+          },
         },
-      },
-    ]);
+      ]),
+    );
   });
 
   it('given a repeat run on the same item, when the worktree session already has a thread, then the prompt lands on that thread instead of creating a new one', async () => {
@@ -1458,6 +1467,9 @@ describe('Factory Board — investigate flow', () => {
     // Registered after renderAt so it takes precedence over the default empty
     // thread list from useAppHandlers (MSW resolves newest-first).
     server.use(
+      http.post(`${API}/sessions`, () =>
+        HttpResponse.json({ controllerId: 'code', resourceId: RESOURCE_ID, threadId: THREAD_ID }),
+      ),
       http.get(`${SESSION}/threads`, () =>
         HttpResponse.json({
           threads: [{ id: THREAD_ID, resourceId: RESOURCE_ID, title: 'PR #34: Add factory pages' }],
@@ -1473,7 +1485,8 @@ describe('Factory Board — investigate flow', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe(`/threads/${THREAD_ID}`));
     // No new thread was created — the resumed thread carried the follow-up run.
     expect(captured.threadTitles).toEqual([]);
-    expect(captured.messages).toHaveLength(0);
+    await waitFor(() => expect(captured.messages).toHaveLength(1));
+    expect(captured.messages[0]?.message).toContain('<skill name="understand-pr">');
     expect(captured.skillInvocations).toHaveLength(1);
     expect(captured.skillInvocations[0]).toMatchObject({
       name: 'understand-pr',
@@ -1481,13 +1494,15 @@ describe('Factory Board — investigate flow', () => {
         'Check out the PR in this worktree first with `gh pr checkout 34`. Expected head branch: feat/factory-pages.',
       ),
     });
-    expect(state.patches).toMatchObject([
-      {
-        id: 'wi-pr',
-        stages: ['review'],
-        sessions: { review: { branch: 'factory/pr-34', threadId: THREAD_ID } },
-      },
-    ]);
+    await waitFor(() =>
+      expect(state.patches).toMatchObject([
+        {
+          id: 'wi-pr',
+          stages: ['review'],
+          sessions: { review: { branch: 'factory/pr-34', threadId: THREAD_ID } },
+        },
+      ]),
+    );
   });
 
   it('given the worktree call fails, when Investigate is clicked, then an error notice renders and no work item is filed', async () => {

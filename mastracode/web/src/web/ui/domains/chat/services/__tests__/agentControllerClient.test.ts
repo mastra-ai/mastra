@@ -13,6 +13,7 @@ vi.mock('@mastra/client-js', () => ({
 import {
   createAgentControllerClient,
   invokeWorkspaceSkill,
+  prepareWorkspaceSkill,
   WorkspaceSkillInvocationError,
 } from '../agentControllerClient';
 
@@ -65,7 +66,28 @@ describe('createAgentControllerClient', () => {
   });
 });
 
-describe('invokeWorkspaceSkill', () => {
+describe('workspace skill requests', () => {
+  it('prepares a scoped skill without invoking it', async () => {
+    const message = '<skill name="understand-issue">\nInvestigate it.\n</skill>';
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(JSON.stringify({ ok: true, skill: 'understand-issue', message })));
+
+    const result = await prepareWorkspaceSkill({
+      agentControllerId: 'code',
+      resourceId: 'project-1',
+      scope: '/worktrees/issue-42',
+      name: 'understand-issue',
+      baseUrl: 'https://code.example',
+    });
+
+    expect(result).toEqual({ skill: 'understand-issue', message });
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'https://code.example/web/agent-controller/code/skills/prepare',
+      expect.anything(),
+    );
+  });
+
   it('posts the scoped skill request with browser credentials', async () => {
     const message = '<skill name="understand-pr">\nReview it.\n</skill>';
     const fetchSpy = vi

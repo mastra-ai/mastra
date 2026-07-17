@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useParams } from 'react-router';
 
 import { useOverlays } from '../../lib/overlays';
@@ -11,6 +12,9 @@ import { ComposerPanel } from './components/ComposerPanel';
 import { ChatMessageBoundary, ChatSessionBoundary } from './context/ChatSessionProvider';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 import { useRouteThreadSync } from '../../../../shared/hooks/useRouteThreadSync';
+import { useChatConnection } from './context/useChatConnection';
+import { useChatSessionContext } from './context/useChatSessionContext';
+import { markThreadPageReady } from './services/threadPageReadiness';
 
 const threadComposerContainerClass = 'w-full px-3 md:px-5';
 const threadComposerInnerClass = 'mx-auto w-full max-w-[80ch]';
@@ -61,6 +65,15 @@ function ThreadComposer() {
 
 function ThreadPageContent() {
   useRouteThreadSync();
+  const { status, threadId: activeThreadId } = useChatConnection();
+  const { resourceId, projectPath } = useChatSessionContext();
+  const { threadId: routeThreadId } = useParams();
+
+  useEffect(() => {
+    if (status === 'ready' && routeThreadId && activeThreadId === routeThreadId) {
+      markThreadPageReady({ resourceId, projectPath, threadId: routeThreadId });
+    }
+  }, [activeThreadId, projectPath, resourceId, routeThreadId, status]);
 
   return <ChatMessageList />;
 }

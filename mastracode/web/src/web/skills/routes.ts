@@ -115,54 +115,61 @@ export function buildSkillRoutes({
   controller,
   authorizeSessionAddress: authorize = authorizeSessionAddress,
 }: BuildSkillRoutesDeps): ApiRoute[] {
+  const handleSkillRequest = async (context: unknown, dispatch: boolean) => {
+    const c = loose(context);
+    if (c.req.param('controllerId') !== controllerId) {
+      return c.json({ error: 'controller_not_found', message: 'Agent controller not found.' }, 404);
+    }
+
+    let rawBody: unknown;
+    try {
+      rawBody = await c.req.json();
+    } catch {
+      return c.json({ error: 'invalid_request', message: 'Invalid JSON body.' }, 400);
+    }
+    const body = parseBody(rawBody);
+    if (!body) {
+      return c.json({ error: 'invalid_request', message: 'Invalid skill invocation request.' }, 400);
+    }
+
+    const authorization = await authorize(c, { resourceId: body.resourceId, scope: body.scope });
+    if (!authorization.allowed) {
+      return c.json({ error: authorization.code, message: authorization.message }, authorization.status ?? 403);
+    }
+
+    const session = (await controller.getSessionByResource(body.resourceId, body.scope)) as SkillSession | undefined;
+    if (!session) {
+      return c.json({ error: 'session_not_found', message: 'Agent controller session not found.' }, 404);
+    }
+
+    const skills = session.getWorkspace().skills;
+    await skills?.maybeRefresh();
+    const skill = await skills?.get(body.name);
+    if (!skill || skill['user-invocable'] === false) {
+      return c.json({ error: 'skill_not_found', message: `Skill not found: ${body.name}.` }, 404);
+    }
+
+    const args = body.arguments?.trim();
+    const content = `${formatSkillActivation(skill)}${args ? `\n\nARGUMENTS: ${args}` : ''}`.trim();
+    const message = `<skill name="${skill.name}">\n${escapeSkillBoundary(content)}\n</skill>`;
+    if (dispatch) {
+      void session.sendMessage({ content: message }).catch(error => {
+        console.error('Workspace skill dispatch failed after acceptance', error);
+      });
+    }
+    return c.json({ ok: true, skill: skill.name, message });
+  };
+
   return [
+    registerApiRoute('/web/agent-controller/:controllerId/skills/prepare', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: context => handleSkillRequest(context, false),
+    }),
     registerApiRoute('/web/agent-controller/:controllerId/skills/invoke', {
       method: 'POST',
       requiresAuth: false,
-      handler: async context => {
-        const c = loose(context);
-        if (c.req.param('controllerId') !== controllerId) {
-          return c.json({ error: 'controller_not_found', message: 'Agent controller not found.' }, 404);
-        }
-
-        let rawBody: unknown;
-        try {
-          rawBody = await c.req.json();
-        } catch {
-          return c.json({ error: 'invalid_request', message: 'Invalid JSON body.' }, 400);
-        }
-        const body = parseBody(rawBody);
-        if (!body) {
-          return c.json({ error: 'invalid_request', message: 'Invalid skill invocation request.' }, 400);
-        }
-
-        const authorization = await authorize(c, { resourceId: body.resourceId, scope: body.scope });
-        if (!authorization.allowed) {
-          return c.json({ error: authorization.code, message: authorization.message }, authorization.status ?? 403);
-        }
-
-        const session = (await controller.getSessionByResource(body.resourceId, body.scope)) as
-          | SkillSession
-          | undefined;
-        if (!session) {
-          return c.json({ error: 'session_not_found', message: 'Agent controller session not found.' }, 404);
-        }
-
-        const skills = session.getWorkspace().skills;
-        await skills?.maybeRefresh();
-        const skill = await skills?.get(body.name);
-        if (!skill || skill['user-invocable'] === false) {
-          return c.json({ error: 'skill_not_found', message: `Skill not found: ${body.name}.` }, 404);
-        }
-
-        const args = body.arguments?.trim();
-        const content = `${formatSkillActivation(skill)}${args ? `\n\nARGUMENTS: ${args}` : ''}`.trim();
-        const message = `<skill name="${skill.name}">\n${escapeSkillBoundary(content)}\n</skill>`;
-        void session.sendMessage({ content: message }).catch(error => {
-          console.error('Workspace skill dispatch failed after acceptance', error);
-        });
-        return c.json({ ok: true, skill: skill.name, message });
-      },
+      handler: context => handleSkillRequest(context, true),
     }),
   ];
 }

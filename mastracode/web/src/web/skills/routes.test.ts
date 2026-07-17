@@ -92,14 +92,27 @@ function createHarness(
   };
 }
 
-function invoke(app: Hono, body: Record<string, unknown>, controllerId = 'code'): Promise<Response> {
+function requestSkill(
+  app: Hono,
+  action: 'prepare' | 'invoke',
+  body: Record<string, unknown>,
+  controllerId = 'code',
+): Promise<Response> {
   return Promise.resolve(
-    app.request(`/web/agent-controller/${controllerId}/skills/invoke`, {
+    app.request(`/web/agent-controller/${controllerId}/skills/${action}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
     }),
   );
+}
+
+function invoke(app: Hono, body: Record<string, unknown>, controllerId = 'code'): Promise<Response> {
+  return requestSkill(app, 'invoke', body, controllerId);
+}
+
+function prepare(app: Hono, body: Record<string, unknown>, controllerId = 'code'): Promise<Response> {
+  return requestSkill(app, 'prepare', body, controllerId);
 }
 
 describe('workspace skill invocation route', () => {
@@ -135,6 +148,28 @@ describe('workspace skill invocation route', () => {
     expect(harness.refreshA.mock.invocationCallOrder[0]!).toBeLessThan(harness.getA.mock.invocationCallOrder[0]!);
     expect(harness.sendA).toHaveBeenCalledOnce();
     expect(harness.sendA).toHaveBeenCalledWith({ content: message });
+  });
+
+  it('prepares the exact activation envelope without dispatching it', async () => {
+    const harness = createHarness();
+    const response = await prepare(harness.app, {
+      resourceId: 'resource-1',
+      scope: '/worktrees/a',
+      name: 'understand-pr',
+      arguments: 'review #42',
+    });
+
+    const message =
+      '<skill name="understand-pr">\n' +
+      'Inspect the pull request carefully.\n\n' +
+      '## References\n- references/checklist.md\n\n' +
+      'ARGUMENTS: review #42\n' +
+      '</skill>';
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true, skill: 'understand-pr', message });
+    expect(harness.refreshA).toHaveBeenCalledOnce();
+    expect(harness.getA).toHaveBeenCalledWith('understand-pr');
+    expect(harness.sendA).not.toHaveBeenCalled();
   });
 
   it('returns once dispatch is accepted without waiting for the agent run to finish', async () => {

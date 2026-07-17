@@ -6,10 +6,11 @@ import { queryKeys } from '../api/keys';
 import type { AgentControllerSession } from '../../web/ui/domains/chat/services/agentControllerClient';
 import {
   createAgentControllerClient,
-  invokeWorkspaceSkill,
+  prepareWorkspaceSkill,
   requireAgentControllerSession,
 } from '../../web/ui/domains/chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../web/ui/domains/chat/services/constants';
+import { waitForThreadPageReady } from '../../web/ui/domains/chat/services/threadPageReadiness';
 // Deep imports (not the workspaces barrel) to avoid provider/component cycles.
 import { useActiveProjectContext } from '../../web/ui/domains/workspaces/context/ActiveProjectProvider';
 import { deriveProjectPath, useCreateWorkspaceMutation } from './useWorkspaces';
@@ -110,10 +111,10 @@ export function useStartFactoryRun() {
       // the same item, reuse that thread: the prompt lands as a follow-up
       // message instead of leaving a stray second thread in the worktree.
       const threadId = await resolveRunThread(scopedSession, created.threadId, threadTitle, projectPath, threadTags);
-      let promptDispatch: Promise<unknown> | undefined;
+      let kickoffMessage: string;
       if (invocation.type === 'skill') {
         const skillArguments = `${invocation.arguments.trim()}\n\nPrepared workspace context:\n- Worktree: ${projectPath}\n- Branch: ${branch}`;
-        await invokeWorkspaceSkill({
+        const prepared = await prepareWorkspaceSkill({
           agentControllerId: AGENT_CONTROLLER_ID,
           resourceId,
           scope: projectPath,
@@ -121,20 +122,31 @@ export function useStartFactoryRun() {
           arguments: skillArguments,
           baseUrl,
         });
+        kickoffMessage = prepared.message;
       } else {
-        promptDispatch = scopedSession.sendMessage(invocation.prompt);
+        kickoffMessage = invocation.prompt;
       }
 
-      // Skill dispatch returns once the kickoff is scheduled. Prompt dispatch
-      // still streams for the whole turn, so start it before navigating and
-      // let the mutation finish in the destination thread.
-      void navigate(`/threads/${threadId}`);
-      await promptDispatch;
-
-      // The thread now exists under the new worktree's project path; refresh
-      // its thread list so the sidebar shows it once the UI lands there.
-      void queryClient.invalidateQueries({
+      // Refresh the new workspace's thread list before mounting the route so
+      // route synchronization can bind the live session to the new thread.
+      await queryClient.invalidateQueries({
         queryKey: queryKeys.agentControllerThreads(AGENT_CONTROLLER_ID, resourceId, projectPath),
+      });
+
+      // Mount the destination thread and wait for its history + live connection
+      // before dispatch. The coordinator remains the single dispatch owner;
+      // route mounts only report readiness and never send messages.
+      const pageReady = waitForThreadPageReady({ resourceId, projectPath, threadId });
+      void navigate(`/threads/${threadId}`);
+      try {
+        await pageReady;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'The Factory thread did not become ready';
+        void navigate('/new', { replace: true, state: { routeErrorNotice: message } });
+        throw error;
+      }
+      void scopedSession.sendMessage(kickoffMessage).catch(error => {
+        console.error('Factory kickoff dispatch failed after navigation', error);
       });
 
       // File the board card now that the run is underway, hanging the run's

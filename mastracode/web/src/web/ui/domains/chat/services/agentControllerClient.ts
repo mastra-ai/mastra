@@ -75,16 +75,12 @@ export class WorkspaceSkillInvocationError extends Error {
   }
 }
 
-export async function invokeWorkspaceSkill({
-  agentControllerId,
-  resourceId,
-  scope,
-  name,
-  arguments: skillArguments,
-  baseUrl = '',
-}: InvokeWorkspaceSkillArgs): Promise<{ skill: string; message: string }> {
+async function requestWorkspaceSkill(
+  action: 'prepare' | 'invoke',
+  { agentControllerId, resourceId, scope, name, arguments: skillArguments, baseUrl = '' }: InvokeWorkspaceSkillArgs,
+): Promise<{ skill: string; message: string }> {
   const response = await fetch(
-    `${baseUrl}/web/agent-controller/${encodeURIComponent(agentControllerId)}/skills/invoke`,
+    `${baseUrl}/web/agent-controller/${encodeURIComponent(agentControllerId)}/skills/${action}`,
     {
       method: 'POST',
       credentials: 'include',
@@ -109,4 +105,12 @@ export async function invokeWorkspaceSkill({
   const code = typeof error.error === 'string' ? error.error : 'skill_invocation_failed';
   const message = typeof error.message === 'string' ? error.message : `Skill invocation failed (${response.status}).`;
   throw new WorkspaceSkillInvocationError(message, response.status, code);
+}
+
+export function prepareWorkspaceSkill(args: InvokeWorkspaceSkillArgs): Promise<{ skill: string; message: string }> {
+  return requestWorkspaceSkill('prepare', args);
+}
+
+export function invokeWorkspaceSkill(args: InvokeWorkspaceSkillArgs): Promise<{ skill: string; message: string }> {
+  return requestWorkspaceSkill('invoke', args);
 }
