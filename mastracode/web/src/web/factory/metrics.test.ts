@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { clampMetricsWindow, computeFactoryMetrics } from './metrics';
-import type { WorkItemRow, WorkItemStageEntry } from './schema';
+import type { WorkItemRow, WorkItemStageEntry } from '../storage/domains/work-items/base';
 
 /** Fixed "now" so every duration in the specs is deterministic. */
 const NOW = new Date('2026-07-15T12:00:00.000Z');

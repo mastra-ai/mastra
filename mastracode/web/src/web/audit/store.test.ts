@@ -1,92 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// ── Mocks ────────────────────────────────────────────────────────────────
-vi.mock('drizzle-orm', async () => {
-  const actual = (await vi.importActual('drizzle-orm')) as Record<string, unknown>;
-  return {
-    ...actual,
-    eq: (column: any, value: any) => ({ kind: 'eq', column: column?.name, value }),
-    and: (...conds: any[]) => ({ kind: 'and', conds: conds.filter(Boolean) }),
-    or: (...conds: any[]) => ({ kind: 'or', conds: conds.filter(Boolean) }),
-    lt: (column: any, value: any) => ({ kind: 'lt', column: column?.name, value }),
-    inArray: (column: any, values: any[]) => ({ kind: 'in', column: column?.name, values }),
-    desc: (column: any) => ({ kind: 'desc', column: column?.name }),
-  };
-});
-
-// In-memory audit_events rows.
-let rows: Array<Record<string, any>> = [];
-let nextId = 1;
-let failNextInsert = false;
-
-const COLUMNS: Record<string, string> = {
-  id: 'id',
-  org_id: 'orgId',
-  actor_id: 'actorId',
-  action: 'action',
-  github_project_id: 'githubProjectId',
-  occurred_at: 'occurredAt',
-};
-
-function valueOf(row: any, column: string): any {
-  return row[COLUMNS[column] ?? column];
-}
-
-function compare(a: any, b: any): number {
-  if (a instanceof Date && b instanceof Date) return a.getTime() - b.getTime();
-  if (a === b) return 0;
-  return a < b ? -1 : 1;
-}
-
-function matches(row: any, cond: any): boolean {
-  if (!cond) return true;
-  if (cond.kind === 'and') return cond.conds.every((c: any) => matches(row, c));
-  if (cond.kind === 'or') return cond.conds.some((c: any) => matches(row, c));
-  if (cond.kind === 'eq') return compare(valueOf(row, cond.column), cond.value) === 0;
-  if (cond.kind === 'lt') return compare(valueOf(row, cond.column), cond.value) < 0;
-  if (cond.kind === 'in') return cond.values.includes(valueOf(row, cond.column));
-  return true;
-}
-
-vi.mock('../github/db', () => ({
-  getAppDb: () => ({
-    execute: async () => undefined,
-    insert: () => ({
-      values: (vals: any) => ({
-        returning: async () => {
-          if (failNextInsert) {
-            failNextInsert = false;
-            throw new Error('insert exploded');
-          }
-          const row = { id: `00000000-0000-4000-8000-${String(nextId++).padStart(12, '0')}`, ...vals };
-          rows.push(row);
-          return [row];
-        },
-      }),
-    }),
-    select: () => ({
-      from: () => ({
-        where: (cond: any) => ({
-          orderBy: (...orders: any[]) => ({
-            limit: async (n: number) => {
-              const filtered = rows.filter(row => matches(row, cond));
-              filtered.sort((a, b) => {
-                for (const order of orders) {
-                  const diff = compare(valueOf(a, order.column), valueOf(b, order.column));
-                  if (diff !== 0) return -diff; // all orders are desc
-                }
-                return 0;
-              });
-              return filtered.slice(0, n);
-            },
-          }),
-        }),
-      }),
-    }),
-  }),
-}));
-
-import { __resetAuditDbForTests } from './db';
+import { __resetRuntimeConfigForTests } from '../runtime-config';
+import { seedInMemoryFactoryStoreForTests } from '../storage/test-utils';
+import type { InMemoryFactoryStoreSeed } from '../storage/test-utils';
 import { listAuditEvents, recordAuditEvent } from './store';
 
 const ORG = 'org_123';
@@ -104,15 +20,15 @@ function baseEvent(overrides: Record<string, any> = {}) {
   };
 }
 
-beforeEach(() => {
-  rows = [];
-  nextId = 1;
-  failNextInsert = false;
-  __resetAuditDbForTests();
+let seed: InMemoryFactoryStoreSeed;
+
+beforeEach(async () => {
+  seed = await seedInMemoryFactoryStoreForTests();
   vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
 
 afterEach(() => {
+  __resetRuntimeConfigForTests();
   vi.restoreAllMocks();
 });
 
@@ -127,7 +43,7 @@ describe('recordAuditEvent', () => {
     expect(row!.metadata).toEqual({});
     expect(row!.context).toEqual({});
     expect(row!.occurredAt).toBeInstanceOf(Date);
-    expect(rows).toHaveLength(1);
+    expect((await listAuditEvents({ orgId: ORG })).events).toHaveLength(1);
   });
 
   it('defaults actorType to human', async () => {
@@ -162,7 +78,7 @@ describe('recordAuditEvent', () => {
   });
 
   it('swallows insert failures and returns null', async () => {
-    failNextInsert = true;
+    vi.spyOn(seed.audit, 'record').mockRejectedValueOnce(new Error('insert exploded'));
     const row = await recordAuditEvent(baseEvent());
     expect(row).toBeNull();
     expect(console.warn).toHaveBeenCalledWith(
@@ -171,6 +87,13 @@ describe('recordAuditEvent', () => {
     );
     // The failure never propagates — a later record works fine.
     expect(await recordAuditEvent(baseEvent())).not.toBeNull();
+  });
+
+  it('swallows an unseeded factory store and returns null', async () => {
+    __resetRuntimeConfigForTests();
+    const row = await recordAuditEvent(baseEvent());
+    expect(row).toBeNull();
+    expect(console.warn).toHaveBeenCalledWith('[Audit] Failed to record audit event', expect.anything());
   });
 });
 

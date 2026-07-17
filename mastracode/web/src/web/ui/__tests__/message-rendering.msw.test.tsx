@@ -689,14 +689,12 @@ describe('App mode + theme controls', () => {
       expect(header).not.toBeNull();
 
       // The header must not contain any project switcher.
-      expect(within(header as HTMLElement).queryByRole('button', { name: /MastraCode Test/ })).not.toBeInTheDocument();
+      expect(within(header as HTMLElement).queryByRole('button', { name: 'Select project' })).not.toBeInTheDocument();
 
-      // The sidebar remains the single source of the project switcher: exactly
-      // one project-switcher button exists, it exposes the project name, and it
-      // lives outside the header.
-      const switchers = screen.getAllByRole('button', { name: /MastraCode Test/ });
-      expect(switchers).toHaveLength(1);
-      expect(header).not.toContainElement(switchers[0]);
+      // The sidebar remains the single source of the project switcher.
+      const switcher = screen.getByRole('button', { name: 'Select project' });
+      expect(switcher).toHaveTextContent('MastraCode Test');
+      expect(header).not.toContainElement(switcher);
     });
 
     it('keeps settings in the sidebar without connection status', async () => {

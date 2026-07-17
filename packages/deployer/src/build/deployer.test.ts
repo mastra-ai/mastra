@@ -9,6 +9,7 @@ describe('getDeployer', () => {
   it.for([
     ['./plugins/__fixtures__/basic.js'],
     ['./plugins/__fixtures__/basic-with-const.js'],
+    ['./plugins/__fixtures__/basic-with-exported-const.js'],
     ['./plugins/__fixtures__/basic-with-import.js'],
     ['./plugins/__fixtures__/basic-with-function.js'],
     ['./plugins/__fixtures__/mastra-with-extra-code.js'],

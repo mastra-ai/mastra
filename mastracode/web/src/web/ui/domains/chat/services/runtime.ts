@@ -53,14 +53,12 @@ export function runtimeReducer(state: ChatRuntimeState, event: AgentControllerEv
       const stepTokens = (usage.completionTokens ?? 0) + (usage.reasoningTokens ?? 0);
       let tokensPerSec = state.tokensPerSec;
       if (state._decodeStartedAt > 0 && stepTokens > 0) {
-        const decodeSeconds = (Date.now() - state._decodeStartedAt) / 1000;
-        if (decodeSeconds > 0) {
-          const instantaneous = stepTokens / decodeSeconds;
-          tokensPerSec =
-            state.tokensPerSec > 0
-              ? Math.round(0.3 * instantaneous + 0.7 * state.tokensPerSec)
-              : Math.round(instantaneous);
-        }
+        const decodeSeconds = Math.max((Date.now() - state._decodeStartedAt) / 1000, 0.001);
+        const instantaneous = stepTokens / decodeSeconds;
+        tokensPerSec =
+          state.tokensPerSec > 0
+            ? Math.round(0.3 * instantaneous + 0.7 * state.tokensPerSec)
+            : Math.round(instantaneous);
       }
       return { ...state, usage, tokensPerSec, _decodeStartedAt: 0 };
     }
