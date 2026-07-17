@@ -1,33 +1,40 @@
+import { MainSidebarProvider, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import { OverlaysProvider, useOverlays } from '../../../../lib/overlays';
 import { ChatHeader } from '../ChatHeader';
 
-/** Exposes the sidebar overlay state so the spec can observe toggling. */
 function SidebarStateProbe() {
-  const overlays = useOverlays();
-  return <output data-testid="sidebar-state">{overlays.isOpen('sidebar') ? 'open' : 'closed'}</output>;
+  const { openMobile } = useMainSidebar();
+  return <output data-testid="sidebar-state">{openMobile ? 'open' : 'closed'}</output>;
 }
 
 describe('ChatHeader', () => {
   describe('when the user clicks the sidebar toggle', () => {
-    it('toggles the sidebar overlay open and closed', async () => {
+    it('opens the design-system mobile sidebar', async () => {
+      vi.spyOn(window, 'matchMedia').mockImplementation(query => ({
+        matches: true,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }));
+
       render(
-        <OverlaysProvider>
+        <MainSidebarProvider storageKey="chat-header-test" mobileBreakpoint={10_000}>
           <ChatHeader />
           <SidebarStateProbe />
-        </OverlaysProvider>,
+        </MainSidebarProvider>,
       );
 
       expect(screen.getByTestId('sidebar-state')).toHaveTextContent('closed');
 
-      await userEvent.click(screen.getByRole('button', { name: 'Toggle sidebar' }));
+      await userEvent.click(screen.getByLabelText('Open navigation menu'));
       expect(screen.getByTestId('sidebar-state')).toHaveTextContent('open');
-
-      await userEvent.click(screen.getByRole('button', { name: 'Toggle sidebar' }));
-      expect(screen.getByTestId('sidebar-state')).toHaveTextContent('closed');
     });
   });
 });
