@@ -193,6 +193,8 @@ describe('WorkItemsStoragePG', () => {
     const domain = new WorkItemsStoragePG();
     await domain.init(ctx);
     expect(queries[0]!.text).toBe(WORK_ITEMS_DDL);
+    expect(WORK_ITEMS_DDL).toContain('ON work_items (org_id, github_project_id, source_key)');
+    expect(WORK_ITEMS_DDL).toContain('DROP INDEX IF EXISTS work_items_project_source_key_unique');
 
     const result = await domain.upsert({ orgId: 'org1', userId: 'u1', githubProjectId: 'p1', input: createInput });
     expect(result.created).toBe(true);
@@ -250,7 +252,7 @@ describe('WorkItemsStoragePG', () => {
 
   it('falls back to the existing row when a concurrent insert wins the unique-index race', async () => {
     let selects = 0;
-    const { ctx } = fakePool(text => {
+    const { queries, ctx } = fakePool(text => {
       if (text.includes('FOR UPDATE')) {
         // First reuse probe misses; the post-conflict probe finds the winner.
         selects += 1;
@@ -265,6 +267,9 @@ describe('WorkItemsStoragePG', () => {
 
     const result = await domain.upsert({ orgId: 'org1', userId: 'u1', githubProjectId: 'p1', input: createInput });
     expect(result.created).toBe(false);
+    const lockQueries = queries.filter(query => query.text.includes('FOR UPDATE'));
+    expect(lockQueries).toHaveLength(2);
+    expect(lockQueries[0]!.values).toEqual(['org1', 'p1', 'github-issue:42']);
   });
 
   it('deletes scoped to the org and returns null on a miss', async () => {
