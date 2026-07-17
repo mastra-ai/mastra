@@ -34,6 +34,7 @@ import {
   THINKING_LEVEL_TO_REASONING_EFFORT,
 } from '../providers/openai-codex.js';
 import type { ThinkingLevel } from '../providers/openai-codex.js';
+import { xaiProvider } from '../providers/xai.js';
 
 export const OPENAI_PREFIX = 'openai/';
 export const MASTRA_GATEWAY_PREFIX = 'mastra/';
@@ -451,6 +452,10 @@ export class MastraCodeGateway extends MastraModelGateway {
     if (args.providerId === 'openai') {
       const openaiModel = this.#resolveOpenAIModel(args);
       if (openaiModel) return openaiModel;
+    }
+
+    if (args.providerId === 'xai' && authStorage.get('xai')?.type === 'oauth') {
+      return xaiProvider(args.modelId, { headers: args.headers }) as unknown as GatewayLanguageModel;
     }
 
     if (this.#routeThroughMastraGateway) {

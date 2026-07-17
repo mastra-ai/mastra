@@ -81,6 +81,7 @@ import { createAmazonBedrockGateway } from './providers/amazon-bedrock-gateway.j
 import { setAuthStorage } from './providers/claude-max.js';
 import { setAuthStorage as setGitHubCopilotAuthStorage } from './providers/github-copilot.js';
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
+import { setAuthStorage as setXAIAuthStorage } from './providers/xai.js';
 
 import { stateSchema } from './schema.js';
 import type { MastraCodeState } from './schema.js';
@@ -243,6 +244,7 @@ export function createAuthStorage() {
   setAuthStorage(authStorage);
   setOpenAIAuthStorage(authStorage);
   setGitHubCopilotAuthStorage(authStorage);
+  setXAIAuthStorage(authStorage);
   return authStorage;
 }
 

@@ -280,6 +280,10 @@ vi.mock('../providers/github-copilot.js', () => ({
   setAuthStorage: vi.fn(),
 }));
 
+vi.mock('../providers/xai.js', () => ({
+  setAuthStorage: vi.fn(),
+}));
+
 vi.mock('../tools/index.js', () => ({
   defaultTools: {},
 }));
