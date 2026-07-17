@@ -116,14 +116,14 @@ describe('MastraFactory.prepare', () => {
     expect(getSeededSandbox()).toBeUndefined();
   });
 
-  it('rejects a sandbox that does not implement derive()', async () => {
-    const underivable = {
+  it('rejects a sandbox that does not implement clone()', async () => {
+    const uncloneable = {
       id: 'sb-1',
-      name: 'Underivable',
+      name: 'Uncloneable',
       provider: 'custom',
     } as unknown as WorkspaceSandbox;
-    const factory = new MastraFactory({ sandbox: { machine: underivable } });
-    await expect(factory.prepare()).rejects.toThrow(/does not implement derive\(\)/);
+    const factory = new MastraFactory({ sandbox: { machine: uncloneable } });
+    await expect(factory.prepare()).rejects.toThrow(/does not implement clone\(\)/);
   });
 
   it("defaults the workdir base to the machine's workingDirectory, else /workspace", async () => {
@@ -137,7 +137,7 @@ describe('MastraFactory.prepare', () => {
       id: 'sb-2',
       name: 'Remote',
       provider: 'railway',
-      derive: () => remote,
+      clone: () => remote,
     } as unknown as WorkspaceSandbox;
     await prepareFactory({ sandbox: { machine: remote } });
     expect(getSeededSandbox()?.workdirBase).toBe('/workspace');

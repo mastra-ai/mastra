@@ -39,14 +39,14 @@ import type { GithubProjectSandboxRow } from './schema';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { __resetRuntimeConfigForTests, seedRuntimeConfig } from '../runtime-config';
 
-/** Minimal derivable template sandbox standing in for Railway/Local instances. */
+/** Minimal cloneable template sandbox standing in for Railway/Local instances. */
 function templateSandbox(opts: { provider?: string; idleTimeoutMinutes?: number } = {}): WorkspaceSandbox {
   const template = {
     id: 'template-1',
     name: 'Template',
     provider: opts.provider ?? 'railway',
     ...(opts.idleTimeoutMinutes !== undefined ? { idleTimeoutMinutes: opts.idleTimeoutMinutes } : {}),
-    derive: () => template,
+    clone: () => template,
   };
   return template as unknown as WorkspaceSandbox;
 }
