@@ -1096,6 +1096,20 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               self.#closeTransportIfNeeded();
               break;
 
+            case 'goal':
+              // A completed goal evaluation marks a safe truncation point for
+              // run-lifetime buffers: the turn's messages are already persisted
+              // to the MessageList by this point, and goal runs chain many agent
+              // turns inside one stream — retaining every chunk, step, and tool
+              // result grows memory unboundedly over long goal runs (and bloats
+              // suspend snapshots via `serializeState`). `pending` chunks are
+              // judge progress updates emitted while the evaluation is still
+              // running — only the final evaluation truncates.
+              if (!chunk.payload.pending) {
+                self.#truncateRunBuffers();
+              }
+              break;
+
             case 'error':
               const error = getErrorFromUnknown(chunk.payload.error, {
                 fallbackMessage: 'Unknown error chunk in stream',
@@ -1755,6 +1769,31 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   #emitChunk(chunk: ChunkType<OUTPUT>) {
     this.#bufferedChunks.push(chunk); // add to bufferedChunks for replay in new streams
     this.#emitter.emit('chunk', chunk); // emit chunk for existing listener streams
+  }
+
+  /**
+   * Drops all run-lifetime accumulators. Called at goal-evaluation boundaries,
+   * where every completed step has already been persisted to the MessageList.
+   * After truncation, run-end results (`text`, `steps`, `toolCalls`, …,
+   * `getFullOutput()`) cover only the segment after the last evaluation —
+   * for goal runs that segment is the completion answer. Token usage
+   * (`#usageCount`), in-flight per-step state (`#bufferedByStep`), structured
+   * output, and the MessageList are intentionally untouched.
+   */
+  #truncateRunBuffers() {
+    this.#bufferedChunks.length = 0;
+    this.#bufferedSteps.length = 0;
+    this.#bufferedText.length = 0;
+    this.#bufferedTextChunks = {};
+    this.#bufferedSources.length = 0;
+    this.#bufferedReasoning.length = 0;
+    this.#bufferedReasoningDetails = {};
+    this.#bufferedFiles.length = 0;
+    this.#toolCalls.length = 0;
+    this.#toolResults.length = 0;
+    this.#toolCallArgsDeltas = {};
+    this.#toolCallDeltaIdNameMap = {};
+    this.#toolCallStreamingMeta = {};
   }
 
   #createEventedStream() {

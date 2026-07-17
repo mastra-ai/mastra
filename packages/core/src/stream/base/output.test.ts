@@ -80,6 +80,40 @@ function createFinishChunk(
   } as ChunkType;
 }
 
+function createTextDeltaChunk(runId: string, text: string): ChunkType {
+  return {
+    type: 'text-delta',
+    runId,
+    from: ChunkFrom.AGENT,
+    payload: { id: 'text-1', text },
+  } as ChunkType;
+}
+
+/**
+ * Minimal goal evaluation chunk. `pending: true` marks an in-progress judge
+ * update; omitted means the evaluation is final.
+ */
+function createGoalChunk(runId: string, { pending }: { pending?: boolean } = {}): ChunkType {
+  return {
+    type: 'goal',
+    runId,
+    from: ChunkFrom.AGENT,
+    payload: {
+      objective: 'test objective',
+      iteration: 1,
+      maxRuns: 5,
+      passed: false,
+      status: 'active',
+      results: [],
+      duration: 0,
+      timedOut: false,
+      maxRunsReached: false,
+      suppressFeedback: false,
+      ...(pending ? { pending: true } : {}),
+    },
+  } as ChunkType;
+}
+
 describe('MastraModelOutput', () => {
   describe('writer in output processors (outer context)', () => {
     it('should pass a defined writer to processOutputResult', async () => {
@@ -1048,6 +1082,139 @@ describe('MastraModelOutput', () => {
 
       expect(firstResolved).toBe(true);
       expect(lateResolved).toBe(true);
+    });
+  });
+
+  describe('goal evaluation run-buffer truncation', () => {
+    it('drops pre-evaluation steps, text, and tool data from run-end results but keeps total usage', async () => {
+      const runId = 'test-run';
+      const stream = createChunkStream([
+        // First goal-judged turn: text + a tool call/result.
+        createTextDeltaChunk(runId, 'first turn text'),
+        {
+          type: 'tool-call',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { toolCallId: 'tc-1', toolName: 'searchTool', args: { q: 'x' } },
+        } as ChunkType,
+        {
+          type: 'tool-result',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { toolCallId: 'tc-1', toolName: 'searchTool', result: { hits: 3 } },
+        } as ChunkType,
+        createStepFinishChunk(runId),
+        createGoalChunk(runId),
+        // Second turn after the evaluation: text only.
+        createTextDeltaChunk(runId, 'final answer'),
+        createStepFinishChunk(runId),
+        createFinishChunk(runId),
+      ]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      const fullOutput = await output.getFullOutput();
+
+      // Run-end results cover only the segment after the last goal evaluation.
+      expect(fullOutput.steps).toHaveLength(1);
+      expect(fullOutput.text).toBe('final answer');
+      expect(fullOutput.toolCalls).toHaveLength(0);
+      expect(fullOutput.toolResults).toHaveLength(0);
+
+      // Token usage still spans the whole run (10/20/30 per step-finish, twice).
+      expect(fullOutput.totalUsage).toMatchObject({ inputTokens: 20, outputTokens: 40, totalTokens: 60 });
+    });
+
+    it('clears buffered chunks on a final goal evaluation so late streams replay from the evaluation onward', async () => {
+      const runId = 'test-run';
+      const stream = createChunkStream([
+        createTextDeltaChunk(runId, 'before '),
+        createTextDeltaChunk(runId, 'goal'),
+        createStepFinishChunk(runId),
+        createGoalChunk(runId),
+        createTextDeltaChunk(runId, 'after goal'),
+        createFinishChunk(runId),
+      ]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      await output.consumeStream();
+
+      // A stream attached after consumption replays only chunks emitted after
+      // the final goal evaluation (starting with the goal chunk itself).
+      const replayed: ChunkType[] = [];
+      for await (const chunk of output.fullStream) {
+        replayed.push(chunk);
+      }
+
+      expect(replayed.map(c => c.type)).toEqual(['goal', 'text-delta', 'finish']);
+    });
+
+    it('does not clear buffered chunks on pending goal chunks', async () => {
+      const runId = 'test-run';
+      const stream = createChunkStream([
+        createTextDeltaChunk(runId, 'before pending'),
+        createGoalChunk(runId, { pending: true }),
+        createStepFinishChunk(runId),
+        createFinishChunk(runId),
+      ]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      await output.consumeStream();
+
+      const replayed: ChunkType[] = [];
+      for await (const chunk of output.fullStream) {
+        replayed.push(chunk);
+      }
+
+      expect(replayed.map(c => c.type)).toEqual(['text-delta', 'goal', 'step-finish', 'finish']);
+    });
+
+    it('still delivers all chunks live to streams attached before the goal evaluation', async () => {
+      const runId = 'test-run';
+      const stream = createChunkStream([
+        createTextDeltaChunk(runId, 'before '),
+        createGoalChunk(runId),
+        createTextDeltaChunk(runId, 'after'),
+        createStepFinishChunk(runId),
+        createFinishChunk(runId),
+      ]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      // Attach BEFORE consumption starts — this consumer drives the stream and
+      // must see every chunk regardless of replay-buffer truncation.
+      const live: ChunkType[] = [];
+      for await (const chunk of output.fullStream) {
+        live.push(chunk);
+      }
+
+      expect(live.map(c => c.type)).toEqual(['text-delta', 'goal', 'text-delta', 'step-finish', 'finish']);
     });
   });
 });
