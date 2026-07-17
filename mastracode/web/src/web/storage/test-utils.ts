@@ -10,6 +10,7 @@ import type { FactoryStorageContext } from './domain';
 import { AuditStorageInMemory } from './domains/audit/inmemory';
 import { ModelCredentialsStorageInMemory } from './domains/credentials/inmemory';
 import { IntakeStorageInMemory } from './domains/intake/inmemory';
+import { QueueHealthStorageInMemory } from './domains/queue-health/inmemory';
 import { WorkItemsStorageInMemory } from './domains/work-items/inmemory';
 import { FactoryStore } from './factory-store';
 
@@ -19,6 +20,7 @@ export interface InMemoryFactoryStoreSeed {
   audit: AuditStorageInMemory;
   workItems: WorkItemsStorageInMemory;
   credentials: ModelCredentialsStorageInMemory;
+  queueHealth: QueueHealthStorageInMemory;
 }
 
 /**
@@ -32,12 +34,14 @@ export async function seedInMemoryFactoryStoreForTests(): Promise<InMemoryFactor
   const audit = new AuditStorageInMemory();
   const workItems = new WorkItemsStorageInMemory();
   const credentials = new ModelCredentialsStorageInMemory();
+  const queueHealth = new QueueHealthStorageInMemory();
   factoryStore.register(intake);
   factoryStore.register(audit);
   factoryStore.register(workItems);
   factoryStore.register(credentials);
+  factoryStore.register(queueHealth);
   // In-memory domains never touch the connection handle.
   await factoryStore.init({} as FactoryStorageContext);
   seedRuntimeConfig({ factoryStore });
-  return { factoryStore, intake, audit, workItems, credentials };
+  return { factoryStore, intake, audit, workItems, credentials, queueHealth };
 }

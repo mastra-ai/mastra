@@ -39,6 +39,7 @@ import { AuditStoragePG } from './storage/domains/audit/pg.js';
 import { ModelCredentialsStoragePG } from './storage/domains/credentials/pg.js';
 import { createTenantCredentialPrimer, registerTenantCredentialResolver } from './tenant-credentials.js';
 import { IntakeStoragePG } from './storage/domains/intake/pg.js';
+import { QueueHealthStoragePG } from './storage/domains/queue-health/pg.js';
 import { WorkItemsStoragePG } from './storage/domains/work-items/pg.js';
 import { handleServerError } from './server-error.js';
 import { createStateSigner } from './state-signing.js';
@@ -222,6 +223,7 @@ export class MastraFactory {
       factoryStore.register(new AuditStoragePG());
       factoryStore.register(new WorkItemsStoragePG());
       factoryStore.register(new ModelCredentialsStoragePG());
+      factoryStore.register(new QueueHealthStoragePG());
       for (const integration of integrations) {
         if (integration.storageDomain) factoryStore.register(integration.storageDomain);
       }
