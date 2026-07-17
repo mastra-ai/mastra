@@ -302,7 +302,7 @@ export class InMemoryPromptBlocksStorage extends PromptBlocksStorage {
   private deepCopyVersion(version: PromptBlockVersion): PromptBlockVersion {
     return {
       ...version,
-      rules: version.rules ? JSON.parse(JSON.stringify(version.rules)) : version.rules,
+      rules: version.rules ? structuredClone(version.rules) : version.rules,
       changedFields: version.changedFields ? [...version.changedFields] : version.changedFields,
     };
   }

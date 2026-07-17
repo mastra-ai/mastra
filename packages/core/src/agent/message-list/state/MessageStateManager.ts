@@ -202,10 +202,10 @@ export class MessageStateManager {
     getSource: (message: MastraDBMessage) => MessageSource | null;
   } {
     const sources = {
-      memory: new Set(Array.from(this.memoryMessages.values()).map(m => m.id)),
-      output: new Set(Array.from(this.newResponseMessages.values()).map(m => m.id)),
-      input: new Set(Array.from(this.newUserMessages.values()).map(m => m.id)),
-      context: new Set(Array.from(this.userContextMessages.values()).map(m => m.id)),
+      memory: new Set(Array.from(this.memoryMessages.values(), m => m.id)),
+      output: new Set(Array.from(this.newResponseMessages.values(), m => m.id)),
+      input: new Set(Array.from(this.newUserMessages.values(), m => m.id)),
+      context: new Set(Array.from(this.userContextMessages.values(), m => m.id)),
     };
 
     return {
@@ -253,7 +253,7 @@ export class MessageStateManager {
     newResponseMessagesPersisted: string[];
     userContextMessagesPersisted: string[];
   } {
-    const serializeSet = (set: Set<MastraDBMessage>) => Array.from(set).map(value => value.id);
+    const serializeSet = (set: Set<MastraDBMessage>) => Array.from(set, value => value.id);
 
     return {
       memoryMessages: serializeSet(this.memoryMessages),

@@ -302,9 +302,9 @@ export class InMemoryMCPServersStorage extends MCPServersStorage {
   private deepCopyVersion(version: MCPServerVersion): MCPServerVersion {
     return {
       ...version,
-      tools: version.tools ? JSON.parse(JSON.stringify(version.tools)) : version.tools,
-      agents: version.agents ? JSON.parse(JSON.stringify(version.agents)) : version.agents,
-      workflows: version.workflows ? JSON.parse(JSON.stringify(version.workflows)) : version.workflows,
+      tools: version.tools ? structuredClone(version.tools) : version.tools,
+      agents: version.agents ? structuredClone(version.agents) : version.agents,
+      workflows: version.workflows ? structuredClone(version.workflows) : version.workflows,
       repository: version.repository ? { ...version.repository } : version.repository,
       changedFields: version.changedFields ? [...version.changedFields] : version.changedFields,
     };

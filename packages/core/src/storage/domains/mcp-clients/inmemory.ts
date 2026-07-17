@@ -302,7 +302,7 @@ export class InMemoryMCPClientsStorage extends MCPClientsStorage {
   private deepCopyVersion(version: MCPClientVersion): MCPClientVersion {
     return {
       ...version,
-      servers: version.servers ? JSON.parse(JSON.stringify(version.servers)) : version.servers,
+      servers: version.servers ? structuredClone(version.servers) : version.servers,
       changedFields: version.changedFields ? [...version.changedFields] : version.changedFields,
     };
   }

@@ -110,9 +110,9 @@ export function mergeWorkflowStepResult({
 
   snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
   try {
-    return JSON.parse(JSON.stringify(snapshot.context));
+    return structuredClone(snapshot.context);
   } catch {
-    // Step results may contain non-serializable values (circular refs, functions, etc.)
+    // Step results may contain non-serializable values (functions, DOM nodes, etc.)
     // when the workflow opts out of full persistence. Return a shallow copy so the
     // caller still gets a usable context without crashing.
     return { ...snapshot.context };
