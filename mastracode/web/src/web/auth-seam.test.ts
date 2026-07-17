@@ -115,6 +115,45 @@ describe('WorkOSWebAuth organization admin authorization', () => {
     expect(mockListOrganizationMemberships).toHaveBeenCalledWith({ userId: 'user_1' });
   });
 
+  it('allows an owner membership', async () => {
+    mockListOrganizationMemberships.mockResolvedValue({
+      autoPagination: async () => [{ organizationId: 'org_1', role: { slug: 'owner' } }],
+    });
+    const adapter = new WorkOSWebAuth({ redirectUri: 'http://localhost:4111/auth/callback' });
+
+    await expect(adapter.isOrganizationAdmin(user, 'org_1')).resolves.toBe(true);
+  });
+
+  it('allows a multi-role membership whose roles include admin', async () => {
+    mockListOrganizationMemberships.mockResolvedValue({
+      autoPagination: async () => [
+        {
+          organizationId: 'org_1',
+          role: { slug: 'member' },
+          roles: [{ slug: 'member' }, { slug: 'admin' }],
+        },
+      ],
+    });
+    const adapter = new WorkOSWebAuth({ redirectUri: 'http://localhost:4111/auth/callback' });
+
+    await expect(adapter.isOrganizationAdmin(user, 'org_1')).resolves.toBe(true);
+  });
+
+  it('denies a multi-role membership without an admin role', async () => {
+    mockListOrganizationMemberships.mockResolvedValue({
+      autoPagination: async () => [
+        {
+          organizationId: 'org_1',
+          role: { slug: 'member' },
+          roles: [{ slug: 'member' }, { slug: 'billing' }],
+        },
+      ],
+    });
+    const adapter = new WorkOSWebAuth({ redirectUri: 'http://localhost:4111/auth/callback' });
+
+    await expect(adapter.isOrganizationAdmin(user, 'org_1')).resolves.toBe(false);
+  });
+
   it('denies members, cross-organization requests, and provider failures', async () => {
     mockListOrganizationMemberships.mockResolvedValue({
       autoPagination: async () => [{ organizationId: 'org_1', role: { slug: 'member' } }],

@@ -214,7 +214,11 @@ export class WorkOSWebAuth implements WebAuthAdapter {
         .userManagement.listOrganizationMemberships({ userId })
         .then(page => page.autoPagination());
       const membership = memberships.find(item => item.organizationId === organizationId);
-      return membership?.role.slug === 'admin';
+      if (!membership) return false;
+      // Multi-role environments report assigned roles in `roles`; single-role
+      // environments only populate the legacy `role` field.
+      const slugs = membership.roles?.length ? membership.roles.map(role => role.slug) : [membership.role.slug];
+      return slugs.some(slug => slug === 'admin' || slug === 'owner');
     } catch {
       return false;
     }
