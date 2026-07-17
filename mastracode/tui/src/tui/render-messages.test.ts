@@ -8,6 +8,7 @@ import { createSignal } from '@mastra/core/signals';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { isChatBoundarySpacer } from './components/chat-boundary-spacer.js';
+import { JudgeDisplayComponent } from './components/judge-display.js';
 import { ReactiveSignalComponent } from './components/reactive-signal.js';
 import { SubagentExecutionComponent } from './components/subagent-execution.js';
 import { TemporalGapComponent } from './components/temporal-gap.js';
@@ -174,17 +175,42 @@ interface ReminderInput {
   message: string;
   gapText?: string;
   precedesMessageId?: string;
+  goalEvaluation?: Record<string, unknown>;
 }
 
 function createReminderMessage(reminder: ReminderInput, id = '__temporal_1'): MastraDBMessage {
-  const { reminderType, message, gapText, precedesMessageId } = reminder;
+  const { reminderType, message, gapText, precedesMessageId, goalEvaluation } = reminder;
   return createSignal({
     id,
     type: 'reactive',
     tagName: 'system-reminder',
     contents: message,
     attributes: { type: reminderType, gapText, precedesMessageId },
-  }).toDBMessage();
+    metadata: { goalEvaluation },
+  } as Parameters<typeof createSignal>[0]).toDBMessage();
+}
+
+function createGoalJudgeMessage(id = 'goal-judge-1'): MastraDBMessage {
+  return createReminderMessage(
+    {
+      reminderType: 'goal-judge',
+      message: '[Goal attempt 2/20] The goal is not yet complete. Judge feedback: Need another fact.',
+      goalEvaluation: {
+        objective: 'List whale facts',
+        iteration: 2,
+        maxRuns: 20,
+        passed: false,
+        status: 'active',
+        results: [],
+        reason: 'Need another fact.',
+        duration: 0,
+        timedOut: false,
+        maxRunsReached: false,
+        suppressFeedback: false,
+      },
+    },
+    id,
+  );
 }
 
 describe('addUserMessage', () => {
@@ -206,6 +232,17 @@ describe('addUserMessage', () => {
       '⏳ 15 minutes later',
     );
     expect(state.messageComponentsById.size).toBe(0);
+  });
+
+  it('renders and registers persisted goal-judge evaluations', () => {
+    const state = createState();
+
+    renderUserMessage(state, createGoalJudgeMessage());
+
+    const children = visibleChildren(state);
+    expect(children).toHaveLength(1);
+    expect(children[0]).toBeInstanceOf(JudgeDisplayComponent);
+    expect(state.messageComponentsById.get('goal-judge-1')).toBe(children[0]);
   });
 
   it('renders non-goal signals through the shared signal renderer', () => {
@@ -353,6 +390,30 @@ describe('renderExistingMessages startup history loading', () => {
     expect(children).toHaveLength(2);
     expect(state.messageComponentsById.get('user-1')).toBe(children[0]);
     expect(state.messageComponentsById.get('user-2')).toBe(children[1]);
+  });
+
+  it('reconstructs one persisted goal-judge evaluation from history', async () => {
+    const state = createState();
+    const listActiveMessages = vi.fn().mockResolvedValue([createGoalJudgeMessage()]);
+    state.session = {
+      ...(state.session as any),
+      thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages },
+      state: createSessionState(),
+    } as unknown as TUIState['session'];
+    state.controller = {
+      session: {
+        thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages },
+        displayState: { get: () => ({ isRunning: false }), restoreTasks: vi.fn() },
+      },
+      setState: vi.fn().mockResolvedValue(undefined),
+    } as unknown as TUIState['controller'];
+
+    await renderExistingMessages(state);
+
+    const children = visibleChildren(state);
+    expect(children).toHaveLength(1);
+    expect(children[0]).toBeInstanceOf(JudgeDisplayComponent);
+    expect(state.messageComponentsById.get('goal-judge-1')).toBe(children[0]);
   });
 
   it('reconstructs a persisted DB-native user signal from history', async () => {

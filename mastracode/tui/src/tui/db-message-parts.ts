@@ -277,6 +277,13 @@ export function getReminderView(message: MastraDBMessage): ReminderView {
   };
 }
 
+/** True for the persisted mirror of a live goal evaluation lifecycle event. */
+export function isGoalJudgeEvaluationSignal(message: MastraDBMessage): boolean {
+  if (!isSignalMessage(message) || getSignalKind(message) !== 'reminder') return false;
+  const reminder = getReminderView(message);
+  return reminder.reminderType === 'goal-judge' && reminder.goalEvaluation !== undefined;
+}
+
 export interface StateSignalView {
   stateId: string;
   mode: 'snapshot' | 'delta';
