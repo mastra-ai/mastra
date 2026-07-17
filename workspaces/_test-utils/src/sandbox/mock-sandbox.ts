@@ -6,6 +6,7 @@
 
 import type {
   WorkspaceSandbox,
+  SandboxDeriveOptions,
   SandboxInfo,
   CommandResult,
   ExecuteCommandOptions,
@@ -39,6 +40,9 @@ export class MockSandbox implements WorkspaceSandbox {
   private defaultResponse: CommandResult;
   private mountedFilesystems: Map<string, WorkspaceFilesystem> = new Map();
 
+  /** Options this sandbox was derived with, for test assertions. Undefined for root sandboxes. */
+  derivedWith?: SandboxDeriveOptions;
+
   constructor(options: MockSandboxOptions = {}) {
     this.id = options.id ?? `mock-sandbox-${Date.now().toString(36)}`;
     this.commandResponses = options.commandResponses ?? new Map();
@@ -56,6 +60,20 @@ export class MockSandbox implements WorkspaceSandbox {
    */
   setCommandResponse(command: string, response: CommandResult): void {
     this.commandResponses.set(command, response);
+  }
+
+  /**
+   * Construct a sibling `MockSandbox` inheriting this sandbox's command
+   * responses. Records the derive options on `derivedWith` for assertions.
+   */
+  derive(options: SandboxDeriveOptions = {}): MockSandbox {
+    const child = new MockSandbox({
+      ...(options.id !== undefined && { id: options.id }),
+      commandResponses: new Map(this.commandResponses),
+      defaultResponse: this.defaultResponse,
+    });
+    child.derivedWith = options;
+    return child;
   }
 
   async start(): Promise<void> {
