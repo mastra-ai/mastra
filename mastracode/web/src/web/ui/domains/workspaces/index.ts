@@ -1,8 +1,8 @@
 export { DirectoryBrowser } from './components/DirectoryPicker';
-export { EmptyProjectState } from './components/EmptyProjectState';
+export { EmptyFactoryState } from './components/EmptyFactoryState';
 export { GithubConnectModal } from './components/GithubConnectModal';
-export { ProjectsModal } from './components/ProjectsModal';
-export { ProjectSwitcher } from './components/ProjectSwitcher';
+export { FactoriesModal } from './components/FactoriesModal';
+export { FactorySwitcher } from './components/FactorySwitcher';
 export { UserSessionsSection } from './components/UserSessionsSection';
 export { WorkspacesSection } from './components/WorkspacesSection';
 export { useActiveFactory } from '../../../../shared/hooks/useActiveFactory';

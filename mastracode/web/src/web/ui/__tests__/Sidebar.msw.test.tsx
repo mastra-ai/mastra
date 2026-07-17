@@ -245,11 +245,11 @@ describe('Sidebar', () => {
       useAgentControllerHandlers();
       renderSidebar();
 
-      const projectSwitcher = await screen.findByRole('region', { name: 'Project switcher' });
+      const projectSwitcher = await screen.findByRole('region', { name: 'Factory switcher' });
       const navigation = screen.getByRole('region', { name: 'Navigation' });
       const account = screen.getByRole('region', { name: 'Account and settings' });
 
-      expect(within(projectSwitcher).getByRole('button', { name: 'Select project' })).toBeInTheDocument();
+      expect(within(projectSwitcher).getByRole('button', { name: 'Select factory' })).toBeInTheDocument();
       expect(await within(navigation).findByText('First thread')).toBeInTheDocument();
       const footerNavigation = within(account).getByRole('list');
       expect(within(footerNavigation).getByRole('button', { name: 'Sign out' })).toHaveTextContent('Ada Lovelace');
@@ -289,11 +289,11 @@ describe('Sidebar', () => {
       useAgentControllerHandlers();
       renderSidebar();
 
-      await userEvent.click(await screen.findByRole('button', { name: 'Select project' }));
+      await userEvent.click(await screen.findByRole('button', { name: 'Select factory' }));
 
       expect(await screen.findByRole('menuitem', { name: 'Mastra' })).toBeInTheDocument();
-      expect(screen.getByRole('menuitem', { name: 'Open local project' })).toBeInTheDocument();
-      expect(screen.getByRole('menuitem', { name: 'Open from GitHub' })).toBeInTheDocument();
+      expect(screen.getByRole('menuitem', { name: 'Create factory from local folder' })).toBeInTheDocument();
+      expect(screen.getByRole('menuitem', { name: 'Create/connect factory from GitHub' })).toBeInTheDocument();
       expect(screen.queryByRole('menuitem', { name: /remove/i })).not.toBeInTheDocument();
 
       await userEvent.click(screen.getByRole('menuitem', { name: 'Beta' }));
@@ -402,7 +402,7 @@ describe('Sidebar', () => {
       useAuthHandler();
       renderSidebar();
 
-      expect(await screen.findByText('Select a project…')).toBeInTheDocument();
+      expect(await screen.findByText('Select a factory…')).toBeInTheDocument();
       expect(screen.queryByText('First thread')).not.toBeInTheDocument();
     });
   });

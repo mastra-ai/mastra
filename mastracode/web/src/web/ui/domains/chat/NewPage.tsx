@@ -6,7 +6,7 @@ import { useOverlays } from '../../lib/overlays';
 import { Sidebar } from '../../Sidebar';
 import { ChatLayout, FolderIcon } from '../../ui';
 import type { Factory } from '../workspaces';
-import { EmptyProjectState, useActiveFactoryContext } from '../workspaces';
+import { EmptyFactoryState, useActiveFactoryContext } from '../workspaces';
 import { deriveProjectPath } from '../../../../shared/hooks/useWorkspaces';
 import { ChatHeader } from './components/ChatHeader';
 import { ChatOverlays } from './components/ChatOverlays';
@@ -31,7 +31,7 @@ export function NewPage() {
           {activeFactory ? (
             <NewPageContent activeFactory={activeFactory} />
           ) : (
-            <EmptyProjectState onOpenProjects={() => overlays.open('projects')} />
+            <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />
           )}
           <ChatOverlays />
         </ChatSessionBoundary>

@@ -10,7 +10,7 @@ import {
   useOverlayControllerHandlers,
 } from '../../../chat/components/__tests__/overlay-test-utils';
 import type { DirectoryListing } from '../../../../../../shared/api/types';
-import { ProjectsModal } from '../../index';
+import { FactoriesModal } from '../../index';
 import { loadFactories } from '../../services/factories';
 
 const FS_URL = `${TEST_BASE_URL}/web/fs/list`;
@@ -25,7 +25,7 @@ const rootListing: DirectoryListing = {
 function renderProjects() {
   return renderWithProviders(
     <OverlayTestProviders>
-      <ProjectsModal />
+      <FactoriesModal />
     </OverlayTestProviders>,
   );
 }
@@ -48,7 +48,7 @@ beforeEach(() => {
 
 afterEach(() => localStorage.clear());
 
-describe('ProjectsModal', () => {
+describe('FactoriesModal', () => {
   it('opens directly into local directory browsing', async () => {
     renderProjects();
 

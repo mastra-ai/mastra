@@ -692,10 +692,10 @@ describe('App mode + theme controls', () => {
       expect(header).not.toBeNull();
 
       // The header must not contain any project switcher.
-      expect(within(header as HTMLElement).queryByRole('button', { name: 'Select project' })).not.toBeInTheDocument();
+      expect(within(header as HTMLElement).queryByRole('button', { name: 'Select factory' })).not.toBeInTheDocument();
 
       // The sidebar remains the single source of the project switcher.
-      const switcher = screen.getByRole('button', { name: 'Select project' });
+      const switcher = screen.getByRole('button', { name: 'Select factory' });
       expect(switcher).toHaveTextContent('MastraCode Test');
       expect(header).not.toContainElement(switcher);
     });

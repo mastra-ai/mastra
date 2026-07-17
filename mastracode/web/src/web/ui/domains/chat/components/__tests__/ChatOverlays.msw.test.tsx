@@ -25,7 +25,7 @@ function OverlayLauncher() {
     <>
       <button onClick={() => open('settings')}>Settings</button>
       <button onClick={() => open('shortcuts')}>Shortcuts</button>
-      <button onClick={() => open('projects')}>Projects</button>
+      <button onClick={() => open('factories')}>Factories</button>
       <ChatOverlays />
     </>
   );
@@ -55,12 +55,12 @@ describe('ChatOverlays', () => {
     await user.click(screen.getByRole('button', { name: 'Shortcuts' }));
     expect(await screen.findByRole('dialog', { name: 'Keyboard shortcuts' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Close' }));
-    await user.click(screen.getByRole('button', { name: 'Projects' }));
-    expect(await screen.findByRole('dialog', { name: 'Open a project' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Factories' }));
+    expect(await screen.findByRole('dialog', { name: 'Create factory from local folder' })).toBeInTheDocument();
   });
 
   it('forces first-run project setup when no project is active', () => {
     renderOverlays();
-    expect(screen.getByRole('dialog', { name: 'Open a project' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Create factory from local folder' })).toBeInTheDocument();
   });
 });

@@ -8,7 +8,7 @@ import { ThreadList } from './domains/chat';
 import { FactorySection } from './domains/factory';
 import {
   isGithubFactory,
-  ProjectSwitcher,
+  FactorySwitcher,
   useActiveFactoryContext,
   UserSessionsSection,
   WorkspacesSection,
@@ -34,8 +34,8 @@ export function Sidebar() {
     <MainSidebar className="bg-transparent h-full">
       <MainSidebar.Nav>
         <div className="flex min-h-0 flex-1 flex-col gap-4">
-          <section aria-label="Project switcher">
-            <ProjectSwitcher />
+          <section aria-label="Factory switcher">
+            <FactorySwitcher />
           </section>
           <section className="flex min-h-0 flex-1 flex-col gap-4" aria-label="Navigation">
             {isGithub ? (

@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import { useOverlays } from '../../../lib/overlays';
 import { useToast } from '../../../ui';
 import { SettingsPanel } from '../../settings';
-import { GithubConnectModal, ProjectsModal, useActiveFactoryContext, useGithubStatusQuery } from '../../workspaces';
+import { FactoriesModal, GithubConnectModal, useActiveFactoryContext, useGithubStatusQuery } from '../../workspaces';
 import { ShortcutsOverlay } from './ShortcutsOverlay';
 
 /** Mounts the active chat overlays. Each overlay owns its provider-backed behavior. */
@@ -14,7 +14,7 @@ export function ChatOverlays() {
   const githubStatus = useGithubStatusQuery().data;
 
   // The GitHub repo picker replaces the factories modal while open.
-  const factoriesOpen = (overlays.isOpen('projects') || factories.length === 0) && !overlays.isOpen('github');
+  const factoriesOpen = (overlays.isOpen('factories') || factories.length === 0) && !overlays.isOpen('github');
 
   // Materialization failures surface as a toast; selection already stays put.
   // Keyed on the error identity only — `toast` is not referentially stable, and
@@ -28,7 +28,7 @@ export function ChatOverlays() {
     <>
       {overlays.isOpen('settings') && <SettingsPanel onClose={() => overlays.close('settings')} />}
       {overlays.isOpen('shortcuts') && <ShortcutsOverlay />}
-      {factoriesOpen && <ProjectsModal />}
+      {factoriesOpen && <FactoriesModal />}
 
       {overlays.isOpen('github') && githubStatus && (
         <GithubConnectModal

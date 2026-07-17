@@ -301,7 +301,7 @@ describe('Factory Audit page', () => {
     useAuditHandlers();
     renderAt('/factory/audit', localProject);
 
-    expect(await screen.findByText(/only available for GitHub factories/)).toBeInTheDocument();
+    expect(await screen.findByText(/Board, metrics, and audit require a Factory connected to GitHub/)).toBeInTheDocument();
     expect(screen.queryByRole('list', { name: 'Audit events' })).not.toBeInTheDocument();
   });
 });

@@ -28,7 +28,7 @@ export function useGlobalShortcuts() {
       overlays.toggle('shortcuts');
     },
     escape: () => {
-      const factoriesForcedOpen = overlays.isOpen('projects') || factories.length === 0;
+      const factoriesForcedOpen = overlays.isOpen('factories') || factories.length === 0;
       if (factoriesForcedOpen) return;
       if (overlays.isOpen('shortcuts')) {
         overlays.close('shortcuts');

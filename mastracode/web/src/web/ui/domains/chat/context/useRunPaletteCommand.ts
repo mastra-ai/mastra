@@ -96,7 +96,7 @@ export function useRunPaletteCommand(setComposerCommandName: Dispatch<SetStateAc
       case 'settings':
         pushNotice(
           [
-            `Project: ${activeFactory?.name ?? '(none)'}`,
+            `Factory: ${activeFactory?.name ?? '(none)'}`,
             `Path: ${activeFactory ? deriveProjectPath(activeFactory) || '(default workspace)' : '(default workspace)'}`,
             `Mode: ${activeModeId ?? '—'}`,
             `Model: ${activeModelId ?? '—'}`,

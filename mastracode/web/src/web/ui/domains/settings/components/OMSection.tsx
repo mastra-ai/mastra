@@ -139,7 +139,7 @@ export function OMSection({ resourceId, models }: { resourceId?: string; models:
           Observational memory. Mirrors the TUI <code>/om</code> command.
         </Txt>
         <Txt as="p" variant="ui-sm" className="text-icon3">
-          Open a project to view and change its OM settings.
+          Open a factory to view and change its OM settings.
         </Txt>
       </div>
     );

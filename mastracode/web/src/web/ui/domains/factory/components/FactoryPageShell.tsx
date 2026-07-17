@@ -5,7 +5,7 @@ import { useOverlays } from '../../../lib/overlays';
 import { Sidebar } from '../../../Sidebar';
 import { PageLayout } from '../../../ui';
 import { ChatHeader } from '../../chat/components/ChatHeader';
-import { EmptyProjectState, useActiveFactoryContext, useGithubStatusQuery } from '../../workspaces';
+import { EmptyFactoryState, useActiveFactoryContext, useGithubStatusQuery } from '../../workspaces';
 import type { GithubFactory } from '../../workspaces';
 import { isGithubFactory } from '../../workspaces';
 
@@ -38,17 +38,18 @@ export function FactoryPageShell({ title, description, children }: FactoryPageSh
       {activeFactory ? (
         !githubFactory ? (
           <Notice variant="info">
-            Factory is only available for GitHub factories. Switch to a GitHub-backed factory.
+            Board, metrics, and audit require a Factory connected to GitHub. Switch to a GitHub-backed factory.
           </Notice>
         ) : status.isPending ? null : status.data?.enabled && status.data.connected ? (
           children(githubFactory)
         ) : (
           <Notice variant="info">
-            Factory requires a GitHub connection. Connect GitHub from the factories menu to see issues and pull requests.
+            Board requires a Factory connected to GitHub. Connect GitHub from the factories menu to see issues and pull
+            requests.
           </Notice>
         )
       ) : (
-        <EmptyProjectState onOpenProjects={() => overlays.open('projects')} />
+        <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />
       )}
     </PageLayout>
   );

@@ -16,7 +16,7 @@ import { isGithubFactory } from '../../workspaces/services/factories';
  * nothing persists until Save — so typing a long command never spams the
  * server. Saving a blank field clears the command.
  */
-function ProjectSetupRow({ factory }: { factory: GithubFactory }) {
+function FactorySetupRow({ factory }: { factory: GithubFactory }) {
   const { toast } = useToast();
   const githubProjectId = factory.binding.githubProjectId;
   const settingsQuery = useProjectSettingsQuery(githubProjectId);
@@ -70,7 +70,7 @@ function ProjectSetupRow({ factory }: { factory: GithubFactory }) {
  * before any agent execution, so agents always start from a built tree.
  * Rendered only when at least one GitHub factory exists.
  */
-export function ProjectSetupSection() {
+export function FactorySetupSection() {
   const factoriesQuery = useFactoriesQuery();
   const githubFactories = (factoriesQuery.data ?? []).filter(isGithubFactory);
   if (githubFactories.length === 0) return null;
@@ -86,7 +86,7 @@ export function ProjectSetupSection() {
         </Txt>
       </div>
       {githubFactories.map(factory => (
-        <ProjectSetupRow key={factory.binding.githubProjectId} factory={factory} />
+        <FactorySetupRow key={factory.binding.githubProjectId} factory={factory} />
       ))}
     </div>
   );

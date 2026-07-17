@@ -7,7 +7,7 @@ import { ChatLayout } from '../../ui';
 import { renderedPaths, WorkspaceViewerPanel } from '../workspace-viewer';
 import {
   activeWorkspacePath,
-  EmptyProjectState,
+  EmptyFactoryState,
   findUserSessionByThreadId,
   useActiveFactoryContext,
 } from '../workspaces';
@@ -60,7 +60,7 @@ export function ThreadPage() {
       }
       main={
         <ChatSessionBoundary threadId={threadId}>
-          {activeFactory ? <ThreadPageMain /> : <EmptyProjectState onOpenProjects={() => overlays.open('projects')} />}
+          {activeFactory ? <ThreadPageMain /> : <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />}
           <ChatOverlays />
         </ChatSessionBoundary>
       }

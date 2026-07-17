@@ -175,7 +175,7 @@ describe('MastraCode web routing', () => {
     const { router } = renderRoutes('/', AUTHENTICATED, { project, workItemCount: 1 });
 
     await expectPathname(router, '/factory/board');
-    expect(await screen.findByText(/Factory requires a GitHub connection/)).toBeInTheDocument();
+    expect(await screen.findByText(/Board requires a Factory connected to GitHub/)).toBeInTheDocument();
   });
 
   it('given Factory work is still loading, when visiting /, then the app waits before choosing a destination', async () => {

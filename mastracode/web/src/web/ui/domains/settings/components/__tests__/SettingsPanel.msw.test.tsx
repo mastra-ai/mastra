@@ -195,27 +195,27 @@ describe('SettingsPanel', () => {
     });
   });
 
-  describe('when managing projects', () => {
-    it('removes the active project and reconciles the project selection', async () => {
+  describe('when managing factories', () => {
+    it('removes the active factory and reconciles the factory selection', async () => {
       const user = userEvent.setup();
       renderSettingsPanel();
 
-      await user.click(screen.getByRole('tab', { name: 'Projects' }));
+      await user.click(screen.getByRole('tab', { name: 'Factories' }));
       expect(screen.getByText('/tmp/settings-panel')).toBeInTheDocument();
 
       await user.click(screen.getByRole('button', { name: 'Remove Settings Panel Project' }));
 
       await waitFor(() => expect(localStorage.getItem('mastracode-active-factory')).toBeNull());
-      await user.click(screen.getByRole('tab', { name: 'Projects' }));
+      await user.click(screen.getByRole('tab', { name: 'Factories' }));
       await screen.findByText('No configured factories.');
       expect(JSON.parse(localStorage.getItem('mastracode-factories') ?? '[]')).toEqual([]);
     });
 
-    it('keeps the project visible and reports storage failures', async () => {
+    it('keeps the factory visible and reports storage failures', async () => {
       const user = userEvent.setup();
       renderSettingsPanel();
-      await user.click(screen.getByRole('tab', { name: 'Projects' }));
-      const storageError = new Error('Project storage is unavailable');
+      await user.click(screen.getByRole('tab', { name: 'Factories' }));
+      const storageError = new Error('Factory storage is unavailable');
       const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementationOnce(() => {
         throw storageError;
       });

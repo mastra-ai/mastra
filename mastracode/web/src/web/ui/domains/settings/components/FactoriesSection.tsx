@@ -7,7 +7,7 @@ import { useRemoveFactoryMutation } from '../../../../../shared/hooks/useFactori
 import { isGithubFactory, useActiveFactoryContext } from '../../workspaces';
 import { deriveProjectPath } from '../../../../../shared/hooks/useWorkspaces';
 
-export function ProjectsSection() {
+export function FactoriesSection() {
   const { factories } = useActiveFactoryContext();
   const removeMutation = useRemoveFactoryMutation();
 
@@ -19,14 +19,14 @@ export function ProjectsSection() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
         <Txt variant="ui-lg" className="font-medium">
-          Projects
+          Factories
         </Txt>
         <Txt variant="ui-sm">Remove local folders and GitHub repositories from Mastra Code.</Txt>
       </div>
 
       {removeMutation.isError && (
         <Notice variant="destructive">
-          {removeMutation.error instanceof Error ? removeMutation.error.message : 'Failed to remove project'}
+          {removeMutation.error instanceof Error ? removeMutation.error.message : 'Failed to remove factory'}
         </Notice>
       )}
 

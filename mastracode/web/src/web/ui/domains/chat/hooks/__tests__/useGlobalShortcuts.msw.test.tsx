@@ -28,7 +28,7 @@ const RESOURCE_ID = 'resource-test';
 const SESSION = `${API}/sessions/${RESOURCE_ID}`;
 const THREAD_ID = 'thread-test';
 
-const OVERLAYS: OverlayName[] = ['sidebar', 'settings', 'shortcuts', 'projects'];
+const OVERLAYS: OverlayName[] = ['sidebar', 'settings', 'shortcuts', 'factories'];
 
 afterEach(() => {
   localStorage.clear();
@@ -193,11 +193,11 @@ describe('useGlobalShortcuts', () => {
     renderProbe(THREAD_ID);
     await ready();
 
-    await userEvent.click(screen.getByRole('button', { name: 'open projects' }));
+    await userEvent.click(screen.getByRole('button', { name: 'open factories' }));
     await userEvent.click(screen.getByRole('button', { name: 'open settings' }));
 
     await userEvent.keyboard('{Escape}');
-    expectOverlay('projects', 'open');
+    expectOverlay('factories', 'open');
     expectOverlay('settings', 'open');
   });
 

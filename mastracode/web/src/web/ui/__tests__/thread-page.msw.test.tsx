@@ -231,7 +231,7 @@ describe('MastraCode thread pages', () => {
   it('hides user-session workspace files when the thread belongs to another project', async () => {
     const activeFactory: Factory = {
   id: 'project-active',
-  name: 'Active project',
+  name: 'Active factory',
   resourceId: RESOURCE_ID,
   createdAt: 1,
   binding: {

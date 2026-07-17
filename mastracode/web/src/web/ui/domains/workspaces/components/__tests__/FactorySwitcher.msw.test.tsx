@@ -1,5 +1,5 @@
 /**
- * BDD coverage for the propless `ProjectSwitcher` (`domains/workspaces/components`).
+ * BDD coverage for the propless `FactorySwitcher` (`domains/workspaces/components`).
  *
  * The switcher reads the active project from `useActiveFactoryContext` and
  * drives the projects modal through `useOverlays` — no props. Opening the
@@ -13,7 +13,7 @@ import { renderWithProviders } from '../../../../../../../e2e/web-ui/render';
 import { OverlaysProvider, useOverlays } from '../../../../lib/overlays';
 import { ActiveFactoryProvider } from '../../context/ActiveFactoryProvider';
 import type { Factory } from '../../services/factories';
-import { ProjectSwitcher } from '../ProjectSwitcher';
+import { FactorySwitcher } from '../FactorySwitcher';
 
 const PROJECT: Factory = {
   id: 'project-test',
@@ -39,7 +39,7 @@ function OverlayProbe() {
   const overlays = useOverlays();
   return (
     <div>
-      <span data-testid="projects-open">{overlays.isOpen('projects') ? 'yes' : 'no'}</span>
+      <span data-testid="projects-open">{overlays.isOpen('factories') ? 'yes' : 'no'}</span>
       <span data-testid="sidebar-open">{overlays.isOpen('sidebar') ? 'yes' : 'no'}</span>
       <button onClick={() => overlays.open('sidebar')}>open sidebar</button>
     </div>
@@ -50,14 +50,14 @@ function renderSwitcher() {
   return renderWithProviders(
     <ActiveFactoryProvider>
       <OverlaysProvider>
-        <ProjectSwitcher />
+        <FactorySwitcher />
         <OverlayProbe />
       </OverlaysProvider>
     </ActiveFactoryProvider>,
   );
 }
 
-describe('ProjectSwitcher', () => {
+describe('FactorySwitcher', () => {
   it('given an active project, then its name and path render', async () => {
     seedProject();
     renderSwitcher();
@@ -69,25 +69,25 @@ describe('ProjectSwitcher', () => {
   it('given no selection, then the placeholder renders', () => {
     renderSwitcher();
 
-    expect(screen.getByText('Select a project…')).toBeInTheDocument();
+    expect(screen.getByText('Select a factory…')).toBeInTheDocument();
   });
 
   it('when the switcher is clicked, then the inline project menu opens without opening the project picker', async () => {
     seedProject();
     renderSwitcher();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Select project' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Select factory' }));
 
     expect(await screen.findByRole('menuitem', { name: /MastraCode Test/ })).toBeInTheDocument();
     expect(screen.getByTestId('projects-open')).toHaveTextContent('no');
   });
 
-  it('when Open local project is selected, then the projects overlay opens', async () => {
+  it('when Create factory from local folder is selected, then the projects overlay opens', async () => {
     seedProject();
     renderSwitcher();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Select project' }));
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Open local project' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Select factory' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Create factory from local folder' }));
 
     expect(screen.getByTestId('projects-open')).toHaveTextContent('yes');
   });
