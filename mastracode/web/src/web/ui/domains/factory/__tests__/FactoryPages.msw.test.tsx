@@ -1744,6 +1744,46 @@ describe('Factory Board — open session from the card title', () => {
     ]);
   });
 
+  it('given a card whose run refs went stale, when the title is clicked, then only chat is filed and the stale roles are not revived', async () => {
+    const state = useBoardHandlers({
+      workItems: [
+        makeWorkItem({
+          id: 'wi-1',
+          title: 'Fix flaky test',
+          source: 'github-issue',
+          sourceKey: 'github-issue:12',
+          stages: ['execute'],
+          metadata: { number: 12 },
+          // Ref to a deleted worktree: the run happened once but its thread is
+          // gone, so the run slot is open again.
+          sessions: {
+            work: {
+              projectPath: '/sandbox/mastra/worktrees/gone',
+              branch: 'factory/issue-12',
+              threadId: 'thread-old',
+              startedBy: 'user-1',
+            },
+          },
+        }),
+      ],
+    });
+    const captured = useFactoryRunHandlers('factory-issue-12');
+    const { router } = renderAt('/factory/board');
+
+    await screen.findByTestId('board-column-intake');
+    const card = within(column('execute')).getByTestId('work-item-card');
+    await userEvent.click(within(card).getByRole('button', { name: 'Fix flaky test' }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
+    expect(captured.messages).toEqual([]);
+    // The fresh thread is filed under chat only — repointing the stale `work`
+    // role would make it look live and hide Investigate/Build again.
+    expect(state.patches).toHaveLength(1);
+    expect(state.patches[0].sessions).toEqual({
+      chat: expect.objectContaining({ branch: 'factory/issue-12', threadId: 'thread-factory' }),
+    });
+  });
+
   it('given a candidate, when the title is clicked, then the card materializes with a chat session in its own column and no prompt is sent', async () => {
     const state = useBoardHandlers({ issues });
     const captured = useFactoryRunHandlers('factory-issue-12');
@@ -1800,7 +1840,12 @@ describe('Factory Board — open session from the card title', () => {
           stages: ['intake'],
           metadata: { number: 12 },
           sessions: {
-            chat: { projectPath: issueWorktreePath, branch: 'factory/issue-12', threadId: 'thread-work', startedBy: 'user-1' },
+            chat: {
+              projectPath: issueWorktreePath,
+              branch: 'factory/issue-12',
+              threadId: 'thread-work',
+              startedBy: 'user-1',
+            },
           },
         }),
       ],

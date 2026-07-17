@@ -2,7 +2,7 @@ import { Button, buttonVariants } from '@mastra/playground-ui/components/Button'
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { CircleDot, EllipsisVertical, ExternalLink, GitPullRequest, MessageSquare, Plus } from 'lucide-react';
+import { CircleDot, EllipsisVertical, ExternalLink, GitPullRequest, Plus } from 'lucide-react';
 import type { ComponentType, DragEvent } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -621,7 +621,12 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
                   item={item}
                   columnStage={stage.id}
                   liveWorktreePaths={liveWorktreePaths}
-                  runDisabled={!runEnabled || start.isPending}
+                  // Until the worktree listing settles, liveness is unknown and
+                  // every session ref looks stale — the title would render as a
+                  // create button and a click would mint a replacement session
+                  // for a perfectly live thread. Hold run/create actions until
+                  // liveness is known.
+                  runDisabled={!runEnabled || start.isPending || !workspaces.isSuccess}
                   runStarting={start.isPending}
                   onOpenThread={session => void openThread(session)}
                   onCreateSession={spec =>
@@ -630,8 +635,12 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
                       threadTitle: spec.threadTitle,
                       workItem: {
                         id: item.id,
+                        // File only the neutral chat role. The title is a
+                        // create button only when every existing role ref is
+                        // stale (worktree gone); repointing those roles here
+                        // would make them look live again and hide the card's
+                        // run actions even though no run happened.
                         role: 'chat',
-                        existingRoles: Object.keys(item.sessions),
                         stages: item.stages,
                         source: item.source,
                         sourceKey: item.sourceKey,
