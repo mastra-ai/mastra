@@ -11,6 +11,7 @@
  * forwarded, and that the Node path (no execution context) still works.
  */
 import { Mastra } from '@mastra/core/mastra';
+import type { ExecutionContext } from 'hono';
 import { Hono } from 'hono';
 import { describe, it, expect, vi } from 'vitest';
 import { MastraServer } from '../index';
@@ -56,13 +57,14 @@ describe('MastraServer (Hono) - custom route execution context passthrough', () 
     const fakeExecutionCtx = {
       waitUntil: vi.fn(),
       passThroughOnException: vi.fn(),
-    };
+      props: {},
+    } satisfies ExecutionContext;
 
     // Mirrors a Cloudflare Worker entry: `fetch: (request, env, ctx) => app.fetch(request, env, ctx)`.
     const response = await app.fetch(
       new Request('http://localhost/probe-execution-ctx', { method: 'POST' }),
       {},
-      fakeExecutionCtx as any,
+      fakeExecutionCtx,
     );
 
     // The execution context handed to the top-level app.fetch() must be the same
