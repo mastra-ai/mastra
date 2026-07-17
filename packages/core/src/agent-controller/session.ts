@@ -2694,6 +2694,17 @@ export class Session<TState = unknown> {
     return { ...this.#tags };
   }
 
+  /**
+   * The workspace resolved for this session.
+   *
+   * Dynamic workspace factories are evaluated independently when each session
+   * is created. Use this accessor for operations that must stay bound to the
+   * session's workspace rather than resolving through controller-global state.
+   */
+  getWorkspace(): Workspace {
+    return this.#workspace;
+  }
+
   // ===========================================================================
   // Event bus
   // ===========================================================================
@@ -3032,7 +3043,6 @@ export class Session<TState = unknown> {
     const signal = createSignal(
       'content' in input ? { type: 'user', tagName: 'user', contents: input.content } : input,
     );
-    const shouldForwardGoalEvaluations = signal.attributes?.type === 'goal';
     const accepted = Promise.resolve().then(async () => {
       if (!this.thread.getId()) {
         const thread = await this.thread.create();
@@ -3092,23 +3102,7 @@ export class Session<TState = unknown> {
       } catch (error) {
         throw error;
       }
-      void result.accepted
-        .then(accepted => {
-          if (accepted.action !== 'wake' || !shouldForwardGoalEvaluations) return;
-          // Goal evaluations are emitted after the model's finish chunk and are not forwarded by
-          // the per-thread subscription. Read only those lifecycle chunks from the owned wake output;
-          // processing the whole output here would duplicate message and suspension events.
-          void (async () => {
-            for await (const chunk of accepted.output.fullStream) {
-              if (chunk.type === 'goal') {
-                this.emit({ type: 'goal_evaluation', payload: chunk.payload });
-              }
-            }
-          })().catch(error => {
-            this.emit({ type: 'error', error: error instanceof Error ? error : new Error(String(error)) });
-          });
-        })
-        .catch(() => {});
+      void result.accepted.catch(() => {});
       return { accepted: true as const, runId: undefined };
     });
 

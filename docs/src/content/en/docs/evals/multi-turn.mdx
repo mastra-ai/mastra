@@ -118,7 +118,7 @@ Semantics:
 - `result.turnResults[i]` reports each turn's `gateResults`, `thresholdResults`, and `scores`, so a failure points at the exact turn. Across multiple conversations, turn results are averaged by turn index.
 - A turn with no `gates`/`scorers` just advances the conversation.
 - Top-level `scorers`/`gates` still run holistically over the accumulated output, so you can combine "this turn must call the tool" with "the overall answer mentions Brooklyn."
-- When the agent has storage configured, each per-turn scorer/gate result is persisted like top-level scores, so per-turn outcomes appear in your scores store.
+- When the agent has storage configured, each per-turn scorer/gate result is persisted like top-level scores, so per-turn outcomes appear in your scores store. Each stored per-turn score is labeled with its turn index (`metadata.turnIndex`), shares the conversation's `threadId`, and links to that turn's own trace span.
 
 Use `inputs` when a single holistic score over the whole conversation is enough; use `turns` when correctness depends on individual turns. `turns` cannot be combined with `input` or `inputs` in the same data item.
 

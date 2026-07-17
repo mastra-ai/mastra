@@ -78,6 +78,12 @@ packageExtensions:
   '@huggingface/transformers@*':
     dependencies:
       onnxruntime-common: '*'
+  # @daytonaio/sdk requires tslib at runtime without declaring it; with the
+  # global virtual store there is no fallback hoist, so importing the SDK
+  # fails with "Cannot find module 'tslib'".
+  '@daytonaio/sdk@*':
+    dependencies:
+      tslib: '*'
 
 blockExoticSubdeps: true
 trustPolicy: no-downgrade

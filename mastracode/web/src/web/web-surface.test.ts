@@ -5,6 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('./sandbox-reattach-registration', () => ({ registerSandboxReattach: () => {} }));
 vi.mock('./linear/db', () => ({ ensureLinearDbReady: vi.fn().mockResolvedValue(undefined) }));
 
+import { PostgresStore } from '@mastra/pg';
+import type { WebAuthAdapter } from './auth-adapter';
+import { __resetRuntimeConfigForTests, seedRuntimeConfig } from './runtime-config';
 import { buildIssueTriagePrompt, resolveLinearReady } from './web-surface';
 
 // ── Linear-only state-secret deploy scenario ─────────────────────────────
@@ -18,7 +21,6 @@ const ENV_KEYS = [
   'LINEAR_CLIENT_SECRET',
   'WORKOS_API_KEY',
   'WORKOS_CLIENT_ID',
-  'APP_DATABASE_URL',
   'GITHUB_APP_WEBHOOK_SECRET',
   'WORKOS_COOKIE_PASSWORD',
 ] as const;
@@ -29,14 +31,18 @@ let stderrSpy: ReturnType<typeof vi.spyOn>;
 function enableLinearFeature(): void {
   process.env.LINEAR_CLIENT_ID = 'linear-client';
   process.env.LINEAR_CLIENT_SECRET = 'linear-secret';
-  process.env.WORKOS_API_KEY = 'workos-key';
-  process.env.WORKOS_CLIENT_ID = 'workos-client';
-  process.env.APP_DATABASE_URL = 'postgres://localhost/app';
+  // The app DB gate checks the seeded storage instance, and seeding the
+  // registry makes it authoritative for auth too — seed both slots.
+  seedRuntimeConfig({
+    storage: new PostgresStore({ id: 'web-surface-test', connectionString: 'postgres://localhost/app' }),
+    authAdapter: { kind: 'workos' } as WebAuthAdapter,
+  });
 }
 
 beforeEach(() => {
   for (const k of ENV_KEYS) saved[k] = process.env[k];
   for (const k of ENV_KEYS) delete process.env[k];
+  __resetRuntimeConfigForTests();
   stderrSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
 });
 
@@ -45,6 +51,7 @@ afterEach(() => {
     if (saved[k] === undefined) delete process.env[k];
     else process.env[k] = saved[k];
   }
+  __resetRuntimeConfigForTests();
   stderrSpy.mockRestore();
 });
 
