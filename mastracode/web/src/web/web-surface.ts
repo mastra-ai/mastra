@@ -15,6 +15,7 @@ import type { MastraCodeState } from '@mastra/code-sdk/schema';
 
 import { buildAuditRoutes } from './audit/routes.js';
 import { buildConfigRoutes } from './config-routes.js';
+import { buildOAuthRoutes } from './oauth-routes.js';
 import { buildFsRoutes } from './fs-routes.js';
 import {
   assertReplicaStableStateSecret,
@@ -326,6 +327,7 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
   return [
     ...buildFsRoutes({ root: deps.fsRoot }),
     ...buildConfigRoutes({ controller: deps.controller, authStorage: deps.authStorage }),
+    ...buildOAuthRoutes({ authStorage: deps.authStorage }),
     ...buildSkillRoutes({ controllerId: deps.controllerId, controller: deps.controller }),
     ...(deps.githubReady
       ? buildGithubRoutes({
