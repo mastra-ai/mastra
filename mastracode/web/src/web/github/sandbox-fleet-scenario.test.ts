@@ -12,7 +12,7 @@ function templateSandbox(): WorkspaceSandbox {
 function seedSandboxRuntime(opts: { maxSandboxes?: number } = {}): void {
   seedRuntimeConfig({
     sandbox: {
-      template: templateSandbox(),
+      machine: templateSandbox(),
       workdirBase: '/workspace',
       ...(opts.maxSandboxes !== undefined ? { maxSandboxes: opts.maxSandboxes } : {}),
     },

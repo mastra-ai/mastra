@@ -92,21 +92,28 @@ export interface MastraFactoryConfig {
    */
   allowedOrigins?: string[];
   /**
-   * Template sandbox instance — `RailwaySandbox` (`@mastra/railway`), core
+   * Sandbox configuration. Omitted → sandboxes disabled and GitHub-backed
+   * projects stay off.
+   */
+  sandbox?: MastraFactorySandboxConfig;
+}
+
+export interface MastraFactorySandboxConfig {
+  /**
+   * Template machine — `RailwaySandbox` (`@mastra/railway`), core
    * `LocalSandbox` (`@mastra/core/workspace`), or any `WorkspaceSandbox` that
    * implements `derive()`. Each GitHub-backed project gets its own sandbox
-   * derived from this template (credentials and defaults inherited, per-project
-   * env/id overridden); the template itself is never started. `prepare()`
-   * fails fast when the instance does not implement `derive()`. Omitted →
-   * sandboxes disabled and GitHub-backed projects stay off.
+   * derived from this machine (credentials and defaults inherited, per-project
+   * env/id overridden); the machine itself is never started. `prepare()`
+   * fails fast when the instance does not implement `derive()`.
    */
-  sandbox?: WorkspaceSandbox;
+  machine: WorkspaceSandbox;
   /**
    * In-sandbox base directory repos check out under (nested `owner/name` per
-   * repo). Default: the template sandbox's own `workingDirectory` when it
-   * exposes one (core `LocalSandbox` does), else `/workspace`.
+   * repo). Default: the machine's own `workingDirectory` when it exposes one
+   * (core `LocalSandbox` does), else `/workspace`.
    */
-  sandboxWorkdir?: string;
+  workdir?: string;
   /**
    * Per-replica cap on concurrently provisioned sandboxes. `0`/omitted means
    * unlimited. A lightweight per-process budget, not a cross-replica scheduler.
@@ -154,16 +161,17 @@ export class MastraFactory {
     const pubsub = this.#config.pubsub;
     const auth = this.#config.auth;
 
-    // Sandbox template validation: GitHub projects need one sandbox per
-    // project, derived from the configured template. A sandbox without
+    // Sandbox machine validation: GitHub projects need one sandbox per
+    // project, derived from the configured machine. A machine without
     // `derive()` would only fail at first project open — fail fast at boot
     // instead, with the fix spelled out.
-    const sandbox = this.#config.sandbox;
-    if (sandbox && typeof sandbox.derive !== 'function') {
+    const sandboxConfig = this.#config.sandbox;
+    const machine = sandboxConfig?.machine;
+    if (machine && typeof machine.derive !== 'function') {
       throw new Error(
-        `MastraFactory: the configured sandbox (provider '${sandbox.provider}') does not implement derive(). ` +
-          `GitHub-backed projects each get their own sandbox derived from the configured template. ` +
-          `Pass a sandbox that implements derive() — e.g. RailwaySandbox (@mastra/railway) or ` +
+        `MastraFactory: the configured sandbox machine (provider '${machine.provider}') does not implement derive(). ` +
+          `GitHub-backed projects each get their own sandbox derived from the configured machine. ` +
+          `Pass a machine that implements derive() — e.g. RailwaySandbox (@mastra/railway) or ` +
           `LocalSandbox (@mastra/core/workspace) — or omit 'sandbox' to disable sandboxes.`,
       );
     }
@@ -176,14 +184,14 @@ export class MastraFactory {
       databaseUrl: database,
       publicUrl: publicOrigin,
       authAdapter: auth,
-      sandbox: sandbox
+      sandbox: machine
         ? {
-            template: sandbox,
-            workdirBase: (this.#config.sandboxWorkdir ?? templateWorkingDirectory(sandbox) ?? '/workspace').replace(
+            machine,
+            workdirBase: (sandboxConfig?.workdir ?? templateWorkingDirectory(machine) ?? '/workspace').replace(
               /\/+$/,
               '',
             ),
-            maxSandboxes: this.#config.maxSandboxes,
+            maxSandboxes: sandboxConfig?.maxSandboxes,
           }
         : undefined,
     });

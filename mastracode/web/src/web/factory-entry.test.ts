@@ -79,10 +79,10 @@ describe('MastraFactory.prepare', () => {
   it('seeds the runtime-config registry with the explicit config', async () => {
     const auth = fakeAdapter();
     const sandbox = new LocalSandbox({ workingDirectory: '/tmp/mc-factory-test' });
-    await prepareFactory({ database: 'postgres://cfg/app', auth, sandbox });
+    await prepareFactory({ database: 'postgres://cfg/app', auth, sandbox: { machine: sandbox } });
     expect(getAppDatabaseUrl()).toBe('postgres://cfg/app');
     expect(getSeededAuthAdapter()).toBe(auth);
-    expect(getSeededSandbox()?.template).toBe(sandbox);
+    expect(getSeededSandbox()?.machine).toBe(sandbox);
   });
 
   it('leaves the sandbox runtime unset when the slot is omitted', async () => {
@@ -96,12 +96,12 @@ describe('MastraFactory.prepare', () => {
       name: 'Underivable',
       provider: 'custom',
     } as unknown as WorkspaceSandbox;
-    const factory = new MastraFactory({ sandbox: underivable });
+    const factory = new MastraFactory({ sandbox: { machine: underivable } });
     await expect(factory.prepare()).rejects.toThrow(/does not implement derive\(\)/);
   });
 
-  it("defaults the workdir base to the template's workingDirectory, else /workspace", async () => {
-    await prepareFactory({ sandbox: new LocalSandbox({ workingDirectory: '/srv/checkouts/' }) });
+  it("defaults the workdir base to the machine's workingDirectory, else /workspace", async () => {
+    await prepareFactory({ sandbox: { machine: new LocalSandbox({ workingDirectory: '/srv/checkouts/' }) } });
     expect(getSeededSandbox()?.workdirBase).toBe('/srv/checkouts');
 
     prepareMock.mockClear();
@@ -113,15 +113,17 @@ describe('MastraFactory.prepare', () => {
       provider: 'railway',
       derive: () => remote,
     } as unknown as WorkspaceSandbox;
-    await prepareFactory({ sandbox: remote });
+    await prepareFactory({ sandbox: { machine: remote } });
     expect(getSeededSandbox()?.workdirBase).toBe('/workspace');
   });
 
-  it('honors an explicit sandboxWorkdir override and passes maxSandboxes through', async () => {
+  it('honors an explicit workdir override and passes maxSandboxes through', async () => {
     await prepareFactory({
-      sandbox: new LocalSandbox({ workingDirectory: '/tmp/mc-factory-test' }),
-      sandboxWorkdir: '/custom/base/',
-      maxSandboxes: 5,
+      sandbox: {
+        machine: new LocalSandbox({ workingDirectory: '/tmp/mc-factory-test' }),
+        workdir: '/custom/base/',
+        maxSandboxes: 5,
+      },
     });
     expect(getSeededSandbox()?.workdirBase).toBe('/custom/base');
     expect(getSeededSandbox()?.maxSandboxes).toBe(5);

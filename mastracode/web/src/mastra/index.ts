@@ -159,12 +159,16 @@ if (sandboxKind === 'railway') {
 
 export const factory = new MastraFactory({
   auth,
-  sandbox,
-  // Checkout base inside sandboxes (nested `owner/name` per repo). Unset →
-  // the template's own workingDirectory (local) or `/workspace` (cloud).
-  sandboxWorkdir: process.env.MASTRACODE_SANDBOX_WORKDIR,
-  // Per-replica cap on concurrently provisioned sandboxes. Unset → unlimited.
-  maxSandboxes: positiveInt(process.env.MASTRACODE_MAX_SANDBOXES),
+  sandbox: sandbox
+    ? {
+        machine: sandbox,
+        // Checkout base inside sandboxes (nested `owner/name` per repo). Unset →
+        // the machine's own workingDirectory (local) or `/workspace` (cloud).
+        workdir: process.env.MASTRACODE_SANDBOX_WORKDIR,
+        // Per-replica cap on concurrently provisioned sandboxes. Unset → unlimited.
+        maxSandboxes: positiveInt(process.env.MASTRACODE_MAX_SANDBOXES),
+      }
+    : undefined,
   // Agent state (threads, messages, memory, OM, recall vectors) lives in the
   // single app Postgres alongside the github/app tables — one shared DB for
   // all users, separated by `resourceId` scoping. Unset (bare local dev) →

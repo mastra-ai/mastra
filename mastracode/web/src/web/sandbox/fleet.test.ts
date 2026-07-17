@@ -27,7 +27,7 @@ function seedSandboxRuntime(
 ): void {
   seedRuntimeConfig({
     sandbox: {
-      template: templateSandbox(opts),
+      machine: templateSandbox(opts),
       workdirBase: opts.workdirBase ?? '/workspace',
       ...(opts.maxSandboxes !== undefined ? { maxSandboxes: opts.maxSandboxes } : {}),
     },

@@ -17,17 +17,17 @@ import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import type { WebAuthAdapter } from './auth-adapter.js';
 
 /**
- * Factory-resolved sandbox runtime: the template sandbox GitHub projects
- * derive their per-project sandboxes from, plus the web-level knobs the
- * factory resolved around it.
+ * Factory-resolved sandbox runtime: the machine GitHub projects derive their
+ * per-project sandboxes from, plus the web-level knobs the factory resolved
+ * around it.
  */
 export interface WebSandboxRuntime {
   /**
-   * Template sandbox (validated by the factory to implement `derive()`).
+   * Template machine (validated by the factory to implement `derive()`).
    * Never started — acts purely as the credential/default holder that
    * per-project sandboxes are derived from.
    */
-  template: WorkspaceSandbox;
+  machine: WorkspaceSandbox;
   /** In-sandbox base directory repos check out under (no trailing slash). */
   workdirBase: string;
   /** Per-replica cap on concurrently provisioned sandboxes. 0 = unlimited. */

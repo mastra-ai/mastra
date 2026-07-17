@@ -3,7 +3,7 @@
  *
  * Server-hosted projects never run on the web host itself. Each project gets
  * its own isolated sandbox (a `WorkspaceSandbox`, e.g. a Railway VM) `derive()`d
- * from the template sandbox the factory was configured with (`sandbox` slot,
+ * from the machine the factory was configured with (`sandbox.machine` slot,
  * seeded into the runtime-config registry). This module owns everything about
  * that fleet — which provider is active, where checkouts live inside a sandbox,
  * the idle window, the per-replica budget, and the provision/reattach/teardown
@@ -80,18 +80,18 @@ export function reportProgress(onProgress: ProgressFn | undefined, event: Prepar
 export type SandboxFactory = (opts: SandboxCreateOptions) => MaterializationSandbox;
 
 /**
- * Name of the active sandbox provider — the template sandbox's `provider`
+ * Name of the active sandbox provider — the configured machine's `provider`
  * discriminator (`'railway'`, `'local'`, …), or `'none'` when the factory was
  * configured without a `sandbox` slot. Diagnostic only; feature gating goes
  * through {@link isSandboxEnabled}.
  */
 export function getSandboxProvider(): string {
-  return getSeededSandbox()?.template.provider ?? 'none';
+  return getSeededSandbox()?.machine.provider ?? 'none';
 }
 
 /**
- * True when a sandbox template was configured. The factory validates the
- * template implements `derive()` at boot, so a seeded runtime is usable —
+ * True when a sandbox machine was configured. The factory validates the
+ * machine implements `derive()` at boot, so a seeded runtime is usable —
  * sandbox-backed projects stay off only when the slot was omitted.
  */
 export function isSandboxEnabled(): boolean {
@@ -121,15 +121,15 @@ function sanitizeSegment(segment: string): string {
 
 /**
  * Idle teardown window for provisioned sandboxes, in minutes; defaults to 30.
- * Read back from the template sandbox's own config when it exposes one
+ * Read back from the machine's own config when it exposes one
  * (Railway's `idleTimeoutMinutes`) — the knob lives on the sandbox, this
  * module only needs it to schedule GC and stamp derived sandboxes. Advisory:
  * providers without idle GC ignore it, and a re-open detects a torn-down VM
  * and re-provisions cleanly.
  */
 export function getSandboxIdleMinutes(): number {
-  const template = getSeededSandbox()?.template as { idleTimeoutMinutes?: unknown } | undefined;
-  const minutes = template?.idleTimeoutMinutes;
+  const machine = getSeededSandbox()?.machine as { idleTimeoutMinutes?: unknown } | undefined;
+  const minutes = machine?.idleTimeoutMinutes;
   return typeof minutes === 'number' && Number.isFinite(minutes) && minutes > 0 ? minutes : 30;
 }
 
@@ -199,7 +199,7 @@ function toMaterializationSandbox(sandbox: WorkspaceSandbox): MaterializationSan
 }
 
 /**
- * Default factory: derive a per-project sibling from the template sandbox the
+ * Default factory: derive a per-project sibling from the machine the
  * factory was configured with. Resolved per call so seeding order doesn't
  * matter at import time. The stored id is passed both as the logical `id`
  * (providers that reattach by construction id, e.g. local) and as the
@@ -209,7 +209,7 @@ function toMaterializationSandbox(sandbox: WorkspaceSandbox): MaterializationSan
 const defaultFactory: SandboxFactory = opts => {
   const seeded = getSeededSandbox();
   if (!seeded) throw new Error('No sandbox configured');
-  const derived = seeded.template.derive!({
+  const derived = seeded.machine.derive!({
     ...(opts.providerSandboxId ? { id: opts.providerSandboxId, sandboxId: opts.providerSandboxId } : {}),
     ...(opts.env ? { env: opts.env } : {}),
     ...(opts.idleTimeoutMinutes !== undefined ? { idleTimeoutMinutes: opts.idleTimeoutMinutes } : {}),
