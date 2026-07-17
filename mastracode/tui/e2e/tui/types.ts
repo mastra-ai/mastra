@@ -103,6 +103,7 @@ export type ScenarioName =
   | 'om-status-indicator'
   | 'om-threshold-persistence'
   | 'quiet-settings'
+  | 'quiet-streaming-preview-height'
   | 'quiet-tool-history-parity'
   | 'report-issue-command'
   | 'request-access-modal'
