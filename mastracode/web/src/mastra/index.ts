@@ -111,46 +111,45 @@ function localSandboxEnv(): Record<string, string> {
   return env;
 }
 
-// Sandbox template, by env precedence (any `WorkspaceSandbox` implementing
+// Sandbox machine, by env precedence (any `WorkspaceSandbox` implementing
 // `derive()` works here too — the factory derives one sandbox per GitHub
 // project from it):
 //   1. MASTRACODE_SANDBOX_PROVIDER=railway|local — explicit selection. Railway
-//      selected without a token boots with sandboxes (and GitHub projects)
-//      disabled, surfaced in the feature diagnostics.
+//      selected without a token is a hard misconfiguration error.
 //   2. RAILWAY_API_TOKEN set → RailwaySandbox (isolated cloud VMs,
 //      multi-tenant safe).
-//   3. Neither → sandboxes disabled. The local host-process sandbox is NEVER
-//      an implicit default: it runs repo checkouts and agent commands as the
-//      server process with no tenant isolation, so it must be opted into with
-//      MASTRACODE_SANDBOX_PROVIDER=local (single-user local dev only).
+//   3. Neither → LocalSandbox, so repos can always be opened with no extra
+//      wiring. WARNING: the local host-process sandbox has NO tenant
+//      isolation — repo checkouts and agent commands run as the server
+//      process. Single-user local dev only; set a Railway token for shared
+//      deployments.
 // Budget/GC knobs: MASTRACODE_SANDBOX_IDLE_MINUTES (default 30, baked into the
 // Railway template), MASTRACODE_MAX_SANDBOXES (default unlimited),
 // MASTRACODE_SANDBOX_WORKDIR (cloud checkout base, default /workspace),
 // MASTRACODE_LOCAL_SANDBOX_ROOT (local checkout root, default
 // ~/.mastracode/web/sandboxes).
-const sandboxKind = process.env.MASTRACODE_SANDBOX_PROVIDER ?? (process.env.RAILWAY_API_TOKEN ? 'railway' : undefined);
+const sandboxKind = process.env.MASTRACODE_SANDBOX_PROVIDER ?? (process.env.RAILWAY_API_TOKEN ? 'railway' : 'local');
 const idleMinutes = positiveInt(process.env.MASTRACODE_SANDBOX_IDLE_MINUTES);
-let sandbox: WorkspaceSandbox | undefined;
+let sandbox: WorkspaceSandbox;
 if (sandboxKind === 'railway') {
   const railwayToken = process.env.RAILWAY_API_TOKEN;
-  if (railwayToken) {
-    sandbox = new RailwaySandbox({
-      token: railwayToken,
-      ...(idleMinutes !== undefined ? { idleTimeoutMinutes: idleMinutes } : {}),
-    });
-  } else {
-    console.warn(
-      '[Sandbox] MASTRACODE_SANDBOX_PROVIDER=railway but RAILWAY_API_TOKEN is not set — ' +
-        'sandboxes (and GitHub-backed projects) are disabled.',
+  if (!railwayToken) {
+    throw new Error(
+      'MASTRACODE_SANDBOX_PROVIDER=railway requires RAILWAY_API_TOKEN — set the token, or unset the ' +
+        'provider to fall back to the local sandbox (single-user dev only).',
     );
   }
+  sandbox = new RailwaySandbox({
+    token: railwayToken,
+    ...(idleMinutes !== undefined ? { idleTimeoutMinutes: idleMinutes } : {}),
+  });
 } else if (sandboxKind === 'local') {
   sandbox = new LocalSandbox({
     workingDirectory:
       process.env.MASTRACODE_LOCAL_SANDBOX_ROOT?.trim() || join(homedir(), '.mastracode', 'web', 'sandboxes'),
     env: localSandboxEnv(),
   });
-} else if (sandboxKind !== undefined) {
+} else {
   throw new Error(
     `Unknown MASTRACODE_SANDBOX_PROVIDER "${sandboxKind}" — expected "railway" or "local" ` +
       '(or pass any WorkspaceSandbox implementing derive() to MastraFactory).',
@@ -159,16 +158,14 @@ if (sandboxKind === 'railway') {
 
 export const factory = new MastraFactory({
   auth,
-  sandbox: sandbox
-    ? {
-        machine: sandbox,
-        // Checkout base inside sandboxes (nested `owner/name` per repo). Unset →
-        // the machine's own workingDirectory (local) or `/workspace` (cloud).
-        workdir: process.env.MASTRACODE_SANDBOX_WORKDIR,
-        // Per-replica cap on concurrently provisioned sandboxes. Unset → unlimited.
-        maxSandboxes: positiveInt(process.env.MASTRACODE_MAX_SANDBOXES),
-      }
-    : undefined,
+  sandbox: {
+    machine: sandbox,
+    // Checkout base inside sandboxes (nested `owner/name` per repo). Unset →
+    // the machine's own workingDirectory (local) or `/workspace` (cloud).
+    workdir: process.env.MASTRACODE_SANDBOX_WORKDIR,
+    // Per-replica cap on concurrently provisioned sandboxes. Unset → unlimited.
+    maxSandboxes: positiveInt(process.env.MASTRACODE_MAX_SANDBOXES),
+  },
   // Agent state (threads, messages, memory, OM, recall vectors) lives in the
   // single app Postgres alongside the github/app tables — one shared DB for
   // all users, separated by `resourceId` scoping. Unset (bare local dev) →
