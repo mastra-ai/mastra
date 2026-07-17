@@ -63,7 +63,8 @@ export const MANAGED_PROVIDER_CONFIGS: Record<CreateLLMProvider, ManagedProvider
     observationalModel: 'xai/grok-4.3',
     apiKeyEnv: 'XAI_API_KEY',
     apiKeyPrerequisite: 'An xAI API key',
-    featureDescription: 'Direct web page fetching',
+    featureDescription: 'xAI web search and direct web page fetching',
+    webSearchEntry: 'xai.tools.webSearch()',
   },
 };
 

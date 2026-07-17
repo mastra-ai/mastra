@@ -5,7 +5,7 @@ import { InvalidArgumentError } from 'commander';
 export const CREATE_LLM_PROVIDERS = [
   { value: 'openai', label: 'OpenAI' },
   { value: 'anthropic', label: 'Anthropic' },
-  { value: 'google', label: 'Google Gemini' },
+  { value: 'google', label: 'Gemini' },
   { value: 'xai', label: 'xAI' },
 ] as const;
 

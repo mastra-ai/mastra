@@ -57,8 +57,8 @@ const expectedAdaptations = {
     importLine: "import { xai } from '@ai-sdk/xai';",
     primaryModel: 'xai/grok-4.3',
     observationalModel: 'xai/grok-4.3',
-    webSearch: undefined,
-    feature: 'Direct web page fetching',
+    webSearch: 'web_search: xai.tools.webSearch(),',
+    feature: 'xAI web search and direct web page fetching',
   },
 } satisfies Record<
   Exclude<CreateLLMProvider, 'openai'>,
