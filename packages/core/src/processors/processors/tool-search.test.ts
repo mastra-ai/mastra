@@ -1472,4 +1472,84 @@ describe('ToolSearchProcessor', () => {
       }
     });
   });
+
+  describe('includeResolvedTools', () => {
+    it('should search and load tools that exist only in args.tools when enabled', async () => {
+      const mcpTool = createMockTool('mcp_github_create_issue', 'Create GitHub issue via MCP');
+      const processor = new ToolSearchProcessor({
+        tools: {},
+        includeResolvedTools: true,
+      });
+
+      const args = createMockArgs('thread-mcp', { mcp_github_create_issue: mcpTool });
+      const result = await processor.processInputStep(args);
+
+      expect(result.tools?.mcp_github_create_issue).toBeUndefined();
+
+      const searchResult = await result.tools?.search_tools!.execute?.({ query: 'github issue' }, undefined);
+      expect(searchResult.results.map(r => r.name)).toContain('mcp_github_create_issue');
+
+      const loadResult = await result.tools?.load_tool!.execute?.({ toolName: 'mcp_github_create_issue' }, undefined);
+      expect(loadResult.success).toBe(true);
+
+      const next = await processor.processInputStep(args);
+      expect(next.tools?.mcp_github_create_issue).toBe(mcpTool);
+    });
+
+    it('should keep default behavior when includeResolvedTools is false', async () => {
+      const mcpTool = createMockTool('mcp_github_create_issue', 'Create GitHub issue via MCP');
+      const processor = new ToolSearchProcessor({
+        tools: {},
+        includeResolvedTools: false,
+      });
+
+      const args = createMockArgs('thread-mcp-default', { mcp_github_create_issue: mcpTool });
+      const result = await processor.processInputStep(args);
+
+      expect(result.tools?.mcp_github_create_issue).toBe(mcpTool);
+
+      const searchResult = await result.tools?.search_tools!.execute?.({ query: 'github issue' }, undefined);
+      expect(searchResult.results.map(r => r.name)).not.toContain('mcp_github_create_issue');
+    });
+
+    it('should combine constructor tools and resolved tools in search', async () => {
+      const mcpTool = createMockTool('mcp_send_email', 'Send email via MCP');
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather_forecast: createMockTool('weather_forecast', 'Get weather forecast'),
+        },
+        includeResolvedTools: true,
+      });
+
+      const args = createMockArgs('thread-mixed', { mcp_send_email: mcpTool });
+      const result = await processor.processInputStep(args);
+
+      const weatherSearch = await result.tools?.search_tools!.execute?.({ query: 'weather' }, undefined);
+      expect(weatherSearch.results.map(r => r.name)).toContain('weather_forecast');
+
+      const emailSearch = await result.tools?.search_tools!.execute?.({ query: 'email' }, undefined);
+      expect(emailSearch.results.map(r => r.name)).toContain('mcp_send_email');
+    });
+
+    it('should apply filter to resolved tools when includeResolvedTools is enabled', async () => {
+      const mcpTool = createMockTool('mcp_github_create_issue', 'Create GitHub issue via MCP');
+      const processor = new ToolSearchProcessor({
+        tools: {},
+        includeResolvedTools: true,
+        filter: ({ requestContext }) => requestContext?.get('allowMcp') === true,
+      });
+
+      const blockedArgs = createMockArgs('thread-mcp-filter', { mcp_github_create_issue: mcpTool });
+      blockedArgs.requestContext?.set('allowMcp', false);
+      const blockedResult = await processor.processInputStep(blockedArgs);
+      const blockedSearch = await blockedResult.tools?.search_tools!.execute?.({ query: 'github issue' }, undefined);
+      expect(blockedSearch.results).toHaveLength(0);
+
+      const allowedArgs = createMockArgs('thread-mcp-filter', { mcp_github_create_issue: mcpTool });
+      allowedArgs.requestContext?.set('allowMcp', true);
+      const allowedResult = await processor.processInputStep(allowedArgs);
+      const allowedSearch = await allowedResult.tools?.search_tools!.execute?.({ query: 'github issue' }, undefined);
+      expect(allowedSearch.results.map(r => r.name)).toContain('mcp_github_create_issue');
+    });
+  });
 });

@@ -94,6 +94,14 @@ export interface ToolSearchProcessorOptions {
    * Return false to hide or block a tool for the current request.
    */
   filter?: (args: ToolSearchFilterArgs) => boolean | Promise<boolean>;
+
+  /**
+   * When true, per-request tools in `args.tools` (e.g. MCP) are searchable via the meta-tools
+   * and omitted from the prompt until loaded.
+   *
+   * @default false
+   */
+  includeResolvedTools?: boolean;
 }
 
 /**
@@ -117,6 +125,8 @@ const TOOL_SEARCH_TOKENIZE_OPTIONS: TokenizeOptions = {
   stopwords: new Set(),
   splitPattern: /[\s\-_.,;:!?()[\]{}'"]+/,
 };
+
+const TOOL_SEARCH_META_TOOL_IDS = new Set(['search_tools', 'load_tool']);
 
 /**
  * Processor that enables dynamic tool discovery and loading.
@@ -154,8 +164,10 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
   readonly description = 'Enables dynamic tool discovery and loading via search';
 
   private allTools: Record<string, Tool<any, any>>;
+  private includeResolvedTools: boolean;
   private searchConfig: Required<NonNullable<ToolSearchProcessorOptions['search']>>;
   private filter?: ToolSearchProcessorOptions['filter'];
+  private indexedToolIds = new Set<string>();
 
   /** Pluggable backend for loaded-tool state. */
   private store: LoadedToolStore;
@@ -167,6 +179,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
 
   constructor(options: ToolSearchProcessorOptions) {
     this.allTools = options.tools;
+    this.includeResolvedTools = options.includeResolvedTools ?? false;
     this.filter = options.filter;
     this.searchConfig = {
       topK: options.search?.topK ?? 5,
@@ -198,13 +211,38 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     return { threadId: this.getThreadId(args), args };
   }
 
-  private findToolById(toolId: string): Tool<any, any> | undefined {
-    return Object.values(this.allTools).find(tool => tool.id === toolId);
+  private isTool(value: unknown): value is Tool<any, any> {
+    return typeof value === 'object' && value !== null && 'id' in value && typeof (value as Tool).id === 'string';
   }
 
-  private findToolForDynamicName(toolName: string): Tool<any, any> | undefined {
-    const toolByKey = this.allTools[toolName];
-    const toolById = this.findToolById(toolName);
+  private extractResolvedTools(tools?: Record<string, unknown>): Record<string, Tool<any, any>> {
+    if (!tools) return {};
+
+    const resolved: Record<string, Tool<any, any>> = {};
+    for (const [key, tool] of Object.entries(tools)) {
+      if (!this.isTool(tool)) continue;
+      if (TOOL_SEARCH_META_TOOL_IDS.has(key) || TOOL_SEARCH_META_TOOL_IDS.has(tool.id)) {
+        continue;
+      }
+      resolved[key] = tool;
+    }
+    return resolved;
+  }
+
+  private buildSearchableTools(resolvedTools: Record<string, Tool<any, any>>): Record<string, Tool<any, any>> {
+    return { ...this.allTools, ...resolvedTools };
+  }
+
+  private findToolById(toolId: string, searchableTools: Record<string, Tool<any, any>>): Tool<any, any> | undefined {
+    return Object.values(searchableTools).find(tool => tool.id === toolId);
+  }
+
+  private findToolForDynamicName(
+    toolName: string,
+    searchableTools: Record<string, Tool<any, any>>,
+  ): Tool<any, any> | undefined {
+    const toolByKey = searchableTools[toolName];
+    const toolById = this.findToolById(toolName, searchableTools);
     return this.filter ? (toolById ?? toolByKey) : (toolByKey ?? toolById);
   }
 
@@ -224,20 +262,24 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     }
   }
 
-  private async getSuggestedToolNames(toolName: string, requestContext?: RequestContext): Promise<string[]> {
+  private async getSuggestedToolNames(
+    toolName: string,
+    searchableTools: Record<string, Tool<any, any>>,
+    requestContext?: RequestContext,
+  ): Promise<string[]> {
     const matchesToolName = (name: string) =>
       name.toLowerCase().includes(toolName.toLowerCase()) || toolName.toLowerCase().includes(name.toLowerCase());
 
     if (!this.filter) {
-      return Object.keys(this.allTools).filter(matchesToolName);
+      return Object.keys(searchableTools).filter(matchesToolName);
     }
 
     const allowedNames: string[] = [];
 
-    for (const name of Object.keys(this.allTools)) {
+    for (const name of Object.keys(searchableTools)) {
       if (!matchesToolName(name)) continue;
 
-      const tool = this.findToolForDynamicName(name);
+      const tool = this.findToolForDynamicName(name, searchableTools);
       if (!tool) continue;
 
       const isAllowed = await this.isToolAllowed(tool, requestContext, 'load');
@@ -256,12 +298,13 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
    */
   private async getLoadedTools(
     loadedNames: Set<string>,
+    searchableTools: Record<string, Tool<any, any>>,
     requestContext?: RequestContext,
   ): Promise<Record<string, Tool<any, any>>> {
     const loadedTools: Record<string, Tool<any, any>> = {};
 
     for (const toolName of loadedNames) {
-      const tool = this.findToolForDynamicName(toolName);
+      const tool = this.findToolForDynamicName(toolName, searchableTools);
       if (tool) {
         const isAllowed = await this.isToolAllowed(tool, requestContext, 'active');
         if (isAllowed) {
@@ -287,16 +330,23 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     requestContext?: RequestContext;
     stepArgs?: ProcessInputStepArgs;
   }): Promise<Record<string, Tool<any, any>>> {
+    const resolvedTools =
+      this.includeResolvedTools && args?.stepArgs?.tools ? this.extractResolvedTools(args.stepArgs.tools) : {};
+    if (this.includeResolvedTools && Object.keys(resolvedTools).length > 0) {
+      this.indexResolvedTools(resolvedTools);
+    }
+    const searchableTools = this.buildSearchableTools(resolvedTools);
+
     if (args?.stepArgs) {
       const loadedNames = await this.store.getLoadedNames(this.makeStoreContext(args.stepArgs));
       // Fall back to the step's own request context so active-phase filtering still
       // runs when the caller only supplies stepArgs.
-      return this.getLoadedTools(loadedNames, args.requestContext ?? args.stepArgs.requestContext);
+      return this.getLoadedTools(loadedNames, searchableTools, args.requestContext ?? args.stepArgs.requestContext);
     }
 
     const threadId = (args?.requestContext?.get(MASTRA_THREAD_ID_KEY) as string | undefined) || undefined;
     const loadedNames = await this.store.getLoadedNames({ threadId, args: undefined });
-    return this.getLoadedTools(loadedNames, args?.requestContext);
+    return this.getLoadedTools(loadedNames, this.allTools, args?.requestContext);
   }
 
   /**
@@ -344,15 +394,30 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     return this.store instanceof LegacyMapLoadedToolStore ? this.store.cleanupStaleState() : 0;
   }
 
+  private indexTool(tool: Tool<any, any>): void {
+    const name = tool.id;
+    if (this.indexedToolIds.has(name)) {
+      return;
+    }
+
+    const description = tool.description || '';
+    this.bm25Index.add(name, `${name} ${description}`);
+    this.toolDescriptions.set(name, description);
+    this.indexedToolIds.add(name);
+  }
+
   /**
    * Index all tools into the BM25 index
    */
   private indexTools(): void {
     for (const tool of Object.values(this.allTools)) {
-      const name = tool.id;
-      const description = tool.description || '';
-      this.bm25Index.add(name, `${name} ${description}`);
-      this.toolDescriptions.set(name, description);
+      this.indexTool(tool);
+    }
+  }
+
+  private indexResolvedTools(resolvedTools: Record<string, Tool<any, any>>): void {
+    for (const tool of Object.values(resolvedTools)) {
+      this.indexTool(tool);
     }
   }
 
@@ -363,7 +428,11 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
    * @param query - Search keywords
    * @returns Array of matching tools with scores, sorted by relevance
    */
-  private async searchTools(query: string, requestContext?: RequestContext): Promise<SearchResult[]> {
+  private async searchTools(
+    query: string,
+    searchableTools: Record<string, Tool<any, any>>,
+    requestContext?: RequestContext,
+  ): Promise<SearchResult[]> {
     if (this.bm25Index.size === 0) return [];
 
     // Get BM25 results (request more than topK to allow for re-ranking after boosting).
@@ -399,7 +468,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     for (const result of boostedResults.sort((a, b) => b.score - a.score)) {
       if (result.score <= this.searchConfig.minScore) continue;
 
-      const tool = this.findToolById(result.id);
+      const tool = this.findToolById(result.id, searchableTools);
       if (!tool) continue;
 
       const isAllowed = await this.isToolAllowed(tool, requestContext, 'search');
@@ -423,6 +492,13 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
   async processInputStep(args: ProcessInputStepArgs) {
     const { tools, messageList } = args;
     const storeContext = this.makeStoreContext(args);
+    const resolvedTools = this.includeResolvedTools ? this.extractResolvedTools(tools) : {};
+    if (this.includeResolvedTools) {
+      this.indexResolvedTools(resolvedTools);
+    }
+    const searchableTools = this.buildSearchableTools(resolvedTools);
+    const passthroughTools = this.includeResolvedTools ? {} : (tools ?? {});
+
     // Snapshot of names already loaded as of this step. Newly activated tools are
     // recorded via the store and become available on the model's next turn.
     const loadedToolNames = await this.store.getLoadedNames(storeContext);
@@ -467,7 +543,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
       }),
       execute: async ({ query }) => {
         // Use BM25 search for relevance-ranked results
-        const results = await this.searchTools(query, args.requestContext);
+        const results = await this.searchTools(query, searchableTools, args.requestContext);
 
         if (results.length === 0) {
           return {
@@ -560,7 +636,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
 
         for (const name of toLoad) {
           // Check if tool exists
-          const matchingTool = this.findToolForDynamicName(name);
+          const matchingTool = this.findToolForDynamicName(name, searchableTools);
 
           if (!matchingTool) {
             notFound.push(name);
@@ -593,7 +669,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
           // Single-tool response (backward compatible shape)
           if (notFound.length > 0) {
             const name = toLoad[0]!;
-            const suggestions = await this.getSuggestedToolNames(name, args.requestContext);
+            const suggestions = await this.getSuggestedToolNames(name, searchableTools, args.requestContext);
             let message = `Tool "${name}" not found.`;
             if (suggestions.length > 0) {
               message += ` Did you mean: ${suggestions.slice(0, 3).join(', ')}?`;
@@ -634,7 +710,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     });
 
     // Get loaded tools as of this step's snapshot.
-    const loadedTools = await this.getLoadedTools(loadedToolNames, args.requestContext);
+    const loadedTools = await this.getLoadedTools(loadedToolNames, searchableTools, args.requestContext);
 
     // Return merged tools, ordered to keep the cacheable prefix stable:
     // meta-tool(s) first (always present, fixed position), then existing tools,
@@ -646,7 +722,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
         search_tools: searchTool,
         // load_tool is omitted in auto-load mode — search_tools activates matches directly.
         ...(autoLoad ? {} : { load_tool: loadTool }),
-        ...(tools ?? {}),
+        ...passthroughTools,
         ...loadedTools,
       },
     };
