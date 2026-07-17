@@ -225,6 +225,7 @@ describe('resolveModel', () => {
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.OPENAI_API_KEY;
     delete process.env.OPENAI_BASE_URL;
+    delete process.env.MOONSHOT_API_KEY;
     delete process.env.MOONSHOT_AI_API_KEY;
     delete process.env.MASTRA_GATEWAY_API_KEY;
     delete process.env.MASTRA_GATEWAY_URL;
@@ -499,6 +500,65 @@ describe('resolveModel', () => {
         headers: undefined,
         authStorage: mockAuthStorageInstance,
       });
+    });
+  });
+
+  describe('moonshotai/* models', () => {
+    it('uses a stored moonshot API key with the Anthropic-compatible endpoint', () => {
+      mockAuthStorageInstance.getStoredApiKey.mockImplementation((provider: string) =>
+        provider === 'moonshotai' ? 'sk-moonshot-stored' : undefined,
+      );
+
+      const result = resolveModel('moonshotai/kimi-k2.6') as Record<string, unknown>;
+
+      expect(result.__provider).toBe('anthropic-direct');
+      expect(result.modelId).toBe('kimi-k2.6');
+      expect(createAnthropic).toHaveBeenCalledWith({
+        apiKey: 'sk-moonshot-stored',
+        baseURL: 'https://api.moonshot.ai/anthropic/v1',
+        name: 'moonshotai.anthropicv1',
+        headers: undefined,
+      });
+    });
+
+    it('falls back to MOONSHOT_API_KEY when no stored credential exists', () => {
+      process.env.MOONSHOT_API_KEY = 'sk-moonshot-env';
+      mockAuthStorageInstance.get.mockReturnValue(undefined);
+      mockAuthStorageInstance.getStoredApiKey.mockReturnValue(undefined);
+
+      const result = resolveModel('moonshotai/kimi-k2.6') as Record<string, unknown>;
+
+      expect(result.__provider).toBe('anthropic-direct');
+      expect(result.modelId).toBe('kimi-k2.6');
+      expect(createAnthropic).toHaveBeenCalledWith({
+        apiKey: 'sk-moonshot-env',
+        baseURL: 'https://api.moonshot.ai/anthropic/v1',
+        name: 'moonshotai.anthropicv1',
+        headers: undefined,
+      });
+    });
+
+    it('falls back to legacy MOONSHOT_AI_API_KEY for compatibility', () => {
+      process.env.MOONSHOT_AI_API_KEY = 'sk-moonshot-legacy';
+      mockAuthStorageInstance.get.mockReturnValue(undefined);
+      mockAuthStorageInstance.getStoredApiKey.mockReturnValue(undefined);
+
+      const result = resolveModel('moonshotai/kimi-k2.6') as Record<string, unknown>;
+
+      expect(result.__provider).toBe('anthropic-direct');
+      expect(createAnthropic).toHaveBeenCalledWith({
+        apiKey: 'sk-moonshot-legacy',
+        baseURL: 'https://api.moonshot.ai/anthropic/v1',
+        name: 'moonshotai.anthropicv1',
+        headers: undefined,
+      });
+    });
+
+    it('throws Need MOONSHOT_API_KEY when no key is available', () => {
+      mockAuthStorageInstance.get.mockReturnValue(undefined);
+      mockAuthStorageInstance.getStoredApiKey.mockReturnValue(undefined);
+
+      expect(() => resolveModel('moonshotai/kimi-k2.6')).toThrow(/Need MOONSHOT_API_KEY/);
     });
   });
 
