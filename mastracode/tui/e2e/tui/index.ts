@@ -98,6 +98,7 @@ import { providerHistoryCompatScenario } from './provider-history-compat.js';
 import { providerHistoryRejectionRetryScenario } from './provider-history-rejection-retry.js';
 import { pruneCommandScenario } from './prune-command.js';
 import { quietSettingsScenario } from './quiet-settings.js';
+import { quietStreamingPreviewHeightScenario } from './quiet-streaming-preview-height.js';
 import { quietToolHistoryParityScenario } from './quiet-tool-history-parity.js';
 import { reportIssueCommandScenario } from './report-issue-command.js';
 import { requestAccessModalScenario } from './request-access-modal.js';
@@ -253,6 +254,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'prompt-queue-interleave': promptQueueInterleaveScenario,
   'prune-command': pruneCommandScenario,
   'quiet-settings': quietSettingsScenario,
+  'quiet-streaming-preview-height': quietStreamingPreviewHeightScenario,
   'quiet-tool-history-parity': quietToolHistoryParityScenario,
   'report-issue-command': reportIssueCommandScenario,
   'request-access-modal': requestAccessModalScenario,
