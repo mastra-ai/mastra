@@ -1,5 +1,6 @@
 import { Agent } from '@mastra/core/agent';
-import { createDurableAgent, DurableAgent } from '@mastra/core/agent/durable';
+import { createDurableAgent } from '@mastra/core/agent/durable';
+import type { DurableAgent } from '@mastra/core/agent/durable';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
