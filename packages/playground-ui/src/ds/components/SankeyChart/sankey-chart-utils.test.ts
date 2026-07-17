@@ -48,6 +48,25 @@ describe('SankeyChart utilities', () => {
     });
   });
 
+  describe('when records provide invalid weights', () => {
+    it('excludes them from the graph', () => {
+      const validRecord = { source: 'API', model: 'GPT', count: 2 };
+      const data = [
+        validRecord,
+        { source: 'CLI', model: 'Claude', count: Number.NaN },
+        { source: 'UI', model: 'Gemini', count: Number.POSITIVE_INFINITY },
+        { source: 'SDK', model: 'Llama', count: -1 },
+      ];
+
+      const graph = buildSankeyChartGraph(data, columns.slice(0, 2), record => Number(record.count));
+
+      expect(graph).toMatchObject({
+        nodes: [{ value: 'API' }, { value: 'GPT' }],
+        links: [{ value: 2, records: [validRecord] }],
+      });
+    });
+  });
+
   describe('when equal labels appear in different dimensions', () => {
     it('creates distinct nodes keyed by their columns', () => {
       const graph = buildSankeyChartGraph([{ source: 'Shared', model: 'Shared' }], columns.slice(0, 2));

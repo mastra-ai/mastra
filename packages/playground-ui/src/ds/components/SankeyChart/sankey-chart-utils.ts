@@ -104,6 +104,9 @@ export function buildSankeyChartGraph(
     if (!sourceColumn || !targetColumn) continue;
 
     for (const record of data) {
+      const weight = getRecordWeight(record);
+      if (!Number.isFinite(weight) || weight < 0) continue;
+
       const sourceValue = getSankeyChartValue(record[sourceColumn.id]);
       const targetValue = getSankeyChartValue(record[targetColumn.id]);
       if (sourceValue === undefined || targetValue === undefined) continue;
@@ -112,7 +115,6 @@ export function buildSankeyChartGraph(
       const target = getNode(targetColumn, targetValue);
       const id = `${source.node.id}->${target.node.id}`;
       const existingLink = linksById.get(id);
-      const weight = getRecordWeight(record);
 
       if (existingLink) {
         existingLink.value += weight;
