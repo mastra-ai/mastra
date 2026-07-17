@@ -37,6 +37,20 @@ export interface MongoDBQueryVectorParams extends QueryVectorParams<MongoDBVecto
   numCandidates?: number;
 }
 
+export interface MongoDBCreateIndexParams extends CreateIndexParams {
+  /**
+   * Metadata field names to declare as filter fields in the Atlas vectorSearch
+   * index (registered as `metadata.<field>`). Queries whose metadata filter
+   * only touches declared fields — using operators `$vectorSearch.filter`
+   * supports — are passed directly to `$vectorSearch` instead of pre-filtering
+   * candidate `_id`s, avoiding the 16 MB BSON limit on large result sets.
+   * Filters that reference an undeclared field, or use an unsupported
+   * operator, automatically fall back to the pre-filter.
+   * @see https://www.mongodb.com/docs/atlas/atlas-vector-search/vector-search-type/
+   */
+  filterFields?: string[];
+}
+
 export interface MongoDBVectorConfig {
   /** Unique identifier for this vector store instance */
   id: string;
@@ -169,7 +183,12 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * queryable. Skipping that step on a real Atlas cluster may cause
    * "index not found" or "index not ready" errors on subsequent operations.
    */
-  async createIndex({ indexName, dimension, metric = 'cosine', filterFields }: CreateIndexParams): Promise<void> {
+  async createIndex({
+    indexName,
+    dimension,
+    metric = 'cosine',
+    filterFields,
+  }: MongoDBCreateIndexParams): Promise<void> {
     let mongoMetric;
     try {
       if (!Number.isInteger(dimension) || dimension <= 0) {
@@ -240,18 +259,25 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         ...declaredMetadataPaths.map(path => ({ type: 'filter', path })),
       ];
 
-      await collection.createSearchIndex({
+      // Each creation treats IndexAlreadyExists as a no-op independently. A
+      // shared catch would let an existing vector index skip creation of the
+      // companion full-text index entirely (e.g. after a previously
+      // interrupted createIndex), leaving the pair in a partial state.
+      const vectorIndexCreated = await this.createSearchIndexIgnoringExisting(collection, {
         definition: { fields },
         name: indexNameInternal,
         type: 'vectorSearch',
       });
 
-      // Cache the declared filter paths only after the index is actually created.
-      // If the index already existed (IndexAlreadyExists is caught below) we skip
-      // this so we never trust a set that may not match the live index; queries
-      // then hydrate the real declaration lazily via getDeclaredFilterPaths().
-      this.declaredFilterPaths.set(indexName, new Set([this.documentFieldName, ...declaredMetadataPaths]));
-      await collection.createSearchIndex({
+      // Cache the declared filter paths only when this call actually created
+      // the index. An index that already existed may carry a different
+      // declaration; queries hydrate the real one lazily via
+      // getDeclaredFilterPaths().
+      if (vectorIndexCreated) {
+        this.declaredFilterPaths.set(indexName, new Set([this.documentFieldName, ...declaredMetadataPaths]));
+      }
+
+      await this.createSearchIndexIgnoringExisting(collection, {
         definition: {
           mappings: {
             dynamic: true,
@@ -261,16 +287,34 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         type: 'search',
       });
     } catch (error: any) {
-      if (error.codeName !== 'IndexAlreadyExists') {
-        throw new MastraError(
-          {
-            id: createVectorErrorId('MONGODB', 'CREATE_INDEX', 'FAILED'),
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.THIRD_PARTY,
-          },
-          error,
-        );
+      throw new MastraError(
+        {
+          id: createVectorErrorId('MONGODB', 'CREATE_INDEX', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Creates an Atlas Search index, treating IndexAlreadyExists as a no-op so
+   * `createIndex` stays idempotent per index. Returns true when the index was
+   * actually created by this call.
+   */
+  private async createSearchIndexIgnoringExisting(
+    collection: Collection<MongoDBDocument>,
+    description: { definition: Document; name: string; type: 'vectorSearch' | 'search' },
+  ): Promise<boolean> {
+    try {
+      await collection.createSearchIndex(description);
+      return true;
+    } catch (error: any) {
+      if (error?.codeName === 'IndexAlreadyExists') {
+        return false;
       }
+      throw error;
     }
   }
 
@@ -952,19 +996,27 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     const indexData = indexInfo.find((idx: any) => idx.name === indexNameInternal);
 
     const paths = new Set<string>();
-    for (const field of indexData?.latestDefinition?.fields ?? []) {
+
+    // `latestDefinition` is the most recently *requested* definition, not
+    // necessarily the one serving queries: while an index update is building,
+    // Atlas keeps answering queries with the previous definition. Trusting a
+    // staged definition could push a filter down onto an active index that
+    // does not support it yet, so the definition is only read — and cached —
+    // once the index reports READY. Until then (missing, PENDING, BUILDING,
+    // or a transient read miss) return the empty set uncached: queries take
+    // the always-correct pre-filter fallback and a later call re-reads the
+    // definition instead of pushdown being permanently disabled.
+    if (indexData?.status !== 'READY') {
+      return paths;
+    }
+
+    for (const field of indexData.latestDefinition?.fields ?? []) {
       if (field?.type === 'filter' && typeof field.path === 'string' && field.path !== '_id') {
         paths.add(field.path);
       }
     }
 
-    // Only cache once the index definition is actually present. If it wasn't
-    // found (e.g. the index isn't ready yet, or a transient read miss), return
-    // the empty set without caching so a later query retries rather than
-    // permanently disabling pushdown for this index.
-    if (indexData) {
-      this.declaredFilterPaths.set(indexName, paths);
-    }
+    this.declaredFilterPaths.set(indexName, paths);
     return paths;
   }
 

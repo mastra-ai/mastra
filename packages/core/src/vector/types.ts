@@ -60,15 +60,6 @@ export interface CreateIndexParams {
   indexName: string;
   dimension: number;
   metric?: 'cosine' | 'euclidean' | 'dotproduct';
-  /**
-   * Metadata field names that will be used as filter predicates during queries.
-   * Adapters that support native index-level filter declarations (e.g. MongoDB
-   * Atlas Vector Search) will register these paths in the index definition so
-   * that filtered queries bypass the pre-filter materialisation step.
-   *
-   * Adapters that do not support this hint ignore it silently.
-   */
-  filterFields?: string[];
 }
 
 export interface QueryVectorParams<Filter = VectorFilter> {

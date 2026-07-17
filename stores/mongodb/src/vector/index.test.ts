@@ -521,6 +521,41 @@ describe('MongoDBVector filterFields (#18587)', () => {
       expect(filterPathsOf(createSearchIndex)).toEqual(['_id', 'document']);
       expect((v as any).declaredFilterPaths.get('idx')).toEqual(new Set(['document']));
     });
+
+    it('still creates the full-text index when the vector index already exists, without caching paths', async () => {
+      const v = makeVector();
+      const indexExists = Object.assign(new Error('index already exists'), { codeName: 'IndexAlreadyExists' });
+      const createSearchIndex = vi
+        .fn()
+        .mockRejectedValueOnce(indexExists) // vector index creation
+        .mockResolvedValueOnce(undefined); // full-text index creation
+      (v as any).db = { listCollections: () => ({ hasNext: async () => true }) };
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex });
+
+      await v.createIndex({ indexName: 'idx', dimension: 4, filterFields: ['category'] });
+
+      // The shared catch used to swallow IndexAlreadyExists from the first
+      // call and skip the second, leaving the full-text index missing.
+      expect(createSearchIndex).toHaveBeenCalledTimes(2);
+      expect(createSearchIndex.mock.calls[1][0].name).toBe('idx_search_index');
+      // The existing index may declare different paths — nothing is cached.
+      expect((v as any).declaredFilterPaths.has('idx')).toBe(false);
+    });
+
+    it('tolerates the full-text index already existing', async () => {
+      const v = makeVector();
+      const indexExists = Object.assign(new Error('index already exists'), { codeName: 'IndexAlreadyExists' });
+      const createSearchIndex = vi.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(indexExists);
+      (v as any).db = { listCollections: () => ({ hasNext: async () => true }) };
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex });
+
+      await expect(
+        v.createIndex({ indexName: 'idx', dimension: 4, filterFields: ['category'] }),
+      ).resolves.toBeUndefined();
+
+      // The vector index was created by this call, so its declaration is cached.
+      expect((v as any).declaredFilterPaths.get('idx')).toEqual(new Set(['document', 'metadata.category']));
+    });
   });
 
   describe('buildDeclaredMetadataPaths', () => {
@@ -563,7 +598,16 @@ describe('MongoDBVector filterFields (#18587)', () => {
   });
 
   describe('getDeclaredFilterPaths', () => {
-    it('does not cache when the index definition is missing, then hydrates once it is present', async () => {
+    const declaration = (extraFields: any[] = []) => ({
+      fields: [
+        { type: 'vector', path: 'embedding' },
+        { type: 'filter', path: '_id' },
+        { type: 'filter', path: 'document' },
+        ...extraFields,
+      ],
+    });
+
+    it('does not cache when the index definition is missing, then hydrates once it is READY', async () => {
       const v = makeVector();
       let indexes: any[] = []; // index not found yet
       const listSearchIndexes = vi.fn(() => ({ toArray: async () => indexes }));
@@ -573,24 +617,44 @@ describe('MongoDBVector filterFields (#18587)', () => {
       expect(await (v as any).getDeclaredFilterPaths('idx')).toEqual(new Set());
       expect((v as any).declaredFilterPaths.has('idx')).toBe(false);
 
-      // The index definition becomes available.
+      // The index definition becomes available and READY.
       indexes = [
         {
           name: 'idx_vector_index',
-          latestDefinition: {
-            fields: [
-              { type: 'vector', path: 'embedding' },
-              { type: 'filter', path: '_id' },
-              { type: 'filter', path: 'document' },
-              { type: 'filter', path: 'metadata.category' },
-            ],
-          },
+          status: 'READY',
+          latestDefinition: declaration([{ type: 'filter', path: 'metadata.category' }]),
         },
       ];
 
       // Now it reads the real declaration (excluding `_id`) and caches it.
       const paths = await (v as any).getDeclaredFilterPaths('idx');
       expect(paths).toEqual(new Set(['document', 'metadata.category']));
+      expect((v as any).declaredFilterPaths.get('idx')).toEqual(new Set(['document', 'metadata.category']));
+    });
+
+    it('ignores a building latestDefinition until the index is READY (staged-definition race)', async () => {
+      const v = makeVector();
+      // An index update added metadata.category to the *requested* definition,
+      // but the rebuild is still in progress: queries are still served by the
+      // previous definition, which does not declare the field.
+      let indexes: any[] = [
+        {
+          name: 'idx_vector_index',
+          status: 'BUILDING',
+          latestDefinition: declaration([{ type: 'filter', path: 'metadata.category' }]),
+        },
+      ];
+      const listSearchIndexes = vi.fn(() => ({ toArray: async () => indexes }));
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ listSearchIndexes });
+
+      // The staged definition must not be trusted or cached — otherwise
+      // pushdown would target a field the active index can't filter on.
+      expect(await (v as any).getDeclaredFilterPaths('idx')).toEqual(new Set());
+      expect((v as any).declaredFilterPaths.has('idx')).toBe(false);
+
+      // Once the rebuild finishes, the same definition is trusted and cached.
+      indexes = [{ ...indexes[0], status: 'READY' }];
+      expect(await (v as any).getDeclaredFilterPaths('idx')).toEqual(new Set(['document', 'metadata.category']));
       expect((v as any).declaredFilterPaths.get('idx')).toEqual(new Set(['document', 'metadata.category']));
     });
   });
@@ -623,6 +687,41 @@ describe('MongoDBVector filterFields (#18587)', () => {
       await v.query({ indexName: 'idx', queryVector: [0.1, 0.2], filter: { category: 'news' } });
 
       // First aggregate materialises _ids via $match, second runs the search.
+      expect(aggregate).toHaveBeenCalledTimes(2);
+      expect(aggregate.mock.calls[0][0]).toEqual([
+        { $match: { 'metadata.category': 'news' } },
+        { $project: { _id: 1 } },
+      ]);
+      expect(aggregate.mock.calls[1][0][0].$vectorSearch.filter).toEqual({ _id: { $in: ['a'] } });
+    });
+
+    it('uses the fallback while an index update declaring the filtered field is still building', async () => {
+      const v = makeVector();
+      // The *requested* definition declares metadata.category, but the rebuild
+      // has not finished — the active index still serves the old definition.
+      const listSearchIndexes = vi.fn(() => ({
+        toArray: async () => [
+          {
+            name: 'idx_vector_index',
+            status: 'BUILDING',
+            latestDefinition: {
+              fields: [
+                { type: 'vector', path: 'embedding' },
+                { type: 'filter', path: '_id' },
+                { type: 'filter', path: 'document' },
+                { type: 'filter', path: 'metadata.category' },
+              ],
+            },
+          },
+        ],
+      }));
+      const aggregate = vi.fn().mockReturnValue(makeCursor([{ _id: 'a' }]));
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ aggregate, listSearchIndexes });
+
+      await v.query({ indexName: 'idx', queryVector: [0.1, 0.2], filter: { category: 'news' } });
+
+      // Pushing { metadata.category } into $vectorSearch.filter could fail on
+      // the active index — the query must take the candidate-ID fallback.
       expect(aggregate).toHaveBeenCalledTimes(2);
       expect(aggregate.mock.calls[0][0]).toEqual([
         { $match: { 'metadata.category': 'news' } },
