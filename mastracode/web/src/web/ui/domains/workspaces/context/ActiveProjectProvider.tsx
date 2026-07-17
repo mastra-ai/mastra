@@ -1,7 +1,7 @@
 import { createContext, useContext } from 'react';
 import type { ReactNode } from 'react';
 
-import { useActiveProject } from '../hooks/useActiveProject';
+import { useActiveProject } from '../../../../../shared/hooks/useActiveProject';
 
 /**
  * Context wrapper around `useActiveProject()`. The hook stays the single

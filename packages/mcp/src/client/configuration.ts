@@ -14,13 +14,32 @@ import type {
   ResourceTemplate,
 } from '@modelcontextprotocol/sdk/types.js';
 import equal from 'fast-deep-equal';
+import type { OAuthClientInformationFull } from '../shared/oauth-types';
+import { UnauthorizedError } from '../shared/oauth-types';
 import { InternalMastraMCPClient } from './client';
-import type { MastraMCPServerDefinition } from './client';
+import type { MastraMCPServerDefinition, MCPServerAuthState } from './client';
 import { isReconnectableMCPError } from './error-utils';
+import { createOAuthCallbackServer, getCallbackUrlCandidates } from './oauth-callback-server';
+import type { OAuthCallbackServer } from './oauth-callback-server';
+import { MCPOAuthClientProvider } from './oauth-provider';
 import { MCPClientServerProxy } from './server-proxy';
 
 const mcpClientInstances = new Map<string, InstanceType<typeof MCPClient>>();
 const TOOL_DISCOVERY_MAX_ATTEMPTS = 2;
+
+// Matches the entire 127.0.0.0/8 range in dotted-quad form. `URL` normalizes
+// IPv4 hosts to four octets (so `127.1` becomes `127.0.0.1`), so anchoring the
+// pattern is enough — and it rejects lookalikes like `127.evil.com` that a
+// prefix check would wrongly accept and leak the authorization code to.
+const LOOPBACK_IPV4 = /^127\.(?:\d{1,3})\.(?:\d{1,3})\.(?:\d{1,3})$/;
+
+// Whether a hostname is a loopback address authenticate() accepts for the
+// provider's redirect URL (RFC 8252 loopback redirection). Kept in sync with the
+// mastracode config parser, which accepts any 127.0.0.0/8 host, so a config that
+// parses (e.g. 127.0.0.2) does not later fail here.
+function isLoopbackHostname(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '[::1]' || hostname === '::1' || LOOPBACK_IPV4.test(hostname);
+}
 
 /**
  * Configuration options for creating an MCPClient instance.
@@ -74,6 +93,15 @@ export class MCPClient extends MastraBase {
   private defaultTimeout: number;
   private mcpClientsById = new Map<string, InternalMastraMCPClient>();
   private disconnectPromise: Promise<void> | null = null;
+  private authFlowsByServer = new Map<string, Promise<void>>();
+  private authCallbackServersByServer = new Map<string, OAuthCallbackServer>();
+  /**
+   * Per-server abort controllers for in-flight authorization flows. Created
+   * synchronously at the start of {@link runAuthorizationFlow} — before the
+   * callback server exists — so cancel/disconnect can interrupt the setup phase
+   * (discovery, registration, port binding) and not just the waitForCode wait.
+   */
+  private authAbortControllersByServer = new Map<string, AbortController>();
 
   /**
    * Creates a new MCPClient instance for managing MCP server connections.
@@ -751,6 +779,23 @@ To fix this you have three different options:
       try {
         mcpClientInstances.delete(this.id);
 
+        // Tear down any in-flight authorization: each callback server owns a live
+        // loopback HTTP port, and closing it rejects the flow's waitForCode. Await
+        // the flow settlements so a disconnect during authentication does not leave
+        // a bound port or a dangling promise keeping the process alive.
+        const pendingFlows = Array.from(this.authFlowsByServer.values());
+        // Abort first so flows still in their setup phase (no callback server
+        // bound yet) unblock instead of parking on waitForCode and deadlocking
+        // the awaited settlement below.
+        for (const controller of this.authAbortControllersByServer.values()) {
+          controller.abort();
+        }
+        await Promise.allSettled(Array.from(this.authCallbackServersByServer.values()).map(server => server.close()));
+        await Promise.allSettled(pendingFlows);
+        this.authAbortControllersByServer.clear();
+        this.authCallbackServersByServer.clear();
+        this.authFlowsByServer.clear();
+
         // Disconnect all clients in the cache
         await Promise.allSettled(Array.from(this.mcpClientsById.values()).map(client => client.disconnect()));
         this.mcpClientsById.clear();
@@ -784,6 +829,198 @@ To fix this you have three different options:
     } else {
       await this.getConnectedClientForServer(serverName);
     }
+  }
+
+  /**
+   * Runs the interactive OAuth authorization-code flow for a server.
+   *
+   * Requires the server to be configured with an MCPOAuthClientProvider whose
+   * redirect URL points at a loopback address. The flow:
+   *
+   * 1. Starts a loopback callback server on the redirect URL's port (falling
+   *    back to the next sequential ports when it is in use)
+   * 2. Attempts a connection so the SDK runs discovery and dynamic client
+   *    registration, delivering the authorization URL through the provider's
+   *    `onRedirectToAuthorization` callback — the host directs the user there
+   * 3. Waits for the browser to deliver the authorization code, validates the
+   *    OAuth state, exchanges the code for tokens, and reconnects
+   *
+   * Concurrent calls for the same server join the pending flow (the joiner's
+   * options are ignored — the pending flow keeps its own timeout); different
+   * servers authenticate independently. Each server needs its own provider
+   * instance: the flow pins session state on the provider, so sharing one
+   * MCPOAuthClientProvider across servers is not supported. Hosts with custom
+   * redirect handling (e.g. a web app with an HTTPS redirect URL) should
+   * drive MCPOAuthClientProvider directly instead.
+   *
+   * @param serverName - The name of the server to authenticate (must match a key in `servers`)
+   * @param options.timeoutMs - How long to wait for the browser callback (default 5 minutes)
+   * @throws {Error} If the server has no MCPOAuthClientProvider or its redirect URL is not loopback
+   *
+   * @example
+   * ```typescript
+   * if (mcp.getServerAuthState('weatherServer') === 'needs-auth') {
+   *   await mcp.authenticate('weatherServer');
+   * }
+   * ```
+   */
+  public async authenticate(serverName: string, options?: { timeoutMs?: number }): Promise<void> {
+    // Wait for an in-flight disconnect to finish before starting. disconnect()
+    // snapshots and then clears the auth-flow maps, so a flow registered during
+    // that window would have its abort controller and callback server wiped
+    // without being closed, orphaning the loopback port. Swallow a rejected
+    // disconnect: it must not surface as an authenticate() failure.
+    if (this.disconnectPromise) {
+      await this.disconnectPromise.catch(() => {});
+    }
+
+    const pendingFlow = this.authFlowsByServer.get(serverName);
+    if (pendingFlow) {
+      return pendingFlow;
+    }
+
+    // Correctness contract: nothing between here and runAuthorizationFlow's
+    // synchronous abort-controller registration may await. The disconnect-race
+    // guard above relies on this flow's map entries landing in the same tick, so
+    // that any disconnect() starting afterwards snapshots and tears them down.
+    const flow = this.runAuthorizationFlow(serverName, options).finally(() => {
+      this.authFlowsByServer.delete(serverName);
+    });
+    this.authFlowsByServer.set(serverName, flow);
+    return flow;
+  }
+
+  /**
+   * OAuth authorization state of a configured server.
+   *
+   * Returns `undefined` for servers without an authProvider and for servers
+   * that have not attempted a connection yet.
+   */
+  public getServerAuthState(serverName: string): MCPServerAuthState | undefined {
+    return this.mcpClientsById.get(serverName)?.authState;
+  }
+
+  private async runAuthorizationFlow(serverName: string, options?: { timeoutMs?: number }): Promise<void> {
+    // Register the abort controller synchronously, before the first await, so a
+    // cancel/disconnect during the setup phase (discovery, registration, port
+    // binding) can interrupt the flow rather than letting it park on waitForCode.
+    const abortController = new AbortController();
+    this.authAbortControllersByServer.set(serverName, abortController);
+    const throwIfAborted = () => {
+      if (abortController.signal.aborted) {
+        throw new Error(`Authentication for MCP server ${serverName} was cancelled.`);
+      }
+    };
+
+    // Resources acquired during setup that must be released on every exit path.
+    // Tracked here so the single outer finally can tear them down even if a
+    // fallible setup step (session begin, port binding) throws.
+    let provider: MCPOAuthClientProvider | undefined;
+    let sessionStarted = false;
+    let callbackServer: OAuthCallbackServer | undefined;
+
+    // Installed before the first fallible step so the abort-controller entry,
+    // provider session, and callback server never leak on an early throw.
+    try {
+      const config = this.getServerConfig(serverName);
+      const candidateProvider = config.authProvider;
+      if (!(candidateProvider instanceof MCPOAuthClientProvider)) {
+        throw new Error(
+          `Cannot authenticate MCP server ${serverName}: it is not configured with an MCPOAuthClientProvider.`,
+        );
+      }
+      provider = candidateProvider;
+
+      const redirectUrl = new URL(provider.redirectUrl.toString());
+      if (redirectUrl.protocol !== 'http:' || !isLoopbackHostname(redirectUrl.hostname)) {
+        throw new Error(
+          `Cannot authenticate MCP server ${serverName}: the provider's redirect URL must be a loopback address, got ${redirectUrl.origin}.`,
+        );
+      }
+
+      const state = await provider.beginAuthorizationSession();
+      sessionStarted = true;
+      // A cancel that arrived during beginAuthorizationSession() has no callback
+      // server to close yet, so bail here before binding a port and parking.
+      throwIfAborted();
+
+      callbackServer = await createOAuthCallbackServer({ redirectUrl, state });
+      // A cancel during port binding: bail before we ever wait for a code that
+      // will never arrive. The outer finally closes the freshly-bound server.
+      throwIfAborted();
+      this.authCallbackServersByServer.set(serverName, callbackServer);
+
+      // Point the authorization request at the callback URL that actually
+      // bound, and register every fallback candidate during dynamic client
+      // registration so a future fallback port still matches a registered URI.
+      provider.applyResolvedRedirectUrl(callbackServer.url, getCallbackUrlCandidates(redirectUrl));
+
+      // Discard a stored client registration that does not cover the bound
+      // callback URL — the authorization server would reject its redirect_uri.
+      const clientInfo = (await provider.clientInformation()) as Partial<OAuthClientInformationFull> | undefined;
+      if (clientInfo?.redirect_uris && !clientInfo.redirect_uris.includes(callbackServer.url.toString())) {
+        await provider.invalidateCredentials('client');
+      }
+
+      const client = await this.getClientForServer(serverName);
+      try {
+        // With valid stored tokens this simply connects; otherwise the SDK
+        // delivers the authorization URL and throws UnauthorizedError.
+        await client.connect();
+        return;
+      } catch (error) {
+        if (!(error instanceof UnauthorizedError)) {
+          throw this.handleConnectError(serverName, error);
+        }
+      }
+
+      const { code } = await callbackServer.waitForCode(options);
+      await client.finishAuth(code);
+
+      try {
+        await client.connect();
+      } catch (error) {
+        throw error instanceof UnauthorizedError ? error : this.handleConnectError(serverName, error);
+      }
+    } finally {
+      this.authCallbackServersByServer.delete(serverName);
+      this.authAbortControllersByServer.delete(serverName);
+      if (sessionStarted) {
+        provider?.endAuthorizationSession();
+      }
+      await callbackServer?.close();
+    }
+  }
+
+  /**
+   * Cancels a pending {@link authenticate} flow for a server.
+   *
+   * Tears down the loopback callback server immediately — the pending
+   * authenticate() call rejects. Useful when the user closed the browser
+   * without completing consent, which the host cannot observe.
+   *
+   * The resulting auth state depends on how far the flow had progressed: a flow
+   * cancelled after the server rejected the connection with a 401 stays in the
+   * `needs-auth` state so it can be retried right away, while a flow cancelled
+   * during the setup phase (before any connection was attempted) leaves the
+   * state unchanged — typically `undefined`.
+   *
+   * @param serverName - The name of the server whose flow to cancel
+   * @returns `true` if a pending flow was cancelled, `false` when no flow was pending
+   */
+  public async cancelAuthentication(serverName: string): Promise<boolean> {
+    const pendingFlow = this.authFlowsByServer.get(serverName);
+    if (!pendingFlow) {
+      return false;
+    }
+
+    // Abort first so a flow still in its setup phase (no callback server bound
+    // yet) is interrupted before it can park on waitForCode; then close the
+    // callback server if one exists, which rejects an in-progress waitForCode.
+    this.authAbortControllersByServer.get(serverName)?.abort();
+    await this.authCallbackServersByServer.get(serverName)?.close();
+    await pendingFlow.catch(() => undefined);
+    return true;
   }
 
   /**
@@ -1106,7 +1343,11 @@ To fix this you have three different options:
     );
     this.logger.trackException(mastraError);
     this.logger.error('MCPClient errored connecting to MCP server:', { error: mastraError.toString() });
-    this.mcpClientsById.delete(name);
+    // Keep the client when authorization is required: it carries the needs-auth
+    // state and the pending transport that authenticate() completes.
+    if (!(error instanceof UnauthorizedError)) {
+      this.mcpClientsById.delete(name);
+    }
     return mastraError;
   }
 

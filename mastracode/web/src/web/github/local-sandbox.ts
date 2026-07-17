@@ -1,29 +1,16 @@
 /**
- * Local (host-process) sandbox provider.
+ * Local (host-process) sandbox.
  *
  * A drop-in `MaterializationSandbox` that runs commands directly on the server
  * host instead of a remote VM. The repo is cloned into a per-project directory
- * under a configurable base (`MASTRACODE_LOCAL_SANDBOX_ROOT`, default
- * `~/.mastracode/web/sandboxes`).
- *
- * WARNING: this provider does NOT isolate tenants — every project's git
- * operations run as the server process on the same host filesystem. It exists
- * for local single-user development when no Railway token is configured. Do not
- * use it for a shared multi-tenant deployment; use a real cloud sandbox there.
+ * under the root the `LocalSandboxProvider` adapter was configured with (see
+ * `../sandbox-local-provider.ts`, which also carries the tenant-isolation
+ * warning).
  */
 
 import { spawn } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
-import type { MaterializationSandbox, SandboxCommandResult } from './sandbox';
-
-/** Base directory under which local sandboxes are created. */
-export function getLocalSandboxRoot(): string {
-  const configured = process.env.MASTRACODE_LOCAL_SANDBOX_ROOT;
-  if (configured && configured.trim()) return configured.trim();
-  return join(homedir(), '.mastracode', 'web', 'sandboxes');
-}
+import type { MaterializationSandbox, SandboxCommandResult } from '../sandbox-provider.js';
 
 /**
  * Environment variables that are safe to expose to sandboxed commands. The repo
@@ -77,8 +64,8 @@ export class LocalSandbox implements MaterializationSandbox {
   readonly id: string;
   private readonly root: string;
 
-  constructor(opts: { sandboxId?: string } = {}) {
-    this.root = getLocalSandboxRoot();
+  constructor(opts: { root: string; sandboxId?: string }) {
+    this.root = opts.root;
     // A stable id keyed to the host root so re-opens reattach to the same place.
     this.id = opts.sandboxId ?? `local:${this.root}`;
   }

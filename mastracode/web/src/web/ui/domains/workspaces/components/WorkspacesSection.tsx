@@ -9,18 +9,18 @@ import { useLocation, useNavigate } from 'react-router';
 
 import { useApiConfig } from '../../../../../shared/api/config';
 import { queryKeys } from '../../../../../shared/api/keys';
-import { AGENT_CONTROLLER_THREAD_PAGE_SIZE } from '../../chat/hooks/useAgentControllerThreads';
-import { createAgentControllerClient, requireAgentControllerSession } from '../../chat/services/agentControllerClient';
-import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
-import { useActiveProjectContext } from '../context/ActiveProjectProvider';
+import { AGENT_CONTROLLER_THREAD_PAGE_SIZE } from '../../../../../shared/hooks/useAgentControllerThreads';
+import { useWorkspaceActivity, useWorkspaceThreadTitles } from '../../../../../shared/hooks/useWorkspaceActivity';
+import { useWorkspaceAttention } from '../../../../../shared/hooks/useWorkspaceAttention';
 import {
   deriveProjectPath,
   useDeleteWorkspaceMutation,
   useSelectWorkspaceMutation,
   useWorkspacesQuery,
-} from '../hooks/useWorkspaces';
-import { useWorkspaceActivity, useWorkspaceThreadTitles } from '../hooks/useWorkspaceActivity';
-import { useWorkspaceAttention } from '../hooks/useWorkspaceAttention';
+} from '../../../../../shared/hooks/useWorkspaces';
+import { createAgentControllerClient, requireAgentControllerSession } from '../../chat/services/agentControllerClient';
+import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
+import { useActiveProjectContext } from '../context/ActiveProjectProvider';
 import type { Worktree } from '../services/projects';
 
 /**

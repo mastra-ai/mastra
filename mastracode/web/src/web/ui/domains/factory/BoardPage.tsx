@@ -1,18 +1,17 @@
-import { Button } from '@mastra/playground-ui/components/Button';
+import { Button, buttonVariants } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { CircleDot, EllipsisVertical, GitPullRequest, MessageSquare } from 'lucide-react';
+import { CircleDot, EllipsisVertical, GitPullRequest, MessageSquare, Plus } from 'lucide-react';
 import type { ComponentType, DragEvent } from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 
 import { useApiConfig } from '../../../../shared/api/config';
+import { useSelectWorkspaceMutation, useWorkspacesQuery } from '../../../../shared/hooks/useWorkspaces';
 import { relativeTime } from '../../../../shared/lib/date';
 import { SkeletonRows } from '../../ui';
 import { AGENT_CONTROLLER_ID } from '../chat/services/constants';
-// Deep imports (not the workspaces barrel) to avoid provider/component cycles.
-import { useSelectWorkspaceMutation, useWorkspacesQuery } from '../workspaces/hooks/useWorkspaces';
 import type { Project } from '../workspaces/services/projects';
 import { FactoryItemActions } from './components/FactoryItemActions';
 import { FactoryPageShell } from './components/FactoryPageShell';
@@ -21,12 +20,17 @@ import {
   useProjectIssuesQuery,
   useProjectPullRequestsQuery,
   useStartIssueTriageMutation,
-} from './hooks/useFactoryData';
-import { useIntakeConfigQuery } from './hooks/useIntakeConfig';
-import { useLinearIssuesQuery, useLinearStatusQuery } from './hooks/useLinearData';
-import { useStartFactoryRun } from './hooks/useStartFactoryRun';
-import { useDeleteWorkItemMutation, useUpdateWorkItemMutation, useUpsertWorkItemMutation } from './hooks/useWorkItems';
-import { useWorkItemsQuery } from './hooks/useWorkItems';
+} from '../../../../shared/hooks/useFactoryData';
+import { useIntakeConfigQuery } from '../../../../shared/hooks/useIntakeConfig';
+import { useLinearIssuesQuery, useLinearStatusQuery } from '../../../../shared/hooks/useLinearData';
+import { useStartFactoryRun } from '../../../../shared/hooks/useStartFactoryRun';
+import type { FactoryRunInvocation } from '../../../../shared/hooks/useStartFactoryRun';
+import {
+  useDeleteWorkItemMutation,
+  useUpdateWorkItemMutation,
+  useUpsertWorkItemMutation,
+} from '../../../../shared/hooks/useWorkItems';
+import { useWorkItemsQuery } from '../../../../shared/hooks/useWorkItems';
 import type { GithubIssue, GithubPullRequest } from './services/factory';
 import type { LinearIssue } from './services/linear';
 import { connectLinear, isLinearReauthError } from './services/linear';
@@ -41,6 +45,15 @@ function hasLabel(labels: readonly string[], label: string): boolean {
   return labels.some(item => item.toLowerCase() === label);
 }
 
+function githubNewIssueUrl(repoFullName: string): string | undefined {
+  const [owner, repo, extra] = repoFullName.split('/');
+  if (extra || !owner || !repo || repo === '.' || repo === '..') return undefined;
+  if (!/^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(owner) || !/^[A-Za-z0-9_.-]+$/.test(repo)) {
+    return undefined;
+  }
+  return `https://github.com/${owner}/${repo}/issues/new`;
+}
+
 function metadataLabels(metadata: Record<string, unknown>): string[] {
   return Array.isArray(metadata.labels)
     ? metadata.labels.filter((label): label is string => typeof label === 'string')
@@ -53,11 +66,12 @@ function issueTriageThreadTags(issueNumber: number): Record<string, string> {
 
 /**
  * Candidate feeds the Intake swimlane can browse. Only one paginated list is
- * shown at a time; when both are configured a pill switcher inside the column
- * picks the active one.
+ * shown at a time; a pill switcher inside the column picks the active feed
+ * when more than one is available.
  */
 const INTAKE_SOURCES = [
-  { id: 'github', label: 'GitHub' },
+  { id: 'github', label: 'Issues' },
+  { id: 'github-prs', label: 'PRs' },
   { id: 'linear', label: 'Linear' },
 ] as const;
 
@@ -109,7 +123,7 @@ interface RunAction {
   role: 'triage' | 'plan' | 'work' | 'review';
   /** Lane the card lands in once the run is underway. */
   stage: BoardStageId;
-  prompt: string;
+  invocation: FactoryRunInvocation;
   threadTags?: Record<string, string>;
 }
 
@@ -125,7 +139,7 @@ interface BoardCandidate {
   meta: string;
   icon: ComponentType<{ size?: number; className?: string }>;
   iconClassName: string;
-  /** Column the candidate is offered in: issues in Intake, PRs in Review. */
+  /** Column the candidate is offered in: everything starts in Intake (auto-triaged issues in Triage). */
   column: BoardStageId;
   /** Runs the candidate can start; the first is the one-click default. */
   runActions: RunAction[];
@@ -137,20 +151,27 @@ interface BoardCandidate {
 }
 
 /** Investigate (understand → Planning) + Build (implement → Building) runs for an issue. */
-function issueRunActions(ref: string, extra?: { promptSuffix?: string }): RunAction[] {
-  const suffix = extra?.promptSuffix ? ` ${extra.promptSuffix}` : '';
+function issueRunActions(ref: string, extra?: { context?: string }): RunAction[] {
+  const context = extra?.context ? `\n\n${extra.context}` : '';
   return [
     {
       label: 'Investigate',
       role: 'plan',
       stage: 'planning',
-      prompt: `Use the understand-issue skill to investigate ${ref}.${suffix}`,
+      invocation: {
+        type: 'skill',
+        skillName: 'understand-issue',
+        arguments: `${ref}${context}`,
+      },
     },
     {
       label: 'Build',
       role: 'work',
       stage: 'execute',
-      prompt: `Implement a fix for ${ref}: investigate the root cause, make the change with tests, and open a pull request.${suffix}`,
+      invocation: {
+        type: 'prompt',
+        prompt: `Implement a fix for ${ref}: investigate the root cause, make the change with tests, and open a pull request.${extra?.context ? ` ${extra.context}` : ''}`,
+      },
     },
   ];
 }
@@ -177,7 +198,10 @@ function issueCandidate(issue: GithubIssue): BoardCandidate {
             label: 'Prepare approval',
             role: 'triage',
             stage: 'triage',
-            prompt: `Prepare approval for ${ref}. Review the existing triage comment and summarize the decision needed before implementation or closure.`,
+            invocation: {
+              type: 'prompt',
+              prompt: `Prepare approval for ${ref}. Review the existing triage comment and summarize the decision needed before implementation or closure.`,
+            },
             threadTags: issueTriageThreadTags(issue.number),
           },
         ]
@@ -192,7 +216,7 @@ function issueCandidate(issue: GithubIssue): BoardCandidate {
 
 function pullRequestCandidate(pr: GithubPullRequest): BoardCandidate {
   const ref = `GitHub pull request #${pr.number} (${pr.url})`;
-  const checkout = `Check out the PR in this worktree first with \`gh pr checkout ${pr.number}\`.`;
+  const checkout = `Check out the PR in this worktree first with \`gh pr checkout ${pr.number}\`. Expected head branch: ${pr.headBranch}.`;
   const base = `Review ${ref}. ${checkout}`;
   return {
     sourceKey: `github-pr:${pr.number}`,
@@ -202,13 +226,17 @@ function pullRequestCandidate(pr: GithubPullRequest): BoardCandidate {
     meta: `#${pr.number}${pr.author ? ` · ${pr.author}` : ''} · ${pr.headBranch} → ${pr.baseBranch}`,
     icon: GitPullRequest,
     iconClassName: 'text-accent1',
-    column: 'review',
+    column: 'intake',
     runActions: [
       {
         label: 'Review',
         role: 'review',
         stage: 'review',
-        prompt: `Use the understand-pr skill to review ${ref}. ${checkout}`,
+        invocation: {
+          type: 'skill',
+          skillName: 'understand-pr',
+          arguments: `${ref}\n\n${checkout}`,
+        },
       },
     ],
     branch: `factory/pr-${pr.number}`,
@@ -231,7 +259,7 @@ function linearCandidate(issue: LinearIssue): BoardCandidate {
     icon: CircleDot,
     iconClassName: 'text-accent3',
     column: 'intake',
-    runActions: issueRunActions(ref, { promptSuffix: fetchHint }),
+    runActions: issueRunActions(ref, { context: fetchHint }),
     branch: `factory/linear-${issue.identifier.toLowerCase()}`,
     threadTitle: `${issue.identifier}: ${issue.title}`,
     customPrompt: instructions => guidedPrompt(base, instructions),
@@ -269,7 +297,10 @@ function itemRunSpec(item: WorkItem): ItemRunSpec | null {
               label: 'Prepare approval',
               role: 'triage',
               stage: 'triage',
-              prompt: `Prepare approval for ${ref}. Review the existing triage comment and summarize the decision needed before implementation or closure.`,
+              invocation: {
+                type: 'prompt',
+                prompt: `Prepare approval for ${ref}. Review the existing triage comment and summarize the decision needed before implementation or closure.`,
+              },
               threadTags: issueTriageThreadTags(meta.number),
             },
           ]
@@ -282,11 +313,12 @@ function itemRunSpec(item: WorkItem): ItemRunSpec | null {
     return {
       branch: `factory/linear-${meta.identifier.toLowerCase()}`,
       threadTitle: `${meta.identifier}: ${item.title}`,
-      actions: issueRunActions(ref, { promptSuffix: fetchHint }),
+      actions: issueRunActions(ref, { context: fetchHint }),
     };
   }
   if (item.source === 'github-pr' && typeof meta.number === 'number' && typeof meta.headBranch === 'string') {
     const ref = `GitHub pull request #${meta.number}${item.url ? ` (${item.url})` : ''}`;
+    const checkout = `Check out the PR in this worktree first with \`gh pr checkout ${meta.number}\`. Expected head branch: ${meta.headBranch}.`;
     return {
       branch: `factory/pr-${meta.number}`,
       threadTitle: `PR #${meta.number}: ${item.title}`,
@@ -295,7 +327,11 @@ function itemRunSpec(item: WorkItem): ItemRunSpec | null {
           label: 'Review',
           role: 'review',
           stage: 'review',
-          prompt: `Use the understand-pr skill to review ${ref}. Check out the PR in this worktree first with \`gh pr checkout ${meta.number}\`.`,
+          invocation: {
+            type: 'skill',
+            skillName: 'understand-pr',
+            arguments: `${ref}\n\n${checkout}`,
+          },
         },
       ],
     };
@@ -334,9 +370,11 @@ function readDragPayload(event: DragEvent): DragPayload | null {
 /**
  * Factory › Board: an org-wide kanban over the project's work items. The
  * Intake column merges persisted `intake` cards with live GitHub/Linear
- * candidates (issues/PRs that have no record yet — records are materialized
- * only when someone acts on them). Cards move between columns by drag-and-drop
- * or the card menu; moves only file/move cards, never start agent runs.
+ * candidates (issues and PRs that have no record yet — records are
+ * materialized only when someone acts on them). Everything enters through
+ * Intake and moves through the system from there. Cards move between columns
+ * by drag-and-drop or the card menu; moves only file/move cards, never start
+ * agent runs.
  */
 export function BoardPage() {
   return (
@@ -356,8 +394,9 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
   const configQuery = useIntakeConfigQuery();
   const linearStatusQuery = useLinearStatusQuery();
 
-  // Intake sources mirror the old Intake page gating: nothing is synced until
-  // it's picked in Settings › General. PRs always feed the board.
+  // Intake sources mirror the old Intake page gating: issues sync only once
+  // picked in Settings › General. Open PRs always feed the board; they start
+  // in Intake and only move once the Factory acts on them.
   const config = configQuery.data;
   const githubEnabled = config?.github.enabled ?? true;
   const githubSelected = config ? (config.github.projectIds?.includes(githubProjectId) ?? false) : true;
@@ -367,22 +406,24 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
     (config?.linear.enabled ?? false) && linearConnected && (config?.linear.projectIds?.length ?? 0) > 0;
 
   // The Intake swimlane browses one candidate feed at a time; a pill switcher
-  // inside the column picks between GitHub and Linear when both are set up.
+  // inside the column filters between Issues, PRs, and Linear as available.
   const githubIntakeActive = githubEnabled && githubSelected;
+  const availableIntakeSources: IntakeSource[] = [
+    ...(githubIntakeActive ? (['github'] as const) : []),
+    'github-prs' as const,
+    ...(linearReady ? (['linear'] as const) : []),
+  ];
+  const newIssueUrl = config && githubIntakeActive ? githubNewIssueUrl(project.name) : undefined;
   const [intakeSource, setIntakeSource] = useState<IntakeSource>('github');
-  const showIntakeSourceSwitch = githubIntakeActive && linearReady;
-  const activeIntakeSource: IntakeSource | null = showIntakeSourceSwitch
+  const showIntakeSourceSwitch = availableIntakeSources.length > 1;
+  const activeIntakeSource: IntakeSource | null = availableIntakeSources.includes(intakeSource)
     ? intakeSource
-    : githubIntakeActive
-      ? 'github'
-      : linearReady
-        ? 'linear'
-        : null;
+    : (availableIntakeSources[0] ?? null);
 
-  // Only the active intake feed fetches; the other feed loads on switch.
+  // Only the active intake feed fetches; the other feeds load on switch.
   const issues = useProjectIssuesQuery(activeIntakeSource === 'github' ? githubProjectId : undefined);
   const triageIssues = useProjectIssuesQuery(githubProjectId, AUTO_TRIAGED_LABEL);
-  const pulls = useProjectPullRequestsQuery(githubProjectId);
+  const pulls = useProjectPullRequestsQuery(activeIntakeSource === 'github-prs' ? githubProjectId : undefined);
   const linearIssues = useLinearIssuesQuery(activeIntakeSource === 'linear');
 
   const upsert = useUpsertWorkItemMutation(githubProjectId);
@@ -391,6 +432,10 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
   const { start, enabled: runEnabled } = useStartFactoryRun();
   const triage = useStartIssueTriageMutation(githubProjectId);
   const navigate = useNavigate();
+  const boardContainerRef = useRef<HTMLDivElement>(null);
+  const laneRefs = useRef(new Map<BoardStageId, HTMLElement>());
+  const autoPositionedProjectRef = useRef<string | undefined>(undefined);
+  const userPositionedProjectRef = useRef<string | undefined>(undefined);
 
   // Worktrees that still exist. A card's session ref whose worktree was
   // deleted is stale: its thread is gone (worktree deletion cascades onto its
@@ -424,11 +469,36 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
     const all: BoardCandidate[] = [
       ...intakeIssues.map(issueCandidate),
       ...(triageIssues.data ?? []).map(issueCandidate),
-      ...(pulls.data ?? []).map(pullRequestCandidate),
+      ...(activeIntakeSource === 'github-prs' ? (pulls.data ?? []).map(pullRequestCandidate) : []),
       ...(activeIntakeSource === 'linear' ? (linearIssues.data ?? []).map(linearCandidate) : []),
     ];
     return all.filter(candidate => !known.has(candidate.sourceKey));
   }, [workItems, issues.data, triageIssues.data, pulls.data, linearIssues.data, activeIntakeSource]);
+
+  const boardDataPending =
+    items.isPending ||
+    configQuery.isPending ||
+    linearStatusQuery.isPending ||
+    triageIssues.isPending ||
+    (activeIntakeSource === 'github' && issues.isPending) ||
+    (activeIntakeSource === 'github-prs' && pulls.isPending) ||
+    (activeIntakeSource === 'linear' && linearIssues.isPending);
+
+  useEffect(() => {
+    if (boardDataPending || autoPositionedProjectRef.current === project.id) return;
+    autoPositionedProjectRef.current = project.id;
+    if (userPositionedProjectRef.current === project.id) return;
+
+    const firstPopulatedStage = BOARD_STAGES.find(
+      stage =>
+        workItems.some(item => item.stages.includes(stage.id)) ||
+        candidates.some(candidate => candidate.column === stage.id),
+    );
+    const container = boardContainerRef.current;
+    const lane = firstPopulatedStage ? laneRefs.current.get(firstPopulatedStage.id) : undefined;
+    if (!container || !lane) return;
+    container.scrollTo?.({ left: Math.max(0, lane.offsetLeft - container.offsetLeft), behavior: 'auto' });
+  }, [boardDataPending, candidates, project.id, workItems]);
 
   const moveItem = (id: string, fromStage: string | null, toStage: string) => {
     const item = workItems.find(i => i.id === id);
@@ -467,24 +537,56 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
           {mutationError instanceof Error ? mutationError.message : 'Board action failed'}
         </Notice>
       )}
-      <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-2" aria-label="Board columns">
+      <div
+        ref={boardContainerRef}
+        className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-2"
+        aria-label="Board columns"
+        onPointerDown={() => {
+          userPositionedProjectRef.current = project.id;
+        }}
+        onWheel={() => {
+          userPositionedProjectRef.current = project.id;
+        }}
+        onScroll={() => {
+          // Ignore the scroll event emitted by our own initial scrollTo call.
+          if (autoPositionedProjectRef.current !== project.id) userPositionedProjectRef.current = project.id;
+        }}
+      >
         {BOARD_STAGES.map(stage => (
           <BoardColumn
             key={stage.id}
             stage={stage.id}
             label={stage.label}
+            laneRef={element => {
+              if (element) laneRefs.current.set(stage.id, element);
+              else laneRefs.current.delete(stage.id);
+            }}
             onDrop={handleDrop}
+            headerAction={
+              stage.id === 'intake' && newIssueUrl ? (
+                <a
+                  href={newIssueUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Create GitHub issue"
+                  title="Create GitHub issue"
+                  className={buttonVariants({ variant: 'ghost', size: 'icon-sm' })}
+                >
+                  <Plus size={13} aria-hidden />
+                </a>
+              ) : undefined
+            }
             headerExtras={
               stage.id === 'intake' && showIntakeSourceSwitch ? (
                 <div role="group" aria-label="Intake source" className="flex items-center gap-1 pb-1">
-                  {INTAKE_SOURCES.map(source => (
+                  {INTAKE_SOURCES.filter(source => availableIntakeSources.includes(source.id)).map(source => (
                     <button
                       key={source.id}
                       type="button"
-                      aria-pressed={intakeSource === source.id}
+                      aria-pressed={activeIntakeSource === source.id}
                       onClick={() => setIntakeSource(source.id)}
                       className={`rounded-full border px-2.5 py-0.5 text-ui-xs transition ${
-                        intakeSource === source.id
+                        activeIntakeSource === source.id
                           ? 'border-accent1 bg-surface4 text-icon6'
                           : 'border-border1 bg-transparent text-icon3 hover:text-icon5'
                       }`}
@@ -512,7 +614,7 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
                       branch: spec.branch,
                       threadTitle: spec.threadTitle,
                       threadTags: action.threadTags,
-                      prompt: action.prompt,
+                      invocation: action.invocation,
                       workItem: {
                         id: item.id,
                         role: action.role,
@@ -544,7 +646,10 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
                       branch: candidate.branch,
                       threadTitle: candidate.threadTitle,
                       threadTags: action.threadTags,
-                      prompt: prompt === undefined ? action.prompt : candidate.customPrompt(prompt),
+                      invocation:
+                        prompt === undefined
+                          ? action.invocation
+                          : { type: 'prompt', prompt: candidate.customPrompt(prompt) },
                       workItem: {
                         role: action.role,
                         stages: [action.stage],
@@ -561,9 +666,13 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
                 />
               ))}
             {stage.id === 'intake' && (
-              <IntakeColumnExtras source={activeIntakeSource} issues={issues} linearIssues={linearIssues} />
+              <IntakeColumnExtras
+                source={activeIntakeSource}
+                issues={issues}
+                pulls={pulls}
+                linearIssues={linearIssues}
+              />
             )}
-            {stage.id === 'review' && <ReviewColumnExtras pulls={pulls} />}
           </BoardColumn>
         ))}
       </div>
@@ -576,13 +685,17 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
 function BoardColumn({
   stage,
   label,
+  laneRef,
   onDrop,
+  headerAction,
   headerExtras,
   children,
 }: {
   stage: BoardStageId;
   label: string;
+  laneRef: (element: HTMLElement | null) => void;
   onDrop: (payload: DragPayload, toStage: BoardStageId) => void;
+  headerAction?: React.ReactNode;
   /** Pinned below the column title, outside the scrolling card list. */
   headerExtras?: React.ReactNode;
   children: React.ReactNode;
@@ -591,6 +704,7 @@ function BoardColumn({
 
   return (
     <section
+      ref={laneRef}
       aria-label={label}
       data-testid={`board-column-${stage}`}
       className={`flex min-h-0 w-72 shrink-0 flex-col gap-2 rounded-lg border p-2 transition ${
@@ -610,9 +724,12 @@ function BoardColumn({
         if (payload) onDrop(payload, stage);
       }}
     >
-      <Txt as="h2" variant="ui-xs" className="m-0 px-1 uppercase tracking-wide text-icon3">
-        {label}
-      </Txt>
+      <div className="flex items-center justify-between gap-2 px-1">
+        <Txt as="h2" variant="ui-xs" className="m-0 uppercase tracking-wide text-icon3">
+          {label}
+        </Txt>
+        {headerAction}
+      </div>
       {headerExtras}
       {/* Cards scroll inside the swimlane; the page stays fixed. */}
       <div className="flex min-h-16 flex-1 flex-col gap-1.5 overflow-y-auto">{children}</div>
@@ -831,15 +948,17 @@ function CandidateCard({
 function IntakeColumnExtras({
   source,
   issues,
+  pulls,
   linearIssues,
 }: {
   source: IntakeSource | null;
   issues: ReturnType<typeof useProjectIssuesQuery>;
+  pulls: ReturnType<typeof useProjectPullRequestsQuery>;
   linearIssues: ReturnType<typeof useLinearIssuesQuery>;
 }) {
   const { baseUrl } = useApiConfig();
   if (source === null) return null;
-  const feed = source === 'github' ? issues : linearIssues;
+  const feed = source === 'github' ? issues : source === 'github-prs' ? pulls : linearIssues;
 
   return (
     <>
@@ -861,23 +980,6 @@ function IntakeColumnExtras({
         isFetchingNextPage={Boolean(feed.isFetchingNextPage)}
         onLoadMore={() => void feed.fetchNextPage()}
         label="Load more candidates"
-      />
-    </>
-  );
-}
-
-/** Review column tail: loading state and pull-request pagination. */
-function ReviewColumnExtras({ pulls }: { pulls: ReturnType<typeof useProjectPullRequestsQuery> }) {
-  return (
-    <>
-      {pulls.isPending && pulls.fetchStatus !== 'idle' && (
-        <SkeletonRows label="Loading pull requests" rows={3} rowClassName="h-12 w-full" />
-      )}
-      <LoadMoreSentinel
-        hasNextPage={Boolean(pulls.hasNextPage)}
-        isFetchingNextPage={Boolean(pulls.isFetchingNextPage)}
-        onLoadMore={() => void pulls.fetchNextPage()}
-        label="Load more pull requests"
       />
     </>
   );

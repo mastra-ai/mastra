@@ -7,9 +7,9 @@ import { useState } from 'react';
 import { useKeyDown } from '../../../lib/hooks';
 import { useOverlays } from '../../../lib/overlays';
 import { GithubIcon } from '../../../ui/icons';
-import { useAddProjectMutation, useRemoveProjectMutation } from '../hooks/useProjects';
+import { useAddProjectMutation, useRemoveProjectMutation } from '../../../../../shared/hooks/useProjects';
 import { useActiveProjectContext } from '../context/ActiveProjectProvider';
-import { useGithubStatusQuery } from '../hooks/useGithubStatus';
+import { useGithubStatusQuery } from '../../../../../shared/hooks/useGithubStatus';
 import { DirectoryBrowser } from './DirectoryPicker';
 
 /** App-level project manager backed by the active-project and overlay providers. */

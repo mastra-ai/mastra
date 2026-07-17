@@ -48,6 +48,7 @@ export type ScenarioName =
   | 'github-signals-notification-reload'
   | 'github-signals-polling-inbox'
   | 'github-signals-unsubscribe-reload'
+  | 'goal-judge-single-render'
   | 'controller-api-config'
   | 'headless-mcp-tool-availability'
   | 'openai-strict-schema'

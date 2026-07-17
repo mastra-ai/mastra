@@ -1,5 +1,168 @@
 # @mastra/core
 
+## 1.52.0-alpha.4
+
+### Patch Changes
+
+- Improve stored `runEvals` per-turn scores (follow-up to multi-turn `turns`). Each persisted per-turn scorer/gate result is now labeled with its turn index (`metadata.turnIndex`), carries the conversation's shared `threadId`, and links to that turn's own trace span instead of the item-level span. This lets the scores UI group and label per-turn scores by conversation and turn, and resolve each score to the correct trace. ([#19491](https://github.com/mastra-ai/mastra/pull/19491))
+
+## 1.52.0-alpha.3
+
+### Minor Changes
+
+- Update the experimental AgentController message surface to use the canonical `MastraDBMessage` shape. ([#18783](https://github.com/mastra-ai/mastra/pull/18783))
+
+  The AgentController now emits, persists, and returns DB-native messages where message parts live under `content.parts`, terminal status lives under `content.metadata`, and completed tool invocations retain their explicit error state. Signals such as system reminders and notifications now arrive as separate messages with `role: 'signal'` instead of being flattened into assistant message content.
+
+  This affects the experimental AgentController event and session APIs, including `message_start`, `message_update`, `message_end`, `currentMessage`, `listMessages`, `listActiveMessages`, `firstUserMessage`, and `firstUserMessages`.
+
+  ```ts
+  agentController.subscribe(event => {
+    if (event.type === 'message_end' && event.message.role === 'assistant') {
+      // Before: parts were flattened directly onto the message
+      // After: read parts and terminal status from the DB-native shape
+      const text = event.message.content.parts
+        .filter(part => part.type === 'text')
+        .map(part => part.text)
+        .join('');
+      const stopReason = event.message.content.metadata?.stopReason;
+    }
+  });
+
+  // System reminders and notifications are now separate messages
+  const messages = await agentController.session.thread.listActiveMessages();
+  const signals = messages.filter(message => message.role === 'signal');
+  ```
+
+### Patch Changes
+
+- Added a `durable` field to `AgentConfig` so an agent can opt into durable execution without a separate `createDurableAgent` call. Setting `durable: true` (or `durable: { cache, pubsub, maxSteps, cleanupTimeoutMs }`) auto-wraps the agent with `createDurableAgent` when it is attached to a `Mastra` instance; the factory function remains available for advanced use. ([#19371](https://github.com/mastra-ai/mastra/pull/19371))
+
+  ```ts
+  const agent = new Agent({
+    id: 'my-agent',
+    name: 'My Agent',
+    instructions: 'You are a helpful assistant',
+    model,
+    durable: true, // or: { maxSteps: 10, cleanupTimeoutMs: 60_000 }
+  });
+
+  export const mastra = new Mastra({ agents: { agent } });
+  ```
+
+- Cap the LLM-provided delegation `maxSteps` at the sub-agent's own `defaultOptions.maxSteps`. Previously a supervisor's model could silently raise a sub-agent's step budget past its configured default via the delegation tool's optional `maxSteps` argument. The supervisor's model can still reduce the budget, and `onDelegationStart`'s `modifiedMaxSteps` (developer code) still overrides the cap. A warning is logged when a value is capped. ([#19529](https://github.com/mastra-ai/mastra/pull/19529))
+
+- Remove leftover branches that selected the evented workflow engine inside the regular `Agent` loop. The agentic-execution workflow now always uses the in-process workflow engine, and `Agent` no longer maintains an ephemeral `Mastra` (with its own pubsub and `startWorkers()` lifecycle) just to host the evented path. This removes a class of subtle behavior differences between the two engines from `Agent.stream()` / `Agent.generate()` and simplifies the suspend/resume scope lifecycle. ([#18666](https://github.com/mastra-ai/mastra/pull/18666))
+
+  No public API changes. The evented workflow infrastructure itself is unchanged and continues to be used by background tasks, notifications, the score-traces workflow, and other subsystems that explicitly opt into it.
+
+- Fixed `requestContext` typing in the dynamic `skills` agent option. When an agent defines `requestContextSchema`, the `skills` callback now receives a typed `RequestContext` (with key autocomplete and typo checking), matching `instructions`, `tools`, `memory`, and the other dynamic options. Previously it was always `RequestContext<unknown>`. ([#19554](https://github.com/mastra-ai/mastra/pull/19554))
+
+  ```typescript
+  const agent = new Agent({
+    requestContextSchema: z.object({ documentId: z.string(), userId: z.string() }),
+    // Before: requestContext was RequestContext<unknown> — any key compiled
+    // After: requestContext is RequestContext<{ documentId: string; userId: string }>
+    skills: ({ requestContext }) => {
+      requestContext.get('documentId'); // typed as string
+      return ['./skills/basic'];
+    },
+  });
+  ```
+
+  Fixes [#19553](https://github.com/mastra-ai/mastra/issues/19553)
+
+- Fix the `createDurableAgent` JSDoc examples to construct `RedisServerCache` with a connected Redis client (`{ client }`) instead of a `{ url }` config the class does not accept. ([#19569](https://github.com/mastra-ai/mastra/pull/19569))
+
+- Added stable metrics and logs capability reporting for observability storage. The system packages response now includes `observabilityStorageCapabilities` with `metrics` and `logs` flags, enabling capability-based detection that is resilient to bundler-generated constructor name changes. ([#19305](https://github.com/mastra-ai/mastra/pull/19305))
+
+  ```typescript
+  const packages = await client.getSystemPackages();
+  console.log(packages.observabilityStorageCapabilities?.metrics); // true
+  console.log(packages.observabilityStorageCapabilities?.logs); // true
+  ```
+
+  Studio now uses the capability response instead of relying on constructor names, with a fallback for older servers.
+
+## 1.52.0-alpha.2
+
+### Minor Changes
+
+- Added multi-turn support to `runEvals`. Data items can now include an `inputs: string[]` array — each entry is sent sequentially to the agent on the same thread, and scorers see the accumulated output from all turns. ([#18395](https://github.com/mastra-ai/mastra/pull/18395))
+
+  **What changed**
+  - `RunEvalsDataItem` accepts an optional `inputs` array for multi-turn conversations
+  - Each turn runs `agent.generate()` with the same `threadId`, preserving conversation history
+  - `runEvals` injects both a shared `threadId` and a `resourceId` (Mastra memory scopes messages by resource + thread, so both are needed for recall); the resource defaults to the generated thread and a caller-provided `targetOptions.memory.resource` is preserved. `thread` is now optional in `targetOptions.memory` since `runEvals` owns it.
+  - Scorers receive the accumulated output messages from all turns
+  - Works with gates, thresholds, and all existing scorer configurations
+  - Validation rejects empty `inputs` arrays with a `MastraError`
+
+  Also added a `turns` API for **per-turn assertions**. Instead of a single holistic score over the accumulated conversation (which can hide a broken follow-up turn), each turn colocates its `input` with `gates`/`scorers` that evaluate only that turn's input and output. Per-turn outcomes are reported in `result.turnResults` and folded into the overall `verdict`. When the agent has storage configured, per-turn scorer/gate results are persisted like top-level scores. `turns` is Agent-only and mutually exclusive with `input`/`inputs`.
+
+  **Example — holistic multi-turn (`inputs`)**
+
+  ```ts
+  import { runEvals } from '@mastra/core/evals';
+  import { checks } from '@mastra/evals/checks';
+
+  const result = await runEvals({
+    target: weatherAgent,
+    data: [
+      {
+        inputs: ['What is the weather in Brooklyn?', 'What about tomorrow?', 'Compare the two forecasts.'],
+      },
+    ],
+    scorers: [checks.calledTool('get_weather', { times: 2 }), checks.includes('Brooklyn')],
+  });
+  ```
+
+  **Example — per-turn assertions (`turns`)**
+
+  ```ts
+  const result = await runEvals({
+    target: weatherAgent,
+    data: [
+      {
+        turns: [
+          {
+            input: 'What is the weather in Brooklyn?',
+            gates: [checks.calledTool('get_weather')],
+          },
+          {
+            input: 'What about tomorrow?',
+            gates: [checks.calledTool('get_weather')], // must call again this turn
+            scorers: [{ scorer: checks.similarity('tomorrow forecast'), threshold: 0.5 }],
+          },
+        ],
+      },
+    ],
+  });
+
+  result.verdict; // folds in per-turn gate/threshold outcomes
+  result.turnResults; // [{ index, gateResults, thresholdResults, scores }]
+  ```
+
+### Patch Changes
+
+- Added native structured-output support lookup through the model provider registry. ([#19440](https://github.com/mastra-ai/mastra/pull/19440))
+
+  ```ts
+  import { modelSupportsStructuredOutput } from '@mastra/core/llm';
+
+  const supportsStructuredOutput = modelSupportsStructuredOutput('openai/gpt-5.5');
+  ```
+
+- Fixed answering an ask_user question failing with a misleading "could not find a suspended run" error when the suspended run died before its state was saved (for example when persisting the suspended snapshot failed). The unresumable question is now retracted, a late answer is ignored, and the original error is surfaced instead. ([#19444](https://github.com/mastra-ai/mastra/pull/19444))
+
+- Aligned A2AAgent streams with the regular Agent stream contract. A2A streams now emit a leading start chunk on fresh runs (skipped when resuming, matching Agent behavior) and the finish chunk now carries the Agent-shaped payload (stepResult.reason, output.usage) so downstream consumers can treat sub-agent streams uniformly. The previous flat finishReason and usage fields are still included for backward compatibility but are deprecated. ([#19517](https://github.com/mastra-ai/mastra/pull/19517))
+
+- Updated the bundled provider SDKs used by the model router for Cerebras, DeepInfra, DeepSeek, Perplexity, Together AI, and OpenAI-compatible endpoints (including custom provider URLs and the Netlify gateway) to their AI SDK v6-compatible versions. This aligns them with the other providers in the model router (OpenAI, Anthropic, Google, Groq, Mistral, xAI, OpenRouter) which already use v6-compatible SDKs, and picks up upstream provider fixes. No changes to the public API: model strings like cerebras/llama-3.3-70b or deepseek/deepseek-chat keep working as before. Unused v5-track provider SDK bundles (Groq, Mistral, xAI, and the migrated providers above) were removed from the bundle. ([#19495](https://github.com/mastra-ai/mastra/pull/19495))
+
+- Updated embedding model routing to use the AI SDK v6 provider SDKs (OpenAI, Google, and OpenAI-compatible) while preserving the existing embedding interface. Existing embedding model configurations continue to work without code changes. ([#19500](https://github.com/mastra-ai/mastra/pull/19500))
+
+- Add `jsonPromptInjection: 'auto'` to select native structured output when model capability data confirms support and inline JSON prompt injection otherwise. Scorer judges use this automatic path by default while preserving explicit `jsonPromptInjection` overrides and fallback retries for unexpected provider failures. ([#19442](https://github.com/mastra-ai/mastra/pull/19442))
+
 ## 1.51.1-alpha.1
 
 ## 1.51.1-alpha.0

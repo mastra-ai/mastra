@@ -1,5 +1,45 @@
 # mastracode
 
+## 0.31.1-alpha.4
+
+### Patch Changes
+
+- Fixed the auto-updater falsely reporting success when the update landed somewhere the running binary doesn't use. Previously any exit code 0 from the package manager was treated as success, so if Mastra Code was installed by a different tool (for example via a wrapper that puts a shim on your PATH), `npm install -g` could update a copy you never run and Mastra Code would still tell you to restart onto the "new" version. ([#18792](https://github.com/mastra-ai/mastra/pull/18792))
+
+  Mastra Code now verifies the install before and after updating when the install location and version are detectable:
+  - Before installing, it checks that the running binary lives in the package manager's global directory when that directory can be determined. If it doesn't (for example when the install is managed by another tool), it skips the pointless install and tells you immediately which install to update instead.
+  - When the install is owned by a tool it recognizes, it delegates the update to that tool: vite-plus installs are updated by running `vp install -g` for you, and Homebrew installs (under any prefix, including Linuxbrew) get the exact `brew upgrade mastracode` command to run.
+  - On Windows, update commands now run through a shell so the package managers' `.cmd` shims launch correctly.
+  - When the installed version is readable, it only reports "Updated" when the running binary changed to the target version.
+  - If the package manager reports success but the running binary is unchanged, it tells you honestly that your installation is managed by another tool and to update it with that tool, instead of claiming success.
+  - When an update fails, it now surfaces the package manager's error output so you can see the cause, rather than just "Auto-update failed".
+
+- Updated dependencies [[`55b6ecd`](https://github.com/mastra-ai/mastra/commit/55b6ecd1083d21d00ea19488e721e451de75e76f), [`4cfdd64`](https://github.com/mastra-ai/mastra/commit/4cfdd645794feaea0c4ea711e70ecdfbef0c5b8e)]:
+  - @mastra/code-sdk@0.2.0-alpha.4
+  - @mastra/core@1.52.0-alpha.4
+
+## 0.31.1-alpha.3
+
+### Patch Changes
+
+- Fixed completed tools with explicit error state rendering as successful after message hydration. ([#18783](https://github.com/mastra-ai/mastra/pull/18783))
+
+- Updated dependencies [[`1426af2`](https://github.com/mastra-ai/mastra/commit/1426af24975879c000d13ac75673f630fcc970c1), [`975295d`](https://github.com/mastra-ai/mastra/commit/975295d418552f0d46a59edfef4c3ee555f9930a), [`85e4fb5`](https://github.com/mastra-ai/mastra/commit/85e4fb50087a81c74df3a762f53b56373db0b912), [`85e4fb5`](https://github.com/mastra-ai/mastra/commit/85e4fb50087a81c74df3a762f53b56373db0b912), [`19881f5`](https://github.com/mastra-ai/mastra/commit/19881f5d6a09437cf5b947d2e8be3bd8745df767), [`ef03c0c`](https://github.com/mastra-ai/mastra/commit/ef03c0cfc62367a458e4cc56462e2148b35681c5), [`4fb4d88`](https://github.com/mastra-ai/mastra/commit/4fb4d881bc107acee13890ad4d78661016c510ed), [`4eba27a`](https://github.com/mastra-ai/mastra/commit/4eba27adcf60f991df0e62f94b3e75b4e67f3b4b), [`c701be3`](https://github.com/mastra-ai/mastra/commit/c701be32d7d9aa94a66da8c6cc38dcac6856f464)]:
+  - @mastra/core@1.52.0-alpha.3
+  - @mastra/code-sdk@0.2.0-alpha.3
+  - @mastra/pg@1.16.1-alpha.0
+
+## 0.31.1-alpha.2
+
+### Patch Changes
+
+- Fixed a stuck ask_user question box after the underlying run failed: the prompt is now dismissed automatically instead of accepting an answer that could never be delivered. ([#19444](https://github.com/mastra-ai/mastra/pull/19444))
+
+- Updated dependencies [[`8b20926`](https://github.com/mastra-ai/mastra/commit/8b20926cd59e2ba3d66458e062fa0e6e2ada3e68), [`f9717e4`](https://github.com/mastra-ai/mastra/commit/f9717e4a381500042d088577347a787b0ec8caff), [`74faf8b`](https://github.com/mastra-ai/mastra/commit/74faf8bd9c1018f2492653c06b1e25fc8300e9e6), [`1fadac4`](https://github.com/mastra-ai/mastra/commit/1fadac44537caeefe81f9f775ae2f2f3d94e9069), [`970c032`](https://github.com/mastra-ai/mastra/commit/970c032502751ee5dd4d0b603331d9838cb538fc), [`792ec9a`](https://github.com/mastra-ai/mastra/commit/792ec9a0869bab8274cf5e0ed2840738737a1607), [`712b864`](https://github.com/mastra-ai/mastra/commit/712b864aa1ed12b14c54390ec17b69de163c37f7), [`8f7a5de`](https://github.com/mastra-ai/mastra/commit/8f7a5dedc246cdc938bb65516703cf9b27b03756), [`c0bec73`](https://github.com/mastra-ai/mastra/commit/c0bec732c93d1a22ae5e51ed66cf8cacca8bd6a6)]:
+  - @mastra/core@1.52.0-alpha.2
+  - @mastra/code-sdk@0.2.0-alpha.2
+  - @mastra/mcp@1.15.0-alpha.0
+
 ## 0.31.1-alpha.1
 
 ### Patch Changes
