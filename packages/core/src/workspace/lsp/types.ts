@@ -70,7 +70,7 @@ export interface LSPConfig {
    * Extra directories to search for both language server binaries and Node.js modules.
    * Each entry should be a directory whose node_modules contains the required packages.
    * Searched after project root and process.cwd() — for binaries in node_modules/.bin/,
-   * and for modules like typescript/lib/tsserver.js.
+   * and for modules like typescript/lib/tsserver.js (TS ≤6).
    * Useful when binaries and modules are installed in a tool's own package rather than the user's project.
    */
   searchPaths?: string[];
