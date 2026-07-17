@@ -1286,7 +1286,11 @@ describe('Agent Routes Authorization', () => {
         id: 'test-agent',
         name: 'test-agent',
         instructions: 'test-instructions',
-        model: {} as any,
+        // Use a shape that satisfies `isSupportedLanguageModel` so background
+        // durable-workflow initialization does not trigger an unhandled
+        // `AGENT_GET_MODEL_MISSING_MODEL_INSTANCE` rejection from
+        // `resolveModelConfig`.
+        model: { specificationVersion: 'v2' } as any,
         memory: mockMemory,
       });
       mockDurableAgent = createDurableAgent({
