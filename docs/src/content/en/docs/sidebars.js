@@ -388,6 +388,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'browser/firecrawl',
+              label: 'Firecrawl',
+            },
+            {
+              type: 'doc',
               id: 'browser/recording',
               label: 'Recording',
               customProps: {
