@@ -1,6 +1,6 @@
 import { Composer } from './Composer';
 
-const composerPanelClass = 'w-full shrink-0';
+const composerPanelClass = 'min-w-0 w-full max-w-full shrink-0';
 
 type ComposerPanelProps = {
   composerVariant?: 'inline' | 'textarea';

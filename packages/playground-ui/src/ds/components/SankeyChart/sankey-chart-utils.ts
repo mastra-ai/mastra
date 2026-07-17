@@ -77,6 +77,7 @@ export function reorderSankeyChartColumns(
 export function buildSankeyChartGraph(
   data: Array<SankeyChartRecord>,
   columns: Array<SankeyChartColumn>,
+  getRecordWeight: (record: SankeyChartRecord) => number = () => 1,
 ): SankeyChartGraph {
   if (columns.length < 2 || data.length === 0) return EMPTY_GRAPH;
 
@@ -103,6 +104,9 @@ export function buildSankeyChartGraph(
     if (!sourceColumn || !targetColumn) continue;
 
     for (const record of data) {
+      const weight = getRecordWeight(record);
+      if (!Number.isFinite(weight) || weight < 0) continue;
+
       const sourceValue = getSankeyChartValue(record[sourceColumn.id]);
       const targetValue = getSankeyChartValue(record[targetColumn.id]);
       if (sourceValue === undefined || targetValue === undefined) continue;
@@ -113,14 +117,14 @@ export function buildSankeyChartGraph(
       const existingLink = linksById.get(id);
 
       if (existingLink) {
-        existingLink.value += 1;
+        existingLink.value += weight;
         existingLink.records.push(record);
       } else {
         linksById.set(id, {
           id,
           source: source.index,
           target: target.index,
-          value: 1,
+          value: weight,
           sourceNode: source.node,
           targetNode: target.node,
           records: [record],
@@ -130,6 +134,20 @@ export function buildSankeyChartGraph(
   }
 
   return { nodes, links: [...linksById.values()] };
+}
+
+export function getSankeyChartNodeWeights(graph: SankeyChartGraph): Map<string, number> {
+  const incomingWeights = new Map<string, number>();
+  const outgoingWeights = new Map<string, number>();
+
+  for (const link of graph.links) {
+    outgoingWeights.set(link.sourceNode.id, (outgoingWeights.get(link.sourceNode.id) ?? 0) + link.value);
+    incomingWeights.set(link.targetNode.id, (incomingWeights.get(link.targetNode.id) ?? 0) + link.value);
+  }
+
+  return new Map(
+    graph.nodes.map(node => [node.id, Math.max(incomingWeights.get(node.id) ?? 0, outgoingWeights.get(node.id) ?? 0)]),
+  );
 }
 
 export function getSankeyChartCurveSelection(link: SankeyChartLink): SankeyChartCurveSelection {

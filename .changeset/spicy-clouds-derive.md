@@ -2,13 +2,13 @@
 '@mastra/core': minor
 ---
 
-Added an optional `derive()` method to the `WorkspaceSandbox` contract, along with the new `SandboxDeriveOptions` type. `derive()` constructs an independent sibling sandbox that inherits the template's configuration (credentials, image, resources) with per-instance overrides — without performing any I/O. This lets one configured sandbox act as a template for a fleet of sandboxes (for example, one per project).
+Added an optional `clone()` method to the `WorkspaceSandbox` contract, along with the new `SandboxCloneOptions` type. `clone()` constructs an unstarted sibling sandbox that inherits the template's configuration (credentials, image, resources) with per-instance overrides — without performing any I/O. This lets one configured sandbox act as a template for a fleet of sandbox clones (for example, one per project).
 
 ```ts
 const template = new RailwaySandbox({ token, environmentId });
 
-// Fresh sandbox for a project — provisions on start()
-const projectSandbox = template.derive({
+// Fresh sandbox clone for a project — provisions on start()
+const projectSandbox = template.clone({
   id: 'mc-project-42',
   env: { GITHUB_TOKEN: token },
   idleTimeoutMinutes: 30,
@@ -16,4 +16,4 @@ const projectSandbox = template.derive({
 await projectSandbox.start();
 ```
 
-`LocalSandbox` implements `derive()` out of the box.
+`LocalSandbox` implements `clone()` out of the box.

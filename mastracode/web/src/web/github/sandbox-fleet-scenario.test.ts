@@ -3,9 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { __resetRuntimeConfigForTests, seedRuntimeConfig } from '../runtime-config';
 
-/** Minimal derivable template sandbox standing in for a RailwaySandbox. */
+/** Minimal cloneable template sandbox standing in for a RailwaySandbox. */
 function templateSandbox(): WorkspaceSandbox {
-  const template = { id: 'template-1', name: 'Template', provider: 'railway', derive: () => template };
+  const template = { id: 'template-1', name: 'Template', provider: 'railway', clone: () => template };
   return template as unknown as WorkspaceSandbox;
 }
 
