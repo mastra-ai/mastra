@@ -92,13 +92,17 @@ describe('deployToSandbox', () => {
     expect(sandbox.commands.some(c => c.includes('npm install'))).toBe(false);
   });
 
-  it('kills the previous server before launching the new one', async () => {
+  it('kills the previous server before extracting files and launching the new one', async () => {
     const sandbox = new FakeSandbox();
 
     await deployToSandbox({ sandbox, dir: buildDir, ...FAST_HEALTH });
 
     const killIndex = sandbox.commands.findIndex(c => c.includes('.mastra-server.pid') && c.includes('kill'));
     expect(killIndex).toBeGreaterThanOrEqual(0);
+    // The old server must be stopped before the new build is extracted over
+    // the live directory, so it never serves mixed old/new files.
+    const extractIndex = sandbox.commands.findIndex(c => c.includes('tar -xzf'));
+    expect(extractIndex).toBeGreaterThan(killIndex);
     // Launched detached via nohup (not processes.spawn — a provider process
     // handle would keep the caller's event loop alive following server logs).
     const launch = sandbox.commands.filter(c => c.includes(`nohup sh`) && c.includes(SERVER_SCRIPT));

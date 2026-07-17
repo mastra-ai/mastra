@@ -101,6 +101,11 @@ export async function deployToSandbox(options: DeployToSandboxOptions): Promise<
   const remoteTarball = `${remoteDir}/.deploy.tgz`;
   await runInSandbox(sandbox, `mkdir -p ${shellQuote(remoteDir)}`);
   await uploadFile(sandbox, remoteTarball, tarball);
+
+  // Stop the previous server BEFORE extracting over the live directory so it
+  // can never serve a mix of old and new files while the release lands.
+  await killPreviousServer(sandbox, remoteDir);
+
   await runInSandbox(sandbox, `cd ${shellQuote(remoteDir)} && tar -xzf .deploy.tgz && rm -f .deploy.tgz`, {
     timeout: 120_000,
   });
@@ -127,12 +132,12 @@ export async function deployToSandbox(options: DeployToSandboxOptions): Promise<
     }
   }
 
-  // 4. Write the launch script, kill any previous server, and start the new one.
+  // 4. Write the launch script and start the new server (the previous one was
+  // stopped before extraction).
   const launchScript = buildLaunchScript({ remoteDir, port, env: mergedEnv });
   await uploadFile(sandbox, `${remoteDir}/${SERVER_SCRIPT}`, Buffer.from(launchScript));
   await runInSandbox(sandbox, `chmod 700 ${shellQuote(`${remoteDir}/${SERVER_SCRIPT}`)}`);
 
-  await killPreviousServer(sandbox, remoteDir);
   logger.info('Starting Mastra server...');
   await launchServer(sandbox, remoteDir);
 
