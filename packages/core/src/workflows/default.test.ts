@@ -1425,6 +1425,11 @@ describe('DefaultExecutionEngine.execute cancellation onFinish contract', () => 
 
     const persistSpy = vi.spyOn(engine as any, 'persistStepUpdate').mockResolvedValue(undefined);
 
+    // Inject metadata during step execution start to test stripping
+    vi.spyOn(engine, 'onStepExecutionStart').mockImplementation(async ({ stepInfo }) => {
+      stepInfo.metadata = { nestedRunId: 'nested-123', customField: 'keep-me' };
+    });
+
     const step1 = {
       id: 'step1',
       inputSchema: z.any(),
@@ -1487,10 +1492,15 @@ describe('DefaultExecutionEngine.execute cancellation onFinish contract', () => 
     const step1Result = result.steps?.step1 as any;
     expect(step1Result?.payload).toBeUndefined();
 
-    // Verify raw persistence: persistStepUpdate receives the un-deduplicated payload
+    // Ensure raw nestedRunId is omitted from formatted steps, but other metadata is preserved
+    expect(step1Result?.metadata?.nestedRunId).toBeUndefined();
+    expect(step1Result?.metadata?.customField).toBe('keep-me');
+
+    // Verify raw persistence: persistStepUpdate receives the un-deduplicated payload and raw metadata
     expect(persistSpy).toHaveBeenCalled();
     const persistArgs = persistSpy.mock.calls[0][0] as any;
     expect(persistArgs.stepResults.step1.payload).toEqual(inputData);
+    expect(persistArgs.stepResults.step1.metadata?.nestedRunId).toBe('nested-123');
   });
 });
 
