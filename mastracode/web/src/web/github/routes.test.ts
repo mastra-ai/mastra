@@ -381,6 +381,7 @@ function buildApp(
   options: {
     controller?: NonNullable<Parameters<typeof buildGithubRoutes>[0]>['controller'];
     runIssueTriage?: (input: any) => Promise<{ threadId?: string; projectPath?: string; branch?: string }>;
+    stateSigner?: typeof stateSigner | null;
   } = {},
 ) {
   const app = new Hono();
@@ -393,9 +394,15 @@ function buildApp(
     }
     await next();
   });
+  const { stateSigner: signerOverride, ...routeOptions } = options;
   mountApiRoutes(
     app as any,
-    buildGithubRoutes({ baseUrl: 'http://localhost:4111', github: githubStub as any, stateSigner, ...options }),
+    buildGithubRoutes({
+      baseUrl: 'http://localhost:4111',
+      github: githubStub as any,
+      stateSigner: signerOverride === null ? undefined : (signerOverride ?? stateSigner),
+      ...routeOptions,
+    }),
   );
   return app;
 }
@@ -645,6 +652,11 @@ describe('status route', () => {
     featureEnabled = false;
     const res = await buildApp({ workosId: 'u1' }).request('/web/github/status');
     expect(await res.json()).toMatchObject({ enabled: false, connected: false });
+  });
+
+  it('reports disabled without a state signer', async () => {
+    const res = await buildApp({ workosId: 'u1' }, { stateSigner: null }).request('/web/github/status');
+    expect(await res.json()).toMatchObject({ enabled: false, connected: false, reason: 'missing_config' });
   });
 
   it('reports connected installations for the user', async () => {

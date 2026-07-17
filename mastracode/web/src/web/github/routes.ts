@@ -222,6 +222,7 @@ function toProjectPayload(row: GithubProjectRow) {
  */
 export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRoute[] {
   const routes: ApiRoute[] = [];
+  const { github, stateSigner } = options;
 
   // The status route is always registered so the SPA can detect the disabled state.
   routes.push(
@@ -229,7 +230,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
-        if (!isGithubFeatureEnabled()) {
+        if (!isGithubFeatureEnabled() || !github || !stateSigner) {
           return c.json({
             enabled: false,
             connected: false,
@@ -280,7 +281,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
   // Without an integration instance + state signer there is nothing the
   // remaining handlers can do — serve only the disabled `status` route
   // (mirrors the feature gate).
-  const { github, stateSigner } = options;
   if (!isGithubFeatureEnabled() || !github || !stateSigner) {
     return routes;
   }
