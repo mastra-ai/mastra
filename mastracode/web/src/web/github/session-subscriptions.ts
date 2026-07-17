@@ -33,6 +33,20 @@ function parsePullRequest(value: number | string, expectedRepo: string): number 
   return Number(match[2]);
 }
 
+/**
+ * Whether the current request comes from a session that GitHub subscriptions
+ * can ever apply to: an authenticated org user on a GitHub-project session
+ * with an active thread. Mirrors the gate in `resolveSessionTarget` without
+ * throwing, for passive callers that should no-op instead of erroring.
+ */
+function isGithubProjectSession(requestContext: RequestContext): boolean {
+  const context = requestContext.get('controller') as AgentControllerRequestContext<GithubSessionState> | undefined;
+  const user = requestContext.get('user') as WebAuthUser | undefined;
+  return Boolean(
+    context?.threadId && context.getState().githubProjectId && getWebAuthOrgId(user) && getWebAuthUserId(user),
+  );
+}
+
 async function resolveSessionTarget(requestContext: RequestContext): Promise<SessionTarget> {
   const context = requestContext.get('controller') as AgentControllerRequestContext<GithubSessionState> | undefined;
   const user = requestContext.get('user') as WebAuthUser | undefined;
@@ -82,6 +96,11 @@ export async function subscribeCurrentSessionToPullRequest(
   pullRequest: number | string,
   source: 'auto-gh-pr-create' | 'explicit-tool',
 ) {
+  // The auto path observes every successful `gh pr create` in every session,
+  // including local and non-GitHub-project sessions where subscriptions can
+  // never apply. Skip silently there; only the explicit tool should surface
+  // "this session cannot subscribe" as an error.
+  if (source === 'auto-gh-pr-create' && !isGithubProjectSession(requestContext)) return undefined;
   const target = await resolveSessionTarget(requestContext);
   const number = parsePullRequest(pullRequest, target.project.repoFullName);
   await verifyPullRequest(target, number);

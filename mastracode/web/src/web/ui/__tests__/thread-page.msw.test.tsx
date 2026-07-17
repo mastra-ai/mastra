@@ -101,6 +101,7 @@ function emptySse(): Response {
 
 interface CapturedRequests {
   sessionsCreated: number;
+  streamSubscriptions: number;
   switched: string[];
   created: number;
   deleted: string[];
@@ -110,24 +111,36 @@ interface CapturedRequests {
 function useAgentControllerHandlers({
   boundThreadId = threadOne.id,
   messagesDelayMs = 0,
+  messagesDelayMsByThread = {},
   stateDelayMs = 0,
   switchDelayMsByThread = {},
   failSwitchFor = [],
 }: {
   boundThreadId?: string;
   messagesDelayMs?: number;
+  messagesDelayMsByThread?: Partial<Record<string, number>>;
   /** Delays `GET /sessions/:resourceId` (the state fetch) to expose hydration races. */
   stateDelayMs?: number;
   switchDelayMsByThread?: Partial<Record<string, number>>;
   failSwitchFor?: string[];
 } = {}): CapturedRequests {
-  const captured: CapturedRequests = { sessionsCreated: 0, switched: [], created: 0, deleted: [], sent: [] };
+  const captured: CapturedRequests = {
+    sessionsCreated: 0,
+    streamSubscriptions: 0,
+    switched: [],
+    created: 0,
+    deleted: [],
+    sent: [],
+  };
   // The bound thread follows successful switches so `GET /sessions/:id` stays authoritative.
   let bound = boundThreadId;
   let stateShouldFail = false;
 
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () => new Response(null, { status: 404 })),
+    http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+      HttpResponse.json({ enabled: true, connected: false, installations: [] }),
+    ),
     http.post(`${API}/sessions`, () => {
       captured.sessionsCreated += 1;
       return HttpResponse.json({ controllerId: 'code', resourceId: RESOURCE_ID, threadId: bound });
@@ -145,8 +158,9 @@ function useAgentControllerHandlers({
       HttpResponse.json({ threads: captured.created > 0 ? [newThread, threadOne, threadTwo] : [threadOne, threadTwo] }),
     ),
     http.get(`${SESSION}/threads/:threadId/messages`, async ({ params }) => {
-      if (messagesDelayMs > 0) await delay(messagesDelayMs);
       const threadId = String(params.threadId);
+      const messagesDelay = messagesDelayMsByThread[threadId] ?? messagesDelayMs;
+      if (messagesDelay > 0) await delay(messagesDelay);
       if (threadId === newThread.id && captured.sent.length > 0) {
         const messages: MastraDBMessage[] = captured.sent.map((text, index) => ({
           id: `sent-${index}`,
@@ -158,7 +172,10 @@ function useAgentControllerHandlers({
       }
       return HttpResponse.json({ messages: MESSAGES[threadId] ?? [] });
     }),
-    http.get(`${SESSION}/stream`, () => emptySse()),
+    http.get(`${SESSION}/stream`, () => {
+      captured.streamSubscriptions += 1;
+      return emptySse();
+    }),
     http.post(`${SESSION}/thread`, async ({ request }) => {
       const { threadId } = (await request.json()) as { threadId: string };
       captured.switched.push(threadId);
@@ -218,6 +235,21 @@ describe('MastraCode thread pages', () => {
     expect(screen.queryByRole('status', { name: 'Loading messages' })).not.toBeInTheDocument();
   });
 
+  it('given destination history loads slowly, when selecting another thread, then loading feedback renders before the destination history', async () => {
+    useAgentControllerHandlers({ messagesDelayMsByThread: { [threadTwo.id]: 150 } });
+    const { router } = renderRoutes(`/threads/${threadOne.id}`);
+
+    await waitFor(() => expect(screen.getByText('Reply from thread one')).toBeInTheDocument());
+
+    await userEvent.click(await screen.findByText('Second thread'));
+
+    await expectPathname(router, `/threads/${threadTwo.id}`);
+    expect(await screen.findByRole('status', { name: 'Loading messages' })).toBeInTheDocument();
+
+    await waitFor(() => expect(screen.getByText('Reply from thread two')).toBeInTheDocument());
+    expect(screen.getByRole('region', { name: 'Thread composer' })).toBeInTheDocument();
+  });
+
   it('given two threads in the sidebar, when clicking another thread, then the URL and session switch to it without recreating the session', async () => {
     const captured = useAgentControllerHandlers();
     const { router } = renderRoutes(`/threads/${threadOne.id}`);
@@ -274,7 +306,9 @@ describe('MastraCode thread pages', () => {
 
     await expectPathname(router, '/new');
     expect(await screen.findByRole('heading', { name: 'What do you want to work on?' })).toBeInTheDocument();
-    expect(screen.getAllByPlaceholderText(/Ask Mastra Code/)).toHaveLength(1);
+    const composer = screen.getByPlaceholderText(/Ask Mastra Code/);
+    await waitFor(() => expect(composer).not.toBeDisabled());
+    expect(captured.streamSubscriptions).toBe(1);
     expect(captured.created).toBe(0);
   });
 
@@ -330,15 +364,13 @@ describe('MastraCode thread pages', () => {
     await expectPathname(router, '/new');
   });
 
-  it('given an unknown thread deep link, then the URL settles on the most recent thread in scope', async () => {
+  it('given an invalid thread deep link in the current scope, then it reports the failure and returns to /new', async () => {
     const captured = useAgentControllerHandlers({ failSwitchFor: ['nope'] });
     const { router } = renderRoutes('/threads/nope');
 
-    // Threads are scoped per worktree, so an unknown route thread is the
-    // normal outcome of a worktree switch: settle on the scope's most recent
-    // thread instead of bouncing through /new with an error.
-    await expectPathname(router, `/threads/${threadOne.id}`);
-    await waitFor(() => expect(screen.getByText('Reply from thread one')).toBeInTheDocument());
+    await expectPathname(router, '/new');
+    expect(await screen.findByRole('heading', { name: 'What do you want to work on?' })).toBeInTheDocument();
+    expect(screen.getByText('Failed to switch thread: thread nope was not found')).toBeInTheDocument();
     expect(captured.switched).not.toContain('nope');
   });
 });

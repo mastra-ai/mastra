@@ -1,7 +1,23 @@
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { __resetRuntimeConfigForTests, seedRuntimeConfig } from '../runtime-config';
-import { RailwaySandboxProvider } from '../sandbox-railway-provider';
+
+/** Minimal cloneable template sandbox standing in for a RailwaySandbox. */
+function templateSandbox(): WorkspaceSandbox {
+  const template = { id: 'template-1', name: 'Template', provider: 'railway', clone: () => template };
+  return template as unknown as WorkspaceSandbox;
+}
+
+function seedSandboxRuntime(opts: { maxSandboxes?: number } = {}): void {
+  seedRuntimeConfig({
+    sandbox: {
+      machine: templateSandbox(),
+      workdirBase: '/workspace',
+      ...(opts.maxSandboxes !== undefined ? { maxSandboxes: opts.maxSandboxes } : {}),
+    },
+  });
+}
 
 // ── Phase 7 sandbox-fleet scenario tests ─────────────────────────────────
 // These prove the lightweight per-replica sandbox budget and the per-user
@@ -107,14 +123,13 @@ import { mountApiRoutes } from '../test-utils';
 import type * as RoutesModule from './routes';
 import {
   __resetLiveSandboxCount,
-  ensureProjectSandbox,
   getLiveSandboxCount,
   resetSandboxFactory,
   SandboxBudgetError,
   setSandboxFactory,
-  teardownProjectSandbox,
-} from './sandbox';
-import type { MaterializationSandbox } from './sandbox';
+} from '../sandbox/fleet';
+import type { MaterializationSandbox } from '../sandbox/fleet';
+import { ensureProjectSandbox, teardownProjectSandbox } from './sandbox';
 import { githubProjectSandboxes } from './schema';
 import type { GithubProjectSandboxRow } from './schema';
 
@@ -167,7 +182,7 @@ afterEach(() => {
 
 describe('S7 — sandbox fleet budget', () => {
   it('cap=1: a second fresh provision is rejected, then succeeds after teardown frees a slot', async () => {
-    seedRuntimeConfig({ sandbox: new RailwaySandboxProvider({ token: 'test-token', maxSandboxes: 1 }) });
+    seedSandboxRuntime({ maxSandboxes: 1 });
     let made = 0;
     setSandboxFactory(({ providerSandboxId }) => new FakeSandbox(providerSandboxId ?? `fresh-${++made}`));
 
@@ -252,8 +267,8 @@ describe('S7 — cross-user teardown isolation (route level)', () => {
       { id: 's1', githubProjectId: 'p1', userId: 'u1', sandboxId: 'vm-u1', sandboxWorkdir: '/workspace/hello' },
     ];
     process.env.MASTRACODE_DISTRIBUTED_LOCK = '0';
-    // A tokened Railway adapter makes isSandboxEnabled() true.
-    seedRuntimeConfig({ sandbox: new RailwaySandboxProvider({ token: 'test-token' }) });
+    // A seeded sandbox template makes isSandboxEnabled() true.
+    seedSandboxRuntime();
 
     // Real teardown/reattach run; the factory yields a fake VM so reattach starts
     // a recordable sandbox instead of hitting Railway.

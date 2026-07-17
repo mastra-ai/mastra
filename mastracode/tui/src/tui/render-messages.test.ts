@@ -8,14 +8,24 @@ import { createSignal } from '@mastra/core/signals';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { isChatBoundarySpacer } from './components/chat-boundary-spacer.js';
+import { JudgeDisplayComponent } from './components/judge-display.js';
+import { ReactiveSignalComponent } from './components/reactive-signal.js';
 import { SubagentExecutionComponent } from './components/subagent-execution.js';
 import { TemporalGapComponent } from './components/temporal-gap.js';
 import { UserMessageComponent } from './components/user-message.js';
-import { addUserMessage, renderExistingMessages } from './render-messages.js';
+import {
+  addPendingUserMessage,
+  addUserMessage as renderUserMessage,
+  renderExistingMessages,
+} from './render-messages.js';
 import type { TUIState } from './state.js';
 
 function visibleChildren(state: TUIState) {
   return state.chatContainer.children.filter(child => !isChatBoundarySpacer(child));
+}
+
+function addUserMessage(state: TUIState, message: MastraDBMessage): void {
+  renderUserMessage(state, message);
 }
 
 const tmpProjects: string[] = [];
@@ -165,17 +175,42 @@ interface ReminderInput {
   message: string;
   gapText?: string;
   precedesMessageId?: string;
+  goalEvaluation?: Record<string, unknown>;
 }
 
 function createReminderMessage(reminder: ReminderInput, id = '__temporal_1'): MastraDBMessage {
-  const { reminderType, message, gapText, precedesMessageId } = reminder;
+  const { reminderType, message, gapText, precedesMessageId, goalEvaluation } = reminder;
   return createSignal({
     id,
     type: 'reactive',
     tagName: 'system-reminder',
     contents: message,
     attributes: { type: reminderType, gapText, precedesMessageId },
-  }).toDBMessage();
+    metadata: { goalEvaluation },
+  } as Parameters<typeof createSignal>[0]).toDBMessage();
+}
+
+function createGoalJudgeMessage(id = 'goal-judge-1'): MastraDBMessage {
+  return createReminderMessage(
+    {
+      reminderType: 'goal-judge',
+      message: '[Goal attempt 2/20] The goal is not yet complete. Judge feedback: Need another fact.',
+      goalEvaluation: {
+        objective: 'List whale facts',
+        iteration: 2,
+        maxRuns: 20,
+        passed: false,
+        status: 'active',
+        results: [],
+        reason: 'Need another fact.',
+        duration: 0,
+        timedOut: false,
+        maxRunsReached: false,
+        suppressFeedback: false,
+      },
+    },
+    id,
+  );
 }
 
 describe('addUserMessage', () => {
@@ -197,6 +232,81 @@ describe('addUserMessage', () => {
       '⏳ 15 minutes later',
     );
     expect(state.messageComponentsById.size).toBe(0);
+  });
+
+  it('renders and registers persisted goal-judge evaluations', () => {
+    const state = createState();
+
+    renderUserMessage(state, createGoalJudgeMessage());
+
+    const children = visibleChildren(state);
+    expect(children).toHaveLength(1);
+    expect(children[0]).toBeInstanceOf(JudgeDisplayComponent);
+    expect(state.messageComponentsById.get('goal-judge-1')).toBe(children[0]);
+  });
+
+  it('renders non-goal signals through the shared signal renderer', () => {
+    const state = createState();
+    const message = createSignal({
+      id: 'build-status',
+      type: 'reactive',
+      tagName: 'build-status',
+      contents: 'Build is still running',
+    }).toDBMessage();
+
+    renderUserMessage(state, message);
+
+    const component = visibleChildren(state)[0];
+    expect(component).toBeInstanceOf(ReactiveSignalComponent);
+    expect(state.messageComponentsById.get('build-status')).toBe(component);
+  });
+
+  it('renders user-kind signal text, attachments, and delivery label from signal contents', () => {
+    const state = createState();
+    const message = createSignal({
+      id: 'steer-signal',
+      type: 'user',
+      contents: [
+        { type: 'text', text: 'Use the new direction' },
+        { type: 'file', data: 'image-data', mediaType: 'image/png' },
+        { type: 'file', data: 'file-data', mediaType: 'text/plain' },
+      ],
+      attributes: { delivery: 'while-active' },
+    }).toDBMessage();
+
+    renderUserMessage(state, message);
+
+    const component = visibleChildren(state)[0];
+    expect(component).toBeInstanceOf(UserMessageComponent);
+    expect(state.messageComponentsById.get('steer-signal')).toBe(component);
+    const rendered = (component as UserMessageComponent).render(100).join('\n');
+    expect(rendered).toContain('steer');
+    expect(rendered).toContain('[1 image] [1 file] Use the new direction');
+  });
+
+  it('preserves canonical attachments when a user-kind signal confirms a pending steer', () => {
+    const state = createState();
+    addPendingUserMessage(state, 'steer-signal', 'Use the new direction', undefined, { isInterjection: true });
+    const message = createSignal({
+      id: 'steer-signal',
+      type: 'user',
+      contents: [
+        { type: 'text', text: 'Use the new direction' },
+        { type: 'file', data: 'image-data', mediaType: 'image/png' },
+        { type: 'file', data: 'file-data', mediaType: 'text/plain' },
+      ],
+      attributes: { delivery: 'while-active' },
+    }).toDBMessage();
+
+    renderUserMessage(state, message);
+
+    const component = visibleChildren(state)[0];
+    expect(component).toBeInstanceOf(UserMessageComponent);
+    expect(state.pendingSignalMessageComponentsById.size).toBe(0);
+    expect(state.messageComponentsById.get('steer-signal')).toBe(component);
+    const rendered = (component as UserMessageComponent).render(100).join('\n');
+    expect(rendered).toContain('steer');
+    expect(rendered).toContain('[1 image] [1 file] Use the new direction');
   });
 
   it('anchors a persisted temporal-gap marker before its target message when precedesMessageId is present', () => {
@@ -280,6 +390,62 @@ describe('renderExistingMessages startup history loading', () => {
     expect(children).toHaveLength(2);
     expect(state.messageComponentsById.get('user-1')).toBe(children[0]);
     expect(state.messageComponentsById.get('user-2')).toBe(children[1]);
+  });
+
+  it('reconstructs one persisted goal-judge evaluation from history', async () => {
+    const state = createState();
+    const listActiveMessages = vi.fn().mockResolvedValue([createGoalJudgeMessage()]);
+    state.session = {
+      ...(state.session as any),
+      thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages },
+      state: createSessionState(),
+    } as unknown as TUIState['session'];
+    state.controller = {
+      session: {
+        thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages },
+        displayState: { get: () => ({ isRunning: false }), restoreTasks: vi.fn() },
+      },
+      setState: vi.fn().mockResolvedValue(undefined),
+    } as unknown as TUIState['controller'];
+
+    await renderExistingMessages(state);
+
+    const children = visibleChildren(state);
+    expect(children).toHaveLength(1);
+    expect(children[0]).toBeInstanceOf(JudgeDisplayComponent);
+    expect(state.messageComponentsById.get('goal-judge-1')).toBe(children[0]);
+  });
+
+  it('reconstructs a persisted DB-native user signal from history', async () => {
+    const state = createState();
+    const userSignal = createSignal({
+      id: 'steer-history',
+      type: 'user',
+      contents: 'Continue from history',
+      attributes: { delivery: 'while-active' },
+    }).toDBMessage();
+    const listActiveMessages = vi.fn().mockResolvedValue([userSignal]);
+    state.session = {
+      ...(state.session as any),
+      thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages },
+      state: createSessionState(),
+    } as unknown as TUIState['session'];
+    state.controller = {
+      session: {
+        thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages },
+        displayState: { get: () => ({ isRunning: false }), restoreTasks: vi.fn() },
+      },
+      setState: vi.fn().mockResolvedValue(undefined),
+    } as unknown as TUIState['controller'];
+
+    await renderExistingMessages(state);
+
+    const component = visibleChildren(state)[0];
+    expect(component).toBeInstanceOf(UserMessageComponent);
+    expect(state.messageComponentsById.get('steer-history')).toBe(component);
+    const rendered = (component as UserMessageComponent).render(100).join('\n');
+    expect(rendered).toContain('steer');
+    expect(rendered).toContain('Continue from history');
   });
 
   it('renders the interrupted line once at the end for an aborted assistant message with tool calls', async () => {

@@ -2,12 +2,11 @@ import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 
+import { ChatSessionTestProvider as ChatSessionProvider } from '../../context/ChatSessionTestProvider';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import { OverlaysProvider } from '../../../../lib/overlays';
 import { ActiveProjectProvider } from '../../../workspaces';
-import { ChatCommandsProvider } from '../../context/ChatCommandsProvider';
-import { ChatSessionProvider } from '../../context/ChatSessionProvider';
 
 if (typeof globalThis.ResizeObserver === 'undefined') {
   class ResizeObserverPolyfill {
@@ -57,7 +56,13 @@ export function useOverlayControllerHandlers() {
     http.get(`${API}/sessions/:resourceId/threads/thread-test/messages`, () => HttpResponse.json({ messages: [] })),
     http.get(
       `${API}/sessions/:resourceId/stream`,
-      () => new Response(null, { headers: { 'content-type': 'text/event-stream' } }),
+      () =>
+        new Response(new ReadableStream<Uint8Array>({ start() {}, cancel() {} }), {
+          headers: { 'content-type': 'text/event-stream' },
+        }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/fs/list`, () =>
+      HttpResponse.json({ root: '/tmp', path: '/tmp', parent: null, entries: [] }),
     ),
     http.put(`${API}/sessions/:resourceId/state`, () => HttpResponse.json({})),
   );
@@ -72,9 +77,7 @@ export function OverlayTestProviders({ children }: { children: ReactNode }) {
           element={
             <ActiveProjectProvider>
               <ChatSessionProvider>
-                <OverlaysProvider>
-                  <ChatCommandsProvider>{children}</ChatCommandsProvider>
-                </OverlaysProvider>
+                <OverlaysProvider>{children}</OverlaysProvider>
               </ChatSessionProvider>
             </ActiveProjectProvider>
           }

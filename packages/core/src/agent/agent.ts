@@ -7089,6 +7089,7 @@ export class Agent<
     threadExists,
     structuredOutput = false,
     overrideScorers,
+    onTitleGenerated,
   }: AgentExecuteOnFinishOptions) {
     const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
 
@@ -7193,26 +7194,24 @@ export class Agent<
               titleModel,
               titleInstructions,
               uiMessages,
-            ).then(
-              async title => {
+            )
+              .then(async title => {
                 if (title) {
-                  try {
-                    await memory.createThread({
-                      threadId: thread.id,
-                      resourceId,
-                      memoryConfig,
-                      title,
-                      metadata: thread.metadata,
-                    });
-                  } catch (error) {
-                    this.logger.error('Error persisting generated title:', error);
+                  await memory.createThread({
+                    threadId: thread.id,
+                    resourceId,
+                    memoryConfig,
+                    title,
+                    metadata: thread.metadata,
+                  });
+                  if (typeof onTitleGenerated === 'function') {
+                    await onTitleGenerated(title);
                   }
                 }
-              },
-              error => {
+              })
+              .catch(error => {
                 this.logger.error('Error persisting generated title:', error);
-              },
-            );
+              });
           }
         }
       } catch (e) {

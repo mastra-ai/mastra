@@ -385,6 +385,79 @@ describe('RailwaySandbox', () => {
     });
   });
 
+  describe('clone', () => {
+    it('constructs an unstarted sibling without any I/O', () => {
+      const template = new RailwaySandbox({ token: 'tok', environmentId: 'env-1' });
+
+      const child = template.clone({ id: 'mc-project-1' });
+
+      expect(child).toBeInstanceOf(RailwaySandbox);
+      expect(child).not.toBe(template);
+      expect(child.id).toBe('mc-project-1');
+      expect(child.status).toBe('pending');
+      expect(mockCreate).not.toHaveBeenCalled();
+      expect(mockConnect).not.toHaveBeenCalled();
+    });
+
+    it('does not require the template to be started', () => {
+      const template = new RailwaySandbox({ token: 'tok' });
+      expect(() => template.clone()).not.toThrow();
+    });
+
+    it('inherits credentials and applies env + idle timeout overrides on start', async () => {
+      const template = new RailwaySandbox({
+        token: 'tok',
+        environmentId: 'env-1',
+        idleTimeoutMinutes: 30,
+        networkIsolation: 'PRIVATE',
+      });
+
+      const child = template.clone({
+        env: { GITHUB_TOKEN: 'ghs_abc' },
+        idleTimeoutMinutes: 15,
+      });
+      await child._start();
+
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          token: 'tok',
+          environmentId: 'env-1',
+          idleTimeoutMinutes: 15,
+          networkIsolation: 'PRIVATE',
+          env: { GITHUB_TOKEN: 'ghs_abc' },
+        }),
+      );
+    });
+
+    it('reattaches to a provider sandbox when sandboxId is passed', async () => {
+      const template = new RailwaySandbox({ token: 'tok', environmentId: 'env-1' });
+
+      const child = template.clone({ sandboxId: 'rw-sandbox-123' });
+      await child._start();
+
+      expect(mockConnect).toHaveBeenCalledWith(
+        'rw-sandbox-123',
+        expect.objectContaining({ token: 'tok', environmentId: 'env-1' }),
+      );
+      expect(mockCreate).not.toHaveBeenCalled();
+    });
+
+    it('inherits template defaults when no overrides are passed', async () => {
+      const template = new RailwaySandbox({
+        token: 'tok',
+        idleTimeoutMinutes: 45,
+        env: { BASE: '1' },
+      });
+
+      const child = template.clone();
+      await child._start();
+
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ token: 'tok', idleTimeoutMinutes: 45, env: { BASE: '1' } }),
+      );
+    });
+  });
+
   describe('executeCommand', () => {
     it('runs a command and maps a successful result', async () => {
       const sandbox = new RailwaySandbox({ token: 't' });

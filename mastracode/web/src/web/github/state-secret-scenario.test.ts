@@ -1,4 +1,7 @@
+import { PostgresStore } from '@mastra/pg';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import type { WebAuthAdapter } from '../auth-adapter';
+import { __resetRuntimeConfigForTests, seedRuntimeConfig } from '../runtime-config';
 import {
   __resetStateSecretForTests,
   assertReplicaStableStateSecret,
@@ -23,7 +26,6 @@ const GITHUB_ENV_KEYS = [
   'GITHUB_APP_SLUG',
   'WORKOS_API_KEY',
   'WORKOS_CLIENT_ID',
-  'APP_DATABASE_URL',
   'GITHUB_APP_WEBHOOK_SECRET',
   'WORKOS_COOKIE_PASSWORD',
 ] as const;
@@ -36,14 +38,18 @@ function enableGithubFeature(): void {
   process.env.GITHUB_APP_CLIENT_ID = 'client-id';
   process.env.GITHUB_APP_CLIENT_SECRET = 'client-secret';
   process.env.GITHUB_APP_SLUG = 'slug';
-  process.env.WORKOS_API_KEY = 'workos-key';
-  process.env.WORKOS_CLIENT_ID = 'workos-client';
-  process.env.APP_DATABASE_URL = 'postgres://localhost/app';
+  // The app DB gate checks the seeded storage instance, and seeding the
+  // registry makes it authoritative for auth too — seed both slots.
+  seedRuntimeConfig({
+    storage: new PostgresStore({ id: 'state-secret-test', connectionString: 'postgres://localhost/app' }),
+    authAdapter: { kind: 'workos' } as WebAuthAdapter,
+  });
 }
 
 beforeEach(() => {
   for (const k of GITHUB_ENV_KEYS) saved[k] = process.env[k];
   for (const k of GITHUB_ENV_KEYS) delete process.env[k];
+  __resetRuntimeConfigForTests();
   __resetStateSecretForTests();
 });
 
@@ -52,6 +58,7 @@ afterEach(() => {
     if (saved[k] === undefined) delete process.env[k];
     else process.env[k] = saved[k];
   }
+  __resetRuntimeConfigForTests();
   __resetStateSecretForTests();
 });
 

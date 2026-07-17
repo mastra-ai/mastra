@@ -6,8 +6,8 @@ import type { FormEvent } from 'react';
 import { useSearchParams } from 'react-router';
 
 import { useApiConfig } from '../../../../../shared/api/config';
+import { useWebAuth } from '../../../../../shared/hooks/useWebAuth';
 import { Wordmark } from '../../../ui';
-import { useWebAuth } from '../hooks/useWebAuth';
 import { navigateAfterSignIn, redirectToLogin, signInWithPassword, signUpWithPassword } from '../services/auth';
 
 /**
@@ -133,7 +133,7 @@ export function SignInPage() {
   return (
     <main className="grid h-dvh place-items-center">
       <div className="flex flex-col items-center gap-6">
-        <Wordmark />
+        <Wordmark brand="factory" />
         <Txt as="p" variant="ui-sm" className="text-icon3">
           Sign in to continue
         </Txt>

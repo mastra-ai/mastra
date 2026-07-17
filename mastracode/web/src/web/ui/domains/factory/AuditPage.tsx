@@ -4,9 +4,9 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 
+import { useAuditEvents, useAuditPortalLink } from '../../../../shared/hooks/useAuditEvents';
 import { relativeTime } from '../../../../shared/lib/date';
 import { FactoryPageShell } from './components/FactoryPageShell';
-import { useAuditEvents, useAuditPortalLink } from './hooks/useAuditEvents';
 import type { AuditEvent } from './services/audit';
 
 /** Action-group filters mapped to the concrete v1 action taxonomy. */
@@ -53,7 +53,6 @@ export function AuditPage() {
     <FactoryPageShell
       title="Audit"
       description="Who did what, when — every board change, run start, worktree change, and git action."
-      maxWidthClassName="max-w-5xl"
     >
       {project => <AuditContent githubProjectId={project.githubProjectId} />}
     </FactoryPageShell>
@@ -72,7 +71,7 @@ function AuditContent({ githubProjectId }: { githubProjectId: string }) {
   const events = eventsQuery.data?.pages.flatMap(page => page.events) ?? [];
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pb-6">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <ButtonsGroup spacing="close" role="group" aria-label="Audit filter">
           {ACTION_GROUPS.map(entry => (

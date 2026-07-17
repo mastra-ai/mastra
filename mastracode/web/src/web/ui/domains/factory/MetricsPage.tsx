@@ -5,14 +5,14 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 
+import { useApiConfig } from '../../../../shared/api/config';
+import { useFactoryMetrics } from '../../../../shared/hooks/useFactoryMetrics';
+import { useWorkspaceActivity } from '../../../../shared/hooks/useWorkspaceActivity';
+import { deriveProjectPath, useWorkspacesQuery } from '../../../../shared/hooks/useWorkspaces';
 import { formatDuration, relativeTime } from '../../../../shared/lib/date';
 import { AGENT_CONTROLLER_ID } from '../chat/services/constants';
 import { useActiveProjectContext } from '../workspaces';
-import { useApiConfig } from '../../../../shared/api/config';
-import { deriveProjectPath, useWorkspacesQuery } from '../workspaces/hooks/useWorkspaces';
-import { useWorkspaceActivity } from '../workspaces/hooks/useWorkspaceActivity';
 import { FactoryPageShell } from './components/FactoryPageShell';
-import { useFactoryMetrics } from './hooks/useFactoryMetrics';
 import type { FactoryMetrics } from './services/metrics';
 import { BOARD_STAGES, stageLabel, stageOrder } from './stages';
 
@@ -44,7 +44,6 @@ export function MetricsPage() {
     <FactoryPageShell
       title="Metrics"
       description="Flow health for this project's factory: throughput, where work stalls, and what's aging."
-      maxWidthClassName="max-w-6xl"
     >
       {project => <MetricsContent githubProjectId={project.githubProjectId} />}
     </FactoryPageShell>
@@ -62,7 +61,7 @@ function MetricsContent({ githubProjectId }: { githubProjectId: string }) {
   const metrics = metricsQuery.data;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pb-6">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
       <div className="flex items-center justify-between">
         <ButtonsGroup spacing="close" role="group" aria-label="Metrics window">
           {WINDOW_OPTIONS.map(option => (
