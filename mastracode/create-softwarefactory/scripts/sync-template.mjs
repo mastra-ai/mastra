@@ -61,20 +61,23 @@ if (containsPath(outDir, webRoot) || containsPath(webRoot, outDir) || containsPa
   process.exit(1);
 }
 
-/** Package name -> monorepo directory (mirrors mastracode/web/scripts/monorepo-deps.mjs). */
-const LINKED_PACKAGES = {
-  '@mastra/auth-workos': 'auth/workos',
-  '@mastra/client-js': 'client-sdks/client-js',
-  '@mastra/code-sdk': 'mastracode/sdk',
-  '@mastra/core': 'packages/core',
-  '@mastra/hono': 'server-adapters/hono',
-  '@mastra/libsql': 'stores/libsql',
-  '@mastra/playground-ui': 'packages/playground-ui',
-  '@mastra/railway': 'workspaces/railway',
-  '@mastra/react': 'client-sdks/react',
-  '@mastra/redis-streams': 'pubsub/redis-streams',
-  mastra: 'packages/cli',
-};
+/**
+ * Resolve a `link:` spec from the web manifest to the linked package's
+ * monorepo directory (relative to monorepoRoot). Link paths are relative to
+ * the web project root (e.g. `link:../../stores/pg` -> `stores/pg`).
+ *
+ * Linked packages are discovered from the manifest rather than a hardcoded
+ * list so a new `link:` dep added to mastracode/web can never slip into the
+ * template untransformed (npm cannot install `link:` specs).
+ */
+function linkSpecToRelPath(spec) {
+  const target = path.resolve(webRoot, spec.slice('link:'.length));
+  const rel = path.relative(monorepoRoot, target);
+  if (rel.startsWith('..')) {
+    throw new Error(`sync-template: link spec ${spec} resolves outside the monorepo (${target})`);
+  }
+  return rel;
+}
 
 /** devDependencies that only support the monorepo test suites. */
 const TEST_ONLY_DEV_DEPS = [
@@ -198,9 +201,9 @@ function transformPackageJson() {
   for (const section of ['dependencies', 'devDependencies']) {
     const deps = manifest[section];
     if (!deps) continue;
-    for (const [name, relPath] of Object.entries(LINKED_PACKAGES)) {
-      if (!deps[name]) continue;
-      const version = resolvePinnedVersion(name, relPath);
+    for (const [name, spec] of Object.entries(deps)) {
+      if (!spec.startsWith('link:')) continue;
+      const version = resolvePinnedVersion(name, linkSpecToRelPath(spec));
       // Caret ranges, matching the monorepo's other templates (templates/*):
       // the scaffold floats to compatible releases instead of freezing the
       // exact set that existed at sync time.
@@ -212,6 +215,15 @@ function transformPackageJson() {
 
   for (const dep of TEST_ONLY_DEV_DEPS) {
     delete manifest.devDependencies?.[dep];
+  }
+
+  // npm cannot install monorepo-only protocols; nothing may slip through.
+  for (const section of ['dependencies', 'devDependencies']) {
+    for (const [name, spec] of Object.entries(manifest[section] ?? {})) {
+      if (/^(link:|workspace:|file:|catalog:)/.test(spec)) {
+        throw new Error(`sync-template: unresolved monorepo spec in template: ${name}@${spec}`);
+      }
+    }
   }
 
   // The template installs with `legacy-peer-deps=true` (see writeNpmrc), which
