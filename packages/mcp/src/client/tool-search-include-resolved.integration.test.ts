@@ -298,12 +298,17 @@ describe('ToolSearchProcessor includeResolvedTools - real MCP integration', () =
     });
 
     const toolErrors: unknown[] = [];
+    let searchToolResult: { results?: Array<{ name: string }> } | undefined;
     for await (const chunk of stream.fullStream) {
       if (chunk.type === 'tool-error') {
         toolErrors.push(chunk.payload);
       }
+      if (chunk.type === 'tool-result' && chunk.payload?.toolName === 'search_tools') {
+        searchToolResult = chunk.payload.result as { results?: Array<{ name: string }> };
+      }
     }
 
+    expect(searchToolResult?.results?.map(r => r.name)).toContain(NAMESPACED_TOOL_ID);
     expect(toolErrors).toEqual([]);
     expect(lastMcpToolInput).toEqual({ title: 'Issue from search flow' });
   }, 30000);

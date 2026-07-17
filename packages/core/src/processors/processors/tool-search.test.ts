@@ -1624,6 +1624,29 @@ describe('ToolSearchProcessor', () => {
       expect(next.tools?.mcp_weather_forecast).toBe(mcpTool);
     });
 
+    it('should not let resolved tools from prior requests pollute search results', async () => {
+      const processor = new ToolSearchProcessor({
+        tools: {},
+        includeResolvedTools: true,
+        search: { topK: 5 },
+      });
+
+      const fillerTools: Record<string, ReturnType<typeof createMockTool>> = {};
+      for (let i = 0; i < 20; i++) {
+        fillerTools[`mcp_filler_${i}`] = createMockTool(`mcp_filler_${i}`, `GitHub related filler tool number ${i}`);
+      }
+
+      const argsA = createMockArgs('thread-a', fillerTools);
+      await processor.processInputStep(argsA);
+
+      const targetTool = createMockTool('mcp_target_create_issue', 'Create GitHub issue via MCP');
+      const argsB = createMockArgs('thread-b', { mcp_target_create_issue: targetTool });
+      const resultB = await processor.processInputStep(argsB);
+
+      const searchResult = await resultB.tools?.search_tools!.execute?.({ query: 'github issue' }, undefined);
+      expect(searchResult.results.map(r => r.name)).toContain('mcp_target_create_issue');
+    });
+
     it('should ignore resolved entries without a string id when includeResolvedTools is enabled', async () => {
       const mcpTool = createMockTool('mcp_indexed', 'Indexed MCP tool');
       const clientTool = {

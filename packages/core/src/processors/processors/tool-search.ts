@@ -4,7 +4,7 @@ import type { RequestContext } from '../../request-context';
 import { createTool } from '../../tools';
 import type { Tool } from '../../tools';
 import { BM25Index } from '../../workspace/search/bm25';
-import type { TokenizeOptions } from '../../workspace/search/bm25';
+import type { BM25SearchResult, TokenizeOptions } from '../../workspace/search/bm25';
 import type { ProcessInputStepArgs, Processor } from '../index';
 import type { LoadedToolStore, LoadedToolStoreContext } from './tool-search-stores';
 import { LegacyMapLoadedToolStore, ContextLoadedToolStore } from './tool-search-stores';
@@ -172,9 +172,9 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
   /** Pluggable backend for loaded-tool state. */
   private store: LoadedToolStore;
 
-  /** BM25 index for tool search */
+  /** BM25 index for constructor-time tools only (immutable per processor instance) */
   private bm25Index: BM25Index;
-  /** Map from tool ID to full description (for result formatting) */
+  /** Map from constructor tool ID to full description (for result formatting) */
   private toolDescriptions = new Map<string, string>();
 
   constructor(options: ToolSearchProcessorOptions) {
@@ -332,9 +332,6 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
   }): Promise<Record<string, Tool<any, any>>> {
     const resolvedTools =
       this.includeResolvedTools && args?.stepArgs?.tools ? this.extractResolvedTools(args.stepArgs.tools) : {};
-    if (this.includeResolvedTools && Object.keys(resolvedTools).length > 0) {
-      this.indexResolvedTools(resolvedTools);
-    }
     const searchableTools = this.buildSearchableTools(resolvedTools);
 
     if (args?.stepArgs) {
@@ -415,10 +412,36 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     }
   }
 
-  private indexResolvedTools(resolvedTools: Record<string, Tool<any, any>>): void {
+  private buildResolvedToolIndex(resolvedTools: Record<string, Tool<any, any>>): {
+    index: BM25Index;
+    descriptions: Map<string, string>;
+  } {
+    const index = new BM25Index({}, TOOL_SEARCH_TOKENIZE_OPTIONS);
+    const descriptions = new Map<string, string>();
+
     for (const tool of Object.values(resolvedTools)) {
-      this.indexTool(tool);
+      const name = tool.id;
+      const description = tool.description || '';
+      index.add(name, `${name} ${description}`);
+      descriptions.set(name, description);
     }
+
+    return { index, descriptions };
+  }
+
+  private mergeBm25Results(...resultSets: BM25SearchResult[][]): BM25SearchResult[] {
+    const byId = new Map<string, BM25SearchResult>();
+
+    for (const results of resultSets) {
+      for (const result of results) {
+        const existing = byId.get(result.id);
+        if (!existing || result.score > existing.score) {
+          byId.set(result.id, result);
+        }
+      }
+    }
+
+    return Array.from(byId.values()).sort((a, b) => b.score - a.score);
   }
 
   /**
@@ -432,14 +455,20 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     query: string,
     searchableTools: Record<string, Tool<any, any>>,
     requestContext?: RequestContext,
+    resolvedIndex?: { index: BM25Index; descriptions: Map<string, string> },
   ): Promise<SearchResult[]> {
-    if (this.bm25Index.size === 0) return [];
+    const resolvedSize = resolvedIndex?.index.size ?? 0;
+    const totalSize = this.bm25Index.size + resolvedSize;
+    if (totalSize === 0) return [];
 
     // Get BM25 results (request more than topK to allow for re-ranking after boosting).
     // When filtering is enabled, inspect every BM25 match so denied high-ranking tools
     // do not prevent lower-ranking allowed tools from filling the result set.
-    const searchLimit = this.filter ? this.bm25Index.size : this.searchConfig.topK * 2;
-    const bm25Results = this.bm25Index.search(query, searchLimit, 0);
+    const searchLimit = this.filter ? totalSize : this.searchConfig.topK * 2;
+    const bm25Results = this.mergeBm25Results(
+      this.bm25Index.search(query, searchLimit, 0),
+      resolvedIndex ? resolvedIndex.index.search(query, searchLimit, 0) : [],
+    ).slice(0, searchLimit);
 
     if (bm25Results.length === 0) return [];
 
@@ -480,7 +509,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
 
     // Apply topK and format results.
     return filteredResults.slice(0, this.searchConfig.topK).map(r => {
-      const description = this.toolDescriptions.get(r.id) || '';
+      const description = resolvedIndex?.descriptions.get(r.id) ?? this.toolDescriptions.get(r.id) ?? '';
       return {
         name: r.id,
         description: description.length > 150 ? description.slice(0, 147) + '...' : description,
@@ -493,9 +522,10 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     const { tools, messageList } = args;
     const storeContext = this.makeStoreContext(args);
     const resolvedTools = this.includeResolvedTools ? this.extractResolvedTools(tools) : {};
-    if (this.includeResolvedTools) {
-      this.indexResolvedTools(resolvedTools);
-    }
+    const resolvedIndex =
+      this.includeResolvedTools && Object.keys(resolvedTools).length > 0
+        ? this.buildResolvedToolIndex(resolvedTools)
+        : undefined;
     const searchableTools = this.buildSearchableTools(resolvedTools);
     const passthroughTools = this.includeResolvedTools ? {} : (tools ?? {});
 
@@ -543,7 +573,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
       }),
       execute: async ({ query }) => {
         // Use BM25 search for relevance-ranked results
-        const results = await this.searchTools(query, searchableTools, args.requestContext);
+        const results = await this.searchTools(query, searchableTools, args.requestContext, resolvedIndex);
 
         if (results.length === 0) {
           return {
