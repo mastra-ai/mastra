@@ -1,4 +1,3 @@
-import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import type { ReactNode } from 'react';
 import { createContext, useContext } from 'react';
@@ -108,7 +107,7 @@ export function ChatSessionBoundary({
     <ChatTranscriptProvider
       key={`${resourceId}:${threadId ?? 'draft'}:${messagesQuery.isPending ? 'loading' : 'ready'}`}
       threadId={threadId}
-      initialMessages={messagesQuery.data as unknown as MastraDBMessage[] | undefined}
+      initialMessages={messagesQuery.data}
     >
       <ChatModesProvider>
         <ChatModelsProvider>
