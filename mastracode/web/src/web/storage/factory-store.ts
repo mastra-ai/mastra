@@ -14,6 +14,7 @@ import type { FactoryStorageContext, FactoryStorageDomain } from './domain';
 import type { AuditStorage } from './domains/audit/base';
 import type { ModelCredentialsStorage } from './domains/credentials/base';
 import type { IntakeStorage } from './domains/intake/base';
+import type { QueueHealthStorage } from './domains/queue-health/base';
 import type { WorkItemsStorage } from './domains/work-items/base';
 
 export class FactoryStore {
@@ -66,6 +67,11 @@ export class FactoryStore {
   /** Model provider credentials domain (built-in). Throws when not registered. */
   get credentials(): ModelCredentialsStorage {
     return this.#require('model-credentials') as ModelCredentialsStorage;
+  }
+
+  /** Queue-health threshold config domain (built-in). Throws when not registered. */
+  get queueHealth(): QueueHealthStorage {
+    return this.#require('queue-health') as QueueHealthStorage;
   }
 
   /** Names of all registered domains, in registration order. */

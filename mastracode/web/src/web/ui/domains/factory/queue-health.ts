@@ -1,0 +1,136 @@
+/**
+ * Client-side aggregation for the Factory Overview queue-health chart.
+ *
+ * Pure, DB-free functions over `work_items` rows — mirrors the discipline of
+ * the server-side `computeFactoryMetrics`, but lives in the UI layer because
+ * its `activePaths` input (which worktrees currently have an active agent
+ * session) is only available in the browser via `useWorkspaceActivity`. The
+ * Overview page feeds it the polled activity map; this module takes all inputs
+ * and returns a plain shape, so it is unit-testable without a network or DOM.
+ */
+
+import type { QueueHealthConfig } from '../../../storage/domains/queue-health/base';
+import type { WorkItemRow, WorkItemStageEntry } from '../../../storage/domains/work-items/base';
+import { BOARD_STAGES } from './stages';
+
+/**
+ * Terminal stage — items here are completed, not in the queue. Redefined
+ * locally (the server constant in `factory/metrics.ts`) rather than imported
+ * from the UI `stages.ts`, which is explicitly UI-only.
+ */
+const DONE_STAGE = 'done';
+
+/** Age-bucket keys, in left→right segment order. */
+export const AGE_BUCKETS = ['green', 'amber', 'orange', 'red'] as const;
+export type AgeBucket = (typeof AGE_BUCKETS)[number];
+
+/** One drill-down row: a work item's presence in one stage. */
+export interface QueueHealthEntry {
+  itemId: string;
+  title: string;
+  url: string | null;
+  stage: string;
+  ageSeconds: number;
+  bucket: AgeBucket;
+  active: boolean;
+}
+
+/** One bar in the chart: a non-done stage segmented by age bucket. */
+export interface QueueHealthStage {
+  stage: string;
+  total: number;
+  buckets: Record<AgeBucket, number>;
+  /** Entries in this stage whose item has ≥1 active session. */
+  activeCount: number;
+}
+
+export interface QueueHealth {
+  stages: QueueHealthStage[];
+  /** Flat per-(item, stage) index so the drill-down list needs no second fetch. */
+  entries: QueueHealthEntry[];
+}
+
+function parseTime(iso: string): number {
+  const time = Date.parse(iso);
+  return Number.isNaN(time) ? 0 : time;
+}
+
+/**
+ * Open (no `exitedAt`) history entries for currently-held non-done stages —
+ * one per held stage. Replicated from `factory/metrics.ts:openEntries` (that
+ * helper is module-private and `metrics.ts` stays untouched per the plan).
+ */
+function openEntries(item: WorkItemRow): WorkItemStageEntry[] {
+  return item.stageHistory.filter(
+    entry => entry.exitedAt === undefined && entry.stage !== DONE_STAGE && item.stages.includes(entry.stage),
+  );
+}
+
+/** The bucket an age falls into: `ageSeconds >= boundary` moves to the higher bucket. */
+function bucketFor(ageSeconds: number, thresholdsSeconds: number[]): AgeBucket {
+  let index = 0;
+  for (const boundary of thresholdsSeconds) {
+    if (ageSeconds >= boundary) index += 1;
+  }
+  return AGE_BUCKETS[Math.min(index, AGE_BUCKETS.length - 1)]!;
+}
+
+/** Board stage ids in column order, minus the terminal `done` stage. */
+function chartStages(): string[] {
+  return BOARD_STAGES.map(s => s.id).filter(id => id !== DONE_STAGE);
+}
+
+/**
+ * Aggregate work items into per-stage age buckets plus an active-work count.
+ *
+ * Aging is per-(item, stage): an item holding N open stages contributes one
+ * entry to each, aged from that stage's own `enteredAt` — so a stage's bar
+ * reflects the age of work *currently in that stage* (totals across bars may
+ * exceed the unique-item count). A held stage with no open history entry
+ * falls back to the item's `createdAt`.
+ */
+export function computeQueueHealth(
+  items: WorkItemRow[],
+  activePaths: ReadonlySet<string>,
+  config: QueueHealthConfig,
+  now: Date = new Date(),
+): QueueHealth {
+  const nowMs = now.getTime();
+  const thresholds = config.thresholdsSeconds;
+
+  const byStage = new Map<string, QueueHealthStage>();
+  for (const stage of chartStages()) {
+    byStage.set(stage, { stage, total: 0, buckets: { green: 0, amber: 0, orange: 0, red: 0 }, activeCount: 0 });
+  }
+
+  const entries: QueueHealthEntry[] = [];
+
+  for (const item of items) {
+    const inFlightStages = item.stages.filter(stage => stage !== DONE_STAGE);
+    if (inFlightStages.length === 0) continue;
+
+    const open = openEntries(item);
+    const active = Object.values(item.sessions).some(ref => activePaths.has(ref.projectPath));
+
+    for (const stage of inFlightStages) {
+      const stageAgg = byStage.get(stage);
+      if (!stageAgg) continue; // stage not on the board — not charted
+
+      const entry = open.find(e => e.stage === stage);
+      // Fall back to creation time when history has no open entry for the
+      // held stage (mirrors metrics.ts aging fallback; shouldn't happen since
+      // history is server-appended).
+      const enteredAt = entry?.enteredAt ?? item.createdAt.toISOString();
+      const ageSeconds = Math.max(0, Math.round((nowMs - parseTime(enteredAt)) / 1000));
+      const bucket = bucketFor(ageSeconds, thresholds);
+
+      stageAgg.total += 1;
+      stageAgg.buckets[bucket] += 1;
+      if (active) stageAgg.activeCount += 1;
+
+      entries.push({ itemId: item.id, title: item.title, url: item.url, stage, ageSeconds, bucket, active });
+    }
+  }
+
+  return { stages: [...byStage.values()], entries };
+}

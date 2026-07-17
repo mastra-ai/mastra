@@ -15,6 +15,7 @@ import { emitAudit } from '../audit/audit';
 import { ensureWebAuthUser, webAuthTenant } from '../auth';
 import type { GithubStorage } from '../github/storage/base';
 import { clampMetricsWindow, computeFactoryMetrics } from './metrics';
+import { getFactoryStore } from '../runtime-config';
 import type { WorkItemRow } from '../storage/domains/work-items/base';
 import type { WorkItemPriorState } from './store';
 import {
@@ -162,6 +163,20 @@ export function buildFactoryRoutes(storage?: GithubStorage): ApiRoute[] {
         const days = clampMetricsWindow(loose(c).req.query('days'));
         const items = await listWorkItems(resolved.orgId, resolved.projectId);
         return c.json({ metrics: computeFactoryMetrics(items, { days, now: new Date() }) });
+      },
+    }),
+
+    // ── Per-project queue-health age-threshold config (seconds) ─────────────
+    registerApiRoute('/web/factory/projects/:id/health/thresholds', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveProject(loose(c), storage);
+        if ('response' in resolved) return resolved.response;
+        const store = getFactoryStore();
+        await store.ensureReady('queue-health');
+        const config = await store.queueHealth.getConfig(resolved.orgId, resolved.projectId);
+        return c.json({ thresholds: config.thresholdsSeconds });
       },
     }),
 
