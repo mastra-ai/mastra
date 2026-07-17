@@ -175,11 +175,11 @@ export function WorkspaceFileBrowser({
   onFileSelect,
   onRefresh,
 }: WorkspaceFileBrowserProps) {
-  const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({ [selectedPath.root]: true });
+  const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
   const nodes = buildTree(listing?.entries ?? []);
 
   useEffect(() => {
-    setOpenFolders(previous => ({ ...previous, [selectedPath.root]: previous[selectedPath.root] ?? true }));
+    setOpenFolders(previous => ({ ...previous, [selectedPath.root]: previous[selectedPath.root] ?? false }));
   }, [selectedPath.root]);
 
   const setFolderOpen = (path: string, open: boolean) => {

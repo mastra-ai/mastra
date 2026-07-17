@@ -80,6 +80,7 @@ describe('WorkspaceViewerPanel', () => {
     renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} renderedPaths={renderedPaths} />);
 
     expect(await screen.findByText('Files')).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('button', { name: 'Artifacts' }));
     expect(await screen.findByText('No artifacts yet. Session files created will appear here.')).toBeInTheDocument();
   });
 
@@ -89,6 +90,8 @@ describe('WorkspaceViewerPanel', () => {
     renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} renderedPaths={renderedPaths} />);
 
     const root = await screen.findByRole('button', { name: 'Artifacts' });
+    expect(root).toHaveAttribute('aria-expanded', 'false');
+    await user.click(root);
     expect(root).toHaveAttribute('aria-expanded', 'true');
 
     const folder = await screen.findByRole('button', { name: 'understand-pr' });
@@ -141,6 +144,7 @@ describe('WorkspaceViewerPanel', () => {
     const user = userEvent.setup();
     renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} renderedPaths={renderedPaths} />);
 
+    await user.click(await screen.findByRole('button', { name: 'Artifacts' }));
     await screen.findByText('No artifacts yet. Session files created will appear here.');
     await user.click(screen.getByRole('button', { name: 'Refresh workspace files' }));
 
