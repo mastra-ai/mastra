@@ -103,43 +103,58 @@ describe('softwarefactory template', () => {
       all: true,
     });
 
+    let devExited = false;
+    void dev.then(() => {
+      devExited = true;
+    });
+
+    const killDev = () => {
+      if (!dev.pid) return;
+      try {
+        process.kill(-dev.pid, 'SIGTERM');
+      } catch {
+        dev.kill('SIGTERM');
+      }
+    };
+
     try {
+      // The dev servers bind `localhost`, which lands on ::1 or 127.0.0.1
+      // depending on the OS/Node resolver — accept whichever loopback answers.
+      const probe = async (port: number, path: string) => {
+        for (const host of ['localhost', '127.0.0.1', '[::1]']) {
+          try {
+            const res = await fetch(`http://${host}:${port}${path}`);
+            if (res.ok) return res;
+          } catch {
+            // Try the next loopback address.
+          }
+        }
+        return null;
+      };
+
       const deadline = Date.now() + 5 * 60 * 1000;
       let ready = false;
-      while (Date.now() < deadline) {
-        try {
-          const [ui, api] = await Promise.all([
-            fetch(`http://localhost:${uiPort}/`),
-            fetch(`http://localhost:${apiPort}/api`),
-          ]);
-          if (ui.ok && api.ok) {
-            ready = true;
-            break;
-          }
-        } catch {
-          // Not up yet.
+      while (Date.now() < deadline && !devExited) {
+        const [ui, api] = await Promise.all([probe(uiPort, '/'), probe(apiPort, '/api')]);
+        if (ui && api) {
+          ready = true;
+          break;
         }
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
 
       if (!ready) {
-        const result = await Promise.race([dev, Promise.resolve(null)]);
-        throw new Error(
-          `Dev server did not become ready on ui:${uiPort} api:${apiPort}.\n${result?.all ?? '(still running, no output captured)'}`,
-        );
+        // Kill first so awaiting the (reject: false) result yields output.
+        killDev();
+        const result = await dev;
+        throw new Error(`Dev server did not become ready on ui:${uiPort} api:${apiPort}.\n${result.all ?? ''}`);
       }
 
       // Web-surface route proxied through the Vite dev server.
-      const providers = await fetch(`http://localhost:${uiPort}/web/config/providers`);
-      expect(providers.status).toBe(200);
+      const providers = await probe(uiPort, '/web/config/providers');
+      expect(providers?.status).toBe(200);
     } finally {
-      if (dev.pid) {
-        try {
-          process.kill(-dev.pid, 'SIGTERM');
-        } catch {
-          dev.kill('SIGTERM');
-        }
-      }
+      killDev();
       await dev.catch(() => {});
     }
   });
