@@ -160,15 +160,19 @@ export async function preflightBuildOutput(
      */
     managedEnvVarNames?: string[] | null;
     /**
-     * Slug of the environment being deployed to. Threaded into remediation
-     * text so `mastra env db create <slug> --kind ...` is copy-pasteable in
-     * non-interactive shells (CI), where the plain form errors when multiple
-     * environments exist. Omit for lint / studio contexts.
+     * User-facing name of the environment being deployed to (`production`,
+     * `staging`, etc.) — threaded into remediation text so the printed
+     * `mastra env db create <env> --kind ...` reads like a command a human
+     * would type. NOT the slug: on some platforms the production env's slug
+     * is derived from the project name (e.g. `my-app-xyz-1234`), which the
+     * platform's env-resolver accepts but is jarring to see printed back.
+     * The env-resolver accepts id, name, or slug, so name is safe.
+     * Omit for lint / studio contexts.
      */
-    environmentSlug?: string;
+    environmentName?: string;
   } = {},
 ): Promise<PreflightIssue[]> {
-  const { hasEnvFile = true, managedEnvVarNames, environmentSlug } = options;
+  const { hasEnvFile = true, managedEnvVarNames, environmentName } = options;
   const outputDir = join(targetDir, '.mastra', 'output');
   const entryPath = join(outputDir, 'index.mjs');
 
@@ -201,7 +205,7 @@ export async function preflightBuildOutput(
   // reports paths from user modules (not node_modules) that survived
   // tree-shaking, so library examples are structurally excluded.
   issues.push(
-    ...(await checkLocalStoragePaths(outputDir, metadata, envVars, hasEnvFile, managedEnvVarNames, environmentSlug)),
+    ...(await checkLocalStoragePaths(outputDir, metadata, envVars, hasEnvFile, managedEnvVarNames, environmentName)),
   );
 
   return issues;
@@ -409,13 +413,20 @@ async function readPreflightMetadata(outputDir: string): Promise<PreflightMetada
  * when the guarded var maps to a known provider (issue 35-B: the remediation
  * previously said "attach a managed database" without ever naming the command).
  */
-export function dbCreateCommandFor(envVarName: string, environmentSlug?: string): string {
-  // env slug goes BEFORE flags because it's a positional argument on
+export function dbCreateCommandFor(envVarName: string, environmentName?: string): string {
+  // env name goes BEFORE flags because it's a positional argument on
   // `mastra env db create`, not a flag. Scoping to the target environment
   // matters after 8816f47: `mastra env db create` with no arg errors in
   // non-interactive shells when multiple environments exist, which is
   // exactly where preflight failures land (CI).
-  const envArg = environmentSlug ? ` ${environmentSlug}` : '';
+  //
+  // We use the environment NAME (`production`, `staging`), not the platform
+  // slug. On some platforms the production env's slug is derived from the
+  // project name (e.g. `my-app-xyz-1234`) — technically accepted by the
+  // env-resolver (which matches id | name | slug), but jarring to see
+  // printed back and awkward to type. The name is what the user thinks of
+  // as the environment identifier, so that's what we print.
+  const envArg = environmentName ? ` ${environmentName}` : '';
   for (const [kind, names] of Object.entries(DB_ENV_VAR_NAMES)) {
     if (names.includes(envVarName)) return `mastra env db create${envArg} --kind ${kind}`;
   }
@@ -443,7 +454,7 @@ async function checkLocalStoragePaths(
   envVars: Record<string, string>,
   hasEnvFile: boolean,
   managedEnvVarNames?: string[] | null,
-  environmentSlug?: string,
+  environmentName?: string,
 ): Promise<PreflightIssue[]> {
   let detections: LocalStorageDetection[];
   if (metadata) {
@@ -517,7 +528,7 @@ async function checkLocalStoragePaths(
           message: `${truncate(d.value, 80)} will be used at runtime because ${d.guardedBy} is not set (${d.hint})`,
           fix: autofix
             ? [
-                `Run \`${dbCreateCommandFor(d.guardedBy, environmentSlug)}\` to attach a managed database`,
+                `Run \`${dbCreateCommandFor(d.guardedBy, environmentName)}\` to attach a managed database`,
                 `Or ${envVarFix.charAt(0).toLowerCase()}${envVarFix.slice(1)}`,
               ]
             : envVarFix,
@@ -534,7 +545,7 @@ async function checkLocalStoragePaths(
         message: `${truncate(d.value, 80)} will be used at runtime because ${d.guardedBy} is not set (${d.hint})`,
         fix: autofix
           ? [
-              `Run \`${dbCreateCommandFor(d.guardedBy, environmentSlug)}\` to attach a managed database`,
+              `Run \`${dbCreateCommandFor(d.guardedBy, environmentName)}\` to attach a managed database`,
               `Or ${envVarFix.charAt(0).toLowerCase()}${envVarFix.slice(1)}`,
               platformFix,
             ]

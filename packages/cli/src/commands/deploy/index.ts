@@ -812,7 +812,12 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
       // time; the platform exposes their names on the environment. Absent
       // field = older platform = incomplete env picture (soften to warnings).
       managedEnvVarNames: environment.managedEnvVarNames ?? null,
-      environmentSlug: environment.slug,
+      // Use the environment NAME (e.g. `production`, `staging`), not the
+      // slug: some platforms derive the production env's slug from the
+      // project name (`my-app-xyz-1234`), which the env-resolver accepts
+      // but is jarring in a printed remediation command. The name is what
+      // the user actually types.
+      environmentName: environment.name,
     });
 
     // If preflight flagged a blocking issue that a managed database would

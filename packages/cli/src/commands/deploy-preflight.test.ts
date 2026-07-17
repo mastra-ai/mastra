@@ -374,14 +374,14 @@ describe('preflightBuildOutput', () => {
       expect(fixText(issue?.fix)).toContain('Set MY_CUSTOM_DB_URL');
     });
 
-    it('scopes the db create command to the target environment when a slug is provided', async () => {
+    it('scopes the db create command to the target environment when a name is provided', async () => {
       writeBundle(`export {};`);
       writeMetadata({ localPaths: [guardedDetection] });
 
       const issues = await preflightBuildOutput(
         tmpDir,
         {},
-        { hasEnvFile: false, managedEnvVarNames: [], environmentSlug: 'production' },
+        { hasEnvFile: false, managedEnvVarNames: [], environmentName: 'production' },
       );
       const issue = issues.find(i => i.code === 'LOCAL_STORAGE_PATH');
       // Positional arg BEFORE the flag — `mastra env db create` accepts the
@@ -393,9 +393,9 @@ describe('preflightBuildOutput', () => {
       writeBundle(`export {};`);
       writeMetadata({ localPaths: [{ ...guardedDetection, guardedBy: 'MY_CUSTOM_DB_URL' }] });
 
-      // Even with an env slug in hand, we don't invent a `mastra env db create
+      // Even with an env name in hand, we don't invent a `mastra env db create
       // staging` remediation for a variable no known provider injects.
-      const issues = await preflightBuildOutput(tmpDir, {}, { hasEnvFile: true, environmentSlug: 'staging' });
+      const issues = await preflightBuildOutput(tmpDir, {}, { hasEnvFile: true, environmentName: 'staging' });
       const issue = issues.find(i => i.code === 'LOCAL_STORAGE_PATH');
       expect(fixText(issue?.fix)).not.toContain('mastra env db create');
     });
