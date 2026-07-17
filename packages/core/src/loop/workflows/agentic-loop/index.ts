@@ -5,13 +5,14 @@ import { InternalSpans } from '../../../observability';
 import { safeEnqueue } from '../../../stream/base';
 import type { ChunkType } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
-import { createWorkflow as createDirectWorkflow, createEventedWorkflow } from '../../../workflows/create';
+import { createWorkflow } from '../../../workflows/create';
 import type { OutputWriter } from '../../../workflows/types';
 import type { RunScopeContext } from '../../run-scope-access';
 import { readScoped, writeScoped } from '../../run-scope-access';
 import { DELEGATION_BAILED_KEY, DRAIN_PENDING_SIGNALS_KEY, RESOURCE_ID_KEY, THREAD_ID_KEY } from '../../run-scope-keys';
 import type { LoopRun } from '../../types';
 import { createAgenticExecutionWorkflow } from '../agentic-execution';
+import { pruneAgentLoopSnapshot } from '../prune-snapshot';
 import { llmIterationOutputSchema } from '../schema';
 import type { LLMIterationData } from '../schema';
 
@@ -58,8 +59,6 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
     ...rest,
   });
 
-  const createWorkflow = process.env.MASTRA_EVENTED_EXECUTION === 'true' ? createEventedWorkflow : createDirectWorkflow;
-
   return createWorkflow({
     id: 'agentic-loop',
     inputSchema: llmIterationOutputSchema,
@@ -81,6 +80,10 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
           params.workflowStatus === 'suspended'
         );
       },
+      // Agent-loop snapshots are pure resume artifacts — strip everything a
+      // resume never reads (stale suspend payloads, duplicated message
+      // arrays, AI SDK step history) before persisting.
+      pruneSnapshot: pruneAgentLoopSnapshot,
       validateInputs: false,
     },
   })
@@ -184,11 +187,10 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
             name: tc.toolName || tc.name || '',
             args: (tc.args || {}) as Record<string, unknown>,
           })),
-          toolResults: (typedInputData.output.toolResults || []).map((tr: any) => ({
-            id: tr.toolCallId || tr.id || '',
-            name: tr.toolName || tr.name || '',
-            result: tr.result,
-            error: tr.error,
+          toolResults: toolResultParts.map(tr => ({
+            id: tr.toolCallId,
+            name: tr.toolName,
+            result: unwrapToolResultOutput(tr.output),
           })),
           isFinal,
           finishReason: typedInputData.stepResult?.reason || 'unknown',
@@ -290,4 +292,26 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
       return typedInputData.stepResult?.isContinued ?? false;
     })
     .commit();
+}
+
+function unwrapToolResultOutput(output: unknown): unknown {
+  if (!output || typeof output !== 'object' || Array.isArray(output)) {
+    return output;
+  }
+
+  const record = output as Record<string, unknown>;
+  if (!('value' in record)) {
+    return output;
+  }
+
+  switch (record.type) {
+    case 'text':
+    case 'json':
+    case 'error-text':
+    case 'error-json':
+    case 'content':
+      return record.value;
+    default:
+      return output;
+  }
 }

@@ -236,6 +236,20 @@ export class LibSQLDB extends MastraBase {
     return this.executeWriteOperationWithRetry(() => this.doInsert(args), `insert into table ${args.tableName}`);
   }
 
+  /** Inserts a record without replacing an existing primary key. */
+  public insertOnly(args: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
+    return this.executeWriteOperationWithRetry(async () => {
+      const filteredRecord = await this.filterRecordToKnownColumns(args.tableName, args.record);
+      if (Object.keys(filteredRecord).length === 0) return;
+      const statement = prepareStatement({ tableName: args.tableName, record: filteredRecord });
+      if (!statement.sql.startsWith('INSERT OR REPLACE')) {
+        throw new Error(`Unexpected insert statement generated for table ${args.tableName}`);
+      }
+      statement.sql = statement.sql.replace('INSERT OR REPLACE', 'INSERT');
+      await withClientWriteLock(this.client, () => this.client.execute(statement));
+    }, `insert into table ${args.tableName}`);
+  }
+
   /**
    * Internal update implementation without retry logic.
    */

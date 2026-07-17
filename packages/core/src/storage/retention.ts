@@ -73,6 +73,14 @@ export interface PruneOptions {
    * stops cleanly, returning partial results with `done: false`.
    */
   signal?: AbortSignal;
+
+  /**
+   * Replace the store's configured retention policies for this call only —
+   * e.g. to skip a domain (keep chat history) or prune more aggressively than
+   * the standing config without reconstructing the store. Consumed at the
+   * composite level; ignored by individual domains.
+   */
+  retention?: RetentionConfig;
 }
 
 /**

@@ -18,13 +18,13 @@ export function ProcessStepListItem({ stepId, step, isActive, position }: Proces
 
   return (
     <div
-      className={cn('grid gap-6 grid-cols-[1fr_auto] py-3 px-4 rounded-lg', transitions.all, {
+      className={cn('grid grid-cols-[1fr_auto] gap-6 rounded-lg px-4 py-3', transitions.all, {
         'border border-dashed border-neutral2 bg-surface3': isActive,
       })}
     >
       <div className="grid grid-cols-[auto_1fr] gap-2">
         <span
-          className={cn('text-ui-md min-w-6 flex justify-end', transitions.colors, {
+          className={cn('flex min-w-6 justify-end text-ui-md', transitions.colors, {
             'text-neutral5': isActive || step.status === 'success',
             'text-neutral3': !isActive && step.status !== 'success',
           })}
@@ -40,22 +40,18 @@ export function ProcessStepListItem({ stepId, step, isActive, position }: Proces
           >
             {formatStepTitle(stepId)}
           </h4>
-          {step.description && <p className="text-ui-md text-neutral2 -mt-0.5">{step.description}</p>}
+          {step.description && <p className="-mt-0.5 text-ui-md text-neutral2">{step.description}</p>}
         </div>
       </div>
       <div
-        className={cn(
-          'w-[1.75rem] h-[1.75rem] rounded-full flex items-center justify-center self-center',
-          transitions.all,
-          {
-            'border border-neutral2 border-dashed': step.status === 'pending',
-            '[&>svg]:text-white [&>svg]:w-4 [&>svg]:h-4': step.status !== 'running',
-            'w-[1.75rem] h-[1.75rem]': step.status === 'running',
-            'bg-accent1Dark shadow-glow-accent1': step.status === 'success',
-            'bg-accent2Dark shadow-glow-accent2': step.status === 'failed',
-            'scale-110': step.status === 'success' || step.status === 'failed',
-          },
-        )}
+        className={cn('flex size-[1.75rem] items-center justify-center self-center rounded-full', transitions.all, {
+          'border border-neutral2 border-dashed': step.status === 'pending',
+          '[&>svg]:text-white [&>svg]:w-4 [&>svg]:h-4': step.status !== 'running',
+          'w-[1.75rem] h-[1.75rem]': step.status === 'running',
+          'bg-accent1Dark shadow-glow-accent1': step.status === 'success',
+          'bg-accent2Dark shadow-glow-accent2': step.status === 'failed',
+          'scale-110': step.status === 'success' || step.status === 'failed',
+        })}
       >
         {getStatusIcon(step.status)}
       </div>

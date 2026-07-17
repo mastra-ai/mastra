@@ -16,6 +16,7 @@ import { getStepResult } from '../step';
 import type {
   DefaultEngineType,
   ExecutionContext,
+  ForeachOptions,
   OutputWriter,
   RestartExecutionParams,
   SerializedStepFlowEntry,
@@ -26,7 +27,12 @@ import type {
   StepSuspended,
   TimeTravelExecutionParams,
 } from '../types';
-import { createDeprecationProxy, runCountDeprecationMessage, getResumeLabelsByStepId } from '../utils';
+import {
+  createDeprecationProxy,
+  runCountDeprecationMessage,
+  getResumeLabelsByStepId,
+  resolveForeachConcurrency,
+} from '../utils';
 
 export interface ExecuteParallelParams extends ObservabilityContext {
   workflowId: string;
@@ -831,9 +837,7 @@ export interface ExecuteForeachParams extends ObservabilityContext {
   entry: {
     type: 'foreach';
     step: Step;
-    opts: {
-      concurrency: number;
-    };
+    opts: ForeachOptions;
   };
   prevStep: StepFlowEntry;
   prevOutput: any;
@@ -888,7 +892,10 @@ export async function executeForeach(
 
   const { step, opts } = entry;
   const results: any[] = [];
-  const concurrency = opts.concurrency;
+  const concurrency = resolveForeachConcurrency(opts, {
+    inputData: prevOutput,
+    getInitData: () => stepResults?.input,
+  });
   const startTime = resume?.steps[0] === step.id ? undefined : Date.now();
   const resumeTime = resume?.steps[0] === step.id ? Date.now() : undefined;
 

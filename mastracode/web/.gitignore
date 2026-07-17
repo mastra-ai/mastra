@@ -1,0 +1,3 @@
+# Vite SPA build output — copied into .mastra/output/ by `mastra build`
+# because it lives under the Mastra entry's public/ dir.
+src/mastra/public/ui/

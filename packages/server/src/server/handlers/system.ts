@@ -164,6 +164,15 @@ export const GET_SYSTEM_PACKAGES_ROUTE = createRoute({
       const storageType = storage?.name;
       const observabilityStorage = storage?.stores?.observability;
       const observabilityStorageType = observabilityStorage?.constructor.name;
+      const observabilityStorageFeatures = observabilityStorage?.getFeatures?.();
+      const observabilityStorageCapabilities = observabilityStorageFeatures?.some(
+        feature => feature === 'metrics' || feature === 'logs',
+      )
+        ? {
+            metrics: observabilityStorageFeatures.includes('metrics'),
+            logs: observabilityStorageFeatures.includes('logs'),
+          }
+        : undefined;
       const observabilityRuntimeStrategy = observabilityStorage?.runtimeTracingStrategy;
       const observabilityEnabled = !!mastra.observability.getDefaultInstance();
 
@@ -180,6 +189,7 @@ export const GET_SYSTEM_PACKAGES_ROUTE = createRoute({
         observabilityEnabled,
         storageType,
         observabilityStorageType,
+        ...(observabilityStorageCapabilities ? { observabilityStorageCapabilities } : {}),
         observabilityRuntimeStrategy,
       };
     } catch (error) {

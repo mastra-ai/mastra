@@ -71,7 +71,7 @@ const externalMcpClient = new MCPClient({
 });
 import { lessComplexWorkflow, myWorkflow } from './workflows';
 import { refundWorkflow } from './workflows/refund-workflow';
-import { heartbeatWorkflow, multiCadenceWorkflow } from './workflows/scheduled';
+import { tickWorkflow, multiCadenceWorkflow } from './workflows/scheduled';
 import {
   chefModelV2Agent,
   networkAgent,
@@ -79,14 +79,17 @@ import {
   agentWithBranchingModeration,
   agentWithSequentialModeration,
   supervisorAgent,
+  durableSupervisorAgent,
   subscriptionOrchestratorAgent,
   cryptoResearchAgent,
+  durableCryptoResearchAgent,
 } from './agents/model-v2-agent';
 import { myWorkflowX, nestedWorkflow, findUserWorkflow } from './workflows/other';
 import { moderationProcessor } from './agents/model-v2-agent';
 import {
   moderatedAssistantAgent,
   agentWithProcessorWorkflow,
+  durableAgentWithProcessorWorkflow,
   contentModerationWorkflow,
   simpleAssistantAgent,
   agentWithBranchingWorkflow,
@@ -142,14 +145,17 @@ export const mastra = new Mastra({
     networkAgent,
     moderatedAssistantAgent,
     agentWithProcessorWorkflow,
+    durableAgentWithProcessorWorkflow,
     simpleAssistantAgent,
     agentWithBranchingWorkflow,
     agentWithAdvancedModeration,
     agentWithBranchingModeration,
     agentWithSequentialModeration,
     supervisorAgent,
+    durableSupervisorAgent,
     subscriptionOrchestratorAgent,
     cryptoResearchAgent,
+    durableCryptoResearchAgent,
     slackDemoAgent,
     codeModeAgent,
     clinicDirectAgent,
@@ -179,7 +185,7 @@ export const mastra = new Mastra({
     contentModerationWorkflow,
     advancedModerationWorkflow,
     findUserWorkflow,
-    heartbeatWorkflow,
+    tickWorkflow,
     multiCadenceWorkflow,
     refundWorkflow,
   },

@@ -181,6 +181,11 @@ export function mockAgentMethods(agent: Agent) {
   // Mock resumeStream method - returns object with fullStream property
   vi.spyOn(agent, 'resumeStream').mockResolvedValue({ fullStream: createMockStream() } as any);
 
+  // Mock durable-only recover method — attach directly since it doesn't exist
+  // on the base Agent class (only on DurableAgent). The RECOVER_ROUTE handler
+  // duck-types on typeof agent.recover === 'function'.
+  (agent as any).recover = vi.fn().mockResolvedValue({ fullStream: createMockStream() });
+
   // Mock legacy generate - returns GenerateTextResult (JSON object, not stream)
   vi.spyOn(agent, 'generateLegacy').mockResolvedValue({
     text: 'test response',
@@ -798,8 +803,8 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
         updatedAt: now,
       });
       await schedules.createSchedule({
-        id: 'hb_test-heartbeat',
-        target: { type: 'heartbeat', agentId: 'test-agent', prompt: 'ping' },
+        id: 'agent_test-agent-schedule',
+        target: { type: 'agent', agentId: 'test-agent', prompt: 'ping' },
         cron: '* * * * *',
         status: 'active',
         nextFireAt: now + 60_000,

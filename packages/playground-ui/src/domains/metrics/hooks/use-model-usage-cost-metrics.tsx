@@ -40,6 +40,8 @@ export function useModelUsageCostMetrics() {
         ),
       );
 
+      if (!inputRes || !outputRes || !cacheReadRes || !cacheWriteRes) return [];
+
       type ModelEntry = {
         input: number;
         output: number;

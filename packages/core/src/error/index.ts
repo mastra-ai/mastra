@@ -3,6 +3,7 @@ export {
   ErrorDomain,
   MastraBaseError,
   MastraError,
+  MastraNonRetryableError,
   getErrorFromUnknown,
   safeParseErrorObject,
 } from '@internal/core/error';

@@ -1,5 +1,65 @@
 # @mastra/convex
 
+## 1.4.0-alpha.0
+
+### Minor Changes
+
+- Added Observational Memory support to the Convex storage adapter. Agents using `ConvexStore` can now enable `observationalMemory` in `@mastra/memory`, including async observation buffering and reflections. ([#19474](https://github.com/mastra-ai/mastra/pull/19474))
+
+  To enable it, add the new `mastraObservationalMemoryTable` to your Convex schema and redeploy:
+
+  ```ts title="convex/schema.ts"
+  import { defineSchema } from 'convex/server';
+  import {
+    mastraThreadsTable,
+    mastraMessagesTable,
+    mastraResourcesTable,
+    mastraObservationalMemoryTable,
+    // ...other Mastra tables
+  } from '@mastra/convex/schema';
+
+  export default defineSchema({
+    mastra_threads: mastraThreadsTable,
+    mastra_messages: mastraMessagesTable,
+    mastra_resources: mastraResourcesTable,
+    mastra_observational_memory: mastraObservationalMemoryTable,
+    // ...other Mastra tables
+  });
+  ```
+
+  Then run `npx convex deploy` (or `npx convex dev`) so the new table and storage operations are live. All observational memory writes run inside the deployed Convex storage mutation, so buffered-observation swaps and reflection generations are atomic.
+
+### Patch Changes
+
+- Improved type safety of the Convex storage layer. Table names accepted by the internal ConvexDB are now a closed union (core storage tables plus the observational memory table) instead of any string, so table-name typos are caught at compile time instead of silently routing records to the mastra_documents fallback table. The internal observational memory operations no longer take a table-name argument. ([#19485](https://github.com/mastra-ai/mastra/pull/19485))
+
+- Removed the Convex adapters' only Node builtin dependency. ConvexStore, the vector adapters, and the storage domains now use the Web Crypto API (crypto.randomUUID) instead of importing node:crypto, so @mastra/convex itself no longer requires the Node.js runtime ("use node") to bundle inside a Convex project. ([#19498](https://github.com/mastra-ai/mastra/pull/19498))
+
+- Updated dependencies [[`8a0d145`](https://github.com/mastra-ai/mastra/commit/8a0d145aadbdf7278665aceaaec364b35dd9bd94), [`bd2f1d2`](https://github.com/mastra-ai/mastra/commit/bd2f1d274d05e60e2366f005ea0d94d5cea0d5ff), [`21a0eb8`](https://github.com/mastra-ai/mastra/commit/21a0eb86746ba0b703acea360d4f84c6a5a493f2), [`de86fd7`](https://github.com/mastra-ai/mastra/commit/de86fd7119f0438381d1a642e3d258143c0b9c29), [`2745031`](https://github.com/mastra-ai/mastra/commit/2745031d1d4a4978f037092da371428c32e2842a), [`db650ce`](https://github.com/mastra-ai/mastra/commit/db650ce490348914e85b93651d83acdf8f2a4c31), [`6354eeb`](https://github.com/mastra-ai/mastra/commit/6354eeb32efa9f5f68f51dda394e90e2ee76f1fb)]:
+  - @mastra/core@1.51.1-alpha.0
+
+## 1.3.2
+
+### Patch Changes
+
+- Update `@mastra/core` peer dependency for the unified schedules API ([#18874](https://github.com/mastra-ai/mastra/pull/18874))
+
+- Schedule rows persisted with the legacy `target.type: 'heartbeat'` are now normalized to `target.type: 'agent'` when read, so existing agent schedules keep firing after the heartbeats-to-schedules rename in `@mastra/core`. ([#18874](https://github.com/mastra-ai/mastra/pull/18874))
+
+- Updated dependencies [[`b291760`](https://github.com/mastra-ai/mastra/commit/b291760df9d6c7e4fc72606c8f0a4af2cf6e946c), [`3ffb8b7`](https://github.com/mastra-ai/mastra/commit/3ffb8b720e90f5e6977129ec1f6707d43c2bebe0), [`6ef59fe`](https://github.com/mastra-ai/mastra/commit/6ef59fef1da52ed8da5fbb2a892c71cf4fb6c739), [`4039488`](https://github.com/mastra-ai/mastra/commit/403948898af7293198d9e8b3e7fb47f623c78b94), [`29b7ea6`](https://github.com/mastra-ai/mastra/commit/29b7ea64e72b5523d5bdcbd34ee03d2b854d54e1), [`b2c9d70`](https://github.com/mastra-ai/mastra/commit/b2c9d70757207fb01a9069549e69b6f0d73a6636), [`a51c63d`](https://github.com/mastra-ai/mastra/commit/a51c63d8ee639e4daeba2a0be093efa6a1b5e52f), [`252f63d`](https://github.com/mastra-ai/mastra/commit/252f63d8fec723955adb2202be2f01a75ad0e69c), [`5ea76a7`](https://github.com/mastra-ai/mastra/commit/5ea76a723d966c72da9aa3ab30ae20276e049765), [`6445560`](https://github.com/mastra-ai/mastra/commit/6445560327045d20b239585fc63fed72e9ce36ec), [`e2b9f33`](https://github.com/mastra-ai/mastra/commit/e2b9f33456fd638eca555f9466c6519d8d049666), [`10959d5`](https://github.com/mastra-ai/mastra/commit/10959d509d824f682d40ff96e05ee044aec3b0e5), [`c547a77`](https://github.com/mastra-ai/mastra/commit/c547a7729bdf64dfc2df29c965046c0712a18f10), [`a0085fa`](https://github.com/mastra-ai/mastra/commit/a0085fa0934e52c37c8c8b3d75a6bb5cd199af36), [`a2ba369`](https://github.com/mastra-ai/mastra/commit/a2ba369e796dfab610f41c6875965b488272fa55), [`ffc3c17`](https://github.com/mastra-ai/mastra/commit/ffc3c17274ea17c11aa6f73d3140649cd7fc8abc), [`81542c1`](https://github.com/mastra-ai/mastra/commit/81542c1835c35bc32f2ce4fa9136ee11993cd299), [`3908e53`](https://github.com/mastra-ai/mastra/commit/3908e53ce04bbea04f5e0c097d7aa298c35fabee), [`cb24ce7`](https://github.com/mastra-ai/mastra/commit/cb24ce76bd16ca88eb6a963f6277f8780e703029), [`02705fd`](https://github.com/mastra-ai/mastra/commit/02705fd2f5a9062210d64ea061adeeb10dc9452e), [`ae51e81`](https://github.com/mastra-ai/mastra/commit/ae51e818825582d42500338dfc1929a082eff0ba), [`6f304ef`](https://github.com/mastra-ai/mastra/commit/6f304ef319e99725e884bdb8d3193c001b6e5964), [`5f9858f`](https://github.com/mastra-ai/mastra/commit/5f9858f791f1137ca7d52d23559fb4568f7a9026)]:
+  - @mastra/core@1.50.0
+
+## 1.3.2-alpha.0
+
+### Patch Changes
+
+- Update `@mastra/core` peer dependency for the unified schedules API ([#18874](https://github.com/mastra-ai/mastra/pull/18874))
+
+- Schedule rows persisted with the legacy `target.type: 'heartbeat'` are now normalized to `target.type: 'agent'` when read, so existing agent schedules keep firing after the heartbeats-to-schedules rename in `@mastra/core`. ([#18874](https://github.com/mastra-ai/mastra/pull/18874))
+
+- Updated dependencies [[`b291760`](https://github.com/mastra-ai/mastra/commit/b291760df9d6c7e4fc72606c8f0a4af2cf6e946c), [`29b7ea6`](https://github.com/mastra-ai/mastra/commit/29b7ea64e72b5523d5bdcbd34ee03d2b854d54e1), [`10959d5`](https://github.com/mastra-ai/mastra/commit/10959d509d824f682d40ff96e05ee044aec3b0e5), [`ffc3c17`](https://github.com/mastra-ai/mastra/commit/ffc3c17274ea17c11aa6f73d3140649cd7fc8abc), [`3908e53`](https://github.com/mastra-ai/mastra/commit/3908e53ce04bbea04f5e0c097d7aa298c35fabee)]:
+  - @mastra/core@1.50.0-alpha.3
+
 ## 1.3.1
 
 ### Patch Changes

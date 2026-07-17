@@ -1,17 +1,17 @@
-import type { HeartbeatIfActive, HeartbeatIfIdle } from '../../../agent/heartbeat/types';
 import type { AgentSignalAttributes, AgentSignalType } from '../../../agent/signals';
+import type { ScheduleIfActive, ScheduleIfIdle } from '../../../schedules/types';
 import { StorageDomain } from '../base';
 
 /**
  * Discriminated union describing what a schedule fires.
  *
  * `workflow` targets publish a `workflow.start` event on the `workflows`
- * pubsub topic and are processed by the orchestration worker. `heartbeat`
- * targets publish a `heartbeat.fire` event on the `heartbeats` pubsub
- * topic and are processed by the {@link HeartbeatWorker}, which runs the
- * referenced agent directly (no workflow indirection).
+ * pubsub topic and are processed by the orchestration worker. `agent`
+ * targets publish an `agent-schedule.fire` event on the `agent-schedules`
+ * pubsub topic and are processed by the {@link AgentScheduleWorker}, which
+ * runs the referenced agent directly (no workflow indirection).
  */
-export type ScheduleTarget = WorkflowScheduleTarget | HeartbeatScheduleTarget;
+export type ScheduleTarget = WorkflowScheduleTarget | AgentScheduleTarget;
 
 export type WorkflowScheduleTarget = {
   type: 'workflow';
@@ -21,56 +21,71 @@ export type WorkflowScheduleTarget = {
   requestContext?: Record<string, unknown>;
 };
 
-// Heartbeat semantic types are owned by `agent/heartbeat/types.ts` (the
-// feature module) and re-exported here so callers describing schedule rows can
-// reach them through the storage barrel.
-export type { HeartbeatIfActive, HeartbeatIfIdle } from '../../../agent/heartbeat/types';
+// Agent-schedule semantic types are owned by the schedules feature module
+// and re-exported here so callers describing schedule rows can reach them
+// through the storage barrel.
+export type { ScheduleIfActive, ScheduleIfIdle } from '../../../schedules/types';
 
 /**
- * Schedule target that fires an agent run on a cron. The heartbeat
+ * Schedule target that fires an agent run on a cron. The agent-schedule
  * worker reads these fields and runs the referenced agent directly —
  * either via `sendSignal` (when `threadId` is set) or `agent.generate`
  * (threadless). The agent's `runId` is recorded on the trigger row for
  * UI linkability into chat / observability traces.
  */
-export type HeartbeatScheduleTarget = {
-  type: 'heartbeat';
+export type AgentScheduleTarget = {
+  type: 'agent';
   agentId: string;
   prompt: string;
   /**
-   * Free-form label for distinguishing multiple heartbeats on the same
+   * Free-form label for distinguishing multiple schedules on the same
    * agent/thread (e.g. `'morning-checkin'`). Optional; filterable via
-   * `mastra.heartbeats.list({ name })`.
+   * `mastra.schedules.list({ name })`.
    */
   name?: string;
-  /** Threaded heartbeats send a signal into this thread. */
+  /** Threaded agent schedules send a signal into this thread. */
   threadId?: string;
   /** Required when `threadId` is set. */
   resourceId?: string;
-  /** Signal type used by threaded heartbeats. Defaults to `'notification'`. */
+  /** Signal type used by threaded agent schedules. Defaults to `'notification'`. */
   signalType?: AgentSignalType;
-  /** XML tag the signal renders as. Defaults to `'heartbeat'`. */
+  /** XML tag the signal renders as. Defaults to `'schedule'`. */
   tagName?: string;
   /** Signal attributes rendered onto the XML tag. */
   attributes?: AgentSignalAttributes;
-  /** Provider options merged into the heartbeat signal payload on every fire. JSON-safe. */
+  /** Provider options merged into the schedule signal payload on every fire. JSON-safe. */
   providerOptions?: Record<string, unknown>;
   /** Options applied when the target thread is actively streaming. Threaded only. */
-  ifActive?: HeartbeatIfActive;
+  ifActive?: ScheduleIfActive;
   /** Options applied when the target thread is idle (incl. serializable streamOptions). Threaded only. */
-  ifIdle?: HeartbeatIfIdle;
+  ifIdle?: ScheduleIfIdle;
   /** Arbitrary metadata stored alongside the schedule row. */
   metadata?: Record<string, unknown>;
   requestContext?: Record<string, unknown>;
 };
+
+/**
+ * Read-shim for schedule rows persisted before the heartbeat → schedules
+ * rename: maps a legacy `target.type: 'heartbeat'` discriminator to the
+ * current `'agent'` value. Every {@link SchedulesStorage} implementation
+ * MUST run row targets through this at deserialization time so legacy rows
+ * keep dispatching. Never used on the write path — new rows always persist
+ * `'agent'`.
+ */
+export function normalizeScheduleTarget(target: ScheduleTarget): ScheduleTarget {
+  if ((target as { type: string }).type === 'heartbeat') {
+    return { ...target, type: 'agent' } as AgentScheduleTarget;
+  }
+  return target;
+}
 
 /** Lifecycle status of a schedule row. */
 export type ScheduleStatus = 'active' | 'paused';
 
 /**
  * Polymorphic owner of a schedule. Workflow schedules created via
- * `createWorkflow({ schedule })` leave both fields null. Heartbeat
- * schedules created via `mastra.heartbeats.create(...)` set
+ * `createWorkflow({ schedule })` leave both fields null. Agent
+ * schedules created via `mastra.schedules.create(...)` set
  * `ownerType: 'agent'` and `ownerId` to the agent id. Future schedule
  * types (tenant-owned, workflow-owned, etc.) can use the same shape
  * without a migration.
@@ -96,7 +111,7 @@ export type Schedule = {
   createdAt: number;
   updatedAt: number;
   metadata?: Record<string, unknown>;
-  /** Optional owner classification (e.g. 'agent' for heartbeats). */
+  /** Optional owner classification (e.g. 'agent' for agent schedules). */
   ownerType?: ScheduleOwnerType;
   /** Optional owner identifier paired with `ownerType`. */
   ownerId?: string;
@@ -105,17 +120,17 @@ export type Schedule = {
 /**
  * Outcome of an individual schedule trigger attempt.
  *
- * Shared across all schedule target types (workflows, heartbeats, …).
+ * Shared across all schedule target types (workflows, agents, …).
  *
  * Workflow outcomes:
  * - `published`  — workflow run was successfully dispatched to the workflow
  *                  engine. Write-once at dispatch time; the trigger row is
  *                  not updated when the run later completes.
- * - `failed`     — dispatch threw (workflow or heartbeat).
+ * - `failed`     — dispatch threw (workflow or agent schedule).
  *
- * Heartbeat outcomes (terminal — written after the run/signal resolves):
- * - `succeeded`  — the heartbeat agent run finished without error.
- * - `delivered`  — the heartbeat signal joined an active run on the target
+ * Agent-schedule outcomes (terminal — written after the run/signal resolves):
+ * - `succeeded`  — the scheduled agent run finished without error.
+ * - `delivered`  — the schedule signal joined an active run on the target
  *                  thread instead of starting a new one (`ifActive: 'deliver'`).
  * - `persisted`  — the signal was saved to memory without triggering a run
  *                  (`ifActive: 'persist'` or `ifIdle: 'persist'`).
@@ -165,8 +180,8 @@ export type ScheduleTrigger = {
    * Identifier of the downstream run produced by this fire.
    *
    * For workflow targets this is the workflow run id (`sched_<scheduleId>_<ts>`).
-   * For heartbeat targets this is the agent run id recorded by the
-   * {@link HeartbeatWorker} after the agent run starts. May be null for
+   * For agent targets this is the agent run id recorded by the
+   * {@link AgentScheduleWorker} after the agent run starts. May be null for
    * drain rows or fires that failed before producing a run id.
    */
   runId: string | null;

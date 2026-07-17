@@ -1,0 +1,151 @@
+{
+  "name": "mastracode",
+  "version": "0.31.1-alpha.4",
+  "description": "",
+  "type": "module",
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "mastracode/tui"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "mastracode": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./tui": {
+      "import": {
+        "types": "./dist/tui/index.d.ts",
+        "default": "./dist/tui.js"
+      },
+      "require": {
+        "types": "./dist/tui/index.d.ts",
+        "default": "./dist/tui.cjs"
+      }
+    },
+    "./acp": {
+      "import": {
+        "types": "./dist/acp.d.ts",
+        "default": "./dist/acp.js"
+      },
+      "require": {
+        "types": "./dist/acp.d.ts",
+        "default": "./dist/acp.cjs"
+      }
+    },
+    "./headless": {
+      "import": {
+        "types": "./dist/headless.d.ts",
+        "default": "./dist/headless.js"
+      },
+      "require": {
+        "types": "./dist/headless.d.ts",
+        "default": "./dist/headless.cjs"
+      }
+    },
+    "./plugin": {
+      "import": {
+        "types": "./dist/plugin.d.ts",
+        "default": "./dist/plugin.js"
+      },
+      "require": {
+        "types": "./dist/plugin.d.ts",
+        "default": "./dist/plugin.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "cli": "tsx src/main.ts",
+    "check": "tsc --noEmit",
+    "build:lib": "tsup --silent --config tsup.config.ts",
+    "prepack": "tsx ../../scripts/generate-package-docs.ts",
+    "render-smoke:install": "node scripts/install-render-smoke-settings.mjs",
+    "render-smoke:server": "node scripts/render-smoke-server.mjs",
+    "render-smoke:uninstall": "node scripts/uninstall-render-smoke-settings.mjs",
+    "test": "vitest",
+    "lint": "eslint .",
+    "e2e:list": "tsx e2e-list.ts",
+    "e2e:smoke": "vitest run --config e2e/vitest.shards.config.ts",
+    "e2e:test": "MC_E2E_VITEST_SCENARIOS=all vitest run --config e2e/vitest.shards.config.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@agentclientprotocol/sdk": "^0.21.0",
+    "@ai-sdk/amazon-bedrock": "^3.0.105",
+    "@ai-sdk/anthropic": "^3.0.96",
+    "@ai-sdk/openai": "^3.0.84",
+    "@ai-sdk/openai-compatible": "^2.0.59",
+    "@ast-grep/napi": "^0.42.0",
+    "@aws-sdk/credential-providers": "^3.864.0",
+    "@earendil-works/pi-tui": "0.80.6",
+    "@mastra/agent-browser": "workspace:*",
+    "@mastra/code-sdk": "workspace:^",
+    "@mastra/core": "workspace:*",
+    "@mastra/duckdb": "workspace:*",
+    "@mastra/fastembed": "workspace:*",
+    "@mastra/github-signals": "workspace:*",
+    "@mastra/libsql": "workspace:*",
+    "@mastra/mcp": "workspace:*",
+    "@mastra/memory": "workspace:*",
+    "@mastra/observability": "workspace:*",
+    "@mastra/pg": "workspace:*",
+    "@mastra/schema-compat": "workspace:*",
+    "@mastra/stagehand": "workspace:*",
+    "@mastra/tavily": "workspace:*",
+    "@mastra/voice-deepgram": "workspace:*",
+    "@mastra/voice-openai": "workspace:*",
+    "ai": "^6.0.225",
+    "chalk": "^5.5.0",
+    "cli-highlight": "^2.1.11",
+    "execa": "^9.6.1",
+    "fastest-levenshtein": "^1.0.16",
+    "jsonriver": "^1.1.1",
+    "posthog-node": "^5.37.0",
+    "strip-ansi": "^7.2.0",
+    "tokenx": "^1.3.0",
+    "vscode-jsonrpc": "^8.2.1",
+    "vscode-languageserver-protocol": "^3.17.5",
+    "yaml": "^2.7.1",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@copilotkit/aimock": "^1.29.0",
+    "@internal/lint": "workspace:*",
+    "@internal/types-builder": "workspace:*",
+    "@types/node": "22.20.1",
+    "@vitest/coverage-v8": "catalog:",
+    "@vitest/ui": "catalog:",
+    "@xterm/headless": "6.0.0",
+    "eslint": "^10.4.1",
+    "tsup": "^8.5.1",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "typescript-eslint": "^8.57.0",
+    "vitest": "catalog:"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  }
+}

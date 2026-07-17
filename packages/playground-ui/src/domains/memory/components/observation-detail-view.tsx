@@ -111,8 +111,11 @@ function parseItem(line: string): ParsedItem | null {
     let time: string | null = null;
     const timeMatch = rest.match(/^\((\d{1,2}:\d{2})\)/);
     if (timeMatch) {
-      time = timeMatch[1];
-      rest = rest.slice(timeMatch[0].length).trimStart();
+      const [matchedText, matchedTime] = timeMatch;
+      if (matchedText !== undefined && matchedTime !== undefined) {
+        time = matchedTime;
+        rest = rest.slice(matchedText.length).trimStart();
+      }
     }
     if (rest) {
       return { text: rest, time, priority, children: [] };
@@ -166,7 +169,7 @@ function parseObservations(raw: string): ParsedSection[] {
       current = { title: 'Recent', relativeTime: null, items: [] };
       sections.push(current);
     }
-    const indent = line.match(/^(\s*)/)?.[1].length ?? 0;
+    const indent = line.match(/^(\s*)/)?.[1]?.length ?? 0;
     const isNested = indent >= 2 && (trimmed.startsWith('* ->') || trimmed.startsWith('->') || trimmed.startsWith('-'));
     const item = parseItem(line);
     if (!item) continue;
@@ -194,7 +197,7 @@ function ObservationItems({ items, nested = false }: { items: ParsedItem[]; nest
                 )}
               </div>
               <div className={cn('min-w-0 flex-1 rounded-md border px-3 py-2', styles.card)}>
-                <p className={cn('whitespace-pre-wrap break-words text-sm leading-6', styles.text)}>{item.text}</p>
+                <p className={cn('text-sm leading-6 break-words whitespace-pre-wrap', styles.text)}>{item.text}</p>
                 {item.children.length > 0 && (
                   <div className="mt-3">
                     <ObservationItems items={item.children} nested />
@@ -212,7 +215,7 @@ function ObservationItems({ items, nested = false }: { items: ParsedItem[]; nest
 function ObservationContent({ observations }: { observations: string }) {
   const sections = useMemo(() => parseObservations(observations), [observations]);
   if (sections.length === 0) {
-    return <p className="italic text-xs text-icon3">Initialized</p>;
+    return <p className="text-icon3 text-xs italic">Initialized</p>;
   }
   return (
     <div className="space-y-5">
@@ -221,7 +224,7 @@ function ObservationContent({ observations }: { observations: string }) {
           <div className="flex items-baseline justify-between gap-3 border-b border-border1 pb-2">
             <div className="min-w-0">
               <h3 className="text-xs font-medium text-neutral6">{section.title}</h3>
-              {section.relativeTime && <p className="text-ui-xs text-icon3">{section.relativeTime}</p>}
+              {section.relativeTime && <p className="text-icon3 text-ui-xs">{section.relativeTime}</p>}
             </div>
           </div>
           <ObservationItems items={section.items} />
@@ -243,7 +246,7 @@ function ObservationHistoryPanel({
   if (records.length <= 1) return null;
 
   return (
-    <div className="border-l border-border1 min-w-[180px] w-[200px] flex flex-col overflow-hidden">
+    <div className="w-50 min-w-45 flex flex-col overflow-hidden border-l border-border1">
       <div className="border-b border-border1 px-4 py-2">
         <p className="text-sm font-normal text-neutral6">History</p>
       </div>
@@ -255,13 +258,13 @@ function ObservationHistoryPanel({
               key={record.id}
               type="button"
               className={cn(
-                'w-full cursor-pointer border-l-2 border-l-transparent px-3 py-2 text-left truncate text-xs text-icon3 transition-all hover:bg-surface3/50',
-                isSelected && 'bg-surface3/50 border-l-accent1',
+                'text-icon3 w-full cursor-pointer truncate border-l-2 border-l-transparent px-3 py-2 text-left text-xs transition-all hover:bg-surface3/50',
+                isSelected && 'border-l-accent1 bg-surface3/50',
               )}
               onClick={() => onSelectRecord(record.id)}
             >
               {record.activeObservations || (
-                <span className="italic text-icon3">
+                <span className="text-icon3 italic">
                   {record.isObserving || record.isReflecting ? 'Processing\u2026' : 'Initialized'}
                 </span>
               )}
@@ -298,14 +301,15 @@ export function ObservationDetailView({
   const previousRecord = selectedIndex > 0 ? sorted[selectedIndex - 1] : null;
 
   useEffect(() => {
-    if (!selectedRecordId && sorted.length > 0) {
-      onSelectRecord(sorted[sorted.length - 1].id);
+    const last = sorted.at(-1);
+    if (!selectedRecordId && last) {
+      onSelectRecord(last.id);
     }
   }, [selectedRecordId, sorted, onSelectRecord]);
 
   if (isLoading) {
     return (
-      <div className="p-4 space-y-4">
+      <div className="space-y-4 p-4">
         <Skeleton className="h-6 w-40" />
         <Skeleton className="h-32 w-full" />
         <Skeleton className="h-32 w-full" />
@@ -328,7 +332,7 @@ export function ObservationDetailView({
   const activeObservations = typeof selected.activeObservations === 'string' ? selected.activeObservations : '';
 
   return (
-    <div className="flex h-full w-full overflow-hidden">
+    <div className="flex size-full overflow-hidden">
       {/* Main observation content */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {previousRecord && (
@@ -336,7 +340,7 @@ export function ObservationDetailView({
             <div className="flex items-start justify-end gap-3">
               <label className="flex cursor-pointer items-center gap-1.5">
                 <Checkbox checked={showDiff} onCheckedChange={v => setShowDiff(v === true)} />
-                <span className="text-xs text-icon3">Show diff</span>
+                <span className="text-icon3 text-xs">Show diff</span>
               </label>
             </div>
           </div>
@@ -351,7 +355,7 @@ export function ObservationDetailView({
           ) : activeObservations ? (
             <ObservationContent observations={activeObservations} />
           ) : (
-            <p className="italic text-xs text-icon3">
+            <p className="text-icon3 text-xs italic">
               {selected.isObserving || selected.isReflecting ? 'Processing…' : 'Initialized'}
             </p>
           )}
