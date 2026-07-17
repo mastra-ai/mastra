@@ -135,7 +135,7 @@ describe('KnowledgeInspector', () => {
     expect(connected).toMatchObject({
       sort: 'connected',
       coverage: 'recent-window',
-      items: [{ name: 'Hub', sampledRelationshipDegree: 2 }],
+      items: [{ name: 'Hub', relationshipCounts: { facts: 1, outgoing: 2, incoming: 0, sampled: false } }],
     });
     expect(connected.nextCursor).toBeDefined();
     const next = await harness.inspector.listEntities({
@@ -149,7 +149,19 @@ describe('KnowledgeInspector', () => {
     const recent = await harness.inspector.listEntities({ level: 'resource', sort: 'recent', limit: 3 });
     expect(recent.coverage).toBe('exact');
     expect(recent.items).toHaveLength(3);
-    expect(recent.items.every(item => item.sampledRelationshipDegree === undefined)).toBe(true);
+    expect(recent.items.every(item => item.relationshipCounts !== undefined)).toBe(true);
+    expect(recent.items.find(item => item.name === 'Hub')?.relationshipCounts).toEqual({
+      facts: 1,
+      outgoing: 2,
+      incoming: 0,
+      sampled: false,
+    });
+    expect(recent.items.find(item => item.name === 'Leaf A')?.relationshipCounts).toEqual({
+      facts: 1,
+      outgoing: 0,
+      incoming: 1,
+      sampled: false,
+    });
   });
 
   it('marks bounded outgoing and incoming relationship previews as partial', async () => {
@@ -197,6 +209,10 @@ describe('KnowledgeInspector', () => {
     const targetDetail = await harness.inspector.getEntity({ handle: targetList.items[0]!.handle });
     expect(sourceDetail.outgoingTargets).toMatchObject({ items: { length: 25 }, partial: true });
     expect(targetDetail.incomingParents).toMatchObject({ items: { length: 25 }, partial: true });
+    expect(sourceList.items[0]?.relationshipCounts).toEqual({ facts: 1, outgoing: 25, incoming: 0, sampled: true });
+    expect(targetList.items[0]?.relationshipCounts).toEqual({ facts: 26, outgoing: 0, incoming: 25, sampled: true });
+    expect(sourceDetail.relationshipCounts).toEqual({ facts: 1, outgoing: 25, incoming: 0, sampled: true });
+    expect(targetDetail.relationshipCounts).toEqual({ facts: 26, outgoing: 0, incoming: 25, sampled: true });
   });
 
   it('returns entity and page details through opaque handles with bounded relations and content', async () => {
@@ -242,6 +258,8 @@ describe('KnowledgeInspector', () => {
       items: [expect.objectContaining({ name: 'Portfolio' })],
       partial: false,
     });
+    expect(detail.relationshipCounts).toEqual({ facts: 2, outgoing: 1, incoming: 1, sampled: false });
+    expect(detail.entity.relationshipCounts).toEqual({ facts: 2, outgoing: 1, incoming: 1, sampled: false });
     expect(JSON.stringify(detail)).not.toContain(entity.id);
     expect(JSON.stringify(detail)).not.toContain(related.id);
     expect(JSON.stringify(detail)).not.toContain(parent.id);

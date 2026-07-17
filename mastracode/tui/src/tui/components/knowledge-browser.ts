@@ -49,6 +49,50 @@ function scopeLabel(record: KnowledgeInspectorRecordSummary, level: KnowledgeIns
   return `[${relation}:${record.scope.level}]`;
 }
 
+type KnowledgeGraphRole = 'bridge' | 'source' | 'referenced' | 'isolated';
+
+const ROLE_GROUPS: { role: KnowledgeGraphRole; label: string }[] = [
+  { role: 'bridge', label: 'Bridges' },
+  { role: 'source', label: 'Sources' },
+  { role: 'referenced', label: 'Referenced only' },
+  { role: 'isolated', label: 'Isolated' },
+];
+
+function graphRole(record: KnowledgeInspectorRecordSummary): KnowledgeGraphRole | undefined {
+  const counts = record.relationshipCounts;
+  if (!counts) return undefined;
+  if (counts.outgoing > 0 && counts.incoming > 0) return 'bridge';
+  if (counts.outgoing > 0) return 'source';
+  if (counts.incoming > 0) return 'referenced';
+  return 'isolated';
+}
+
+function roleLabel(role: KnowledgeGraphRole): string {
+  switch (role) {
+    case 'bridge':
+      return 'Bridge';
+    case 'source':
+      return 'Source';
+    case 'referenced':
+      return 'Referenced only';
+    case 'isolated':
+      return 'Isolated';
+  }
+}
+
+function countsBadge(record: KnowledgeInspectorRecordSummary): string {
+  const counts = record.relationshipCounts;
+  if (!counts) return '';
+  return ` · →${counts.outgoing} ←${counts.incoming}${counts.sampled ? '+' : ''}`;
+}
+
+function groupEntityRecords(records: KnowledgeInspectorRecordSummary[]): KnowledgeInspectorRecordSummary[] {
+  const grouped: KnowledgeInspectorRecordSummary[] = [];
+  for (const group of ROLE_GROUPS) grouped.push(...records.filter(record => graphRole(record) === group.role));
+  grouped.push(...records.filter(record => graphRole(record) === undefined));
+  return grouped;
+}
+
 function formatError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -184,7 +228,8 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
         this.activity = append ? [...this.activity, ...items] : items;
       } else {
         const recordResult = result as KnowledgeInspectorRecordList;
-        this.records = append ? [...this.records, ...recordResult.items] : recordResult.items;
+        const merged = append ? [...this.records, ...recordResult.items] : recordResult.items;
+        this.records = this.section === 'entities' ? groupEntityRecords(merged) : merged;
         if (this.section === 'entities') this.entityCoverage = recordResult.coverage;
       }
       this.nextCursor = result.nextCursor;
@@ -434,13 +479,24 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
   }
 
   private renderRecordList(width: number): string[] {
-    const lines = this.records.map((record, index) => {
+    const lines: string[] = [];
+    let lastRole: KnowledgeGraphRole | undefined | null = null;
+    this.records.forEach((record, index) => {
+      if (this.section === 'entities') {
+        const role = graphRole(record);
+        if (role !== lastRole) {
+          lastRole = role;
+          const group = ROLE_GROUPS.find(entry => entry.role === role);
+          if (lines.length > 0) lines.push('');
+          lines.push(theme.fg('muted', group ? group.label : 'Other'));
+        }
+      }
       const marker = index === this.selectedIndex ? '→' : ' ';
       const kind = record.kind ? ` (${record.kind})` : '';
-      const degree =
-        record.sampledRelationshipDegree === undefined ? '' : ` · ${record.sampledRelationshipDegree} links`;
       const badge = scopeLabel(record, this.level);
-      return truncateAnsi(`${marker} ${record.name}${kind}${degree} ${theme.fg('muted', badge)}`, width);
+      lines.push(
+        truncateAnsi(`${marker} ${record.name}${kind}${countsBadge(record)} ${theme.fg('muted', badge)}`, width),
+      );
     });
     if (this.nextCursor) lines.push(`${this.selectedIndex === this.records.length ? '→' : ' '} Load more…`);
     if (!this.loading && lines.length === 0) lines.push(theme.fg('muted', `No ${this.section} found.`));
@@ -466,8 +522,14 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
 
   private renderEntityDetail(detail: KnowledgeInspectorEntityDetail, width: number): string[] {
     this.detailTargets = [];
+    const counts = detail.relationshipCounts;
+    const role = graphRole(detail.entity);
+    const roleSummary = counts
+      ? `${role ? `${roleLabel(role)} · ` : ''}${counts.facts} facts · ${counts.outgoing} outgoing · ${counts.incoming} incoming${counts.sampled ? ' (sampled)' : ''}`
+      : undefined;
     const lines = [
       `${theme.bold(detail.entity.name)}  ${detail.entity.kind ?? 'entity'}  ${scopeLabel(detail.entity, this.level)}  v${detail.entity.version}`,
+      ...(roleSummary ? [theme.fg('muted', roleSummary)] : []),
       '',
       theme.bold(`Facts (${detail.facts.length})`),
       ...detail.facts.slice(0, 8).map(fact => truncateAnsi(`  • ${fact.text} [${fact.scope.level}]`, width)),

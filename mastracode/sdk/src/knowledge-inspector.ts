@@ -37,6 +37,13 @@ export interface KnowledgeInspectorScopeBadge {
   id: string;
 }
 
+export interface KnowledgeInspectorRelationshipCounts {
+  facts: number;
+  outgoing: number;
+  incoming: number;
+  sampled: boolean;
+}
+
 export interface KnowledgeInspectorRecordSummary {
   handle: string;
   type: KnowledgeInspectorRecordType;
@@ -45,7 +52,7 @@ export interface KnowledgeInspectorRecordSummary {
   scope: KnowledgeInspectorScopeBadge;
   version: number;
   updatedAt: string;
-  sampledRelationshipDegree?: number;
+  relationshipCounts?: KnowledgeInspectorRelationshipCounts;
 }
 
 export interface KnowledgeInspectorFactSummary {
@@ -80,6 +87,7 @@ export interface KnowledgeInspectorEntityDetail {
   incomingFactsNextCursor?: string;
   outgoingTargets: KnowledgeInspectorRelationshipPreview;
   incomingParents: KnowledgeInspectorRelationshipPreview;
+  relationshipCounts: KnowledgeInspectorRelationshipCounts;
 }
 
 export interface KnowledgeInspectorPageLink {
@@ -179,7 +187,7 @@ interface CursorEntry {
 
 interface RankedEntitySnapshot {
   offset: number;
-  entries: { id: string; degree: number }[];
+  entries: { id: string; degree: number; counts: KnowledgeInspectorRelationshipCounts }[];
 }
 
 interface RelationshipRecords {
@@ -300,11 +308,17 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
         cursor,
         limit,
       });
+      const items: KnowledgeInspectorRecordSummary[] = await Promise.all(
+        records.map(async record => ({
+          ...this.#recordSummary(record, binding, input.level),
+          relationshipCounts: (await this.#sampledRelationshipCounts(record, scope)).counts,
+        })),
+      );
       await this.#assertStable(binding);
       return {
         identityKey: binding.identityKey,
         scopeLevel: input.level,
-        items: records.map(record => this.#recordSummary(record, binding, input.level)),
+        items,
         nextCursor:
           records.length === limit
             ? this.#mintCursor(binding, input.level, 'entity', createKnowledgeRecordCursor(records.at(-1)!, input), {
@@ -328,7 +342,7 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
     for (const entry of page) {
       const entity = await this.#knowledge.getEntity(entry.id);
       if (!entity || !isKnowledgeScopeVisible(entity.scope, scope)) continue;
-      items.push({ ...this.#recordSummary(entity, binding, input.level), sampledRelationshipDegree: entry.degree });
+      items.push({ ...this.#recordSummary(entity, binding, input.level), relationshipCounts: entry.counts });
     }
     const nextOffset = snapshot.offset + limit;
     await this.#assertStable(binding);
@@ -397,15 +411,16 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
       this.#knowledge.factsTouching({ entityId: entity.id, scope, after: incomingAfter, limit }),
     ]);
     const incomingFacts = incomingResult.facts.filter(fact => fact.parentEntityId !== entity.id);
-    const [outgoingTargets, incomingParents] = await Promise.all([
+    const [outgoingTargets, incomingParents, relationship] = await Promise.all([
       this.#outgoingTargets(entity, factsResult.facts, scope, binding, handle.level),
       this.#incomingParents(entity, incomingFacts, scope, binding, handle.level),
+      this.#sampledRelationshipCounts(entity, scope),
     ]);
     await this.#assertStable(binding);
     return {
       identityKey: binding.identityKey,
       scopeLevel: handle.level,
-      entity: this.#recordSummary(entity, binding, handle.level),
+      entity: { ...this.#recordSummary(entity, binding, handle.level), relationshipCounts: relationship.counts },
       facts: factsResult.facts.map(factSummary),
       factsNextCursor: factsResult.nextCursor
         ? this.#mintCursor(binding, handle.level, 'facts', factsResult.nextCursor)
@@ -422,6 +437,7 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
         items: incomingParents.items,
         partial: incomingParents.partial || Boolean(incomingResult.nextCursor),
       },
+      relationshipCounts: relationship.counts,
     };
   }
 
@@ -552,7 +568,7 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
       records.map(async (entity, recencyRank) => ({
         entity,
         recencyRank,
-        degree: await this.#sampledRelationshipDegree(entity, scope),
+        ...(await this.#sampledRelationshipCounts(entity, scope)),
       })),
     );
     const connected = [...ranked].sort(
@@ -567,10 +583,16 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
             const bScore = 1 / (RRF_K + b.recencyRank + 1) + 1 / (RRF_K + connectedRank.get(b.entity.id)! + 1);
             return bScore - aScore || a.recencyRank - b.recencyRank || a.entity.id.localeCompare(b.entity.id);
           });
-    return { offset: 0, entries: ordered.map(entry => ({ id: entry.entity.id, degree: entry.degree })) };
+    return {
+      offset: 0,
+      entries: ordered.map(entry => ({ id: entry.entity.id, degree: entry.degree, counts: entry.counts })),
+    };
   }
 
-  async #sampledRelationshipDegree(entity: KnowledgeEntity, scope: KnowledgeScope): Promise<number> {
+  async #sampledRelationshipCounts(
+    entity: KnowledgeEntity,
+    scope: KnowledgeScope,
+  ): Promise<{ degree: number; counts: KnowledgeInspectorRelationshipCounts }> {
     const [factsResult, touchingResult] = await Promise.all([
       this.#knowledge.factsAbout({ entityId: entity.id, scope, limit: MAX_RANK_FACTS }),
       this.#knowledge.factsTouching({ entityId: entity.id, scope, limit: MAX_RANK_FACTS }),
@@ -579,7 +601,19 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
       this.#outgoingEntityRecords(entity, factsResult.facts, scope),
       this.#incomingParentRecords(entity, touchingResult.facts, scope),
     ]);
-    return new Set([...outgoing.items, ...incoming.items].map(record => record.id)).size;
+    const incomingFacts = touchingResult.facts.filter(fact => fact.parentEntityId !== entity.id);
+    const degree = new Set([...outgoing.items, ...incoming.items].map(record => record.id)).size;
+    return {
+      degree,
+      counts: {
+        facts: factsResult.facts.length + incomingFacts.length,
+        outgoing: outgoing.items.length,
+        incoming: incoming.items.length,
+        sampled: Boolean(
+          factsResult.nextCursor || touchingResult.nextCursor || outgoing.truncated || incoming.truncated,
+        ),
+      },
+    };
   }
 
   async #outgoingEntityRecords(
