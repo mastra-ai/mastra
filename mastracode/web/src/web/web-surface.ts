@@ -37,6 +37,8 @@ registerSandboxReattach();
 export interface IntegrationRegistration {
   integration: FactoryIntegration;
   ready: boolean;
+  /** Retry a failed storage-domain init before serving the integration. */
+  ensureReady?: () => Promise<void>;
 }
 
 export interface WebApiRoutesDeps {
@@ -376,9 +378,7 @@ function disabledIntegrationStatusRoutes(id: string): ApiRoute[] {
 export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
   const registrations = deps.integrations ?? [];
   const githubRegistration = registrations.find(({ integration }) => integration.id === 'github');
-  const githubStorage = githubRegistration?.ready
-    ? (githubRegistration.integration.storageDomain as GithubStorage | undefined)
-    : undefined;
+  const githubStorage = githubRegistration?.integration.storageDomain as GithubStorage | undefined;
   const ctx = deps.stateSigner
     ? {
         baseUrl: deps.publicOrigin,
@@ -387,9 +387,49 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
         hooks: { runIssueTriage: (input: IssueTriageRunInput) => runIssueTriage(deps, input) },
       }
     : undefined;
-  const integrationRoutes = registrations.flatMap(({ integration, ready }) =>
-    ready && ctx ? integration.routes(ctx) : disabledIntegrationStatusRoutes(integration.id),
-  );
+  const integrationRoutes = registrations.flatMap(registration => {
+    const { integration, ready, ensureReady } = registration;
+    if (!ctx) return disabledIntegrationStatusRoutes(integration.id);
+    if (ready) return integration.routes(ctx);
+    if (!ensureReady) return disabledIntegrationStatusRoutes(integration.id);
+    return integration.routes(ctx).map(route => {
+      if ('handler' in route) {
+        const handler = route.handler;
+        return {
+          ...route,
+          handler: async (c: Parameters<typeof handler>[0]) => {
+            try {
+              await ensureReady();
+            } catch {
+              return c.json(
+                { error: 'integration_unavailable', message: `${integration.id} integration is unavailable.` },
+                503,
+              );
+            }
+            return handler(c, async () => {});
+          },
+        };
+      }
+      const createHandler = route.createHandler;
+      return {
+        ...route,
+        createHandler: async (args: Parameters<typeof createHandler>[0]) => {
+          const handler = await createHandler(args);
+          return async (c: Parameters<typeof handler>[0]) => {
+            try {
+              await ensureReady();
+            } catch {
+              return c.json(
+                { error: 'integration_unavailable', message: `${integration.id} integration is unavailable.` },
+                503,
+              );
+            }
+            return handler(c);
+          };
+        },
+      };
+    });
+  });
   // Absent known integrations still get their disabled-status stub.
   const absentStubs = ['github', 'linear']
     .filter(id => !registrations.some(({ integration }) => integration.id === id))
@@ -402,6 +442,7 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
       controllerId: deps.controllerId,
       controller: deps.controller,
       githubStorage,
+      ensureGithubReady: githubRegistration?.ensureReady,
     }),
     ...integrationRoutes,
     ...absentStubs,

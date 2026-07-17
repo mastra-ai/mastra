@@ -280,6 +280,28 @@ describe('MastraFactory.prepare integrations', () => {
     expect(typeof ctx.hooks?.runIssueTriage).toBe('function');
   });
 
+  it('retries a failed integration domain before serving its routes', async () => {
+    const ensureReady = vi.spyOn(FactoryStore.prototype, 'ensureReady').mockResolvedValue(undefined);
+    const domain = { name: 'retryable-domain', init: vi.fn(async () => {}) };
+    const handler = vi.fn(async () => new Response('ready'));
+    const custom = fakeIntegration({
+      id: 'retryable',
+      storageDomain: domain,
+      routes: vi.fn(() => [{ path: '/web/retryable', method: 'GET' as const, handler }]),
+    });
+    const config = await prepareFactory({ storage: fakePgStorage(), integrations: [custom] });
+    const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{
+      path: string;
+      handler?: (c: unknown, next: () => Promise<void>) => Promise<Response>;
+    }>;
+    const route = buildApiRoutes({ controller: {}, authStorage: {} }).find(r => r.path === '/web/retryable');
+    expect(route?.handler).toBeTypeOf('function');
+    const response = await route!.handler!({} as never, async () => {});
+    expect(response.status).toBe(200);
+    expect(ensureReady).toHaveBeenCalledWith('retryable-domain');
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
   it('mounts disabled-status stubs for the known ids when no integrations are registered', async () => {
     const config = await prepareFactory({});
     const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
@@ -301,6 +323,20 @@ describe('MastraFactory.prepare integrations', () => {
     const tools = await extraTools({ requestContext: {} });
     expect(tools.customAgentTool).toBe(agentTool);
     expect(tools.customSessionTool).toBe(sessionTool);
+  });
+
+  it('retries a failed integration domain before resolving its tools', async () => {
+    const ensureReady = vi.spyOn(FactoryStore.prototype, 'ensureReady').mockResolvedValue(undefined);
+    const customTool = { description: 'recovered' };
+    const custom = fakeIntegration({
+      id: 'retryable-tools',
+      storageDomain: { name: 'retryable-tools-domain', init: vi.fn(async () => {}) },
+      agentTools: vi.fn(async () => ({ customTool }) as never),
+    });
+    const config = await prepareFactory({ storage: fakePgStorage(), integrations: [custom] });
+    const extraTools = config.extraTools as (args: { requestContext: object }) => Promise<Record<string, unknown>>;
+    await expect(extraTools({ requestContext: {} })).resolves.toEqual({ customTool });
+    expect(ensureReady).toHaveBeenCalledWith('retryable-tools-domain');
   });
 
   it('rejects duplicate tool keys from integrations', async () => {

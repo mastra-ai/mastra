@@ -39,6 +39,7 @@ export interface BuildSkillRoutesDeps {
   controllerId: string;
   controller: Pick<AgentController<MastraCodeState>, 'getSessionByResource'>;
   githubStorage?: GithubStorage;
+  ensureGithubReady?: () => Promise<void>;
   authorizeSessionAddress?: (
     context: Context,
     address: { resourceId: string; scope?: string },
@@ -77,6 +78,7 @@ async function authorizeSessionAddress(
   context: Context,
   address: { resourceId: string; scope?: string },
   storage?: GithubStorage,
+  ensureGithubReady?: () => Promise<void>,
 ): Promise<SessionAuthorizationResult> {
   if (!isWebAuthEnabled()) return { allowed: true };
 
@@ -102,6 +104,13 @@ async function authorizeSessionAddress(
   if (!storage) {
     return { allowed: false, status: 403, code: 'session_forbidden', message: 'Session access denied.' };
   }
+  if (ensureGithubReady) {
+    try {
+      await ensureGithubReady();
+    } catch {
+      return { allowed: false, status: 403, code: 'session_forbidden', message: 'Session access denied.' };
+    }
+  }
   const worktree = await storage.findWorktreeByPath(address.resourceId, tenant.userId, address.scope);
   return worktree?.orgId === tenant.orgId
     ? { allowed: true }
@@ -112,12 +121,13 @@ export function buildSkillRoutes({
   controllerId,
   controller,
   githubStorage,
+  ensureGithubReady,
   authorizeSessionAddress: customAuthorize,
 }: BuildSkillRoutesDeps): ApiRoute[] {
   const authorize =
     customAuthorize ??
     ((context: Context, address: { resourceId: string; scope?: string }) =>
-      authorizeSessionAddress(context, address, githubStorage));
+      authorizeSessionAddress(context, address, githubStorage, ensureGithubReady));
   const handleSkillRequest = async (context: unknown, dispatch: boolean) => {
     const c = loose(context);
     if (c.req.param('controllerId') !== controllerId) {

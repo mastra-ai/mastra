@@ -326,14 +326,17 @@ export class MastraFactory {
     const readyIntegrations = integrations.map(integration => ({
       integration,
       ready: integrationReady.get(integration.id) ?? false,
+      ...(integration.storageDomain && factoryStore
+        ? { ensureReady: () => factoryStore.ensureReady(integration.storageDomain!.name) }
+        : {}),
     }));
 
     // Boot assertion: an active integration that signs OAuth `state` needs a
     // replica-stable signer — a per-process random secret silently breaks the
     // OAuth callback on any replica that didn't sign the state. Fail loud now
     // instead. (The built-ins also assert this inside their readiness gates.)
-    for (const { integration, ready } of readyIntegrations) {
-      if (ready && integration.requiresStableStateSigner && !stateSigner.stable) {
+    for (const { integration } of readyIntegrations) {
+      if (integration.requiresStableStateSigner && !stateSigner.stable) {
         throw new Error(
           `MastraFactory: integration '${integration.id}' signs OAuth state and requires a ` +
             `replica-stable state secret, but none is configured. Set 'stateSecret' on the ` +
@@ -344,8 +347,8 @@ export class MastraFactory {
 
     // Integrations contributing tools to agent sessions: org-scoped
     // `agentTools` (resolved per request) + session-scoped `sessionTools`.
-    const toolIntegrations = integrations.filter(
-      integration => integrationReady.get(integration.id) && (integration.agentTools || integration.sessionTools),
+    const toolIntegrations = readyIntegrations.filter(
+      ({ integration }) => integration.agentTools || integration.sessionTools,
     );
 
     // Build the real production controller (agents, modes, tools, memory, OM,
@@ -375,7 +378,14 @@ export class MastraFactory {
                   tools[name] = tool;
                 }
               };
-              for (const integration of toolIntegrations) {
+              for (const { integration, ready, ensureReady } of toolIntegrations) {
+                if (!ready && ensureReady) {
+                  try {
+                    await ensureReady();
+                  } catch {
+                    continue;
+                  }
+                }
                 if (integration.agentTools) {
                   mergeTools(integration, await integration.agentTools({ requestContext }));
                 }
