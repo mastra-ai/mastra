@@ -89,6 +89,8 @@ export type AuthStorageData = Record<string, AuthCredential>;
  * the app database so each caller's own credentials are used.
  */
 export interface CredentialStore {
+  /** Whether model resolution may fall back to process environment credentials. */
+  readonly allowEnvironmentFallback?: boolean;
   /** Refresh any cached view (no-op for sources that are always fresh). */
   reload(): void;
   /** Credential in the provider's main slot (`anthropic`, `openai-codex`, …). */

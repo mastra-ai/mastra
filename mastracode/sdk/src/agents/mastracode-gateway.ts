@@ -115,7 +115,9 @@ export function getAnthropicApiKey(credentials: CredentialStore = authStorage): 
   }
   const dedicatedKey = credentials.getStoredApiKey('anthropic')?.trim();
   if (dedicatedKey) return dedicatedKey;
-  return process.env.ANTHROPIC_API_KEY?.trim() || undefined;
+  return credentials.allowEnvironmentFallback === false
+    ? undefined
+    : process.env.ANTHROPIC_API_KEY?.trim() || undefined;
 }
 
 /**
@@ -129,7 +131,7 @@ export function getOpenAIApiKey(credentials: CredentialStore = authStorage): str
   }
   const dedicatedKey = credentials.getStoredApiKey('openai-codex')?.trim();
   if (dedicatedKey) return dedicatedKey;
-  return process.env.OPENAI_API_KEY?.trim() || undefined;
+  return credentials.allowEnvironmentFallback === false ? undefined : process.env.OPENAI_API_KEY?.trim() || undefined;
 }
 
 function anthropicApiKeyProvider(modelId: string, apiKey: string, headers?: ModelRequestHeaders) {

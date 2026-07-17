@@ -31,14 +31,15 @@ export function ProvidersSection() {
 
   const providers = providersQuery.data ?? [];
   const authEnabled = authQuery.data?.authEnabled === true;
-  const configured = providers
-    .filter(provider => provider.source !== 'none')
+  const oauthProviders = providers
+    .filter(provider => provider.oauth?.supported === true)
     .sort((left, right) => left.provider.localeCompare(right.provider));
+  const oauthProviderIds = new Set(oauthProviders.map(provider => provider.provider));
 
   const query = search.trim().toLowerCase();
   const results = query
     ? providers
-        .filter(provider => provider.provider.toLowerCase().includes(query))
+        .filter(provider => !oauthProviderIds.has(provider.provider) && provider.provider.toLowerCase().includes(query))
         .sort((left, right) => {
           if ((left.source !== 'none') !== (right.source !== 'none')) return left.source !== 'none' ? -1 : 1;
           return left.provider.localeCompare(right.provider);
@@ -67,17 +68,59 @@ export function ProvidersSection() {
   };
 
   const searching = query.length > 0;
-  const list = searching ? results : configured;
   const requestError = providersQuery.error ?? startOAuthMutation.error ?? cancelOAuthMutation.error;
   const error = requestError instanceof Error ? requestError.message : undefined;
 
   return (
     <div className="flex flex-col gap-3">
+      {error && (
+        <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg">
+          {error}
+        </Txt>
+      )}
+
+      <div className="flex flex-col gap-1">
+        <Txt as="h3" variant="ui-lg" className="font-medium text-icon6">
+          Sign in with a provider
+        </Txt>
+        <Txt as="p" variant="ui-sm" className="text-icon3">
+          Connect an existing provider account to use its models.
+        </Txt>
+      </div>
+
+      {providersQuery.isPending ? (
+        <SkeletonRows label="Loading providers" rows={3} rowClassName="h-9 w-full" />
+      ) : oauthProviders.length === 0 ? (
+        <Txt as="p" variant="ui-sm" className="text-icon3">
+          No providers support sign in.
+        </Txt>
+      ) : (
+        <ul role="list" aria-label="Sign in providers" className="flex flex-col divide-y divide-border1">
+          {oauthProviders.map(provider => (
+            <ProviderRow
+              key={provider.provider}
+              provider={provider}
+              authEnabled={authEnabled}
+              startingOAuth={startingProvider === provider.provider}
+              onStartOAuth={startOAuth}
+            />
+          ))}
+        </ul>
+      )}
+
+      <div className="flex items-center gap-3" aria-hidden="true">
+        <div className="h-px flex-1 bg-border1" />
+        <Txt as="span" variant="ui-xs" className="text-icon3">
+          OR
+        </Txt>
+        <div className="h-px flex-1 bg-border1" />
+      </div>
+
       <div className="relative">
         <Search size={14} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-icon3" />
         <Input
           type="text"
-          placeholder="Search providers to sign in or add a key…"
+          placeholder="Search providers to add an API key…"
           value={search}
           onChange={event => setSearch(event.target.value)}
           aria-label="Search providers"
@@ -85,42 +128,24 @@ export function ProvidersSection() {
         />
       </div>
 
-      {error && (
-        <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg">
-          {error}
-        </Txt>
-      )}
-
-      {providersQuery.isPending ? (
-        <SkeletonRows label="Loading providers" rows={3} rowClassName="h-9 w-full" />
-      ) : (
-        <>
-          {!searching && (
-            <Txt as="p" variant="ui-sm" className="text-icon3">
-              {configured.length > 0
-                ? `${configured.length} configured. Search above to add more.`
-                : 'No providers configured yet. Search above to sign in or add a key.'}
-            </Txt>
-          )}
-          {list.length === 0 ? (
-            <Txt as="p" variant="ui-sm" className="text-icon3">
-              {searching ? `No providers match “${search.trim()}”.` : 'No providers configured.'}
-            </Txt>
-          ) : (
-            <ul role="list" className="flex flex-col divide-y divide-border1">
-              {list.map(provider => (
-                <ProviderRow
-                  key={provider.provider}
-                  provider={provider}
-                  authEnabled={authEnabled}
-                  startingOAuth={startingProvider === provider.provider}
-                  onStartOAuth={startOAuth}
-                />
-              ))}
-            </ul>
-          )}
-        </>
-      )}
+      {searching &&
+        (results.length === 0 ? (
+          <Txt as="p" variant="ui-sm" className="text-icon3">
+            {`No providers match “${search.trim()}”.`}
+          </Txt>
+        ) : (
+          <ul role="list" aria-label="API key providers" className="flex flex-col divide-y divide-border1">
+            {results.map(provider => (
+              <ProviderRow
+                key={provider.provider}
+                provider={provider}
+                authEnabled={authEnabled}
+                startingOAuth={startingProvider === provider.provider}
+                onStartOAuth={startOAuth}
+              />
+            ))}
+          </ul>
+        ))}
 
       {activeOAuth && (
         <ProviderOAuthDialog

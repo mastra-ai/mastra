@@ -12,8 +12,8 @@
  *
  * Snapshots are primed per request by `createTenantCredentialPrimer` (mounted
  * after the web auth gate) so the first model call of a request already sees
- * the caller's credentials. Env vars remain the final fallback inside the
- * gateway itself — this store only answers for tenant-stored credentials.
+ * the caller's credentials. This store explicitly disables the SDK's
+ * environment fallback so server-shell credentials never leak into tenants.
  */
 
 import type { MiddlewareHandler } from 'hono';
@@ -34,6 +34,7 @@ const SNAPSHOT_TTL_MS = 15_000;
 const MAX_CACHED_TENANTS = 1000;
 
 export class TenantCredentialStore implements CredentialStore {
+  readonly allowEnvironmentFallback = false;
   readonly #orgId: string;
   readonly #userId: string;
   #snapshot = new Map<string, AuthCredential>();
@@ -56,7 +57,7 @@ export class TenantCredentialStore implements CredentialStore {
 
   async #hydrate(): Promise<void> {
     const storage = await getTenantCredentialsStorage();
-    if (!storage) return; // keep last snapshot; env fallback still works
+    if (!storage) return; // Keep the last tenant-scoped snapshot.
     const records = await storage.listCredentials(this.#orgId, this.#userId);
     const next = new Map<string, AuthCredential>();
     // Org rows first so user rows overwrite them (user > org precedence).

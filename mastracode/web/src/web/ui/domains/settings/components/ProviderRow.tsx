@@ -12,6 +12,7 @@ import {
   useSaveProviderKey,
   useSignOutProviderOAuth,
 } from '../../../../../shared/hooks/use-providers';
+import { providerDisplayName } from './provider-display-name';
 
 const SOURCE_LABEL: Record<ProviderInfo['source'], string> = {
   oauth: 'Signed in',
@@ -41,6 +42,7 @@ interface ProviderRowProps {
 }
 
 export function ProviderRow({ provider, authEnabled, startingOAuth, onStartOAuth }: ProviderRowProps) {
+  const displayName = providerDisplayName(provider.provider);
   const saveKeyMutation = useSaveProviderKey();
   const removeKeyMutation = useRemoveProviderKey();
   const signOutMutation = useSignOutProviderOAuth();
@@ -102,7 +104,7 @@ export function ProviderRow({ provider, authEnabled, startingOAuth, onStartOAuth
         <div className="flex min-w-0 items-center gap-2">
           {provider.source !== 'none' && <Check size={13} className="shrink-0 text-accent1" />}
           <Txt as="span" variant="ui-md" className="truncate text-icon6">
-            {provider.provider}
+            {displayName}
           </Txt>
           <Badge size="sm" variant={SOURCE_VARIANT[provider.source]}>
             {SOURCE_LABEL[provider.source]}
@@ -146,7 +148,7 @@ export function ProviderRow({ provider, authEnabled, startingOAuth, onStartOAuth
             autoFocus
             type="password"
             size="sm"
-            aria-label={`API key for ${provider.provider}`}
+            aria-label={`API key for ${displayName}`}
             placeholder="Paste API key"
             value={keyDraft}
             onChange={event => setKeyDraft(event.target.value)}

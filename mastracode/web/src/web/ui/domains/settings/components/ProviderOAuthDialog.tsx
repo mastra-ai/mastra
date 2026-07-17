@@ -12,10 +12,11 @@ import {
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Copy, ExternalLink, Loader2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type { OAuthStartResponse } from '../../../../../shared/api/types';
 import { useCompleteProviderOAuth, usePollProviderOAuth } from '../../../../../shared/hooks/use-providers';
+import { providerDisplayName } from './provider-display-name';
 
 interface ProviderOAuthDialogProps {
   provider: string;
@@ -37,6 +38,7 @@ function openAuthorizationUrl(url: string) {
 }
 
 function PasteCodeDialog({ provider, session, onClose, onComplete }: ProviderOAuthDialogProps) {
+  const displayName = providerDisplayName(provider);
   const completeMutation = useCompleteProviderOAuth();
   const [code, setCode] = useState('');
 
@@ -55,7 +57,7 @@ function PasteCodeDialog({ provider, session, onClose, onComplete }: ProviderOAu
     <Dialog open onOpenChange={open => !open && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Sign in to {provider}</DialogTitle>
+          <DialogTitle>Sign in to {displayName}</DialogTitle>
           <DialogDescription>Authorize your account and paste the returned code.</DialogDescription>
         </DialogHeader>
         <DialogBody className="flex flex-col gap-4">
@@ -98,19 +100,25 @@ function PasteCodeDialog({ provider, session, onClose, onComplete }: ProviderOAu
 }
 
 function DeviceCodeDialog({ provider, session, onClose, onComplete }: ProviderOAuthDialogProps) {
-  const pollMutation = usePollProviderOAuth();
+  const displayName = providerDisplayName(provider);
+  const { mutate: poll } = usePollProviderOAuth();
+  const onCompleteRef = useRef(onComplete);
   const [nextPollAt, setNextPollAt] = useState(() => Date.now() + (session.nextPollMs ?? 1000));
   const [flowError, setFlowError] = useState<string>();
 
   useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
+
+  useEffect(() => {
     const timer = window.setTimeout(
       () => {
-        pollMutation.mutate(
+        poll(
           { provider, sessionId: session.sessionId },
           {
             onSuccess: response => {
               if (response.status === 'complete') {
-                onComplete();
+                onCompleteRef.current();
                 return;
               }
               if (response.status === 'failed') {
@@ -127,7 +135,7 @@ function DeviceCodeDialog({ provider, session, onClose, onComplete }: ProviderOA
     );
 
     return () => window.clearTimeout(timer);
-  }, [nextPollAt, onComplete, pollMutation, provider, session.sessionId]);
+  }, [nextPollAt, poll, provider, session.sessionId]);
 
   const copyCode = async () => {
     if (session.userCode) await navigator.clipboard.writeText(session.userCode);
@@ -137,7 +145,7 @@ function DeviceCodeDialog({ provider, session, onClose, onComplete }: ProviderOA
     <Dialog open onOpenChange={open => !open && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Sign in to {provider}</DialogTitle>
+          <DialogTitle>Sign in to {displayName}</DialogTitle>
           <DialogDescription>Enter the device code on the provider authorization page.</DialogDescription>
         </DialogHeader>
         <DialogBody className="flex flex-col gap-4">

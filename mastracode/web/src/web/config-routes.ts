@@ -147,8 +147,6 @@ export async function listProviders(
         source = 'stored-user';
       } else if (orgRec?.credential.type === 'api_key') {
         source = 'stored-org';
-      } else if ((model.apiKeyEnvVar && process.env[model.apiKeyEnvVar]) || model.hasApiKey) {
-        source = 'env';
       }
     } else if (authStorage?.isLoggedIn(authProviderId)) {
       source = 'oauth';

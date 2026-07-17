@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../../e2e/web-ui/render';
 import type { ProviderInfo } from '../../../../../../shared/api/types';
+import { providerDisplayName } from '../provider-display-name';
 import { ProvidersSection } from '../ProvidersSection';
 
 const PROVIDERS_URL = `${TEST_BASE_URL}/web/config/providers`;
@@ -17,8 +18,8 @@ function providersResponse(providers: ProviderInfo[]) {
   return HttpResponse.json({ providers });
 }
 
-function rowFor(name: string): HTMLElement {
-  return screen.getByText(name).closest('[role="listitem"]') as HTMLElement;
+function rowFor(provider: string): HTMLElement {
+  return screen.getByText(providerDisplayName(provider)).closest('[role="listitem"]') as HTMLElement;
 }
 
 afterEach(() => {
@@ -31,7 +32,9 @@ describe('ProvidersSection', () => {
       server.use(
         http.get(PROVIDERS_URL, async () => {
           await delay(150);
-          return providersResponse([{ provider: 'openai', source: 'stored' }]);
+          return providersResponse([
+            { provider: 'anthropic', source: 'none', oauth: { supported: true, modes: ['paste-code'] } },
+          ]);
         }),
       );
 
@@ -40,27 +43,36 @@ describe('ProvidersSection', () => {
       expect(await screen.findByRole('status', { name: 'Loading providers' })).toBeInTheDocument();
       expect(screen.queryByText(/Loading providers/)).not.toBeInTheDocument();
 
-      expect(await screen.findByText('openai')).toBeInTheDocument();
+      expect(await screen.findByText('Anthropic')).toBeInTheDocument();
       expect(screen.queryByRole('status', { name: 'Loading providers' })).not.toBeInTheDocument();
     });
   });
 
   describe('when providers load', () => {
-    it('renders the configured providers', async () => {
+    it('shows OAuth providers above the API-key search and reveals other providers through search', async () => {
       server.use(
         http.get(PROVIDERS_URL, () =>
           providersResponse([
             { provider: 'openai', source: 'stored' },
-            { provider: 'anthropic', source: 'none' },
+            { provider: 'anthropic', source: 'none', oauth: { supported: true, modes: ['paste-code'] } },
+            { provider: 'google', source: 'none' },
           ]),
         ),
       );
 
+      const user = userEvent.setup();
       renderWithProviders(<ProvidersSection />);
 
-      expect(await screen.findByText('openai')).toBeInTheDocument();
-      // `none`-source providers are hidden until searched.
-      expect(screen.queryByText('anthropic')).not.toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Sign in with a provider' })).toBeInTheDocument();
+      const anthropic = await screen.findByText('Anthropic');
+      const search = screen.getByLabelText('Search providers');
+      expect(anthropic.compareDocumentPosition(search) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(screen.getByText('OR')).toBeInTheDocument();
+      expect(screen.queryByText('OpenAI')).not.toBeInTheDocument();
+      expect(screen.queryByText('google')).not.toBeInTheDocument();
+
+      await user.type(search, 'openai');
+      expect(await screen.findByText('OpenAI')).toBeInTheDocument();
     });
   });
 
@@ -104,7 +116,7 @@ describe('ProvidersSection', () => {
   });
 
   describe('when a stored key is removed', () => {
-    it('DELETEs the key and refetches so the provider drops out of the configured list', async () => {
+    it('DELETEs the key and refetches so the provider drops out of search results', async () => {
       const providers: ProviderInfo[] = [{ provider: 'openai', source: 'stored' }];
       let removed = false;
       server.use(
@@ -119,12 +131,12 @@ describe('ProvidersSection', () => {
       const user = userEvent.setup();
       renderWithProviders(<ProvidersSection />);
 
-      await screen.findByText('openai');
+      await user.type(screen.getByLabelText('Search providers'), 'openai');
       const row = rowFor('openai');
       await user.click(within(row).getByRole('button', { name: 'Remove' }));
 
       await waitFor(() => expect(removed).toBe(true));
-      await waitFor(() => expect(screen.queryByText('openai')).not.toBeInTheDocument());
+      await waitFor(() => expect(screen.queryByText('OpenAI')).not.toBeInTheDocument());
     });
   });
 
@@ -156,7 +168,7 @@ describe('ProvidersSection', () => {
       const user = userEvent.setup();
       renderWithProviders(<ProvidersSection />);
 
-      await user.type(screen.getByLabelText('Search providers'), 'anthropic');
+      await screen.findByText('Anthropic');
       await user.click(within(rowFor('anthropic')).getByRole('button', { name: 'Sign in' }));
       await user.type(await screen.findByLabelText('Authorization code'), 'code#state');
       await user.click(screen.getByRole('button', { name: 'Complete sign in' }));
@@ -196,11 +208,53 @@ describe('ProvidersSection', () => {
       const user = userEvent.setup();
       renderWithProviders(<ProvidersSection />);
 
-      await user.type(screen.getByLabelText('Search providers'), 'xai');
+      await screen.findByText('xAI');
       await user.click(within(rowFor('xai')).getByRole('button', { name: 'Sign in' }));
 
       expect(await screen.findByText('GROK-123')).toBeInTheDocument();
       await waitFor(() => expect(within(rowFor('xai')).getByText('Signed in')).toBeInTheDocument());
+    });
+
+    it('closes after persistence without issuing a stale second poll', async () => {
+      const providers: ProviderInfo[] = [
+        { provider: 'openai', source: 'none', oauth: { supported: true, modes: ['device-code'] } },
+      ];
+      let pollCount = 0;
+      server.use(
+        http.get(PROVIDERS_URL, () => providersResponse(providers)),
+        http.post(oauthUrl('openai', 'start'), () =>
+          HttpResponse.json({
+            sessionId: 'session-race',
+            kind: 'device-code',
+            url: 'https://example.com/device',
+            userCode: 'OPENAI-123',
+            instructions: 'Enter this code.',
+            expiresAt: Date.now() + 60_000,
+            nextPollMs: 10,
+          }),
+        ),
+        http.post(oauthUrl('openai', 'poll'), async () => {
+          pollCount += 1;
+          if (pollCount > 1) {
+            await delay(50);
+            return HttpResponse.error();
+          }
+          await delay(20);
+          providers[0] = { provider: 'openai', source: 'oauth-user', oauth: providers[0].oauth };
+          return HttpResponse.json({ status: 'complete', ok: true });
+        }),
+      );
+
+      const user = userEvent.setup();
+      renderWithProviders(<ProvidersSection />);
+
+      await screen.findByText('OpenAI');
+      await user.click(within(rowFor('openai')).getByRole('button', { name: 'Sign in' }));
+
+      expect(await screen.findByText('OPENAI-123')).toBeInTheDocument();
+      await waitFor(() => expect(within(rowFor('openai')).getByText('Signed in')).toBeInTheDocument());
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      expect(pollCount).toBe(1);
     });
   });
 

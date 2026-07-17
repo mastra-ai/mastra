@@ -114,7 +114,7 @@ describe('listProviders', () => {
       updatedAt: new Date(),
     });
 
-    it('resolves user > org > env precedence', async () => {
+    it('resolves user > org and ignores the server environment in tenant mode', async () => {
       process.env.ANTHROPIC_API_KEY = 'sk-env';
       const controller = makeAgentController([
         { provider: 'anthropic', hasApiKey: true, apiKeyEnvVar: 'ANTHROPIC_API_KEY' },
@@ -129,8 +129,8 @@ describe('listProviders', () => {
       const orgWins = await listProviders(controller, undefined, [record('anthropic', 'org', 'api_key')]);
       expect(orgWins[0]?.source).toBe('stored-org');
 
-      const envWins = await listProviders(controller, undefined, []);
-      expect(envWins[0]?.source).toBe('env');
+      const noTenantCredential = await listProviders(controller, undefined, []);
+      expect(noTenantCredential[0]?.source).toBe('none');
     });
 
     it('reports oauth-user for a user OAuth token stored under the auth provider id', async () => {

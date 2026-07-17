@@ -847,6 +847,16 @@ describe('resolveModel', () => {
   });
 });
 
+function makeTenantCredentialStore() {
+  return {
+    allowEnvironmentFallback: false,
+    reload: vi.fn(),
+    get: vi.fn(() => undefined),
+    getStoredApiKey: vi.fn(() => undefined),
+    getApiKey: vi.fn(async () => undefined),
+  };
+}
+
 describe('getAnthropicApiKey', () => {
   const originalEnv = { ...process.env };
 
@@ -879,6 +889,11 @@ describe('getAnthropicApiKey', () => {
     mockAuthStorageInstance.get.mockReturnValue(undefined);
     expect(getAnthropicApiKey()).toBe('sk-env-key');
   });
+
+  it('ignores the env var when the credential store disables environment fallback', () => {
+    process.env.ANTHROPIC_API_KEY = 'sk-env-key';
+    expect(getAnthropicApiKey(makeTenantCredentialStore())).toBeUndefined();
+  });
 });
 
 describe('getOpenAIApiKey', () => {
@@ -906,5 +921,16 @@ describe('getOpenAIApiKey', () => {
   it('returns undefined when stored credential is OAuth type', () => {
     mockAuthStorageInstance.get.mockReturnValue({ type: 'oauth', access: 'token', refresh: 'r', expires: 0 });
     expect(getOpenAIApiKey()).toBeUndefined();
+  });
+
+  it('falls back to env var in local mode', () => {
+    process.env.OPENAI_API_KEY = 'sk-env-key';
+    mockAuthStorageInstance.get.mockReturnValue(undefined);
+    expect(getOpenAIApiKey()).toBe('sk-env-key');
+  });
+
+  it('ignores the env var when the credential store disables environment fallback', () => {
+    process.env.OPENAI_API_KEY = 'sk-env-key';
+    expect(getOpenAIApiKey(makeTenantCredentialStore())).toBeUndefined();
   });
 });
