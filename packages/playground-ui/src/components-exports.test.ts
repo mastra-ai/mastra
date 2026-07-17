@@ -68,6 +68,14 @@ describe('components/* subpath exports', () => {
     expect(mod.DataPanel).toBeDefined();
   });
 
+  it('Composer entry exports its compound components', async () => {
+    const mod = await import('./ds/components/Composer');
+    expect(mod.Composer).toBeDefined();
+    expect(mod.ComposerAttachments).toBeDefined();
+    expect(mod.ComposerInput).toBeDefined();
+    expect(mod.ComposerActions).toBeDefined();
+  });
+
   it('AI plan entry exports Plan', async () => {
     const mod = await import('./ds/components/ai/plan');
     expect(mod.Plan).toBeDefined();

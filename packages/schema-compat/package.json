@@ -1,6 +1,6 @@
 {
   "name": "@mastra/schema-compat",
-  "version": "1.3.4-alpha.1",
+  "version": "1.3.4",
   "description": "Tool schema compatibility layer for Mastra.ai",
   "type": "module",
   "main": "dist/index.js",
@@ -119,7 +119,7 @@
     "@internal/types-builder": "workspace:*",
     "@standard-schema/spec": "^1.1.0",
     "@types/json-schema": "^7.0.15",
-    "@types/node": "22.19.21",
+    "@types/node": "22.20.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "ajv": "^8.20.0",

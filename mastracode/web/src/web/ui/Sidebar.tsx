@@ -2,13 +2,13 @@ import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Circle, LogOut, Settings } from 'lucide-react';
+import { LogOut, Settings } from 'lucide-react';
 
 import { useApiConfig } from '../../shared/api/config';
 import { redirectToLogout, useWebAuth } from './domains/auth';
-import { ThreadList, useChatConnection, useChatTranscript } from './domains/chat';
+import { ThreadList } from './domains/chat';
 import { FactorySection } from './domains/factory';
-import { ProjectSwitcher, useActiveProjectContext, WorkspacesSection } from './domains/workspaces';
+import { ProjectSwitcher, useActiveProjectContext, UserSessionsSection, WorkspacesSection } from './domains/workspaces';
 import { useOverlays } from './lib/overlays';
 
 /**
@@ -16,10 +16,11 @@ import { useOverlays } from './lib/overlays';
  * (`useActiveProjectContext`, focused chat hooks, `useOverlays`), so nothing is
  * wired through props here.
  *
- * Threads are scoped to the worktree they run in. GitHub projects nest the
- * thread list under the main-branch workspace inside the Workspaces section —
- * feature worktrees hold a single conversation, so they show no thread list;
- * local projects (no worktrees) keep the flat list.
+ * Everything runs in a worktree branched from the repo's HEAD. GitHub projects
+ * show the Factory menu (Board + org-level factory Sessions) and the current
+ * user's personal User Sessions; each worktree holds a single conversation, so
+ * there is no nested thread list. Local projects (no worktrees) keep the flat
+ * thread list.
  */
 export function Sidebar() {
   const overlays = useOverlays();
@@ -32,11 +33,13 @@ export function Sidebar() {
       className={`fixed inset-y-0 left-0 z-40 flex h-full w-[82vw] max-w-[300px] shrink-0 flex-col gap-4 border-r border-border1 bg-surface2 p-3 shadow-lg transition-transform duration-200 md:static md:z-auto md:w-full md:max-w-none md:translate-x-0 md:border-r-0 md:bg-transparent md:shadow-none ${open ? 'translate-x-0' : '-translate-x-full'}`}
     >
       <ProjectSwitcher />
-      <FactorySection />
       {isGithubProject ? (
-        <WorkspacesSection>
-          <ThreadList />
-        </WorkspacesSection>
+        <>
+          <FactorySection>
+            <WorkspacesSection />
+          </FactorySection>
+          <UserSessionsSection />
+        </>
       ) : (
         <ThreadList />
       )}
@@ -45,36 +48,11 @@ export function Sidebar() {
   );
 }
 
-function statusLabel(status: string, running: boolean): string {
-  if (running) return 'Working…';
-  if (status === 'reconnecting') return 'Reconnecting…';
-  return status.charAt(0).toUpperCase() + status.slice(1);
-}
-
-function statusDotClass(status: string): string {
-  if (status === 'ready') return 'fill-accent1 text-accent1';
-  if (status === 'reconnecting') return 'animate-pulse fill-warning1 text-warning1';
-  if (status === 'error') return 'fill-error text-error';
-  return 'animate-pulse fill-icon2 text-icon2';
-}
-
 function SidebarFooter() {
-  const { status } = useChatConnection();
-  const { busy } = useChatTranscript();
   const overlays = useOverlays();
 
   return (
     <div className="mt-auto flex flex-col gap-2 border-t border-border1 pt-2">
-      <div
-        className="grid h-10 grid-cols-[2.75rem_1fr_auto] items-center text-ui-sm text-icon3"
-        role="status"
-        aria-live="polite"
-      >
-        <span className="flex items-center justify-center">
-          <Circle size={10} className={statusDotClass(status)} />
-        </span>
-        <span>{statusLabel(status, busy)}</span>
-      </div>
       <SidebarAuth />
       <Button
         variant="ghost"

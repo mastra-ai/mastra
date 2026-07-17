@@ -1,0 +1,248 @@
+// @vitest-environment jsdom
+
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { SankeyChart } from './sankey-chart';
+import { Sankey, useSankey } from './sankey-context';
+import { buildSankeyHueMap, nodeColor, nodeColorVivid } from './sankeyColor';
+
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
+
+beforeEach(() => {
+  vi.stubGlobal('PointerEvent', MouseEvent);
+  vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(800);
+  vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(320);
+});
+
+const data = [
+  { channel: 'Search', region: 'EU', outcome: 'Won' },
+  { channel: 'Search', region: 'EU', outcome: 'Lost' },
+  { channel: 'Search', region: 'US', outcome: 'Won' },
+  { channel: 'Referral', region: 'US', outcome: 'Won' },
+];
+
+const columns = [
+  { id: 'channel', label: 'Channel' },
+  { id: 'region', label: 'Region' },
+  { id: 'outcome', label: 'Outcome' },
+];
+
+function TestControls() {
+  const { columns: controlColumns, toggleColumn, reorderColumns } = useSankey();
+
+  return (
+    <div>
+      {controlColumns.map(column => (
+        <button key={column.id} type="button" onClick={() => toggleColumn(column.id)}>
+          {column.visible ? 'Hide' : 'Show'} {column.label}
+        </button>
+      ))}
+      <button type="button" onClick={() => reorderColumns(1, 0)}>
+        Move second column first
+      </button>
+    </div>
+  );
+}
+
+function Example({
+  onCurveClick,
+  columnOrder,
+  onColumnOrderChange,
+  visibleColumnIds,
+  onVisibleColumnIdsChange,
+}: {
+  onCurveClick?: (selection: unknown) => void;
+  columnOrder?: Array<string>;
+  onColumnOrderChange?: (columnOrder: Array<string>) => void;
+  visibleColumnIds?: Array<string>;
+  onVisibleColumnIdsChange?: (columnIds: Array<string>) => void;
+}) {
+  return (
+    <Sankey
+      data={data}
+      columns={columns}
+      columnOrder={columnOrder}
+      onColumnOrderChange={onColumnOrderChange}
+      visibleColumnIds={visibleColumnIds}
+      onVisibleColumnIdsChange={onVisibleColumnIdsChange}
+    >
+      <TestControls />
+      <SankeyChart onCurveClick={onCurveClick} />
+    </Sankey>
+  );
+}
+
+describe('SankeyChart', () => {
+  it('reports when the renderer is used outside its provider', () => {
+    expect(() => render(<SankeyChart />)).toThrow('SankeyChart must be used within Sankey');
+  });
+
+  it('reports when the controls hook is used outside its provider', () => {
+    function InvalidControls() {
+      useSankey();
+      return undefined;
+    }
+
+    expect(() => render(<InvalidControls />)).toThrow('useSankey must be used within Sankey');
+  });
+
+  it('renders the supplied columns', async () => {
+    render(
+      <Sankey data={data} columns={columns}>
+        <SankeyChart />
+      </Sankey>,
+    );
+
+    expect(await screen.findAllByText('Channel')).not.toHaveLength(0);
+    expect(screen.queryByText('Select at least two columns with data to display a flow')).toBeNull();
+  });
+
+  it('labels each chart column above its nodes', async () => {
+    const { container } = render(<Example />);
+
+    await screen.findByText('Search');
+    const chartLabels = [...container.querySelectorAll('svg text')].map(element => element.textContent);
+
+    expect(chartLabels).toEqual(expect.arrayContaining(['Channel', 'Region', 'Outcome']));
+    const node = container.querySelector('svg rect[rx="3"]');
+    expect(node?.getAttribute('width')).toBe('7');
+    const searchLabel = [...container.querySelectorAll('svg text')].find(element => element.textContent === 'Search');
+    expect(searchLabel?.getAttribute('font-size')).toBe('12.5');
+    expect(searchLabel?.getAttribute('paint-order')).toBe('stroke');
+    const lostLabel = [...container.querySelectorAll('svg text')].find(element => element.textContent === 'Lost');
+    expect(lostLabel?.getAttribute('text-anchor')).toBe('end');
+    expect(container.querySelector('svg text[font-size="10.5"]')).not.toBeNull();
+  });
+
+  it('uses one repelled hue map for colored nodes and gradient ribbon links', async () => {
+    const { container } = render(<Example onCurveClick={() => {}} />);
+    const hueMap = buildSankeyHueMap(['Search', 'Referral', 'EU', 'US', 'Won', 'Lost']);
+
+    await screen.findAllByRole('button', { name: 'Select Sankey curve' });
+
+    expect(container.querySelector(`rect[fill="${nodeColor(hueMap.Search ?? 0)}"]`)).not.toBeNull();
+    expect(container.querySelector(`stop[stop-color="${nodeColor(hueMap.Search ?? 0)}"]`)).not.toBeNull();
+    expect(container.querySelector(`stop[stop-color="${nodeColorVivid(hueMap.EU ?? 0)}"]`)).not.toBeNull();
+  });
+
+  it('renders closed gradient ribbons without strokes, filters, or glow', async () => {
+    const { container } = render(<Example onCurveClick={() => {}} />);
+    const curves = await screen.findAllByRole('button', { name: 'Select Sankey curve' });
+    const firstCurve = curves[0];
+
+    expect(firstCurve?.getAttribute('d')).toMatch(/^M.+ C.+ L.+ C.+ Z$/);
+    expect(firstCurve?.getAttribute('fill')).toBe('url(#sankey-grad-0)');
+    expect(firstCurve?.getAttribute('fill-opacity')).toBe('0.32');
+    expect(firstCurve?.getAttribute('stroke')).toBe('none');
+    expect(firstCurve?.getAttribute('filter')).toBeNull();
+    expect(container.querySelector('linearGradient[gradientUnits="userSpaceOnUse"]')).not.toBeNull();
+  });
+
+  it('brightens every ribbon with the same source and restores them on leave', async () => {
+    render(<Example onCurveClick={() => {}} />);
+    const curves = await screen.findAllByRole('button', { name: 'Select Sankey curve' });
+    const firstSearchBranch = curves[0];
+    const secondSearchBranch = curves[1];
+    const referralBranch = curves[2];
+    if (!firstSearchBranch || !secondSearchBranch || !referralBranch) {
+      throw new Error('Expected Search and Referral branch ribbons');
+    }
+
+    fireEvent.mouseEnter(firstSearchBranch);
+
+    expect(firstSearchBranch.getAttribute('fill-opacity')).toBe('0.75');
+    expect(secondSearchBranch.getAttribute('fill-opacity')).toBe('0.75');
+    expect(referralBranch.getAttribute('fill-opacity')).toBe('0.32');
+
+    fireEvent.mouseLeave(firstSearchBranch);
+
+    expect(firstSearchBranch.getAttribute('fill-opacity')).toBe('0.32');
+    expect(secondSearchBranch.getAttribute('fill-opacity')).toBe('0.32');
+  });
+
+  it('keeps every connected ribbon bright while hovering a node label', async () => {
+    render(<Example onCurveClick={() => {}} />);
+    const curves = await screen.findAllByRole('button', { name: 'Select Sankey curve' });
+    const searchLabel = screen.getByText('Search');
+
+    fireEvent.mouseEnter(searchLabel);
+
+    expect(curves[0]?.getAttribute('fill-opacity')).toBe('0.75');
+    expect(curves[1]?.getAttribute('fill-opacity')).toBe('0.75');
+    expect(curves[2]?.getAttribute('fill-opacity')).toBe('0.32');
+  });
+
+  it('lets user-land controls toggle columns and recomputes the rendered flow', async () => {
+    render(<Example />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide Region' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Hide Outcome' }));
+
+    expect(screen.getByText('Select at least two columns with data to display a flow')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Show Region' })).toBeDefined();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show Region' }));
+    await waitFor(() =>
+      expect(screen.queryByText('Select at least two columns with data to display a flow')).toBeNull(),
+    );
+  });
+
+  it('reports the next visible columns from controlled user-land controls', () => {
+    const onVisibleColumnIdsChange = vi.fn();
+    render(
+      <Example
+        visibleColumnIds={['channel', 'region', 'outcome']}
+        onVisibleColumnIdsChange={onVisibleColumnIdsChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide Region' }));
+
+    expect(onVisibleColumnIdsChange).toHaveBeenCalledWith(['channel', 'outcome']);
+  });
+
+  it('lifts the selected link metadata and contributing records by mouse and keyboard', async () => {
+    const onCurveClick = vi.fn();
+    render(<Example onCurveClick={onCurveClick} />);
+
+    const curves = await screen.findAllByRole('button', { name: 'Select Sankey curve' });
+    fireEvent.click(curves[0]);
+
+    expect(onCurveClick).toHaveBeenCalledWith({
+      source: { column: { id: 'channel', label: 'Channel' }, value: 'Search' },
+      target: { column: { id: 'region', label: 'Region' }, value: 'EU' },
+      records: [data[0], data[1]],
+    });
+
+    fireEvent.keyDown(curves[0], { key: 'Enter' });
+    await waitFor(() => expect(onCurveClick).toHaveBeenCalledTimes(2));
+  });
+
+  it('lets user-land controls reorder columns and recomputes curve metadata', async () => {
+    const onCurveClick = vi.fn();
+    render(<Example onCurveClick={onCurveClick} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Move second column first' }));
+    const curves = await screen.findAllByRole('button', { name: 'Select Sankey curve' });
+    fireEvent.click(curves[0]);
+
+    expect(onCurveClick).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: expect.objectContaining({ column: { id: 'region', label: 'Region' } }),
+        target: expect.objectContaining({ column: { id: 'channel', label: 'Channel' } }),
+      }),
+    );
+  });
+
+  it('reports the next column order from controlled user-land controls', () => {
+    const onColumnOrderChange = vi.fn();
+    render(<Example columnOrder={['channel', 'region', 'outcome']} onColumnOrderChange={onColumnOrderChange} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Move second column first' }));
+
+    expect(onColumnOrderChange).toHaveBeenCalledWith(['region', 'channel', 'outcome']);
+  });
+});

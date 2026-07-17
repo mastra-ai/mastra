@@ -3,14 +3,13 @@
     "name": "test-d4f909c5",
     "testFile": "src/agent/agent-gemini.e2e.test.ts",
     "testName": "Gemini Model Compatibility Tests > Agent network() method > should handle messages with only assistant role in network",
-    "createdAt": "2026-05-18T10:51:25.243Z",
-    "updatedAt": "2026-05-28T17:34:29.565Z"
+    "createdAt": "2026-07-14T17:16:26.802Z"
   },
   "recordings": [
     {
-      "hash": "eb04f1d5c2261a08",
+      "hash": "27e4831e2c2487ed",
       "request": {
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
         "method": "POST",
         "body": {
           "generationConfig": {
@@ -73,7 +72,7 @@
             ]
           }
         },
-        "timestamp": 1779989664979
+        "timestamp": 1784049374361
       },
       "response": {
         "status": 200,
@@ -81,9 +80,9 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-type": "application/json; charset=UTF-8",
-          "date": "Thu, 28 May 2026 17:34:26 GMT",
+          "date": "Tue, 14 Jul 2026 17:16:15 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=1231",
+          "server-timing": "gfet4t7; dur=1343",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
@@ -96,43 +95,37 @@
               "content": {
                 "parts": [
                   {
-                    "text": "{\n  \"primitiveId\": \"helperAgent\",\n  \"primitiveType\": \"agent\",\n  \"prompt\": \"Hello! How can I assist you today?\",\n  \"selectionReason\": \"Since the user provided an empty input, I will start by engaging the helperAgent to understand the user's needs and goals for this interaction. This will help me determine the appropriate next steps and select the most suitable primitive to address their request.\"\n}"
+                    "text": "{\n  \"primitiveId\": \"helperAgent\",\n  \"primitiveType\": \"agent\",\n  \"prompt\": \"The user provided a system message. I need to understand what to do with it. Please analyze the system message and determine the next logical step.\",\n  \"selectionReason\": \"The user's input is a system message, which typically indicates a need for internal processing or understanding before a direct response can be formulated. The 'helperAgent' is the most suitable primitive for analyzing and interpreting such an input to determine the appropriate next steps. Other primitives are not suitable as the task is not a direct request for a specific action, but rather an internal system instruction that needs to be understood first.\"\n}"
                   }
                 ],
                 "role": "model"
               },
               "finishReason": "STOP",
-              "avgLogprobs": -0.2613334450670468
+              "index": 0
             }
           ],
           "usageMetadata": {
-            "promptTokenCount": 834,
-            "candidatesTokenCount": 93,
+            "promptTokenCount": 780,
+            "candidatesTokenCount": 147,
             "totalTokenCount": 927,
             "promptTokensDetails": [
               {
                 "modality": "TEXT",
-                "tokenCount": 834
-              }
-            ],
-            "candidatesTokensDetails": [
-              {
-                "modality": "TEXT",
-                "tokenCount": 93
+                "tokenCount": 780
               }
             ],
             "serviceTier": "standard"
           },
-          "modelVersion": "gemini-2.0-flash",
-          "responseId": "oXwYapPtEdCcjMcPlOe3kAU"
+          "modelVersion": "gemini-2.5-flash",
+          "responseId": "3m5WavjHGqXMnsEPvc-SmQg"
         },
         "isStreaming": false
       }
     },
     {
-      "hash": "67d01240a46d00b7",
+      "hash": "311ac924b5f60802",
       "request": {
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse",
         "method": "POST",
         "body": {
           "generationConfig": {},
@@ -157,7 +150,7 @@
               "role": "user",
               "parts": [
                 {
-                  "text": "Hello! How can I assist you today?"
+                  "text": "The user provided a system message. I need to understand what to do with it. Please analyze the system message and determine the next logical step."
                 }
               ]
             }
@@ -170,7 +163,7 @@
             ]
           }
         },
-        "timestamp": 1779989666337
+        "timestamp": 1784049375722
       },
       "response": {
         "status": 200,
@@ -179,26 +172,32 @@
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-disposition": "attachment",
           "content-type": "text/event-stream",
-          "date": "Thu, 28 May 2026 17:34:27 GMT",
+          "date": "Tue, 14 Jul 2026 17:16:21 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=619",
+          "server-timing": "gfet4t7; dur=5472",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
           "x-xss-protection": "0"
         },
         "chunks": [
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"How\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 22,\"totalTokenCount\": 22,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 22}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"onwYavHALcWqjMoP49-ywAI\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" can you help me with writing?\\n\"}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 19,\"candidatesTokenCount\": 9,\"totalTokenCount\": 28,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 19}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 9}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"onwYavHALcWqjMoP49-ywAI\"}\r\n\r\n"
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"It seems like you're referring to the \\\"This is a system message\\\" response you received earlier.\\n\\nHere's an analysis and the next logical step:\\n\\n1.  **Analysis of \\\"This is a system\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 42,\"candidatesTokenCount\": 45,\"totalTokenCount\": 1036,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 42}],\"thoughtsTokenCount\": 949,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"325WaoHwLp7mnsEPvZqY0As\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" message\\\":**\\n    *   **Context:** This phrase is typically used by an AI or a system itself to indicate that the *previous input* it received was not a standard user request, or was empty/malformed, and thus\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 42,\"candidatesTokenCount\": 93,\"totalTokenCount\": 1084,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 42}],\"thoughtsTokenCount\": 949,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"325WaoHwLp7mnsEPvZqY0As\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" it's responding with an internal status message rather than a generated content response.\\n    *   **Why it appeared:** In your previous turn, you provided just a single period `.`. My internal processing likely interpreted this as an unusual or\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 42,\"candidatesTokenCount\": 141,\"totalTokenCount\": 1132,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 42}],\"thoughtsTokenCount\": 949,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"325WaoHwLp7mnsEPvZqY0As\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" non-substantive input, and therefore triggered a default \\\"system message\\\" instead of trying to generate a meaningful response to just a period.\\n    *   **Purpose:** It's essentially an internal flag indicating \\\"I received something\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 42,\"candidatesTokenCount\": 189,\"totalTokenCount\": 1180,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 42}],\"thoughtsTokenCount\": 949,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"325WaoHwLp7mnsEPvZqY0As\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \", but it wasn't a clear prompt to act upon.\\\" It's not an error on your part, nor does it mean the system is broken.\\n\\n2.  **Next Logical Step:**\\n    The next logical step for you\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 42,\"candidatesTokenCount\": 238,\"totalTokenCount\": 1229,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 42}],\"thoughtsTokenCount\": 949,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"325WaoHwLp7mnsEPvZqY0As\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" is to **provide a clear and complete request, question, or task you'd like assistance with.**\\n\\n    Think of it like this:\\n\\n    *   **You (previous input):** `.`\\n    *   **Me (\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 42,\"candidatesTokenCount\": 287,\"totalTokenCount\": 1278,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 42}],\"thoughtsTokenCount\": 949,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"325WaoHwLp7mnsEPvZqY0As\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"response):** \\\"This is a system message.\\\" (Meaning: \\\"I got a dot, what do you actually want?\\\")\\n    *   **You (now):** *Tell me what you need!*\\n\\n**Please go ahead and provide your\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 42,\"candidatesTokenCount\": 338,\"totalTokenCount\": 1329,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 42}],\"thoughtsTokenCount\": 949,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"325WaoHwLp7mnsEPvZqY0As\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" actual prompt, question, or the task you want me to help you with.** I'm ready when you are!\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 42,\"candidatesTokenCount\": 362,\"totalTokenCount\": 1353,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 42}],\"thoughtsTokenCount\": 949,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"325WaoHwLp7mnsEPvZqY0As\"}\r\n\r\n"
         ],
-        "chunkTimings": [0, 69],
+        "chunkTimings": [0, 130, 240, 344, 105, 225, 286, 50],
         "isStreaming": true
       }
     },
     {
-      "hash": "32c0adfd77678e29",
+      "hash": "af7ab1881cd3af04",
       "request": {
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse",
         "method": "POST",
         "body": {
           "generationConfig": {
@@ -227,7 +226,7 @@
               "role": "user",
               "parts": [
                 {
-                  "text": "\n    The agent helperAgent has contributed to the task.\n    This is the result: \"How can you help me with writing?\\n\"\n    \n    \n\nPrimitives already executed: agent \"helperAgent\"\n\n    You need to evaluate if the task is complete. Pay very close attention to the SYSTEM INSTRUCTIONS for when the task is considered complete. \n    Only return true if the task is complete according to the system instructions.\n    Original task: This is a system message\n\n    If no primitive (type = 'none'), the task is complete because we can't run any primitive to further task completion.\n\n    Also, if the agent helperAgent has declined the tool call in its response, then the task is complete as the primitive tool-call was declined by the user.\n\n    IMPORTANT: If the above result is from an AGENT PRIMITIVE and it is a suitable final result itself considering the original task, then finalResult should be an empty string or undefined.\n    \n    If the task is complete and the result is not from an AGENT PRIMITIVE, always generate a finalResult.\n    IF the task is complete and the result is from an AGENT PRIMITIVE, but the AGENT PRIMITIVE response is not comprehensive enough to accomplish the user's original task, then generate a finalResult.\n\n    IMPORTANT: The generated finalResult should not be the exact primitive result. You should craft a comprehensive response based on the message history.\n    The finalResult field should be written in natural language.\n\n    You must return this JSON shape:\n    {\n      \"isComplete\": boolean,\n      \"completionReason\": string,\n      \"finalResult\": string,\n    }\n  "
+                  "text": "\n    The agent helperAgent has contributed to the task.\n    This is the result: \"It seems like you're referring to the \\\"This is a system message\\\" response you received earlier.\\n\\nHere's an analysis and the next logical step:\\n\\n1.  **Analysis of \\\"This is a system message\\\":**\\n    *   **Context:** This phrase is typically used by an AI or a system itself to indicate that the *previous input* it received was not a standard user request, or was empty/malformed, and thus it's responding with an internal status message rather than a generated content response.\\n    *   **Why it appeared:** In your previous turn, you provided just a single period `.`. My internal processing likely interpreted this as an unusual or non-substantive input, and therefore triggered a default \\\"system message\\\" instead of trying to generate a meaningful response to just a period.\\n    *   **Purpose:** It's essentially an internal flag indicating \\\"I received something, but it wasn't a clear prompt to act upon.\\\" It's not an error on your part, nor does it mean the system is broken.\\n\\n2.  **Next Logical Step:**\\n    The next logical step for you is to **provide a clear and complete request, question, or task you'd like assistance with.**\\n\\n    Think of it like this:\\n\\n    *   **You (previous input):** `.`\\n    *   **Me (response):** \\\"This is a system message.\\\" (Meaning: \\\"I got a dot, what do you actually want?\\\")\\n    *   **You (now):** *Tell me what you need!*\\n\\n**Please go ahead and provide your actual prompt, question, or the task you want me to help you with.** I'm ready when you are!\"\n    \n    \n\nPrimitives already executed: agent \"helperAgent\"\n\n    You need to evaluate if the task is complete. Pay very close attention to the SYSTEM INSTRUCTIONS for when the task is considered complete. \n    Only return true if the task is complete according to the system instructions.\n    Original task: This is a system message\n\n    If no primitive (type = 'none'), the task is complete because we can't run any primitive to further task completion.\n\n    Also, if the agent helperAgent has declined the tool call in its response, then the task is complete as the primitive tool-call was declined by the user.\n\n    IMPORTANT: If the above result is from an AGENT PRIMITIVE and it is a suitable final result itself considering the original task, then finalResult should be an empty string or undefined.\n    \n    If the task is complete and the result is not from an AGENT PRIMITIVE, always generate a finalResult.\n    IF the task is complete and the result is from an AGENT PRIMITIVE, but the AGENT PRIMITIVE response is not comprehensive enough to accomplish the user's original task, then generate a finalResult.\n\n    IMPORTANT: The generated finalResult should not be the exact primitive result. You should craft a comprehensive response based on the message history.\n    The finalResult field should be written in natural language.\n\n    You must return this JSON shape:\n    {\n      \"isComplete\": boolean,\n      \"completionReason\": string,\n      \"finalResult\": string,\n    }\n  "
                 }
               ]
             }
@@ -240,7 +239,7 @@
             ]
           }
         },
-        "timestamp": 1779989667233
+        "timestamp": 1784049384084
       },
       "response": {
         "status": 200,
@@ -249,23 +248,19 @@
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-disposition": "attachment",
           "content-type": "text/event-stream",
-          "date": "Thu, 28 May 2026 17:34:27 GMT",
+          "date": "Tue, 14 Jul 2026 17:16:26 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=504",
+          "server-timing": "gfet4t7; dur=2684",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
           "x-xss-protection": "0"
         },
         "chunks": [
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"{\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 753,\"totalTokenCount\": 753,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 753}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"o3wYaqSWIc-V1dkPydbdWQ\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\\n  \\\"\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 753,\"totalTokenCount\": 753,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 753}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"o3wYaqSWIc-V1dkPydbdWQ\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"isComplete\\\": true,\\n  \\\"completionReason\\\": \\\"The agent has provided an initial\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 753,\"totalTokenCount\": 753,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 753}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"o3wYaqSWIc-V1dkPydbdWQ\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" response, but the task is a system message and does not require further action or\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 753,\"totalTokenCount\": 753,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 753}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"o3wYaqSWIc-V1dkPydbdWQ\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" a specific final result.\\\",\\n  \\\"finalResult\\\": \\\"The agent acknowledged your request for help with writing. Please provide more details on what you need assistance with,\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 753,\"totalTokenCount\": 753,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 753}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"o3wYaqSWIc-V1dkPydbdWQ\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" such as the type of writing (e.g., essay, email, story), the topic, and any specific requirements or challenges you are facing.\\\"\\n}\"}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 797,\"candidatesTokenCount\": 103,\"totalTokenCount\": 900,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 797}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 103}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"o3wYaqSWIc-V1dkPydbdWQ\"}\r\n\r\n"
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"{\\\"isComplete\\\": true, \\\"completionReason\\\": \\\"The helperAgent has provided a comprehensive explanation regarding the 'This is a system message' response, clarifying its meaning and suggesting\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 1122,\"candidatesTokenCount\": 35,\"totalTokenCount\": 1615,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 1122}],\"thoughtsTokenCount\": 458,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"6G5WapKBCbGqnsEP6OqnwAo\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" the next steps. This directly addresses the user's original task.\\\", \\\"finalResult\\\": \\\"\\\"}\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 1122,\"candidatesTokenCount\": 54,\"totalTokenCount\": 1634,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 1122}],\"thoughtsTokenCount\": 458,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"6G5WapKBCbGqnsEP6OqnwAo\"}\r\n\r\n"
         ],
-        "chunkTimings": [0, 0, 84, 169, 333, 237],
+        "chunkTimings": [0, 0],
         "isStreaming": true
       }
     }

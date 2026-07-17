@@ -120,7 +120,7 @@ export const deletePushNotificationConfigParamsSchema = taskIdParamsSchema.exten
 // Legacy schema for backwards compatibility
 export const messageSendBodySchema = z.object({
   message: messageSchema,
-  metadata: z.record(z.string(), z.any()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const taskQueryBodySchema = z.object({

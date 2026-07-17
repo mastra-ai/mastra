@@ -633,6 +633,7 @@ function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
       workflowId,
       state,
       setState,
+      abortSignal,
       ...rest
     }) => {
       // BREAKING CHANGE v1.0: Pass raw input as first arg, context as second
@@ -641,6 +642,7 @@ function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
         mastra,
         requestContext,
         ...observabilityContext,
+        abortSignal,
         resumeData,
         workflow: {
           runId,
@@ -2660,10 +2662,29 @@ export class Workflow<
       for (const [stepName, stepResult] of suspendedSteps) {
         // @ts-expect-error - context type mismatch
         const suspendPath: string[] = [stepName, ...(stepResult?.suspendPayload?.__workflow_meta?.path ?? [])];
+        const nestedMeta = (stepResult as any)?.suspendPayload?.__workflow_meta ?? {};
+        // Keep the nested workflow metadata (foreachIndex, foreachOutput, resumeLabels) when
+        // propagating a suspension to the parent — mirrors the evented engine — so the parent
+        // snapshot is self-describing about EVERY parked iteration, not just the first one.
+        // Only runId and path change as we propagate up. Per-iteration `__streamState` blobs
+        // are stripped from the propagated copies: they can be large and resume reads them
+        // from the nested run's own snapshot, so the parent only needs the identifying fields.
+        const propagatedForeachOutput = Array.isArray(nestedMeta.foreachOutput)
+          ? nestedMeta.foreachOutput.map((entry: any) => {
+              if (entry?.status !== 'suspended' || !entry.suspendPayload) return entry;
+              const { __streamState: _streamState, ...suspendPayload } = entry.suspendPayload;
+              return { ...entry, suspendPayload };
+            })
+          : undefined;
         await suspend(
           {
             ...(stepResult as any)?.suspendPayload,
-            __workflow_meta: { runId: run.runId, path: suspendPath },
+            __workflow_meta: {
+              ...nestedMeta,
+              ...(propagatedForeachOutput ? { foreachOutput: propagatedForeachOutput } : {}),
+              runId: run.runId,
+              path: suspendPath,
+            },
           },
           {
             resumeLabel: Object.keys(res.resumeLabels ?? {}),

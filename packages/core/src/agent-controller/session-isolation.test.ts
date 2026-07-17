@@ -351,6 +351,32 @@ describe('AgentController session registry', () => {
     expect(b.mode.get()).toBe('build');
   });
 
+  it('keeps the resolved workspace isolated on each scoped session', async () => {
+    const controller = createController(new InMemoryStore());
+    await controller.init();
+    const workspaceA = createMockWorkspace();
+    const workspaceB = createMockWorkspace();
+
+    const a = await controller.createSession({
+      id: 'user-a::wt-a',
+      ownerId: 'test-owner',
+      resourceId: 'user-a',
+      scope: '/worktrees/a',
+      workspace: workspaceA,
+    });
+    const b = await controller.createSession({
+      id: 'user-a::wt-b',
+      ownerId: 'test-owner',
+      resourceId: 'user-a',
+      scope: '/worktrees/b',
+      workspace: workspaceB,
+    });
+
+    expect(a.getWorkspace()).toBe(workspaceA);
+    expect(b.getWorkspace()).toBe(workspaceB);
+    expect(a.getWorkspace()).not.toBe(b.getWorkspace());
+  });
+
   it('returns the same session for the same resourceId and scope (get-or-create)', async () => {
     const controller = createController(new InMemoryStore());
     await controller.init();
@@ -402,5 +428,29 @@ describe('AgentController session registry', () => {
 
     expect(await controller.getSessionByResource('user-a-renamed', '/worktrees/a')).toBe(a);
     expect(await controller.getSessionByResource('user-a', '/worktrees/a')).toBeUndefined();
+  });
+
+  it('exposes the authoritative scope through the session request context', async () => {
+    let observedScope: string | undefined;
+    const agent = new Agent({
+      name: 'test-agent',
+      instructions: 'You are a test agent.',
+      model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
+    });
+    const controller = new AgentController({
+      id: 'test-controller',
+      storage: new InMemoryStore(),
+      initialState: {},
+      workspace: ({ requestContext }) => {
+        observedScope = requestContext.get('controller')?.scope;
+        return createMockWorkspace();
+      },
+      modes: [{ id: 'build', name: 'Build', default: true, agent, defaultModelId: 'openai/gpt-4o' }],
+    });
+    await controller.init();
+
+    await controller.createSession({ resourceId: 'user-a', scope: '/worktrees/a' });
+
+    expect(observedScope).toBe('/worktrees/a');
   });
 });

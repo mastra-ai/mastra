@@ -7,8 +7,7 @@ export type ChatConnectionState = ReturnType<typeof useAgentControllerConnection
 export interface ChatConnectionApi {
   status: ConnectionStatus;
   state?: ChatConnectionState;
-  /** When the state snapshot was last fetched — bumps on reconnect refetches. */
-  stateUpdatedAt?: number;
+  threadId?: string;
   createdThreadId?: string;
 }
 

@@ -9,7 +9,22 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { MessageFactory } from '@mastra/react';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react';
-import { Bell, ChevronDown, Eye, Globe, ListChecks, Pencil, Search, Terminal, Wrench } from 'lucide-react';
+import {
+  Bell,
+  BookOpen,
+  ChevronDown,
+  CircleDot,
+  CircleX,
+  ExternalLink,
+  Eye,
+  GitMerge,
+  Globe,
+  ListChecks,
+  Pencil,
+  Search,
+  Terminal,
+  Wrench,
+} from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 
@@ -19,7 +34,7 @@ import { useChatTranscript } from '../context/useChatTranscript';
 import {
   useApproveAgentControllerToolMutation,
   useRespondAgentControllerSuspensionMutation,
-} from '../hooks/useAgentControllerRunMutations';
+} from '../../../../../shared/hooks/useAgentControllerRunMutations';
 import { stripSerializedAnsi } from '../services/ansi';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 
@@ -83,6 +98,66 @@ function stringify(v: unknown): string {
 function lastSegment(id: string): string {
   const parts = id.split('/');
   return parts[parts.length - 1] ?? id;
+}
+
+interface SkillActivation {
+  name: string;
+  content: string;
+  arguments?: string;
+}
+
+const skillActivationPattern = /^<skill name="([a-z0-9]+(?:-[a-z0-9]+)*)">\n([\s\S]+)\n<\/skill>$/;
+const skillArgumentsMarker = '\n\nARGUMENTS: ';
+
+function parseSkillActivation(text: string): SkillActivation | undefined {
+  const match = skillActivationPattern.exec(text.trim());
+  if (!match) return undefined;
+
+  const content = match[2];
+  const argumentsIndex = content.lastIndexOf(skillArgumentsMarker);
+  return {
+    name: match[1],
+    content,
+    arguments: argumentsIndex >= 0 ? content.slice(argumentsIndex + skillArgumentsMarker.length).trim() : undefined,
+  };
+}
+
+function SkillActivationCard({ activation }: { activation: SkillActivation }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <Collapsible open={expanded} onOpenChange={setExpanded} className="min-w-64 max-w-full">
+      <CollapsibleTrigger
+        className="w-full rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent1"
+        aria-label={`${expanded ? 'Hide' : 'Show'} ${activation.name} skill contents`}
+      >
+        <span className="flex items-center gap-2">
+          <span className="flex items-center gap-1.5 text-icon3">
+            <BookOpen size={14} aria-hidden="true" />
+            <Txt as="span" variant="ui-xs" className="uppercase tracking-wide">
+              Skill
+            </Txt>
+          </span>
+          <Txt as="span" variant="ui-sm" font="mono" className="text-icon6">
+            {activation.name}
+          </Txt>
+          <ChevronDown
+            size={13}
+            aria-hidden="true"
+            className={`ml-auto shrink-0 text-icon3 transition-transform ${expanded ? 'rotate-180' : ''}`}
+          />
+        </span>
+        {activation.arguments && (
+          <span className="mt-1 block truncate text-ui-xs text-icon3">{activation.arguments}</span>
+        )}
+      </CollapsibleTrigger>
+      <CollapsibleContent className="mt-2 max-h-96 overflow-y-auto border-t border-border1 pt-2">
+        <div className="prose text-ui-sm">
+          <Markdown>{activation.content}</Markdown>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -526,36 +601,70 @@ function SubagentCard({ entry }: { entry: SubagentEntry }) {
 // Notification cards
 // ---------------------------------------------------------------------------
 
+function notificationUrl(entry: NotificationEntry): string | undefined {
+  const targetUrl = entry.metadata?.targetUrl;
+  if (typeof targetUrl === 'string' && /^https:\/\/github\.com\//.test(targetUrl)) return targetUrl;
+
+  const repository = entry.metadata?.repository;
+  if (typeof repository !== 'string' || !/^[^/]+\/[^/]+$/.test(repository)) return undefined;
+  const pullRequestNumber = entry.metadata?.pullRequestNumber;
+  if (typeof pullRequestNumber === 'number') return `https://github.com/${repository}/pull/${pullRequestNumber}`;
+  const issueNumber = entry.metadata?.issueNumber;
+  if (typeof issueNumber === 'number') return `https://github.com/${repository}/issues/${issueNumber}`;
+  return undefined;
+}
+
+function notificationPresentation(entry: NotificationEntry) {
+  const action = entry.metadata?.action;
+  if (entry.notifKind === 'pull-request-merged') {
+    return { state: 'merged', icon: <GitMerge size={13} />, className: 'border-accent3/30 text-accent3' };
+  }
+  if (entry.notifKind === 'pull-request-closed') {
+    return { state: 'closed', icon: <CircleX size={13} />, className: 'border-error/30 text-error' };
+  }
+  if (action === 'opened' || action === 'reopened') {
+    return { state: 'open', icon: <CircleDot size={13} />, className: 'border-accent1/30 text-accent1' };
+  }
+  return { state: 'notification', icon: <Bell size={13} />, className: 'border-accent3/30 text-icon3' };
+}
+
 function NotificationCard({ entry }: { entry: NotificationEntry }) {
-  return (
-    <div className="rounded-lg border border-l-4 border-border1 border-l-accent3 bg-surface2 px-3 py-2 shadow-sm">
+  const url = notificationUrl(entry);
+  const presentation = notificationPresentation(entry);
+  const content = (
+    <div
+      data-notification-state={presentation.state}
+      className={`rounded-lg border bg-surface2 px-3 py-2 shadow-sm ${presentation.className}`}
+    >
       <div className="flex items-center gap-2">
-        <Bell size={13} />
+        {presentation.icon}
         <Txt variant="ui-sm" font="mono">
           {entry.source ?? 'notification'}
         </Txt>
-        {entry.priority && (
-          <Badge variant={entry.priority === 'high' || entry.priority === 'urgent' ? 'error' : 'default'}>
-            {entry.priority}
-          </Badge>
-        )}
+        {url && <ExternalLink size={12} className="ml-auto" aria-hidden />}
       </div>
       <Txt variant="ui-sm" className="py-1">
         {entry.message}
       </Txt>
     </div>
   );
+
+  if (!url) return content;
+  return (
+    <a href={url} target="_blank" rel="noreferrer" aria-label={`Open notification target: ${entry.message}`}>
+      {content}
+    </a>
+  );
 }
 
 function NotificationSummaryCard({ entry }: { entry: NotificationSummaryEntry }) {
   return (
-    <div className="rounded-lg border border-l-4 border-border1 border-l-accent3 bg-surface2 px-3 py-2 shadow-sm">
+    <div className="rounded-lg border border-accent3/30 bg-surface2 px-3 py-2 shadow-sm">
       <div className="flex items-center gap-2">
         <Bell size={13} />
         <Txt variant="ui-sm" font="mono">
           Notification summary
         </Txt>
-        <Badge variant="info">{entry.pending} pending</Badge>
       </div>
       <Txt variant="ui-sm" className="py-1">
         {entry.message}
@@ -694,19 +803,27 @@ function MessageBubble({ entry }: { entry: MessageEntry }) {
   };
 
   const renderers = {
-    Text: (part: TextPart) =>
-      entry.message.role === 'user' ? (
-        <div className="prose">
-          <Markdown>{part.text}</Markdown>
-        </div>
-      ) : (
+    Text: (part: TextPart) => {
+      if (entry.message.role === 'user') {
+        const activation = parseSkillActivation(part.text);
+        return activation ? (
+          <SkillActivationCard activation={activation} />
+        ) : (
+          <div className="prose">
+            <Markdown>{part.text}</Markdown>
+          </div>
+        );
+      }
+
+      return (
         <div className="prose">
           <Markdown>{part.text}</Markdown>
           {entry.streaming && part === lastTextPart && (
             <span className="ml-0.5 inline-block h-[1em] w-0.5 animate-pulse bg-accent1 align-text-bottom" />
           )}
         </div>
-      ),
+      );
+    },
     Reasoning: (part: ReasoningPart) => (
       <div className="my-1.5 border-l-2 border-border1 pl-2.5 text-ui-sm italic text-icon3 [&_p]:my-0.5">
         <Markdown>{part.reasoning}</Markdown>
@@ -721,10 +838,28 @@ function MessageBubble({ entry }: { entry: MessageEntry }) {
     File: (part: FilePart) => <FileAttachment part={part} />,
   };
 
+  const notifications = notificationMetadata(entry);
+  if (notifications.length > 0) {
+    return (
+      <div className="flex flex-col gap-2">
+        {notifications.map(notification =>
+          notification.kind === 'notification' ? (
+            <NotificationCard key={notification.id} entry={notification} />
+          ) : (
+            <NotificationSummaryCard key={notification.id} entry={notification} />
+          ),
+        )}
+        {hasRenderablePart && entry.message.role !== 'signal' && (
+          <MessageFactory message={entry.message} roles={roles} {...renderers} fallback={() => null} />
+        )}
+      </div>
+    );
+  }
+
   const status = statusMetadata(entry);
-  // Some harness status parts (e.g. om_* markers) carry no text; skip them
-  // entirely instead of rendering an empty notice bubble.
-  if (status) return status.text.trim() ? <StatusMetadataCard status={status} /> : null;
+  // Some harness status parts (e.g. om_* markers) carry no text. Ignore the
+  // marker while preserving any ordinary assistant content in the message.
+  if (status?.text.trim()) return <StatusMetadataCard status={status} />;
   if (entry.message.role === 'assistant' && !hasRenderablePart) return null;
 
   return <MessageFactory message={entry.message} roles={roles} {...renderers} fallback={() => null} />;
@@ -755,6 +890,114 @@ function toolFromInvocationPart(part: ToolInvocationPart, runtime?: ToolCall): T
   };
 }
 
+function notificationMetadata(entry: MessageEntry): Array<NotificationEntry | NotificationSummaryEntry> {
+  if (entry.message.role === 'signal') return signalNotifications(entry);
+
+  const harnessContent = entry.message.content.metadata?.harnessContent;
+  if (!Array.isArray(harnessContent)) return [];
+
+  const notifications: Array<NotificationEntry | NotificationSummaryEntry> = [];
+  for (const [index, part] of harnessContent.entries()) {
+    if (typeof part !== 'object' || part === null || !('type' in part)) continue;
+    if (!('message' in part) || typeof part.message !== 'string') continue;
+
+    if (part.type === 'notification') {
+      notifications.push({
+        kind: 'notification',
+        id: `${entry.id}-notification-${index}`,
+        notificationId:
+          'notificationId' in part && typeof part.notificationId === 'string' ? part.notificationId : undefined,
+        message: part.message,
+        source: 'source' in part && typeof part.source === 'string' ? part.source : undefined,
+        notifKind: 'kind' in part && typeof part.kind === 'string' ? part.kind : undefined,
+        priority: 'priority' in part && typeof part.priority === 'string' ? part.priority : undefined,
+        metadata: 'metadata' in part && isRecord(part.metadata) ? part.metadata : undefined,
+      });
+      continue;
+    }
+
+    if (part.type !== 'notification_summary') continue;
+    const pending = 'pending' in part && typeof part.pending === 'number' ? part.pending : 0;
+    const bySource = 'bySource' in part && isNumberRecord(part.bySource) ? part.bySource : {};
+    const byPriority = 'byPriority' in part && isNumberRecord(part.byPriority) ? part.byPriority : {};
+    const notificationIds =
+      'notificationIds' in part && Array.isArray(part.notificationIds)
+        ? part.notificationIds.filter((id: unknown): id is string => typeof id === 'string')
+        : [];
+    notifications.push({
+      kind: 'notification_summary',
+      id: `${entry.id}-notification-summary-${index}`,
+      message: part.message,
+      pending,
+      bySource,
+      byPriority,
+      notificationIds,
+    });
+  }
+  return notifications;
+}
+
+/**
+ * Persisted notification signals are DB-native `role: 'signal'` rows whose
+ * original signal payload lives under `content.metadata.signal` (see
+ * `signalToDBMessage` in @mastra/core). Rebuild notification cards from it so
+ * they survive transcript hydration.
+ */
+function signalNotifications(entry: MessageEntry): Array<NotificationEntry | NotificationSummaryEntry> {
+  const signal = entry.message.content.metadata?.signal;
+  if (!isRecord(signal) || signal.type !== 'notification') return [];
+
+  const text = (entry.message.content.parts ?? [])
+    .map(part => (part.type === 'text' ? part.text : ''))
+    .filter(Boolean)
+    .join('\n')
+    .trim();
+  const attributes = isRecord(signal.attributes) ? signal.attributes : {};
+  const metadata = isRecord(signal.metadata) ? signal.metadata : {};
+
+  if (signal.tagName === 'notification-summary') {
+    const summary = isRecord(metadata.notificationSummary) ? metadata.notificationSummary : {};
+    return [
+      {
+        kind: 'notification_summary',
+        id: `${entry.id}-signal-summary`,
+        message: text,
+        pending: typeof summary.pending === 'number' ? summary.pending : 0,
+        bySource: isNumberRecord(summary.bySource) ? summary.bySource : {},
+        byPriority: isNumberRecord(summary.byPriority) ? summary.byPriority : {},
+        notificationIds: Array.isArray(summary.notificationIds)
+          ? summary.notificationIds.filter((id: unknown): id is string => typeof id === 'string')
+          : [],
+      },
+    ];
+  }
+
+  return [
+    {
+      kind: 'notification',
+      id: `${entry.id}-signal-notification`,
+      notificationId: typeof attributes.id === 'string' ? attributes.id : undefined,
+      message: text,
+      source: typeof attributes.source === 'string' ? attributes.source : undefined,
+      notifKind: typeof attributes.kind === 'string' ? attributes.kind : undefined,
+      priority: typeof attributes.priority === 'string' ? attributes.priority : undefined,
+      metadata,
+    },
+  ];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isNumberRecord(value: unknown): value is Record<string, number> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    Object.values(value).every(candidate => typeof candidate === 'number')
+  );
+}
+
 interface StatusMetadata {
   id: string;
   text: string;
@@ -775,16 +1018,17 @@ function statusMetadata(entry: MessageEntry): StatusMetadata | undefined {
   );
   if (!statusPart || typeof statusPart !== 'object' || !('type' in statusPart)) return undefined;
 
-  const text = 'text' in statusPart && typeof statusPart.text === 'string' ? statusPart.text : messageText(entry);
+  const text =
+    'text' in statusPart && typeof statusPart.text === 'string'
+      ? statusPart.text
+      : 'message' in statusPart && typeof statusPart.message === 'string'
+        ? statusPart.message
+        : '';
   return {
     id: `${entry.id}-${String(statusPart.type)}`,
     text,
     level: statusPart.type === 'harness-error' ? 'error' : 'info',
   };
-}
-
-function messageText(entry: MessageEntry): string {
-  return entry.message.content.parts.flatMap(part => (part.type === 'text' ? [part.text] : [])).join('');
 }
 
 function StatusMetadataCard({ status }: { status: StatusMetadata }) {

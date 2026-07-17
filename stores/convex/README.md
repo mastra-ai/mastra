@@ -2,7 +2,7 @@
 
 Convex adapters for Mastra:
 
-- `ConvexStore` implements the Mastra storage contract (threads, messages, workflows, scores, resources, schedules, channels, background tasks).
+- `ConvexStore` implements the Mastra storage contract (threads, messages, workflows, scores, resources, schedules, channels, background tasks, observational memory).
 - `ConvexVector` stores embeddings inside Convex and performs development-scale cosine similarity search.
 - `ConvexNativeVector` uses Convex native vector search for production workloads.
 - `ConvexServerCache` stores Mastra server cache entries in Convex for durable stream replay and response caching.
@@ -33,6 +33,7 @@ import {
   mastraChannelInstallationsTable,
   mastraChannelConfigTable,
   mastraBackgroundTasksTable,
+  mastraObservationalMemoryTable,
   mastraVectorIndexesTable,
   mastraVectorsTable,
   mastraCacheTable,
@@ -51,6 +52,7 @@ export default defineSchema({
   mastra_channel_installations: mastraChannelInstallationsTable,
   mastra_channel_config: mastraChannelConfigTable,
   mastra_background_tasks: mastraBackgroundTasksTable,
+  mastra_observational_memory: mastraObservationalMemoryTable,
   mastra_vector_indexes: mastraVectorIndexesTable,
   mastra_vectors: mastraVectorsTable,
   mastra_cache: mastraCacheTable,
@@ -170,22 +172,23 @@ Native vector search uses Convex's schema-defined vector indexes and action-only
 
 This adapter uses **typed Convex tables** for each Mastra domain:
 
-| Domain           | Convex Table                                            | Purpose                          |
-| ---------------- | ------------------------------------------------------- | -------------------------------- |
-| Threads          | `mastra_threads`                                        | Conversation threads             |
-| Messages         | `mastra_messages`                                       | Chat messages                    |
-| Resources        | `mastra_resources`                                      | User working memory              |
-| Workflows        | `mastra_workflow_snapshots`                             | Workflow state                   |
-| Scorers          | `mastra_scorers`                                        | Evaluation data                  |
-| Schedules        | `mastra_schedules`                                      | Workflow schedules               |
-| Triggers         | `mastra_schedule_triggers`                              | Schedule history                 |
-| Channels         | `mastra_channel_installations`, `mastra_channel_config` | Channel installations and config |
-| Background Tasks | `mastra_background_tasks`                               | Background task state            |
-| Vector Indexes   | `mastra_vector_indexes`                                 | Index metadata                   |
-| Vectors          | `mastra_vectors`                                        | Embeddings                       |
-| Cache            | `mastra_cache`                                          | Cache metadata                   |
-| Cache Items      | `mastra_cache_list_items`                               | Cache list entries               |
-| Fallback         | `mastra_documents`                                      | Unknown tables                   |
+| Domain               | Convex Table                                            | Purpose                          |
+| -------------------- | ------------------------------------------------------- | -------------------------------- |
+| Threads              | `mastra_threads`                                        | Conversation threads             |
+| Messages             | `mastra_messages`                                       | Chat messages                    |
+| Resources            | `mastra_resources`                                      | User working memory              |
+| Workflows            | `mastra_workflow_snapshots`                             | Workflow state                   |
+| Scorers              | `mastra_scorers`                                        | Evaluation data                  |
+| Schedules            | `mastra_schedules`                                      | Workflow schedules               |
+| Triggers             | `mastra_schedule_triggers`                              | Schedule history                 |
+| Channels             | `mastra_channel_installations`, `mastra_channel_config` | Channel installations and config |
+| Background Tasks     | `mastra_background_tasks`                               | Background task state            |
+| Observational Memory | `mastra_observational_memory`                           | Observational memory generations |
+| Vector Indexes       | `mastra_vector_indexes`                                 | Index metadata                   |
+| Vectors              | `mastra_vectors`                                        | Embeddings                       |
+| Cache                | `mastra_cache`                                          | Cache metadata                   |
+| Cache Items          | `mastra_cache_list_items`                               | Cache list entries               |
+| Fallback             | `mastra_documents`                                      | Unknown tables                   |
 
 All typed tables include:
 
@@ -195,6 +198,14 @@ All typed tables include:
 Schedule due reads and trigger-history reads use bounded Convex queries to avoid deployment read limits. When no explicit trigger-history limit is provided, the adapter returns the newest 100 rows. Schedule listing is capped at 8,000 rows per call. Schedule rows also store a normalized `workflow_id` alongside the serialized target so workflow filters can run inside Convex before the listing cap is applied.
 
 Background task reads and updates also tolerate older rows that were written to the fallback `mastra_documents` table.
+
+### Observational memory
+
+`ConvexStore` supports Mastra's observational memory. Records are keyed by a `lookupKey` (`thread:{id}` or `resource:{id}`) and the latest generation is served through the `by_lookup_key` index. All observational memory read-modify-write operations run inside the deployed storage mutation, so swaps and counter updates are atomic.
+
+Upgrading from a version without observational memory: add `mastraObservationalMemoryTable` to your `convex/schema.ts` (as shown in the quick start) and run `npx convex deploy` again.
+
+Active observations and buffered chunks share one Convex document, which is subject to Convex's 1 MiB document size limit. Default observational memory thresholds stay well below this limit; extremely large custom thresholds can exceed it.
 
 ## Testing
 

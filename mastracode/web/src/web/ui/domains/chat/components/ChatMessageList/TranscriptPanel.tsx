@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ArrowDown } from 'lucide-react';
 
+import { useChatConnection } from '../../context/useChatConnection';
 import { useChatTranscript } from '../../context/useChatTranscript';
 import { useTranscriptScroll } from '../../hooks/useTranscriptScroll';
 import { Transcript } from '../Transcript';
@@ -12,7 +13,8 @@ const transcriptScrollClass =
 
 export function TranscriptPanel() {
   const { transcript, showWorkingIndicator } = useChatTranscript();
-  const { threadRef, showScrollDown, scrollToBottom } = useTranscriptScroll(transcript);
+  const { threadId } = useChatConnection();
+  const { threadRef, showScrollDown, scrollToBottom } = useTranscriptScroll(transcript, threadId);
 
   const panelClassName =
     transcript.entries.length === 0 ? `${transcriptScrollClass} place-items-center` : transcriptScrollClass;
