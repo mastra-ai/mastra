@@ -1,35 +1,54 @@
 import { MastraError } from '../../../error';
 import type { DatasetItemPayload } from '../../types';
 
+interface SerializationIssue {
+  path: string;
+  reason: string;
+  referencePath?: string;
+}
+
 function formatPath(parent: string, key: string): string {
   return /^[A-Za-z_$][\w$]*$/.test(key) ? `${parent}.${key}` : `${parent}[${JSON.stringify(key)}]`;
 }
 
-function findCircularReference(
+function findSerializationIssue(
   value: unknown,
   path: string,
   ancestors: WeakMap<object, string>,
-): { path: string; referencePath: string } | undefined {
+): SerializationIssue | undefined {
+  switch (typeof value) {
+    case 'undefined':
+      return { path, reason: `undefined value at ${path} would be silently dropped or nulled` };
+    case 'function':
+      return { path, reason: `function at ${path} would be silently dropped` };
+    case 'symbol':
+      return { path, reason: `symbol at ${path} would be silently dropped` };
+    case 'bigint':
+      return { path, reason: `bigint at ${path} cannot be serialized` };
+    case 'number':
+      return Number.isFinite(value)
+        ? undefined
+        : { path, reason: `non-finite number ${value} at ${path} would become null` };
+  }
+
   if (value === null || typeof value !== 'object') return undefined;
 
   const referencePath = ancestors.get(value);
-  if (referencePath) return { path, referencePath };
+  if (referencePath) {
+    return { path, referencePath, reason: `circular reference at ${path} references ${referencePath}` };
+  }
 
   ancestors.set(value, path);
   try {
     if (Array.isArray(value)) {
       for (const [index, item] of value.entries()) {
-        const circularReference = findCircularReference(item, `${path}[${index}]`, ancestors);
-        if (circularReference) return circularReference;
+        const issue = findSerializationIssue(item, `${path}[${index}]`, ancestors);
+        if (issue) return issue;
       }
     } else {
       for (const key of Object.keys(value)) {
-        const circularReference = findCircularReference(
-          (value as Record<string, unknown>)[key],
-          formatPath(path, key),
-          ancestors,
-        );
-        if (circularReference) return circularReference;
+        const issue = findSerializationIssue((value as Record<string, unknown>)[key], formatPath(path, key), ancestors);
+        if (issue) return issue;
       }
     }
   } finally {
@@ -40,15 +59,26 @@ function findCircularReference(
 }
 
 export function validateDatasetItemPayloadSerialization(payload: Partial<DatasetItemPayload>, path: string): void {
-  const circularReference = findCircularReference(payload, path, new WeakMap());
-  if (circularReference) {
-    throw new MastraError({
-      id: 'DATASET_ITEM_PAYLOAD_NOT_SERIALIZABLE',
-      text: `Dataset item payload must be JSON-serializable: circular reference at ${circularReference.path} references ${circularReference.referencePath}.`,
-      domain: 'STORAGE',
-      category: 'USER',
-      details: circularReference,
-    });
+  const ancestors = new WeakMap<object, string>();
+  ancestors.set(payload, path);
+
+  for (const key of Object.keys(payload)) {
+    const fieldValue = (payload as Record<string, unknown>)[key];
+    // Omitted optional fields: only nested undefined values are lossy.
+    if (fieldValue === undefined) continue;
+
+    const issue = findSerializationIssue(fieldValue, formatPath(path, key), ancestors);
+    if (issue) {
+      throw new MastraError({
+        id: 'DATASET_ITEM_PAYLOAD_NOT_SERIALIZABLE',
+        text: `Dataset item payload must be JSON-serializable: ${issue.reason}.`,
+        domain: 'STORAGE',
+        category: 'USER',
+        details: issue.referencePath
+          ? { path: issue.path, referencePath: issue.referencePath }
+          : { path: issue.path, reason: issue.reason },
+      });
+    }
   }
 
   try {

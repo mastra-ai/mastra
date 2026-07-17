@@ -367,6 +367,23 @@ describe('Datasets Handlers', () => {
       expect((error as HTTPException).message).toContain('items[0].input.self references items[0].input');
     });
 
+    it('maps lossy dataset item payloads to HTTP 400', async () => {
+      const dataset = await mastra.datasets.create({ name: 'Lossy Payload DS' });
+
+      const error = await ADD_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        input: { q: 'lossy', extra: undefined },
+      } as any).then(
+        () => null,
+        (caught: unknown) => caught,
+      );
+
+      expect(error).toBeInstanceOf(HTTPException);
+      expect((error as HTTPException).status).toBe(400);
+      expect((error as HTTPException).message).toContain('undefined value at items[0].input.extra');
+    });
+
     it('maps incompatible externalId reuse in a batch to HTTP 409', async () => {
       const dataset = await mastra.datasets.create({ name: 'Batch Conflict DS' });
       await BATCH_INSERT_ITEMS_ROUTE.handler({

@@ -207,6 +207,63 @@ describe('DatasetsInMemory', () => {
       expect(items.items).toHaveLength(0);
     });
 
+    it.each([
+      ['a nested undefined value', { prompt: 'hello', missing: undefined }, 'undefined value at item.input.missing'],
+      ['a function', { prompt: 'hello', callback: () => 'hi' }, 'function at item.input.callback'],
+      ['a symbol', { prompt: 'hello', token: Symbol('token') }, 'symbol at item.input.token'],
+      ['a bigint', { prompt: 'hello', count: 1n }, 'bigint at item.input.count'],
+      [
+        'a non-finite number',
+        { prompt: 'hello', score: Number.POSITIVE_INFINITY },
+        'non-finite number Infinity at item.input.score',
+      ],
+      [
+        'an undefined array entry',
+        { prompt: 'hello', steps: ['a', undefined] },
+        'undefined value at item.input.steps[1]',
+      ],
+    ] as const)('updateItem rejects payloads containing %s', async (_label, input, expectedPath) => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      const item = await storage.addItem({ datasetId: dataset.id, input: { prompt: 'safe' } });
+
+      await expect(storage.updateItem({ id: item.id, datasetId: dataset.id, input })).rejects.toMatchObject({
+        id: 'DATASET_ITEM_PAYLOAD_NOT_SERIALIZABLE',
+        message: expect.stringContaining(expectedPath),
+      });
+    });
+
+    it('addItem accepts omitted optional payload fields set to undefined', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+
+      const item = await storage.addItem({ datasetId: dataset.id, input: { prompt: 'hello' }, groundTruth: undefined });
+      expect(item.input).toEqual({ prompt: 'hello' });
+    });
+
+    it('addItem rejects lossy payloads so identical externalId retries stay idempotent', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      const input = { prompt: 'hello', extra: undefined };
+
+      // Without rejection, the first call would persist {prompt} (undefined dropped by
+      // serialization) while the retry compares against {prompt, extra: undefined} in
+      // memory, turning an identical retry into a spurious identity conflict.
+      await expect(storage.addItem({ datasetId: dataset.id, externalId: 'lossy-item', input })).rejects.toMatchObject({
+        id: 'DATASET_ITEM_PAYLOAD_NOT_SERIALIZABLE',
+        message: expect.stringContaining('undefined value at items[0].input.extra'),
+      });
+      await expect(storage.addItem({ datasetId: dataset.id, externalId: 'lossy-item', input })).rejects.toMatchObject({
+        id: 'DATASET_ITEM_PAYLOAD_NOT_SERIALIZABLE',
+      });
+
+      // A JSON-safe payload stays idempotent across identical externalId retries.
+      const safeInput = { prompt: 'hello' };
+      const first = await storage.addItem({ datasetId: dataset.id, externalId: 'lossy-item', input: safeInput });
+      const retry = await storage.addItem({ datasetId: dataset.id, externalId: 'lossy-item', input: safeInput });
+      expect(retry.id).toBe(first.id);
+
+      const items = await storage.listItems({ datasetId: dataset.id, pagination: { page: 0, perPage: 10 } });
+      expect(items.items).toHaveLength(1);
+    });
+
     it('addItem throws for non-existent dataset', async () => {
       await expect(storage.addItem({ datasetId: 'non-existent', input: {} })).rejects.toThrow('Dataset not found');
     });
