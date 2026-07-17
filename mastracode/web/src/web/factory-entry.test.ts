@@ -6,10 +6,14 @@ import { PostgresStore, PgVector } from '@mastra/pg';
 import type { WebAuthAdapter, WebAuthAdapterInitContext } from './auth-adapter.js';
 import { MastraFactory } from './factory-entry.js';
 import { getFactoryWorkspace } from './factory/workspace.js';
+import type { FactoryIntegration, IntegrationContext } from './factory-integration.js';
 import {
   __resetRuntimeConfigForTests,
+  getFactoryStore,
   getSeededAuthAdapter,
+  getSeededIntegration,
   getSeededSandbox,
+  getSeededStateSigner,
   getSeededStorage,
   getSharedAppPool,
 } from './runtime-config.js';
@@ -230,6 +234,100 @@ describe('MastraFactory.prepare', () => {
     const gatedConfig = await prepareFactory({ auth: fakeAdapter() });
     const gatedMiddleware = (gatedConfig.buildServerConfig as () => { middleware?: unknown[] })().middleware ?? [];
     expect(gatedMiddleware).toHaveLength(openMiddleware.length + 2);
+  });
+});
+
+function fakeIntegration(overrides: Partial<FactoryIntegration> & { id: string }): FactoryIntegration {
+  return {
+    routes: vi.fn((_ctx: IntegrationContext) => []),
+    diagnostics: () => ({}),
+    ...overrides,
+  };
+}
+
+describe('MastraFactory.prepare integrations', () => {
+  it('rejects duplicate integration ids', async () => {
+    const factory = new MastraFactory({
+      integrations: [fakeIntegration({ id: 'custom' }), fakeIntegration({ id: 'custom' })],
+    });
+    await expect(factory.prepare()).rejects.toThrow(/duplicate integration id 'custom'/);
+  });
+
+  it('seeds integrations into the runtime-config registry', async () => {
+    const custom = fakeIntegration({ id: 'custom' });
+    await prepareFactory({ integrations: [custom] });
+    expect(getSeededIntegration('custom')).toBe(custom);
+    expect(getSeededIntegration('missing')).toBeUndefined();
+  });
+
+  it('registers an integration-provided storage domain into the FactoryStore', async () => {
+    const domain = { name: 'custom-domain', init: vi.fn(async () => {}) };
+    const custom = fakeIntegration({ id: 'custom', storageDomain: domain });
+    await prepareFactory({ storage: fakePgStorage(), integrations: [custom] });
+    expect(getFactoryStore().get('custom-domain')).toBe(domain);
+  });
+
+  it("folds a ready integration's routes into buildApiRoutes", async () => {
+    const routes = vi.fn((_ctx: IntegrationContext) => [
+      { path: '/web/custom/status', method: 'GET' as const, handler: () => new Response() },
+    ]);
+    const config = await prepareFactory({ integrations: [fakeIntegration({ id: 'custom', routes })] });
+    const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
+    const paths = buildApiRoutes({ controller: {}, authStorage: {} }).map(r => r.path);
+    expect(paths).toContain('/web/custom/status');
+    const ctx = routes.mock.calls[0]![0];
+    expect(ctx.stateSigner).toBe(getSeededStateSigner());
+    expect(typeof ctx.hooks?.runIssueTriage).toBe('function');
+  });
+
+  it('mounts disabled-status stubs for the known ids when no integrations are registered', async () => {
+    const config = await prepareFactory({});
+    const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
+    const paths = buildApiRoutes({ controller: {}, authStorage: {} }).map(r => r.path);
+    expect(paths).toContain('/web/github/status');
+    expect(paths).toContain('/web/linear/status');
+  });
+
+  it('merges agentTools and sessionTools from ready integrations into extraTools', async () => {
+    const agentTool = { description: 'agent' };
+    const sessionTool = { description: 'session' };
+    const custom = fakeIntegration({
+      id: 'custom',
+      agentTools: vi.fn(async () => ({ customAgentTool: agentTool }) as never),
+      sessionTools: vi.fn(() => ({ customSessionTool: sessionTool }) as never),
+    });
+    const config = await prepareFactory({ integrations: [custom] });
+    const extraTools = config.extraTools as (args: { requestContext: object }) => Promise<Record<string, unknown>>;
+    const tools = await extraTools({ requestContext: {} });
+    expect(tools.customAgentTool).toBe(agentTool);
+    expect(tools.customSessionTool).toBe(sessionTool);
+  });
+
+  it('omits extraTools when no integration contributes tools', async () => {
+    const config = await prepareFactory({ integrations: [fakeIntegration({ id: 'custom' })] });
+    expect(config).not.toHaveProperty('extraTools');
+  });
+
+  it('fails loud when a ready integration requires a stable signer but none is configured', async () => {
+    const factory = new MastraFactory({
+      integrations: [fakeIntegration({ id: 'custom', requiresStableStateSigner: true })],
+    });
+    await expect(factory.prepare()).rejects.toThrow(/replica-stable state secret/);
+  });
+
+  it('accepts a stability-requiring integration when stateSecret is configured', async () => {
+    await prepareFactory({
+      stateSecret: 'deployment-stable-secret',
+      integrations: [fakeIntegration({ id: 'custom', requiresStableStateSigner: true })],
+    });
+    expect(getSeededStateSigner()?.stable).toBe(true);
+  });
+
+  it("falls back to a github integration's webhook secret for the state signer", async () => {
+    const github = fakeIntegration({ id: 'github' }) as FactoryIntegration & { webhookSecret?: string };
+    github.webhookSecret = 'hook-secret';
+    await prepareFactory({ integrations: [github] });
+    expect(getSeededStateSigner()?.stable).toBe(true);
   });
 });
 

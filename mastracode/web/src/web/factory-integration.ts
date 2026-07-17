@@ -22,6 +22,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 
 import type { StateSigner } from './state-signing.js';
+import type { FactoryStorageDomain } from './storage/domain.js';
 
 /**
  * Input for the system's issue-triage hook: a webhook (or manual Intake
@@ -81,15 +82,17 @@ export interface IntegrationContext {
 /**
  * A pluggable web integration. Implementations own their credentials
  * (validated at construction), their API surface, and their HTTP routes.
- *
- * Storage note: integrations that persist state currently manage their own
- * tables against the shared app database. Once the `FactoryStorageDomain`
- * contract lands, integrations will expose a `storageDomain` here and the
- * factory will register it into the storage init path.
  */
 export interface FactoryIntegration {
   /** Stable identifier: `'github'`, `'linear'`, custom ids for third parties. */
   readonly id: string;
+  /**
+   * Storage domain the factory registers into the {@link FactoryStore}
+   * alongside the built-ins. Optional: integrations with no persistence omit
+   * it. `init()` (DDL) runs through the store's coalesced, retry-safe boot
+   * path; a failure marks the integration not-ready without aborting boot.
+   */
+  readonly storageDomain?: FactoryStorageDomain;
   /**
    * The integration's full HTTP surface (status, OAuth, webhooks, feature
    * routes), as Mastra `apiRoutes`. Called once at boot; the factory folds

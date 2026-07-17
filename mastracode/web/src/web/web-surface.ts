@@ -9,31 +9,36 @@
 
 import type { AgentController } from '@mastra/core/agent-controller';
 import type { ApiRoute } from '@mastra/core/server';
+import { registerApiRoute } from '@mastra/core/server';
 
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 
 import { buildAuditRoutes } from './audit/routes.js';
 import { buildConfigRoutes } from './config-routes.js';
-import { buildOAuthRoutes } from './oauth-routes.js';
+import type { FactoryIntegration, IssueTriageRunInput, IssueTriageRunResult } from './factory-integration.js';
 import { buildFsRoutes } from './fs-routes.js';
+import { buildOAuthRoutes } from './oauth-routes.js';
 import { getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './github/config.js';
 import { buildFactoryRoutes } from './factory/routes.js';
 import { ensureAppDbReady } from './github/db.js';
-import { buildGithubRoutes } from './github/routes.js';
-import type { GithubIssueTriageRunInput, GithubIssueTriageRunResult } from './github/webhook.js';
 import { buildIntakeRoutes } from './intake/routes.js';
-import { getFactoryStore } from './runtime-config.js';
+import { getFactoryStore, getSeededStateSigner } from './runtime-config.js';
 import { getLinearFeatureDiagnostics, isLinearFeatureEnabled } from './linear/config.js';
 import { ensureLinearDbReady } from './linear/db.js';
-import { buildLinearRoutes } from './linear/routes.js';
-import { getSeededGithubIntegration, getSeededStateSigner } from './runtime-config.js';
 import { registerSandboxReattach } from './sandbox-reattach-registration.js';
 import { buildSkillRoutes } from './skills/routes.js';
+import type { StateSigner } from './state-signing.js';
 
 // Wire the core workspace seam to this package's sandbox provisioning as soon
 // as the web surface is loaded, so sandbox-backed workspaces can reattach.
 registerSandboxReattach();
+
+/** A registered integration paired with its factory-resolved readiness. */
+export interface IntegrationRegistration {
+  integration: FactoryIntegration;
+  ready: boolean;
+}
 
 export interface WebApiRoutesDeps {
   controllerId: string;
@@ -41,18 +46,20 @@ export interface WebApiRoutesDeps {
   authStorage: AuthStorage;
   /** Root directory the project picker may browse. Defaults to the user's home. */
   fsRoot?: string;
-  /** Public origin used to build GitHub OAuth/install callback URLs. */
+  /** Public origin used to build integration OAuth/install callback URLs. */
   publicOrigin: string;
   /**
-   * Whether the GitHub App + cloud-sandbox routes should be included. Resolved
-   * ahead of time via {@link resolveGithubReady} so this stays synchronous.
+   * Shared OAuth state signer created by the factory, handed to every
+   * integration via its {@link IntegrationContext}.
    */
-  githubReady: boolean;
+  stateSigner?: StateSigner;
   /**
-   * Whether the Linear intake routes should be included. Resolved ahead of
-   * time via {@link resolveLinearReady} so this stays synchronous.
+   * Registered integrations with their readiness (resolved ahead of time by
+   * the factory so this stays synchronous). Ready → the integration's full
+   * `routes()` surface mounts; not ready (or absent for the known ids) → a
+   * disabled-status stub keeps the SPA's status-poll contract intact.
    */
-  linearReady: boolean;
+  integrations?: IntegrationRegistration[];
   /**
    * Whether the intake-config routes should be included. Resolved ahead of
    * time via {@link resolveIntakeReady} so this stays synchronous.
@@ -227,7 +234,7 @@ function issueBranch(issueNumber: number): string {
   return `factory/issue-${issueNumber}`;
 }
 
-function buildIssueTriageTags(input: GithubIssueTriageRunInput, projectPath: string): Record<string, string> {
+function buildIssueTriageTags(input: IssueTriageRunInput, projectPath: string): Record<string, string> {
   return {
     projectPath,
     role: ISSUE_TRIAGE_ROLE,
@@ -257,7 +264,7 @@ function createScopedSession(
   return (controller.createSession as ControllerCreateSessionWithScope)(input);
 }
 
-export function buildIssueTriagePrompt(input: GithubIssueTriageRunInput): string {
+export function buildIssueTriagePrompt(input: IssueTriageRunInput): string {
   return [
     'Use the triage-issue skill to triage this GitHub issue.',
     '',
@@ -275,8 +282,8 @@ export function buildIssueTriagePrompt(input: GithubIssueTriageRunInput): string
 
 async function runIssueTriage(
   deps: Pick<WebApiRoutesDeps, 'controller'>,
-  input: GithubIssueTriageRunInput,
-): Promise<GithubIssueTriageRunResult> {
+  input: IssueTriageRunInput,
+): Promise<IssueTriageRunResult> {
   const branch = input.branch ?? issueBranch(input.issueNumber);
   if (!input.resourceId) {
     throw new Error('Issue triage requires a board resource id');
@@ -319,28 +326,78 @@ async function runIssueTriage(
 }
 
 /**
+ * Disabled-status stub for the well-known integration ids. The SPA polls
+ * `/web/github/status` and `/web/linear/status` unconditionally, so when an
+ * integration is absent (or not ready) the status contract must still hold.
+ * Unknown custom ids get no stub — the SPA doesn't poll them.
+ */
+function disabledIntegrationStatusRoutes(id: string): ApiRoute[] {
+  if (id === 'github') {
+    return [
+      registerApiRoute('/web/github/status', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: c =>
+          c.json({
+            enabled: false,
+            connected: false,
+            installations: [],
+            reason: 'missing_config',
+            diagnostics: getGithubFeatureDiagnostics(),
+          }),
+      }),
+    ];
+  }
+  if (id === 'linear') {
+    return [
+      registerApiRoute('/web/linear/status', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: c =>
+          c.json({
+            enabled: false,
+            connected: false,
+            workspace: null,
+            reason: 'missing_config',
+            diagnostics: getLinearFeatureDiagnostics(),
+          }),
+      }),
+    ];
+  }
+  return [];
+}
+
+/**
  * Assemble the custom `/web/*` API routes as Mastra `server.apiRoutes`:
  *   - fs browser routes (project picker), confined to `fsRoot`
  *   - config routes (provider/API-key/model-pack/OM management)
- *   - github routes (only when `githubReady`)
- *   - linear routes (only when `linearReady`)
+ *   - every registered integration's `routes()` surface (full set when ready,
+ *     disabled-status stub otherwise), plus stubs for absent known ids
  */
 export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
+  const registrations = deps.integrations ?? [];
+  const ctx = deps.stateSigner
+    ? {
+        baseUrl: deps.publicOrigin,
+        controller: deps.controller,
+        stateSigner: deps.stateSigner,
+        hooks: { runIssueTriage: (input: IssueTriageRunInput) => runIssueTriage(deps, input) },
+      }
+    : undefined;
+  const integrationRoutes = registrations.flatMap(({ integration, ready }) =>
+    ready && ctx ? integration.routes(ctx) : disabledIntegrationStatusRoutes(integration.id),
+  );
+  // Absent known integrations still get their disabled-status stub.
+  const absentStubs = ['github', 'linear']
+    .filter(id => !registrations.some(({ integration }) => integration.id === id))
+    .flatMap(disabledIntegrationStatusRoutes);
   return [
     ...buildFsRoutes({ root: deps.fsRoot }),
     ...buildConfigRoutes({ controller: deps.controller, authStorage: deps.authStorage }),
     ...buildOAuthRoutes({ authStorage: deps.authStorage }),
     ...buildSkillRoutes({ controllerId: deps.controllerId, controller: deps.controller }),
-    ...(deps.githubReady
-      ? buildGithubRoutes({
-          github: getSeededGithubIntegration(),
-          stateSigner: getSeededStateSigner(),
-          baseUrl: deps.publicOrigin,
-          controller: deps.controller,
-          runIssueTriage: input => runIssueTriage(deps, input),
-        })
-      : []),
-    ...(deps.linearReady ? buildLinearRoutes({ baseUrl: deps.publicOrigin, stateSigner: getSeededStateSigner() }) : []),
+    ...integrationRoutes,
+    ...absentStubs,
     ...(deps.intakeReady ? buildIntakeRoutes() : []),
     ...(deps.factoryReady ? buildFactoryRoutes() : []),
     ...(deps.factoryReady ? buildAuditRoutes({ baseUrl: deps.publicOrigin }) : []),
