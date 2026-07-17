@@ -107,7 +107,10 @@ import { mountApiRoutes } from '../test-utils';
 import { buildLinearRoutes } from './routes';
 
 // ── Test harness ─────────────────────────────────────────────────────────
-function buildApp(user: { workosId: string; organizationId?: string | null } | null) {
+function buildApp(
+  user: { workosId: string; organizationId?: string | null } | null,
+  signer: import('../state-signing').StateSigner | null = stateSigner,
+) {
   const app = new Hono();
   app.use('*', async (c, next) => {
     if (user) {
@@ -116,7 +119,10 @@ function buildApp(user: { workosId: string; organizationId?: string | null } | n
     }
     await next();
   });
-  mountApiRoutes(app as any, buildLinearRoutes({ baseUrl: 'http://localhost:4111', linear: linearStub, stateSigner }));
+  mountApiRoutes(
+    app as any,
+    buildLinearRoutes({ baseUrl: 'http://localhost:4111', linear: linearStub, stateSigner: signer ?? undefined }),
+  );
   return app;
 }
 
@@ -159,6 +165,11 @@ describe('status route', () => {
   it('reports disabled without the feature', async () => {
     featureEnabled = false;
     const res = await buildApp({ workosId: 'u1' }).request('/web/linear/status');
+    expect(await res.json()).toMatchObject({ enabled: false, connected: false, reason: 'missing_config' });
+  });
+
+  it('reports disabled without a state signer', async () => {
+    const res = await buildApp({ workosId: 'u1' }, null).request('/web/linear/status');
     expect(await res.json()).toMatchObject({ enabled: false, connected: false, reason: 'missing_config' });
   });
 

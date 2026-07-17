@@ -113,7 +113,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
-        if (!isLinearFeatureEnabled() || !linear) {
+        if (!isLinearFeatureEnabled() || !linear || !stateSigner) {
           return c.json({
             enabled: false,
             connected: false,
