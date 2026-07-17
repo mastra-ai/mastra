@@ -114,7 +114,7 @@ function useAuditHandlers(options: AuditHandlerOptions = {}): AuditHandlerState 
     http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedStatus)),
     http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
       HttpResponse.json({
-        config: { github: { enabled: true, projectIds: [] }, linear: { enabled: false, projectIds: [] } },
+        config: { github: { enabled: true, repositoryIds: [] }, linear: { enabled: false, projectIds: [] } },
       }),
     ),
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>

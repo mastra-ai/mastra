@@ -75,7 +75,7 @@ function buildApp(
 const orgUser = { workosId: 'u1', organizationId: 'org1' };
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111';
 
-function seedProject(overrides: Record<string, any> = {}) {
+function seedFactory(overrides: Record<string, any> = {}) {
   githubStorage.projects.push({
     id: PROJECT_ID,
     orgId: 'org1',
@@ -115,7 +115,7 @@ describe('GET /web/factory/repositories/:id/audit', () => {
   });
 
   it("404s when the project isn't in the caller's org", async () => {
-    seedProject({ orgId: 'other-org' });
+    seedFactory({ orgId: 'other-org' });
     const res = await buildApp(orgUser).request(`/web/factory/repositories/${PROJECT_ID}/audit`);
     expect(res.status).toBe(404);
     expect(listCalls).toHaveLength(0);
@@ -133,7 +133,7 @@ describe('GET /web/factory/repositories/:id/audit', () => {
   });
 
   it('returns the event page scoped to the org and project', async () => {
-    seedProject();
+    seedFactory();
     listResult = {
       events: [{ id: 'e1', action: 'factory.work_item.created' }],
       nextCursor: '2026-07-15T00:00:00.000Z_e1',
@@ -154,7 +154,7 @@ describe('GET /web/factory/repositories/:id/audit', () => {
   });
 
   it('passes actions/actor/before/limit filters through to the store', async () => {
-    seedProject();
+    seedFactory();
     const query = new URLSearchParams({
       actions: 'factory.work_item.created, factory.git.push,',
       actor: 'u2',
@@ -176,7 +176,7 @@ describe('GET /web/factory/repositories/:id/audit', () => {
   });
 
   it('ignores an unparseable limit', async () => {
-    seedProject();
+    seedFactory();
     await buildApp(orgUser).request(`/web/factory/repositories/${PROJECT_ID}/audit?limit=lots`);
     expect(listCalls[0]?.limit).toBeUndefined();
   });

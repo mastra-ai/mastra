@@ -26,7 +26,7 @@ afterEach(() => {
   localStorage.clear();
 });
 
-function seedProject() {
+function seedFactory() {
   const project: Factory = {
   id: 'project-test',
   name: 'MastraCode Test',
@@ -98,7 +98,7 @@ function renderComposerPanel(composerVariant: 'inline' | 'textarea' = 'inline') 
 
 describe('ComposerPanel', () => {
   it('renders the textarea composer and preserves its draft', async () => {
-    seedProject();
+    seedFactory();
     useAgentControllerHandlers();
     const user = userEvent.setup();
     renderComposerPanel('textarea');
@@ -111,7 +111,7 @@ describe('ComposerPanel', () => {
   });
 
   it('renders the session mode and model status alongside the composer', async () => {
-    seedProject();
+    seedFactory();
     useAgentControllerHandlers();
     renderComposerPanel();
 

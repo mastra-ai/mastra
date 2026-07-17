@@ -39,7 +39,7 @@ afterEach(() => {
   vi.mocked(redirectToLogin).mockClear();
 });
 
-function seedProject(project?: Factory) {
+function seedFactory(project?: Factory) {
   const selectedProject: Factory = project ?? {
     id: 'project-test',
     name: 'MastraCode Test',
@@ -103,7 +103,7 @@ function renderRoutes(
   authMe: () => Response | Promise<Response>,
   options?: { project?: Factory; workItemCount?: number; workItemsReady?: Promise<void>; workItemsError?: boolean },
 ) {
-  seedProject(options?.project);
+  seedFactory(options?.project);
   useAgentControllerHandlers();
   server.use(http.get(`${TEST_BASE_URL}/auth/me`, authMe));
   if (options?.project?.binding.kind === 'github') {

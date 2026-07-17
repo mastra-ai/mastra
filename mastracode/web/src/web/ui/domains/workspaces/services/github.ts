@@ -193,7 +193,7 @@ export async function ensureRepoMaterialized(
       result = JSON.parse(data) as MaterializeResult;
     } else if (event === 'error') {
       const body = JSON.parse(data) as { error?: string; message?: string };
-      failure = new Error(body.message ?? 'Failed to prepare project') as Error & { code?: string };
+      failure = new Error(body.message ?? 'Failed to prepare repository') as Error & { code?: string };
       failure.code = body.error;
     }
   });
@@ -206,7 +206,7 @@ export async function ensureRepoMaterialized(
 /** Build an Error carrying the server's error code from a non-OK JSON response. */
 async function ensureError(res: Response): Promise<Error & { code?: string }> {
   let code = `http_${res.status}`;
-  let message = `Failed to prepare project (${res.status})`;
+  let message = `Failed to prepare repository (${res.status})`;
   try {
     const body = (await res.json()) as { error?: string; message?: string };
     if (body.error) code = body.error;

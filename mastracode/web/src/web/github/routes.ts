@@ -578,10 +578,10 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         }
 
         const projectId = c.req.param('id');
-        if (!projectId) return c.json({ error: 'Project not found' }, 404);
+        if (!projectId) return c.json({ error: 'Repository not found' }, 404);
         const project = await github.storageDomain.getOrgProject(orgId, projectId);
         if (!project) {
-          return c.json({ error: 'Project not found' }, 404);
+          return c.json({ error: 'Repository not found' }, 404);
         }
 
         // Stream live server-side progress when the client asks for it (EventSource
@@ -810,11 +810,11 @@ async function loadOrgProject(
 
   const projectId = c.req.param('id');
   if (!projectId) {
-    return { response: c.json({ error: 'Project not found' }, 404) };
+    return { response: c.json({ error: 'Repository not found' }, 404) };
   }
   const project = await github.storageDomain.getOrgProject(orgId, projectId);
   if (!project) {
-    return { response: c.json({ error: 'Project not found' }, 404) };
+    return { response: c.json({ error: 'Repository not found' }, 404) };
   }
   return { project };
 }
@@ -831,7 +831,7 @@ function identityFromUser(user: { name?: string; email?: string } | undefined): 
  */
 async function resolveProjectSandbox(sandboxRow: GithubProjectSandboxRow): Promise<MaterializationSandbox> {
   if (!sandboxRow.sandboxId) {
-    throw new MaterializeError('Project sandbox is not provisioned. Open the project first.', 'clone-failed');
+    throw new MaterializeError('Project sandbox is not provisioned. Open the repository first.', 'clone-failed');
   }
   return reattachSandbox(sandboxRow.sandboxId);
 }
@@ -947,11 +947,11 @@ async function loadOwnedProject(
 
   const projectId = c.req.param('id');
   if (!projectId) {
-    return { response: c.json({ error: 'Project not found' }, 404) };
+    return { response: c.json({ error: 'Repository not found' }, 404) };
   }
   const project = await github.storageDomain.getOrgProject(orgId, projectId);
   if (!project) {
-    return { response: c.json({ error: 'Project not found' }, 404) };
+    return { response: c.json({ error: 'Repository not found' }, 404) };
   }
   const sandboxRow = await loadOrCreateSandboxRow(github, project, userId);
   return { orgId, userId, project, sandboxRow };

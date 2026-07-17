@@ -85,9 +85,9 @@ function SourceCheckbox({
 
 /**
  * Settings › General › Intake sources: choose which sources feed the Factory
- * Intake page. Both sources sync only the explicitly selected factories —
- * nothing is synced until something is picked. Linear factories are grouped by
- * team. Every change persists immediately.
+ * Intake page. GitHub syncs selected connected repositories; Linear syncs
+ * selected Linear projects (grouped by team). Nothing is synced until
+ * something is picked. Every change persists immediately.
  */
 export function IntakeSection() {
   const { baseUrl } = useApiConfig();
@@ -142,8 +142,8 @@ export function IntakeSection() {
       {heading}
       <section className="flex flex-col gap-2" aria-label="GitHub intake">
         <SourceHeader
-          title="GitHub"
-          hint="Sync open issues from the selected factories. Nothing syncs until you pick one."
+          title="GitHub repositories"
+          hint="Sync open issues from the selected connected repositories. Nothing syncs until you pick one."
           enabled={config.github.enabled}
           disabled={busy}
           onToggle={enabled => update({ ...config, github: { ...config.github, enabled } })}
@@ -152,21 +152,21 @@ export function IntakeSection() {
           <div className="flex flex-wrap gap-1.5 pl-1">
             {githubProjects.length === 0 ? (
               <Txt as="span" variant="ui-xs" className="text-icon3">
-                No GitHub factories yet — open a repo from GitHub to add one.
+                No GitHub repositories yet — connect a repo from GitHub to add one.
               </Txt>
             ) : (
-              githubProjects.map(project => (
+              githubProjects.map(factory => (
                 <SourceCheckbox
-                  key={project.binding.githubProjectId}
-                  label={project.name}
-                  checked={config.github.projectIds?.includes(project.binding.githubProjectId!) ?? false}
+                  key={factory.binding.githubProjectId}
+                  label={factory.name}
+                  checked={config.github.repositoryIds?.includes(factory.binding.githubProjectId) ?? false}
                   disabled={busy}
                   onChange={() =>
                     update({
                       ...config,
                       github: {
                         ...config.github,
-                        projectIds: toggleId(config.github.projectIds, project.binding.githubProjectId!),
+                        repositoryIds: toggleId(config.github.repositoryIds, factory.binding.githubProjectId),
                       },
                     })
                   }
@@ -179,8 +179,8 @@ export function IntakeSection() {
 
       <section className="flex flex-col gap-2" aria-label="Linear intake">
         <SourceHeader
-          title="Linear"
-          hint="Sync active issues from the factories picked per team. Nothing syncs until you pick one."
+          title="Linear projects"
+          hint="Sync active issues from the Linear projects picked per team. Nothing syncs until you pick one."
           enabled={config.linear.enabled}
           disabled={busy || !linearConnected}
           onToggle={enabled => update({ ...config, linear: { ...config.linear, enabled } })}

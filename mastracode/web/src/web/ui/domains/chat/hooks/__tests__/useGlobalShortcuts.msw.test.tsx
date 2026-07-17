@@ -3,7 +3,7 @@
  *
  * The hook is now zero-args: it observes `useOverlays()`,
  * `useChatTranscript()` (busy + abort), and `useActiveFactoryContext()` (zero
- * projects force the projects modal open) directly. Specs preserve the
+ * projects force the factories modal open) directly. Specs preserve the
  * `?` shortcuts toggle unless typing, and the Escape priority cascade.
  */
 import type { AgentControllerEvent } from '@mastra/client-js';
@@ -34,7 +34,7 @@ afterEach(() => {
   localStorage.clear();
 });
 
-function seedProject() {
+function seedFactory() {
   const project: Factory = {
   id: 'project-test',
   name: 'MastraCode Test',
@@ -132,7 +132,7 @@ async function ready() {
 
 describe('useGlobalShortcuts', () => {
   it('given focus is not in a text field, when ? is pressed, then the shortcuts overlay toggles', async () => {
-    seedProject();
+    seedFactory();
     useAgentControllerHandlers();
     renderProbe(THREAD_ID);
     await ready();
@@ -144,7 +144,7 @@ describe('useGlobalShortcuts', () => {
   });
 
   it('given focus is in a text field, when ? is typed, then the shortcuts overlay stays closed', async () => {
-    seedProject();
+    seedFactory();
     useAgentControllerHandlers();
     renderProbe(THREAD_ID);
     await ready();
@@ -154,7 +154,7 @@ describe('useGlobalShortcuts', () => {
   });
 
   it('given Cmd/Ctrl+K is pressed, when a retained overlay is open, then it stays open', async () => {
-    seedProject();
+    seedFactory();
     useAgentControllerHandlers();
     renderProbe(THREAD_ID);
     await ready();
@@ -166,7 +166,7 @@ describe('useGlobalShortcuts', () => {
   });
 
   it('given several overlays are open, when Escape is pressed repeatedly, then they close in priority order shortcuts → settings → sidebar', async () => {
-    seedProject();
+    seedFactory();
     useAgentControllerHandlers();
     renderProbe(THREAD_ID);
     await ready();
@@ -187,8 +187,8 @@ describe('useGlobalShortcuts', () => {
     expectOverlay('sidebar', 'closed');
   });
 
-  it('given the projects modal is open, when Escape is pressed, then nothing closes', async () => {
-    seedProject();
+  it('given the factories modal is open, when Escape is pressed, then nothing closes', async () => {
+    seedFactory();
     useAgentControllerHandlers();
     renderProbe(THREAD_ID);
     await ready();
@@ -201,8 +201,8 @@ describe('useGlobalShortcuts', () => {
     expectOverlay('settings', 'open');
   });
 
-  it('given zero projects (forced projects modal), when Escape is pressed, then it is a no-op even with overlays open', async () => {
-    // No seedProject(): the projects modal is force-opened by derivation.
+  it('given zero factories (forced factories modal), when Escape is pressed, then it is a no-op even with overlays open', async () => {
+    // No seedFactory(): the factories modal is force-opened by derivation.
     useAgentControllerHandlers();
     renderProbe(undefined);
 
@@ -212,7 +212,7 @@ describe('useGlobalShortcuts', () => {
   });
 
   it('given a running turn and no open overlays, when Escape is pressed, then the run is aborted', async () => {
-    seedProject();
+    seedFactory();
     useAgentControllerHandlers([{ type: 'agent_start' }]);
     let aborted = false;
     server.use(

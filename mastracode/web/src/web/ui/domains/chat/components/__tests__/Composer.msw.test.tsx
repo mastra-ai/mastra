@@ -38,7 +38,7 @@ function sse(): Response {
   });
 }
 
-function seedProject() {
+function seedFactory() {
   const project: Factory = {
   id: 'project-test',
   name: 'MastraCode Test',
@@ -155,7 +155,7 @@ afterEach(() => {
 describe('Composer', () => {
   describe('when submitting a message', () => {
     it('sends the trimmed draft on Enter', async () => {
-      seedProject();
+      seedFactory();
       const { onSend } = useAgentControllerHandlers();
       renderComposer();
 
@@ -167,7 +167,7 @@ describe('Composer', () => {
     });
 
     it('keeps a newline in the draft on Shift+Enter', async () => {
-      seedProject();
+      seedFactory();
       const { onSend } = useAgentControllerHandlers();
       renderComposer();
 
@@ -182,7 +182,7 @@ describe('Composer', () => {
 
   describe('when the agent is busy', () => {
     it('steers instead of sending a new message', async () => {
-      seedProject();
+      seedFactory();
       const { onSend, onSteer } = useAgentControllerHandlers({ running: true });
       renderComposer();
 
@@ -195,7 +195,7 @@ describe('Composer', () => {
     });
 
     it('aborts the active run', async () => {
-      seedProject();
+      seedFactory();
       const { onAbort } = useAgentControllerHandlers({ running: true });
       renderComposer();
 
@@ -208,7 +208,7 @@ describe('Composer', () => {
 
   describe('when entering exact no-arg slash commands', () => {
     it('shows permissions from the client cache instead of sending a message', async () => {
-      seedProject();
+      seedFactory();
       const { onSend, onPermissions } = useAgentControllerHandlers();
       renderComposer();
 
@@ -224,7 +224,7 @@ describe('Composer', () => {
     });
 
     it('shows permissions refreshed by permission mutations', async () => {
-      seedProject();
+      seedFactory();
       const { onSend, onPermissions } = useAgentControllerHandlers();
       renderComposer();
 
@@ -248,7 +248,7 @@ describe('Composer', () => {
 
   describe('when entering a partial slash command', () => {
     it('completes the highlighted suggestion on Enter', async () => {
-      seedProject();
+      seedFactory();
       const { onSend, onPermissions } = useAgentControllerHandlers();
       renderComposer();
 
@@ -265,7 +265,7 @@ describe('Composer', () => {
 
   describe('when a palette command is applied', () => {
     it('prefills the composer once and clears the command state', async () => {
-      seedProject();
+      seedFactory();
       useAgentControllerHandlers();
       renderComposer();
 
@@ -287,7 +287,7 @@ describe('Composer', () => {
     const pngBase64 = 'cG5nLWJ5dGVz'; // btoa('png-bytes')
 
     it('previews the image, sends it as a file, and clears the pending list', async () => {
-      seedProject();
+      seedFactory();
       const { onSend } = useAgentControllerHandlers();
       renderComposer();
 
@@ -310,7 +310,7 @@ describe('Composer', () => {
     });
 
     it('sends an image without any text', async () => {
-      seedProject();
+      seedFactory();
       const { onSend } = useAgentControllerHandlers();
       renderComposer();
 
@@ -329,7 +329,7 @@ describe('Composer', () => {
     });
 
     it('removes a pending image before sending', async () => {
-      seedProject();
+      seedFactory();
       const { onSend } = useAgentControllerHandlers();
       renderComposer();
 
@@ -348,7 +348,7 @@ describe('Composer', () => {
 
   describe('when rendering the composer controls', () => {
     it('places the session status line in the composer actions area', async () => {
-      seedProject();
+      seedFactory();
       useAgentControllerHandlers();
       renderComposer();
 
@@ -358,7 +358,7 @@ describe('Composer', () => {
     });
 
     it('colors the composer box border with the active mode', async () => {
-      seedProject();
+      seedFactory();
       useAgentControllerHandlers();
       renderComposer();
 
@@ -372,7 +372,7 @@ describe('Composer', () => {
 
   describe('when composing a multi-line draft', () => {
     it('grows with content via CSS instead of inline styles', async () => {
-      seedProject();
+      seedFactory();
       useAgentControllerHandlers();
       renderComposer();
 
@@ -385,7 +385,7 @@ describe('Composer', () => {
     });
 
     it('leaves textarea variant height under stylesheet control', async () => {
-      seedProject();
+      seedFactory();
       useAgentControllerHandlers();
       renderComposer({ variant: 'textarea' });
 

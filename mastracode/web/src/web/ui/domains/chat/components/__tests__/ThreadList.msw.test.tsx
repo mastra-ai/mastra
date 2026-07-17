@@ -67,7 +67,7 @@ afterEach(() => {
   localStorage.clear();
 });
 
-function seedProject(seeded: Factory = project) {
+function seedFactory(seeded: Factory = project) {
   localStorage.setItem('mastracode-factories', JSON.stringify([seeded]));
   localStorage.setItem('mastracode-active-factory', seeded.id);
 }
@@ -195,7 +195,7 @@ describe('ThreadList', () => {
   });
 
   it('given threads, then every fetched thread renders sorted by updatedAt desc', async () => {
-    seedProject();
+    seedFactory();
     const threads = [
       thread('t1', 'Thread 1', '2026-06-01T00:00:00.000Z'),
       thread('t2', 'Thread 2', '2026-06-02T00:00:00.000Z'),
@@ -225,7 +225,7 @@ describe('ThreadList', () => {
   });
 
   it('given a feature worktree is active, then thread titles render read-only without actions or a new-thread control', async () => {
-    seedProject(worktreeProject);
+    seedFactory(worktreeProject);
     useAgentControllerHandlers([threadOne]);
     renderThreadList();
 
@@ -240,7 +240,7 @@ describe('ThreadList', () => {
   it('given a GitHub project, then the list is read-only even when the repo-root path was persisted as selected', async () => {
     // Legacy projects could persist the repo root as the selected worktree;
     // it is no longer a workspace, so GitHub lists never expose thread controls.
-    seedProject({ ...worktreeProject, binding: { ...worktreeProject.binding, selectedWorktreePath: '/sandbox/mastra'  } });
+    seedFactory({ ...worktreeProject, binding: { ...worktreeProject.binding, selectedWorktreePath: '/sandbox/mastra'  } });
     useAgentControllerHandlers([threadOne]);
     renderThreadList();
 
@@ -250,7 +250,7 @@ describe('ThreadList', () => {
   });
 
   it('when a thread is clicked, then the app navigates to its page and the sidebar closes', async () => {
-    seedProject();
+    seedFactory();
     useAgentControllerHandlers([threadOne, threadTwo]);
     renderThreadList();
 
@@ -262,7 +262,7 @@ describe('ThreadList', () => {
   });
 
   it('when "New thread" is clicked, then it opens the /new draft page without persisting a thread and the sidebar closes', async () => {
-    seedProject();
+    seedFactory();
     const captured = useAgentControllerHandlers([threadOne]);
     renderThreadList();
 
@@ -276,7 +276,7 @@ describe('ThreadList', () => {
   });
 
   it('when a rename is committed with Enter, then the rename request fires with the new title and a toast shows', async () => {
-    seedProject();
+    seedFactory();
     const captured = useAgentControllerHandlers([threadOne]);
     renderThreadList();
 
@@ -293,7 +293,7 @@ describe('ThreadList', () => {
   });
 
   it('when a rename is cancelled with Escape, then no rename request fires', async () => {
-    seedProject();
+    seedFactory();
     const captured = useAgentControllerHandlers([threadOne]);
     renderThreadList();
 
@@ -309,7 +309,7 @@ describe('ThreadList', () => {
   });
 
   it('when Clone is picked, then the clone request fires and a toast shows', async () => {
-    seedProject();
+    seedFactory();
     const captured = useAgentControllerHandlers([threadOne]);
     renderThreadList();
 
@@ -323,7 +323,7 @@ describe('ThreadList', () => {
   });
 
   it('when Delete is picked, then the delete request fires and a toast shows', async () => {
-    seedProject();
+    seedFactory();
     const captured = useAgentControllerHandlers([threadOne, threadTwo]);
     renderThreadList();
 
@@ -335,7 +335,7 @@ describe('ThreadList', () => {
   });
 
   it('when the actions menu is open, then clicking the trigger again closes it', async () => {
-    seedProject();
+    seedFactory();
     useAgentControllerHandlers([threadOne]);
     renderThreadList();
 

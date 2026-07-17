@@ -98,7 +98,7 @@ afterEach(() => {
   vi.mocked(redirectToLogout).mockClear();
 });
 
-function seedProject(active: Factory = project, projects: Factory[] = [active]) {
+function seedFactory(active: Factory = project, projects: Factory[] = [active]) {
   localStorage.setItem('mastracode-factories', JSON.stringify(projects));
   localStorage.setItem('mastracode-active-factory', active.id);
 }
@@ -230,7 +230,7 @@ async function openThreadActions(title: string) {
 describe('Sidebar', () => {
   describe('when a project with threads is active', () => {
     it('lists each thread by title', async () => {
-      seedProject();
+      seedFactory();
       useAuthHandler();
       useAgentControllerHandlers();
       renderSidebar();
@@ -240,7 +240,7 @@ describe('Sidebar', () => {
     });
 
     it('keeps project, navigation, and account sections in order', async () => {
-      seedProject();
+      seedFactory();
       useAuthHandler({ authenticated: true, user: { name: 'Ada Lovelace' } });
       useAgentControllerHandlers();
       renderSidebar();
@@ -259,7 +259,7 @@ describe('Sidebar', () => {
     });
 
     it('navigates to the thread page when a thread is clicked', async () => {
-      seedProject();
+      seedFactory();
       useAuthHandler();
       useAgentControllerHandlers();
       renderSidebar();
@@ -270,7 +270,7 @@ describe('Sidebar', () => {
     });
 
     it('opens the /new draft page without persisting a thread when the new-thread control is clicked', async () => {
-      seedProject();
+      seedFactory();
       useAuthHandler();
       const captured = useAgentControllerHandlers();
       renderSidebar();
@@ -283,7 +283,7 @@ describe('Sidebar', () => {
     });
 
     it('switches projects inline and keeps destructive actions out of the menu', async () => {
-      seedProject(project, [project, secondLocalProject, githubProject]);
+      seedFactory(project, [project, secondLocalProject, githubProject]);
       useAuthHandler();
       useGithubStatusHandler();
       useAgentControllerHandlers();
@@ -305,7 +305,7 @@ describe('Sidebar', () => {
 
   describe('when a GitHub project is active', () => {
     it('expands factory Sessions as a navigation item without showing the repo root', async () => {
-      seedProject(githubProject);
+      seedFactory(githubProject);
       useAuthHandler();
       useGithubStatusHandler();
       useAgentControllerHandlers();
@@ -325,7 +325,7 @@ describe('Sidebar', () => {
     });
 
     it('explains how factory Sessions are created when none exist', async () => {
-      seedProject({
+      seedFactory({
         ...githubProject,
         binding: { ...githubProject.binding, worktrees: [githubProject.binding.worktrees[0]!] },
       });
@@ -341,7 +341,7 @@ describe('Sidebar', () => {
     });
 
     it('renders the User Sessions section and no thread list', async () => {
-      seedProject(githubProject);
+      seedFactory(githubProject);
       useAuthHandler();
       useGithubStatusHandler();
       useAgentControllerHandlers();
@@ -358,7 +358,7 @@ describe('Sidebar', () => {
 
   describe('when opening a thread action menu', () => {
     it('clones the thread', async () => {
-      seedProject();
+      seedFactory();
       useAuthHandler();
       const captured = useAgentControllerHandlers();
       renderSidebar();
@@ -370,7 +370,7 @@ describe('Sidebar', () => {
     });
 
     it('deletes the thread', async () => {
-      seedProject();
+      seedFactory();
       useAuthHandler();
       const captured = useAgentControllerHandlers();
       renderSidebar();
@@ -382,7 +382,7 @@ describe('Sidebar', () => {
     });
 
     it('renames the thread on Enter', async () => {
-      seedProject();
+      seedFactory();
       useAuthHandler();
       const captured = useAgentControllerHandlers();
       renderSidebar();
@@ -409,7 +409,7 @@ describe('Sidebar', () => {
 
   describe('while the sign-in check is pending', () => {
     it('renders a skeleton placeholder, then the identity row', async () => {
-      seedProject();
+      seedFactory();
       server.use(
         http.get(`${TEST_BASE_URL}/auth/me`, async () => {
           await delay(150);
@@ -429,7 +429,7 @@ describe('Sidebar', () => {
 
   describe('when the server reports a signed-in user', () => {
     it('shows the identity and signs out via the auth service', async () => {
-      seedProject();
+      seedFactory();
       useAuthHandler({ authenticated: true, user: { name: 'Ada Lovelace', email: 'ada@example.com' } });
       useAgentControllerHandlers();
       renderSidebar();

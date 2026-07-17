@@ -130,7 +130,7 @@ function useAgentControllerHandlers(): CapturedRequests {
   return captured;
 }
 
-function seedProject() {
+function seedFactory() {
   localStorage.setItem('mastracode-factories', JSON.stringify([project]));
   localStorage.setItem('mastracode-active-factory', project.id);
 }
@@ -152,7 +152,7 @@ function Harness({ children }: { children: ReactNode }) {
 }
 
 function renderSettingsPanel() {
-  seedProject();
+  seedFactory();
   const captured = useAgentControllerHandlers();
   renderWithProviders(
     <Harness>

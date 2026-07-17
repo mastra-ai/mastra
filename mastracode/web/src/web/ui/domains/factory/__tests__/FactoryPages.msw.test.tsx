@@ -131,7 +131,7 @@ const notConnectedStatus: GithubStatus = {
 
 /** Both sources selected so GitHub/Linear specs see data by default. */
 const defaultIntakeConfig: IntakeConfig = {
-  github: { enabled: true, projectIds: [GITHUB_PROJECT_ID] },
+  github: { enabled: true, repositoryIds: [GITHUB_PROJECT_ID] },
   linear: { enabled: true, projectIds: ['lin-proj-1'] },
 };
 
@@ -485,7 +485,7 @@ describe('Factory Board — Intake candidates', () => {
     useBoardHandlers();
     renderAt('/factory/board', githubProject, connectedStatus, {
       intakeConfig: {
-        github: { enabled: false, projectIds: [] },
+        github: { enabled: false, repositoryIds: [] },
         linear: { enabled: false, projectIds: [] },
       },
     });

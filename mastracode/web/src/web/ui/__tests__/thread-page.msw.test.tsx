@@ -66,7 +66,7 @@ afterEach(() => {
   localStorage.clear();
 });
 
-function seedProject(projects?: Factory[], activeFactoryId?: string) {
+function seedFactory(projects?: Factory[], activeFactoryId?: string) {
   const project: Factory = {
   id: 'project-test',
   name: 'MastraCode Test',
@@ -215,7 +215,7 @@ function useAgentControllerHandlers({
 }
 
 function renderRoutes(initialEntry: string, projects?: Factory[], activeFactoryId?: string) {
-  seedProject(projects, activeFactoryId);
+  seedFactory(projects, activeFactoryId);
 
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [initialEntry] });

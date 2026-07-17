@@ -2,7 +2,7 @@
  * BDD coverage for the propless `FactorySwitcher` (`domains/workspaces/components`).
  *
  * The switcher reads the active project from `useActiveFactoryContext` and
- * drives the projects modal through `useOverlays` — no props. Opening the
+ * drives the factories modal through `useOverlays` — no props. Opening the
  * projects overlay also closes the sidebar drawer (mobile behavior).
  */
 import { screen, waitFor } from '@testing-library/react';
@@ -30,7 +30,7 @@ afterEach(() => {
   localStorage.clear();
 });
 
-function seedProject(project: Factory = PROJECT) {
+function seedFactory(project: Factory = PROJECT) {
   localStorage.setItem('mastracode-factories', JSON.stringify([project]));
   localStorage.setItem('mastracode-active-factory', project.id);
 }
@@ -59,7 +59,7 @@ function renderSwitcher() {
 
 describe('FactorySwitcher', () => {
   it('given an active project, then its name and path render', async () => {
-    seedProject();
+    seedFactory();
     renderSwitcher();
 
     await waitFor(() => expect(screen.getByText('MastraCode Test')).toBeInTheDocument());
@@ -73,7 +73,7 @@ describe('FactorySwitcher', () => {
   });
 
   it('when the switcher is clicked, then the inline project menu opens without opening the project picker', async () => {
-    seedProject();
+    seedFactory();
     renderSwitcher();
 
     await userEvent.click(screen.getByRole('button', { name: 'Select factory' }));
@@ -83,7 +83,7 @@ describe('FactorySwitcher', () => {
   });
 
   it('when Create factory from local folder is selected, then the projects overlay opens', async () => {
-    seedProject();
+    seedFactory();
     renderSwitcher();
 
     await userEvent.click(screen.getByRole('button', { name: 'Select factory' }));

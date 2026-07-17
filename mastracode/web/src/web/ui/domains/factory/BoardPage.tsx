@@ -414,7 +414,7 @@ function Board({ project }: { project: GithubFactory }) {
   // in Intake and only move once the Factory acts on them.
   const config = configQuery.data;
   const githubEnabled = config?.github.enabled ?? true;
-  const githubSelected = config ? (config.github.projectIds?.includes(githubProjectId) ?? false) : true;
+  const githubSelected = config ? (config.github.repositoryIds?.includes(githubProjectId) ?? false) : true;
   const linearFeature = linearStatusQuery.data?.enabled ?? false;
   const linearConnected = Boolean(linearFeature && linearStatusQuery.data?.connected);
   const linearReady =

@@ -51,7 +51,7 @@ function buildApp(
 const orgUser = { workosId: 'u1', organizationId: 'org1' };
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 
-function seedProject(orgId = 'org1', id = PROJECT_ID) {
+function seedFactory(orgId = 'org1', id = PROJECT_ID) {
   githubStorage.projects.push({
     id,
     orgId,
@@ -93,7 +93,7 @@ beforeEach(async () => {
   githubStorage = new GithubStorageInMemory();
   auditRecorded = [];
   auditFailure = undefined;
-  seedProject();
+  seedFactory();
 });
 
 afterEach(() => {
@@ -115,7 +115,7 @@ describe('auth and scoping', () => {
 
   it('404s when the project belongs to another org', async () => {
     githubStorage.projects = [];
-    seedProject('other-org');
+    seedFactory('other-org');
     const res = await json('GET', `/web/factory/repositories/${PROJECT_ID}/work-items`);
     expect(res.status).toBe(404);
   });
@@ -323,7 +323,7 @@ describe('GET /web/factory/repositories/:id/metrics', () => {
     expect((await json('GET', `/web/factory/repositories/${PROJECT_ID}/metrics`, undefined, null)).status).toBe(401);
 
     githubStorage.projects = [];
-    seedProject('other-org');
+    seedFactory('other-org');
     expect((await json('GET', `/web/factory/repositories/${PROJECT_ID}/metrics`)).status).toBe(404);
   });
 
