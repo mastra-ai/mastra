@@ -1,69 +1,42 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// ── Mocks ────────────────────────────────────────────────────────────────
-vi.mock('drizzle-orm', () => ({
-  eq: (column: any, value: any) => ({ kind: 'eq', column: column?.name, value }),
-}));
-
-// In-memory tables, keyed by the drizzle table object passed to `.from()`.
-let projects: Array<Record<string, any>> = [];
-let connections: Array<Record<string, any>> = [];
-/** When true, every select throws — simulates a transient app-db outage. */
-let dbShouldFail = false;
-
-function rowsFor(table: any): Array<Record<string, any>> {
-  // The github_projects table has a `repoFullName` column; linear_connections doesn't.
-  return 'repoFullName' in table ? projects : connections;
-}
-
-function matches(table: any, row: any, cond: any): boolean {
-  if (!cond) return true;
-  if (cond.kind === 'eq') {
-    for (const [jsKey, col] of Object.entries(table)) {
-      if ((col as any)?.name === cond.column) return row[jsKey] === cond.value;
-    }
-    return false;
-  }
-  return true;
-}
-
-vi.mock('../github/db', () => ({
-  getAppDb: () => ({
-    select: (_projection?: any) => ({
-      from: (table: any) => ({
-        where: async (cond: any) => {
-          if (dbShouldFail) throw new Error('connection refused');
-          return rowsFor(table).filter(row => matches(table, row, cond));
-        },
-      }),
-    }),
-    update: (table: any) => ({
-      set: (vals: any) => ({
-        where: async (cond: any) => {
-          for (const row of rowsFor(table)) {
-            if (matches(table, row, cond)) Object.assign(row, vals);
-          }
-        },
-      }),
-    }),
-  }),
-}));
+import { seedRuntimeConfig } from '../runtime-config';
+import { GithubStorageInMemory } from '../github/storage/inmemory';
+import { LinearStorageInMemory } from './storage/inmemory';
 
 let featureEnabled = true;
 vi.mock('./config', () => ({
   isLinearFeatureEnabled: () => featureEnabled,
 }));
 
+class FailableGithubStorage extends GithubStorageInMemory {
+  shouldFail = false;
+
+  override async getProjectById(projectId: string) {
+    if (this.shouldFail) throw new Error('connection refused');
+    return super.getProjectById(projectId);
+  }
+}
+
+const githubStorage = new FailableGithubStorage();
+const linearStorage = new LinearStorageInMemory();
 const fetchLinearIssueDetail = vi.fn();
 const createLinearIssueComment = vi.fn();
 const refreshLinearAccessToken = vi.fn();
+
+const githubStub = {
+  id: 'github',
+  storageDomain: githubStorage,
+  getInstallationOctokit: vi.fn(),
+} as unknown as import('../github/integration').GithubIntegration;
 
 // Stub integration instance: real DI through `buildLinearAgentTools`'s
 // `linear` argument instead of module mocking — mirrors how the factory hands
 // the instance to the extraTools provider in production.
 const linearStub = {
   id: 'linear',
+  storageDomain: linearStorage,
   fetchIssueDetail: (...args: any[]) => fetchLinearIssueDetail(...(args as [])),
   createIssueComment: (...args: any[]) => createLinearIssueComment(...(args as [])),
   refreshAccessToken: (...args: any[]) => refreshLinearAccessToken(...(args as [])),
@@ -83,16 +56,35 @@ function requestContextFor(resourceId: string | undefined): RequestContext {
 }
 
 function seedProject(): void {
-  projects.push({ id: PROJECT_ID, orgId: ORG_ID, repoFullName: 'acme/app' });
+  githubStorage.projects.push({
+    id: PROJECT_ID,
+    orgId: ORG_ID,
+    userId: 'user-1',
+    installationId: 123,
+    repoFullName: 'acme/app',
+    repoId: 456,
+    defaultBranch: 'main',
+    sandboxProvider: 'local',
+    sandboxWorkdir: '/workspace/acme-app',
+    setupCommand: null,
+    createdAt: new Date(),
+  });
 }
 
-function seedConnection(overrides: Record<string, any> = {}): void {
-  connections.push({
+function seedConnection(overrides: Partial<(typeof linearStorage.connections)[number]> = {}): void {
+  const now = new Date();
+  linearStorage.connections.push({
+    id: 'connection-1',
     orgId: ORG_ID,
+    userId: 'user-1',
     accessToken: 'linear-token',
     refreshToken: 'linear-refresh',
     expiresAt: new Date(Date.now() + 60 * 60 * 1000),
     scope: 'read,comments:create',
+    workspaceName: 'Acme',
+    workspaceUrlKey: 'acme',
+    createdAt: now,
+    updatedAt: now,
     ...overrides,
   });
 }
@@ -115,10 +107,11 @@ const issueDetail = {
 };
 
 beforeEach(() => {
-  projects = [];
-  connections = [];
-  dbShouldFail = false;
+  githubStorage.projects = [];
+  linearStorage.connections = [];
+  githubStorage.shouldFail = false;
   featureEnabled = true;
+  seedRuntimeConfig({ integrations: [githubStub, linearStub] });
   clearLinearAgentToolCaches();
   fetchLinearIssueDetail.mockReset();
   createLinearIssueComment.mockReset();
@@ -182,13 +175,13 @@ describe('buildLinearAgentTools — exposure gating', () => {
     seedProject();
     seedConnection();
 
-    dbShouldFail = true;
+    githubStorage.shouldFail = true;
     expect(await buildLinearAgentTools({ linear: linearStub, requestContext: requestContextFor(PROJECT_ID) })).toEqual(
       {},
     );
 
     // Database recovers: the next request must retry the lookup and get tools.
-    dbShouldFail = false;
+    githubStorage.shouldFail = false;
     const tools = await buildLinearAgentTools({ linear: linearStub, requestContext: requestContextFor(PROJECT_ID) });
     expect(tools).toHaveProperty('linear_get_issue');
   });
@@ -231,7 +224,7 @@ describe('linear_get_issue — execute', () => {
   });
 
   it('refreshes an expired token before fetching', async () => {
-    connections.length = 0;
+    linearStorage.connections.length = 0;
     seedProject();
     seedConnection({ expiresAt: new Date(Date.now() - 1000) });
     refreshLinearAccessToken.mockResolvedValue({
@@ -250,7 +243,7 @@ describe('linear_get_issue — execute', () => {
   });
 
   it('surfaces reauth-required as a tool error instead of throwing', async () => {
-    connections.length = 0;
+    linearStorage.connections.length = 0;
     seedProject();
     seedConnection({ expiresAt: new Date(Date.now() - 1000), refreshToken: null });
 
@@ -297,7 +290,7 @@ describe('linear_create_comment — execute', () => {
   });
 
   it('surfaces reauth-required as a tool error instead of throwing', async () => {
-    connections.length = 0;
+    linearStorage.connections.length = 0;
     seedProject();
     seedConnection({ expiresAt: new Date(Date.now() - 1000), refreshToken: null });
 

@@ -45,7 +45,37 @@ vi.mock('./config', () => ({
 
 // Minimal injected instances: this suite only exercises sandbox teardown
 // routes, so the integration stub needs no real API methods.
+const githubStorage = {
+  getOrgProject: async (orgId: string, projectId: string) =>
+    tables.projects.find(row => row.orgId === orgId && row.id === projectId),
+  getOrCreateSandbox: async (project: Record<string, any>, userId: string) => {
+    const existing = tables.sandboxes.find(row => row.githubProjectId === project.id && row.userId === userId);
+    if (existing) return existing;
+    const row = {
+      id: `gen-sandboxes-${tables.sandboxes.length}`,
+      githubProjectId: project.id,
+      userId,
+      sandboxId: null,
+      sandboxWorkdir: project.sandboxWorkdir,
+      materializedAt: null,
+      createdAt: new Date(),
+    };
+    tables.sandboxes.push(row);
+    return row;
+  },
+  getSandboxById: async (id: string) => tables.sandboxes.find(row => row.id === id),
+  setSandboxId: async (id: string, sandboxId: string) => {
+    const row = tables.sandboxes.find(candidate => candidate.id === id);
+    if (row) row.sandboxId = sandboxId;
+  },
+  clearSandboxBinding: async (id: string) => {
+    const row = tables.sandboxes.find(candidate => candidate.id === id);
+    if (row) Object.assign(row, { sandboxId: null, materializedAt: null });
+  },
+} as any;
+
 const githubStub = {
+  storageDomain: githubStorage,
   mintInstallationToken: vi.fn(async () => 'install-token'),
 } as any;
 const stateSigner = {
@@ -139,9 +169,9 @@ import {
 } from '../sandbox/fleet';
 import type { MaterializationSandbox } from '../sandbox/fleet';
 import { ensureProjectSandbox, teardownProjectSandbox } from './sandbox';
-import { githubProjectSandboxes } from './schema';
-import type { GithubProjectSandboxRow } from './schema';
+import type { GithubProjectSandboxRow } from './storage/base';
 
+const githubProjectSandboxes = {};
 sandboxesRef = githubProjectSandboxes;
 
 /** Minimal fake sandbox VM that records lifecycle calls. */
@@ -199,26 +229,26 @@ describe('S7 — sandbox fleet budget', () => {
     const rowB = makeBindingRow('b');
 
     // First fresh provision succeeds and consumes the single slot.
-    const sandboxA = (await ensureProjectSandbox(rowA)) as FakeSandbox;
+    const sandboxA = (await ensureProjectSandbox(rowA, githubStorage)) as FakeSandbox;
     expect(sandboxA.startCount).toBe(1);
     expect(getLiveSandboxCount()).toBe(1);
     expect(rowA.sandboxId).toBe('vm-fresh-1');
 
     // Second fresh provision is over budget → rejected before spending quota.
-    const err = await ensureProjectSandbox(rowB).catch(e => e);
+    const err = await ensureProjectSandbox(rowB, githubStorage).catch(e => e);
     expect(err).toBeInstanceOf(SandboxBudgetError);
     expect(err.max).toBe(1);
     expect(getLiveSandboxCount()).toBe(1);
     expect(rowB.sandboxId).toBeNull();
 
     // Tear down A → frees the slot.
-    await teardownProjectSandbox(rowA, sandboxA);
+    await teardownProjectSandbox(rowA, githubStorage, sandboxA);
     expect(sandboxA.stopCount).toBe(1);
     expect(getLiveSandboxCount()).toBe(0);
     expect(rowA.sandboxId).toBeNull();
 
     // Now B provisions successfully.
-    const sandboxB = (await ensureProjectSandbox(rowB)) as FakeSandbox;
+    const sandboxB = (await ensureProjectSandbox(rowB, githubStorage)) as FakeSandbox;
     expect(sandboxB.startCount).toBe(1);
     expect(getLiveSandboxCount()).toBe(1);
     expect(rowB.sandboxId).toBe('vm-fresh-2');
@@ -230,21 +260,21 @@ describe('S7 — sandbox fleet budget', () => {
 
     const row = makeBindingRow('a');
 
-    const first = (await ensureProjectSandbox(row)) as FakeSandbox;
+    const first = (await ensureProjectSandbox(row, githubStorage)) as FakeSandbox;
     expect(getLiveSandboxCount()).toBe(1);
     expect(row.sandboxId).toBe('vm-fresh-1');
 
     // Simulate a materialized binding so teardown clears that too.
     (row as { materializedAt: Date | null }).materializedAt = new Date();
 
-    await teardownProjectSandbox(row, first);
+    await teardownProjectSandbox(row, githubStorage, first);
     expect(first.stopCount).toBe(1);
     expect(getLiveSandboxCount()).toBe(0);
     expect(row.sandboxId).toBeNull();
     expect(row.materializedAt).toBeNull();
 
     // Next open re-provisions a brand new sandbox (fresh provider id).
-    const second = (await ensureProjectSandbox(row)) as FakeSandbox;
+    const second = (await ensureProjectSandbox(row, githubStorage)) as FakeSandbox;
     expect(second).not.toBe(first);
     expect(second.startCount).toBe(1);
     expect(getLiveSandboxCount()).toBe(1);
@@ -253,7 +283,7 @@ describe('S7 — sandbox fleet budget', () => {
 
   it('teardown of a never-provisioned binding is a no-op that does not underflow the counter', async () => {
     const row = makeBindingRow('a'); // sandboxId stays null
-    await teardownProjectSandbox(row);
+    await teardownProjectSandbox(row, githubStorage);
     expect(getLiveSandboxCount()).toBe(0);
     expect(row.sandboxId).toBeNull();
   });

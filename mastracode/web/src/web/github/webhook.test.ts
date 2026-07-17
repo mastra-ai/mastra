@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { GithubSignalSubscriptionRow } from './schema';
+import type { GithubSignalSubscriptionRow } from './storage/base';
 
 const getRepositoryCollaboratorPermission = vi.fn<
   () => Promise<'admin' | 'maintain' | 'write' | 'triage' | 'read' | 'none' | undefined>

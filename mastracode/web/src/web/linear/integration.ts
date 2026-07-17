@@ -25,6 +25,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../factory-integration.js';
 import { buildLinearAgentTools } from './agent-tools.js';
 import { buildLinearRoutes } from './routes.js';
+import { LinearStoragePG } from './storage/pg.js';
 
 const LINEAR_GRAPHQL_URL = 'https://api.linear.app/graphql';
 const LINEAR_TOKEN_URL = 'https://api.linear.app/oauth/token';
@@ -226,6 +227,7 @@ export class LinearIntegration implements FactoryIntegration {
    * Linear, so a multi-replica deploy needs a deployment-stable state secret.
    */
   readonly requiresStableStateSigner = true;
+  readonly storageDomain = new LinearStoragePG();
 
   readonly #clientId: string;
   readonly #clientSecret: string;

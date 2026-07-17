@@ -12,28 +12,21 @@ vi.mock('./subscriptions', () => ({
   unsubscribeFromPullRequest: mocks.unsubscribe,
 }));
 
-// Stub integration: entry points consume the injected instance for PR verification.
+// Stub integration: entry points consume the injected instance for PR verification and persistence.
 const githubStub = {
+  storageDomain: {
+    getOrgProject: vi.fn(async () => ({
+      id: 'project-1',
+      orgId: 'org-1',
+      installationId: 7,
+      repoId: 99,
+      repoFullName: 'mastra-ai/mastra',
+    })),
+    subscribeToPullRequest: mocks.subscribe,
+    unsubscribeFromPullRequest: mocks.unsubscribe,
+  },
   getInstallationOctokit: () => ({ pulls: { get: mocks.getPullRequest } }),
 } as unknown as import('./integration').GithubIntegration;
-
-vi.mock('./db', () => ({
-  getAppDb: () => ({
-    select: () => ({
-      from: () => ({
-        where: async () => [
-          {
-            id: 'project-1',
-            orgId: 'org-1',
-            installationId: 7,
-            repoId: 99,
-            repoFullName: 'mastra-ai/mastra',
-          },
-        ],
-      }),
-    }),
-  }),
-}));
 
 import {
   createGithubSubscriptionTools,
@@ -188,6 +181,7 @@ describe('GitHub subscription entry points', () => {
     const number = await unsubscribeCurrentSessionFromPullRequest(
       authenticatedRequestContext('/worktrees/a'),
       'https://github.com/mastra-ai/mastra/pull/123',
+      githubStub,
     );
 
     expect(number).toBe(123);

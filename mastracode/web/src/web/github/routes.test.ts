@@ -29,6 +29,9 @@ interface Tables {
 }
 const tables: Tables = { installations: [], projects: [], sandboxes: [], worktrees: [], subscriptions: [] };
 
+import { GithubStorageInMemory } from './storage/inmemory';
+const githubStorage = new GithubStorageInMemory();
+
 // Capture audit events at the store boundary so the real `emitAudit` path
 // (actor resolution, request context, never-throws) is exercised end to end.
 let auditRecorded: Array<Record<string, any>> = [];
@@ -125,6 +128,7 @@ const listRepoOpenPullRequests = vi.fn(async (_installationId: number, _repoFull
 // Stub GithubIntegration instance injected into `buildGithubRoutes` — real DI
 // instead of module mocking (github/client.ts no longer exists).
 const githubStub = {
+  storageDomain: githubStorage,
   webhookSecret: undefined as string | undefined,
   buildInstallUrl: (state: string) => `https://github.com/apps/test/installations/new?state=${state}`,
   buildOAuthIdentifyUrl: (state: string) => `https://github.com/login/oauth/authorize?state=${state}`,
@@ -176,12 +180,13 @@ const stateSigner = {
   },
 };
 
-const ensureProjectSandbox = vi.fn(async (_row: any, onProgress?: (e: any) => void) => {
+const ensureProjectSandbox = vi.fn(async (row: any, storage: GithubStorageInMemory, onProgress?: (e: any) => void) => {
+  await storage.setSandboxId(row.id, 'sb');
   onProgress?.({ phase: 'provisioning', message: 'Provisioning a new sandbox…' });
   return { id: 'sb' };
 });
 const materializeRepo = vi.fn(async (..._args: any[]) => {
-  const onProgress = _args[4] as ((e: any) => void) | undefined;
+  const onProgress = _args[5] as ((e: any) => void) | undefined;
   onProgress?.({ phase: 'cloning', message: 'Cloning octo/hello…' });
 });
 const reattachSandbox = vi.fn(async (_id: string) => ({ id: 'sb' }));
@@ -229,7 +234,8 @@ vi.mock('./sandbox', () => {
   return {
     computeWorktreePath: (repoWorkdir: string, branch: string) =>
       `${repoWorkdir.replace(/\/+$/, '').split('/').slice(0, -1).join('/')}/worktrees/${branch.replace('/', '-')}-aeab418d`,
-    ensureProjectSandbox: (row: any, onProgress?: any) => ensureProjectSandbox(row, onProgress),
+    ensureProjectSandbox: (row: any, storage: GithubStorageInMemory, onProgress?: any) =>
+      ensureProjectSandbox(row, storage, onProgress),
     materializeRepo: (...args: any[]) => materializeRepo(...(args as [])),
     ensureWorktree: (sb: any, workdir: string, opts: any) => ensureWorktree(sb, workdir, opts),
     removeWorktree: (sb: any, workdir: string, opts: any) => removeWorktree(sb, workdir, opts),
@@ -358,8 +364,10 @@ function deleteRows(table: any, cond?: any): void {
   tables[kind] = tables[kind].filter(row => !matches(table, row, cond)) as any;
 }
 
-// Resolve schema refs after import.
-import { githubInstallations, githubProjectSandboxes, githubSignalSubscriptions, githubWorktrees } from './schema';
+const githubInstallations = {};
+const githubProjectSandboxes = {};
+const githubSignalSubscriptions = {};
+const githubWorktrees = {};
 
 const { listInstallationRepos, listUserInstallations } = githubStub;
 installationsRef = githubInstallations;
@@ -398,6 +406,11 @@ beforeEach(() => {
   tables.sandboxes = [];
   tables.worktrees = [];
   tables.subscriptions = [];
+  githubStorage.installations = tables.installations as any;
+  githubStorage.projects = tables.projects as any;
+  githubStorage.sandboxes = tables.sandboxes as any;
+  githubStorage.worktrees = tables.worktrees as any;
+  githubStorage.subscriptions = tables.subscriptions as any;
   featureEnabled = true;
   sandboxEnabled = true;
   cookieUser = null;

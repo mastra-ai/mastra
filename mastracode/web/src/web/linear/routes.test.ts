@@ -2,55 +2,11 @@ import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as AuthModule from '../auth';
 
-// ── Mocks ────────────────────────────────────────────────────────────────
-vi.mock('drizzle-orm', () => ({
-  eq: (column: any, value: any) => ({ kind: 'eq', column: column?.name, value }),
-  and: (...conds: any[]) => ({ kind: 'and', conds: conds.filter(Boolean) }),
-}));
-
 // In-memory linear_connections table.
 let connections: Array<Record<string, any>> = [];
 
-function matches(table: any, row: any, cond: any): boolean {
-  if (!cond) return true;
-  if (cond.kind === 'and') return cond.conds.every((c: any) => matches(table, row, c));
-  if (cond.kind === 'eq') {
-    for (const [jsKey, col] of Object.entries(table)) {
-      if ((col as any)?.name === cond.column) return row[jsKey] === cond.value;
-    }
-    return false;
-  }
-  return true;
-}
-
-vi.mock('../github/db', () => ({
-  getAppDb: () => ({
-    select: () => ({
-      from: (table: any) => ({
-        where: async (cond: any) => connections.filter(row => matches(table, row, cond)),
-      }),
-    }),
-    insert: () => ({
-      values: (vals: any) => ({
-        onConflictDoUpdate: (opts: any) => {
-          const existing = connections.find(row => row.orgId === vals.orgId);
-          if (existing) Object.assign(existing, opts?.set ?? {});
-          else connections.push({ id: `id-${connections.length + 1}`, ...vals });
-          return Promise.resolve();
-        },
-      }),
-    }),
-    update: (table: any) => ({
-      set: (vals: any) => ({
-        where: async (cond: any) => {
-          for (const row of connections) {
-            if (matches(table, row, cond)) Object.assign(row, vals);
-          }
-        },
-      }),
-    }),
-  }),
-}));
+import { LinearStorageInMemory } from './storage/inmemory';
+const linearStorage = new LinearStorageInMemory();
 
 let featureEnabled = true;
 vi.mock('./config', () => ({
@@ -97,6 +53,7 @@ const listActiveLinearIssues = vi.fn(async (_token: string, _after?: string, _pr
 // `buildLinearRoutes` in production.
 const linearStub = {
   id: 'linear',
+  storageDomain: linearStorage,
   buildAuthorizeUrl: (state: string, redirectUri: string) =>
     `https://linear.app/oauth/authorize?state=${state}&redirect_uri=${encodeURIComponent(redirectUri)}`,
   exchangeOAuthCode: (...args: any[]) => exchangeLinearOAuthCode(...(args as [])),
@@ -179,6 +136,7 @@ const connect = (overrides: Record<string, any> = {}) =>
 
 beforeEach(() => {
   connections = [];
+  linearStorage.connections = connections as any;
   featureEnabled = true;
   cookieUser = null;
   getIntakeConfig.mockClear();

@@ -12,7 +12,6 @@
  */
 
 import { isWebAuthEnabled } from '../auth';
-import { isAppDbConfigured } from '../github/db';
 import { getSeededLinearIntegration } from '../runtime-config';
 
 /** True when a Linear integration instance is registered with the factory. */
@@ -22,7 +21,7 @@ export function isLinearAppConfigured(): boolean {
 
 /** True when the Linear intake feature should be active. */
 export function isLinearFeatureEnabled(): boolean {
-  return isLinearAppConfigured() && isWebAuthEnabled() && isAppDbConfigured();
+  return isLinearAppConfigured() && isWebAuthEnabled();
 }
 
 /**
@@ -36,9 +35,10 @@ export interface LinearFeatureDiagnostics {
 }
 
 export function getLinearFeatureDiagnostics(): LinearFeatureDiagnostics {
+  const linear = getSeededLinearIntegration();
   return {
-    linearAppConfigured: isLinearAppConfigured(),
+    linearAppConfigured: linear !== undefined,
     webAuthEnabled: isWebAuthEnabled(),
-    appDbConfigured: isAppDbConfigured(),
+    appDbConfigured: linear?.storageDomain !== undefined,
   };
 }

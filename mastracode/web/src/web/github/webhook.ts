@@ -4,7 +4,7 @@ import type { NotificationPriority } from '@mastra/core/notifications';
 import type { Context } from 'hono';
 import type { IssueTriageRunInput, IssueTriageRunResult } from '../factory-integration';
 import type { GithubIntegration } from './integration';
-import type { GithubSignalSubscriptionRow } from './schema';
+import type { GithubSignalSubscriptionRow } from './storage/base';
 import {
   listPullRequestSubscriptionsForWebhook,
   retirePullRequestSubscription,
@@ -406,8 +406,18 @@ export async function dispatchGithubWebhook(
     repoId: notification.metadata.repositoryId,
     pullRequestNumber: notification.metadata.pullRequestNumber,
   };
-  const listSubscriptions = dependencies.listSubscriptions ?? listPullRequestSubscriptionsForWebhook;
-  const retireSubscription = dependencies.retireSubscription ?? retirePullRequestSubscription;
+  const listSubscriptions =
+    dependencies.listSubscriptions ??
+    ((subscriptionTarget: GithubWebhookPullRequestTarget, options?: { includeTerminal?: boolean }) => {
+      if (!dependencies.github) throw new Error('GitHub integration is required to load webhook subscriptions.');
+      return listPullRequestSubscriptionsForWebhook(subscriptionTarget, options, dependencies.github.storageDomain);
+    });
+  const retireSubscription =
+    dependencies.retireSubscription ??
+    ((id: string, status: 'open' | 'closed' | 'merged') => {
+      if (!dependencies.github) throw new Error('GitHub integration is required to retire webhook subscriptions.');
+      return retirePullRequestSubscription(id, status, dependencies.github.storageDomain);
+    });
   const subscriptions = await listSubscriptions(target, { includeTerminal: notification.action === 'reopened' });
   let delivered = 0;
   let failed = 0;

@@ -9,13 +9,12 @@
 
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
-import { and, eq } from 'drizzle-orm';
 import type { Context } from 'hono';
 
 import { emitAudit } from '../audit/audit';
 import { ensureWebAuthUser, webAuthTenant } from '../auth';
-import { getAppDb } from '../github/db';
-import { githubProjects } from '../github/schema';
+import type { GithubStorage } from '../github/storage/base';
+import { getSeededGithubIntegration } from '../runtime-config';
 import { clampMetricsWindow, computeFactoryMetrics } from './metrics';
 import type { WorkItemRow } from '../storage/domains/work-items/base';
 import type { WorkItemPriorState } from './store';
@@ -57,18 +56,17 @@ async function resolveTenant(c: Context): Promise<{ orgId: string; userId: strin
  */
 async function resolveProject(
   c: Context,
+  storage?: GithubStorage,
 ): Promise<{ orgId: string; userId: string; projectId: string } | { response: Response }> {
   const tenant = await resolveTenant(c);
   if ('response' in tenant) return tenant;
 
+  if (!storage) throw new Error('GitHub storage is not configured.');
   const projectId = c.req.param('id');
   if (!projectId || !UUID_RE.test(projectId)) {
     return { response: c.json({ error: 'Project not found' }, 404) };
   }
-  const [project] = await getAppDb()
-    .select()
-    .from(githubProjects)
-    .where(and(eq(githubProjects.id, projectId), eq(githubProjects.orgId, tenant.orgId)));
+  const project = await storage.getOrgProject(tenant.orgId, projectId);
   if (!project) {
     return { response: c.json({ error: 'Project not found' }, 404) };
   }
@@ -137,14 +135,15 @@ async function auditWorkItemPatch(
 }
 
 /** Build the Factory work-item routes as Mastra `apiRoutes`. */
-export function buildFactoryRoutes(): ApiRoute[] {
+export function buildFactoryRoutes(storage?: GithubStorage): ApiRoute[] {
+  storage ??= getSeededGithubIntegration()?.storageDomain;
   return [
     // ── List the org's work items for a project ─────────────────────────────
     registerApiRoute('/web/factory/projects/:id/work-items', {
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
-        const resolved = await resolveProject(loose(c));
+        const resolved = await resolveProject(loose(c), storage);
         if ('response' in resolved) return resolved.response;
         const items = await listWorkItems(resolved.orgId, resolved.projectId);
         return c.json({ workItems: items });
@@ -156,7 +155,7 @@ export function buildFactoryRoutes(): ApiRoute[] {
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
-        const resolved = await resolveProject(loose(c));
+        const resolved = await resolveProject(loose(c), storage);
         if ('response' in resolved) return resolved.response;
         const days = clampMetricsWindow(loose(c).req.query('days'));
         const items = await listWorkItems(resolved.orgId, resolved.projectId);
@@ -169,7 +168,7 @@ export function buildFactoryRoutes(): ApiRoute[] {
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
-        const resolved = await resolveProject(loose(c));
+        const resolved = await resolveProject(loose(c), storage);
         if ('response' in resolved) return resolved.response;
 
         const body = await readJson(loose(c));

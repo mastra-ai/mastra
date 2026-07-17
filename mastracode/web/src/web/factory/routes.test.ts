@@ -2,36 +2,6 @@ import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ── Mocks ────────────────────────────────────────────────────────────────
-vi.mock('drizzle-orm', async () => {
-  const actual = (await vi.importActual('drizzle-orm')) as Record<string, unknown>;
-  return {
-    ...actual,
-    eq: (column: any, value: any) => ({ kind: 'eq', column: column?.name, value }),
-    and: (...conds: any[]) => ({ kind: 'and', conds: conds.filter(Boolean) }),
-  };
-});
-
-// In-memory github_projects rows served by the getAppDb mock — the routes
-// still resolve project ownership through the (temporary) app-DB bridge;
-// work items themselves go through the in-memory factory storage domain.
-let projects: Array<Record<string, any>> = [];
-
-function columnJsKey(table: any, columnName: string): string | undefined {
-  for (const [jsKey, col] of Object.entries(table)) {
-    if ((col as any)?.name === columnName) return jsKey;
-  }
-  return undefined;
-}
-
-function matches(table: any, row: any, cond: any): boolean {
-  if (!cond) return true;
-  if (cond.kind === 'and') return cond.conds.every((c: any) => matches(table, row, c));
-  if (cond.kind === 'eq') {
-    const jsKey = columnJsKey(table, cond.column);
-    return jsKey !== undefined && row[jsKey] === cond.value;
-  }
-  return true;
-}
 
 // Capture audit events at the store boundary so the real `emitAudit` path
 // (actor resolution, request context, never-throws) is exercised end to end.
@@ -54,16 +24,7 @@ vi.mock('../audit/store', () => ({
   listAuditEvents: async () => ({ events: [] }),
 }));
 
-vi.mock('../github/db', () => ({
-  getAppDb: () => ({
-    select: () => ({
-      from: (table: any) => ({
-        where: async (cond: any) => projects.filter(row => matches(table, row, cond)),
-      }),
-    }),
-  }),
-}));
-
+import { GithubStorageInMemory } from '../github/storage/inmemory';
 import { __resetRuntimeConfigForTests } from '../runtime-config';
 import { seedInMemoryFactoryStoreForTests } from '../storage/test-utils';
 import type { InMemoryFactoryStoreSeed } from '../storage/test-utils';
@@ -72,13 +33,15 @@ import { buildFactoryRoutes } from './routes';
 import { parseCreateWorkItem, parseUpdateWorkItem } from './store';
 
 // ── Test harness ─────────────────────────────────────────────────────────
+let githubStorage!: GithubStorageInMemory;
+
 function buildApp(user: { workosId: string; organizationId?: string } | null) {
   const app = new Hono();
   app.use('*', async (c, next) => {
     if (user) c.set('webAuthUser' as never, user as never);
     await next();
   });
-  mountApiRoutes(app as any, buildFactoryRoutes());
+  mountApiRoutes(app as any, buildFactoryRoutes(githubStorage));
   return app;
 }
 
@@ -86,7 +49,19 @@ const orgUser = { workosId: 'u1', organizationId: 'org1' };
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 
 function seedProject(orgId = 'org1', id = PROJECT_ID) {
-  projects.push({ id, orgId, repoFullName: 'acme/app' });
+  githubStorage.projects.push({
+    id,
+    orgId,
+    userId: 'u1',
+    installationId: 1,
+    repoFullName: 'acme/app',
+    repoId: 1,
+    defaultBranch: 'main',
+    sandboxProvider: 'local',
+    sandboxWorkdir: '/tmp/acme-app',
+    setupCommand: null,
+    createdAt: new Date(),
+  });
 }
 
 const listItems = () => seed.workItems.list('org1', PROJECT_ID);
@@ -112,7 +87,7 @@ let seed: InMemoryFactoryStoreSeed;
 
 beforeEach(async () => {
   seed = await seedInMemoryFactoryStoreForTests();
-  projects = [];
+  githubStorage = new GithubStorageInMemory();
   auditRecorded = [];
   auditFailure = undefined;
   seedProject();
@@ -136,7 +111,7 @@ describe('auth and scoping', () => {
   });
 
   it('404s when the project belongs to another org', async () => {
-    projects = [];
+    githubStorage.projects = [];
     seedProject('other-org');
     const res = await json('GET', `/web/factory/projects/${PROJECT_ID}/work-items`);
     expect(res.status).toBe(404);
@@ -339,7 +314,7 @@ describe('GET /web/factory/projects/:id/metrics', () => {
   it('401s without a user and 404s for projects outside the org', async () => {
     expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/metrics`, undefined, null)).status).toBe(401);
 
-    projects = [];
+    githubStorage.projects = [];
     seedProject('other-org');
     expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/metrics`)).status).toBe(404);
   });

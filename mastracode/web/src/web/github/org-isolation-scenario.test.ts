@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as AuthModule from '../auth';
+import { GithubStorageInMemory } from './storage/inmemory';
 
 // ── Phase 2 org-isolation scenario tests ─────────────────────────────────
 // These prove the org-tenancy boundary end to end through the real GitHub
@@ -59,6 +60,7 @@ interface Tables {
   worktrees: Array<Record<string, any>>;
 }
 const tables: Tables = { installations: [], projects: [], sandboxes: [], worktrees: [] };
+const githubStorage = new GithubStorageInMemory();
 
 vi.mock('./db', () => {
   const makeDb = () => ({
@@ -96,6 +98,7 @@ let mintCount = 0;
 // Stub integration instance: routes consume the injected `github` instance —
 // real DI instead of module mocking (client.ts no longer exists).
 const githubStub = {
+  storageDomain: githubStorage,
   buildInstallUrl: (state: string) => `https://github.com/apps/test/installations/new?state=${state}`,
   buildOAuthIdentifyUrl: (state: string) => `https://github.com/login/oauth/authorize?state=${state}`,
   exchangeOAuthCode: vi.fn(async () => 'user-token'),
@@ -131,10 +134,10 @@ const stateSigner = {
 
 // Mirror production: provisioning persists a sandboxId onto the binding row so
 // the later git routes can reattach. We update the fake DB row in place.
-const ensureProjectSandbox = vi.fn(async (row: any) => {
-  const persisted = tables.sandboxes.find(s => s.id === row.id);
-  if (persisted && !persisted.sandboxId) persisted.sandboxId = `sb-${persisted.userId}`;
-  return { id: persisted?.sandboxId ?? 'sb' };
+const ensureProjectSandbox = vi.fn(async (row: any, storage: GithubStorageInMemory) => {
+  const sandboxId = row.sandboxId ?? `sb-${row.userId}`;
+  await storage.setSandboxId(row.id, sandboxId);
+  return { id: sandboxId };
 });
 const materializeRepo = vi.fn(async () => {});
 const reattachSandbox = vi.fn(async (_id: string) => ({ id: 'sb' }));
@@ -178,7 +181,7 @@ vi.mock('./sandbox', () => {
     }
   }
   return {
-    ensureProjectSandbox: (row: any) => ensureProjectSandbox(row),
+    ensureProjectSandbox: (row: any, storage: GithubStorageInMemory) => ensureProjectSandbox(row, storage),
     materializeRepo: (...args: any[]) => materializeRepo(...(args as [])),
     ensureWorktree: (sb: any, workdir: string, opts: any) => ensureWorktree(sb, workdir, opts),
     commitAll: (...args: any[]) => commitAll(...(args as [])),
@@ -261,7 +264,9 @@ function updateRows(table: any, vals: any, cond?: any): void {
   }
 }
 
-import { githubInstallations, githubProjectSandboxes, githubWorktrees } from './schema';
+const githubInstallations = {};
+const githubProjectSandboxes = {};
+const githubWorktrees = {};
 installationsRef = githubInstallations;
 worktreesRef = githubWorktrees;
 sandboxesRef = githubProjectSandboxes;
@@ -292,6 +297,11 @@ beforeEach(() => {
   tables.projects = [];
   tables.sandboxes = [];
   tables.worktrees = [];
+  githubStorage.installations = tables.installations as any;
+  githubStorage.projects = tables.projects as any;
+  githubStorage.sandboxes = tables.sandboxes as any;
+  githubStorage.worktrees = tables.worktrees as any;
+  githubStorage.subscriptions = [];
   featureEnabled = true;
   sandboxEnabled = true;
   cookieUser = null;

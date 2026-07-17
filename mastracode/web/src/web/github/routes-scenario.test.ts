@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { GithubStorageInMemory } from './storage/inmemory';
 
 // ── Scenario tests (S1, S2) ──────────────────────────────────────────────
 // These exercise the *composition* of the real Phase 4 git route handlers
@@ -26,6 +27,7 @@ interface Tables {
   worktrees: Array<Record<string, any>>;
 }
 const tables: Tables = { installations: [], projects: [], sandboxes: [], worktrees: [] };
+const githubStorage = new GithubStorageInMemory();
 
 vi.mock('./db', () => {
   const makeDb = () => ({
@@ -62,6 +64,7 @@ vi.mock('./db', () => {
 // Stub integration instance: routes consume the injected `github` instance —
 // real DI instead of module mocking (client.ts no longer exists).
 const githubStub = {
+  storageDomain: githubStorage,
   buildInstallUrl: (state: string) => `https://github.com/apps/test/installations/new?state=${state}`,
   buildOAuthIdentifyUrl: (state: string) => `https://github.com/login/oauth/authorize?state=${state}`,
   exchangeOAuthCode: vi.fn(async () => 'user-token'),
@@ -109,11 +112,15 @@ const stateSigner = {
 let mintCount = 0;
 
 const subscribeToPullRequest = vi.fn(async (_input: unknown) => ({ created: true }));
+vi.spyOn(githubStorage, 'subscribeToPullRequest').mockImplementation(subscribeToPullRequest as any);
 vi.mock('./subscriptions', () => ({
   subscribeToPullRequest: (input: unknown) => subscribeToPullRequest(input),
 }));
 
-const ensureProjectSandbox = vi.fn(async (_row: any) => ({ id: 'sb' }));
+const ensureProjectSandbox = vi.fn(async (row: any, storage: GithubStorageInMemory) => {
+  await storage.setSandboxId(row.id, 'sb');
+  return { id: 'sb' };
+});
 const materializeRepo = vi.fn(async () => {});
 const reattachSandbox = vi.fn(async (_id: string) => ({ id: 'sb' }));
 const ensureWorktree = vi.fn(async (_sb: any, _workdir: string, opts: { branch: string; baseBranch: string }) => ({
@@ -158,7 +165,7 @@ vi.mock('./sandbox', () => {
     }
   }
   return {
-    ensureProjectSandbox: (row: any) => ensureProjectSandbox(row),
+    ensureProjectSandbox: (row: any, storage: GithubStorageInMemory) => ensureProjectSandbox(row, storage),
     materializeRepo: (...args: any[]) => materializeRepo(...(args as [])),
     ensureWorktree: (sb: any, workdir: string, opts: any) => ensureWorktree(sb, workdir, opts),
     commitAll: (...args: any[]) => commitAll(...(args as [])),
@@ -241,7 +248,9 @@ function updateRows(table: any, vals: any, cond?: any): void {
   }
 }
 
-import { githubInstallations, githubProjectSandboxes, githubWorktrees } from './schema';
+const githubInstallations = {};
+const githubProjectSandboxes = {};
+const githubWorktrees = {};
 installationsRef = githubInstallations;
 worktreesRef = githubWorktrees;
 sandboxesRef = githubProjectSandboxes;
@@ -283,6 +292,11 @@ beforeEach(() => {
   tables.projects = [];
   tables.sandboxes = [];
   tables.worktrees = [];
+  githubStorage.installations = tables.installations as any;
+  githubStorage.projects = tables.projects as any;
+  githubStorage.sandboxes = tables.sandboxes as any;
+  githubStorage.worktrees = tables.worktrees as any;
+  githubStorage.subscriptions = [];
   featureEnabled = true;
   sandboxEnabled = true;
   // No Postgres in these scenario tests: keep the project lock in-process.

@@ -17,7 +17,6 @@ import type { Context } from 'hono';
 
 import { ensureWebAuthUser, webAuthTenant } from '../auth';
 import type { WebAuthTenant } from '../auth';
-import { getAppDb } from '../github/db';
 import type { StateSigner } from '../state-signing';
 import type { LinearIntegration } from './integration';
 import { getIntakeConfig } from '../intake/store';
@@ -28,7 +27,6 @@ import {
   LinearReauthRequiredError,
   loadLinearConnection as loadConnection,
 } from './connection';
-import { linearConnections } from './schema';
 
 type RouteContext = Context;
 
@@ -115,7 +113,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
-        if (!isLinearFeatureEnabled()) {
+        if (!isLinearFeatureEnabled() || !linear) {
           return c.json({
             enabled: false,
             connected: false,
@@ -139,7 +137,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
           });
         }
 
-        const connection = await loadConnection(tenant.orgId);
+        const connection = await loadConnection(tenant.orgId, linear);
         return c.json({
           enabled: true,
           connected: Boolean(connection),
@@ -202,31 +200,16 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
         try {
           const tokens = await linear.exchangeOAuthCode(code, redirectUri);
           const workspace = await linear.fetchWorkspace(tokens.accessToken);
-          await getAppDb()
-            .insert(linearConnections)
-            .values({
-              orgId,
-              userId,
-              accessToken: tokens.accessToken,
-              refreshToken: tokens.refreshToken,
-              expiresAt: tokens.expiresAt,
-              scope: tokens.scope,
-              workspaceName: workspace.name,
-              workspaceUrlKey: workspace.urlKey,
-            })
-            .onConflictDoUpdate({
-              target: [linearConnections.orgId],
-              set: {
-                userId,
-                accessToken: tokens.accessToken,
-                refreshToken: tokens.refreshToken,
-                expiresAt: tokens.expiresAt,
-                scope: tokens.scope,
-                workspaceName: workspace.name,
-                workspaceUrlKey: workspace.urlKey,
-                updatedAt: new Date(),
-              },
-            });
+          await linear.storageDomain.upsertConnection({
+            orgId,
+            userId,
+            accessToken: tokens.accessToken,
+            refreshToken: tokens.refreshToken,
+            expiresAt: tokens.expiresAt,
+            scope: tokens.scope,
+            workspaceName: workspace.name,
+            workspaceUrlKey: workspace.urlKey,
+          });
         } catch (error) {
           console.warn(`[Linear] OAuth callback failed to persist connection for org ${orgId}.`, error);
           return c.redirect('/?linear=error');
@@ -248,7 +231,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
         const resolved = await resolveOrgTenant(loose(c));
         if ('response' in resolved) return resolved.response;
 
-        const connection = await loadConnection(resolved.tenant.orgId);
+        const connection = await loadConnection(resolved.tenant.orgId, linear);
         if (!connection) {
           return c.json({ error: 'linear_not_connected', message: 'Connect Linear to list projects.' }, 409);
         }
@@ -278,7 +261,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
         const after = parseAfterCursor(c.req.query('after'));
         if (after === null) return c.json({ error: 'invalid_cursor' }, 400);
 
-        const connection = await loadConnection(resolved.tenant.orgId);
+        const connection = await loadConnection(resolved.tenant.orgId, linear);
         if (!connection) {
           return c.json({ error: 'linear_not_connected', message: 'Connect Linear to see intake issues.' }, 409);
         }

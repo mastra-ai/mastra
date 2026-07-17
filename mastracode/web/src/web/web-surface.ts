@@ -21,11 +21,10 @@ import { buildFsRoutes } from './fs-routes.js';
 import { buildOAuthRoutes } from './oauth-routes.js';
 import { getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './github/config.js';
 import { buildFactoryRoutes } from './factory/routes.js';
-import { ensureAppDbReady } from './github/db.js';
+import type { GithubStorage } from './github/storage/base.js';
 import { buildIntakeRoutes } from './intake/routes.js';
 import { getFactoryStore, getSeededStateSigner } from './runtime-config.js';
 import { getLinearFeatureDiagnostics, isLinearFeatureEnabled } from './linear/config.js';
-import { ensureLinearDbReady } from './linear/db.js';
 import { registerSandboxReattach } from './sandbox-reattach-registration.js';
 import { buildSkillRoutes } from './skills/routes.js';
 import type { StateSigner } from './state-signing.js';
@@ -145,7 +144,7 @@ export async function resolveLinearReady(): Promise<boolean> {
   }
 
   try {
-    await ensureLinearDbReady();
+    await getFactoryStore().ensureReady('linear');
     process.stderr.write('MastraCode Web: Linear routes enabled\n');
     return true;
   } catch (err) {
@@ -200,7 +199,7 @@ export async function resolveGithubReady(): Promise<boolean> {
   }
 
   try {
-    await ensureAppDbReady();
+    await getFactoryStore().ensureReady('github');
     process.stderr.write(
       [
         'MastraCode Web: GitHub routes enabled',
@@ -376,6 +375,8 @@ function disabledIntegrationStatusRoutes(id: string): ApiRoute[] {
  */
 export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
   const registrations = deps.integrations ?? [];
+  const githubStorage = registrations.find(({ integration }) => integration.id === 'github')?.integration
+    .storageDomain as GithubStorage | undefined;
   const ctx = deps.stateSigner
     ? {
         baseUrl: deps.publicOrigin,
@@ -395,11 +396,15 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
     ...buildFsRoutes({ root: deps.fsRoot }),
     ...buildConfigRoutes({ controller: deps.controller, authStorage: deps.authStorage }),
     ...buildOAuthRoutes({ authStorage: deps.authStorage }),
-    ...buildSkillRoutes({ controllerId: deps.controllerId, controller: deps.controller }),
+    ...buildSkillRoutes({
+      controllerId: deps.controllerId,
+      controller: deps.controller,
+      githubStorage,
+    }),
     ...integrationRoutes,
     ...absentStubs,
     ...(deps.intakeReady ? buildIntakeRoutes() : []),
-    ...(deps.factoryReady ? buildFactoryRoutes() : []),
-    ...(deps.factoryReady ? buildAuditRoutes({ baseUrl: deps.publicOrigin }) : []),
+    ...(deps.factoryReady ? buildFactoryRoutes(githubStorage) : []),
+    ...(deps.factoryReady ? buildAuditRoutes({ baseUrl: deps.publicOrigin, githubStorage }) : []),
   ];
 }

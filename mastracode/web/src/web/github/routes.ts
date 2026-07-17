@@ -14,7 +14,6 @@
 import type { MountedMastraCode } from '@mastra/code-sdk';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
-import { and, eq } from 'drizzle-orm';
 import type { Context } from 'hono';
 
 /**
@@ -37,7 +36,6 @@ import type { WebAuthTenant } from '../auth';
 import type { StateSigner } from '../state-signing';
 import { getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './config';
 import type { GithubIntegration } from './integration';
-import { getAppDb } from './db';
 import { withProjectLock } from './project-lock';
 import { handleGithubWebhook } from './webhook';
 import type { GithubIssueTriageRunInput, GithubIssueTriageRunResult } from './webhook';
@@ -65,9 +63,7 @@ import {
   WorktreeError,
 } from './sandbox';
 import type { GitIdentity } from './sandbox';
-import { githubInstallations, githubProjects, githubProjectSandboxes, githubWorktrees } from './schema';
-import type { GithubProjectRow, GithubProjectSandboxRow } from './schema';
-import { listPullRequestSubscriptionsForThread, subscribeToPullRequest } from './subscriptions';
+import type { GithubProjectRow, GithubProjectSandboxRow } from './storage/base';
 
 export interface MountGithubRoutesOptions {
   /**
@@ -262,10 +258,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
           });
         }
 
-        const rows = await getAppDb()
-          .select()
-          .from(githubInstallations)
-          .where(eq(githubInstallations.orgId, tenant.orgId));
+        const rows = options.github ? await options.github.storageDomain.listInstallations(tenant.orgId) : [];
 
         const connected = rows.length > 0;
         return c.json({
@@ -298,15 +291,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
   const runBoardIssueTriage = runIssueTriage
     ? async (input: GithubIssueTriageRunInput): Promise<GithubIssueTriageRunResult> => {
         const branch = `factory/issue-${input.issueNumber}`;
-        const [project] = await getAppDb()
-          .select()
-          .from(githubProjects)
-          .where(
-            and(
-              eq(githubProjects.installationId, input.installationId),
-              eq(githubProjects.repoFullName, input.repository),
-            ),
-          );
+        const project = await github.storageDomain.findProjectByRepo(input.installationId, input.repository);
         if (!project) throw new Error(`GitHub project not found for ${input.repository}`);
         const projectPath = input.projectPath ?? computeWorktreePath(project.sandboxWorkdir, branch);
         await github.addIssueLabels(input.installationId, input.repository, input.issueNumber, ['auto-triaged']);
@@ -333,7 +318,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         const sessionScope = c.req.query('scope');
         if (!resourceId || !threadId) return c.json({ error: 'resourceId and threadId are required' }, 400);
 
-        const subscriptions = await listPullRequestSubscriptionsForThread({
+        const subscriptions = await github.storageDomain.listPullRequestSubscriptionsForThread({
           orgId: tenant.orgId,
           resourceId,
           threadId,
@@ -459,21 +444,15 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
             // again and lands in the persist path below.
             return c.redirect(github.buildInstallUrl(signState(orgId, userId)));
           }
-          const db = getAppDb();
           for (const inst of installations) {
             // The installation is org-owned; `userId` records who connected it.
-            await db
-              .insert(githubInstallations)
-              .values({
-                orgId,
-                userId,
-                installationId: inst.installationId,
-                accountLogin: inst.accountLogin,
-                accountType: inst.accountType,
-              })
-              .onConflictDoNothing({
-                target: [githubInstallations.orgId, githubInstallations.installationId],
-              });
+            await github.storageDomain.insertInstallation({
+              orgId,
+              userId,
+              installationId: inst.installationId,
+              accountLogin: inst.accountLogin,
+              accountType: inst.accountType,
+            });
           }
         } catch (error) {
           console.warn(
@@ -497,10 +476,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         const resolved = await resolveOrgTenant(loose(c));
         if ('response' in resolved) return resolved.response;
 
-        const installs = await getAppDb()
-          .select()
-          .from(githubInstallations)
-          .where(eq(githubInstallations.orgId, resolved.tenant.orgId));
+        const installs = await github.storageDomain.listInstallations(resolved.tenant.orgId);
 
         const query = (c.req.query('q') ?? '').toLowerCase();
         const repos = [];
@@ -518,14 +494,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
             console.error(
               `[MastraCode Web] pruning stale GitHub installation ${inst.installationId} (404 from GitHub)`,
             );
-            await getAppDb()
-              .delete(githubInstallations)
-              .where(
-                and(
-                  eq(githubInstallations.orgId, resolved.tenant.orgId),
-                  eq(githubInstallations.installationId, inst.installationId),
-                ),
-              );
+            await github.storageDomain.deleteInstallation(resolved.tenant.orgId, inst.installationId);
             continue;
           }
           for (const repo of list) {
@@ -564,11 +533,8 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         }
 
         // The installation must belong to this org.
-        const owned = await getAppDb()
-          .select()
-          .from(githubInstallations)
-          .where(and(eq(githubInstallations.orgId, orgId), eq(githubInstallations.installationId, installationId)));
-        if (owned.length === 0) {
+        const owned = await github.storageDomain.getInstallation(orgId, installationId);
+        if (!owned) {
           return c.json({ error: 'Installation not found for organization' }, 404);
         }
 
@@ -582,25 +548,18 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         const defaultBranch = isValidGitRef(repo.defaultBranch) ? repo.defaultBranch : 'main';
         const sandboxWorkdir = computeSandboxWorkdir(repo.fullName);
 
-        const [row] = await getAppDb()
-          .insert(githubProjects)
-          .values({
-            orgId,
-            userId,
-            installationId,
-            repoFullName: repo.fullName,
-            repoId: repo.id,
-            defaultBranch,
-            sandboxProvider: getSandboxProvider(),
-            sandboxWorkdir,
-          })
-          .onConflictDoUpdate({
-            target: [githubProjects.orgId, githubProjects.repoId],
-            set: { installationId, repoFullName: repo.fullName, defaultBranch, sandboxWorkdir },
-          })
-          .returning();
+        const row = await github.storageDomain.upsertProject({
+          orgId,
+          userId,
+          installationId,
+          repoFullName: repo.fullName,
+          repoId: repo.id,
+          defaultBranch,
+          sandboxProvider: getSandboxProvider(),
+          sandboxWorkdir,
+        });
 
-        return c.json({ project: toProjectPayload(row!) });
+        return c.json({ project: toProjectPayload(row) });
       },
     }),
   );
@@ -621,10 +580,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
 
         const projectId = c.req.param('id');
         if (!projectId) return c.json({ error: 'Project not found' }, 404);
-        const [project] = await getAppDb()
-          .select()
-          .from(githubProjects)
-          .where(and(eq(githubProjects.id, projectId), eq(githubProjects.orgId, orgId)));
+        const project = await github.storageDomain.getOrgProject(orgId, projectId);
         if (!project) {
           return c.json({ error: 'Project not found' }, 404);
         }
@@ -666,7 +622,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
-        const loaded = await loadOrgProject(loose(c));
+        const loaded = await loadOrgProject(github, loose(c));
         if ('response' in loaded) return loaded.response;
         const page = parseListPage(c.req.query('page'));
         if (page === null) return c.json({ error: 'invalid_page' }, 400);
@@ -696,7 +652,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
-        const owned = await loadOwnedProject(loose(c));
+        const owned = await loadOwnedProject(github, loose(c));
         if ('response' in owned) return owned.response;
         const { project, sandboxRow } = owned;
         const issueNumber = parseIssueNumberParam(c.req.param('number'));
@@ -760,7 +716,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
-        const loaded = await loadOrgProject(loose(c));
+        const loaded = await loadOrgProject(github, loose(c));
         if ('response' in loaded) return loaded.response;
         const page = parseListPage(c.req.query('page'));
         if (page === null) return c.json({ error: 'invalid_page' }, 400);
@@ -787,7 +743,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
-        const loaded = await loadOrgProject(loose(c));
+        const loaded = await loadOrgProject(github, loose(c));
         if ('response' in loaded) return loaded.response;
         return c.json({ setupCommand: loaded.project.setupCommand });
       },
@@ -800,7 +756,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
-        const loaded = await loadOrgProject(loose(c));
+        const loaded = await loadOrgProject(github, loose(c));
         if ('response' in loaded) return loaded.response;
 
         let body: { setupCommand?: unknown };
@@ -827,7 +783,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
             ? body.setupCommand.trim()
             : null;
 
-        await getAppDb().update(githubProjects).set({ setupCommand }).where(eq(githubProjects.id, loaded.project.id));
+        await github.storageDomain.setProjectSetupCommand(loaded.project.id, setupCommand);
         return c.json({ setupCommand });
       },
     }),
@@ -845,7 +801,10 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
  * routes only need the repo + installation, so they work before a sandbox is
  * ever provisioned.
  */
-async function loadOrgProject(c: RouteContext): Promise<{ project: GithubProjectRow } | { response: Response }> {
+async function loadOrgProject(
+  github: GithubIntegration,
+  c: RouteContext,
+): Promise<{ project: GithubProjectRow } | { response: Response }> {
   const resolved = await resolveOrgTenant(c);
   if ('response' in resolved) return { response: resolved.response };
   const { orgId } = resolved.tenant;
@@ -854,10 +813,7 @@ async function loadOrgProject(c: RouteContext): Promise<{ project: GithubProject
   if (!projectId) {
     return { response: c.json({ error: 'Project not found' }, 404) };
   }
-  const [project] = await getAppDb()
-    .select()
-    .from(githubProjects)
-    .where(and(eq(githubProjects.id, projectId), eq(githubProjects.orgId, orgId)));
+  const project = await github.storageDomain.getOrgProject(orgId, projectId);
   if (!project) {
     return { response: c.json({ error: 'Project not found' }, 404) };
   }
@@ -886,30 +842,12 @@ async function resolveProjectSandbox(sandboxRow: GithubProjectSandboxRow): Promi
  * binding inherits its workdir from the org-owned project, but `sandboxId` /
  * `materializedAt` stay null until the user first opens the project.
  */
-async function loadOrCreateSandboxRow(project: GithubProjectRow, userId: string): Promise<GithubProjectSandboxRow> {
-  const [existing] = await getAppDb()
-    .select()
-    .from(githubProjectSandboxes)
-    .where(and(eq(githubProjectSandboxes.githubProjectId, project.id), eq(githubProjectSandboxes.userId, userId)));
-  if (existing) return existing;
-
-  const [created] = await getAppDb()
-    .insert(githubProjectSandboxes)
-    .values({
-      githubProjectId: project.id,
-      userId,
-      sandboxWorkdir: project.sandboxWorkdir,
-    })
-    .onConflictDoNothing({ target: [githubProjectSandboxes.githubProjectId, githubProjectSandboxes.userId] })
-    .returning();
-  if (created) return created;
-
-  // Lost a race: another request inserted the binding first. Re-read it.
-  const [row] = await getAppDb()
-    .select()
-    .from(githubProjectSandboxes)
-    .where(and(eq(githubProjectSandboxes.githubProjectId, project.id), eq(githubProjectSandboxes.userId, userId)));
-  return row!;
+async function loadOrCreateSandboxRow(
+  github: GithubIntegration,
+  project: GithubProjectRow,
+  userId: string,
+): Promise<GithubProjectSandboxRow> {
+  return github.storageDomain.getOrCreateSandbox(project, userId);
 }
 
 interface EnsureResult {
@@ -931,13 +869,10 @@ async function prepareProject(
   userId: string,
   onProgress?: ProgressFn,
 ): Promise<EnsureResult> {
-  const sandboxRow = await loadOrCreateSandboxRow(project, userId);
-  const sandbox = await ensureProjectSandbox(sandboxRow, onProgress);
+  const sandboxRow = await loadOrCreateSandboxRow(github, project, userId);
+  const sandbox = await ensureProjectSandbox(sandboxRow, github.storageDomain, onProgress);
   // Re-read the sandbox binding so we have the freshly persisted sandboxId.
-  const [fresh] = await getAppDb()
-    .select()
-    .from(githubProjectSandboxes)
-    .where(eq(githubProjectSandboxes.id, sandboxRow.id));
+  const fresh = await github.storageDomain.getSandboxById(sandboxRow.id);
   const token = await github.mintInstallationToken(project.installationId);
   const finalRow = fresh ?? sandboxRow;
   await materializeRepo(
@@ -945,6 +880,7 @@ async function prepareProject(
     { repoFullName: project.repoFullName, defaultBranch: project.defaultBranch },
     sandbox,
     token,
+    github.storageDomain,
     onProgress,
   );
   const result: EnsureResult = {
@@ -994,6 +930,7 @@ function gitErrorResponse(c: Context, err: unknown) {
  * a ready-to-return error response.
  */
 async function loadOwnedProject(
+  github: GithubIntegration,
   c: RouteContext,
 ): Promise<
   | { orgId: string; userId: string; project: GithubProjectRow; sandboxRow: GithubProjectSandboxRow }
@@ -1013,14 +950,11 @@ async function loadOwnedProject(
   if (!projectId) {
     return { response: c.json({ error: 'Project not found' }, 404) };
   }
-  const [project] = await getAppDb()
-    .select()
-    .from(githubProjects)
-    .where(and(eq(githubProjects.id, projectId), eq(githubProjects.orgId, orgId)));
+  const project = await github.storageDomain.getOrgProject(orgId, projectId);
   if (!project) {
     return { response: c.json({ error: 'Project not found' }, 404) };
   }
-  const sandboxRow = await loadOrCreateSandboxRow(project, userId);
+  const sandboxRow = await loadOrCreateSandboxRow(github, project, userId);
   return { orgId, userId, project, sandboxRow };
 }
 
@@ -1031,7 +965,7 @@ function buildProjectGitRoutes(github: GithubIntegration): ApiRoute[] {
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
-        const owned = await loadOwnedProject(loose(c));
+        const owned = await loadOwnedProject(github, loose(c));
         if ('response' in owned) return owned.response;
         const { orgId, userId, project, sandboxRow } = owned;
 
@@ -1069,20 +1003,14 @@ function buildProjectGitRoutes(github: GithubIntegration): ApiRoute[] {
               await runWorktreeSetup(sandbox, result.worktreePath, project.setupCommand);
             }
 
-            await getAppDb()
-              .insert(githubWorktrees)
-              .values({
-                orgId,
-                userId,
-                githubProjectId: project.id,
-                branch: result.branch,
-                baseBranch: result.baseBranch,
-                worktreePath: result.worktreePath,
-              })
-              .onConflictDoUpdate({
-                target: [githubWorktrees.githubProjectId, githubWorktrees.userId, githubWorktrees.branch],
-                set: { baseBranch: result.baseBranch, worktreePath: result.worktreePath },
-              });
+            await github.storageDomain.upsertWorktree({
+              orgId,
+              userId,
+              githubProjectId: project.id,
+              branch: result.branch,
+              baseBranch: result.baseBranch,
+              worktreePath: result.worktreePath,
+            });
 
             if (!result.reused) {
               await emitAudit(loose(c), {
@@ -1115,7 +1043,7 @@ function buildProjectGitRoutes(github: GithubIntegration): ApiRoute[] {
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
-        const owned = await loadOwnedProject(loose(c));
+        const owned = await loadOwnedProject(github, loose(c));
         if ('response' in owned) return owned.response;
         const { userId, project, sandboxRow } = owned;
 
@@ -1132,12 +1060,7 @@ function buildProjectGitRoutes(github: GithubIntegration): ApiRoute[] {
 
         // Only server-created worktrees (persisted rows owned by this user)
         // can be deleted; the repo root checkout is never a worktree row.
-        const rowFilter = and(
-          eq(githubWorktrees.githubProjectId, project.id),
-          eq(githubWorktrees.userId, userId),
-          eq(githubWorktrees.branch, branch),
-        );
-        const [worktreeRow] = await getAppDb().select().from(githubWorktrees).where(rowFilter);
+        const worktreeRow = await github.storageDomain.getWorktree(project.id, userId, branch);
         if (!worktreeRow) return c.json({ error: 'Unknown worktree' }, 404);
         if (worktreeRow.worktreePath === sandboxRow.sandboxWorkdir) {
           return c.json({ error: 'Cannot delete the repo root workspace' }, 400);
@@ -1150,7 +1073,7 @@ function buildProjectGitRoutes(github: GithubIntegration): ApiRoute[] {
               branch,
               worktreePath: worktreeRow.worktreePath,
             });
-            await getAppDb().delete(githubWorktrees).where(rowFilter);
+            await github.storageDomain.deleteWorktree(project.id, userId, branch);
             await emitAudit(loose(c), {
               action: 'factory.worktree.deleted',
               projectId: project.id,
@@ -1170,7 +1093,7 @@ function buildProjectGitRoutes(github: GithubIntegration): ApiRoute[] {
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
-        const owned = await loadOwnedProject(loose(c));
+        const owned = await loadOwnedProject(github, loose(c));
         if ('response' in owned) return owned.response;
         const { userId, project, sandboxRow } = owned;
 
@@ -1183,7 +1106,13 @@ function buildProjectGitRoutes(github: GithubIntegration): ApiRoute[] {
         if (typeof body.message !== 'string' || body.message.trim().length === 0 || body.message.length > 5000) {
           return c.json({ error: 'Invalid message' }, 400);
         }
-        const workdir = await resolveWorktreePath(project.id, userId, body.worktreePath, sandboxRow.sandboxWorkdir);
+        const workdir = await resolveWorktreePath(
+          github,
+          project.id,
+          userId,
+          body.worktreePath,
+          sandboxRow.sandboxWorkdir,
+        );
         if (!workdir) {
           return c.json({ error: 'Invalid worktreePath' }, 400);
         }
@@ -1218,7 +1147,7 @@ function buildProjectGitRoutes(github: GithubIntegration): ApiRoute[] {
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
-        const owned = await loadOwnedProject(loose(c));
+        const owned = await loadOwnedProject(github, loose(c));
         if ('response' in owned) return owned.response;
         const { userId, project, sandboxRow } = owned;
 
@@ -1232,7 +1161,13 @@ function buildProjectGitRoutes(github: GithubIntegration): ApiRoute[] {
           return c.json({ error: 'Invalid branch' }, 400);
         }
         const branch = body.branch;
-        const workdir = await resolveWorktreePath(project.id, userId, body.worktreePath, sandboxRow.sandboxWorkdir);
+        const workdir = await resolveWorktreePath(
+          github,
+          project.id,
+          userId,
+          body.worktreePath,
+          sandboxRow.sandboxWorkdir,
+        );
         if (!workdir) {
           return c.json({ error: 'Invalid worktreePath' }, 400);
         }
@@ -1261,7 +1196,7 @@ function buildProjectGitRoutes(github: GithubIntegration): ApiRoute[] {
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
-        const owned = await loadOwnedProject(loose(c));
+        const owned = await loadOwnedProject(github, loose(c));
         if ('response' in owned) return owned.response;
         const { userId, project, sandboxRow } = owned;
 
@@ -1295,7 +1230,13 @@ function buildProjectGitRoutes(github: GithubIntegration): ApiRoute[] {
         const head = body.branch;
         const title = body.title;
         const prBody = body.body as string | undefined;
-        const workdir = await resolveWorktreePath(project.id, userId, body.worktreePath, sandboxRow.sandboxWorkdir);
+        const workdir = await resolveWorktreePath(
+          github,
+          project.id,
+          userId,
+          body.worktreePath,
+          sandboxRow.sandboxWorkdir,
+        );
         if (!workdir) {
           return c.json({ error: 'Invalid worktreePath' }, 400);
         }
@@ -1319,25 +1260,27 @@ function buildProjectGitRoutes(github: GithubIntegration): ApiRoute[] {
             ) {
               const pullRequestNumber = pullRequestNumberFromUrl(result.url, project.repoFullName);
               if (pullRequestNumber) {
-                await subscribeToPullRequest({
-                  orgId: project.orgId,
-                  installationId: project.installationId,
-                  githubProjectId: project.id,
-                  repoId: project.repoId,
-                  pullRequestNumber,
-                  sessionId: body.sessionId,
-                  ownerId: userId,
-                  resourceId: project.id,
-                  threadId: body.threadId,
-                  sessionScope: workdir,
-                  source: 'factory-pr-create',
-                  subscribedByUserId: userId,
-                }).catch(error => {
-                  console.warn(
-                    `[GitHub] Pull request ${result.url} was created but automatic subscription failed.`,
-                    error,
-                  );
-                });
+                await github.storageDomain
+                  .subscribeToPullRequest({
+                    orgId: project.orgId,
+                    installationId: project.installationId,
+                    githubProjectId: project.id,
+                    repoId: project.repoId,
+                    pullRequestNumber,
+                    sessionId: body.sessionId,
+                    ownerId: userId,
+                    resourceId: project.id,
+                    threadId: body.threadId,
+                    sessionScope: workdir,
+                    source: 'factory-pr-create',
+                    subscribedByUserId: userId,
+                  })
+                  .catch(error => {
+                    console.warn(
+                      `[GitHub] Pull request ${result.url} was created but automatic subscription failed.`,
+                      error,
+                    );
+                  });
               }
             }
             return c.json({ url: result.url });
@@ -1356,7 +1299,7 @@ function buildProjectGitRoutes(github: GithubIntegration): ApiRoute[] {
       method: 'DELETE',
       requiresAuth: false,
       handler: async c => {
-        const owned = await loadOwnedProject(loose(c));
+        const owned = await loadOwnedProject(github, loose(c));
         if ('response' in owned) return owned.response;
         const { userId, project, sandboxRow } = owned;
 
@@ -1368,7 +1311,7 @@ function buildProjectGitRoutes(github: GithubIntegration): ApiRoute[] {
         try {
           return await withProjectLock(`${project.id}:${userId}`, async () => {
             const sandbox = await reattachSandbox(sandboxRow.sandboxId!);
-            await teardownProjectSandbox(sandboxRow, sandbox);
+            await teardownProjectSandbox(sandboxRow, github.storageDomain, sandbox);
             return c.json({ tornDown: true });
           });
         } catch (err) {
@@ -1387,6 +1330,7 @@ function buildProjectGitRoutes(github: GithubIntegration): ApiRoute[] {
  * `undefined` when it isn't recognized.
  */
 async function resolveWorktreePath(
+  github: GithubIntegration,
   projectId: string,
   userId: string,
   worktreePath: unknown,
@@ -1398,15 +1342,6 @@ async function resolveWorktreePath(
   if (typeof worktreePath !== 'string') {
     return undefined;
   }
-  const [row] = await getAppDb()
-    .select()
-    .from(githubWorktrees)
-    .where(
-      and(
-        eq(githubWorktrees.githubProjectId, projectId),
-        eq(githubWorktrees.userId, userId),
-        eq(githubWorktrees.worktreePath, worktreePath),
-      ),
-    );
+  const row = await github.storageDomain.findWorktreeByPath(projectId, userId, worktreePath);
   return row ? row.worktreePath : undefined;
 }

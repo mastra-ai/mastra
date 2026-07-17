@@ -7,10 +7,9 @@ vi.mock('../auth', () => ({
   isWebAuthEnabled: vi.fn(() => true),
   webAuthTenant: vi.fn(),
 }));
-vi.mock('../github/db', () => ({ getAppDb: vi.fn() }));
 
 import { webAuthTenant } from '../auth';
-import { getAppDb } from '../github/db';
+import { GithubStorageInMemory } from '../github/storage/inmemory';
 import { mountApiRoutes } from '../test-utils';
 import { buildSkillRoutes } from './routes';
 
@@ -119,7 +118,6 @@ describe('workspace skill invocation route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(webAuthTenant).mockReset();
-    vi.mocked(getAppDb).mockReset();
   });
 
   it('formats and dispatches a workspace skill once with escaped arguments', async () => {
@@ -291,10 +289,7 @@ describe('workspace skill invocation route', () => {
 
   it('enforces authenticated tenant worktree ownership before session lookup', async () => {
     vi.mocked(webAuthTenant).mockReturnValue({ userId: 'user-1', orgId: 'org-1' });
-    const where = vi.fn(async () => [] as Array<{ id: string }>);
-    vi.mocked(getAppDb).mockReturnValue({
-      select: () => ({ from: () => ({ where }) }),
-    } as never);
+    const githubStorage = new GithubStorageInMemory();
     const sendMessage = vi.fn(async () => {});
     const getSessionByResource = vi.fn(async () => ({
       getWorkspace: () => ({
@@ -308,6 +303,7 @@ describe('workspace skill invocation route', () => {
       buildSkillRoutes({
         controllerId: 'code',
         controller: { getSessionByResource } as never,
+        githubStorage,
       }),
     );
 
@@ -321,7 +317,7 @@ describe('workspace skill invocation route', () => {
       error: 'invalid_request',
       message: 'Invalid skill invocation request.',
     });
-    expect(where).not.toHaveBeenCalled();
+    expect(githubStorage.worktrees).toHaveLength(0);
 
     const projectId = '00000000-0000-4000-8000-000000000001';
     const denied = await invoke(app, {
@@ -336,7 +332,16 @@ describe('workspace skill invocation route', () => {
     });
     expect(getSessionByResource).not.toHaveBeenCalled();
 
-    where.mockResolvedValueOnce([{ id: 'worktree-1' }]);
+    githubStorage.worktrees.push({
+      id: 'worktree-1',
+      orgId: 'org-1',
+      userId: 'user-1',
+      githubProjectId: projectId,
+      branch: 'review-42',
+      baseBranch: 'main',
+      worktreePath: '/worktrees/review-42',
+      createdAt: new Date(),
+    });
     const allowed = await invoke(app, {
       resourceId: projectId,
       scope: '/worktrees/review-42',

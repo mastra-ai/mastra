@@ -15,12 +15,11 @@
 import { WorkOSAdminPortal } from '@mastra/auth-workos';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
-import { and, eq } from 'drizzle-orm';
 import type { Context } from 'hono';
 
 import { ensureWebAuthUser, getWorkOSProvider, isWorkOSAuth, webAuthTenant } from '../auth';
-import { getAppDb } from '../github/db';
-import { githubProjects } from '../github/schema';
+import type { GithubStorage } from '../github/storage/base';
+import { getSeededGithubIntegration } from '../runtime-config';
 import { listAuditEvents } from './store';
 
 function loose(c: unknown): Context {
@@ -50,18 +49,17 @@ async function resolveTenant(c: Context): Promise<{ orgId: string; userId: strin
 /** Resolve the tenant AND the org-owned project from the `:id` param. */
 async function resolveProject(
   c: Context,
+  storage?: GithubStorage,
 ): Promise<{ orgId: string; userId: string; projectId: string } | { response: Response }> {
   const tenant = await resolveTenant(c);
   if ('response' in tenant) return tenant;
 
+  if (!storage) throw new Error('GitHub storage is not configured.');
   const projectId = c.req.param('id');
   if (!projectId || !UUID_RE.test(projectId)) {
     return { response: c.json({ error: 'Project not found' }, 404) };
   }
-  const [project] = await getAppDb()
-    .select()
-    .from(githubProjects)
-    .where(and(eq(githubProjects.id, projectId), eq(githubProjects.orgId, tenant.orgId)));
+  const project = await storage.getOrgProject(tenant.orgId, projectId);
   if (!project) {
     return { response: c.json({ error: 'Project not found' }, 404) };
   }
@@ -89,15 +87,17 @@ function parseLimitParam(raw: string | undefined): number | undefined {
 export interface AuditRoutesDeps {
   /** Public origin used as the Admin Portal return URL base. */
   baseUrl: string;
+  githubStorage?: GithubStorage;
 }
 
 export function buildAuditRoutes(deps: AuditRoutesDeps): ApiRoute[] {
+  const githubStorage = deps.githubStorage ?? getSeededGithubIntegration()?.storageDomain;
   return [
     registerApiRoute('/web/factory/projects/:id/audit', {
       method: 'GET',
       handler: async cc => {
         const c = loose(cc);
-        const scope = await resolveProject(c);
+        const scope = await resolveProject(c, githubStorage);
         if ('response' in scope) return scope.response;
 
         const page = await listAuditEvents({

@@ -14,7 +14,6 @@
 import { isWebAuthEnabled } from '../auth';
 import { getSeededGithubIntegration, getSeededStateSigner } from '../runtime-config';
 import { getSandboxProvider, isSandboxEnabled } from '../sandbox/fleet';
-import { isAppDbConfigured } from './db';
 
 /**
  * Env vars the deploy entry reads to construct a `GithubIntegration`. Names
@@ -35,7 +34,7 @@ const GITHUB_APP_ENV_VARS = [
  * True when the GitHub App project feature should be active.
  */
 export function isGithubFeatureEnabled(): boolean {
-  return getSeededGithubIntegration() !== undefined && isWebAuthEnabled() && isAppDbConfigured();
+  return getSeededGithubIntegration() !== undefined && isWebAuthEnabled();
 }
 
 /**
@@ -65,7 +64,7 @@ export function getGithubFeatureDiagnostics(): GithubFeatureDiagnostics {
   return {
     githubAppConfigured: github !== undefined,
     webAuthEnabled: isWebAuthEnabled(),
-    appDbConfigured: isAppDbConfigured(),
+    appDbConfigured: github?.storageDomain !== undefined,
     stateSecretConfigured: getSeededStateSigner()?.stable ?? false,
     sandboxEnabled: isSandboxEnabled(),
     sandboxProvider: getSandboxProvider(),

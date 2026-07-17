@@ -3,14 +3,13 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import { formatSkillActivation } from '@mastra/core/workspace';
 import type { Workspace } from '@mastra/core/workspace';
-import { and, eq } from 'drizzle-orm';
 import type { Context } from 'hono';
 
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 
 import { ensureWebAuthUser, isWebAuthEnabled, webAuthTenant } from '../auth';
-import { getAppDb } from '../github/db';
-import { githubWorktrees } from '../github/schema';
+import type { GithubStorage } from '../github/storage/base';
+import { getSeededGithubIntegration } from '../runtime-config';
 
 const MAX_RESOURCE_ID_LENGTH = 512;
 const MAX_SCOPE_LENGTH = 2048;
@@ -40,6 +39,7 @@ interface SkillSession {
 export interface BuildSkillRoutesDeps {
   controllerId: string;
   controller: Pick<AgentController<MastraCodeState>, 'getSessionByResource'>;
+  githubStorage?: GithubStorage;
   authorizeSessionAddress?: (
     context: Context,
     address: { resourceId: string; scope?: string },
@@ -77,6 +77,7 @@ function parseBody(value: unknown): SkillInvocationBody | undefined {
 async function authorizeSessionAddress(
   context: Context,
   address: { resourceId: string; scope?: string },
+  storage?: GithubStorage,
 ): Promise<SessionAuthorizationResult> {
   if (!isWebAuthEnabled()) return { allowed: true };
 
@@ -99,18 +100,9 @@ async function authorizeSessionAddress(
   if (!tenant.orgId || !address.scope) {
     return { allowed: false, status: 403, code: 'session_forbidden', message: 'Session access denied.' };
   }
-  const rows = await getAppDb()
-    .select({ id: githubWorktrees.id })
-    .from(githubWorktrees)
-    .where(
-      and(
-        eq(githubWorktrees.orgId, tenant.orgId),
-        eq(githubWorktrees.userId, tenant.userId),
-        eq(githubWorktrees.githubProjectId, address.resourceId),
-        eq(githubWorktrees.worktreePath, address.scope),
-      ),
-    );
-  return rows.length > 0
+  if (!storage) throw new Error('GitHub storage is not configured.');
+  const worktree = await storage.findWorktreeByPath(address.resourceId, tenant.userId, address.scope);
+  return worktree?.orgId === tenant.orgId
     ? { allowed: true }
     : { allowed: false, status: 403, code: 'session_forbidden', message: 'Session access denied.' };
 }
@@ -118,8 +110,13 @@ async function authorizeSessionAddress(
 export function buildSkillRoutes({
   controllerId,
   controller,
-  authorizeSessionAddress: authorize = authorizeSessionAddress,
+  githubStorage = getSeededGithubIntegration()?.storageDomain,
+  authorizeSessionAddress: customAuthorize,
 }: BuildSkillRoutesDeps): ApiRoute[] {
+  const authorize =
+    customAuthorize ??
+    ((context: Context, address: { resourceId: string; scope?: string }) =>
+      authorizeSessionAddress(context, address, githubStorage));
   const handleSkillRequest = async (context: unknown, dispatch: boolean) => {
     const c = loose(context);
     if (c.req.param('controllerId') !== controllerId) {

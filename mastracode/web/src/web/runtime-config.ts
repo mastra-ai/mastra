@@ -3,8 +3,8 @@
  *
  * `MastraFactory.prepare()` (see `./factory-entry.ts`) seeds this module with
  * the explicit config the deploy entry passed in. Deep modules that can't be
- * parameterized through every call site (`github/db.ts`, the auth module)
- * consult it via getters instead of reading deployment env themselves.
+ * parameterized through every call site (such as the auth module) consult it
+ * via getters instead of reading deployment env themselves.
  *
  * The registry holds *instances*, not connection strings: the injected Mastra
  * storage (whose pg pool is shared by every app-table consumer), the vector

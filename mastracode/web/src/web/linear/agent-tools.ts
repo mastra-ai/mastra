@@ -16,11 +16,9 @@
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
-import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 
-import { getAppDb } from '../github/db';
-import { githubProjects } from '../github/schema';
+import { getSeededGithubIntegration } from '../runtime-config';
 import { isLinearFeatureEnabled } from './config';
 import type { LinearIntegration } from './integration';
 import {
@@ -58,26 +56,24 @@ async function resolveOrgId(resourceId: string): Promise<string | null> {
     orgIdByResourceId.set(resourceId, null);
     return null;
   }
-  let row: { orgId: string } | undefined;
+  let orgId: string | null;
   try {
-    [row] = await getAppDb()
-      .select({ orgId: githubProjects.orgId })
-      .from(githubProjects)
-      .where(eq(githubProjects.id, resourceId));
+    const github = getSeededGithubIntegration();
+    const project = github ? await github.storageDomain.getProjectById(resourceId) : null;
+    orgId = project?.orgId ?? null;
   } catch {
     // Transient database failure: skip the tools for this request but don't
     // cache the miss, so the next request retries the lookup.
     return null;
   }
-  const orgId = row?.orgId ?? null;
   orgIdByResourceId.set(resourceId, orgId);
   return orgId;
 }
 
-async function checkLinearConnection(orgId: string): Promise<ConnectionCheck> {
+async function checkLinearConnection(orgId: string, linear: LinearIntegration): Promise<ConnectionCheck> {
   const cached = connectionCheckByOrg.get(orgId);
   if (cached && Date.now() - cached.checkedAt < CONNECTION_TTL_MS) return cached;
-  const connection = await loadLinearConnection(orgId);
+  const connection = await loadLinearConnection(orgId, linear);
   const check: ConnectionCheck = {
     connected: connection !== null,
     canComment: connection !== null && canPostLinearComments(connection),
@@ -111,7 +107,7 @@ function createLinearGetIssueTool(linear: LinearIntegration, orgId: string) {
       issue: z.string().min(1).describe('The Linear issue identifier (e.g. "ENG-123") or issue UUID.'),
     }),
     execute: async ({ issue }: { issue: string }) => {
-      const connection = await loadLinearConnection(orgId);
+      const connection = await loadLinearConnection(orgId, linear);
       if (!connection) {
         return { error: 'Linear is not connected for this project. Connect Linear in Settings to fetch issues.' };
       }
@@ -142,7 +138,7 @@ function createLinearCommentTool(linear: LinearIntegration, orgId: string) {
       body: z.string().min(1).describe('The comment body, as Linear-flavored markdown.'),
     }),
     execute: async ({ issue, body }: { issue: string; body: string }) => {
-      const connection = await loadLinearConnection(orgId);
+      const connection = await loadLinearConnection(orgId, linear);
       if (!connection) {
         return { error: 'Linear is not connected for this project. Connect Linear in Settings to post comments.' };
       }
@@ -188,7 +184,7 @@ export async function buildLinearAgentTools({
 
   const orgId = await resolveOrgId(resourceId);
   if (!orgId) return {};
-  const check = await checkLinearConnection(orgId);
+  const check = await checkLinearConnection(orgId, linear);
   if (!check.connected) return {};
 
   return {
