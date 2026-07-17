@@ -217,6 +217,7 @@ export function createDurableGoalStep() {
                 timedOut: false,
                 maxRunsReached: true,
                 suppressFeedback: false,
+                shouldContinue: false,
               },
             } as any);
           } catch {
@@ -466,6 +467,7 @@ export function createDurableGoalStep() {
         timedOut: result.timedOut,
         maxRunsReached,
         suppressFeedback,
+        shouldContinue,
       };
 
       // Inject feedback into messageList via signal so the next LLM call sees it.

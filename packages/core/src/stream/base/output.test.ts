@@ -91,9 +91,14 @@ function createTextDeltaChunk(runId: string, text: string): ChunkType {
 
 /**
  * Minimal goal evaluation chunk. `pending: true` marks an in-progress judge
- * update; omitted means the evaluation is final.
+ * update. `shouldContinue` mirrors the goal gate's continuation decision:
+ * `true` on evaluations that loop into another judged iteration, `false` on
+ * terminal evaluations.
  */
-function createGoalChunk(runId: string, { pending }: { pending?: boolean } = {}): ChunkType {
+function createGoalChunk(
+  runId: string,
+  { pending, shouldContinue }: { pending?: boolean; shouldContinue?: boolean } = {},
+): ChunkType {
   return {
     type: 'goal',
     runId,
@@ -102,15 +107,36 @@ function createGoalChunk(runId: string, { pending }: { pending?: boolean } = {})
       objective: 'test objective',
       iteration: 1,
       maxRuns: 5,
-      passed: false,
-      status: 'active',
+      passed: shouldContinue === false,
+      status: shouldContinue === false ? 'done' : 'active',
       results: [],
       duration: 0,
       timedOut: false,
       maxRunsReached: false,
       suppressFeedback: false,
+      ...(shouldContinue !== undefined ? { shouldContinue } : {}),
       ...(pending ? { pending: true } : {}),
     },
+  } as ChunkType;
+}
+
+/** Tool-call chunk for a completed (non-streaming) tool invocation. */
+function createToolCallChunk(runId: string, toolCallId: string): ChunkType {
+  return {
+    type: 'tool-call',
+    runId,
+    from: ChunkFrom.AGENT,
+    payload: { toolCallId, toolName: 'searchTool', args: { q: 'x' } },
+  } as ChunkType;
+}
+
+/** Tool-result chunk matching a prior tool-call. */
+function createToolResultChunk(runId: string, toolCallId: string): ChunkType {
+  return {
+    type: 'tool-result',
+    runId,
+    from: ChunkFrom.AGENT,
+    payload: { toolCallId, toolName: 'searchTool', result: { hits: 3 } },
   } as ChunkType;
 }
 
@@ -1086,27 +1112,101 @@ describe('MastraModelOutput', () => {
   });
 
   describe('goal evaluation run-buffer truncation', () => {
-    it('drops pre-evaluation steps, text, and tool data from run-end results but keeps total usage', async () => {
-      const runId = 'test-run';
-      const stream = createChunkStream([
-        // First goal-judged turn: text + a tool call/result.
-        createTextDeltaChunk(runId, 'first turn text'),
-        {
-          type: 'tool-call',
-          runId,
-          from: ChunkFrom.AGENT,
-          payload: { toolCallId: 'tc-1', toolName: 'searchTool', args: { q: 'x' } },
-        } as ChunkType,
-        {
-          type: 'tool-result',
-          runId,
-          from: ChunkFrom.AGENT,
-          payload: { toolCallId: 'tc-1', toolName: 'searchTool', result: { hits: 3 } },
-        } as ChunkType,
+    /**
+     * The normal terminal goal-loop sequence in durable-engine chunk order:
+     * each judged turn ends with a step-finish followed by a goal evaluation,
+     * and the LAST evaluation is terminal (`shouldContinue: false`) — the
+     * final turn's chunks arrive BEFORE it, never after. (In-process engines
+     * emit the goal chunk before the judged turn's step-finish; covered
+     * separately below.)
+     */
+    function createGoalLoopChunks(runId: string): ChunkType[] {
+      return [
+        // Turn 1: text + a tool call/result → continuing evaluation.
+        createTextDeltaChunk(runId, 'turn one'),
+        createToolCallChunk(runId, 'tc-1'),
+        createToolResultChunk(runId, 'tc-1'),
         createStepFinishChunk(runId),
-        createGoalChunk(runId),
-        // Second turn after the evaluation: text only.
+        createGoalChunk(runId, { shouldContinue: true }),
+        // Turn 2: another tool turn → continuing evaluation.
+        createTextDeltaChunk(runId, 'turn two'),
+        createToolCallChunk(runId, 'tc-2'),
+        createToolResultChunk(runId, 'tc-2'),
+        createStepFinishChunk(runId),
+        createGoalChunk(runId, { shouldContinue: true }),
+        // Terminal turn: the answer, then the terminal evaluation.
         createTextDeltaChunk(runId, 'final answer'),
+        createStepFinishChunk(runId),
+        createGoalChunk(runId, { shouldContinue: false }),
+        createFinishChunk(runId),
+      ];
+    }
+
+    it('bounds buffering across continuing evaluations but preserves the terminal turn in getFullOutput()', async () => {
+      const runId = 'test-run';
+      const stream = createChunkStream(createGoalLoopChunks(runId));
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      const fullOutput = await output.getFullOutput();
+
+      // Run-end results cover the segment after the last CONTINUING
+      // evaluation — the terminal turn survives because the terminal
+      // evaluation does not truncate.
+      expect(fullOutput.steps).toHaveLength(1);
+      expect(fullOutput.text).toBe('final answer');
+      // Earlier turns' tool data was dropped at the continuing boundaries.
+      expect(fullOutput.toolCalls).toHaveLength(0);
+      expect(fullOutput.toolResults).toHaveLength(0);
+
+      // Token usage still spans the whole run (10/20/30 per step-finish, x3).
+      expect(fullOutput.totalUsage).toMatchObject({ inputTokens: 30, outputTokens: 60, totalTokens: 90 });
+    });
+
+    it('clears buffered chunks on continuing evaluations so late streams replay from the last iteration boundary', async () => {
+      const runId = 'test-run';
+      const stream = createChunkStream(createGoalLoopChunks(runId));
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      await output.consumeStream();
+
+      // A stream attached after consumption replays from the last continuing
+      // evaluation onward: the boundary goal chunk, the terminal turn, the
+      // terminal evaluation, and the finish.
+      const replayed: ChunkType[] = [];
+      for await (const chunk of output.fullStream) {
+        replayed.push(chunk);
+      }
+
+      expect(replayed.map(c => c.type)).toEqual(['goal', 'text-delta', 'step-finish', 'goal', 'finish']);
+    });
+
+    it('drops the judged turn arriving as a step-finish AFTER a continuing evaluation (in-process chunk order)', async () => {
+      const runId = 'test-run';
+      // In-process engines run the goal gate before emitting the turn's
+      // step-finish (the gate decides `isContinued` first), so the judged
+      // turn's step-finish lands after the continuing evaluation.
+      const stream = createChunkStream([
+        createTextDeltaChunk(runId, 'turn one'),
+        createToolCallChunk(runId, 'tc-1'),
+        createToolResultChunk(runId, 'tc-1'),
+        createGoalChunk(runId, { shouldContinue: true }),
+        createStepFinishChunk(runId),
+        createTextDeltaChunk(runId, 'final answer'),
+        createGoalChunk(runId, { shouldContinue: false }),
         createStepFinishChunk(runId),
         createFinishChunk(runId),
       ]);
@@ -1121,24 +1221,23 @@ describe('MastraModelOutput', () => {
 
       const fullOutput = await output.getFullOutput();
 
-      // Run-end results cover only the segment after the last goal evaluation.
+      // The judged turn's late step-finish was dropped at the boundary; the
+      // terminal turn (whose evaluation was terminal) is preserved.
       expect(fullOutput.steps).toHaveLength(1);
       expect(fullOutput.text).toBe('final answer');
       expect(fullOutput.toolCalls).toHaveLength(0);
       expect(fullOutput.toolResults).toHaveLength(0);
-
-      // Token usage still spans the whole run (10/20/30 per step-finish, twice).
       expect(fullOutput.totalUsage).toMatchObject({ inputTokens: 20, outputTokens: 40, totalTokens: 60 });
     });
 
-    it('clears buffered chunks on a final goal evaluation so late streams replay from the evaluation onward', async () => {
+    it('does not truncate on a terminal evaluation without a prior continuing one', async () => {
       const runId = 'test-run';
+      // A goal satisfied on the first judged turn: no continuing boundary ever
+      // occurs, so the whole (single-turn) run is preserved.
       const stream = createChunkStream([
-        createTextDeltaChunk(runId, 'before '),
-        createTextDeltaChunk(runId, 'goal'),
+        createTextDeltaChunk(runId, 'only turn'),
         createStepFinishChunk(runId),
-        createGoalChunk(runId),
-        createTextDeltaChunk(runId, 'after goal'),
+        createGoalChunk(runId, { shouldContinue: false }),
         createFinishChunk(runId),
       ]);
 
@@ -1150,16 +1249,10 @@ describe('MastraModelOutput', () => {
         options: { runId },
       });
 
-      await output.consumeStream();
+      const fullOutput = await output.getFullOutput();
 
-      // A stream attached after consumption replays only chunks emitted after
-      // the final goal evaluation (starting with the goal chunk itself).
-      const replayed: ChunkType[] = [];
-      for await (const chunk of output.fullStream) {
-        replayed.push(chunk);
-      }
-
-      expect(replayed.map(c => c.type)).toEqual(['goal', 'text-delta', 'finish']);
+      expect(fullOutput.text).toBe('only turn');
+      expect(fullOutput.steps).toHaveLength(1);
     });
 
     it('does not clear buffered chunks on pending goal chunks', async () => {
@@ -1193,7 +1286,7 @@ describe('MastraModelOutput', () => {
       const runId = 'test-run';
       const stream = createChunkStream([
         createTextDeltaChunk(runId, 'before '),
-        createGoalChunk(runId),
+        createGoalChunk(runId, { shouldContinue: true }),
         createTextDeltaChunk(runId, 'after'),
         createStepFinishChunk(runId),
         createFinishChunk(runId),

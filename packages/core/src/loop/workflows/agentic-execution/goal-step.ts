@@ -163,6 +163,7 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
             timedOut: false,
             maxRunsReached: true,
             suppressFeedback: false,
+            shouldContinue: false,
           },
         } as ChunkType<OUTPUT>);
         return inputData;
@@ -463,6 +464,7 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
         timedOut: result.timedOut,
         maxRunsReached,
         suppressFeedback,
+        shouldContinue,
       };
 
       let currentMessageId = inputData.messageId;

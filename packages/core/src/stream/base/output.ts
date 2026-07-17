@@ -148,6 +148,13 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   #error: Error | undefined;
   #baseStream: ReadableStream<ChunkType<OUTPUT>>;
   #bufferedChunks: ChunkType<OUTPUT>[] = [];
+  /**
+   * Set when a continuing goal evaluation arrives while a step is still in
+   * flight (in-process engines emit the goal chunk before the judged turn's
+   * step-finish): the next step-finish belongs to the judged turn and its
+   * buffers are dropped once its stepResult and usage are recorded.
+   */
+  #truncateAtNextStepFinish = false;
   #streamFinished = false;
   #finishCallbackSent = false;
   #emitter = new EventEmitter();
@@ -768,6 +775,15 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 finishReason: undefined,
               };
 
+              // A continuing goal evaluation arrived while this step was still
+              // in flight (in-process chunk ordering): this step-finish belongs
+              // to the judged turn, so drop its buffers now that its stepResult
+              // and usage have been recorded.
+              if (self.#truncateAtNextStepFinish) {
+                self.#truncateAtNextStepFinish = false;
+                self.#truncateRunBuffers();
+              }
+
               break;
             }
             case 'tripwire':
@@ -1097,16 +1113,33 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               break;
 
             case 'goal':
-              // A completed goal evaluation marks a safe truncation point for
+              // A continuing goal evaluation marks a safe truncation point for
               // run-lifetime buffers: the turn's messages are already persisted
               // to the MessageList by this point, and goal runs chain many agent
               // turns inside one stream — retaining every chunk, step, and tool
               // result grows memory unboundedly over long goal runs (and bloats
-              // suspend snapshots via `serializeState`). `pending` chunks are
-              // judge progress updates emitted while the evaluation is still
-              // running — only the final evaluation truncates.
-              if (!chunk.payload.pending) {
+              // suspend snapshots via `serializeState`). `shouldContinue` is the
+              // goal gate's explicit continuation decision: only truncate when
+              // another judged iteration follows, so terminal evaluations
+              // (completion, waiting, judge failure, budget exhaustion) keep the
+              // final turn intact for run-end results like `getFullOutput()`.
+              if (chunk.payload.shouldContinue === true) {
                 self.#truncateRunBuffers();
+                // In-process engines emit the goal chunk BEFORE the judged
+                // turn's step-finish (the gate decides `isContinued` first);
+                // durable engines emit it after. If the judged step is still in
+                // flight, its step-finish lands after this boundary — drop that
+                // step's buffers too when it arrives.
+                const byStep = self.#bufferedByStep;
+                if (
+                  byStep.text.length > 0 ||
+                  byStep.toolCalls.length > 0 ||
+                  byStep.reasoning.length > 0 ||
+                  byStep.sources.length > 0 ||
+                  byStep.files.length > 0
+                ) {
+                  self.#truncateAtNextStepFinish = true;
+                }
               }
               break;
 
