@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 /**
  * Smoke test for the platform-deployable entry (`src/mastra/index.ts`).
@@ -35,6 +35,22 @@ describe('platform entry (src/mastra/index.ts)', () => {
   // means you intend to enable the integration, so a partial set must fail
   // the boot loudly (listing what's missing) instead of silently disabling.
   describe('integration env groups', () => {
+    beforeEach(() => {
+      for (const name of [
+        'GITHUB_APP_ID',
+        'GITHUB_APP_PRIVATE_KEY',
+        'GITHUB_APP_CLIENT_ID',
+        'GITHUB_APP_CLIENT_SECRET',
+        'GITHUB_APP_SLUG',
+        'GITHUB_APP_WEBHOOK_SECRET',
+        'LINEAR_CLIENT_ID',
+        'LINEAR_CLIENT_SECRET',
+      ]) {
+        vi.stubEnv(name, '');
+      }
+      vi.resetModules();
+    });
+
     afterEach(() => {
       vi.unstubAllEnvs();
       vi.resetModules();
