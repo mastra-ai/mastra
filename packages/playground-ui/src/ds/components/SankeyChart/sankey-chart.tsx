@@ -24,7 +24,6 @@ export function SankeyChart({
   const { graph, enabledColumns, hueMap } = useSankeyRenderContext();
   const [hoveredSourceName, setHoveredSourceName] = useState<string>();
   const firstColumnId = enabledColumns[0]?.id;
-  const lastColumnId = enabledColumns.at(-1)?.id;
   const total = graph.links.reduce(
     (sum, link) => (link.sourceNode.column.id === firstColumnId ? sum + link.value : sum),
     0,
@@ -63,8 +62,6 @@ export function SankeyChart({
                     columnLabel={node?.column.label}
                     total={total}
                     showColumnLabel={showColumnLabel}
-                    isFirstColumn={node?.column.id === firstColumnId}
-                    isLastColumn={node?.column.id === lastColumnId}
                     onHoverChange={setHoveredSourceName}
                   />
                 );
@@ -118,8 +115,6 @@ type SankeyNodeProps = SankeyNodeRendererProps & {
   columnLabel?: string;
   total: number;
   showColumnLabel: boolean;
-  isFirstColumn: boolean;
-  isLastColumn: boolean;
   onHoverChange: (sourceName: string | undefined) => void;
 };
 
@@ -133,31 +128,20 @@ function SankeyNode({
   columnLabel,
   total,
   showColumnLabel,
-  isFirstColumn,
-  isLastColumn,
   onHoverChange,
 }: SankeyNodeProps) {
   const name = typeof payload.name === 'string' || typeof payload.name === 'number' ? String(payload.name) : '';
   const numericValue = typeof payload.value === 'number' ? payload.value : Number(payload.value);
   const value = Number.isFinite(numericValue) ? String(numericValue) : '';
   const percentage = total > 0 && Number.isFinite(numericValue) ? Math.round((numericValue / total) * 100) : 0;
-  const labelX = isLastColumn ? x - 8 : x + width + 8;
-  const textAnchor = isLastColumn ? 'end' : 'start';
-  const columnLabelX = isFirstColumn ? x + 8 : isLastColumn ? x + width - 8 : x + width / 2;
-  const columnLabelAnchor = isFirstColumn ? 'start' : isLastColumn ? 'end' : 'middle';
+  const labelX = x + width + 8;
+  const columnLabelX = x + width / 2;
   const hue = hueMap[name] ?? 0;
 
   return (
     <g onMouseEnter={() => onHoverChange(name)} onMouseLeave={() => onHoverChange(undefined)}>
       {showColumnLabel && columnLabel ? (
-        <text
-          x={columnLabelX}
-          y={18}
-          textAnchor={columnLabelAnchor}
-          fill={Colors.neutral5}
-          fontSize={12}
-          fontWeight={600}
-        >
+        <text x={columnLabelX} y={18} textAnchor="middle" fill={nodeColor(hue)} fontSize={12} fontWeight={600}>
           {columnLabel}
         </text>
       ) : null}
@@ -165,7 +149,7 @@ function SankeyNode({
       <text
         x={labelX}
         y={y + height / 2 - 4}
-        textAnchor={textAnchor}
+        textAnchor="start"
         fill={Colors.neutral5}
         fontSize={12.5}
         fontFamily="var(--font-mono)"
@@ -173,7 +157,7 @@ function SankeyNode({
       >
         {name}
       </text>
-      <text x={labelX} y={y + height / 2 + 10} textAnchor={textAnchor} fill={Colors.neutral3} fontSize={10.5}>
+      <text x={labelX} y={y + height / 2 + 10} textAnchor="start" fill={Colors.neutral3} fontSize={10.5}>
         {value} ({percentage}%)
       </text>
     </g>

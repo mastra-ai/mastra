@@ -53,12 +53,14 @@ function Example({
   onColumnOrderChange,
   visibleColumnIds,
   onVisibleColumnIdsChange,
+  getColumnHue,
 }: {
   onCurveClick?: (selection: unknown) => void;
   columnOrder?: Array<string>;
   onColumnOrderChange?: (columnOrder: Array<string>) => void;
   visibleColumnIds?: Array<string>;
   onVisibleColumnIdsChange?: (columnIds: Array<string>) => void;
+  getColumnHue?: (column: (typeof columns)[number]) => number;
 }) {
   return (
     <Sankey
@@ -68,6 +70,7 @@ function Example({
       onColumnOrderChange={onColumnOrderChange}
       visibleColumnIds={visibleColumnIds}
       onVisibleColumnIdsChange={onVisibleColumnIdsChange}
+      getColumnHue={getColumnHue}
     >
       <TestControls />
       <SankeyChart onCurveClick={onCurveClick} />
@@ -109,18 +112,18 @@ describe('SankeyChart', () => {
     expect(chartLabels).toEqual(expect.arrayContaining(['Channel', 'Region', 'Outcome']));
     const channelLabel = [...container.querySelectorAll('svg text')].find(element => element.textContent === 'Channel');
     const outcomeLabel = [...container.querySelectorAll('svg text')].find(element => element.textContent === 'Outcome');
-    expect(channelLabel?.getAttribute('text-anchor')).toBe('start');
-    expect(outcomeLabel?.getAttribute('text-anchor')).toBe('end');
+    expect(channelLabel?.getAttribute('text-anchor')).toBe('middle');
+    expect(outcomeLabel?.getAttribute('text-anchor')).toBe('middle');
     const node = container.querySelector('svg rect[rx="3"]');
     expect(node?.getAttribute('x')).toBe('120');
     expect(node?.getAttribute('width')).toBe('7');
-    expect(channelLabel?.getAttribute('x')).toBe('128');
+    expect(channelLabel?.getAttribute('x')).toBe('123.5');
     const searchLabel = [...container.querySelectorAll('svg text')].find(element => element.textContent === 'Search');
     expect(searchLabel?.getAttribute('font-size')).toBe('12.5');
     expect(searchLabel?.getAttribute('paint-order')).toBeNull();
     expect(searchLabel?.getAttribute('style')).toContain('drop-shadow');
     const lostLabel = [...container.querySelectorAll('svg text')].find(element => element.textContent === 'Lost');
-    expect(lostLabel?.getAttribute('text-anchor')).toBe('end');
+    expect(lostLabel?.getAttribute('text-anchor')).toBe('start');
     expect(container.querySelector('svg text[font-size="10.5"]')).not.toBeNull();
   });
 
@@ -155,6 +158,26 @@ describe('SankeyChart', () => {
     expect(container.querySelector(`rect[fill="${nodeColor(hueMap.Search ?? 0)}"]`)).not.toBeNull();
     expect(container.querySelector(`stop[stop-color="${nodeColor(hueMap.Search ?? 0)}"]`)).not.toBeNull();
     expect(container.querySelector(`stop[stop-color="${nodeColorVivid(hueMap.EU ?? 0)}"]`)).not.toBeNull();
+  });
+
+  describe('when the caller provides column hues', () => {
+    it('uses one hue for every node and ribbon endpoint in each column', async () => {
+      const columnHues: Record<string, number> = { channel: 24, region: 144, outcome: 264 };
+      const { container } = render(
+        <Example onCurveClick={() => {}} getColumnHue={column => columnHues[column.id] ?? 0} />,
+      );
+
+      await screen.findAllByRole('button', { name: 'Select Sankey curve' });
+
+      expect(container.querySelectorAll(`rect[fill="${nodeColor(columnHues.channel)}"]`)).toHaveLength(2);
+      expect(container.querySelectorAll(`rect[fill="${nodeColor(columnHues.region)}"]`)).toHaveLength(2);
+      expect(container.querySelectorAll(`rect[fill="${nodeColor(columnHues.outcome)}"]`)).toHaveLength(2);
+      expect(screen.getByText('Channel').getAttribute('fill')).toBe(nodeColor(columnHues.channel));
+      expect(screen.getByText('Region').getAttribute('fill')).toBe(nodeColor(columnHues.region));
+      expect(screen.getByText('Outcome').getAttribute('fill')).toBe(nodeColor(columnHues.outcome));
+      expect(container.querySelector(`stop[stop-color="${nodeColor(columnHues.channel)}"]`)).not.toBeNull();
+      expect(container.querySelector(`stop[stop-color="${nodeColorVivid(columnHues.region)}"]`)).not.toBeNull();
+    });
   });
 
   it('renders closed gradient ribbons without strokes, filters, or glow', async () => {
