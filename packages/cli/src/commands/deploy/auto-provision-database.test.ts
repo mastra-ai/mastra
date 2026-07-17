@@ -47,7 +47,7 @@ function makeCtx(overrides: Partial<AutoProvisionContext> = {}): AutoProvisionCo
     projectId: 'proj-1',
     projectName: 'My App',
     projectSlug: 'my-app',
-    environment: { id: 'env-prod', slug: 'my-app-production' },
+    environment: { id: 'env-prod', slug: 'my-app-production', name: 'production' },
     autoAccept: false,
     ...overrides,
   };
@@ -231,13 +231,52 @@ describe('maybeAutoProvisionDatabases', () => {
     attachDatabaseMock.mockResolvedValue({ id: 'db-1', name: 'my-app-db', kind: 'turso' });
     pollDatabaseUntilReadyMock.mockResolvedValue({ id: 'db-1', name: 'my-app-db', kind: 'turso' });
 
-    await maybeAutoProvisionDatabases([tursoIssue()], makeCtx({ environment: { id: 'env-stg', slug: 'stg' } }));
+    await maybeAutoProvisionDatabases(
+      [tursoIssue()],
+      makeCtx({ environment: { id: 'env-stg', slug: 'stg', name: 'staging' } }),
+    );
 
     expect(attachDatabaseMock).toHaveBeenCalledWith(
       't',
       'org-1',
       'proj-1',
       expect.objectContaining({ environmentId: 'env-stg' }),
+    );
+  });
+
+  it('derives an env-suffixed default name for non-production environments', async () => {
+    confirmMock.mockResolvedValue(true);
+    attachDatabaseMock.mockResolvedValue({ id: 'db-1', name: 'my-app-eu-db', kind: 'turso' });
+    pollDatabaseUntilReadyMock.mockResolvedValue({ id: 'db-1', name: 'my-app-eu-db', kind: 'turso' });
+
+    await maybeAutoProvisionDatabases(
+      [tursoIssue()],
+      makeCtx({ environment: { id: 'env-eu', slug: 'my-app--eu', name: 'eu' } }),
+    );
+
+    expect(attachDatabaseMock).toHaveBeenCalledWith(
+      't',
+      'org-1',
+      'proj-1',
+      expect.objectContaining({ name: 'my-app-eu-db' }),
+    );
+  });
+
+  it('keeps the canonical unsuffixed name for the production environment', async () => {
+    confirmMock.mockResolvedValue(true);
+    attachDatabaseMock.mockResolvedValue({ id: 'db-1', name: 'my-app-db', kind: 'turso' });
+    pollDatabaseUntilReadyMock.mockResolvedValue({ id: 'db-1', name: 'my-app-db', kind: 'turso' });
+
+    await maybeAutoProvisionDatabases(
+      [tursoIssue()],
+      makeCtx({ environment: { id: 'env-prod', slug: 'my-app', name: 'production' } }),
+    );
+
+    expect(attachDatabaseMock).toHaveBeenCalledWith(
+      't',
+      'org-1',
+      'proj-1',
+      expect.objectContaining({ name: 'my-app-db' }),
     );
   });
 });

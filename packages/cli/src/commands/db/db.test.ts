@@ -80,6 +80,34 @@ describe('defaultDatabaseName', () => {
   it('never returns leading/trailing hyphens or an empty base', () => {
     expect(defaultDatabaseName({ name: '---', slug: null })).toBe('mastra-db');
   });
+
+  it('does not suffix the production environment (keeps the canonical name)', () => {
+    expect(defaultDatabaseName({ name: 'My App', slug: 'my-app' }, { name: 'production', slug: 'my-app' })).toBe(
+      'my-app-db',
+    );
+  });
+
+  it('suffixes non-production environments so multi-env attaches do not collide', () => {
+    expect(defaultDatabaseName({ name: 'My App', slug: 'my-app' }, { name: 'eu', slug: 'my-app--eu' })).toBe(
+      'my-app-eu-db',
+    );
+    expect(defaultDatabaseName({ name: 'My App', slug: 'my-app' }, { name: 'staging', slug: 'my-app--staging' })).toBe(
+      'my-app-staging-db',
+    );
+  });
+
+  it('sanitizes env names into DNS-safe segments', () => {
+    expect(defaultDatabaseName({ name: 'My App', slug: 'my-app' }, { name: 'EU West', slug: 'eu' })).toBe(
+      'my-app-eu-west-db',
+    );
+  });
+
+  it('skips a redundant env suffix when the env slug equals the project slug', () => {
+    // Platforms sometimes derive the production env slug from the project slug.
+    expect(
+      defaultDatabaseName({ name: 'My App', slug: 'smoke-1234' }, { name: 'smoke-1234', slug: 'smoke-1234' }),
+    ).toBe('smoke-1234-db');
+  });
 });
 
 describe('resolveDefaultEnvironment', () => {

@@ -77,17 +77,40 @@ export function formatScope(db: Pick<ProjectDatabase, 'environmentId'>, environm
 }
 
 /**
- * Derive a provider-safe default database name from the project slug/name.
+ * Derive a provider-safe default database name from the project slug/name,
+ * optionally suffixed with an environment slug/name for env-scoped attaches.
+ *
  * Turso names become DNS labels, so: lowercase letters, digits, hyphens,
  * no leading/trailing hyphen, max 64 chars.
+ *
+ * When `environment` is provided, the name includes an env-derived suffix
+ * (e.g. `my-app-eu-db`). Two env-scoped databases in the same project must
+ * have different names — the platform rejects duplicates — so the suffix
+ * is essential for auto-provisioning across environments.
  */
-export function defaultDatabaseName(project: Pick<Project, 'name' | 'slug'>): string {
-  const base = (project.slug || project.name)
+export function defaultDatabaseName(
+  project: Pick<Project, 'name' | 'slug'>,
+  environment?: Pick<Environment, 'name' | 'slug'> | null,
+): string {
+  const projectPart = sanitizeSegment(project.slug || project.name) || 'mastra';
+  // Prefer the env name over the slug: platforms sometimes derive the
+  // production env's slug from the project name (e.g. `smoke-envdbux-1784317673`),
+  // which would produce ugly `<project>-<project>-db` duplication.
+  const envPart = environment ? sanitizeSegment(environment.name || environment.slug || '') : '';
+  // Treat `production` as the canonical default — don't suffix, so the
+  // common single-env project gets a clean `<project>-db`. Suffix every
+  // other env so multi-env auto-provision doesn't collide on the name.
+  const shouldSuffix = envPart && envPart !== 'production' && envPart !== projectPart;
+  const base = shouldSuffix ? `${projectPart}-${envPart}` : projectPart;
+  return `${base}-db`.slice(0, 64).replace(/-+$/g, '');
+}
+
+function sanitizeSegment(input: string): string {
+  return input
     .toLowerCase()
     .replace(/[^a-z0-9-]+/g, '-')
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '');
-  return `${base || 'mastra'}-db`.slice(0, 64).replace(/-+$/g, '');
 }
 
 function envVarNamesFor(kind: DatabaseKind): string {
@@ -309,7 +332,7 @@ async function createDatabase(opts: {
   json?: boolean;
 }) {
   const { token, orgId, project, environment, kind } = opts;
-  const name = opts.name ?? defaultDatabaseName(project);
+  const name = opts.name ?? defaultDatabaseName(project, environment);
 
   const created = await attachDatabase(token, orgId, project.id, {
     kind,
