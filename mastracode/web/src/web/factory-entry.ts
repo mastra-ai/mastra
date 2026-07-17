@@ -118,10 +118,10 @@ export interface MastraFactorySandboxConfig {
   /**
    * Template machine — `RailwaySandbox` (`@mastra/railway`), core
    * `LocalSandbox` (`@mastra/core/workspace`), or any `WorkspaceSandbox` that
-   * implements `derive()`. Each GitHub-backed project gets its own sandbox
-   * derived from this machine (credentials and defaults inherited, per-project
+   * implements `clone()`. Each GitHub-backed project gets its own sandbox
+   * cloned from this machine (credentials and defaults inherited, per-project
    * env/id overridden); the machine itself is never started. `prepare()`
-   * fails fast when the instance does not implement `derive()`.
+   * fails fast when the instance does not implement `clone()`.
    */
   machine: WorkspaceSandbox;
   /**
@@ -200,16 +200,16 @@ export class MastraFactory {
     }
 
     // Sandbox machine validation: GitHub projects need one sandbox per
-    // project, derived from the configured machine. A machine without
-    // `derive()` would only fail at first project open — fail fast at boot
+    // project, cloned from the configured machine. A machine without
+    // `clone()` would only fail at first project open — fail fast at boot
     // instead, with the fix spelled out.
     const sandboxConfig = this.#config.sandbox;
     const machine = sandboxConfig?.machine;
-    if (machine && typeof machine.derive !== 'function') {
+    if (machine && typeof machine.clone !== 'function') {
       throw new Error(
-        `MastraFactory: the configured sandbox machine (provider '${machine.provider}') does not implement derive(). ` +
-          `GitHub-backed projects each get their own sandbox derived from the configured machine. ` +
-          `Pass a machine that implements derive() — e.g. RailwaySandbox (@mastra/railway) or ` +
+        `MastraFactory: the configured sandbox machine (provider '${machine.provider}') does not implement clone(). ` +
+          `GitHub-backed projects each get their own sandbox cloned from the configured machine. ` +
+          `Pass a machine that implements clone() — e.g. RailwaySandbox (@mastra/railway) or ` +
           `LocalSandbox (@mastra/core/workspace) — or omit 'sandbox' to disable sandboxes.`,
       );
     }
@@ -250,10 +250,8 @@ export class MastraFactory {
     if (factoryStore && appPool) await factoryStore.init({ pool: appPool });
 
     // Per-tenant model credentials: once the credentials domain is up, model
-    // resolution goes through the caller's own store (user > org > env) and
-    // the SDK stops mirroring stored API keys into process.env. Registered
-    // whenever the domain exists — `ensureReady` inside the store keeps
-    // serving env-fallback (fail-soft) if the domain init failed.
+    // resolution goes through the caller's own store and the SDK stops
+    // mirroring stored API keys into process.env.
     if (factoryStore) registerTenantCredentialResolver();
 
     // GitHub App + cloud-sandbox readiness, resolved BEFORE constructing the

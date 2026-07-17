@@ -36,7 +36,7 @@ export function FactorySection({ children }: { children?: ReactNode }) {
           <FactoryLink to="/factory/audit" icon={ScrollText} label="Audit" />
         </div>
       )}
-      {children && <div className="flex flex-col gap-2 pl-2">{children}</div>}
+      {children}
     </nav>
   );
 }

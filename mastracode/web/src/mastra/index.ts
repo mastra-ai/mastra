@@ -114,7 +114,7 @@ function localSandboxEnv(): Record<string, string> {
 }
 
 // Sandbox machine, by env precedence (any `WorkspaceSandbox` implementing
-// `derive()` works here too — the factory derives one sandbox per GitHub
+// `clone()` works here too — the factory clones one sandbox per GitHub
 // project from it):
 //   1. MASTRACODE_SANDBOX_PROVIDER=railway|local — explicit selection. Railway
 //      selected without a token is a hard misconfiguration error.
@@ -154,7 +154,7 @@ if (sandboxKind === 'railway') {
 } else {
   throw new Error(
     `Unknown MASTRACODE_SANDBOX_PROVIDER "${sandboxKind}" — expected "railway" or "local" ` +
-      '(or pass any WorkspaceSandbox implementing derive() to MastraFactory).',
+      '(or pass any WorkspaceSandbox implementing clone() to MastraFactory).',
   );
 }
 

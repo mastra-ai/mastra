@@ -1,60 +1,59 @@
-import { Button } from '@mastra/playground-ui/components/Button';
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { ChevronsUpDown, Folder, Plus } from 'lucide-react';
+import { Check, ChevronsUpDown, Folder, FolderOpen } from 'lucide-react';
 
-import { useOverlays } from '../../../lib/overlays';
-import { useActiveProjectContext } from '../context/ActiveProjectProvider';
+import { useGithubStatusQuery } from '../../../../../shared/hooks/useGithubStatus';
 import { deriveProjectPath } from '../../../../../shared/hooks/useWorkspaces';
+import { useOverlays } from '../../../lib/overlays';
+import { GithubIcon } from '../../../ui/icons';
+import { useActiveProjectContext } from '../context/ActiveProjectProvider';
 
-/**
- * Propless project switcher: shows the active project and opens the projects
- * modal. Opening the modal also closes the sidebar drawer (mobile behavior).
- */
+/** Inline project selection with dedicated actions for adding local and GitHub projects. */
 export function ProjectSwitcher() {
-  const { activeProject } = useActiveProjectContext();
+  const { projects, activeProject, selectProject } = useActiveProjectContext();
   const overlays = useOverlays();
-
-  const manageProjects = () => {
-    overlays.open('projects');
-    overlays.close('sidebar');
-  };
+  const githubStatus = useGithubStatusQuery().data;
+  const githubEnabled = !!githubStatus && (githubStatus.enabled || !!githubStatus.authRequired);
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between px-1">
-        <Txt as="span" variant="ui-xs" className="text-icon3 uppercase tracking-wide">
-          Project
-        </Txt>
-        <Button variant="ghost" size="icon-sm" aria-label="Manage projects" onClick={manageProjects}>
-          <Plus size={15} />
-        </Button>
-      </div>
-
-      <button
-        type="button"
-        className="flex w-full items-center gap-2 rounded-md border border-border1 bg-surface3 px-2.5 py-2 text-left transition-colors hover:bg-surface4"
-        onClick={manageProjects}
-        title={activeProject ? deriveProjectPath(activeProject) : 'Select a project'}
+    <DropdownMenu>
+      <DropdownMenu.Trigger
+        aria-label="Select project"
+        className="flex w-full items-center gap-2 rounded-md border border-border1 px-2.5 py-2 text-left hover:bg-surface3"
       >
         <Folder size={16} className="shrink-0 text-icon3" />
         <span className="flex min-w-0 flex-1 flex-col">
-          {activeProject ? (
-            <>
-              <Txt as="span" variant="ui-sm" className="truncate text-icon6">
-                {activeProject.name}
-              </Txt>
-              <Txt as="span" variant="ui-xs" className="truncate text-icon3">
-                {deriveProjectPath(activeProject)}
-              </Txt>
-            </>
-          ) : (
-            <Txt as="span" variant="ui-sm" className="text-icon3">
-              Select a project…
+          <Txt as="span" variant="ui-sm" className="truncate text-icon6">
+            {activeProject?.name ?? 'Select a project…'}
+          </Txt>
+          {activeProject && (
+            <Txt as="span" variant="ui-xs" className="truncate text-icon3">
+              {deriveProjectPath(activeProject)}
             </Txt>
           )}
         </span>
         <ChevronsUpDown size={13} className="shrink-0 text-icon3" />
-      </button>
-    </div>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Content align="start" className="w-64">
+        {projects.map(project => (
+          <DropdownMenu.Item key={project.id} onSelect={() => void selectProject(project)}>
+            {project.source === 'github' ? <GithubIcon /> : <Folder />}
+            <span className="min-w-0 flex-1 truncate">{project.name}</span>
+            {project.id === activeProject?.id && <Check aria-label="Active project" />}
+          </DropdownMenu.Item>
+        ))}
+        {projects.length > 0 && <DropdownMenu.Separator />}
+        <DropdownMenu.Item onSelect={() => overlays.open('projects')}>
+          <FolderOpen />
+          <span>Open local project</span>
+        </DropdownMenu.Item>
+        {githubEnabled && (
+          <DropdownMenu.Item onSelect={() => overlays.open('github')}>
+            <GithubIcon />
+            <span>Open from GitHub</span>
+          </DropdownMenu.Item>
+        )}
+      </DropdownMenu.Content>
+    </DropdownMenu>
   );
 }

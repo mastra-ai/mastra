@@ -14,7 +14,7 @@ import type {
   InstructionsOption,
   MastraSandboxOptions,
   ProviderStatus,
-  SandboxDeriveOptions,
+  SandboxCloneOptions,
   SandboxInfo,
 } from '@mastra/core/workspace';
 import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
@@ -592,13 +592,13 @@ export class RailwaySandbox extends MastraSandbox {
    * credentials and defaults (token, environment, checkpoint, network
    * isolation, timeout, template, instructions) with per-instance overrides.
    *
-   * Unlike {@link fork}, `derive` performs no I/O and does not require this
+   * Unlike {@link fork}, `clone` performs no I/O and does not require this
    * sandbox to be started — the returned sandbox is not started and provisions
    * (or reattaches, when `sandboxId` is set) on its own `start()`. Use it when
    * one configured sandbox acts as the template for a fleet of independent
    * sandboxes (e.g. one per project).
    */
-  derive(options: SandboxDeriveOptions = {}): RailwaySandbox {
+  clone(options: SandboxCloneOptions = {}): RailwaySandbox {
     return new RailwaySandbox({
       ...(options.id !== undefined && { id: options.id }),
       ...(this._token !== undefined && { token: this._token }),

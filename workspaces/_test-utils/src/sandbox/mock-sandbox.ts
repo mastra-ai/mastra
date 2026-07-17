@@ -6,7 +6,7 @@
 
 import type {
   WorkspaceSandbox,
-  SandboxDeriveOptions,
+  SandboxCloneOptions,
   SandboxInfo,
   CommandResult,
   ExecuteCommandOptions,
@@ -40,8 +40,8 @@ export class MockSandbox implements WorkspaceSandbox {
   private defaultResponse: CommandResult;
   private mountedFilesystems: Map<string, WorkspaceFilesystem> = new Map();
 
-  /** Options this sandbox was derived with, for test assertions. Undefined for root sandboxes. */
-  derivedWith?: SandboxDeriveOptions;
+  /** Options this sandbox was cloned with, for test assertions. Undefined for root sandboxes. */
+  clonedWith?: SandboxCloneOptions;
 
   constructor(options: MockSandboxOptions = {}) {
     this.id = options.id ?? `mock-sandbox-${Date.now().toString(36)}`;
@@ -64,15 +64,15 @@ export class MockSandbox implements WorkspaceSandbox {
 
   /**
    * Construct a sibling `MockSandbox` inheriting this sandbox's command
-   * responses. Records the derive options on `derivedWith` for assertions.
+   * responses. Records the clone options on `clonedWith` for assertions.
    */
-  derive(options: SandboxDeriveOptions = {}): MockSandbox {
+  clone(options: SandboxCloneOptions = {}): MockSandbox {
     const child = new MockSandbox({
       ...(options.id !== undefined && { id: options.id }),
       commandResponses: new Map(this.commandResponses),
       defaultResponse: this.defaultResponse,
     });
-    child.derivedWith = options;
+    child.clonedWith = options;
     return child;
   }
 
