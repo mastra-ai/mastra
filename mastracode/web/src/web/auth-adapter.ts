@@ -1,3 +1,4 @@
+import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { Context } from 'hono';
 
 /**
@@ -62,8 +63,12 @@ export interface AuthRouteSpec {
 
 /** Factory-level context handed to `WebAuthAdapter.init()` once during `prepare()`. */
 export interface WebAuthAdapterInitContext {
-  /** Postgres connection string of the app database, when configured. */
-  databaseUrl?: string;
+  /**
+   * The Mastra storage instance injected into the factory, when configured.
+   * Adapters that need a database (better-auth) reuse its shared pg pool
+   * instead of opening their own connection.
+   */
+  storage?: MastraCompositeStore;
   /** Browser-facing origin (no trailing slash), e.g. `https://factory.acme.com`. */
   publicUrl?: string;
   /**
@@ -114,6 +119,12 @@ export interface WebAuthAdapter {
    * idempotent under concurrent/retried first logins.
    */
   ensureOrg(user: WebAuthUser): Promise<string | undefined>;
+
+  /**
+   * Authorize an organization-level administrative mutation. Missing
+   * implementations and provider errors are denied by the caller.
+   */
+  isOrganizationAdmin?(user: WebAuthUser, organizationId: string): Promise<boolean>;
 
   /** Provider-specific public `/auth/*` routes (login, callback, logout, APIs). */
   publicRoutes(): AuthRouteSpec[];

@@ -29,6 +29,9 @@ interface Tables {
 }
 const tables: Tables = { installations: [], projects: [], sandboxes: [], worktrees: [], subscriptions: [] };
 
+import { GithubStorageInMemory } from './storage/inmemory';
+const githubStorage = new GithubStorageInMemory();
+
 // Capture audit events at the store boundary so the real `emitAudit` path
 // (actor resolution, request context, never-throws) is exercised end to end.
 let auditRecorded: Array<Record<string, any>> = [];
@@ -122,13 +125,17 @@ const listRepoOpenPullRequests = vi.fn(async (_installationId: number, _repoFull
   nextPage: null as number | null,
 }));
 
-vi.mock('./client', () => ({
+// Stub GithubIntegration instance injected into `buildGithubRoutes` — real DI
+// instead of module mocking (github/client.ts no longer exists).
+const githubStub = {
+  storageDomain: githubStorage,
+  webhookSecret: undefined as string | undefined,
   buildInstallUrl: (state: string) => `https://github.com/apps/test/installations/new?state=${state}`,
   buildOAuthIdentifyUrl: (state: string) => `https://github.com/login/oauth/authorize?state=${state}`,
   exchangeOAuthCode: vi.fn(async () => 'user-token'),
   getRepositoryCollaboratorPermission: vi.fn(async () => 'write'),
   listUserInstallations: vi.fn(async () => [{ installationId: 7, accountLogin: 'octo', accountType: 'User' }]),
-  listInstallationRepos: vi.fn(async () => [
+  listInstallationRepos: vi.fn(async (_installationId: number) => [
     {
       id: 99,
       fullName: 'octo/hello',
@@ -159,17 +166,30 @@ vi.mock('./client', () => ({
     listRepoOpenIssues(installationId, repoFullName, page, options),
   listRepoOpenPullRequests: (installationId: number, repoFullName: string, page: number) =>
     listRepoOpenPullRequests(installationId, repoFullName, page),
-}));
+};
 
-const ensureProjectSandbox = vi.fn(async (_row: any, onProgress?: (e: any) => void) => {
+// Deterministic state signer stub (replaces the old signState/verifyState mocks).
+const stateSigner = {
+  stable: true,
+  sign: (orgId: string, userId: string) => `state.${orgId}.${userId}`,
+  verify: (state: string | undefined) => {
+    if (!state?.startsWith('state.')) return null;
+    const [orgId, userId] = state.slice('state.'.length).split('.');
+    if (!orgId || !userId) return null;
+    return { orgId, userId };
+  },
+};
+
+const ensureProjectSandbox = vi.fn(async (row: any, storage: GithubStorageInMemory, onProgress?: (e: any) => void) => {
+  await storage.setSandboxId(row.id, 'sb');
   onProgress?.({ phase: 'provisioning', message: 'Provisioning a new sandbox…' });
   return { id: 'sb' };
 });
 const materializeRepo = vi.fn(async (..._args: any[]) => {
-  const onProgress = _args[4] as ((e: any) => void) | undefined;
+  const onProgress = _args[5] as ((e: any) => void) | undefined;
   onProgress?.({ phase: 'cloning', message: 'Cloning octo/hello…' });
 });
-const reattachProjectSandbox = vi.fn(async (_id: string) => ({ id: 'sb' }));
+const reattachSandbox = vi.fn(async (_id: string) => ({ id: 'sb' }));
 const ensureWorktree = vi.fn(async (_sb: any, _workdir: string, opts: { branch: string; baseBranch: string }) => ({
   worktreePath: `/workspace/hello/../worktrees/${opts.branch}`,
   branch: opts.branch,
@@ -181,6 +201,21 @@ const commitAll = vi.fn(async () => ({ committed: true }));
 const pushBranch = vi.fn(async () => {});
 const createPullRequest = vi.fn(async () => ({ url: 'https://github.com/octo/hello/pull/1' }));
 let sandboxEnabled = true;
+vi.mock('../sandbox/fleet', () => {
+  class SandboxBudgetError extends Error {
+    readonly code = 'sandbox-budget-exceeded';
+    constructor(readonly max: number) {
+      super(`Sandbox budget exceeded: ${max}`);
+    }
+  }
+  return {
+    computeSandboxWorkdir: (repo: string) => `/workspace/${repo.split('/').pop()}`,
+    getSandboxProvider: () => 'railway',
+    isSandboxEnabled: () => sandboxEnabled,
+    reattachSandbox: (id: string) => reattachSandbox(id),
+    SandboxBudgetError,
+  };
+});
 vi.mock('./sandbox', () => {
   class MaterializeError extends Error {
     code: string;
@@ -197,14 +232,11 @@ vi.mock('./sandbox', () => {
     }
   }
   return {
-    computeSandboxWorkdir: (repo: string) => `/workspace/${repo.split('/').pop()}`,
     computeWorktreePath: (repoWorkdir: string, branch: string) =>
       `${repoWorkdir.replace(/\/+$/, '').split('/').slice(0, -1).join('/')}/worktrees/${branch.replace('/', '-')}-aeab418d`,
-    getSandboxProvider: () => 'railway',
-    isSandboxEnabled: () => sandboxEnabled,
-    ensureProjectSandbox: (row: any, onProgress?: any) => ensureProjectSandbox(row, onProgress),
+    ensureProjectSandbox: (row: any, storage: GithubStorageInMemory, onProgress?: any) =>
+      ensureProjectSandbox(row, storage, onProgress),
     materializeRepo: (...args: any[]) => materializeRepo(...(args as [])),
-    reattachProjectSandbox: (id: string) => reattachProjectSandbox(id),
     ensureWorktree: (sb: any, workdir: string, opts: any) => ensureWorktree(sb, workdir, opts),
     removeWorktree: (sb: any, workdir: string, opts: any) => removeWorktree(sb, workdir, opts),
     runWorktreeSetup: (sb: any, worktreePath: string, command: string) => runWorktreeSetup(sb, worktreePath, command),
@@ -223,14 +255,6 @@ let featureEnabled = true;
 vi.mock('./config', () => ({
   isGithubFeatureEnabled: () => featureEnabled,
   getGithubFeatureDiagnostics: () => ({}),
-  getGithubWebhookSecret: () => process.env.GITHUB_APP_WEBHOOK_SECRET || undefined,
-  signState: (orgId: string, userId: string) => `state.${orgId}.${userId}`,
-  verifyState: (state: string | undefined) => {
-    if (!state?.startsWith('state.')) return null;
-    const [orgId, userId] = state.slice('state.'.length).split('.');
-    if (!orgId || !userId) return null;
-    return { orgId, userId };
-  },
 }));
 
 // Partially mock `../auth`: keep all real helpers (getWebAuthUser/webAuthTenant)
@@ -340,9 +364,12 @@ function deleteRows(table: any, cond?: any): void {
   tables[kind] = tables[kind].filter(row => !matches(table, row, cond)) as any;
 }
 
-// Resolve schema refs after import.
-import { listInstallationRepos, listUserInstallations } from './client';
-import { githubInstallations, githubProjectSandboxes, githubSignalSubscriptions, githubWorktrees } from './schema';
+const githubInstallations = {};
+const githubProjectSandboxes = {};
+const githubSignalSubscriptions = {};
+const githubWorktrees = {};
+
+const { listInstallationRepos, listUserInstallations } = githubStub;
 installationsRef = githubInstallations;
 worktreesRef = githubWorktrees;
 sandboxesRef = githubProjectSandboxes;
@@ -354,6 +381,7 @@ function buildApp(
   options: {
     controller?: NonNullable<Parameters<typeof buildGithubRoutes>[0]>['controller'];
     runIssueTriage?: (input: any) => Promise<{ threadId?: string; projectPath?: string; branch?: string }>;
+    stateSigner?: typeof stateSigner | null;
   } = {},
 ) {
   const app = new Hono();
@@ -366,7 +394,16 @@ function buildApp(
     }
     await next();
   });
-  mountApiRoutes(app as any, buildGithubRoutes({ baseUrl: 'http://localhost:4111', ...options }));
+  const { stateSigner: signerOverride, ...routeOptions } = options;
+  mountApiRoutes(
+    app as any,
+    buildGithubRoutes({
+      baseUrl: 'http://localhost:4111',
+      github: githubStub as any,
+      stateSigner: signerOverride === null ? undefined : (signerOverride ?? stateSigner),
+      ...routeOptions,
+    }),
+  );
   return app;
 }
 
@@ -376,17 +413,24 @@ beforeEach(() => {
   tables.sandboxes = [];
   tables.worktrees = [];
   tables.subscriptions = [];
+  githubStorage.installations = tables.installations as any;
+  githubStorage.projects = tables.projects as any;
+  githubStorage.sandboxes = tables.sandboxes as any;
+  githubStorage.worktrees = tables.worktrees as any;
+  githubStorage.subscriptions = tables.subscriptions as any;
   featureEnabled = true;
   sandboxEnabled = true;
   cookieUser = null;
   auditRecorded = [];
   auditFailure = undefined;
   process.env.GITHUB_APP_WEBHOOK_SECRET = 'test-webhook-secret';
+  // The webhook route verifies deliveries against the injected instance's secret.
+  githubStub.webhookSecret = 'test-webhook-secret';
   // No Postgres in these unit tests: keep the project lock purely in-process.
   process.env.MASTRACODE_DISTRIBUTED_LOCK = '0';
   ensureProjectSandbox.mockClear();
   materializeRepo.mockClear();
-  reattachProjectSandbox.mockClear();
+  reattachSandbox.mockClear();
   ensureWorktree.mockClear();
   removeWorktree.mockClear();
   runWorktreeSetup.mockClear();
@@ -608,6 +652,11 @@ describe('status route', () => {
     featureEnabled = false;
     const res = await buildApp({ workosId: 'u1' }).request('/web/github/status');
     expect(await res.json()).toMatchObject({ enabled: false, connected: false });
+  });
+
+  it('reports disabled without a state signer', async () => {
+    const res = await buildApp({ workosId: 'u1' }, { stateSigner: null }).request('/web/github/status');
+    expect(await res.json()).toMatchObject({ enabled: false, connected: false, reason: 'missing_config' });
   });
 
   it('reports connected installations for the user', async () => {
@@ -1367,7 +1416,7 @@ describe('worktree route', () => {
     expect(json.branch).toBe('feat/x');
     expect(json.baseBranch).toBe('main');
     expect(json.resourceId).toBe('p1');
-    expect(reattachProjectSandbox).toHaveBeenCalledWith('sb-1');
+    expect(reattachSandbox).toHaveBeenCalledWith('sb-1');
     expect(ensureWorktree).toHaveBeenCalledOnce();
     // A freshly minted install token + repo name are passed through so the
     // worktree forks from the latest fetched origin/<base>, not local state.

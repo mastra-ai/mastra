@@ -1,8 +1,6 @@
-import { Avatar } from '@mastra/playground-ui/components/Avatar';
-import { Button } from '@mastra/playground-ui/components/Button';
+import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { LogOut, Settings } from 'lucide-react';
+import { CircleUserRound, Settings } from 'lucide-react';
 
 import { useApiConfig } from '../../shared/api/config';
 import { redirectToLogout, useWebAuth } from './domains/auth';
@@ -23,28 +21,34 @@ import { useOverlays } from './lib/overlays';
  * thread list.
  */
 export function Sidebar() {
-  const overlays = useOverlays();
   const { activeProject } = useActiveProjectContext();
-  const open = overlays.isOpen('sidebar');
   const isGithubProject = activeProject?.source === 'github';
 
   return (
-    <div
-      className={`fixed inset-y-0 left-0 z-40 flex h-full w-[82vw] max-w-[300px] shrink-0 flex-col gap-4 border-r border-border1 bg-surface2 p-3 shadow-lg transition-transform duration-200 md:static md:z-auto md:w-full md:max-w-none md:translate-x-0 md:border-r-0 md:bg-transparent md:shadow-none ${open ? 'translate-x-0' : '-translate-x-full'}`}
-    >
-      <ProjectSwitcher />
-      {isGithubProject ? (
-        <>
-          <FactorySection>
-            <WorkspacesSection />
-          </FactorySection>
-          <UserSessionsSection />
-        </>
-      ) : (
-        <ThreadList />
-      )}
-      <SidebarFooter />
-    </div>
+    <MainSidebar className="bg-transparent h-full">
+      <MainSidebar.Nav>
+        <div className="flex min-h-0 flex-1 flex-col gap-4">
+          <section aria-label="Project switcher">
+            <ProjectSwitcher />
+          </section>
+          <section className="flex min-h-0 flex-1 flex-col gap-4" aria-label="Navigation">
+            {isGithubProject ? (
+              <>
+                <FactorySection>
+                  <WorkspacesSection />
+                </FactorySection>
+                <UserSessionsSection />
+              </>
+            ) : (
+              <ThreadList />
+            )}
+          </section>
+        </div>
+      </MainSidebar.Nav>
+      <MainSidebar.Bottom role="region" aria-label="Account and settings" className="pb-3">
+        <SidebarFooter />
+      </MainSidebar.Bottom>
+    </MainSidebar>
   );
 }
 
@@ -52,24 +56,25 @@ function SidebarFooter() {
   const overlays = useOverlays();
 
   return (
-    <div className="mt-auto flex flex-col gap-2 border-t border-border1 pt-2">
-      <SidebarAuth />
-      <Button
-        variant="ghost"
-        size="sm"
-        className="grid h-10 w-full grid-cols-[2.75rem_1fr_auto] items-center justify-normal gap-0 px-0"
-        onClick={() => {
-          overlays.open('settings');
-          overlays.close('sidebar');
-        }}
-        aria-label="Open settings"
-      >
-        <span className="flex items-center justify-center">
-          <Settings size={18} />
-        </span>
-        <span className="justify-self-start">Settings</span>
-      </Button>
-    </div>
+    <>
+      <MainSidebar.NavSeparator />
+      <MainSidebar.NavList>
+        <SidebarAuth />
+        <MainSidebar.NavLink
+          asChild
+          link={{
+            name: 'Settings',
+            url: '#',
+            icon: <Settings />,
+          }}
+        >
+          <button type="button" onClick={() => overlays.open('settings')} aria-label="Open settings">
+            <Settings />
+            <MainSidebar.NavLabel>Settings</MainSidebar.NavLabel>
+          </button>
+        </MainSidebar.NavLink>
+      </MainSidebar.NavList>
+    </>
   );
 }
 
@@ -79,10 +84,10 @@ function SidebarAuth() {
 
   if (auth.isLoading) {
     return (
-      <div role="status" aria-label="Checking sign-in" className="grid h-10 grid-cols-[2.75rem_1fr_auto] items-center">
-        <Skeleton className="size-6 justify-self-center rounded-full" />
+      <li role="status" aria-label="Checking sign-in" className="flex h-9 items-center gap-2 px-3">
+        <Skeleton className="size-4 rounded-full" />
         <Skeleton className="h-3 w-24" />
-      </div>
+      </li>
     );
   }
 
@@ -91,19 +96,21 @@ function SidebarAuth() {
   const state = auth.data;
   if (!state?.authEnabled || !state.authenticated) return null;
 
-  const identity = state.user?.name ?? state.user?.email ?? 'Signed in';
+  const identity = state.user?.name ?? state.user?.email ?? 'User';
 
   return (
-    <div className="grid h-10 grid-cols-[2.75rem_1fr_auto] items-center">
-      <span className="flex items-center justify-center">
-        <Avatar name={identity} size="sm" />
-      </span>
-      <Txt as="span" variant="ui-sm" className="min-w-0 truncate text-icon6" title={identity}>
-        {identity}
-      </Txt>
-      <Button variant="ghost" size="icon-sm" onClick={() => redirectToLogout(baseUrl)} aria-label="Sign out">
-        <LogOut size={15} />
-      </Button>
-    </div>
+    <MainSidebar.NavLink
+      asChild
+      link={{
+        name: 'User',
+        url: '#',
+        icon: <CircleUserRound />,
+      }}
+    >
+      <button type="button" onClick={() => redirectToLogout(baseUrl)} aria-label="Sign out" title={identity}>
+        <CircleUserRound />
+        <MainSidebar.NavLabel>{identity}</MainSidebar.NavLabel>
+      </button>
+    </MainSidebar.NavLink>
   );
 }

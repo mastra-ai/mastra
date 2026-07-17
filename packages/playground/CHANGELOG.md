@@ -1,5 +1,29 @@
 # @internal/playground
 
+## 1.20.0-alpha.5
+
+### Patch Changes
+
+- Improved notification signals to use the shared Notice design. ([#19593](https://github.com/mastra-ai/mastra/pull/19593))
+
+- Fixed tool execution forms to hide empty configuration tabs and label root inputs. ([#19598](https://github.com/mastra-ai/mastra/pull/19598))
+
+- Updated dependencies [[`ec857fc`](https://github.com/mastra-ai/mastra/commit/ec857fc79c264b53b38e16478c789b7177f2ad59), [`e1f2fae`](https://github.com/mastra-ai/mastra/commit/e1f2faebaf048c3d4c2e2c01d293767c195d5794), [`63aa799`](https://github.com/mastra-ai/mastra/commit/63aa799c6b44eacc7806cda6846b7c5bbee06b37), [`65934ce`](https://github.com/mastra-ai/mastra/commit/65934cea790ccf7cc01ddf2743711c244f21263e), [`73db8db`](https://github.com/mastra-ai/mastra/commit/73db8db90d69ab6153c7942749f624db0d96952d), [`4c63f10`](https://github.com/mastra-ai/mastra/commit/4c63f10449ed4fc9f4236c3ce02049b45dae28e7), [`73db8db`](https://github.com/mastra-ai/mastra/commit/73db8db90d69ab6153c7942749f624db0d96952d), [`76b7181`](https://github.com/mastra-ai/mastra/commit/76b71810366e6d90b9d3973149d1c7ba3659ffb9), [`0c0e8d7`](https://github.com/mastra-ai/mastra/commit/0c0e8d7becd4d1445c656b78d5d845f606c1ff9d), [`39c6753`](https://github.com/mastra-ai/mastra/commit/39c6753788a8d17278531b3381eb508747495b67), [`39c6753`](https://github.com/mastra-ai/mastra/commit/39c6753788a8d17278531b3381eb508747495b67), [`9f7c67a`](https://github.com/mastra-ai/mastra/commit/9f7c67abeeb52c41c51a9b5edee60b62afe7cd8d), [`3b65e68`](https://github.com/mastra-ai/mastra/commit/3b65e68d7f1c771c7a70eea42d83fefdd28cad88), [`e3868e2`](https://github.com/mastra-ai/mastra/commit/e3868e22babfffd0133771669ca724501c2dd58e)]:
+  - @mastra/core@1.52.0-alpha.5
+  - @mastra/playground-ui@42.0.0-alpha.5
+  - @mastra/react@1.2.6-alpha.5
+  - @mastra/client-js@1.33.0-alpha.5
+
+## 1.19.1-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`4cfdd64`](https://github.com/mastra-ai/mastra/commit/4cfdd645794feaea0c4ea711e70ecdfbef0c5b8e)]:
+  - @mastra/core@1.52.0-alpha.4
+  - @mastra/client-js@1.33.0-alpha.4
+  - @mastra/react@1.2.6-alpha.4
+  - @mastra/playground-ui@42.0.0-alpha.4
+
 ## 1.19.1-alpha.3
 
 ### Patch Changes

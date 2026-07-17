@@ -8,8 +8,9 @@ import { useEffect, useRef, useCallback, useMemo } from 'react';
 import type { UseFormReturn } from 'react-hook-form';
 import { z } from 'zod';
 import { AutoForm } from './auto-form';
+import { isEmptyZodObject } from './is-empty-zod-object';
 import { CustomZodProvider } from './zod-provider';
-import { getShape, getIntersection } from './zod-provider/compat';
+import { getShape } from './zod-provider/compat';
 
 interface DynamicFormProps {
   schema: any;
@@ -28,20 +29,6 @@ interface DynamicFormProps {
   children?: React.ReactNode;
   submitActions?: React.ReactNode;
   leftActions?: React.ReactNode;
-}
-
-function isEmptyZodObject(schema: unknown): boolean {
-  const shape = getShape(schema);
-  if (shape) {
-    return Object.keys(shape).length === 0;
-  }
-
-  const intersection = getIntersection(schema);
-  if (intersection) {
-    return isEmptyZodObject(intersection.left) && isEmptyZodObject(intersection.right);
-  }
-
-  return false;
 }
 
 function isZodObjectLike(schema: any): boolean {
@@ -123,9 +110,11 @@ export function DynamicForm({
         return z.object({});
       }
       if (isNotZodObject) {
+        const rootSchema = s.description ? s : s.describe('Input');
+
         // using a non-printable character to avoid conflicts with the form data
         return z.object({
-          '\u200B': s,
+          '\u200B': rootSchema,
         });
       }
       return s;

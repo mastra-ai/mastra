@@ -102,6 +102,22 @@ export function isWebAuthEnabled(): boolean {
   return getActiveWebAuthAdapter() !== undefined;
 }
 
+/**
+ * Fail-closed authorization for organization-level administrative mutations.
+ * The caller must belong to the same active organization and the adapter must
+ * explicitly confirm an admin/owner role.
+ */
+export async function isOrganizationAdmin(c: Context, organizationId: string): Promise<boolean> {
+  const user = await ensureWebAuthUser(c);
+  const adapter = getActiveWebAuthAdapter();
+  if (!user || user.organizationId !== organizationId || !adapter?.isOrganizationAdmin) return false;
+  try {
+    return await adapter.isOrganizationAdmin(user, organizationId);
+  } catch {
+    return false;
+  }
+}
+
 /** True when the active adapter is WorkOS. Gates WorkOS-only capabilities. */
 export function isWorkOSAuth(): boolean {
   return getActiveWebAuthAdapter()?.kind === 'workos';

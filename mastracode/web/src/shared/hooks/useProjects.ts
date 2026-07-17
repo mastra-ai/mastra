@@ -42,7 +42,10 @@ export function useRemoveProjectMutation() {
     mutationFn: async (id: string) => {
       removeProject(id);
     },
-    onSuccess: () => invalidateProjects(queryClient),
+    onSuccess: () => {
+      queryClient.setQueryData(queryKeys.projects(), loadProjects());
+      invalidateProjects(queryClient);
+    },
   });
 }
 
