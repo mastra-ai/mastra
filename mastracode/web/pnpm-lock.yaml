@@ -26,6 +26,9 @@ importers:
       '@mastra/libsql':
         specifier: link:../../stores/libsql
         version: link:../../stores/libsql
+      '@mastra/pg':
+        specifier: link:../../stores/pg
+        version: link:../../stores/pg
       '@mastra/playground-ui':
         specifier: link:../../packages/playground-ui
         version: link:../../packages/playground-ui
