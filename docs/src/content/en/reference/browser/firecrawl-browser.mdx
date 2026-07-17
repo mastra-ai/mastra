@@ -84,7 +84,7 @@ then interact with elements using their refs (e.g., @e5).`,
             name: 'profile',
             type: '{ name: string; saveChanges?: boolean }',
             description:
-              'Named Firecrawl sandbox profile. Persists cookies and login state between sessions. Distinct from the top-level AgentBrowser profile option, which is a local Playwright user-data directory path.',
+              'Named Firecrawl sandbox profile. Set saveChanges: true to persist cookies and login state when the session ends; naming a profile alone does not save changes. Distinct from the top-level AgentBrowser profile option, which is a local Playwright user-data directory path.',
             isOptional: true,
           },
           {
