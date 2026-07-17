@@ -346,10 +346,7 @@ function readDragPayload(event: DragEvent): DragPayload | null {
  */
 export function BoardPage() {
   return (
-    <FactoryPageShell
-      title="Board"
-      description="Issues and pull requests across intake, work, review, and done."
-    >
+    <FactoryPageShell title="Board" description="Issues and pull requests across intake, work, review, and done.">
       {project => <Board project={project} />}
     </FactoryPageShell>
   );

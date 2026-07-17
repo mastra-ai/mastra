@@ -43,8 +43,7 @@ export function FactoryPageShell({ title, description, children }: FactoryPageSh
           children({ ...activeProject, githubProjectId: activeProject.githubProjectId })
         ) : (
           <Notice variant="info">
-            Factory requires a GitHub connection. Connect GitHub from the projects menu to see issues and pull
-            requests.
+            Factory requires a GitHub connection. Connect GitHub from the projects menu to see issues and pull requests.
           </Notice>
         )
       ) : (

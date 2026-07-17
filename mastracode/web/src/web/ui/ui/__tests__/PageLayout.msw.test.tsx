@@ -10,7 +10,11 @@ describe('PageLayout', () => {
         <PageLayout
           sidebar={<div>sidebar-slot</div>}
           header={<div>header-slot</div>}
-          title={<>Factory <strong>Board</strong></>}
+          title={
+            <>
+              Factory <strong>Board</strong>
+            </>
+          }
           description={<span>Project work in progress</span>}
         >
           <div>content-slot</div>
