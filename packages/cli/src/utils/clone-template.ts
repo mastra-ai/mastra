@@ -12,19 +12,41 @@ import type { PackageManager } from './package-manager';
 import type { Template } from './template-utils';
 
 const exec = util.promisify(child_process.exec);
+const INTERRUPT_SIGNALS = ['SIGINT', 'SIGTERM'] as const;
+
+function startSpinner(text: string, signal?: AbortSignal) {
+  if (!signal) return yoctoSpinner({ text }).start();
+
+  const existingListeners = new Map(
+    INTERRUPT_SIGNALS.map(interruptSignal => [interruptSignal, new Set(process.listeners(interruptSignal))]),
+  );
+  const spinner = yoctoSpinner({ text }).start();
+
+  // The caller owns interruption handling so its finally block can clean up before the process exits.
+  for (const interruptSignal of INTERRUPT_SIGNALS) {
+    for (const listener of process.listeners(interruptSignal)) {
+      if (!existingListeners.get(interruptSignal)?.has(listener)) {
+        process.removeListener(interruptSignal, listener);
+      }
+    }
+  }
+
+  return spinner;
+}
 
 export interface CloneTemplateOptions {
   template: Template;
   projectName: string;
   targetDir?: string;
   branch?: string;
+  signal?: AbortSignal;
 }
 
 export async function cloneTemplate(options: CloneTemplateOptions): Promise<string> {
-  const { template, projectName, targetDir, branch } = options;
+  const { template, projectName, targetDir, branch, signal } = options;
   const projectPath = targetDir ? path.resolve(targetDir, projectName) : path.resolve(projectName);
 
-  const spinner = yoctoSpinner({ text: `Cloning template "${template.title}"...` }).start();
+  const spinner = startSpinner(`Cloning template "${template.title}"...`, signal);
 
   try {
     // Check if directory already exists
@@ -34,7 +56,7 @@ export async function cloneTemplate(options: CloneTemplateOptions): Promise<stri
     }
 
     // Clone the repository without git history
-    await cloneRepositoryWithoutGit(template.githubUrl, projectPath, branch);
+    await cloneRepositoryWithoutGit(template.githubUrl, projectPath, branch, signal);
 
     // Update package.json with new project name
     await updatePackageJson(projectPath, projectName);
@@ -72,8 +94,13 @@ async function fileExists(filePath: string): Promise<boolean> {
   }
 }
 
-async function cloneRepositoryWithoutGit(repoUrl: string, targetPath: string, branch?: string): Promise<void> {
-  // Create target directory
+async function cloneRepositoryWithoutGit(
+  repoUrl: string,
+  targetPath: string,
+  branch?: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  signal?.throwIfAborted();
   await fs.mkdir(targetPath, { recursive: true });
 
   try {
@@ -84,12 +111,16 @@ async function cloneRepositoryWithoutGit(repoUrl: string, targetPath: string, br
     const degitCommand = shellQuote.quote(['npx', 'degit', degitRepoWithBranch, targetPath]);
     await exec(degitCommand, {
       cwd: process.cwd(),
+      ...(signal ? { signal } : {}),
     });
+    signal?.throwIfAborted();
 
     if ((await fs.readdir(targetPath)).length === 0) {
       throw new Error('degit completed without cloning template files');
     }
-  } catch {
+  } catch (error) {
+    if (signal?.aborted) throw error;
+
     // Degit can leave partial output behind, so reset only this clone-owned destination before the fallback.
     await fs.rm(targetPath, { recursive: true, force: true });
     await fs.mkdir(targetPath, { recursive: true });
@@ -106,7 +137,9 @@ async function cloneRepositoryWithoutGit(repoUrl: string, targetPath: string, br
       const gitCommand = shellQuote.quote(gitArgs);
       await exec(gitCommand, {
         cwd: process.cwd(),
+        ...(signal ? { signal } : {}),
       });
+      signal?.throwIfAborted();
 
       // Remove .git directory
       const gitDir = path.join(targetPath, '.git');
@@ -114,6 +147,7 @@ async function cloneRepositoryWithoutGit(repoUrl: string, targetPath: string, br
         await fs.rm(gitDir, { recursive: true, force: true });
       }
     } catch (gitError) {
+      if (signal?.aborted) throw gitError;
       throw new Error(`Failed to clone repository: ${gitError instanceof Error ? gitError.message : 'Unknown error'}`);
     }
   }
@@ -141,8 +175,9 @@ export async function installDependencies(
   projectPath: string,
   packageManager?: PackageManager,
   timeout?: number,
+  signal?: AbortSignal,
 ): Promise<void> {
-  const spinner = yoctoSpinner({ text: 'Installing dependencies...' }).start();
+  const spinner = startSpinner('Installing dependencies...', signal);
 
   try {
     // Use provided package manager or detect from environment/globally
@@ -154,6 +189,7 @@ export async function installDependencies(
       cwd: projectPath,
       timeout,
       killSignal: 'SIGTERM',
+      ...(signal ? { signal } : {}),
     });
 
     spinner.success('Dependencies installed successfully');

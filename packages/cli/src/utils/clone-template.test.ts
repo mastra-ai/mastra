@@ -9,6 +9,7 @@ vi.mock('../commands/utils', () => ({
 import child_process from 'node:child_process';
 import { vol } from 'memfs';
 import type * as MemfsModule from 'memfs';
+import yoctoSpinner from 'yocto-spinner';
 
 // Mock the logger
 vi.mock('./logger', () => ({
@@ -135,6 +136,30 @@ describe('clone-template', () => {
       });
       expect(mockExec).toHaveBeenCalledWith('git clone https\\://github.com/mastra-ai/template-test /test-project', {
         cwd: process.cwd(),
+      });
+    });
+
+    it('does not start the git fallback when degit is aborted', async () => {
+      const controller = new AbortController();
+      const mockExec = vi.fn().mockImplementation(async () => {
+        controller.abort();
+        controller.signal.throwIfAborted();
+      });
+      vi.mocked(child_process.exec).mockImplementation(mockExec);
+
+      const { cloneTemplate } = await import('./clone-template');
+      await expect(
+        cloneTemplate({
+          template: mockTemplate,
+          projectName: 'test-project',
+          signal: controller.signal,
+        }),
+      ).rejects.toMatchObject({ name: 'AbortError' });
+
+      expect(mockExec).toHaveBeenCalledOnce();
+      expect(mockExec).toHaveBeenCalledWith('npx degit mastra-ai/template-test /test-project', {
+        cwd: process.cwd(),
+        signal: controller.signal,
       });
     });
 
@@ -416,6 +441,45 @@ describe('clone-template', () => {
         timeout: undefined,
         killSignal: 'SIGTERM',
       });
+    });
+
+    it('passes an abort signal to dependency installation', async () => {
+      const mockExec = vi.fn().mockResolvedValue({ stdout: '', stderr: '' });
+      vi.mocked(child_process.exec).mockImplementation(mockExec);
+      const controller = new AbortController();
+
+      const { installDependencies } = await import('./clone-template');
+      await installDependencies('/test-project', 'npm', 12_345, controller.signal);
+
+      expect(mockExec).toHaveBeenCalledWith('npm install', {
+        cwd: '/test-project',
+        timeout: 12_345,
+        killSignal: 'SIGTERM',
+        signal: controller.signal,
+      });
+    });
+
+    it('keeps abortable operations in control of process interruption', async () => {
+      const mockExec = vi.fn().mockResolvedValue({ stdout: '', stderr: '' });
+      vi.mocked(child_process.exec).mockImplementation(mockExec);
+      const spinnerExitHandler = vi.fn();
+      const spinner = {
+        start: vi.fn(() => {
+          process.once('SIGINT', spinnerExitHandler);
+          process.once('SIGTERM', spinnerExitHandler);
+          return spinner;
+        }),
+        success: vi.fn(),
+        error: vi.fn(),
+      };
+      vi.mocked(yoctoSpinner).mockReturnValueOnce(spinner as never);
+      const controller = new AbortController();
+
+      const { installDependencies } = await import('./clone-template');
+      await installDependencies('/test-project', 'npm', undefined, controller.signal);
+
+      expect(process.listeners('SIGINT')).not.toContain(spinnerExitHandler);
+      expect(process.listeners('SIGTERM')).not.toContain(spinnerExitHandler);
     });
 
     it('should default to npm when no lock file is found', async () => {

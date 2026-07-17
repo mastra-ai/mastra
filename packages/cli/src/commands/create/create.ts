@@ -256,7 +256,19 @@ export const create = async (args: CreateOptions): Promise<void> => {
   const packageManager = getPackageManager();
   const invocationIsGitWorktree = await isGitInitialized({ cwd: invocationCwd });
   const staging = await createOwnedStagingDirectory(invocationCwd, projectName);
+  const materializationController = new AbortController();
+  let interruptionSignal: 'SIGINT' | 'SIGTERM' | undefined;
+  const interrupt = (signal: 'SIGINT' | 'SIGTERM') => {
+    interruptionSignal ??= signal;
+    materializationController.abort();
+  };
+  const handleSigint = () => interrupt('SIGINT');
+  const handleSigterm = () => interrupt('SIGTERM');
+  process.on('SIGINT', handleSigint);
+  process.on('SIGTERM', handleSigterm);
+
   let selectedApiKeyEnv: string | undefined;
+  let materializationError: unknown;
 
   try {
     if (mode === 'empty') {
@@ -266,6 +278,7 @@ export const create = async (args: CreateOptions): Promise<void> => {
         versionTag: versionTag ?? 'latest',
         packageManager,
       });
+      materializationController.signal.throwIfAborted();
     } else {
       const isManaged = mode === 'managed';
       const branch = isManaged && versionTag === 'beta' ? 'beta' : undefined;
@@ -274,6 +287,7 @@ export const create = async (args: CreateOptions): Promise<void> => {
         projectName,
         targetDir: staging.rootPath,
         branch,
+        signal: materializationController.signal,
       });
 
       if (isManaged) {
@@ -286,12 +300,18 @@ export const create = async (args: CreateOptions): Promise<void> => {
           versionTag: versionTag ?? 'latest',
         });
         selectedApiKeyEnv = providerConfig.apiKeyEnv;
+        materializationController.signal.throwIfAborted();
       }
     }
 
-    await installDependencies(staging.projectPath, packageManager, options.timeout);
+    await installDependencies(staging.projectPath, packageManager, options.timeout, materializationController.signal);
+    materializationController.signal.throwIfAborted();
     await publishStagedProject({ projectPath: staging.projectPath, targetPath, projectName });
+  } catch (error) {
+    materializationError = error;
   } finally {
+    process.removeListener('SIGINT', handleSigint);
+    process.removeListener('SIGTERM', handleSigterm);
     if (process.cwd() !== invocationCwd) {
       process.chdir(invocationCwd);
     }
@@ -303,6 +323,10 @@ export const create = async (args: CreateOptions): Promise<void> => {
       );
     }
   }
+
+  if (interruptionSignal === 'SIGINT') cancelCreate();
+  if (interruptionSignal === 'SIGTERM') throw new Error('Operation terminated by SIGTERM');
+  if (materializationError) throw materializationError;
 
   const postSetup = await runPostCreateSetup({
     projectPath: targetPath,

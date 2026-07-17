@@ -176,6 +176,7 @@ describe('create preflight and mode orchestration', () => {
       projectName: 'my-project',
       targetDir: '/tmp/.my-project.mastra-create-test',
       branch: undefined,
+      signal: expect.any(AbortSignal),
     });
     const { adaptDefaultTemplate } = await import('./provider-adapter');
     expect(adaptDefaultTemplate).toHaveBeenCalledWith({
@@ -408,7 +409,12 @@ describe('create materialization lifecycle', () => {
     });
 
     expect(writeEmptyScaffold).toHaveBeenCalledBefore(vi.mocked(installDependencies));
-    expect(installDependencies).toHaveBeenCalledWith('/tmp/.my-project.mastra-create-test/my-project', 'npm', 12_345);
+    expect(installDependencies).toHaveBeenCalledWith(
+      '/tmp/.my-project.mastra-create-test/my-project',
+      'npm',
+      12_345,
+      expect.any(AbortSignal),
+    );
     expect(installDependencies).toHaveBeenCalledBefore(vi.mocked(publishStagedProject));
     expect(publishStagedProject).toHaveBeenCalledWith({
       projectPath: '/tmp/.my-project.mastra-create-test/my-project',
@@ -450,6 +456,46 @@ describe('create materialization lifecycle', () => {
 
     expect(publishStagedProject).not.toHaveBeenCalled();
     expect(cleanupOwnedStagingDirectory).toHaveBeenCalledWith('/tmp/.my-project.mastra-create-test');
+  });
+
+  it('aborts dependency installation and cleans staging on SIGINT', async () => {
+    const { create, CreateCancelledError } = await import('./create');
+    const { installDependencies } = await import('../../utils/clone-template');
+    const { cleanupOwnedStagingDirectory, publishStagedProject } = await import('./utils');
+    const prompts = await import('@clack/prompts');
+    vi.mocked(installDependencies).mockImplementationOnce(async (_projectPath, _packageManager, _timeout, signal) => {
+      process.emit('SIGINT');
+      expect(signal?.aborted).toBe(true);
+      signal?.throwIfAborted();
+    });
+
+    await expect(
+      create({ projectName: 'my-project', empty: true, resolveVersionTag: vi.fn().mockResolvedValue('latest') }),
+    ).rejects.toBeInstanceOf(CreateCancelledError);
+
+    expect(publishStagedProject).not.toHaveBeenCalled();
+    expect(cleanupOwnedStagingDirectory).toHaveBeenCalledWith('/tmp/.my-project.mastra-create-test');
+    expect(prompts.cancel).toHaveBeenCalledWith('Operation cancelled');
+  });
+
+  it('aborts dependency installation and cleans staging on SIGTERM without reporting successful cancellation', async () => {
+    const { create } = await import('./create');
+    const { installDependencies } = await import('../../utils/clone-template');
+    const { cleanupOwnedStagingDirectory, publishStagedProject } = await import('./utils');
+    const prompts = await import('@clack/prompts');
+    vi.mocked(installDependencies).mockImplementationOnce(async (_projectPath, _packageManager, _timeout, signal) => {
+      process.emit('SIGTERM');
+      expect(signal?.aborted).toBe(true);
+      signal?.throwIfAborted();
+    });
+
+    await expect(
+      create({ projectName: 'my-project', empty: true, resolveVersionTag: vi.fn().mockResolvedValue('latest') }),
+    ).rejects.toThrow('Operation terminated by SIGTERM');
+
+    expect(publishStagedProject).not.toHaveBeenCalled();
+    expect(cleanupOwnedStagingDirectory).toHaveBeenCalledWith('/tmp/.my-project.mastra-create-test');
+    expect(prompts.cancel).not.toHaveBeenCalled();
   });
 
   it('restores the invocation cwd even when a materializer changes it', async () => {
