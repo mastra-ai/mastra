@@ -303,6 +303,22 @@ describe('MastraFactory.prepare integrations', () => {
     expect(tools.customSessionTool).toBe(sessionTool);
   });
 
+  it('rejects duplicate tool keys from integrations', async () => {
+    const first = fakeIntegration({
+      id: 'first',
+      agentTools: vi.fn(async () => ({ sharedTool: { description: 'first' } }) as never),
+    });
+    const second = fakeIntegration({
+      id: 'second',
+      sessionTools: vi.fn(() => ({ sharedTool: { description: 'second' } }) as never),
+    });
+    const config = await prepareFactory({ integrations: [first, second] });
+    const extraTools = config.extraTools as (args: { requestContext: object }) => Promise<Record<string, unknown>>;
+    await expect(extraTools({ requestContext: {} })).rejects.toThrow(
+      "integration tool 'sharedTool' from 'second' conflicts with 'first'",
+    );
+  });
+
   it('omits extraTools when no integration contributes tools', async () => {
     const config = await prepareFactory({ integrations: [fakeIntegration({ id: 'custom' })] });
     expect(config).not.toHaveProperty('extraTools');

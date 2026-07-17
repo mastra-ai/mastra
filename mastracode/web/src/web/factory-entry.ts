@@ -362,9 +362,26 @@ export class MastraFactory {
         ? {
             extraTools: async ({ requestContext }: { requestContext: RequestContext }) => {
               const tools: IntegrationTools = {};
+              const toolOwners = new Map<string, string>();
+              const mergeTools = (integration: FactoryIntegration, contributed: IntegrationTools) => {
+                for (const [name, tool] of Object.entries(contributed)) {
+                  const owner = toolOwners.get(name);
+                  if (owner) {
+                    throw new Error(
+                      `MastraFactory: integration tool '${name}' from '${integration.id}' conflicts with '${owner}'.`,
+                    );
+                  }
+                  toolOwners.set(name, integration.id);
+                  tools[name] = tool;
+                }
+              };
               for (const integration of toolIntegrations) {
-                if (integration.agentTools) Object.assign(tools, await integration.agentTools({ requestContext }));
-                if (integration.sessionTools) Object.assign(tools, integration.sessionTools(requestContext));
+                if (integration.agentTools) {
+                  mergeTools(integration, await integration.agentTools({ requestContext }));
+                }
+                if (integration.sessionTools) {
+                  mergeTools(integration, integration.sessionTools(requestContext));
+                }
               }
               return tools;
             },
