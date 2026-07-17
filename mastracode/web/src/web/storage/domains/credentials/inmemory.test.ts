@@ -31,9 +31,9 @@ describe('ModelCredentialsStorageInMemory', () => {
   it('rejects org-scoped OAuth credentials without a user tenant', async () => {
     const store = new ModelCredentialsStorageInMemory();
 
-    await expect(store.setCredential({ orgId: 'org1' }, 'anthropic', oauth('org', Date.now() + 60_000))).rejects.toThrow(
-      'OAuth credentials must be user-scoped',
-    );
+    await expect(
+      store.setCredential({ orgId: 'org1' }, 'anthropic', oauth('org', Date.now() + 60_000)),
+    ).rejects.toThrow('OAuth credentials must be user-scoped');
     expect(await store.listCredentials('org1', 'alice')).toEqual([]);
   });
 

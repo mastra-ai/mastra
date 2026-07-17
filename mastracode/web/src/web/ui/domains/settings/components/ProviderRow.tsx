@@ -42,7 +42,13 @@ interface ProviderRowProps {
   onStartOAuth: (provider: string, mode?: string) => Promise<void>;
 }
 
-export function ProviderRow({ provider, authEnabled, disabled = false, startingOAuth, onStartOAuth }: ProviderRowProps) {
+export function ProviderRow({
+  provider,
+  authEnabled,
+  disabled = false,
+  startingOAuth,
+  onStartOAuth,
+}: ProviderRowProps) {
   const displayName = providerDisplayName(provider.provider);
   const saveKeyMutation = useSaveProviderKey();
   const removeKeyMutation = useRemoveProviderKey();
