@@ -44,7 +44,7 @@ export class WorkItemsStorageInMemory extends WorkItemsStorage {
 
     if (input.sourceKey !== null) {
       const existing = [...this.#items.values()].find(
-        item => item.githubProjectId === githubProjectId && item.sourceKey === input.sourceKey,
+        item => item.orgId === orgId && item.githubProjectId === githubProjectId && item.sourceKey === input.sourceKey,
       );
       if (existing) {
         const updated = this.#applyPatch(existing, input, userId, now);

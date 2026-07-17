@@ -30,6 +30,9 @@ import { BetterAuthWebAuth } from '../web/auth-better-adapter.js';
 import type { WebAuthAdapter } from '../web/auth-adapter.js';
 import { WorkOSWebAuth } from '../web/auth-workos-adapter.js';
 import { MastraFactory } from '../web/factory-entry.js';
+import type { FactoryIntegration } from '../web/factory-integration.js';
+import { GithubIntegration } from '../web/github/integration.js';
+import { LinearIntegration } from '../web/linear/integration.js';
 
 /**
  * Parse a positive-integer env knob; anything else means "use the default".
@@ -158,6 +161,66 @@ if (sandboxKind === 'railway') {
   );
 }
 
+// Integrations, all-or-nothing per integration: setting ANY of an
+// integration's env vars means you intend to enable it, so a partial set is a
+// hard misconfiguration error listing exactly what's missing. No vars set →
+// the integration is omitted entirely: its routes never mount, its tools never
+// register, and its status endpoint reports "not configured".
+function envGroup<K extends string>(
+  vars: Record<K, string | undefined>,
+  integration: string,
+): Record<K, string> | undefined {
+  const entries = Object.entries(vars) as Array<[K, string | undefined]>;
+  const present = entries.filter(([, value]) => value);
+  if (present.length === 0) return undefined;
+  const missing = entries.filter(([, value]) => !value).map(([name]) => name);
+  if (missing.length > 0) {
+    throw new Error(
+      `${integration} integration is partially configured — missing ${missing.join(', ')}. ` +
+        'Set the remaining variable(s) to enable it, or unset the group to disable it.',
+    );
+  }
+  return Object.fromEntries(entries) as Record<K, string>;
+}
+
+// GitHub App: signed-in users install the app, pick repos, and turn them into
+// projects. The webhook secret is optional (webhook deliveries are rejected
+// without it) so it is validated separately from the required group.
+const githubEnv = envGroup(
+  {
+    GITHUB_APP_ID: process.env.GITHUB_APP_ID,
+    GITHUB_APP_PRIVATE_KEY: process.env.GITHUB_APP_PRIVATE_KEY,
+    GITHUB_APP_CLIENT_ID: process.env.GITHUB_APP_CLIENT_ID,
+    GITHUB_APP_CLIENT_SECRET: process.env.GITHUB_APP_CLIENT_SECRET,
+    GITHUB_APP_SLUG: process.env.GITHUB_APP_SLUG,
+  },
+  'GitHub',
+);
+const github = githubEnv
+  ? new GithubIntegration({
+      appId: githubEnv.GITHUB_APP_ID,
+      privateKey: githubEnv.GITHUB_APP_PRIVATE_KEY,
+      clientId: githubEnv.GITHUB_APP_CLIENT_ID,
+      clientSecret: githubEnv.GITHUB_APP_CLIENT_SECRET,
+      slug: githubEnv.GITHUB_APP_SLUG,
+      webhookSecret: process.env.GITHUB_APP_WEBHOOK_SECRET,
+    })
+  : undefined;
+
+// Linear OAuth app: per-org workspace connections + issue intake.
+const linearEnv = envGroup(
+  {
+    LINEAR_CLIENT_ID: process.env.LINEAR_CLIENT_ID,
+    LINEAR_CLIENT_SECRET: process.env.LINEAR_CLIENT_SECRET,
+  },
+  'Linear',
+);
+const linear = linearEnv
+  ? new LinearIntegration({ clientId: linearEnv.LINEAR_CLIENT_ID, clientSecret: linearEnv.LINEAR_CLIENT_SECRET })
+  : undefined;
+
+const integrations: FactoryIntegration[] = [github, linear].filter(i => i !== undefined);
+
 // Single app Postgres: one PostgresStore (and one pg pool) powers agent
 // storage, the factory app tables, the distributed project lock, and
 // better-auth. The paired PgVector rides the same database for recall search.
@@ -201,6 +264,15 @@ export const factory = new MastraFactory({
     .split(',')
     .map(o => o.trim())
     .filter(Boolean),
+  // Deployment-stable secret for OAuth `state` signing (GitHub/Linear connect
+  // flows). Same resolution the state signer used before it moved into the
+  // factory: webhook secret first, then the WorkOS cookie password. Unset →
+  // per-process random secret (single-process local dev only).
+  stateSecret: process.env.GITHUB_APP_WEBHOOK_SECRET || process.env.WORKOS_COOKIE_PASSWORD || undefined,
+  // Registered integrations. Each is constructed above from its own env group
+  // (all-or-nothing); an absent integration simply isn't registered — its
+  // routes never mount and its status endpoint reports "not configured".
+  integrations,
 });
 
 // Construct the server-owned Mastra HERE so the `new Mastra(...)` literal lives

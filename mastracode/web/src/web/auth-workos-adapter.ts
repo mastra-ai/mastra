@@ -204,6 +204,26 @@ export class WorkOSWebAuth implements WebAuthAdapter {
     return ensureUserHasOrganization(this.provider, user);
   }
 
+  async isOrganizationAdmin(user: WebAuthUser, organizationId: string): Promise<boolean> {
+    const userId = user.workosId ?? user.id;
+    if (!userId || user.organizationId !== organizationId) return false;
+
+    try {
+      const memberships = await this.provider
+        .getWorkOS()
+        .userManagement.listOrganizationMemberships({ userId })
+        .then(page => page.autoPagination());
+      const membership = memberships.find(item => item.organizationId === organizationId);
+      if (!membership) return false;
+      // Multi-role environments report assigned roles in `roles`; single-role
+      // environments only populate the legacy `role` field.
+      const slugs = membership.roles?.length ? membership.roles.map(role => role.slug) : [membership.role.slug];
+      return slugs.some(slug => slug === 'admin' || slug === 'owner');
+    } catch {
+      return false;
+    }
+  }
+
   /**
    * Cookie string that clears the WorkOS session. Matches the `SameSite`/`Secure`
    * attributes of the session cookie so the browser actually overwrites it: a

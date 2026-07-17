@@ -9,6 +9,7 @@ import { getAppDataDir } from '../utils/project.js';
 import { anthropicOAuthProvider } from './providers/anthropic.js';
 import { githubCopilotOAuthProvider } from './providers/github-copilot.js';
 import { openaiCodexOAuthProvider } from './providers/openai-codex.js';
+import { xaiOAuthProvider } from './providers/xai.js';
 import type {
   AuthCredential,
   AuthStorageData,
@@ -28,6 +29,7 @@ export const PROVIDER_DEFAULT_MODELS: Record<OAuthProviderId, string> = {
   // adapter handles); Anthropic-shaped Copilot models (Claude on `/v1/messages`)
   // are not yet wired up, so picking one as the post-login default would error.
   'github-copilot': 'github-copilot/gpt-4.1',
+  xai: 'xai/grok-4.5',
 };
 
 // Provider registry
@@ -35,6 +37,7 @@ const oauthProviderRegistry = new Map<string, OAuthProviderInterface>([
   [anthropicOAuthProvider.id, anthropicOAuthProvider],
   [openaiCodexOAuthProvider.id, openaiCodexOAuthProvider],
   [githubCopilotOAuthProvider.id, githubCopilotOAuthProvider],
+  [xaiOAuthProvider.id, xaiOAuthProvider],
 ]);
 
 /**

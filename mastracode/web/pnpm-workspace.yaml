@@ -17,5 +17,5 @@ enableGlobalVirtualStore: true
 # Listing them here (even as false) also prevents pnpm v10 from exiting with
 # ERR_PNPM_IGNORED_BUILDS when the deployer copies this file to .mastra/output.
 allowBuilds:
-  esbuild: set this to true or false
-  msw: set this to true or false
+  esbuild: false
+  msw: false

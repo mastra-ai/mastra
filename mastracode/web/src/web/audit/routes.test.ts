@@ -2,44 +2,6 @@ import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ── Mocks ────────────────────────────────────────────────────────────────
-vi.mock('drizzle-orm', async () => {
-  const actual = (await vi.importActual('drizzle-orm')) as Record<string, unknown>;
-  return {
-    ...actual,
-    eq: (column: any, value: any) => ({ kind: 'eq', column: column?.name, value }),
-    and: (...conds: any[]) => ({ kind: 'and', conds: conds.filter(Boolean) }),
-  };
-});
-
-// In-memory github_projects rows for the `resolveProject` guard.
-let projects: Array<Record<string, any>> = [];
-
-function columnJsKey(table: any, columnName: string): string | undefined {
-  for (const [jsKey, col] of Object.entries(table)) {
-    if ((col as any)?.name === columnName) return jsKey;
-  }
-  return undefined;
-}
-
-function matches(table: any, row: any, cond: any): boolean {
-  if (!cond) return true;
-  if (cond.kind === 'and') return cond.conds.every((c: any) => matches(table, row, c));
-  if (cond.kind === 'eq') {
-    const jsKey = columnJsKey(table, cond.column);
-    return jsKey !== undefined && row[jsKey] === cond.value;
-  }
-  return true;
-}
-
-vi.mock('../github/db', () => ({
-  getAppDb: () => ({
-    select: () => ({
-      from: (table: any) => ({
-        where: async (cond: any) => projects.filter(row => matches(table, row, cond)),
-      }),
-    }),
-  }),
-}));
 
 // Capture list queries at the store boundary; routes are exercised end to end.
 let listCalls: Array<Record<string, any>> = [];
@@ -87,18 +49,26 @@ vi.mock('@mastra/auth-workos', () => ({
   },
 }));
 
-import { githubProjects } from '../github/schema';
+import { GithubStorageInMemory } from '../github/storage/inmemory';
 import { mountApiRoutes } from '../test-utils';
 import { buildAuditRoutes } from './routes';
 
 // ── Test harness ─────────────────────────────────────────────────────────
-function buildApp(user: { workosId: string; organizationId?: string } | null) {
+let githubStorage!: GithubStorageInMemory;
+
+function buildApp(
+  user: { workosId: string; organizationId?: string } | null,
+  storage: GithubStorageInMemory | null = githubStorage,
+) {
   const app = new Hono();
   app.use('*', async (c, next) => {
     if (user) c.set('webAuthUser' as never, user as never);
     await next();
   });
-  mountApiRoutes(app as any, buildAuditRoutes({ baseUrl: 'https://web.example.com' }));
+  mountApiRoutes(
+    app as any,
+    buildAuditRoutes({ baseUrl: 'https://web.example.com', githubStorage: storage ?? undefined }),
+  );
   return app;
 }
 
@@ -106,17 +76,24 @@ const orgUser = { workosId: 'u1', organizationId: 'org1' };
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111';
 
 function seedProject(overrides: Record<string, any> = {}) {
-  projects.push({
+  githubStorage.projects.push({
     id: PROJECT_ID,
     orgId: 'org1',
+    userId: 'u1',
+    installationId: 1,
     repoFullName: 'acme/repo',
-    // Only fields the guard reads matter; keep the mock row minimal.
+    repoId: 1,
+    defaultBranch: 'main',
+    sandboxProvider: 'local',
+    sandboxWorkdir: '/tmp/acme-repo',
+    setupCommand: null,
+    createdAt: new Date(),
     ...overrides,
   });
 }
 
 beforeEach(() => {
-  projects = [];
+  githubStorage = new GithubStorageInMemory();
   listCalls = [];
   listResult = { events: [] };
   workosAuthActive = false;
@@ -144,6 +121,12 @@ describe('GET /web/factory/projects/:id/audit', () => {
     expect(listCalls).toHaveLength(0);
   });
 
+  it('503s when GitHub storage is unavailable', async () => {
+    const res = await buildApp(orgUser, null).request(`/web/factory/projects/${PROJECT_ID}/audit`);
+    expect(res.status).toBe(503);
+    expect(listCalls).toHaveLength(0);
+  });
+
   it('404s on a non-uuid project id', async () => {
     const res = await buildApp(orgUser).request('/web/factory/projects/not-a-uuid/audit');
     expect(res.status).toBe(404);
@@ -168,8 +151,6 @@ describe('GET /web/factory/projects/:id/audit', () => {
         limit: undefined,
       },
     ]);
-    // Sanity: the guard read the real table shape.
-    expect(columnJsKey(githubProjects, 'org_id')).toBe('orgId');
   });
 
   it('passes actions/actor/before/limit filters through to the store', async () => {
