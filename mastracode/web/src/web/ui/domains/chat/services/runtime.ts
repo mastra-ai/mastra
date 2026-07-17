@@ -102,30 +102,17 @@ export function runtimeReducer(state: ChatRuntimeState, event: AgentControllerEv
   }
 }
 
-function hasAssistantText(message: unknown) {
-  if (typeof message !== 'object' || message === null || !('role' in message) || message.role !== 'assistant') {
-    return false;
-  }
-  if (!('content' in message)) return false;
-  if (typeof message.content === 'string') return message.content.trim().length > 0;
+interface RuntimeMessagePart {
+  type: string;
+  text?: string;
+}
 
-  const parts = Array.isArray(message.content)
-    ? message.content
-    : typeof message.content === 'object' &&
-        message.content !== null &&
-        'parts' in message.content &&
-        Array.isArray(message.content.parts)
-      ? message.content.parts
-      : [];
+interface RuntimeMessage {
+  role: string;
+  content: RuntimeMessagePart[] | { parts: RuntimeMessagePart[] };
+}
 
-  return parts.some(
-    part =>
-      typeof part === 'object' &&
-      part !== null &&
-      'type' in part &&
-      part.type === 'text' &&
-      'text' in part &&
-      typeof part.text === 'string' &&
-      part.text.trim().length > 0,
-  );
+function hasAssistantText(message: RuntimeMessage) {
+  const parts = Array.isArray(message.content) ? message.content : message.content.parts;
+  return message.role === 'assistant' && parts.some(part => part.type === 'text' && part.text?.trim());
 }

@@ -10,6 +10,7 @@ export interface ChatTranscriptApi {
   localUser: (text: string, steer?: boolean, files?: OutgoingFile[]) => void;
   reset: (threadId?: string, state?: SessionStateSnapshot) => void;
   resolvePrompt: (id: string) => void;
+  clearPending: () => void;
   pushNotice: (text: string, level?: 'info' | 'error') => void;
 }
 

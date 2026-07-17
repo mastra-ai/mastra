@@ -6,25 +6,61 @@
  * parameterized through every call site (`github/db.ts`, the auth module)
  * consult it via getters instead of reading deployment env themselves.
  *
- * Once seeded, the seeded config wins unconditionally. The env fallback on the
- * database getter applies ONLY before seeding, as back-compat for modules and
- * test suites exercised without booting the factory (existing route suites set
- * `APP_DATABASE_URL` directly); it is slated for removal once all consumers
- * seed the registry.
+ * The registry holds *instances*, not connection strings: the injected Mastra
+ * storage (whose pg pool is shared by every app-table consumer), the vector
+ * store, and the {@link FactoryStore} of app-table domains initialized against
+ * that shared pool.
  */
 
+import type { MastraCompositeStore } from '@mastra/core/storage';
+import type { MastraVector } from '@mastra/core/vector';
+import type { WorkspaceSandbox } from '@mastra/core/workspace';
+import { PostgresStore } from '@mastra/pg';
+import type pg from 'pg';
 import type { WebAuthAdapter } from './auth-adapter.js';
-import type { WebSandboxProvider } from './sandbox-provider.js';
+import type { FactoryStore } from './storage/factory-store.js';
+
+/**
+ * Factory-resolved sandbox runtime: the machine GitHub projects derive their
+ * per-project sandboxes from, plus the web-level knobs the factory resolved
+ * around it.
+ */
+export interface WebSandboxRuntime {
+  /**
+   * Template machine (validated by the factory to implement `derive()`).
+   * Never started — acts purely as the credential/default holder that
+   * per-project sandboxes are derived from.
+   */
+  machine: WorkspaceSandbox;
+  /** In-sandbox base directory repos check out under (no trailing slash). */
+  workdirBase: string;
+  /** Per-replica cap on concurrently provisioned sandboxes. 0 = unlimited. */
+  maxSandboxes?: number;
+}
 
 export interface WebRuntimeConfig {
-  /** Postgres connection string for the application database + agent storage. */
-  databaseUrl?: string;
+  /**
+   * Injected Mastra storage instance powering BOTH agent storage (threads,
+   * messages, memory, OM) and — when it is a `PostgresStore` — the app tables
+   * (github/factory/audit/intake) via its shared pg pool. `undefined` when
+   * the factory was configured without storage.
+   */
+  storage?: MastraCompositeStore;
+  /** Injected vector store instance (recall search), when configured. */
+  vector?: MastraVector;
   /** Browser-facing origin, normalized without a trailing slash. */
   publicUrl?: string;
   /** Active web auth adapter, or `undefined` when auth is disabled. */
   authAdapter?: WebAuthAdapter;
-  /** Active sandbox provider, or `undefined` when sandboxes are disabled. */
-  sandbox?: WebSandboxProvider;
+  /** Active sandbox runtime, or `undefined` when sandboxes are disabled. */
+  sandbox?: WebSandboxRuntime;
+  /**
+   * Registry of factory app-table storage domains (intake, audit, work-items,
+   * integration-provided), initialized by `MastraFactory.prepare()` against
+   * the injected storage's shared connection. `undefined` when the factory
+   * was configured without pg-backed storage — app-DB features stay off.
+   */
+  factoryStore?: FactoryStore;
 }
 
 let seeded: WebRuntimeConfig | undefined;
@@ -34,14 +70,25 @@ export function seedRuntimeConfig(config: WebRuntimeConfig): void {
   seeded = { ...config };
 }
 
+/** The injected Mastra storage instance, if seeded. */
+export function getSeededStorage(): MastraCompositeStore | undefined {
+  return seeded?.storage;
+}
+
+/** The injected vector store instance, if seeded. */
+export function getSeededVector(): MastraVector | undefined {
+  return seeded?.vector;
+}
+
 /**
- * Postgres connection string for the app tables (github/factory/audit/intake).
- * Falls back to `APP_DATABASE_URL` only when the factory has not seeded the
- * registry (back-compat; see module docs).
+ * The pg pool shared by all app-table consumers (the `getAppDb()` drizzle
+ * bridge, the distributed project lock, better-auth). Available only when the
+ * seeded storage is a `PostgresStore` — any other backend (or no storage)
+ * returns `undefined` and app-DB features stay off.
  */
-export function getAppDatabaseUrl(): string | undefined {
-  if (seeded) return seeded.databaseUrl;
-  return process.env.APP_DATABASE_URL || undefined;
+export function getSharedAppPool(): pg.Pool | undefined {
+  const storage = seeded?.storage;
+  return storage instanceof PostgresStore ? storage.pool : undefined;
 }
 
 /** Browser-facing origin resolved by the factory, if seeded. */
@@ -64,12 +111,28 @@ export function getSeededAuthAdapter(): WebAuthAdapter | undefined {
 }
 
 /**
- * Active sandbox provider seeded by the factory. `undefined` when the factory
- * was configured without a `sandbox` slot (or never ran) — GitHub-backed
- * projects stay off in that case.
+ * Sandbox runtime seeded by the factory. `undefined` when the factory was
+ * configured without a `sandbox` slot (or never ran) — GitHub-backed projects
+ * stay off in that case.
  */
-export function getSeededSandboxProvider(): WebSandboxProvider | undefined {
+export function getSeededSandbox(): WebSandboxRuntime | undefined {
   return seeded?.sandbox;
+}
+
+/**
+ * The seeded {@link FactoryStore}, for the app-table wrapper modules
+ * (intake/audit/work-items stores). Throws when the factory never ran or was
+ * configured without storage — callers behind a readiness gate never hit
+ * this; ungated callers (audit recording) treat it as a normal failure.
+ */
+export function getFactoryStore(): FactoryStore {
+  const store = seeded?.factoryStore;
+  if (!store) {
+    throw new Error(
+      'MastraCode Web: factory storage unavailable — MastraFactory.prepare() has not run or no storage was provided.',
+    );
+  }
+  return store;
 }
 
 /** Reset the registry for test isolation. */

@@ -12,7 +12,7 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { ChatSessionTestProvider as ChatSessionProvider } from '../../../../../../../e2e/web-ui/ChatSessionTestProvider';
+import { ChatSessionTestProvider as ChatSessionProvider } from '../../context/ChatSessionTestProvider';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import type { OverlayName } from '../../../../lib/overlays';

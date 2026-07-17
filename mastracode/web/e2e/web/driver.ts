@@ -38,6 +38,12 @@ export interface ScenarioDriver {
    * events — mode/model intentionally no longer live on the transcript.
    */
   sessionState: () => { modeId?: string; modelId?: string };
+  /**
+   * Whether a run is in flight, mirroring the app's connection-state layer.
+   * Run state intentionally no longer lives on the transcript reducer, so the
+   * driver tracks it from raw agent_start/agent_end events.
+   */
+  running: () => boolean;
   /** Flattened visible text of the transcript, for substring assertions. */
   text: () => string;
   /** Resolve once `pattern` appears in the transcript text (or throw on timeout). */
@@ -95,18 +101,17 @@ export async function createDriver(opts: {
   const session = controller.session(opts.resourceId);
 
   let state: TranscriptState = initialTranscript;
-  let running = false;
   const apply = (next: TranscriptState) => {
     state = next;
   };
 
   await session.create();
   const initial = await session.state();
-  running = initial.running === true;
   let sessionState: { modeId?: string; modelId?: string } = {
     modeId: initial.modeId,
     modelId: initial.modelId,
   };
+  let running = initial.running === true;
   apply(transcriptReducer(state, { type: 'reset', threadId: initial.threadId }));
 
   const sub = await session.subscribe({
@@ -122,8 +127,6 @@ export async function createDriver(opts: {
         running = true;
       } else if (known.type === 'agent_end') {
         running = false;
-      } else if (known.type === 'display_state_changed') {
-        running = known.displayState.isRunning === true;
       }
       apply(transcriptReducer(state, { type: 'event', event }));
     },
@@ -146,6 +149,7 @@ export async function createDriver(opts: {
   return {
     state: () => state,
     sessionState: () => sessionState,
+    running: () => running,
     text,
     waitForText: (pattern, timeoutMs) =>
       waitFor(() => (matches(text(), pattern) ? true : undefined), `text ${pattern}`, timeoutMs).then(() => undefined),

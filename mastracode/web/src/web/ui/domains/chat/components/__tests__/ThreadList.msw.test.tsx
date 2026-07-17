@@ -13,7 +13,7 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { ChatSessionTestProvider as ChatSessionProvider } from '../../../../../../../e2e/web-ui/ChatSessionTestProvider';
+import { ChatSessionTestProvider as ChatSessionProvider } from '../../context/ChatSessionTestProvider';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import { OverlaysProvider, useOverlays } from '../../../../lib/overlays';

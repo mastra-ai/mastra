@@ -11,7 +11,7 @@
  */
 
 import { getWorkOSProvider, isWorkOSAuth } from '../auth';
-import type { AuditEventRow } from './schema';
+import type { AuditEventRow } from '../storage/domains/audit/base';
 
 /** WorkOS requires a `context.location`; fall back when the request had none. */
 const UNKNOWN_LOCATION = 'unknown';

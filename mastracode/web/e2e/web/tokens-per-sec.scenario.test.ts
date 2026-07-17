@@ -157,7 +157,7 @@ describe('tokens/sec (reducer-level)', () => {
     state = decodeStep(state, { startMs: 2000, endMs: 2500, completionTokens: 15 });
     expect(state.tokensPerSec).toBe(23);
 
-    // Turn end keeps the last reading visible while idle.
+    // Turn ends: stop running but keep the last reading visible while idle.
     state = transcriptReducer(state, {
       type: 'event',
       event: { type: 'agent_end', reason: 'done' } as any,

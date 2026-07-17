@@ -6,7 +6,7 @@ import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ChatSessionTestProvider as ChatSessionProvider } from '../../../../../../../e2e/web-ui/ChatSessionTestProvider';
+import { ChatSessionTestProvider as ChatSessionProvider } from '../../../chat/context/ChatSessionTestProvider';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import type { Project } from '../../../workspaces';

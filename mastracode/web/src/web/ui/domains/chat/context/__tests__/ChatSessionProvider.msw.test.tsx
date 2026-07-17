@@ -20,7 +20,7 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ChatSessionTestProvider as ChatSessionProvider } from '../../../../../../../e2e/web-ui/ChatSessionTestProvider';
+import { ChatSessionTestProvider as ChatSessionProvider } from '../ChatSessionTestProvider';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import type { Project } from '../../../workspaces';
@@ -775,7 +775,7 @@ describe('ChatSessionProvider', () => {
           message: {
             id: 'first-project-message',
             role: 'assistant',
-            createdAt: new Date(),
+            createdAt: new Date().toISOString(),
             content: { format: 2, parts: [{ type: 'text', text: 'First project response' }] },
           },
         },

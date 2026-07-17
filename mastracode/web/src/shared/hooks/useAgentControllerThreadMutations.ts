@@ -70,12 +70,20 @@ export function useCloneAgentControllerThreadMutation(args: AgentControllerThrea
 }
 
 export function useSwitchAgentControllerThreadMutation(args: AgentControllerThreadMutationArgs) {
+  const { agentControllerId, resourceId, projectPath } = args;
+  const queryClient = useQueryClient();
   const { session } = createAgentControllerClient(args);
 
   return useMutation({
     mutationFn: async (threadId: string) => {
       await requireAgentControllerSession(session).switchThread(threadId);
       return requireAgentControllerSession(session).state();
+    },
+    onSuccess: state => {
+      queryClient.setQueryData(
+        queryKeys.agentControllerConnectionState(agentControllerId, resourceId, projectPath),
+        state,
+      );
     },
   });
 }

@@ -2,7 +2,7 @@ import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 
-import { ChatSessionTestProvider as ChatSessionProvider } from '../../../../../../../e2e/web-ui/ChatSessionTestProvider';
+import { ChatSessionTestProvider as ChatSessionProvider } from '../../context/ChatSessionTestProvider';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import { OverlaysProvider } from '../../../../lib/overlays';

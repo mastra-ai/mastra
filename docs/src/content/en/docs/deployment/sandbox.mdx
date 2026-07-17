@@ -1,0 +1,266 @@
+---
+title: "Deploy to a sandbox | Deployment"
+description: "Deploy a Mastra server into an ephemeral workspace sandbox and get a live public URL."
+packages:
+  - "@mastra/deployer-sandbox"
+---
+
+# Deploy to a sandbox
+
+`@mastra/deployer-sandbox` deploys a full Mastra server, including Studio, into an ephemeral workspace sandbox and returns a live public URL. Repeat deployments can finish faster because the deployer skips dependency installation.
+
+Use sandbox deployments for:
+
+- Agent-built apps: An agent generates a Mastra project and deploys it to verify the result.
+- Continuous integration (CI): Spin up a real server for checks, then tear it down.
+- Instant previews: Share a working agent with your team before merging.
+- Multi-tenant untrusted code: Run per-user Mastra instances isolated from your infrastructure.
+
+Sandboxes have provider-enforced runtime caps and expire. For production hosting, see the [deployment overview](/docs/deployment/overview).
+
+## Supported sandboxes
+
+The deployer works with any workspace sandbox that supports networking (public port URLs):
+
+- [Vercel Sandbox](/reference/workspace/vercel-sandbox) (`@mastra/vercel`)
+- [E2B](/reference/workspace/e2b-sandbox) (`@mastra/e2b`)
+- [Daytona](/reference/workspace/daytona-sandbox) (`@mastra/daytona`)
+
+Provider authors can add support by implementing the optional `networking` capability on [`WorkspaceSandbox`](/reference/workspace/sandbox).
+
+## Quickstart
+
+Install the deployer and a sandbox provider of your choice. This example uses Vercel Sandbox:
+
+```bash npm2yarn
+npm install @mastra/deployer-sandbox @mastra/vercel
+```
+
+Configure the deployer in your `src/mastra/index.ts` file. The `sandboxName` identifies the deployment, so subsequent deployments with the same name reuse the existing sandbox.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { SandboxDeployer } from '@mastra/deployer-sandbox'
+import { VercelSandbox } from '@mastra/vercel'
+
+export const mastra = new Mastra({
+  deployer: new SandboxDeployer({
+    sandbox: new VercelSandbox({
+      sandboxName: 'my-preview',
+      timeout: 3_600_000, // 1 hour
+      ports: [4111],
+    }),
+  }),
+})
+```
+
+Build and deploy in one command:
+
+```bash
+mastra build
+```
+
+When a `SandboxDeployer()` is configured, `mastra build` bundles your project and deploys it into the sandbox. The deploy prints the API and Studio URLs and writes a `sandbox-deployment.json` manifest into `.mastra/output`:
+
+```text
+API:    https://<sandbox-id>-4111.vercel.run/api
+Studio: https://<sandbox-id>-4111.vercel.run
+```
+
+The manifest includes `expiresAt` when the sandbox provider reports an expiration time. Redeploys to the same sandbox skip the dependency install when the install inputs (`package.json`, bundled lockfiles, and the install command) are unchanged.
+
+### Using E2B
+
+For E2B, the `id` identifies the deployment, so subsequent deployments with the same value reconnect to the existing sandbox, whether it's running or paused.
+
+```typescript title="src/mastra/index.ts"
+import { SandboxDeployer } from '@mastra/deployer-sandbox'
+import { E2BSandbox } from '@mastra/e2b'
+
+const deployer = new SandboxDeployer({
+  sandbox: new E2BSandbox({
+    id: 'my-preview',
+    template: 'base',
+    timeout: 3_600_000, // 1 hour
+  }),
+})
+```
+
+Pass `template: 'base'` unless you need filesystem mounts; without it, the provider builds a custom Filesystem in Userspace (FUSE) template on first use. E2B pauses instead of stopping: `stop()` snapshots the whole virtual machine (VM), including memory and running processes. When a paused sandbox wakes, the Mastra server resumes where it left off, and there's no relaunch step like on Vercel.
+
+### Using Daytona
+
+For Daytona, the `id` identifies the deployment, so subsequent deployments with the same value reconnect to the existing sandbox. Set `public: true` to make the preview URL accessible without a token.
+
+```typescript title="src/mastra/index.ts"
+import { SandboxDeployer } from '@mastra/deployer-sandbox'
+import { DaytonaSandbox } from '@mastra/daytona'
+
+const deployer = new SandboxDeployer({
+  sandbox: new DaytonaSandbox({
+    id: 'my-preview',
+    public: true,
+    autoStopInterval: 30, // minutes
+  }),
+})
+```
+
+Stopping a Daytona sandbox persists its filesystem but not running processes, so waking works like Vercel: the resolver relaunches the server on `wake: true`.
+
+## Deploying programmatically
+
+`deployToSandbox()` deploys a prebuilt output directory without the bundler. Unlike `SandboxDeployer()`, it doesn't include Studio unless you pass `studio: true`. Use it in CI or from agent code:
+
+```typescript
+import { deployToSandbox } from '@mastra/deployer-sandbox'
+import { VercelSandbox } from '@mastra/vercel'
+
+const deployment = await deployToSandbox({
+  sandbox: new VercelSandbox({ sandboxName: 'ci-smoke', ports: [4111] }),
+  dir: '.mastra/output',
+})
+
+console.info(deployment.url) // https://<sandbox-id>-4111.vercel.run
+await deployment.logs() // tail the server log
+await deployment.stop() // stop the sandbox (resumable)
+await deployment.destroy() // permanently delete the sandbox
+```
+
+## Lifecycle
+
+### Managing a deployment
+
+Use the server-only `getDeployment()` export from `@mastra/deployer-sandbox/client` to retrieve an existing deployment. It identifies the sandbox through provider-specific configuration, such as a Vercel `sandboxName` or an E2B or Daytona `id`. The lookup isn't tied to the process that created the deployment, so you can use it from another server-side service or in CI.
+
+```typescript title="scripts/stop.ts"
+import { getDeployment } from '@mastra/deployer-sandbox/client'
+import { VercelSandbox } from '@mastra/vercel'
+
+const deployment = await getDeployment({
+  sandbox: new VercelSandbox({ sandboxName: 'my-preview', ports: [4111] }),
+  port: 4111,
+})
+
+console.info(deployment.status, deployment.url)
+await deployment.logs() // tail the server log
+await deployment.stop() // stop the sandbox (resumable)
+await deployment.destroy() // permanently delete the sandbox
+```
+
+Pass `wake: true` to resume a stopped sandbox before returning. The server is relaunched only if it isn't healthy after the resume. Provider tooling works too, for example `vercel sandbox ls`, `vercel sandbox stop`, and `vercel sandbox rm`.
+
+### Expiry and URLs
+
+Sandboxes expire according to the provider's runtime limits. When the provider reports an expiration time, the deploy logs it and `deployment.expiresAt` exposes it programmatically.
+
+Sandbox URLs can change when a sandbox stops and resumes. Treat the URL as plumbing and the sandbox identity (for example, the `sandboxName`) as the stable handle. The routing tiers below deal with URL rotation.
+
+## Routing tiers
+
+### Tier 1: Direct URL
+
+Use the printed URL directly for development, demos, and CI where a fresh URL per deploy is acceptable.
+
+### Tier 2: Resolve at runtime
+
+`getDeployment()` resolves the current URL at runtime, so consumers never hold a stale URL. Any server that knows the sandbox name can resolve it, including one in a different codebase than the Mastra project:
+
+```typescript title="app/api/agent-url/route.ts"
+import { getDeployment } from '@mastra/deployer-sandbox/client'
+import { VercelSandbox } from '@mastra/vercel'
+
+const deployment = await getDeployment({
+  sandbox: new VercelSandbox({ sandboxName: 'my-preview', ports: [4111] }),
+  wake: true,
+})
+
+console.info(deployment.url, deployment.status)
+```
+
+With `wake: false` (the default) the sandbox isn't started and you get `{ url, status }` to act on. Resolving the URL, `stop()`, and `destroy()` attach to the existing sandbox by name without resuming it, so lifecycle operations on a stopped sandbox never wake it or start billing. With `wake: true` the sandbox resumes and the server is relaunched if it isn't answering. Whether a relaunch is needed depends on the provider: Vercel and Daytona restore the filesystem but not running processes, while E2B resumes the whole VM including the server process.
+
+:::warning
+
+`@mastra/deployer-sandbox/client` is server-only. Resolving a sandbox uses provider credentials that must never reach the browser. The module throws if imported in a browser context.
+
+:::
+
+### Tier 3: Stable URL for end users
+
+Give end users a stable URL on your own domain and forward to the sandbox server-side, using either a route handler proxy or an Edge Config alias.
+
+The example below shows a Vercel & Next.js setup, but the concept applies to any server-side framework or provider that can forward requests.
+
+- **Route handler proxy.** `createSandboxHandler()` caches the sandbox URL and re-resolves after a connection-level failure, which covers URL rotation and cold wakes:
+
+  ```typescript title="app/api/[...path]/route.ts"
+  import { createSandboxHandler, getDeployment } from '@mastra/deployer-sandbox/client'
+  import { VercelSandbox } from '@mastra/vercel'
+
+  const handler = createSandboxHandler({
+    resolve: async () => {
+      const deployment = await getDeployment({
+        sandbox: new VercelSandbox({ sandboxName: 'my-preview', ports: [4111] }),
+        wake: true,
+      })
+      return deployment.url!
+    },
+  })
+
+  export { handler as GET, handler as POST }
+  ```
+
+- **Edge Config alias.** Set the `alias` option on the deployer to keep a [Vercel Edge Config](https://vercel.com/docs/edge-config) item pointed at the current URL on every deploy:
+
+  ```typescript title="src/mastra/index.ts"
+  const deployer = new SandboxDeployer({
+    sandbox: new VercelSandbox({ sandboxName: 'my-preview', ports: [4111] }),
+    alias: { edgeConfigId: 'ecfg_...', key: 'my-preview', token: process.env.VERCEL_TOKEN! },
+  })
+  ```
+
+  Then rewrite requests in Next.js middleware with `createSandboxProxy()`:
+
+  ```typescript title="middleware.ts"
+  import { createSandboxProxy } from '@mastra/deployer-sandbox/client'
+
+  export const middleware = createSandboxProxy({ key: 'my-preview' })
+  export const config = { matcher: '/api/:path*' }
+  ```
+
+## CI example
+
+Deploy a preview on every pull request:
+
+```yaml title=".github/workflows/preview.yml"
+name: Sandbox preview
+on: pull_request
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npx mastra build
+      - run: curl --fail "$(jq -r .url .mastra/output/sandbox-deployment.json)/api"
+```
+
+## Security
+
+- The sandbox URL is public. Anyone with the URL can reach your Mastra server, including Studio. Enable [server auth](/docs/server/auth) for anything beyond throwaway previews.
+- Environment variables from your `.env` files are injected into the remote sandbox VM so the server can run. The deploy logs a warning when this happens. Don't deploy secrets you wouldn't put on a shared preview server.
+- To restrict access to Tier 3 traffic, pass a `secret` to `createSandboxHandler()` or `createSandboxProxy()`. The helpers attach it as the `x-mastra-sandbox-secret` header on forwarded requests. Configure [server auth](/docs/server/auth) to require that header, and direct hits to the sandbox URL get rejected while traffic through your domain works.
+
+## Related
+
+- [Deployment overview](/docs/deployment/overview)
+- [Server authentication](/docs/server/auth)
+- [`WorkspaceSandbox` reference](/reference/workspace/sandbox)

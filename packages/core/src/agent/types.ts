@@ -958,6 +958,8 @@ export type AgentMemoryOption = {
   thread: string | (Partial<StorageThreadType> & { id: string });
   resource?: string;
   options?: MemoryConfigInternal;
+  /** Callback fired when a thread title is generated and persisted to storage. */
+  onTitleGenerated?: (title: string) => void | Promise<void>;
 };
 
 /**
@@ -1164,6 +1166,7 @@ export type AgentExecuteOnFinishOptions = {
   threadExists: boolean;
   structuredOutput?: boolean;
   overrideScorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
+  onTitleGenerated?: (title: string) => void | Promise<void>;
 };
 
 export type AgentMethodType = 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
