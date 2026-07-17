@@ -9,10 +9,10 @@
 import type {
   AgentControllerEvent,
   AgentControllerSessionState,
-  MastraDBMessage,
   PermissionPolicy,
   PermissionRules,
 } from '@mastra/client-js';
+import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import type { ReactNode } from 'react';
 import { Profiler } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
