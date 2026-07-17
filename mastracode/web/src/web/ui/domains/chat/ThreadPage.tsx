@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams } from 'react-router';
+import { useLocation, useParams } from 'react-router';
 
 import { useOverlays } from '../../lib/overlays';
 import { Sidebar } from '../../Sidebar';
@@ -27,12 +27,16 @@ export function ThreadPage() {
   const overlays = useOverlays();
   const { activeProject } = useActiveProjectContext();
   const { threadId } = useParams();
+  const location = useLocation();
   const [workspaceViewerExpanded, setWorkspaceViewerExpanded] = useState(false);
   const [workspaceViewerVisible, setWorkspaceViewerVisible] = useState(true);
   const userSessionMatch = threadId ? findUserSessionByThreadId(threadId) : undefined;
-  const workspaceProject = userSessionMatch?.project ?? activeProject;
+  const activeUserSessionMatch =
+    userSessionMatch && activeProject?.id === userSessionMatch.project.id ? userSessionMatch : undefined;
+  const isUserThreadRoute = location.pathname.startsWith('/user/threads/');
+  const workspaceProject = isUserThreadRoute ? activeUserSessionMatch?.project : activeProject;
   const workspacePath = workspaceProject
-    ? activeWorkspacePath(workspaceProject, userSessionMatch?.worktree)
+    ? activeWorkspacePath(workspaceProject, activeUserSessionMatch?.worktree)
     : undefined;
 
   return (

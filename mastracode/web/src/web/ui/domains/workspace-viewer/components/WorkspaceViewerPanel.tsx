@@ -23,7 +23,15 @@ interface WorkspaceViewerPanelProps {
   onCollapse?: () => void;
 }
 
-export function WorkspaceViewerPanel({
+export function WorkspaceViewerPanel({ workspacePath, renderedPaths, ...props }: WorkspaceViewerPanelProps) {
+  const resetKey = [workspacePath, ...renderedPaths.map(path => `${path.id}:${path.root}`)].join('|');
+
+  return (
+    <WorkspaceViewerPanelInner key={resetKey} workspacePath={workspacePath} renderedPaths={renderedPaths} {...props} />
+  );
+}
+
+function WorkspaceViewerPanelInner({
   workspacePath,
   renderedPaths,
   title,
@@ -33,27 +41,23 @@ export function WorkspaceViewerPanel({
 }: WorkspaceViewerPanelProps) {
   const [selectedRenderedPathId, setSelectedRenderedPathId] = useState(renderedPaths[0]?.id ?? '');
   const [selectedFilePath, setSelectedFilePath] = useState<string | undefined>();
-  const [viewerOpen, setViewerOpen] = useState(false);
+  const [viewerOpen, setViewerOpenState] = useState(false);
   const [browserWidth, setBrowserWidth] = useState(320);
   const resizeCleanupRef = useRef<(() => void) | undefined>(undefined);
 
   const selectedRenderedPath = renderedPaths.find(path => path.id === selectedRenderedPathId) ?? renderedPaths[0];
+  const selectedFileRequestPath = selectedFilePath ? `${selectedRenderedPath?.root}/${selectedFilePath}` : undefined;
   const listing = useWorkspaceRenderedListing(workspacePath, selectedRenderedPath?.root);
-  const file = useWorkspaceFile(workspacePath, selectedFilePath, { enabled: viewerOpen });
-
-  useEffect(() => {
-    setSelectedRenderedPathId(renderedPaths[0]?.id ?? '');
-    setSelectedFilePath(undefined);
-    setViewerOpen(false);
-  }, [workspacePath, renderedPaths]);
-
-  useEffect(() => {
-    onExpandedChange?.(viewerOpen);
-  }, [onExpandedChange, viewerOpen]);
+  const file = useWorkspaceFile(workspacePath, selectedFileRequestPath, { enabled: viewerOpen });
 
   useEffect(() => () => resizeCleanupRef.current?.(), []);
 
   if (!selectedRenderedPath) return null;
+
+  const setViewerOpen = (open: boolean) => {
+    setViewerOpenState(open);
+    onExpandedChange?.(open);
+  };
 
   const collapse = () => {
     if (viewerOpen) {
@@ -117,7 +121,10 @@ export function WorkspaceViewerPanel({
           onPointerDown={startResize}
         />
       ) : null}
-      <div className="h-full min-w-0 shrink-0 overflow-hidden" style={{ width: browserWidth }}>
+      <div
+        className={viewerOpen ? 'h-full min-w-0 shrink-0 overflow-hidden' : 'h-full min-w-0 flex-1 overflow-hidden'}
+        style={viewerOpen ? { width: browserWidth } : undefined}
+      >
         <div className="sr-only">
           {title ?? 'Workspace viewer'} {context ?? ''}
         </div>

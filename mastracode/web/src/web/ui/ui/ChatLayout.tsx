@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
+import type { ReactNode, RefObject } from 'react';
 
 function FilledArrowLeft() {
   return (
@@ -51,41 +51,8 @@ export function ChatLayout({
   sidebarOpen = false,
   onSidebarClose,
 }: ChatLayoutProps) {
-  const [rightPanelWidth, setRightPanelWidth] = useState(COMPACT_RIGHT_PANEL_WIDTH);
   const frameRef = useRef<HTMLDivElement>(null);
-  const resizeCleanupRef = useRef<(() => void) | undefined>(undefined);
   const backdropVisibilityClass = sidebarOpen ? 'opacity-100' : 'pointer-events-none opacity-0';
-
-  useEffect(() => {
-    setRightPanelWidth(rightPanelExpanded ? EXPANDED_RIGHT_PANEL_WIDTH : COMPACT_RIGHT_PANEL_WIDTH);
-  }, [rightPanelExpanded]);
-
-  useEffect(() => () => resizeCleanupRef.current?.(), []);
-
-  const clampRightPanelWidth = (width: number) => {
-    const frameWidth = frameRef.current?.clientWidth ?? window.innerWidth;
-    const maxWidth = Math.max(MIN_RIGHT_PANEL_WIDTH, frameWidth - MIN_CHAT_WIDTH);
-    return Math.min(maxWidth, Math.max(MIN_RIGHT_PANEL_WIDTH, width));
-  };
-
-  const startRightPanelResize = (event: React.PointerEvent<HTMLDivElement>) => {
-    resizeCleanupRef.current?.();
-    const startX = event.clientX;
-    const startWidth = rightPanelWidth;
-    const onPointerMove = (moveEvent: PointerEvent) => {
-      setRightPanelWidth(clampRightPanelWidth(startWidth - (moveEvent.clientX - startX)));
-    };
-    const cleanup = () => {
-      window.removeEventListener('pointermove', onPointerMove);
-      window.removeEventListener('pointerup', cleanup);
-      window.removeEventListener('pointercancel', cleanup);
-      resizeCleanupRef.current = undefined;
-    };
-    resizeCleanupRef.current = cleanup;
-    window.addEventListener('pointermove', onPointerMove);
-    window.addEventListener('pointerup', cleanup);
-    window.addEventListener('pointercancel', cleanup);
-  };
 
   return (
     <div className="relative z-1 flex h-screen gap-3 overflow-y-scroll bg-surface1 pb-3 pl-3 pt-3 md:gap-4 md:pb-4 md:pl-4 md:pt-4">
@@ -110,33 +77,82 @@ export function ChatLayout({
           )}
         </div>
         {rightPanel ? (
-          <>
-            <div
-              className="hidden w-1 shrink-0 cursor-col-resize bg-border1 hover:bg-accent1 lg:block"
-              role="separator"
-              aria-orientation="vertical"
-              aria-label="Resize workspace panel"
-              onPointerDown={startRightPanelResize}
-            />
-            <div className="hidden h-full min-w-0 shrink-0 overflow-visible lg:block" style={{ width: rightPanelWidth }}>
-              {rightPanel}
-            </div>
-          </>
+          <DesktopRightPanelFrame
+            frameRef={frameRef}
+            width={rightPanelExpanded ? EXPANDED_RIGHT_PANEL_WIDTH : COMPACT_RIGHT_PANEL_WIDTH}
+          >
+            {rightPanel}
+          </DesktopRightPanelFrame>
         ) : null}
         {!rightPanel && rightPanelAvailable ? (
           <button
             type="button"
-            className="absolute right-2 top-2 hidden items-center gap-1.5 text-icon6 lg:inline-flex"
+            className="absolute right-2 top-2 hidden text-icon6 lg:inline-flex"
             onClick={onRightPanelOpen}
             aria-label="Open workspace files"
           >
             <span className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border2 bg-surface1 shadow-sm hover:bg-surface2">
               <FilledArrowLeft />
             </span>
-            <span className="text-ui-xs font-medium">Files</span>
           </button>
         ) : null}
       </div>
     </div>
+  );
+}
+
+function DesktopRightPanelFrame({
+  frameRef,
+  width,
+  children,
+}: {
+  frameRef: RefObject<HTMLDivElement | null>;
+  width: number;
+  children: ReactNode;
+}) {
+  const [resizedWidth, setResizedWidth] = useState<number | undefined>();
+  const resizeCleanupRef = useRef<(() => void) | undefined>(undefined);
+  const rightPanelWidth = resizedWidth ?? width;
+
+  useEffect(() => () => resizeCleanupRef.current?.(), []);
+
+  const clampRightPanelWidth = (width: number) => {
+    const frameWidth = frameRef.current?.clientWidth ?? window.innerWidth;
+    const maxWidth = Math.max(MIN_RIGHT_PANEL_WIDTH, frameWidth - MIN_CHAT_WIDTH);
+    return Math.min(maxWidth, Math.max(MIN_RIGHT_PANEL_WIDTH, width));
+  };
+
+  const startRightPanelResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    resizeCleanupRef.current?.();
+    const startX = event.clientX;
+    const startWidth = rightPanelWidth;
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      setResizedWidth(clampRightPanelWidth(startWidth - (moveEvent.clientX - startX)));
+    };
+    const cleanup = () => {
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', cleanup);
+      window.removeEventListener('pointercancel', cleanup);
+      resizeCleanupRef.current = undefined;
+    };
+    resizeCleanupRef.current = cleanup;
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', cleanup);
+    window.addEventListener('pointercancel', cleanup);
+  };
+
+  return (
+    <>
+      <div
+        className="hidden w-1 shrink-0 cursor-col-resize bg-border1 hover:bg-accent1 lg:block"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize workspace panel"
+        onPointerDown={startRightPanelResize}
+      />
+      <div className="hidden h-full min-w-0 shrink-0 overflow-visible lg:block" style={{ width: rightPanelWidth }}>
+        {children}
+      </div>
+    </>
   );
 }

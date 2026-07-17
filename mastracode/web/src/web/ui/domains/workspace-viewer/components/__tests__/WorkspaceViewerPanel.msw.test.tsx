@@ -14,6 +14,7 @@ const WORKSPACE = '/home/user/project';
 const renderedPaths = [{ id: 'artifacts', label: 'Artifacts', root: '.artifacts' }];
 
 function installHandlers() {
+  const fileRequests: string[] = [];
   server.use(
     http.get(LIST_URL, ({ request }) => {
       const root = new URL(request.url).searchParams.get('root');
@@ -51,6 +52,7 @@ function installHandlers() {
     }),
     http.get(FILE_URL, ({ request }) => {
       const path = new URL(request.url).searchParams.get('path');
+      if (path) fileRequests.push(path);
       return HttpResponse.json({
         workspacePath: WORKSPACE,
         path,
@@ -62,6 +64,7 @@ function installHandlers() {
       });
     }),
   );
+  return fileRequests;
 }
 
 describe('WorkspaceViewerPanel', () => {
@@ -85,7 +88,7 @@ describe('WorkspaceViewerPanel', () => {
   });
 
   it('expands folders inline and opens the selected file viewer left of the browser', async () => {
-    installHandlers();
+    const fileRequests = installHandlers();
     const user = userEvent.setup();
     renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} renderedPaths={renderedPaths} />);
 
@@ -109,8 +112,12 @@ describe('WorkspaceViewerPanel', () => {
     expect(folder).toHaveAttribute('aria-expanded', 'true');
     await user.click(await screen.findByText('HISTORY.md'));
 
-    expect(await screen.findByLabelText('Workspace file viewer')).toBeInTheDocument();
+    const viewer = await screen.findByLabelText('Workspace file viewer');
+    expect(viewer).toBeInTheDocument();
     expect(await screen.findByText('Notes')).toBeInTheDocument();
+    expect(screen.getByLabelText('Workspace files')).toBeInTheDocument();
+    expect(fileRequests).toContain('.artifacts/understand-pr/HISTORY.md');
+    expect(fileRequests).not.toContain('understand-pr/HISTORY.md');
   });
 
   it('can switch between configured rendered roots', async () => {
@@ -131,9 +138,15 @@ describe('WorkspaceViewerPanel', () => {
   it('closes the file viewer before collapsing the files panel', async () => {
     installHandlers();
     const onCollapse = vi.fn();
+    const onExpandedChange = vi.fn();
     const user = userEvent.setup();
     renderWithProviders(
-      <WorkspaceViewerPanel workspacePath={WORKSPACE} renderedPaths={renderedPaths} onCollapse={onCollapse} />,
+      <WorkspaceViewerPanel
+        workspacePath={WORKSPACE}
+        renderedPaths={renderedPaths}
+        onCollapse={onCollapse}
+        onExpandedChange={onExpandedChange}
+      />,
     );
 
     await user.click(await screen.findByRole('button', { name: 'Artifacts' }));
@@ -141,9 +154,11 @@ describe('WorkspaceViewerPanel', () => {
     await user.click(await screen.findByText('HISTORY.md'));
 
     expect(await screen.findByLabelText('Workspace file viewer')).toBeInTheDocument();
+    expect(onExpandedChange).toHaveBeenLastCalledWith(true);
     await user.click(screen.getByRole('button', { name: 'Close workspace file viewer' }));
 
     expect(screen.queryByLabelText('Workspace file viewer')).not.toBeInTheDocument();
+    expect(onExpandedChange).toHaveBeenLastCalledWith(false);
     expect(onCollapse).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole('button', { name: 'Close workspace files' }));

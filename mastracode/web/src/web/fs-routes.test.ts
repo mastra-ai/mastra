@@ -154,6 +154,16 @@ describe('readWorkspaceFile', () => {
     await expect(readWorkspaceFile(root, workspace, '../secret.md')).rejects.toThrow('path escapes workspace');
   });
 
+  it('rejects absolute file paths', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mc-file-root-'));
+    const workspace = join(root, 'workspace');
+    await mkdir(workspace);
+
+    await expect(readWorkspaceFile(root, workspace, join(workspace, '.artifacts', 'secret.md'))).rejects.toThrow(
+      'path must be relative',
+    );
+  });
+
   it('rejects file reads outside approved rendered roots', async () => {
     const root = await mkdtemp(join(tmpdir(), 'mc-file-root-'));
     const workspace = join(root, 'workspace');

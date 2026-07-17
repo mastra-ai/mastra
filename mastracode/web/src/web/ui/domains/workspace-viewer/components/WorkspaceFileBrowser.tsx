@@ -2,7 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Tree } from '@mastra/playground-ui/components/Tree';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { File, FileCode, FileJson, FileText, Folder, FolderOpen, Image, NotepadText, RefreshCw } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { ReactNode } from 'react';
 
 import type { WorkspaceRenderedEntry, WorkspaceRenderedListing } from '../../../../../shared/api/types';
@@ -178,16 +178,15 @@ export function WorkspaceFileBrowser({
   const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
   const nodes = buildTree(listing?.entries ?? []);
 
-  useEffect(() => {
-    setOpenFolders(previous => ({ ...previous, [selectedPath.root]: previous[selectedPath.root] ?? false }));
-  }, [selectedPath.root]);
-
   const setFolderOpen = (path: string, open: boolean) => {
     setOpenFolders(previous => ({ ...previous, [path]: open }));
   };
 
   return (
-    <aside className="flex h-full min-w-0 flex-col border-l border-border1 bg-surface1" aria-label="Workspace files">
+    <aside
+      className="flex h-full w-full min-w-0 flex-col border-l border-border1 bg-surface1"
+      aria-label="Workspace files"
+    >
       <div className="flex items-center justify-between gap-2 border-b border-border1 px-3 py-2 pl-4">
         <div className="flex min-w-0 items-center gap-2">
           <NotepadText size={15} className="shrink-0 text-icon4" />
@@ -201,7 +200,13 @@ export function WorkspaceFileBrowser({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
-        <Tree selectedId={selectedFilePath} onSelect={onFileSelect}>
+        <Tree
+          selectedId={selectedFilePath ? `${selectedPath.root}/${selectedFilePath}` : undefined}
+          onSelect={id => {
+            const selectedRootPrefix = `${selectedPath.root}/`;
+            if (id.startsWith(selectedRootPrefix)) onFileSelect(id.slice(selectedRootPrefix.length));
+          }}
+        >
           {renderedPaths.map(path => {
             const isSelectedRoot = path.id === selectedPath.id;
             const isOpen = openFolders[path.root] ?? false;
