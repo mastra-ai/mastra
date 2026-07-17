@@ -23,6 +23,7 @@ import type {
   ScoringSamplingConfig,
 } from '../evals';
 import { runScorer } from '../evals/hooks';
+
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
 import { resolveModelConfig } from '../llm';
@@ -41,8 +42,14 @@ import { ModelRouterLanguageModel } from '../llm/model/router';
 import type { MastraLanguageModel, MastraLegacyLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
 import { RegisteredLogger } from '../logger';
 import { networkLoop } from '../loop/network';
+// `Mastra` is imported type-only here: a runtime import would create an ESM
+// init cycle (agent → mastra → agent/durable → agent) that breaks
+// `class DurableAgent extends Agent` with a TDZ error. The constructor is read
+// from `mastraCtorHolder` (populated by `mastra/index.ts` at load), with an
+// `await import('../mastra')` fallback for the standalone-agent case where the
+// Mastra module was never loaded. See `#getOrCreateEphemeralMastra`.
 import type { Mastra } from '../mastra';
-import { Mastra as MastraClass } from '../mastra';
+import { mastraCtorHolder } from '../mastra/mastra-ctor-holder';
 import type { VersionOverrides } from '../mastra/types';
 import { mergeVersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
@@ -81,6 +88,7 @@ import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
 import type { SignalProvider } from '../signals/signal-provider';
 import { resolveAgentSkills, mergeWorkspaceSkills } from '../skills/agent-skills-resolver';
 import type { AgentSkillsInput, SkillInput } from '../skills/types';
+
 import { InMemoryStore } from '../storage';
 import type { GoalObjectiveRecord } from '../storage/domains/thread-state/base';
 import { ChunkFrom } from '../stream';
@@ -136,6 +144,7 @@ import { agentThreadStreamRuntime } from './thread-stream-runtime';
 import { TripWire } from './trip-wire';
 import type {
   AgentConfig,
+  AgentDurableOption,
   AgentGenerateOptions,
   AgentNotificationConfig,
   GoalConfig,
@@ -453,6 +462,20 @@ function hasOnDemandSkillDiscoveryProcessor(processors: InputProcessorOrWorkflow
  *   memory: new Memory(),
  * });
  * ```
+ *
+ * @example
+ * Opt into durable execution via config — the agent is auto-wrapped with
+ * `createDurableAgent` when it is attached to a `Mastra` instance:
+ * ```typescript
+ * const agent = new Agent({
+ *   id: 'my-agent',
+ *   instructions: 'You are a helpful assistant',
+ *   model: 'openai/gpt-5',
+ *   durable: true, // or: { cache, pubsub, maxSteps, cleanupTimeoutMs }
+ * });
+ *
+ * const mastra = new Mastra({ agents: { myAgent: agent } });
+ * ```
  */
 export class Agent<
   TAgentId extends string = string,
@@ -475,19 +498,17 @@ export class Agent<
   maxRetries?: number;
   #mastra?: Mastra;
   /**
-   * Lazily-created Mastra used as a fallback when the agent isn't attached to
-   * a user-supplied Mastra. The agent's prepare-stream workflow runs on the
-   * evented engine, which requires a pubsub for event dispatch — so a bare
-   * `new Agent(...)` (common in unit tests and small scripts) still needs *some*
-   * Mastra. This one carries an in-process EventEmitterPubSub + InMemoryStore;
-   * workers are started on first use. Cleared when `__registerMastra` attaches
-   * a real Mastra later.
+   * Lazily-built in-memory Mastra used when the agent isn't wired into one.
+   * Provides a workflow storage backend for internal snapshot lookups
+   * (loadAgenticLoopSnapshotOrThrow, assertToolCallSuspended,
+   * listSuspendedRuns) so `new Agent(...)` works standalone. Cleared when
+   * `__registerMastra` attaches a real Mastra later.
    */
   #ephemeralMastra?: Mastra;
   #pubsub?: PubSub;
   #inheritedPubSub?: PubSub;
   #memory?: DynamicArgument<MastraMemory, TRequestContext>;
-  #skills?: AgentSkillsInput;
+  #skills?: AgentSkillsInput<TRequestContext>;
   #skillsFormat?: SkillFormat;
   #workflows?: DynamicArgument<Record<string, AnyWorkflow>, TRequestContext>;
   #defaultGenerateOptionsLegacy: DynamicArgument<AgentGenerateOptions, TRequestContext>;
@@ -526,6 +547,7 @@ export class Agent<
    */
   #activeStreamUntilIdle = new Map<string, () => void>();
   readonly #options?: AgentCreateOptions;
+  readonly #durable?: AgentDurableOption;
   #legacyHandler?: AgentLegacyHandler;
   #config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext, TEditor>;
   #subAgentToolSchemas?: SubAgentToolSchemas;
@@ -566,6 +588,7 @@ export class Agent<
     this.#description = config.description;
     this.#metadata = config.metadata;
     this.#options = config.options;
+    this.#durable = config.durable;
 
     if (!config.model) {
       const mastraError = new MastraError({
@@ -1103,6 +1126,16 @@ export class Agent<
   }
 
   /**
+   * The `durable` option this agent was constructed with, if any.
+   *
+   * Read by `Mastra.addAgent` to auto-wrap the agent with `createDurableAgent`
+   * at registration time. See {@link AgentDurableOption}.
+   */
+  get durable(): AgentDurableOption | undefined {
+    return this.#durable;
+  }
+
+  /**
    * Sets or updates the browser instance for this agent.
    * This allows hot-swapping browser configuration without recreating the agent.
    * Browser tools will be automatically updated on the next execution.
@@ -1140,7 +1173,7 @@ export class Agent<
     if (this.#skills) {
       let resolvedInputs: SkillInput[];
       if (typeof this.#skills === 'function') {
-        resolvedInputs = await this.#skills({ requestContext: rc });
+        resolvedInputs = await this.#skills({ requestContext: rc as RequestContext<TRequestContext> });
       } else {
         resolvedInputs = this.#skills;
       }
@@ -3090,12 +3123,9 @@ export class Agent<
   __registerMastra(mastra: Mastra) {
     this.#mastra = mastra;
 
-    // Tear down any ephemeral Mastra: we now have a real one. Workers stop in
-    // the background — we don't await to keep this hot path sync-ish. Release
-    // its global scorer hook synchronously so it can't outlive the instance.
+    // Drop any ephemeral Mastra now that a real one is attached; we no longer
+    // need the storage fallback.
     if (this.#ephemeralMastra) {
-      this.#ephemeralMastra.__unregisterHooks();
-      void this.#ephemeralMastra.stopWorkers().catch(() => {});
       this.#ephemeralMastra = undefined;
     }
 
@@ -3271,12 +3301,11 @@ export class Agent<
     const observabilityContext = resolveObservabilityContext(rest);
     // need to use text, not object output or it will error for models that don't support structured output (eg Deepseek R1)
     const llm = await this.getLLM({ requestContext, model });
-    // Title generation runs the same evented agentic loop as `#execute` — make
-    // sure the LLM has the effective Mastra (real or ephemeral) so its inner
-    // workflows can dispatch events. Idempotent.
-    const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
-    llm.__registerMastra(effectiveMastra);
-    await effectiveMastra.startWorkers();
+    // Register Mastra on the LLM (if any) so the inner agentic loop has access
+    // for storage/observability. Idempotent.
+    if (this.#mastra) {
+      llm.__registerMastra(this.#mastra);
+    }
 
     let userContent: string;
 
@@ -4664,6 +4693,24 @@ export class Agent<
             let effectivePrompt = inputData.prompt;
             let effectiveInstructions = inputData.instructions;
             let effectiveMaxSteps = inputData.maxSteps;
+            // Cap the LLM-provided maxSteps at the sub-agent's own configured
+            // default so the supervisor's model can reduce, but never expand,
+            // the developer-defined step budget. `onDelegationStart`'s
+            // `modifiedMaxSteps` (developer code) below bypasses this cap.
+            const subAgentMaxStepsCap = resolvedDefaultOptions?.maxSteps;
+            if (
+              typeof effectiveMaxSteps === 'number' &&
+              typeof subAgentMaxStepsCap === 'number' &&
+              effectiveMaxSteps > subAgentMaxStepsCap
+            ) {
+              this.logger.warn('Delegation maxSteps exceeds sub-agent default, capping', {
+                agent: this.name,
+                targetAgent: agentName,
+                requestedMaxSteps: effectiveMaxSteps,
+                cappedMaxSteps: subAgentMaxStepsCap,
+              });
+              effectiveMaxSteps = subAgentMaxStepsCap;
+            }
             if (delegation?.onDelegationStart) {
               try {
                 const startResult = await delegation.onDelegationStart(delegationStartContext);
@@ -6309,12 +6356,8 @@ export class Agent<
 
   #getSuspendedToolCalls(existingSnapshot: WorkflowRunState | null | undefined): AgentRunToolCall[] {
     const toolCalls: AgentRunToolCall[] = [];
-    for (const key in existingSnapshot?.context) {
-      const step = existingSnapshot?.context[key];
-      if (step?.status !== 'suspended') continue;
-      const payload = step.suspendPayload;
-      if (!payload) continue;
 
+    const collectFromPayload = (payload: Record<string, any>, stepKey: string) => {
       if (payload.requireToolApproval) {
         toolCalls.push({
           toolCallId: payload.requireToolApproval.toolCallId,
@@ -6324,15 +6367,100 @@ export class Agent<
         });
       } else if (payload.toolCallSuspended || payload.toolName || payload.toolCallId) {
         toolCalls.push({
-          toolCallId: payload.toolCallId ?? this.#findResumeLabelForStep(existingSnapshot, key),
+          toolCallId: payload.toolCallId ?? this.#findResumeLabelForStep(existingSnapshot, stepKey),
           toolName: payload.toolName,
           requiresApproval: false,
           suspendPayload: payload.toolCallSuspended,
         });
       }
+    };
+
+    for (const key in existingSnapshot?.context) {
+      const step = existingSnapshot?.context[key];
+      if (step?.status !== 'suspended') continue;
+      const payload = step.suspendPayload;
+      if (!payload) continue;
+
+      // A foreach step (e.g. parallel tool calls in the agentic loop) can park several
+      // iterations at once, but its step-level suspendPayload only carries the first
+      // suspended iteration. The full set lives in `__workflow_meta.foreachOutput`,
+      // where each suspended entry keeps its own per-iteration payload — surface every
+      // one of them so all pending tool calls are discoverable and resumable.
+      const suspendedIterations = this.#getSuspendedForeachIterations(payload);
+      if (suspendedIterations.length > 0) {
+        for (const iteration of suspendedIterations) {
+          collectFromPayload(iteration.suspendPayload, key);
+        }
+      } else {
+        collectFromPayload(payload, key);
+      }
     }
 
     return toolCalls;
+  }
+
+  #getSuspendedForeachIterations(
+    payload: Record<string, any>,
+  ): { status: 'suspended'; suspendPayload: Record<string, any> }[] {
+    // The default engine persists foreach aggregation as an array; the evented
+    // engine persists it as an object keyed by iteration index.
+    const foreachOutput = payload.__workflow_meta?.foreachOutput;
+    const entries = Array.isArray(foreachOutput)
+      ? foreachOutput
+      : foreachOutput && typeof foreachOutput === 'object'
+        ? Object.values(foreachOutput)
+        : [];
+    return entries.filter(
+      (entry: any): entry is { status: 'suspended'; suspendPayload: Record<string, any> } =>
+        entry?.status === 'suspended' && !!entry.suspendPayload,
+    );
+  }
+
+  async #validateSuspendedToolCallTarget({
+    snapshot,
+    toolCallId,
+    runId,
+    method,
+  }: {
+    snapshot: WorkflowRunState;
+    toolCallId: string | undefined;
+    runId: string;
+    method: string;
+  }) {
+    if (toolCallId === undefined) return;
+
+    const isTargetSuspended = (currentSnapshot: WorkflowRunState) =>
+      this.#getSuspendedToolCalls(currentSnapshot).some(toolCall => toolCall.toolCallId === toolCallId);
+
+    let isSuspended = isTargetSuspended(snapshot);
+    if (!isSuspended) {
+      // A resume stream can expose the next suspension just before its snapshot is
+      // persisted. Briefly poll after authorization so an immediate response to
+      // that newly surfaced tool call is not rejected based on the prior snapshot.
+      const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
+      const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
+      const deadline = Date.now() + 2000;
+      while (!isSuspended && workflowsStore && Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 25));
+        const latestSnapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: 'agentic-loop', runId });
+        isSuspended = latestSnapshot ? isTargetSuspended(latestSnapshot) : false;
+      }
+    }
+
+    if (!isSuspended) {
+      throw new MastraError({
+        id: 'AGENT_RESUME_TOOL_CALL_NOT_SUSPENDED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent "${this.name}" ${method}() cannot resume tool call "${toolCallId}" because it is not suspended.`,
+        details: {
+          agentName: this.name,
+          method,
+          runId,
+          toolCallId,
+        },
+      });
+    }
   }
 
   /**
@@ -6349,9 +6477,19 @@ export class Agent<
 
   #getSuspendedToolInfo(
     existingSnapshot: WorkflowRunState | null | undefined,
+    targetToolCallId?: string,
   ): { toolCallId?: string; toolName?: string } | undefined {
-    const [first] = this.#getSuspendedToolCalls(existingSnapshot);
-    return first ? { toolCallId: first.toolCallId, toolName: first.toolName } : undefined;
+    const suspendedToolCalls = this.#getSuspendedToolCalls(existingSnapshot);
+    // Several tool calls can be parked at once. Never label an explicitly targeted
+    // resume with a sibling if this snapshot predates the target's persistence.
+    const info =
+      targetToolCallId !== undefined
+        ? (suspendedToolCalls.find(toolCall => toolCall.toolCallId === targetToolCallId) ?? {
+            toolCallId: targetToolCallId,
+            toolName: undefined,
+          })
+        : suspendedToolCalls[0];
+    return info ? { toolCallId: info.toolCallId, toolName: info.toolName } : undefined;
   }
 
   #getResumeSpanInput(resumeData: unknown, suspendedToolInfo?: { toolCallId?: string; toolName?: string }): unknown {
@@ -6440,22 +6578,31 @@ export class Agent<
   }
 
   /**
-   * Lazily build (and cache) an ephemeral Mastra. The agent's prepare-stream
-   * workflow runs on the evented engine, which requires `mastra.pubsub` to
-   * dispatch events — so a `new Agent(...)` that isn't wired into a Mastra
-   * still needs *some* Mastra. Workers are started once and reused for every
-   * subsequent call on this agent. `__registerMastra(real)` tears it down.
+   * Lazily build (and cache) an ephemeral in-memory Mastra. A `new Agent(...)`
+   * that isn't wired into a Mastra still needs *some* storage for internal
+   * snapshot lookups (agentic-loop resume, suspended-run discovery). Reused
+   * for every subsequent call on this agent; `__registerMastra(real)` clears
+   * it.
    */
   async #getOrCreateEphemeralMastra(): Promise<Mastra> {
     if (this.#ephemeralMastra) {
       return this.#ephemeralMastra;
     }
+    // Resolve the Mastra constructor without a static `agent → mastra` runtime
+    // edge (see the type-only import at the top of this file). In any app that
+    // constructed a Mastra, the holder is already populated and no dynamic
+    // import runs; the `await import` is a fallback for standalone agents that
+    // never loaded the Mastra module.
+    const MastraClass = mastraCtorHolder.ctor ?? (await import('../mastra')).Mastra;
     const ephemeral = new MastraClass({
       logger: false,
       storage: new InMemoryStore(),
       pubsub: new EventEmitterPubSub(),
+      // Skip module-level scorer-hook registration: the hook can never resolve
+      // a scorer on this registry-less instance, and it would pin the whole
+      // ephemeral graph against GC for the process lifetime (#19404).
+      __ephemeral: true,
     });
-    await ephemeral.startWorkers();
     this.#ephemeralMastra = ephemeral;
     return ephemeral;
   }
@@ -6638,7 +6785,9 @@ export class Agent<
     // For resumed runs, surface resumeData as the span input and link the resumed
     // span back to the original suspended trace. Mirrors Workflow.resume tracing.
     const isResume = !!resumeContext;
-    const suspendedToolInfo = isResume ? this.#getSuspendedToolInfo(resumeContext?.snapshot) : undefined;
+    const suspendedToolInfo = isResume
+      ? this.#getSuspendedToolInfo(resumeContext?.snapshot, options.toolCallId)
+      : undefined;
     const persistedTracingContext = isResume
       ? (resumeContext?.snapshot?.tracingContext as
           | { traceId?: string; spanId?: string; parentSpanId?: string }
@@ -6805,68 +6954,18 @@ export class Agent<
         agentThreadStreamRuntime.drainPendingSignals(runId, threadStreamPubSub, scope),
     });
 
-    // The prepare-stream workflow runs on the evented engine and needs a
-    // pubsub-equipped Mastra to dispatch events. If the agent isn't attached
-    // to one, fall back to a lazily-created ephemeral Mastra (see field doc).
-    // The same Mastra is registered on the LLM so the agentic loop inside
-    // `capabilities.llm.stream(...)` inherits it.
-    const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
-    // Idempotent: the LLM was already given this.#mastra (or undefined) in
-    // getLLM; re-register so the ephemeral case takes effect.
-    llm.__registerMastra(effectiveMastra);
-
-    const useEventedExecution = process.env.MASTRA_EVENTED_EXECUTION === 'true';
-    const executionRunId = randomUUID();
-
-    if (useEventedExecution) {
-      // Evented engine path: needs pubsub workers and internal workflow registration.
-      // Ensure the evented engine's workers are running on the effective Mastra.
-      // Users who just do `new Mastra({ agents })` without calling startWorkers
-      // would otherwise hang here — events would publish but no worker would
-      // consume them. startWorkers is idempotent.
-      await effectiveMastra?.startWorkers();
-      // Register as internal so the evented engine's event processor can resolve
-      // `execution-workflow` by id via __hasInternalWorkflow/getInternalWorkflow.
-      // We pick the runId up front and register run-scoped (not unscoped), so
-      // concurrent or nested agent invocations never resolve each other's
-      // closure-bound instance. __registerInternalWorkflow also calls
-      // __registerMastra under the hood, which wires the pubsub `createRun` needs.
-      effectiveMastra?.__registerInternalWorkflow(executionWorkflow, executionRunId);
-    } else {
-      // Direct execution path (default): register Mastra for storage/observability
-      // but skip pubsub workers and internal workflow registration (not needed
-      // without events). Avoids requestContext serialisation loss.
-      executionWorkflow.__registerMastra(effectiveMastra);
+    // Register Mastra (if any) on the workflow for storage/observability access.
+    // The agent's prepare-stream workflow runs in-process via the default
+    // execution engine, so no pubsub workers or internal workflow registration
+    // are needed.
+    if (this.#mastra) {
+      executionWorkflow.__registerMastra(this.#mastra);
     }
 
     const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
-    try {
-      const run = await executionWorkflow.createRun({ runId: executionRunId });
-      const result = await run.start({ requestContext, actor: options.actor, ...observabilityContext });
-      return result;
-    } finally {
-      if (useEventedExecution) {
-        // The WEP's terminal event handlers (processWorkflowEnd / processWorkflowFail /
-        // processWorkflowSuspend) unregister the internal workflow after all events for
-        // this run have been fully processed. This safety-net covers the exceptional path
-        // where run.start() throws before a terminal event is published (e.g. subscription
-        // setup failure). In the normal case the WEP already unregistered, so this is a no-op.
-        effectiveMastra.__unregisterInternalWorkflow(executionWorkflow.id, executionRunId);
-        // The prepare-stream workflow opts out of persisting via `shouldPersistSnapshot: () => false`,
-        // but the evented engine's `EventedRun.start` still writes the initial 'running' row
-        // (see issue #17137). Drop it here so this throwaway internal workflow never leaves a
-        // row in the user's storage. Best-effort: swallow errors so a delete miss doesn't mask
-        // a real failure in the surrounding run.
-        try {
-          await executionWorkflow.deleteWorkflowRunById(executionRunId);
-        } catch (err) {
-          this.logger.debug('Failed to clean up internal execution-workflow run row', {
-            runId: executionRunId,
-            error: err instanceof Error ? err.message : String(err),
-          });
-        }
-      }
-    }
+    const run = await executionWorkflow.createRun();
+    const result = await run.start({ requestContext, actor: options.actor, ...observabilityContext });
+    return result;
   }
 
   /**
@@ -6888,6 +6987,7 @@ export class Agent<
     threadExists,
     structuredOutput = false,
     overrideScorers,
+    onTitleGenerated,
   }: AgentExecuteOnFinishOptions) {
     const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
 
@@ -6992,26 +7092,24 @@ export class Agent<
               titleModel,
               titleInstructions,
               uiMessages,
-            ).then(
-              async title => {
+            )
+              .then(async title => {
                 if (title) {
-                  try {
-                    await memory.createThread({
-                      threadId: thread.id,
-                      resourceId,
-                      memoryConfig,
-                      title,
-                      metadata: thread.metadata,
-                    });
-                  } catch (error) {
-                    this.logger.error('Error persisting generated title:', error);
+                  await memory.createThread({
+                    threadId: thread.id,
+                    resourceId,
+                    memoryConfig,
+                    title,
+                    metadata: thread.metadata,
+                  });
+                  if (typeof onTitleGenerated === 'function') {
+                    await onTitleGenerated(title);
                   }
                 }
-              },
-              error => {
+              })
+              .catch(error => {
                 this.logger.error('Error persisting generated title:', error);
-              },
-            );
+              });
           }
         }
       } catch (e) {
@@ -7392,7 +7490,7 @@ export class Agent<
         id: 'AGENT_GENERATE_MALFORMED_RESULT',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.SYSTEM,
-        text: 'Execution workflow produced a result without getFullOutput — this usually means the evented engine failed to deliver events (e.g. socket publish failure)',
+        text: 'Execution workflow produced a result without getFullOutput',
       });
     }
 
@@ -7653,6 +7751,10 @@ export class Agent<
     }
 
     const results: SendAgentNotificationSignalResult<OUTPUT>[] = [];
+    // Set when a record stays pending with a scheduled deliverAt/summaryAt —
+    // those are delivered later by the notification dispatch workflow, so the
+    // dispatcher schedule (and scheduler) must be lazily activated.
+    let needsDispatcher = false;
     for (const { record, decision } of planned) {
       if (decision.action === 'discard') {
         const updated = await notifications.updateNotification({
@@ -7693,6 +7795,10 @@ export class Agent<
               : (decision.summaryAt ?? record.summaryAt),
           deliveryReason: decision.reason,
         });
+
+        if (updated.deliverAt != null || updated.summaryAt != null) {
+          needsDispatcher = true;
+        }
 
         if (shouldEmitSummaryNow) {
           const signal = createNotificationSummarySignal(summarizeNotifications([updated]));
@@ -7802,6 +7908,10 @@ export class Agent<
         persisted: result.persisted,
         accepted: result.accepted,
       });
+    }
+
+    if (needsDispatcher) {
+      await this.#mastra?.__ensureNotificationDispatchReady();
     }
 
     return results;
@@ -8209,7 +8319,10 @@ export class Agent<
     }
 
     const runId = streamOptions?.runId ?? '';
-    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeStream' });
+    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({
+      runId,
+      method: 'resumeStream',
+    });
     const snapshotMemoryInfo = this.#getSnapshotMemoryInfo(existingSnapshot);
 
     if (snapshotMemoryInfo?.threadId) {
@@ -8227,6 +8340,12 @@ export class Agent<
       runId: mergedStreamOptions.runId,
       snapshotMemoryInfo,
       actor,
+    });
+    await this.#validateSuspendedToolCallTarget({
+      snapshot: existingSnapshot,
+      toolCallId: streamOptions?.toolCallId,
+      runId,
+      method: 'resumeStream',
     });
 
     const llm = await this.getLLM({
@@ -8371,13 +8490,22 @@ export class Agent<
     delete loopOptions.actor;
 
     const runId = options?.runId ?? '';
-    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeGenerate' });
+    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({
+      runId,
+      method: 'resumeGenerate',
+    });
     await this.#requireAgentExecutionFGA({
       requestContext: mergedOptions.requestContext,
       memory: mergedOptions.memory,
       runId: mergedOptions.runId,
       snapshotMemoryInfo: this.#getSnapshotMemoryInfo(existingSnapshot),
       actor,
+    });
+    await this.#validateSuspendedToolCallTarget({
+      snapshot: existingSnapshot,
+      toolCallId: options?.toolCallId,
+      runId,
+      method: 'resumeGenerate',
     });
 
     const llm = await this.getLLM({
@@ -8452,7 +8580,7 @@ export class Agent<
         id: 'AGENT_GENERATE_MALFORMED_RESULT',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.SYSTEM,
-        text: 'Execution workflow produced a result without getFullOutput — this usually means the evented engine failed to deliver events (e.g. socket publish failure)',
+        text: 'Execution workflow produced a result without getFullOutput',
       });
     }
 

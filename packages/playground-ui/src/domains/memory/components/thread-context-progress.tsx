@@ -25,9 +25,9 @@ function ProgressBar({
 
   return (
     <div className="min-w-0 flex-1">
-      <div className="mb-1 flex items-center justify-between gap-2 font-mono text-ui-xs text-icon3">
-        <span className="uppercase tracking-wide text-icon6">{label}</span>
-        <span className="tabular-nums text-icon3">
+      <div className="text-icon3 mb-1 flex items-center justify-between gap-2 font-mono text-ui-xs">
+        <span className="text-icon6 tracking-wide uppercase">{label}</span>
+        <span className="text-icon3 tabular-nums">
           {formatCompactTokens(value)}/{formatCompactTokens(max)}k
         </span>
       </div>

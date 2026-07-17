@@ -1,0 +1,26 @@
+---
+extends: existence
+message: "AI overused verb: '%s'. State what it adds or enables directly. Disable this rule for library or finance prose."
+level: error
+nonword: true
+ignorecase: true
+# "Lends" is an AI fingerprint for conferring an abstract quality: a study
+# "lends credence," a detail "lends weight," a structure "lends itself to"
+# reuse. Literal lending is loaning money or a book, so the complement after
+# the verb is the discriminator, in the FigurativeSits mold. "Lends a hand"
+# rides along as an anthropomorphic idiom.
+tokens:
+  # --- Suitability: the artifact volunteers for a use ("lends itself to,"
+  # "lends itself well to").
+  - "\\blend(?:s|ing)? itself (?:well |neatly |naturally |readily )?to\\b"
+  - "\\blend(?:s|ing)? themselves (?:well |neatly |naturally |readily )?to\\b"
+
+  # --- Conferred quality: the abstraction hands over credibility or
+  # gravity ("lends credence," "lends weight," "lends an air of," "lends
+  # support," "lends color").
+  - "\\blend(?:s|ing)? (?:credence|credibility|weight|gravitas|authority|legitimacy|support|nuance|texture|color|colour|depth|clarity)\\b"
+  - "\\blent (?:credence|credibility|weight|gravitas|authority|legitimacy|support|nuance|texture|color|colour|depth|clarity)\\b"
+  - "\\blend(?:s|ing)? an (?:air|aura|element|element of surprise|impression) (?:of|to)\\b"
+
+  # --- Helping idiom ("lends a hand"), the anthropomorphic ride-along.
+  - "\\blend(?:s|ing)? a hand\\b"

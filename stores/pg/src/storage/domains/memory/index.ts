@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { createRequire } from 'node:module';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -8,6 +7,7 @@ import {
   MemoryStorage,
   normalizePerPage,
   calculatePagination,
+  OBSERVATIONAL_MEMORY_TABLE_SCHEMA,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
@@ -54,18 +54,14 @@ export const OM_MIGRATION_COLUMNS: string[] = [
 ];
 
 /**
- * Try to import the OM schema statically. On older @mastra/core versions that
- * don't export OBSERVATIONAL_MEMORY_TABLE_SCHEMA this will be undefined,
- * and getExportDDL / init() will simply skip the OM table.
+ * The OM schema is imported statically above: the peer dependency range
+ * (`@mastra/core >= 1.49.0`) guarantees the export exists. This used to be a
+ * dynamic `require` guarded by `typeof require === 'function'` for older core
+ * versions, but esbuild rewrites the bare `require` identifier in the ESM
+ * bundle to a shim that always throws, and the silent catch meant the
+ * published ESM build skipped creating the OM table entirely (#18954).
  */
-let _omTableSchema: Record<string, Record<string, any>> | undefined;
-try {
-  const __require = typeof require === 'function' ? require : createRequire(import.meta.url);
-  const storage = __require('@mastra/core/storage');
-  _omTableSchema = storage.OBSERVATIONAL_MEMORY_TABLE_SCHEMA;
-} catch {
-  // OM not available in this version of core
-}
+const _omTableSchema: Record<string, Record<string, any>> = OBSERVATIONAL_MEMORY_TABLE_SCHEMA;
 import type {
   StorageResourceType,
   StorageListMessagesInput,
@@ -196,11 +192,11 @@ export class MemoryPG extends MemoryStorage {
     await this.#db.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
     await this.#db.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
 
-    // Reuse the module-level `_omTableSchema` set via the top-of-file
-    // `createRequire` shim. `await import('@mastra/core/storage')` here used
-    // to deadlock `mastra build` output: bundlers rewrite the dynamic import
-    // to point at the entry chunk that statically depends on this file, so
-    // the cycle never resolves when storage initializes during module
+    // Reuse the module-level `_omTableSchema` (static import). Don't switch
+    // this to `await import('@mastra/core/storage')`: that used to deadlock
+    // `mastra build` output, because bundlers rewrite the dynamic import to
+    // point at the entry chunk that statically depends on this file, so the
+    // cycle never resolves when storage initializes during module
     // evaluation (#18298).
     const omSchema = _omTableSchema?.[OM_TABLE];
 

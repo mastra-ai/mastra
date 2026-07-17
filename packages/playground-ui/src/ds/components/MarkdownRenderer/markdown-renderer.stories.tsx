@@ -8,7 +8,7 @@ const meta: Meta<typeof MarkdownRenderer> = {
   decorators: [
     Story => (
       <TooltipProvider>
-        <div className="w-[600px] p-4">
+        <div className="w-150 p-4">
           <Story />
         </div>
       </TooltipProvider>

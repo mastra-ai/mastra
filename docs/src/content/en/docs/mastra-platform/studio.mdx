@@ -1,6 +1,6 @@
 ---
 title: "Studio | Mastra platform"
-description: Deploy and host Studio on Mastra platform for a shared visual environment for your Mastra application.
+description: Deploy and host Studio on Mastra platform for a shared visual workspace for your Mastra application.
 ---
 
 import Steps from "@site/src/components/Steps";
@@ -8,9 +8,13 @@ import StepItem from "@site/src/components/StepItem";
 
 # Studio on Mastra platform
 
-Studio on Mastra platform is a hosted visual environment for testing agents, running workflows, and inspecting traces. Use it when you want to share Studio with your team without hosting the Studio UI yourself.
+Studio on Mastra platform is a hosted visual workspace for testing agents, running workflows, and inspecting traces. Use it when you want to share Studio with your team without hosting the Studio UI yourself.
 
 You can deploy Studio from the CLI as shown below, or link a GitHub repository for push-to-deploy. See the [GitHub integration](/docs/mastra-platform/github) for the repository-linked flow.
+
+:::note
+`mastra studio deploy` is the earlier split deploy path. New projects should use the unified [`mastra deploy`](/docs/mastra-platform/deploy) command, which adds preflight validation, environments, and CLI-managed databases.
+:::
 
 ## Quickstart
 
@@ -50,7 +54,7 @@ See the [`mastra studio deploy` CLI reference](/reference/cli/mastra#mastra-stud
 
 ## Environment files
 
-The deploy bundles environment variables from a `.env` or `.env.*` file in the project directory. If no env file is present, the deploy errors with `No env file found for deploy.` after the build step. Add at least an empty `.env` file before running the command.
+A local env file is optional. When a `.env` or `.env.*` file is present in the project directory, the deploy bundles its environment variables.
 
 When multiple env files are present, the CLI prompts you to pick one. To select non-interactively, pass `--env-file`:
 
@@ -58,7 +62,7 @@ When multiple env files are present, the CLI prompts you to pick one. To select 
 mastra studio deploy --env-file .env.production --yes
 ```
 
-This is also how you target multiple environments from a single codebase: maintain one env file per environment, such as `.env.staging` and `.env.production`, and pass the right one to each deploy. Each environment still requires its own Mastra platform project. See [Configuration](/docs/mastra-platform/configuration) for the multi-environment pattern.
+To run the same codebase across `production` and `staging`, use the unified [`mastra deploy --env`](/docs/mastra-platform/deploy#deploy-to-another-environment) command instead. [Environments](/docs/mastra-platform/environments) replace the earlier pattern of one project per environment.
 
 ## Create a new project non-interactively
 

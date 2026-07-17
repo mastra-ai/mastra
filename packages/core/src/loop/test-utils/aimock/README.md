@@ -151,11 +151,10 @@ baseURL })`) so its own loop turns also hit the mock; match the delegated prompt
 ### Engine / agent variants (`describeForAllEngines`)
 
 `describeForAllEngines(name, factory, { skip })` runs the factory once per `EngineVariant`. The first
-three select the _execution engine_; `'fs'` selects the _agent-assembly method_ and runs on the normal
+two select the _execution engine_; `'fs'` selects the _agent-assembly method_ and runs on the normal
 engine:
 
 - `'normal'` — direct engine, `new Agent(...)`.
-- `'evented'` — evented workflow engine (`MASTRA_EVENTED_EXECUTION=true`).
 - `'durable'` — `createDurableAgent` wrapper.
 - `'fs'` — agent assembled from file-system routing (`instructions.md` body + discovered `tools/*`) and
   registered through `Mastra.__registerFsAgents`, then run on the normal engine. Equivalent to setting

@@ -3,6 +3,13 @@ import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import {
+  Composer,
+  ComposerActions,
+  ComposerAttachments,
+  ComposerBox,
+  ComposerInput,
+} from '@mastra/playground-ui/components/Composer';
+import {
   MessageScroller,
   MessageScrollerButton,
   MessageScrollerContent,
@@ -11,23 +18,20 @@ import {
   MessageScrollerViewport,
 } from '@mastra/playground-ui/components/MessageScroller';
 import { PendingIndicator } from '@mastra/playground-ui/components/PendingIndicator';
-import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { buildThreadRailTurns, getClientMessageKey, ThreadRail } from '@mastra/playground-ui/components/ThreadRail';
 import type { ThreadRailTurn } from '@mastra/playground-ui/components/ThreadRail';
 import { useAutoscroll } from '@mastra/playground-ui/hooks/use-autoscroll';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import type { MessageFactoryPart } from '@mastra/react';
 import { useSpeechRecognition } from '@mastra/react';
 import { ArrowUp, Mic } from 'lucide-react';
 import { startTransition, useEffect, useMemo, useRef, useState } from 'react';
 
 import { AttachFilePopover } from './attachments/attach-file-popover';
-import { ComposerAttachments } from './attachments/attachment';
+import { ComposerAttachments as ChatComposerAttachments } from './attachments/attachment';
 import { ComposerAttachmentsProvider, useComposerAttachments } from './attachments/composer-attachments';
 import { useChatMessages, useChatRunning, useChatSend } from './chat/chat-context';
 import { useReadAloud } from './chat/use-read-aloud';
 import { BracketOverlay } from './components/bracket-overlay';
-import './composer-sending.css';
 import './thread.css';
 import { SaveFullConversationAction } from './messages/dataset-save-action';
 import { MessageRow } from './messages/message-row';
@@ -37,6 +41,8 @@ import { ComposerModelSettings } from '@/domains/agents/components/composer-mode
 import { ComposerModelSwitcher, ComposerModelWarning } from '@/domains/agents/components/composer-model-switcher';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useThreadInput } from '@/domains/conversation';
+import { useVoiceCall, VoiceCallButton, VoiceCallPanel } from '@/domains/voice';
+import type { VoiceCallControls } from '@/domains/voice';
 import { usePlaygroundStore } from '@/store/playground-store';
 
 const SKELETON_DELAY_MS = 300;
@@ -102,6 +108,11 @@ export interface ThreadProps {
   hideModelSwitcher?: boolean;
   /** Extra run-scoped controls (request context, tracing options) rendered in the composer action row */
   runOptionsSlot?: React.ReactNode;
+  /**
+   * Called when a voice call connects. On a brand-new chat the agent page passes its
+   * thread-list refresh here so the page navigates from /new to the real thread URL.
+   */
+  refreshThreadList?: () => Promise<void> | void;
 }
 
 export const Thread = ({
@@ -111,6 +122,7 @@ export const Thread = ({
   hasModelList,
   hideModelSwitcher,
   runOptionsSlot,
+  refreshThreadList,
 }: ThreadProps) => {
   const areaRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -196,12 +208,13 @@ export const Thread = ({
 
           <TaskPanel />
 
-          <Composer
+          <AgentComposer
             agentId={agentId}
             threadId={threadId}
             hasModelList={hasModelList}
             hideModelSwitcher={hideModelSwitcher}
             runOptionsSlot={runOptionsSlot}
+            refreshThreadList={refreshThreadList}
           />
         </div>
       </MessageScrollerProvider>
@@ -222,15 +235,23 @@ const ThreadWelcome = ({ agentName }: ThreadWelcomeProps) => {
   );
 };
 
-interface ComposerProps {
+interface AgentComposerProps {
   agentId?: string;
   threadId?: string;
   hasModelList?: boolean;
   hideModelSwitcher?: boolean;
   runOptionsSlot?: React.ReactNode;
+  refreshThreadList?: () => Promise<void> | void;
 }
 
-const Composer = ({ agentId, threadId, hasModelList, hideModelSwitcher, runOptionsSlot }: ComposerProps) => {
+const AgentComposer = ({
+  agentId,
+  threadId,
+  hasModelList,
+  hideModelSwitcher,
+  runOptionsSlot,
+  refreshThreadList,
+}: AgentComposerProps) => {
   const { threadInput: text, setThreadInput } = useThreadInput(threadId);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const send = useChatSend();
@@ -239,6 +260,9 @@ const Composer = ({ agentId, threadId, hasModelList, hideModelSwitcher, runOptio
   const [sendPulseKey, setSendPulseKey] = useState(0);
   const { canExecute } = usePermissions();
   const canExecuteAgent = canExecute('agents');
+  // On a brand-new chat, starting the call must transition the page out of its
+  // new-thread state (same as the first text send) or the chat never loads messages.
+  const voiceCall = useVoiceCall({ agentId, threadId, onCallStarted: refreshThreadList });
 
   const isEmpty = text.trim().length === 0 && attachments.length === 0;
   const sendBlocked = isRunning && !canSendWhileStreaming;
@@ -256,53 +280,43 @@ const Composer = ({ agentId, threadId, hasModelList, hideModelSwitcher, runOptio
   return (
     // Named so the chat/settings view transition can slide the composer toward
     // the bottom edge independently of the root crossfade.
-    <div className="relative px-2 pb-2" style={{ viewTransitionName: 'agent-chat-composer' }}>
-      <form
-        onSubmit={e => {
-          e.preventDefault();
+    <div className="relative" style={{ viewTransitionName: 'agent-chat-composer' }}>
+      <VoiceCallPanel voiceCall={voiceCall} />
+      <Composer
+        className="relative px-2 pb-2"
+        onSubmit={event => {
+          event.preventDefault();
           void submit();
         }}
       >
-        <div className="max-w-3xl w-full mx-auto pb-2">
-          <ComposerAttachments />
-        </div>
-
-        <div
-          className="relative overflow-hidden bg-surface3 rounded-[22px] border border-border2/40 mt-auto max-w-3xl w-full mx-auto transition-colors duration-normal focus-within:border-border2 @container"
-          onClick={e => {
-            if (e.target === e.currentTarget) textareaRef.current?.focus();
-          }}
-        >
-          <ComposerSendingGradient pulseKey={sendPulseKey} />
-          <div className="relative z-10">
-            {/* The textarea grows with its content (field-sizing); the ScrollArea caps the
-                height and fades the clipped edges once the content overflows. */}
-            <ScrollArea maxHeight="212px">
-              <textarea
-                ref={textareaRef}
-                value={text}
-                autoFocus={false}
-                className="field-sizing-content min-h-17 w-full text-ui-lg leading-ui-lg placeholder:text-neutral3 text-neutral6 bg-transparent focus:outline-hidden resize-none outline-hidden disabled:cursor-not-allowed disabled:opacity-50 px-3 pt-3 pb-2"
-                placeholder={canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"}
-                onChange={e => {
-                  setThreadInput(e.target.value);
-                }}
-                onKeyDown={e => {
-                  // Ignore Enter while an IME composition is active (e.g. committing a
-                  // CJK/pinyin candidate). `isComposing` is the browser-owned flag; the
-                  // `keyCode === 229` fallback covers browsers that fire keydown without it.
-                  if (e.nativeEvent.isComposing || e.keyCode === 229) return;
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    if (sendBlocked) return;
-                    e.preventDefault();
-                    e.stopPropagation();
-                    void submit();
-                  }
-                }}
-                disabled={!canExecuteAgent}
-              />
-            </ScrollArea>
-            {agentId && !hasModelList && !hideModelSwitcher && <ComposerModelWarning agentId={agentId} />}
+        <ComposerAttachments>
+          <ChatComposerAttachments />
+        </ComposerAttachments>
+        <ComposerBox sendingPulseKey={sendPulseKey}>
+          <ComposerInput
+            ref={textareaRef}
+            value={text}
+            autoFocus={false}
+            placeholder={canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"}
+            onChange={event => {
+              setThreadInput(event.target.value);
+            }}
+            onKeyDown={event => {
+              // Ignore Enter while an IME composition is active (e.g. committing a
+              // CJK/pinyin candidate). `isComposing` is the browser-owned flag; the
+              // `keyCode === 229` fallback covers browsers that fire keydown without it.
+              if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+              if (event.key === 'Enter' && !event.shiftKey) {
+                if (sendBlocked) return;
+                event.preventDefault();
+                event.stopPropagation();
+                void submit();
+              }
+            }}
+            disabled={!canExecuteAgent}
+          />
+          {agentId && !hasModelList && !hideModelSwitcher && <ComposerModelWarning agentId={agentId} />}
+          <ComposerActions>
             <ComposerActionRow
               canExecute={canExecuteAgent}
               agentId={agentId}
@@ -315,34 +329,11 @@ const Composer = ({ agentId, threadId, hasModelList, hideModelSwitcher, runOptio
               onSetText={value => {
                 setThreadInput(value);
               }}
+              voiceCall={voiceCall}
             />
-          </div>
-        </div>
-      </form>
-    </div>
-  );
-};
-
-const ComposerGradientColumn = ({ className }: { className?: string }) => (
-  <div className={cn('flex h-full w-full flex-col -space-y-3', className)}>
-    <div className="w-full flex-1 bg-accent1 blur-xl" />
-    <div className="w-full flex-1 bg-accent1Dark blur-xl" />
-    <div className="w-full flex-1 bg-accent1 blur-xl" />
-    <div className="w-full flex-1 bg-accent1Darker blur-xl" />
-  </div>
-);
-
-const ComposerSendingGradient = ({ pulseKey }: { pulseKey: number }) => {
-  if (pulseKey === 0) return null;
-  return (
-    <div
-      key={pulseKey}
-      aria-hidden
-      className="composer-sending pointer-events-none absolute -left-[10%] top-0 z-0 flex h-10 w-[120%] transform-gpu"
-    >
-      <ComposerGradientColumn />
-      <ComposerGradientColumn className="-translate-y-2" />
-      <ComposerGradientColumn />
+          </ComposerActions>
+        </ComposerBox>
+      </Composer>
     </div>
   );
 };
@@ -379,6 +370,7 @@ interface ComposerActionRowProps {
   canSendWhileStreaming: boolean;
   onCancel: () => void;
   onSetText: (text: string) => void;
+  voiceCall?: VoiceCallControls;
 }
 
 const ComposerActionRow = ({
@@ -391,9 +383,10 @@ const ComposerActionRow = ({
   canSendWhileStreaming,
   onCancel,
   onSetText,
+  voiceCall,
 }: ComposerActionRowProps) => {
   return (
-    <div className="flex flex-wrap-reverse justify-between items-center gap-2 px-1.5 pb-1.5">
+    <>
       {((showModelSwitcher && agentId) || runOptionsSlot) && (
         <div className="flex items-center gap-1.5 shrink-0 max-w-full">
           {showModelSwitcher && agentId && (
@@ -412,6 +405,7 @@ const ComposerActionRow = ({
         <ButtonsGroup spacing="close">
           {canExecute && <AttachFilePopover />}
           {canExecute && <SpeechInput agentId={agentId} onTranscript={onSetText} />}
+          {canExecute && agentId && voiceCall && <VoiceCallButton voiceCall={voiceCall} />}
         </ButtonsGroup>
         <ComposerSendButton
           canExecute={canExecute}
@@ -421,7 +415,7 @@ const ComposerActionRow = ({
           onCancel={onCancel}
         />
       </div>
-    </div>
+    </>
   );
 };
 

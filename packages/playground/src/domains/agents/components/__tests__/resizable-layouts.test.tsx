@@ -2,7 +2,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode, Ref } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WorkflowLayout } from '../../../workflows/components/workflow-layout';
-import type * as AgentsContext from '../../context';
+import type * as MemoryTimelineContext from '../../context/memory-timeline-context';
 import { AgentLayout } from '../agent-layout';
 
 const resizeLeftPanel = vi.hoisted(() => vi.fn());
@@ -57,8 +57,8 @@ vi.mock('react-resizable-panels', () => ({
   },
 }));
 
-vi.mock('../../context', async () => {
-  const actual = await vi.importActual<typeof AgentsContext>('../../context');
+vi.mock('../../context/memory-timeline-context', async () => {
+  const actual = await vi.importActual<typeof MemoryTimelineContext>('../../context/memory-timeline-context');
 
   return {
     ...actual,

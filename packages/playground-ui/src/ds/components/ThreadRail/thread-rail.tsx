@@ -284,9 +284,9 @@ function ThreadRailItem({
         onMouseEnter={event => onHoverChange(index, event.currentTarget)}
         onFocus={event => onHoverChange(index, event.currentTarget)}
         className={cn(
-          'relative block h-px cursor-pointer rounded-full transition-[width,background-color] duration-normal ease-out',
-          "before:absolute before:-inset-y-1 before:inset-x-0 before:content-['']",
-          'focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent1/40',
+          'duration-normal relative block h-px cursor-pointer rounded-full transition-[width,background-color] ease-out',
+          "before:absolute before:inset-x-0 before:-inset-y-1 before:content-['']",
+          'focus-visible:ring-2 focus-visible:ring-accent1/40 focus-visible:outline-hidden',
           size,
           tone,
         )}
@@ -330,7 +330,7 @@ function ThreadRailPreview({
       data-testid="thread-rail-preview"
       data-visible={containerVisible ? 'true' : undefined}
       className={cn(
-        'pointer-events-none absolute left-full top-0 z-30 ml-3 w-72 overflow-hidden rounded-xl border border-border1 bg-surface3 text-left shadow-dialog transition-[height,translate,opacity] duration-360 ease-out-custom will-change-[height,translate,opacity] motion-reduce:transition-none',
+        'pointer-events-none absolute top-0 left-full z-30 ml-3 w-72 overflow-hidden rounded-xl border border-border1 bg-surface3 text-left shadow-dialog transition-[height,translate,opacity] duration-360 ease-out-custom will-change-[height,translate,opacity] motion-reduce:transition-none',
         containerVisible ? 'opacity-100' : 'opacity-0',
       )}
       style={{ ...previewHeightStyle, translate: `0 calc(${top}px - 50%)` }}
@@ -370,7 +370,7 @@ function ThreadRailPreviewContent({
 }: React.HTMLAttributes<HTMLDivElement> & { turn: ThreadRailTurn }) {
   return (
     <div className={className} {...props}>
-      <div className="truncate text-ui-md font-medium leading-ui-md text-neutral6">{turn.prompt}</div>
+      <div className="truncate text-ui-md leading-ui-md font-medium text-neutral6">{turn.prompt}</div>
       {turn.reply && <p className="mt-1.5 line-clamp-3 text-ui-sm leading-ui-sm text-neutral4">{turn.reply}</p>}
       {(turn.files.length > 0 || turn.hiddenFileCount > 0) && (
         <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border1/60 pt-2.5">

@@ -1,5 +1,186 @@
 # @mastra/mcp
 
+## 1.15.0-alpha.0
+
+### Minor Changes
+
+- Complete the OAuth authorization-code loop in MCPClient for HTTP MCP servers. Connections rejected with an authorization error now surface a `needs-auth` state (readable via `getServerAuthState()`), and the new `authenticate(serverName)` method runs the interactive flow end to end: it captures the authorization code on a local loopback callback server (exported as `createOAuthCallbackServer` for hosts with custom redirect handling), exchanges it for tokens, and reconnects. ([#19466](https://github.com/mastra-ai/mastra/pull/19466))
+
+### Patch Changes
+
+- Updated dependencies [[`8b20926`](https://github.com/mastra-ai/mastra/commit/8b20926cd59e2ba3d66458e062fa0e6e2ada3e68), [`74faf8b`](https://github.com/mastra-ai/mastra/commit/74faf8bd9c1018f2492653c06b1e25fc8300e9e6), [`1fadac4`](https://github.com/mastra-ai/mastra/commit/1fadac44537caeefe81f9f775ae2f2f3d94e9069), [`792ec9a`](https://github.com/mastra-ai/mastra/commit/792ec9a0869bab8274cf5e0ed2840738737a1607), [`712b864`](https://github.com/mastra-ai/mastra/commit/712b864aa1ed12b14c54390ec17b69de163c37f7), [`8f7a5de`](https://github.com/mastra-ai/mastra/commit/8f7a5dedc246cdc938bb65516703cf9b27b03756), [`c0bec73`](https://github.com/mastra-ai/mastra/commit/c0bec732c93d1a22ae5e51ed66cf8cacca8bd6a6)]:
+  - @mastra/core@1.52.0-alpha.2
+
+## 1.14.0
+
+### Minor Changes
+
+- Add `serverlessStreaming` option to `MCPServer.startHTTP()` for request-scoped progress notifications in serverless mode. ([#17927](https://github.com/mastra-ai/mastra/pull/17927))
+
+  Serverless mode (`serverless: true`) buffers each request into a single JSON response, which silently drops any `notifications/progress` a tool emits via `extra.sendNotification()`. Setting `options: { serverless: true, serverlessStreaming: true }` now handles the request with request-scoped SSE streaming (`enableJsonResponse: false` on the transient transport), so progress notifications reach the MCP client's `onprogress` handler before the final result. An explicit `enableJsonResponse` is also honored.
+
+  ```ts
+  await server.startHTTP({
+    url,
+    httpPath: '/mcp',
+    req,
+    res,
+    options: { serverless: true, serverlessStreaming: true },
+  });
+  ```
+
+  This is still fully stateless — no `mcp-session-id` is required or persisted — and the default behavior is unchanged (`enableJsonResponse: true`), so existing serverless JSON-response users are unaffected. It enables only notifications scoped to the current request, such as progress; elicitation, resource subscriptions, and out-of-request resource/list-change notifications still require session state.
+
+- Fixed MCP server notifications (resource updates, resource/prompt list changes) not reaching clients connected over streamable HTTP. Notifications are now broadcast to every connected session across all transports. ([#19193](https://github.com/mastra-ai/mastra/pull/19193))
+
+  Fixed resource subscriptions being shared globally across all clients. Subscriptions are now tracked per session, so `resources.notifyUpdated()` only notifies sessions that subscribed to the resource URI, and one client unsubscribing no longer removes another client's subscription. Clients that relied on receiving `notifications/resources/updated` without subscribing must now call `resources/subscribe` first.
+
+  Added support for the remaining MCP notification features:
+
+  **Dynamic tools and tools/list_changed**
+
+  Servers can now add and remove tools at runtime and notify clients via `notifications/tools/list_changed`:
+
+  ```typescript
+  // Server: manage tools at runtime
+  await server.toolActions.add({ myNewTool });
+  await server.toolActions.remove(['myNewTool']);
+  await server.toolActions.notifyListChanged();
+  ```
+
+  When the server is registered with a Mastra instance, dynamic add/remove also keeps the Mastra instance's tool registry in sync.
+
+  ```typescript
+  // Client: react to tool list changes
+  await mcp.tools.onListChanged('myServer', async () => {
+    const tools = await mcp.listTools();
+  });
+  ```
+
+  **Server-side log messages**
+
+  Servers can now emit `notifications/message` log notifications. The minimum level a client sets via `logging/setLevel` is honored per session:
+
+  ```typescript
+  // Broadcast to all connected clients
+  await server.sendLoggingMessage({ level: 'info', data: { message: 'Sync completed' } });
+
+  // From inside a tool, send to the calling client
+  await context.mcp.log('debug', 'Fetching weather', { location });
+  ```
+
+  **Progress notifications from tools**
+
+  Tools can now report progress to the calling client:
+
+  ```typescript
+  await context.mcp.progress({ progress: 1, total: 3, message: 'step 1' });
+  ```
+
+### Patch Changes
+
+- Fixed MCP clients advertising elicitation support before a handler is registered. ([#19192](https://github.com/mastra-ai/mastra/pull/19192))
+
+- Fixed `MCPServer` dropping a resource's `_meta` from `resources/read` results. The read handler rebuilt each content item with only `{ uri, mimeType, text | blob }`, so `appResources` (MCP Apps / SEP-1865) metadata attached during `resources/list` as `_meta: { ui: meta }` never reached the client. Hosts read the UI CSP from `contents[]._meta.ui.csp`, so `connectDomains` was silently ignored and widget `fetch`/XHR calls failed with `Failed to fetch`. The resource's `_meta` is now preserved on the read contents. ([#19163](https://github.com/mastra-ai/mastra/pull/19163))
+
+- Updated dependencies [[`bd6d240`](https://github.com/mastra-ai/mastra/commit/bd6d2402db93dddaef0721667e7e8a030e7c6e16), [`0111486`](https://github.com/mastra-ai/mastra/commit/01114867612593eef5cfa2fda6a1194dfedda841), [`96a3749`](https://github.com/mastra-ai/mastra/commit/96a37492235f5b8076b3e3177d83ed5a5e44a640), [`fe1bda0`](https://github.com/mastra-ai/mastra/commit/fe1bda06f6af92a694a51712db747cda1e7185f0), [`25e7c12`](https://github.com/mastra-ai/mastra/commit/25e7c126a770069ae7fb7ecf1d2adb40e017b009), [`1ce5121`](https://github.com/mastra-ai/mastra/commit/1ce512155d122bb21f47d98383e82ffbf84b39e8), [`fb8aea3`](https://github.com/mastra-ai/mastra/commit/fb8aea384291e77311be3a64ee1717320d5c3c73), [`4adc391`](https://github.com/mastra-ai/mastra/commit/4adc3911075249c352bb4832d2471922826344de), [`a5c6337`](https://github.com/mastra-ai/mastra/commit/a5c6337d23c7686c81a32ce62f550f610543a240), [`3cfc47a`](https://github.com/mastra-ai/mastra/commit/3cfc47a6b89940aadd0f46fb01ae9624a73a865d), [`2bb7817`](https://github.com/mastra-ai/mastra/commit/2bb78176112fde628483de2830528f7eee911e56), [`51d9870`](https://github.com/mastra-ai/mastra/commit/51d987032c689c2855374d0f244f5d654da809d1), [`5cab274`](https://github.com/mastra-ai/mastra/commit/5cab2744250e22d12fefa7b32637dce224233cee), [`7fa27d3`](https://github.com/mastra-ai/mastra/commit/7fa27d3b6f5ed68cd34e454a4d3ad9c482a0cfbc), [`8b97958`](https://github.com/mastra-ai/mastra/commit/8b979589f9aa59ba67cac565949475f2ffeb4ac3), [`8410541`](https://github.com/mastra-ai/mastra/commit/84105412c60ecd3bb33a9838146f59c4b588228f), [`a58dcbb`](https://github.com/mastra-ai/mastra/commit/a58dcbb546d7e1d65ebdc1f39e55f0908fcd9391), [`aa38805`](https://github.com/mastra-ai/mastra/commit/aa38805b878b827403be785eb90688d7172f5a40), [`153bd3b`](https://github.com/mastra-ai/mastra/commit/153bd3b396bdfed6b74cf43de12db8fd2d83c04a), [`45a8e65`](https://github.com/mastra-ai/mastra/commit/45a8e65e1556d1362cb3f25187023c36de26661d), [`e955965`](https://github.com/mastra-ai/mastra/commit/e955965dce575a903e37cf054d28ea99aa48785e), [`2d22570`](https://github.com/mastra-ai/mastra/commit/2d22570c7dfdd02123d0ecc529efb05ccba2d9fc), [`07bb863`](https://github.com/mastra-ai/mastra/commit/07bb8631919c6f7cf377dccd45b096e0f17fbed0), [`c8ed116`](https://github.com/mastra-ai/mastra/commit/c8ed11699f62bcac70102ab4ec84d80d20541da6), [`01b338c`](https://github.com/mastra-ai/mastra/commit/01b338c56271f0219606710e3e8b26dee27ac6c2), [`a99eae8`](https://github.com/mastra-ai/mastra/commit/a99eae8908e500c1b2d12f9d277be616b98617a5), [`860ef7e`](https://github.com/mastra-ai/mastra/commit/860ef7e77d92b63469cbe5857aa1e626197e43e9), [`17e818c`](https://github.com/mastra-ai/mastra/commit/17e818c51a958ba90641b1a959dc38faf8c034e9), [`edce8d2`](https://github.com/mastra-ai/mastra/commit/edce8d2769f19e27a05737c627af2d765472a4f8), [`8a586ec`](https://github.com/mastra-ai/mastra/commit/8a586eca9a4914f31dff6140d0d45ac375b00669), [`4451dfe`](https://github.com/mastra-ai/mastra/commit/4451dfe857428e7abcc0261a507a2e186dae6d47), [`8b7361d`](https://github.com/mastra-ai/mastra/commit/8b7361d35de68b80d05d30a74e0c69e7218fd612), [`1d39058`](https://github.com/mastra-ai/mastra/commit/1d39058e548efd691799985d5c8af2737f1c3bd2), [`3927473`](https://github.com/mastra-ai/mastra/commit/392747323ddb10c643d12be7b9ae913159dfaeed), [`dce50dc`](https://github.com/mastra-ai/mastra/commit/dce50dc9a1c1fcd0f427bb5f6250ec74910cb04b), [`fd13f8e`](https://github.com/mastra-ai/mastra/commit/fd13f8e21990f9904c3eedba3a626bb4a929cdb8), [`634caff`](https://github.com/mastra-ai/mastra/commit/634caff29a9200ad058b67d53f96d9e5832fb8a2), [`f703f87`](https://github.com/mastra-ai/mastra/commit/f703f878de072d51fda557f9c50867d8252bef05), [`3e26c87`](https://github.com/mastra-ai/mastra/commit/3e26c87de0c5bc2583b795ce6ca5889b6b161acb), [`33f2b88`](https://github.com/mastra-ai/mastra/commit/33f2b88842c09a567f906fac4cb61cd5277ced59), [`177010f`](https://github.com/mastra-ai/mastra/commit/177010ff096d2e4b28d89803be5b1a4cad2a0d6b), [`0ad646f`](https://github.com/mastra-ai/mastra/commit/0ad646f71a530f2454664299e5e01bfd13fa12e5), [`b486abf`](https://github.com/mastra-ai/mastra/commit/b486abfa2a7528c6f527e4015c819ea9fa54aaad), [`54a51e0`](https://github.com/mastra-ai/mastra/commit/54a51e0a484fe1ebad3fb1f7ef5282a075709eb7), [`c43f3a9`](https://github.com/mastra-ai/mastra/commit/c43f3a9d1efde99b38789364ba4d0ba670f430e3), [`a5008f2`](https://github.com/mastra-ai/mastra/commit/a5008f22ae710ad9402ea9f2547d8c02f74d384b), [`e2d5f37`](https://github.com/mastra-ai/mastra/commit/e2d5f373bd289be534d5f8694d34465010533df6), [`4ce0163`](https://github.com/mastra-ai/mastra/commit/4ce0163dc86e675a86809685c8ce6c49f1aeb87e), [`4378341`](https://github.com/mastra-ai/mastra/commit/43783412df5ea3dd35f5b1f6e4851e79c346fc89)]:
+  - @mastra/core@1.51.0
+
+## 1.14.0-alpha.0
+
+### Minor Changes
+
+- Add `serverlessStreaming` option to `MCPServer.startHTTP()` for request-scoped progress notifications in serverless mode. ([#17927](https://github.com/mastra-ai/mastra/pull/17927))
+
+  Serverless mode (`serverless: true`) buffers each request into a single JSON response, which silently drops any `notifications/progress` a tool emits via `extra.sendNotification()`. Setting `options: { serverless: true, serverlessStreaming: true }` now handles the request with request-scoped SSE streaming (`enableJsonResponse: false` on the transient transport), so progress notifications reach the MCP client's `onprogress` handler before the final result. An explicit `enableJsonResponse` is also honored.
+
+  ```ts
+  await server.startHTTP({
+    url,
+    httpPath: '/mcp',
+    req,
+    res,
+    options: { serverless: true, serverlessStreaming: true },
+  });
+  ```
+
+  This is still fully stateless — no `mcp-session-id` is required or persisted — and the default behavior is unchanged (`enableJsonResponse: true`), so existing serverless JSON-response users are unaffected. It enables only notifications scoped to the current request, such as progress; elicitation, resource subscriptions, and out-of-request resource/list-change notifications still require session state.
+
+- Fixed MCP server notifications (resource updates, resource/prompt list changes) not reaching clients connected over streamable HTTP. Notifications are now broadcast to every connected session across all transports. ([#19193](https://github.com/mastra-ai/mastra/pull/19193))
+
+  Fixed resource subscriptions being shared globally across all clients. Subscriptions are now tracked per session, so `resources.notifyUpdated()` only notifies sessions that subscribed to the resource URI, and one client unsubscribing no longer removes another client's subscription. Clients that relied on receiving `notifications/resources/updated` without subscribing must now call `resources/subscribe` first.
+
+  Added support for the remaining MCP notification features:
+
+  **Dynamic tools and tools/list_changed**
+
+  Servers can now add and remove tools at runtime and notify clients via `notifications/tools/list_changed`:
+
+  ```typescript
+  // Server: manage tools at runtime
+  await server.toolActions.add({ myNewTool });
+  await server.toolActions.remove(['myNewTool']);
+  await server.toolActions.notifyListChanged();
+  ```
+
+  When the server is registered with a Mastra instance, dynamic add/remove also keeps the Mastra instance's tool registry in sync.
+
+  ```typescript
+  // Client: react to tool list changes
+  await mcp.tools.onListChanged('myServer', async () => {
+    const tools = await mcp.listTools();
+  });
+  ```
+
+  **Server-side log messages**
+
+  Servers can now emit `notifications/message` log notifications. The minimum level a client sets via `logging/setLevel` is honored per session:
+
+  ```typescript
+  // Broadcast to all connected clients
+  await server.sendLoggingMessage({ level: 'info', data: { message: 'Sync completed' } });
+
+  // From inside a tool, send to the calling client
+  await context.mcp.log('debug', 'Fetching weather', { location });
+  ```
+
+  **Progress notifications from tools**
+
+  Tools can now report progress to the calling client:
+
+  ```typescript
+  await context.mcp.progress({ progress: 1, total: 3, message: 'step 1' });
+  ```
+
+### Patch Changes
+
+- Fixed MCP clients advertising elicitation support before a handler is registered. ([#19192](https://github.com/mastra-ai/mastra/pull/19192))
+
+- Fixed `MCPServer` dropping a resource's `_meta` from `resources/read` results. The read handler rebuilt each content item with only `{ uri, mimeType, text | blob }`, so `appResources` (MCP Apps / SEP-1865) metadata attached during `resources/list` as `_meta: { ui: meta }` never reached the client. Hosts read the UI CSP from `contents[]._meta.ui.csp`, so `connectDomains` was silently ignored and widget `fetch`/XHR calls failed with `Failed to fetch`. The resource's `_meta` is now preserved on the read contents. ([#19163](https://github.com/mastra-ai/mastra/pull/19163))
+
+- Updated dependencies [[`a5c6337`](https://github.com/mastra-ai/mastra/commit/a5c6337d23c7686c81a32ce62f550f610543a240), [`8b97958`](https://github.com/mastra-ai/mastra/commit/8b979589f9aa59ba67cac565949475f2ffeb4ac3), [`8410541`](https://github.com/mastra-ai/mastra/commit/84105412c60ecd3bb33a9838146f59c4b588228f), [`01b338c`](https://github.com/mastra-ai/mastra/commit/01b338c56271f0219606710e3e8b26dee27ac6c2), [`8b7361d`](https://github.com/mastra-ai/mastra/commit/8b7361d35de68b80d05d30a74e0c69e7218fd612), [`c43f3a9`](https://github.com/mastra-ai/mastra/commit/c43f3a9d1efde99b38789364ba4d0ba670f430e3)]:
+  - @mastra/core@1.51.0-alpha.4
+
+## 1.13.1
+
+### Patch Changes
+
+- Fixed MCP client tools missing output schemas in tool listings. Fixes #18850. ([#18854](https://github.com/mastra-ai/mastra/pull/18854))
+
+  MCP tools that declare an `outputSchema` now expose that schema on the Mastra tool wrapper, so Studio and other consumers can document expected tool outputs.
+
+  Mastra does not re-validate MCP tool results. The MCP SDK still validates `structuredContent` via AJV. This keeps full `CallToolResult` envelopes and extra fields intact while making output shapes visible again.
+
+  ```typescript
+  const tools = await mcp.listTools();
+  const outputSchema = tools['weather_getForecast'].outputSchema?.['~standard'].jsonSchema.output({
+    target: 'draft-07',
+  });
+  ```
+
+- Updated dependencies [[`b291760`](https://github.com/mastra-ai/mastra/commit/b291760df9d6c7e4fc72606c8f0a4af2cf6e946c), [`3ffb8b7`](https://github.com/mastra-ai/mastra/commit/3ffb8b720e90f5e6977129ec1f6707d43c2bebe0), [`6ef59fe`](https://github.com/mastra-ai/mastra/commit/6ef59fef1da52ed8da5fbb2a892c71cf4fb6c739), [`4039488`](https://github.com/mastra-ai/mastra/commit/403948898af7293198d9e8b3e7fb47f623c78b94), [`29b7ea6`](https://github.com/mastra-ai/mastra/commit/29b7ea64e72b5523d5bdcbd34ee03d2b854d54e1), [`b2c9d70`](https://github.com/mastra-ai/mastra/commit/b2c9d70757207fb01a9069549e69b6f0d73a6636), [`a51c63d`](https://github.com/mastra-ai/mastra/commit/a51c63d8ee639e4daeba2a0be093efa6a1b5e52f), [`252f63d`](https://github.com/mastra-ai/mastra/commit/252f63d8fec723955adb2202be2f01a75ad0e69c), [`5ea76a7`](https://github.com/mastra-ai/mastra/commit/5ea76a723d966c72da9aa3ab30ae20276e049765), [`6445560`](https://github.com/mastra-ai/mastra/commit/6445560327045d20b239585fc63fed72e9ce36ec), [`e2b9f33`](https://github.com/mastra-ai/mastra/commit/e2b9f33456fd638eca555f9466c6519d8d049666), [`10959d5`](https://github.com/mastra-ai/mastra/commit/10959d509d824f682d40ff96e05ee044aec3b0e5), [`c547a77`](https://github.com/mastra-ai/mastra/commit/c547a7729bdf64dfc2df29c965046c0712a18f10), [`a0085fa`](https://github.com/mastra-ai/mastra/commit/a0085fa0934e52c37c8c8b3d75a6bb5cd199af36), [`a2ba369`](https://github.com/mastra-ai/mastra/commit/a2ba369e796dfab610f41c6875965b488272fa55), [`ffc3c17`](https://github.com/mastra-ai/mastra/commit/ffc3c17274ea17c11aa6f73d3140649cd7fc8abc), [`81542c1`](https://github.com/mastra-ai/mastra/commit/81542c1835c35bc32f2ce4fa9136ee11993cd299), [`3908e53`](https://github.com/mastra-ai/mastra/commit/3908e53ce04bbea04f5e0c097d7aa298c35fabee), [`cb24ce7`](https://github.com/mastra-ai/mastra/commit/cb24ce76bd16ca88eb6a963f6277f8780e703029), [`02705fd`](https://github.com/mastra-ai/mastra/commit/02705fd2f5a9062210d64ea061adeeb10dc9452e), [`ae51e81`](https://github.com/mastra-ai/mastra/commit/ae51e818825582d42500338dfc1929a082eff0ba), [`6f304ef`](https://github.com/mastra-ai/mastra/commit/6f304ef319e99725e884bdb8d3193c001b6e5964), [`5f9858f`](https://github.com/mastra-ai/mastra/commit/5f9858f791f1137ca7d52d23559fb4568f7a9026)]:
+  - @mastra/core@1.50.0
+
 ## 1.13.1-alpha.0
 
 ### Patch Changes

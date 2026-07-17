@@ -56,8 +56,8 @@ export const WithCopyMessage: Story = {
 
 export const InContext: Story = {
   render: () => (
-    <div className="flex items-center gap-2 p-3 bg-surface4 rounded-md">
-      <code className="text-sm font-mono text-neutral5">npm install @mastra/core</code>
+    <div className="flex items-center gap-2 rounded-md bg-surface4 p-3">
+      <code className="font-mono text-sm text-neutral5">npm install @mastra/core</code>
       <CopyButton content="npm install @mastra/core" />
     </div>
   ),
@@ -65,9 +65,9 @@ export const InContext: Story = {
 
 export const CodeBlock: Story = {
   render: () => (
-    <div className="relative p-4 bg-surface4 rounded-md w-dropdown-max-height">
+    <div className="relative w-dropdown-max-height rounded-md bg-surface4 p-4">
       <CopyButton content="const agent = new Agent()" className="absolute top-2 right-2" />
-      <pre className="text-sm font-mono text-neutral5">const agent = new Agent()</pre>
+      <pre className="font-mono text-sm text-neutral5">const agent = new Agent()</pre>
     </div>
   ),
 };

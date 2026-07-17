@@ -187,7 +187,7 @@ The following environment variables are automatically used when constructor opti
 1. **Session cookie**: When SSO is enabled, reads the encrypted session cookie and decrypts it. If the session is valid and not expired, the user is authenticated.
 1. **Google ID token fallback**: If no valid session cookie is present, verifies the `Authorization` header token against Google's JWKS endpoint.
 
-After authentication, `authorizeUser` checks that the user has a valid Google user ID, the token-derived expiration has not passed, and the user's verified `hd` claim matches `allowedDomains` when domains are configured.
+After authentication, `authorizeUser` checks that the user has a valid Google user ID, the token-derived expiration hasn't passed, and the user's verified `hd` claim matches `allowedDomains` when domains are configured.
 
 ### Authentication methods
 
@@ -213,7 +213,7 @@ Returns: `Promise<GoogleUser | null>`
 
 #### `authorizeUser(user)`
 
-Returns `true` when the user has an ID, has not expired, and matches `allowedDomains` when domains are configured.
+Returns `true` when the user has an ID, hasn't expired, and matches `allowedDomains` when domains are configured.
 
 ```typescript
 const allowed = auth.authorizeUser(user)
@@ -223,7 +223,7 @@ Returns: `boolean`
 
 #### `getUser(userId)`
 
-Returns `null`. Google ID tokens are verified directly, so this provider does not perform user lookup by ID.
+Returns `null`. Google ID tokens are verified directly, so this provider doesn't perform user lookup by ID.
 
 ```typescript
 const user = await auth.getUser(userId)
@@ -580,9 +580,9 @@ Returns: `{ size: number; maxSize: number }`
 
 `MastraRBACGoogle` uses `GET https://admin.googleapis.com/admin/directory/v1/groups?userKey=...` and handles pagination. Provide a service account with domain-wide delegation for production Google Workspace deployments, or pass `accessToken` / `getAccessToken` if your application already manages Google API tokens.
 
-If `user.groups` is already an array, `MastraRBACGoogle` uses that value and does not call the Directory API. An empty `groups` array means the user has no Google group roles and resolves to `_default` permissions when `_default` is configured.
+If `user.groups` is already an array, `MastraRBACGoogle` uses that value and doesn't call the Directory API. An empty `groups` array means the user has no Google group roles and resolves to `_default` permissions when `_default` is configured.
 
-`MastraRBACGoogle` does not automatically read service-account environment variables. Pass service-account credentials through the `serviceAccount` option, or pass `accessToken` / `getAccessToken`.
+`MastraRBACGoogle` doesn't automatically read service-account environment variables. Pass service-account credentials through the `serviceAccount` option, or pass `accessToken` / `getAccessToken`.
 
 ## Related
 

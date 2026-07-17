@@ -12,14 +12,15 @@ import { cn } from '@/lib/utils';
 // (so `[&>svg]` selectors don't match) and uses its own `rounded-full` (circle).
 const TEXT_MODE_ADORNMENTS = cn(
   'gap-[.75em] rounded-full',
-  '[&>svg]:w-[1.1em] [&>svg]:h-[1.1em] [&>svg]:mx-[-.3em]',
-  '[&>svg]:opacity-50 [&:hover>svg]:opacity-100',
+  '[&>svg]:mx-[-.3em] [&>svg]:size-[1.1em]',
+  '[&:hover>svg]:opacity-100 [&>svg]:opacity-50',
 );
 
+// eslint-disable-next-line react-refresh/only-export-components -- exported variant helper is part of Button's public API
 export const buttonVariants = cva(
   cn(
-    'inline-flex items-center justify-center leading-0 cursor-pointer',
-    'transition-all duration-normal ease-out-custom',
+    'inline-flex cursor-pointer items-center justify-center leading-0',
+    'duration-normal transition-all ease-out-custom',
     sharedFormElementDisabledStyle,
     controlFocusBorderVisible,
   ),
@@ -27,13 +28,13 @@ export const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          'bg-surface3 border border-border2 hover:bg-surface5 hover:text-neutral6 active:bg-surface6 text-neutral6',
+          'border border-border2 bg-surface3 text-neutral6 hover:bg-surface5 hover:text-neutral6 active:bg-surface6',
         primary:
-          'bg-neutral6 border border-transparent hover:bg-neutral6/90 active:bg-neutral6/80 text-surface1 font-medium',
+          'border border-transparent bg-neutral6 font-medium text-surface1 hover:bg-neutral6/90 active:bg-neutral6/80',
         ghost:
-          'bg-transparent border border-transparent hover:bg-neutral6/5 hover:text-neutral6 active:bg-neutral6/10 text-neutral4',
+          'border border-transparent bg-transparent text-neutral4 hover:bg-neutral6/5 hover:text-neutral6 active:bg-neutral6/10',
         outline:
-          'bg-transparent border border-border1 hover:bg-surface3 hover:text-neutral6 active:bg-surface4 text-neutral5',
+          'border border-border1 bg-transparent text-neutral5 hover:bg-surface3 hover:text-neutral6 active:bg-surface4',
       },
       size: {
         xs: cn(controlSizeClasses.xs, 'px-[.8em]', TEXT_MODE_ADORNMENTS),

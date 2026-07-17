@@ -1,4 +1,23 @@
+import type { MessageInput } from '@mastra/core/agent/message-list';
 import { z } from 'zod/v4';
+
+/**
+ * Brands a permissive runtime schema with a concrete compile-time type.
+ *
+ * Some request-body fields carry values the server cannot fully validate with
+ * zod: functions (stop conditions, client tools), Zod schemas (structured
+ * output), or complex core types that would drift if re-declared here. For
+ * those fields runtime validation stays permissive and the receiving
+ * agent/workflow API performs the real validation, while handlers and
+ * generated route types still get the concrete type.
+ *
+ * Every call site is an intentional, documented gap between runtime
+ * validation and the declared type. Prefer a real zod schema whenever the
+ * shape can reasonably be expressed — only reach for this when it cannot.
+ */
+export function typedPermissive<T>(schema: z.ZodType): z.ZodType<T> {
+  return schema as unknown as z.ZodType<T>;
+}
 
 // Path parameter schemas
 export const runIdSchema = z.object({
@@ -96,7 +115,10 @@ export const tracingOptionsSchema = z.object({
  * Represents messages exchanged with AI models
  * Content can be string, array of content parts, or object (for complex message types)
  */
-export const coreMessageSchema = z.any();
+// Runtime validation stays permissive (z.unknown()) so generated route types
+// don't leak `any`; typedPermissive gives handlers the concrete message type
+// expected by agent APIs (agent.generate/stream/network).
+export const coreMessageSchema = typedPermissive<MessageInput>(z.unknown());
 // .object({
 //   role: z.enum(['system', 'user', 'assistant', 'tool']),
 //   content: z.union([
@@ -108,7 +130,7 @@ export const coreMessageSchema = z.any();
 //         })
 //         .passthrough(), // Preserve additional fields like text, image, toolCall, etc.
 //     ),
-//     z.any(), // For complex message content objects
+//     z.unknown(), // For complex message content objects
 //   ]),
 // })
 // .passthrough();

@@ -29,13 +29,13 @@ export function MetricsLineChart({
 
   return (
     <div>
-      <div className="flex flex-wrap w-full items-end gap-4 gap-y-1 mb-4 ">
+      <div className="mb-4 flex w-full flex-wrap items-end gap-4 gap-y-1 ">
         {series.map(s => {
           const aggregated = s.aggregate?.(data);
           return (
             <div key={s.dataKey} className="inline-flex items-baseline gap-2">
-              <div className="size-2 shrink-0 rounded-full -translate-y-px" style={{ backgroundColor: s.color }} />
-              <span className="text-ui-sm text-neutral3 truncate max-w-24">{s.label}</span>
+              <div className="size-2 shrink-0 -translate-y-px rounded-full" style={{ backgroundColor: s.color }} />
+              <span className="max-w-24 truncate text-ui-sm text-neutral3">{s.label}</span>
               {aggregated && (
                 <span className="text-ui-sm text-neutral4">
                   {aggregated.value}

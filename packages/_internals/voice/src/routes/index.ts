@@ -18,16 +18,16 @@ export const generateSpeechBodySchema = z.object({
 });
 
 export const transcribeSpeechBodySchema = z.object({
-  audio: z.any(),
-  options: z.record(z.string(), z.any()).optional(),
+  audio: z.unknown(),
+  options: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const transcribeSpeechResponseSchema = z.object({
   text: z.string(),
 });
 
-export const getListenerResponseSchema = z.any();
-export const speakResponseSchema = z.any();
+export const getListenerResponseSchema = z.unknown();
+export const speakResponseSchema = z.unknown();
 
 const agentIdPathParams = z.object({
   agentId: z.string().describe('Agent ID'),

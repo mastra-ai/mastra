@@ -75,6 +75,60 @@ describe('LocalSandbox', () => {
   });
 
   // ===========================================================================
+  // Derivation
+  // ===========================================================================
+  describe('derive', () => {
+    it('constructs an unstarted sibling inheriting configuration', () => {
+      const template = new LocalSandbox({ workingDirectory: tempDir, env: { BASE: '1' } });
+
+      const child = template.derive({ id: 'mc-project-1' });
+
+      expect(child).toBeInstanceOf(LocalSandbox);
+      expect(child).not.toBe(template);
+      expect(child.id).toBe('mc-project-1');
+      expect(child.status).toBe('pending');
+      expect(child.workingDirectory).toBe(tempDir);
+      expect(child.isolation).toBe(template.isolation);
+    });
+
+    it('applies env overrides and can execute commands after start', async () => {
+      const template = new LocalSandbox({ workingDirectory: tempDir, env: { PATH: process.env.PATH } });
+
+      const child = template.derive({ env: { PATH: process.env.PATH ?? '', DERIVED_VAR: 'derived-value' } });
+      await child._start();
+      try {
+        const result = await child.executeCommand!('sh', ['-c', 'echo "$DERIVED_VAR"']);
+        expect(result.success).toBe(true);
+        expect(result.stdout.trim()).toBe('derived-value');
+      } finally {
+        await child._destroy();
+      }
+    });
+
+    it('inherits the template env when no env override is passed', async () => {
+      const template = new LocalSandbox({
+        workingDirectory: tempDir,
+        env: { PATH: process.env.PATH, TEMPLATE_VAR: 'from-template' },
+      });
+
+      const child = template.derive();
+      await child._start();
+      try {
+        const result = await child.executeCommand!('sh', ['-c', 'echo "$TEMPLATE_VAR"']);
+        expect(result.stdout.trim()).toBe('from-template');
+      } finally {
+        await child._destroy();
+      }
+    });
+
+    it('ignores sandboxId and idleTimeoutMinutes (no local equivalent)', () => {
+      const template = new LocalSandbox({ workingDirectory: tempDir });
+      const child = template.derive({ sandboxId: 'ignored', idleTimeoutMinutes: 15, id: 'local-child' });
+      expect(child.id).toBe('local-child');
+    });
+  });
+
+  // ===========================================================================
   // Lifecycle
   // ===========================================================================
   describe('lifecycle', () => {

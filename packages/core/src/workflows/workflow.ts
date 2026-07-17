@@ -95,6 +95,7 @@ import type {
   OutputWriter,
   StepMetadata,
   WorkflowRunStartOptions,
+  ForeachOptions,
 } from './types';
 import { cleanStepResult, createRestartExecutionParams, createTimeTravelExecutionParams } from './utils';
 
@@ -632,6 +633,7 @@ function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
       workflowId,
       state,
       setState,
+      abortSignal,
       ...rest
     }) => {
       // BREAKING CHANGE v1.0: Pass raw input as first arg, context as second
@@ -640,6 +642,7 @@ function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
         mastra,
         requestContext,
         ...observabilityContext,
+        abortSignal,
         resumeData,
         workflow: {
           runId,
@@ -1894,6 +1897,18 @@ export class Workflow<
             requestContextPath: m.requestContextPath,
             schema: m.schema,
           };
+        } else if (m.initData !== undefined) {
+          // `mapVariable({ initData: <workflow> })` keeps a live Workflow instance
+          // by reference. Serializing it here would deep-walk the whole workflow
+          // (logger, nested step graph, …) into `mapConfig` — a multi-hundred-MB
+          // string that OOMs at .commit() before the length guard below can trim
+          // it (#19018). The execute path only reads `m.initData` for truthiness
+          // (it calls getInitData()), so a slim id reference is behaviourally
+          // identical at runtime.
+          a[key] = {
+            initData: m.initData?.id ?? true,
+            path: m.path,
+          };
         } else {
           a[key] = m;
         }
@@ -2227,11 +2242,10 @@ export class Workflow<
           unknown extends TStepRC ? unknown : TRequestContext
         >
       : 'Previous step must return an array type',
-    opts?: {
-      concurrency: number;
-    },
+    opts?: ForeachOptions,
   ) {
     const actualStep = step as Step<any, any, any, any, any, any>;
+    const concurrency = opts?.concurrency ?? 1;
     this.stepFlow.push({ type: 'foreach', step: step as any, opts: opts ?? { concurrency: 1 } });
     this.serializedStepFlow.push({
       type: 'foreach',
@@ -2243,7 +2257,7 @@ export class Workflow<
         serializedStepFlow: (step as SerializedStep).serializedStepFlow,
         canSuspend: Boolean(actualStep.suspendSchema || actualStep.resumeSchema),
       },
-      opts: opts ?? { concurrency: 1 },
+      opts: typeof concurrency === 'function' ? { fn: concurrency.toString() } : { concurrency },
     });
     this.steps[(step as any).id] = step as any;
     return this as unknown as Workflow<
@@ -2361,9 +2375,14 @@ export class Workflow<
       stepResults: {},
     });
 
-    const existingRun = await this.getWorkflowRunById(runIdToUse, {
-      withNestedWorkflows: false,
-    });
+    // A freshly-minted run for a workflow that never persists a snapshot (e.g. the
+    // transient processor workflows from #17344) cannot have a stored row, so this
+    // existence read would be a guaranteed miss. Skipping it removes one storage
+    // round trip per streamed chunk on the agent output-processor hot path (#19015).
+    const existingRun =
+      shouldPersistSnapshot || options?.runId
+        ? await this.getWorkflowRunById(runIdToUse, { withNestedWorkflows: false })
+        : undefined;
 
     // Check if run exists in persistent storage (not just in-memory)
     const existsInStorage = existingRun && !existingRun.isFromInMemory;
@@ -2643,10 +2662,29 @@ export class Workflow<
       for (const [stepName, stepResult] of suspendedSteps) {
         // @ts-expect-error - context type mismatch
         const suspendPath: string[] = [stepName, ...(stepResult?.suspendPayload?.__workflow_meta?.path ?? [])];
+        const nestedMeta = (stepResult as any)?.suspendPayload?.__workflow_meta ?? {};
+        // Keep the nested workflow metadata (foreachIndex, foreachOutput, resumeLabels) when
+        // propagating a suspension to the parent — mirrors the evented engine — so the parent
+        // snapshot is self-describing about EVERY parked iteration, not just the first one.
+        // Only runId and path change as we propagate up. Per-iteration `__streamState` blobs
+        // are stripped from the propagated copies: they can be large and resume reads them
+        // from the nested run's own snapshot, so the parent only needs the identifying fields.
+        const propagatedForeachOutput = Array.isArray(nestedMeta.foreachOutput)
+          ? nestedMeta.foreachOutput.map((entry: any) => {
+              if (entry?.status !== 'suspended' || !entry.suspendPayload) return entry;
+              const { __streamState: _streamState, ...suspendPayload } = entry.suspendPayload;
+              return { ...entry, suspendPayload };
+            })
+          : undefined;
         await suspend(
           {
             ...(stepResult as any)?.suspendPayload,
-            __workflow_meta: { runId: run.runId, path: suspendPath },
+            __workflow_meta: {
+              ...nestedMeta,
+              ...(propagatedForeachOutput ? { foreachOutput: propagatedForeachOutput } : {}),
+              runId: run.runId,
+              path: suspendPath,
+            },
           },
           {
             resumeLabel: Object.keys(res.resumeLabels ?? {}),

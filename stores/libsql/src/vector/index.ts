@@ -102,6 +102,34 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     this.vectorIndexes = this.isMemoryDb ? Promise.resolve(new Set<string>()) : this.discoverVectorIndexes();
   }
 
+  /**
+   * Closes the underlying libsql client, releasing all OS file handles.
+   *
+   * For local file databases, first runs PRAGMA wal_checkpoint(TRUNCATE) and
+   * switches back to journal_mode=DELETE so the -wal and -shm sidecar files
+   * are released promptly (mirrors LibSQLStore.close()).
+   *
+   * Remote (Turso) databases skip the WAL pragmas and just close the client.
+   *
+   * Safe to call more than once; subsequent calls are no-ops.
+   */
+  async close(): Promise<void> {
+    if (this.turso.closed) {
+      return;
+    }
+
+    if (this.turso.protocol === 'file' && !this.isMemoryDb) {
+      try {
+        await this.turso.execute('PRAGMA wal_checkpoint(TRUNCATE);');
+        await this.turso.execute('PRAGMA journal_mode=DELETE;');
+      } catch (err) {
+        this.logger.warn('LibSQLVector: Failed to checkpoint WAL before close.', err);
+      }
+    }
+
+    this.turso.close();
+  }
+
   private async discoverVectorIndexes(): Promise<Set<string>> {
     try {
       const result = await this.turso.execute({

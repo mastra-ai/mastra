@@ -24,7 +24,7 @@ For tool calls that return quickly, foreground execution using `agent.stream()` 
 
 :::note
 
-Background tasks require a configured [storage](/docs/memory/storage) backend on the Mastra instance. Tasks are persisted so they survive process restarts.
+Background tasks require a configured [storage](/docs/storage/overview) backend on the Mastra instance. Tasks are persisted so they survive process restarts.
 
 :::
 
@@ -78,8 +78,8 @@ export const researchTool = createTool({
     maxRetries: 1,
   },
   // highlight-end
-  execute: async ({ context }) => {
-    // ...
+  execute: async ({ topic }) => {
+    // Run the research job for topic
   },
 })
 ```
@@ -182,11 +182,7 @@ const stream = await agent.stream('Research solana for me', {
 })
 ```
 
-:::note
-
 Visit [`Agent.stream()`](/reference/streaming/agents/stream) for the full API.
-
-:::
 
 ### Aggregate properties
 
@@ -401,4 +397,4 @@ These read from storage rather than the pubsub stream, so they're suitable for p
 - [Durable agents](./durable-agents)
 - [Supervisor agents](/docs/agents/supervisor-agents)
 - [Stream chunk types](/reference/streaming/ChunkType)
-- [Storage](/docs/memory/storage)
+- [Storage](/docs/storage/overview)

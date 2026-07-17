@@ -2,6 +2,7 @@ import {
   SignalDetailsPage as SignalDetailsPageContent,
   SignalTraceDetailsPanel,
 } from '@mastra/playground-ui/ee/signals/components/signal-details-page';
+import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 
@@ -11,6 +12,14 @@ function useSelectedEntity() {
   const entity = entityId ? { entityType: 'agent', entityId } : null;
 
   return { entity };
+}
+
+function SignalDetailsScrollBoundary({ children }: { children: ReactNode }) {
+  return (
+    <div data-testid="signal-details-scroll-boundary" className="h-full min-h-0 min-w-0 overflow-y-auto">
+      {children}
+    </div>
+  );
 }
 
 function SignalDetailsRouteContent({ selectedTraceId }: { selectedTraceId: string | null }) {
@@ -28,13 +37,15 @@ function SignalDetailsRouteContent({ selectedTraceId }: { selectedTraceId: strin
   };
 
   return (
-    <SignalDetailsPageContent
-      signalId={signalId}
-      entity={entity}
-      selectedTraceId={selectedTraceId}
-      initialTopicId={initialTopicId}
-      onTraceSelect={handleTraceSelect}
-    />
+    <SignalDetailsScrollBoundary>
+      <SignalDetailsPageContent
+        signalId={signalId}
+        entity={entity}
+        selectedTraceId={selectedTraceId}
+        initialTopicId={initialTopicId}
+        onTraceSelect={handleTraceSelect}
+      />
+    </SignalDetailsScrollBoundary>
   );
 }
 
@@ -61,23 +72,25 @@ export function SignalTraceIdPage() {
   };
 
   return (
-    <SignalDetailsPageContent
-      signalId={signalId}
-      entity={entity}
-      selectedTraceId={traceId ?? null}
-      initialTopicId={initialTopicId}
-      onTraceSelect={handleTraceSelect}
-      tracePanel={
-        traceId ? (
-          <SignalTraceDetailsPanel
-            traceId={traceId}
-            selectedSpanId={selectedSpanId}
-            onSpanSelect={spanId => setSelectedSpanId(spanId ?? null)}
-            onClose={handleTraceClose}
-          />
-        ) : null
-      }
-    />
+    <SignalDetailsScrollBoundary>
+      <SignalDetailsPageContent
+        signalId={signalId}
+        entity={entity}
+        selectedTraceId={traceId ?? null}
+        initialTopicId={initialTopicId}
+        onTraceSelect={handleTraceSelect}
+        tracePanel={
+          traceId ? (
+            <SignalTraceDetailsPanel
+              traceId={traceId}
+              selectedSpanId={selectedSpanId}
+              onSpanSelect={spanId => setSelectedSpanId(spanId ?? null)}
+              onClose={handleTraceClose}
+            />
+          ) : null
+        }
+      />
+    </SignalDetailsScrollBoundary>
   );
 }
 

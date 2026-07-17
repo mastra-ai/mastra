@@ -1,5 +1,6 @@
 import { Tabs as BaseTabs } from '@base-ui/react/tabs';
 import { X } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip/tooltip';
 import { transitions, focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -9,32 +10,35 @@ export type TabProps = {
   onClick?: () => void;
   onClose?: () => void;
   disabled?: boolean;
+  disabledTooltip?: React.ReactNode;
   className?: string;
 };
 
-export const Tab = ({ children, value, onClick, onClose, disabled, className }: TabProps) => {
-  return (
+export const Tab = ({ children, value, onClick, onClose, disabled, disabledTooltip, className }: TabProps) => {
+  const tab = (
     <BaseTabs.Tab
       value={value}
       disabled={disabled}
       className={cn(
         'text-ui-md font-normal text-neutral3',
-        'whitespace-nowrap shrink-0 flex items-center justify-center gap-1.5 outline-none cursor-pointer',
+        'flex shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap outline-none',
         transitions.colors,
         focusRing.visible,
         'hover:text-neutral4',
         'data-[active]:text-neutral5',
+        'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-neutral3',
+        'aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:hover:text-neutral3',
         'data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[disabled]:hover:text-neutral3',
         // Line variant legacy fallback — active state drawn by <Tabs.Indicator> in TabList
-        'group-data-[variant=line]/tabs-list:py-2 group-data-[variant=line]/tabs-list:px-5',
+        'group-data-[variant=line]/tabs-list:px-5 group-data-[variant=line]/tabs-list:py-2',
         'group-data-[variant=line]/tabs-list:border-b-2 group-data-[variant=line]/tabs-list:border-transparent',
         // Pill variant
         'group-data-[variant=pill]/tabs-list:relative group-data-[variant=pill]/tabs-list:z-10',
-        'group-data-[variant=pill]/tabs-list:py-1 group-data-[variant=pill]/tabs-list:px-3',
+        'group-data-[variant=pill]/tabs-list:px-3 group-data-[variant=pill]/tabs-list:py-1',
         'group-data-[variant=pill]/tabs-list:rounded-full',
         // Pill-ghost variant (pill without list background)
         'group-data-[variant=pill-ghost]/tabs-list:relative group-data-[variant=pill-ghost]/tabs-list:z-10',
-        'group-data-[variant=pill-ghost]/tabs-list:py-1 group-data-[variant=pill-ghost]/tabs-list:px-3',
+        'group-data-[variant=pill-ghost]/tabs-list:px-3 group-data-[variant=pill-ghost]/tabs-list:py-1',
         'group-data-[variant=pill-ghost]/tabs-list:rounded-full',
         className,
       )}
@@ -48,12 +52,23 @@ export const Tab = ({ children, value, onClick, onClose, disabled, className }: 
             e.stopPropagation();
             onClose();
           }}
-          className={cn('p-0.5 hover:bg-surface4 rounded', transitions.colors, 'hover:text-neutral5')}
+          className={cn('rounded p-0.5 hover:bg-surface4', transitions.colors, 'hover:text-neutral5')}
           aria-label="Close tab"
         >
-          <X className="w-3 h-3" />
+          <X className="size-3" />
         </button>
       )}
     </BaseTabs.Tab>
   );
+
+  if (disabled && disabledTooltip) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>{tab}</TooltipTrigger>
+        <TooltipContent>{disabledTooltip}</TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return tab;
 };

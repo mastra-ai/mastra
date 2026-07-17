@@ -31,11 +31,6 @@ const sidebars = {
       items: [
         {
           type: 'doc',
-          id: 'getting-started/project-structure',
-          label: 'Project Structure',
-        },
-        {
-          type: 'doc',
           id: 'getting-started/manual-install',
           label: 'Manual Install',
         },
@@ -43,6 +38,19 @@ const sidebars = {
           type: 'doc',
           id: 'getting-started/build-with-ai',
           label: 'Build with AI',
+        },
+        {
+          type: 'doc',
+          id: 'storage/overview',
+          label: 'Storage',
+        },
+        {
+          type: 'doc',
+          id: 'getting-started/file-based-agents',
+          label: 'File-based Agents',
+          customProps: {
+            tags: ['beta'],
+          },
         },
       ],
     },
@@ -91,11 +99,6 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'agents/channels',
-              label: 'Channels',
-            },
-            {
-              type: 'doc',
               id: 'agents/guardrails',
               label: 'Guardrails',
             },
@@ -103,14 +106,6 @@ const sidebars = {
               type: 'doc',
               id: 'agents/processors',
               label: 'Processors',
-            },
-            {
-              type: 'doc',
-              id: 'agents/file-based-agents',
-              label: 'File-based Agents',
-              customProps: {
-                tags: ['beta'],
-              },
             },
             {
               type: 'doc',
@@ -225,11 +220,6 @@ const sidebars = {
               type: 'doc',
               id: 'memory/overview',
               label: 'Overview',
-            },
-            {
-              type: 'doc',
-              id: 'memory/storage',
-              label: 'Storage',
             },
             {
               type: 'doc',
@@ -413,6 +403,47 @@ const sidebars = {
         },
         {
           type: 'category',
+          label: 'Channels',
+          items: [
+            {
+              type: 'doc',
+              id: 'capabilities/channels/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'capabilities/channels/slack',
+              label: 'Slack',
+            },
+            {
+              type: 'doc',
+              id: 'capabilities/channels/teams',
+              label: 'Microsoft Teams',
+            },
+            {
+              type: 'doc',
+              id: 'capabilities/channels/discord',
+              label: 'Discord',
+            },
+            {
+              type: 'doc',
+              id: 'capabilities/channels/telegram',
+              label: 'Telegram',
+            },
+            {
+              type: 'doc',
+              id: 'capabilities/channels/whatsapp',
+              label: 'WhatsApp',
+            },
+            {
+              type: 'doc',
+              id: 'capabilities/channels/other-adapters',
+              label: 'More',
+            },
+          ],
+        },
+        {
+          type: 'category',
           label: 'RAG',
           items: [
             {
@@ -465,6 +496,11 @@ const sidebars = {
               type: 'doc',
               id: 'voice/speech-to-speech',
               label: 'Speech to Speech',
+            },
+            {
+              type: 'doc',
+              id: 'voice/livekit',
+              label: 'LiveKit',
             },
           ],
         },
@@ -886,6 +922,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'evals/multi-turn',
+              label: 'Multi-turn Evals',
+            },
+            {
+              type: 'doc',
               id: 'evals/custom-scorers',
               label: 'Custom Scorers',
             },
@@ -943,6 +984,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'deployment/sandbox',
+              label: 'Sandbox',
+            },
+            {
+              type: 'doc',
               id: 'deployment/web-framework',
               label: 'Web Framework',
             },
@@ -965,6 +1011,22 @@ const sidebars = {
           type: 'doc',
           id: 'mastra-platform/overview',
           label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/deploy',
+          label: 'Deploy',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/environments',
+          label: 'Environments',
+          customProps: {
+            tags: ['new'],
+          },
         },
         {
           type: 'doc',
