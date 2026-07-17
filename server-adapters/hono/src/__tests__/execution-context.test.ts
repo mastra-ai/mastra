@@ -18,7 +18,7 @@ import { MastraServer } from '../index';
 
 describe('MastraServer (Hono) - custom route execution context passthrough', () => {
   function buildProbeAdapter() {
-    let seenWaitUntil: unknown;
+    let seenWaitUntil: ExecutionContext['waitUntil'] | undefined;
     let handlerRan = false;
 
     const mastra = new Mastra({
