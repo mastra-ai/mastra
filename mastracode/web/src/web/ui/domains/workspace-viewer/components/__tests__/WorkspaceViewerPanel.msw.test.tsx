@@ -80,7 +80,7 @@ describe('WorkspaceViewerPanel', () => {
     renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} renderedPaths={renderedPaths} />);
 
     expect(await screen.findByText('Files')).toBeInTheDocument();
-    expect(await screen.findByText('No files in this workspace path.')).toBeInTheDocument();
+    expect(await screen.findByText('No artifacts yet. Session files created will appear here.')).toBeInTheDocument();
   });
 
   it('expands folders inline and opens the selected file viewer left of the browser', async () => {
@@ -141,7 +141,7 @@ describe('WorkspaceViewerPanel', () => {
     const user = userEvent.setup();
     renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} renderedPaths={renderedPaths} />);
 
-    await screen.findByText('No files in this workspace path.');
+    await screen.findByText('No artifacts yet. Session files created will appear here.');
     await user.click(screen.getByRole('button', { name: 'Refresh workspace files' }));
 
     expect(calls).toBeGreaterThan(1);

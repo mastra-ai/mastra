@@ -1,3 +1,4 @@
+import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import type { ReactNode } from 'react';
 import { createContext, useContext } from 'react';
@@ -11,7 +12,6 @@ import { findUserSessionByThreadId } from '../../workspaces/services/projects';
 import { deriveProjectPath } from '../../../../../shared/hooks/useWorkspaces';
 import { useAgentControllerThreadMessages } from '../../../../../shared/hooks/useAgentControllerThreadMessages';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { normalizeMessages } from '../services/transcript';
 import { ChatModelsProvider } from './ChatModelsProvider';
 import { ChatModesProvider } from './ChatModesProvider';
 import { ChatPermissionsProvider } from './ChatPermissionsProvider';
@@ -100,7 +100,7 @@ export function ChatSessionBoundary({
     <ChatTranscriptProvider
       key={`${resourceId}:${threadId ?? 'draft'}`}
       threadId={threadId}
-      initialMessages={normalizeMessages(messagesQuery.data)}
+      initialMessages={messagesQuery.data as unknown as MastraDBMessage[] | undefined}
     >
       <ChatModesProvider>
         <ChatModelsProvider>

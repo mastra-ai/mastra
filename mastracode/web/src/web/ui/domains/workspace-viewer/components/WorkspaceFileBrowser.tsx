@@ -104,6 +104,11 @@ function buildTree(entries: WorkspaceRenderedEntry[]): WorkspaceTreeNode[] {
   return sortTree(nodes);
 }
 
+function emptyStateCopy(path: RenderedWorkspacePath) {
+  if (path.root === '.artifacts') return 'No artifacts yet. Session files created will appear here.';
+  return `No files in ${path.label}.`;
+}
+
 function WorkspaceTreeItem({
   node,
   root,
@@ -218,7 +223,9 @@ export function WorkspaceFileBrowser({
                     {isLoading ? <Txt className="px-2 py-3 text-icon3">Loading files…</Txt> : null}
                     {error ? <Txt className="px-2 py-3 text-icon4">Unable to load files.</Txt> : null}
                     {!isLoading && !error && nodes.length === 0 ? (
-                      <Txt className="px-2 py-3 text-icon3">No files in this workspace path.</Txt>
+                      <Txt className="px-2 py-3 text-icon3" variant="ui-sm">
+                        {emptyStateCopy(path)}
+                      </Txt>
                     ) : null}
                     {!isLoading && !error
                       ? nodes.map(node => (

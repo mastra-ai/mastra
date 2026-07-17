@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import { useParams } from 'react-router';
 
 import { useOverlays } from '../../lib/overlays';
 import { Sidebar } from '../../Sidebar';
 import { ChatLayout } from '../../ui';
-import { EmptyProjectState, useActiveProjectContext } from '../workspaces';
+import { renderedPaths, WorkspaceViewerPanel } from '../workspace-viewer';
+import { activeWorkspacePath, EmptyProjectState, findUserSessionByThreadId, useActiveProjectContext } from '../workspaces';
 import { ChatHeader } from './components/ChatHeader';
 import { ChatMessageList } from './components/ChatMessageList';
 import { ChatOverlays } from './components/ChatOverlays';
@@ -20,6 +22,10 @@ export function ThreadPage() {
   const overlays = useOverlays();
   const { activeProject } = useActiveProjectContext();
   const { threadId } = useParams();
+  const [workspaceViewerExpanded, setWorkspaceViewerExpanded] = useState(false);
+  const userSessionMatch = threadId ? findUserSessionByThreadId(threadId) : undefined;
+  const workspaceProject = userSessionMatch?.project ?? activeProject;
+  const workspacePath = workspaceProject ? activeWorkspacePath(workspaceProject, userSessionMatch?.worktree) : undefined;
 
   return (
     <ChatLayout
@@ -27,6 +33,18 @@ export function ThreadPage() {
       header={<ChatHeader />}
       sidebarOpen={overlays.isOpen('sidebar')}
       onSidebarClose={() => overlays.close('sidebar')}
+      rightPanelExpanded={workspaceViewerExpanded}
+      rightPanel={
+        workspacePath ? (
+          <WorkspaceViewerPanel
+            workspacePath={workspacePath}
+            renderedPaths={renderedPaths}
+            title="Workspace files"
+            context={workspaceProject?.name}
+            onExpandedChange={setWorkspaceViewerExpanded}
+          />
+        ) : undefined
+      }
       main={
         <ChatSessionBoundary threadId={threadId}>
           {activeProject ? <ThreadPageMain /> : <EmptyProjectState onOpenProjects={() => overlays.open('projects')} />}
