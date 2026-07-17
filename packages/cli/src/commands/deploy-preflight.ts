@@ -28,7 +28,12 @@ export interface PreflightIssue {
   code: PreflightIssueCode;
   severity: 'error' | 'warning';
   message: string;
-  fix: string;
+  /**
+   * Remediation. A single string renders as one arrow line; an array renders
+   * as one arrow line per entry so multi-step fixes (run this command, OR set
+   * this env var) stay legible instead of collapsing into a wall of text.
+   */
+  fix: string | string[];
   autofix?: PreflightAutofix;
 }
 
@@ -241,12 +246,17 @@ export async function printPreflightIssues(
   const errors = issues.filter(i => i.severity === 'error');
   const warnings = issues.filter(i => i.severity === 'warning');
 
+  const renderFix = (fix: string | string[]): string => {
+    const steps = Array.isArray(fix) ? fix : [fix];
+    return steps.map(step => `  ${pc.dim('→')} ${step}`).join('\n');
+  };
+
   for (const issue of warnings) {
-    p.log.warn(`${pc.yellow(`[${issue.code}]`)} ${issue.message}\n  ${pc.dim('→')} ${issue.fix}`);
+    p.log.warn(`${pc.yellow(`[${issue.code}]`)} ${issue.message}\n${renderFix(issue.fix)}`);
   }
 
   for (const issue of errors) {
-    p.log.error(`${pc.red(`[${issue.code}]`)} ${issue.message}\n  ${pc.dim('→')} ${issue.fix}`);
+    p.log.error(`${pc.red(`[${issue.code}]`)} ${issue.message}\n${renderFix(issue.fix)}`);
   }
 
   if (errors.length > 0) {
@@ -499,7 +509,10 @@ async function checkLocalStoragePaths(
           code: 'LOCAL_STORAGE_PATH',
           severity: 'error',
           message: `${truncate(d.value, 80)} will be used at runtime because ${d.guardedBy} is not set (${d.hint})`,
-          fix: `Set ${d.guardedBy} in your env file or the environment's stored vars, or create a managed database that provides it: ${dbCreateCommandFor(d.guardedBy, environmentSlug)}`,
+          fix: [
+            `Run \`${dbCreateCommandFor(d.guardedBy, environmentSlug)}\` to attach a managed database`,
+            `Or set ${d.guardedBy} in your env file or the environment's stored vars`,
+          ],
           autofix: dbAutofixFor(d.guardedBy),
         });
       }
@@ -508,7 +521,11 @@ async function checkLocalStoragePaths(
         code: 'LOCAL_STORAGE_PATH',
         severity: 'error',
         message: `${truncate(d.value, 80)} will be used at runtime because ${d.guardedBy} is not set (${d.hint})`,
-        fix: `Set ${d.guardedBy} in your env file, or create a managed database that provides it: ${dbCreateCommandFor(d.guardedBy, environmentSlug)}. If the platform already injects it, re-run with --skip-preflight.`,
+        fix: [
+          `Run \`${dbCreateCommandFor(d.guardedBy, environmentSlug)}\` to attach a managed database`,
+          `Or set ${d.guardedBy} in your env file`,
+          `If the platform already injects it, re-run with --skip-preflight`,
+        ],
         autofix: dbAutofixFor(d.guardedBy),
       });
     } else {

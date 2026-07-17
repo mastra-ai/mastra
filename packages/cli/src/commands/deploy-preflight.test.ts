@@ -6,6 +6,12 @@ import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import { mergePreflightEnvVars, preflightBuildOutput, printPreflightIssues } from './deploy-preflight.js';
 import type { PreflightIssue } from './deploy-preflight.js';
 
+/**
+ * `fix` may be a single string or a step list. Tests care about whether the
+ * remediation contains a substring, so flatten to one blob for assertions.
+ */
+const fixText = (fix: PreflightIssue['fix'] | undefined): string => (Array.isArray(fix) ? fix.join('\n') : (fix ?? ''));
+
 vi.mock('@clack/prompts', () => ({
   log: { warn: vi.fn(), error: vi.fn() },
   confirm: vi.fn(),
@@ -212,7 +218,7 @@ describe('preflightBuildOutput', () => {
       expect(issue?.severity).toBe('error');
       expect(issue?.message).toContain('file:./.mastra-demo.db will be used at runtime');
       expect(issue?.message).toContain('TURSO_DATABASE_URL is not set');
-      expect(issue?.fix).toContain('TURSO_DATABASE_URL');
+      expect(fixText(issue?.fix)).toContain('TURSO_DATABASE_URL');
     });
 
     it('warns (not errors) when the guarding var is missing but the CLI has no env file', async () => {
@@ -295,7 +301,19 @@ describe('preflightBuildOutput', () => {
 
       const issues = await preflightBuildOutput(tmpDir, {}, { hasEnvFile: false, managedEnvVarNames: [] });
       const issue = issues.find(i => i.code === 'LOCAL_STORAGE_PATH');
-      expect(issue?.fix).toContain('mastra env db create --kind turso');
+      expect(fixText(issue?.fix)).toContain('mastra env db create --kind turso');
+    });
+
+    it('renders the DB provisioning fix as a step list so command and env-var options are on separate lines', async () => {
+      writeBundle(`export {};`);
+      writeMetadata({ localPaths: [guardedDetection] });
+
+      const issues = await preflightBuildOutput(tmpDir, {}, { hasEnvFile: false, managedEnvVarNames: [] });
+      const issue = issues.find(i => i.code === 'LOCAL_STORAGE_PATH');
+      expect(Array.isArray(issue?.fix)).toBe(true);
+      const steps = issue?.fix as string[];
+      expect(steps[0]).toMatch(/mastra env db create/);
+      expect(steps[1]).toMatch(/^Or set TURSO_DATABASE_URL/);
     });
 
     it('attaches a create-managed-database autofix hint when the guard var maps to a provider', async () => {
@@ -339,7 +357,7 @@ describe('preflightBuildOutput', () => {
 
       const issues = await preflightBuildOutput(tmpDir, {}, { hasEnvFile: true });
       const issue = issues.find(i => i.code === 'LOCAL_STORAGE_PATH');
-      expect(issue?.fix).toContain('mastra env db create --kind neon');
+      expect(fixText(issue?.fix)).toContain('mastra env db create --kind neon');
     });
 
     it('falls back to a bare db create command for unmapped guard vars', async () => {
@@ -348,8 +366,8 @@ describe('preflightBuildOutput', () => {
 
       const issues = await preflightBuildOutput(tmpDir, {}, { hasEnvFile: true });
       const issue = issues.find(i => i.code === 'LOCAL_STORAGE_PATH');
-      expect(issue?.fix).toContain('mastra env db create');
-      expect(issue?.fix).not.toContain('--kind');
+      expect(fixText(issue?.fix)).toContain('mastra env db create');
+      expect(fixText(issue?.fix)).not.toContain('--kind');
     });
 
     it('scopes the db create command to the target environment when a slug is provided', async () => {
@@ -364,7 +382,7 @@ describe('preflightBuildOutput', () => {
       const issue = issues.find(i => i.code === 'LOCAL_STORAGE_PATH');
       // Positional arg BEFORE the flag — `mastra env db create` accepts the
       // environment as an argument, not as `--env`.
-      expect(issue?.fix).toContain('mastra env db create production --kind turso');
+      expect(fixText(issue?.fix)).toContain('mastra env db create production --kind turso');
     });
 
     it('scopes the bare db create command too when a slug is provided', async () => {
@@ -373,8 +391,8 @@ describe('preflightBuildOutput', () => {
 
       const issues = await preflightBuildOutput(tmpDir, {}, { hasEnvFile: true, environmentSlug: 'staging' });
       const issue = issues.find(i => i.code === 'LOCAL_STORAGE_PATH');
-      expect(issue?.fix).toContain('mastra env db create staging');
-      expect(issue?.fix).not.toContain('--kind');
+      expect(fixText(issue?.fix)).toContain('mastra env db create staging');
+      expect(fixText(issue?.fix)).not.toContain('--kind');
     });
 
     it('warns (not errors) on guarded misses when platform context lacks managedEnvVarNames (older platform)', async () => {
@@ -527,5 +545,35 @@ describe('printPreflightIssues', () => {
   it('returns ok for warnings-only under autoAccept', async () => {
     const result = await printPreflightIssues([warningIssue], { autoAccept: true });
     expect(result).toBe('ok');
+  });
+
+  it('renders a step-list fix as one arrow line per step', async () => {
+    // Reach in via the mocked module so we can inspect what was rendered.
+    const clack = await import('@clack/prompts');
+    const errorSpy = clack.log.error as unknown as ReturnType<typeof vi.fn>;
+    errorSpy.mockClear();
+
+    await printPreflightIssues(
+      [
+        {
+          code: 'LOCAL_STORAGE_PATH',
+          severity: 'error',
+          message: 'missing DB var',
+          fix: ['Run `mastra env db create production --kind turso`', 'Or set TURSO_DATABASE_URL in your env file'],
+        },
+      ],
+      { autoAccept: true },
+    );
+
+    // First call to log.error is the issue itself (subsequent call is the
+    // summary line). Ensure both step lines land with their own arrow.
+    // Strip ANSI so the assertion isn't coupled to picocolors styling.
+
+    const rendered = (errorSpy.mock.calls[0][0] as string).replace(/\x1b\[[0-9;]*m/g, '');
+    expect(rendered).toContain('→ Run `mastra env db create production --kind turso`');
+    expect(rendered).toContain('→ Or set TURSO_DATABASE_URL in your env file');
+    // And they must be on separate lines, not concatenated.
+    const arrowLines = rendered.split('\n').filter(l => l.includes('→'));
+    expect(arrowLines).toHaveLength(2);
   });
 });
