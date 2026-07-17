@@ -24,6 +24,7 @@ import {
 import { useIntakeConfigQuery } from '../../../../shared/hooks/useIntakeConfig';
 import { useLinearIssuesQuery, useLinearStatusQuery } from '../../../../shared/hooks/useLinearData';
 import { useStartFactoryRun } from '../../../../shared/hooks/useStartFactoryRun';
+import type { FactoryRunInvocation } from '../../../../shared/hooks/useStartFactoryRun';
 import {
   useDeleteWorkItemMutation,
   useUpdateWorkItemMutation,
@@ -122,7 +123,7 @@ interface RunAction {
   role: 'triage' | 'plan' | 'work' | 'review';
   /** Lane the card lands in once the run is underway. */
   stage: BoardStageId;
-  prompt: string;
+  invocation: FactoryRunInvocation;
   threadTags?: Record<string, string>;
 }
 
@@ -150,20 +151,27 @@ interface BoardCandidate {
 }
 
 /** Investigate (understand → Planning) + Build (implement → Building) runs for an issue. */
-function issueRunActions(ref: string, extra?: { promptSuffix?: string }): RunAction[] {
-  const suffix = extra?.promptSuffix ? ` ${extra.promptSuffix}` : '';
+function issueRunActions(ref: string, extra?: { context?: string }): RunAction[] {
+  const context = extra?.context ? `\n\n${extra.context}` : '';
   return [
     {
       label: 'Investigate',
       role: 'plan',
       stage: 'planning',
-      prompt: `Use the understand-issue skill to investigate ${ref}.${suffix}`,
+      invocation: {
+        type: 'skill',
+        skillName: 'understand-issue',
+        arguments: `${ref}${context}`,
+      },
     },
     {
       label: 'Build',
       role: 'work',
       stage: 'execute',
-      prompt: `Implement a fix for ${ref}: investigate the root cause, make the change with tests, and open a pull request.${suffix}`,
+      invocation: {
+        type: 'prompt',
+        prompt: `Implement a fix for ${ref}: investigate the root cause, make the change with tests, and open a pull request.${extra?.context ? ` ${extra.context}` : ''}`,
+      },
     },
   ];
 }
@@ -190,7 +198,10 @@ function issueCandidate(issue: GithubIssue): BoardCandidate {
             label: 'Prepare approval',
             role: 'triage',
             stage: 'triage',
-            prompt: `Prepare approval for ${ref}. Review the existing triage comment and summarize the decision needed before implementation or closure.`,
+            invocation: {
+              type: 'prompt',
+              prompt: `Prepare approval for ${ref}. Review the existing triage comment and summarize the decision needed before implementation or closure.`,
+            },
             threadTags: issueTriageThreadTags(issue.number),
           },
         ]
@@ -205,7 +216,7 @@ function issueCandidate(issue: GithubIssue): BoardCandidate {
 
 function pullRequestCandidate(pr: GithubPullRequest): BoardCandidate {
   const ref = `GitHub pull request #${pr.number} (${pr.url})`;
-  const checkout = `Check out the PR in this worktree first with \`gh pr checkout ${pr.number}\`.`;
+  const checkout = `Check out the PR in this worktree first with \`gh pr checkout ${pr.number}\`. Expected head branch: ${pr.headBranch}.`;
   const base = `Review ${ref}. ${checkout}`;
   return {
     sourceKey: `github-pr:${pr.number}`,
@@ -221,7 +232,11 @@ function pullRequestCandidate(pr: GithubPullRequest): BoardCandidate {
         label: 'Review',
         role: 'review',
         stage: 'review',
-        prompt: `Use the understand-pr skill to review ${ref}. ${checkout}`,
+        invocation: {
+          type: 'skill',
+          skillName: 'understand-pr',
+          arguments: `${ref}\n\n${checkout}`,
+        },
       },
     ],
     branch: `factory/pr-${pr.number}`,
@@ -244,7 +259,7 @@ function linearCandidate(issue: LinearIssue): BoardCandidate {
     icon: CircleDot,
     iconClassName: 'text-accent3',
     column: 'intake',
-    runActions: issueRunActions(ref, { promptSuffix: fetchHint }),
+    runActions: issueRunActions(ref, { context: fetchHint }),
     branch: `factory/linear-${issue.identifier.toLowerCase()}`,
     threadTitle: `${issue.identifier}: ${issue.title}`,
     customPrompt: instructions => guidedPrompt(base, instructions),
@@ -282,7 +297,10 @@ function itemRunSpec(item: WorkItem): ItemRunSpec | null {
               label: 'Prepare approval',
               role: 'triage',
               stage: 'triage',
-              prompt: `Prepare approval for ${ref}. Review the existing triage comment and summarize the decision needed before implementation or closure.`,
+              invocation: {
+                type: 'prompt',
+                prompt: `Prepare approval for ${ref}. Review the existing triage comment and summarize the decision needed before implementation or closure.`,
+              },
               threadTags: issueTriageThreadTags(meta.number),
             },
           ]
@@ -295,11 +313,12 @@ function itemRunSpec(item: WorkItem): ItemRunSpec | null {
     return {
       branch: `factory/linear-${meta.identifier.toLowerCase()}`,
       threadTitle: `${meta.identifier}: ${item.title}`,
-      actions: issueRunActions(ref, { promptSuffix: fetchHint }),
+      actions: issueRunActions(ref, { context: fetchHint }),
     };
   }
   if (item.source === 'github-pr' && typeof meta.number === 'number' && typeof meta.headBranch === 'string') {
     const ref = `GitHub pull request #${meta.number}${item.url ? ` (${item.url})` : ''}`;
+    const checkout = `Check out the PR in this worktree first with \`gh pr checkout ${meta.number}\`. Expected head branch: ${meta.headBranch}.`;
     return {
       branch: `factory/pr-${meta.number}`,
       threadTitle: `PR #${meta.number}: ${item.title}`,
@@ -308,7 +327,11 @@ function itemRunSpec(item: WorkItem): ItemRunSpec | null {
           label: 'Review',
           role: 'review',
           stage: 'review',
-          prompt: `Use the understand-pr skill to review ${ref}. Check out the PR in this worktree first with \`gh pr checkout ${meta.number}\`.`,
+          invocation: {
+            type: 'skill',
+            skillName: 'understand-pr',
+            arguments: `${ref}\n\n${checkout}`,
+          },
         },
       ],
     };
@@ -591,7 +614,7 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
                       branch: spec.branch,
                       threadTitle: spec.threadTitle,
                       threadTags: action.threadTags,
-                      prompt: action.prompt,
+                      invocation: action.invocation,
                       workItem: {
                         id: item.id,
                         role: action.role,
@@ -623,7 +646,10 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
                       branch: candidate.branch,
                       threadTitle: candidate.threadTitle,
                       threadTags: action.threadTags,
-                      prompt: prompt === undefined ? action.prompt : candidate.customPrompt(prompt),
+                      invocation:
+                        prompt === undefined
+                          ? action.invocation
+                          : { type: 'prompt', prompt: candidate.customPrompt(prompt) },
                       workItem: {
                         role: action.role,
                         stages: [action.stage],

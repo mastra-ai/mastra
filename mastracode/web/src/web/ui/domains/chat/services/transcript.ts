@@ -200,6 +200,7 @@ export interface OutgoingFile {
 type Action =
   | { type: 'event'; event: AgentControllerEvent }
   | { type: 'localUser'; text: string; steer?: boolean; files?: OutgoingFile[] }
+  | { type: 'clearPending' }
   | { type: 'localNotice'; text: string; level: 'info' | 'error' }
   | { type: 'resolvePrompt'; id: string }
   | {
@@ -255,6 +256,8 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
           ),
         ],
       };
+    case 'clearPending':
+      return { ...state, pending: false };
     case 'localNotice':
       return pushNotice(state, action.level, action.text);
     case 'resolvePrompt':

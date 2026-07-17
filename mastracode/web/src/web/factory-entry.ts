@@ -26,6 +26,7 @@ import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import { observeAgentGitAction } from './audit/agent-audit.js';
 import type { WebAuthAdapter } from './auth-adapter.js';
 import { buildAuthRoutes, createWebAuthGate } from './auth.js';
+import { getFactoryWorkspace } from './factory/workspace.js';
 import {
   createGithubSubscriptionTools,
   parseCreatedPullRequest,
@@ -166,6 +167,7 @@ export class MastraFactory {
     // one shared DB for all users, separated by `resourceId` scoping.
     const prepared = await prepareAgentControllerMount({
       controllerId: CONTROLLER_ID,
+      workspace: getFactoryWorkspace,
       disableGithubSignals: true,
       ...(database ? { storage: { backend: 'pg', connectionString: database } } : {}),
       ...(githubReady || linearReady
@@ -209,6 +211,7 @@ export class MastraFactory {
         ...(auth ? buildAuthRoutes(auth) : []),
         // Custom `/web/*` routes (fs / config / github / factory / audit).
         ...assembleWebApiRoutes({
+          controllerId: CONTROLLER_ID,
           controller,
           authStorage,
           publicOrigin,

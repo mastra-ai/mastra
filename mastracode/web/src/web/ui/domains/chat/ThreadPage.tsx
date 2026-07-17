@@ -11,6 +11,7 @@ import { ComposerPanel } from './components/ComposerPanel';
 import { ChatMessageBoundary, ChatSessionBoundary } from './context/ChatSessionProvider';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 import { useRouteThreadSync } from '../../../../shared/hooks/useRouteThreadSync';
+import { useThreadPageKickoffs } from './hooks/useThreadPageKickoffs';
 
 const threadComposerContainerClass = 'w-full px-3 md:px-5';
 const threadComposerInnerClass = 'mx-auto w-full max-w-[80ch]';
@@ -61,6 +62,7 @@ function ThreadComposer() {
 
 function ThreadPageContent() {
   useRouteThreadSync();
+  useThreadPageKickoffs();
 
   return <ChatMessageList />;
 }

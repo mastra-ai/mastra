@@ -2694,6 +2694,17 @@ export class Session<TState = unknown> {
     return { ...this.#tags };
   }
 
+  /**
+   * The workspace resolved for this session.
+   *
+   * Dynamic workspace factories are evaluated independently when each session
+   * is created. Use this accessor for operations that must stay bound to the
+   * session's workspace rather than resolving through controller-global state.
+   */
+  getWorkspace(): Workspace {
+    return this.#workspace;
+  }
+
   // ===========================================================================
   // Event bus
   // ===========================================================================
