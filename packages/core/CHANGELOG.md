@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 1.52.0-alpha.4
+
+### Patch Changes
+
+- Improve stored `runEvals` per-turn scores (follow-up to multi-turn `turns`). Each persisted per-turn scorer/gate result is now labeled with its turn index (`metadata.turnIndex`), carries the conversation's shared `threadId`, and links to that turn's own trace span instead of the item-level span. This lets the scores UI group and label per-turn scores by conversation and turn, and resolve each score to the correct trace. ([#19491](https://github.com/mastra-ai/mastra/pull/19491))
+
 ## 1.52.0-alpha.3
 
 ### Minor Changes

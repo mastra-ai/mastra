@@ -44,16 +44,10 @@ export function useSetAgentControllerStateMutation({
 }
 
 export function useSwitchAgentControllerModeMutation(args: AgentControllerMutationArgs) {
-  const queryClient = useQueryClient();
   const { session } = createAgentControllerClient(args);
 
   return useMutation({
     mutationFn: (modeId: string) => requireAgentControllerSession(session).switchMode(modeId),
-    onSuccess: () =>
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.agentControllerConnectionState(args.agentControllerId, args.resourceId, args.projectPath),
-        exact: true,
-      }),
   });
 }
 

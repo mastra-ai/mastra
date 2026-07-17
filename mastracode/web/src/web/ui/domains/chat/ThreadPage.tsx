@@ -11,8 +11,9 @@ import { ComposerPanel } from './components/ComposerPanel';
 import { ChatMessageBoundary, ChatSessionBoundary } from './context/ChatSessionProvider';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 import { useRouteThreadSync } from '../../../../shared/hooks/useRouteThreadSync';
+import { useThreadPageKickoffs } from './hooks/useThreadPageKickoffs';
 
-const threadComposerContainerClass = 'w-full px-3 md:px-5';
+const threadComposerContainerClass = 'w-full p-3 md:p-5';
 const threadComposerInnerClass = 'mx-auto w-full max-w-[80ch]';
 
 export function ThreadPage() {
@@ -24,8 +25,6 @@ export function ThreadPage() {
     <ChatLayout
       sidebar={<Sidebar />}
       header={<ChatHeader />}
-      sidebarOpen={overlays.isOpen('sidebar')}
-      onSidebarClose={() => overlays.close('sidebar')}
       main={
         <ChatSessionBoundary threadId={threadId}>
           {activeProject ? <ThreadPageMain /> : <EmptyProjectState onOpenProjects={() => overlays.open('projects')} />}
@@ -61,6 +60,7 @@ function ThreadComposer() {
 
 function ThreadPageContent() {
   useRouteThreadSync();
+  useThreadPageKickoffs();
 
   return <ChatMessageList />;
 }

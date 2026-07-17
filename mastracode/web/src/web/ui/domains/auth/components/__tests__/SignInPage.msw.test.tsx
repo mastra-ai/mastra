@@ -45,6 +45,15 @@ function renderSignIn(initialEntry = '/signin') {
 }
 
 describe('SignInPage', () => {
+  it('renders the Mastra Factory wordmark', async () => {
+    stubAuthMe({ provider: 'workos' });
+    renderSignIn();
+
+    const wordmark = await screen.findByLabelText('Mastra Factory');
+    expect(wordmark.textContent).toContain('█▀▀ ▄▀█ █▀▀ ▀█▀ █▀█ █▀█ █▄█');
+    expect(screen.queryByLabelText('Mastra Code')).not.toBeInTheDocument();
+  });
+
   describe('given a WorkOS (hosted-login) deploy', () => {
     it('renders the hosted sign-in button and redirects to the login route', async () => {
       stubAuthMe({ provider: 'workos' });
