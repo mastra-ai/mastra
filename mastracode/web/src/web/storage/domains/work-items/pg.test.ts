@@ -70,7 +70,7 @@ describe('WorkItemsStoragePG', () => {
     expect(result.item.sourceKey).toBe('github-issue:42');
 
     const insert = queries.find(q => q.text.includes('INSERT INTO work_items'))!;
-    const history = JSON.parse(insert.values![8] as string);
+    const history = JSON.parse(insert.values![9] as string);
     expect(history).toHaveLength(1);
     expect(history[0]).toMatchObject({ stage: 'intake', by: 'u1' });
   });
