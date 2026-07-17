@@ -37,6 +37,7 @@ import type { OAuthCredentials } from '@mastra/code-sdk/auth/types';
 
 import { getAuthProviderId, resolveCredentialContext, WEB_OAUTH_FLOW_KINDS } from './provider-credentials.js';
 import type { CredentialContext } from './provider-credentials.js';
+import { invalidateTenantCredentialSnapshots } from './tenant-credentials.js';
 import type { LoginSessionKind, LoginSessionRow } from './storage/domains/credentials/base';
 import { ModelCredentialsStorageInMemory } from './storage/domains/credentials/inmemory.js';
 
@@ -192,6 +193,7 @@ async function persistOAuthCredential(
       type: 'oauth',
       ...credentials,
     });
+    invalidateTenantCredentialSnapshots({ orgId: ctx.orgId, userId: ctx.userId });
     return;
   }
   if (!authStorage) throw new Error('Credential storage is not available');
@@ -379,6 +381,7 @@ export function buildOAuthRoutes(options: { authStorage?: AuthStorage } = {}): A
           if (ctx.mode === 'tenant') {
             // Caller's credential only — never touches org rows or other users.
             await ctx.storage.removeCredential({ orgId: ctx.orgId, userId: ctx.userId }, authProviderId);
+            invalidateTenantCredentialSnapshots({ orgId: ctx.orgId, userId: ctx.userId });
           } else {
             if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
             authStorage.remove(authProviderId);

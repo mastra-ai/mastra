@@ -7,14 +7,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const startAnthropicLogin = vi.fn();
 const completeAnthropicLogin = vi.fn();
-vi.mock('@mastra/code-sdk/auth/providers/anthropic', () => ({
+vi.mock('@mastra/code-sdk/auth/providers/anthropic', async importOriginal => ({
+  ...(await importOriginal<object>()),
   startAnthropicLogin: (...args: unknown[]) => startAnthropicLogin(...args),
   completeAnthropicLogin: (...args: unknown[]) => completeAnthropicLogin(...args),
 }));
 
 const startCodexDeviceLogin = vi.fn();
 const pollCodexDeviceLogin = vi.fn();
-vi.mock('@mastra/code-sdk/auth/providers/openai-codex', () => ({
+vi.mock('@mastra/code-sdk/auth/providers/openai-codex', async importOriginal => ({
+  ...(await importOriginal<object>()),
   startCodexDeviceLogin: (...args: unknown[]) => startCodexDeviceLogin(...args),
   pollCodexDeviceLogin: (...args: unknown[]) => pollCodexDeviceLogin(...args),
 }));

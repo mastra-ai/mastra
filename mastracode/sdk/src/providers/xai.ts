@@ -11,6 +11,7 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { AuthStorage } from '../auth/storage.js';
+import type { CredentialStore } from '../auth/types.js';
 
 const XAI_PROVIDER_ID = 'xai';
 const XAI_BASE_URL = 'https://api.x.ai/v1';
@@ -36,7 +37,7 @@ export function setAuthStorage(storage: AuthStorage | undefined): void {
  * Injects the access token (auto-refreshed by AuthStorage) as a bearer token,
  * preserving non-auth headers from the caller.
  */
-export function buildXAIOAuthFetch(opts: { authStorage?: AuthStorage } = {}): typeof fetch {
+export function buildXAIOAuthFetch(opts: { authStorage?: CredentialStore } = {}): typeof fetch {
   return (async (url: string | URL | Request, init?: Parameters<typeof fetch>[1]) => {
     const storage = opts.authStorage ?? getAuthStorage();
     storage.reload();
@@ -88,13 +89,16 @@ export function buildXAIOAuthFetch(opts: { authStorage?: AuthStorage } = {}): ty
  * Creates an xAI model using OAuth authentication.
  * Uses OAuth tokens from AuthStorage (auto-refreshes when needed).
  */
-export function xaiProvider(modelId: string, options?: { headers?: Record<string, string> }): MastraModelConfig {
+export function xaiProvider(
+  modelId: string,
+  options?: { headers?: Record<string, string>; authStorage?: CredentialStore },
+): MastraModelConfig {
   const provider = createOpenAICompatible({
     name: XAI_PROVIDER_ID,
     baseURL: XAI_BASE_URL,
     apiKey: 'oauth-placeholder', // real auth injected by the custom fetch
     headers: options?.headers,
-    fetch: buildXAIOAuthFetch(),
+    fetch: buildXAIOAuthFetch({ authStorage: options?.authStorage }),
   });
   return provider.chatModel(modelId);
 }

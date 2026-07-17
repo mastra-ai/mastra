@@ -43,6 +43,7 @@ import {
   SensitiveDataFilter,
 } from '@mastra/observability';
 
+import { hasCredentialStoreProvider } from './agents/credential-resolver.js';
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory } from './agents/memory.js';
 import { createMastraCodeGateway, getDynamicModel, getGoalJudgeModel, resolveModel } from './agents/model.js';
@@ -313,26 +314,31 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   }
 
   // Load user-entered API keys from auth.json into process.env
-  // (only sets env vars that aren't already present — env vars take precedence)
-  try {
-    const registry = PROVIDER_REGISTRY as Record<string, ProviderConfig>;
-    const providerEnvVars: Record<string, string | undefined> = {};
-    for (const [provider, cfg] of Object.entries(registry)) {
-      const envVars = cfg?.apiKeyEnvVar;
-      providerEnvVars[provider] = Array.isArray(envVars) ? envVars[0] : envVars;
+  // (only sets env vars that aren't already present — env vars take precedence).
+  // Skipped in deployed multi-tenant mode: when a per-tenant credential store
+  // provider is registered, provider keys are resolved per request and must
+  // never leak into process-global env vars.
+  if (!hasCredentialStoreProvider()) {
+    try {
+      const registry = PROVIDER_REGISTRY as Record<string, ProviderConfig>;
+      const providerEnvVars: Record<string, string | undefined> = {};
+      for (const [provider, cfg] of Object.entries(registry)) {
+        const envVars = cfg?.apiKeyEnvVar;
+        providerEnvVars[provider] = Array.isArray(envVars) ? envVars[0] : envVars;
+      }
+      providerEnvVars[MASTRA_GATEWAY_PROVIDER] ??= 'MASTRA_GATEWAY_API_KEY';
+      authStorage.loadStoredApiKeysIntoEnv(providerEnvVars);
+    } catch {
+      // Registry unavailable — load well-known provider keys so non-gateway flows still work
+      authStorage.loadStoredApiKeysIntoEnv({
+        [MASTRA_GATEWAY_PROVIDER]: 'MASTRA_GATEWAY_API_KEY',
+        anthropic: 'ANTHROPIC_API_KEY',
+        openai: 'OPENAI_API_KEY',
+        google: 'GOOGLE_GENERATIVE_AI_API_KEY',
+        cerebras: 'CEREBRAS_API_KEY',
+        deepseek: 'DEEPSEEK_API_KEY',
+      });
     }
-    providerEnvVars[MASTRA_GATEWAY_PROVIDER] ??= 'MASTRA_GATEWAY_API_KEY';
-    authStorage.loadStoredApiKeysIntoEnv(providerEnvVars);
-  } catch {
-    // Registry unavailable — load well-known provider keys so non-gateway flows still work
-    authStorage.loadStoredApiKeysIntoEnv({
-      [MASTRA_GATEWAY_PROVIDER]: 'MASTRA_GATEWAY_API_KEY',
-      anthropic: 'ANTHROPIC_API_KEY',
-      openai: 'OPENAI_API_KEY',
-      google: 'GOOGLE_GENERATIVE_AI_API_KEY',
-      cerebras: 'CEREBRAS_API_KEY',
-      deepseek: 'DEEPSEEK_API_KEY',
-    });
   }
 
   const mgApiKey = process.env['MASTRA_GATEWAY_API_KEY'] ?? storedGatewayKey;

@@ -218,9 +218,9 @@ describe('MastraFactory.prepare', () => {
     expect(paths.some(p => p.startsWith('/auth/'))).toBe(false);
   });
 
-  it('installs exactly one extra middleware (the auth gate) when auth is configured', async () => {
+  it('installs the auth gate and tenant credential primer when auth is configured', async () => {
     // The SPA static middleware is environment-dependent (present when ui/dist
-    // exists), so assert the delta: configuring auth prepends exactly one gate.
+    // exists), so assert the delta from the two auth-specific middleware.
     const openConfig = await prepareFactory({});
     const openMiddleware = (openConfig.buildServerConfig as () => { middleware?: unknown[] })().middleware ?? [];
 
@@ -229,7 +229,7 @@ describe('MastraFactory.prepare', () => {
 
     const gatedConfig = await prepareFactory({ auth: fakeAdapter() });
     const gatedMiddleware = (gatedConfig.buildServerConfig as () => { middleware?: unknown[] })().middleware ?? [];
-    expect(gatedMiddleware).toHaveLength(openMiddleware.length + 1);
+    expect(gatedMiddleware).toHaveLength(openMiddleware.length + 2);
   });
 });
 

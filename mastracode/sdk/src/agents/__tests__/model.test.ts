@@ -282,7 +282,10 @@ describe('resolveModel', () => {
 
       resolveModel('anthropic/claude-sonnet-4-20250514');
 
-      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514', { headers: undefined });
+      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514', {
+        headers: undefined,
+        authStorage: expect.anything(),
+      });
     });
 
     it('parses provider/model ids and delegates directly through the MastraCode gateway', () => {
@@ -356,7 +359,10 @@ describe('resolveModel', () => {
 
       resolveModel('anthropic/claude-sonnet-4-20250514');
 
-      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514', { headers: undefined });
+      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514', {
+        headers: undefined,
+        authStorage: expect.anything(),
+      });
     });
 
     it('passes controller headers to the Anthropic OAuth provider', () => {
@@ -376,6 +382,7 @@ describe('resolveModel', () => {
           'x-thread-id': 'thread-123',
           'x-resource-id': 'resource-456',
         },
+        authStorage: expect.anything(),
       });
     });
 
@@ -389,7 +396,10 @@ describe('resolveModel', () => {
 
       resolveModel('anthropic/claude-opus-4.6');
 
-      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-opus-4-6', { headers: undefined });
+      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-opus-4-6', {
+        headers: undefined,
+        authStorage: expect.anything(),
+      });
     });
 
     it('reloads auth storage before resolving', () => {
@@ -457,6 +467,7 @@ describe('resolveModel', () => {
           'x-thread-id': 'thread-123',
           'x-resource-id': 'resource-456',
         },
+        authStorage: expect.anything(),
       });
     });
 
@@ -485,6 +496,7 @@ describe('resolveModel', () => {
       expect(openaiCodexProvider).toHaveBeenCalledWith('gpt-5.2-codex', {
         thinkingLevel: 'high',
         headers: undefined,
+        authStorage: expect.anything(),
       });
     });
   });
@@ -808,7 +820,10 @@ describe('resolveModel', () => {
       resolveModel('anthropic/claude-sonnet-4');
 
       expect(MastraGateway).toHaveBeenCalledWith({ baseUrl: 'https://gateway-api.mastra.ai' });
-      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4', { headers: undefined });
+      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4', {
+        headers: undefined,
+        authStorage: expect.anything(),
+      });
       delete process.env['MASTRA_GATEWAY_API_KEY'];
     });
 

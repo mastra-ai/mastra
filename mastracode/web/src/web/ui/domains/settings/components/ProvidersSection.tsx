@@ -1,177 +1,85 @@
-import { Badge } from '@mastra/playground-ui/components/Badge';
-import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Check, Search } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { Search } from 'lucide-react';
+import { useState } from 'react';
 
-import type { ProviderInfo } from '../../../../../shared/api/types';
-import { useProvidersQuery, useRemoveProviderKey, useSaveProviderKey } from '../../../../../shared/hooks/use-providers';
+import type { OAuthStartResponse } from '../../../../../shared/api/types';
+import {
+  useCancelProviderOAuth,
+  useProvidersQuery,
+  useStartProviderOAuth,
+} from '../../../../../shared/hooks/use-providers';
+import { useWebAuth } from '../../../../../shared/hooks/useWebAuth';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
+import { ProviderOAuthDialog } from './ProviderOAuthDialog';
+import { ProviderRow } from './ProviderRow';
 
-const SOURCE_LABEL: Record<ProviderInfo['source'], string> = {
-  oauth: 'Signed in',
-  stored: 'Key saved',
-  env: 'From env',
-  none: 'Not set',
-};
+interface ActiveOAuthSession {
+  provider: string;
+  session: OAuthStartResponse;
+}
 
-const SOURCE_VARIANT: Record<ProviderInfo['source'], 'success' | 'info' | 'default'> = {
-  oauth: 'success',
-  stored: 'success',
-  env: 'info',
-  none: 'default',
-};
-
-/**
- * Provider + API-key management. Mirrors the TUI's `/api-keys` command.
- *
- * The search box is the primary affordance and stays pinned at the top of the
- * pane: an empty query shows the configured providers (key saved / from env);
- * typing filters the full catalog so any provider is reachable. Keys are
- * written to the server credential store and never read back to the client.
- */
+/** Provider OAuth and API-key management for local and tenant-scoped web deployments. */
 export function ProvidersSection() {
   const providersQuery = useProvidersQuery();
-  const saveKeyMutation = useSaveProviderKey();
-  const removeKeyMutation = useRemoveProviderKey();
-
+  const authQuery = useWebAuth();
+  const startOAuthMutation = useStartProviderOAuth();
+  const cancelOAuthMutation = useCancelProviderOAuth();
   const [search, setSearch] = useState('');
-  const [editing, setEditing] = useState<string | null>(null);
-  const [keyDraft, setKeyDraft] = useState('');
-  const keyInputRef = useRef<HTMLInputElement>(null);
+  const [startingProvider, setStartingProvider] = useState<string>();
+  const [activeOAuth, setActiveOAuth] = useState<ActiveOAuthSession>();
 
   const providers = providersQuery.data ?? [];
-  const loading = providersQuery.isPending;
-  const busy = saveKeyMutation.isPending || removeKeyMutation.isPending;
-  const error =
-    (providersQuery.error ?? saveKeyMutation.error ?? removeKeyMutation.error) instanceof Error
-      ? (providersQuery.error ?? saveKeyMutation.error ?? removeKeyMutation.error)!.message
-      : null;
+  const authEnabled = authQuery.data?.authEnabled === true;
+  const configured = providers
+    .filter(provider => provider.source !== 'none')
+    .sort((left, right) => left.provider.localeCompare(right.provider));
 
-  useEffect(() => {
-    if (editing) keyInputRef.current?.focus();
-  }, [editing]);
-
-  const configured = providers.filter(p => p.source !== 'none').sort((a, b) => a.provider.localeCompare(b.provider));
-
-  // When searching, surface ALL matches (any source) so configured + new
-  // providers are reachable; configured ones float to the top.
-  const q = search.trim().toLowerCase();
-  const results = q
+  const query = search.trim().toLowerCase();
+  const results = query
     ? providers
-        .filter(p => p.provider.toLowerCase().includes(q))
-        .sort((a, b) => {
-          if ((a.source !== 'none') !== (b.source !== 'none')) return a.source !== 'none' ? -1 : 1;
-          return a.provider.localeCompare(b.provider);
+        .filter(provider => provider.provider.toLowerCase().includes(query))
+        .sort((left, right) => {
+          if ((left.source !== 'none') !== (right.source !== 'none')) return left.source !== 'none' ? -1 : 1;
+          return left.provider.localeCompare(right.provider);
         })
         .slice(0, 50)
     : [];
 
-  const saveKey = async (provider: string, envVar?: string) => {
-    const key = keyDraft.trim();
-    if (!key) return;
+  const startOAuth = async (provider: string, mode?: string) => {
+    setStartingProvider(provider);
     try {
-      await saveKeyMutation.mutateAsync({ provider, key, envVar });
-      setEditing(null);
-      setKeyDraft('');
+      const session = await startOAuthMutation.mutateAsync({ provider, mode });
+      setActiveOAuth({ provider, session });
     } catch {
-      // Error surfaced via the mutation state above.
+      // Mutation error is rendered below.
+    } finally {
+      setStartingProvider(undefined);
     }
   };
 
-  const removeKey = async (provider: string) => {
-    try {
-      await removeKeyMutation.mutateAsync({ provider });
-    } catch {
-      // Error surfaced via the mutation state above.
+  const closeOAuth = () => {
+    const flow = activeOAuth;
+    setActiveOAuth(undefined);
+    if (flow) {
+      cancelOAuthMutation.mutate({ provider: flow.provider, sessionId: flow.session.sessionId });
     }
   };
 
-  const renderRow = (p: ProviderInfo) => {
-    const isEditing = editing === p.provider;
-    return (
-      <li key={p.provider} role="listitem" className="flex items-center justify-between gap-3 py-2">
-        <div className="flex min-w-0 items-center gap-2">
-          {p.source !== 'none' && <Check size={13} className="text-accent1 shrink-0" />}
-          <Txt as="span" variant="ui-md" className="truncate text-icon6">
-            {p.provider}
-          </Txt>
-          <Badge size="sm" variant={SOURCE_VARIANT[p.source]}>
-            {SOURCE_LABEL[p.source]}
-          </Badge>
-        </div>
-        {isEditing ? (
-          <div className="flex items-center gap-2">
-            <Input
-              ref={keyInputRef}
-              type="password"
-              size="sm"
-              placeholder="Paste API key"
-              value={keyDraft}
-              onChange={e => setKeyDraft(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter') void saveKey(p.provider, p.envVar);
-                if (e.key === 'Escape') {
-                  setEditing(null);
-                  setKeyDraft('');
-                }
-              }}
-            />
-            <Button
-              variant="primary"
-              size="sm"
-              disabled={busy || !keyDraft.trim()}
-              onClick={() => void saveKey(p.provider, p.envVar)}
-            >
-              Save
-            </Button>
-            <Button
-              size="sm"
-              disabled={busy}
-              onClick={() => {
-                setEditing(null);
-                setKeyDraft('');
-              }}
-            >
-              Cancel
-            </Button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              disabled={busy}
-              onClick={() => {
-                setEditing(p.provider);
-                setKeyDraft('');
-              }}
-            >
-              {p.source === 'stored' ? 'Update' : 'Add key'}
-            </Button>
-            {p.source === 'stored' && (
-              <Button variant="outline" size="sm" disabled={busy} onClick={() => void removeKey(p.provider)}>
-                Remove
-              </Button>
-            )}
-          </div>
-        )}
-      </li>
-    );
-  };
-
-  const searching = search.trim().length > 0;
+  const searching = query.length > 0;
   const list = searching ? results : configured;
+  const requestError = providersQuery.error ?? startOAuthMutation.error ?? cancelOAuthMutation.error;
+  const error = requestError instanceof Error ? requestError.message : undefined;
 
   return (
     <div className="flex flex-col gap-3">
       <div className="relative">
-        <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-icon3" />
+        <Search size={14} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-icon3" />
         <Input
           type="text"
-          placeholder="Search providers to add a key…"
+          placeholder="Search providers to sign in or add a key…"
           value={search}
-          onChange={e => setSearch(e.target.value)}
+          onChange={event => setSearch(event.target.value)}
           aria-label="Search providers"
           className="pl-8"
         />
@@ -183,7 +91,7 @@ export function ProvidersSection() {
         </Txt>
       )}
 
-      {loading ? (
+      {providersQuery.isPending ? (
         <SkeletonRows label="Loading providers" rows={3} rowClassName="h-9 w-full" />
       ) : (
         <>
@@ -191,7 +99,7 @@ export function ProvidersSection() {
             <Txt as="p" variant="ui-sm" className="text-icon3">
               {configured.length > 0
                 ? `${configured.length} configured. Search above to add more.`
-                : 'No providers configured yet. Search above to add a key.'}
+                : 'No providers configured yet. Search above to sign in or add a key.'}
             </Txt>
           )}
           {list.length === 0 ? (
@@ -200,10 +108,27 @@ export function ProvidersSection() {
             </Txt>
           ) : (
             <ul role="list" className="flex flex-col divide-y divide-border1">
-              {list.map(renderRow)}
+              {list.map(provider => (
+                <ProviderRow
+                  key={provider.provider}
+                  provider={provider}
+                  authEnabled={authEnabled}
+                  startingOAuth={startingProvider === provider.provider}
+                  onStartOAuth={startOAuth}
+                />
+              ))}
             </ul>
           )}
         </>
+      )}
+
+      {activeOAuth && (
+        <ProviderOAuthDialog
+          provider={activeOAuth.provider}
+          session={activeOAuth.session}
+          onClose={closeOAuth}
+          onComplete={() => setActiveOAuth(undefined)}
+        />
       )}
     </div>
   );

@@ -51,7 +51,7 @@ export type CredentialContext =
  * the factory never ran, storage was not provided, or the domain's init failed
  * (fail-soft — callers report the feature unavailable instead of crashing).
  */
-async function getTenantCredentialsStorage(): Promise<ModelCredentialsStorage | undefined> {
+export async function getTenantCredentialsStorage(): Promise<ModelCredentialsStorage | undefined> {
   if (!isRuntimeConfigSeeded()) return undefined;
   let store: ReturnType<typeof getFactoryStore>;
   try {
@@ -72,7 +72,7 @@ async function getTenantCredentialsStorage(): Promise<ModelCredentialsStorage | 
  * auth adapter (`ensureOrg`); if one still isn't present, scope rows under a
  * per-user synthetic org so credentials never become server-global.
  */
-function tenantOrgId(tenant: { orgId?: string; userId: string }): string {
+export function tenantOrgId(tenant: { orgId?: string; userId: string }): string {
   return tenant.orgId ?? `user:${tenant.userId}`;
 }
 

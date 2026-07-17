@@ -24,6 +24,7 @@ import {
   resolveCredentialContext,
   WEB_OAUTH_FLOW_KINDS,
 } from './provider-credentials.js';
+import { invalidateTenantCredentialSnapshots } from './tenant-credentials.js';
 import type { CredentialRecord, LoginSessionKind } from './storage/domains/credentials/base';
 
 /** Widen a route-local Hono context to the plain `Context` the auth helpers take. */
@@ -435,6 +436,7 @@ export function buildConfigRoutes(options: { controller: ModelCatalog; authStora
             // envVar is intentionally ignored: tenant credentials are resolved
             // per-request, never written into process.env.
             await ctx.storage.setCredential(tenant, getAuthProviderId(provider), { type: 'api_key', key });
+            invalidateTenantCredentialSnapshots(tenant);
             const records = await ctx.storage.listCredentials(ctx.orgId, ctx.userId);
             const providers = await listProviders(controller, undefined, records);
             return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
@@ -463,6 +465,7 @@ export function buildConfigRoutes(options: { controller: ModelCatalog; authStora
           if (ctx.mode === 'tenant') {
             const tenant = scope === 'org' ? { orgId: ctx.orgId } : { orgId: ctx.orgId, userId: ctx.userId };
             await ctx.storage.removeCredential(tenant, getAuthProviderId(provider));
+            invalidateTenantCredentialSnapshots(tenant);
             const records = await ctx.storage.listCredentials(ctx.orgId, ctx.userId);
             const providers = await listProviders(controller, undefined, records);
             return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
