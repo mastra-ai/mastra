@@ -280,6 +280,10 @@ vi.mock('../providers/github-copilot.js', () => ({
   setAuthStorage: vi.fn(),
 }));
 
+vi.mock('../providers/xai.js', () => ({
+  setAuthStorage: vi.fn(),
+}));
+
 vi.mock('../tools/index.js', () => ({
   defaultTools: {},
 }));
@@ -380,6 +384,7 @@ describe('createMastraCode', () => {
     delete process.env.MC_E2E_PRIMARY_KEY;
     delete process.env.MC_E2E_SECONDARY_KEY;
     delete process.env.MASTRA_GATEWAY_API_KEY;
+    delete process.env.MASTRA_GATEWAY_URL;
   });
 
   it('registers the MastraCode gateway and app-provided model hooks on AgentController', async () => {

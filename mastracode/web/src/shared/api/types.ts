@@ -55,6 +55,20 @@ export interface OMResponse {
 export interface SaveProviderKeyBody {
   key: string;
   envVar?: string;
+  scope?: 'user' | 'org';
+}
+
+export interface OAuthStartBody {
+  mode?: string;
+}
+
+export interface OAuthCompleteBody {
+  sessionId: string;
+  code: string;
+}
+
+export interface OAuthSessionBody {
+  sessionId: string;
 }
 
 export interface SaveCustomProviderBody {
@@ -101,6 +115,21 @@ export interface SaveProviderKeyResponse {
   ok: true;
   provider?: ProviderInfo;
 }
+
+export interface OAuthStartResponse {
+  sessionId: string;
+  kind: 'paste-code' | 'device-code';
+  url: string;
+  userCode?: string;
+  instructions: string;
+  expiresAt: number;
+  nextPollMs?: number;
+}
+
+export type OAuthPollResponse =
+  | { status: 'pending'; nextPollMs: number }
+  | { status: 'complete' }
+  | { status: 'failed'; error: string };
 
 export interface ActivateModelPackResponse {
   ok: true;

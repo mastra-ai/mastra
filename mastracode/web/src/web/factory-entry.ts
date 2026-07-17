@@ -40,6 +40,8 @@ import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { seedRuntimeConfig } from './runtime-config.js';
 import { FactoryStore } from './storage/factory-store.js';
 import { AuditStoragePG } from './storage/domains/audit/pg.js';
+import { ModelCredentialsStoragePG } from './storage/domains/credentials/pg.js';
+import { createTenantCredentialPrimer, registerTenantCredentialResolver } from './tenant-credentials.js';
 import { IntakeStoragePG } from './storage/domains/intake/pg.js';
 import { WorkItemsStoragePG } from './storage/domains/work-items/pg.js';
 import { handleServerError } from './server-error.js';
@@ -194,6 +196,7 @@ export class MastraFactory {
       factoryStore.register(new IntakeStoragePG());
       factoryStore.register(new AuditStoragePG());
       factoryStore.register(new WorkItemsStoragePG());
+      factoryStore.register(new ModelCredentialsStoragePG());
     }
 
     // Sandbox machine validation: GitHub projects need one sandbox per
@@ -245,6 +248,11 @@ export class MastraFactory {
     // … then every registered factory app-table domain. Fail-soft per domain:
     // a failed domain marks its feature gates off without aborting boot.
     if (factoryStore && appPool) await factoryStore.init({ pool: appPool });
+
+    // Per-tenant model credentials: once the credentials domain is up, model
+    // resolution goes through the caller's own store and the SDK stops
+    // mirroring stored API keys into process.env.
+    if (factoryStore) registerTenantCredentialResolver();
 
     // GitHub App + cloud-sandbox readiness, resolved BEFORE constructing the
     // Mastra args so the github routes are simply omitted from `apiRoutes`
@@ -339,11 +347,13 @@ export class MastraFactory {
 
         // Ordered middleware. The deployer applies these AFTER its context
         // middleware sets `c.set('mastra', mastra)` and BEFORE routes, so:
-        //   1. gate  — validates the auth session, stashes the user, and 401s /
-        //              redirects unauthenticated requests. Skips public `/auth/*`.
-        //   2. spa   — serves the built UI for everything the server doesn't own.
+        //   1. gate   — validates the auth session, stashes the user, and 401s /
+        //               redirects unauthenticated requests. Skips public `/auth/*`.
+        //   2. primer — hydrates the caller's model-credential snapshot so the
+        //               request's first model call resolves tenant credentials.
+        //   3. spa    — serves the built UI for everything the server doesn't own.
         return {
-          middleware: [createWebAuthGate(auth), ...spa],
+          middleware: [createWebAuthGate(auth), createTenantCredentialPrimer(), ...spa],
           ...cors,
           ...onError,
         };

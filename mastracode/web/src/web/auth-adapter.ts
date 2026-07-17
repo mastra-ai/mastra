@@ -120,6 +120,12 @@ export interface WebAuthAdapter {
    */
   ensureOrg(user: WebAuthUser): Promise<string | undefined>;
 
+  /**
+   * Authorize an organization-level administrative mutation. Missing
+   * implementations and provider errors are denied by the caller.
+   */
+  isOrganizationAdmin?(user: WebAuthUser, organizationId: string): Promise<boolean>;
+
   /** Provider-specific public `/auth/*` routes (login, callback, logout, APIs). */
   publicRoutes(): AuthRouteSpec[];
 

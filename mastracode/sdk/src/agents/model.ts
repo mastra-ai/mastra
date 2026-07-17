@@ -4,6 +4,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { loadSettings } from '../onboarding/settings.js';
 import { AMAZON_BEDROCK_GATEWAY_ID, createAmazonBedrockGateway } from '../providers/amazon-bedrock-gateway.js';
 import type { ThinkingLevel } from '../providers/openai-codex.js';
+import { resolveCredentialStore } from './credential-resolver.js';
 import {
   MASTRA_GATEWAY_PREFIX,
   MASTRACODE_GATEWAY_ID,
@@ -22,6 +23,12 @@ export {
   resolveAuth,
 } from './mastracode-gateway.js';
 export type { MastraCodeCustomProvider, MastraCodeGatewayOptions } from './mastracode-gateway.js';
+export {
+  setCredentialStoreProvider,
+  hasCredentialStoreProvider,
+  resolveTenantFromRequestContext,
+} from './credential-resolver.js';
+export type { CredentialTenant, CredentialStoreProvider } from './credential-resolver.js';
 
 type ResolvedModel = GatewayLanguageModel;
 type ModelRequestHeaders = Record<string, string>;
@@ -109,12 +116,17 @@ export function resolveModel(
   const mgApiKey = MastraCodeGateway.getMastraGatewayApiKey();
   const rawGatewayBase =
     settings.memoryGateway?.baseUrl ?? process.env['MASTRA_GATEWAY_URL'] ?? 'https://gateway-api.mastra.ai';
+  // Deployed web registers a per-tenant credential store provider; when the
+  // request carries an authenticated tenant, resolve credentials through the
+  // caller's own store (user > org > env). Undefined = global AuthStorage.
+  const credentialStore = resolveCredentialStore(options?.requestContext);
   const gateway = createMastraCodeGateway({
     mastraGatewayBaseUrl: rawGatewayBase.replace(/\/+$/, '').replace(/\/v1$/, ''),
     mastraGatewayApiKey: mgApiKey,
     routeThroughMastraGateway: Boolean(mgApiKey && isMastraGatewayModel),
     thinkingLevel: options?.thinkingLevel,
     customProviders: settings.customProviders,
+    credentialStore,
   });
 
   const auth = gateway.resolveAuth({
