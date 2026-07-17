@@ -802,11 +802,19 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           },
         });
 
+        const formattedResult = await this.fmtReturnValue<any>(
+          params.pubsub,
+          stepResults,
+          { status: 'canceled' } as any,
+          undefined,
+          stepExecutionPath,
+        );
+
         await this.invokeLifecycleCallbacks({
           status: 'canceled',
           result: undefined,
           error: undefined,
-          steps: stepResults,
+          steps: formattedResult.steps,
           tripwire: undefined,
           runId,
           workflowId,
@@ -821,7 +829,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           status: 'canceled',
           result: undefined,
           error: undefined,
-          steps: stepResults,
+          steps: formattedResult.steps,
           tripwire: undefined,
           runId,
           ...(params.outputOptions?.includeState ? { state: lastState } : {}),

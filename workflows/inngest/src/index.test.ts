@@ -217,6 +217,42 @@ async function resetInngest(expectedFnIds: string[] = []) {
   await waitForFunctionRegistration(expectedFnIds);
 }
 
+describe('Inngest type regressions', () => {
+  it('should correctly thread TRequestContext type without TS2416 errors', () => {
+    // This is a compile-time test to ensure TS2416 doesn't regress when InngestWorkflow
+    // overrides createRun from the base Workflow class.
+    const inngest = new Inngest({ id: 'test' });
+    const { createWorkflow, createStep } = init(inngest);
+
+    type CustomContext = { userId: string };
+
+    const step1 = createStep<any, any, any, any, any, any, CustomContext>({
+      id: 'step1',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ user: z.string() }),
+      execute: async ({ requestContext }) => {
+        // requestContext should be typed as RequestContext<CustomContext>
+        return { user: requestContext.get('userId') as string };
+      },
+    });
+
+    const workflow = createWorkflow<any, any, any, any, CustomContext>({
+      id: 'typed-context-workflow',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ user: z.string() }),
+      steps: [step1],
+    });
+
+    workflow.then(step1).commit();
+
+    // createRun should return a Run that accepts the CustomContext
+    // This compilation would fail with TS2416 if InngestWorkflow incorrectly
+    // omitted TRequestContext from its generic signature.
+    const runPromise = workflow.createRun();
+    expect(runPromise).toBeDefined();
+  });
+});
+
 describe('MastraInngestWorkflow', () => {
   let globServer: any;
 

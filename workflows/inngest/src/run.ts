@@ -992,9 +992,7 @@ export class InngestRun<
     const stream = new ReadableStream<WorkflowStreamEvent>({
       async start(controller) {
         const unwatch = self.watch(async (event: WorkflowStreamEvent) => {
-          const type = event.type;
-          const from = event.from ?? ChunkFrom.WORKFLOW;
-          const payload = 'payload' in event ? (event as any).payload : undefined;
+          const { type, from = ChunkFrom.WORKFLOW, payload } = event;
           controller.enqueue({
             type,
             runId: self.runId,
@@ -1099,9 +1097,7 @@ export class InngestRun<
     const stream = new ReadableStream<WorkflowStreamEvent>({
       async start(controller) {
         const unwatch = self.watch(async (event: WorkflowStreamEvent) => {
-          const type = event.type;
-          const from = event.from ?? ChunkFrom.WORKFLOW;
-          const payload = 'payload' in event ? (event as any).payload : undefined;
+          const { type, from = ChunkFrom.WORKFLOW, payload } = event;
           controller.enqueue({
             type,
             runId: self.runId,

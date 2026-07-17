@@ -312,6 +312,18 @@ describe('getEditDiagnosticsText', () => {
     expect(mockLsp.getDiagnostics).toHaveBeenCalledWith('/project/src/app.ts', 'code');
   });
 
+  it('uses win32 resolve when lspManager.root is a Windows absolute path', async () => {
+    const { workspace, mockLsp } = createMockLSPWorkspace([]);
+    mockLsp.root = 'C:\\project';
+    Object.defineProperty(workspace, 'filesystem', {
+      get: () => ({ resolveAbsolutePath: () => undefined }),
+    });
+
+    await getEditDiagnosticsText(workspace, '/src/app.ts', 'code');
+
+    expect(mockLsp.getDiagnostics).toHaveBeenCalledWith('C:\\project\\src\\app.ts', 'code');
+  });
+
   it('truncates long output', async () => {
     // Generate many diagnostics to exceed 2000 chars
     const diagnostics: LSPDiagnostic[] = [];

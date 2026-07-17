@@ -1324,3 +1324,66 @@ describe('DefaultExecutionEngine.deserializeRequestContext', () => {
     expect(result.size()).toBe(0);
   });
 });
+
+describe('DefaultExecutionEngine.execute cancellation onFinish contract', () => {
+  it('should format returned steps and onFinish steps identically for canceled runs', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const requestContext = new RequestContext();
+    const abortController = new AbortController();
+
+    let onFinishResult: any = null;
+    const engine = new DefaultExecutionEngine({
+      mastra: undefined,
+      options: {
+        validateInputs: true,
+        shouldPersistSnapshot: () => false,
+        onFinish: result => {
+          onFinishResult = result;
+        },
+      } as any,
+    });
+
+    const step = {
+      id: 'step1',
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+      execute: async () => {
+        // Trigger cancel
+        abortController.abort();
+        return { data: 'test' };
+      },
+    };
+
+    const graph = {
+      id: 'test-graph',
+      steps: [
+        {
+          type: 'step' as const,
+          step,
+        },
+      ],
+    };
+
+    const result = await engine.execute({
+      workflowId: 'test-workflow',
+      runId: 'test-run',
+      graph,
+      serializedStepGraph: [],
+      pubsub,
+      requestContext,
+      abortController,
+    });
+
+    expect(result.status).toBe('canceled');
+    expect(onFinishResult).toBeDefined();
+    expect(onFinishResult?.status).toBe('canceled');
+
+    // The returned steps and onFinish steps should be identically normalized
+    // and neither should contain internal metadata or un-deduplicated payloads (when path deduplication is active).
+    expect(result.steps).toEqual(onFinishResult?.steps);
+
+    // Ensure raw nestedRunId is omitted
+    const step1Result = result.steps?.step1 as any;
+    expect(step1Result?.metadata?.nestedRunId).toBeUndefined();
+  });
+});
