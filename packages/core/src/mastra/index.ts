@@ -1707,8 +1707,19 @@ export class Mastra<
       return;
     }
 
-    const managerConfig = modeOverride
-      ? { ...this.#backgroundTaskConfig, mode: modeOverride }
+    // Derive the effective mode from the worker configuration when no
+    // explicit override is given. Late call-sites (#maybeEnableBackgroundTasksForAgent,
+    // setStorage) don't know the worker topology, so we derive it here to
+    // ensure producer mode is consistently applied when workers are disabled
+    // or the backgroundTasks worker is excluded by the MASTRA_WORKERS filter.
+    const effectiveMode =
+      modeOverride ??
+      (this.#workersDisabled || (this.#workerFilter && !this.#workerFilter.has('backgroundTasks'))
+        ? 'producer'
+        : undefined);
+
+    const managerConfig = effectiveMode
+      ? { ...this.#backgroundTaskConfig, mode: effectiveMode }
       : this.#backgroundTaskConfig;
     const bgManager = new BackgroundTaskManager(managerConfig);
     bgManager.__registerMastra(this);
@@ -2330,13 +2341,18 @@ export class Mastra<
           this.#logger?.debug(`Failed to register scorers from durable agent ${agentKey}:`, err);
         });
 
-      // Register durable-agent-owned tools with the background task manager
+      // Register durable-agent-owned tools with the background task manager.
+      // Namespaced as `agentId:toolName` to avoid cross-agent collisions.
       if (this.#backgroundTaskManager) {
+        const durableAgentId = underlyingAgent.id ?? agentKey;
         Promise.resolve(underlyingAgent.listTools())
           .then(agentTools => {
             for (const [toolKey, tool] of Object.entries(agentTools || {})) {
               if (tool && typeof (tool as any).execute === 'function') {
-                this.#registerToolWithBackgroundManager(toolKey, tool as ToolAction<any, any, any, any>);
+                this.#registerToolWithBackgroundManager(
+                  `${durableAgentId}:${toolKey}`,
+                  tool as ToolAction<any, any, any, any>,
+                );
               }
             }
           })
@@ -2431,14 +2447,17 @@ export class Mastra<
     // Register agent-owned tools with the background task manager's static
     // executor registry so cross-process workers can resolve dispatched tasks
     // for tools that are only attached to an agent (not top-level on Mastra).
+    // Keys are namespaced as `agentId:toolName` to avoid cross-agent collisions
+    // when multiple agents define tools with the same config key.
     // Dynamic (function-based) tools are resolved lazily and cannot be
     // eagerly registered — only static tool records are wired here.
     if (this.#backgroundTaskManager) {
+      const agentId = mastraAgent.id ?? agentKey;
       Promise.resolve(mastraAgent.listTools())
         .then(agentTools => {
           for (const [toolKey, tool] of Object.entries(agentTools || {})) {
             if (tool && typeof (tool as any).execute === 'function') {
-              this.#registerToolWithBackgroundManager(toolKey, tool as ToolAction<any, any, any, any>);
+              this.#registerToolWithBackgroundManager(`${agentId}:${toolKey}`, tool as ToolAction<any, any, any, any>);
             }
           }
         })
@@ -5326,6 +5345,22 @@ export class Mastra<
       }
     } else {
       targets = this.#workers;
+    }
+
+    // When explicitly starting the backgroundTasks worker (e.g.
+    // `startWorkers('backgroundTasks')`), upgrade a producer-mode manager to
+    // full mode so the worker can subscribe to dispatch events. Without this,
+    // a manager created at construction time as 'producer' (because
+    // MASTRA_WORKERS excluded backgroundTasks) would be reused by the worker
+    // but never subscribe to the dispatch topic.
+    if (
+      name === 'backgroundTasks' &&
+      this.#backgroundTaskManager &&
+      this.#backgroundTaskManager.config.mode === 'producer'
+    ) {
+      await this.#backgroundTaskManager.shutdown();
+      this.#backgroundTaskManager = undefined;
+      this.#ensureBackgroundTaskManager('full');
     }
 
     for (const worker of targets) {

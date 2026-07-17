@@ -1041,6 +1041,13 @@ export class PgDB extends MastraBase {
 
       this.logger?.info?.(`Added PRIMARY KEY constraint ${constraintName} to ${fullTableName}`);
     } catch (error) {
+      // Another process may have added the same constraint concurrently
+      // (TOCTOU between the EXISTS check and the ALTER TABLE). Treat the
+      // resulting duplicate-relation / duplicate-object error as success.
+      if (isDuplicateRelationError(error)) {
+        this.logger?.debug?.(`PRIMARY KEY constraint ${constraintName} was created by another process`);
+        return;
+      }
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'ADD_SPANS_PRIMARY_KEY', 'FAILED'),

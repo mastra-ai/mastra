@@ -72,9 +72,14 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
       //      wins when present.
       //   2. Static executor registered by tool name. Used by remote workers
       //      that received the dispatch via PubSub and don't have access to
-      //      the producer's per-task closure.
+      //      the producer's per-task closure. Agent-owned executors are
+      //      namespaced as `agentId:toolName` to avoid cross-agent collisions;
+      //      we try the namespaced key first, then fall back to the plain key.
       const ctx = manager.taskContexts.get(taskId);
-      const executor = ctx?.executor ?? manager.getStaticExecutor(task.toolName);
+      const executor =
+        ctx?.executor ??
+        (task.agentId ? manager.getStaticExecutor(`${task.agentId}:${task.toolName}`) : undefined) ??
+        manager.getStaticExecutor(task.toolName);
       if (!executor) {
         const errorInfo = {
           message:
