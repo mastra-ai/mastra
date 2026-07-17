@@ -99,6 +99,14 @@ const toolSearch = new ToolSearchProcessor({
               'Optional request-aware hook for hiding tools from search results, blocking tool loading, or hiding already-loaded tools for the current request.',
             isOptional: true,
           },
+          {
+            name: 'includeResolvedTools',
+            type: 'boolean',
+            description:
+              'When true, tools passed per-request via processInputStep (for example MCP tools in args.tools) are indexed for search_tools and load_tool and are not injected into the prompt until loaded. When false (default), args.tools remain immediately available but are not searchable via the meta-tools.',
+            isOptional: true,
+            default: 'false',
+          },
         ],
       },
     ],
@@ -201,7 +209,22 @@ The `phase` value describes where the filter is being applied:
 - `load`: Blocks `load_tool` from loading disallowed tools.
 - `active`: Hides already-loaded tools from the current request if they're no longer allowed.
 
-If the hook throws or rejects, `ToolSearchProcessor` treats the tool as disallowed for that request. The hook may run for every matching search candidate, so keep async policy checks cheap or cached. The `search_tools` meta-tool is always available; `load_tool` is available unless `search.autoLoad` is enabled. Tools passed directly through the agent or `processInputStep` remain available unless you filter them outside `ToolSearchProcessor`.
+If the hook throws or rejects, `ToolSearchProcessor` treats the tool as disallowed for that request. The hook may run for every matching search candidate, so keep async policy checks cheap or cached. The `search_tools` meta-tool is always available; `load_tool` is available unless `search.autoLoad` is enabled. By default, tools passed directly through the agent or `processInputStep` remain available unless you filter them outside `ToolSearchProcessor`. Set `includeResolvedTools: true` to index per-request tools (such as MCP) for search/load without injecting them until loaded.
+
+## Per-request and MCP tools
+
+When MCP or other dynamically resolved tools are passed in `args.tools`, enable `includeResolvedTools` so they follow the same search/load pattern as constructor-time tools:
+
+```typescript
+const toolSearch = new ToolSearchProcessor({
+  tools: {
+    ...staticTools,
+  },
+  includeResolvedTools: true,
+})
+```
+
+With this option, per-request tools are searchable via `search_tools` and become available only after `load_tool` (or `search.autoLoad`) — they are not sent in the prompt on every turn.
 
 ## Extended usage example
 
