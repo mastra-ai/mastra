@@ -13,10 +13,10 @@ export function withOmInternalThreadId(
 ): RequestContext | undefined {
   if (!requestContext) return undefined;
 
-  const parentThreadId = requestContext.get(MASTRA_THREAD_ID_KEY);
-  if (typeof parentThreadId !== 'string' || !parentThreadId) return requestContext;
-
   const internalRequestContext = new RequestContext(requestContext.entries());
-  internalRequestContext.set(MASTRA_THREAD_ID_KEY, `${parentThreadId}-${omAgentId}`);
+  const parentThreadId = requestContext.get(MASTRA_THREAD_ID_KEY);
+  if (typeof parentThreadId === 'string' && parentThreadId) {
+    internalRequestContext.set(MASTRA_THREAD_ID_KEY, `${parentThreadId}-${omAgentId}`);
+  }
   return internalRequestContext;
 }

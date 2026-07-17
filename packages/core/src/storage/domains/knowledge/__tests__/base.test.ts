@@ -64,7 +64,7 @@ describe('InMemoryKnowledgeStorage', () => {
     expect((await store.factsTouching({ entityId: marco!.id, scope: sibling })).facts).toHaveLength(0);
   });
 
-  it('does not expose facts through a scope that cannot see their parent entity', async () => {
+  it('applies fact visibility independently from parent entity identity scope', async () => {
     const store = createStore();
     const entity = await store.createEntity({ name: 'Resource Secret', kind: 'task', scope: resource });
     await store.appendFact({
@@ -76,8 +76,10 @@ describe('InMemoryKnowledgeStorage', () => {
       defaultScope: resource,
     });
 
-    expect((await store.factsAbout({ entityId: entity.id, scope: org })).facts).toEqual([]);
-    expect(await store.search({ query: 'org-visible', scope: org })).toEqual([]);
+    expect((await store.factsAbout({ entityId: entity.id, scope: org })).facts).toHaveLength(1);
+    expect(await store.search({ query: 'org-visible', scope: org })).toEqual([
+      expect.objectContaining({ type: 'fact', recordId: entity.id, scope: org }),
+    ]);
     expect((await store.factsAbout({ entityId: entity.id, scope: thread })).facts).toHaveLength(1);
   });
 
@@ -155,6 +157,18 @@ describe('InMemoryKnowledgeStorage', () => {
       expect.objectContaining({ operation: 'delete', scope: resource }),
       expect.objectContaining({ operation: 'upsert', scope: org }),
     ]);
+  });
+
+  it('serializes semantic work for successive versions of one document', async () => {
+    const store = createStore();
+    const entity = await store.createEntity({ name: 'Atlas', kind: 'task', scope: resource });
+    await store.updateEntity({ id: entity.id, version: entity.version, kind: 'project' });
+
+    const first = await store.claimSemanticOutbox({ workerId: 'first', limit: 10 });
+    expect(first).toHaveLength(1);
+    expect(await store.claimSemanticOutbox({ workerId: 'second', limit: 10 })).toEqual([]);
+    await store.completeSemanticOutbox({ ids: [first[0]!.id], workerId: 'first' });
+    expect(await store.claimSemanticOutbox({ workerId: 'second', limit: 10 })).toHaveLength(1);
   });
 
   it('enforces ceilings and monotonic curation cursors', async () => {

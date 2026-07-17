@@ -22,6 +22,23 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       expect(await store.getEntity(page.id)).toBeNull();
     });
 
+    it('applies fact visibility independently from parent entity identity scope', async () => {
+      const entity = await store.createEntity({ name: 'Resource entity', kind: 'task', scope: resource });
+      await store.appendFact({
+        parentEntityId: entity.id,
+        text: 'organization-visible fact',
+        scope: ['org:acme'],
+        sourceThreadId: 't1',
+        resolutionScope: thread,
+        defaultScope: resource,
+      });
+
+      expect((await store.factsAbout({ entityId: entity.id, scope: ['org:acme'] })).facts).toHaveLength(1);
+      expect(await store.search({ query: 'organization-visible', scope: ['org:acme'] })).toEqual([
+        expect.objectContaining({ type: 'fact', recordId: entity.id, scope: ['org:acme'] }),
+      ]);
+    });
+
     it('maintains mentions and soft deletes without losing them', async () => {
       const jane = await store.createEntity({ name: 'Jane', kind: 'person', scope: resource });
       const marco = await store.createEntity({ name: 'Marco', kind: 'person', scope: resource });
@@ -167,6 +184,21 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
         defaultScope: resource,
       });
       await expect(store.rescopeFact({ id: fact.id, scope: ['org:acme'] })).rejects.toThrow('ceiling');
+    });
+
+    it('serializes semantic work for successive versions of the same document', async () => {
+      const entity = await store.createEntity({ name: 'Atlas', kind: 'task', scope: resource });
+      await store.updateEntity({ id: entity.id, version: entity.version, kind: 'project' });
+
+      const first = await store.claimSemanticOutbox({ workerId: 'first', limit: 10 });
+      expect(first).toHaveLength(1);
+      expect(first[0]?.documentId).toBe(`knowledge:entity:${entity.id}`);
+      expect(await store.claimSemanticOutbox({ workerId: 'second', limit: 10 })).toEqual([]);
+
+      await store.completeSemanticOutbox({ ids: [first[0]!.id], workerId: 'first' });
+      const second = await store.claimSemanticOutbox({ workerId: 'second', limit: 10 });
+      expect(second).toHaveLength(1);
+      expect(second[0]?.documentId).toBe(first[0]?.documentId);
     });
 
     it('dangerously clears every knowledge table', async () => {

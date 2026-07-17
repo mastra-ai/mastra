@@ -368,7 +368,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   async factsAbout(input: ListKnowledgeFactsInput): Promise<ListKnowledgeFactsOutput> {
     const queryScope = canonicalizeKnowledgeScope(input.scope);
     const terminal = this.#resolveTerminalEntity(input.entityId);
-    if (!terminal || !isKnowledgeScopeVisible(terminal.scope, queryScope)) return { facts: [] };
+    if (!terminal) return { facts: [] };
     return this.#paginateFacts(
       [...this.#db.knowledgeFacts.values()].filter(fact => fact.parentEntityId === terminal.id),
       { ...input, scope: queryScope },
@@ -378,7 +378,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   async factsTouching(input: ListKnowledgeFactsInput): Promise<ListKnowledgeFactsOutput> {
     const queryScope = canonicalizeKnowledgeScope(input.scope);
     const terminal = this.#resolveTerminalEntity(input.entityId);
-    if (!terminal || !isKnowledgeScopeVisible(terminal.scope, queryScope)) return { facts: [] };
+    if (!terminal) return { facts: [] };
     return this.#paginateFacts(
       [...this.#db.knowledgeFacts.values()].filter(
         fact =>
@@ -471,7 +471,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
         fact.text.toLocaleLowerCase().includes(query)
       ) {
         const entity = this.#db.knowledgeEntities.get(fact.parentEntityId);
-        if (entity && !entity.mergedInto && isKnowledgeScopeVisible(entity.scope, queryScope)) {
+        if (entity && !entity.mergedInto) {
           results.push({
             type: 'fact',
             id: fact.id,
@@ -547,6 +547,16 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       )
       .filter(entry => entry.availableAt <= now)
       .filter(entry => !queryScope || isKnowledgeScopeVisible(entry.scope, queryScope))
+      .filter(
+        entry =>
+          ![...this.#db.knowledgeSemanticOutbox.values()].some(
+            earlier =>
+              earlier.documentId === entry.documentId &&
+              earlier.status !== 'completed' &&
+              (earlier.createdAt < entry.createdAt ||
+                (earlier.createdAt.getTime() === entry.createdAt.getTime() && earlier.id < entry.id)),
+          ),
+      )
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id))
       .slice(0, input.limit ?? 100);
     for (const entry of claimed) {

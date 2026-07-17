@@ -660,8 +660,8 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     }));
     if (results.length < (input.limit ?? 20)) {
       const facts = await this.#client.execute({
-        sql: `SELECT f.*,json(f.scope) AS scopeJson,r.name FROM "${TABLE_KNOWLEDGE_FACTS}" f JOIN "${TABLE_KNOWLEDGE_RECORDS}" r ON r.id=f.parentEntityId AND r.type='entity' AND r.mergedInto IS NULL WHERE f.deletedAt IS NULL AND ${visibleSql.replaceAll('scopeKey', 'f.scopeKey')} AND ${visibleSql.replaceAll('scopeKey', 'r.scopeKey')} AND lower(f.text) LIKE ? ORDER BY f.id DESC LIMIT ?`,
-        args: [key, key, key, key, query, (input.limit ?? 20) - results.length],
+        sql: `SELECT f.*,json(f.scope) AS scopeJson,r.name FROM "${TABLE_KNOWLEDGE_FACTS}" f JOIN "${TABLE_KNOWLEDGE_RECORDS}" r ON r.id=f.parentEntityId AND r.type='entity' AND r.mergedInto IS NULL WHERE f.deletedAt IS NULL AND ${visibleSql.replaceAll('scopeKey', 'f.scopeKey')} AND lower(f.text) LIKE ? ORDER BY f.id DESC LIMIT ?`,
+        args: [key, key, query, (input.limit ?? 20) - results.length],
       });
       results.push(
         ...facts.rows.map(row => ({
@@ -755,7 +755,11 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     const now = input.now ?? new Date();
     const stale = new Date(now.getTime() - (input.claimTimeoutMs ?? 60_000));
     return this.#transaction(async tx => {
-      const clauses = [`availableAt <= ?`, `(status='pending' OR (status='processing' AND claimedAt <= ?))`];
+      const clauses = [
+        `availableAt <= ?`,
+        `(status='pending' OR (status='processing' AND claimedAt <= ?))`,
+        `NOT EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" AS earlier WHERE earlier.documentId = "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}".documentId AND earlier.status != 'completed' AND (earlier.createdAt < "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}".createdAt OR (earlier.createdAt = "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}".createdAt AND earlier.id < "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}".id)))`,
+      ];
       const args: InValue[] = [now.toISOString(), stale.toISOString()];
       if (input.scope) {
         const key = knowledgeScopeKey(canonicalizeKnowledgeScope(input.scope));
@@ -873,7 +877,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   async #listFacts(input: ListKnowledgeFactsInput, touching: boolean): Promise<ListKnowledgeFactsOutput> {
     const scope = canonicalizeKnowledgeScope(input.scope);
     const entity = await this.#resolveTerminalEntity(this.#client, input.entityId);
-    if (!entity || !isKnowledgeScopeVisible(entity.scope, scope)) return { facts: [] };
+    if (!entity) return { facts: [] };
     const key = knowledgeScopeKey(scope);
     const args: InValue[] = [entity.id, ...(touching ? [entity.id] : []), key, key];
     if (input.after) args.push(input.after);
