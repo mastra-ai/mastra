@@ -61,10 +61,11 @@ describe('softwarefactory template', () => {
   it('seeds .env with commented placeholders only', async () => {
     const env = await readFile(join(scaffoldDir, '.env'), 'utf8');
     // The CLI writes no values — configuration happens in the web UI. Unset
-    // vars must stay commented placeholders: an active `KEY=` loads as the
-    // empty string and poisons `process.env.X ?? default` fallbacks.
+    // vars must stay commented placeholders: an active empty `KEY=` loads as
+    // the empty string and poisons `process.env.X ?? default` fallbacks.
+    // (Non-empty schema defaults like MASTRACODE_SANDBOX_WORKDIR are fine.)
     expect(env).toMatch(/^# WORKOS_API_KEY=/m);
-    expect(env).not.toMatch(/^[A-Z][A-Z0-9_]*=/m);
+    expect(env).not.toMatch(/^[A-Z][A-Z0-9_]*=\s*$/m);
   });
 
   it('typechecks against the local package set', async () => {
