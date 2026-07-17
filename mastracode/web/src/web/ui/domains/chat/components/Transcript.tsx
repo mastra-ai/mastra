@@ -830,7 +830,7 @@ function MessageBubble({ entry, followsToolEntry }: { entry: MessageEntry; follo
       }
 
       return (
-        <div className={`prose ${followsTool || followsToolEntry ? 'mt-3' : ''}`}>
+        <div className={`prose ${followsToolEntry ? 'mt-4' : followsTool ? 'mt-3' : ''}`}>
           <Markdown>{part.text}</Markdown>
           {entry.streaming && part === lastTextPart && (
             <span className="ml-0.5 inline-block h-[1em] w-0.5 animate-pulse bg-accent1 align-text-bottom" />
