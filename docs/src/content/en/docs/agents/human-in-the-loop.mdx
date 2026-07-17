@@ -1,5 +1,5 @@
 ---
-title: "Agent approval | Agents"
+title: "Human-in-the-loop | Agents"
 description: Learn how to require approvals, suspend tool execution, and automatically resume suspended tools while keeping humans in control of agent workflows.
 packages:
   - "@mastra/core"
@@ -7,11 +7,11 @@ packages:
   - "@mastra/memory"
 ---
 
-# Agent approval
+# Human-in-the-loop
 
-Agents sometimes require the same [human-in-the-loop](/docs/workflows/human-in-the-loop) oversight used in workflows when calling tools that handle sensitive operations, like deleting resources or running long processes. With agent approval you can suspend a tool call before it executes so a human can approve or decline it, or let tools suspend themselves to request additional context from the user.
+Agents sometimes require the same [human-in-the-loop](/docs/workflows/human-in-the-loop) oversight used in workflows when calling tools that handle sensitive operations, like deleting resources or running long processes. With human-in-the-loop you can suspend a tool call before it executes so a human can approve or decline it, or let tools suspend themselves to request additional context from the user.
 
-## When to use agent approval
+## When to use human-in-the-loop
 
 - **Destructive or irreversible actions** such as deleting records, sending emails, or processing payments.
 - **Cost-heavy operations** like calling expensive third-party APIs where you want to verify arguments first.
@@ -57,7 +57,7 @@ for await (const chunk of stream.fullStream) {
 
 :::note
 
-Agent approval uses snapshots to capture request state. Configure a [storage provider](/docs/storage/overview) on your Mastra instance or you'll see a "snapshot not found" error.
+Human-in-the-loop uses snapshots to capture request state. Configure a [storage provider](/docs/storage/overview) on your Mastra instance or you'll see a "snapshot not found" error.
 
 Snapshots for agent runs are minimal resume artifacts: they hold only what's needed to resume the suspended run and are deleted once the run finishes. Use [tracing](/docs/observability/overview) for the execution record and [memory](/docs/memory/overview) for the conversation history.
 

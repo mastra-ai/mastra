@@ -9,7 +9,7 @@ packages:
 
 A built-in, agent-agnostic tool that submits an implementation plan for user review. The agent writes a plan to a markdown file and passes the file path to this tool. The tool suspends the run until the user approves or rejects the plan.
 
-The tool pauses through the native [tool suspension](/docs/agents/agent-approval#runtime-suspension-with-suspend) primitive: it calls `suspend({ path })`, which makes the agent emit a `tool-call-suspended` event. The host reads the plan file, presents it to the user, and resumes with an approval or rejection.
+The tool pauses through the native [tool suspension](/docs/agents/human-in-the-loop#runtime-suspension-with-suspend) primitive: it calls `suspend({ path })`, which makes the agent emit a `tool-call-suspended` event. The host reads the plan file, presents it to the user, and resumes with an approval or rejection.
 
 When executed outside an agent run (no `suspend` available), the tool returns a readable fallback string containing the file path.
 

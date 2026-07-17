@@ -347,7 +347,7 @@
     },
     {
       "source": "/docs/agents/human-in-the-loop-with-tools",
-      "destination": "/docs/agents/agent-approval",
+      "destination": "/docs/agents/human-in-the-loop",
       "permanent": true
     },
     {
@@ -1016,6 +1016,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/agents/agent-approval",
+      "destination": "/docs/agents/human-in-the-loop",
+      "permanent": true
+    },
+    {
       "source": "/docs/agents/channels/llms.txt",
       "destination": "/docs/capabilities/channels/overview/llms.txt",
       "permanent": true
@@ -1202,7 +1207,7 @@
     },
     {
       "source": "/docs/agents/human-in-the-loop-with-tools/llms.txt",
-      "destination": "/docs/agents/agent-approval/llms.txt",
+      "destination": "/docs/agents/human-in-the-loop/llms.txt",
       "permanent": true
     },
     {
@@ -1748,6 +1753,11 @@
     {
       "source": "/docs/scorers/creating-custom-scorers/llms.txt",
       "destination": "/docs/evals/custom-scorers/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/agent-approval/llms.txt",
+      "destination": "/docs/agents/human-in-the-loop/llms.txt",
       "permanent": true
     }
   ]

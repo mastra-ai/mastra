@@ -353,7 +353,7 @@ const result = await agent.generate('message for agent')
             type: 'boolean',
             isOptional: true,
             description:
-              "When true, all tool calls require explicit approval before execution. The generate() method will return with `finishReason: 'suspended'` and include a `suspendPayload` with tool call details (`toolCallId`, `toolName`, `args`). Use `approveToolCallGenerate()` or `declineToolCallGenerate()` to proceed. See [Agent Approval](/docs/agents/agent-approval#tool-approval-with-generate) for details.",
+              "When true, all tool calls require explicit approval before execution. The generate() method will return with `finishReason: 'suspended'` and include a `suspendPayload` with tool call details (`toolCallId`, `toolName`, `args`). Use `approveToolCallGenerate()` or `declineToolCallGenerate()` to proceed. See [Human-in-the-loop](/docs/agents/human-in-the-loop#tool-approval-with-generate) for details.",
           },
           {
             name: 'autoResumeSuspendedTools',

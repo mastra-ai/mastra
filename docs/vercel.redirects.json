@@ -332,7 +332,7 @@
     },
     {
       "source": "/docs/agents/human-in-the-loop-with-tools",
-      "destination": "/docs/agents/agent-approval",
+      "destination": "/docs/agents/human-in-the-loop",
       "permanent": true
     },
     {
@@ -998,6 +998,11 @@
     {
       "source": "/docs/scorers/creating-custom-scorers",
       "destination": "/docs/evals/custom-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/agent-approval",
+      "destination": "/docs/agents/human-in-the-loop",
       "permanent": true
     }
   ]
