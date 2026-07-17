@@ -1,5 +1,5 @@
 import type { KnowledgeScope, KnowledgeScopeLevel, KnowledgeStorage } from '@mastra/core/storage';
-import { expandKnowledgeScope, parseKnowledgeWikilinks } from '@mastra/core/storage';
+import { expandKnowledgeScope } from '@mastra/core/storage';
 import { z } from 'zod';
 
 import { Extractor } from '../extractor';
@@ -39,7 +39,6 @@ Return entities with short stable names, a freeform kind, and facts nested under
 Use common kinds such as person, task, event, project, or organization when they fit. Never use the reserved kind page.
 Facts must be grounded in the conversation, concise, and written as prose. Do not infer unstated information.
 Wrap every named entity mentioned in fact text in [[wikilinks]].
-Only emit an entity when it has at least one fact, or when another emitted fact wikilinks it and the bare entity entry supplies its kind. Never emit disconnected entities with no facts.
 Set a fact scope only when the conversation establishes where it applies. Use org for organization-wide facts, resource for facts shared across this resource's conversations, and thread for conversation-private facts.
 Omit scope when uncertain; omitted fact scopes stay private to the current thread.
 Emit when only when the conversation anchors the referred time. Resolve relative dates against the current date and use ISO 8601.`;
@@ -96,29 +95,13 @@ export class SubconsciousCaptureExtractor extends Extractor<SubconsciousCaptureO
       const store = await getKnowledgeStore(context);
       const entityLevel = clampScope(options.defaultScope, options.maxScope);
       const entityScope = expandKnowledgeScope(scopeContext, entityLevel);
-      const mentionedNames = new Set(
-        context.current.entities.flatMap(extractedEntity =>
-          extractedEntity.facts.flatMap(extractedFact =>
-            parseKnowledgeWikilinks(extractedFact.text).map(name => name.trim().toLocaleLowerCase()),
-          ),
-        ),
-      );
-      const retainedEntities = context.current.entities.filter(
-        extractedEntity =>
-          extractedEntity.facts.length > 0 || mentionedNames.has(extractedEntity.name.trim().toLocaleLowerCase()),
-      );
-      const createdEntities = [];
 
-      for (const extractedEntity of retainedEntities) {
+      for (const extractedEntity of context.current.entities) {
         const entity = await store.createEntity({
           name: extractedEntity.name,
           kind: extractedEntity.kind,
           scope: entityScope,
         });
-        createdEntities.push({ entity, extractedEntity });
-      }
-
-      for (const { entity, extractedEntity } of createdEntities) {
         for (const extractedFact of extractedEntity.facts) {
           const factLevel = clampScope(extractedFact.scope ?? 'thread', options.maxScope);
           await store.appendFact({

@@ -73,32 +73,6 @@ describe('Subconscious capture', () => {
     expect(touchingMaya.facts.map(fact => fact.text)).toContain('[[Maya Chen]] owns [[Project Atlas]].');
   });
 
-  it('keeps referenced zero-fact entities and drops disconnected zero-fact entities', async () => {
-    const memory = new Memory({ storage: new InMemoryStore() });
-    const extractor = new SubconsciousCaptureExtractor({
-      defaultScope: 'resource',
-      learnedGuidance: false,
-    });
-    const context = createContext(memory, {
-      entities: [
-        {
-          name: 'Project Atlas',
-          kind: 'project',
-          facts: [{ text: 'Project Atlas depends on [[Deploy Fix]].' }],
-        },
-        { name: 'Deploy Fix', kind: 'task', facts: [] },
-        { name: 'Disconnected Noise', kind: 'topic', facts: [] },
-      ],
-    });
-
-    await extractor.onExtracted?.({ ...context, extractor });
-
-    const store = (await memory.storage.getStore('knowledge'))!;
-    const scope = ['org:acme', 'resource:user-42'];
-    expect(await store.getEntityByName({ name: 'Deploy Fix', scope })).toMatchObject({ kind: 'task' });
-    expect(await store.getEntityByName({ name: 'Disconnected Noise', scope })).toBeNull();
-  });
-
   it('loads bounded learned guidance after user instructions', async () => {
     const memory = new Memory({ storage: new InMemoryStore() });
     const store = (await memory.storage.getStore('knowledge'))!;
@@ -115,7 +89,6 @@ describe('Subconscious capture', () => {
 
     const resolved = await extractor.resolve(createContext(memory, { entities: [] }));
     expect(resolved.instructions).toContain('Record pricing amounts verbatim.');
-    expect(resolved.instructions).toContain('Never emit disconnected entities with no facts.');
     expect(resolved.instructions).toContain('Learned guidance');
     expect(resolved.instructions.indexOf('Record pricing')).toBeLessThan(
       resolved.instructions.indexOf('Learned guidance'),
@@ -135,7 +108,7 @@ describe('Subconscious capture', () => {
       learnedGuidance: false,
     });
     const context = createContext(memory, {
-      entities: [{ name: 'Atlas', kind: 'project', facts: [{ text: 'Atlas is a project.' }] }],
+      entities: [{ name: 'Atlas', kind: 'project', facts: [] }],
     });
 
     await extractor.onExtracted?.({ ...context, extractor });
