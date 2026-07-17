@@ -88,7 +88,7 @@ function createReminderMessage(reminder: ReminderInput, id = '__temporal_1'): Ma
 }
 
 function createStateSignalMessage(
-  input: { stateId: string; mode: string; version: number; message: string },
+  input: { stateId: string; mode: string; version: number; message: string; value?: unknown; delta?: unknown },
   id: string,
 ): MastraDBMessage {
   return createSignal({
@@ -96,7 +96,11 @@ function createStateSignalMessage(
     type: 'state',
     tagName: input.stateId,
     contents: input.message,
-    metadata: { state: { id: input.stateId, mode: input.mode, version: input.version } },
+    metadata: {
+      state: { id: input.stateId, mode: input.mode, version: input.version },
+      ...(input.value !== undefined ? { value: input.value } : {}),
+      ...(input.delta !== undefined ? { delta: input.delta } : {}),
+    },
   } as Parameters<typeof createSignal>[0]).toDBMessage();
 }
 
@@ -245,14 +249,13 @@ describe('addUserMessage', () => {
 
   it('renders valid Subconscious activity values with the specialized component', () => {
     const state = createState();
-    addUserMessage(state, {
-      id: 'subconscious-activity-1',
-      role: 'user',
-      content: [
+    addUserMessage(
+      state,
+      createStateSignalMessage(
         {
-          type: 'state_signal',
           stateId: 'subconscious-activity',
           mode: 'snapshot',
+          version: 1,
           message: 'Hot: [[Atlas launch]] (1)',
           value: {
             updates: [
@@ -270,29 +273,28 @@ describe('addUserMessage', () => {
             hot: [{ type: 'entity', id: 'atlas', name: 'Atlas launch', updates: 1 }],
           },
         },
-      ],
-      createdAt: new Date('2026-07-15T00:00:00.000Z'),
-    } as AgentControllerMessage);
+        'subconscious-activity-1',
+      ),
+    );
 
     expect(state.messageComponentsById.get('subconscious-activity-1')).toBeInstanceOf(SubconsciousActivityComponent);
   });
 
   it('falls back to generic state rendering for malformed Subconscious activity values', () => {
     const state = createState();
-    addUserMessage(state, {
-      id: 'subconscious-activity-invalid',
-      role: 'user',
-      content: [
+    addUserMessage(
+      state,
+      createStateSignalMessage(
         {
-          type: 'state_signal',
           stateId: 'subconscious-activity',
           mode: 'snapshot',
+          version: 1,
           message: 'Malformed activity remains visible',
           value: { updates: 'invalid', hot: [] },
         },
-      ],
-      createdAt: new Date('2026-07-15T00:00:00.000Z'),
-    } as AgentControllerMessage);
+        'subconscious-activity-invalid',
+      ),
+    );
 
     const component = state.messageComponentsById.get('subconscious-activity-invalid');
     expect(component).toBeInstanceOf(StateSignalComponent);

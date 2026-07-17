@@ -232,14 +232,14 @@ describe('handleMessageStart signals', () => {
   });
 
   it('renders streamed Subconscious activity with the specialized component', () => {
-    handleMessageUpdate(
+    handleMessageStart(
       ctx,
-      createAssistantMessage([
-        {
-          type: 'state_signal',
-          stateId: 'subconscious-activity',
-          mode: 'snapshot',
-          cacheKey: 'subconscious-activity:v1',
+      signalMessage({
+        type: 'state',
+        tagName: 'subconscious-activity',
+        contents: 'Hot: [[Atlas launch]] (1)',
+        metadata: {
+          state: { id: 'subconscious-activity', mode: 'snapshot', cacheKey: 'subconscious-activity:v1' },
           value: {
             updates: [
               {
@@ -255,9 +255,8 @@ describe('handleMessageStart signals', () => {
             ],
             hot: [{ type: 'entity', id: 'atlas', name: 'Atlas launch', updates: 1 }],
           },
-          message: 'Hot: [[Atlas launch]] (1)',
-        } as never,
-      ]),
+        },
+      } as Parameters<typeof createSignal>[0]),
     );
 
     expect(state.chatContainer.children.some(child => child instanceof SubconsciousActivityComponent)).toBe(true);
