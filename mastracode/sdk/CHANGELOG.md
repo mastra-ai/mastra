@@ -1,5 +1,14 @@
 # @mastra/code-sdk
 
+## 0.2.0-alpha.4
+
+### Patch Changes
+
+- Added on-disk verification to the update utilities: `runUpdate` now returns the package manager's stderr, and the new `performUpdate` locates the running install, delegates the update to the tool that owns it (for example vite-plus), verifies the on-disk version when available, and reports when a readable installed version remains unchanged. ([#18792](https://github.com/mastra-ai/mastra/pull/18792))
+
+- Updated dependencies [[`4cfdd64`](https://github.com/mastra-ai/mastra/commit/4cfdd645794feaea0c4ea711e70ecdfbef0c5b8e)]:
+  - @mastra/core@1.52.0-alpha.4
+
 ## 0.2.0-alpha.3
 
 ### Patch Changes

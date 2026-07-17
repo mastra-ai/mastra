@@ -24,42 +24,37 @@ export function validateMaxRetainedProcessOutputBytes(maxRetainedBytes: number):
   return maxRetainedBytes;
 }
 
-function getPreviousCodePointStart(value: string, end: number): number {
-  let start = end - 1;
-  const codeUnit = value.charCodeAt(start);
+function advanceStartByUtf8Bytes(
+  value: string,
+  start: number,
+  minimumBytesToDrop: number,
+): { start: number; droppedBytes: number } {
+  let nextStart = start;
+  let droppedBytes = 0;
 
-  if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff && start > 0) {
-    const previousCodeUnit = value.charCodeAt(start - 1);
-    if (previousCodeUnit >= 0xd800 && previousCodeUnit <= 0xdbff) {
-      start -= 1;
-    }
+  while (nextStart < value.length && droppedBytes < minimumBytesToDrop) {
+    const codePoint = value.codePointAt(nextStart)!;
+
+    if (codePoint < 0x80) droppedBytes += 1;
+    else if (codePoint < 0x800) droppedBytes += 2;
+    else if (codePoint < 0x10000) droppedBytes += 3;
+    else droppedBytes += 4;
+
+    nextStart += codePoint > 0xffff ? 2 : 1;
   }
 
-  return start;
+  return { start: nextStart, droppedBytes };
 }
 
-function trimToMaxBytes(value: string, maxBytes: number): string {
-  if (maxBytes <= 0) return '';
-
-  let retainedBytes = 0;
-  let end = value.length;
-  let start = end;
-
-  while (start > 0) {
-    const characterStart = getPreviousCodePointStart(value, start);
-    const characterBytes = Buffer.byteLength(value.slice(characterStart, end));
-    if (retainedBytes + characterBytes > maxBytes) break;
-    retainedBytes += characterBytes;
-    end = characterStart;
-    start = characterStart;
-  }
-
-  const retained = value.slice(start);
-  return retained.length === value.length ? retained : Buffer.from(retained, 'utf8').toString('utf8');
+interface RetainedOutputChunk {
+  data: string;
+  start: number;
+  bytes: number;
+  dataBytes: number;
 }
 
 class RetainedOutputBuffer {
-  private chunks: Array<{ data: string; bytes: number }> = [];
+  private chunks: RetainedOutputChunk[] = [];
   private bytes = 0;
   private droppedBytes = 0;
   private cachedValue: string | undefined;
@@ -74,7 +69,7 @@ class RetainedOutputBuffer {
       return;
     }
 
-    this.chunks.push({ data, bytes: dataBytes });
+    this.chunks.push({ data, start: 0, bytes: dataBytes, dataBytes });
     this.bytes += dataBytes;
     this.cachedValue = undefined;
 
@@ -83,7 +78,7 @@ class RetainedOutputBuffer {
   }
 
   toString(): string {
-    this.cachedValue ??= this.chunks.map(chunk => chunk.data).join('');
+    this.cachedValue ??= this.chunks.map(chunk => chunk.data.slice(chunk.start)).join('');
     return this.cachedValue;
   }
 
@@ -109,20 +104,23 @@ class RetainedOutputBuffer {
         continue;
       }
 
-      const retainedData = trimToMaxBytes(firstChunk.data, firstChunk.bytes - overflowBytes);
-      const retainedBytes = Buffer.byteLength(retainedData);
-      const droppedBytes = firstChunk.bytes - retainedBytes;
+      const { start, droppedBytes } = advanceStartByUtf8Bytes(firstChunk.data, firstChunk.start, overflowBytes);
+      firstChunk.start = start;
+      firstChunk.bytes -= droppedBytes;
+      this.bytes -= droppedBytes;
+      this.droppedBytes += droppedBytes;
 
-      if (retainedBytes === 0) {
+      if (firstChunk.bytes === 0) {
         this.chunks.shift();
-        this.bytes -= droppedBytes;
-        this.droppedBytes += droppedBytes;
         continue;
       }
 
-      this.chunks[0] = { data: retainedData, bytes: retainedBytes };
-      this.bytes -= droppedBytes;
-      this.droppedBytes += droppedBytes;
+      if (firstChunk.dataBytes > this.maxBytes) {
+        // V8 sliced strings retain their parent, so detach a bounded suffix from an oversized source chunk.
+        firstChunk.data = Buffer.from(firstChunk.data.slice(firstChunk.start), 'utf8').toString('utf8');
+        firstChunk.start = 0;
+        firstChunk.dataBytes = firstChunk.bytes;
+      }
     }
   }
 
@@ -130,7 +128,7 @@ class RetainedOutputBuffer {
     if (this.chunks.length <= RETAINED_OUTPUT_COMPACT_CHUNK_THRESHOLD) return;
     const data = this.toString();
     this.bytes = Buffer.byteLength(data);
-    this.chunks = this.bytes === 0 ? [] : [{ data, bytes: this.bytes }];
+    this.chunks = this.bytes === 0 ? [] : [{ data, start: 0, bytes: this.bytes, dataBytes: this.bytes }];
     this.cachedValue = data;
   }
 }

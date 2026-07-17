@@ -21,16 +21,17 @@ import { z } from 'zod'
 
 export default createTool({
   id: 'get_weather',
-  description: 'Get the current weather for a city.',
+  description: 'Get the current weather for a location.',
   inputSchema: z.object({
-    city: z.string(),
+    location: z.string(),
   }),
   outputSchema: z.object({
-    city: z.string(),
-    tempC: z.number(),
+    location: z.string(),
+    temperatureCelsius: z.number(),
+    conditions: z.string(),
   }),
-  execute: async ({ context }) => {
-    return { city: context.city, tempC: 21 }
+  execute: async ({ location }) => {
+    return { location, temperatureCelsius: 21, conditions: 'sunny' }
   },
 })
 ```

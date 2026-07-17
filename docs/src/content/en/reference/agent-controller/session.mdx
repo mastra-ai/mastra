@@ -109,6 +109,19 @@ The session is organized into sub-objects, each owning one domain of per-convers
 
 ## Methods
 
+### Workspace
+
+#### `getWorkspace()`
+
+Return the workspace resolved for this session. This preserves session-level overrides and workspaces selected from the session scope.
+
+```typescript
+const workspace = agentController.session.getWorkspace()
+const skill = await workspace.skills?.get('code-review')
+```
+
+Returns: `Workspace`
+
 ### Permissions
 
 Session-scoped grants auto-approve tools without prompting. Grants are ephemeral — they reset when the session restarts and are never persisted.
