@@ -133,9 +133,10 @@ export function boundAuditMetadata(metadata: Record<string, unknown> | undefined
   return { truncated: true };
 }
 
-/** Clamp a requested page size into `[1, MAX_PAGE_SIZE]`. */
+/** Normalize a requested page size to a finite integer in `[1, MAX_PAGE_SIZE]`. */
 export function clampAuditLimit(limit: number | undefined): number {
-  return Math.min(Math.max(limit ?? DEFAULT_PAGE_SIZE, 1), MAX_PAGE_SIZE);
+  const normalized = typeof limit === 'number' && Number.isFinite(limit) ? Math.trunc(limit) : DEFAULT_PAGE_SIZE;
+  return Math.min(Math.max(normalized, 1), MAX_PAGE_SIZE);
 }
 
 /** Encode the `(occurredAt, id)` keyset cursor of a row. */

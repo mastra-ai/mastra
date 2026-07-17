@@ -7,3 +7,4 @@ export * from './storage.js';
 export { anthropicOAuthProvider } from './providers/anthropic.js';
 export { githubCopilotOAuthProvider } from './providers/github-copilot.js';
 export { openaiCodexOAuthProvider } from './providers/openai-codex.js';
+export { xaiOAuthProvider } from './providers/xai.js';

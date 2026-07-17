@@ -1,16 +1,7 @@
-/**
- * Unit tests for the Postgres factory-storage domain implementations, driven
- * through a fake `pg.Pool` (the same fake-db approach as
- * `github/subscriptions.test.ts`): DDL-on-init, parameter binding + jsonb
- * serialization, snake→camel row mapping, and transaction ordering.
- */
-
 import { describe, expect, it } from 'vitest';
 
-import type { FactoryStorageContext } from '../domain';
-import { AUDIT_DDL, AuditStoragePG } from './audit/pg';
-import { INTAKE_DDL, IntakeStoragePG } from './intake/pg';
-import { WORK_ITEMS_DDL, WorkItemsStoragePG } from './work-items/pg';
+import type { FactoryStorageContext } from '../../domain';
+import { WORK_ITEMS_DDL, WorkItemsStoragePG } from './pg';
 
 interface RecordedQuery {
   text: string;
@@ -19,7 +10,6 @@ interface RecordedQuery {
 
 type Responder = (text: string, values?: unknown[]) => { rows: any[] } | undefined;
 
-/** Fake pg.Pool: records every query and answers via the responder. */
 function fakePool(respond: Responder = () => undefined) {
   const queries: RecordedQuery[] = [];
   const run = async (text: string, values?: unknown[]) => {
@@ -33,127 +23,7 @@ function fakePool(respond: Responder = () => undefined) {
   return { pool, queries, ctx: { pool } as unknown as FactoryStorageContext };
 }
 
-const sqlOf = (q: RecordedQuery) => q.text.replace(/\s+/g, ' ').trim();
-
-describe('IntakeStoragePG', () => {
-  it('runs its DDL on init and refuses queries before init succeeds', async () => {
-    const { pool, queries, ctx } = fakePool();
-    const domain = new IntakeStoragePG();
-    await expect(domain.getConfig('org1', 'u1')).rejects.toThrow(/Not initialized/);
-    await domain.init(ctx);
-    expect(queries[0]!.text).toBe(INTAKE_DDL);
-    expect(pool).toBeDefined();
-  });
-
-  it('returns the defaults when no row exists and the stored config otherwise', async () => {
-    const stored = { github: { enabled: false, projectIds: ['gp-1'] }, linear: { enabled: true, projectIds: null } };
-    let hasRow = false;
-    const { ctx } = fakePool(text => {
-      if (text.startsWith('SELECT config')) return { rows: hasRow ? [{ config: stored }] : [] };
-      return undefined;
-    });
-    const domain = new IntakeStoragePG();
-    await domain.init(ctx);
-
-    expect(await domain.getConfig('org1', 'u1')).toEqual({
-      github: { enabled: true, projectIds: null },
-      linear: { enabled: true, projectIds: null },
-    });
-    hasRow = true;
-    expect(await domain.getConfig('org1', 'u1')).toEqual(stored);
-  });
-
-  it('upserts on (org_id, user_id) with the config serialized as jsonb', async () => {
-    const { queries, ctx } = fakePool();
-    const domain = new IntakeStoragePG();
-    await domain.init(ctx);
-    const config = { github: { enabled: true, projectIds: null }, linear: { enabled: false, projectIds: ['lp-1'] } };
-    await domain.saveConfig('org1', 'u1', config);
-
-    const upsert = queries.at(-1)!;
-    expect(sqlOf(upsert)).toContain('ON CONFLICT (org_id, user_id)');
-    expect(upsert.values).toEqual(['org1', 'u1', JSON.stringify(config)]);
-  });
-});
-
-describe('AuditStoragePG', () => {
-  const dbRow = {
-    id: 'e1',
-    org_id: 'org1',
-    actor_id: 'u1',
-    actor_type: 'human',
-    action: 'factory.run.started',
-    targets: [{ type: 'work_item', id: 'wi-1' }],
-    metadata: {},
-    github_project_id: null,
-    context: {},
-    occurred_at: new Date('2026-07-01T10:00:00Z'),
-  };
-
-  it('runs its DDL on init and maps inserted rows snake→camel', async () => {
-    const { queries, ctx } = fakePool(text =>
-      text.includes('INSERT INTO audit_events') ? { rows: [dbRow] } : undefined,
-    );
-    const domain = new AuditStoragePG();
-    await domain.init(ctx);
-    expect(queries[0]!.text).toBe(AUDIT_DDL);
-
-    const row = await domain.record({
-      orgId: 'org1',
-      actorId: 'u1',
-      action: 'factory.run.started',
-      targets: [{ type: 'work_item', id: 'wi-1' }],
-    });
-    expect(row).toMatchObject({ orgId: 'org1', actorId: 'u1', actorType: 'human', githubProjectId: null });
-    expect(row.occurredAt).toBeInstanceOf(Date);
-
-    const insert = queries.at(-1)!;
-    // jsonb columns are stringified; actorType defaulted server-side.
-    expect(insert.values![2]).toBe('human');
-    expect(insert.values![4]).toBe(JSON.stringify([{ type: 'work_item', id: 'wi-1' }]));
-  });
-
-  it('builds list filters and the keyset cursor into parameterized conditions', async () => {
-    const { queries, ctx } = fakePool(text => (text.includes('FROM audit_events') ? { rows: [] } : undefined));
-    const domain = new AuditStoragePG();
-    await domain.init(ctx);
-
-    await domain.list({
-      orgId: 'org1',
-      githubProjectId: 'p1',
-      actions: ['factory.git.push'],
-      actorId: 'u1',
-      before: '2026-07-01T10:00:00.000Z_e9',
-      limit: 10,
-    });
-
-    const list = queries.at(-1)!;
-    const sql = sqlOf(list);
-    expect(sql).toContain('org_id = $1');
-    expect(sql).toContain('github_project_id = $2');
-    expect(sql).toContain('action = ANY($3)');
-    expect(sql).toContain('actor_id = $4');
-    expect(sql).toContain('(occurred_at < $5 OR (occurred_at = $5 AND id < $6))');
-    expect(sql).toContain('ORDER BY occurred_at DESC, id DESC');
-    expect(list.values).toEqual([
-      'org1',
-      'p1',
-      ['factory.git.push'],
-      'u1',
-      new Date('2026-07-01T10:00:00.000Z'),
-      'e9',
-      11, // limit + 1 look-ahead for nextCursor
-    ]);
-  });
-
-  it('ignores malformed cursors instead of failing the query', async () => {
-    const { queries, ctx } = fakePool(text => (text.includes('FROM audit_events') ? { rows: [] } : undefined));
-    const domain = new AuditStoragePG();
-    await domain.init(ctx);
-    await domain.list({ orgId: 'org1', before: 'not-a-cursor' });
-    expect(sqlOf(queries.at(-1)!)).not.toContain('occurred_at <');
-  });
-});
+const sqlOf = (query: RecordedQuery) => query.text.replace(/\s+/g, ' ').trim();
 
 describe('WorkItemsStoragePG', () => {
   const dbRow = {
@@ -192,6 +62,8 @@ describe('WorkItemsStoragePG', () => {
     const domain = new WorkItemsStoragePG();
     await domain.init(ctx);
     expect(queries[0]!.text).toBe(WORK_ITEMS_DDL);
+    expect(WORK_ITEMS_DDL).toContain('ON work_items (org_id, github_project_id, source_key)');
+    expect(WORK_ITEMS_DDL).toContain('DROP INDEX IF EXISTS work_items_project_source_key_unique');
 
     const result = await domain.upsert({ orgId: 'org1', userId: 'u1', githubProjectId: 'p1', input: createInput });
     expect(result.created).toBe(true);
@@ -249,7 +121,7 @@ describe('WorkItemsStoragePG', () => {
 
   it('falls back to the existing row when a concurrent insert wins the unique-index race', async () => {
     let selects = 0;
-    const { ctx } = fakePool(text => {
+    const { queries, ctx } = fakePool(text => {
       if (text.includes('FOR UPDATE')) {
         // First reuse probe misses; the post-conflict probe finds the winner.
         selects += 1;
@@ -264,6 +136,9 @@ describe('WorkItemsStoragePG', () => {
 
     const result = await domain.upsert({ orgId: 'org1', userId: 'u1', githubProjectId: 'p1', input: createInput });
     expect(result.created).toBe(false);
+    const lockQueries = queries.filter(query => query.text.includes('FOR UPDATE'));
+    expect(lockQueries).toHaveLength(2);
+    expect(lockQueries[0]!.values).toEqual(['org1', 'p1', 'github-issue:42']);
   });
 
   it('deletes scoped to the org and returns null on a miss', async () => {
