@@ -2,8 +2,9 @@ import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
+import type { WebAuthAdapter } from './auth-adapter.js';
 import { buildConfigRoutes, listProviders } from './config-routes.js';
-import { __resetRuntimeConfigForTests } from './runtime-config.js';
+import { __resetRuntimeConfigForTests, seedRuntimeConfig } from './runtime-config.js';
 import { seedInMemoryFactoryStoreForTests } from './storage/test-utils.js';
 import type { InMemoryFactoryStoreSeed } from './storage/test-utils.js';
 import { mountApiRoutes } from './test-utils.js';
@@ -155,6 +156,15 @@ describe('listProviders', () => {
 
 describe('provider key routes with a tenant', () => {
   let seed: InMemoryFactoryStoreSeed;
+  const isOrganizationAdmin = vi.fn(async () => true);
+  const authAdapter: WebAuthAdapter = {
+    kind: 'test',
+    authenticate: vi.fn(async () => null),
+    ensureOrg: vi.fn(async user => user.organizationId),
+    isOrganizationAdmin,
+    publicRoutes: () => [],
+    sessionClearCookie: () => '',
+  };
 
   const controller = makeAgentController([
     { provider: 'anthropic', hasApiKey: false, apiKeyEnvVar: 'ANTHROPIC_API_KEY' },
@@ -175,6 +185,8 @@ describe('provider key routes with a tenant', () => {
 
   beforeEach(async () => {
     seed = await seedInMemoryFactoryStoreForTests();
+    isOrganizationAdmin.mockResolvedValue(true);
+    seedRuntimeConfig({ factoryStore: seed.factoryStore, authAdapter });
   });
 
   afterEach(() => {
@@ -201,13 +213,39 @@ describe('provider key routes with a tenant', () => {
     expect(await seed.credentials.resolveCredential('org1', 'user-b', 'anthropic')).toBeUndefined();
   });
 
-  it('stores an org-scoped key that all members inherit', async () => {
+  it('stores an org-scoped key that all members inherit when the caller is an admin', async () => {
     const res = await putKey(buildApp(userA), { key: 'sk-shared', scope: 'org' });
     expect(res.status).toBe(200);
     expect((await res.json()).provider?.source).toBe('stored-org');
+    expect(isOrganizationAdmin).toHaveBeenCalledWith(userA, 'org1');
 
     const resolvedForB = await seed.credentials.resolveCredential('org1', 'user-b', 'anthropic');
     expect(resolvedForB).toMatchObject({ scope: 'org', credential: { key: 'sk-shared' } });
+  });
+
+  it('rejects org-scoped writes from non-admin members', async () => {
+    isOrganizationAdmin.mockResolvedValue(false);
+    const res = await putKey(buildApp(userA), { key: 'sk-shared', scope: 'org' });
+
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: 'organization_admin_required' });
+    expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'anthropic')).toBeUndefined();
+  });
+
+  it('fails closed when org-admin authorization errors', async () => {
+    isOrganizationAdmin.mockRejectedValue(new Error('identity provider unavailable'));
+    const res = await putKey(buildApp(userA), { key: 'sk-shared', scope: 'org' });
+
+    expect(res.status).toBe(403);
+    expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'anthropic')).toBeUndefined();
+  });
+
+  it('keeps user-scoped writes available to non-admin members', async () => {
+    isOrganizationAdmin.mockResolvedValue(false);
+    const res = await putKey(buildApp(userA), { key: 'sk-mine' });
+
+    expect(res.status).toBe(200);
+    expect(isOrganizationAdmin).not.toHaveBeenCalled();
   });
 
   it('user key wins over org key for the caller', async () => {
@@ -222,7 +260,7 @@ describe('provider key routes with a tenant', () => {
     expect(providers.find((p: { provider: string }) => p.provider === 'anthropic')?.source).toBe('stored-user');
   });
 
-  it('deletes only the requested scope', async () => {
+  it('deletes only the requested scope when the caller is an admin', async () => {
     await putKey(buildApp(userA), { key: 'sk-shared', scope: 'org' });
     await putKey(buildApp(userA), { key: 'sk-mine' });
 
@@ -230,6 +268,16 @@ describe('provider key routes with a tenant', () => {
     expect(res.status).toBe(200);
     expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'anthropic')).toBeUndefined();
     expect(await seed.credentials.getCredential({ orgId: 'org1', userId: 'user-a' }, 'anthropic')).toBeDefined();
+  });
+
+  it('rejects org-scoped deletes from non-admin members', async () => {
+    await putKey(buildApp(userA), { key: 'sk-shared', scope: 'org' });
+    isOrganizationAdmin.mockResolvedValue(false);
+
+    const res = await buildApp(userA).request('/web/config/providers/anthropic/key?scope=org', { method: 'DELETE' });
+
+    expect(res.status).toBe(403);
+    expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'anthropic')).toBeDefined();
   });
 
   it("GET /web/config/providers reflects the caller's own view", async () => {

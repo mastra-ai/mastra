@@ -18,6 +18,7 @@ import {
 } from '@mastra/code-sdk/onboarding/settings';
 import type { CustomProviderSetting } from '@mastra/code-sdk/onboarding/settings';
 
+import { isOrganizationAdmin } from './auth.js';
 import {
   getAuthProviderId,
   listTenantCredentialsForRequest,
@@ -427,9 +428,9 @@ export function buildConfigRoutes(options: { controller: ModelCatalog; authStora
         const scope = body.scope === 'org' ? 'org' : 'user';
         try {
           if (ctx.mode === 'tenant') {
-            // Org-scope writes: the active auth adapter does not expose member
-            // roles yet, so any org member may set the shared key. Tighten to
-            // admin-only once the WorkOS adapter surfaces roles.
+            if (scope === 'org' && !(await isOrganizationAdmin(loose(c), ctx.orgId))) {
+              return c.json({ error: 'organization_admin_required' }, 403);
+            }
             const tenant = scope === 'org' ? { orgId: ctx.orgId } : { orgId: ctx.orgId, userId: ctx.userId };
             // envVar is intentionally ignored: tenant credentials are resolved
             // per-request, never written into process.env.
@@ -461,6 +462,9 @@ export function buildConfigRoutes(options: { controller: ModelCatalog; authStora
         const scope = c.req.query('scope') === 'org' ? 'org' : 'user';
         try {
           if (ctx.mode === 'tenant') {
+            if (scope === 'org' && !(await isOrganizationAdmin(loose(c), ctx.orgId))) {
+              return c.json({ error: 'organization_admin_required' }, 403);
+            }
             const tenant = scope === 'org' ? { orgId: ctx.orgId } : { orgId: ctx.orgId, userId: ctx.userId };
             await ctx.storage.removeCredential(tenant, getAuthProviderId(provider));
             invalidateTenantCredentialSnapshots(tenant);
