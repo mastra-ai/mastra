@@ -10,27 +10,27 @@ packages:
 Create a standalone Mastra project. By default, `create-mastra` installs a default starter and configures it for your selected model provider.
 
 ```bash npm2yarn
-npx create-mastra@latest my-mastra-project
+npx create-mastra@latest
 ```
 
 ## Creation modes
 
 ### Default starter
 
-The default starter creates an agent harness with workspace tools, memory, task tracking, web access, recurring schedules, storage, and observability. Select OpenAI, Anthropic, Google Gemini, or xAI:
+The default starter creates an agent harness with workspace tools, memory, task tracking, web access, recurring schedules, storage, and observability. Select OpenAI, Anthropic, Gemini, or xAI as your model provider.
+
+Provide a project name like `my-mastra-project` to directly select your model provider:
 
 ```bash npm2yarn
 npx create-mastra@latest my-mastra-project
 ```
-
-The generated provider dependency, models, API key variable, and native search tool match the selected provider.
 
 ### Template
 
 Use a template slug or a public GitHub URL:
 
 ```bash npm2yarn
-npx create-mastra@latest my-mastra-project --template coding-agent
+npx create-mastra@latest my-mastra-project --template agent-harness
 ```
 
 ```bash npm2yarn
