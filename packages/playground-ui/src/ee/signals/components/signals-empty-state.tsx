@@ -3,8 +3,10 @@ import type { CSSProperties, ReactNode } from 'react';
 
 import './signals-empty-state.css';
 import { Button } from '../../../ds/components/Button';
-import { buildSankeyHueMap, nodeColorVivid } from '../../../ds/components/SankeyChart/sankeyColor';
+import { Card } from '../../../ds/components/Card';
+import { nodeColor } from '../../../ds/components/SankeyChart/sankeyColor';
 import type { LinkComponent } from '../../../ds/types/link-component';
+import { getSignalHue } from '../signal-colors';
 
 const signalDefinitions = [
   { label: 'Goal', description: 'What the user is trying to achieve or have completed.' },
@@ -17,7 +19,6 @@ const signalDefinitions = [
   { label: 'Outcome', description: 'The final completed, unresolved, or blocked state.' },
 ];
 const signalLabels = signalDefinitions.map(signal => signal.label);
-const signalHues = buildSankeyHueMap(signalLabels);
 
 const traceRows = [
   ['chat.completion', '1.2s'],
@@ -26,7 +27,7 @@ const traceRows = [
 ];
 
 const signalStyle = (label: string): CSSProperties => ({
-  color: nodeColorVivid(signalHues[label] ?? 0),
+  color: nodeColor(getSignalHue(label)),
 });
 
 const PipelineConnector = () => (
@@ -75,7 +76,12 @@ export const SignalsEmptyState = ({ actionSlot, LinkComponent = 'a' }: SignalsEm
 
           <PipelineConnector />
 
-          <article className="h-50 flex flex-col items-center p-5 text-center" role="listitem">
+          <Card
+            as="article"
+            className="h-50 flex flex-col items-center p-5 text-center"
+            elevation="elevated"
+            role="listitem"
+          >
             <h2 className="text-lg font-semibold text-neutral6">Mastra Engine</h2>
             <p className="mt-0.5 text-xs text-neutral3">Clusters recurring patterns</p>
             <div aria-hidden="true" className="relative mt-5 flex size-20 items-center justify-center">
@@ -87,7 +93,7 @@ export const SignalsEmptyState = ({ actionSlot, LinkComponent = 'a' }: SignalsEm
             <p className="mt-3 max-w-40 text-ui-xs leading-4 text-neutral2">
               Finds relationships across conversations, tools, and workflows
             </p>
-          </article>
+          </Card>
 
           <PipelineConnector />
 

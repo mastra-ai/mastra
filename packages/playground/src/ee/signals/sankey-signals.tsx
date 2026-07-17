@@ -1,7 +1,7 @@
 import { Card, CardContent, CardFooter, CardHeader } from '@mastra/playground-ui/components/Card';
 import { nodeColor, Sankey, SankeyChart } from '@mastra/playground-ui/components/SankeyChart';
 import type { SankeyChartColumn, SankeyChartRecord } from '@mastra/playground-ui/components/SankeyChart';
-import { SignalsOverviewPage as SignalsEmptyState } from '@mastra/playground-ui/ee/signals';
+import { getSignalHue, SignalsOverviewPage as SignalsEmptyState } from '@mastra/playground-ui/ee/signals';
 import { ExternalLink } from 'lucide-react';
 
 import { useThemeFlow } from './hooks/use-theme-flow';
@@ -13,12 +13,6 @@ import { Link } from '@/lib/link';
 
 const SIGNAL_ORDER: TraceSignalName[] = ['goal', 'outcome', 'behavior', 'sentiment'];
 const SIGNAL_DOCS_URL = 'https://mastra.ai/en/docs/observability/tracing/overview';
-const SIGNAL_HUES: Record<TraceSignalName, number> = {
-  goal: 145,
-  outcome: 35,
-  behavior: 225,
-  sentiment: 300,
-};
 
 export interface SankeySignalsProps {
   entityId: string;
@@ -35,13 +29,6 @@ function traceLabel(count: number) {
   return `${count} ${count === 1 ? 'trace' : 'traces'}`;
 }
 
-function getSignalHue(signalName: string) {
-  if (signalName === 'goal' || signalName === 'outcome' || signalName === 'behavior' || signalName === 'sentiment') {
-    return SIGNAL_HUES[signalName];
-  }
-  return 0;
-}
-
 function SignalDistribution({
   signalName,
   traceCount,
@@ -52,7 +39,7 @@ function SignalDistribution({
   nodes: SignalGraphNodeSummary[];
 }) {
   const label = formatSignalName(signalName);
-  const color = nodeColor(SIGNAL_HUES[signalName]);
+  const color = nodeColor(getSignalHue(signalName));
 
   return (
     <Card aria-label={`${label} distribution`} as="article" className="min-w-0" elevation="elevated">
