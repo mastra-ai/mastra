@@ -2259,8 +2259,7 @@ export class Mastra<
     // discriminate against a real wrapper by checking `agent.agent !== agent`.
     // Real wrappers (e.g. `DurableAgent`, `InngestAgent`) point `.agent` at a
     // distinct inner `Agent`; the standalone placeholder points at itself.
-    const isRealDurableWrapper =
-      isDurableAgentLike(agent) && (agent as DurableAgentLike).agent !== (agent as unknown);
+    const isRealDurableWrapper = isDurableAgentLike(agent) && (agent as DurableAgentLike).agent !== (agent as unknown);
     if (!isRealDurableWrapper && (agent as Agent).durable) {
       const durableOption = (agent as Agent).durable;
       const opts = durableOption === true ? {} : { ...(durableOption as object) };

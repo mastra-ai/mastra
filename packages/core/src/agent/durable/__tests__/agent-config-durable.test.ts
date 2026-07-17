@@ -235,7 +235,9 @@ describe('AgentConfig.durable', () => {
       .mockImplementation(async () => 'durable-resume-generate-result');
 
     try {
-      const result = await (agent.resumeGenerate({ approved: true }, { runId: 'r1' } as any) as unknown as Promise<string>);
+      const result = await (agent.resumeGenerate({ approved: true }, {
+        runId: 'r1',
+      } as any) as unknown as Promise<string>);
       expect(result).toBe('durable-resume-generate-result');
       expect(spy).toHaveBeenCalledTimes(1);
     } finally {
@@ -259,7 +261,9 @@ describe('AgentConfig.durable', () => {
       .mockImplementation(async () => 'durable-resume-stream-result');
 
     try {
-      const result = await (agent.resumeStream({ approved: true }, { runId: 'r1' } as any) as unknown as Promise<string>);
+      const result = await (agent.resumeStream({ approved: true }, {
+        runId: 'r1',
+      } as any) as unknown as Promise<string>);
       expect(result).toBe('durable-resume-stream-result');
       expect(spy).toHaveBeenCalledTimes(1);
     } finally {
@@ -409,9 +413,7 @@ describe('AgentConfig.durable', () => {
         });
 
         const sentinel = { called: name };
-        const spy = vi
-          .spyOn(DurableAgent.prototype as any, name)
-          .mockImplementation(async () => sentinel);
+        const spy = vi.spyOn(DurableAgent.prototype as any, name).mockImplementation(async () => sentinel);
 
         try {
           const result = await (agent as any)[name](...args);
@@ -434,7 +436,9 @@ describe('AgentConfig.durable', () => {
           model: makeMockModel(),
         });
 
-        await expect((agent as any)[name](...args)).rejects.toThrow(/AGENT_DURABLE_METHOD_NOT_AVAILABLE|only available on agents constructed with `durable: true`/);
+        await expect((agent as any)[name](...args)).rejects.toThrow(
+          /AGENT_DURABLE_METHOD_NOT_AVAILABLE|only available on agents constructed with `durable: true`/,
+        );
       });
     }
   });
