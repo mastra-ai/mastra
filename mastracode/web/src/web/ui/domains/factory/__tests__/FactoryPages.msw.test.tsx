@@ -373,17 +373,16 @@ function dragTo(card: HTMLElement, target: HTMLElement) {
 }
 
 describe('Factory sidebar section', () => {
-  it('given a GitHub project, when the app renders, then the Factory heading exposes the Board link', async () => {
+  it('given a GitHub project, when the app renders, then Factory exposes sibling Work and Review links', async () => {
     useBoardHandlers();
-    renderAt('/factory/board');
+    renderAt('/factory/work');
 
     const nav = await screen.findByRole('navigation', { name: 'Factory' });
     expect(within(nav).getByText('Factory')).toBeInTheDocument();
-    // The Board link appears once the GitHub status query resolves as connected.
-    expect(await within(nav).findByRole('link', { name: /Board/ })).toHaveAttribute('href', '/factory/board');
+    expect(await within(nav).findByRole('link', { name: 'Work' })).toHaveAttribute('href', '/factory/work');
+    expect(within(nav).getByRole('link', { name: 'Review' })).toHaveAttribute('href', '/factory/review');
     expect(within(nav).getByRole('link', { name: /Metrics/ })).toHaveAttribute('href', '/factory/metrics');
     expect(within(nav).getByRole('link', { name: /Audit/ })).toHaveAttribute('href', '/factory/audit');
-    // The factory Sessions list is nested under the same menu.
     expect(within(nav).getByRole('region', { name: 'Factory sessions' })).toBeInTheDocument();
   });
 
@@ -394,77 +393,80 @@ describe('Factory sidebar section', () => {
     expect(screen.queryByRole('navigation', { name: 'Factory' })).not.toBeInTheDocument();
   });
 
-  it('given GitHub is not connected, when the app renders, then the Board link is hidden but Sessions remain', async () => {
+  it('given GitHub is not connected, when the app renders, then workflow links are hidden but Sessions remain', async () => {
     renderAt('/new', githubProject, notConnectedStatus);
 
-    // Sessions work off the project's own worktrees, so the Factory menu stays;
-    // only the Board (which needs the GitHub integration) disappears.
     const nav = await screen.findByRole('navigation', { name: 'Factory' });
     expect(within(nav).getByRole('region', { name: 'Factory sessions' })).toBeInTheDocument();
-    await waitFor(() => expect(within(nav).queryByRole('link', { name: /Board/ })).not.toBeInTheDocument());
+    await waitFor(() => expect(within(nav).queryByRole('link', { name: 'Work' })).not.toBeInTheDocument());
+    expect(within(nav).queryByRole('link', { name: 'Review' })).not.toBeInTheDocument();
     expect(within(nav).queryByRole('link', { name: /Metrics/ })).not.toBeInTheDocument();
     expect(within(nav).queryByRole('link', { name: /Audit/ })).not.toBeInTheDocument();
   });
 });
 
-describe('Factory Board routing', () => {
-  it('given the legacy intake route, when visited, then it redirects to the Board', async () => {
-    useBoardHandlers();
-    const { router } = renderAt('/factory/intake');
+describe('Factory workflow routing', () => {
+  it.each(['/factory/board', '/factory/intake'])(
+    'given the compatibility route %s, when visited, then it redirects to Work',
+    async route => {
+      useBoardHandlers();
+      const { router } = renderAt(route);
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/factory/board'));
-    expect(await screen.findByRole('heading', { name: 'Board' })).toBeInTheDocument();
-  });
+      await waitFor(() => expect(router.state.location.pathname).toBe('/factory/work'));
+      expect(await screen.findByRole('heading', { name: 'Work' })).toBeInTheDocument();
+    },
+  );
 
-  it('given the legacy review route, when visited, then it redirects to the Board', async () => {
-    useBoardHandlers();
+  it('given the Review route, when visited, then the Review workflow renders without redirecting', async () => {
+    useBoardHandlers({ pullRequests });
     const { router } = renderAt('/factory/review');
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/factory/board'));
-    expect(await screen.findByRole('heading', { name: 'Board' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Review' })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/factory/review');
   });
 
-  it('given a local project, when visiting the Board, then a GitHub-only notice renders instead of columns', async () => {
-    renderAt('/factory/board', localProject);
+  it('given a local project, when visiting Work, then a GitHub-only notice renders instead of columns', async () => {
+    renderAt('/factory/work', localProject);
 
     expect(await screen.findByText(/only available for GitHub projects/)).toBeInTheDocument();
     expect(screen.queryByTestId('board-column-intake')).not.toBeInTheDocument();
   });
 
-  it('given GitHub is not connected, when visiting the Board, then a connect notice renders instead of columns', async () => {
-    renderAt('/factory/board', githubProject, notConnectedStatus);
+  it('given GitHub is not connected, when visiting Work, then a connect notice renders instead of columns', async () => {
+    renderAt('/factory/work', githubProject, notConnectedStatus);
 
     expect(await screen.findByText(/Factory requires a GitHub connection/)).toBeInTheDocument();
     expect(screen.queryByTestId('board-column-intake')).not.toBeInTheDocument();
   });
 });
 
-describe('Factory Board — Intake candidates', () => {
-  it('given open issues and PRs, when the Board renders, then both appear as Intake candidates behind the feed filter', async () => {
+describe('Factory Work and Review intake candidates', () => {
+  it('given open issues and PRs, when Work renders, then only issue candidates appear', async () => {
     const state = useBoardHandlers({ issues, pullRequests });
-    renderAt('/factory/board');
+    renderAt('/factory/work');
 
-    expect(await screen.findByRole('heading', { name: 'Board' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Work' })).toBeInTheDocument();
     await waitFor(() => expect(state.issueRequests).toEqual(expect.arrayContaining([null, 'auto-triaged'])));
     const intake = await screen.findByTestId('board-column-intake');
     expect(await within(intake).findByText('Fix flaky test')).toBeInTheDocument();
     expect(within(intake).getByText('Improve docs')).toBeInTheDocument();
-    expect(within(intake).getAllByTestId('candidate-card')).toHaveLength(2);
-    // Candidates link out to GitHub without exposing implementation label chips.
-    expect(within(intake).getByText('Fix flaky test').closest('a')).toHaveAttribute(
-      'href',
-      'https://github.com/mastra-ai/mastra/issues/12',
-    );
-    expect(
-      within(within(intake).getByRole('article', { name: 'Fix flaky test' })).queryByText('bug'),
-    ).not.toBeInTheDocument();
-    // PRs start in Intake too — behind the PRs feed pill, never in Review.
-    expect(within(column('review')).queryByTestId('candidate-card')).not.toBeInTheDocument();
-    const sources = within(intake).getByRole('group', { name: 'Intake source' });
-    await userEvent.click(within(sources).getByRole('button', { name: 'PRs' }));
-    expect(await within(column('intake')).findByText('Add factory pages')).toBeInTheDocument();
-    expect(within(column('intake')).queryByText('Fix flaky test')).not.toBeInTheDocument();
-    expect(within(column('review')).queryByTestId('candidate-card')).not.toBeInTheDocument();
+    expect(within(intake).queryByText('Add factory pages')).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Intake source' })).not.toBeInTheDocument();
+  });
+
+  it('given an external PR, when Review renders, then it stays in Intake without an automatic session or dispatch', async () => {
+    const state = useBoardHandlers({ issues, pullRequests });
+    renderAt('/factory/review');
+
+    expect(await screen.findByRole('heading', { name: 'Review' })).toBeInTheDocument();
+    const intake = await screen.findByTestId('board-column-intake');
+    expect(await within(intake).findByText('Add factory pages')).toBeInTheDocument();
+    expect(within(intake).queryByText('Fix flaky test')).not.toBeInTheDocument();
+    expect(screen.getByTestId('board-column-review')).toHaveAccessibleName('Reviewing');
+    expect(screen.queryByTestId('board-column-triage')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('board-column-planning')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('board-column-execute')).not.toBeInTheDocument();
+    expect(state.posts).toHaveLength(0);
   });
 
   it('given GitHub Intake is configured, when the Board renders, then Intake offers repository issue creation in a new tab', async () => {
@@ -600,7 +602,7 @@ describe('Factory Board — Intake candidates', () => {
         },
       ),
     );
-    const { router } = renderAt('/factory/board');
+    const { router } = renderAt('/factory/work');
 
     const intake = await screen.findByTestId('board-column-intake');
     const card = within(intake).getByRole('article', { name: 'Fix flaky test' });
@@ -623,7 +625,7 @@ describe('Factory Board — Intake candidates', () => {
     const unfilteredRequestsBeforeResolve = state.issueRequests.filter(label => label === null).length;
     const autoTriagedRequestsBeforeResolve = state.issueRequests.filter(label => label === 'auto-triaged').length;
     resolveTriage();
-    await waitFor(() => expect(router.state.location.pathname).toBe('/factory/board'));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/factory/work'));
     await waitFor(() => {
       expect(state.issueRequests.filter(label => label === null).length).toBeGreaterThan(
         unfilteredRequestsBeforeResolve,
@@ -636,7 +638,7 @@ describe('Factory Board — Intake candidates', () => {
 
   it('given an auto-triaged issue candidate, when the Board renders, then it appears in Triage with Investigate and no label chips', async () => {
     const state = useBoardHandlers({ triageIssues: [{ ...issues[0]!, labels: ['bug', 'auto-triaged'] }] });
-    renderAt('/factory/board');
+    renderAt('/factory/work');
 
     await waitFor(() => expect(state.issueRequests).toContain('auto-triaged'));
     const triageColumn = await screen.findByTestId('board-column-triage');
@@ -651,7 +653,7 @@ describe('Factory Board — Intake candidates', () => {
     const state = useBoardHandlers({
       triageIssues: [{ ...issues[0]!, labels: ['bug', 'auto-triaged', 'needs-approval'] }],
     });
-    renderAt('/factory/board');
+    renderAt('/factory/work');
 
     await waitFor(() => expect(state.issueRequests).toContain('auto-triaged'));
     const triageColumn = await screen.findByTestId('board-column-triage');
@@ -677,7 +679,7 @@ describe('Factory Board — Intake candidates', () => {
         }),
       ],
     });
-    renderAt('/factory/board', githubProject, connectedStatus, { linearStatus: linearConnectedStatus });
+    renderAt('/factory/work', githubProject, connectedStatus, { linearStatus: linearConnectedStatus });
 
     // GitHub issues are the default feed: they show, Linear's don't.
     const intake = await screen.findByTestId('board-column-intake');
@@ -703,7 +705,7 @@ describe('Factory Board — Intake candidates', () => {
 
   it('given Linear is connected and selected, when the Linear feed is picked, then Linear issues appear as candidates', async () => {
     useBoardHandlers({ linearIssues });
-    renderAt('/factory/board', githubProject, connectedStatus, { linearStatus: linearConnectedStatus });
+    renderAt('/factory/work', githubProject, connectedStatus, { linearStatus: linearConnectedStatus });
 
     const intake = await screen.findByTestId('board-column-intake');
     const sources = await within(intake).findByRole('group', { name: 'Intake source' });
@@ -714,16 +716,14 @@ describe('Factory Board — Intake candidates', () => {
 
   it('given the Linear feature is disabled, when the Board renders, then no Linear candidates or Linear feed pill appear', async () => {
     useBoardHandlers({ issues, linearIssues });
-    renderAt('/factory/board');
+    renderAt('/factory/work');
 
     const intake = await screen.findByTestId('board-column-intake');
     expect(await within(intake).findByText('Fix flaky test')).toBeInTheDocument();
     expect(within(intake).queryByText('Fix intake sync')).not.toBeInTheDocument();
-    // Issues + PRs still get a switcher, but Linear is not offered.
-    const sources = within(intake).getByRole('group', { name: 'Intake source' });
-    expect(within(sources).getByRole('button', { name: 'Issues' })).toBeInTheDocument();
-    expect(within(sources).getByRole('button', { name: 'PRs' })).toBeInTheDocument();
-    expect(within(sources).queryByRole('button', { name: 'Linear' })).not.toBeInTheDocument();
+    // Work has only the Issues feed when Linear is unavailable; PR intake is
+    // owned by the sibling Review workflow.
+    expect(within(intake).queryByRole('group', { name: 'Intake source' })).not.toBeInTheDocument();
   });
 
   it('given a work item exists for an issue, when the Board renders, then candidates from both issue feeds are deduped by source key', async () => {
@@ -740,7 +740,7 @@ describe('Factory Board — Intake candidates', () => {
         }),
       ],
     });
-    renderAt('/factory/board');
+    renderAt('/factory/work');
 
     const intake = await screen.findByTestId('board-column-intake');
     // Issue #15 is still a candidate; issue #12 lives on as a card in Building.
@@ -758,13 +758,13 @@ describe('Factory Board — persisted cards', () => {
         makeWorkItem({
           id: 'wi-1',
           title: 'Parallel effort',
-          source: 'github-pr',
-          sourceKey: 'github-pr:34',
+          source: 'github-issue',
+          sourceKey: 'github-issue:34',
           stages: ['execute', 'review'],
         }),
       ],
     });
-    renderAt('/factory/board');
+    renderAt('/factory/work');
 
     await screen.findByTestId('board-column-intake');
     const executeCard = within(column('execute')).getByTestId('work-item-card');
@@ -776,7 +776,7 @@ describe('Factory Board — persisted cards', () => {
     expect(within(reviewCard).getByText('Building')).toBeInTheDocument();
   });
 
-  it('given related issue and PR review items, when they share a lane, then they stay separate with explicit sources and a restrained relationship marker', async () => {
+  it('given related issue and PR items, when switching workflows, then each stays on its own board with a reciprocal relation marker', async () => {
     useBoardHandlers({
       workItems: [
         makeWorkItem({
@@ -796,17 +796,21 @@ describe('Factory Board — persisted cards', () => {
         }),
       ],
     });
-    renderAt('/factory/board');
+    renderAt('/factory/work');
 
-    await screen.findByTestId('board-column-intake');
-    const cards = within(column('review')).getAllByTestId('work-item-card');
-    expect(cards).toHaveLength(2);
-    expect(within(cards[0]).getByText('Issue:')).toBeInTheDocument();
-    expect(within(cards[1]).getByText('PR Review:')).toBeInTheDocument();
-    expect(within(cards[0]).getByText(/^Related /)).toBeInTheDocument();
-    expect(within(cards[1]).getByText(/^Related /)).toBeInTheDocument();
-    expect(cards[0]).toHaveAccessibleName('Fix flaky test');
-    expect(cards[1]).toHaveAccessibleName('Fix flaky test');
+    const workColumn = await screen.findByTestId('board-column-review');
+    const workCard = within(workColumn).getByTestId('work-item-card');
+    expect(within(workCard).getByText('Issue:')).toBeInTheDocument();
+    expect(within(workCard).queryByText('PR Review:')).not.toBeInTheDocument();
+    expect(within(workCard).getByText(/^Related /)).toBeInTheDocument();
+
+    const nav = screen.getByRole('navigation', { name: 'Factory' });
+    await userEvent.click(within(nav).getByRole('link', { name: 'Review' }));
+    expect(await screen.findByRole('heading', { name: 'Review' })).toBeInTheDocument();
+    const reviewCard = within(column('review')).getByTestId('work-item-card');
+    expect(within(reviewCard).getByText('PR Review:')).toBeInTheDocument();
+    expect(within(reviewCard).queryByText('Issue:')).not.toBeInTheDocument();
+    expect(within(reviewCard).getByText(/^Related /)).toBeInTheDocument();
   });
 
   // A project that still has the worktree the cards' session refs point at:
@@ -826,6 +830,57 @@ describe('Factory Board — persisted cards', () => {
     startedBy: 'user-1',
   };
 
+  it('given related Work and Review sessions, when the related session is opened from a thread, then its worktree becomes active before navigation', async () => {
+    const reviewWorktreePath = '/sandbox/mastra/worktrees/factory-pr-34';
+    const relatedProject: Project = {
+      ...projectWithIssueWorktree,
+      selectedWorktreePath: issueWorktreePath,
+      worktrees: [
+        ...(projectWithIssueWorktree.worktrees ?? []),
+        { branch: 'factory/pr-34', worktreePath: reviewWorktreePath, baseBranch: 'main' },
+      ],
+    };
+    useBoardHandlers({
+      workItems: [
+        makeWorkItem({
+          id: 'wi-issue',
+          title: 'Fix flaky test',
+          source: 'github-issue',
+          sourceKey: 'github-issue:12',
+          stages: ['review'],
+          sessions: { work: { ...issueWorkSession, threadId: THREAD_ID } },
+        }),
+        makeWorkItem({
+          id: 'wi-review',
+          parentWorkItemId: 'wi-issue',
+          title: 'Review fix flaky test',
+          source: 'github-pr',
+          sourceKey: 'github-pr:34',
+          stages: ['review'],
+          sessions: {
+            review: {
+              projectPath: reviewWorktreePath,
+              branch: 'factory/pr-34',
+              threadId: 'thread-related-review',
+              startedBy: 'user-1',
+            },
+          },
+        }),
+      ],
+    });
+    const { router } = renderAt(`/threads/${THREAD_ID}`, relatedProject);
+
+    const openRelated = await screen.findByRole('button', {
+      name: 'Open related review session: Review fix flaky test',
+    });
+    await userEvent.click(openRelated);
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-related-review'));
+    expect(JSON.parse(localStorage.getItem('mastracode-projects') ?? '[]')).toMatchObject([
+      { selectedWorktreePath: reviewWorktreePath },
+    ]);
+  });
+
   it('given a work item with sessions, when the Board renders, then the card links to its thread', async () => {
     useBoardHandlers({
       workItems: [
@@ -839,7 +894,7 @@ describe('Factory Board — persisted cards', () => {
         }),
       ],
     });
-    renderAt('/factory/board', projectWithIssueWorktree);
+    renderAt('/factory/work', projectWithIssueWorktree);
 
     await screen.findByTestId('board-column-intake');
     const card = within(column('execute')).getByTestId('work-item-card');
@@ -860,7 +915,7 @@ describe('Factory Board — persisted cards', () => {
         }),
       ],
     });
-    renderAt('/factory/board', projectWithIssueWorktree);
+    renderAt('/factory/work', projectWithIssueWorktree);
 
     await screen.findByTestId('board-column-intake');
     const card = within(column('execute')).getByTestId('work-item-card');
@@ -885,7 +940,7 @@ describe('Factory Board — persisted cards', () => {
         }),
       ],
     });
-    renderAt('/factory/board', projectWithIssueWorktree);
+    renderAt('/factory/work', projectWithIssueWorktree);
 
     await screen.findByTestId('board-column-intake');
     const card = within(column('execute')).getByTestId('work-item-card');
@@ -911,7 +966,7 @@ describe('Factory Board — persisted cards', () => {
       ],
     });
     // The default project does not have the ref's worktree — it was deleted.
-    renderAt('/factory/board');
+    renderAt('/factory/work');
 
     await screen.findByTestId('board-column-intake');
     const card = within(column('execute')).getByTestId('work-item-card');
@@ -934,7 +989,7 @@ describe('Factory Board — persisted cards', () => {
         }),
       ],
     });
-    const { router } = renderAt('/factory/board', projectWithIssueWorktree);
+    const { router } = renderAt('/factory/work', projectWithIssueWorktree);
 
     await screen.findByTestId('board-column-intake');
     const card = within(column('execute')).getByTestId('work-item-card');
@@ -951,7 +1006,7 @@ describe('Factory Board — persisted cards', () => {
         makeWorkItem({ id: 'wi-1', title: 'Fix flaky test', source: 'github-issue', sourceKey: 'github-issue:12' }),
       ],
     });
-    renderAt('/factory/board');
+    renderAt('/factory/work');
 
     await screen.findByTestId('board-column-intake');
     await userEvent.click(within(column('intake')).getByRole('button', { name: 'Actions for Fix flaky test' }));
@@ -976,7 +1031,7 @@ describe('Factory Board — persisted cards', () => {
       ],
     });
     const captured = useFactoryRunHandlers('factory-issue-12');
-    const { router } = renderAt('/factory/board');
+    const { router } = renderAt('/factory/work');
 
     await screen.findByTestId('board-column-triage');
     await userEvent.click(within(column('triage')).getByRole('button', { name: 'Actions for Fix flaky test' }));
@@ -1002,7 +1057,7 @@ describe('Factory Board — persisted cards', () => {
       ],
     });
     const captured = useFactoryRunHandlers('factory-issue-21');
-    const { router } = renderAt('/factory/board');
+    const { router } = renderAt('/factory/work');
 
     await screen.findByTestId('board-column-triage');
     await userEvent.click(within(column('triage')).getByRole('button', { name: 'Actions for Add OAuth support' }));
@@ -1039,7 +1094,7 @@ describe('Factory Board — persisted cards', () => {
         }),
       ],
     });
-    renderAt('/factory/board');
+    renderAt('/factory/work');
 
     await screen.findByTestId('board-column-triage');
     await userEvent.click(within(column('triage')).getByRole('button', { name: 'Actions for Fix flaky test' }));
@@ -1064,7 +1119,7 @@ describe('Factory Board — persisted cards', () => {
       ],
     });
     const captured = useFactoryRunHandlers('factory-issue-12');
-    const { router } = renderAt('/factory/board');
+    const { router } = renderAt('/factory/work');
 
     await screen.findByTestId('board-column-planning');
     await userEvent.click(within(column('planning')).getByRole('button', { name: 'Actions for Fix flaky test' }));
@@ -1082,7 +1137,7 @@ describe('Factory Board — persisted cards', () => {
         makeWorkItem({ id: 'wi-1', title: 'Fix flaky test', source: 'github-issue', sourceKey: 'github-issue:12' }),
       ],
     });
-    renderAt('/factory/board');
+    renderAt('/factory/work');
 
     await screen.findByTestId('board-column-intake');
     await userEvent.click(within(column('intake')).getByRole('button', { name: 'Actions for Fix flaky test' }));
@@ -1099,7 +1154,7 @@ describe('Factory Board — persisted cards', () => {
         makeWorkItem({ id: 'wi-1', title: 'Fix flaky test', source: 'github-issue', sourceKey: 'github-issue:12' }),
       ],
     });
-    renderAt('/factory/board');
+    renderAt('/factory/work');
 
     await screen.findByTestId('board-column-intake');
     await userEvent.click(within(column('intake')).getByRole('button', { name: 'Actions for Fix flaky test' }));
@@ -1111,7 +1166,7 @@ describe('Factory Board — persisted cards', () => {
 
   it('given a candidate, when "Add to board" is chosen, then a work item is filed into Intake without starting a run', async () => {
     const state = useBoardHandlers({ issues });
-    renderAt('/factory/board');
+    renderAt('/factory/work');
 
     const intake = await screen.findByTestId('board-column-intake');
     await within(intake).findByText('Fix flaky test');
@@ -1136,7 +1191,7 @@ describe('Factory Board — drag and drop', () => {
         makeWorkItem({ id: 'wi-1', title: 'Fix flaky test', source: 'github-issue', sourceKey: 'github-issue:12' }),
       ],
     });
-    renderAt('/factory/board');
+    renderAt('/factory/work');
 
     await screen.findByTestId('board-column-intake');
     dragTo(within(column('intake')).getByTestId('work-item-card'), column('execute'));
@@ -1152,13 +1207,13 @@ describe('Factory Board — drag and drop', () => {
         makeWorkItem({
           id: 'wi-1',
           title: 'Parallel effort',
-          source: 'github-pr',
-          sourceKey: 'github-pr:34',
+          source: 'github-issue',
+          sourceKey: 'github-issue:34',
           stages: ['execute', 'review'],
         }),
       ],
     });
-    renderAt('/factory/board');
+    renderAt('/factory/work');
 
     await screen.findByTestId('board-column-intake');
     dragTo(within(column('review')).getByTestId('work-item-card'), column('done'));
@@ -1170,7 +1225,7 @@ describe('Factory Board — drag and drop', () => {
 
   it('given an unmaterialized candidate, when dragged to Building, then a work item is filed with that stage and no run starts', async () => {
     const state = useBoardHandlers({ issues });
-    renderAt('/factory/board');
+    renderAt('/factory/work');
 
     const intake = await screen.findByTestId('board-column-intake');
     await within(intake).findByText('Fix flaky test');
@@ -1192,7 +1247,7 @@ describe('Factory Board — drag and drop', () => {
         makeWorkItem({ id: 'wi-1', title: 'Fix flaky test', source: 'github-issue', sourceKey: 'github-issue:12' }),
       ],
     });
-    renderAt('/factory/board');
+    renderAt('/factory/work');
 
     await screen.findByTestId('board-column-intake');
     dragTo(within(column('intake')).getByTestId('work-item-card'), column('intake'));
@@ -1253,7 +1308,7 @@ describe('Factory Board — investigate flow', () => {
   it('given an issue candidate, when Investigate is clicked, then a worktree, thread, and direct skill activation are created, a work item materializes into Planning, and the app navigates to the thread', async () => {
     const state = useBoardHandlers({ issues });
     const captured = useFactoryRunHandlers('factory-issue-12');
-    const { router } = renderAt('/factory/board');
+    const { router } = renderAt('/factory/work');
 
     const intake = await screen.findByTestId('board-column-intake');
     await within(intake).findByText('Fix flaky test');
@@ -1313,7 +1368,7 @@ describe('Factory Board — investigate flow', () => {
         return HttpResponse.json({ ok: true });
       }),
     );
-    ({ router } = renderAt('/factory/board'));
+    ({ router } = renderAt('/factory/work'));
 
     try {
       const intake = await screen.findByTestId('board-column-intake');
@@ -1347,7 +1402,7 @@ describe('Factory Board — investigate flow', () => {
         return HttpResponse.json({ error: 'kickoff failed' }, { status: 500 });
       }),
     );
-    renderAt('/factory/board');
+    renderAt('/factory/work');
 
     const intake = await screen.findByTestId('board-column-intake');
     await userEvent.click(within(intake).getByRole('button', { name: 'Investigate Fix flaky test' }));
@@ -1372,14 +1427,14 @@ describe('Factory Board — investigate flow', () => {
         );
       }),
     );
-    const { router } = renderAt('/factory/board');
+    const { router } = renderAt('/factory/work');
 
     const intake = await screen.findByTestId('board-column-intake');
     await within(intake).findByText('Fix flaky test');
     await userEvent.click(within(intake).getByRole('button', { name: 'Investigate Fix flaky test' }));
 
     expect(await screen.findByText('Skill not found: understand-issue.')).toBeInTheDocument();
-    expect(router.state.location.pathname).toBe('/factory/board');
+    expect(router.state.location.pathname).toBe('/factory/work');
     expect(captured.skillInvocations).toHaveLength(1);
     expect(captured.messages).toHaveLength(0);
     expect(state.posts).toHaveLength(0);
@@ -1404,7 +1459,7 @@ describe('Factory Board — investigate flow', () => {
         return HttpResponse.json({ ok: true });
       }),
     );
-    const { router } = renderAt('/factory/board');
+    const { router } = renderAt('/factory/work');
 
     const intake = await screen.findByTestId('board-column-intake');
     await within(intake).findByText('Fix flaky test');
@@ -1439,7 +1494,7 @@ describe('Factory Board — investigate flow', () => {
     );
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
-      const { router } = renderAt('/factory/board');
+      const { router } = renderAt('/factory/work');
 
       const intake = await screen.findByTestId('board-column-intake');
       await within(intake).findByText('Fix flaky test');
@@ -1456,14 +1511,12 @@ describe('Factory Board — investigate flow', () => {
     }
   });
 
-  it('given a PR candidate in Intake, when Review is clicked, then the review prompt runs and a work item materializes into Review with a review session', async () => {
+  it('given a PR candidate in Review Intake, when Review is clicked, then the review prompt runs and a work item materializes into Reviewing with a review session', async () => {
     const state = useBoardHandlers({ pullRequests });
     const captured = useFactoryRunHandlers('factory-pr-34');
-    const { router } = renderAt('/factory/board');
+    const { router } = renderAt('/factory/review');
 
     const intake = await screen.findByTestId('board-column-intake');
-    const sources = within(intake).getByRole('group', { name: 'Intake source' });
-    await userEvent.click(within(sources).getByRole('button', { name: 'PRs' }));
     await within(intake).findByText('Add factory pages');
     await userEvent.click(within(intake).getByRole('button', { name: 'Review Add factory pages' }));
 
@@ -1501,7 +1554,7 @@ describe('Factory Board — investigate flow', () => {
   it('given a Linear candidate, when Investigate is clicked, then the prompt mentions the linear_get_issue tool', async () => {
     useBoardHandlers({ linearIssues });
     const captured = useFactoryRunHandlers('factory-linear-eng-42');
-    const { router } = renderAt('/factory/board', githubProject, connectedStatus, {
+    const { router } = renderAt('/factory/work', githubProject, connectedStatus, {
       linearStatus: linearConnectedStatus,
     });
 
@@ -1527,7 +1580,7 @@ describe('Factory Board — investigate flow', () => {
   it('given an issue candidate, when a custom prompt is submitted, then the run keeps the issue context and adds the typed guidance', async () => {
     useBoardHandlers({ issues });
     const captured = useFactoryRunHandlers('factory-issue-12');
-    const { router } = renderAt('/factory/board');
+    const { router } = renderAt('/factory/work');
 
     const intake = await screen.findByTestId('board-column-intake');
     await within(intake).findByText('Fix flaky test');
@@ -1568,7 +1621,7 @@ describe('Factory Board — investigate flow', () => {
       ],
     });
     const captured = useFactoryRunHandlers('factory-issue-12');
-    const { router } = renderAt('/factory/board');
+    const { router } = renderAt('/factory/work');
 
     await screen.findByTestId('board-column-intake');
     await userEvent.click(within(column('intake')).getByRole('button', { name: 'Actions for Fix flaky test' }));
@@ -1618,7 +1671,7 @@ describe('Factory Board — investigate flow', () => {
       ],
     });
     const captured = useFactoryRunHandlers('factory-issue-12');
-    const { router } = renderAt('/factory/board');
+    const { router } = renderAt('/factory/work');
 
     await screen.findByTestId('board-column-planning');
     await userEvent.click(within(column('planning')).getByRole('button', { name: 'Actions for Fix flaky test' }));
@@ -1656,7 +1709,7 @@ describe('Factory Board — investigate flow', () => {
       ],
     });
     const captured = useFactoryRunHandlers('factory-pr-34');
-    const { router } = renderAt('/factory/board');
+    const { router } = renderAt('/factory/review');
     // The worktree session resumes a real (titled) thread from a previous run.
     // Registered after renderAt so it takes precedence over the default empty
     // thread list from useAppHandlers (MSW resolves newest-first).
@@ -1706,7 +1759,7 @@ describe('Factory Board — investigate flow', () => {
         HttpResponse.json({ error: 'git_error', message: 'worktree failed' }, { status: 502 }),
       ),
     );
-    const { router } = renderAt('/factory/board');
+    const { router } = renderAt('/factory/work');
 
     const intake = await screen.findByTestId('board-column-intake');
     await within(intake).findByText('Fix flaky test');
@@ -1714,6 +1767,6 @@ describe('Factory Board — investigate flow', () => {
 
     expect(await screen.findByText('worktree failed')).toBeInTheDocument();
     expect(state.posts).toEqual([]);
-    expect(router.state.location.pathname).toBe('/factory/board');
+    expect(router.state.location.pathname).toBe('/factory/work');
   });
 });
