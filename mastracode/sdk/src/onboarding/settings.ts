@@ -20,12 +20,35 @@ export interface CustomPack {
   createdAt: string;
 }
 
+/** How a custom provider authenticates. */
+export type CustomProviderAuth = 'bearer' | 'aws-sigv4';
+/** Which OpenAI-compatible API a custom provider's models speak. */
+export type CustomProviderApi = 'chat' | 'responses';
+
 /** A saved custom provider for OpenAI-compatible endpoints. */
 export interface CustomProviderSetting {
   name: string;
   url: string;
   apiKey?: string;
   models: string[];
+  /**
+   * Auth mode. `bearer` (default) sends `apiKey` as a bearer token; `aws-sigv4`
+   * signs each request with the AWS credential chain (for AWS-hosted endpoints
+   * such as Bedrock's OpenAI-compatible API, which use SigV4 rather than a key).
+   */
+  auth?: CustomProviderAuth;
+  /**
+   * API the models speak: `chat` (default) uses `/v1/chat/completions`;
+   * `responses` uses `/v1/responses` (required by e.g. the Bedrock gpt-5.x models).
+   */
+  api?: CustomProviderApi;
+  /**
+   * For `api: 'responses'`, whether the endpoint stores conversation state
+   * server-side. Defaults to the SDK default (`true`). Set `false` for endpoints
+   * with short server-side retention (e.g. Bedrock), so replayed history is sent
+   * self-contained instead of via `item_reference` items that can expire.
+   */
+  store?: boolean;
 }
 
 /** Storage backend type. */
@@ -471,11 +494,18 @@ export function parseCustomProviders(rawProviders: unknown): CustomProviderSetti
     const apiKey =
       typeof candidate.apiKey === 'string' && candidate.apiKey.trim().length > 0 ? candidate.apiKey.trim() : undefined;
 
+    const auth = candidate.auth === 'aws-sigv4' ? 'aws-sigv4' : undefined;
+    const api = candidate.api === 'responses' ? 'responses' : undefined;
+    const store = typeof candidate.store === 'boolean' ? candidate.store : undefined;
+
     parsedProviders.push({
       name,
       url,
       ...(apiKey ? { apiKey } : {}),
       models,
+      ...(auth ? { auth } : {}),
+      ...(api ? { api } : {}),
+      ...(store !== undefined ? { store } : {}),
     });
   }
 

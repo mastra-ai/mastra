@@ -442,6 +442,47 @@ describe('customProviders parsing/persistence', () => {
     ]);
   });
 
+  it('parses optional auth/api/store fields and defaults them off', () => {
+    const providers = parseCustomProviders([
+      {
+        name: 'Bedrock Mantle',
+        url: 'https://bedrock-mantle.us-east-1.api.aws/openai/v1',
+        auth: 'aws-sigv4',
+        api: 'responses',
+        store: false,
+        models: ['openai.gpt-5.6-terra'],
+      },
+      {
+        name: 'Plain',
+        url: 'https://api.example.com/v1',
+        models: ['m1'],
+      },
+      {
+        name: 'Bad Enums',
+        url: 'https://api.example.com/v1',
+        auth: 'basic',
+        api: 'grpc',
+        store: 'yes',
+        models: ['m2'],
+      },
+    ]);
+
+    expect(providers).toEqual([
+      {
+        name: 'Bedrock Mantle',
+        url: 'https://bedrock-mantle.us-east-1.api.aws/openai/v1',
+        models: ['openai.gpt-5.6-terra'],
+        auth: 'aws-sigv4',
+        api: 'responses',
+        store: false,
+      },
+      // No optional fields → none added (backward-compatible).
+      { name: 'Plain', url: 'https://api.example.com/v1', models: ['m1'] },
+      // Invalid enum/type values are dropped, not coerced.
+      { name: 'Bad Enums', url: 'https://api.example.com/v1', models: ['m2'] },
+    ]);
+  });
+
   it('creates custom provider ids without custom- prefix', () => {
     expect(getCustomProviderId('Acme Provider')).toBe('acme-provider');
     expect(getCustomProviderId('  !!!  ')).toBe('provider');

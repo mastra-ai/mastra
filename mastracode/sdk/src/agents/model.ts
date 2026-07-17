@@ -78,14 +78,13 @@ export function resolveModel(
   reloadAuthStorage();
   const headers = getAgentControllerHeaders(options?.requestContext);
   const settings = loadSettings();
-  // Bedrock was previously cataloged under the MastraCode gateway namespace
-  // (`mastracode/amazon-bedrock/<model>`). Normalize any legacy saved ids to the
-  // standalone `amazon-bedrock/<model>` form so they resolve through the
-  // dedicated Bedrock gateway.
-  const bedrockLegacyPrefix = `${MASTRACODE_GATEWAY_ID}/amazon-bedrock/`;
-  const normalizedInput = modelId.startsWith(bedrockLegacyPrefix)
-    ? modelId.slice(MASTRACODE_GATEWAY_ID.length + 1)
-    : modelId;
+  // The model catalog prefixes gateway-routed ids with the MastraCode gateway id
+  // (`mastracode/<provider>/<model>`) — including custom providers and the legacy
+  // Bedrock namespace (`mastracode/amazon-bedrock/<model>`). Strip that prefix so
+  // the id parses to `<provider>/<model>`; otherwise `providerId` mis-parses as
+  // "mastracode" and resolution fails with "Could not find config for provider".
+  const mastracodePrefix = `${MASTRACODE_GATEWAY_ID}/`;
+  const normalizedInput = modelId.startsWith(mastracodePrefix) ? modelId.slice(mastracodePrefix.length) : modelId;
   const isMastraGatewayModel = normalizedInput.startsWith(MASTRA_GATEWAY_PREFIX);
   const normalizedModelId = stripMastraGatewayPrefix(normalizedInput);
   const [providerId, ...modelParts] = normalizedModelId.split('/');

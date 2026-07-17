@@ -2259,6 +2259,9 @@ importers:
       ai:
         specifier: ^6.0.225
         version: 6.0.228(zod@4.4.3)
+      aws4fetch:
+        specifier: ^1.0.20
+        version: 1.0.20
       execa:
         specifier: ^9.6.1
         version: 9.6.1
