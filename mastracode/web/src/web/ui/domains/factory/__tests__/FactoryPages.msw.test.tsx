@@ -18,6 +18,7 @@ import { server } from '../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/web-ui/render';
 import type { GithubStatus, Project } from '../../workspaces';
 import { createAppRoutes } from '../../../router';
+import { FactoryItemActions } from '../components/FactoryItemActions';
 import type { GithubIssue, GithubPullRequest } from '../services/factory';
 import type { IntakeConfig } from '../services/intake';
 import type { LinearIssue, LinearStatus } from '../services/linear';
@@ -627,9 +628,10 @@ describe('Factory Work and Review intake candidates', () => {
     await userEvent.click(within(card).getByRole('button', { name: 'More actions for Fix flaky test' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Triage issue' }));
 
-    const pendingButton = await within(card).findByRole('button', { name: 'Investigate Fix flaky test' });
-    expect(pendingButton).toBeDisabled();
-    expect(pendingButton).toHaveTextContent('Starting…');
+    await waitFor(() => expect(state.triageRequests).toHaveLength(1));
+    expect(within(card).getByRole('button', { name: 'Investigate Fix flaky test' })).toBeEnabled();
+    await userEvent.click(within(card).getByRole('button', { name: 'More actions for Fix flaky test' }));
+    expect(await screen.findByRole('menuitem', { name: 'Starting…' })).toHaveAttribute('aria-disabled', 'true');
     expect(state.triageRequests).toEqual([
       {
         number: 12,
@@ -766,6 +768,29 @@ describe('Factory Work and Review intake candidates', () => {
     expect(within(intake).queryByText('Fix flaky test')).not.toBeInTheDocument();
     expect(within(column('triage')).queryByText('Fix flaky test')).not.toBeInTheDocument();
     expect(within(column('execute')).getByText('Fix flaky test')).toBeInTheDocument();
+  });
+});
+
+describe('Factory item actions', () => {
+  it('given a custom prompt opened before the action starts, then the stale form cannot duplicate the pending action', async () => {
+    const onRunPrompt = vi.fn();
+    const props = {
+      actionLabel: 'Investigate',
+      itemLabel: 'Fix flaky test',
+      disabled: false,
+      onAction: vi.fn(),
+      onRunPrompt,
+    };
+    const view = renderWithProviders(<FactoryItemActions {...props} starting={false} />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'More actions for Fix flaky test' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Custom prompt…' }));
+    await userEvent.type(screen.getByRole('textbox', { name: 'Prompt for Fix flaky test' }), 'Check the race');
+    view.rerender(<FactoryItemActions {...props} starting />);
+
+    expect(screen.getByRole('button', { name: 'Run' })).toBeDisabled();
+    fireEvent.submit(screen.getByRole('form', { name: 'Custom prompt for Fix flaky test' }));
+    expect(onRunPrompt).not.toHaveBeenCalled();
   });
 });
 
@@ -1175,6 +1200,214 @@ describe('Factory Board — persisted cards', () => {
     expect(within(column('triage')).queryByTestId('work-item-card')).not.toBeInTheDocument();
   });
 
+  it('given two same-role cards, when one run starts, then only its action shows progress', async () => {
+    useBoardHandlers({
+      workItems: [
+        makeWorkItem({
+          id: 'wi-1',
+          title: 'Fix flaky test',
+          source: 'github-issue',
+          sourceKey: 'github-issue:12',
+          stages: ['triage'],
+          metadata: { number: 12 },
+        }),
+        makeWorkItem({
+          id: 'wi-2',
+          title: 'Improve docs',
+          source: 'github-issue',
+          sourceKey: 'github-issue:15',
+          stages: ['triage'],
+          metadata: { number: 15 },
+        }),
+      ],
+    });
+    const captured = useFactoryRunHandlers('factory-issue-12');
+    let releaseWorktree!: () => void;
+    const worktreeBlocked = new Promise<void>(resolve => {
+      releaseWorktree = resolve;
+    });
+    let markWorktreeRequested!: () => void;
+    const worktreeRequested = new Promise<void>(resolve => {
+      markWorktreeRequested = resolve;
+    });
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/worktree`, async () => {
+        markWorktreeRequested();
+        await worktreeBlocked;
+        return HttpResponse.json({
+          worktreePath: '/sandbox/mastra/worktrees/factory-issue-12',
+          branch: 'factory/issue-12',
+          baseBranch: 'main',
+          resourceId: RESOURCE_ID,
+        });
+      }),
+    );
+    renderAt('/factory/board');
+
+    try {
+      const triageColumn = await screen.findByTestId('board-column-triage');
+      const firstActions = within(triageColumn).getByRole('button', { name: 'Actions for Fix flaky test' });
+      await userEvent.click(firstActions);
+      await userEvent.click(await screen.findByRole('menuitem', { name: 'Investigate' }));
+      await worktreeRequested;
+      await waitFor(() => expect(screen.queryByRole('menuitem')).not.toBeInTheDocument());
+      await userEvent.click(firstActions);
+      expect(await screen.findByRole('menuitem', { name: 'Starting…' })).toHaveAttribute('aria-disabled', 'true');
+      expect(screen.getByRole('menuitem', { name: 'Build' })).not.toHaveAttribute('aria-disabled', 'true');
+
+      await userEvent.click(within(triageColumn).getByRole('button', { name: 'Actions for Improve docs' }));
+      expect(await screen.findByRole('menuitem', { name: 'Investigate' })).not.toHaveAttribute('aria-disabled', 'true');
+    } finally {
+      releaseWorktree();
+      await waitFor(() => expect(captured.messages).toHaveLength(1));
+    }
+  });
+
+  it('given two runs start concurrently, when one fails, then each action keeps its own pending lifecycle', async () => {
+    useBoardHandlers({
+      workItems: [
+        makeWorkItem({
+          id: 'wi-1',
+          title: 'Fix flaky test',
+          source: 'github-issue',
+          sourceKey: 'github-issue:12',
+          stages: ['triage'],
+          metadata: { number: 12 },
+        }),
+        makeWorkItem({
+          id: 'wi-2',
+          title: 'Improve docs',
+          source: 'github-issue',
+          sourceKey: 'github-issue:15',
+          stages: ['triage'],
+          metadata: { number: 15 },
+        }),
+      ],
+    });
+    const captured = useFactoryRunHandlers('factory-issue-12');
+    let releaseFirst!: () => void;
+    const firstBlocked = new Promise<void>(resolve => {
+      releaseFirst = resolve;
+    });
+    let releaseSecond!: () => void;
+    const secondBlocked = new Promise<void>(resolve => {
+      releaseSecond = resolve;
+    });
+    let markFirstRequested!: () => void;
+    const firstRequested = new Promise<void>(resolve => {
+      markFirstRequested = resolve;
+    });
+    let markSecondRequested!: () => void;
+    const secondRequested = new Promise<void>(resolve => {
+      markSecondRequested = resolve;
+    });
+    let requestCount = 0;
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/worktree`, async () => {
+        requestCount += 1;
+        if (requestCount === 1) {
+          markFirstRequested();
+          await firstBlocked;
+          return HttpResponse.json({
+            worktreePath: '/sandbox/mastra/worktrees/factory-issue-12',
+            branch: 'factory/issue-12',
+            baseBranch: 'main',
+            resourceId: RESOURCE_ID,
+          });
+        }
+        markSecondRequested();
+        await secondBlocked;
+        return HttpResponse.json({ error: 'git_error', message: 'second worktree failed' }, { status: 502 });
+      }),
+    );
+    renderAt('/factory/board');
+
+    try {
+      const triageColumn = await screen.findByTestId('board-column-triage');
+      const firstActions = within(triageColumn).getByRole('button', { name: 'Actions for Fix flaky test' });
+      const secondActions = within(triageColumn).getByRole('button', { name: 'Actions for Improve docs' });
+
+      await userEvent.click(firstActions);
+      await userEvent.click(await screen.findByRole('menuitem', { name: 'Investigate' }));
+      await firstRequested;
+      await userEvent.click(secondActions);
+      await userEvent.click(await screen.findByRole('menuitem', { name: 'Investigate' }));
+      await secondRequested;
+
+      await userEvent.click(firstActions);
+      expect(await screen.findByRole('menuitem', { name: 'Starting…' })).toHaveAttribute('aria-disabled', 'true');
+      await userEvent.click(secondActions);
+      expect(await screen.findByRole('menuitem', { name: 'Starting…' })).toHaveAttribute('aria-disabled', 'true');
+
+      releaseSecond();
+      expect(await screen.findByText('second worktree failed')).toBeInTheDocument();
+      await userEvent.click(secondActions);
+      expect(await screen.findByRole('menuitem', { name: 'Investigate' })).not.toHaveAttribute('aria-disabled', 'true');
+      await userEvent.click(firstActions);
+      expect(await screen.findByRole('menuitem', { name: 'Starting…' })).toHaveAttribute('aria-disabled', 'true');
+    } finally {
+      releaseSecond();
+      releaseFirst();
+      await waitFor(() => expect(captured.messages).toHaveLength(1));
+    }
+  });
+
+  it('given two actions on one card start concurrently, then both exact actions remain pending', async () => {
+    useBoardHandlers({
+      workItems: [
+        makeWorkItem({
+          id: 'wi-1',
+          title: 'Fix flaky test',
+          source: 'github-issue',
+          sourceKey: 'github-issue:12',
+          stages: ['triage'],
+          metadata: { number: 12 },
+        }),
+      ],
+    });
+    const captured = useFactoryRunHandlers('factory-issue-12');
+    let releaseWorktrees!: () => void;
+    const worktreesBlocked = new Promise<void>(resolve => {
+      releaseWorktrees = resolve;
+    });
+    let requestCount = 0;
+    let markBothRequested!: () => void;
+    const bothRequested = new Promise<void>(resolve => {
+      markBothRequested = resolve;
+    });
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/worktree`, async () => {
+        requestCount += 1;
+        if (requestCount === 2) markBothRequested();
+        await worktreesBlocked;
+        return HttpResponse.json({
+          worktreePath: '/sandbox/mastra/worktrees/factory-issue-12',
+          branch: 'factory/issue-12',
+          baseBranch: 'main',
+          resourceId: RESOURCE_ID,
+        });
+      }),
+    );
+    renderAt('/factory/board');
+
+    try {
+      const triageColumn = await screen.findByTestId('board-column-triage');
+      const actions = within(triageColumn).getByRole('button', { name: 'Actions for Fix flaky test' });
+      await userEvent.click(actions);
+      await userEvent.click(await screen.findByRole('menuitem', { name: 'Investigate' }));
+      await waitFor(() => expect(requestCount).toBe(1));
+      await userEvent.click(actions);
+      await userEvent.click(await screen.findByRole('menuitem', { name: 'Build' }));
+      await bothRequested;
+
+      await userEvent.click(actions);
+      expect(await screen.findAllByRole('menuitem', { name: 'Starting…' })).toHaveLength(2);
+    } finally {
+      releaseWorktrees();
+      await waitFor(() => expect(captured.messages).toHaveLength(2));
+    }
+  });
+
   it('given a card in Planning, when Build is chosen, then planning exits and the card moves to Building', async () => {
     const state = useBoardHandlers({
       workItems: [
@@ -1555,6 +1788,46 @@ function useFactoryRunHandlers(branchDir: string): CapturedRun {
 }
 
 describe('Factory Board — investigate flow', () => {
+  it('given two candidates, when one run starts, then the unrelated candidate stays operable', async () => {
+    useBoardHandlers({ issues });
+    const captured = useFactoryRunHandlers('factory-issue-12');
+    let releaseWorktree!: () => void;
+    const worktreeBlocked = new Promise<void>(resolve => {
+      releaseWorktree = resolve;
+    });
+    let markWorktreeRequested!: () => void;
+    const worktreeRequested = new Promise<void>(resolve => {
+      markWorktreeRequested = resolve;
+    });
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/worktree`, async () => {
+        markWorktreeRequested();
+        await worktreeBlocked;
+        return HttpResponse.json({
+          worktreePath: '/sandbox/mastra/worktrees/factory-issue-12',
+          branch: 'factory/issue-12',
+          baseBranch: 'main',
+          resourceId: RESOURCE_ID,
+        });
+      }),
+    );
+    renderAt('/factory/board');
+
+    try {
+      const intake = await screen.findByTestId('board-column-intake');
+      await userEvent.click(within(intake).getByRole('button', { name: 'Investigate Fix flaky test' }));
+      await worktreeRequested;
+
+      expect(within(intake).getByRole('button', { name: 'Investigate Fix flaky test' })).toBeDisabled();
+      expect(within(intake).getByRole('button', { name: 'Investigate Improve docs' })).toBeEnabled();
+      await userEvent.click(within(intake).getByRole('button', { name: 'More actions for Fix flaky test' }));
+      expect(await screen.findByRole('menuitem', { name: 'Custom prompt…' })).toHaveAttribute('aria-disabled', 'true');
+    } finally {
+      releaseWorktree();
+      await waitFor(() => expect(captured.messages).toHaveLength(1));
+    }
+  });
+
   it('given an issue candidate, when Investigate is clicked, then a worktree, thread, and direct skill activation are created, a work item materializes into Planning, and the app navigates to the thread', async () => {
     const state = useBoardHandlers({ issues });
     const captured = useFactoryRunHandlers('factory-issue-12');
@@ -2027,6 +2300,7 @@ describe('Factory Board — investigate flow', () => {
     await userEvent.click(within(intake).getByRole('button', { name: 'Investigate Fix flaky test' }));
 
     expect(await screen.findByText('worktree failed')).toBeInTheDocument();
+    expect(within(intake).getByRole('button', { name: 'Investigate Fix flaky test' })).toBeEnabled();
     expect(state.posts).toEqual([]);
     expect(router.state.location.pathname).toBe('/factory/work');
   });
