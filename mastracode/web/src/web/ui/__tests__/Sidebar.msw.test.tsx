@@ -2,23 +2,24 @@
  * BDD coverage for the propless `Sidebar`.
  *
  * The sidebar consumes the domain contexts directly (`useActiveProjectContext`,
- * `useChatSession`, `useOverlays`, `useToast`, `useWebAuth`) instead of a
+ * focused chat hooks, `useOverlays`, `useToast`, `useWebAuth`) instead of a
  * drilled prop bag, so the spec drives it end-to-end: real fetch transport,
  * MSW at the network boundary, assertions on the requests the thread actions
  * produce.
  */
 import type { AgentControllerSessionState, AgentControllerThreadInfo } from '@mastra/client-js';
+import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { delay, http, HttpResponse } from 'msw';
 import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { ChatSessionTestProvider as ChatSessionProvider } from '../domains/chat/context/ChatSessionTestProvider';
 import { server } from '../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/web-ui/render';
 import { redirectToLogout } from '../domains/auth';
 import type * as AuthService from '../domains/auth/services/auth';
-import { ChatSessionProvider } from '../domains/chat';
 import type { Project } from '../domains/workspaces';
 import { ActiveProjectProvider } from '../domains/workspaces';
 import { OverlaysProvider } from '../lib/overlays';
@@ -44,6 +45,30 @@ const project: Project = {
   createdAt: 1,
 };
 
+const secondLocalProject: Project = {
+  id: 'p-beta',
+  name: 'Beta',
+  path: '/projects/beta',
+  resourceId: 'res-beta',
+  createdAt: 2,
+};
+
+const githubProject: Project = {
+  id: 'p-github',
+  name: 'Mastra',
+  source: 'github',
+  githubProjectId: 'gh-project-1',
+  sandboxWorkdir: '/sandbox/mastra',
+  resourceId: RESOURCE_ID,
+  gitBranch: 'main',
+  worktrees: [
+    { branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' },
+    { branch: 'feat-ui', worktreePath: '/sandbox/mastra-worktrees/feat-ui', baseBranch: 'main' },
+  ],
+  selectedWorktreePath: '/sandbox/mastra',
+  createdAt: 1,
+};
+
 const threadOne: AgentControllerThreadInfo = {
   id: 'thread-one',
   title: 'First thread',
@@ -65,9 +90,17 @@ afterEach(() => {
   vi.mocked(redirectToLogout).mockClear();
 });
 
-function seedProject() {
-  localStorage.setItem('mastracode-projects', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-project', project.id);
+function seedProject(active: Project = project, projects: Project[] = [active]) {
+  localStorage.setItem('mastracode-projects', JSON.stringify(projects));
+  localStorage.setItem('mastracode-active-project', active.id);
+}
+
+function useGithubStatusHandler() {
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+      HttpResponse.json({ enabled: true, connected: false, installations: [] }),
+    ),
+  );
 }
 
 function sessionState(): AgentControllerSessionState {
@@ -165,16 +198,18 @@ function LocationProbe() {
 function renderSidebar() {
   return renderWithProviders(
     <MemoryRouter initialEntries={['/chat']}>
-      <ToastProvider>
-        <ActiveProjectProvider>
-          <ChatSessionProvider>
-            <OverlaysProvider>
-              <Sidebar />
-              <LocationProbe />
-            </OverlaysProvider>
-          </ChatSessionProvider>
-        </ActiveProjectProvider>
-      </ToastProvider>
+      <MainSidebarProvider storageKey="sidebar-test" mobileBreakpoint={0}>
+        <ToastProvider>
+          <ActiveProjectProvider>
+            <ChatSessionProvider>
+              <OverlaysProvider>
+                <Sidebar />
+                <LocationProbe />
+              </OverlaysProvider>
+            </ChatSessionProvider>
+          </ActiveProjectProvider>
+        </ToastProvider>
+      </MainSidebarProvider>
     </MemoryRouter>,
   );
 }
@@ -194,6 +229,25 @@ describe('Sidebar', () => {
 
       expect(await screen.findByText('First thread')).toBeInTheDocument();
       expect(await screen.findByText('Second thread')).toBeInTheDocument();
+    });
+
+    it('keeps project, navigation, and account sections in order', async () => {
+      seedProject();
+      useAuthHandler({ authenticated: true, user: { name: 'Ada Lovelace' } });
+      useAgentControllerHandlers();
+      renderSidebar();
+
+      const projectSwitcher = await screen.findByRole('region', { name: 'Project switcher' });
+      const navigation = screen.getByRole('region', { name: 'Navigation' });
+      const account = screen.getByRole('region', { name: 'Account and settings' });
+
+      expect(within(projectSwitcher).getByRole('button', { name: 'Select project' })).toBeInTheDocument();
+      expect(await within(navigation).findByText('First thread')).toBeInTheDocument();
+      const footerNavigation = within(account).getByRole('list');
+      expect(within(footerNavigation).getByRole('button', { name: 'Sign out' })).toHaveTextContent('Ada Lovelace');
+      expect(within(footerNavigation).getByRole('button', { name: 'Open settings' })).toHaveTextContent('Settings');
+      expect(projectSwitcher.compareDocumentPosition(navigation)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+      expect(navigation.compareDocumentPosition(account)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     });
 
     it('navigates to the thread page when a thread is clicked', async () => {
@@ -219,6 +273,76 @@ describe('Sidebar', () => {
       await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/new'));
       expect(captured.created).toBe(0);
     });
+
+    it('switches projects inline and keeps destructive actions out of the menu', async () => {
+      seedProject(project, [project, secondLocalProject, githubProject]);
+      useAuthHandler();
+      useGithubStatusHandler();
+      useAgentControllerHandlers();
+      renderSidebar();
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Select project' }));
+
+      expect(await screen.findByRole('menuitem', { name: 'Mastra' })).toBeInTheDocument();
+      expect(screen.getByRole('menuitem', { name: 'Open local project' })).toBeInTheDocument();
+      expect(screen.getByRole('menuitem', { name: 'Open from GitHub' })).toBeInTheDocument();
+      expect(screen.queryByRole('menuitem', { name: /remove/i })).not.toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole('menuitem', { name: 'Beta' }));
+
+      await waitFor(() => expect(localStorage.getItem('mastracode-active-project')).toBe(secondLocalProject.id));
+      expect(await screen.findByText('Beta')).toBeInTheDocument();
+    });
+  });
+
+  describe('when a GitHub project is active', () => {
+    it('expands factory Sessions as a navigation item without showing the repo root', async () => {
+      seedProject(githubProject);
+      useAuthHandler();
+      useGithubStatusHandler();
+      useAgentControllerHandlers();
+      renderSidebar();
+
+      const factory = await screen.findByRole('navigation', { name: 'Factory' });
+      const sessions = within(factory).getByRole('button', { name: 'Sessions' });
+      expect(sessions).toHaveAttribute('aria-expanded', 'false');
+      expect(within(factory).queryByRole('button', { name: 'feat-ui' })).not.toBeInTheDocument();
+
+      await userEvent.click(sessions);
+
+      expect(sessions).toHaveAttribute('aria-expanded', 'true');
+      // Only feature worktrees are sessions: the repo-root checkout is not one.
+      expect(within(factory).getByRole('button', { name: 'feat-ui' })).toBeInTheDocument();
+      expect(within(factory).queryByRole('button', { name: 'main' })).not.toBeInTheDocument();
+    });
+
+    it('explains how factory Sessions are created when none exist', async () => {
+      seedProject({ ...githubProject, worktrees: [githubProject.worktrees![0]!] });
+      useAuthHandler();
+      useGithubStatusHandler();
+      useAgentControllerHandlers();
+      renderSidebar();
+
+      const factory = await screen.findByRole('navigation', { name: 'Factory' });
+      await userEvent.click(within(factory).getByRole('button', { name: 'Sessions' }));
+
+      expect(within(factory).getByText('Sessions appear when work starts from the Factory board.')).toBeInTheDocument();
+    });
+
+    it('renders the User Sessions section and no thread list', async () => {
+      seedProject(githubProject);
+      useAuthHandler();
+      useGithubStatusHandler();
+      useAgentControllerHandlers();
+      renderSidebar();
+
+      expect(await screen.findByRole('region', { name: 'User sessions' })).toBeInTheDocument();
+      // Each worktree holds a single conversation, so GitHub projects have no
+      // thread list — neither nested nor flat.
+      await userEvent.click(screen.getByRole('button', { name: 'Sessions' }));
+      await screen.findByRole('button', { name: 'feat-ui' });
+      expect(screen.queryByText('First thread')).not.toBeInTheDocument();
+    });
   });
 
   describe('when opening a thread action menu', () => {
@@ -229,7 +353,7 @@ describe('Sidebar', () => {
       renderSidebar();
 
       await openThreadActions('Second thread');
-      await userEvent.click(screen.getByRole('menuitem', { name: 'Clone' }));
+      await userEvent.click(await screen.findByRole('menuitem', { name: 'Clone' }));
 
       await waitFor(() => expect(captured.cloned).toEqual([{ sourceThreadId: 'thread-two' }]));
     });
@@ -241,7 +365,7 @@ describe('Sidebar', () => {
       renderSidebar();
 
       await openThreadActions('Second thread');
-      await userEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
+      await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
 
       await waitFor(() => expect(captured.deleted).toContain('thread-two'));
     });
@@ -253,7 +377,7 @@ describe('Sidebar', () => {
       renderSidebar();
 
       await openThreadActions('Second thread');
-      await userEvent.click(screen.getByRole('menuitem', { name: 'Rename' }));
+      await userEvent.click(await screen.findByRole('menuitem', { name: 'Rename' }));
       const input = screen.getByRole('textbox', { name: 'Thread title' });
       await userEvent.clear(input);
       await userEvent.type(input, 'Renamed{Enter}');

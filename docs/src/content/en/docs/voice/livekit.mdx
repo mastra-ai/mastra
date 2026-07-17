@@ -344,7 +344,7 @@ import { LibSQLStore } from '@mastra/libsql'
 import { Observability, MastraStorageExporter } from '@mastra/observability'
 
 export const mastra = new Mastra({
-  storage: new LibSQLStore({ url: 'file:./voice-agent.db' }),
+  storage: new LibSQLStore({ id: 'voice-agent-storage', url: 'file:./voice-agent.db' }),
   observability: new Observability({
     configs: {
       default: {

@@ -2,15 +2,15 @@ import { createOpenAI } from '@ai-sdk/openai-v5';
 import { LLMock } from '@copilotkit/aimock';
 import { afterAll, afterEach, beforeAll, describe } from 'vitest';
 import { Agent } from '../../../agent';
-import { assembleAgentFromFsEntry } from '../../../agent/fs-routing';
 import { createDurableAgent } from '../../../agent/durable';
+import { assembleAgentFromFsEntry } from '../../../agent/fs-routing';
+import { isDurableAgentLike } from '../../../agent/types';
 import { Mastra } from '../../../mastra';
 import { InMemoryStore } from '../../../storage';
 import type { MastraModelOutput } from '../../../stream/base/output';
 import type { ChunkType } from '../../../stream/types';
 import type { EngineVariant, LoopScenarioResult, RunApprovalScenarioOptions, RunLoopScenarioOptions } from './types';
 import { ALL_ENGINE_VARIANTS, SCENARIO_MODEL_ID } from './types';
-import { isDurableAgentLike } from '../../../agent/types';
 
 /**
  * Start a shared AIMock server for the lifetime of a test suite and wire its
@@ -290,6 +290,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     toolsets,
     errorProcessors,
     onError,
+    onChunk,
     onStepFinish,
     onFinish,
     savePerStep,
@@ -302,11 +303,6 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
   } = opts;
 
   fixtures(llm);
-
-  // For evented engine, set env var before building the agent
-  if (engine === 'evented') {
-    process.env.MASTRA_EVENTED_EXECUTION = 'true';
-  }
 
   // Use shared agent/mastra if provided (for suspend/resume flows across calls),
   // otherwise build a fresh one.
@@ -393,6 +389,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     ...(onStepFinish ? { onStepFinish } : {}),
     ...(onFinish ? { onFinish } : {}),
     ...(onError ? { onError } : {}),
+    ...(onChunk && !isDurable ? { onChunk } : {}),
     ...(savePerStep !== undefined ? { savePerStep } : {}),
     ...(actor ? { actor } : {}),
     ...(abortSignal ? { abortSignal } : {}),
@@ -470,11 +467,6 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     } catch {
       // cleanup may race
     }
-  }
-
-  // Clean up evented env var
-  if (engine === 'evented') {
-    delete process.env.MASTRA_EVENTED_EXECUTION;
   }
 
   return {

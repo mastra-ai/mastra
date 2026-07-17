@@ -1,0 +1,47 @@
+---
+extends: existence
+message: "AI inevitability: '%s'. Say the choice was designed that way."
+level: error
+tokens:
+  # "falls out naturally" and variants
+  - falls out naturally
+  - fell out naturally
+  - fall out naturally
+
+  # Effortless emergence: a result "falls straight out of" its premise, the
+  # derivation dressed as inevitable. The manner adverb (straight, right,
+  # cleanly, directly, naturally) is the gate, so a literal "the pen fell
+  # out of my pocket" without the adverb stays quiet; with the adverb, a
+  # literal "fell straight out of my bag" fires, so disable the rule where
+  # that is common.
+  - "\\b(?:falls?|fell|falling) (?:straight|right|cleanly|directly|naturally|neatly) out of\\b"
+  - "\\b(?:drops?|dropped|drop) (?:straight|right|cleanly|directly) out of\\b"
+
+  # "emerges naturally" and variants
+  - emerges naturally
+  - emerged naturally
+  - emerge naturally
+  - emerges organically
+  - emerged organically
+
+  # "arises naturally" and variants
+  - arises naturally
+  - arose naturally
+  - arise naturally
+  - arises organically
+
+  # "flows naturally" and variants
+  - flows naturally
+  - flowed naturally
+  - flow naturally
+
+  # Other organic-sounding consequence language
+  - a natural consequence
+  - the natural consequence
+  - a natural result
+  - the natural result
+  - naturally follows
+  - naturally leads to
+  - naturally results in
+  - follows naturally from
+  - results naturally from

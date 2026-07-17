@@ -414,10 +414,10 @@ const stream = await agent.stream('message for agent')
                 parameters: [
                   {
                     name: 'jsonPromptInjection',
-                    type: 'boolean',
+                    type: "boolean | 'system' | 'inline' | 'auto'",
                     isOptional: true,
                     description:
-                      'Injects system prompt into the main agent instructing it to return structured output, useful for when a model does not natively support structured outputs.',
+                      "Controls how the JSON schema reaches the model. Set to 'auto' to use native structured output when supported and inline prompt injection otherwise.",
                   },
                 ],
               },
@@ -510,6 +510,17 @@ const stream = await agent.stream('message for agent')
                     isOptional: true,
                     description:
                       'Configuration for memory behavior including lastMessages, readOnly, semanticRecall, workingMemory, and filterIncompleteToolCalls.',
+                  },
+                ],
+              },
+              {
+                parameters: [
+                  {
+                    name: 'onTitleGenerated',
+                    type: '(title: string) => void | Promise<void>',
+                    isOptional: true,
+                    description:
+                      'Callback fired asynchronously when a thread title is generated and persisted to storage. Title generation runs in the background and may complete after the stream ends. Only fires when `generateTitle` is enabled in memory options and the thread has no existing title.',
                   },
                 ],
               },

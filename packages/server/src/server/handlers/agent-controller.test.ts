@@ -32,16 +32,17 @@ function makeAgent(id = 'test-agent') {
 }
 
 function makeMastra() {
+  const storage = new InMemoryStore();
   const controller = new AgentController({
     id: 'code',
-    storage: new InMemoryStore(),
+    storage,
     workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
     modes: [
       { id: 'build', name: 'Build', default: true, agent: makeAgent() },
       { id: 'plan', name: 'Plan', agent: makeAgent() },
     ],
   });
-  const mastra = new Mastra({ agentControllers: { code: controller }, storage: new InMemoryStore() });
+  const mastra = new Mastra({ agentControllers: { code: controller }, storage });
   return { mastra, controller };
 }
 
@@ -100,6 +101,81 @@ describe('agent-controller routes', () => {
     });
   });
 
+  describe('scoped sessions (sessionScope)', () => {
+    // One resourceId can be shared across git worktrees; a `sessionScope`
+    // addresses an independent session per scope so parallel worktrees don't
+    // collide on one run loop / thread binding.
+    it('creates independent sessions for the same resourceId under different scopes', async () => {
+      const a = (await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-wt',
+        sessionScope: '/repo/worktree-a',
+        tags: { projectPath: '/repo/worktree-a' },
+      } as any)) as { threadId?: string };
+      const b = (await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-wt',
+        sessionScope: '/repo/worktree-b',
+        tags: { projectPath: '/repo/worktree-b' },
+      } as any)) as { threadId?: string };
+
+      expect(a.threadId).toBeDefined();
+      expect(b.threadId).toBeDefined();
+      expect(b.threadId).not.toBe(a.threadId);
+
+      // Get-or-create still holds within one scope.
+      const aAgain = (await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-wt',
+        sessionScope: '/repo/worktree-a',
+        tags: { projectPath: '/repo/worktree-a' },
+      } as any)) as { threadId?: string };
+      expect(aAgain.threadId).toBe(a.threadId);
+    });
+
+    it('routes with a sessionScope address the scoped session, not the unscoped one', async () => {
+      await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-wt',
+      } as any);
+      await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-wt',
+        sessionScope: '/repo/worktree-a',
+        tags: { projectPath: '/repo/worktree-a' },
+      } as any);
+
+      // Switch the scoped session's mode; the unscoped session must not move.
+      await SWITCH_AGENT_CONTROLLER_MODE_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-wt',
+        sessionScope: '/repo/worktree-a',
+        modeId: 'plan',
+      } as any);
+
+      const scoped = (await GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-wt',
+        sessionScope: '/repo/worktree-a',
+      } as any)) as { modeId: string };
+      const unscoped = (await GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-wt',
+      } as any)) as { modeId: string };
+
+      expect(scoped.modeId).toBe('plan');
+      expect(unscoped.modeId).toBe('build');
+    });
+  });
+
   describe('ABORT_AGENT_CONTROLLER_SESSION_ROUTE', () => {
     it('acks an abort on an idle session', async () => {
       const res = await ABORT_AGENT_CONTROLLER_SESSION_ROUTE.handler({
@@ -108,6 +184,27 @@ describe('agent-controller routes', () => {
         resourceId: 'user-1',
       } as any);
       expect(res).toEqual({ ok: true });
+    });
+  });
+
+  describe('SWITCH_AGENT_CONTROLLER_THREAD_ROUTE', () => {
+    it('does not interrupt the session when the requested thread is already active', async () => {
+      const controller = mastra.getAgentController('code');
+      if (!controller) throw new Error('Expected the code agent controller');
+      await controller.init();
+      const session = await controller.createSession({ resourceId: 'user-1', id: 'user-1', ownerId: controller.id });
+      const threadId = session.thread.requireId();
+      const switchThread = vi.spyOn(session.thread, 'switch');
+
+      const response = await SWITCH_AGENT_CONTROLLER_THREAD_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-1',
+        threadId,
+      });
+
+      expect(response).toEqual({ ok: true });
+      expect(switchThread).not.toHaveBeenCalled();
     });
   });
 
@@ -156,6 +253,37 @@ describe('agent-controller routes', () => {
       } as any);
 
       expect(spy).toHaveBeenCalledWith({ content: 'hello', requestContext });
+    });
+
+    it('forwards files to session.sendMessage', async () => {
+      const session = await getRouteSession('user-rc');
+      const spy = vi.spyOn(session, 'sendMessage').mockResolvedValue(undefined);
+      const files = [{ data: 'aGVsbG8=', mediaType: 'image/png', filename: 'shot.png' }];
+
+      await SEND_AGENT_CONTROLLER_MESSAGE_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-rc',
+        message: 'see attached',
+        files,
+      } as any);
+
+      expect(spy).toHaveBeenCalledWith({ content: 'see attached', files, requestContext: undefined });
+    });
+
+    it('rejects oversized file attachments in the body schema', () => {
+      const schema = SEND_AGENT_CONTROLLER_MESSAGE_ROUTE.bodySchema!;
+
+      const okFile = { data: 'aGVsbG8=', mediaType: 'image/png' };
+      expect(schema.safeParse({ message: 'hi', files: [okFile] }).success).toBe(true);
+
+      // Single file over the 14MB base64 cap (10MB binary).
+      const oversized = { data: 'a'.repeat(14 * 1024 * 1024 + 1), mediaType: 'image/png' };
+      expect(schema.safeParse({ message: 'hi', files: [oversized] }).success).toBe(false);
+
+      // Individually valid files whose combined size exceeds the 28MB total cap.
+      const large = { data: 'a'.repeat(10 * 1024 * 1024), mediaType: 'image/png' };
+      expect(schema.safeParse({ message: 'hi', files: [large, large, large] }).success).toBe(false);
     });
 
     it('forwards requestContext to session.steer', async () => {
@@ -256,6 +384,36 @@ describe('agent-controller routes', () => {
       expect(received).toBeDefined();
       expect(received.type).toBe('agent_start');
     });
+
+    it('flattens Error instances on error events so the message survives JSON serialization', async () => {
+      const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-err',
+        abortSignal: new AbortController().signal,
+      } as any)) as ReadableStream<unknown>;
+
+      const reader = stream.getReader();
+
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({ resourceId: 'user-err', id: 'user-err', ownerId: 'code' });
+      session.emit({ type: 'error', error: new Error('model quota exhausted'), errorType: 'provider' } as any);
+
+      let received: any;
+      for (let i = 0; i < 10 && received === undefined; i++) {
+        const { value } = await reader.read();
+        if (value && typeof value === 'object' && (value as any).type === 'error') received = value;
+      }
+      await reader.cancel();
+
+      expect(received).toBeDefined();
+      // Error's message/name are non-enumerable; the wire event must carry them
+      // as plain properties so JSON.stringify doesn't send `"error": {}`.
+      expect(received.error).toEqual({ name: 'Error', message: 'model quota exhausted' });
+      expect(JSON.parse(JSON.stringify(received)).error.message).toBe('model quota exhausted');
+      expect(received.errorType).toBe('provider');
+    });
   });
 
   describe('LIST_AGENT_CONTROLLER_MODES_ROUTE', () => {
@@ -276,9 +434,118 @@ describe('agent-controller routes', () => {
         mastra,
         controllerId: 'code',
         resourceId: 'user-1',
-      } as any)) as { modeId: string; threadId?: string };
+      } as any)) as { modeId: string; threadId?: string; running?: boolean };
       expect(res.modeId).toBe('build');
       expect(typeof res.threadId).toBe('string');
+      // Idle session: hydration snapshot reports not running.
+      expect(res.running).toBe(false);
+    });
+
+    it('reports running: true while a run is active', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({ resourceId: 'user-1', id: 'user-1', ownerId: controller.id });
+      session.displayState.apply({ type: 'agent_start' } as any);
+
+      const res = (await GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-1',
+      } as any)) as { running?: boolean };
+      expect(res.running).toBe(true);
+    });
+  });
+
+  describe('LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE message shape', () => {
+    it('returns persisted messages in the MastraDBMessage shape (nested content.parts)', async () => {
+      // Given a session/thread with a persisted assistant DB message
+      const created = (await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-msg-shape',
+      } as any)) as { threadId: string };
+      const threadId = created.threadId;
+
+      const memory = await mastra.getStorage()!.getStore('memory');
+      await memory!.saveMessages({
+        messages: [
+          {
+            id: 'm-assistant-1',
+            role: 'assistant',
+            threadId,
+            resourceId: 'user-msg-shape',
+            createdAt: new Date('2026-01-01T00:00:00.000Z'),
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'hello world' }],
+            },
+          } as any,
+        ],
+      });
+
+      // When the thread messages are listed over the REST handler
+      const res = (await LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-msg-shape',
+        threadId,
+      } as any)) as { messages: any[] };
+
+      // Then the response exposes the DB-native nested content (not a flat union array)
+      const message = res.messages.find(m => m.id === 'm-assistant-1');
+      expect(message).toBeDefined();
+      expect(message.role).toBe('assistant');
+      expect(Array.isArray(message.content)).toBe(false);
+      expect(message.content.format).toBe(2);
+      expect(message.content.parts).toEqual([{ type: 'text', text: 'hello world' }]);
+      expect(message.createdAt).toBe('2026-01-01T00:00:00.000Z');
+    });
+
+    it('preserves signal-role messages with their data parts', async () => {
+      // Given a session/thread with a persisted signal DB message
+      const created = (await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-signal-shape',
+      } as any)) as { threadId: string };
+      const threadId = created.threadId;
+
+      const memory = await mastra.getStorage()!.getStore('memory');
+      await memory!.saveMessages({
+        messages: [
+          {
+            id: 'm-signal-1',
+            role: 'signal',
+            threadId,
+            resourceId: 'user-signal-shape',
+            createdAt: new Date('2026-01-02T00:00:00.000Z'),
+            content: {
+              format: 2,
+              parts: [
+                {
+                  type: 'data-signal',
+                  data: { id: 's1', type: 'reactive', tagName: 'system-reminder', contents: 'continue' },
+                },
+              ],
+              metadata: { signal: { id: 's1', type: 'reactive', tagName: 'system-reminder' } },
+            },
+          } as any,
+        ],
+      });
+
+      // When the thread messages are listed over the REST handler
+      const res = (await LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-signal-shape',
+        threadId,
+      } as any)) as { messages: any[] };
+
+      // Then the signal row is passed through unflattened with role 'signal'
+      const message = res.messages.find(m => m.id === 'm-signal-1');
+      expect(message).toBeDefined();
+      expect(message.role).toBe('signal');
+      expect(message.content.parts[0].type).toBe('data-signal');
     });
   });
 
@@ -388,6 +655,34 @@ describe('agent-controller routes', () => {
         resourceId: 'user-wt',
       } as any)) as { threads: unknown[] };
       expect(all.threads.length).toBeGreaterThanOrEqual(3);
+    });
+
+    it('annotates each thread with its run state (active while a run executes, idle otherwise)', async () => {
+      // Thread state comes from the agent thread-stream runtime — the same
+      // per-thread active/idle tracking the signals `ifIdle` path uses.
+      await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-state',
+      } as any);
+      const session = await mastra.getAgentController('code')!.createSession({ resourceId: 'user-state' });
+      const busy = await session.thread.create({ title: 'busy' });
+
+      const spy = vi
+        .spyOn(Agent.prototype, 'getActiveThreadRunId')
+        .mockImplementation(({ threadId }) => (threadId === busy.id ? 'run-1' : undefined));
+      try {
+        const res = (await LIST_AGENT_CONTROLLER_THREADS_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          resourceId: 'user-state',
+        } as any)) as { threads: { id: string; state?: string }[] };
+
+        expect(res.threads.find(t => t.id === busy.id)?.state).toBe('active');
+        expect(res.threads.filter(t => t.id !== busy.id).every(t => t.state === 'idle')).toBe(true);
+      } finally {
+        spy.mockRestore();
+      }
     });
   });
 

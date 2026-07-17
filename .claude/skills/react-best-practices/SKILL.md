@@ -7,7 +7,7 @@ description: React performance optimization guidelines from Mastra Engineering. 
 
 ## Overview
 
-Routing and priority guide for React performance and quality, containing 25 rules across 9 categories. Rule files hold the detailed explanations, examples, review smells, and impact metrics.
+Routing and priority guide for React performance and quality, containing 26 rules across 9 categories. Rule files hold the detailed explanations, examples, review smells, and impact metrics.
 
 ## When to Apply
 
@@ -59,7 +59,7 @@ Rules are prioritized by impact:
 
 - Use lazy state initialization for expensive values (`rerender-lazy-state-init`)
 - Apply `startTransition` for non-urgent updates (`rerender-transitions`)
-- Minimize `useEffect` function calls (`rerender-useeffect-function-calls`)
+- Keep UI handlers plain; use Effect Events only for effect-fired logic (`rerender-useeffect-function-calls`)
 - Never reset state with `useEffect`; lift the discriminant and remount the branch (`rerender-no-useeffect-state-reset`)
 - Never add `useMemo` or `useCallback`; leave memoization decisions to developers with profiler evidence (`rerender-no-usememo-usecallback`)
 - Never call `setState` during render or inside `useEffect`; derive during render or move state ownership to an intermediate component (`rerender-no-setstate-in-render-or-effect`)
@@ -67,6 +67,7 @@ Rules are prioritized by impact:
 **Component Structure:**
 
 - One domain component/hook per file, one responsibility each — split bloated components (`structure-single-responsibility`)
+- Keep component, hook, function, and utility APIs narrow: split oversized props, arguments, and return objects into focused units composed at the component level; wrapping the same values in one object is not a fix (`structure-narrow-apis`)
 - Use PascalCase components for JSX-returning helpers; keep lowercase helpers for non-JSX values (`structure-component-naming`)
 - Derive props/params instead of accepting a value computable from another arg (`structure-derive-dont-duplicate`)
 - Extract complex derived logic into named locals plus predicates or pure helpers with early returns: oversized conditions, nested ternaries, fallback chains, and `let`-based render prep are code smells (`structure-complex-derived-logic`)
@@ -81,7 +82,7 @@ Rules are prioritized by impact:
 **Type Safety:**
 
 - No `as` type assertions anywhere — production **or tests**; narrow with real type guards, query generics (`querySelector<T>`, `getByRole<T>`), typed fixture factories, or `implements` on mocks. `as const` is the only allowed form. Do not replace a cast with a domain-type predicate that only checks `typeof value === 'object'`; call that an `isRecord` helper or validate the fields used (`types-no-type-assertions`)
-- Use `undefined` and optional `?` for absence, not `null`; convert external `null` at boundaries with `?? undefined` (`types-no-null`)
+- Use `undefined` and optional `?` for absence, not `null`; convert external `null` at boundaries, and keep leaf props strict so callers own absence and fallback rendering (`types-no-null`)
 
 ### Rendering Patterns
 
@@ -120,5 +121,5 @@ grep -l "Tanstack" references/rules/
 - `rendering-*` - DOM rendering performance (2 rules)
 - `js-*` - JavaScript micro-optimizations (3 rules)
 - `types-*` - Type-safety / no-`as`-cast and no-`null` rules (2 rules)
-- `structure-*` - Component/hook structure (6 rules)
+- `structure-*` - Component/hook/function/utility structure (7 rules)
 - `testing-*` - BDD tests + mock-only-the-network policy + no className implementation-mirror assertions (2 rules)

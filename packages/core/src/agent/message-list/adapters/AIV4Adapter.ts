@@ -8,7 +8,13 @@ import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../../../tools/payload-transform';
 import { TypeDetector } from '../detection/TypeDetector';
 import { convertDataContentToBase64String } from '../prompt/data-content';
-import { categorizeFileData, createDataUri, imageContentToString } from '../prompt/image-utils';
+import type { ImageContent } from '../prompt/image-utils';
+import {
+  categorizeFileData,
+  createDataUri,
+  imageContentToString,
+  resolveFilePartMediaTypeAndData,
+} from '../prompt/image-utils';
 import type {
   MastraDBMessage,
   MastraMessageContentV2,
@@ -181,24 +187,28 @@ export class AIV4Adapter {
     if (sourceParts.length) {
       for (const part of sourceParts) {
         if (part.type === `file`) {
-          // Normalize part.data to ensure it's a valid URL or data URI
+          // Stored file parts can arrive in either the v4 (`mimeType`/`data`) or v5
+          // (`mediaType`/`url`) shape; resolve both so a v5 part isn't read as `undefined`.
+          const { mediaType: fileMimeType, data: fileData } = resolveFilePartMediaTypeAndData(part);
+          // Normalize fileData to ensure it's a valid URL or data URI
           let normalizedUrl: string;
-          if (typeof part.data === 'string') {
-            const categorized = categorizeFileData(part.data, part.mimeType);
+          if (typeof fileData === 'string') {
+            const categorized = categorizeFileData(fileData, fileMimeType);
             if (categorized.type === 'raw') {
               // Raw base64 - convert to data URI
-              normalizedUrl = createDataUri(part.data, part.mimeType || 'application/octet-stream');
+              normalizedUrl = createDataUri(fileData, fileMimeType || 'application/octet-stream');
             } else {
               // Already a URL or data URI
-              normalizedUrl = part.data;
+              normalizedUrl = fileData;
             }
           } else {
-            // It's a non-string (shouldn't happen in practice for file parts, but handle it)
-            normalizedUrl = part.data;
+            // Non-string payload (shouldn't happen for stored file parts, but handle it):
+            // coerce to a string so `normalizedUrl` stays typed `string`.
+            normalizedUrl = imageContentToString(fileData as ImageContent, fileMimeType);
           }
 
           experimentalAttachments.push({
-            contentType: part.mimeType,
+            contentType: fileMimeType ?? 'application/octet-stream',
             url: normalizedUrl,
           });
         } else if (

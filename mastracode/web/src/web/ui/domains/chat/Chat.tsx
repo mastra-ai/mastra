@@ -1,11 +1,12 @@
-import { Outlet } from 'react-router';
+import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
+import type { ReactNode } from 'react';
+import { Outlet, useLocation } from 'react-router';
 
 import { OverlaysProvider } from '../../lib/overlays';
 import { ActiveProjectProvider } from '../workspaces';
 import { ChatOverlays } from './components/ChatOverlays';
-import { ChatCommandsProvider } from './context/ChatCommandsProvider';
-import { ChatSessionProvider } from './context/ChatSessionProvider';
-import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
+import { ChatSessionConfigProvider } from './context/ChatSessionProvider';
+import { ChatPermissionsProvider } from './context/ChatPermissionsProvider';
 
 /**
  * Shared chat app providers. Route leaves render their own pages so `/new` is a
@@ -13,21 +14,35 @@ import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
  */
 export default function Chat() {
   return (
-    <ActiveProjectProvider>
-      <ChatSessionProvider>
-        <OverlaysProvider>
-          <ChatCommandsProvider>
+    <MainSidebarProvider storageKey="mastracode-web" collapsedWidth={0} mobileBreakpoint={768}>
+      <ActiveProjectProvider>
+        <ChatSessionRouteProvider>
+          <OverlaysProvider>
             <ChatShell />
-          </ChatCommandsProvider>
-        </OverlaysProvider>
-      </ChatSessionProvider>
-    </ActiveProjectProvider>
+          </OverlaysProvider>
+        </ChatSessionRouteProvider>
+      </ActiveProjectProvider>
+    </MainSidebarProvider>
+  );
+}
+
+function ChatSessionRouteProvider({ children }: { children: ReactNode }) {
+  const { pathname } = useLocation();
+  const userScoped = pathname.startsWith('/user/threads/');
+  const threadId = userScoped
+    ? decodeURIComponent(pathname.slice('/user/threads/'.length))
+    : pathname.startsWith('/threads/')
+      ? decodeURIComponent(pathname.slice('/threads/'.length))
+      : undefined;
+
+  return (
+    <ChatSessionConfigProvider threadId={threadId} userScoped={userScoped}>
+      <ChatPermissionsProvider>{children}</ChatPermissionsProvider>
+    </ChatSessionConfigProvider>
   );
 }
 
 function ChatShell() {
-  useGlobalShortcuts();
-
   return (
     <>
       <Outlet />

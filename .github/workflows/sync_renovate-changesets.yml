@@ -16,7 +16,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Re-checkout with app token
-        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           fetch-depth: 0
           token: ${{ secrets.RENOVATE_PAT  }}

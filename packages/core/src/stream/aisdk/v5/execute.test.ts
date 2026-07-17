@@ -2,7 +2,7 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { coreFeatures } from '../../../features';
-import { execute } from './execute';
+import { execute, resolveJsonPromptInjection } from './execute';
 import { testUsage } from './test-utils';
 
 const inputMessages = [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Summarize the plan.' }] }];
@@ -21,6 +21,13 @@ async function readStream(stream: ReadableStream) {
 }
 
 describe('execute structured output prompt handling', () => {
+  it('resolves automatic prompt injection from tri-state capability data', () => {
+    expect(resolveJsonPromptInjection('auto', true)).toBeUndefined();
+    expect(resolveJsonPromptInjection('auto', false)).toBe('inline');
+    expect(resolveJsonPromptInjection('auto', undefined)).toBe('inline');
+    expect(resolveJsonPromptInjection('system', undefined)).toBe('system');
+  });
+
   it('advertises inline JSON prompt injection support', () => {
     expect(coreFeatures.has('json-prompt-injection:inline')).toBe(true);
   });

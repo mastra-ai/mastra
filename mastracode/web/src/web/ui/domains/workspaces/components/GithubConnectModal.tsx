@@ -4,10 +4,10 @@ import { useApiConfig } from '../../../../../shared/api/config';
 import { useKeyDown } from '../../../lib/hooks';
 import { CloseIcon, FolderIcon, LogoMark, SearchIcon } from '../../../ui/icons';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
-import { useGithubReposQuery } from '../hooks/useGithubRepos';
-import { useCreateGithubProjectMutation } from '../hooks/useProjects';
+import { useGithubReposQuery } from '../../../../../shared/hooks/useGithubRepos';
+import { useCreateGithubProjectMutation } from '../../../../../shared/hooks/useProjects';
 import type { GithubRepo, GithubStatus } from '../services/github';
-import { connectGithub } from '../services/github';
+import { connectGithub, manageGithubConnection } from '../services/github';
 import type { Project } from '../services/projects';
 
 interface GithubConnectModalProps {
@@ -134,6 +134,18 @@ export function GithubConnectModal({ status, onProjectCreated, onClose }: Github
                   </button>
                 ))
               )}
+            </div>
+
+            {/* Re-run the install flow: GitHub's own page adds/removes accounts
+                and repo access; the callback re-syncs installations here. */}
+            <div className="mt-4 flex items-center justify-between gap-3 border-t border-border1 pt-3">
+              <span className="text-ui-xs text-icon3">Missing a repository or connected the wrong account?</span>
+              <button
+                className="shrink-0 rounded-lg border border-border1 bg-surface2 px-3 py-1.5 text-ui-xs font-medium text-icon6 hover:border-border2 hover:bg-surface4"
+                onClick={() => manageGithubConnection(baseUrl)}
+              >
+                Manage GitHub connection
+              </button>
             </div>
           </>
         )}

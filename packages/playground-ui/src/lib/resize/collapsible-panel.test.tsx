@@ -25,7 +25,7 @@ vi.mock('react-resizable-panels', () => ({
     className?: string;
     collapsedSize?: number;
     elementRef?: Ref<HTMLDivElement>;
-    onResize?: (size: MockPanelSize, previousSize: MockPanelSize, panel: unknown) => void;
+    onResize?: (size: MockPanelSize, id: string | number | undefined, previousSize: MockPanelSize | undefined) => void;
     style?: CSSProperties;
   }) => {
     const assignRef = (node: HTMLDivElement | null) => {
@@ -43,12 +43,12 @@ vi.mock('react-resizable-panels', () => ({
         <button
           type="button"
           data-testid="resize-collapsed"
-          onClick={() => onResize?.({ inPixels: collapsedSize ?? 0 }, { inPixels: 320 }, {})}
+          onClick={() => onResize?.({ inPixels: collapsedSize ?? 0 }, undefined, undefined)}
         />
         <button
           type="button"
           data-testid="resize-open"
-          onClick={() => onResize?.({ inPixels: 320 }, { inPixels: collapsedSize ?? 0 }, {})}
+          onClick={() => onResize?.({ inPixels: 320 }, undefined, { inPixels: collapsedSize ?? 0 })}
         />
         {children}
       </section>
@@ -92,15 +92,6 @@ const renderPanel = (direction: 'left' | 'right' = 'left') =>
 describe('CollapsiblePanel', () => {
   beforeEach(() => {
     panelMocks.expand.mockReset();
-    Object.defineProperty(window, 'matchMedia', {
-      configurable: true,
-      writable: true,
-      value: vi.fn().mockReturnValue({
-        matches: false,
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-      }),
-    });
     Object.defineProperty(window, 'requestAnimationFrame', {
       configurable: true,
       writable: true,
@@ -120,7 +111,7 @@ describe('CollapsiblePanel', () => {
     const { container } = renderPanel();
 
     expect(screen.getByTestId('panel').style.overflow).toBe('hidden');
-    expect(screen.getByTestId('panel-content').parentElement?.dataset.state).toBe('open');
+    expect(screen.getByTestId('panel-content').parentElement?.hasAttribute('hidden')).toBe(false);
     expect(screen.queryByRole('button', { name: 'Expand panel' })).toBeNull();
     expect(container.querySelector('button[aria-hidden="true"]')).toBeNull();
   });
@@ -132,8 +123,7 @@ describe('CollapsiblePanel', () => {
 
     const contentWrapper = screen.getByTestId('panel-content').parentElement;
     expect(screen.getByTestId('panel').style.overflow).toBe('visible');
-    expect(contentWrapper?.dataset.state).toBe('collapsed');
-    expect(contentWrapper?.getAttribute('inert')).toBe('');
+    expect(contentWrapper?.getAttribute('hidden')).toBe('');
 
     fireEvent.click(screen.getByRole('button', { name: 'Expand panel' }));
 

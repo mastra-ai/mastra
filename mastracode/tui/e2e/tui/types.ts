@@ -48,6 +48,7 @@ export type ScenarioName =
   | 'github-signals-notification-reload'
   | 'github-signals-polling-inbox'
   | 'github-signals-unsubscribe-reload'
+  | 'goal-judge-single-render'
   | 'controller-api-config'
   | 'headless-mcp-tool-availability'
   | 'openai-strict-schema'
@@ -59,8 +60,10 @@ export type ScenarioName =
   | 'persistent-goal-reload'
   | 'plugins-local-tool'
   | 'plugins-local-hot-reload'
-  | 'plugins-github-install-gh-cli'
-  | 'plugins-github-install-missing-package-manager'
+  | 'plugins-github-install-gh-cli-pnpm-10'
+  | 'plugins-github-install-gh-cli-pnpm-11'
+  | 'plugins-github-install-missing-corepack'
+  | 'plugins-github-install-invalid-package-manager'
   | 'plugins-github-poll-update'
   | 'plugins-blocked-config'
   | 'plugins-scaffold-install-tool'
@@ -77,6 +80,7 @@ export type ScenarioName =
   | 'lifecycle-hooks-configured'
   | 'lifecycle-hooks-events'
   | 'login-dialog-masked-input'
+  | 'login-preserves-model-pack'
   | 'modal-and-shell'
   | 'mcp-http-tool-call'
   | 'mcp-long-running-tool'
@@ -96,6 +100,7 @@ export type ScenarioName =
   | 'om-global-settings-persistence'
   | 'om-model-override-reload'
   | 'om-pack-startup-restore'
+  | 'om-status-indicator'
   | 'om-threshold-persistence'
   | 'quiet-settings'
   | 'quiet-tool-history-parity'
@@ -128,6 +133,7 @@ export type ScenarioName =
   | 'task-inline-transitions'
   | 'task-patch-tools'
   | 'task-progress-events'
+  | 'terminal-resize-reflow'
   | 'task-prompt-context-next-turn'
   | 'thread-history'
   | 'tool-history-reload'
@@ -151,6 +157,7 @@ export type McE2eTerminal = {
   getByText: (text: string | RegExp, options?: { full?: boolean; strict?: boolean }) => any;
   flushInput?: () => Promise<void>;
   keyCtrlC: () => void;
+  resize: (columns: number, rows: number) => void;
   serialize: () => { view: string };
   submit: (text: string) => void;
   write: (text: string) => void;

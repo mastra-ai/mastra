@@ -29,6 +29,20 @@ afterEach(async () => {
 
 afterAll(() => server.close());
 
+if (!globalThis.localStorage) {
+  const store = new Map<string, string>();
+  globalThis.localStorage = {
+    get length() {
+      return store.size;
+    },
+    clear: () => store.clear(),
+    getItem: key => store.get(key) ?? null,
+    key: index => Array.from(store.keys())[index] ?? null,
+    removeItem: key => store.delete(key),
+    setItem: (key, value) => store.set(key, value),
+  } as Storage;
+}
+
 // jsdom polyfills used by the settings UI.
 if (!window.matchMedia) {
   window.matchMedia = (query: string): MediaQueryList =>
@@ -46,4 +60,17 @@ if (!window.matchMedia) {
 
 if (!Element.prototype.scrollTo) {
   Element.prototype.scrollTo = () => {};
+}
+
+// jsdom has no PointerEvent constructor; Base UI's Switch builds one on click.
+if (!window.PointerEvent) {
+  window.PointerEvent = class PointerEvent extends MouseEvent {
+    pointerId: number;
+    pointerType: string;
+    constructor(type: string, init: PointerEventInit = {}) {
+      super(type, init);
+      this.pointerId = init.pointerId ?? 0;
+      this.pointerType = init.pointerType ?? '';
+    }
+  } as unknown as typeof window.PointerEvent;
 }

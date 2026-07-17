@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 
 export function MetricsKpiCardRoot({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <DashboardCard className={cn('flex-1 min-w-72', className)}>
+    <DashboardCard className={cn('min-w-72 flex-1', className)}>
       <div className="grid gap-1">{children}</div>
     </DashboardCard>
   );

@@ -1,38 +1,83 @@
-import { useEffect, useEffectEvent, useRef } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { useState } from 'react';
+import { useLocation, useParams } from 'react-router';
 
-import { useApiConfig } from '../../../../shared/api/config';
 import { useOverlays } from '../../lib/overlays';
 import { Sidebar } from '../../Sidebar';
 import { ChatLayout } from '../../ui';
-import { EmptyProjectState, useActiveProjectContext } from '../workspaces';
-import { deriveProjectPath } from '../workspaces/hooks/useWorkspaces';
+import { renderedPaths, WorkspaceViewerPanel } from '../workspace-viewer';
+import {
+  activeWorkspacePath,
+  EmptyProjectState,
+  findUserSessionByThreadId,
+  useActiveProjectContext,
+} from '../workspaces';
 import { ChatHeader } from './components/ChatHeader';
 import { ChatMessageList } from './components/ChatMessageList';
+import { ChatOverlays } from './components/ChatOverlays';
 import { ComposerPanel } from './components/ComposerPanel';
-import { useChatSession } from './context/ChatSessionProvider';
-import { useSwitchAgentControllerThreadMutation } from './hooks/useAgentControllerThreadMutations';
-import { useAgentControllerThreads } from './hooks/useAgentControllerThreads';
-import { AGENT_CONTROLLER_ID } from './services/constants';
+import { ChatMessageBoundary, ChatSessionBoundary } from './context/ChatSessionProvider';
+import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
+import { useRouteThreadSync } from '../../../../shared/hooks/useRouteThreadSync';
+import { useThreadPageKickoffs } from './hooks/useThreadPageKickoffs';
 
-const threadComposerContainerClass = 'w-full px-3 md:px-5';
+const threadComposerContainerClass = 'w-full p-3 md:p-5';
 const threadComposerInnerClass = 'mx-auto w-full max-w-[80ch]';
 
 export function ThreadPage() {
   const overlays = useOverlays();
   const { activeProject } = useActiveProjectContext();
+  const { threadId } = useParams();
+  const location = useLocation();
+  const [workspaceViewerExpanded, setWorkspaceViewerExpanded] = useState(false);
+  const [workspaceViewerVisible, setWorkspaceViewerVisible] = useState(true);
+  const userSessionMatch = threadId ? findUserSessionByThreadId(threadId) : undefined;
+  const activeUserSessionMatch =
+    userSessionMatch && activeProject?.id === userSessionMatch.project.id ? userSessionMatch : undefined;
+  const isUserThreadRoute = location.pathname.startsWith('/user/threads/');
+  const workspaceProject = isUserThreadRoute ? activeUserSessionMatch?.project : activeProject;
+  const workspacePath = workspaceProject
+    ? activeWorkspacePath(workspaceProject, activeUserSessionMatch?.worktree)
+    : undefined;
 
   return (
     <ChatLayout
       sidebar={<Sidebar />}
       header={<ChatHeader />}
-      sidebarOpen={overlays.isOpen('sidebar')}
-      onSidebarClose={() => overlays.close('sidebar')}
-      content={
-        activeProject ? <ThreadPageContent /> : <EmptyProjectState onOpenProjects={() => overlays.open('projects')} />
+      rightPanelExpanded={workspaceViewerExpanded}
+      rightPanelAvailable={Boolean(workspacePath)}
+      onRightPanelOpen={() => setWorkspaceViewerVisible(true)}
+      rightPanel={
+        workspacePath && workspaceViewerVisible ? (
+          <WorkspaceViewerPanel
+            workspacePath={workspacePath}
+            renderedPaths={renderedPaths}
+            title="Workspace files"
+            context={workspaceProject?.name}
+            onExpandedChange={setWorkspaceViewerExpanded}
+            onCollapse={() => setWorkspaceViewerVisible(false)}
+          />
+        ) : undefined
       }
-      footer={activeProject ? <ThreadComposer /> : null}
+      main={
+        <ChatSessionBoundary threadId={threadId}>
+          {activeProject ? <ThreadPageMain /> : <EmptyProjectState onOpenProjects={() => overlays.open('projects')} />}
+          <ChatOverlays />
+        </ChatSessionBoundary>
+      }
     />
+  );
+}
+
+function ThreadPageMain() {
+  useGlobalShortcuts();
+
+  return (
+    <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
+      <ChatMessageBoundary>
+        <ThreadPageContent />
+      </ChatMessageBoundary>
+      <ThreadComposer />
+    </div>
   );
 }
 
@@ -47,64 +92,8 @@ function ThreadComposer() {
 }
 
 function ThreadPageContent() {
-  const { baseUrl } = useApiConfig();
-  const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
-  const { status, transcript, resetCurrentThread, resetHydration, syncState, pushNotice } = useChatSession();
-  const projectPath = deriveProjectPath(activeProject);
-  const threadsQuery = useAgentControllerThreads({
-    agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    projectPath,
-    baseUrl,
-    enabled: sessionEnabled,
-  });
-  const switchThreadMutation = useSwitchAgentControllerThreadMutation({
-    agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    projectPath,
-    baseUrl,
-    enabled: sessionEnabled,
-  });
-  const navigate = useNavigate();
-  const { threadId: routeThreadId } = useParams<{ threadId: string }>();
-  const latestRouteThreadId = useRef<string | null>(null);
-
-  const switchToRouteThread = useEffectEvent((threadId: string) => {
-    latestRouteThreadId.current = threadId;
-    const isLatestRequest = () => latestRouteThreadId.current === threadId;
-
-    if (!threadsQuery.data?.some(thread => thread.id === threadId)) {
-      const message = `Failed to switch thread: thread ${threadId} was not found`;
-      resetCurrentThread();
-      pushNotice(message, 'error');
-      void navigate('/new', { replace: true, state: { routeErrorNotice: message } });
-      return;
-    }
-
-    resetHydration();
-    resetCurrentThread(threadId);
-    void switchThreadMutation
-      .mutateAsync(threadId)
-      .then(state => {
-        if (!isLatestRequest()) return;
-        syncState(state);
-      })
-      .catch(err => {
-        if (!isLatestRequest()) return;
-        const message = `Failed to switch thread: ${err instanceof Error ? err.message : String(err)}`;
-        resetCurrentThread();
-        pushNotice(message, 'error');
-        void navigate('/new', { replace: true, state: { routeErrorNotice: message } });
-      });
-  });
-
-  useEffect(() => {
-    latestRouteThreadId.current = routeThreadId ?? null;
-    if (!routeThreadId) return;
-    if (status !== 'ready' || !transcript.threadId || transcript.threadId === routeThreadId || !threadsQuery.isSuccess)
-      return;
-    switchToRouteThread(routeThreadId);
-  }, [routeThreadId, status, transcript.threadId, threadsQuery.isSuccess]);
+  useRouteThreadSync();
+  useThreadPageKickoffs();
 
   return <ChatMessageList />;
 }

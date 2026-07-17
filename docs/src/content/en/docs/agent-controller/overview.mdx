@@ -74,7 +74,7 @@ const agent = new Agent({
 const agentController = new AgentController({
   id: 'my-agent',
   agent,
-  storage: new LibSQLStore({ url: 'file:./data.db' }),
+  storage: new LibSQLStore({ id: 'agent-storage', url: 'file:./data.db' }),
   modes: [
     {
       id: 'plan',
@@ -97,11 +97,7 @@ await agentController.selectOrCreateThread()
 await agentController.sendMessage({ content: 'Hello!' })
 ```
 
-:::note
-
 Visit the [AgentController reference](/reference/agent-controller/agent-controller-class) for the full constructor parameters and method signatures.
-
-:::
 
 ## Architecture
 

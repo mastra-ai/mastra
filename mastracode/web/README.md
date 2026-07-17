@@ -1,6 +1,6 @@
 # mastracode-web
 
-The Mastra Code web surface: API routes (config/fs/GitHub), tenant server, a deployable Mastra entry (`src/mastra/index.ts`), and the SPA UI. Built on [`@mastra/code-sdk`](../sdk).
+The Mastra Code web surface: API routes (config/fs/GitHub), a deployable Mastra entry (`src/mastra/index.ts`), and the SPA UI. Built on [`@mastra/code-sdk`](../sdk). All agent state (threads, messages, memory, recall vectors) persists in the single app Postgres when `APP_DATABASE_URL` is set.
 
 This is a **standalone pnpm project** (own lockfile, not a monorepo workspace member). For development, the monorepo-provided packages (`@mastra/*`, `mastra`) are consumed via `link:` specs pointing at the monorepo directories, so you always develop against local source. For builds, `scripts/monorepo-deps.mjs` temporarily pins those deps to the exact versions found in the monorepo (see below).
 
@@ -56,6 +56,16 @@ This runs `web:build` (pinned versions, as above), validates the output (server 
 pnpm web:test     # server scenario tests (e2e/web)
 pnpm web:ui:test  # UI MSW tests (e2e/web-ui)
 ```
+
+## Workspace skill invocation
+
+The private Web API can activate a user-invocable skill on an existing scoped AgentController session with `POST /web/agent-controller/:controllerId/skills/invoke`. The Web Factory packages workflow skills such as `understand-issue` and `understand-pr` as ordinary, read-only `SKILL.md` files and adds them only to workspaces created by `MastraFactory`; the shared SDK and TUI workspace resolver do not load them. The route resolves every ID through the session workspace, uses the same `<skill name="…">` activation envelope as `/skill/<name>` in the TUI, and returns an error without dispatching when the skill is missing. Authenticated requests may target only the caller's personal session or a Factory worktree owned by that organization user.
+
+## GitHub pull request notifications
+
+GitHub project sessions automatically subscribe the current thread after a successful `gh pr create`. The `github_subscribe_pr` tool is primarily for existing pull requests or recovery when automatic subscription did not occur. Use `github_unsubscribe_pr` only to stop notifications early; closing or merging the pull request retires its subscription automatically.
+
+Configure the GitHub App webhook URL as `https://your-host/web/github/webhook`, set `GITHUB_APP_WEBHOOK_SECRET` to the same secret configured in GitHub, and subscribe the App to pull request, pull request review, pull request review comment, and issue comment events. Comments and reviews are delivered only when their author has write access or is an explicitly authorized bot.
 
 ## Environment
 

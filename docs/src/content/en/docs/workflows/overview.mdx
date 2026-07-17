@@ -12,7 +12,9 @@ import TabItem from "@theme/TabItem";
 
 Workflows let you define complex sequences of tasks using clear, structured steps rather than relying on the reasoning of a single agent. They give you full control over how tasks are broken down, how data moves between them, and what gets executed when. Workflows run using the built-in execution engine by default, or can be deployed to [workflow runners](/docs/deployment/workflow-runners) like Inngest for managed infrastructure.
 
-![Workflows overview](/img/workflows/workflows-overview.jpg)
+<Inject>
+  **For AI agents:** Run `npx mastra api workflow run start test-workflow '{"inputData":{"message":"Hello, world!"}}'` to start this workflow directly instead of writing a temporary script. The command requires a running Mastra server; start the local server with `npx mastra dev`, or pass the reachable server's base URL with `--url`. Run `npx mastra api workflow run start --schema` before constructing different input. Install Mastra's skill with `npx skills add mastra-ai/skills --skill mastra` for complete API CLI discovery, targeting, schema, authentication, and error-handling guidance.
+</Inject>
 
 ## When to use workflows
 
@@ -111,11 +113,7 @@ The `execute` function defines what the step does. Use it to call functions in y
   </TabItem>
 </Tabs>
 
-:::info
-
 Visit [`Step`](/reference/workflows/step) for a full list of configuration options.
-
-:::
 
 ### Using agents and tools
 
@@ -191,11 +189,7 @@ Create a workflow using `createWorkflow()` with `inputSchema` and `outputSchema`
   </TabItem>
 </Tabs>
 
-:::info
-
 Visit [Workflow Class](/reference/workflows/workflow) for a full list of configuration options.
-
-:::
 
 ### Understanding control flow
 
@@ -232,11 +226,7 @@ const step1 = createStep({
 })
 ```
 
-:::info
-
 Visit [Workflow State](/docs/workflows/workflow-state) for complete documentation on state schemas, initial state, persistence across suspend/resume, and nested workflows.
-
-:::
 
 ## Workflows as steps
 
@@ -565,11 +555,7 @@ const step1 = createStep({
 })
 ```
 
-:::info
-
 Visit [Request Context](/docs/server/request-context) for more information.
-
-:::
 
 :::tip
 

@@ -22,11 +22,20 @@ export interface GithubAppConfig {
 }
 
 /**
- * Normalize a PEM private key supplied via env. Supports the common
- * single-line `\n`-escaped form so the key can live in a `.env` value.
+ * Normalize a PEM private key supplied via env. Env tooling tends to mangle
+ * multi-line PEMs, so two single-line forms are supported:
+ *   - `\n`-escaped: literal `\n` sequences become real newlines
+ *   - fully flattened: newlines stripped entirely — the PEM is rebuilt by
+ *     re-wrapping the base64 body (Node's decoder rejects header/body/footer
+ *     on one line with `error:1E08010C:DECODER routines::unsupported`)
  */
-function normalizePrivateKey(raw: string): string {
-  return raw.includes('\\n') ? raw.replace(/\\n/g, '\n') : raw;
+export function normalizePrivateKey(raw: string): string {
+  const key = raw.replace(/\\n/g, '\n');
+  if (key.includes('\n')) return key;
+  const flattened = key.trim().match(/^(-----BEGIN [A-Z0-9 ]+-----)\s*(.+?)\s*(-----END [A-Z0-9 ]+-----)$/);
+  if (!flattened) return key;
+  const body = flattened[2]!.replace(/\s+/g, '');
+  return `${flattened[1]}\n${body.match(/.{1,64}/g)!.join('\n')}\n${flattened[3]}\n`;
 }
 
 /** Required GitHub App env var names (non-secret names only). */
@@ -193,6 +202,26 @@ export async function listInstallationRepos(installationId: number): Promise<Rep
  * accessible to the installation (so a client can't create a project for an
  * arbitrary repo under an installation id it merely owns).
  */
+export type GithubRepositoryPermission = 'admin' | 'maintain' | 'write' | 'triage' | 'read' | 'none';
+
+export async function getRepositoryCollaboratorPermission(
+  installationId: number,
+  repoFullName: string,
+  username: string,
+): Promise<GithubRepositoryPermission | undefined> {
+  const parts = splitRepoFullName(repoFullName);
+  if (!parts) return undefined;
+  try {
+    const { data } = await getInstallationOctokit(installationId).repos.getCollaboratorPermissionLevel({
+      ...parts,
+      username,
+    });
+    return data.permission as GithubRepositoryPermission;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function getInstallationRepo(installationId: number, repoFullName: string): Promise<RepoSummary | null> {
   const slash = repoFullName.indexOf('/');
   if (slash <= 0) return null;
@@ -213,6 +242,146 @@ export async function getInstallationRepo(installationId: number, repoFullName: 
   } catch {
     return null;
   }
+}
+
+/** Split an `owner/name` full name into its parts, or `null` when malformed. */
+function splitRepoFullName(repoFullName: string): { owner: string; repo: string } | null {
+  const slash = repoFullName.indexOf('/');
+  if (slash <= 0 || slash === repoFullName.length - 1) return null;
+  return { owner: repoFullName.slice(0, slash), repo: repoFullName.slice(slash + 1) };
+}
+
+export interface IssueSummary {
+  number: number;
+  title: string;
+  url: string;
+  author: string | null;
+  labels: string[];
+  comments: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Page size for issue/PR listings; one GitHub API call per page. */
+export const LIST_PAGE_SIZE = 30;
+
+export interface IssuePage {
+  issues: IssueSummary[];
+  /** Next page number to request, or `null` when this was the last page. */
+  nextPage: number | null;
+}
+
+export interface ListRepoOpenIssuesOptions {
+  label?: string;
+}
+
+export async function addIssueLabels(
+  installationId: number,
+  repoFullName: string,
+  issueNumber: number,
+  labels: string[],
+): Promise<void> {
+  const parts = splitRepoFullName(repoFullName);
+  if (!parts) return;
+  const uniqueLabels = [...new Set(labels.map(label => label.trim()).filter(Boolean))];
+  if (uniqueLabels.length === 0) return;
+  const octokit = getInstallationOctokit(installationId);
+  await octokit.issues.addLabels({
+    owner: parts.owner,
+    repo: parts.repo,
+    issue_number: issueNumber,
+    labels: uniqueLabels,
+  });
+}
+
+/**
+ * List one page of a repo's open issues through an installation token. The
+ * issues API also returns pull requests, so those are filtered out (the filter
+ * can make a non-final page shorter than the page size — `nextPage` is derived
+ * from the raw response length, not the filtered one).
+ */
+export async function listRepoOpenIssues(
+  installationId: number,
+  repoFullName: string,
+  page: number,
+  options: ListRepoOpenIssuesOptions = {},
+): Promise<IssuePage> {
+  const parts = splitRepoFullName(repoFullName);
+  if (!parts) return { issues: [], nextPage: null };
+  const octokit = getInstallationOctokit(installationId);
+  const response = await octokit.issues.listForRepo({
+    owner: parts.owner,
+    repo: parts.repo,
+    state: 'open',
+    labels: options.label,
+    per_page: LIST_PAGE_SIZE,
+    page,
+  });
+  const issues = response.data
+    .filter(issue => !issue.pull_request)
+    .map(issue => ({
+      number: issue.number,
+      title: issue.title,
+      url: issue.html_url,
+      author: issue.user?.login ?? null,
+      labels: issue.labels.map(label => (typeof label === 'string' ? label : (label.name ?? ''))).filter(Boolean),
+      comments: issue.comments,
+      createdAt: issue.created_at,
+      updatedAt: issue.updated_at,
+    }));
+  return { issues, nextPage: response.data.length === LIST_PAGE_SIZE ? page + 1 : null };
+}
+
+export interface PullRequestSummary {
+  number: number;
+  title: string;
+  url: string;
+  author: string | null;
+  baseBranch: string;
+  headBranch: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PullRequestPage {
+  pullRequests: PullRequestSummary[];
+  /** Next page number to request, or `null` when this was the last page. */
+  nextPage: number | null;
+}
+
+/**
+ * List one page of a repo's open, non-draft pull requests through an
+ * installation token. Draft filtering can make a non-final page shorter than
+ * the page size — `nextPage` is derived from the raw response length.
+ */
+export async function listRepoOpenPullRequests(
+  installationId: number,
+  repoFullName: string,
+  page: number,
+): Promise<PullRequestPage> {
+  const parts = splitRepoFullName(repoFullName);
+  if (!parts) return { pullRequests: [], nextPage: null };
+  const octokit = getInstallationOctokit(installationId);
+  const response = await octokit.pulls.list({
+    owner: parts.owner,
+    repo: parts.repo,
+    state: 'open',
+    per_page: LIST_PAGE_SIZE,
+    page,
+  });
+  const pullRequests = response.data
+    .filter(pr => !pr.draft)
+    .map(pr => ({
+      number: pr.number,
+      title: pr.title,
+      url: pr.html_url,
+      author: pr.user?.login ?? null,
+      baseBranch: pr.base.ref,
+      headBranch: pr.head.ref,
+      createdAt: pr.created_at,
+      updatedAt: pr.updated_at,
+    }));
+  return { pullRequests, nextPage: response.data.length === LIST_PAGE_SIZE ? page + 1 : null };
 }
 
 /**

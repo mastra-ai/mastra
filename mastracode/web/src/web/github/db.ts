@@ -1,46 +1,54 @@
 /**
- * Application database layer for the GitHub App integration.
+ * Application database bridge for the GitHub App + Linear integrations.
  *
- * This is a *separate* Postgres from Mastra's own storage: it is created lazily
- * from `APP_DATABASE_URL` and holds only the GitHub installations/projects
- * tables defined in `./schema`. The connection is a singleton so the whole
- * process shares one pg Pool.
+ * TEMPORARY: github/linear are the last app-table consumers still on drizzle.
+ * The drizzle client here no longer owns a connection — it is built over the
+ * shared pg pool of the storage instance injected into `MastraFactory`
+ * (`getSharedAppPool()`), so Mastra storage and the app tables ride one pool.
+ * The integrations PR ports github/linear to `FactoryStorageDomain` classes
+ * and deletes this module together with the drizzle dependency.
  */
 
 import { sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
-import pkg from 'pg';
+import type pg from 'pg';
+import { getSharedAppPool } from '../runtime-config';
 import { MIGRATION_SQL } from './schema';
 import * as schema from './schema';
 
-const { Pool } = pkg;
-
 export type AppDb = NodePgDatabase<typeof schema>;
 
-let pool: pkg.Pool | undefined;
+let boundPool: pg.Pool | undefined;
 let db: AppDb | undefined;
 let migrationPromise: Promise<void> | undefined;
 
 /**
- * True when the app database is configured. Required for the GitHub feature.
+ * True when the app database is available: the factory was configured with a
+ * `PostgresStore` whose pool the app tables share. Required for the GitHub
+ * feature.
  */
 export function isAppDbConfigured(): boolean {
-  return Boolean(process.env.APP_DATABASE_URL);
+  return Boolean(getSharedAppPool());
 }
 
 /**
- * Get (lazily creating) the Drizzle client bound to `APP_DATABASE_URL`.
- * @throws if `APP_DATABASE_URL` is not set.
+ * Get the drizzle client bound to the shared app pool (rebuilt if the seeded
+ * storage changed, e.g. across test seeds).
+ * @throws if the factory has no pg-backed storage.
  */
 export function getAppDb(): AppDb {
-  if (db) return db;
-  const connectionString = process.env.APP_DATABASE_URL;
-  if (!connectionString) {
-    throw new Error('APP_DATABASE_URL is not set; the GitHub App feature requires an application database.');
+  const pool = getSharedAppPool();
+  if (!pool) {
+    throw new Error(
+      'No Postgres storage configured; the GitHub App feature requires the MastraFactory `storage` slot to be a PostgresStore.',
+    );
   }
-  pool = new Pool({ connectionString });
-  db = drizzle(pool, { schema });
+  if (!db || boundPool !== pool) {
+    boundPool = pool;
+    db = drizzle(pool, { schema });
+    migrationPromise = undefined;
+  }
   return db;
 }
 
@@ -65,27 +73,11 @@ export async function ensureAppDbReady(): Promise<void> {
 }
 
 /**
- * Get the underlying pg `Pool`, lazily creating the client if needed. Used by
- * the distributed project lock, which needs a single dedicated connection to
- * hold a transaction-scoped advisory lock.
- * @throws if `APP_DATABASE_URL` is not set.
+ * The shared pg `Pool`. Used by the distributed project lock, which needs a
+ * single dedicated connection to hold a transaction-scoped advisory lock.
+ * @throws if the factory has no pg-backed storage.
  */
-export function getAppDbPool(): pkg.Pool {
+export function getAppDbPool(): pg.Pool {
   getAppDb();
-  if (!pool) {
-    throw new Error('APP_DATABASE_URL is not set; the GitHub App feature requires an application database.');
-  }
-  return pool;
-}
-
-/**
- * Close the pool. Primarily for tests / graceful shutdown.
- */
-export async function closeAppDb(): Promise<void> {
-  if (pool) {
-    await pool.end();
-    pool = undefined;
-    db = undefined;
-    migrationPromise = undefined;
-  }
+  return boundPool!;
 }

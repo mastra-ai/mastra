@@ -4,7 +4,7 @@
   "type": "module",
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
-    "@types/node": "22.19.21",
+    "@types/node": "22.20.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "changesets-changelog-github-local": "^1.0.1",
@@ -15,7 +15,7 @@
     "madge": "^8.0.0",
     "npm-run-all2": "^9.0.2",
     "path-to-regexp": "^8.4.2",
-    "prettier": "^3.8.3",
+    "prettier": "3.8.3",
     "prettier-plugin-tailwindcss": "^0.7.2",
     "semver": "^7.7.4",
     "tsc-files": "^1.1.4",

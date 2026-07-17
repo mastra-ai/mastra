@@ -11,7 +11,7 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { isWebAuthEnabled } from '../auth';
 import { getMissingGithubAppEnvVars, isGithubAppConfigured } from './client';
 import { isAppDbConfigured } from './db';
-import { getSandboxProvider, isSandboxEnabled } from './sandbox';
+import { getSandboxProvider, isSandboxEnabled } from '../sandbox/fleet';
 
 /**
  * True when the GitHub App project feature should be active.
@@ -52,6 +52,11 @@ export function getGithubFeatureDiagnostics(): GithubFeatureDiagnostics {
     sandboxProvider: getSandboxProvider(),
     missingGithubAppEnvVars: getMissingGithubAppEnvVars(),
   };
+}
+
+/** Secret used by GitHub to sign webhook deliveries. */
+export function getGithubWebhookSecret(): string | undefined {
+  return process.env.GITHUB_APP_WEBHOOK_SECRET || undefined;
 }
 
 /**

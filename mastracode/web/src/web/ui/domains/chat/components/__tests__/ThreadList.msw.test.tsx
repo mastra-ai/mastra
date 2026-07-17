@@ -2,7 +2,7 @@
  * BDD coverage for the propless `ThreadList` (`domains/chat/components`).
  *
  * The list owns the thread-section behavior end-to-end: it reads threads from
- * `useChatSession`, gates itself on the active project, closes the sidebar
+ * focused chat hooks, gates itself on the active project, closes the sidebar
  * drawer on navigation, and toasts on thread CRUD. Driven through the real
  * fetch transport with MSW at the network boundary.
  */
@@ -13,13 +13,13 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { ChatSessionTestProvider as ChatSessionProvider } from '../../context/ChatSessionTestProvider';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import { OverlaysProvider, useOverlays } from '../../../../lib/overlays';
 import { ToastProvider } from '../../../../ui';
 import type { Project } from '../../../workspaces';
 import { ActiveProjectProvider } from '../../../workspaces';
-import { ChatSessionProvider } from '../../context/ChatSessionProvider';
 import { ThreadList } from '../ThreadList';
 
 const RESOURCE_ID = 'res-alpha';
@@ -34,6 +34,23 @@ const project: Project = {
   createdAt: 1,
 };
 
+/** GitHub project with a feature worktree selected — thread list is read-only. */
+const worktreeProject: Project = {
+  id: 'p-gh',
+  name: 'Mastra',
+  source: 'github',
+  githubProjectId: 'gh-1',
+  sandboxWorkdir: '/sandbox/mastra',
+  resourceId: RESOURCE_ID,
+  gitBranch: 'main',
+  worktrees: [
+    { branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' },
+    { branch: 'feat-ui', worktreePath: '/sandbox/mastra-worktrees/feat-ui', baseBranch: 'main' },
+  ],
+  selectedWorktreePath: '/sandbox/mastra-worktrees/feat-ui',
+  createdAt: 1,
+};
+
 function thread(id: string, title: string, updatedAt: string): AgentControllerThreadInfo {
   return { id, title, resourceId: RESOURCE_ID, createdAt: '2026-06-01T00:00:00.000Z', updatedAt };
 }
@@ -45,9 +62,9 @@ afterEach(() => {
   localStorage.clear();
 });
 
-function seedProject() {
-  localStorage.setItem('mastracode-projects', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-project', project.id);
+function seedProject(seeded: Project = project) {
+  localStorage.setItem('mastracode-projects', JSON.stringify([seeded]));
+  localStorage.setItem('mastracode-active-project', seeded.id);
 }
 
 function sessionState(): AgentControllerSessionState {
@@ -157,7 +174,9 @@ function renderThreadList() {
 }
 
 async function openThreadActions(title: string) {
-  const row = (await screen.findByText(title)).closest('[role="listitem"]') as HTMLElement;
+  await screen.findByText(title);
+  const row = screen.getAllByRole('listitem').find(item => within(item).queryByText(title));
+  if (!row) throw new Error(`Thread row not found: ${title}`);
   await userEvent.click(within(row).getByRole('button', { name: 'Thread actions' }));
 }
 
@@ -170,7 +189,7 @@ describe('ThreadList', () => {
     expect(screen.queryByRole('list')).not.toBeInTheDocument();
   });
 
-  it('given threads, then they render sorted by updatedAt desc, capped at 5 with an overflow hint', async () => {
+  it('given threads, then every fetched thread renders sorted by updatedAt desc', async () => {
     seedProject();
     const threads = [
       thread('t1', 'Thread 1', '2026-06-01T00:00:00.000Z'),
@@ -188,8 +207,41 @@ describe('ThreadList', () => {
     const titles = within(screen.getByRole('list'))
       .getAllByRole('listitem')
       .map(item => within(item).getByRole('button', { name: /Thread \d/ }).textContent);
-    expect(titles.map(t => t?.slice(0, 8))).toEqual(['Thread 7', 'Thread 6', 'Thread 5', 'Thread 4', 'Thread 3']);
-    expect(screen.getByText('+2 more')).toBeInTheDocument();
+    expect(titles.map(t => t?.slice(0, 8))).toEqual([
+      'Thread 7',
+      'Thread 6',
+      'Thread 5',
+      'Thread 4',
+      'Thread 3',
+      'Thread 2',
+      'Thread 1',
+    ]);
+    expect(screen.queryByText(/more$/)).not.toBeInTheDocument();
+  });
+
+  it('given a feature worktree is active, then thread titles render read-only without actions or a new-thread control', async () => {
+    seedProject(worktreeProject);
+    useAgentControllerHandlers([threadOne]);
+    renderThreadList();
+
+    // The title still shows for context…
+    expect(await screen.findByText('First thread')).toBeInTheDocument();
+    // …but no "Threads" header/count and no way to create, rename, clone, or delete threads.
+    expect(screen.queryByText('Threads')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'New thread' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Thread actions' })).not.toBeInTheDocument();
+  });
+
+  it('given a GitHub project, then the list is read-only even when the repo-root path was persisted as selected', async () => {
+    // Legacy projects could persist the repo root as the selected worktree;
+    // it is no longer a workspace, so GitHub lists never expose thread controls.
+    seedProject({ ...worktreeProject, selectedWorktreePath: '/sandbox/mastra' });
+    useAgentControllerHandlers([threadOne]);
+    renderThreadList();
+
+    expect(await screen.findByText('First thread')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'New thread' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Thread actions' })).not.toBeInTheDocument();
   });
 
   it('when a thread is clicked, then the app navigates to its page and the sidebar closes', async () => {
@@ -224,7 +276,7 @@ describe('ThreadList', () => {
     renderThreadList();
 
     await openThreadActions('First thread');
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Rename' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Rename' }));
 
     const input = screen.getByRole('textbox', { name: 'Thread title' });
     await userEvent.clear(input);
@@ -232,6 +284,7 @@ describe('ThreadList', () => {
 
     await waitFor(() => expect(captured.renamed).toEqual([{ threadId: 'thread-one', title: 'Renamed thread' }]));
     expect(await screen.findByText('Thread renamed')).toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: 'Thread title' })).not.toBeInTheDocument();
   });
 
   it('when a rename is cancelled with Escape, then no rename request fires', async () => {
@@ -240,7 +293,7 @@ describe('ThreadList', () => {
     renderThreadList();
 
     await openThreadActions('First thread');
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Rename' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Rename' }));
 
     const input = screen.getByRole('textbox', { name: 'Thread title' });
     await userEvent.clear(input);
@@ -256,7 +309,7 @@ describe('ThreadList', () => {
     renderThreadList();
 
     await openThreadActions('First thread');
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Clone' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Clone' }));
 
     await waitFor(() => expect(captured.cloned).toHaveLength(1));
     expect(captured.cloned[0]).toMatchObject({ sourceThreadId: 'thread-one' });
@@ -270,25 +323,20 @@ describe('ThreadList', () => {
     renderThreadList();
 
     await openThreadActions('Second thread');
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
 
     await waitFor(() => expect(captured.deleted).toEqual(['thread-two']));
     expect(await screen.findByText('Thread deleted')).toBeInTheDocument();
   });
 
-  it('when the actions menu is open, then outside click and Escape both close it', async () => {
+  it('when the actions menu is open, then clicking the trigger again closes it', async () => {
     seedProject();
     useAgentControllerHandlers([threadOne]);
     renderThreadList();
 
     await openThreadActions('First thread');
-    expect(screen.getByRole('menu')).toBeInTheDocument();
-    await userEvent.click(document.body);
-    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
-
+    expect(await screen.findByRole('menu')).toBeInTheDocument();
     await openThreadActions('First thread');
-    expect(screen.getByRole('menu')).toBeInTheDocument();
-    await userEvent.keyboard('{Escape}');
-    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
   });
 });

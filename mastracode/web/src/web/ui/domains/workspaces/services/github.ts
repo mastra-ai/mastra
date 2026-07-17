@@ -95,6 +95,16 @@ export function connectGithub(baseUrl: string): void {
   window.location.assign(`${baseUrl}/auth/github/connect`);
 }
 
+/**
+ * Open GitHub's installation page to add/remove accounts and repo access
+ * (full-page redirect). Unlike {@link connectGithub}, this skips the OAuth
+ * identify bounce — for an already-authorized user that bounce completes
+ * instantly and invisibly, which would make the manage button a silent no-op.
+ */
+export function manageGithubConnection(baseUrl: string): void {
+  window.location.assign(`${baseUrl}/auth/github/connect?manage=1`);
+}
+
 /** List repos across the user's installations, optionally filtered by query. */
 export async function listGithubRepos(baseUrl: string, query?: string): Promise<GithubRepo[]> {
   const url = query ? `${baseUrl}/web/github/repos?q=${encodeURIComponent(query)}` : `${baseUrl}/web/github/repos`;
@@ -307,6 +317,25 @@ export async function createWorktree(
   return postProjectGitOp<WorktreeResult>(baseUrl, githubProjectId, 'worktree', { branch, baseBranch });
 }
 
+export interface DeleteWorktreeResult {
+  removed: boolean;
+  branch: string;
+  worktreePath: string;
+}
+
+/**
+ * Delete a worktree's checkout (and local feature branch) from the project's
+ * sandbox and drop its persisted row. Destructive: any uncommitted work in the
+ * checkout is discarded, so callers must confirm with the user first.
+ */
+export async function deleteWorktree(
+  baseUrl: string,
+  githubProjectId: string,
+  branch: string,
+): Promise<DeleteWorktreeResult> {
+  return postProjectGitOp<DeleteWorktreeResult>(baseUrl, githubProjectId, 'worktree/delete', { branch });
+}
+
 export interface CommitResult {
   committed: boolean;
 }
@@ -348,7 +377,44 @@ export interface PullRequestResult {
 export async function openPullRequest(
   baseUrl: string,
   githubProjectId: string,
-  args: { branch: string; title: string; body?: string; base?: string; worktreePath?: string },
+  args: {
+    branch: string;
+    title: string;
+    body?: string;
+    base?: string;
+    worktreePath?: string;
+    sessionId?: string;
+    threadId?: string;
+  },
 ): Promise<PullRequestResult> {
   return postProjectGitOp<PullRequestResult>(baseUrl, githubProjectId, 'pr', args);
+}
+
+/** Per-project settings persisted on the server. */
+export interface ProjectSettings {
+  /**
+   * Shell command run inside every freshly created worktree before any agent
+   * execution (e.g. `pnpm i && pnpm build`). `null` when no setup step is
+   * configured.
+   */
+  setupCommand: string | null;
+}
+
+/** Read a project's settings (currently just the worktree setup command). */
+export async function fetchProjectSettings(baseUrl: string, githubProjectId: string): Promise<ProjectSettings> {
+  const res = await fetch(`${baseUrl}/web/github/projects/${encodeURIComponent(githubProjectId)}/settings`, {
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
+  });
+  if (!res.ok) throw new Error(`Failed to load project settings (${res.status})`);
+  return (await res.json()) as ProjectSettings;
+}
+
+/** Persist a project's setup command. Pass `null` (or blank) to clear it. */
+export async function saveProjectSettings(
+  baseUrl: string,
+  githubProjectId: string,
+  settings: ProjectSettings,
+): Promise<ProjectSettings> {
+  return postProjectGitOp<ProjectSettings>(baseUrl, githubProjectId, 'settings', settings);
 }
