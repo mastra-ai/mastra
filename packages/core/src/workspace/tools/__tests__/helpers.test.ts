@@ -313,15 +313,27 @@ describe('getEditDiagnosticsText', () => {
   });
 
   it('uses win32 resolve when lspManager.root is a Windows absolute path', async () => {
-    const { workspace, mockLsp } = createMockLSPWorkspace([]);
-    mockLsp.root = 'C:\\project';
-    Object.defineProperty(workspace, 'filesystem', {
-      get: () => ({ resolveAbsolutePath: () => undefined }),
-    });
+    const windowsRoots = ['C:\\project', 'c:/project', '\\\\server\\share'];
+    for (const root of windowsRoots) {
+      const { workspace, mockLsp } = createMockLSPWorkspace([]);
+      mockLsp.root = root;
+      Object.defineProperty(workspace, 'filesystem', {
+        get: () => ({ resolveAbsolutePath: () => undefined }),
+      });
 
-    await getEditDiagnosticsText(workspace, '/src/app.ts', 'code');
+      await getEditDiagnosticsText(workspace, '/src/app.ts', 'code');
 
-    expect(mockLsp.getDiagnostics).toHaveBeenCalledWith('C:\\project\\src\\app.ts', 'code');
+      // The exact resolved path might depend on whether it's a UNC or drive letter,
+      // but it should use path.win32.resolve which converts forward slashes to backslashes
+      // and prepends the root correctly.
+      if (root === '\\\\server\\share') {
+        expect(mockLsp.getDiagnostics).toHaveBeenCalledWith('\\\\server\\share\\src\\app.ts', 'code');
+      } else if (root === 'c:/project') {
+        expect(mockLsp.getDiagnostics).toHaveBeenCalledWith('c:\\project\\src\\app.ts', 'code');
+      } else {
+        expect(mockLsp.getDiagnostics).toHaveBeenCalledWith('C:\\project\\src\\app.ts', 'code');
+      }
+    }
   });
 
   it('truncates long output', async () => {

@@ -99,7 +99,8 @@ export async function getEditDiagnosticsText(workspace: Workspace, filePath: str
     // and contained: false (absolute paths used as-is).
     // Use posix resolve to ensure POSIX LSP paths don't get Windows drive letters appended,
     // but fall back to win32 resolve if the root is explicitly a Windows absolute path.
-    const isWindowsRoot = path.win32.isAbsolute(lspManager.root);
+    const isWindowsRoot =
+      /^[A-Za-z]:[\\/]/.test(lspManager.root) || /^(?:\\\\|\/\/)[^\\]+[\\][^\\/]+/.test(lspManager.root);
     const absolutePath =
       workspace.filesystem?.resolveAbsolutePath?.(filePath) ??
       (isWindowsRoot

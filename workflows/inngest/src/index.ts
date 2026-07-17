@@ -1119,7 +1119,7 @@ export function init<TRequestContext = unknown>(inngest: Inngest) {
         any,
         InngestEngineType
       >[],
-    >(params: InngestWorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>) {
+    >(params: InngestWorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps, TRequestContext>) {
       return new InngestWorkflow<
         InngestEngineType,
         TSteps,
