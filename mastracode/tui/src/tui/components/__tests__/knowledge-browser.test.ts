@@ -25,6 +25,7 @@ function record(
   name: string,
   type: 'entity' | 'page' = 'entity',
   scope: 'org' | 'resource' | 'thread' = 'resource',
+  relationshipCounts?: KnowledgeInspectorRecordSummary['relationshipCounts'],
 ): KnowledgeInspectorRecordSummary {
   return {
     handle: `${type}:${name}`,
@@ -34,6 +35,7 @@ function record(
     scope: { level: scope, id: `${scope}-id` },
     version: 1,
     updatedAt: '2026-07-15T00:00:00.000Z',
+    relationshipCounts,
   };
 }
 
@@ -42,10 +44,11 @@ function entityDetail(
   outgoingTargets = [] as KnowledgeInspectorRecordSummary[],
   incomingParents = [] as KnowledgeInspectorRecordSummary[],
 ): KnowledgeInspectorEntityDetail {
+  const relationshipCounts = entity.relationshipCounts ?? { facts: 1, outgoing: 0, incoming: 0, sampled: false };
   return {
     identityKey: 'identity-1',
     scopeLevel: 'resource' as const,
-    entity,
+    entity: { ...entity, relationshipCounts },
     facts: [
       {
         text: `${entity.name} ships Friday`,
@@ -57,6 +60,7 @@ function entityDetail(
     incomingFacts: [],
     outgoingTargets: { items: outgoingTargets, partial: false },
     incomingParents: { items: incomingParents, partial: false },
+    relationshipCounts,
   };
 }
 
@@ -207,7 +211,12 @@ describe('KnowledgeBrowserComponent', () => {
         identityKey: 'identity-1',
         scopeLevel: 'resource' as const,
         items: [
-          { ...record(input.sort ?? 'relevant'), sampledRelationshipDegree: input.sort === 'recent' ? undefined : 3 },
+          record(input.sort ?? 'relevant', 'entity', 'resource', {
+            facts: 4,
+            outgoing: 2,
+            incoming: 1,
+            sampled: false,
+          }),
         ],
         sort: input.sort,
         coverage: input.sort === 'recent' ? ('exact' as const) : ('recent-window' as const),
@@ -219,7 +228,7 @@ describe('KnowledgeBrowserComponent', () => {
     browser.handleInput('\r');
     await settle();
     expect(text(browser)).toContain('Sort: Relevant · recent window');
-    expect(text(browser)).toContain('3 links');
+    expect(text(browser)).toContain('→2 ←1');
 
     browser.handleInput('\x13');
     await settle();
@@ -230,6 +239,62 @@ describe('KnowledgeBrowserComponent', () => {
     browser.handleInput('\x13');
     await settle();
     expect(text(browser)).toContain('Sort: Connected · recent window');
+  });
+
+  it('groups entities by graph role and badges rows with directional counts', async () => {
+    const bridge = record('Bridge', 'entity', 'resource', { facts: 3, outgoing: 2, incoming: 1, sampled: false });
+    const source = record('Source', 'entity', 'resource', { facts: 1, outgoing: 2, incoming: 0, sampled: false });
+    const referenced = record('Referenced', 'entity', 'resource', {
+      facts: 1,
+      outgoing: 0,
+      incoming: 2,
+      sampled: false,
+    });
+    const isolated = record('Isolated', 'entity', 'resource', { facts: 0, outgoing: 0, incoming: 0, sampled: false });
+    const sampledHub = record('Sampled hub', 'entity', 'resource', {
+      facts: 40,
+      outgoing: 25,
+      incoming: 25,
+      sampled: true,
+    });
+    const inspector = createInspector({
+      listEntities: vi.fn(async () => ({
+        identityKey: 'identity-1',
+        scopeLevel: 'resource' as const,
+        items: [isolated, source, bridge, referenced, sampledHub],
+        sort: 'relevant' as const,
+        coverage: 'recent-window' as const,
+      })),
+      getEntity: vi.fn(async () => entityDetail(bridge, [source], [referenced])),
+    });
+    const { browser } = createBrowser(inspector);
+    await settle();
+    browser.handleInput('j');
+    browser.handleInput('\r');
+    await settle();
+
+    const rendered = text(browser);
+    const bridgesAt = rendered.indexOf('Bridges');
+    const sourcesAt = rendered.indexOf('Sources');
+    const referencedAt = rendered.indexOf('Referenced only');
+    const isolatedAt = rendered.indexOf('Isolated\n');
+    expect(bridgesAt).toBeGreaterThan(-1);
+    expect(sourcesAt).toBeGreaterThan(bridgesAt);
+    expect(referencedAt).toBeGreaterThan(sourcesAt);
+    expect(isolatedAt).toBeGreaterThan(referencedAt);
+    expect(rendered.indexOf('Bridge (project)')).toBeGreaterThan(bridgesAt);
+    expect(rendered.indexOf('Bridge (project)')).toBeLessThan(sourcesAt);
+    expect(rendered.indexOf('Source (project)')).toBeGreaterThan(sourcesAt);
+    expect(rendered.indexOf('Source (project)')).toBeLessThan(referencedAt);
+    expect(rendered.indexOf('Referenced (project)')).toBeGreaterThan(referencedAt);
+    expect(rendered.indexOf('Referenced (project)')).toBeLessThan(isolatedAt);
+    expect(rendered.indexOf('Isolated (project)')).toBeGreaterThan(isolatedAt);
+    expect(rendered).toContain('→2 ←1');
+    expect(rendered).toContain('→25 ←25+');
+
+    browser.handleInput('\r');
+    await settle();
+    expect(text(browser)).toContain('Bridge · 3 facts · 2 outgoing · 1 incoming');
   });
 
   it('keeps pages separate, follows resolved page links, and leaves unresolved links as text', async () => {
