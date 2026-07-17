@@ -53,8 +53,10 @@ A local `.env` file is optional. Environment variables stored on the platform ar
     Accept the prompt and provisioning takes a few seconds — the database's connection variables are injected into your deploys automatically, with nothing to copy into an `.env` file. Decline it, or run in a non-interactive shell (CI, `--yes`), and the CLI falls back to the previous behavior: it prints the exact command to run yourself.
 
     ```bash
-    mastra env db create --kind turso
+    mastra env db create production --kind turso
     ```
+
+    The environment slug (`production` above) matches the environment the CLI would have deployed to — this is important because `mastra env db create` requires an environment argument in non-interactive shells when the project has more than one environment.
 
     :::note
     If preflight reports a hard-coded local path instead (`Build contains a host-local storage URL`), it can't offer the inline fix — guard the path with an environment variable first so the file is only used during local development:

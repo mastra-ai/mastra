@@ -360,14 +360,18 @@ describe('preflightBuildOutput', () => {
       expect(fixText(issue?.fix)).toContain('mastra env db create --kind neon');
     });
 
-    it('falls back to a bare db create command for unmapped guard vars', async () => {
+    it('omits `mastra env db create` from the remediation when the guard var maps to no known provider', async () => {
       writeBundle(`export {};`);
       writeMetadata({ localPaths: [{ ...guardedDetection, guardedBy: 'MY_CUSTOM_DB_URL' }] });
 
       const issues = await preflightBuildOutput(tmpDir, {}, { hasEnvFile: true });
       const issue = issues.find(i => i.code === 'LOCAL_STORAGE_PATH');
-      expect(fixText(issue?.fix)).toContain('mastra env db create');
-      expect(fixText(issue?.fix)).not.toContain('--kind');
+      // Suggesting `mastra env db create` for an arbitrary user-defined var
+      // would tell users to spin up managed infra that can't inject their
+      // var — a real footgun, not a helpful fallback. The env-var path is
+      // the only actionable remediation here.
+      expect(fixText(issue?.fix)).not.toContain('mastra env db create');
+      expect(fixText(issue?.fix)).toContain('Set MY_CUSTOM_DB_URL');
     });
 
     it('scopes the db create command to the target environment when a slug is provided', async () => {
@@ -385,14 +389,15 @@ describe('preflightBuildOutput', () => {
       expect(fixText(issue?.fix)).toContain('mastra env db create production --kind turso');
     });
 
-    it('scopes the bare db create command too when a slug is provided', async () => {
+    it('does not emit a scoped bare db create command for unmapped guard vars either', async () => {
       writeBundle(`export {};`);
       writeMetadata({ localPaths: [{ ...guardedDetection, guardedBy: 'MY_CUSTOM_DB_URL' }] });
 
+      // Even with an env slug in hand, we don't invent a `mastra env db create
+      // staging` remediation for a variable no known provider injects.
       const issues = await preflightBuildOutput(tmpDir, {}, { hasEnvFile: true, environmentSlug: 'staging' });
       const issue = issues.find(i => i.code === 'LOCAL_STORAGE_PATH');
-      expect(fixText(issue?.fix)).toContain('mastra env db create staging');
-      expect(fixText(issue?.fix)).not.toContain('--kind');
+      expect(fixText(issue?.fix)).not.toContain('mastra env db create');
     });
 
     it('warns (not errors) on guarded misses when platform context lacks managedEnvVarNames (older platform)', async () => {

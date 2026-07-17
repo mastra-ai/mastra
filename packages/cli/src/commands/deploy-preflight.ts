@@ -505,28 +505,41 @@ async function checkLocalStoragePaths(
         // Full env picture: local env file + stored vars + managed names.
         // The guard var is genuinely absent, so the local fallback WILL be
         // used at runtime — trustworthy hard error.
+        const autofix = dbAutofixFor(d.guardedBy);
+        // Only recommend `mastra env db create` when we recognize the guard
+        // var as belonging to a managed provider we can actually provision.
+        // Suggesting the command for arbitrary vars (e.g. MY_CUSTOM_DB_URL)
+        // would tell users to spin up infra that can't inject their var.
+        const envVarFix = `Set ${d.guardedBy} in your env file or the environment's stored vars`;
         issues.push({
           code: 'LOCAL_STORAGE_PATH',
           severity: 'error',
           message: `${truncate(d.value, 80)} will be used at runtime because ${d.guardedBy} is not set (${d.hint})`,
-          fix: [
-            `Run \`${dbCreateCommandFor(d.guardedBy, environmentSlug)}\` to attach a managed database`,
-            `Or set ${d.guardedBy} in your env file or the environment's stored vars`,
-          ],
-          autofix: dbAutofixFor(d.guardedBy),
+          fix: autofix
+            ? [
+                `Run \`${dbCreateCommandFor(d.guardedBy, environmentSlug)}\` to attach a managed database`,
+                `Or ${envVarFix.charAt(0).toLowerCase()}${envVarFix.slice(1)}`,
+              ]
+            : envVarFix,
+          autofix,
         });
       }
     } else if (hasEnvFile) {
+      const autofix = dbAutofixFor(d.guardedBy);
+      const envVarFix = `Set ${d.guardedBy} in your env file`;
+      const platformFix = `If the platform already injects it, re-run with --skip-preflight`;
       issues.push({
         code: 'LOCAL_STORAGE_PATH',
         severity: 'error',
         message: `${truncate(d.value, 80)} will be used at runtime because ${d.guardedBy} is not set (${d.hint})`,
-        fix: [
-          `Run \`${dbCreateCommandFor(d.guardedBy, environmentSlug)}\` to attach a managed database`,
-          `Or set ${d.guardedBy} in your env file`,
-          `If the platform already injects it, re-run with --skip-preflight`,
-        ],
-        autofix: dbAutofixFor(d.guardedBy),
+        fix: autofix
+          ? [
+              `Run \`${dbCreateCommandFor(d.guardedBy, environmentSlug)}\` to attach a managed database`,
+              `Or ${envVarFix.charAt(0).toLowerCase()}${envVarFix.slice(1)}`,
+              platformFix,
+            ]
+          : [envVarFix, platformFix],
+        autofix,
       });
     } else {
       issues.push({

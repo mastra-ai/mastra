@@ -32,7 +32,13 @@ export interface AutoProvisionContext {
   /** Project slug, used to derive a default database name. */
   projectSlug: string | null;
   environment: Pick<Environment, 'id' | 'slug'>;
-  /** Disables prompting (`--yes` / `--auto-accept`). Provisioning still runs. */
+  /**
+   * Skip the auto-provision flow entirely (`--yes` / `--auto-accept`). We
+   * treat "accept all defaults" as "don't prompt me for infrastructure
+   * creation" — auto-accept should never silently spin up managed
+   * resources. Users who want provisioning in CI should run
+   * `mastra env db create` in a separate step.
+   */
   autoAccept: boolean;
 }
 

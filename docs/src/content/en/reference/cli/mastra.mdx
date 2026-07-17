@@ -371,7 +371,7 @@ File to write. Defaults to `.env`.
 
 Manages databases attached to a project on Mastra platform. Databases are provisioned from a managed provider (for example Turso or Neon) and inject their connection env vars into deploys automatically.
 
-A database is either **environment-scoped** (its env vars only go to one environment) or **shared** (project-scoped: its env vars go to all environments). Pass the environment argument to work with environment-scoped databases; omit it for shared databases.
+A database is either **environment-scoped** (its env vars only go to one environment) or **shared** (project-scoped: its env vars go to all environments). Environment-scoped is the default for `mastra env db create` — pass an environment argument, or let the CLI pick or prompt for one. Pass `--shared` on create to attach a shared database instead. For other subcommands (`list`, `delete`, `keys`), pass the environment argument to work with environment-scoped databases and omit it for shared databases.
 
 Creating and deleting databases requires the `admin` role in the organization.
 
