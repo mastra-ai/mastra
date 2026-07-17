@@ -1,5 +1,5 @@
 import { Buffer } from 'node:buffer';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createStateSigner } from './state-signing';
 
 // ── State-secret deploy scenario (ported from github/state-secret-scenario) ──
@@ -36,6 +36,32 @@ describe('sign/verify round-trip', () => {
     const state = signer.sign('orgA', 'user1');
     const flipped = state.slice(0, -1) + (state.endsWith('A') ? 'B' : 'A');
     expect(signer.verify(flipped)).toBeNull();
+  });
+});
+
+describe('state age validation', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('rejects a state issued in the future', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-17T12:01:00Z'));
+    const signer = createStateSigner('secret');
+    const state = signer.sign('orgA', 'user1');
+
+    vi.setSystemTime(new Date('2026-07-17T12:00:00Z'));
+    expect(signer.verify(state)).toBeNull();
+  });
+
+  it('accepts the expiration boundary and rejects one millisecond beyond it', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-17T12:00:00Z'));
+    const signer = createStateSigner('secret');
+    const state = signer.sign('orgA', 'user1');
+
+    vi.advanceTimersByTime(10 * 60 * 1000);
+    expect(signer.verify(state)).toEqual({ orgId: 'orgA', userId: 'user1' });
+    vi.advanceTimersByTime(1);
+    expect(signer.verify(state)).toBeNull();
   });
 });
 

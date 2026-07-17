@@ -90,8 +90,9 @@ export function createStateSigner(secret?: string): StateSigner {
       try {
         const parsed = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as StatePayload;
         if (typeof parsed.orgId !== 'string' || typeof parsed.userId !== 'string') return null;
-        if (typeof parsed.issuedAt !== 'number') return null;
-        if (Date.now() - parsed.issuedAt > STATE_MAX_AGE_MS) return null;
+        if (typeof parsed.issuedAt !== 'number' || !Number.isFinite(parsed.issuedAt)) return null;
+        const age = Date.now() - parsed.issuedAt;
+        if (age < 0 || age > STATE_MAX_AGE_MS) return null;
         return { orgId: parsed.orgId, userId: parsed.userId };
       } catch {
         return null;
