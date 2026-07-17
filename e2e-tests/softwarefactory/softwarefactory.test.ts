@@ -29,7 +29,9 @@ describe('softwarefactory template', () => {
   beforeAll(async () => {
     const registry = inject('registry');
     const tag = inject('tag');
-    registryEnv = { npm_config_registry: registry };
+    // npm honors npm_config_registry; pnpm (which the CLI uses when invoked
+    // from a pnpm script) wants the pnpm_config_ prefix.
+    registryEnv = { npm_config_registry: registry, pnpm_config_registry: registry };
 
     workDir = await realpath(await mkdtemp(join(tmpdir(), 'sf-e2e-')));
     const templateDir = join(workDir, 'template');
