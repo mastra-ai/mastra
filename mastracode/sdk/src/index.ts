@@ -42,6 +42,7 @@ import {
   MastraPlatformExporter,
   SensitiveDataFilter,
 } from '@mastra/observability';
+import { PostgresStore } from '@mastra/pg';
 
 import { hasCredentialStoreProvider } from './agents/credential-resolver.js';
 import { getDynamicInstructions } from './agents/instructions.js';
@@ -193,6 +194,8 @@ export interface MastraCodeConfig {
    * LibSQL fallback — if the injected store fails, that's a hard error.
    */
   storage?: StorageConfig | MastraCompositeStore;
+  /** Backend for an injected custom storage instance. Inferred for LibSQLStore and PostgresStore. */
+  storageBackend?: 'libsql' | 'pg';
   /** Pre-built vector store instance for recall search. Skips the default vector store creation. */
   vector?: MastraVector;
   /** Observational memory scope. Default: auto-detected from env/config files, falls back to 'thread' */
@@ -280,6 +283,16 @@ function resolveCloudObservabilityConfig(
  *
  * See {@link bootLocalAgentController} (Case 3) and `mountAgentControllerOnMastra` (Cases 1 & 2).
  */
+function resolveInjectedStorageBackend(
+  storage: MastraCompositeStore,
+  configuredBackend?: 'libsql' | 'pg',
+): 'libsql' | 'pg' {
+  if (configuredBackend) return configuredBackend;
+  if (storage instanceof LibSQLStore) return 'libsql';
+  if (storage instanceof PostgresStore) return 'pg';
+  throw new Error('storageBackend is required when injecting a custom storage instance.');
+}
+
 export async function createMastraCodeAgentController(config?: MastraCodeConfig) {
   const cwd = config?.cwd ?? process.cwd();
   const homeDir = config?.homeDir ?? config?.initialState?.homeDir;
@@ -389,7 +402,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     : ((config?.storage as StorageConfig | undefined) ??
       getStorageConfig(project.rootPath, globalSettings.storage, configDir));
   const storageResult: StorageResult = injectedStorage
-    ? { storage: injectedStorage, backend: injectedStorage instanceof LibSQLStore ? 'libsql' : 'pg' }
+    ? { storage: injectedStorage, backend: resolveInjectedStorageBackend(injectedStorage, config?.storageBackend) }
     : await createStorage(storageConfig!);
   const storageWarning = storageResult.warning;
 
