@@ -56,6 +56,13 @@ export function ChatSessionConfigProvider({
         resourceId,
         sessionEnabled: projectSessionEnabled,
         projectPath,
+        // Session state consumed server-side: GitHub PR auto-subscription,
+        // the subscribe tools, and agent git-action auditing all gate on
+        // `githubProjectId` being present in session state.
+        projectState:
+          activeProject?.source === 'github' && activeProject.githubProjectId
+            ? { githubProjectId: activeProject.githubProjectId }
+            : undefined,
         baseUrl,
         kind: activeProject?.source === 'github' ? ('factory' as const) : ('user' as const),
         threadBasePath: '/threads' as const,

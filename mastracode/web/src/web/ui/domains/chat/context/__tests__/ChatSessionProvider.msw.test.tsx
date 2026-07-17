@@ -677,6 +677,20 @@ describe('ChatSessionProvider', () => {
       expect(screen.getByTestId('session-project-path')).toHaveTextContent('/tmp/mastracode-github-test');
       await waitFor(() => expect(requests).toContain('create'));
     });
+
+    it('binds a GitHub project session with the githubProjectId in session state', async () => {
+      const requests: string[] = [];
+      seedProject([githubProjectWithWorktree], githubProjectWithWorktree);
+      useAgentControllerHandlers([], requests);
+
+      renderFocusedProbe(<SessionContextProbe />);
+
+      await waitFor(() =>
+        expect(requests).toContain(
+          'setState:{"state":{"projectPath":"/tmp/mastracode-github-test","githubProjectId":"github-project-id"}}',
+        ),
+      );
+    });
   });
 
   describe('when route thread messages fail to load', () => {
