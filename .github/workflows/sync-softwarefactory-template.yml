@@ -49,6 +49,24 @@ jobs:
         # sources need unpublished APIs. Re-run after the alpha publish if so.
         run: node mastracode/create-softwarefactory/scripts/sync-template.mjs --out "$RUNNER_TEMP/template-out"
 
+      # Sources can legitimately be ahead of npm between release trains
+      # (version exists on npm but the sources need unpublished APIs), so the
+      # push is gated on the template actually working against PUBLISHED
+      # packages: install, typecheck, build. When this fails, the template
+      # repo simply stays at its last good sync — re-run this workflow
+      # (workflow_dispatch) after the next release train catches up.
+      # PR-time validation against the LOCAL package set lives in the
+      # e2e-softwarefactory job of e2e-tests.yml.
+      - name: Validate template against published packages
+        working-directory: ${{ runner.temp }}/template-out
+        env:
+          MASTRA_TELEMETRY_DISABLED: '1'
+        run: |
+          set -euo pipefail
+          npm install --no-audit --no-fund
+          npm run check
+          npm run build
+
       - name: Push to template repository
         env:
           GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
