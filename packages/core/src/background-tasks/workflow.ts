@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { InternalSpans } from '../observability';
 import type { SuspendOptions } from '../workflows';
-import { createStep, createWorkflow } from '../workflows/evented';
+import { createStep, createWorkflow } from '../workflows';
 import type { BackgroundTaskManager } from './manager';
 import type { BackgroundTaskStatus } from './types';
 import { BACKGROUND_TASK_WORKFLOW_ID } from './workflow-id';
@@ -34,18 +34,20 @@ const bodyOutputSchema = z.object({
 const WORKFLOW_STATUS_TO_PERSIST = ['suspended', 'pending', 'paused', 'waiting'];
 
 /**
- * Builds the per-task evented workflow that owns executor + retries.
+ * Builds the per-task workflow that owns executor + retries.
+ *
+ * Uses the standard (default) execution engine so the workflow runs entirely
+ * in-process on whatever host calls `run.start()`. This is critical for
+ * distributed deployments (Option E) where the background-task worker must
+ * execute tools locally — routing through the evented pipeline would send
+ * step execution to the orchestration worker / API, which don't have the
+ * internal workflow or task contexts registered.
  *
  * Shape: outer workflow runs an inner `[run-attempt, classify-outcome]`
  * workflow inside a `dountil` loop. `run-attempt` invokes the executor and
  * categorises the outcome; `classify-outcome` persists final state, advances
  * retry bookkeeping, and decides whether the loop is done. The dountil
  * predicate exits on `done === true`.
- *
- * The nested-workflow-as-loop-body path lives in
- * `processWorkflowEnd → processWorkflowLoop` and was fixed in PR #16312.
- * Suspend/resume routes through the runtime's nested-workflow auto-detect
- * (`processWorkflowStepRun` resume branch).
  *
  * Step bodies close over `manager` directly — the bg-tasks layer is the only
  * consumer of the `@internal` private fields.

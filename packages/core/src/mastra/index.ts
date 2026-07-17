@@ -1442,16 +1442,15 @@ export class Mastra<
     }
 
     this.#backgroundTaskConfig = config?.backgroundTasks;
-    // Auto-create the background-task manager only when this Mastra is
-    // running workers. When `workers: false`, the consumer of the
-    // background-tasks topic must live elsewhere — the producer can still
-    // construct its own `BackgroundTaskManager` and call `init()` directly
-    // (see redis-streams cross-process tests for that pattern). Initializing
-    // a worker here would compete with the dedicated worker process for
-    // dispatch events.
-    if (workersOption !== false) {
-      this.#ensureBackgroundTaskManager();
-    }
+    // Always create the background-task manager when background tasks are
+    // enabled. When workers are disabled (`workers: false`) or when a
+    // MASTRA_WORKERS filter is set that excludes 'backgroundTasks', the
+    // manager runs in 'producer' mode: it can enqueue/dispatch tasks and
+    // receive completion notifications via the fan-out result topic, but
+    // does NOT join the worker consumer group — so it won't compete with
+    // a dedicated BackgroundTaskWorker process for dispatch events.
+    const bgWorkerFiltered = this.#workerFilter && !this.#workerFilter.has('backgroundTasks');
+    this.#ensureBackgroundTaskManager(workersOption === false || bgWorkerFiltered ? 'producer' : undefined);
 
     this.#schedulerConfig = config?.scheduler;
     this.#notificationDispatchConfig = config?.notifications?.dispatch;
@@ -1665,12 +1664,15 @@ export class Mastra<
     }
   }
 
-  #ensureBackgroundTaskManager(): void {
+  #ensureBackgroundTaskManager(modeOverride?: 'producer' | 'worker' | 'full'): void {
     if (!this.#backgroundTaskConfig?.enabled || !this.#storage || this.#backgroundTaskManager) {
       return;
     }
 
-    const bgManager = new BackgroundTaskManager(this.#backgroundTaskConfig);
+    const managerConfig = modeOverride
+      ? { ...this.#backgroundTaskConfig, mode: modeOverride }
+      : this.#backgroundTaskConfig;
+    const bgManager = new BackgroundTaskManager(managerConfig);
     bgManager.__registerMastra(this);
     this.#backgroundTaskManager = bgManager;
 
@@ -2270,6 +2272,24 @@ export class Mastra<
           this.#logger?.debug(`Failed to register scorers from durable agent ${agentKey}:`, err);
         });
 
+      // Register durable-agent-owned tools with the background task manager
+      if (this.#backgroundTaskManager) {
+        Promise.resolve(underlyingAgent.listTools())
+          .then(agentTools => {
+            for (const [toolKey, tool] of Object.entries(agentTools || {})) {
+              if (tool && typeof (tool as any).execute === 'function') {
+                this.#registerToolWithBackgroundManager(toolKey, tool as ToolAction<any, any, any, any>);
+              }
+            }
+          })
+          .catch(err => {
+            this.#logger?.debug(
+              `Failed to register durable agent tools for background tasks (agent ${agentKey}):`,
+              err,
+            );
+          });
+      }
+
       return;
     }
 
@@ -2349,6 +2369,25 @@ export class Mastra<
       .catch(err => {
         this.#logger?.debug(`Failed to register scorers from agent ${agentKey}:`, err);
       });
+
+    // Register agent-owned tools with the background task manager's static
+    // executor registry so cross-process workers can resolve dispatched tasks
+    // for tools that are only attached to an agent (not top-level on Mastra).
+    // Dynamic (function-based) tools are resolved lazily and cannot be
+    // eagerly registered — only static tool records are wired here.
+    if (this.#backgroundTaskManager) {
+      Promise.resolve(mastraAgent.listTools())
+        .then(agentTools => {
+          for (const [toolKey, tool] of Object.entries(agentTools || {})) {
+            if (tool && typeof (tool as any).execute === 'function') {
+              this.#registerToolWithBackgroundManager(toolKey, tool as ToolAction<any, any, any, any>);
+            }
+          }
+        })
+        .catch(err => {
+          this.#logger?.debug(`Failed to register agent tools for background tasks (agent ${agentKey}):`, err);
+        });
+    }
 
     // Set up AgentChannels for manual adapter configurations
     const agentChannelsInstance = mastraAgent.getChannels();
