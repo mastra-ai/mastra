@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ToolMockMatcher, TOOL_MOCK_MISMATCH, TOOL_MOCK_EXHAUSTED } from '../tool-mocks';
+import { ToolMockMatcher, TOOL_MOCK_MISMATCH, TOOL_MOCK_EXHAUSTED, TOOL_MOCK_NOT_DECLARED } from '../tool-mocks';
 import type { ItemToolMock } from '../tool-mocks';
 
 describe('ToolMockMatcher', () => {
@@ -90,6 +90,23 @@ describe('ToolMockMatcher', () => {
     // the declared mock was never used → unconsumed, but no failure
     expect(report.unconsumed).toEqual([{ mockIndex: 0, toolName: 'mocked', args: {} }]);
     expect(report.failure).toBeUndefined();
+  });
+
+  it('denies undeclared tools without recording a live call', () => {
+    const matcher = new ToolMockMatcher([{ toolName: 'mocked', args: {}, output: 1 }], 'deny');
+
+    expect(matcher.resolve('other', { x: 1 })).toEqual({ kind: 'fail', code: TOOL_MOCK_NOT_DECLARED });
+    expect(matcher.report()).toMatchObject({
+      liveCalls: [],
+      failure: { code: TOOL_MOCK_NOT_DECLARED, toolName: 'other', args: { x: 1 } },
+    });
+  });
+
+  it('denies undeclared tools even when no mocks are declared', () => {
+    const matcher = new ToolMockMatcher(undefined, 'deny');
+
+    expect(matcher.hasMocks).toBe(false);
+    expect(matcher.resolve('other', {})).toEqual({ kind: 'fail', code: TOOL_MOCK_NOT_DECLARED });
   });
 
   it('reports unconsumed mocks without failing (report-only)', () => {

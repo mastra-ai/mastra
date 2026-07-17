@@ -131,6 +131,14 @@ console.log(`Status: ${summary2.status}`)
     isOptional: true,
     description: 'Maximum retries per item on failure. Defaults to `0` (no retries). Abort errors are never retried.',
   },
+  {
+    name: 'unmockedToolPolicy',
+    type: "'allow' | 'deny'",
+    isOptional: true,
+    defaultValue: "'allow'",
+    description:
+      'Controls undeclared agent tool calls. `allow` executes them live. `deny` fails the item with `TOOL_MOCK_NOT_DECLARED` before execution. An item-level value overrides this experiment default.',
+  },
 ]}
 />
 

@@ -573,6 +573,30 @@ export function createDatasetsTests({
         ).rejects.toThrow();
       });
 
+      it('unmockedToolPolicy round-trips through add, get, and SCD-2 update', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'item-unmocked-tool-policy' });
+
+        const item = await datasetsStorage.addItem({
+          datasetId: ds.id,
+          input: { q: 'hi' },
+          unmockedToolPolicy: 'deny',
+        });
+        expect(item.unmockedToolPolicy).toBe('deny');
+
+        const fetched = await datasetsStorage.getItemById({ id: item.id });
+        expect(fetched!.unmockedToolPolicy).toBe('deny');
+
+        const updated = await datasetsStorage.updateItem({ id: item.id, datasetId: ds.id, input: { q: 'hi2' } });
+        expect(updated.unmockedToolPolicy).toBe('deny');
+
+        const replaced = await datasetsStorage.updateItem({
+          id: item.id,
+          datasetId: ds.id,
+          unmockedToolPolicy: 'allow',
+        });
+        expect(replaced.unmockedToolPolicy).toBe('allow');
+      });
+
       it('updateItem creates new version row', async () => {
         const ds = await datasetsStorage.createDataset({ name: 'item-update' });
         const item = await datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'v1' } });

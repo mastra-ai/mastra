@@ -194,6 +194,7 @@ export class DatasetsMySQL extends DatasetsStorage {
         'source',
         'expectedTrajectory',
         'toolMocks',
+        'unmockedToolPolicy',
         'externalId',
       ],
     });
@@ -260,6 +261,7 @@ export class DatasetsMySQL extends DatasetsStorage {
         ? parseJSON<DatasetItem['expectedTrajectory']>(row.expectedTrajectory)
         : undefined,
       toolMocks: row.toolMocks ? parseJSON<DatasetItem['toolMocks']>(row.toolMocks) : undefined,
+      unmockedToolPolicy: row.unmockedToolPolicy ?? undefined,
       requestContext: row.requestContext ? parseJSON<Record<string, unknown>>(row.requestContext) : undefined,
       metadata: row.metadata ? parseJSON<Record<string, unknown>>(row.metadata) : undefined,
       source: row.source ? parseJSON<DatasetItem['source']>(row.source) : undefined,
@@ -284,6 +286,7 @@ export class DatasetsMySQL extends DatasetsStorage {
         ? parseJSON<DatasetItem['expectedTrajectory']>(row.expectedTrajectory)
         : undefined,
       toolMocks: row.toolMocks ? parseJSON<DatasetItem['toolMocks']>(row.toolMocks) : undefined,
+      unmockedToolPolicy: row.unmockedToolPolicy ?? undefined,
       requestContext: row.requestContext ? parseJSON<Record<string, unknown>>(row.requestContext) : undefined,
       metadata: row.metadata ? parseJSON<Record<string, unknown>>(row.metadata) : undefined,
       source: row.source ? parseJSON<DatasetItem['source']>(row.source) : undefined,
@@ -659,7 +662,7 @@ export class DatasetsMySQL extends DatasetsStorage {
 
       // Insert item (tenancy inherited from parent dataset)
       await connection.execute(
-        `INSERT INTO ${tableItemsName} (\`id\`, \`datasetId\`, \`datasetVersion\`, \`organizationId\`, \`projectId\`, \`validTo\`, \`isDeleted\`, \`input\`, \`groundTruth\`, \`metadata\`, \`createdAt\`, \`updatedAt\`) VALUES (?, ?, ?, ?, ?, NULL, 0, ?, ?, ?, ?, ?)`,
+        `INSERT INTO ${tableItemsName} (\`id\`, \`datasetId\`, \`datasetVersion\`, \`organizationId\`, \`projectId\`, \`validTo\`, \`isDeleted\`, \`input\`, \`groundTruth\`, \`unmockedToolPolicy\`, \`metadata\`, \`createdAt\`, \`updatedAt\`) VALUES (?, ?, ?, ?, ?, NULL, 0, ?, ?, ?, ?, ?, ?)`,
         [
           id,
           args.datasetId,
@@ -668,6 +671,7 @@ export class DatasetsMySQL extends DatasetsStorage {
           parentProjectId,
           jsonArg(args.input),
           jsonArg(args.groundTruth),
+          args.unmockedToolPolicy ?? null,
           jsonArg(args.metadata),
           transformToSqlValue(now),
           transformToSqlValue(now),
@@ -690,6 +694,7 @@ export class DatasetsMySQL extends DatasetsStorage {
         projectId: parentProjectId,
         input: args.input,
         groundTruth: args.groundTruth,
+        unmockedToolPolicy: args.unmockedToolPolicy,
         metadata: args.metadata,
         createdAt: now,
         updatedAt: now,
@@ -744,6 +749,7 @@ export class DatasetsMySQL extends DatasetsStorage {
       const mergedGroundTruth = args.groundTruth ?? existing.groundTruth;
       const mergedExpectedTrajectory = args.expectedTrajectory ?? existing.expectedTrajectory;
       const mergedToolMocks = args.toolMocks ?? existing.toolMocks;
+      const mergedUnmockedToolPolicy = args.unmockedToolPolicy ?? existing.unmockedToolPolicy;
       const mergedRequestContext = args.requestContext ?? existing.requestContext;
       const mergedMetadata = args.metadata ?? existing.metadata;
       const mergedSource = args.source ?? existing.source;
@@ -770,7 +776,7 @@ export class DatasetsMySQL extends DatasetsStorage {
 
       // Insert new row (tenancy inherited from parent dataset)
       await connection.execute(
-        `INSERT INTO ${tableItemsName} (\`id\`, \`datasetId\`, \`datasetVersion\`, \`externalId\`, \`organizationId\`, \`projectId\`, \`validTo\`, \`isDeleted\`, \`input\`, \`groundTruth\`, \`expectedTrajectory\`, \`toolMocks\`, \`requestContext\`, \`metadata\`, \`source\`, \`createdAt\`, \`updatedAt\`) VALUES (?, ?, ?, ?, ?, ?, NULL, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO ${tableItemsName} (\`id\`, \`datasetId\`, \`datasetVersion\`, \`externalId\`, \`organizationId\`, \`projectId\`, \`validTo\`, \`isDeleted\`, \`input\`, \`groundTruth\`, \`expectedTrajectory\`, \`toolMocks\`, \`unmockedToolPolicy\`, \`requestContext\`, \`metadata\`, \`source\`, \`createdAt\`, \`updatedAt\`) VALUES (?, ?, ?, ?, ?, ?, NULL, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           args.id,
           args.datasetId,
@@ -782,6 +788,7 @@ export class DatasetsMySQL extends DatasetsStorage {
           jsonArg(mergedGroundTruth),
           jsonArg(mergedExpectedTrajectory),
           jsonArg(mergedToolMocks),
+          mergedUnmockedToolPolicy ?? null,
           jsonArg(mergedRequestContext),
           jsonArg(mergedMetadata),
           jsonArg(mergedSource),
@@ -807,6 +814,7 @@ export class DatasetsMySQL extends DatasetsStorage {
         groundTruth: mergedGroundTruth,
         expectedTrajectory: mergedExpectedTrajectory,
         toolMocks: mergedToolMocks,
+        unmockedToolPolicy: mergedUnmockedToolPolicy,
         requestContext: mergedRequestContext,
         metadata: mergedMetadata,
         source: mergedSource,
@@ -872,7 +880,7 @@ export class DatasetsMySQL extends DatasetsStorage {
 
       // Insert tombstone (tenancy inherited from parent dataset)
       await connection.execute(
-        `INSERT INTO ${tableItemsName} (\`id\`, \`datasetId\`, \`datasetVersion\`, \`externalId\`, \`organizationId\`, \`projectId\`, \`validTo\`, \`isDeleted\`, \`input\`, \`groundTruth\`, \`expectedTrajectory\`, \`toolMocks\`, \`requestContext\`, \`metadata\`, \`source\`, \`createdAt\`, \`updatedAt\`) VALUES (?, ?, ?, ?, ?, ?, NULL, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO ${tableItemsName} (\`id\`, \`datasetId\`, \`datasetVersion\`, \`externalId\`, \`organizationId\`, \`projectId\`, \`validTo\`, \`isDeleted\`, \`input\`, \`groundTruth\`, \`expectedTrajectory\`, \`toolMocks\`, \`unmockedToolPolicy\`, \`requestContext\`, \`metadata\`, \`source\`, \`createdAt\`, \`updatedAt\`) VALUES (?, ?, ?, ?, ?, ?, NULL, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           id,
           datasetId,
@@ -884,6 +892,7 @@ export class DatasetsMySQL extends DatasetsStorage {
           jsonArg(existing.groundTruth),
           jsonArg(existing.expectedTrajectory),
           jsonArg(existing.toolMocks),
+          existing.unmockedToolPolicy ?? null,
           jsonArg(existing.requestContext),
           jsonArg(existing.metadata),
           jsonArg(existing.source),
@@ -1207,7 +1216,7 @@ export class DatasetsMySQL extends DatasetsStorage {
       const inserted = new Map<string, DatasetItem>();
       for (const { id, item } of plan.inserts) {
         await connection.execute(
-          `INSERT INTO ${tableItemsName} (\`id\`, \`datasetId\`, \`datasetVersion\`, \`externalId\`, \`organizationId\`, \`projectId\`, \`validTo\`, \`isDeleted\`, \`input\`, \`groundTruth\`, \`expectedTrajectory\`, \`toolMocks\`, \`requestContext\`, \`metadata\`, \`source\`, \`createdAt\`, \`updatedAt\`) VALUES (?, ?, ?, ?, ?, ?, NULL, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO ${tableItemsName} (\`id\`, \`datasetId\`, \`datasetVersion\`, \`externalId\`, \`organizationId\`, \`projectId\`, \`validTo\`, \`isDeleted\`, \`input\`, \`groundTruth\`, \`expectedTrajectory\`, \`toolMocks\`, \`unmockedToolPolicy\`, \`requestContext\`, \`metadata\`, \`source\`, \`createdAt\`, \`updatedAt\`) VALUES (?, ?, ?, ?, ?, ?, NULL, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             id,
             input.datasetId,
@@ -1219,6 +1228,7 @@ export class DatasetsMySQL extends DatasetsStorage {
             jsonArg(item.groundTruth),
             jsonArg(item.expectedTrajectory),
             jsonArg(item.toolMocks),
+            item.unmockedToolPolicy ?? null,
             jsonArg(item.requestContext),
             jsonArg(item.metadata),
             jsonArg(item.source),
@@ -1317,7 +1327,7 @@ export class DatasetsMySQL extends DatasetsStorage {
 
         // Insert tombstone (tenancy inherited from parent dataset)
         await connection.execute(
-          `INSERT INTO ${tableItemsName} (\`id\`, \`datasetId\`, \`datasetVersion\`, \`externalId\`, \`organizationId\`, \`projectId\`, \`validTo\`, \`isDeleted\`, \`input\`, \`groundTruth\`, \`expectedTrajectory\`, \`toolMocks\`, \`requestContext\`, \`metadata\`, \`source\`, \`createdAt\`, \`updatedAt\`) VALUES (?, ?, ?, ?, ?, ?, NULL, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO ${tableItemsName} (\`id\`, \`datasetId\`, \`datasetVersion\`, \`externalId\`, \`organizationId\`, \`projectId\`, \`validTo\`, \`isDeleted\`, \`input\`, \`groundTruth\`, \`expectedTrajectory\`, \`toolMocks\`, \`unmockedToolPolicy\`, \`requestContext\`, \`metadata\`, \`source\`, \`createdAt\`, \`updatedAt\`) VALUES (?, ?, ?, ?, ?, ?, NULL, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             item.id,
             input.datasetId,
@@ -1329,6 +1339,7 @@ export class DatasetsMySQL extends DatasetsStorage {
             jsonArg(item.groundTruth),
             jsonArg(item.expectedTrajectory),
             jsonArg(item.toolMocks),
+            item.unmockedToolPolicy ?? null,
             jsonArg(item.requestContext),
             jsonArg(item.metadata),
             jsonArg(item.source),
