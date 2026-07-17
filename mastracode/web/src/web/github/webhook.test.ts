@@ -112,12 +112,7 @@ describe('dispatchGithubWebhook', () => {
     );
 
     expect(result).toEqual({ delivered: 0, failed: 0, ignored: true });
-    expect(getRepositoryCollaboratorPermission).toHaveBeenCalledWith(
-      7,
-      'octo/hello',
-      'ada',
-      expect.any(AbortSignal),
-    );
+    expect(getRepositoryCollaboratorPermission).toHaveBeenCalledWith(7, 'octo/hello', 'ada', expect.any(AbortSignal));
     expect(listSubscriptions).not.toHaveBeenCalled();
   });
 
