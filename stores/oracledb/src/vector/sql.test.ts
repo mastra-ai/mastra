@@ -41,6 +41,15 @@ describe('Oracle vector SQL helpers', () => {
     expect(() => validateAccuracy(101)).toThrow(/between 1 and 100/i);
   });
 
+  it('rejects jaccard for HNSW/IVF indexes but allows it for exact search', () => {
+    expect(() => validateMetricForFormat('jaccard', 'bit', 'hnsw')).toThrow(/jaccard.*exact search/i);
+    expect(() => validateMetricForFormat('jaccard', 'bit', 'ivf')).toThrow(/jaccard.*exact search/i);
+    expect(validateMetricForFormat('jaccard', 'bit', 'none')).toBeUndefined();
+    expect(validateMetricForFormat('jaccard', 'bit')).toBeUndefined();
+    // hamming stays valid for HNSW/IVF bit indexes; only jaccard is exact-search-only.
+    expect(validateMetricForFormat('hamming', 'bit', 'hnsw')).toBeUndefined();
+  });
+
   it('builds IVF and HNSW vector index parameter clauses', () => {
     expect(buildVectorIndexParameterClause({ type: 'ivf' })).toBe('');
     expect(buildVectorIndexParameterClause({ type: 'ivf', ivf: { neighborPartitions: 4 } })).toBe(
@@ -51,6 +60,18 @@ describe('Oracle vector SQL helpers', () => {
       'PARAMETERS (type HNSW, neighbors 16, efconstruction 64)',
     );
     expect(() => buildVectorIndexParameterClause({ type: 'ivf', ivf: { neighborPartitions: 1.5 } })).toThrow(
+      /positive integer/i,
+    );
+  });
+
+  it('rejects an explicit 0 instead of silently treating it as unset', () => {
+    expect(() => buildVectorIndexParameterClause({ type: 'ivf', ivf: { neighborPartitions: 0 } })).toThrow(
+      /positive integer/i,
+    );
+    expect(() => buildVectorIndexParameterClause({ type: 'hnsw', hnsw: { neighbors: 0 } })).toThrow(
+      /positive integer/i,
+    );
+    expect(() => buildVectorIndexParameterClause({ type: 'hnsw', hnsw: { efConstruction: 0 } })).toThrow(
       /positive integer/i,
     );
   });

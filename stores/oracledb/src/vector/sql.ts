@@ -1,4 +1,4 @@
-import type { OracleMetric, OracleVectorFormat, OracleVectorIndexConfig } from './types';
+import type { OracleMetric, OracleVectorFormat, OracleVectorIndexConfig, OracleVectorIndexType } from './types';
 
 // Shared Oracle VECTOR SQL helpers used by both runtime queries and offline DDL export.
 // Keeping these in one place prevents the schema exporter from drifting away from OracleVector behavior.
@@ -56,30 +56,45 @@ export function vectorFormatToken(vectorFormat: OracleVectorFormat): string {
   }
 }
 
-export function validateMetricForFormat(metric: OracleMetric, vectorFormat: OracleVectorFormat): void {
+// `indexType` is optional so callers that only know the vector format (e.g. the offline schema
+// exporter) keep validating format/metric compatibility without being forced to resolve an index type.
+export function validateMetricForFormat(
+  metric: OracleMetric,
+  vectorFormat: OracleVectorFormat,
+  indexType?: OracleVectorIndexType,
+): void {
   if (vectorFormat === 'bit') {
     if (metric !== 'hamming' && metric !== 'jaccard') {
       throw new Error('bit vector indexes support only "hamming" or "jaccard" metrics');
     }
-    return;
+  } else if (metric === 'hamming' || metric === 'jaccard') {
+    throw new Error(`${metric} metric requires vectorFormat "bit"`);
   }
 
-  if (metric === 'hamming' || metric === 'jaccard') {
-    throw new Error(`${metric} metric requires vectorFormat "bit"`);
+  // Oracle only supports JACCARD for exact search (VECTOR_DISTANCE); CREATE VECTOR INDEX rejects it
+  // for HNSW/IVF at DDL time, so fail fast here instead of surfacing a database error later.
+  if (metric === 'jaccard' && (indexType === 'hnsw' || indexType === 'ivf')) {
+    throw new Error(
+      `jaccard metric is only supported for exact search; use index type "none" or a different metric for ${indexType} indexes`,
+    );
   }
 }
 
 export function buildVectorIndexParameterClause(indexConfig: OracleVectorIndexConfig): string {
   if (indexConfig.type === 'ivf') {
     const neighborPartitions = indexConfig.ivf?.neighborPartitions;
-    return neighborPartitions ? `PARAMETERS (type IVF, neighbor partitions ${validatePositiveInteger(neighborPartitions)})` : '';
+    // `!== undefined` (rather than truthy) so an explicit 0 reaches validatePositiveInteger and is
+    // rejected instead of being silently treated as "unset".
+    return neighborPartitions !== undefined
+      ? `PARAMETERS (type IVF, neighbor partitions ${validatePositiveInteger(neighborPartitions)})`
+      : '';
   }
 
   const parts: string[] = ['type HNSW'];
-  if (indexConfig.hnsw?.neighbors) {
+  if (indexConfig.hnsw?.neighbors !== undefined) {
     parts.push(`neighbors ${validatePositiveInteger(indexConfig.hnsw.neighbors)}`);
   }
-  if (indexConfig.hnsw?.efConstruction) {
+  if (indexConfig.hnsw?.efConstruction !== undefined) {
     parts.push(`efconstruction ${validatePositiveInteger(indexConfig.hnsw.efConstruction)}`);
   }
   return parts.length > 1 ? `PARAMETERS (${parts.join(', ')})` : '';

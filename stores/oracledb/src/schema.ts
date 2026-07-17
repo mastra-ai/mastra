@@ -481,11 +481,11 @@ function vectorIndexStatements(
   const vectorFormat = normalizeVectorFormat(vectorIndex.vectorFormat ?? 'vector');
   validateVectorFormatDimension(vectorFormat, dimension);
   const metric = normalizeMetric(vectorIndex.metric ?? defaultMetricForFormat(vectorFormat));
-  validateMetricForFormat(metric, vectorFormat);
   const tableName = tableNameForIndex(indexName, tablePrefix);
   const indexConfig: OracleVectorIndexConfig = { type: 'none', accuracy: 95, ...vectorIndex.indexConfig };
   const registryIndexConfig: OracleVectorIndexConfig =
     vectorIndex.buildIndex === false ? { type: 'none', accuracy: 95 } : indexConfig;
+  validateMetricForFormat(metric, vectorFormat, registryIndexConfig.type);
   const statements = [
     `CREATE TABLE ${qualifyName(tableName, schemaName)} (
   vector_id VARCHAR2(512) PRIMARY KEY,

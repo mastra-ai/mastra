@@ -81,12 +81,20 @@ function buildFieldExpression(path: string, value: unknown, collector: BindColle
   }
 
   const entries = Object.entries(value);
+  if (entries.length === 0) {
+    throw new Error(`Vector metadata filter for "${path}" cannot be an empty object`);
+  }
+
   const operatorEntries = entries.filter(([key]) => key.startsWith('$'));
   if (operatorEntries.length === 0) {
     return entries
       .map(([nestedKey, nestedValue]) => buildFieldExpression(`${path}.${nestedKey}`, nestedValue, collector))
       .map(expr => `(${expr})`)
       .join(' AND ');
+  }
+
+  if (operatorEntries.length < entries.length) {
+    throw new Error(`Unsupported mixed operator/nested-field filter for "${path}"`);
   }
 
   return operatorEntries
@@ -305,7 +313,13 @@ function assertPlainObject(value: unknown, operator: string): Record<string, unk
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value) && !(value instanceof RegExp);
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    !(value instanceof RegExp) &&
+    !(value instanceof Date)
+  );
 }
 
 function escapeLikePattern(value: string): string {

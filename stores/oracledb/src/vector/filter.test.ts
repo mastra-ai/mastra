@@ -193,4 +193,22 @@ describe('buildMetadataWhereClause', () => {
       /Unsupported \$elemMatch operator/i,
     );
   });
+
+  it('treats a bare Date value as direct equality instead of an empty nested object', () => {
+    const createdAt = new Date('2026-01-01T00:00:00.000Z');
+    const filter = buildMetadataWhereClause({ createdAt });
+
+    expect(filter.sql).toContain("JSON_VALUE(metadata, '$.createdAt' RETURNING VARCHAR2(4000) NULL ON ERROR) = :b0");
+    expect(filter.binds).toEqual({ b0: '2026-01-01T00:00:00.000Z' });
+  });
+
+  it('rejects a genuinely empty nested object instead of emitting an empty predicate', () => {
+    expect(() => buildMetadataWhereClause({ profile: {} })).toThrow(/cannot be an empty object/i);
+  });
+
+  it('rejects an object that mixes operator keys with plain nested fields', () => {
+    expect(() => buildMetadataWhereClause({ profile: { $exists: true, tier: 'gold' } as any })).toThrow(
+      /mixed operator\/nested-field/i,
+    );
+  });
 });

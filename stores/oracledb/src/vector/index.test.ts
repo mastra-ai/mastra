@@ -38,6 +38,14 @@ function cacheIndex(vector: OracleVector, overrides: Record<string, unknown> = {
   });
 }
 
+// Flushes microtasks until `condition` is true or `maxTicks` is exhausted. Used to observe an
+// in-flight mocked DDL call without depending on real timers.
+async function waitUntil(condition: () => boolean, maxTicks = 50): Promise<void> {
+  for (let i = 0; i < maxTicks && !condition(); i += 1) {
+    await Promise.resolve();
+  }
+}
+
 // Format names are part of the public OracleVector API and should fail fast on misuse.
 describe('OracleVector format validation', () => {
   it('defaults to exact search without a physical vector index', () => {
@@ -109,6 +117,51 @@ describe('OracleVector format validation', () => {
         buildIndex: false,
       }),
     ).rejects.toThrow(/vector.*bit.*int8/i);
+  });
+
+  it('rejects jaccard metric for HNSW/IVF index types before running any DDL', async () => {
+    const vector = createVector();
+
+    await expect(
+      vector.createIndex({
+        indexName: 'jaccard_hnsw_mismatch',
+        dimension: 8,
+        vectorFormat: 'bit',
+        metric: 'jaccard',
+        indexConfig: { type: 'hnsw' },
+      }),
+    ).rejects.toThrow(/jaccard.*exact search/i);
+
+    await expect(
+      vector.createIndex({
+        indexName: 'jaccard_ivf_mismatch',
+        dimension: 8,
+        vectorFormat: 'bit',
+        metric: 'jaccard',
+        indexConfig: { type: 'ivf' },
+      }),
+    ).rejects.toThrow(/jaccard.*exact search/i);
+  });
+
+  it('allows jaccard metric for exact search (index type "none")', async () => {
+    const execute = vi.fn(async () => ({ rows: [] }));
+    const commit = vi.fn(async () => undefined);
+    const vector = new OracleVector({
+      id: 'oracle-vector-jaccard-exact',
+      pool: {
+        getConnection: vi.fn(async () => ({ execute, commit, close: vi.fn(async () => undefined) })),
+      } as any,
+    });
+
+    await expect(
+      vector.createIndex({
+        indexName: 'jaccard_exact_ok',
+        dimension: 8,
+        vectorFormat: 'bit',
+        metric: 'jaccard',
+        indexConfig: { type: 'none' },
+      }),
+    ).resolves.toBeUndefined();
   });
 });
 
@@ -457,7 +510,9 @@ describe('OracleVector operation branches', () => {
             rows: [
               {
                 id: 'bit-1',
-                score: '0.75',
+                // Production projects a literal `0 AS "score"` for metadata-only queries (no queryVector);
+                // mirror that here so a regression that starts computing a real score is caught.
+                score: sql.includes('0 AS "score"') ? 0 : '0.75',
                 metadata: Buffer.from(JSON.stringify({ tag: 'x' })),
                 vector: Uint8Array.from([0b10101010]),
               },
@@ -521,7 +576,7 @@ describe('OracleVector operation branches', () => {
     expect(Array.from(executeManyBinds[0]!.embedding)).toEqual([0b10101010]);
     expect(metadataOnlyResults[0]).toMatchObject({
       id: 'bit-1',
-      score: 0.75,
+      score: 0,
       metadata: { tag: 'x' },
       vector: [1, 0, 1, 0, 1, 0, 1, 0],
     });
@@ -665,6 +720,32 @@ describe('OracleVector operation branches', () => {
     );
   });
 
+  it('rejects createIndex when the physical table already belongs to a different index name after identifier normalization', async () => {
+    // "FOO" and "foo" collapse onto the same physical table name once identifiers are normalized to
+    // uppercase, so the registry already has a row for "foo" pointing at that table.
+    const connection = {
+      execute: vi.fn(async (sql: string) => {
+        if (sql.includes('FROM all_tables')) return { rows: [{ exists: 1 }] };
+        if (sql.includes('index_name AS "indexName"') && sql.includes('table_name AS "tableName"')) {
+          // No exact/legacy registry row for the incoming logical name "FOO".
+          return { rows: [] };
+        }
+        if (sql.includes('index_name AS "indexName"') && sql.includes('WHERE table_name = :tableName')) {
+          // The physical table is already claimed by a different logical index name.
+          return { rows: [{ indexName: 'foo' }] };
+        }
+        return { rows: [], rowsAffected: 1 };
+      }),
+      commit: vi.fn(async () => undefined),
+      rollback: vi.fn(async () => undefined),
+    };
+    const { vector } = createVectorWithConnection(connection);
+
+    await expect(vector.createIndex({ indexName: 'FOO', dimension: 3 })).rejects.toThrow(
+      /collides with existing index "foo"/i,
+    );
+  });
+
   it('recreates missing physical tables and covers build and rebuild transitions', async () => {
     const registryRow = {
       indexName: 'missing_table_index',
@@ -703,6 +784,140 @@ describe('OracleVector operation branches', () => {
     expect(sql).toContain('CREATE VECTOR INDEX "MASTRA_VEC_MISSING_TABLE_INDEX_VECTOR_IDX"');
     expect(sql).toContain('DROP INDEX "MASTRA_VEC_MISSING_TABLE_INDEX_VECTOR_IDX"');
     expect(sql).toContain('UPDATE "MASTRA_VECTOR_INDEXES"');
+  });
+
+  it('serializes concurrent buildIndex calls for the same index name instead of interleaving DDL', async () => {
+    const registryRow = {
+      indexName: 'lock_build_index',
+      tableName: 'MASTRA_VEC_LOCK_BUILD_INDEX',
+      dimension: 3,
+      metric: 'cosine',
+      indexType: 'none',
+      vectorFormat: 'vector',
+      accuracy: 95,
+    };
+
+    let activeBuilds = 0;
+    let maxConcurrentBuilds = 0;
+    // Each in-flight CREATE VECTOR INDEX call parks itself here until the test resolves it, so we can
+    // observe whether a second buildIndex call reaches the DDL before the first one has finished.
+    const pendingBuilds: Array<() => void> = [];
+
+    const execute = vi.fn(async (sql: string) => {
+      if (sql.includes('index_name AS "indexName"') && sql.includes('table_name AS "tableName"')) {
+        return { rows: [registryRow] };
+      }
+      if (sql.includes('CREATE VECTOR INDEX')) {
+        activeBuilds += 1;
+        maxConcurrentBuilds = Math.max(maxConcurrentBuilds, activeBuilds);
+        await new Promise<void>(resolve => pendingBuilds.push(() => resolve()));
+        activeBuilds -= 1;
+        return { rows: [] };
+      }
+      return { rows: [], rowsAffected: 1 };
+    });
+    const connection = { execute, commit: vi.fn(async () => undefined), rollback: vi.fn(async () => undefined) };
+    const { vector } = createVectorWithConnection(connection);
+
+    const first = vector.buildIndex({ indexName: 'lock_build_index', indexConfig: { type: 'hnsw' } });
+    const second = vector.buildIndex({ indexName: 'lock_build_index', indexConfig: { type: 'ivf' } });
+
+    await waitUntil(() => pendingBuilds.length >= 1);
+    expect(pendingBuilds).toHaveLength(1); // the second call must stay blocked behind the per-index lock
+
+    pendingBuilds[0]!();
+    await first;
+
+    await waitUntil(() => pendingBuilds.length >= 2);
+    expect(pendingBuilds).toHaveLength(2);
+
+    pendingBuilds[1]!();
+    await second;
+
+    expect(maxConcurrentBuilds).toBe(1);
+  });
+
+  it('serializes concurrent rebuildIndex calls for the same index name instead of interleaving DDL', async () => {
+    let registryRow = {
+      indexName: 'lock_rebuild_index',
+      tableName: 'MASTRA_VEC_LOCK_REBUILD_INDEX',
+      dimension: 3,
+      metric: 'cosine',
+      indexType: 'hnsw',
+      vectorFormat: 'vector',
+      accuracy: 95,
+    };
+
+    let activeBuilds = 0;
+    let maxConcurrentBuilds = 0;
+    const pendingBuilds: Array<() => void> = [];
+
+    const execute = vi.fn(async (sql: string, binds: Record<string, unknown> = {}) => {
+      if (sql.includes('index_name AS "indexName"') && sql.includes('table_name AS "tableName"')) {
+        return { rows: [registryRow] };
+      }
+      if (sql.includes('DROP INDEX')) return { rows: [] };
+      if (sql.includes('CREATE VECTOR INDEX')) {
+        activeBuilds += 1;
+        maxConcurrentBuilds = Math.max(maxConcurrentBuilds, activeBuilds);
+        await new Promise<void>(resolve => pendingBuilds.push(() => resolve()));
+        activeBuilds -= 1;
+        return { rows: [] };
+      }
+      if (sql.includes('UPDATE "MASTRA_VECTOR_INDEXES"')) {
+        registryRow = { ...registryRow, metric: String(binds.metric), indexType: String(binds.index_type) };
+        return { rows: [], rowsAffected: 1 };
+      }
+      return { rows: [], rowsAffected: 1 };
+    });
+    const connection = { execute, commit: vi.fn(async () => undefined), rollback: vi.fn(async () => undefined) };
+    const { vector } = createVectorWithConnection(connection);
+
+    const first = vector.rebuildIndex({ indexName: 'lock_rebuild_index', indexConfig: { type: 'hnsw' } });
+    const second = vector.rebuildIndex({ indexName: 'lock_rebuild_index', indexConfig: { type: 'ivf' } });
+
+    await waitUntil(() => pendingBuilds.length >= 1);
+    expect(pendingBuilds).toHaveLength(1); // the second rebuild must stay blocked behind the per-index lock
+
+    pendingBuilds[0]!();
+    await first;
+
+    await waitUntil(() => pendingBuilds.length >= 2);
+    expect(pendingBuilds).toHaveLength(2);
+
+    pendingBuilds[1]!();
+    await second;
+
+    expect(maxConcurrentBuilds).toBe(1);
+  });
+
+  it('rejects rebuildIndex when the vector index still exists after DROP INDEX instead of updating the registry', async () => {
+    const duplicateIndexError = Object.assign(new Error('ORA-00955: name is already used by an existing object'), {
+      errorNum: 955,
+    });
+    const registryRow = {
+      indexName: 'rebuild_race_index',
+      tableName: 'MASTRA_VEC_REBUILD_RACE_INDEX',
+      dimension: 3,
+      metric: 'cosine',
+      indexType: 'hnsw',
+      vectorFormat: 'vector',
+      accuracy: 95,
+    };
+    const execute = vi.fn(async (sql: string) => {
+      if (sql.includes('index_name AS "indexName"') && sql.includes('table_name AS "tableName"')) {
+        return { rows: [registryRow] };
+      }
+      if (sql.includes('DROP INDEX')) return { rows: [] };
+      if (sql.includes('CREATE VECTOR INDEX')) throw duplicateIndexError;
+      return { rows: [], rowsAffected: 1 };
+    });
+    const connection = { execute, commit: vi.fn(async () => undefined), rollback: vi.fn(async () => undefined) };
+    const { vector } = createVectorWithConnection(connection);
+
+    await expect(vector.rebuildIndex({ indexName: 'rebuild_race_index' })).rejects.toThrow(/already exists/i);
+
+    expect(execute.mock.calls.some(call => String(call[0]).includes('UPDATE "MASTRA_VECTOR_INDEXES"'))).toBe(false);
   });
 
   it('normalizes query rows from string, null, object, array, and unsupported vector payloads', async () => {

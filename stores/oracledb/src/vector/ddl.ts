@@ -113,7 +113,7 @@ export class IndexRegistry {
       const builtConfig = buildIndex ? mergedConfig : unbuiltConfig;
       validateDimension(dimension);
       validateVectorFormatDimension(normalizedFormat, dimension);
-      validateMetricForFormat(normalizedMetric, normalizedFormat);
+      validateMetricForFormat(normalizedMetric, normalizedFormat, mergedConfig.type);
 
       await this.withIndexLock(logicalIndexName, () => withConnection(async connection => {
         await this.ensureRegistry(connection);
@@ -175,6 +175,23 @@ export class IndexRegistry {
 
         const tableName = tableNameForIndex(logicalIndexName, this.tablePrefix);
         if (await this.vectorTableExists(connection, tableName)) {
+          // Oracle identifier normalization can collapse two distinct logical names (e.g. "foo" and
+          // "FOO") onto the same physical table. Check the registry for a row already claiming this
+          // table under a different index name so the error explains the real cause instead of the
+          // generic "registry metadata is missing" message below.
+          const collidingIndexName = await this.findRegistryEntryByTableName(connection, tableName);
+          if (collidingIndexName && collidingIndexName !== logicalIndexName) {
+            throw asMastraError(
+              'CREATE_INDEX',
+              'IDENTIFIER_COLLISION',
+              { indexName: logicalIndexName, tableName, collidingIndexName },
+              new Error(
+                `Logical index name "${logicalIndexName}" collides with existing index "${collidingIndexName}" after Oracle identifier normalization (both map to table "${tableName}"). Choose a different index name.`,
+              ),
+              ErrorCategory.USER,
+            );
+          }
+
           // A physical table without registry metadata is unsafe because describe/query cannot validate dimensions.
           throw asMastraError(
             'CREATE_INDEX',
@@ -224,8 +241,10 @@ export class IndexRegistry {
   }
 
   async buildIndex(withConnection: WithConnection, { indexName, metric, indexConfig }: OracleBuildIndexParams): Promise<void> {
-    return withConnection(async connection => {
-      const logicalIndexName = normalizeLogicalIndexName(indexName);
+    const logicalIndexName = normalizeLogicalIndexName(indexName);
+    // Locked like createIndex/deleteIndex so a concurrent build/rebuild on the same logical index
+    // cannot interleave DROP/CREATE VECTOR INDEX statements against each other.
+    return this.withIndexLock(logicalIndexName, () => withConnection(async connection => {
       const indexInfo = await this.getIndexMetadata(connection, logicalIndexName);
       const existingBuiltConfig = indexInfo.indexType === 'none' ? undefined : {
         type: indexInfo.indexType,
@@ -237,7 +256,7 @@ export class IndexRegistry {
       if (mergedConfig.type === 'none') return;
 
       const normalizedMetric = normalizeMetric(metric ?? indexInfo.metric);
-      validateMetricForFormat(normalizedMetric, indexInfo.vectorFormat);
+      validateMetricForFormat(normalizedMetric, indexInfo.vectorFormat, mergedConfig.type);
       const createdIndex = await this.createVectorIndex(connection, logicalIndexName, normalizedMetric, mergedConfig, indexInfo.tableName);
       if (!createdIndex) {
         const explicitlyRequestedConfig = metric !== undefined || indexConfig !== undefined;
@@ -254,27 +273,35 @@ export class IndexRegistry {
         indexType: mergedConfig.type,
         accuracy: mergedConfig.accuracy ?? 95,
       });
-    }).catch(error => {
+    })).catch(error => {
       if (error instanceof MastraError) throw error;
       throw asMastraError('BUILD_INDEX', 'FAILED', { indexName }, error);
     });
   }
 
   async rebuildIndex(withConnection: WithConnection, { indexName, metric, indexConfig }: OracleRebuildIndexParams): Promise<void> {
-    return withConnection(async connection => {
-      const logicalIndexName = normalizeLogicalIndexName(indexName);
+    const logicalIndexName = normalizeLogicalIndexName(indexName);
+    // Locked like createIndex/deleteIndex so a concurrent build/rebuild on the same logical index
+    // cannot interleave DROP/CREATE VECTOR INDEX statements against each other.
+    return this.withIndexLock(logicalIndexName, () => withConnection(async connection => {
       const indexInfo = await this.getIndexMetadata(connection, logicalIndexName);
       const normalizedMetric = normalizeMetric(metric ?? indexInfo.metric);
-      validateMetricForFormat(normalizedMetric, indexInfo.vectorFormat);
       const mergedConfig = this.mergeIndexConfig(indexConfig ?? {
         type: indexInfo.indexType,
         accuracy: indexInfo.accuracy,
       });
+      validateMetricForFormat(normalizedMetric, indexInfo.vectorFormat, mergedConfig.type);
 
       if (mergedConfig.type === 'none') return;
 
       await this.dropVectorIndex(connection, logicalIndexName, indexInfo.tableName);
-      await this.createVectorIndex(connection, logicalIndexName, normalizedMetric, mergedConfig, indexInfo.tableName);
+      const createdIndex = await this.createVectorIndex(connection, logicalIndexName, normalizedMetric, mergedConfig, indexInfo.tableName);
+      if (!createdIndex) {
+        // The DROP above should have cleared the way for a fresh CREATE VECTOR INDEX; a `false`
+        // return means the index still exists (e.g. a racing writer recreated it), so the registry
+        // must not be advanced to describe a physical index that does not match this config.
+        throw vectorIndexAlreadyExistsError('REBUILD_INDEX', logicalIndexName, indexInfo);
+      }
       await this.updateRegistryIndexConfig(connection, logicalIndexName, normalizedMetric, mergedConfig);
       this.cacheIndexMetadata(logicalIndexName, {
         ...indexInfo,
@@ -282,7 +309,7 @@ export class IndexRegistry {
         indexType: mergedConfig.type,
         accuracy: mergedConfig.accuracy ?? 95,
       });
-    }).catch(error => {
+    })).catch(error => {
       if (error instanceof MastraError) throw error;
       throw asMastraError('REBUILD_INDEX', 'FAILED', { indexName }, error);
     });
@@ -633,6 +660,23 @@ export class IndexRegistry {
     };
   }
 
+  // Looks up a registry row by physical table name rather than logical index name, so createIndex can
+  // tell an identifier-normalization collision (table claimed by a different index_name) apart from a
+  // genuinely orphaned physical table with no registry row at all.
+  async findRegistryEntryByTableName(connection: Connection, tableName: string): Promise<string | null> {
+    const registryResult = await connection.execute<ObjectRow>(
+      `
+      SELECT index_name AS "indexName"
+      FROM ${this.qualifiedRegistryTable()}
+      WHERE table_name = :tableName
+      FETCH FIRST 1 ROWS ONLY`,
+      { tableName },
+      executeOptions(),
+    );
+    const registryRow = rows(registryResult)[0];
+    return registryRow ? String(registryRow.indexName) : null;
+  }
+
   async vectorTableExists(connection: Connection, tableName: string): Promise<boolean> {
     const normalizedTableName = normalizeIdentifier(tableName, 'table name');
     const binds: BindParameters = { tableName: normalizedTableName };
@@ -747,7 +791,7 @@ function vectorIndexRegistryConfigMatches(
 }
 
 function vectorIndexAlreadyExistsError(
-  operation: 'BUILD_INDEX' | 'CREATE_INDEX',
+  operation: 'BUILD_INDEX' | 'CREATE_INDEX' | 'REBUILD_INDEX',
   indexName: string,
   indexInfo: Pick<OracleIndexStats, 'metric' | 'indexType'>,
 ): MastraError {
