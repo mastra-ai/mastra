@@ -16,8 +16,7 @@
     "meta-llama/Llama-4-Scout-17B-16E-Instruct",
     "moonshotai/Kimi-K2.5",
     "moonshotai/Kimi-K2.6",
-    "moonshotai/Kimi-K2.7-Code",
-    "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning"
+    "moonshotai/Kimi-K2.7-Code"
   ],
   "temperature": [
     "MiniMaxAI/MiniMax-M2.5",
@@ -47,7 +46,6 @@
     "moonshotai/Kimi-K2.6",
     "nvidia/Llama-3.3-Nemotron-Super-49B-v1.5",
     "nvidia/Nemotron-3-Nano-30B-A3B",
-    "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning",
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b",
     "zai-org/GLM-4.6",
@@ -85,7 +83,6 @@
     "moonshotai/Kimi-K2.6",
     "moonshotai/Kimi-K2.7-Code",
     "nvidia/Llama-3.3-Nemotron-Super-49B-v1.5",
-    "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning",
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b",
     "zai-org/GLM-4.6",

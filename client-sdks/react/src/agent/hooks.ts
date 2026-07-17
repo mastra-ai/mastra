@@ -750,6 +750,9 @@ export const useChat = ({
 
     const resolvedSignalId = signalId ?? uuid();
     const messageContents = getSignalContents(coreUserMessages);
+    // RequestContext serializes to a plain record via its toJSON(), but the class has no
+    // index signature, so it isn't assignable to the generated `Record<string, unknown>` body type.
+    const requestContextRecord = resolvedRequestContext as Record<string, unknown> | undefined;
     const streamOptions = {
       maxSteps,
       modelSettings: {
@@ -762,7 +765,7 @@ export const useChat = ({
         topP,
       },
       instructions,
-      requestContext: resolvedRequestContext,
+      requestContext: requestContextRecord,
       providerOptions: providerOptions as any,
       requireToolApproval,
       tracingOptions,
@@ -778,7 +781,7 @@ export const useChat = ({
         ifIdle: {
           streamOptions: {
             ...signalContinuationOptions,
-            requestContext: resolvedRequestContext,
+            requestContext: requestContextRecord,
             clientTools: resolvedClientTools,
           },
         },

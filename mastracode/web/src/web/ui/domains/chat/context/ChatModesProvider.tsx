@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
-import { useAgentControllerModes } from '../hooks/useAgentControllerModes';
-import { useSwitchAgentControllerModeMutation } from '../hooks/useAgentControllerStateMutations';
+import { useAgentControllerModes } from '../../../../../shared/hooks/useAgentControllerModes';
+import { useSwitchAgentControllerModeMutation } from '../../../../../shared/hooks/useAgentControllerStateMutations';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { ChatModesContext } from './ChatModesContext';
 import type { ChatModesApi } from './ChatModesContext';

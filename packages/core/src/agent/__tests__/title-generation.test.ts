@@ -2951,3 +2951,150 @@ describe('sub-agent title generation propagation (#18738)', () => {
     expect(subAgentGenTitle).not.toHaveBeenCalled();
   });
 });
+
+describe('onTitleGenerated callback', () => {
+  function createMockModels() {
+    const agentModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text' as const, text: 'Agent response' }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start' as const, warnings: [] },
+          { type: 'response-metadata' as const, id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-start' as const, id: 'text-1' },
+          { type: 'text-delta' as const, id: 'text-1', delta: 'Agent response' },
+          { type: 'text-end' as const, id: 'text-1' },
+          {
+            type: 'finish' as const,
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ]),
+      }),
+    });
+
+    const titleModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+        content: [{ type: 'text' as const, text: 'Generated Title' }],
+        warnings: [],
+      }),
+    });
+
+    return { agentModel, titleModel };
+  }
+
+  function createAgentWithTitleGen(agentModel: MockLanguageModelV2, titleModel: MockLanguageModelV2) {
+    const mockMemory = new MockMemory();
+    mockMemory.getMergedThreadConfig = () => ({
+      generateTitle: { model: titleModel },
+    });
+
+    const agent = new Agent({
+      id: 'on-title-gen-test',
+      name: 'OnTitleGenerated Test',
+      instructions: 'test agent',
+      model: agentModel,
+      memory: mockMemory,
+    });
+
+    return { agent, mockMemory };
+  }
+
+  it('should fire onTitleGenerated after title is persisted via generate()', async () => {
+    const { agentModel, titleModel } = createMockModels();
+    const { agent } = createAgentWithTitleGen(agentModel, titleModel);
+
+    let receivedTitle: string | undefined;
+
+    await agent.generate('Hello', {
+      memory: {
+        resource: 'user-1',
+        thread: { id: 'thread-cb-1', title: '' },
+        onTitleGenerated: title => {
+          receivedTitle = title;
+        },
+      },
+    });
+
+    // Title generation is fire-and-forget, wait for it
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    expect(receivedTitle).toBe('Generated Title');
+  });
+
+  it('should fire onTitleGenerated after title is persisted via stream()', async () => {
+    const { agentModel, titleModel } = createMockModels();
+    const { agent } = createAgentWithTitleGen(agentModel, titleModel);
+
+    let receivedTitle: string | undefined;
+
+    const result = await agent.stream('Hello', {
+      memory: {
+        resource: 'user-1',
+        thread: { id: 'thread-cb-2', title: '' },
+        onTitleGenerated: title => {
+          receivedTitle = title;
+        },
+      },
+    });
+
+    // Drain the stream to trigger onFinish
+    for await (const _ of result.fullStream) {
+      // drain
+    }
+
+    // Title generation is fire-and-forget, wait for it
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    expect(receivedTitle).toBe('Generated Title');
+  });
+
+  it('should not fire onTitleGenerated when thread already has a title', async () => {
+    const { agentModel, titleModel } = createMockModels();
+    const { agent } = createAgentWithTitleGen(agentModel, titleModel);
+
+    let callbackFired = false;
+
+    await agent.generate('Hello', {
+      memory: {
+        resource: 'user-1',
+        thread: { id: 'thread-cb-3', title: 'Existing Title' },
+        onTitleGenerated: () => {
+          callbackFired = true;
+        },
+      },
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    expect(callbackFired).toBe(false);
+  });
+
+  it('should not crash when onTitleGenerated throws', async () => {
+    const { agentModel, titleModel } = createMockModels();
+    const { agent } = createAgentWithTitleGen(agentModel, titleModel);
+
+    await agent.generate('Hello', {
+      memory: {
+        resource: 'user-1',
+        thread: { id: 'thread-cb-4', title: '' },
+        onTitleGenerated: () => {
+          throw new Error('Callback error');
+        },
+      },
+    });
+
+    // Should not throw — error is caught in the .catch() handler
+    await new Promise(resolve => setTimeout(resolve, 200));
+  });
+});
