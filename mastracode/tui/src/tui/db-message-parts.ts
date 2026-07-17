@@ -204,6 +204,34 @@ export function getSignalContentsText(message: MastraDBMessage): string {
   return contentsToText(getSignalView(message).contents);
 }
 
+export interface UserSignalView {
+  message: string;
+  imageCount: number;
+  fileCount: number;
+}
+
+/** Fields needed to render a user-kind signal as a user message. */
+export function getUserSignalView(message: MastraDBMessage): UserSignalView {
+  const contents = getSignalView(message).contents;
+  if (typeof contents === 'string') {
+    return { message: contents, imageCount: 0, fileCount: 0 };
+  }
+
+  let imageCount = 0;
+  let fileCount = 0;
+  for (const part of contents) {
+    if (part.type !== 'file') continue;
+    if (part.mediaType.startsWith('image/')) imageCount++;
+    else fileCount++;
+  }
+
+  return {
+    message: contentsToText(contents),
+    imageCount,
+    fileCount,
+  };
+}
+
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }

@@ -14,13 +14,17 @@ import { SystemReminderComponent } from '../../components/system-reminder.js';
 import { TemporalGapComponent } from '../../components/temporal-gap.js';
 import { ToolExecutionComponentEnhanced } from '../../components/tool-execution-enhanced.js';
 import { UserMessageComponent } from '../../components/user-message.js';
-import { addPendingUserMessage, addUserMessage } from '../../render-messages.js';
+import { addPendingUserMessage, addUserMessage as renderUserMessage } from '../../render-messages.js';
 import type { TUIState } from '../../state.js';
 import { handleMessageEnd, handleMessageStart, handleMessageUpdate } from '../message.js';
 import type { EventHandlerContext } from '../types.js';
 
 function visibleChildren(state: TUIState) {
   return state.chatContainer.children.filter(child => !isChatBoundarySpacer(child));
+}
+
+function addUserMessage(state: TUIState, message: MastraDBMessage): void {
+  renderUserMessage(state, message);
 }
 
 type Part = Exclude<MastraDBMessage['content'], string>['parts'][number];
@@ -129,7 +133,7 @@ describe('handleMessageStart signals', () => {
 
     ctx = {
       state,
-      addUserMessage: (message: MastraDBMessage) => addUserMessage(state, message),
+      addUserMessage: message => renderUserMessage(state, message),
       addChildBeforeFollowUps: (child: any) => {
         state.chatContainer.addChild(child);
       },
@@ -162,6 +166,35 @@ describe('handleMessageStart signals', () => {
     const rendered = stripAnsi((visibleChildren(state)[0] as ReactiveSignalComponent).render(80).join('\n'));
     expect(rendered).toContain('Signal: build-status');
     expect(rendered).toContain('Build is still running');
+  });
+
+  it('confirms pending steering from the delivered DB-native user signal', () => {
+    addPendingUserMessage(state, 'steer-1', 'Change direction', [{ data: 'image-data', mimeType: 'image/png' }], {
+      isInterjection: true,
+    });
+
+    handleMessageStart(
+      ctx,
+      signalMessage(
+        {
+          id: 'steer-1',
+          type: 'user',
+          contents: [
+            { type: 'text', text: 'Change direction' },
+            { type: 'file', data: 'image-data', mediaType: 'image/png' },
+          ],
+          attributes: { delivery: 'while-active' },
+        },
+        'steer-1',
+      ),
+    );
+
+    expect(state.pendingSignalMessageComponentsById.has('steer-1')).toBe(false);
+    const component = state.messageComponentsById.get('steer-1');
+    expect(component).toBeInstanceOf(UserMessageComponent);
+    const rendered = stripAnsi((component as UserMessageComponent).render(100).join('\n'));
+    expect(rendered).toContain('steer');
+    expect(rendered).toContain('[1 image] Change direction');
   });
 
   it('does not render streamed GitHub subscribe operation signals', () => {
@@ -446,7 +479,7 @@ describe('handleMessageUpdate assistant streaming', () => {
 
     ctx = {
       state,
-      addUserMessage: (message: MastraDBMessage) => addUserMessage(state, message),
+      addUserMessage: message => renderUserMessage(state, message),
       addChildBeforeFollowUps: (child: any) => {
         state.chatContainer.addChild(child);
       },
