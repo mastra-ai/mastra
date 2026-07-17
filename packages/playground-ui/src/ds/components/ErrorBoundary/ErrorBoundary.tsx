@@ -136,22 +136,22 @@ function DefaultErrorFallback({
       role="alert"
       className={cn(
         '@container flex w-full items-center justify-center',
-        isInline ? 'py-6 px-4' : 'h-full min-h-[240px] flex-1 py-10 px-6',
+        isInline ? 'px-4 py-6' : 'h-full min-h-60 flex-1 px-6 py-10',
         className,
       )}
     >
       <div
         className={cn(
           'flex flex-col items-center text-center',
-          isInline ? 'gap-3 max-w-md' : 'gap-4 max-w-2xl @md:gap-5 @lg:gap-6',
+          isInline ? 'max-w-md gap-3' : 'max-w-2xl gap-4 @md:gap-5 @lg:gap-6',
         )}
       >
         <div
           className={cn(
-            'rounded-full bg-accent2/10 text-accent2 flex items-center justify-center',
+            'flex items-center justify-center rounded-full bg-accent2/10 text-accent2',
             isInline
-              ? 'h-10 w-10 [&>svg]:h-5 [&>svg]:w-5'
-              : 'h-14 w-14 [&>svg]:h-7 [&>svg]:w-7 @md:h-16 @md:w-16 @md:[&>svg]:h-8 @md:[&>svg]:w-8 @lg:h-20 @lg:w-20 @lg:[&>svg]:h-10 @lg:[&>svg]:w-10',
+              ? 'size-10 [&>svg]:size-5'
+              : 'size-14 @md:size-16 @lg:size-20 [&>svg]:size-7 @md:[&>svg]:size-8 @lg:[&>svg]:size-10',
           )}
         >
           <AlertTriangle />
@@ -169,23 +169,23 @@ function DefaultErrorFallback({
         </p>
         <p
           className={cn(
-            'font-mono text-neutral4 break-words rounded-md bg-surface3 px-3 py-2',
+            'rounded-md bg-surface3 px-3 py-2 font-mono break-words text-neutral4',
             isInline ? 'text-ui-xs' : 'text-ui-sm',
           )}
         >
           {error.message}
         </p>
         <div className={cn('flex flex-wrap items-center justify-center gap-2', isInline ? 'mt-1' : 'mt-2')}>
-          <Button variant="primary" size={isInline ? 'sm' : 'default'} onClick={reset}>
+          <Button variant="primary" size={isInline ? 'sm' : 'lg'} onClick={reset}>
             Try again
           </Button>
-          <Button variant="default" size={isInline ? 'sm' : 'default'} onClick={() => window.location.reload()}>
+          <Button variant="default" size={isInline ? 'sm' : 'lg'} onClick={() => window.location.reload()}>
             Reload page
           </Button>
           <Button
             as="a"
             variant="default"
-            size={isInline ? 'sm' : 'default'}
+            size={isInline ? 'sm' : 'lg'}
             href="https://github.com/mastra-ai/mastra/issues"
             target="_blank"
             rel="noopener noreferrer"
@@ -198,7 +198,7 @@ function DefaultErrorFallback({
             <summary className="cursor-pointer text-ui-sm text-neutral3 hover:text-neutral4">
               Show error details
             </summary>
-            <pre className="mt-2 max-h-64 overflow-auto rounded-md bg-surface3 p-3 text-ui-xs text-neutral4 whitespace-pre-wrap break-words">
+            <pre className="mt-2 max-h-64 overflow-auto rounded-md bg-surface3 p-3 text-ui-xs break-words whitespace-pre-wrap text-neutral4">
               {stack}
             </pre>
           </details>

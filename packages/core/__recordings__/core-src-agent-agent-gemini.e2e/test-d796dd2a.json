@@ -1,0 +1,108 @@
+{
+  "meta": {
+    "name": "test-d796dd2a",
+    "testFile": "src/agent/agent-gemini.e2e.test.ts",
+    "testName": "Gemini Model Compatibility Tests > Direct generate() method - Gemini basic functionality > should handle single turn with maxSteps=1 and messages ending with assistant",
+    "createdAt": "2026-07-14T17:15:00.112Z"
+  },
+  "recordings": [
+    {
+      "hash": "070895a4843aac06",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "method": "POST",
+        "body": {
+          "generationConfig": {
+            "responseMimeType": "application/json",
+            "responseSchema": {
+              "required": ["selection", "reason"],
+              "type": "object",
+              "properties": {
+                "selection": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "I need to choose between option A (fast), option B (cheap), or option C (reliable). I value reliability most."
+                }
+              ]
+            },
+            {
+              "role": "model",
+              "parts": [
+                {
+                  "text": "Let me help you make the best choice."
+                }
+              ]
+            }
+          ],
+          "systemInstruction": {
+            "parts": [
+              {
+                "text": "You help users choose between options A, B, or C."
+              }
+            ]
+          }
+        },
+        "timestamp": 1784049299272
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-type": "application/json; charset=UTF-8",
+          "date": "Tue, 14 Jul 2026 17:15:00 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=819",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-gemini-service-tier": "standard",
+          "x-xss-protection": "0"
+        },
+        "body": {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "text": "{\"selection\": \"C\", \"reason\": \"You value reliability most, and Option C is described as reliable.\"}"
+                  }
+                ],
+                "role": "model"
+              },
+              "finishReason": "STOP",
+              "index": 0
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 50,
+            "candidatesTokenCount": 24,
+            "totalTokenCount": 131,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 50
+              }
+            ],
+            "thoughtsTokenCount": 57,
+            "serviceTier": "standard"
+          },
+          "modelVersion": "gemini-2.5-flash",
+          "responseId": "k25WasSgFIOvkdUP2f-f0Qk"
+        },
+        "isStreaming": false
+      }
+    }
+  ]
+}

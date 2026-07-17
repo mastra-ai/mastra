@@ -3,6 +3,13 @@ import type { CoreMessage } from '@mastra/core/llm';
 
 import { stripEphemeralAnchorIds } from './anchor-ids';
 import { isTemporalGapMarker } from './date-utils';
+import type { Extractor } from './extractor';
+import {
+  buildExtractorOutputSections,
+  buildExtractorPriorLines,
+  parseExtractedValues,
+  stripExtractorSections,
+} from './extractor';
 import { safeSlice } from './string-utils';
 import {
   DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS,
@@ -10,7 +17,24 @@ import {
   resolveToolResultValue,
 } from './tool-result-helpers';
 
-type ObserverFormatOptions = { maxPartLength?: number; maxToolResultTokens?: number };
+/**
+ * Filter controlling which attachment parts (image/file) are forwarded to
+ * the Observer model alongside their placeholder text lines.
+ *
+ * - `true` (or undefined): forward all attachments
+ * - `false`: drop all attachments; placeholders still appear in text
+ * - `string[]`: allowlist of mimeType patterns. Each entry is matched against
+ *   the part's mimeType (case-insensitive), supporting exact matches
+ *   (`application/pdf`), wildcard subtypes (`image/\*`), and bare `*` for all.
+ *   Empty array drops everything.
+ */
+export type ObserverAttachmentFilter = boolean | string[];
+
+type ObserverFormatOptions = {
+  maxPartLength?: number;
+  maxToolResultTokens?: number;
+  attachmentFilter?: ObserverAttachmentFilter;
+};
 
 /**
  * The core extraction instructions for the Observer.
@@ -275,18 +299,24 @@ Prefer concrete resolved outcomes over abstract workflow status so the assistant
  */
 export const OBSERVER_OUTPUT_FORMAT_BASE = buildObserverOutputFormat();
 
-export function buildObserverOutputFormat(includeThreadTitle: boolean = false): string {
-  const threadTitleSection = includeThreadTitle
-    ? `
-<thread-title>
-A short, noun-phrase title for this conversation (2-5 words). Examples:
-- "Auth bug fix" — not "Fixing the auth bug"
-- "Dark mode toggle" — not "User wants dark mode toggle added"
-- "Deployment pipeline setup" — not "Setting up deployment pipeline for project"
-Only update when the topic meaningfully changes.
-</thread-title>`
-    : '';
+export function buildObserverOutputFormat(extractors: readonly Extractor<any>[] = []): string {
+  const extractorSections = buildExtractorOutputSections(extractors);
+  const legacyContinuationSections =
+    extractors.length === 0
+      ? `
+<current-task>
+State the current task(s) explicitly:
+- Primary: What the agent is currently working on
+- Secondary: Other pending tasks (mark as "waiting for user" if appropriate)
+</current-task>
 
+<suggested-response>
+Hint for the agent's immediate next message. Examples:
+- "I've updated the navigation model. Let me walk you through the changes..."
+- "The assistant should wait for the user to respond before continuing."
+- Call the view tool on src/example.ts to continue debugging.
+</suggested-response>`
+      : '';
   return `Use priority levels:
 - 🔴 High: explicit user facts, preferences, unresolved goals, critical context
 - 🟡 Medium: project details, learned information, tool results
@@ -312,20 +342,7 @@ Date: Dec 5, 2025
 * 🔴 (09:15) Continued work on feature X
 </observations>
 
-<current-task>
-State the current task(s) explicitly. Can be single or multiple:
-- Primary: What the agent is currently working on
-- Secondary: Other pending tasks (mark as "waiting for user" if appropriate)
-
-If the agent started doing something without user approval, note that it's off-task.
-</current-task>
-
-<suggested-response>
-Hint for the agent's immediate next message. Examples:
-- "I've updated the navigation model. Let me walk you through the changes..."
-- "The assistant should wait for the user to respond before continuing."
-- Call the view tool on src/example.ts to continue debugging.
-</suggested-response>${threadTitleSection}`;
+${extractorSections || legacyContinuationSections}`;
 }
 
 /**
@@ -359,8 +376,9 @@ export function buildObserverSystemPrompt(
   multiThread: boolean = false,
   instruction?: string,
   includeThreadTitle: boolean = false,
+  extractors: readonly Extractor<any>[] = [],
 ): string {
-  const outputFormat = buildObserverOutputFormat(includeThreadTitle);
+  const outputFormat = buildObserverOutputFormat(extractors);
   const multiThreadTitleInstruction = includeThreadTitle
     ? ` Each thread's observations, current-task, suggested-response, and thread-title should be nested inside a <thread id="..."> block within <observations>.`
     : ` Each thread's observations, current-task, and suggested-response should be nested inside a <thread id="..."> block within <observations>.`;
@@ -484,6 +502,12 @@ export interface ObserverResult {
 
   /** The suggested thread title (short/concise, for thread metadata) */
   threadTitle?: string;
+
+  /** Extracted values keyed by extractor slug */
+  extractedValues?: Record<string, unknown>;
+
+  /** Extractor failures keyed by extractor slug */
+  extractionFailures?: Array<{ slug: string; error: string }>;
 
   /** Raw output from the model (for debugging) */
   rawOutput?: string;
@@ -635,6 +659,41 @@ function isImageLikeObserverFilePart(part: ObserverAttachmentPart): boolean {
   return hasObserverImageFilenameExtension(part.filename);
 }
 
+function resolveObserverAttachmentMimeType(part: ObserverAttachmentPart): string {
+  if (typeof part.mimeType === 'string' && part.mimeType.length > 0) {
+    return part.mimeType.toLowerCase();
+  }
+  if (part.type === 'image') {
+    return 'image/*';
+  }
+  if (isImageLikeObserverFilePart(part)) {
+    return 'image/*';
+  }
+  return 'application/octet-stream';
+}
+
+function matchObserverMimePattern(mimeType: string, pattern: string): boolean {
+  const normalized = pattern.trim().toLowerCase();
+  if (!normalized) return false;
+  if (normalized === '*' || normalized === '*/*') return true;
+  if (normalized.endsWith('/*')) {
+    const prefix = normalized.slice(0, normalized.length - 1); // keep trailing '/'
+    return mimeType.startsWith(prefix);
+  }
+  return mimeType === normalized;
+}
+
+function shouldIncludeObserverAttachment(
+  part: ObserverAttachmentPart,
+  filter: ObserverAttachmentFilter | undefined,
+): boolean {
+  if (filter === undefined || filter === true) return true;
+  if (filter === false) return false;
+  if (!Array.isArray(filter) || filter.length === 0) return false;
+  const mimeType = resolveObserverAttachmentMimeType(part);
+  return filter.some(pattern => matchObserverMimePattern(mimeType, pattern));
+}
+
 function toObserverInputAttachmentPart(part: ObserverAttachmentPart): ObserverInputAttachmentPart {
   if (part.type === 'image') {
     return {
@@ -752,6 +811,7 @@ function mapToolResultBlockToAttachment(block: unknown): ObserverAttachmentPart 
 function extractToolResultAttachments(
   result: unknown,
   counter: ObserverAttachmentCounter,
+  attachmentFilter?: ObserverAttachmentFilter,
 ): { resultWithoutAttachments: unknown; attachments: ObserverInputAttachmentPart[] } {
   if (!isRecord(result) || result.type !== 'content' || !Array.isArray(result.value)) {
     return { resultWithoutAttachments: result, attachments: [] };
@@ -760,18 +820,22 @@ function extractToolResultAttachments(
   const record = result;
 
   const attachments: ObserverInputAttachmentPart[] = [];
+  let hadAttachmentBlocks = false;
   const newValue = (record.value as unknown[]).map(block => {
     const attachment = mapToolResultBlockToAttachment(block);
     if (!attachment) {
       return block;
     }
+    hadAttachmentBlocks = true;
 
-    attachments.push(toObserverInputAttachmentPart(attachment));
+    if (shouldIncludeObserverAttachment(attachment, attachmentFilter)) {
+      attachments.push(toObserverInputAttachmentPart(attachment));
+    }
     const placeholder = formatObserverAttachmentPlaceholder(attachment, counter);
     return { type: isRecord(block) ? block.type : undefined, placeholder };
   });
 
-  if (attachments.length === 0) {
+  if (!hadAttachmentBlocks) {
     return { resultWithoutAttachments: result, attachments };
   }
 
@@ -864,6 +928,7 @@ function formatObserverMessage(
 ): ObserverFormattedMessage {
   const maxLen = options?.maxPartLength;
   const maxToolResultTokens = options?.maxToolResultTokens ?? DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS;
+  const attachmentFilter = options?.attachmentFilter;
   const role = msg.role.charAt(0).toUpperCase() + msg.role.slice(1);
   const attachments: ObserverInputAttachmentPart[] = [];
   const messageCreatedAt = normalizeObserverCreatedAt(msg.createdAt);
@@ -909,6 +974,7 @@ function formatObserverMessage(
           const { resultWithoutAttachments, attachments: extractedAttachments } = extractToolResultAttachments(
             resultForObserver,
             counter,
+            attachmentFilter,
           );
           if (extractedAttachments.length > 0) {
             attachments.push(...extractedAttachments);
@@ -940,9 +1006,11 @@ function formatObserverMessage(
 
       if (partType === 'image' || partType === 'file') {
         const attachment = part as ObserverAttachmentPart;
-        const inputAttachment = toObserverInputAttachmentPart(attachment);
-        if (inputAttachment) {
-          attachments.push(inputAttachment);
+        if (shouldIncludeObserverAttachment(attachment, attachmentFilter)) {
+          const inputAttachment = toObserverInputAttachmentPart(attachment);
+          if (inputAttachment) {
+            attachments.push(inputAttachment);
+          }
         }
         pushLine(
           partType === 'image' ? 'Image' : 'File',
@@ -1094,9 +1162,13 @@ export function buildMultiThreadObserverHistoryMessage(
 export function buildMultiThreadObserverTaskPrompt(
   existingObservations: string | undefined,
   threadOrder?: string[],
-  priorMetadataByThread?: Map<string, { currentTask?: string; suggestedResponse?: string; threadTitle?: string }>,
+  priorMetadataByThread?: Map<
+    string,
+    { currentTask?: string; suggestedResponse?: string; threadTitle?: string; extracted?: Record<string, unknown> }
+  >,
   wasTruncated?: boolean,
   includeThreadTitle?: boolean,
+  extractors: readonly Extractor<any>[] = [],
 ): string {
   let prompt = '';
 
@@ -1110,9 +1182,13 @@ export function buildMultiThreadObserverTaskPrompt(
   const threadMetadataLines = threadOrder
     ?.map(threadId => {
       const metadata = priorMetadataByThread?.get(threadId);
+      const extractorPriorLines = buildExtractorPriorLines(extractors, metadata?.extracted);
       const hasRelevantMetadata =
-        metadata?.currentTask || metadata?.suggestedResponse || (includeThreadTitle && metadata?.threadTitle);
-      if (!hasRelevantMetadata) {
+        metadata?.currentTask ||
+        metadata?.suggestedResponse ||
+        (includeThreadTitle && metadata?.threadTitle) ||
+        extractorPriorLines.length > 0;
+      if (!hasRelevantMetadata || !metadata) {
         return '';
       }
 
@@ -1125,6 +1201,9 @@ export function buildMultiThreadObserverTaskPrompt(
       }
       if (includeThreadTitle && metadata.threadTitle) {
         lines.push(`  - prior thread-title: ${metadata.threadTitle}`);
+      }
+      for (const priorLine of extractorPriorLines) {
+        lines.push(`  - prior ${priorLine.replace(/\n/g, '\n    ')}`);
       }
       return lines.join('\n');
     })
@@ -1172,13 +1251,17 @@ export function buildMultiThreadObserverPrompt(
   existingObservations: string | undefined,
   messagesByThread: Map<string, MastraDBMessage[]>,
   threadOrder: string[],
-  priorMetadataByThread?: Map<string, { currentTask?: string; suggestedResponse?: string; threadTitle?: string }>,
+  priorMetadataByThread?: Map<
+    string,
+    { currentTask?: string; suggestedResponse?: string; threadTitle?: string; extracted?: Record<string, unknown> }
+  >,
   wasTruncated?: boolean,
   options?: ObserverFormatOptions,
   includeThreadTitle?: boolean,
+  extractors: readonly Extractor<any>[] = [],
 ): string {
   const formattedMessages = formatMultiThreadMessagesForObserver(messagesByThread, threadOrder, options);
-  return `## New Message History to Observe\n\nThe following messages are from ${threadOrder.length} different conversation threads. Each thread is wrapped in a <thread id="..."> tag.\n\n${formattedMessages}\n\n---\n\n${buildMultiThreadObserverTaskPrompt(existingObservations, threadOrder, priorMetadataByThread, wasTruncated, includeThreadTitle)}`;
+  return `## New Message History to Observe\n\nThe following messages are from ${threadOrder.length} different conversation threads. Each thread is wrapped in a <thread id="..."> tag.\n\n${formattedMessages}\n\n---\n\n${buildMultiThreadObserverTaskPrompt(existingObservations, threadOrder, priorMetadataByThread, wasTruncated, includeThreadTitle, extractors)}`;
 }
 
 /**
@@ -1196,7 +1279,10 @@ export interface MultiThreadObserverResult {
 /**
  * Parse multi-thread Observer output to extract per-thread results.
  */
-export function parseMultiThreadObserverOutput(output: string): MultiThreadObserverResult {
+export function parseMultiThreadObserverOutput(
+  output: string,
+  extractors: readonly Extractor<any>[] = [],
+): MultiThreadObserverResult {
   const threads = new Map<string, ObserverResult>();
 
   // Check for degenerate repetition on the whole output
@@ -1217,9 +1303,12 @@ export function parseMultiThreadObserverOutput(output: string): MultiThreadObser
     const threadContent = match[2];
     if (!threadId || !threadContent) continue;
 
+    const inlineExtractors = extractors.filter(extractor => extractor.mode === 'inline');
+    const parsedExtractedValues = parseExtractedValues(threadContent, inlineExtractors);
+
     // Parse this thread's content for observations, current-task, suggested-response
     // Extract observations (everything except current-task and suggested-response)
-    let observations = threadContent;
+    let observations = stripExtractorSections(threadContent, inlineExtractors);
 
     // Extract and remove current-task
     let currentTask: string | undefined;
@@ -1250,9 +1339,12 @@ export function parseMultiThreadObserverOutput(output: string): MultiThreadObser
 
     threads.set(threadId, {
       observations,
-      currentTask,
-      suggestedContinuation,
-      threadTitle,
+      currentTask: currentTask || getStringExtractedValue(parsedExtractedValues.values, 'current-task'),
+      suggestedContinuation:
+        suggestedContinuation || getStringExtractedValue(parsedExtractedValues.values, 'suggested-response'),
+      threadTitle: threadTitle || getStringExtractedValue(parsedExtractedValues.values, 'thread-title'),
+      extractedValues: parsedExtractedValues.values,
+      extractionFailures: parsedExtractedValues.failures,
       rawOutput: threadContent,
     });
   }
@@ -1275,6 +1367,8 @@ export function buildObserverTaskPrompt(
     priorThreadTitle?: string;
     wasTruncated?: boolean;
     includeThreadTitle?: boolean;
+    extractors?: readonly Extractor<any>[];
+    priorExtractedValues?: Record<string, unknown>;
   },
 ): string {
   let prompt = '';
@@ -1296,6 +1390,7 @@ export function buildObserverTaskPrompt(
   if (options?.includeThreadTitle && options?.priorThreadTitle) {
     priorMetadataLines.push(`- prior thread-title: ${options.priorThreadTitle}`);
   }
+  priorMetadataLines.push(...buildExtractorPriorLines(options?.extractors ?? [], options?.priorExtractedValues));
 
   if (priorMetadataLines.length > 0) {
     prompt += `## Prior Thread Metadata\n\n${priorMetadataLines.join('\n')}\n\n`;
@@ -1310,13 +1405,8 @@ export function buildObserverTaskPrompt(
   prompt += `## Your Task\n\n`;
   prompt += `Extract new observations from the message history above. Do not repeat observations that are already in the previous observations. Add your new observations in the format specified in your instructions.`;
 
-  // Add thread title guidance (independent of continuation hints)
-  if (options?.includeThreadTitle) {
-    prompt += `\n\nAlso output a <thread-title> — a short noun-phrase label for this conversation (2-5 words). Write it like a file name or PR title: "Auth bug fix", "Memory config refactor", "RAG pipeline setup". Avoid verbs/sentences ("Fixing the auth bug"), filler ("Working on stuff"), and generic labels ("Code review"). Only change it from the prior title if the topic meaningfully shifted.`;
-  }
-
   if (options?.skipContinuationHints) {
-    prompt += `\n\nIMPORTANT: Do NOT include <current-task> or <suggested-response> sections in your output. Only output <observations>${options?.includeThreadTitle ? ' and <thread-title>' : ''}.`;
+    prompt += `\n\nOutput <observations> every time.`;
   }
 
   return prompt;
@@ -1336,6 +1426,8 @@ export function buildObserverPrompt(
     priorThreadTitle?: string;
     wasTruncated?: boolean;
     includeThreadTitle?: boolean;
+    extractors?: readonly Extractor<any>[];
+    priorExtractedValues?: Record<string, unknown>;
   },
 ): string {
   const formattedMessages = formatMessagesForObserver(messagesToObserve);
@@ -1346,7 +1438,12 @@ export function buildObserverPrompt(
  * Parse the Observer's output to extract observations, current task, and suggested response.
  * Uses XML tag parsing for structured extraction.
  */
-export function parseObserverOutput(output: string): ObserverResult {
+function getStringExtractedValue(values: Record<string, unknown>, slug: string): string | undefined {
+  const value = values[slug];
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+export function parseObserverOutput(output: string, extractors: readonly Extractor<any>[] = []): ObserverResult {
   // Check for degenerate repetition before parsing (operates on raw output)
   if (detectDegenerateRepetition(output)) {
     return {
@@ -1356,7 +1453,10 @@ export function parseObserverOutput(output: string): ObserverResult {
     };
   }
 
-  const parsed = parseMemorySectionXml(output);
+  const inlineExtractors = extractors.filter(extractor => extractor.mode === 'inline');
+  const parsedExtractedValues = parseExtractedValues(output, inlineExtractors);
+  const strippedOutput = stripExtractorSections(output, inlineExtractors);
+  const parsed = parseMemorySectionXml(strippedOutput);
 
   // Return observations WITHOUT current-task/suggested-response tags
   // Those are stored separately in thread metadata and injected dynamically
@@ -1364,9 +1464,12 @@ export function parseObserverOutput(output: string): ObserverResult {
 
   return {
     observations,
-    currentTask: parsed.currentTask || undefined,
-    suggestedContinuation: parsed.suggestedResponse || undefined,
-    threadTitle: parsed.threadTitle || undefined,
+    currentTask: parsed.currentTask || getStringExtractedValue(parsedExtractedValues.values, 'current-task'),
+    suggestedContinuation:
+      parsed.suggestedResponse || getStringExtractedValue(parsedExtractedValues.values, 'suggested-response'),
+    threadTitle: parsed.threadTitle || getStringExtractedValue(parsedExtractedValues.values, 'thread-title'),
+    extractedValues: parsedExtractedValues.values,
+    extractionFailures: parsedExtractedValues.failures,
     rawOutput: output,
   };
 }

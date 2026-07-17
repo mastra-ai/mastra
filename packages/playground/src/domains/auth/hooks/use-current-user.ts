@@ -4,6 +4,17 @@ import { useQuery } from '@tanstack/react-query';
 import type { CurrentUser } from '../types';
 import { fetchWithRefresh } from './fetch-with-refresh';
 
+export class CurrentUserError extends Error {
+  constructor(public readonly status: number) {
+    super(`Failed to fetch current user: ${status}`);
+    this.name = 'CurrentUserError';
+  }
+}
+
+export function isUnauthenticatedError(error: unknown): boolean {
+  return error instanceof CurrentUserError && error.status === 401;
+}
+
 /**
  * Hook to fetch the current authenticated user.
  *
@@ -34,7 +45,7 @@ import { fetchWithRefresh } from './fetch-with-refresh';
  */
 export function useCurrentUser() {
   const client = useMastraClient();
-  const baseUrl = (client as any).options?.baseUrl || '';
+  const baseUrl = client.options?.baseUrl || '';
 
   return useQuery<CurrentUser>({
     queryKey: ['auth', 'me'],
@@ -47,7 +58,7 @@ export function useCurrentUser() {
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch current user: ${response.status}`);
+        throw new CurrentUserError(response.status);
       }
 
       return response.json();

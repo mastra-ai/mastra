@@ -2,6 +2,9 @@ import type { AgentConfig } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { ObservationalMemoryModelSettings } from '@mastra/core/memory';
 import type { MemoryStorage } from '@mastra/core/storage';
+import type { ProviderMetadata } from '@mastra/core/stream';
+import type { Memory } from '../..';
+import type { Extractor } from './extractor';
 import type { ModelByInputTokens } from './model-by-input-tokens';
 
 /**
@@ -50,7 +53,8 @@ export interface ProviderOptions {
   [key: string]: Record<string, any> | undefined;
 }
 
-export type ActivationTTL = number | string | false;
+export type ActivationTTL = number | string | 'auto' | false;
+export type ResolvedActivationTTL = number | 'auto';
 
 /**
  * Configuration for the observation step (Observer agent).
@@ -122,6 +126,16 @@ export interface ObservationConfig {
   bufferTokens?: number | false;
 
   /**
+   * Whether to run background observation buffering when a turn ends and the agent becomes idle.
+   *
+   * This is separate from `bufferTokens`: `bufferTokens` controls step-time async buffering,
+   * while `bufferOnIdle` controls end-of-turn buffering for short idle turns.
+   *
+   * @default false
+   */
+  bufferOnIdle?: boolean;
+
+  /**
    * Controls how many raw message tokens to retain after activation.
    *
    * - **Ratio (0 < value <= 1):** fraction of `messageTokens` to activate.
@@ -184,6 +198,22 @@ export interface ObservationConfig {
   instruction?: string;
 
   /**
+   * Manage working memory through Observational Memory extraction.
+   * When enabled alongside `workingMemory.enabled`, Memory supplies defaults that
+   * disable main-agent working memory management and add the WorkingMemoryExtractor.
+   * Set `workingMemory.agentManaged: true` to keep main-agent tools/instructions enabled.
+   *
+   * @default false
+   */
+  manageWorkingMemory?: boolean;
+
+  /**
+   * Additional values to extract from observer output. Built-in OM fields are registered automatically.
+   * @experimental Extractors are experimental and may change in a future release.
+   */
+  extract?: Extractor<any>[];
+
+  /**
    * Whether the Observer should suggest thread titles.
    * When enabled, the Observer will analyze conversation context and
    * suggest a short, descriptive title for the thread.
@@ -191,6 +221,31 @@ export interface ObservationConfig {
    * @default false
    */
   threadTitle?: boolean;
+
+  /**
+   * Controls which attachment parts (image/file) are forwarded to the
+   * Observer model alongside their placeholder text lines. The placeholder
+   * line (e.g. `[Image #1: photo.png]`) is always emitted so the Observer
+   * still knows an attachment existed.
+   *
+   * - `'auto'`: use the provider capabilities registry to decide.
+   *   If the observer model supports attachments (multimodal input), they
+   *   are forwarded; otherwise they are dropped. Falls back to `true` when
+   *   no capabilities data is available for the model.
+   * - `true`: forward all attachments.
+   * - `false`: drop all attachments; placeholders remain visible.
+   * - `string[]`: allowlist of mimeType patterns. Each entry is matched
+   *   case-insensitively against the part's mimeType. Supports exact matches
+   *   (`'application/pdf'`), wildcard subtypes (`'image/*'`), and bare `'*'`
+   *   for everything. An empty array drops everything.
+   *
+   * Use this when the Observer model is text-only (e.g. some DeepSeek
+   * endpoints) while the main agent uses a multimodal model. The same
+   * filter applies to tool results that contain image or file parts.
+   *
+   * @default true
+   */
+  observeAttachments?: 'auto' | boolean | string[];
 }
 
 /**
@@ -278,6 +333,12 @@ export interface ReflectionConfig {
    * Use this to customize reflection behavior for specific use cases.
    */
   instruction?: string;
+
+  /**
+   * Additional values to extract from reflector output. Built-in OM fields are registered automatically.
+   * @experimental Extractors are experimental and may change in a future release.
+   */
+  extract?: Extractor<any>[];
 }
 
 /**
@@ -289,6 +350,12 @@ export interface ObserverResult {
 
   /** Suggested continuation for the Actor */
   suggestedContinuation?: string;
+
+  /** Extracted values keyed by extractor slug */
+  extractedValues?: Record<string, unknown>;
+
+  /** Extractor failures keyed by extractor slug */
+  extractionFailures?: Array<{ slug: string; error: string }>;
 }
 
 /**
@@ -303,6 +370,12 @@ export interface ReflectorResult {
 
   /** True if the output was detected as degenerate (repetition loop) and should be discarded/retried */
   degenerate?: boolean;
+
+  /** Extracted values keyed by extractor slug */
+  extractedValues?: Record<string, unknown>;
+
+  /** Extractor failures keyed by extractor slug */
+  extractionFailures?: Array<{ slug: string; error: string }>;
 }
 
 /**
@@ -312,12 +385,13 @@ export interface ObservationMarkerConfig {
   messageTokens: number;
   observationTokens: number;
   scope: 'thread' | 'resource';
-  activateAfterIdle?: number;
+  activateAfterIdle?: ResolvedActivationTTL;
 }
 
 export interface ObservationModelContext {
   provider?: string;
   modelId?: string;
+  providerOptions?: ProviderOptions;
 }
 
 /**
@@ -392,6 +466,12 @@ export interface DataOmObservationEndPart {
 
     /** Suggested response extracted by the Observer */
     suggestedResponse?: string;
+
+    /** Extracted values keyed by extractor slug */
+    extractedValues?: Record<string, unknown>;
+
+    /** Extractor failures keyed by extractor slug */
+    extractionFailures?: Array<{ slug: string; error: string }>;
 
     /** The OM record ID */
     recordId: string;
@@ -572,6 +652,12 @@ export interface DataOmBufferingEndPart {
 
     /** The buffered observations/reflection content (for UI expansion) */
     observations?: string;
+
+    /** Extracted values keyed by extractor slug */
+    extractedValues?: Record<string, unknown>;
+
+    /** Extractor failures keyed by extractor slug */
+    extractionFailures?: Array<{ slug: string; error: string }>;
   };
 }
 
@@ -804,8 +890,11 @@ export interface ObservationalMemoryConfig {
    */
   storage: MemoryStorage;
 
+  /** Active Memory instance, when Observational Memory is created by Memory. */
+  memory?: Memory;
+
   /**
-   * **Experimental.** Enable retrieval-mode observation group metadata.
+   * Enable retrieval-mode observation group metadata.
    * When true, observation groups are treated as durable pointers to raw
    * message history and a `recall` tool is registered so the actor can
    * inspect raw messages behind a stored observation summary.
@@ -814,7 +903,6 @@ export interface ObservationalMemoryConfig {
    * configured vector store for semantic recall, and `scope` to limit recall
    * browsing to the current thread instead of the whole resource.
    *
-   * @experimental
    * @default false
    */
   retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource' };
@@ -928,10 +1016,12 @@ export interface ResolvedObservationConfig {
   maxTokensPerBatch: number;
   /** Token interval for async background observation buffering (resolved from config) */
   bufferTokens?: number;
+  /** Whether to buffer unobserved messages at the end of an idle turn */
+  bufferOnIdle: boolean;
   /** Ratio of buffered observations to activate (0-1 float) */
   bufferActivation?: number;
-  /** Time in milliseconds before buffered observations are force-activated based on the last assistant message part timestamp */
-  activateAfterIdle?: number;
+  /** Time in milliseconds, or auto provider-aware TTL, before buffered observations are force-activated based on the last assistant message part timestamp */
+  activateAfterIdle?: ResolvedActivationTTL;
   /** Force-activate buffered observations when the actor model/provider changes */
   activateOnProviderChange?: boolean;
   /** Token threshold above which synchronous observation is forced */
@@ -942,6 +1032,10 @@ export interface ResolvedObservationConfig {
   instruction?: string;
   /** Whether the Observer should suggest thread titles */
   threadTitle?: boolean;
+  /** Filter for attachment parts forwarded to the Observer model */
+  observeAttachments: 'auto' | boolean | string[];
+  /** Resolved observer extractors, including enabled built-ins and user extractors */
+  extractors: Extractor<any>[];
 }
 
 export interface ResolvedReflectionConfig {
@@ -955,14 +1049,16 @@ export interface ResolvedReflectionConfig {
   providerOptions: ProviderOptions;
   /** Ratio (0-1) controlling when async reflection buffering starts */
   bufferActivation?: number;
-  /** Time in milliseconds before buffered reflections are force-activated based on the last assistant message part timestamp */
-  activateAfterIdle?: number;
+  /** Time in milliseconds, or auto provider-aware TTL, before buffered reflections are force-activated based on the last assistant message part timestamp */
+  activateAfterIdle?: ResolvedActivationTTL;
   /** Force-activate buffered reflections when the actor model/provider changes */
   activateOnProviderChange?: boolean;
   /** Token threshold above which synchronous reflection is forced */
   blockAfter?: number;
   /** Custom instructions to append to the Reflector's system prompt */
   instruction?: string;
+  /** Resolved reflector extractors, including enabled built-ins and user extractors */
+  extractors: Extractor<any>[];
 }
 
 export interface ObserveHookUsage {
@@ -973,7 +1069,22 @@ export interface ObserveHookUsage {
 
 export interface ObserveHooks {
   onObservationStart?: () => void;
-  onObservationEnd?: (result: { usage?: ObserveHookUsage; error?: Error }) => void;
+  /**
+   * Fires when an observation cycle ends. `providerMetadata` carries the OM
+   * observer model call's full provider metadata (e.g. AI Gateway cost and
+   * generation id under `providerMetadata.gateway`); it is undefined when the
+   * provider emits none. For batched resource-scoped observations it reflects
+   * the last batch that emitted provider metadata (per-call values are not
+   * summed/merged).
+   */
+  onObservationEnd?: (result: { usage?: ObserveHookUsage; error?: Error; providerMetadata?: ProviderMetadata }) => void;
   onReflectionStart?: () => void;
-  onReflectionEnd?: (result: { usage?: ObserveHookUsage; error?: Error }) => void;
+  /**
+   * Fires when a reflection cycle ends. `providerMetadata` carries the OM
+   * reflector model call's full provider metadata; it is undefined when the
+   * provider emits none. Across retry attempts `usage` is summed but
+   * `providerMetadata` reflects the last attempt that emitted it (per-call
+   * values are not merged).
+   */
+  onReflectionEnd?: (result: { usage?: ObserveHookUsage; error?: Error; providerMetadata?: ProviderMetadata }) => void;
 }

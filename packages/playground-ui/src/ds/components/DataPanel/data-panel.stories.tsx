@@ -9,7 +9,7 @@ const meta: Meta<typeof DataPanel> = {
   decorators: [
     Story => (
       <TooltipProvider>
-        <div className="h-[500px] w-[400px]">
+        <div className="h-125 w-100">
           <Story />
         </div>
       </TooltipProvider>
@@ -17,6 +17,18 @@ const meta: Meta<typeof DataPanel> = {
   ],
   parameters: {
     layout: 'centered',
+    docs: {
+      description: {
+        component: [
+          'Non-modal panel that lives inside the page layout — no overlay, no Portal, no focus trap.',
+          'It is a layout region, not a dialog: clicking an item reveals its detail in place.',
+          '',
+          'This is the pattern behind the observability trace / span / log detail views, shared by',
+          'both the local Studio and Cloud Studio. For a modal panel that slides in over the page',
+          'with a backdrop, see `Layout/SideDialog`.',
+        ].join('\n'),
+      },
+    },
   },
 };
 

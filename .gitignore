@@ -1,4 +1,5 @@
-node_modules/
+node_modules
+.test-tmp/
 dist/
 test-outputs/
 .vitest-reports/
@@ -68,5 +69,18 @@ om-debug.log
 om-reflector-fixture.json
 .notion
 .dev/lima
-.mastracode/
-/packages/core/__recordings__
+.mastracode/*
+!.mastracode/commands/
+!.mastracode/commands/gh-triage.md
+!.mastracode/commands/gh-bulk-issues.md
+!.mastracode/commands/understand-pr.md
+!.mastracode/commands/understand-issue.md
+!.mastracode/skills/
+!.mastracode/skills/*/
+!.mastracode/skills/*/SKILL.md
+!.mastracode/shared/
+!.mastracode/shared/pr-review-context.md
+!.mastracode/shared/issue-debug-context.md
+!.mastracode/resources/
+!.mastracode/resources/CRITICAL_PATHS.md
+.tmp-mc-e2e-vitest/

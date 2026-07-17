@@ -36,6 +36,27 @@ export function createSkillTools(skills: WorkspaceSkills) {
   };
 }
 
+/**
+ * Format a skill into the activation payload: instructions followed by
+ * any references/scripts/assets listings. Shared between the `skill` tool
+ * and explicit user activations so both paths produce identical output.
+ */
+export function formatSkillActivation(skill: Skill): string {
+  const parts = [skill.instructions];
+
+  if (skill.references?.length) {
+    parts.push(`\n\n## References\n${skill.references.map(r => `- references/${r}`).join('\n')}`);
+  }
+  if (skill.scripts?.length) {
+    parts.push(`\n\n## Scripts\n${skill.scripts.map(s => `- scripts/${s}`).join('\n')}`);
+  }
+  if (skill.assets?.length) {
+    parts.push(`\n\n## Assets\n${skill.assets.map(a => `- assets/${a}`).join('\n')}`);
+  }
+
+  return parts.join('');
+}
+
 // =============================================================================
 // Individual Tools
 // =============================================================================
@@ -44,11 +65,19 @@ export function createSkillTools(skills: WorkspaceSkills) {
  * Resolve a skill identifier (name or path) to a Skill.
  * The `skills.get()` method handles both name-based lookup (with tie-breaking)
  * and path-based lookup (escape hatch for disambiguation).
+ *
+ * Calls `maybeRefresh()` first so edits on disk are picked up between tool
+ * invocations without restarting the server. Refresh is gated by an internal
+ * staleness check + cooldown, so the cost is a small directory `stat` rather
+ * than a full re-walk. File-level reloads (SKILL.md content edits) only
+ * trigger when the workspace is configured with `checkSkillFileMtime: true`.
  */
 async function resolveSkill(
   skills: WorkspaceSkills,
   identifier: string,
 ): Promise<{ skill: Skill } | { notFound: string }> {
+  await skills.maybeRefresh();
+
   const skill = await skills.get(identifier);
   if (skill) return { skill };
 
@@ -83,20 +112,10 @@ function createSkillTool(skills: WorkspaceSkills) {
         }
 
         const { skill } = result;
-        const parts = [skill.instructions];
-
-        if (skill.references?.length) {
-          parts.push(`\n\n## References\n${skill.references.map(r => `- references/${r}`).join('\n')}`);
-        }
-        if (skill.scripts?.length) {
-          parts.push(`\n\n## Scripts\n${skill.scripts.map(s => `- scripts/${s}`).join('\n')}`);
-        }
-        if (skill.assets?.length) {
-          parts.push(`\n\n## Assets\n${skill.assets.map(a => `- assets/${a}`).join('\n')}`);
-        }
+        const output = formatSkillActivation(skill);
 
         span.end({ success: true });
-        return parts.join('');
+        return output;
       } catch (err) {
         span.error(err);
         throw err;
@@ -126,6 +145,7 @@ function createSkillSearchTool(skills: WorkspaceSkills) {
       });
 
       try {
+        await skills.maybeRefresh();
         const results = await skills.search(query, { topK, skillNames });
 
         if (results.length === 0) {

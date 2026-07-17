@@ -16,7 +16,7 @@ import { cn } from '@/lib/utils';
 function buildDarkTheme(): Extension {
   return draculaInit({
     settings: {
-      fontFamily: 'var(--geist-mono)',
+      fontFamily: 'var(--font-mono)',
       fontSize: '0.75rem',
       lineHighlight: 'transparent',
       gutterBackground: 'transparent',
@@ -35,7 +35,7 @@ function buildLightTheme(): Extension {
       fontSize: '0.75rem',
     },
     '&.cm-editor .cm-scroller': {
-      fontFamily: 'var(--geist-mono)',
+      fontFamily: 'var(--font-mono)',
     },
     '.cm-gutters': {
       backgroundColor: 'transparent',
@@ -115,7 +115,7 @@ export function DataDetailsPanelCodeSection({
       <div className="flex items-center justify-between">
         <div
           className={cn(
-            'flex items-center gap-1.5 text-ui-xs uppercase tracking-widest text-neutral2',
+            'flex items-center gap-1.5 text-ui-xs tracking-widest text-neutral2 uppercase',
             '[&>svg]:size-3.5',
           )}
         >
@@ -135,9 +135,9 @@ export function DataDetailsPanelCodeSection({
           )}
         </ButtonsGroup>
       </div>
-      <div className="dark:bg-black/20 bg-surface3 p-3 overflow-hidden rounded-lg border dark:border-white/10 border-border1 text-neutral4 text-ui-sm break-all max-h-[30vh] overflow-y-auto">
+      <div className="max-h-[30vh] overflow-hidden overflow-y-auto rounded-lg border border-border1 bg-surface3 p-3 text-ui-sm break-all text-neutral4 dark:border-white/10 dark:bg-black/20">
         {usePlainTextView ? (
-          <div className="text-neutral4 font-mono break-all">
+          <div className="font-mono break-all text-neutral4">
             <pre className="text-wrap">{finalCodeStr}</pre>
           </div>
         ) : (

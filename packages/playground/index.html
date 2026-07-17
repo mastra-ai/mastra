@@ -21,13 +21,17 @@
       window.MASTRA_REQUEST_CONTEXT_PRESETS = '%%MASTRA_REQUEST_CONTEXT_PRESETS%%';
       window.MASTRA_EXPERIMENTAL_UI = '%%MASTRA_EXPERIMENTAL_UI%%';
       window.MASTRA_AGENT_SIGNALS = '%%MASTRA_AGENT_SIGNALS%%';
+      window.MASTRA_SIGNALS_UI = '%%MASTRA_SIGNALS_UI%%';
+      window.MASTRA_ORGANIZATION_ID = '%%MASTRA_ORGANIZATION_ID%%';
+      window.MASTRA_PLATFORM_PROJECT_ID = '%%MASTRA_PLATFORM_PROJECT_ID%%';
+      window.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT = '%%MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT%%';
 
       try {
         const storageValue = window.localStorage.getItem('mastra-playground-store');
         const parsedStorage = storageValue ? JSON.parse(storageValue) : null;
         const persistedTheme = parsedStorage?.state?.theme;
 
-        const selectedTheme = persistedTheme === 'light' || persistedTheme === 'system' ? persistedTheme : 'dark';
+        const selectedTheme = persistedTheme === 'light' || persistedTheme === 'dark' ? persistedTheme : 'system';
 
         const resolvedTheme =
           selectedTheme === 'system'
@@ -89,10 +93,6 @@
 
   <body class="overflow-hidden">
     <div id="root"></div>
-    <script type="module">
-      // Use relative import to work with any base path
-      // Vite transforms this during build to reference compiled output with correct paths
-      import('./src/main.tsx');
-    </script>
+    <script type="module" src="./src/bootstrap.ts"></script>
   </body>
 </html>

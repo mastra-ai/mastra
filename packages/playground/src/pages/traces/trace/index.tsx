@@ -1,19 +1,17 @@
 import type { ScoreRowData } from '@mastra/core/evals';
 import { EntityType } from '@mastra/core/observability';
-import {
-  ButtonWithTooltip,
-  ButtonsGroup,
-  PageLayout,
-  SpanDataPanelView,
-  TraceDataPanelView,
-  TraceKeysAndValues,
-  TracesErrorContent,
-  cn,
-  useSpanDetail,
-  useTraceLightSpans,
-  useTraceSpanNavigation,
-} from '@mastra/playground-ui';
-import type { SpanTab } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { SpanDataPanelView } from '@mastra/playground-ui/domains/traces/components/span-data-panel-view';
+import { TraceDataPanelView } from '@mastra/playground-ui/domains/traces/components/trace-data-panel-view';
+import { TraceKeysAndValues } from '@mastra/playground-ui/domains/traces/components/trace-keys-and-values';
+import { TracesErrorContent } from '@mastra/playground-ui/domains/traces/components/traces-error-content';
+import { useSpanDetail } from '@mastra/playground-ui/domains/traces/hooks/use-span-detail';
+import { useTraceLightSpans } from '@mastra/playground-ui/domains/traces/hooks/use-trace-light-spans';
+import { useTraceSpanNavigation } from '@mastra/playground-ui/domains/traces/hooks/use-trace-span-navigation';
+import type { SpanTab } from '@mastra/playground-ui/domains/traces/types';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { CircleGaugeIcon, SaveIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
@@ -160,18 +158,18 @@ export default function TracePage() {
   const traceHeaderActions = rootSpan ? (
     <RouteHeaderActions owner="trace-detail">
       <ButtonsGroup>
-        <ButtonWithTooltip tooltipContent="Evaluate Trace" aria-label="Evaluate Trace" onClick={handleEvaluateTrace}>
+        <Button tooltip="Evaluate Trace" aria-label="Evaluate Trace" onClick={handleEvaluateTrace}>
           <CircleGaugeIcon />
           Evaluate
-        </ButtonWithTooltip>
-        <ButtonWithTooltip
-          tooltipContent="Save as Dataset Item"
+        </Button>
+        <Button
+          tooltip="Save as Dataset Item"
           aria-label="Save as Dataset Item"
           onClick={() => setDatasetDialogOpen(true)}
         >
           <SaveIcon />
           Save
-        </ButtonWithTooltip>
+        </Button>
       </ButtonsGroup>
     </RouteHeaderActions>
   ) : null;
@@ -197,7 +195,7 @@ export default function TracePage() {
   }
 
   return (
-    <PageLayout>
+    <PageLayout height="full" className="grid-rows-[auto_minmax(0,1fr)] content-normal">
       {traceHeaderActions}
       {traceTopAreaSharedContent && <PageLayout.TopArea>{traceTopAreaSharedContent}</PageLayout.TopArea>}
 
@@ -210,7 +208,7 @@ export default function TracePage() {
 
       <div
         className={cn(
-          'grid h-full min-h-0 gap-4 overflow-hidden items-start mt-4',
+          'mt-4 grid min-h-0 items-stretch gap-4 overflow-hidden',
           featuredSpanId ? 'grid-cols-[2fr_3fr]' : 'grid-cols-[1fr]',
         )}
       >
@@ -228,7 +226,7 @@ export default function TracePage() {
         {featuredSpanId && !isTraceLoading && (
           <div
             className={cn(
-              'grid gap-4 max-h-full min-h-0 overflow-auto',
+              'grid h-full max-h-full min-h-0 gap-4 overflow-auto',
               featuredScore ? 'grid-rows-[1fr_1fr]' : 'grid-rows-[1fr]',
             )}
           >

@@ -88,6 +88,8 @@ import type {
 import { extractBranchSpans, getBranchArgsSchema } from './tracing';
 import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './types';
 
+export type ObservabilityStorageFeature = 'delta-polling' | 'metrics' | 'logs';
+
 /**
  * Base storage class for observability data (traces, metrics, logs, scores, feedback).
  * Not abstract -- provides default implementations that throw "not implemented" errors.
@@ -142,6 +144,15 @@ export class ObservabilityStorage extends StorageDomain {
   public get runtimeTracingStrategy(): TracingStorageStrategy | undefined {
     const supportedStrategies = this.observabilityStrategy.supported;
     return supportedStrategies.length === 1 ? supportedStrategies[0] : undefined;
+  }
+
+  /**
+   * Optional feature list for observability storage APIs.
+   * Stores should override this to opt in to the APIs they support explicitly.
+   * Older stores and older package versions will simply omit it, which keeps page mode working.
+   */
+  public getFeatures(): readonly ObservabilityStorageFeature[] | undefined {
+    return undefined;
   }
 
   /**

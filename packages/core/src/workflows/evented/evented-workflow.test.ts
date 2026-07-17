@@ -19,6 +19,7 @@ import type {
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../agent';
+import { MastraNonRetryableError } from '../../error';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
 import type { Processor } from '../../processors';
@@ -313,6 +314,17 @@ describe('Workflow (Evented Engine Specific)', () => {
     vi.resetAllMocks();
     const workflowsStore = await testStorage.getStore('workflows');
     await workflowsStore?.dangerouslyClearAll();
+  });
+
+  it('should create a processor step for state signal only processors', () => {
+    const processor: Processor = {
+      id: 'state-only-processor',
+      computeStateSignal: () => ({ cacheKey: 'state-only-cache', contents: 'state' }),
+    };
+
+    const step = createStep(processor);
+
+    expect(step.id).toBe('processor:state-only-processor');
   });
 
   it('should preserve processorStates across nested processor workflows', async () => {
@@ -829,5 +841,97 @@ describe('Workflow (Evented Engine Specific)', () => {
 
     // Note: "should preserve error details in streaming workflow" moved to shared suite
     // (streaming domain: should preserve error details in streaming workflow)
+  });
+
+  describe('non-retryable workflow failures', () => {
+    it('does not retry workflow steps that throw MastraNonRetryableError', async () => {
+      let calls = 0;
+
+      const fatalStep = createStep({
+        id: 'evented-fatal-step',
+        execute: async () => {
+          calls++;
+          throw new MastraNonRetryableError('permanent failure');
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'evented-non-retryable-fatal-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        retryConfig: { attempts: 3, delay: 0 },
+        steps: [fatalStep],
+      });
+      workflow.then(fatalStep).commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+        workflows: { 'evented-non-retryable-fatal-workflow': workflow },
+      });
+      await mastra.startWorkers();
+
+      try {
+        const run = await workflow.createRun();
+        const result = await run.start({ inputData: {} });
+
+        expect(result.status).toBe('failed');
+        expect(calls).toBe(1);
+
+        const stepResult = result.steps['evented-fatal-step'];
+        expect(stepResult?.status).toBe('failed');
+        expect(stepResult?.nonRetryable).toBe(true);
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
+
+    it('retries workflow steps that throw transient errors until attempts are exhausted', async () => {
+      let calls = 0;
+
+      const transientStep = createStep({
+        id: 'evented-transient-step',
+        execute: async () => {
+          calls++;
+          throw new Error('transient failure');
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'evented-retryable-transient-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        retryConfig: { attempts: 3, delay: 0 },
+        steps: [transientStep],
+      });
+      workflow.then(transientStep).commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+        workflows: { 'evented-retryable-transient-workflow': workflow },
+      });
+      await mastra.startWorkers();
+
+      try {
+        const run = await workflow.createRun();
+        const result = await run.start({ inputData: {} });
+
+        expect(result.status).toBe('failed');
+        expect(calls).toBe(4);
+
+        const stepResult = result.steps['evented-transient-step'];
+        expect(stepResult?.status).toBe('failed');
+        expect(stepResult?.nonRetryable).toBeUndefined();
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
   });
 });

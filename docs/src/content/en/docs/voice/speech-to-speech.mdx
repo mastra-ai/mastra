@@ -6,6 +6,7 @@ packages:
   - "@mastra/node-audio"
   - "@mastra/voice-aws-nova-sonic"
   - "@mastra/voice-google-gemini-live"
+  - "@mastra/voice-inworld"
   - "@mastra/voice-openai-realtime"
 ---
 
@@ -44,7 +45,7 @@ const agent = new Agent({
   id: 'agent',
   name: 'OpenAI Realtime Agent',
   instructions: `You are a helpful assistant with real-time voice capabilities.`,
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   voice: new OpenAIRealtimeVoice(),
 })
 
@@ -64,7 +65,87 @@ const micStream = getMicrophoneStream()
 await agent.voice.send(micStream)
 ```
 
-For integrating Speech-to-Speech capabilities with agents, refer to the [Adding Voice to Agents](/docs/agents/adding-voice) documentation.
+For a broader overview of voice providers on agents, see [Voice in Mastra](/docs/voice/overview).
+
+## Use tools in realtime sessions
+
+Realtime voice providers can use tools configured on the agent. Add the tools to the `Agent` definition, then connect and send audio through the voice provider:
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime'
+import { calculate, search } from '../tools'
+
+export const agent = new Agent({
+  id: 'speech-to-speech-agent',
+  name: 'Speech-to-Speech Agent',
+  instructions: 'You are a helpful assistant with speech-to-speech capabilities.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  tools: {
+    search,
+    calculate,
+  },
+  voice: new OpenAIRealtimeVoice(),
+})
+```
+
+## Listen for realtime events
+
+Realtime voice providers emit events you can use to update your UI, play assistant audio, log transcriptions, and handle errors:
+
+```typescript
+agent.voice.on('speaking', ({ audio }) => {
+  playAudio(audio)
+})
+
+agent.voice.on('writing', ({ text, role }) => {
+  console.log(`${role}: ${text}`)
+})
+
+agent.voice.on('error', error => {
+  console.error('Voice error:', error)
+})
+```
+
+Event names and payloads vary by provider. Check the provider section below or the provider reference for the full event list.
+
+## Per-session voice instances
+
+A static `voice` instance is shared across every request. This works for one-shot text-to-speech, but real-time and speech-to-speech providers store session state such as the WebSocket connection, tools, instructions, and request context. If one agent handles several live sessions at once, a shared instance can let one session overwrite another session's state.
+
+Provide `voice` as a resolver when each live session needs its own voice instance. Mastra runs the resolver on each `getVoice()` call and returns a fresh instance for that request context:
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { RequestContext } from '@mastra/core/request-context'
+import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime'
+
+export const agent = new Agent({
+  id: 'support-line',
+  name: 'Support Line',
+  instructions: ({ requestContext }) => `Help user ${requestContext.get('user')}.`,
+  model: '__GATEWAY_OPENAI_MODEL__',
+  voice: ({ requestContext }) =>
+    new OpenAIRealtimeVoice({
+      apiKey: requestContext.get('apiKey'),
+    }),
+})
+
+const requestContext = new RequestContext()
+requestContext.set('user', 'user-123')
+requestContext.set('apiKey', process.env.OPENAI_API_KEY)
+
+const voice = await agent.getVoice({ requestContext })
+await voice.connect()
+```
+
+When you use a resolver:
+
+- Each call to `getVoice()` returns a new instance, so concurrent sessions don't share state.
+- Mastra doesn't add tools or instructions to a resolver instance. Configure them inside the resolver or on the provider.
+- You own the returned instance lifecycle, so call `disconnect()` or `close()` when the session ends.
+
+The `agent.voice` getter has no request context, so it throws when `voice` is a resolver. Use `agent.getVoice({ requestContext })` instead.
 
 ## Google Gemini Live (Realtime)
 
@@ -78,7 +159,7 @@ const agent = new Agent({
   name: 'Gemini Live Agent',
   instructions: 'You are a helpful assistant with real-time voice capabilities.',
   // Model used for text generation; voice provider handles realtime audio
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   voice: new GeminiLiveVoice({
     apiKey: process.env.GOOGLE_API_KEY,
     model: 'gemini-2.0-flash-exp',
@@ -125,7 +206,7 @@ const agent = new Agent({
   name: 'Nova Sonic Agent',
   instructions: 'You are a helpful assistant with real-time voice capabilities.',
   // Model used for text generation; voice provider handles realtime audio
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   voice: new NovaSonicVoice({
     region: 'us-east-1',
     speaker: 'matthew',
@@ -156,3 +237,54 @@ Note:
 - Available regions: `us-east-1`, `us-west-2`, and `ap-northeast-1`.
 - Authenticates through the standard AWS credential provider chain. Pass `credentials` to override.
 - Events: `speaking` (Int16Array audio), `writing` (text with `generationStage`), `toolCall`, `interrupt`, `turnComplete`, `usage`, `session`, and `error`.
+
+## Inworld Realtime
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { InworldRealtimeVoice } from '@mastra/voice-inworld'
+import { playAudio, getMicrophoneStream } from '@mastra/node-audio'
+
+const agent = new Agent({
+  id: 'agent',
+  name: 'Inworld Realtime Agent',
+  instructions: 'You are a helpful assistant with real-time voice capabilities.',
+  // Model used for text generation; voice provider handles realtime audio
+  model: '__GATEWAY_OPENAI_MODEL__',
+  voice: new InworldRealtimeVoice({
+    apiKey: process.env.INWORLD_API_KEY,
+    model: 'inworld/models/gemma-4-26b-a4b-it',
+    speaker: 'Sarah',
+    // Typed Inworld realtime knobs (semantic VAD, playback speed, etc.)
+    // session: {
+    //   audio: {
+    //     output: { speed: 1.1 },
+    //     input: { turn_detection: { type: 'semantic_vad', eagerness: 'high' } },
+    //   },
+    // },
+  }),
+})
+
+await agent.voice.connect()
+
+agent.voice.on('speaker', stream => {
+  playAudio(stream)
+})
+
+agent.voice.on('writing', ({ role, text }) => {
+  console.log(`${role}: ${text}`)
+})
+
+await agent.voice.speak('How can I help you today?')
+
+const micStream = getMicrophoneStream()
+await agent.voice.send(micStream)
+```
+
+Note:
+
+- Requires `INWORLD_API_KEY`. Inworld API keys ship pre-Basic-encoded — paste them verbatim.
+- The WebSocket URL appends a client-generated `?key=...&protocol=realtime`. The model is configured via the initial `session.update`, not in the URL.
+- Inworld's wire protocol is the OpenAI Realtime GA spec, so event names match `@mastra/voice-openai-realtime`.
+- Typed Inworld realtime knobs (MCP tool routing, semantic VAD eagerness, playback speed, transcription model, output modalities, …) are exposed through the `session` constructor field; an untyped `providerData` escape hatch is also deep-merged for forward compatibility with new Inworld features.
+- Events: `speaker` (PCM audio stream), `speaking` (audio Buffer per delta), `writing` (text), `conversation.item.added`, `conversation.item.done`, `function_call.arguments`, `tool-call-start`, `tool-call-result`, and `error`.

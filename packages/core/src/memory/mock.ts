@@ -24,6 +24,54 @@ import type {
   SharedMemoryConfig,
 } from './types';
 
+/**
+ * Deep-merge working memory objects.
+ * Matches the semantics of `deepMergeWorkingMemory` in `@mastra/memory`:
+ * - `null` values delete the corresponding key
+ * - Arrays are replaced entirely (not merged element-by-element)
+ * - Nested plain objects are merged recursively
+ * - Primitives and new keys are set directly
+ */
+function deepMergeWorkingMemory(
+  existing: Record<string, unknown> | null | undefined,
+  update: Record<string, unknown> | null | undefined,
+): Record<string, unknown> {
+  if (!update || typeof update !== 'object' || Object.keys(update).length === 0) {
+    return existing && typeof existing === 'object' ? { ...existing } : {};
+  }
+  if (!existing || typeof existing !== 'object') {
+    return update;
+  }
+
+  const result: Record<string, unknown> = { ...existing };
+
+  for (const key of Object.keys(update)) {
+    const updateValue = update[key];
+    const existingValue = result[key];
+
+    if (updateValue === null) {
+      delete result[key];
+    } else if (Array.isArray(updateValue)) {
+      result[key] = updateValue;
+    } else if (
+      typeof updateValue === 'object' &&
+      updateValue !== null &&
+      typeof existingValue === 'object' &&
+      existingValue !== null &&
+      !Array.isArray(existingValue)
+    ) {
+      result[key] = deepMergeWorkingMemory(
+        existingValue as Record<string, unknown>,
+        updateValue as Record<string, unknown>,
+      );
+    } else {
+      result[key] = updateValue;
+    }
+  }
+
+  return result;
+}
+
 export class MockMemory extends MastraMemory {
   constructor({
     storage,
@@ -44,7 +92,11 @@ export class MockMemory extends MastraMemory {
       options: {
         ...options,
         workingMemory: enableWorkingMemory
-          ? ({ enabled: true, template: workingMemoryTemplate } as WorkingMemory)
+          ? ({
+              ...options?.workingMemory,
+              enabled: true,
+              ...(workingMemoryTemplate !== undefined ? { template: workingMemoryTemplate } : {}),
+            } as WorkingMemory)
           : options?.workingMemory,
         lastMessages: enableMessageHistory ? (options?.lastMessages ?? 10) : options?.lastMessages,
       },
@@ -128,6 +180,20 @@ export class MockMemory extends MastraMemory {
     };
   }
 
+  async updateThread({
+    id,
+    title,
+    metadata,
+  }: {
+    id: string;
+    title: string;
+    metadata: Record<string, unknown>;
+    memoryConfig?: MemoryConfigInternal;
+  }): Promise<StorageThreadType> {
+    const memoryStorage = await this.getMemoryStore();
+    return memoryStorage.updateThread({ id, title, metadata });
+  }
+
   async deleteThread(threadId: string) {
     const memoryStorage = await this.getMemoryStore();
     return memoryStorage.deleteThread({ threadId });
@@ -171,14 +237,19 @@ export class MockMemory extends MastraMemory {
 
   public listTools(_config?: MemoryConfigInternal): Record<string, ToolAction<any, any, any>> {
     const mergedConfig = this.getMergedThreadConfig(_config);
-    if (!mergedConfig.workingMemory?.enabled) {
+    if (!mergedConfig.workingMemory?.enabled || mergedConfig.workingMemory.agentManaged === false) {
       return {};
     }
+
+    const usesMergeSemantics = Boolean(mergedConfig.workingMemory?.schema);
+    const description = usesMergeSemantics
+      ? `Update the working memory with new information. Data is merged with existing memory - only include fields you want to add or update.`
+      : `Update the working memory with new information. Any data not included will be overwritten.`;
 
     return {
       updateWorkingMemory: createTool({
         id: 'update-working-memory',
-        description: `Update the working memory with new information. Any data not included will be overwritten.`,
+        description,
         inputSchema: z.object({ memory: z.string() }),
         execute: async (inputData, context) => {
           const threadId = context?.agent?.threadId;
@@ -218,8 +289,49 @@ export class MockMemory extends MastraMemory {
             }
           }
 
-          const workingMemory =
-            typeof inputData.memory === 'string' ? inputData.memory : JSON.stringify(inputData.memory);
+          let workingMemory: string;
+
+          if (usesMergeSemantics) {
+            const existingRaw = await memory.getWorkingMemory({
+              threadId,
+              resourceId,
+              memoryConfig: _config,
+            });
+
+            let existingData: Record<string, unknown> | null = null;
+            if (existingRaw) {
+              try {
+                existingData = typeof existingRaw === 'string' ? JSON.parse(existingRaw) : existingRaw;
+              } catch {
+                existingData = null;
+              }
+            }
+
+            const memoryInput = inputData.memory;
+            let newData: unknown;
+            if (typeof memoryInput === 'string') {
+              try {
+                newData = JSON.parse(memoryInput);
+              } catch {
+                newData = memoryInput;
+              }
+            } else {
+              newData = memoryInput;
+            }
+
+            if (newData && typeof newData === 'object' && !Array.isArray(newData)) {
+              workingMemory = JSON.stringify(
+                deepMergeWorkingMemory(
+                  existingData as Record<string, unknown> | null,
+                  newData as Record<string, unknown>,
+                ),
+              );
+            } else {
+              workingMemory = typeof newData === 'string' ? newData : JSON.stringify(newData);
+            }
+          } else {
+            workingMemory = typeof inputData.memory === 'string' ? inputData.memory : JSON.stringify(inputData.memory);
+          }
 
           await memory.updateWorkingMemory({
             threadId,

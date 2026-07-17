@@ -11,7 +11,7 @@ packages:
 
 The cache key is derived from the resolved `LanguageModelV2Prompt` Mastra is about to send to the model — i.e. _after_ memory has loaded and earlier input processors have transformed the prompt — so two users with different memory contexts produce different cache keys. Each step in an agentic tool loop is independently cached.
 
-There is no agent-level option for response caching; register `ResponseCache` explicitly on `inputProcessors`. Per-call overrides flow through `RequestContext` via [`ResponseCache.context()`](#static-helpers) and [`ResponseCache.applyContext()`](#static-helpers).
+No agent-level option for response caching exists; register `ResponseCache` explicitly on `inputProcessors`. Per-call overrides flow through `RequestContext` via [`ResponseCache.context()`](#static-helpers) and [`ResponseCache.applyContext()`](#static-helpers).
 
 ## Usage example
 
@@ -23,9 +23,10 @@ import { ResponseCache } from '@mastra/core/processors'
 const cache = new InMemoryServerCache()
 
 const agent = new Agent({
+  id: 'search-agent',
   name: 'Search Agent',
   instructions: 'You answer questions concisely.',
-  model: 'openai/gpt-5',
+  model: '__GATEWAY_OPENAI_MODEL_BASE__',
   inputProcessors: [new ResponseCache({ cache, ttl: 600 })],
 })
 
@@ -41,7 +42,7 @@ await agent.generate('What is the capital of France?', {
 })
 ```
 
-See [Response caching](/docs/agents/response-caching) for the conceptual overview, scoping rules, and recommended deployment patterns.
+See [Response caching](/docs/agents/processors#response-caching) for the conceptual overview, scoping rules, and recommended deployment patterns.
 
 ## Constructor parameters
 
@@ -147,7 +148,7 @@ The shape passed to `ResponseCache.context()` / `ResponseCache.applyContext()`.
 ]}
 />
 
-`cache`, `ttl`, and `agentId` are intentionally not overridable per call — they are instance-level concerns that should not vary per request.
+`cache`, `ttl`, and `agentId` are intentionally not overridable per call — they're instance-level concerns that shouldn't vary per request.
 
 ## ResponseCacheKeyInputs
 
@@ -197,6 +198,6 @@ The argument passed to a `key` function (constructor or per-call). All fields co
 
 ## Related
 
-- [Response caching](/docs/agents/response-caching)
+- [Response caching](/docs/agents/processors#response-caching)
 - [Processors](/docs/agents/processors)
 - [Processor interface](/reference/processors/processor-interface)

@@ -89,6 +89,7 @@ import {
   Workspace,
   Responses,
   Channels,
+  AgentController,
 } from './resources';
 import type {
   ListScoresBySpanParams,
@@ -145,6 +146,16 @@ import type {
   CreateStoredSkillParams,
   StoredSkillResponse,
   GetSystemPackagesResponse,
+  BuilderSettingsResponse,
+  BuilderAvailableModelsResponse,
+  PermissionPatternsResponse,
+  InfrastructureStatusResponse,
+  ListBuilderRegistriesResponse,
+  BuilderRegistrySearchResponse,
+  BuilderRegistryPopularResponse,
+  BuilderRegistryPreviewResponse,
+  BuilderRegistryInstallBody,
+  BuilderRegistryInstallResponse,
   ListScoresResponse as ListScoresResponseOld,
   GetObservationalMemoryParams,
   GetObservationalMemoryResponse,
@@ -152,6 +163,9 @@ import type {
   AwaitBufferStatusResponse,
   GetMemoryStatusResponse,
   ListWorkspacesResponse,
+  ListStoredWorkspacesParams,
+  ListStoredWorkspacesResponse,
+  StoredWorkspaceResponse,
   ListVectorsResponse,
   ListEmbeddersResponse,
   DatasetRecord,
@@ -184,8 +198,11 @@ import type {
   ScheduleResponse,
   ListScheduleTriggersParams,
   ListScheduleTriggersResponse,
+  CreateScheduleInput,
+  UpdateScheduleInput,
+  RunScheduleResponse,
 } from './types';
-import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
+import { base64RequestContext, buildTenancyQuery, parseClientRequestContext, requestContextQueryString } from './utils';
 
 export class MastraClient extends BaseResource {
   private observability: Observability;
@@ -237,6 +254,25 @@ export class MastraClient extends BaseResource {
    */
   public getAgent(agentId: string, version?: AgentVersionIdentifier) {
     return new Agent(this.options, agentId, version);
+  }
+
+  /**
+   * Lists the agent controllers hosted on the connected Mastra instance.
+   * @returns Promise containing an array of agent controller identifiers
+   */
+  public async listAgentControllers(): Promise<{ id: string }[]> {
+    const body = await this.request<{ agentControllers: { id: string }[] }>('/agent-controller');
+    return body.agentControllers;
+  }
+
+  /**
+   * Scopes to an agent controller hosted on the connected Mastra instance. Use
+   * `getAgentController(id).session(resourceId)` to create/resume a session,
+   * stream its events, and send messages.
+   * @param controllerId - The id the agent controller is registered under on Mastra
+   */
+  public getAgentController(controllerId: string) {
+    return new AgentController(this.options, controllerId);
   }
 
   /**
@@ -589,10 +625,10 @@ export class MastraClient extends BaseResource {
     if (logLevel) {
       searchParams.set('logLevel', logLevel);
     }
-    if (page) {
+    if (page !== undefined) {
       searchParams.set('page', String(page));
     }
-    if (perPage) {
+    if (perPage !== undefined) {
       searchParams.set('perPage', String(perPage));
     }
     if (_filters) {
@@ -637,10 +673,10 @@ export class MastraClient extends BaseResource {
     if (logLevel) {
       searchParams.set('logLevel', logLevel);
     }
-    if (page) {
+    if (page !== undefined) {
       searchParams.set('page', String(page));
     }
-    if (perPage) {
+    if (perPage !== undefined) {
       searchParams.set('perPage', String(perPage));
     }
 
@@ -1204,11 +1240,23 @@ export class MastraClient extends BaseResource {
         searchParams.set('orderBy[direction]', params.orderBy.direction);
       }
     }
+    if (params?.status) {
+      searchParams.set('status', params.status);
+    }
     if (params?.authorId) {
       searchParams.set('authorId', params.authorId);
     }
+    if (params?.visibility) {
+      searchParams.set('visibility', params.visibility);
+    }
     if (params?.metadata) {
       searchParams.set('metadata', JSON.stringify(params.metadata));
+    }
+    if (params?.favoritedOnly) {
+      searchParams.set('favoritedOnly', 'true');
+    }
+    if (params?.pinFavoritedFor) {
+      searchParams.set('pinFavoritedFor', params.pinFavoritedFor);
     }
 
     const queryString = searchParams.toString();
@@ -1442,8 +1490,17 @@ export class MastraClient extends BaseResource {
     if (params?.authorId) {
       searchParams.set('authorId', params.authorId);
     }
+    if (params?.visibility) {
+      searchParams.set('visibility', params.visibility);
+    }
     if (params?.metadata) {
       searchParams.set('metadata', JSON.stringify(params.metadata));
+    }
+    if (params?.favoritedOnly) {
+      searchParams.set('favoritedOnly', 'true');
+    }
+    if (params?.pinFavoritedFor) {
+      searchParams.set('pinFavoritedFor', params.pinFavoritedFor);
     }
 
     const queryString = searchParams.toString();
@@ -1526,6 +1583,119 @@ export class MastraClient extends BaseResource {
   }
 
   // ============================================================================
+  // Editor / Builder
+  // ============================================================================
+
+  /**
+   * Retrieves agent builder settings for UI gating.
+   * Returns feature flags and configuration set by admin.
+   * @returns Promise containing builder settings
+   */
+  public getBuilderSettings(): Promise<BuilderSettingsResponse> {
+    return this.request('/editor/builder/settings');
+  }
+
+  /**
+   * Retrieves the AI providers/models available under the active builder model
+   * policy. The server applies the EE allowlist, so the result can be rendered
+   * directly in the model picker.
+   * @returns Promise containing the policy-filtered providers/models
+   */
+  public getBuilderAvailableModels(): Promise<BuilderAvailableModelsResponse> {
+    return this.request('/editor/builder/models/available');
+  }
+
+  /**
+   * Retrieves the authoritative list of valid permission-pattern strings.
+   * Used by Studio to validate route→permission literals and gate the sidebar.
+   * @returns Promise containing the permission patterns
+   */
+  public getPermissionPatterns(): Promise<PermissionPatternsResponse> {
+    return this.request('/auth/permission-patterns');
+  }
+
+  /**
+   * Retrieves Agent Builder infrastructure configuration and resolution status.
+   * Requires `infrastructure:read` permission.
+   * @returns Promise containing infrastructure status
+   */
+  public getInfrastructureStatus(): Promise<InfrastructureStatusResponse> {
+    return this.request('/editor/builder/infrastructure');
+  }
+
+  /**
+   * Lists known skill registries surfaced by the Agent Builder config.
+   * Each entry reports whether the registry is enabled. Disabled or unknown
+   * registries return 404 from registry-scoped routes.
+   * Requires `stored-skills:read` permission.
+   */
+  public listBuilderRegistries(): Promise<ListBuilderRegistriesResponse> {
+    return this.request('/editor/builder/registries');
+  }
+
+  /**
+   * Search a builder skill registry. The registry must be enabled or the
+   * server returns 404.
+   * Requires `stored-skills:read` permission.
+   */
+  public searchBuilderRegistry(
+    registryId: string,
+    params: { q: string; limit?: number },
+  ): Promise<BuilderRegistrySearchResponse> {
+    const search = new URLSearchParams({ q: params.q });
+    if (params.limit !== undefined) search.set('limit', String(params.limit));
+    return this.request(`/editor/builder/registries/${encodeURIComponent(registryId)}/search?${search.toString()}`);
+  }
+
+  /**
+   * Fetch the popular skills feed from a builder skill registry.
+   * Requires `stored-skills:read` permission.
+   */
+  public getBuilderRegistryPopular(
+    registryId: string,
+    params?: { limit?: number; offset?: number },
+  ): Promise<BuilderRegistryPopularResponse> {
+    const search = new URLSearchParams();
+    if (params?.limit !== undefined) search.set('limit', String(params.limit));
+    if (params?.offset !== undefined) search.set('offset', String(params.offset));
+    const query = search.toString();
+    return this.request(
+      `/editor/builder/registries/${encodeURIComponent(registryId)}/popular${query ? `?${query}` : ''}`,
+    );
+  }
+
+  /**
+   * Fetch the rendered preview content for a single registry skill.
+   * Requires `stored-skills:read` permission.
+   */
+  public getBuilderRegistryPreview(
+    registryId: string,
+    params: { owner: string; repo: string; path: string },
+  ): Promise<BuilderRegistryPreviewResponse> {
+    const search = new URLSearchParams({
+      owner: params.owner,
+      repo: params.repo,
+      path: params.path,
+    });
+    return this.request(`/editor/builder/registries/${encodeURIComponent(registryId)}/preview?${search.toString()}`);
+  }
+
+  /**
+   * Install a registry skill into the builder's stored-skills DB.
+   * Returns 409 when a stored skill with the derived id already exists.
+   * Requires `stored-skills:write` permission.
+   */
+  public installBuilderRegistrySkill(
+    registryId: string,
+    body: BuilderRegistryInstallBody,
+  ): Promise<BuilderRegistryInstallResponse> {
+    return this.request(`/editor/builder/registries/${encodeURIComponent(registryId)}/install`, {
+      method: 'POST',
+      body,
+    });
+  }
+
+  // ============================================================================
   // Workspace
   // ============================================================================
 
@@ -1544,6 +1714,35 @@ export class MastraClient extends BaseResource {
    */
   public getWorkspace(workspaceId: string): Workspace {
     return new Workspace(this.options, workspaceId);
+  }
+
+  // ============================================================================
+  // Stored Workspaces
+  // ============================================================================
+
+  /**
+   * Lists stored workspace configurations from the database
+   * @param params - Optional filter and pagination parameters
+   * @returns Promise containing paginated list of stored workspaces
+   */
+  public listStoredWorkspaces(params?: ListStoredWorkspacesParams): Promise<ListStoredWorkspacesResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.page !== undefined) searchParams.set('page', String(params.page));
+    if (params?.perPage !== undefined) searchParams.set('perPage', String(params.perPage));
+    if (params?.authorId) searchParams.set('authorId', params.authorId);
+    if (params?.orderBy?.field) searchParams.set('orderBy[field]', params.orderBy.field);
+    if (params?.orderBy?.direction) searchParams.set('orderBy[direction]', params.orderBy.direction);
+    const qs = searchParams.toString();
+    return this.request(`/stored/workspaces${qs ? `?${qs}` : ''}`);
+  }
+
+  /**
+   * Gets a specific stored workspace by ID
+   * @param id - The workspace ID
+   * @returns Promise containing the stored workspace
+   */
+  public getStoredWorkspace(id: string): Promise<StoredWorkspaceResponse> {
+    return this.request(`/stored/workspaces/${encodeURIComponent(id)}`);
   }
 
   // ============================================================================
@@ -1585,10 +1784,16 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Gets a single dataset by ID
+   * Gets a single dataset by ID. Optionally scope the lookup to a specific
+   * tenant organization/project — the server returns 404 if the dataset does
+   * not belong to the given tenant.
    */
-  public getDataset(datasetId: string): Promise<DatasetRecord> {
-    return this.request(`/datasets/${encodeURIComponent(datasetId)}`);
+  public getDataset(
+    datasetId: string,
+    tenancy?: { organizationId?: string; projectId?: string },
+  ): Promise<DatasetRecord> {
+    const qs = buildTenancyQuery(tenancy);
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}${qs}`);
   }
 
   /**
@@ -1599,21 +1804,30 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Updates a dataset
+   * Updates a dataset. Tenancy fields, when provided, scope the existence
+   * check on the server side so that a caller can only update datasets that
+   * belong to the given tenant.
    */
   public updateDataset(params: UpdateDatasetParams): Promise<DatasetRecord> {
-    const { datasetId, ...body } = params;
-    return this.request(`/datasets/${encodeURIComponent(datasetId)}`, {
+    const { datasetId, organizationId, projectId, ...body } = params;
+    const qs = buildTenancyQuery({ organizationId, projectId });
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}${qs}`, {
       method: 'PATCH',
       body,
     });
   }
 
   /**
-   * Deletes a dataset
+   * Deletes a dataset. When tenancy fields are supplied, the server only
+   * deletes the dataset if it belongs to the given tenant (silent no-op
+   * otherwise).
    */
-  public deleteDataset(datasetId: string): Promise<{ success: boolean }> {
-    return this.request(`/datasets/${encodeURIComponent(datasetId)}`, {
+  public deleteDataset(
+    datasetId: string,
+    tenancy?: { organizationId?: string; projectId?: string },
+  ): Promise<{ success: boolean }> {
+    const qs = buildTenancyQuery(tenancy);
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}${qs}`, {
       method: 'DELETE',
     });
   }
@@ -2013,12 +2227,18 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Lists workflow schedules with optional filtering by workflowId or status.
+   * Lists schedules — agent schedules and workflow schedules — with optional
+   * filtering by agentId, workflowId, or status. Agent schedules can
+   * additionally be filtered by threadId, resourceId, or name.
    */
   public listSchedules(params: ListSchedulesParams = {}): Promise<ListSchedulesResponse> {
     const searchParams = new URLSearchParams();
+    if (params.agentId) searchParams.set('agentId', params.agentId);
     if (params.workflowId) searchParams.set('workflowId', params.workflowId);
     if (params.status) searchParams.set('status', params.status);
+    if (params.threadId) searchParams.set('threadId', params.threadId);
+    if (params.resourceId) searchParams.set('resourceId', params.resourceId);
+    if (params.name) searchParams.set('name', params.name);
     const qs = searchParams.toString();
     return this.request(`/schedules${qs ? `?${qs}` : ''}`);
   }
@@ -2028,6 +2248,56 @@ export class MastraClient extends BaseResource {
    */
   public getSchedule(scheduleId: string): Promise<ScheduleResponse> {
     return this.request(`/schedules/${encodeURIComponent(scheduleId)}`);
+  }
+
+  /**
+   * Creates a schedule. Pass `agentId` (plus `prompt`) to schedule an agent,
+   * or `workflowId` (plus optional `inputData`) to schedule a workflow.
+   * By default each call creates a new schedule with a random id
+   * (`agent_<uuid>` for agents, `schedule_<uuid>` for workflows) — pass `id`
+   * to choose a stable id instead; creating one with an id that already
+   * exists throws.
+   *
+   * Trigger (fire) history is read through `listScheduleTriggers(schedule.id)`.
+   */
+  public createSchedule(options: CreateScheduleInput): Promise<ScheduleResponse> {
+    return this.request(`/schedules`, {
+      method: 'POST',
+      body: options,
+    });
+  }
+
+  /**
+   * Patches an existing schedule. Fields apply to the matching target type;
+   * agent-only fields on a workflow schedule are rejected. `threadId` /
+   * `resourceId` are immutable — to retarget, delete and recreate.
+   */
+  public updateSchedule(scheduleId: string, patch: UpdateScheduleInput): Promise<ScheduleResponse> {
+    return this.request(`/schedules/${encodeURIComponent(scheduleId)}`, {
+      method: 'PATCH',
+      body: patch,
+    });
+  }
+
+  /**
+   * Deletes a schedule.
+   */
+  public deleteSchedule(scheduleId: string): Promise<{ message: string }> {
+    return this.request(`/schedules/${encodeURIComponent(scheduleId)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * Fires a schedule manually, out-of-band from the cron schedule. Behaves
+   * like a scheduled fire but does not advance `nextFireAt`. The returned
+   * `claimId` is the trigger row's runId — look it up via
+   * `listScheduleTriggers(scheduleId)`.
+   */
+  public runSchedule(scheduleId: string): Promise<RunScheduleResponse> {
+    return this.request(`/schedules/${encodeURIComponent(scheduleId)}/run`, {
+      method: 'POST',
+    });
   }
 
   /**

@@ -1,6 +1,7 @@
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import { useMetricsFilters } from './use-metrics-filters';
+import { getOrCreate } from '@/lib/map';
 
 export interface TokenUsageByAgentRow {
   name: string;
@@ -24,23 +25,18 @@ export function useTokenUsageByAgentMetrics() {
         orderDirection: 'DESC' as const,
         filters,
       };
-      const [inputRes, outputRes, cacheReadRes, cacheWriteRes] = await Promise.all([
+      // total_input/total_output estimatedCost already rolls up cache + other detail costs.
+      const [inputRes, outputRes] = await Promise.all([
         client.getMetricBreakdown({ ...breakdownBase, name: ['mastra_model_total_input_tokens'] }),
         client.getMetricBreakdown({ ...breakdownBase, name: ['mastra_model_total_output_tokens'] }),
-        client.getMetricBreakdown({ ...breakdownBase, name: ['mastra_model_input_cache_read_tokens'] }),
-        client.getMetricBreakdown({ ...breakdownBase, name: ['mastra_model_input_cache_write_tokens'] }),
       ]);
 
       type AgentEntry = { input: number; output: number; cost: number | null; costUnit: string | null };
 
       const agentMap = new Map<string, AgentEntry>();
 
-      const ensure = (name: string): AgentEntry => {
-        if (!agentMap.has(name)) {
-          agentMap.set(name, { input: 0, output: 0, cost: null, costUnit: null });
-        }
-        return agentMap.get(name)!;
-      };
+      const ensure = (name: string): AgentEntry =>
+        getOrCreate(agentMap, name, () => ({ input: 0, output: 0, cost: null, costUnit: null }));
 
       const addCost = (entry: AgentEntry, group: { estimatedCost?: number | null; costUnit?: string | null }) => {
         if (group.estimatedCost != null) {
@@ -59,16 +55,6 @@ export function useTokenUsageByAgentMetrics() {
         const name = group.dimensions.entityName ?? 'unknown';
         const entry = ensure(name);
         entry.output = group.value;
-        addCost(entry, group);
-      }
-      for (const group of cacheReadRes.groups) {
-        const name = group.dimensions.entityName ?? 'unknown';
-        const entry = ensure(name);
-        addCost(entry, group);
-      }
-      for (const group of cacheWriteRes.groups) {
-        const name = group.dimensions.entityName ?? 'unknown';
-        const entry = ensure(name);
         addCost(entry, group);
       }
 

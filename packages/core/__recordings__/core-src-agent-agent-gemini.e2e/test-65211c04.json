@@ -1,0 +1,97 @@
+{
+  "meta": {
+    "name": "test-65211c04",
+    "testFile": "src/agent/agent-gemini.e2e.test.ts",
+    "testName": "Gemini Model Compatibility Tests > Direct generate() method - Gemini basic functionality > should strip workflow tools when toolChoice is none with structured output",
+    "createdAt": "2026-07-14T17:14:59.192Z"
+  },
+  "recordings": [
+    {
+      "hash": "ae3c79c38d04be49",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "method": "POST",
+        "body": {
+          "generationConfig": {
+            "responseMimeType": "application/json",
+            "responseSchema": {
+              "required": ["summary"],
+              "type": "object",
+              "properties": {
+                "summary": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "Return a short structured summary about exercise."
+                }
+              ]
+            }
+          ],
+          "systemInstruction": {
+            "parts": [
+              {
+                "text": "You answer directly when asked for structured output."
+              }
+            ]
+          }
+        },
+        "timestamp": 1784049298359
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-type": "application/json; charset=UTF-8",
+          "date": "Tue, 14 Jul 2026 17:14:59 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=814",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-gemini-service-tier": "standard",
+          "x-xss-protection": "0"
+        },
+        "body": {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "text": "{\"summary\":\"Regular exercise improves physical and mental health, reduces disease risk, and boosts overall well-being.\"}"
+                  }
+                ],
+                "role": "model"
+              },
+              "finishReason": "STOP",
+              "index": 0
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 18,
+            "candidatesTokenCount": 23,
+            "totalTokenCount": 94,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 18
+              }
+            ],
+            "thoughtsTokenCount": 53,
+            "serviceTier": "standard"
+          },
+          "modelVersion": "gemini-2.5-flash",
+          "responseId": "km5WasqEGo-zkdUPyKqD4Aw"
+        },
+        "isStreaming": false
+      }
+    }
+  ]
+}

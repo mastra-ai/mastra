@@ -1,5 +1,5 @@
 ---
-title: "Reference: Perplexity tools | Tools & MCP"
+title: "Reference: Perplexity tools | Tools and MCP"
 description: "API reference for @mastra/perplexity, which provides a Perplexity Search tool for Mastra agents."
 packages:
   - "@mastra/perplexity"
@@ -177,7 +177,7 @@ import { createPerplexitySearchTool } from '@mastra/perplexity'
 const agent = new Agent({
   id: 'research-agent',
   name: 'Research Agent',
-  model: 'anthropic/claude-sonnet-4-6',
+  model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
   instructions:
     'You are a research assistant. Use the perplexity-search tool to find up-to-date information from the web before answering.',
   tools: {
@@ -190,7 +190,7 @@ const agent = new Agent({
 
 | Variable | Description |
 | - | - |
-| `PERPLEXITY_API_KEY` | Your Perplexity API key. Used as the default when `apiKey` is not passed to a factory function. |
+| `PERPLEXITY_API_KEY` | Your Perplexity API key. Used as the default when `apiKey` isn't passed to a factory function. |
 | `PPLX_API_KEY` | Fallback used when `PERPLEXITY_API_KEY` is unset. |
 
 ## Related

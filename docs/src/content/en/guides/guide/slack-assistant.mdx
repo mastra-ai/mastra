@@ -33,7 +33,7 @@ export const slackAgent = new Agent({
   name: 'Slack Agent',
   instructions:
     'You are a helpful assistant. Answer questions, help with tasks, and have natural conversations.',
-  model: 'anthropic/claude-opus-4-6',
+  model: '__GATEWAY_ANTHROPIC_MODEL_OPUS__',
   channels: {
     adapters: {
       slack: createSlackAdapter(),
@@ -151,12 +151,12 @@ You can extend this agent to:
 
 - [Deploy your application](/docs/deployment/overview) and update the Slack **Request URL** to your production endpoint
 - Add more adapters (Discord, Telegram) to the same agent so it responds on multiple platforms
-- Configure [multimodal content](/docs/agents/channels#multimodal-content) to let your agent process images, video, and audio shared in chat
+- Configure [multimodal content](/docs/capabilities/channels/overview#multimodal-content) to let your agent process images, video, and audio shared in chat
 - Add [tools](/docs/agents/using-tools) to give the agent access to external APIs and data
 
 Learn more:
 
-- [Channels overview](/docs/agents/channels)
+- [Channels overview](/docs/capabilities/channels/overview)
 - [Studio](/docs/studio/overview)
 - [Deployment overview](/docs/deployment/overview)
 - [Chat SDK adapter docs](https://chat-sdk.dev)

@@ -24,7 +24,7 @@ export function CardHeading({
       <h3
         id={id}
         className={cn(
-          'font-serif text-header-md font-normal leading-tight tracking-normal',
+          'font-display text-header-md leading-tight font-normal tracking-normal',
           danger ? 'text-accent2' : 'text-neutral4',
           className,
         )}

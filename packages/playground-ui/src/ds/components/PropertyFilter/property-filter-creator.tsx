@@ -4,7 +4,7 @@ import { PickMultiPanel } from './pick-multi-panel';
 import type { PropertyFilterField, PropertyFilterToken } from './types';
 import { Button } from '@/ds/components/Button/Button';
 import type { ButtonProps } from '@/ds/components/Button/Button';
-import { MultiCombobox } from '@/ds/components/Combobox/multi-combobox';
+import { Combobox } from '@/ds/components/Combobox/combobox';
 import { Input } from '@/ds/components/Input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover/popover';
 import { cn } from '@/lib/utils';
@@ -170,13 +170,14 @@ export function PropertyFilterCreator({
       </PopoverTrigger>
       <PopoverContent
         align="end"
-        className="p-3 w-64"
-        onOpenAutoFocus={e => e.preventDefault()}
-        onCloseAutoFocus={e => {
+        className="w-64 p-3"
+        initialFocus={false}
+        finalFocus={() => {
           if (skipCloseFocusRef.current) {
             skipCloseFocusRef.current = false;
-            e.preventDefault();
+            return false;
           }
+          return true;
         }}
       >
         <div className="grid gap-3">
@@ -185,7 +186,7 @@ export function PropertyFilterCreator({
               <button
                 type="button"
                 aria-label="Back to properties"
-                className="text-neutral3 hover:text-neutral6 transition-colors"
+                className="text-neutral3 transition-colors hover:text-neutral6"
                 onClick={() => {
                   setFieldId(undefined);
                   setTextValue('');
@@ -193,9 +194,9 @@ export function PropertyFilterCreator({
                   setError(undefined);
                 }}
               >
-                <ArrowLeftIcon className="h-4 w-4" />
+                <ArrowLeftIcon className="size-4" />
               </button>
-              <FilterIcon className="h-4 w-4 shrink-0 text-neutral3" />
+              <FilterIcon className="size-4 shrink-0 text-neutral3" />
               <span className="text-ui-sm text-neutral3">{`${selectedField.label} · is`}</span>
             </div>
           )}
@@ -267,7 +268,7 @@ export function PropertyFilterCreator({
                       {used ? (
                         <span className="ml-auto text-neutral3">In use</span>
                       ) : (
-                        <PlusIcon className="ml-auto h-4 w-4 text-neutral3 opacity-0 transition-opacity group-hover:opacity-100 group-focus:opacity-100" />
+                        <PlusIcon className="ml-auto size-4 text-neutral3 opacity-0 transition-opacity group-hover:opacity-100 group-focus:opacity-100" />
                       )}
                     </button>
                   );
@@ -298,7 +299,8 @@ export function PropertyFilterCreator({
           )}
 
           {selectedField && selectedField.kind === 'multi-select' && (
-            <MultiCombobox
+            <Combobox
+              multiple
               options={selectedField.options ?? []}
               value={multiValue}
               onValueChange={v => {
@@ -365,7 +367,7 @@ function PickMultiMenuItem({ field, tokens, onChange, open, onToggle, onClose }:
           role="menuitem"
           data-filter-item=""
           className={cn(
-            'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-ui-md text-neutral4 hover:bg-surface4 hover:text-neutral6 transition-colors',
+            'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-ui-md text-neutral4 transition-colors hover:bg-surface4 hover:text-neutral6',
             'focus:bg-surface4 focus:text-neutral6 focus:outline-none',
           )}
           onKeyDown={e => {
@@ -380,9 +382,9 @@ function PickMultiMenuItem({ field, tokens, onChange, open, onToggle, onClose }:
             });
           }}
         >
-          {open && <ChevronRightIcon className="h-4 w-4 text-neutral3 shrink-0" />}
+          {open && <ChevronRightIcon className="size-4 shrink-0 text-neutral3" />}
           <span className="truncate">{field.label}</span>
-          {!open && <ChevronRightIcon className="h-4 w-4 ml-auto text-neutral3 shrink-0" />}
+          {!open && <ChevronRightIcon className="ml-auto size-4 shrink-0 text-neutral3" />}
         </button>
       </PopoverTrigger>
       <PopoverContent
@@ -391,7 +393,7 @@ function PickMultiMenuItem({ field, tokens, onChange, open, onToggle, onClose }:
         align="start"
         sideOffset={8}
         className="w-64 p-2"
-        onOpenAutoFocus={e => e.preventDefault()}
+        initialFocus={false}
         onKeyDown={e => {
           if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Home' && e.key !== 'End') return;
           const items = Array.from(

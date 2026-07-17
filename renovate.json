@@ -21,7 +21,7 @@
   "major": {
     "dependencyDashboardApproval": true
   },
-  "schedule": ["before 6am on monday"],
+  "schedule": ["before 6am every weekday"],
   "vulnerabilityAlerts": {
     "groupName": "security updates",
     "labels": ["automation", "security"],
@@ -33,8 +33,28 @@
     "schedule": ["before 6am on wednesday"],
     "automerge": true
   },
-  "ignorePaths": ["docs/**", "explorations/**", ".github/scripts", "templates/**", "**/examples/**", "**/_examples/**"],
+  "ignorePaths": [
+    "docs/**",
+    "explorations/**",
+    ".github/scripts",
+    "templates/**",
+    "**/_examples/**",
+    ".claude/skills/**/assets/**/package.json",
+    "e2e-tests/**/template/package.json"
+  ],
   "packageRules": [
+    {
+      "description": "Disable all dependency updates in examples (Renovate previously ignored these via ignorePaths)",
+      "matchFileNames": ["examples/**/package.json"],
+      "enabled": false
+    },
+    {
+      "description": "Allow zod updates in examples (kept in sync with the catalog to prevent version collision with workspace-linked @mastra packages that caused TS2589/OOM)",
+      "matchFileNames": ["examples/**/package.json"],
+      "matchPackageNames": ["zod"],
+      "enabled": true,
+      "groupName": "Schema"
+    },
     {
       "matchDepTypes": ["engines"],
       "enabled": false
@@ -58,6 +78,88 @@
       "automerge": true
     },
     {
+      "groupName": "GitHub Actions",
+      "commitMessageTopic": "GitHub Actions",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["major", "minor", "patch", "digest"],
+      "dependencyDashboardApproval": false,
+      "automerge": true
+    },
+    {
+      "groupName": "Docker images",
+      "commitMessageTopic": "Docker images",
+      "matchDatasources": ["docker"],
+      "matchUpdateTypes": ["major", "minor", "patch"],
+      "dependencyDashboardApproval": false
+    },
+    {
+      "groupName": "AI provider SDKs",
+      "commitMessageTopic": "AI provider SDKs",
+      "matchFileNames": ["+(package.json)", "**/package.json", "!./examples/**", "!./docs/**"],
+      "matchPackageNames": [
+        "@arcadeai/arcadejs",
+        "@deepgram/sdk",
+        "@google/genai",
+        "@mendable/firecrawl-js",
+        "@openrouter/ai-sdk-provider",
+        "@openrouter/ai-sdk-provider-v5",
+        "@tavily/core",
+        "elevenlabs"
+      ],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "dependencyDashboardApproval": false
+    },
+    {
+      "groupName": "Observability providers",
+      "commitMessageTopic": "Observability providers",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": [
+        "@arizeai/*",
+        "@langfuse/*",
+        "@sentry/node",
+        "braintrust",
+        "dd-trace",
+        "langsmith",
+        "posthog-node"
+      ],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "dependencyDashboardApproval": false
+    },
+    {
+      "groupName": "Database clients",
+      "commitMessageTopic": "Database clients",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": [
+        "@clickhouse/client",
+        "@datastax/astra-db-ts",
+        "@duckdb/node-api",
+        "@elastic/elasticsearch",
+        "@lancedb/lancedb",
+        "@libsql/client",
+        "@opensearch-project/opensearch",
+        "@pinecone-database/pinecone",
+        "@qdrant/js-client-rest",
+        "@supabase/supabase-js",
+        "@turbopuffer/turbopuffer",
+        "@types/mssql",
+        "@types/pg",
+        "chromadb",
+        "convex",
+        "couchbase",
+        "electrodb",
+        "ioredis",
+        "mongodb",
+        "mssql",
+        "pg",
+        "redis"
+      ],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "dependencyDashboardApproval": false
+    },
+    {
       "groupName": "Hono",
       "matchSourceUrls": ["https://github.com/honojs/hono"],
       "matchPackageNames": ["@hono/*", "hono"]
@@ -79,9 +181,10 @@
     },
     {
       "groupName": "AI SDK Examples",
-      "description": "Leave example apps eligible for all AI SDK update types",
+      "description": "Allow all AI SDK update types in examples",
       "matchFileNames": ["examples/**/package.json"],
-      "matchSourceUrls": ["https://github.com/vercel/ai"]
+      "matchSourceUrls": ["https://github.com/vercel/ai"],
+      "enabled": true
     },
     {
       "groupName": "Assistant UI",
@@ -205,7 +308,15 @@
       "groupName": "Schema",
       "commitMessageTopic": "Schema",
       "matchFileNames": ["+(package.json)", "**/package.json"],
-      "matchPackageNames": ["zod", "json-schema", "zod-to-json-schema"],
+      "matchPackageNames": [
+        "zod",
+        "json-schema",
+        "zod-to-json-schema",
+        "zod-from-json-schema",
+        "zod-from-json-schema-v3",
+        "zod-to-ts",
+        "json-schema-to-zod"
+      ],
       "matchUpdateTypes": ["major", "minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "dependencyDashboardApproval": false
@@ -266,7 +377,7 @@
       "groupName": "Inngest",
       "commitMessageTopic": "Inngest",
       "matchFileNames": ["+(package.json)", "**/package.json"],
-      "matchPackageNames": ["inngest", "inngest-cli"],
+      "matchPackageNames": ["inngest", "inngest-cli", "@inngest/*"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"]
     },
@@ -279,18 +390,95 @@
       "matchDepTypes": ["dependencies", "devDependencies"]
     },
     {
-      "groupName": "Vector Databases",
-      "commitMessageTopic": "Vector Databases",
+      "groupName": "Browser automation",
+      "commitMessageTopic": "Browser automation",
       "matchFileNames": ["+(package.json)", "**/package.json"],
-      "matchPackageNames": ["@qdrant/js-client-rest", "chromadb", "lancedb", "turbopuffer"],
+      "matchPackageNames": ["@browserbasehq/stagehand", "agent-browser", "firecrawl"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"]
     },
     {
-      "groupName": "Workflow Platforms",
-      "commitMessageTopic": "Workflow Platforms",
+      "groupName": "Chat adapter",
+      "commitMessageTopic": "Chat adapter",
       "matchFileNames": ["+(package.json)", "**/package.json"],
-      "matchPackageNames": ["convex", "@daytona-io/sdk", "electrodb"],
+      "matchPackageNames": ["@chat-adapter/slack", "chat"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
+      "groupName": "Composio",
+      "commitMessageTopic": "Composio",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": ["@composio/*"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
+      "groupName": "MCP",
+      "commitMessageTopic": "MCP",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": ["@modelcontextprotocol/*"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
+      "description": "Disable @opencode-ai/plugin updates. Newer plugin versions pull effect@4.0.0-beta.83, which pnpm rejects as a trust downgrade under trustPolicy: no-downgrade. The plugin is exact-pinned to 1.14.48 (effect@4.0.0-beta.59) until upstream publishes a version that does not trigger ERR_PNPM_TRUST_DOWNGRADE.",
+      "matchPackageNames": ["@opencode-ai/plugin"],
+      "enabled": false
+    },
+    {
+      "groupName": "OpenCode",
+      "commitMessageTopic": "OpenCode",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": ["@opencode-ai/*"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
+      "groupName": "React Hook Form",
+      "commitMessageTopic": "React Hook Form",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": ["react-hook-form", "@hookform/resolvers"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
+      "groupName": "Smithy",
+      "commitMessageTopic": "Smithy",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": ["@smithy/*"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
+      "groupName": "Tailwind ecosystem",
+      "commitMessageTopic": "Tailwind ecosystem",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": ["@tailwindcss/typography", "prettier-plugin-tailwindcss", "tailwind-merge"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
+      "groupName": "WorkOS",
+      "commitMessageTopic": "WorkOS",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": ["@workos-inc/node", "@workos/authkit-session"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
+      "groupName": "Workspace providers",
+      "commitMessageTopic": "Workspace providers",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": [
+        "@blaxel/core",
+        "@daytonaio/sdk",
+        "agentfs-sdk",
+        "e2b",
+        "files-sdk",
+        "modal",
+        "@vercel/sandbox"
+      ],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"]
     }

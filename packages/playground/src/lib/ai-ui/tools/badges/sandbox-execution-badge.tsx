@@ -1,12 +1,15 @@
-import { useAuiState } from '@assistant-ui/react';
-import { Badge, Button, Icon, cn } from '@mastra/playground-ui';
-import type { MastraUIMessage } from '@mastra/react';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { CheckIcon, ChevronUpIcon, CopyIcon, TerminalSquare } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useCopyToClipboard } from '../../hooks/use-copy-to-clipboard';
+import type { DataMessagePart } from '../tool-card';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
 import { WORKSPACE_TOOLS } from '@/domains/workspace/constants';
+import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
 import { useLinkComponent } from '@/lib/framework';
 
 // Matches the shape returned by workspace.getInfo() — flat, not nested under "workspace"
@@ -52,8 +55,9 @@ export interface SandboxExecutionBadgeProps extends Omit<ToolApprovalButtonsProp
   toolName: string;
   args: Record<string, unknown> | string;
   result: any;
-  metadata?: MastraUIMessage['metadata'];
+  metadata?: MessageMetadata;
   toolCalled?: boolean;
+  dataParts?: ReadonlyArray<DataMessagePart>;
 }
 
 // Hook for live elapsed time while running
@@ -104,7 +108,7 @@ const TerminalBlock = ({ command, content, maxHeight = '20rem', onCopy, isCopied
         <div className="px-3 py-2 bg-surface3 border-b border-border1 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-neutral6 text-xs shrink-0">$</span>
-            <code className="text-xs text-neutral-300 font-mono truncate">{command}</code>
+            <code className="text-xs text-neutral5 font-mono truncate">{command}</code>
           </div>
           {onCopy && (
             <Button variant="default" size="icon-sm" tooltip="Copy output" onClick={onCopy} className="shrink-0">
@@ -147,16 +151,15 @@ export const SandboxExecutionBadge = ({
   toolApprovalMetadata,
   isNetwork,
   toolCalled: toolCalledProp,
+  dataParts: dataPartsProp,
 }: SandboxExecutionBadgeProps) => {
   // Get sandbox streaming data parts from the message
-  const message = useAuiState(s => s.message);
   const dataParts = useMemo(() => {
-    const content = message.content as ReadonlyArray<{ type: string; name?: string; data?: any }>;
-    return content.filter(part => part.type === 'data');
-  }, [message.content]);
+    return (dataPartsProp ?? []).filter(part => part.type === 'data');
+  }, [dataPartsProp]);
 
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const { isCopied, copyToClipboard } = useCopyToClipboard();
+  const { isCopied, copyToClipboard } = useCopyToClipboard({ copiedDuration: 1500, showToast: false });
   const { Link } = useLinkComponent();
 
   // Command info emitted by get_process_output (so we can show the original command)

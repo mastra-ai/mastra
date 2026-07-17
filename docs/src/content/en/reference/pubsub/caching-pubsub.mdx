@@ -1,0 +1,164 @@
+---
+title: "Reference: CachingPubSub | PubSub"
+description: API reference for CachingPubSub, a pub/sub wrapper that adds event caching and replay for resumable streams.
+packages:
+  - "@mastra/core"
+---
+
+# CachingPubSub
+
+`CachingPubSub` wraps any [`PubSub`](/reference/pubsub/base) implementation and adds event caching and replay. It records every published event per topic in a cache, so a subscriber that connects late or reconnects after a disconnect can replay the events it missed before continuing with live events.
+
+Use it to build resumable streams on top of a transport that doesn't keep history, such as [`EventEmitterPubSub`](/reference/pubsub/event-emitter). Transports that already persist events, such as [`RedisStreamsPubSub`](/reference/pubsub/redis-streams), don't need this wrapper.
+
+`CachingPubSub` is transparent to batching: `subscribe()` forwards `options.batch` to the inner pub/sub, and `supportsNativeBatching` mirrors the inner's value. Wrapping an inner that doesn't support batching results in unbatched delivery even when `options.batch` is passed.
+
+## Usage example
+
+Wrap an inner pub/sub and provide a server cache to store events.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { CachingPubSub, EventEmitterPubSub } from '@mastra/core/events'
+import { InMemoryServerCache } from '@mastra/core/cache'
+
+const cache = new InMemoryServerCache()
+const pubsub = new CachingPubSub(new EventEmitterPubSub(), cache)
+
+export const mastra = new Mastra({
+  pubsub,
+})
+```
+
+The `withCaching` helper returns the same instance and reads better when wrapping inline:
+
+```typescript
+import { withCaching, EventEmitterPubSub } from '@mastra/core/events'
+import { InMemoryServerCache } from '@mastra/core/cache'
+
+const pubsub = withCaching(new EventEmitterPubSub(), new InMemoryServerCache())
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'inner',
+    type: 'PubSub',
+    description:
+      'The pub/sub implementation to wrap. All publishes and live subscriptions pass through to this instance.',
+    isOptional: false,
+  },
+  {
+    name: 'cache',
+    type: 'MastraServerCache',
+    description: 'Cache used to store events per topic for replay.',
+    isOptional: false,
+  },
+  {
+    name: 'options',
+    type: 'CachingPubSubOptions',
+    description: 'Optional configuration.',
+    isOptional: true,
+    properties: [
+      {
+        name: 'keyPrefix',
+        type: 'string',
+        description: 'Prefix for cache keys, used to namespace events.',
+        isOptional: true,
+        defaultValue: 'pubsub:',
+      },
+      {
+        name: 'logger',
+        type: 'IMastraLogger',
+        description: 'Logger for errors. Falls back to `console.error` when omitted.',
+        isOptional: true,
+      },
+    ],
+  },
+]}
+/>
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'supportsNativeBatching',
+    type: 'boolean',
+    description: 'Mirrors the inner pub/sub. Returns `true` only when the wrapped implementation supports batching.',
+  },
+]}
+/>
+
+## Methods
+
+`CachingPubSub` implements the [`PubSub`](/reference/pubsub/base) contract. It overrides the replay methods to read cached events. The methods below describe the caching behavior.
+
+### `publish(topic, event)`
+
+Caches the event with a sequential index, then publishes it to the inner pub/sub.
+
+```typescript
+await pubsub.publish('my-topic', {
+  type: 'example',
+  data: { value: 1 },
+  runId: 'run-123',
+})
+```
+
+### `subscribeWithReplay(topic, cb)`
+
+Replays all cached events for the topic, then subscribes to live events.
+
+```typescript
+await pubsub.subscribeWithReplay('my-topic', event => {
+  console.log(event)
+})
+```
+
+### `subscribeFromOffset(topic, offset, cb)`
+
+Replays cached events starting at `offset`, then subscribes to live events. Use this when the client knows its last position, to avoid replaying the whole history.
+
+```typescript
+await pubsub.subscribeFromOffset('my-topic', 42, event => {
+  console.log(event)
+})
+```
+
+### `getHistory(topic, offset?)`
+
+Returns cached events for the topic, starting at `offset`.
+
+```typescript
+const events = await pubsub.getHistory('my-topic', 0)
+```
+
+Returns: `Promise<Event[]>`
+
+### `clearTopic(topic)`
+
+Removes the topic's cached events and offset counter, and forwards the call to the inner pub/sub so persistent transports (such as [`RedisStreamsPubSub`](/reference/pubsub/redis-streams)) can delete their retained state too. Mastra's run lifecycles call this automatically when a run finishes.
+
+```typescript
+await pubsub.clearTopic('my-topic')
+```
+
+## Functions
+
+### `withCaching(pubsub, cache, options?)`
+
+Convenience wrapper that constructs a `CachingPubSub`. Accepts the same arguments as the constructor and returns the new instance.
+
+```typescript
+import { withCaching, EventEmitterPubSub } from '@mastra/core/events'
+import { InMemoryServerCache } from '@mastra/core/cache'
+
+const pubsub = withCaching(new EventEmitterPubSub(), new InMemoryServerCache(), {
+  keyPrefix: 'events:',
+})
+```
+
+Returns: `CachingPubSub`

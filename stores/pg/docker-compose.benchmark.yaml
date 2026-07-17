@@ -1,0 +1,24 @@
+services:
+  db:
+    image: pgvector/pgvector:0.8.4-pg16
+    container_name: 'pg-benchmark-db'
+    ports:
+      # Direct port for cleanup/setup operations.
+      - '5438:5432'
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+
+  # Toxiproxy sits between the benchmark client and Postgres so we can
+  # measure init() at multiple round-trip latencies. The fix's worst case
+  # (high RTT, no pooler) is the scenario this benchmark is designed to
+  # quantify.
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.12.0
+    container_name: 'pg-benchmark-toxiproxy'
+    depends_on:
+      - db
+    ports:
+      - '8476:8474' # admin API
+      - '5439:5432' # latency-injected pg endpoint

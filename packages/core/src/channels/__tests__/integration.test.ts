@@ -1,10 +1,12 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { Agent } from '../../agent';
+import { ConsoleLogger } from '../../logger';
 import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage/mock';
-import type { ChannelConfig } from '../agent-channels';
+import { AgentChannels } from '../agent-channels';
+import type { ChannelConfig } from '../types';
 
 // Minimal mock adapter satisfying the Chat SDK Adapter interface
 function createMockAdapter(name: string) {
@@ -116,6 +118,29 @@ describe('Mastra Channel Integration', () => {
     });
   });
 
+  describe('logger propagation', () => {
+    it('propagates the Mastra logger to AgentChannels when registered', () => {
+      const agent = createTestAgent('bot-1', {
+        channels: { adapters: { discord: createMockAdapter('discord') } },
+      });
+
+      const mastra = new Mastra({
+        agents: { 'bot-1': agent },
+        storage: new InMemoryStore(),
+      });
+
+      const channels = mastra.getChannels()['bot-1']!;
+      // AgentChannels.__setLogger stores the logger on its internal field; assert
+      // a logger has been propagated from the agent (Mastra wires a DualLogger
+      // on register) rather than remaining unset.
+      const channelLogger = (channels as any).logger;
+      expect(channelLogger).toBeDefined();
+      expect(typeof channelLogger.info).toBe('function');
+      expect(typeof channelLogger.debug).toBe('function');
+      expect(typeof channelLogger.warn).toBe('function');
+    });
+  });
+
   describe('webhook route auto-wiring', () => {
     it('adds channel webhook routes to server config', () => {
       const agent = createTestAgent('bot-1', {
@@ -158,6 +183,35 @@ describe('Mastra Channel Integration', () => {
       expect(paths).toContain('/api/custom');
       expect(paths).toContain('/api/agents/bot-1/channels/discord/webhook');
       expect(paths.length).toBe(2);
+    });
+  });
+
+  describe('channel initialization error handling', () => {
+    it('logs an error instead of swallowing the rejection when channel initialization fails', async () => {
+      const logger = new ConsoleLogger({ level: 'error' });
+      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+      // Force initialization to fail. Registration fires channel init as a
+      // background promise; previously that rejection was swallowed by an
+      // un-awaited `void initialize()`, leaving the channel silently dead.
+      const initSpy = vi
+        .spyOn(AgentChannels.prototype, 'initialize')
+        .mockRejectedValue(new Error('channel init failed'));
+
+      try {
+        const agent = createTestAgent('bot-1', {
+          channels: { adapters: { discord: createMockAdapter('discord') } },
+        });
+
+        new Mastra({ logger, agents: { 'bot-1': agent }, storage: new InMemoryStore() });
+
+        await vi.waitFor(() => expect(errorSpy).toHaveBeenCalled());
+        expect(errorSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Failed to initialize channels for agent bot-1'),
+          expect.any(Error),
+        );
+      } finally {
+        initSpy.mockRestore();
+      }
     });
   });
 });

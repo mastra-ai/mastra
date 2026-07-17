@@ -1,7 +1,7 @@
 import pMap from 'p-map';
 import { z } from 'zod/v4';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
-import { getEntityTypeForSpan } from '../../observability';
+import { getEntityTypeForSpan, InternalSpans } from '../../observability';
 import type { SpanRecord, TraceRecord, MastraStorage } from '../../storage';
 import { createStep, createWorkflow } from '../../workflows/evented';
 import type { MastraScorer, ScorerRun } from '../base';
@@ -68,7 +68,7 @@ const getTraceStep = createStep({
       inputData.targets,
       async target => {
         try {
-          await runScorerOnTarget({ storage, scorer, target });
+          await scoreTrace({ storage, scorer, target });
         } catch (error) {
           const mastraError = new MastraError(
             {
@@ -91,15 +91,86 @@ const getTraceStep = createStep({
   },
 });
 
-export async function runScorerOnTarget({
+/** Tenancy derived from a span, threaded into emitted scores. */
+type ScoreTenancy = {
+  organizationId?: string;
+  projectId?: string;
+};
+
+/**
+ * Derive score tenancy from a span. On spans, `resourceId` carries the project
+ * scope, so it maps to the score's `projectId` field.
+ */
+function getSpanTenancy(span: SpanRecord): ScoreTenancy {
+  const tenancy: ScoreTenancy = {};
+  if (span.organizationId) {
+    tenancy.organizationId = span.organizationId;
+  }
+  if (span.resourceId) {
+    tenancy.projectId = span.resourceId;
+  }
+  return tenancy;
+}
+
+export type ScoreTraceTarget = { traceId: string; spanId?: string } | { trace: TraceRecord; spanId?: string };
+
+export type ScoreTraceBatchTarget = {
+  traceId: string;
+  spanId?: string;
+  datasetItemId?: string;
+};
+
+export type ScoreTraceBatchResult =
+  | {
+      ok: true;
+      index: number;
+      traceId: string;
+      spanId: string;
+      datasetItemId?: string;
+      score: ScoreRowData;
+    }
+  | {
+      ok: false;
+      index: number;
+      traceId: string;
+      spanId?: string;
+      datasetItemId?: string;
+      error: Error;
+    };
+
+type ScoreTraceReferenceTarget = { traceId: string; spanId?: string };
+
+function isScoreTraceReferenceTarget(target: ScoreTraceTarget): target is ScoreTraceReferenceTarget {
+  return 'traceId' in target;
+}
+
+function resolveTargetSpan({ trace, spanId }: { trace: TraceRecord; spanId?: string }): SpanRecord {
+  const span = spanId
+    ? trace.spans.find(candidateSpan => candidateSpan.spanId === spanId)
+    : trace.spans.find(candidateSpan => candidateSpan.parentSpanId === null);
+
+  if (!span) {
+    throw new Error(`Span not found for scoring, traceId: ${trace.traceId}, spanId: ${spanId ?? 'Not provided'}`);
+  }
+
+  return span;
+}
+
+/** Resolve the target span for a trace/target pair. */
+async function resolveTraceAndSpan({
   storage,
-  scorer,
   target,
 }: {
   storage: MastraStorage;
-  scorer: MastraScorer;
-  target: { traceId: string; spanId?: string };
-}) {
+  target: ScoreTraceTarget;
+}): Promise<{ trace: TraceRecord; span: SpanRecord }> {
+  if (!isScoreTraceReferenceTarget(target)) {
+    return {
+      trace: target.trace,
+      span: resolveTargetSpan({ trace: target.trace, spanId: target.spanId }),
+    };
+  }
+
   // TODO: add storage api to get a single span
   const observabilityStore = await storage.getStore('observability');
   if (!observabilityStore) {
@@ -115,32 +186,81 @@ export async function runScorerOnTarget({
     throw new Error(`Trace not found for scoring, traceId: ${target.traceId}`);
   }
 
-  let span: SpanRecord | undefined;
-  if (target.spanId) {
-    span = trace.spans.find(span => span.spanId === target.spanId);
-  } else {
-    span = trace.spans.find(span => span.parentSpanId === null);
-  }
+  return { trace, span: resolveTargetSpan({ trace, spanId: target.spanId }) };
+}
 
-  if (!span) {
-    throw new Error(
-      `Span not found for scoring, traceId: ${target.traceId}, spanId: ${target.spanId ?? 'Not provided'}`,
-    );
-  }
+type TraceScoreResult = Awaited<ReturnType<MastraScorer['run']>>;
+
+/**
+ * Run a scorer against an already-resolved trace + span.
+ *
+ * Span tenancy (`organizationId`, `resourceId` → `projectId`) is threaded into
+ * the scorer run so any score the scorer emits is correctly multi-tenant.
+ */
+async function runScorerForTrace({
+  scorer,
+  trace,
+  span,
+}: {
+  scorer: MastraScorer;
+  trace: TraceRecord;
+  span: SpanRecord;
+}): Promise<TraceScoreResult> {
+  const tenancy = getSpanTenancy(span);
 
   const scorerRun = buildScorerRun({
     scorerType: scorer.type === 'agent' ? 'agent' : undefined,
     trace,
     targetSpan: span,
   });
-  const result = await scorer.run({
+
+  return scorer.run({
     ...scorerRun,
     scoreSource: 'trace',
     targetScope: 'span',
     targetEntityType: getEntityTypeForSpan(span),
-    targetTraceId: target.traceId,
+    targetTraceId: trace.traceId,
     targetSpanId: span.spanId,
+    targetCorrelationContext: {
+      traceId: trace.traceId,
+      spanId: span.spanId,
+      ...(tenancy.organizationId ? { organizationId: tenancy.organizationId } : {}),
+      ...(tenancy.projectId ? { resourceId: tenancy.projectId } : {}),
+    },
+    targetMetadata: {
+      ...(tenancy.organizationId ? { organizationId: tenancy.organizationId } : {}),
+      ...(tenancy.projectId ? { projectId: tenancy.projectId } : {}),
+    },
   });
+}
+
+/**
+ * Resolve a trace/span target, run the scorer, and persist the resulting score.
+ */
+export async function scoreTrace({
+  storage,
+  scorer,
+  target,
+  batchId,
+  datasetId,
+  datasetItemId,
+}: {
+  storage: MastraStorage;
+  scorer: MastraScorer;
+  target: ScoreTraceTarget;
+  /** Optional batch handle stamped on the persisted score so all scores from one
+   * batch scoring call share a `batchId` (each keeps its own per-execution `runId`). */
+  batchId?: string;
+  /** Optional dataset provenance stamped on the persisted score so baseline scores
+   * can join back to the curated dataset item that produced them. Top-level handles,
+   * independent of how the trace is resolved. */
+  datasetId?: string;
+  datasetItemId?: string;
+}): Promise<ScoreRowData> {
+  const { trace, span } = await resolveTraceAndSpan({ storage, target });
+  const tenancy = getSpanTenancy(span);
+
+  const result = await runScorerForTrace({ scorer, trace, span });
 
   const scorerResult = {
     ...result,
@@ -150,18 +270,104 @@ export async function runScorerOnTarget({
       description: scorer.description,
       hasJudge: !!scorer.judge,
     },
-    traceId: target.traceId,
+    traceId: trace.traceId,
     spanId: span.spanId,
     entityId: span.entityId || span.entityName || 'unknown',
     entityType: span.spanType,
     entity: { traceId: span.traceId, spanId: span.spanId },
     source: 'TEST',
     scorerId: scorer.id,
+    ...(tenancy.organizationId ? { organizationId: tenancy.organizationId } : {}),
+    ...(tenancy.projectId ? { projectId: tenancy.projectId } : {}),
+    ...(batchId ? { batchId } : {}),
+    ...(datasetId ? { datasetId } : {}),
+    ...(datasetItemId ? { datasetItemId } : {}),
   };
 
   // Legacy score-store emission. This path is being deprecated.
   const savedScoreRecord = await validateAndSaveScore({ storage, scorerResult });
   await attachScoreToSpan({ storage, span, scoreRecord: savedScoreRecord });
+  return savedScoreRecord;
+}
+
+function toBatchResultError(error: unknown): Error {
+  if (error instanceof Error) {
+    return error;
+  }
+
+  return new Error(typeof error === 'string' ? error : 'Unknown scoreTraceBatch error');
+}
+
+export async function scoreTraceBatch({
+  storage,
+  scorer,
+  targets,
+  batchId,
+  datasetId,
+  concurrency = 3,
+}: {
+  storage: MastraStorage;
+  scorer: MastraScorer;
+  targets: ScoreTraceBatchTarget[];
+  batchId?: string;
+  datasetId?: string;
+  concurrency?: number;
+}): Promise<{
+  batchId?: string;
+  datasetId?: string;
+  scoredCount: number;
+  failedCount: number;
+  results: ScoreTraceBatchResult[];
+}> {
+  const results = await pMap(
+    targets,
+    async (target, index): Promise<ScoreTraceBatchResult> => {
+      try {
+        const score = await scoreTrace({
+          storage,
+          scorer,
+          target,
+          batchId,
+          datasetId,
+          datasetItemId: target.datasetItemId,
+        });
+        const spanId = score.spanId ?? target.spanId;
+
+        if (!spanId) {
+          throw new Error(`Persisted score is missing spanId for traceId: ${target.traceId}`);
+        }
+
+        return {
+          ok: true,
+          index,
+          traceId: score.traceId ?? target.traceId,
+          spanId,
+          ...(target.datasetItemId ? { datasetItemId: target.datasetItemId } : {}),
+          score,
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          index,
+          traceId: target.traceId,
+          ...(target.spanId ? { spanId: target.spanId } : {}),
+          ...(target.datasetItemId ? { datasetItemId: target.datasetItemId } : {}),
+          error: toBatchResultError(error),
+        };
+      }
+    },
+    { concurrency },
+  );
+
+  const scoredCount = results.filter(result => result.ok).length;
+
+  return {
+    ...(batchId ? { batchId } : {}),
+    ...(datasetId ? { datasetId } : {}),
+    scoredCount,
+    failedCount: results.length - scoredCount,
+    results,
+  };
 }
 
 /**
@@ -256,6 +462,12 @@ export const scoreTracesWorkflow = createWorkflow({
   steps: [getTraceStep],
   options: {
     validateInputs: false,
+    // Internal batch-scoring plumbing — hide its workflow spans from exported
+    // traces. Any user-facing work invoked from steps (e.g. the scorer's own
+    // SCORER_RUN span) keeps its own policy and remains visible.
+    tracingPolicy: {
+      internal: InternalSpans.WORKFLOW,
+    },
   },
 });
 

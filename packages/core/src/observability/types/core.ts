@@ -9,6 +9,7 @@
 import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import type { RequestContext } from '../../request-context';
+import type { ClientObservabilityProxy } from './client';
 import type { FeedbackEvent, FeedbackInput } from './feedback';
 import type { LoggerContext, LogEvent } from './logging';
 import type { MetricsContext, MetricEvent } from './metrics';
@@ -122,7 +123,7 @@ export interface ObservabilityContext {
 // ============================================================================
 
 /** Where a registered definition came from. */
-export type DefinitionSource = 'code' | 'stored';
+export type DefinitionSource = 'code' | 'stored' | 'fs';
 
 /** What kind of scoring flow produced the score. */
 export type ScorerScoreSource = 'live' | 'trace' | 'experiment';
@@ -308,6 +309,8 @@ export interface ObservabilityInstance {
 // ============================================================================
 
 export interface ObservabilityEntrypoint {
+  flush(): Promise<void>;
+
   shutdown(): Promise<void>;
 
   setMastraContext(options: { mastra: Mastra }): void;
@@ -353,6 +356,18 @@ export interface ObservabilityEntrypoint {
     correlationContext?: CorrelationContext;
     feedback: FeedbackInput;
   }): Promise<void>;
+
+  /**
+   * Returns the proxy responsible for client observability (W3C trace
+   * context injection + OTLP/JSON payload reception for spans/logs
+   * returned from client-side execution).
+   *
+   * Returns `undefined` when no implementation is registered (e.g.
+   * `NoOpObservability`, or when `@mastra/observability` is not
+   * installed). Callers must treat `undefined` as "no cross-boundary
+   * client observability" and skip inject/receive accordingly.
+   */
+  getClientObservabilityProxy?(): ClientObservabilityProxy | undefined;
 
   // Registry management methods
   registerInstance(name: string, instance: ObservabilityInstance, isDefault?: boolean): void;

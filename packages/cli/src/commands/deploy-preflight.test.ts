@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 
-import { preflightBuildOutput, printPreflightIssues } from './deploy-preflight.js';
+import { mergePreflightEnvVars, preflightBuildOutput, printPreflightIssues } from './deploy-preflight.js';
 import type { PreflightIssue } from './deploy-preflight.js';
 
 vi.mock('@clack/prompts', () => ({
@@ -97,11 +97,28 @@ describe('preflightBuildOutput', () => {
       const missing = issues.find(i => i.code === 'MISSING_ENV_VAR');
       expect(missing?.message).toContain('STRIPE_KEY');
     });
+
+    it('does not flag AUTO_BLOCK_EXTERNAL_PROVIDERS (read by bundled @mastra/server)', async () => {
+      writeBundle(`const f = process.env.AUTO_BLOCK_EXTERNAL_PROVIDERS;`);
+      const issues = await preflightBuildOutput(tmpDir, {});
+      expect(issues.find(i => i.code === 'MISSING_ENV_VAR')).toBeUndefined();
+    });
   });
 
   describe('LOCAL_STORAGE_PATH', () => {
-    it('flags file:./*.db LibSQL paths as errors', async () => {
-      writeBundle(`const url = 'file:./mastra.db';`);
+    function writePreflightMetadata(detections: Array<{ value: string; hint: string; module: string }>) {
+      writeFileSync(join(tmpDir, '.mastra', 'output', 'preflight-local-paths.json'), JSON.stringify(detections));
+    }
+
+    it('flags detections from bundler metadata as errors', async () => {
+      writeBundle(`export {};`);
+      writePreflightMetadata([
+        {
+          value: 'file:./mastra.db',
+          hint: 'LibSQL/SQLite file path relative to the build host',
+          module: 'src/mastra/index.ts',
+        },
+      ]);
       const issues = await preflightBuildOutput(tmpDir, {});
       const issue = issues.find(i => i.code === 'LOCAL_STORAGE_PATH');
       expect(issue).toBeDefined();
@@ -109,30 +126,275 @@ describe('preflightBuildOutput', () => {
       expect(issue?.message).toContain('file:./mastra.db');
     });
 
-    it('flags localhost in connection strings', async () => {
-      writeBundle(`const pg = 'postgresql://user:pass@localhost:5432/db';`);
+    it('flags multiple detections from metadata', async () => {
+      writeBundle(`export {};`);
+      writePreflightMetadata([
+        { value: 'file:./mastra.db', hint: 'LibSQL/SQLite file path', module: 'src/mastra/index.ts' },
+        { value: 'file:../data.db', hint: 'LibSQL/SQLite file path', module: 'src/mastra/config.ts' },
+      ]);
       const issues = await preflightBuildOutput(tmpDir, {});
+      const storageIssues = issues.filter(i => i.code === 'LOCAL_STORAGE_PATH');
+      expect(storageIssues.length).toBe(2);
+    });
+
+    it('reports no issues when metadata file is empty array', async () => {
+      writeBundle(`export {};`);
+      writePreflightMetadata([]);
+      const issues = await preflightBuildOutput(tmpDir, {});
+      expect(issues.find(i => i.code === 'LOCAL_STORAGE_PATH')).toBeUndefined();
+    });
+
+    it('reports no issues when metadata file is absent (older build)', async () => {
+      // Bundle exists but no preflight metadata — plugin wasn't active.
+      writeBundle(`const url = 'file:./mastra.db';`);
+      const issues = await preflightBuildOutput(tmpDir, {});
+      expect(issues.find(i => i.code === 'LOCAL_STORAGE_PATH')).toBeUndefined();
+    });
+
+    it('excludes library code by design (agent-builder prompt templates)', async () => {
+      // The Rollup plugin only records detections from user modules (not
+      // node_modules), so agent-builder prompt templates are never present
+      // in the metadata.  An empty metadata array = no false positives.
+      writeBundle(`const prompt = "url: 'file:./mastra.db'"; // from agent-builder`);
+      writePreflightMetadata([]);
+      const issues = await preflightBuildOutput(tmpDir, {});
+      expect(issues.find(i => i.code === 'LOCAL_STORAGE_PATH')).toBeUndefined();
+    });
+  });
+
+  describe('unified preflight-metadata.json', () => {
+    function writeLegacyMetadata(detections: Array<{ value: string; hint: string; module: string }>) {
+      writeFileSync(join(tmpDir, '.mastra', 'output', 'preflight-local-paths.json'), JSON.stringify(detections));
+    }
+
+    function writeMetadata(metadata: {
+      version?: number;
+      localPaths?: Array<{ value: string; hint: string; module: string; guardedBy?: string }>;
+      userEnvRefs?: string[];
+    }) {
+      writeFileSync(
+        join(tmpDir, '.mastra', 'output', 'preflight-metadata.json'),
+        JSON.stringify({ version: 1, localPaths: [], userEnvRefs: [], ...metadata }),
+      );
+    }
+
+    const guardedDetection = {
+      value: 'file:./.mastra-demo.db',
+      hint: 'LibSQL/SQLite file path relative to the build host',
+      module: 'src/constants.ts',
+      guardedBy: 'TURSO_DATABASE_URL',
+    };
+
+    it('suppresses env-guarded local paths when the guarding var is in the deploy env', async () => {
+      writeBundle(`export {};`);
+      writeMetadata({ localPaths: [guardedDetection] });
+
+      const issues = await preflightBuildOutput(tmpDir, { TURSO_DATABASE_URL: 'libsql://x.turso.io' });
+      expect(issues.find(i => i.code === 'LOCAL_STORAGE_PATH')).toBeUndefined();
+    });
+
+    it('treats an empty-string guard value as missing (runtime || still takes the fallback)', async () => {
+      writeBundle(`export {};`);
+      writeMetadata({ localPaths: [guardedDetection] });
+
+      const issues = await preflightBuildOutput(tmpDir, { TURSO_DATABASE_URL: '' }, { hasEnvFile: true });
       const issue = issues.find(i => i.code === 'LOCAL_STORAGE_PATH');
-      expect(issue).toBeDefined();
       expect(issue?.severity).toBe('error');
+      expect(issue?.message).toContain('TURSO_DATABASE_URL is not set');
     });
 
-    it('flags 127.0.0.1 in connection strings', async () => {
-      writeBundle(`const r = 'redis://127.0.0.1:6379';`);
-      const issues = await preflightBuildOutput(tmpDir, {});
-      expect(issues.find(i => i.code === 'LOCAL_STORAGE_PATH')).toBeDefined();
+    it('errors with an actionable message when the guarding var is missing and an env file is present', async () => {
+      writeBundle(`export {};`);
+      writeMetadata({ localPaths: [guardedDetection] });
+
+      const issues = await preflightBuildOutput(tmpDir, {}, { hasEnvFile: true });
+      const issue = issues.find(i => i.code === 'LOCAL_STORAGE_PATH');
+      expect(issue?.severity).toBe('error');
+      expect(issue?.message).toContain('file:./.mastra-demo.db will be used at runtime');
+      expect(issue?.message).toContain('TURSO_DATABASE_URL is not set');
+      expect(issue?.fix).toContain('TURSO_DATABASE_URL');
     });
 
-    it('does not flag hosted libsql:// URLs', async () => {
-      writeBundle(`const url = 'libsql://my-db-acme.turso.io';`);
-      const issues = await preflightBuildOutput(tmpDir, {});
+    it('warns (not errors) when the guarding var is missing but the CLI has no env file', async () => {
+      writeBundle(`export {};`);
+      writeMetadata({ localPaths: [guardedDetection] });
+
+      const issues = await preflightBuildOutput(tmpDir, {}, { hasEnvFile: false });
+      const issue = issues.find(i => i.code === 'LOCAL_STORAGE_PATH');
+      expect(issue?.severity).toBe('warning');
+      expect(issue?.message).toContain('cannot verify TURSO_DATABASE_URL is set on the platform');
+    });
+
+    it('suppresses paths guarded by platform-provided vars (e.g. MASTRA_STORAGE_URL) without an env entry', async () => {
+      writeBundle(`export {};`);
+      writeMetadata({
+        localPaths: [{ ...guardedDetection, guardedBy: 'MASTRA_STORAGE_URL' }],
+      });
+
+      const issues = await preflightBuildOutput(tmpDir, {}, { hasEnvFile: true });
       expect(issues.find(i => i.code === 'LOCAL_STORAGE_PATH')).toBeUndefined();
     });
 
-    it('does not flag the word "localhost" in unrelated strings', async () => {
-      writeBundle(`const msg = 'You can run this on localhost too';`);
-      const issues = await preflightBuildOutput(tmpDir, {});
+    it('suppresses guarded paths when the var is present only in platform-stored env vars', async () => {
+      writeBundle(`export {};`);
+      writeMetadata({ localPaths: [guardedDetection] });
+
+      const merged = mergePreflightEnvVars({ TURSO_DATABASE_URL: 'libsql://stored.turso.io' }, {});
+      const issues = await preflightBuildOutput(tmpDir, merged, { hasEnvFile: true });
       expect(issues.find(i => i.code === 'LOCAL_STORAGE_PATH')).toBeUndefined();
+    });
+
+    it('suppresses MISSING_ENV_VAR for vars present only in platform-stored env vars', async () => {
+      writeBundle(`export {};`);
+      writeMetadata({ userEnvRefs: ['OPENAI_API_KEY'] });
+
+      const merged = mergePreflightEnvVars({ OPENAI_API_KEY: 'sk-stored' }, {});
+      const issues = await preflightBuildOutput(tmpDir, merged, { hasEnvFile: true });
+      expect(issues.find(i => i.code === 'MISSING_ENV_VAR')).toBeUndefined();
+    });
+
+    it('suppresses guarded paths when the var is a platform-managed injection (managedEnvVarNames)', async () => {
+      writeBundle(`export {};`);
+      writeMetadata({ localPaths: [guardedDetection] });
+
+      const issues = await preflightBuildOutput(
+        tmpDir,
+        {},
+        { hasEnvFile: true, managedEnvVarNames: ['TURSO_DATABASE_URL', 'TURSO_AUTH_TOKEN'] },
+      );
+      expect(issues.find(i => i.code === 'LOCAL_STORAGE_PATH')).toBeUndefined();
+    });
+
+    it('suppresses MISSING_ENV_VAR for platform-managed vars (managedEnvVarNames)', async () => {
+      writeBundle(`export {};`);
+      writeMetadata({ userEnvRefs: ['TURSO_DATABASE_URL', 'TURSO_AUTH_TOKEN'] });
+
+      const issues = await preflightBuildOutput(
+        tmpDir,
+        {},
+        { hasEnvFile: true, managedEnvVarNames: ['TURSO_DATABASE_URL', 'TURSO_AUTH_TOKEN'] },
+      );
+      expect(issues.find(i => i.code === 'MISSING_ENV_VAR')).toBeUndefined();
+    });
+
+    it('hard-errors on guarded misses when managedEnvVarNames is present (complete env picture)', async () => {
+      writeBundle(`export {};`);
+      writeMetadata({ localPaths: [guardedDetection] });
+
+      // Field present but the guard var is not managed, provided, or stored —
+      // the picture is complete even without a local env file.
+      const issues = await preflightBuildOutput(tmpDir, {}, { hasEnvFile: false, managedEnvVarNames: [] });
+      const issue = issues.find(i => i.code === 'LOCAL_STORAGE_PATH');
+      expect(issue?.severity).toBe('error');
+      expect(issue?.message).toContain('TURSO_DATABASE_URL is not set');
+    });
+
+    it('names the exact db create command in the hard-error fix (kind-specific)', async () => {
+      writeBundle(`export {};`);
+      writeMetadata({ localPaths: [guardedDetection] });
+
+      const issues = await preflightBuildOutput(tmpDir, {}, { hasEnvFile: false, managedEnvVarNames: [] });
+      const issue = issues.find(i => i.code === 'LOCAL_STORAGE_PATH');
+      expect(issue?.fix).toContain('mastra env db create --kind turso');
+    });
+
+    it('names the exact db create command when preflight runs without platform context (lint path)', async () => {
+      writeBundle(`export {};`);
+      writeMetadata({ localPaths: [{ ...guardedDetection, guardedBy: 'DATABASE_URL' }] });
+
+      const issues = await preflightBuildOutput(tmpDir, {}, { hasEnvFile: true });
+      const issue = issues.find(i => i.code === 'LOCAL_STORAGE_PATH');
+      expect(issue?.fix).toContain('mastra env db create --kind neon');
+    });
+
+    it('falls back to a bare db create command for unmapped guard vars', async () => {
+      writeBundle(`export {};`);
+      writeMetadata({ localPaths: [{ ...guardedDetection, guardedBy: 'MY_CUSTOM_DB_URL' }] });
+
+      const issues = await preflightBuildOutput(tmpDir, {}, { hasEnvFile: true });
+      const issue = issues.find(i => i.code === 'LOCAL_STORAGE_PATH');
+      expect(issue?.fix).toContain('mastra env db create');
+      expect(issue?.fix).not.toContain('--kind');
+    });
+
+    it('warns (not errors) on guarded misses when platform context lacks managedEnvVarNames (older platform)', async () => {
+      writeBundle(`export {};`);
+      writeMetadata({ localPaths: [guardedDetection] });
+
+      const issues = await preflightBuildOutput(tmpDir, {}, { hasEnvFile: true, managedEnvVarNames: null });
+      const issue = issues.find(i => i.code === 'LOCAL_STORAGE_PATH');
+      expect(issue?.severity).toBe('warning');
+      expect(issue?.message).toContain('cannot verify whether the platform injects it');
+    });
+
+    it('still errors on unguarded local paths', async () => {
+      writeBundle(`export {};`);
+      writeMetadata({
+        localPaths: [{ value: 'file:./mastra.db', hint: 'LibSQL/SQLite file path', module: 'src/mastra/index.ts' }],
+      });
+
+      const issues = await preflightBuildOutput(tmpDir, { TURSO_DATABASE_URL: 'libsql://x.turso.io' });
+      const issue = issues.find(i => i.code === 'LOCAL_STORAGE_PATH');
+      expect(issue?.severity).toBe('error');
+      expect(issue?.message).toContain('file:./mastra.db');
+    });
+
+    it('prefers metadata localPaths over the legacy preflight-local-paths.json', async () => {
+      writeBundle(`export {};`);
+      // Legacy file says error; unified metadata knows the path is guarded.
+      writeLegacyMetadata([{ value: 'file:./.mastra-demo.db', hint: 'x', module: 'src/constants.ts' }]);
+      writeMetadata({ localPaths: [guardedDetection] });
+
+      const issues = await preflightBuildOutput(tmpDir, { TURSO_DATABASE_URL: 'libsql://x.turso.io' });
+      expect(issues.find(i => i.code === 'LOCAL_STORAGE_PATH')).toBeUndefined();
+    });
+
+    it('scopes MISSING_ENV_VAR to userEnvRefs — library-only refs in the bundle do not warn', async () => {
+      writeBundle(`const libFlag = process.env.SOME_LIBRARY_ONLY_FLAG;`);
+      writeMetadata({ userEnvRefs: [] });
+
+      const issues = await preflightBuildOutput(tmpDir, {});
+      expect(issues.find(i => i.code === 'MISSING_ENV_VAR')).toBeUndefined();
+    });
+
+    it('still warns for user-referenced env vars missing from the deploy env', async () => {
+      writeBundle(`export {};`);
+      writeMetadata({ userEnvRefs: ['OPENAI_API_KEY', 'TURSO_DATABASE_URL'] });
+
+      const issues = await preflightBuildOutput(tmpDir, { TURSO_DATABASE_URL: 'libsql://x.turso.io' });
+      const missing = issues.find(i => i.code === 'MISSING_ENV_VAR');
+      expect(missing?.severity).toBe('warning');
+      expect(missing?.message).toContain('OPENAI_API_KEY');
+      expect(missing?.message).not.toContain('TURSO_DATABASE_URL');
+    });
+
+    it('applies the allowlist to userEnvRefs too', async () => {
+      writeBundle(`export {};`);
+      writeMetadata({ userEnvRefs: ['PORT', 'MASTRA_API_TOKEN'] });
+
+      const issues = await preflightBuildOutput(tmpDir, {});
+      expect(issues.find(i => i.code === 'MISSING_ENV_VAR')).toBeUndefined();
+    });
+
+    it('falls back to bundle-wide scan + legacy file when metadata is absent (regression guard)', async () => {
+      writeBundle(`const k = process.env.ANTHROPIC_API_KEY;`);
+      writeLegacyMetadata([{ value: 'file:./mastra.db', hint: 'x', module: 'src/mastra/index.ts' }]);
+
+      const issues = await preflightBuildOutput(tmpDir, {});
+      expect(issues.find(i => i.code === 'MISSING_ENV_VAR')?.message).toContain('ANTHROPIC_API_KEY');
+      const storage = issues.find(i => i.code === 'LOCAL_STORAGE_PATH');
+      expect(storage?.severity).toBe('error');
+    });
+
+    it('ignores malformed metadata (wrong version) and falls back', async () => {
+      writeBundle(`const k = process.env.ANTHROPIC_API_KEY;`);
+      writeFileSync(
+        join(tmpDir, '.mastra', 'output', 'preflight-metadata.json'),
+        JSON.stringify({ version: 99, nonsense: true }),
+      );
+
+      const issues = await preflightBuildOutput(tmpDir, {});
+      expect(issues.find(i => i.code === 'MISSING_ENV_VAR')?.message).toContain('ANTHROPIC_API_KEY');
     });
   });
 
@@ -145,6 +407,31 @@ describe('preflightBuildOutput', () => {
     const issues = await preflightBuildOutput(tmpDir, {});
     const missing = issues.find(i => i.code === 'MISSING_ENV_VAR');
     expect(missing?.message).toContain('SECRET_KEY');
+  });
+});
+
+describe('mergePreflightEnvVars', () => {
+  it('keeps vars present only in the stored environment', () => {
+    expect(mergePreflightEnvVars({ TURSO_DATABASE_URL: 'libsql://stored.turso.io' }, {})).toEqual({
+      TURSO_DATABASE_URL: 'libsql://stored.turso.io',
+    });
+  });
+
+  it('lets local env file values win over stored values (mirrors platform merge)', () => {
+    expect(mergePreflightEnvVars({ API_KEY: 'stored' }, { API_KEY: 'local' })).toEqual({ API_KEY: 'local' });
+  });
+
+  it('lets a blank local value override a stored value (platform request-wins semantics)', () => {
+    expect(
+      mergePreflightEnvVars({ TURSO_DATABASE_URL: 'libsql://stored.turso.io' }, { TURSO_DATABASE_URL: '' }),
+    ).toEqual({
+      TURSO_DATABASE_URL: '',
+    });
+  });
+
+  it('tolerates absent stored env (older platform responses)', () => {
+    expect(mergePreflightEnvVars(undefined, { A: '1' })).toEqual({ A: '1' });
+    expect(mergePreflightEnvVars(null, { A: '1' })).toEqual({ A: '1' });
   });
 });
 

@@ -1,12 +1,34 @@
-import { createGoogleGenerativeAI } from '@ai-sdk/google-v5';
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
-import { createOpenAI } from '@ai-sdk/openai-v5';
+import { createGoogleGenerativeAI } from '@ai-sdk/google-v6';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v6';
+import { createOpenAI } from '@ai-sdk/openai-v6';
 import type { EmbeddingModel } from '@internal/ai-sdk-v5';
+import type { EmbeddingModelV3 } from '@internal/ai-v6';
 
 type EmbeddingModelV2<VALUE> = Exclude<EmbeddingModel<VALUE>, string>;
 
+import { MASTRA_USER_AGENT } from './gateways/constants.js';
 import { GatewayRegistry } from './provider-registry.js';
 import type { OpenAICompatibleConfig } from './shared.types.js';
+
+const MASTRA_GATEWAY_ID = 'mastra';
+
+function trimTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 47) {
+    end -= 1;
+  }
+  return value.slice(0, end);
+}
+
+function getMastraGatewayBaseUrl(raw = process.env['MASTRA_GATEWAY_URL']): string {
+  const baseUrl = raw?.trim() || 'https://gateway-api.mastra.ai';
+  const withoutTrailingSlashes = trimTrailingSlashes(baseUrl);
+  const withoutVersion = withoutTrailingSlashes.endsWith('/v1')
+    ? withoutTrailingSlashes.slice(0, -'/v1'.length)
+    : withoutTrailingSlashes;
+
+  return `${withoutVersion}/v1`;
+}
 
 /**
  * Information about a known embedding model
@@ -96,7 +118,9 @@ export class ModelRouterEmbeddingModel<VALUE extends string = string> implements
   maxEmbeddingsPerCall: number | PromiseLike<number | undefined> = 2048;
   supportsParallelCalls: boolean | PromiseLike<boolean> = true;
 
-  private providerModel: EmbeddingModelV2<VALUE>;
+  // The underlying provider SDKs are on the AI SDK v6 track (V3 embedding
+  // spec). This wrapper keeps exposing the V2 interface; doEmbed adapts.
+  private providerModel: EmbeddingModelV3;
 
   constructor(config: string | OpenAICompatibleConfig) {
     // Normalize config to always have provider and model IDs
@@ -109,13 +133,20 @@ export class ModelRouterEmbeddingModel<VALUE extends string = string> implements
     };
 
     if (typeof config === 'string') {
-      // Parse provider/model from string (e.g., "openai/text-embedding-3-small")
+      // Parse provider/model or gateway/provider/model from string.
       const parts = config.split('/');
-      if (parts.length !== 2) {
-        throw new Error(`Invalid model string format: "${config}". Expected format: "provider/model"`);
+      if (parts[0] === MASTRA_GATEWAY_ID) {
+        if (parts.length < 3) {
+          throw new Error(`Invalid model string format: "${config}". Expected format: "mastra/provider/model"`);
+        }
+        normalizedConfig = { providerId: MASTRA_GATEWAY_ID, modelId: parts.slice(1).join('/') };
+      } else {
+        if (parts.length !== 2) {
+          throw new Error(`Invalid model string format: "${config}". Expected format: "provider/model"`);
+        }
+        const [providerId, modelId] = parts as [string, string];
+        normalizedConfig = { providerId, modelId };
       }
-      const [providerId, modelId] = parts as [string, string];
-      normalizedConfig = { providerId, modelId };
     } else if ('providerId' in config && 'modelId' in config) {
       normalizedConfig = {
         providerId: config.providerId,
@@ -127,32 +158,60 @@ export class ModelRouterEmbeddingModel<VALUE extends string = string> implements
     } else {
       // config has 'id' field
       const parts = config.id.split('/');
-      if (parts.length !== 2) {
-        throw new Error(`Invalid model string format: "${config.id}". Expected format: "provider/model"`);
+      if (parts[0] === MASTRA_GATEWAY_ID) {
+        if (parts.length < 3) {
+          throw new Error(`Invalid model string format: "${config.id}". Expected format: "mastra/provider/model"`);
+        }
+        normalizedConfig = {
+          providerId: MASTRA_GATEWAY_ID,
+          modelId: parts.slice(1).join('/'),
+          url: config.url,
+          apiKey: config.apiKey,
+          headers: config.headers,
+        };
+      } else {
+        if (parts.length !== 2) {
+          throw new Error(`Invalid model string format: "${config.id}". Expected format: "provider/model"`);
+        }
+        const [providerId, modelId] = parts as [string, string];
+        normalizedConfig = {
+          providerId,
+          modelId,
+          url: config.url,
+          apiKey: config.apiKey,
+          headers: config.headers,
+        };
       }
-      const [providerId, modelId] = parts as [string, string];
-      normalizedConfig = {
-        providerId,
-        modelId,
-        url: config.url,
-        apiKey: config.apiKey,
-        headers: config.headers,
-      };
     }
 
     this.provider = normalizedConfig.providerId;
     this.modelId = normalizedConfig.modelId;
 
-    // If custom URL is provided, skip provider registry validation
-    // and use the provided API key (or empty string if not provided)
-    if (normalizedConfig.url) {
+    if (normalizedConfig.providerId === MASTRA_GATEWAY_ID) {
+      const apiKey = normalizedConfig.apiKey ?? process.env['MASTRA_GATEWAY_API_KEY'];
+      if (!apiKey) {
+        throw new Error('API key not found for provider mastra. Set MASTRA_GATEWAY_API_KEY');
+      }
+
+      this.providerModel = createOpenAICompatible({
+        name: MASTRA_GATEWAY_ID,
+        apiKey,
+        baseURL: getMastraGatewayBaseUrl(normalizedConfig.url),
+        headers: {
+          'User-Agent': MASTRA_USER_AGENT,
+          ...normalizedConfig.headers,
+        },
+      }).embeddingModel(normalizedConfig.modelId);
+    } else if (normalizedConfig.url) {
+      // If custom URL is provided, skip provider registry validation
+      // and use the provided API key (or empty string if not provided)
       const apiKey = normalizedConfig.apiKey || '';
       this.providerModel = createOpenAICompatible({
         name: normalizedConfig.providerId,
         apiKey,
         baseURL: normalizedConfig.url,
         headers: normalizedConfig.headers,
-      }).textEmbeddingModel(normalizedConfig.modelId) as EmbeddingModelV2<VALUE>;
+      }).embeddingModel(normalizedConfig.modelId);
     } else {
       // Get provider config from registry
       const registry = GatewayRegistry.getInstance();
@@ -186,13 +245,9 @@ export class ModelRouterEmbeddingModel<VALUE extends string = string> implements
 
       // Initialize the provider model directly in constructor
       if (normalizedConfig.providerId === 'openai') {
-        this.providerModel = createOpenAI({ apiKey }).textEmbeddingModel(
-          normalizedConfig.modelId,
-        ) as EmbeddingModelV2<VALUE>;
+        this.providerModel = createOpenAI({ apiKey }).embeddingModel(normalizedConfig.modelId);
       } else if (normalizedConfig.providerId === 'google') {
-        this.providerModel = createGoogleGenerativeAI({ apiKey }).textEmbedding(
-          normalizedConfig.modelId,
-        ) as EmbeddingModelV2<VALUE>;
+        this.providerModel = createGoogleGenerativeAI({ apiKey }).embeddingModel(normalizedConfig.modelId);
       } else {
         // Use OpenAI-compatible provider for other providers
         if (!providerConfig.url) {
@@ -202,7 +257,7 @@ export class ModelRouterEmbeddingModel<VALUE extends string = string> implements
           name: normalizedConfig.providerId,
           apiKey,
           baseURL: providerConfig.url,
-        }).textEmbeddingModel(normalizedConfig.modelId) as EmbeddingModelV2<VALUE>;
+        }).embeddingModel(normalizedConfig.modelId);
       }
     }
 
@@ -218,7 +273,14 @@ export class ModelRouterEmbeddingModel<VALUE extends string = string> implements
   async doEmbed(
     args: Parameters<EmbeddingModelV2<VALUE>['doEmbed']>[0],
   ): Promise<Awaited<ReturnType<EmbeddingModelV2<VALUE>['doEmbed']>>> {
-    const result = await this.providerModel.doEmbed(args);
+    // V3 call options require header values to be defined strings.
+    let headers: Record<string, string> | undefined;
+    if (args.headers) {
+      headers = Object.fromEntries(
+        Object.entries(args.headers).filter((entry): entry is [string, string] => entry[1] !== undefined),
+      );
+    }
+    const result = await this.providerModel.doEmbed({ ...args, headers });
     // Ensure warnings is always an array — AI SDK v6's embedMany spreads
     // result.warnings and crashes if it's undefined.
     const warnings = (result as { warnings?: unknown[] }).warnings ?? [];

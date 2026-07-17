@@ -7,12 +7,25 @@ import { DuckDBStore } from '@mastra/duckdb';
 import { Observability, MastraStorageExporter, SensitiveDataFilter } from '@mastra/observability';
 import { SlackProvider } from '@mastra/slack';
 
-import { mastraAuth, rbacProvider, fgaProvider } from './auth';
+import {
+  mastraAuth,
+  rbacProvider,
+  fgaProvider,
+  studioAuth,
+  studioRbac,
+  studioFga,
+  serverAuth,
+  serverRbac,
+  serverFga,
+} from './auth';
 
 import {
   agentThatHarassesYou,
   chefAgent,
   chefAgentResponses,
+  codeOverrideEditableAgent,
+  codeOverrideLockedAgent,
+  codeOverrideDescriptionsOnlyAgent,
   dynamicAgent,
   evalAgent,
   dynamicToolsAgent,
@@ -20,6 +33,8 @@ import {
   requestContextDemoAgent,
   mcpAppsAgent,
   slackDemoAgent,
+  billingAgent,
+  balanceAgent,
 } from './agents/index';
 import { MCPClient } from '@mastra/mcp';
 import { myMcpServer, myMcpServerTwo, mcpAppsServer } from './mcp/server';
@@ -55,7 +70,8 @@ const externalMcpClient = new MCPClient({
   },
 });
 import { lessComplexWorkflow, myWorkflow } from './workflows';
-import { heartbeatWorkflow, multiCadenceWorkflow } from './workflows/scheduled';
+import { refundWorkflow } from './workflows/refund-workflow';
+import { tickWorkflow, multiCadenceWorkflow } from './workflows/scheduled';
 import {
   chefModelV2Agent,
   networkAgent,
@@ -63,14 +79,17 @@ import {
   agentWithBranchingModeration,
   agentWithSequentialModeration,
   supervisorAgent,
+  durableSupervisorAgent,
   subscriptionOrchestratorAgent,
   cryptoResearchAgent,
+  durableCryptoResearchAgent,
 } from './agents/model-v2-agent';
 import { myWorkflowX, nestedWorkflow, findUserWorkflow } from './workflows/other';
 import { moderationProcessor } from './agents/model-v2-agent';
 import {
   moderatedAssistantAgent,
   agentWithProcessorWorkflow,
+  durableAgentWithProcessorWorkflow,
   contentModerationWorkflow,
   simpleAssistantAgent,
   agentWithBranchingWorkflow,
@@ -84,6 +103,10 @@ import {
   stepLoggerProcessor,
 } from './processors/index';
 import { gatewayAgent } from './agents/gateway';
+import { askUserAgent } from './agents/ask-user-agent';
+import { codeModeAgent } from './agents/code-mode-agent';
+import { clinicDirectAgent, clinicSpecialistAgent, clinicSupervisorAgent } from './agents/clinic-context-agents';
+import { approvalDemoAgent } from './agents/approval-demo-agent';
 
 const libsqlStore = new LibSQLStore({
   id: 'mastra-storage',
@@ -102,10 +125,17 @@ const storage = new MastraCompositeStore({
 export const mastra = new Mastra({
   agents: {
     gatewayAgent,
+    askUserAgent,
+    approvalDemoAgent,
     chefAgent,
     chefAgentResponses,
+    codeOverrideEditableAgent,
+    codeOverrideLockedAgent,
+    codeOverrideDescriptionsOnlyAgent,
     dynamicAgent,
     dynamicToolsAgent,
+    billingAgent,
+    balanceAgent,
     agentThatHarassesYou,
     evalAgent,
     schemaValidatedAgent,
@@ -115,15 +145,22 @@ export const mastra = new Mastra({
     networkAgent,
     moderatedAssistantAgent,
     agentWithProcessorWorkflow,
+    durableAgentWithProcessorWorkflow,
     simpleAssistantAgent,
     agentWithBranchingWorkflow,
     agentWithAdvancedModeration,
     agentWithBranchingModeration,
     agentWithSequentialModeration,
     supervisorAgent,
+    durableSupervisorAgent,
     subscriptionOrchestratorAgent,
     cryptoResearchAgent,
+    durableCryptoResearchAgent,
     slackDemoAgent,
+    codeModeAgent,
+    clinicDirectAgent,
+    clinicSpecialistAgent,
+    clinicSupervisorAgent,
   },
   processors: {
     moderationProcessor,
@@ -148,13 +185,15 @@ export const mastra = new Mastra({
     contentModerationWorkflow,
     advancedModerationWorkflow,
     findUserWorkflow,
-    heartbeatWorkflow,
+    tickWorkflow,
     multiCadenceWorkflow,
+    refundWorkflow,
   },
   bundler: {
     sourcemap: true,
   },
   editor: new MastraEditor({
+    source: 'code',
     toolProviders: {
       composio: new ComposioToolProvider({ apiKey: '' }),
     },
@@ -165,10 +204,18 @@ export const mastra = new Mastra({
     }),
   },
   server: {
-    auth: mastraAuth,
-    rbac: rbacProvider,
-    fga: fgaProvider,
+    // Use dual auth providers if available, otherwise fall back to single auth
+    auth: serverAuth ?? mastraAuth,
+    rbac: serverRbac ?? rbacProvider,
+    fga: serverFga ?? fgaProvider,
   },
+  studio: studioAuth
+    ? {
+        auth: studioAuth,
+        rbac: studioRbac,
+        fga: studioFga,
+      }
+    : undefined,
   backgroundTasks: {
     enabled: true,
     globalConcurrency: 10,

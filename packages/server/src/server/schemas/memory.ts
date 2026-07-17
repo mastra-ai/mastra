@@ -23,7 +23,13 @@ export const optionalAgentIdQuerySchema = z.object({
 
 /**
  * Storage order by configuration for threads and agents (have both createdAt and updatedAt)
- * Handles JSON parsing from query strings
+ * Handles JSON parsing from query strings.
+ *
+ * The inner object is wrapped in `.optional()` so the preprocess can yield
+ * `undefined` (e.g. when a legacy client sends a bare string like
+ * `?orderBy=updatedAt`) without tripping a "expected object, received undefined"
+ * Zod error. Without that inner `.optional()`, valid optional query usage
+ * regresses into a hard 400.
  */
 const storageOrderBySchema = z
   .preprocess(
@@ -38,16 +44,19 @@ const storageOrderBySchema = z
       }
       return val;
     },
-    z.object({
-      field: z.enum(['createdAt', 'updatedAt']).optional(),
-      direction: z.enum(['ASC', 'DESC']).optional(),
-    }),
+    z
+      .object({
+        field: z.enum(['createdAt', 'updatedAt']).optional(),
+        direction: z.enum(['ASC', 'DESC']).optional(),
+      })
+      .optional(),
   )
   .optional();
 
 /**
  * Storage order by configuration for messages (only have createdAt)
- * Handles JSON parsing from query strings
+ * Handles JSON parsing from query strings. See `storageOrderBySchema` for why
+ * the inner object schema is also `.optional()`.
  */
 const messageOrderBySchema = z
   .preprocess(
@@ -62,10 +71,12 @@ const messageOrderBySchema = z
       }
       return val;
     },
-    z.object({
-      field: z.enum(['createdAt']).optional(),
-      direction: z.enum(['ASC', 'DESC']).optional(),
-    }),
+    z
+      .object({
+        field: z.enum(['createdAt']).optional(),
+        direction: z.enum(['ASC', 'DESC']).optional(),
+      })
+      .optional(),
   )
   .optional();
 
@@ -165,7 +176,7 @@ const threadSchema = z.object({
  * Message structure for storage
  * Extends coreMessageSchema with storage-specific fields
  */
-const messageSchema = z.any();
+const messageSchema = z.unknown();
 // const messageSchema = coreMessageSchema.extend({
 //   id: z.string(),
 //   createdAt: z.coerce.date(),
@@ -192,12 +203,13 @@ export const getMemoryStatusQuerySchema = agentIdQuerySchema.extend({
 export const getMemoryConfigQuerySchema = agentIdQuerySchema;
 
 /**
- * GET /memory/threads
- * agentId is optional - can use storage fallback when not provided
- * resourceId is optional - when omitted, returns all threads
- * metadata is optional - filters threads by metadata key-value pairs (AND logic)
+ * Inner schema for GET /memory/threads. The outer `listThreadsQuerySchema`
+ * wraps this with a back-compat preprocess (see below) that rewrites the
+ * legacy `?orderBy=<field>&sortDirection=<dir>` shape — emitted by
+ * `@mastra/client-js` < 1.18 (e.g. mobile clients pinned to 1.4.x) — into the
+ * current `{ orderBy: { field, direction } }` object shape.
  */
-export const listThreadsQuerySchema = createPagePaginationSchema(100).extend({
+const listThreadsQueryInnerSchema = createPagePaginationSchema(100).extend({
   agentId: z.string().optional(),
   resourceId: z.string().optional(),
   metadata: z
@@ -214,11 +226,46 @@ export const listThreadsQuerySchema = createPagePaginationSchema(100).extend({
         }
         return val;
       },
-      z.record(z.string(), z.any()),
+      z.record(z.string(), z.unknown()),
     )
     .optional(),
   orderBy: storageOrderBySchema,
 });
+
+/**
+ * GET /memory/threads
+ * agentId is optional - can use storage fallback when not provided
+ * resourceId is optional - when omitted, returns all threads
+ * metadata is optional - filters threads by metadata key-value pairs (AND logic)
+ *
+ * Accepts both the current shape (`orderBy[field]=...&orderBy[direction]=...`)
+ * and the legacy shape used by `@mastra/client-js` < 1.18
+ * (`orderBy=<field>&sortDirection=<dir>`). The legacy shape is fused into the
+ * current shape before schema validation, so existing pinned clients continue
+ * to work without server-side breakage.
+ */
+export const listThreadsQuerySchema = z.preprocess(val => {
+  if (val === null || typeof val !== 'object' || Array.isArray(val)) return val;
+  const record = val as Record<string, unknown>;
+  const rawOrderBy = record.orderBy;
+  // Only rewrite the legacy bare-string shape. Object / bracket-notation /
+  // JSON-stringified orderBy is left alone and handled by storageOrderBySchema.
+  if (typeof rawOrderBy !== 'string') return val;
+  // A JSON-stringified object is the current "stringified" shape, not legacy —
+  // let storageOrderBySchema's preprocess parse it.
+  const trimmed = rawOrderBy.trim();
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) return val;
+  // Legacy shape detected: fuse into `{ field, direction }`.
+  const direction = typeof record.sortDirection === 'string' ? record.sortDirection : undefined;
+  const { sortDirection: _legacyDir, ...rest } = record;
+  return {
+    ...rest,
+    orderBy: {
+      field: rawOrderBy,
+      ...(direction !== undefined ? { direction } : {}),
+    },
+  };
+}, listThreadsQueryInnerSchema);
 
 /**
  * GET /memory/threads/:threadId
@@ -308,7 +355,7 @@ export const listThreadsNetworkQuerySchema = createPagePaginationSchema(100).ext
         }
         return val;
       },
-      z.record(z.string(), z.any()),
+      z.record(z.string(), z.unknown()),
     )
     .optional(),
   orderBy: storageOrderBySchema,
@@ -421,8 +468,17 @@ export const memoryConfigResponseSchema = z.object({
   config: z
     .object({
       lastMessages: z.union([z.number(), z.literal(false)]).optional(),
-      semanticRecall: z.union([z.boolean(), z.any()]).optional(),
-      workingMemory: z.any().optional(),
+      semanticRecall: z.union([z.boolean(), z.unknown()]).optional(),
+      workingMemory: z
+        .object({
+          enabled: z.boolean().optional(),
+          scope: z.enum(['thread', 'resource']).optional(),
+          template: z.string().optional(),
+          schema: z.unknown().optional(),
+          version: z.enum(['stable', 'vnext']).optional(),
+        })
+        .passthrough() // WorkingMemory has additional experimental fields (useStateSignals, agentManaged)
+        .optional(),
       observationalMemory: observationalMemoryConfigSchema.optional(),
     })
     .nullable(),
@@ -445,16 +501,16 @@ export const getThreadByIdResponseSchema = threadSchema;
  */
 export const listMessagesResponseSchema = z.object({
   messages: z.array(messageSchema),
-  uiMessages: z.unknown(), // Converted messages in UI format
+  uiMessages: z.array(z.unknown()).nullable(), // Converted messages in UI format
 });
 
 /**
  * Response for GET /memory/threads/:threadId/working-memory
  */
 export const getWorkingMemoryResponseSchema = z.object({
-  workingMemory: z.unknown(), // Can be string or structured object depending on template
+  workingMemory: z.unknown().nullable(), // Can be string or structured object depending on template
   source: z.enum(['thread', 'resource']),
-  workingMemoryTemplate: z.unknown(), // Template structure varies
+  workingMemoryTemplate: z.unknown().nullable(), // Template structure varies
   threadExists: z.boolean(),
 });
 
@@ -598,6 +654,22 @@ export const getObservationalMemoryQuerySchema = z.object({
  * Observational Memory record schema for API responses
  * Matches the ObservationalMemoryRecord type from @mastra/core/storage
  */
+const bufferedObservationChunkSchema = z.object({
+  id: z.string().optional(),
+  cycleId: z.string(),
+  observations: z.string(),
+  tokenCount: z.number(),
+  messageIds: z.array(z.string()).optional(),
+  messageTokens: z.number(),
+  lastObservedAt: z.date().optional(),
+  createdAt: z.date().optional(),
+  suggestedContinuation: z.string().optional(),
+  currentTask: z.string().optional(),
+  threadTitle: z.string().optional(),
+  extractedValues: z.record(z.string(), z.unknown()).optional(),
+  extractionFailures: z.array(z.object({ slug: z.string(), error: z.string() })).optional(),
+});
+
 const observationalMemoryRecordSchema = z.object({
   id: z.string(),
   scope: z.enum(['thread', 'resource']),
@@ -605,6 +677,7 @@ const observationalMemoryRecordSchema = z.object({
   threadId: z.string().nullable(),
   activeObservations: z.string(),
   bufferedObservations: z.string().optional(),
+  bufferedObservationChunks: z.array(bufferedObservationChunkSchema).optional(),
   bufferedReflection: z.string().optional(),
   originType: z.enum(['initial', 'observation', 'reflection']),
   generationCount: z.number(),

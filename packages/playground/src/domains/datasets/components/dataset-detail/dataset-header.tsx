@@ -1,15 +1,10 @@
 'use client';
-
-import {
-  Button,
-  ButtonsGroup,
-  DropdownMenu,
-  MainHeader,
-  TextAndIcon,
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
-} from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
+import { TextAndIcon } from '@mastra/playground-ui/components/Text';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@mastra/playground-ui/components/Tooltip';
 import { format } from 'date-fns/format';
 import { MoreVertical, Pencil, Copy, Trash2, Play, DatabaseIcon, Calendar1Icon, HistoryIcon } from 'lucide-react';
 
@@ -96,7 +91,7 @@ export function DatasetHeader({
           ) : null}
           <DropdownMenu>
             <DropdownMenu.Trigger asChild>
-              <Button size="default" aria-label="Dataset actions menu">
+              <Button size="lg" aria-label="Dataset actions menu">
                 <MoreVertical />
               </Button>
             </DropdownMenu.Trigger>

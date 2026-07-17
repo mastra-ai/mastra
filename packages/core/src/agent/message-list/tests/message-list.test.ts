@@ -931,7 +931,7 @@ describe('MessageList', () => {
               expect.objectContaining({
                 type: 'reasoning',
                 createdAt: expect.any(Number),
-                reasoning: '',
+                reasoning: 'Step 1: Analyze',
                 details: [{ type: 'text', text: 'Step 1: Analyze', signature: 'sig-a' }],
               }),
               expect.objectContaining({
@@ -1011,7 +1011,7 @@ describe('MessageList', () => {
               expect.objectContaining({
                 type: 'reasoning',
                 createdAt: expect.any(Number),
-                reasoning: '',
+                reasoning: 'Analyzing data...',
                 details: [{ type: 'text', text: 'Analyzing data...', signature: 'sig-b' }],
               }),
               expect.objectContaining({
@@ -1225,7 +1225,7 @@ describe('MessageList', () => {
               expect.objectContaining({
                 type: 'reasoning',
                 createdAt: expect.any(Number),
-                reasoning: '',
+                reasoning: 'First, I need to gather some data.',
                 details: [{ type: 'text', text: 'First, I need to gather some data.', signature: 'sig-gather' }],
               }),
               expect.objectContaining({ type: 'text', text: 'Calling data tool...', createdAt: expect.any(Number) }),
@@ -1244,7 +1244,7 @@ describe('MessageList', () => {
               expect.objectContaining({
                 type: 'reasoning',
                 createdAt: expect.any(Number),
-                reasoning: '',
+                reasoning: 'Data gathered, now processing.',
                 details: [{ type: 'text', text: 'Data gathered, now processing.', signature: 'sig-process' }],
               }),
               expect.objectContaining({
@@ -1716,7 +1716,7 @@ describe('MessageList', () => {
             parts: [
               {
                 type: 'reasoning',
-                reasoning: '',
+                reasoning: 'First, I need to gather some data.',
                 details: [{ type: 'text', text: 'First, I need to gather some data.', signature: 'sig-gather' }],
               },
               { type: 'text', text: 'Gathering data...' },
@@ -1731,7 +1731,7 @@ describe('MessageList', () => {
               },
               {
                 type: 'reasoning',
-                reasoning: '',
+                reasoning: 'Data gathered, now I will process it.',
                 details: [{ type: 'text', text: 'Data gathered, now I will process it.', signature: 'sig-process' }],
               },
             ],
@@ -1893,13 +1893,13 @@ describe('MessageList', () => {
             parts: [
               {
                 type: 'reasoning',
-                reasoning: '',
+                reasoning: 'Thinking step 1...',
                 details: [{ type: 'text', text: 'Thinking step 1...', signature: 'sig-1' }],
               },
               { type: 'reasoning', reasoning: '', details: [{ type: 'redacted', data: 'some hidden data' }] },
               {
                 type: 'reasoning',
-                reasoning: '',
+                reasoning: 'Final thought.',
                 details: [{ type: 'text', text: 'Final thought.', signature: 'sig-2' }],
               },
             ],
@@ -4281,10 +4281,10 @@ describe('MessageList', () => {
   });
 
   describe('replaceAllSystemMessages', () => {
-    it('should replace all system messages with new ones', () => {
+    it('should replace untagged system messages and preserve tagged ones', () => {
       const list = new MessageList();
       list.addSystem('Original instruction 1');
-      list.addSystem('Original instruction 2', 'memory');
+      list.addSystem('Memory context', 'memory');
 
       const newSystemMessages: AIV4Type.CoreSystemMessage[] = [
         { role: 'system', content: 'New instruction 1' },
@@ -4293,13 +4293,11 @@ describe('MessageList', () => {
 
       list.replaceAllSystemMessages(newSystemMessages);
 
-      const systemMessages = list.getAllSystemMessages();
-      expect(systemMessages).toHaveLength(2);
-      expect(systemMessages[0].content).toBe('New instruction 1');
-      expect(systemMessages[1].content).toBe('New instruction 2');
+      expect(list.getSystemMessages().map(m => m.content)).toEqual(['New instruction 1', 'New instruction 2']);
+      expect(list.getSystemMessages('memory').map(m => m.content)).toEqual(['Memory context']);
     });
 
-    it('should clear all existing system messages including tagged ones', () => {
+    it('should preserve tagged system messages when called with an empty array', () => {
       const list = new MessageList();
       list.addSystem('Instruction');
       list.addSystem('Memory context', 'memory');
@@ -4307,8 +4305,9 @@ describe('MessageList', () => {
 
       list.replaceAllSystemMessages([]);
 
-      const systemMessages = list.getAllSystemMessages();
-      expect(systemMessages).toHaveLength(0);
+      expect(list.getSystemMessages()).toHaveLength(0);
+      expect(list.getSystemMessages('memory').map(m => m.content)).toEqual(['Memory context']);
+      expect(list.getSystemMessages('user-provided').map(m => m.content)).toEqual(['User provided']);
     });
 
     it('should not affect non-system messages', () => {

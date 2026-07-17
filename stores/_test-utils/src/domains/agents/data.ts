@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto';
 export const createSampleAgent = ({
   id = `agent-${randomUUID()}`,
   authorId,
+  visibility,
   metadata,
   name = 'Test Agent',
   description,
@@ -28,6 +29,7 @@ export const createSampleAgent = ({
   instructions,
   model,
   ...(authorId && { authorId }),
+  ...(visibility && { visibility }),
   ...(metadata && { metadata }),
   ...(description && { description }),
   ...(tools && { tools }),

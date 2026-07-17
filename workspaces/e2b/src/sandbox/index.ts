@@ -16,6 +16,9 @@ import type {
   ProviderStatus,
   MountManager,
   MastraSandboxOptions,
+  SandboxFileInput,
+  SandboxNetworking,
+  SandboxDeriveOptions,
 } from '@mastra/core/workspace';
 
 /**
@@ -24,7 +27,7 @@ import type {
 type InstructionsOption = string | ((opts: { defaultInstructions: string; requestContext?: RequestContext }) => string);
 import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 import { Sandbox, Template } from 'e2b';
-import type { TemplateBuilder, TemplateClass } from 'e2b';
+import type { SandboxInfo as E2BSandboxListInfo, SandboxNetworkOpts, TemplateBuilder, TemplateClass } from 'e2b';
 import { createDefaultMountableTemplate } from '../utils/template';
 import type { TemplateSpec } from '../utils/template';
 import { mountS3, mountGCS, mountAzure, LOG_PREFIX } from './mounts';
@@ -83,6 +86,8 @@ export interface E2BSandboxOptions extends Omit<MastraSandboxOptions, 'processes
   env?: Record<string, string>;
   /** Custom metadata */
   metadata?: Record<string, unknown>;
+  /** Network configuration to use when creating the E2B sandbox */
+  network?: SandboxNetworkOpts;
 
   /** Domain for self-hosted E2B. Falls back to E2B_DOMAIN env var. */
   domain?: string;
@@ -156,6 +161,30 @@ export class E2BSandbox extends MastraSandbox {
   declare readonly mounts: MountManager; // Non-optional (initialized by BaseSandbox)
   declare readonly processes: E2BProcessManager;
 
+  /**
+   * Networking capability: public HTTPS URLs for sandbox ports.
+   * E2B exposes every port via `getHost(port)` — no upfront declaration needed.
+   *
+   * When not attached in this process, the URL is resolved by looking up the
+   * existing sandbox by identity (without resuming it) and deriving the host
+   * (`{port}-{sandboxId}.{domain}`), so other processes can resolve
+   * deployments without waking a paused sandbox.
+   */
+  readonly networking: SandboxNetworking = {
+    getPortUrl: async (port: number): Promise<string | null> => {
+      try {
+        if (this._sandbox) {
+          return `https://${this._sandbox.getHost(port)}`;
+        }
+        const info = await this.lookupExistingSandboxInfo();
+        if (!info) return null;
+        return `https://${port}-${info.sandboxId}.${this.sandboxDomain}`;
+      } catch {
+        return null;
+      }
+    },
+  };
+
   private _sandbox: Sandbox | null = null;
   private _createdAt: Date | null = null;
   private _isRetrying = false;
@@ -163,8 +192,10 @@ export class E2BSandbox extends MastraSandbox {
   private readonly templateSpec?: TemplateSpec;
   private readonly env: Record<string, string>;
   private readonly metadata: Record<string, unknown>;
+  private readonly network?: SandboxNetworkOpts;
   private readonly connectionOpts: Record<string, string>;
   private readonly _instructionsOverride?: InstructionsOption;
+  private readonly _constructorOptions: E2BSandboxOptions;
 
   /** Resolved template ID after building (if needed) */
   private _resolvedTemplateId?: string;
@@ -184,6 +215,7 @@ export class E2BSandbox extends MastraSandbox {
     this.templateSpec = options.template;
     this.env = options.env ?? {};
     this.metadata = options.metadata ?? {};
+    this.network = options.network;
     this.connectionOpts = {
       ...(options.domain && { domain: options.domain }),
       ...(options.apiUrl && { apiUrl: options.apiUrl }),
@@ -192,12 +224,36 @@ export class E2BSandbox extends MastraSandbox {
     };
 
     this._instructionsOverride = options.instructions;
+    this._constructorOptions = { ...options };
 
     // Start template preparation immediately in background
     // This way template build (if needed) begins before start() is called
     this._templatePreparePromise = this.resolveTemplate().catch(err => {
       this.logger.debug(`${LOG_PREFIX} Template preparation error (will retry on start):`, err);
       return ''; // Return empty string, will be retried in start()
+    });
+  }
+
+  /**
+   * Construct a sibling `E2BSandbox` that inherits this sandbox's
+   * configuration (credentials, template, network, metadata, instructions)
+   * with per-instance overrides.
+   *
+   * Performs no I/O — the derived sandbox provisions (or reconnects to an
+   * existing E2B sandbox with the same logical `id`) on its own `start()`.
+   * Use it when one configured sandbox acts as the template for a fleet of
+   * independent sandboxes (e.g. one per project).
+   *
+   * `options.idleTimeoutMinutes` maps to the E2B sandbox `timeout` (ms);
+   * `options.sandboxId` is ignored because E2B reconnects by logical `id`.
+   */
+  derive(options: SandboxDeriveOptions = {}): E2BSandbox {
+    const { id: _id, ...base } = this._constructorOptions;
+    return new E2BSandbox({
+      ...base,
+      ...(options.id !== undefined && { id: options.id }),
+      ...(options.env !== undefined && { env: options.env }),
+      ...(options.idleTimeoutMinutes !== undefined && { timeout: options.idleTimeoutMinutes * 60_000 }),
     });
   }
 
@@ -273,18 +329,19 @@ export class E2BSandbox extends MastraSandbox {
       resolvedTemplateId = await this.resolveTemplate();
     }
 
-    // Create a new sandbox with our logical ID in metadata
-    // Using betaCreate with autoPause so sandbox pauses on timeout instead of being destroyed
+    // Create a new sandbox with our logical ID in metadata.
+    // lifecycle.onTimeout: 'pause' makes the sandbox pause on timeout instead of being destroyed.
     this.logger.debug(`${LOG_PREFIX} Creating new sandbox for: ${this.id} with template: ${resolvedTemplateId}`);
 
     try {
-      this._sandbox = await Sandbox.betaCreate(resolvedTemplateId, {
+      this._sandbox = await Sandbox.create(resolvedTemplateId, {
         ...this.connectionOpts,
-        autoPause: true,
+        lifecycle: { onTimeout: 'pause' },
         metadata: {
           ...this.metadata,
           'mastra-sandbox-id': this.id,
         },
+        ...(this.network && { network: this.network }),
         timeoutMs: this.timeout,
       });
     } catch (createError) {
@@ -296,13 +353,14 @@ export class E2BSandbox extends MastraSandbox {
         const rebuiltTemplateId = await this.buildDefaultTemplate();
 
         this.logger.debug(`${LOG_PREFIX} Retrying sandbox creation with rebuilt template: ${rebuiltTemplateId}`);
-        this._sandbox = await Sandbox.betaCreate(rebuiltTemplateId, {
+        this._sandbox = await Sandbox.create(rebuiltTemplateId, {
           ...this.connectionOpts,
-          autoPause: true,
+          lifecycle: { onTimeout: 'pause' },
           metadata: {
             ...this.metadata,
             'mastra-sandbox-id': this.id,
           },
+          ...(this.network && { network: this.network }),
           timeoutMs: this.timeout,
         });
       } else {
@@ -317,26 +375,37 @@ export class E2BSandbox extends MastraSandbox {
   }
 
   /**
-   * Stop the E2B sandbox.
-   * Unmounts all filesystems and releases the sandbox reference.
+   * Stop the E2B sandbox by pausing it (snapshot-stop).
+   *
+   * Pausing freezes the whole VM — filesystem, memory, and running processes —
+   * and stops billing immediately. The next `start()` reconnects and resumes it,
+   * with background processes still running. Filesystem mounts are unmounted
+   * first (FUSE mounts don't survive pause) and reconciled again on start.
+   *
    * Status management is handled by the base class.
    */
   async stop(): Promise<void> {
-    // Kill all background processes before stopping
-    try {
-      const procs = await this.processes.list();
-      await Promise.all(procs.map(p => this.processes.kill(p.pid)));
-    } catch {
-      // Best-effort: sandbox may already be dead
-    }
-
-    // Unmount all filesystems before stopping
+    // Unmount all filesystems before pausing
     // Collect keys first since unmount() mutates the map
     for (const mountPath of [...this.mounts.entries.keys()]) {
       try {
         await this.unmount(mountPath);
       } catch {
         // Best-effort unmount; sandbox may already be dead
+      }
+    }
+
+    // Pause failures propagate — a sandbox that failed to pause is still
+    // running (and billing), so callers must not assume it stopped.
+    if (this._sandbox) {
+      await this._sandbox.pause();
+      this.logger.debug(`${LOG_PREFIX} Paused sandbox ${this._sandbox.sandboxId} for: ${this.id}`);
+    } else {
+      // Not attached in this process — pause by identity without resuming.
+      const info = await this.lookupExistingSandboxInfo();
+      if (info?.state === 'running') {
+        await Sandbox.pause(info.sandboxId, this.connectionOpts);
+        this.logger.debug(`${LOG_PREFIX} Paused detached sandbox ${info.sandboxId} for: ${this.id}`);
       }
     }
 
@@ -368,13 +437,18 @@ export class E2BSandbox extends MastraSandbox {
         }
       }
 
-      try {
-        await this._sandbox.kill();
-      } catch {
-        // Ignore errors during destroy
-      }
+      // Kill failures propagate — a sandbox that failed to delete is still
+      // alive, so callers must not assume cleanup completed.
+      await this._sandbox.kill();
 
       this._sandbox = null;
+    } else {
+      // Not attached in this process — kill by identity without resuming.
+      const info = await this.lookupExistingSandboxInfo();
+      if (info) {
+        await Sandbox.kill(info.sandboxId, this.connectionOpts);
+        this.logger.debug(`${LOG_PREFIX} Killed detached sandbox ${info.sandboxId} for: ${this.id}`);
+      }
     }
 
     this.mounts.clear();
@@ -395,6 +469,23 @@ export class E2BSandbox extends MastraSandbox {
         ...this.metadata,
       },
     };
+  }
+
+  // ---------------------------------------------------------------------------
+  // File Upload
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Bulk-write files into the sandbox filesystem via the SDK's native upload.
+   */
+  async writeFiles(files: SandboxFileInput[]): Promise<void> {
+    await this.ensureRunning();
+    await this.e2b.files.write(
+      files.map(f => ({
+        path: f.path,
+        data: typeof f.content === 'string' ? f.content : new Blob([new Uint8Array(f.content)]),
+      })),
+    );
   }
 
   /**
@@ -713,11 +804,16 @@ export class E2BSandbox extends MastraSandbox {
     return `e2b-sandbox-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   }
 
+  /** Domain used to derive public sandbox hosts (self-hosted E2B or e2b.app). */
+  private get sandboxDomain(): string {
+    return this.connectionOpts.domain ?? process.env.E2B_DOMAIN ?? 'e2b.app';
+  }
+
   /**
-   * Find an existing sandbox with matching mastra-sandbox-id metadata.
-   * Returns the connected sandbox if found, null otherwise.
+   * Look up an existing sandbox with matching mastra-sandbox-id metadata
+   * WITHOUT connecting or resuming it. Returns its list info or null.
    */
-  private async findExistingSandbox(): Promise<Sandbox | null> {
+  private async lookupExistingSandboxInfo(): Promise<E2BSandboxListInfo | null> {
     try {
       // Query E2B for existing sandbox with our logical ID in metadata
       const paginator = Sandbox.list({
@@ -738,7 +834,7 @@ export class E2BSandbox extends MastraSandbox {
         this.logger.debug(
           `${LOG_PREFIX} Found existing sandbox for ${this.id}: ${existingSandbox.sandboxId} (state: ${existingSandbox.state})`,
         );
-        return await Sandbox.connect(existingSandbox.sandboxId, this.connectionOpts);
+        return existingSandbox;
       }
     } catch (e) {
       this.logger.debug(`${LOG_PREFIX} Error querying for existing sandbox:`, e);
@@ -746,6 +842,22 @@ export class E2BSandbox extends MastraSandbox {
     }
 
     return null;
+  }
+
+  /**
+   * Find an existing sandbox with matching mastra-sandbox-id metadata.
+   * Returns the connected sandbox if found, null otherwise.
+   * Connecting to a paused sandbox resumes it.
+   */
+  private async findExistingSandbox(): Promise<Sandbox | null> {
+    const info = await this.lookupExistingSandboxInfo();
+    if (!info) return null;
+    try {
+      return await Sandbox.connect(info.sandboxId, this.connectionOpts);
+    } catch (e) {
+      this.logger.debug(`${LOG_PREFIX} Error connecting to existing sandbox:`, e);
+      return null;
+    }
   }
 
   /**

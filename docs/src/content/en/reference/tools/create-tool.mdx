@@ -1,5 +1,5 @@
 ---
-title: "Reference: createTool() | Tools & MCP"
+title: "Reference: createTool() | Tools and MCP"
 description: Documentation for the `createTool()` function in Mastra, used to define custom tools for agents.
 packages:
   - "@mastra/core"
@@ -14,257 +14,32 @@ The `createTool()` function is used to define custom tools that your Mastra agen
 
 ## Usage example
 
-```typescript title="src/mastra/tools/reverse-tool.ts"
-import { createTool } from '@mastra/core/tools'
-import { z } from 'zod'
-
-export const tool = createTool({
-  id: 'test-tool',
-  description: 'Reverse the input string',
-  inputSchema: z.object({
-    input: z.string(),
-  }),
-  outputSchema: z.object({
-    output: z.string(),
-  }),
-  execute: async inputData => {
-    const reversed = inputData.input.split('').reverse().join('')
-
-    return {
-      output: reversed,
-    }
-  },
-})
-```
-
-## Define schemas
-
-You can define the tool's `inputSchema` and `outputSchema` with any library that supports [Standard JSON Schema](https://standardschema.dev/json-schema). This includes libraries like [Zod](https://zod.dev/), [Valibot](https://valibot.dev/), and [ArkType](https://arktype.io/).
-
-<Tabs>
-  <TabItem value="zod" label="Zod">
-    ```typescript title="src/mastra/tools/weather-tool.ts"
-    import { createTool } from '@mastra/core/tools'
-    import { z } from 'zod'
-
-    export const weatherTool = createTool({
-      id: 'weather-tool',
-      description: 'Fetches weather for a location',
-      inputSchema: z.object({
-        location: z.string(),
-      }),
-      outputSchema: z.object({
-        weather: z.string(),
-      }),
-      execute: async inputData => {
-        // Fetch weather data
-      },
-    })
-    ```
-  </TabItem>
-
-  <TabItem value="valibot" label="Valibot">
-    ```typescript title="src/mastra/tools/weather-tool.ts"
-    import { createTool } from '@mastra/core/tools'
-    import * as v from 'valibot'
-    import { toStandardJsonSchema } from '@valibot/to-json-schema'
-
-    export const weatherTool = createTool({
-      id: 'weather-tool',
-      description: 'Fetches weather for a location',
-      inputSchema: toStandardJsonSchema(
-        v.object({
-          location: v.string(),
-        }),
-      ),
-      outputSchema: toStandardJsonSchema(
-        v.object({
-          weather: v.string(),
-        }),
-      ),
-      execute: async inputData => {
-        // Fetch weather data
-      },
-    })
-    ```
-  </TabItem>
-
-  <TabItem value="arktype" label="ArkType">
-    ```typescript title="src/mastra/tools/weather-tool.ts"
-    import { createTool } from '@mastra/core/tools'
-    import { type } from 'arktype'
-
-    export const weatherTool = createTool({
-      id: 'weather-tool',
-      description: 'Fetches weather for a location',
-      inputSchema: type({
-        location: 'string',
-      }),
-      outputSchema: type({
-        weather: 'string',
-      }),
-      execute: async inputData => {
-        // Fetch weather data
-      },
-    })
-    ```
-  </TabItem>
-</Tabs>
-
-## Example with strict tool inputs
-
-Set `strict: true` when you want Mastra to ask supported model providers to generate tool arguments that exactly match the tool schema.
-
 ```typescript title="src/mastra/tools/weather-tool.ts"
 import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 
 export const weatherTool = createTool({
-  id: 'get-weather',
-  description: 'Get weather for a city',
-  strict: true,
+  id: 'weather-tool',
+  description: 'Get the current weather for a location',
   inputSchema: z.object({
-    city: z.string(),
-    units: z.enum(['metric', 'imperial']),
-  }),
-  execute: async ({ city, units }) => {
-    return {
-      city,
-      units,
-      forecast: 'sunny',
-    }
-  },
-})
-```
-
-Mastra forwards `strict: true` to model adapters that support strict tool calling. On adapters that do not support strict tool calling, Mastra ignores this option.
-
-## Example with `toModelOutput`
-
-Use `toModelOutput` when your tool should return rich internal data to your app, but the model should receive either a simplified value or multimodal content.
-
-```typescript title="src/mastra/tools/weather-tool.ts"
-import { createTool } from '@mastra/core/tools'
-import { z } from 'zod'
-
-export const weatherTool = createTool({
-  id: 'get-weather',
-  description: 'Get weather for a city',
-  inputSchema: z.object({
-    city: z.string(),
+    location: z.string(),
   }),
   outputSchema: z.object({
-    city: z.string(),
-    temperature: z.number(),
-    condition: z.string(),
-    radarImageUrl: z.string().url(),
+    location: z.string(),
+    temperatureCelsius: z.number(),
+    conditions: z.string(),
   }),
-  execute: async ({ city }) => ({
-    city,
-    temperature: 72,
-    condition: 'sunny',
-    radarImageUrl: 'https://example.com/radar/seattle.png',
-  }),
-  toModelOutput: output => {
+  execute: async ({ location }) => {
     return {
-      type: 'content',
-      value: [
-        { type: 'text', text: `${output.city}: ${output.temperature}F and ${output.condition}` },
-        { type: 'image-url', url: output.radarImageUrl },
-      ],
+      location,
+      temperatureCelsius: 21,
+      conditions: 'sunny',
     }
   },
 })
 ```
 
-The tool still returns the full `execute` result to your application, while the model receives the transformed `toModelOutput` value.
-
-`toModelOutput` can return:
-
-- `type: 'text'`
-- `type: 'json'`
-- `type: 'content'` with parts like `text`, `image-url`, `image-data`, `file-url`, `file-data`, `file-id`, `image-file-id`, or `custom`
-
-## Example with `transform`
-
-Use `transform` when the tool should keep raw inputs or outputs for runtime behavior, but display streams or transcript messages should receive a smaller or safer shape.
-
-```typescript title="src/mastra/tools/customer-tool.ts"
-import { createTool } from '@mastra/core/tools'
-import { z } from 'zod'
-
-export const customerTool = createTool({
-  id: 'lookup-customer',
-  description: 'Looks up a customer',
-  inputSchema: z.object({
-    customerId: z.string(),
-    internalPath: z.string(),
-  }),
-  outputSchema: z.object({
-    displayName: z.string(),
-    apiKey: z.string(),
-    debugScore: z.number(),
-  }),
-  execute: async () => {
-    return {
-      displayName: 'Acme',
-      apiKey: 'secret-value',
-      debugScore: 0.97,
-    }
-  },
-  transform: {
-    display: {
-      input: ({ input }) => ({ customerId: input?.customerId }),
-      output: ({ output }) => ({ displayName: output?.displayName }),
-      error: () => ({ message: 'Customer lookup failed' }),
-    },
-    transcript: {
-      input: ({ input }) => ({ customerId: input?.customerId }),
-      output: ({ output }) => ({ displayName: output?.displayName }),
-      error: () => ({ message: 'Customer lookup failed' }),
-    },
-  },
-})
-```
-
-The tool still receives the raw `inputSchema` value and returns the raw `execute` result. Mastra applies `display` transforms to streamed UI payloads and `transcript` transforms to user-visible transcript messages.
-
-## Example with MCP annotations
-
-When exposing tools via MCP (Model Context Protocol), you can add annotations to describe tool behavior and customize how clients display the tool. These MCP-specific properties are grouped under the `mcp` property:
-
-```typescript title="src/mastra/tools/weather-tool.ts"
-import { createTool } from '@mastra/core/tools'
-import { z } from 'zod'
-
-export const weatherTool = createTool({
-  id: 'get-weather',
-  description: 'Get current weather for a location',
-  inputSchema: z.object({
-    location: z.string().describe('City name or coordinates'),
-  }),
-  // MCP-specific properties
-  mcp: {
-    // Annotations for client behavior hints
-    annotations: {
-      title: 'Weather Lookup', // Human-readable display name
-      readOnlyHint: true, // Tool doesn't modify environment
-      destructiveHint: false, // Tool doesn't perform destructive updates
-      idempotentHint: true, // Same args = same result
-      openWorldHint: true, // Interacts with external API
-    },
-    // Custom metadata for client-specific functionality
-    _meta: {
-      version: '1.0.0',
-      category: 'weather',
-    },
-  },
-  execute: async inputData => {
-    const weather = await fetchWeather(inputData.location)
-    return { weather }
-  },
-})
-```
+The first `execute` parameter is the validated value from `inputSchema`. Destructure schema fields directly in the function signature, as shown with `{ location }`. The optional second parameter contains the execution context.
 
 ## Parameters
 
@@ -351,11 +126,31 @@ export const weatherTool = createTool({
     isOptional: true,
   },
   {
+    name: 'providerOptions',
+    type: 'Record<string, Record<string, unknown>>',
+    description:
+      'Provider-specific options passed to the model when this tool is used. Keys are provider names, such as `anthropic` or `openai`, and values are provider-specific configuration objects.',
+    isOptional: true,
+  },
+  {
+    name: 'inputExamples',
+    type: 'Array<{ input: Record<string, unknown> }>',
+    description: 'Examples of valid tool inputs that supported model providers can use as input examples.',
+    isOptional: true,
+  },
+  {
+    name: 'background',
+    type: 'ToolBackgroundConfig',
+    description:
+      'Background task configuration for this tool. When enabled, the tool can execute in the background while the agent conversation continues.',
+    isOptional: true,
+  },
+  {
     name: 'execute',
     type: 'function',
     description:
-      "The function that contains the tool's logic. It receives two parameters: the validated input data (first parameter) and an optional execution context object (second parameter) containing `requestContext`, `tracingContext`, `abortSignal`, and other execution metadata.",
-    isOptional: false,
+      "The function that contains the tool's logic. Ordinary custom tools usually provide `execute`, but the type allows omission for tool definitions that are executed or adapted elsewhere. It receives two parameters: the validated input data based on inputSchema (first parameter) and an execution context object (second parameter) containing `requestContext`, `abortSignal`, and other execution metadata.",
+    isOptional: true,
     properties: [
       {
         parameters: [
@@ -382,12 +177,6 @@ export const weatherTool = createTool({
                     type: 'RequestContext',
                     isOptional: true,
                     description: 'Request Context for accessing shared state and dependencies',
-                  },
-                  {
-                    name: 'tracingContext',
-                    type: 'TracingContext',
-                    isOptional: true,
-                    description: 'Tracing context for creating child spans and adding metadata',
                   },
                   {
                     name: 'abortSignal',
@@ -459,6 +248,27 @@ export const weatherTool = createTool({
                     isOptional: true,
                     description: 'MCP-specific context (elicitation, etc.)',
                   },
+                  {
+                    name: 'observe',
+                    type: 'ToolObserve',
+                    isOptional: false,
+                    description:
+                      "Observability helpers for recording child spans and structured logs from inside a tool's execute function. Always provided — when no tracing context is active, `span` runs the function directly and `log` is a no-op.",
+                    properties: [
+                      {
+                        name: 'span',
+                        type: '(name: string, fn: () => Promise<T> | T, attributes?: Record<string, unknown>) => Promise<T>',
+                        description:
+                          'Wraps a function in a child span for tracing. When no tracing context is active, runs the function directly.',
+                      },
+                      {
+                        name: 'log',
+                        type: "(level: 'debug' | 'info' | 'warn' | 'error' | 'fatal', message: string, data?: Record<string, unknown>) => void",
+                        description:
+                          'Emits a structured log event attached to the current span. No-op when tracing is inactive.',
+                      },
+                    ],
+                  },
                 ],
               },
             ],
@@ -471,32 +281,34 @@ export const weatherTool = createTool({
     name: 'onInputStart',
     type: 'function',
     description:
-      'Optional callback invoked when the tool call input streaming begins. Receives `toolCallId`, `messages`, and `abortSignal`.',
+      'Optional callback invoked when the tool call input streaming begins. Signature: `(options: ToolCallOptions) => void | PromiseLike<void>`.',
     isOptional: true,
   },
   {
     name: 'onInputDelta',
     type: 'function',
     description:
-      'Optional callback invoked for each incremental chunk of input text as it streams in. Receives `inputTextDelta`, `toolCallId`, `messages`, and `abortSignal`.',
+      'Optional callback invoked for each incremental chunk of input text as it streams in. Signature: `({ inputTextDelta, ...options }: { inputTextDelta: string } & ToolCallOptions) => void | PromiseLike<void>`.',
     isOptional: true,
   },
   {
     name: 'onInputAvailable',
     type: 'function',
     description:
-      'Optional callback invoked when the complete tool input is available and parsed. Receives the validated `input` object, `toolCallId`, `messages`, and `abortSignal`.',
+      'Optional callback invoked when the complete tool input is available and parsed. Signature: `({ input, ...options }: { input: TSchemaIn } & ToolCallOptions) => void | PromiseLike<void>`.',
     isOptional: true,
   },
   {
     name: 'onOutput',
     type: 'function',
     description:
-      "Optional callback invoked after the tool has successfully executed and returned output. Receives the tool's `output`, `toolCallId`, `messages`, and `abortSignal`.",
+      "Optional callback invoked after the tool has successfully executed and returned output. Signature: `({ output, toolName, ...options }: { output: TSchemaOut; toolName: string } & Omit<ToolCallOptions, 'messages'>) => void | PromiseLike<void>`.",
     isOptional: true,
   },
 ]}
 />
+
+Runtime-populated fields such as `mastra` and `mcpMetadata` appear in source types but are set by Mastra or MCP adapters. You don't need to configure them for ordinary `createTool()` usage.
 
 ## Returns
 
@@ -512,11 +324,300 @@ The `createTool()` function returns a `Tool` object.
 ]}
 />
 
+## Define schemas
+
+You can define the tool's `inputSchema` and `outputSchema` with any library that supports [Standard JSON Schema](https://standardschema.dev/json-schema). This includes libraries like [Zod](https://zod.dev/), [Valibot](https://valibot.dev/), and [ArkType](https://arktype.io/).
+
+<Tabs>
+  <TabItem value="zod" label="Zod">
+    ```typescript title="src/mastra/tools/weather-tool.ts"
+    import { createTool } from '@mastra/core/tools'
+    import { z } from 'zod'
+
+    export const weatherTool = createTool({
+      id: 'weather-tool',
+      description: 'Fetches weather for a location',
+      inputSchema: z.object({
+        location: z.string(),
+      }),
+      outputSchema: z.object({
+        location: z.string(),
+        temperatureCelsius: z.number(),
+        conditions: z.string(),
+      }),
+      execute: async ({ location }) => {
+        return { location, temperatureCelsius: 21, conditions: 'sunny' }
+      },
+    })
+    ```
+  </TabItem>
+
+  <TabItem value="valibot" label="Valibot">
+    ```typescript title="src/mastra/tools/weather-tool.ts"
+    import { createTool } from '@mastra/core/tools'
+    import * as v from 'valibot'
+    import { toStandardJsonSchema } from '@valibot/to-json-schema'
+
+    export const weatherTool = createTool({
+      id: 'weather-tool',
+      description: 'Fetches weather for a location',
+      inputSchema: toStandardJsonSchema(
+        v.object({
+          location: v.string(),
+        }),
+      ),
+      outputSchema: toStandardJsonSchema(
+        v.object({
+          location: v.string(),
+          temperatureCelsius: v.number(),
+          conditions: v.string(),
+        }),
+      ),
+      execute: async ({ location }) => {
+        return { location, temperatureCelsius: 21, conditions: 'sunny' }
+      },
+    })
+    ```
+  </TabItem>
+
+  <TabItem value="arktype" label="ArkType">
+    ```typescript title="src/mastra/tools/weather-tool.ts"
+    import { createTool } from '@mastra/core/tools'
+    import { type } from 'arktype'
+
+    export const weatherTool = createTool({
+      id: 'weather-tool',
+      description: 'Fetches weather for a location',
+      inputSchema: type({
+        location: 'string',
+      }),
+      outputSchema: type({
+        location: 'string',
+        temperatureCelsius: 'number',
+        conditions: 'string',
+      }),
+      execute: async ({ location }) => {
+        return { location, temperatureCelsius: 21, conditions: 'sunny' }
+      },
+    })
+    ```
+  </TabItem>
+</Tabs>
+
+## Example with strict tool inputs
+
+Set `strict: true` when you want Mastra to ask supported model providers to generate tool arguments that exactly match the tool schema.
+
+```typescript title="src/mastra/tools/weather-tool.ts"
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+export const weatherTool = createTool({
+  id: 'weather-tool',
+  description: 'Get the current weather for a location',
+  strict: true,
+  inputSchema: z.object({
+    location: z.string(),
+  }),
+  outputSchema: z.object({
+    location: z.string(),
+    temperatureCelsius: z.number(),
+    conditions: z.string(),
+  }),
+  execute: async ({ location }) => {
+    return {
+      location,
+      temperatureCelsius: 21,
+      conditions: 'sunny',
+    }
+  },
+})
+```
+
+Mastra forwards `strict: true` to model adapters that support strict tool calling. On adapters that don't support strict tool calling, Mastra ignores this option.
+
+## Example with `toModelOutput`
+
+Use `toModelOutput` when your tool should return rich internal data to your app, but the model should receive either a simplified value or multimodal content.
+
+```typescript title="src/mastra/tools/weather-tool.ts"
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+export const weatherTool = createTool({
+  id: 'weather-tool',
+  description: 'Get the current weather for a location',
+  inputSchema: z.object({
+    location: z.string(),
+  }),
+  outputSchema: z.object({
+    location: z.string(),
+    temperatureCelsius: z.number(),
+    conditions: z.string(),
+    radarImageUrl: z.string().url(),
+  }),
+  execute: async ({ location }) => ({
+    location,
+    temperatureCelsius: 21,
+    conditions: 'sunny',
+    radarImageUrl: 'https://example.com/radar/seattle.png',
+  }),
+  toModelOutput: output => {
+    return {
+      type: 'content',
+      value: [
+        {
+          type: 'text',
+          text: `${output.location}: ${output.temperatureCelsius}°C and ${output.conditions}`,
+        },
+        { type: 'image-url', url: output.radarImageUrl },
+      ],
+    }
+  },
+})
+```
+
+The tool still returns the full `execute` result to your application, while the model receives the transformed `toModelOutput` value.
+
+`toModelOutput` can return:
+
+- `type: 'text'`
+- `type: 'json'`
+- `type: 'content'` with parts like `text`, `image-url`, `image-data`, `file-url`, `file-data`, `file-id`, `image-file-id`, or `custom`
+
+## Example with `transform`
+
+Use `transform` when the tool should keep raw inputs or outputs for runtime behavior, but display streams or transcript messages should receive a smaller or safer shape.
+
+```typescript title="src/mastra/tools/customer-tool.ts"
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+export const customerTool = createTool({
+  id: 'lookup-customer',
+  description: 'Looks up a customer',
+  inputSchema: z.object({
+    customerId: z.string(),
+    internalPath: z.string(),
+  }),
+  outputSchema: z.object({
+    displayName: z.string(),
+    apiKey: z.string(),
+    debugScore: z.number(),
+  }),
+  execute: async () => {
+    return {
+      displayName: 'Acme',
+      apiKey: 'secret-value',
+      debugScore: 0.97,
+    }
+  },
+  transform: {
+    display: {
+      input: ({ input }) => ({ customerId: input?.customerId }),
+      output: ({ output }) => ({ displayName: output?.displayName }),
+      error: () => ({ message: 'Customer lookup failed' }),
+    },
+    transcript: {
+      input: ({ input }) => ({ customerId: input?.customerId }),
+      output: ({ output }) => ({ displayName: output?.displayName }),
+      error: () => ({ message: 'Customer lookup failed' }),
+    },
+  },
+})
+```
+
+The tool still receives the raw `inputSchema` value and returns the raw `execute` result. Mastra applies `display` transforms to streamed UI payloads and `transcript` transforms to user-visible transcript messages.
+
+## Example with MCP annotations
+
+When exposing tools via MCP (Model Context Protocol), you can add annotations to describe tool behavior and customize how clients display the tool. These MCP-specific properties are grouped under the `mcp` property:
+
+```typescript title="src/mastra/tools/weather-tool.ts"
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+export const weatherTool = createTool({
+  id: 'weather-tool',
+  description: 'Get the current weather for a location',
+  inputSchema: z.object({
+    location: z.string().describe('City name or coordinates'),
+  }),
+  outputSchema: z.object({
+    location: z.string(),
+    temperatureCelsius: z.number(),
+    conditions: z.string(),
+  }),
+  // MCP-specific properties
+  mcp: {
+    // Annotations for client behavior hints
+    annotations: {
+      title: 'Weather Lookup', // Human-readable display name
+      readOnlyHint: true, // Tool doesn't modify environment
+      destructiveHint: false, // Tool doesn't perform destructive updates
+      idempotentHint: true, // Same args = same result
+      openWorldHint: true, // Interacts with external API
+    },
+    // Custom metadata for client-specific functionality
+    _meta: {
+      version: '1.0.0',
+      category: 'weather',
+    },
+  },
+  execute: async ({ location }) => {
+    return {
+      location,
+      temperatureCelsius: 21,
+      conditions: 'sunny',
+    }
+  },
+})
+```
+
 ## Tool lifecycle hooks
 
 Tools support lifecycle hooks that allow you to monitor and react to different stages of tool execution. These hooks are particularly useful for logging, analytics, validation, and real-time updates during streaming.
 
-### Available Hooks
+The following example demonstrates a tool with all lifecycle hooks configured:
+
+```typescript title="src/mastra/tools/weather-tool.ts"
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+export const weatherTool = createTool({
+  id: 'weather-tool',
+  description: 'Get the current weather for a location',
+  inputSchema: z.object({
+    location: z.string(),
+  }),
+  outputSchema: z.object({
+    location: z.string(),
+    temperatureCelsius: z.number(),
+    conditions: z.string(),
+  }),
+  execute: async ({ location }) => {
+    return {
+      location,
+      temperatureCelsius: 21,
+      conditions: 'sunny',
+    }
+  },
+  onInputStart: ({ toolCallId }) => {
+    console.log(`Tool call ${toolCallId} input started`)
+  },
+  onInputDelta: ({ inputTextDelta, toolCallId }) => {
+    console.log(`Tool call ${toolCallId} received input chunk: ${inputTextDelta}`)
+  },
+  onInputAvailable: ({ input, toolCallId }) => {
+    console.log(`Tool call ${toolCallId} received location: ${input.location}`)
+  },
+  onOutput: ({ output, toolCallId, toolName }) => {
+    console.log(`Tool ${toolName} call ${toolCallId} returned conditions: ${output.conditions}`)
+  },
+})
+```
+
+### Available hooks
 
 #### `onInputStart`
 
@@ -555,7 +656,7 @@ export const tool = createTool({
   id: 'example-tool',
   description: 'Example tool with hooks',
   inputSchema: z.object({
-    city: z.string(),
+    location: z.string(),
   }),
   onInputAvailable: ({ input, toolCallId, messages, abortSignal }) => {
     console.log(`Tool received complete input:`, input)
@@ -585,7 +686,7 @@ export const tool = createTool({
 })
 ```
 
-### Hook Execution Order
+### Hook execution order
 
 For a typical streaming tool call, the hooks are invoked in this order:
 
@@ -595,19 +696,14 @@ For a typical streaming tool call, the hooks are invoked in this order:
 1. Tool's **execute** function runs
 1. **onOutput**: Tool has completed successfully
 
-### Hook Parameters
+### Hook parameters
 
-All hooks receive a parameter object with these common properties:
+Hook callbacks receive these source-backed parameter shapes:
 
-- `toolCallId` (string): Unique identifier for this specific tool call
-- `abortSignal` (AbortSignal): Signal for detecting if the operation should be cancelled
-
-Additionally:
-
-- `onInputStart`, `onInputDelta`, and `onInputAvailable` receive `messages` (array): The conversation messages at the time of the tool call
-- `onInputDelta` receives `inputTextDelta` (string): The incremental text chunk
-- `onInputAvailable` receives `input`: The validated input data (typed according to `inputSchema`)
-- `onOutput` receives `output`: The tool's return value (typed according to `outputSchema`) and `toolName` (string): The name of the tool
+- `onInputStart`: Receives `ToolCallOptions`, including fields such as `toolCallId`, `messages`, and `abortSignal`.
+- `onInputDelta`: Receives `{ inputTextDelta: string } & ToolCallOptions`.
+- `onInputAvailable`: Receives `{ input: TSchemaIn } & ToolCallOptions`, where `input` is typed from `inputSchema`.
+- `onOutput`: Receives `{ output: TSchemaOut; toolName: string } & Omit<ToolCallOptions, 'messages'>`, where `output` is typed from `outputSchema`. This hook doesn't receive `messages`.
 
 ### Error handling
 
@@ -626,7 +722,7 @@ mcp: {
 }
 ```
 
-### `ToolAnnotations` Properties
+### `ToolAnnotations` properties
 
 <PropertiesTable
   content={[
@@ -674,5 +770,5 @@ These annotations follow the [MCP specification](https://spec.modelcontextprotoc
 - [MCP Overview](/docs/mcp/overview)
 - [Using Tools with Agents](/docs/agents/using-tools)
 - [Agent Approval](/docs/agents/agent-approval)
-- [Tool Streaming](/docs/streaming/tool-streaming)
+- [Tool Streaming](/docs/agents/using-tools#streaming)
 - [Request Context](/docs/server/request-context#accessing-values-with-tools)

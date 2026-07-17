@@ -917,4 +917,82 @@ describe('MastraClient', () => {
       });
     });
   });
+
+  describe('Dataset Item Tool Mocks', () => {
+    let client: MastraClient;
+
+    beforeEach(() => {
+      vi.resetAllMocks();
+      client = new MastraClient({ baseUrl: 'http://localhost:4111', retries: 0 });
+    });
+
+    it('addDatasetItem posts toolMocks in the request body', async () => {
+      const toolMocks = [{ toolName: 'getWeather', args: { city: 'Seattle' }, output: { temp: 52 } }];
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ id: 'item-1', toolMocks }),
+      });
+
+      const result = await client.addDatasetItem({ datasetId: 'ds-1', input: { q: 'x' }, toolMocks });
+
+      const [url, init] = (global.fetch as any).mock.calls[0];
+      expect(url).toBe('http://localhost:4111/api/datasets/ds-1/items');
+      expect(init.method).toBe('POST');
+      expect(JSON.parse(init.body)).toMatchObject({ input: { q: 'x' }, toolMocks });
+      expect(result.toolMocks).toEqual(toolMocks);
+    });
+
+    it('addDatasetItem posts externalId in the request body', async () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ id: 'item-1', externalId: 'source-item-1' }),
+      });
+
+      const result = await client.addDatasetItem({
+        datasetId: 'ds-1',
+        externalId: 'source-item-1',
+        input: { q: 'x' },
+      });
+
+      const [, init] = (global.fetch as any).mock.calls[0];
+      expect(JSON.parse(init.body)).toMatchObject({ externalId: 'source-item-1', input: { q: 'x' } });
+      expect(result.externalId).toBe('source-item-1');
+    });
+
+    it('batchInsertDatasetItems posts externalId in each item', async () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ items: [{ id: 'item-1', externalId: 'source-item-1' }], count: 1 }),
+      });
+
+      await client.batchInsertDatasetItems({
+        datasetId: 'ds-1',
+        items: [{ externalId: 'source-item-1', input: { q: 'x' } }],
+      });
+
+      const [, init] = (global.fetch as any).mock.calls[0];
+      expect(JSON.parse(init.body)).toMatchObject({
+        items: [{ externalId: 'source-item-1', input: { q: 'x' } }],
+      });
+    });
+
+    it('updateDatasetItem posts toolMocks in the request body', async () => {
+      const toolMocks = [{ toolName: 'write', args: { f: 'a' }, output: 'ok' }];
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ id: 'item-1', toolMocks }),
+      });
+
+      await client.updateDatasetItem({ datasetId: 'ds-1', itemId: 'item-1', toolMocks });
+
+      const [url, init] = (global.fetch as any).mock.calls[0];
+      expect(url).toBe('http://localhost:4111/api/datasets/ds-1/items/item-1');
+      expect(init.method).toBe('PATCH');
+      expect(JSON.parse(init.body)).toMatchObject({ toolMocks });
+    });
+  });
 });

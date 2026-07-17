@@ -9,13 +9,7 @@ packages:
 
 **Added in:** `@mastra/core@1.1.0`
 
-Stores files in a directory on the local filesystem.
-
-:::info
-
-For interface details, see [WorkspaceFilesystem Interface](/reference/workspace/filesystem).
-
-:::
+Stores files in a directory on the local filesystem. For interface details, see [WorkspaceFilesystem Interface](/reference/workspace/filesystem).
 
 ## Usage
 
@@ -33,7 +27,7 @@ const workspace = new Workspace({
 
 const agent = new Agent({
   id: 'file-agent',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   workspace,
 })
 

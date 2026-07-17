@@ -1,5 +1,5 @@
 import { createAnthropic } from '@ai-sdk/anthropic-v6';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider-v5';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider-v6';
 import { MastraError } from '../../../error/index.js';
 import { PROVIDER_REGISTRY } from '../provider-registry.js';
 import { MastraModelGateway } from './base.js';
@@ -14,7 +14,7 @@ export interface MastraGatewayConfig {
 
 export class MastraGateway extends MastraModelGateway {
   readonly id = 'mastra';
-  readonly name = 'Memory Gateway';
+  readonly name = 'Gateway';
 
   constructor(private config?: MastraGatewayConfig) {
     super();
@@ -41,7 +41,7 @@ export class MastraGateway extends MastraModelGateway {
       mastra: {
         apiKeyEnvVar: 'MASTRA_GATEWAY_API_KEY',
         apiKeyHeader: 'Authorization',
-        name: 'Memory Gateway',
+        name: 'Gateway',
         gateway: 'mastra',
         models: [...models],
         docUrl: 'https://mastra.ai/docs/gateway',

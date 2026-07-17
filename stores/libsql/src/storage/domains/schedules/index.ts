@@ -7,11 +7,22 @@ import type {
   ScheduleStatus,
   ScheduleTarget,
   ScheduleUpdate,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
-import { SchedulesStorage, TABLE_SCHEDULES, TABLE_SCHEDULE_TRIGGERS, TABLE_SCHEMAS } from '@mastra/core/storage';
+import {
+  normalizeScheduleTarget,
+  SchedulesStorage,
+  TABLE_SCHEDULES,
+  TABLE_SCHEDULE_TRIGGERS,
+  TABLE_SCHEMAS,
+} from '@mastra/core/storage';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import { buildSelectColumns } from '../../db/utils';
+import { runPrune, resolveTargets } from '../../retention';
 
 function parseJson<T = unknown>(val: unknown): T | undefined {
   if (val == null) return undefined;
@@ -37,7 +48,7 @@ function rowToSchedule(row: Record<string, any>): Schedule {
   }
   const schedule: Schedule = {
     id: String(row.id),
-    target,
+    target: normalizeScheduleTarget(target),
     cron: String(row.cron),
     status: String(row.status) as ScheduleStatus,
     nextFireAt: toNumber(row.next_fire_at),
@@ -73,6 +84,15 @@ function rowToTrigger(row: Record<string, any>): ScheduleTrigger {
 }
 
 export class SchedulesLibSQL extends SchedulesStorage {
+  /**
+   * The fire/run history (`schedule_triggers`, one row per fire) is the growth
+   * table; schedule definitions are config and excluded. Anchored on
+   * `actual_fire_at`, a bigint epoch-ms column (numeric comparison, not ISO).
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    triggers: { table: TABLE_SCHEDULE_TRIGGERS, column: 'actual_fire_at', indexed: true, anchorType: 'epoch-ms' },
+  };
+
   #db: LibSQLDB;
   #client: Client;
 
@@ -92,11 +112,35 @@ export class SchedulesLibSQL extends SchedulesStorage {
       tableName: TABLE_SCHEDULE_TRIGGERS,
       schema: TABLE_SCHEMAS[TABLE_SCHEDULE_TRIGGERS],
     });
+
+    await this.#client.batch(
+      [
+        {
+          sql: `CREATE INDEX IF NOT EXISTS idx_schedules_status_next_fire ON "${TABLE_SCHEDULES}" ("status", "next_fire_at")`,
+          args: [],
+        },
+        {
+          sql: `CREATE INDEX IF NOT EXISTS idx_schedule_triggers_schedule_fire ON "${TABLE_SCHEDULE_TRIGGERS}" ("schedule_id", "actual_fire_at")`,
+          args: [],
+        },
+      ],
+      'write',
+    );
   }
 
   async dangerouslyClearAll(): Promise<void> {
     await this.#db.deleteData({ tableName: TABLE_SCHEDULE_TRIGGERS });
     await this.#db.deleteData({ tableName: TABLE_SCHEDULES });
+  }
+
+  /** Delete schedule fire history older than the `triggers` policy's `maxAge`, batched. */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveTargets({
+      policies,
+      descriptor: SchedulesLibSQL.retentionTables,
+      order: ['triggers'],
+    });
+    return runPrune({ db: this.#db, domain: 'schedules', targets, options, logger: this.logger });
   }
 
   async createSchedule(schedule: Schedule): Promise<Schedule> {

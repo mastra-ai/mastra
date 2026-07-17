@@ -1,4 +1,4 @@
-import { Workspace } from '@mastra/core/workspace';
+import { Workspace, CompositeFilesystem } from '@mastra/core/workspace';
 import type { WorkspaceFilesystem, WorkspaceSandbox, SkillSource } from '@mastra/core/workspace';
 import type { WorkspaceConfig } from '@mastra/core/workspace';
 import type {
@@ -9,6 +9,7 @@ import type {
   StorageResolvedWorkspaceType,
   StorageListWorkspacesResolvedOutput,
   StorageWorkspaceSnapshotType,
+  StorageWorkspaceToolsConfig,
   StorageFilesystemConfig,
   StorageSandboxConfig,
 } from '@mastra/core/storage';
@@ -144,6 +145,71 @@ export class EditorWorkspaceNamespace extends CrudEditorNamespace<
   }
 
   /**
+   * Serialize a runtime Workspace instance into a StorageWorkspaceSnapshotType.
+   * The reverse of hydrateSnapshotToWorkspace — extracts provider IDs and config
+   * from live filesystem/sandbox instances so the workspace can be persisted to the DB.
+   */
+  async snapshotFromWorkspace(workspace: Workspace): Promise<StorageWorkspaceSnapshotType> {
+    const snapshot: StorageWorkspaceSnapshotType = {
+      name: workspace.name,
+    };
+
+    const fs = workspace.filesystem;
+    if (fs) {
+      if (fs instanceof CompositeFilesystem) {
+        // Workspace uses mounts — serialize each mounted filesystem
+        const mounts: Record<string, StorageFilesystemConfig> = {};
+        for (const [mountPath, mountedFs] of fs.mounts) {
+          mounts[mountPath] = await this.serializeFilesystem(mountedFs);
+        }
+        snapshot.mounts = mounts;
+      } else {
+        // Single filesystem
+        snapshot.filesystem = await this.serializeFilesystem(fs);
+      }
+    }
+
+    const sandbox = workspace.sandbox;
+    if (sandbox) {
+      // Sandbox.getInfo() is async and returns metadata that we round-trip through the
+      // stored config so resolveSandbox() can re-instantiate the provider with its
+      // original constructor configuration.
+      const info = typeof sandbox.getInfo === 'function' ? await sandbox.getInfo() : undefined;
+      snapshot.sandbox = {
+        provider: sandbox.provider,
+        config: info?.metadata ?? {},
+      };
+    }
+
+    const tools = workspace.getToolsConfig();
+    if (tools) {
+      // Only serialize static boolean values — runtime functions can't be stored
+      const storageTools: StorageWorkspaceToolsConfig = {};
+      if (typeof tools.enabled === 'boolean') storageTools.enabled = tools.enabled;
+      if (typeof tools.requireApproval === 'boolean') storageTools.requireApproval = tools.requireApproval;
+      if (Object.keys(storageTools).length > 0) {
+        snapshot.tools = storageTools;
+      }
+    }
+
+    return snapshot;
+  }
+
+  /**
+   * Serialize a runtime WorkspaceFilesystem into a StorageFilesystemConfig.
+   * Awaits getInfo() so async providers like CompositeFilesystem keep their mount metadata.
+   */
+  private async serializeFilesystem(fs: WorkspaceFilesystem): Promise<StorageFilesystemConfig> {
+    const info = typeof fs.getInfo === 'function' ? await fs.getInfo() : undefined;
+    const metadata = info && typeof info === 'object' && 'metadata' in info ? (info as any).metadata : undefined;
+    return {
+      provider: fs.provider,
+      config: metadata ?? {},
+      readOnly: fs.readOnly,
+    };
+  }
+
+  /**
    * Resolve a stored filesystem config to a runtime WorkspaceFilesystem instance.
    * Looks up the provider by ID in the editor's registry (which includes built-in providers).
    */
@@ -172,6 +238,24 @@ export class EditorWorkspaceNamespace extends CrudEditorNamespace<
       );
     }
     return await provider.createSandbox(sandboxConfig.config);
+  }
+
+  /**
+   * Resolve a stored workspace provider config to a complete runtime Workspace instance.
+   * Looks up the provider by ID in the editor's workspace provider registry.
+   */
+  async resolveWorkspaceProvider(
+    providerId: string,
+    config: Record<string, unknown>,
+  ): Promise<Workspace<any, any, any>> {
+    const provider = this.editor.__workspaces.get(providerId);
+    if (!provider) {
+      throw new Error(
+        `Workspace provider "${providerId}" is not registered. ` +
+          `Register it via new MastraEditor({ workspaces: { '${providerId}': yourProvider } })`,
+      );
+    }
+    return await provider.createWorkspace(config);
   }
 
   protected async getStorageAdapter(): Promise<

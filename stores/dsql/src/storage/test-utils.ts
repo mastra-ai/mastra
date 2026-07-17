@@ -33,7 +33,12 @@ export function createTestPool(): Pool {
     host: TEST_CONFIG.host,
     user: TEST_CONFIG.user ?? 'admin',
     database: TEST_CONFIG.database ?? 'postgres',
-    Client: AuroraDSQLClient,
+    // AuroraDSQLClient's constructor type doesn't match pg.PoolClient's,
+    // but it's compatible at runtime. The `as any` avoids a TS error in
+    // pnpm v11's stricter lockfile layout, where the connector's ESM-only
+    // type exports (`.d.mts`) aren't resolved by tsc when the consumer uses
+    // CommonJS module resolution.
+    Client: AuroraDSQLClient as any,
     region,
     max: DSQL_POOL_DEFAULTS.max,
     min: DSQL_POOL_DEFAULTS.min,

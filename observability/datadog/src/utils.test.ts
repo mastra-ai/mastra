@@ -88,6 +88,7 @@ describe('span-type → Datadog kind mapping', () => {
       [SpanType.MODEL_INFERENCE]: 'llm',
       [SpanType.TOOL_CALL]: 'tool',
       [SpanType.MCP_TOOL_CALL]: 'tool',
+      [SpanType.PROVIDER_TOOL_CALL]: 'tool',
       [SpanType.WORKFLOW_RUN]: 'workflow',
     };
 
@@ -161,6 +162,10 @@ describe('safeStringify', () => {
     expect(safeStringify('hello')).toBe('"hello"');
     expect(safeStringify(123)).toBe('123');
   });
+
+  it('returns an empty string for undefined values', () => {
+    expect(safeStringify(undefined)).toBe('');
+  });
 });
 
 describe('formatInput', () => {
@@ -177,6 +182,37 @@ describe('formatInput', () => {
       ];
       const result = formatInput(messages, SpanType.MODEL_GENERATION);
       expect(result).toEqual(messages);
+    });
+
+    it('drops empty user messages from message arrays', () => {
+      const result = formatInput(
+        [
+          { role: 'system', content: 'You are helpful' },
+          { role: 'user', content: '' },
+          { role: 'user', content: '   ' },
+          { role: 'assistant', content: 'What do you need?' },
+          { role: 'user', content: 'Hello' },
+        ],
+        SpanType.MODEL_GENERATION,
+      );
+
+      expect(result).toEqual([
+        { role: 'system', content: 'You are helpful' },
+        { role: 'assistant', content: 'What do you need?' },
+        { role: 'user', content: 'Hello' },
+      ]);
+    });
+
+    it('drops blank string input instead of creating an empty user message', () => {
+      const result = formatInput('   ', SpanType.MODEL_GENERATION);
+
+      expect(result).toEqual([]);
+    });
+
+    it('drops undefined input instead of throwing during empty message filtering', () => {
+      const result = formatInput(undefined, SpanType.MODEL_GENERATION);
+
+      expect(result).toEqual([]);
     });
 
     it('stringifies object input as user message', () => {
@@ -217,6 +253,22 @@ describe('formatInput', () => {
       };
       const result = formatInput(input, SpanType.MODEL_STEP);
       expect(result).toEqual([{ role: 'user', content: 'Hi' }]);
+    });
+
+    it('cleans unwrapped message arrays for MODEL_INFERENCE spans', () => {
+      const input = {
+        messages: [
+          { role: 'user', content: '' },
+          { role: 'system', content: 'You are helpful' },
+          { role: 'user', content: 'Hi' },
+        ],
+      };
+      const result = formatInput(input, SpanType.MODEL_INFERENCE);
+
+      expect(result).toEqual([
+        { role: 'system', content: 'You are helpful' },
+        { role: 'user', content: 'Hi' },
+      ]);
     });
 
     it('unwraps Gemini { contents } request body shape', () => {
@@ -289,6 +341,12 @@ describe('formatOutput', () => {
       expect(result).toEqual(messages);
     });
 
+    it('preserves structured tool call messages without content', () => {
+      const toolCalls = [{ name: 'search', arguments: { q: 'mastra' }, toolId: 'call-1', type: 'function' }];
+      const result = formatOutput([{ role: 'assistant', toolCalls }], SpanType.MODEL_GENERATION);
+      expect(result).toEqual([{ role: 'assistant', content: '', toolCalls }]);
+    });
+
     it('extracts text property from object output', () => {
       const result = formatOutput({ text: 'Hello world', metadata: { model: 'gpt-4' } }, SpanType.MODEL_GENERATION);
       expect(result).toEqual([{ role: 'assistant', content: 'Hello world' }]);
@@ -299,20 +357,82 @@ describe('formatOutput', () => {
       expect(result).toEqual([{ role: 'assistant', content: '{"result":"success"}' }]);
     });
 
-    it('summarizes tool-call-only outputs without burying them as escaped JSON', () => {
+    it('formats tool-call-only outputs as Datadog tool call blocks', () => {
       const result = formatOutput(
         {
           text: '',
-          toolCalls: [{ toolName: 'search', args: { q: 'mastra' } }, { toolName: 'fetch' }],
+          toolCalls: [
+            { toolCallId: 'call-1', toolName: 'search', args: { q: 'mastra' } },
+            { toolCallId: 'call-2', toolName: 'fetch', input: { url: 'https://mastra.ai' } },
+          ],
         },
         SpanType.MODEL_GENERATION,
       );
-      expect(result).toEqual([{ role: 'assistant', content: '[tool: search][tool: fetch]' }]);
+      expect(result).toEqual([
+        {
+          role: 'assistant',
+          content: '',
+          toolCalls: [
+            { name: 'search', arguments: { q: 'mastra' }, toolId: 'call-1', type: 'function' },
+            { name: 'fetch', arguments: { url: 'https://mastra.ai' }, toolId: 'call-2', type: 'function' },
+          ],
+        },
+      ]);
+    });
+
+    it('preserves assistant text when formatting Datadog tool call blocks', () => {
+      const result = formatOutput(
+        {
+          text: 'I will search for that.',
+          toolCalls: [{ toolCallId: 'call-1', toolName: 'search', args: '{"q":"mastra"}' }],
+        },
+        SpanType.MODEL_GENERATION,
+      );
+      expect(result).toEqual([
+        {
+          role: 'assistant',
+          content: 'I will search for that.',
+          toolCalls: [{ name: 'search', arguments: { q: 'mastra' }, toolId: 'call-1', type: 'function' }],
+        },
+      ]);
+    });
+
+    it('wraps JSON array and primitive tool-call arguments for Datadog', () => {
+      const result = formatOutput(
+        {
+          text: '',
+          toolCalls: [
+            { toolCallId: 'call-1', toolName: 'list', args: '[1,2,3]' },
+            { toolCallId: 'call-2', toolName: 'literal', args: '"string"' },
+          ],
+        },
+        SpanType.MODEL_GENERATION,
+      );
+      expect(result).toEqual([
+        {
+          role: 'assistant',
+          content: '',
+          toolCalls: [
+            { name: 'list', arguments: { value: '[1,2,3]' }, toolId: 'call-1', type: 'function' },
+            { name: 'literal', arguments: { value: '"string"' }, toolId: 'call-2', type: 'function' },
+          ],
+        },
+      ]);
+    });
+
+    it('normalizes null message content to an empty string', () => {
+      const result = formatOutput([{ role: 'assistant', content: null }], SpanType.MODEL_GENERATION);
+      expect(result).toEqual([{ role: 'assistant', content: '' }]);
     });
 
     it('uses object payload when text is empty and an object result is present', () => {
       const result = formatOutput({ text: '', object: { ok: true } }, SpanType.MODEL_GENERATION);
       expect(result).toEqual([{ role: 'assistant', content: '{"ok":true}' }]);
+    });
+
+    it('formats MODEL_INFERENCE output as assistant messages', () => {
+      const result = formatOutput('Hi there!', SpanType.MODEL_INFERENCE);
+      expect(result).toEqual([{ role: 'assistant', content: 'Hi there!' }]);
     });
   });
 

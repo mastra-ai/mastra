@@ -1,7 +1,17 @@
-import * as Dialog from '@radix-ui/react-dialog';
-
-import * as VisuallyHidden from '@radix-ui/react-visually-hidden';
 import { ChevronsRightIcon } from 'lucide-react';
+import * as React from 'react';
+import {
+  Drawer,
+  DrawerBackdrop,
+  DrawerClose,
+  DrawerDescription,
+  DrawerInteractive,
+  DrawerPopup,
+  DrawerPortal,
+  DrawerTitle,
+  DrawerViewport,
+} from '@/ds/components/Drawer';
+import { PortalContainerProvider } from '@/ds/primitives/portal-container';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -28,62 +38,74 @@ export function SideDialogRoot({
 }: SideDialogRootProps) {
   const isConfirmation = variant === 'confirmation';
 
+  // Mount point for nested popups (Select, Popover, …). It sits *inside* Base
+  // UI's modal `FloatingFocusManager` region (so a `document.body` portal can't
+  // leave them unclickable) AND is a `DrawerInteractive` (`data-drawer-content`)
+  // node, which Base UI's Drawer excludes from swipe-to-dismiss. Without that
+  // exclusion, a `pointerdown` on a dropdown option starts a drawer swipe and
+  // captures the pointer, so the option never receives `pointerup` and the
+  // click never commits. See `portal-container.tsx`.
+  const [portalHost, setPortalHost] = React.useState<HTMLDivElement | null>(null);
+
   return (
-    <Dialog.Root open={isOpen} onOpenChange={onClose}>
-      <Dialog.Portal>
-        {!isConfirmation && (
-          <Dialog.Overlay
+    <Drawer
+      side="right"
+      open={isOpen}
+      onOpenChange={open => {
+        if (!open) onClose?.();
+      }}
+    >
+      <DrawerPortal>
+        {!isConfirmation && <DrawerBackdrop className="backdrop-blur-sm" />}
+        <DrawerViewport className={isConfirmation ? 'pointer-events-none' : undefined}>
+          <DrawerPopup
             className={cn(
-              'bg-overlay backdrop-blur-sm top-0 bottom-0 right-0 left-0 fixed z-50',
-              'data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:duration-200',
-              'data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:duration-150',
+              'max-w-none overflow-visible rounded-none border-y-0 border-r-0 border-l border-border2 bg-surface2',
+              {
+                'w-[75vw] 2xl:w-[65vw] 4xl:w-[55vw]': level === 1,
+                'w-[70vw] 2xl:w-[59vw] 4xl:w-[48vw]': level === 2,
+                'w-[65vw] 2xl:w-[53vw] 4xl:w-[41vw]': level === 3,
+                'pointer-events-auto bg-surface2/70 backdrop-blur-sm shadow-none': isConfirmation,
+              },
+              className,
             )}
-          />
-        )}
-        <Dialog.Content
-          className={cn(
-            'fixed top-0 bottom-0 right-0 border-l border-border2 z-50 bg-surface2',
-            'data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-right-1/4 data-[state=closed]:duration-200',
-            {
-              'w-[75vw] 2xl:w-[65vw] 4xl:w-[55vw]': level === 1,
-              'w-[70vw] 2xl:w-[59vw] 4xl:w-[48vw]': level === 2,
-              'w-[65vw] 2xl:w-[53vw] 4xl:w-[41vw]': level === 3,
-              'data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-right-1/4 data-[state=open]:duration-300 shadow-dialog':
-                !isConfirmation,
-              'bg-surface2/70 backdrop-blur-sm': isConfirmation,
-            },
-            className,
-          )}
-        >
-          <VisuallyHidden.Root>
-            <Dialog.Title>{dialogTitle}</Dialog.Title>
-            <Dialog.Description>{dialogDescription}</Dialog.Description>
-          </VisuallyHidden.Root>
-
-          {!isConfirmation && (
-            <Dialog.Close asChild>
-              <button
-                className={cn(
-                  'flex appearance-none items-center justify-center rounded-bl-lg h-14 w-14 absolute top-0 -left-14 bg-surface2 text-neutral3 border-l border-b border-border2',
-                  transitions.all,
-                  'hover:bg-surface4 hover:text-neutral5',
-                )}
-                aria-label="Close"
-              >
-                <ChevronsRightIcon />
-              </button>
-            </Dialog.Close>
-          )}
-
-          <div
-            className={cn('grid h-full', {
-              'grid-rows-[auto_1fr]': !isConfirmation,
-            })}
           >
-            {children}
-          </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+            <DrawerTitle className="sr-only">{dialogTitle}</DrawerTitle>
+            <DrawerDescription className="sr-only">{dialogDescription}</DrawerDescription>
+
+            {!isConfirmation && (
+              <DrawerClose
+                render={
+                  <button
+                    type="button"
+                    className={cn(
+                      'absolute top-0 -left-14 flex size-14 appearance-none items-center justify-center rounded-bl-lg border-b border-l border-border2 bg-surface2 text-neutral3',
+                      transitions.all,
+                      'hover:bg-surface4 hover:text-neutral5',
+                    )}
+                    aria-label="Close"
+                  >
+                    <ChevronsRightIcon />
+                  </button>
+                }
+              />
+            )}
+
+            {/* Swipe-exempt, out-of-flow mount point for nested popups. */}
+            <DrawerInteractive render={<div ref={setPortalHost} className="absolute" />} />
+
+            <PortalContainerProvider container={portalHost}>
+              <div
+                className={cn('grid h-full', {
+                  'grid-rows-[auto_1fr]': !isConfirmation,
+                })}
+              >
+                {children}
+              </div>
+            </PortalContainerProvider>
+          </DrawerPopup>
+        </DrawerViewport>
+      </DrawerPortal>
+    </Drawer>
   );
 }

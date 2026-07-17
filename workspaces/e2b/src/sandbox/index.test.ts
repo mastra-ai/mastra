@@ -59,6 +59,7 @@ const { mockSandbox, createMockSandboxApi, resetMockDefaults, createMockCommandH
 
   const mockSandbox = {
     sandboxId: 'mock-sandbox-id',
+    getHost: vi.fn((port: number) => `${port}-mock-sandbox-id.e2b.app`),
     commands: {
       run: createDefaultRunMock(),
       list: vi.fn().mockResolvedValue([]),
@@ -70,6 +71,7 @@ const { mockSandbox, createMockSandboxApi, resetMockDefaults, createMockCommandH
       list: vi.fn().mockResolvedValue([]),
     },
     kill: vi.fn().mockResolvedValue(undefined),
+    pause: vi.fn().mockResolvedValue(true),
   };
 
   // Create a mock template builder with chainable methods
@@ -96,11 +98,13 @@ const { mockSandbox, createMockSandboxApi, resetMockDefaults, createMockCommandH
 
   const createMockSandboxApi = () => ({
     Sandbox: {
-      betaCreate: vi.fn().mockResolvedValue(mockSandbox),
+      create: vi.fn().mockResolvedValue(mockSandbox),
       connect: vi.fn().mockResolvedValue(mockSandbox),
       list: vi.fn().mockReturnValue({
         nextItems: vi.fn().mockResolvedValue([]),
       }),
+      pause: vi.fn().mockResolvedValue(true),
+      kill: vi.fn().mockResolvedValue(true),
     },
     Template: createMockTemplate(),
   });
@@ -113,11 +117,13 @@ const { mockSandbox, createMockSandboxApi, resetMockDefaults, createMockCommandH
    */
   const resetMockDefaults = async () => {
     const { Sandbox, Template } = await import('e2b');
-    (Sandbox.betaCreate as any).mockResolvedValue(mockSandbox);
+    (Sandbox.create as any).mockResolvedValue(mockSandbox);
     (Sandbox.connect as any).mockResolvedValue(mockSandbox);
     (Sandbox.list as any).mockReturnValue({
       nextItems: vi.fn().mockResolvedValue([]),
     });
+    ((Sandbox as any).pause as any).mockResolvedValue(true);
+    ((Sandbox as any).kill as any).mockResolvedValue(true);
     (Template.exists as any).mockResolvedValue(false);
     (Template.build as any).mockResolvedValue({ templateId: 'mock-template-id' });
     // Default run mock handles both foreground and background modes
@@ -134,6 +140,7 @@ const { mockSandbox, createMockSandboxApi, resetMockDefaults, createMockCommandH
     mockSandbox.files.read.mockResolvedValue('');
     mockSandbox.files.list.mockResolvedValue([]);
     mockSandbox.kill.mockResolvedValue(undefined);
+    mockSandbox.getHost.mockImplementation((port: number) => `${port}-mock-sandbox-id.e2b.app`);
     nextMockPid = 1000;
   };
 
@@ -203,8 +210,8 @@ describe('E2BSandbox', () => {
       // Both promises should resolve to the same value (void)
       expect(result1).toBe(result2);
 
-      // betaCreate should only be called once
-      expect(Sandbox.betaCreate).toHaveBeenCalledTimes(1);
+      // create should only be called once
+      expect(Sandbox.create).toHaveBeenCalledTimes(1);
     });
 
     it('start() is idempotent when already running', async () => {
@@ -212,11 +219,11 @@ describe('E2BSandbox', () => {
       const sandbox = new E2BSandbox();
 
       await sandbox._start();
-      expect(Sandbox.betaCreate).toHaveBeenCalledTimes(1);
+      expect(Sandbox.create).toHaveBeenCalledTimes(1);
 
       // Second start should not create another sandbox
       await sandbox._start();
-      expect(Sandbox.betaCreate).toHaveBeenCalledTimes(1);
+      expect(Sandbox.create).toHaveBeenCalledTimes(1);
     });
 
     it('status transitions through starting to running', async () => {
@@ -237,19 +244,19 @@ describe('E2BSandbox', () => {
 
       await sandbox._start();
 
-      expect(Sandbox.betaCreate).toHaveBeenCalled();
+      expect(Sandbox.create).toHaveBeenCalled();
     });
 
-    it('uses autoPause for sandbox persistence', async () => {
+    it('uses lifecycle onTimeout pause for sandbox persistence', async () => {
       const { Sandbox } = await import('e2b');
       const sandbox = new E2BSandbox();
 
       await sandbox._start();
 
-      expect(Sandbox.betaCreate).toHaveBeenCalledWith(
+      expect(Sandbox.create).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
-          autoPause: true,
+          lifecycle: { onTimeout: 'pause' },
         }),
       );
     });
@@ -260,7 +267,7 @@ describe('E2BSandbox', () => {
 
       await sandbox._start();
 
-      expect(Sandbox.betaCreate).toHaveBeenCalledWith(
+      expect(Sandbox.create).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
           metadata: expect.objectContaining({
@@ -268,6 +275,26 @@ describe('E2BSandbox', () => {
           }),
         }),
       );
+    });
+
+    it('forwards network options to Sandbox.create', async () => {
+      const { Sandbox } = await import('e2b');
+      const network = {
+        rules: {
+          'api.example.com': [
+            {
+              transform: {
+                headers: { Authorization: 'Bearer token' },
+              },
+            },
+          ],
+        },
+      };
+      const sandbox = new E2BSandbox({ network });
+
+      await sandbox._start();
+
+      expect(Sandbox.create).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ network }));
     });
 
     it('reconnects to existing sandbox by metadata', async () => {
@@ -319,8 +346,8 @@ describe('E2BSandbox', () => {
       const sandbox = new E2BSandbox({ template: 'my-custom-template' });
       await sandbox._start();
 
-      // betaCreate should be called with the custom template ID
-      expect(Sandbox.betaCreate).toHaveBeenCalledWith('my-custom-template', expect.any(Object));
+      // create should be called with the custom template ID
+      expect(Sandbox.create).toHaveBeenCalledWith('my-custom-template', expect.any(Object));
     });
   });
 
@@ -352,14 +379,14 @@ describe('E2BSandbox', () => {
   });
 
   describe('Environment Variables', () => {
-    it('env vars not passed to Sandbox.betaCreate', async () => {
+    it('env vars not passed to Sandbox.create', async () => {
       const { Sandbox } = await import('e2b');
       const sandbox = new E2BSandbox({ env: { KEY: 'value' } });
 
       await sandbox._start();
 
-      // betaCreate should NOT have envs option
-      expect(Sandbox.betaCreate).toHaveBeenCalledWith(
+      // create should NOT have envs option
+      expect(Sandbox.create).toHaveBeenCalledWith(
         expect.any(String),
         expect.not.objectContaining({
           envs: expect.any(Object),
@@ -385,6 +412,64 @@ describe('E2BSandbox', () => {
   });
 
   describe('Stop/Destroy', () => {
+    it('stop pauses the sandbox (snapshot-stop)', async () => {
+      const sandbox = new E2BSandbox();
+      await sandbox._start();
+
+      await sandbox._stop();
+
+      expect(mockSandbox.pause).toHaveBeenCalled();
+      expect(mockSandbox.kill).not.toHaveBeenCalled();
+      expect(sandbox.status).toBe('stopped');
+    });
+
+    it('stop propagates pause failure so callers do not assume the sandbox stopped', async () => {
+      mockSandbox.pause.mockRejectedValueOnce(new Error('pause failed'));
+      const sandbox = new E2BSandbox();
+      await sandbox._start();
+
+      await expect(sandbox._stop()).rejects.toThrow('pause failed');
+    });
+
+    it('stop pauses a detached running sandbox by identity without resuming', async () => {
+      const { Sandbox } = await import('e2b');
+      (Sandbox.list as any).mockReturnValue({
+        nextItems: vi.fn().mockResolvedValue([{ sandboxId: 'existing-sandbox-id', state: 'running' }]),
+      });
+
+      const sandbox = new E2BSandbox({ id: 'my-preview' });
+      await sandbox.stop();
+
+      expect((Sandbox as any).pause).toHaveBeenCalledWith('existing-sandbox-id', expect.any(Object));
+      expect(Sandbox.connect).not.toHaveBeenCalled();
+    });
+
+    it('stop skips a detached sandbox that is already paused', async () => {
+      const { Sandbox } = await import('e2b');
+      (Sandbox.list as any).mockReturnValue({
+        nextItems: vi.fn().mockResolvedValue([{ sandboxId: 'existing-sandbox-id', state: 'paused' }]),
+      });
+
+      const sandbox = new E2BSandbox({ id: 'my-preview' });
+      await sandbox.stop();
+
+      expect((Sandbox as any).pause).not.toHaveBeenCalled();
+      expect(Sandbox.connect).not.toHaveBeenCalled();
+    });
+
+    it('destroy kills a detached sandbox by identity without resuming', async () => {
+      const { Sandbox } = await import('e2b');
+      (Sandbox.list as any).mockReturnValue({
+        nextItems: vi.fn().mockResolvedValue([{ sandboxId: 'existing-sandbox-id', state: 'paused' }]),
+      });
+
+      const sandbox = new E2BSandbox({ id: 'my-preview' });
+      await sandbox.destroy();
+
+      expect((Sandbox as any).kill).toHaveBeenCalledWith('existing-sandbox-id', expect.any(Object));
+      expect(Sandbox.connect).not.toHaveBeenCalled();
+    });
+
     it('destroy kills sandbox', async () => {
       const sandbox = new E2BSandbox();
       await sandbox._start();
@@ -393,6 +478,14 @@ describe('E2BSandbox', () => {
 
       expect(mockSandbox.kill).toHaveBeenCalled();
       expect(sandbox.status).toBe('destroyed');
+    });
+
+    it('destroy propagates kill failure so callers do not assume cleanup completed', async () => {
+      mockSandbox.kill.mockRejectedValueOnce(new Error('kill failed'));
+      const sandbox = new E2BSandbox();
+      await sandbox._start();
+
+      await expect(sandbox._destroy()).rejects.toThrow('kill failed');
     });
   });
 
@@ -584,7 +677,7 @@ describe('E2BSandbox Race Conditions', () => {
 
   it('start() clears _startPromise after error', async () => {
     const { Sandbox } = await import('e2b');
-    (Sandbox.betaCreate as any).mockRejectedValueOnce(new Error('Creation failed'));
+    (Sandbox.create as any).mockRejectedValueOnce(new Error('Creation failed'));
 
     const sandbox = new E2BSandbox();
 
@@ -613,7 +706,7 @@ describe('E2BSandbox Template Handling', () => {
 
     // First call fails with 404 error (matching the implementation check), second succeeds
     let callCount = 0;
-    (Sandbox.betaCreate as any).mockImplementation(() => {
+    (Sandbox.create as any).mockImplementation(() => {
       callCount++;
       if (callCount === 1) {
         // Error message must include both '404' and 'not found' to trigger rebuild
@@ -627,7 +720,7 @@ describe('E2BSandbox Template Handling', () => {
 
     // Template.build should be called to rebuild after 404
     expect(Template.build).toHaveBeenCalled();
-    // And betaCreate should be called twice (retry after rebuild)
+    // And create should be called twice (retry after rebuild)
     expect(callCount).toBe(2);
   });
 
@@ -973,6 +1066,86 @@ describe('E2BSandbox S3 Public Bucket Mount', () => {
     if (s3fsMountCall) {
       expect(s3fsMountCall[0]).toContain('public_bucket=1');
     }
+  });
+
+  it('S3 mount uses path-specific credentials file to avoid concurrent mount races', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+
+    const mockFilesystem = {
+      id: 'test-s3-creds',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'test-bucket',
+        region: 'us-east-1',
+        accessKeyId: 'key',
+        secretAccessKey: 'secret',
+      }),
+    } as any;
+
+    await sandbox.mount(mockFilesystem, '/data/s3-creds');
+
+    const calls = mockSandbox.commands.run.mock.calls;
+    // Mount command should reference a path-specific credentials file (not the shared /tmp/.passwd-s3fs)
+    const s3fsMountCall = calls.find(
+      (call: any[]) => call[0].includes('s3fs') && call[0].includes('/data/s3-creds') && !call[0].includes('which'),
+    );
+    expect(s3fsMountCall).toBeDefined();
+    if (s3fsMountCall) {
+      // Must use a hash-suffixed path, not the generic shared path
+      expect(s3fsMountCall[0]).toMatch(/passwd_file=\/tmp\/\.passwd-s3fs-[a-f0-9]+/);
+      expect(s3fsMountCall[0]).not.toContain('passwd_file=/tmp/.passwd-s3fs\n');
+      expect(s3fsMountCall[0]).not.toMatch(/passwd_file=\/tmp\/\.passwd-s3fs\b(?!-)/);
+    }
+  });
+
+  it('S3 mount errors when only accessKeyId is provided without secretAccessKey', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+
+    const mockFilesystem = {
+      id: 'test-s3-partial-creds',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'test-bucket',
+        region: 'us-east-1',
+        accessKeyId: 'key',
+        // secretAccessKey missing
+      }),
+    } as any;
+
+    const result = await sandbox.mount(mockFilesystem, '/data/s3-partial');
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Both accessKeyId and secretAccessKey must be provided together');
+  });
+
+  it('S3 mount errors when only secretAccessKey is provided without accessKeyId', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+
+    const mockFilesystem = {
+      id: 'test-s3-partial-creds2',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'test-bucket',
+        region: 'us-east-1',
+        // accessKeyId missing
+        secretAccessKey: 'secret',
+      }),
+    } as any;
+
+    const result = await sandbox.mount(mockFilesystem, '/data/s3-partial2');
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Both accessKeyId and secretAccessKey must be provided together');
   });
 });
 
@@ -2105,8 +2278,8 @@ describe('E2BSandbox Internal Methods', () => {
 
       // Should succeed on retry (auto-restarts sandbox)
       expect(result.success).toBe(true);
-      // betaCreate called once in initial start(), once in retry start()
-      expect(Sandbox.betaCreate).toHaveBeenCalledTimes(2);
+      // create called once in initial start(), once in retry start()
+      expect(Sandbox.create).toHaveBeenCalledTimes(2);
     });
 
     it('does not retry infinitely (only once)', async () => {
@@ -2209,7 +2382,7 @@ describe('E2BSandbox Self-Hosted Connection Options', () => {
     await resetMockDefaults();
   });
 
-  it('forwards domain/apiUrl/apiKey/accessToken to Sandbox.betaCreate', async () => {
+  it('forwards domain/apiUrl/apiKey/accessToken to Sandbox.create', async () => {
     const { Sandbox } = await import('e2b');
     const sandbox = new E2BSandbox({
       domain: 'custom.dev',
@@ -2220,7 +2393,7 @@ describe('E2BSandbox Self-Hosted Connection Options', () => {
 
     await sandbox._start();
 
-    expect(Sandbox.betaCreate).toHaveBeenCalledWith(
+    expect(Sandbox.create).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
         domain: 'custom.dev',
@@ -2317,12 +2490,12 @@ describe('E2BSandbox Self-Hosted Connection Options', () => {
     const sandbox = new E2BSandbox();
     await sandbox._start();
 
-    // betaCreate should not contain domain/apiUrl/apiKey/accessToken
-    const betaCreateOpts = (Sandbox.betaCreate as any).mock.calls[0][1];
-    expect(betaCreateOpts).not.toHaveProperty('domain');
-    expect(betaCreateOpts).not.toHaveProperty('apiUrl');
-    expect(betaCreateOpts).not.toHaveProperty('apiKey');
-    expect(betaCreateOpts).not.toHaveProperty('accessToken');
+    // create should not contain domain/apiUrl/apiKey/accessToken
+    const createOpts = (Sandbox.create as any).mock.calls[0][1];
+    expect(createOpts).not.toHaveProperty('domain');
+    expect(createOpts).not.toHaveProperty('apiUrl');
+    expect(createOpts).not.toHaveProperty('apiKey');
+    expect(createOpts).not.toHaveProperty('accessToken');
 
     // list should not contain connection opts
     const listOpts = (Sandbox.list as any).mock.calls[0][0];
@@ -2330,6 +2503,91 @@ describe('E2BSandbox Self-Hosted Connection Options', () => {
     expect(listOpts).not.toHaveProperty('apiUrl');
     expect(listOpts).not.toHaveProperty('apiKey');
     expect(listOpts).not.toHaveProperty('accessToken');
+  });
+});
+
+describe('networking', () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    await resetMockDefaults();
+  });
+
+  it('getPortUrl returns an https URL built from getHost', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+
+    await expect(sandbox.networking.getPortUrl(3000)).resolves.toBe('https://3000-mock-sandbox-id.e2b.app');
+    expect(mockSandbox.getHost).toHaveBeenCalledWith(3000);
+  });
+
+  it('getPortUrl returns null before the sandbox is started', async () => {
+    const sandbox = new E2BSandbox();
+    await expect(sandbox.networking.getPortUrl(3000)).resolves.toBeNull();
+  });
+
+  it('getPortUrl derives the URL by identity lookup when detached, without connecting', async () => {
+    const { Sandbox } = await import('e2b');
+    (Sandbox.list as any).mockReturnValue({
+      nextItems: vi.fn().mockResolvedValue([{ sandboxId: 'existing-sandbox-id', state: 'paused' }]),
+    });
+
+    const sandbox = new E2BSandbox({ id: 'my-preview' });
+
+    await expect(sandbox.networking.getPortUrl(4111)).resolves.toBe('https://4111-existing-sandbox-id.e2b.app');
+    expect(Sandbox.connect).not.toHaveBeenCalled();
+  });
+
+  it('getPortUrl returns null when getHost throws', async () => {
+    mockSandbox.getHost.mockImplementation(() => {
+      throw new Error('no host');
+    });
+
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+
+    await expect(sandbox.networking.getPortUrl(3000)).resolves.toBeNull();
+  });
+});
+
+describe('writeFiles()', () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    await resetMockDefaults();
+  });
+
+  it('forwards string files to the SDK bulk write', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+    await sandbox.writeFiles([
+      { path: '/app/index.mjs', content: 'export {}' },
+      { path: '/app/package.json', content: '{}' },
+    ]);
+
+    expect(mockSandbox.files.write).toHaveBeenCalledTimes(1);
+    expect(mockSandbox.files.write).toHaveBeenCalledWith([
+      { path: '/app/index.mjs', data: 'export {}' },
+      { path: '/app/package.json', data: '{}' },
+    ]);
+  });
+
+  it('converts Buffer content to a Blob', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+    await sandbox.writeFiles([{ path: '/app/data.bin', content: Buffer.from([1, 2, 3]) }]);
+
+    const entries = mockSandbox.files.write.mock.calls[0]![0];
+    expect(entries[0].path).toBe('/app/data.bin');
+    expect(entries[0].data).toBeInstanceOf(Blob);
+    expect(new Uint8Array(await entries[0].data.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
+  });
+
+  it('starts the sandbox if not already running', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox.writeFiles([{ path: '/app/a.txt', content: 'hi' }]);
+
+    const { Sandbox } = await import('e2b');
+    expect(Sandbox.create as any).toHaveBeenCalledTimes(1);
+    expect(mockSandbox.files.write).toHaveBeenCalled();
   });
 });
 
@@ -2368,4 +2626,46 @@ describe('E2BSandbox Shared Conformance', () => {
 
   createSandboxLifecycleTests(getContext);
   createMountOperationsTests(getContext);
+});
+
+describe('E2BSandbox.derive', () => {
+  it('constructs an unstarted sibling without any I/O', () => {
+    const template = new E2BSandbox({ apiKey: 'e2b-key', template: 'base-tpl', timeout: 120_000 });
+
+    const child = template.derive({ id: 'mc-project-1' });
+
+    expect(child).toBeInstanceOf(E2BSandbox);
+    expect(child).not.toBe(template);
+    expect(child.id).toBe('mc-project-1');
+    expect(child.status).toBe('pending');
+  });
+
+  it('inherits template config and applies env override', () => {
+    const template = new E2BSandbox({ apiKey: 'e2b-key', template: 'base-tpl', env: { BASE: '1' } });
+
+    const child = template.derive({ env: { GITHUB_TOKEN: 'ghs_abc' } });
+
+    expect(child['_constructorOptions']).toMatchObject({
+      apiKey: 'e2b-key',
+      template: 'base-tpl',
+      env: { GITHUB_TOKEN: 'ghs_abc' },
+    });
+  });
+
+  it('maps idleTimeoutMinutes to the E2B timeout in milliseconds', () => {
+    const template = new E2BSandbox({ apiKey: 'e2b-key', timeout: 120_000 });
+
+    const child = template.derive({ idleTimeoutMinutes: 15 });
+
+    expect(child['_constructorOptions']).toMatchObject({ timeout: 900_000 });
+  });
+
+  it('inherits template defaults when no overrides are passed', () => {
+    const template = new E2BSandbox({ apiKey: 'e2b-key', timeout: 120_000, env: { BASE: '1' } });
+
+    const child = template.derive();
+
+    expect(child.id).not.toBe(template.id);
+    expect(child['_constructorOptions']).toMatchObject({ apiKey: 'e2b-key', timeout: 120_000, env: { BASE: '1' } });
+  });
 });

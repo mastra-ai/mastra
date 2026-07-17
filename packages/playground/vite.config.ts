@@ -21,7 +21,11 @@ const studioStandalonePlugin = (targetPort: string, targetHost: string): PluginO
       .replace(/%%MASTRA_AUTO_DETECT_URL%%/g, 'true')
       .replace(/%%MASTRA_EXPERIMENTAL_FEATURES%%/g, process.env.EXPERIMENTAL_FEATURES || 'false')
       .replace(/%%MASTRA_EXPERIMENTAL_UI%%/g, process.env.MASTRA_EXPERIMENTAL_UI || 'false')
-      .replace(/%%MASTRA_AGENT_SIGNALS%%/g, process.env.MASTRA_AGENT_SIGNALS || 'false');
+      .replace(/%%MASTRA_AGENT_SIGNALS%%/g, process.env.MASTRA_AGENT_SIGNALS ?? 'true')
+      .replace(/%%MASTRA_SIGNALS_UI%%/g, process.env.MASTRA_SIGNALS_UI || 'false')
+      .replace(/%%MASTRA_ORGANIZATION_ID%%/g, process.env.MASTRA_ORGANIZATION_ID || '')
+      .replace(/%%MASTRA_PLATFORM_PROJECT_ID%%/g, process.env.MASTRA_PLATFORM_PROJECT_ID || '')
+      .replace(/%%MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT%%/g, process.env.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT || '');
   },
 });
 
@@ -252,6 +256,12 @@ export default defineConfig(({ mode }) => {
         ...commonConfig.server,
         proxy: {
           '/api': {
+            target: `http://${targetHost}:${targetPort}`,
+            changeOrigin: true,
+          },
+          // Custom server routes (e.g. @mastra/livekit's connection-details endpoint)
+          // mount at the server root, outside the /api prefix, so forward them too.
+          '/voice': {
             target: `http://${targetHost}:${targetPort}`,
             changeOrigin: true,
           },

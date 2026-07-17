@@ -22,6 +22,7 @@ vi.mock('commander', () => {
     command: any;
     description: any;
     option: any;
+    requiredOption: any;
     parse: any;
     help: any;
 
@@ -34,6 +35,7 @@ vi.mock('commander', () => {
       this.command = vi.fn().mockReturnThis();
       this.description = vi.fn().mockReturnThis();
       this.option = vi.fn().mockReturnThis();
+      this.requiredOption = vi.fn().mockReturnThis();
       this.parse = vi.fn();
       this.help = vi.fn();
     }
@@ -54,7 +56,10 @@ vi.mock('@mastra/deployer/build', () => {
       }),
       off: vi.fn(),
     }),
+    discoverFsAgents: vi.fn().mockResolvedValue([]),
     getWatcherInputOptions: vi.fn().mockResolvedValue({ plugins: [] }),
+    prepareFsAgentsEntry: vi.fn(),
+    writeFsAgentsEntry: vi.fn(),
   };
 });
 
@@ -127,6 +132,71 @@ describe('DevBundler', () => {
           },
           expect.objectContaining({ sourcemap: false }),
         );
+      } finally {
+        await remove(tmpDir);
+      }
+    });
+
+    it('watches file-based agent instructions and regenerates the wrapper when source changes before rebuilds', async () => {
+      const devBundler = new DevBundler();
+      const { createWatcher, discoverFsAgents, prepareFsAgentsEntry, writeFsAgentsEntry } =
+        await import('@mastra/deployer/build');
+      vi.mocked(discoverFsAgents).mockResolvedValue([
+        {
+          name: 'weather',
+          configPath: '/project/src/mastra/agents/weather/config.ts',
+          instructionsPath: '/project/src/mastra/agents/weather/instructions.md',
+          workspacePath: undefined,
+          workspaceSeedDir: undefined,
+          memoryPath: undefined,
+          tools: [],
+          skills: [],
+          inputProcessors: [],
+          outputProcessors: [],
+          scorers: [],
+          subagents: [],
+        },
+      ] as any);
+      const nextEntry = {
+        entryFile: '/project/.mastra/.mastra-fs-agents-entry.mjs',
+        standalone: false,
+        toolPaths: [],
+        agentCount: 1,
+        workflowCount: 0,
+        hasStorage: false,
+        hasObservability: false,
+        hasLogger: false,
+        hasServer: false,
+        hasStudio: false,
+        moduleSource: 'next source',
+      };
+      vi.mocked(prepareFsAgentsEntry).mockResolvedValue(nextEntry);
+
+      const tmpDir = '.test-tmp';
+      await devBundler.watch('test-entry.js', tmpDir, [], {
+        mastraDir: '/project/src/mastra',
+        userEntryFile: '/project/src/mastra/index.ts',
+        outputDirectory: '/project/.mastra',
+        preparedEntry: {
+          ...nextEntry,
+          moduleSource: 'old source',
+        },
+      });
+
+      try {
+        const input = vi.mocked(createWatcher).mock.calls[0]![0] as any;
+        const plugin = input.plugins.find((candidate: any) => candidate?.name === 'fs-routing-watcher');
+        const addWatchFile = vi.fn();
+
+        await plugin.buildStart.call({ addWatchFile });
+
+        expect(addWatchFile).toHaveBeenCalledWith('/project/src/mastra/agents/weather/instructions.md');
+        expect(prepareFsAgentsEntry).toHaveBeenCalledWith(
+          '/project/src/mastra',
+          '/project/src/mastra/index.ts',
+          '/project/.mastra',
+        );
+        expect(writeFsAgentsEntry).toHaveBeenCalledWith(nextEntry);
       } finally {
         await remove(tmpDir);
       }

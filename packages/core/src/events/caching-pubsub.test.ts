@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { InMemoryServerCache } from '../cache/inmemory';
 import { CachingPubSub, withCaching } from './caching-pubsub';
 import { EventEmitterPubSub } from './event-emitter';
-import type { Event } from './types';
+import { isLeaseProvider, PubSub } from './pubsub';
+import type { Event, EventCallback } from './types';
 
 describe('CachingPubSub', () => {
   let cache: InMemoryServerCache;
@@ -170,6 +171,44 @@ describe('CachingPubSub', () => {
         expect.any(Function),
       );
     });
+
+    it('forwards options (including batch) verbatim to the inner PubSub', async () => {
+      const subscribeSpy = vi.fn(async () => {});
+      class StubInner extends PubSub {
+        get supportsNativeBatching() {
+          return true;
+        }
+        async publish() {}
+        subscribe = subscribeSpy;
+        async unsubscribe() {}
+        async flush() {}
+      }
+      const wrapped = new CachingPubSub(new StubInner(), cache);
+      const cb = () => {};
+      const options = { batch: { maxSize: 2, maxWaitMs: 50 } };
+      await wrapped.subscribe('t', cb, options);
+      expect(subscribeSpy).toHaveBeenCalledWith('t', cb, options);
+    });
+
+    it('reports supportsNativeBatching by delegating to the inner PubSub', () => {
+      class NativeInner extends PubSub {
+        get supportsNativeBatching() {
+          return true;
+        }
+        async publish() {}
+        async subscribe() {}
+        async unsubscribe() {}
+        async flush() {}
+      }
+      class NonNativeInner extends PubSub {
+        async publish() {}
+        async subscribe() {}
+        async unsubscribe() {}
+        async flush() {}
+      }
+      expect(new CachingPubSub(new NativeInner(), cache).supportsNativeBatching).toBe(true);
+      expect(new CachingPubSub(new NonNativeInner(), cache).supportsNativeBatching).toBe(false);
+    });
   });
 
   describe('subscribeWithReplay', () => {
@@ -208,21 +247,47 @@ describe('CachingPubSub', () => {
         receivedEvents.push(event);
       });
 
-      // Create a custom pubsub that simulates a race condition
-      // where the same event arrives both via cache replay and live subscription
       const racyInnerPubsub = new EventEmitterPubSub();
       const racyCachingPubsub = new CachingPubSub(racyInnerPubsub, cache);
 
-      // Publish an event
       await racyCachingPubsub.publish(topic, { type: 'boundary-event', runId: 'run-1', data: {} });
       await new Promise(resolve => setTimeout(resolve, 10));
 
-      // Subscribe with replay
       await racyCachingPubsub.subscribeWithReplay(topic, callback);
 
-      // Should only receive the event once (deduped by ID)
       const boundaryEvents = receivedEvents.filter(e => e.type === 'boundary-event');
       expect(boundaryEvents).toHaveLength(1);
+    });
+
+    it('should not duplicate an event published while the subscription is being established', async () => {
+      const topic = 'replay-race-topic';
+      const received: string[] = [];
+
+      // Pre-fill history before any subscriber exists.
+      await cachingPubsub.publish(topic, { type: 'chunk', runId: 'r1', data: { c: '0' } });
+      await cachingPubsub.publish(topic, { type: 'chunk', runId: 'r1', data: { c: '1' } });
+
+      // Force the race: publish "2" exactly between inner.subscribe() and
+      // getHistory(), so it lands in both the live stream and the replayed history.
+      const realGetHistory = cachingPubsub.getHistory.bind(cachingPubsub);
+      let raced = false;
+      vi.spyOn(cachingPubsub, 'getHistory').mockImplementation(async (t: string, offset?: number) => {
+        if (!raced) {
+          raced = true;
+          await cachingPubsub.publish(topic, { type: 'chunk', runId: 'r1', data: { c: '2' } });
+        }
+        return realGetHistory(t, offset);
+      });
+
+      await cachingPubsub.subscribeWithReplay(topic, (event: Event) => {
+        received.push((event.data as { c: string }).c);
+      });
+
+      const counts = received.reduce<Record<string, number>>((acc, c) => {
+        acc[c] = (acc[c] ?? 0) + 1;
+        return acc;
+      }, {});
+      expect(counts).toEqual({ '0': 1, '1': 1, '2': 1 });
     });
 
     it('should handle empty cache gracefully', async () => {
@@ -238,6 +303,52 @@ describe('CachingPubSub', () => {
       await cachingPubsub.publish(topic, { type: 'first-event', runId: 'run-1', data: {} });
 
       expect(callback).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('subscribeFromOffset', () => {
+    it('should not duplicate an event published while the subscription is being established', async () => {
+      const topic = 'offset-race-topic';
+      const received: string[] = [];
+
+      await cachingPubsub.publish(topic, { type: 'chunk', runId: 'r1', data: { c: '0' } });
+      await cachingPubsub.publish(topic, { type: 'chunk', runId: 'r1', data: { c: '1' } });
+
+      const realGetHistory = cachingPubsub.getHistory.bind(cachingPubsub);
+      let raced = false;
+      vi.spyOn(cachingPubsub, 'getHistory').mockImplementation(async (t: string, offset?: number) => {
+        if (!raced) {
+          raced = true;
+          await cachingPubsub.publish(topic, { type: 'chunk', runId: 'r1', data: { c: '2' } });
+        }
+        return realGetHistory(t, offset);
+      });
+
+      await cachingPubsub.subscribeFromOffset(topic, 0, (event: Event) => {
+        received.push((event.data as { c: string }).c);
+      });
+
+      const counts = received.reduce<Record<string, number>>((acc, c) => {
+        acc[c] = (acc[c] ?? 0) + 1;
+        return acc;
+      }, {});
+      expect(counts).toEqual({ '0': 1, '1': 1, '2': 1 });
+    });
+
+    it('skips events before the requested offset', async () => {
+      const topic = 'offset-skip-topic';
+
+      await cachingPubsub.publish(topic, { type: 'e0', runId: 'r1', data: {} });
+      await cachingPubsub.publish(topic, { type: 'e1', runId: 'r1', data: {} });
+      await cachingPubsub.publish(topic, { type: 'e2', runId: 'r1', data: {} });
+      await cachingPubsub.publish(topic, { type: 'e3', runId: 'r1', data: {} });
+
+      const received: number[] = [];
+      await cachingPubsub.subscribeFromOffset(topic, 2, (event: Event) => {
+        received.push(event.index!);
+      });
+
+      expect(received).toEqual([2, 3]);
     });
   });
 
@@ -328,6 +439,52 @@ describe('CachingPubSub', () => {
       expect(history1).toHaveLength(0);
       expect(history2).toHaveLength(1);
     });
+
+    it('forwards clearTopic to an inner transport that implements it', async () => {
+      // A persistent inner (e.g. Redis Streams) must be told to delete its
+      // underlying stream — otherwise wrapping it in CachingPubSub turns
+      // clearTopic into a cache-only no-op and the inner storage leaks.
+      class ClearableInner extends PubSub {
+        clearTopic = vi.fn(async (_topic: string) => {});
+        async publish(): Promise<void> {}
+        async subscribe(): Promise<void> {}
+        async unsubscribe(): Promise<void> {}
+        async flush(): Promise<void> {}
+      }
+      const inner = new ClearableInner();
+      const wrapped = new CachingPubSub(inner, cache);
+
+      await wrapped.clearTopic('some-topic');
+
+      expect(inner.clearTopic).toHaveBeenCalledWith('some-topic');
+    });
+
+    it('does not throw when the inner transport does not override clearTopic', async () => {
+      // EventEmitterPubSub retains nothing per topic and relies on the
+      // PubSub base class's no-op clearTopic; forwarding must resolve cleanly.
+      await expect(cachingPubsub.clearTopic('no-inner-hook')).resolves.toBeUndefined();
+    });
+
+    it('does not reject when the cache or inner transport fails', async () => {
+      // The base-class contract says clearTopic is best-effort and
+      // non-throwing: callers (DurableAgent, WorkflowEventProcessor) invoke
+      // it fire-and-forget, so a rejection here would surface as an
+      // unhandledRejection. Failures must be logged, not thrown.
+      class FailingInner extends PubSub {
+        override clearTopic = vi.fn(async (_topic: string) => {
+          throw new Error('inner delete failed');
+        });
+        async publish(): Promise<void> {}
+        async subscribe(): Promise<void> {}
+        async unsubscribe(): Promise<void> {}
+        async flush(): Promise<void> {}
+      }
+      const logger = { error: vi.fn() };
+      const wrapped = new CachingPubSub(new FailingInner(), cache, { logger: logger as any });
+
+      await expect(wrapped.clearTopic('failing-topic')).resolves.toBeUndefined();
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('failing-topic'), expect.any(Error));
+    });
   });
 
   describe('flush', () => {
@@ -343,6 +500,46 @@ describe('CachingPubSub', () => {
   describe('getInner', () => {
     it('should return the inner pubsub instance', () => {
       expect(cachingPubsub.getInner()).toBe(innerPubsub);
+    });
+  });
+
+  describe('lease provider', () => {
+    it('exposes the inner pubsub as the lease provider when the inner can lease', () => {
+      const leaseProvider = cachingPubsub.getLeaseProvider();
+      expect(leaseProvider).toBe(innerPubsub);
+      expect(isLeaseProvider(leaseProvider)).toBe(true);
+    });
+
+    it('returns undefined when the inner pubsub cannot lease', () => {
+      class NonLeaseInner extends PubSub {
+        async publish() {}
+        async subscribe() {}
+        async unsubscribe() {}
+        async flush() {}
+      }
+      const wrapped = new CachingPubSub(new NonLeaseInner(), cache);
+      expect(wrapped.getLeaseProvider()).toBeUndefined();
+    });
+
+    it('preserves real lease semantics through the inner lease provider', async () => {
+      // Caching is transparent to leasing: callers resolve the inner's
+      // provider and coordinate through it, so wrapping with caching must
+      // not fake or weaken the lock. This guards against a regression where
+      // a second owner could "acquire" an already-held lease.
+      const leaseProvider = cachingPubsub.getLeaseProvider();
+      expect(leaseProvider).toBeDefined();
+
+      const first = await leaseProvider!.acquireLease('thread-1', 'owner-a', 5000);
+      expect(first).toEqual({ acquired: true, owner: 'owner-a' });
+
+      const second = await leaseProvider!.acquireLease('thread-1', 'owner-b', 5000);
+      expect(second.acquired).toBe(false);
+      expect(second.owner).toBe('owner-a');
+
+      expect(await leaseProvider!.getLeaseOwner('thread-1')).toBe('owner-a');
+
+      await leaseProvider!.releaseLease('thread-1', 'owner-a');
+      expect(await leaseProvider!.getLeaseOwner('thread-1')).toBeUndefined();
     });
   });
 
@@ -460,53 +657,47 @@ describe('CachingPubSub', () => {
     });
   });
 
-  describe('seen set after replay', () => {
-    it('should not track event IDs in dedup set after replay completes', async () => {
+  describe('steady-state dedup after replay', () => {
+    it('uses bounded watermark instead of unbounded seen set after replay', async () => {
       const topic = 'seen-set-topic';
 
       // Publish a cached event before subscribing
       await cachingPubsub.publish(topic, { type: 'cached', runId: 'run-1', data: {} });
       await new Promise(resolve => setTimeout(resolve, 10));
 
-      // Subscribe with replay — wrappedCb is stored in callbackMap
       const callback = vi.fn();
       await cachingPubsub.subscribeWithReplay(topic, callback);
 
-      // Verify we received the cached event
       expect(callback).toHaveBeenCalledTimes(1);
 
-      // Now send 50 live events
+      // Send 50 live events
       for (let i = 0; i < 50; i++) {
         await cachingPubsub.publish(topic, { type: `live-${i}`, runId: 'run-1', data: {} });
       }
       expect(callback).toHaveBeenCalledTimes(51); // 1 cached + 50 live
 
-      // Get the wrappedCb from the callbackMap (internal state)
+      // Get the wrappedCb from the callbackMap
       const callbackMap = (cachingPubsub as any).callbackMap as Map<any, any>;
       const wrappedCb = callbackMap.get(callback);
       expect(wrappedCb).toBeDefined();
 
-      // The wrappedCb closure captures a `seen` variable.
-      // After replay, `seen` should be nulled out (not growing with each live event).
-      // We can verify this by checking that the wrapper is a passthrough:
-      // calling it with a duplicate ID should still forward it (no dedup after replay).
-      const duplicateEvent = {
-        id: 'already-seen-id',
+      // After replay, the wrapper uses a lastDelivered watermark. A genuinely
+      // new event (index higher than anything seen) should still be delivered.
+      callback.mockClear();
+      const newEvent = {
+        id: 'brand-new',
         type: 'test',
         runId: 'run-1',
         data: {},
         createdAt: new Date(),
         index: 999,
       };
+      wrappedCb(newEvent);
+      expect(callback).toHaveBeenCalledTimes(1);
 
-      // Call wrappedCb twice with the same event ID
-      callback.mockClear();
-      wrappedCb(duplicateEvent);
-      wrappedCb(duplicateEvent);
-
-      // After replay, the seen set should be null — wrappedCb should be a passthrough
-      // Both calls should forward to cb (no dedup on live events post-replay)
-      expect(callback).toHaveBeenCalledTimes(2);
+      // The same index again should be suppressed (watermark dedup)
+      wrappedCb(newEvent);
+      expect(callback).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -543,6 +734,264 @@ describe('CachingPubSub', () => {
       for (const callback of callbacks) {
         expect(callback).toHaveBeenCalledTimes(5);
       }
+    });
+  });
+
+  describe('pull-mode transport correctness', () => {
+    // A mock PubSub that behaves like Redis Streams: when subscribe() is
+    // called, it immediately re-delivers the full backlog to the callback
+    // (simulating XREADGROUP from id '0'). This exercises the buffering
+    // and dedup paths that EventEmitterPubSub never triggers.
+    class PullModePubSub extends PubSub {
+      private published: Event[] = [];
+      private listeners: Map<string, Set<EventCallback>> = new Map();
+      private acked: Event[] = [];
+
+      async publish(_topic: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<void> {
+        const full: Event = {
+          ...event,
+          id: crypto.randomUUID(),
+          createdAt: new Date(),
+        } as Event;
+        this.published.push(full);
+        // Deliver to existing listeners
+        const cbs = this.listeners.get(_topic);
+        if (cbs) {
+          for (const cb of cbs)
+            cb(full, async () => {
+              this.acked.push(full);
+            });
+        }
+      }
+
+      async subscribe(_topic: string, cb: EventCallback): Promise<void> {
+        let cbs = this.listeners.get(_topic);
+        if (!cbs) {
+          cbs = new Set();
+          this.listeners.set(_topic, cbs);
+        }
+        cbs.add(cb);
+        // Re-deliver full backlog immediately (pull-mode behavior)
+        for (const event of this.published) {
+          cb(event, async () => {
+            this.acked.push(event);
+          });
+        }
+      }
+
+      async unsubscribe(_topic: string, cb: EventCallback): Promise<void> {
+        this.listeners.get(_topic)?.delete(cb);
+      }
+
+      async flush(): Promise<void> {}
+
+      getAckedIndices(): number[] {
+        return this.acked.map(event => event.index!);
+      }
+
+      emitLiveOnly(
+        topic: string,
+        event: Event,
+        ack?: Parameters<EventCallback>[1],
+        nack?: Parameters<EventCallback>[2],
+      ): void {
+        const cbs = this.listeners.get(topic);
+        if (cbs) {
+          for (const cb of cbs) cb(event, ack, nack);
+        }
+      }
+    }
+
+    it('delivers history before live events even on pull-mode transports', async () => {
+      const pullInner = new PullModePubSub();
+      const pullCaching = new CachingPubSub(pullInner, cache);
+      const topic = 'pull-order';
+
+      // Publish 3 events that will be in the backlog
+      await pullCaching.publish(topic, { type: 'e0', runId: 'r', data: {} });
+      await pullCaching.publish(topic, { type: 'e1', runId: 'r', data: {} });
+      await pullCaching.publish(topic, { type: 'e2', runId: 'r', data: {} });
+
+      const received: number[] = [];
+      await pullCaching.subscribeWithReplay(topic, (event: Event) => {
+        received.push(event.index!);
+      });
+
+      // Events must arrive in index order, no duplicates
+      expect(received).toEqual([0, 1, 2]);
+    });
+
+    it('honors offset on live path for pull-mode transports', async () => {
+      const pullInner = new PullModePubSub();
+      const pullCaching = new CachingPubSub(pullInner, cache);
+      const topic = 'pull-offset';
+
+      // Publish 5 events
+      for (let i = 0; i < 5; i++) {
+        await pullCaching.publish(topic, { type: `e${i}`, runId: 'r', data: {} });
+      }
+
+      const received: number[] = [];
+      await pullCaching.subscribeFromOffset(topic, 3, (event: Event) => {
+        received.push(event.index!);
+      });
+
+      // Only events with index >= 3 should be delivered
+      expect(received).toEqual([3, 4]);
+    });
+
+    it('delivers events published during getHistory bootstrap without duplication', async () => {
+      const pullInner = new PullModePubSub();
+      const pullCaching = new CachingPubSub(pullInner, cache);
+      const topic = 'pull-bootstrap-race';
+
+      // Pre-fill 2 events
+      await pullCaching.publish(topic, { type: 'e0', runId: 'r', data: {} });
+      await pullCaching.publish(topic, { type: 'e1', runId: 'r', data: {} });
+
+      // Publish during getHistory to simulate the race
+      const realGetHistory = pullCaching.getHistory.bind(pullCaching);
+      let raced = false;
+      vi.spyOn(pullCaching, 'getHistory').mockImplementation(async (t: string, offset?: number) => {
+        if (!raced) {
+          raced = true;
+          await pullCaching.publish(topic, { type: 'e2', runId: 'r', data: {} });
+        }
+        return realGetHistory(t, offset);
+      });
+
+      const received: number[] = [];
+      await pullCaching.subscribeWithReplay(topic, (event: Event) => {
+        received.push(event.index!);
+      });
+
+      // All 3 events, each exactly once, in order
+      expect(received).toEqual([0, 1, 2]);
+    });
+
+    it('live events after bootstrap are delivered in steady state', async () => {
+      const pullInner = new PullModePubSub();
+      const pullCaching = new CachingPubSub(pullInner, cache);
+      const topic = 'pull-steady-state';
+
+      await pullCaching.publish(topic, { type: 'e0', runId: 'r', data: {} });
+
+      const received: number[] = [];
+      await pullCaching.subscribeWithReplay(topic, (event: Event) => {
+        received.push(event.index!);
+      });
+
+      expect(received).toEqual([0]);
+
+      // Publish after bootstrap — should be delivered normally
+      await pullCaching.publish(topic, { type: 'e1', runId: 'r', data: {} });
+      await pullCaching.publish(topic, { type: 'e2', runId: 'r', data: {} });
+
+      expect(received).toEqual([0, 1, 2]);
+    });
+
+    it('allows nack-redelivered events through even when index <= lastDelivered', async () => {
+      const pullInner = new PullModePubSub();
+      const pullCaching = new CachingPubSub(pullInner, cache);
+      const topic = 'pull-nack-retry';
+
+      await pullCaching.publish(topic, { type: 'e0', runId: 'r', data: {} });
+      await pullCaching.publish(topic, { type: 'e1', runId: 'r', data: {} });
+
+      const received: Array<{ index: number; attempt: number | undefined }> = [];
+      await pullCaching.subscribeWithReplay(topic, (event: Event) => {
+        received.push({ index: event.index!, attempt: event.deliveryAttempt });
+      });
+
+      expect(received).toEqual([
+        { index: 0, attempt: undefined },
+        { index: 1, attempt: undefined },
+      ]);
+
+      // Simulate a nack redelivery: same index, deliveryAttempt > 1
+      pullInner.emitLiveOnly(topic, {
+        id: 'retry-id',
+        type: 'e1',
+        runId: 'r',
+        data: {},
+        createdAt: new Date(),
+        index: 1,
+        deliveryAttempt: 2,
+      });
+
+      expect(received).toHaveLength(3);
+      expect(received[2]).toEqual({ index: 1, attempt: 2 });
+    });
+
+    it('cleans up wrappedCb when replay bootstrap fails', async () => {
+      const pullInner = new PullModePubSub();
+      const pullCaching = new CachingPubSub(pullInner, cache);
+      const topic = 'pull-bootstrap-fail';
+
+      await pullCaching.publish(topic, { type: 'e0', runId: 'r', data: {} });
+
+      vi.spyOn(pullCaching, 'getHistory').mockRejectedValueOnce(new Error('cache down'));
+
+      const cb = vi.fn();
+      await expect(pullCaching.subscribeWithReplay(topic, cb)).rejects.toThrow('cache down');
+
+      // wrappedCb should have been unsubscribed — new events must not reach cb
+      pullInner.emitLiveOnly(topic, {
+        id: 'after-fail',
+        type: 'e1',
+        runId: 'r',
+        data: {},
+        createdAt: new Date(),
+        index: 1,
+      });
+
+      expect(cb).not.toHaveBeenCalled();
+    });
+
+    it('preserves ack and nack handles for buffered live events that are delivered after history', async () => {
+      const pullInner = new PullModePubSub();
+      const pullCaching = new CachingPubSub(pullInner, cache);
+      const topic = 'pull-buffer-handles';
+
+      await pullCaching.publish(topic, { type: 'e0', runId: 'r', data: {} });
+
+      const realGetHistory = pullCaching.getHistory.bind(pullCaching);
+      let raced = false;
+      const ackedByConsumer: number[] = [];
+      vi.spyOn(pullCaching, 'getHistory').mockImplementation(async (t: string, offset?: number) => {
+        if (!raced) {
+          raced = true;
+          pullInner.emitLiveOnly(
+            topic,
+            {
+              id: 'live-only',
+              type: 'e1',
+              runId: 'r',
+              data: {},
+              createdAt: new Date(),
+              index: 1,
+            },
+            async () => {
+              ackedByConsumer.push(1);
+            },
+            async () => {},
+          );
+        }
+        return realGetHistory(t, offset);
+      });
+
+      const received: number[] = [];
+      await pullCaching.subscribeWithReplay(topic, (event: Event, ack, nack) => {
+        received.push(event.index!);
+        if (event.index === 1) {
+          expect(nack).toBeDefined();
+          void ack?.().then(() => ackedByConsumer.push(event.index!));
+        }
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(received).toEqual([0, 1]);
+      expect(ackedByConsumer).toEqual([1, 1]);
     });
   });
 });

@@ -7,7 +7,8 @@ import type * as z from 'zod/v4';
 import type { InMemoryTaskStore } from '../../a2a/store';
 import type { OpenAPIRoute } from '../openapi-utils';
 import { A2A_ROUTES } from './a2a';
-import type { AGENT_BUILDER_ROUTES } from './agent-builder';
+import { AGENT_BUILDER_ROUTES } from './agent-builder';
+import { AGENT_CONTROLLER_ROUTES } from './agent-controller';
 import { AGENTS_ROUTES } from './agents';
 import type { AgentRoutes } from './agents';
 import { AUTH_ROUTES } from './auth';
@@ -15,6 +16,7 @@ import { BACKGROUND_TASK_ROUTES } from './background-tasks';
 import { CHANNELS_ROUTES } from './channels';
 import { CONVERSATIONS_ROUTES } from './conversations';
 import { DATASETS_ROUTES } from './datasets';
+import { EDITOR_BUILDER_ROUTES } from './editor-builder';
 import { LEGACY_ROUTES } from './legacy';
 import { LOGS_ROUTES } from './logs';
 import { MCP_ROUTES } from './mcp';
@@ -53,6 +55,8 @@ export type ServerContext = {
   abortSignal: AbortSignal;
   /** The route prefix configured for the server (e.g., '/api') */
   routePrefix?: string;
+  /** The web-standard Request object for accessing headers, cookies, etc. */
+  request?: Request;
 };
 
 /**
@@ -119,6 +123,7 @@ export type ServerRoute<
   path: TPath;
   responseType: TResponseType;
   streamFormat?: 'sse' | 'stream'; // Only used when responseType is 'stream', defaults to 'stream'
+  sseFlushOnConnect?: boolean;
   // Method signature is bivariant in params, allowing heterogeneous route arrays
   // while still preserving specific param types on individual routes.
   handler(params: TParams & ServerContext): ReturnType<ServerRouteHandler<TParams, TResponse, TResponseType>>;
@@ -134,11 +139,15 @@ export type ServerRoute<
    * If set, the user must have this permission to access the route.
    * Uses the format: `resource:action` or `resource:action:resourceId`
    *
+   * When an array is provided, the user needs ANY ONE of the listed permissions
+   * (logical OR). This is useful for routes that serve multiple resource types,
+   * e.g. a streaming endpoint used by both runtime and stored agents.
+   *
    * @example
    * requiresPermission: MastraFGAPermissions.AGENTS_READ
    * requiresPermission: MastraFGAPermissions.WORKFLOWS_EXECUTE
    */
-  requiresPermission?: MastraFGAPermissionInput;
+  requiresPermission?: MastraFGAPermissionInput | MastraFGAPermissionInput[];
   /**
    * FGA authorization config for this route (EE feature).
    * If set, the user must have the specified permission on the resource.
@@ -180,8 +189,11 @@ export const SERVER_ROUTES: readonly ServerRoute[] = [
   ...SYSTEM_ROUTES,
   ...DATASETS_ROUTES,
   ...BACKGROUND_TASK_ROUTES,
+  ...EDITOR_BUILDER_ROUTES,
+  ...AGENT_BUILDER_ROUTES,
   ...SCHEDULES_ROUTES,
   ...CHANNELS_ROUTES,
+  ...AGENT_CONTROLLER_ROUTES,
 ];
 
 /**
@@ -216,6 +228,7 @@ export type ServerRoutes = readonly [
   ...typeof PROCESSOR_PROVIDER_ROUTES,
   ...typeof SYSTEM_ROUTES,
   ...typeof DATASETS_ROUTES,
+  ...typeof EDITOR_BUILDER_ROUTES,
   ...typeof CHANNELS_ROUTES,
 ];
 

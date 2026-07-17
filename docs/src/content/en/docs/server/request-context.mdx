@@ -91,11 +91,7 @@ export const mastra = new Mastra({
 })
 ```
 
-:::info
-
 Visit [Middleware](/docs/server/middleware) for how to use server middleware.
-
-:::
 
 ## Studio
 
@@ -170,7 +166,7 @@ export const dynamicAgent = new Agent({
 
     return `${basePrompt} ${localeInstructions}`.trim()
   },
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
 })
 ```
 
@@ -197,15 +193,11 @@ export const registryAgent = new Agent({
 
     return prompt.content
   },
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
 })
 ```
 
-:::info
-
 Visit [Agent](/reference/agents/agent) for a full list of configuration options.
-
-:::
 
 ## Accessing values from workflow steps
 
@@ -227,11 +219,7 @@ const stepOne = createStep({
 })
 ```
 
-:::info
-
 Visit [createStep()](/reference/workflows/step) for a full list of configuration options.
-
-:::
 
 ## Accessing values with tools
 
@@ -253,11 +241,7 @@ export const weatherTool = createTool({
 })
 ```
 
-:::info
-
 Visit [createTool()](/reference/tools/create-tool) for a full list of configuration options.
-
-:::
 
 ## Reserved keys
 
@@ -271,6 +255,8 @@ auth: {
   mapUserToResourceId: user => user.id,
 }
 ```
+
+When the resource ID is derived this way, clients can omit `memory.resource` from agent generate and stream request bodies — the server-derived value is used instead (and always takes precedence over any client-provided value). If a request uses memory and neither the body nor the request context provides a resource ID, the server responds with a 400 error.
 
 You can also set these keys manually in middleware:
 
@@ -363,7 +349,7 @@ export const validatedAgent = new Agent({
 
     return `You are helping user ${userId}`
   },
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
 })
 ```
 

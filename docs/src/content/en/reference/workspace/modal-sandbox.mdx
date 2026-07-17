@@ -7,13 +7,7 @@ packages:
 
 # ModalSandbox
 
-Executes commands in isolated [Modal](https://modal.com) cloud sandboxes. Provides secure, ephemeral environments backed by Modal's infrastructure.
-
-:::info
-
-For interface details, see [WorkspaceSandbox interface](/reference/workspace/sandbox).
-
-:::
+Executes commands in isolated [Modal](https://modal.com) cloud sandboxes. Provides secure, ephemeral environments backed by Modal's infrastructure. For interface details, see [WorkspaceSandbox interface](/reference/workspace/sandbox).
 
 ## Installation
 
@@ -40,7 +34,7 @@ const workspace = new Workspace({
 
 const agent = new Agent({
   id: 'dev-agent',
-  model: 'anthropic/claude-opus-4-6',
+  model: '__GATEWAY_ANTHROPIC_MODEL_OPUS__',
   workspace,
 })
 ```
@@ -233,7 +227,7 @@ await handle.kill()
 
 :::note
 
-`sendStdin()` is not supported — the Modal JS SDK does not expose stdin on `Sandbox.exec()`.
+`sendStdin()` isn't supported — the Modal JS SDK doesn't expose stdin on `Sandbox.exec()`.
 
 :::
 

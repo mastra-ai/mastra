@@ -10,7 +10,7 @@ export const isMastraTextStreamChunk = (chunk: any): chunk is ChunkType<OutputSc
     typeof chunk === 'object' &&
     'type' in chunk &&
     typeof chunk.type === 'string' &&
-    [
+    ([
       'text-start',
       'text-delta',
       'text-end',
@@ -36,9 +36,20 @@ export const isMastraTextStreamChunk = (chunk: any): chunk is ChunkType<OutputSc
       'object',
       'tripwire',
       'raw',
-    ].includes(chunk.type)
+    ].includes(chunk.type) ||
+      chunk.type.startsWith('background-task-'))
   );
 };
+
+// Fields on AI SDK error classes (APICallError, InvalidPromptError,
+// InvalidResponseDataError, ...) that can carry the request/response payload.
+// The most dangerous is APICallError.requestBodyValues, which holds the full
+// request body sent to the provider — including the agent's system prompt.
+// These get stripped from the default error serialization so an unhandled
+// LLM failure can't leak the system prompt back to the chat client. Callers
+// that want richer diagnostics should pass their own `onError` to chatRoute /
+// handleChatStream and serialize as they see fit.
+const REDACTED_ERROR_FIELDS = new Set(['requestBodyValues', 'responseBody', 'responseHeaders', 'data', 'prompt']);
 
 export function safeParseErrorObject(obj: unknown): string {
   if (typeof obj !== 'object' || obj === null) {
@@ -46,9 +57,9 @@ export function safeParseErrorObject(obj: unknown): string {
   }
 
   try {
-    const stringified = JSON.stringify(obj);
+    const stringified = JSON.stringify(obj, (key, value) => (REDACTED_ERROR_FIELDS.has(key) ? undefined : value));
     // If JSON.stringify returns "{}", fall back to String() for better representation
-    if (stringified === '{}') {
+    if (stringified === '{}' || stringified === undefined) {
       return String(obj);
     }
     return stringified;

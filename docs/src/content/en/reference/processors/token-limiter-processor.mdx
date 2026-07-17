@@ -165,9 +165,10 @@ import { Memory } from '@mastra/memory'
 import { TokenLimiterProcessor } from '@mastra/core/processors'
 
 export const agent = new Agent({
+  id: 'context-limited-agent',
   name: 'context-limited-agent',
   instructions: 'You are a helpful assistant',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   memory: new Memory({
     /* ... */
   }),
@@ -186,9 +187,10 @@ import { Agent } from '@mastra/core/agent'
 import { TokenLimiterProcessor } from '@mastra/core/processors'
 
 export const agent = new Agent({
+  id: 'multi-step-agent',
   name: 'multi-step-agent',
   instructions: 'You are a helpful research assistant with access to tools',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   inputProcessors: [
     new TokenLimiterProcessor({ limit: 8000 }), // Applied at every step
   ],
@@ -209,9 +211,10 @@ import { Agent } from '@mastra/core/agent'
 import { TokenLimiterProcessor } from '@mastra/core/processors'
 
 export const agent = new Agent({
+  id: 'response-limited-agent',
   name: 'response-limited-agent',
   instructions: 'You are a helpful assistant',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   outputProcessors: [
     new TokenLimiterProcessor({
       limit: 1000,

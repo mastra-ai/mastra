@@ -10,14 +10,17 @@ import type {
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
+import { MastraNonRetryableError } from '../error';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from '../loop/test-utils/MastraLanguageModelV2Mock';
 import { Mastra } from '../mastra';
+import { RequestContext } from '../request-context';
 import { MockStore } from '../storage/mock';
 import { createTool } from '../tools/tool';
 import { PUBSUB_SYMBOL } from './constants';
+import { createWorkflow } from './create';
 import type { Workflow } from './types';
-import { createStep, createWorkflow } from './workflow';
+import { createStep } from './workflow';
 
 // ============================================================================
 // Shared Test Suite (Default Engine)
@@ -573,6 +576,141 @@ describe('Workflow (Default Engine Specifics)', () => {
     });
   });
 
+  describe('non-retryable workflow failures', () => {
+    it('does not retry workflow steps that throw MastraNonRetryableError', async () => {
+      let calls = 0;
+
+      const fatalStep = createStep({
+        id: 'fatal-step',
+        execute: async () => {
+          calls++;
+          throw new MastraNonRetryableError('permanent failure');
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'non-retryable-fatal-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        retryConfig: { attempts: 3, delay: 0 },
+        steps: [fatalStep],
+      });
+      workflow.then(fatalStep).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { 'non-retryable-fatal-workflow': workflow },
+      });
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+      expect(calls).toBe(1);
+
+      const stepResult = result.steps['fatal-step'];
+      expect(stepResult?.status).toBe('failed');
+      expect(stepResult?.nonRetryable).toBe(true);
+    });
+
+    it('retries workflow steps that throw transient errors until attempts are exhausted', async () => {
+      let calls = 0;
+
+      const transientStep = createStep({
+        id: 'transient-step',
+        execute: async () => {
+          calls++;
+          throw new Error('transient failure');
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'retryable-transient-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        retryConfig: { attempts: 3, delay: 0 },
+        steps: [transientStep],
+      });
+      workflow.then(transientStep).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { 'retryable-transient-workflow': workflow },
+      });
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+      expect(calls).toBe(4);
+
+      const stepResult = result.steps['transient-step'];
+      expect(stepResult?.status).toBe('failed');
+      expect(stepResult?.nonRetryable).toBeUndefined();
+    });
+  });
+
+  describe('tool step cancellation', () => {
+    it('forwards abortSignal to tool-wrapped steps so run.cancel() can stop cooperative tools', async () => {
+      let capturedAbortSignal: AbortSignal | undefined;
+      let toolStoppedEarly = false;
+
+      const cooperativeTool = createTool({
+        id: 'cooperative-tool',
+        description: 'Polls abortSignal until canceled',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ completed: z.boolean() }),
+        execute: async (_input, context) => {
+          capturedAbortSignal = context.abortSignal;
+          const deadline = Date.now() + 5_000;
+          while (Date.now() < deadline) {
+            if (context.abortSignal?.aborted) {
+              toolStoppedEarly = true;
+              return { completed: false };
+            }
+            await new Promise(resolve => setTimeout(resolve, 50));
+          }
+          return { completed: true };
+        },
+      });
+
+      const toolStep = createStep(cooperativeTool);
+      const workflow = createWorkflow({
+        id: 'tool-cancel-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ completed: z.boolean() }),
+        steps: [toolStep],
+      });
+      workflow.then(toolStep).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { 'tool-cancel-workflow': workflow },
+      });
+
+      const run = await workflow.createRun();
+      const startedAt = Date.now();
+      const startPromise = run.start({ inputData: {} });
+
+      await new Promise(resolve => setTimeout(resolve, 1_000));
+      await run.cancel();
+
+      const result = await startPromise;
+
+      expect(result.status).toBe('canceled');
+      expect(capturedAbortSignal).toBeInstanceOf(AbortSignal);
+      expect(toolStoppedEarly).toBe(true);
+      expect(Date.now() - startedAt).toBeLessThan(3_000);
+    }, 10_000);
+  });
+
   describe('Tracing Context Persistence', () => {
     it('should persist tracing context when workflow suspends', async () => {
       const mastra = new Mastra({
@@ -677,6 +815,145 @@ describe('Workflow (Default Engine Specifics)', () => {
       expect(childRuns?.runs.length).toBe(1);
       // Regression guard for #15246: child workflow snapshots must inherit the parent's resourceId.
       expect(childRuns?.runs[0]?.resourceId).toBe('workspace-1');
+    });
+  });
+
+  describe('FGA checks', () => {
+    function createFGAWorkflow() {
+      const step = createStep({
+        id: 'fga-step',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ value: z.string() }),
+        execute: async ({ inputData }) => inputData,
+      });
+
+      return createWorkflow({
+        id: 'fga-workflow',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ value: z.string() }),
+        steps: [step],
+      })
+        .then(step)
+        .commit();
+    }
+
+    it('checks internal workflow execution FGA with request context metadata', async () => {
+      const fgaProvider = {
+        require: vi.fn().mockResolvedValue(undefined),
+        check: vi.fn(),
+        filterAccessible: vi.fn(),
+      };
+      const workflow = createFGAWorkflow();
+      const mastra = new Mastra({
+        logger: false,
+        server: { fga: fgaProvider },
+      });
+      workflow.__registerMastra(mastra);
+
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1' });
+
+      const result = await (workflow as any).execute({
+        runId: 'run-1',
+        resourceId: 'tenant-1',
+        inputData: { value: 'ok' },
+        state: {},
+        setState: vi.fn(),
+        suspend: vi.fn(),
+        [PUBSUB_SYMBOL]: new EventEmitterPubSub(),
+        mastra,
+        requestContext,
+        abort: vi.fn(),
+        abortSignal: new AbortController().signal,
+        engine: 'default',
+        bail: vi.fn(),
+      });
+
+      expect(result).toEqual({ value: 'ok' });
+      expect(fgaProvider.require).toHaveBeenCalledWith(
+        { id: 'user-1' },
+        {
+          resource: { type: 'workflow', id: 'fga-workflow' },
+          permission: 'workflows:execute',
+          context: expect.objectContaining({
+            resourceId: 'tenant-1',
+            requestContext,
+            metadata: expect.objectContaining({
+              workflowId: 'fga-workflow',
+              runId: 'run-1',
+              resourceId: 'tenant-1',
+            }),
+          }),
+        },
+      );
+    });
+
+    it('fails closed when internal workflow FGA is configured and no user is available', async () => {
+      const fgaProvider = {
+        require: vi.fn().mockResolvedValue(undefined),
+        check: vi.fn(),
+        filterAccessible: vi.fn(),
+      };
+      const workflow = createFGAWorkflow();
+      const mastra = new Mastra({
+        logger: false,
+        server: { fga: fgaProvider },
+      });
+      workflow.__registerMastra(mastra);
+
+      await expect(
+        (workflow as any).execute({
+          runId: 'run-2',
+          inputData: { value: 'ok' },
+          state: {},
+          setState: vi.fn(),
+          suspend: vi.fn(),
+          [PUBSUB_SYMBOL]: new EventEmitterPubSub(),
+          mastra,
+          requestContext: new RequestContext(),
+          abort: vi.fn(),
+          abortSignal: new AbortController().signal,
+          engine: 'default',
+          bail: vi.fn(),
+        }),
+      ).rejects.toThrow('authenticated user is required');
+      expect(fgaProvider.require).not.toHaveBeenCalled();
+    });
+
+    it('bypasses membership resolution for a tenant-scoped trusted actor', async () => {
+      const fgaProvider = {
+        require: vi.fn().mockResolvedValue(undefined),
+        check: vi.fn(),
+        filterAccessible: vi.fn(),
+      };
+      const workflow = createFGAWorkflow();
+      const mastra = new Mastra({
+        logger: false,
+        server: { fga: fgaProvider },
+      });
+      workflow.__registerMastra(mastra);
+
+      const requestContext = new RequestContext();
+      requestContext.set('organizationId', 'org-1');
+
+      const result = await (workflow as any).execute({
+        runId: 'run-3',
+        inputData: { value: 'ok' },
+        state: {},
+        setState: vi.fn(),
+        suspend: vi.fn(),
+        [PUBSUB_SYMBOL]: new EventEmitterPubSub(),
+        mastra,
+        requestContext,
+        actor: { actorKind: 'system', sourceWorkflow: 'nightly-workflow' },
+        abort: vi.fn(),
+        abortSignal: new AbortController().signal,
+        engine: 'default',
+        bail: vi.fn(),
+      });
+
+      expect(result).toEqual({ value: 'ok' });
+      expect(fgaProvider.require).not.toHaveBeenCalled();
     });
   });
 
@@ -933,5 +1210,80 @@ describe('Workflow (Default Engine Specifics)', () => {
 
       expect(nestedWorkflowStoreResult?.status).toBe('success');
     });
+  });
+});
+
+describe('createRun storage existence read (issue #19015)', () => {
+  const ioSchema = z.object({ value: z.string() });
+  const buildStep = () =>
+    createStep({
+      id: 'passthrough',
+      inputSchema: ioSchema,
+      outputSchema: ioSchema,
+      execute: async ({ inputData }) => inputData,
+    });
+
+  it('skips the storage read for a transient (non-persisting) workflow with a freshly minted runId', async () => {
+    const storage = new MockStore();
+    const workflow = createWorkflow({
+      id: 'transient-createrun-wf',
+      inputSchema: ioSchema,
+      outputSchema: ioSchema,
+      options: { shouldPersistSnapshot: () => false },
+    })
+      .then(buildStep())
+      .commit();
+    new Mastra({ logger: false, storage, workflows: { 'transient-createrun-wf': workflow } });
+
+    const workflowsStore = await storage.getStore('workflows');
+    const readSpy = vi.spyOn(workflowsStore!, 'getWorkflowRunById');
+    const persistSpy = vi.spyOn(workflowsStore!, 'persistWorkflowSnapshot');
+
+    await workflow.createRun();
+
+    // The run id was just generated and the workflow never persists a snapshot, so
+    // the existence read would be a guaranteed miss — it must be short-circuited.
+    expect(readSpy).not.toHaveBeenCalled();
+    expect(persistSpy).not.toHaveBeenCalled();
+  });
+
+  it('still reads storage for a default (persisting) workflow', async () => {
+    const storage = new MockStore();
+    const workflow = createWorkflow({
+      id: 'persisting-createrun-wf',
+      inputSchema: ioSchema,
+      outputSchema: ioSchema,
+    })
+      .then(buildStep())
+      .commit();
+    new Mastra({ logger: false, storage, workflows: { 'persisting-createrun-wf': workflow } });
+
+    const workflowsStore = await storage.getStore('workflows');
+    const readSpy = vi.spyOn(workflowsStore!, 'getWorkflowRunById');
+
+    await workflow.createRun();
+
+    expect(readSpy).toHaveBeenCalled();
+  });
+
+  it('still reads storage for a transient workflow when an explicit runId is provided', async () => {
+    const storage = new MockStore();
+    const workflow = createWorkflow({
+      id: 'transient-explicit-createrun-wf',
+      inputSchema: ioSchema,
+      outputSchema: ioSchema,
+      options: { shouldPersistSnapshot: () => false },
+    })
+      .then(buildStep())
+      .commit();
+    new Mastra({ logger: false, storage, workflows: { 'transient-explicit-createrun-wf': workflow } });
+
+    const workflowsStore = await storage.getStore('workflows');
+    const readSpy = vi.spyOn(workflowsStore!, 'getWorkflowRunById');
+
+    // An explicit runId may reference an existing (resumable) run, so the read must run.
+    await workflow.createRun({ runId: 'explicit-run-id' });
+
+    expect(readSpy).toHaveBeenCalled();
   });
 });

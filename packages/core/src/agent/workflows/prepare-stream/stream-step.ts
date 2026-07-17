@@ -8,19 +8,21 @@ import type { MemoryConfigInternal } from '../../../memory/types';
 import { resolveObservabilityContext } from '../../../observability';
 import { RequestContext } from '../../../request-context';
 import { MastraModelOutput } from '../../../stream';
-import type { ToolPayloadTransformPolicy } from '../../../tools';
+import type { RequireToolApproval, ToolPayloadTransformPolicy } from '../../../tools';
 import { createStep } from '../../../workflows/workflow';
 import type { Workspace } from '../../../workspace/workspace';
 import type { SaveQueueManager } from '../../save-queue';
 import type { CreatedAgentSignal } from '../../signals';
 import type { AgentMethodType } from '../../types';
+import type { PrepareStreamRunScope } from './run-scope';
+import { LOOP_OPTIONS_KEY } from './run-scope-keys';
 import type { AgentCapabilities } from './schema';
 
-interface StreamStepOptions {
+interface StreamStepOptions<OUTPUT = undefined> {
   capabilities: AgentCapabilities;
   runId: string;
   returnScorerData?: boolean;
-  requireToolApproval?: boolean;
+  requireToolApproval?: RequireToolApproval;
   toolCallConcurrency?: number;
   resumeContext?: {
     resumeData: any;
@@ -45,8 +47,8 @@ interface StreamStepOptions {
    * drives continuation from outside the loop.
    */
   skipBgTaskWait?: boolean;
-  drainPendingSignals?: (runId: string) => CreatedAgentSignal[];
-  initialSignalEchoes?: CreatedAgentSignal[];
+  drainPendingSignals?: (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
+  runScope: PrepareStreamRunScope<OUTPUT>;
 }
 
 export function createStreamStep<OUTPUT = undefined>({
@@ -71,22 +73,26 @@ export function createStreamStep<OUTPUT = undefined>({
   toolPayloadTransform,
   skipBgTaskWait,
   drainPendingSignals,
-  initialSignalEchoes,
-}: StreamStepOptions) {
+  runScope,
+}: StreamStepOptions<OUTPUT>) {
   return createStep({
     id: 'stream-text-step',
-    inputSchema: z.any(), // tried to type this in various ways but it's too complex
+    inputSchema: z.any(),
     outputSchema: z.instanceof(MastraModelOutput<OUTPUT>),
-    execute: async ({ inputData, ...observabilityContext }) => {
-      // Instead of validating inputData with zod, we just cast it to the type we know it should be
-      const validatedInputData = inputData as ModelLoopStreamArgs<any, OUTPUT>;
+    execute: async ({ ...observabilityContext }) => {
+      // `loopOptions` carries class instances (MessageList, Tools) and closures
+      // (onStepFinish, onFinish, ...) — none of which survive the evented engine's
+      // JSON round-trip in step inputs. map-results-step parked it on runScope.
+      const loopOptions = runScope.getOrThrow(LOOP_OPTIONS_KEY) as ModelLoopStreamArgs<any, OUTPUT> & {
+        initialSignalEchoes?: CreatedAgentSignal[];
+      };
 
       const processors =
-        validatedInputData.outputProcessors ||
+        loopOptions.outputProcessors ||
         (capabilities.outputProcessors
           ? typeof capabilities.outputProcessors === 'function'
             ? await capabilities.outputProcessors({
-                requestContext: validatedInputData.requestContext || new RequestContext(),
+                requestContext: loopOptions.requestContext || new RequestContext(),
               })
             : capabilities.outputProcessors
           : []);
@@ -94,7 +100,7 @@ export function createStreamStep<OUTPUT = undefined>({
       const modelMethodType: ModelMethodType = getModelMethodFromAgentMethod(methodType);
 
       const streamResult = capabilities.llm.stream({
-        ...validatedInputData,
+        ...loopOptions,
         outputProcessors: processors,
         returnScorerData,
         ...resolveObservabilityContext(observabilityContext),
@@ -105,7 +111,7 @@ export function createStreamStep<OUTPUT = undefined>({
           generateId: capabilities.generateMessageId,
           saveQueueManager,
           memoryConfig,
-          threadId: validatedInputData.threadId,
+          threadId: loopOptions.threadId,
           resourceId,
           memory,
           backgroundTaskManager,
@@ -114,7 +120,7 @@ export function createStreamStep<OUTPUT = undefined>({
           toolPayloadTransform,
           skipBgTaskWait,
           drainPendingSignals,
-          initialSignalEchoes,
+          initialSignalEchoes: loopOptions.initialSignalEchoes,
         },
         agentId,
         agentName,

@@ -1,0 +1,286 @@
+{
+  "meta": {
+    "name": "test-626b9daa",
+    "testFile": "src/agent/agent-gemini.e2e.test.ts",
+    "testName": "Gemini Model Compatibility Tests > Gemini 3 Pro with tool calls > should handle multi-step tool calls with gemini 3 pro",
+    "createdAt": "2026-07-14T17:16:31.797Z"
+  },
+  "recordings": [
+    {
+      "hash": "1e2e14a7db48d56e",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent",
+        "method": "POST",
+        "body": {
+          "generationConfig": {},
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "What is the weather in San Francisco and New York?"
+                }
+              ]
+            }
+          ],
+          "systemInstruction": {
+            "parts": [
+              {
+                "text": "You are a helpful weather assistant. Use the get-weather-multi tool to answer weather questions."
+              }
+            ]
+          },
+          "tools": [
+            {
+              "functionDeclarations": [
+                {
+                  "name": "weatherTool",
+                  "description": "Gets the current weather for a location",
+                  "parameters": {
+                    "required": ["location"],
+                    "type": "object",
+                    "properties": {
+                      "location": {
+                        "description": "The city and state, e.g. San Francisco, CA",
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "toolConfig": {
+            "functionCallingConfig": {
+              "mode": "AUTO"
+            }
+          }
+        },
+        "timestamp": 1784049386807
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-type": "application/json; charset=UTF-8",
+          "date": "Tue, 14 Jul 2026 17:16:29 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=2754",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-gemini-service-tier": "standard",
+          "x-xss-protection": "0"
+        },
+        "body": {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "functionCall": {
+                      "name": "weatherTool",
+                      "args": {
+                        "location": "San Francisco, CA"
+                      },
+                      "id": "zr77oswb"
+                    },
+                    "thoughtSignature": "EtAFCs0FARFNMg//OhPlL6gcXBd14doxGhF6OyZveDx2KgwxbwYfPVZgds57coS0NOKxCjDXNNUktgZq/QeJAU4mvX7Rnz9vOrZx8lgSBPKEyPMSkYt1JEP91CnwElzLgBE0VqDuISyo4jYlH4Xx7lXPtqKOTHPM1M6MQJgQbfADxepldtv3EOd2bk4FHei2ud/38+IDba8gU5VURfFC+Iqr65WVMunejAmop7HCs0Uf4j7LQrXxuwMW+ml1g6bFAxTqHgm/O2YDTgx6r7GSPNJJaNutuw5cNukHieUHZJVch/K3NVVPHMdXG3vGHPkSUkT4qWoyb3LY1nYEsqk78iyGW7/ZT95/N5qMF5m5nPrhDPD3+GmugU6/A87OS51uu09hK/jUIhvboNjmQgF8+SCeDLzBqcid3a9ntrVzV2IZp/C5vWXn6adsTGV+/aiZ42U9VfuG7P3IhldHKfwuDuujfEzF2V91r/9zWShZ5bmv71CaWedjJyaUSqUTLRvAqflaguqSBxilCuE6b/eaZFDcxS0Q9zr96t/dgn/DdLYnDYpl6MvC148ggApEME5zvkIfSJuwEtQ8nj9+6Af1NGHwpCJIw6DaAx584Cm2ZYqLhWWSyCR/zOiYu7TOamK1DuSkYOuIZv12pefb5v0lBNSg6Cj/QImaV7Kt14tqfOGO5c/yyCmj81dItZ26gZQ59zEqzUQ8JPdLA2vaHS8N4uAlqRuFSvQlDtpUGVIOVSOVduTH1CUtHp0+Zl3KFqD6bCi07EJjWe5qEhXbm4ESNencTeQC4IWREYtoiTlKBw7CctRmxlSDYFnz++Pnc6cN/aGhea1XajWYJV2t37m2zz2kDQ0L584n0J9l7wTxEZcVfRdhQAU/21ny6uL2DO9VudcmcP8AkwYoDXT2cWIjS6/SrxYQb28BUi3NoVw9qBKXxSa3hPfmmAzX1/Hy9D2hsVoc"
+                  },
+                  {
+                    "functionCall": {
+                      "name": "weatherTool",
+                      "args": {
+                        "location": "New York, NY"
+                      },
+                      "id": "bkfbcf42"
+                    }
+                  }
+                ],
+                "role": "model"
+              },
+              "finishReason": "STOP",
+              "index": 0,
+              "finishMessage": "Model generated function call(s)."
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 93,
+            "candidatesTokenCount": 36,
+            "totalTokenCount": 297,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 93
+              }
+            ],
+            "thoughtsTokenCount": 168,
+            "serviceTier": "standard"
+          },
+          "modelVersion": "gemini-3.1-pro-preview",
+          "responseId": "6m5WasfjM72pnsEP7MWEwAg"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "ac61e8f95548754b",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent",
+        "method": "POST",
+        "body": {
+          "generationConfig": {},
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "What is the weather in San Francisco and New York?"
+                }
+              ]
+            },
+            {
+              "role": "model",
+              "parts": [
+                {
+                  "functionCall": {
+                    "id": "zr77oswb",
+                    "name": "weatherTool",
+                    "args": {
+                      "location": "San Francisco, CA"
+                    }
+                  },
+                  "thoughtSignature": "EtAFCs0FARFNMg//OhPlL6gcXBd14doxGhF6OyZveDx2KgwxbwYfPVZgds57coS0NOKxCjDXNNUktgZq/QeJAU4mvX7Rnz9vOrZx8lgSBPKEyPMSkYt1JEP91CnwElzLgBE0VqDuISyo4jYlH4Xx7lXPtqKOTHPM1M6MQJgQbfADxepldtv3EOd2bk4FHei2ud/38+IDba8gU5VURfFC+Iqr65WVMunejAmop7HCs0Uf4j7LQrXxuwMW+ml1g6bFAxTqHgm/O2YDTgx6r7GSPNJJaNutuw5cNukHieUHZJVch/K3NVVPHMdXG3vGHPkSUkT4qWoyb3LY1nYEsqk78iyGW7/ZT95/N5qMF5m5nPrhDPD3+GmugU6/A87OS51uu09hK/jUIhvboNjmQgF8+SCeDLzBqcid3a9ntrVzV2IZp/C5vWXn6adsTGV+/aiZ42U9VfuG7P3IhldHKfwuDuujfEzF2V91r/9zWShZ5bmv71CaWedjJyaUSqUTLRvAqflaguqSBxilCuE6b/eaZFDcxS0Q9zr96t/dgn/DdLYnDYpl6MvC148ggApEME5zvkIfSJuwEtQ8nj9+6Af1NGHwpCJIw6DaAx584Cm2ZYqLhWWSyCR/zOiYu7TOamK1DuSkYOuIZv12pefb5v0lBNSg6Cj/QImaV7Kt14tqfOGO5c/yyCmj81dItZ26gZQ59zEqzUQ8JPdLA2vaHS8N4uAlqRuFSvQlDtpUGVIOVSOVduTH1CUtHp0+Zl3KFqD6bCi07EJjWe5qEhXbm4ESNencTeQC4IWREYtoiTlKBw7CctRmxlSDYFnz++Pnc6cN/aGhea1XajWYJV2t37m2zz2kDQ0L584n0J9l7wTxEZcVfRdhQAU/21ny6uL2DO9VudcmcP8AkwYoDXT2cWIjS6/SrxYQb28BUi3NoVw9qBKXxSa3hPfmmAzX1/Hy9D2hsVoc"
+                },
+                {
+                  "functionCall": {
+                    "id": "bkfbcf42",
+                    "name": "weatherTool",
+                    "args": {
+                      "location": "New York, NY"
+                    }
+                  },
+                  "thoughtSignature": "skip_thought_signature_validator"
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "functionResponse": {
+                    "id": "zr77oswb",
+                    "name": "weatherTool",
+                    "response": {
+                      "name": "weatherTool",
+                      "content": {
+                        "temperature": 72,
+                        "conditions": "Sunny"
+                      }
+                    }
+                  }
+                },
+                {
+                  "functionResponse": {
+                    "id": "bkfbcf42",
+                    "name": "weatherTool",
+                    "response": {
+                      "name": "weatherTool",
+                      "content": {
+                        "temperature": 72,
+                        "conditions": "Sunny"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "systemInstruction": {
+            "parts": [
+              {
+                "text": "You are a helpful weather assistant. Use the get-weather-multi tool to answer weather questions."
+              }
+            ]
+          },
+          "tools": [
+            {
+              "functionDeclarations": [
+                {
+                  "name": "weatherTool",
+                  "description": "Gets the current weather for a location",
+                  "parameters": {
+                    "required": ["location"],
+                    "type": "object",
+                    "properties": {
+                      "location": {
+                        "description": "The city and state, e.g. San Francisco, CA",
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "toolConfig": {
+            "functionCallingConfig": {
+              "mode": "AUTO"
+            }
+          }
+        },
+        "timestamp": 1784049389586
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-type": "application/json; charset=UTF-8",
+          "date": "Tue, 14 Jul 2026 17:16:31 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=2193",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-gemini-service-tier": "standard",
+          "x-xss-protection": "0"
+        },
+        "body": {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "text": "The current weather in both San Francisco and New York is sunny with a temperature of 72°F.",
+                    "thoughtSignature": "EqgCCqUCARFNMg8+eAZ2MsTgo9Uf9ey9lSQOVfrAMNNQEcZ1bAQaYoeRov6GsyUqqG23bQ068ARYe4sktL8grkFjvMm+83UrLTkJwXCqv1u8v3LKH340my/mK+oWpffooVtWgMlfHOe+ziAsWQ1BVMZyMZEKNTsJ6WRVAcTOxJo+mI1MiqOgtZM2bqjS6rVduBigJocgpVK1oBabaCKLWUpcZHs6WsPj3k+DoALPIk1uDXLQkwqnXCuxCGIUD8nYbTwzDqNB8tHHJwm8HeX2T4R+SgaB4M3aD5iF4MP/UgwOIB9ZRO8wcefir/FEFS0h3a8MLyFswzZqH5QVKfcyPXvp1u8hlEm28wkbmeA4xnhoFSOI5RWyh3R8NGw79ieWdCoG5YyXB9PevwY="
+                  }
+                ],
+                "role": "model"
+              },
+              "finishReason": "STOP",
+              "index": 0
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 349,
+            "candidatesTokenCount": 22,
+            "totalTokenCount": 448,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 349
+              }
+            ],
+            "thoughtsTokenCount": 77,
+            "serviceTier": "standard"
+          },
+          "modelVersion": "gemini-3.1-pro-preview",
+          "responseId": "7W5WaurCJv2nkdUPzuSc8Ag"
+        },
+        "isStreaming": false
+      }
+    }
+  ]
+}

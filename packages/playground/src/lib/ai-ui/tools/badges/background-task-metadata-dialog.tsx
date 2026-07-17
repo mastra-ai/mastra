@@ -1,15 +1,15 @@
+import { Button } from '@mastra/playground-ui/components/Button';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import {
-  Button,
-  CodeEditor,
-  Txt,
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogBody,
-  toSigFigs,
-} from '@mastra/playground-ui';
+} from '@mastra/playground-ui/components/Dialog';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { toSigFigs } from '@mastra/playground-ui/utils/number';
 import { Loader2Icon, Share2 } from 'lucide-react';
 import { useState } from 'react';
 import { useTimeDiff } from '../../hooks/use-time-diff';
@@ -78,7 +78,7 @@ const BackgroundTaskMetadata = ({
     typeof suspendPayload === 'string' ? (
       <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto">{suspendPayload}</pre>
     ) : (
-      <CodeEditor data={suspendPayload} />
+      <CodeEditor data={suspendPayload as Record<string, unknown> | Record<string, unknown>[] | undefined} />
     );
 
   return (

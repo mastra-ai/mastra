@@ -35,6 +35,129 @@ function getTextParts(message: MastraDBMessage): string[] {
 }
 
 describe('Memory', () => {
+  describe('constructor', () => {
+    it('throws when working memory vNext is combined with state signals', () => {
+      expect(
+        () =>
+          new Memory({
+            storage: new InMemoryStore(),
+            options: {
+              workingMemory: {
+                enabled: true,
+                template: '# User',
+                version: 'vnext',
+                useStateSignals: true,
+              } as any,
+            },
+          }),
+      ).toThrow("workingMemory.useStateSignals is not supported with workingMemory.version: 'vnext'");
+    });
+  });
+
+  describe('listTools', () => {
+    it('omits working memory tools when agentManaged is false', () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: { workingMemory: { enabled: true, agentManaged: false } },
+      });
+
+      expect(memory.listTools()).not.toHaveProperty('updateWorkingMemory');
+    });
+
+    it('includes working memory tools by default when working memory is enabled', () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: { workingMemory: { enabled: true } },
+      });
+
+      expect(memory.listTools()).toHaveProperty('updateWorkingMemory');
+    });
+
+    it('uses manageWorkingMemory to add the working memory extractor and disable agent-managed tools by default', () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: {
+          workingMemory: { enabled: true },
+          observationalMemory: { enabled: true, observation: { manageWorkingMemory: true } },
+        },
+      });
+
+      const config = memory.getMergedThreadConfig() as MemoryConfig & {
+        workingMemory: MemoryConfig['workingMemory'] & { agentManaged?: boolean; useStateSignals?: boolean };
+      };
+      const omConfig = config.observationalMemory as Extract<MemoryConfig['observationalMemory'], object> & {
+        observation?: { extract?: Array<{ slug: string }> };
+      };
+      expect(config.workingMemory.agentManaged).toBe(false);
+      expect(config.workingMemory.useStateSignals).toBe(true);
+      expect(memory.listTools()).not.toHaveProperty('updateWorkingMemory');
+      expect(omConfig.observation?.extract?.some(extractor => extractor.slug === 'working-memory')).toBe(true);
+    });
+
+    it('keeps explicit useStateSignals false when manageWorkingMemory supplies defaults', () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: {
+          workingMemory: { enabled: true, useStateSignals: false },
+          observationalMemory: { enabled: true, observation: { manageWorkingMemory: true } },
+        },
+      });
+
+      const config = memory.getMergedThreadConfig();
+
+      expect(config.workingMemory?.useStateSignals).toBe(false);
+    });
+
+    it('keeps agent-managed tools when agentManaged explicitly overrides manageWorkingMemory defaults', () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: {
+          workingMemory: { enabled: true, agentManaged: true, useStateSignals: false },
+          observationalMemory: { enabled: true, observation: { manageWorkingMemory: true } },
+        },
+      });
+
+      expect(memory.listTools()).toHaveProperty('updateWorkingMemory');
+    });
+  });
+
+  describe('getSystemMessage', () => {
+    it('renders working memory as context-only when agentManaged is false', async () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: { workingMemory: { enabled: true, agentManaged: false } },
+      });
+      const threadId = 'agent-managed-false-thread';
+      const resourceId = 'agent-managed-false-resource';
+      await memory.createThread({ threadId, resourceId });
+      await memory.updateWorkingMemory({ threadId, resourceId, workingMemory: '# User\n- Location: Sooke' });
+
+      const systemMessage = await memory.getSystemMessage({ threadId, resourceId });
+
+      expect(systemMessage).toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION (READ-ONLY)');
+      expect(systemMessage).toContain('Location: Sooke');
+      expect(systemMessage).not.toContain('calling the updateWorkingMemory tool');
+    });
+
+    it('renders update instructions when agentManaged explicitly overrides manageWorkingMemory defaults', async () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: {
+          workingMemory: { enabled: true, agentManaged: true, useStateSignals: false },
+          observationalMemory: { enabled: true, observation: { manageWorkingMemory: true } },
+        },
+      });
+      const threadId = 'agent-managed-true-thread';
+      const resourceId = 'agent-managed-true-resource';
+      await memory.createThread({ threadId, resourceId });
+
+      const systemMessage = await memory.getSystemMessage({ threadId, resourceId });
+
+      expect(systemMessage).toContain('calling the updateWorkingMemory tool');
+      expect(systemMessage).not.toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION (READ-ONLY)');
+    });
+  });
+
   describe('updateMessageToHideWorkingMemoryV2', () => {
     const memory = new TestableMemory();
 
@@ -1766,6 +1889,107 @@ describe('Memory', () => {
     });
   });
 
+  describe('semantic recall threshold', () => {
+    const createSemanticRecallMemory = async (threshold?: number) => {
+      const suffix = `${threshold ?? 'none'}`;
+      const resourceId = `threshold-resource-${suffix}`;
+      const threadId = `threshold-thread-${suffix}`;
+      const messages: MastraDBMessage[] = [
+        {
+          id: `threshold-low-${suffix}`,
+          role: 'user',
+          createdAt: new Date('2024-01-01T00:00:00Z'),
+          threadId,
+          resourceId,
+          content: { format: 2, parts: [{ type: 'text', text: 'low score memory' }] },
+        },
+        {
+          id: `threshold-high-${suffix}`,
+          role: 'assistant',
+          createdAt: new Date('2024-01-01T00:01:00Z'),
+          threadId,
+          resourceId,
+          content: { format: 2, parts: [{ type: 'text', text: 'high score memory' }] },
+        },
+      ];
+
+      const mockVector: MastraVector = {
+        createIndex: vi.fn().mockResolvedValue(undefined),
+        upsert: vi.fn().mockResolvedValue(undefined),
+        query: vi.fn().mockResolvedValue([
+          { id: 'low-vector', score: 0.6, metadata: { message_id: messages[0]!.id, thread_id: threadId } },
+          { id: 'high-vector', score: 0.9, metadata: { message_id: messages[1]!.id, thread_id: threadId } },
+        ]),
+        listIndexes: vi.fn().mockResolvedValue([]),
+        deleteVectors: vi.fn().mockResolvedValue(undefined),
+        describeIndex: vi.fn().mockResolvedValue({ dimension: 3 }),
+        id: 'threshold-vector',
+      } as any;
+
+      const mockEmbedder = {
+        doEmbed: vi.fn().mockResolvedValue({ embeddings: [[0.1, 0.2, 0.3]], usage: { tokens: 3 } }),
+        modelId: 'threshold-embedder',
+        specificationVersion: 'v1',
+        provider: 'mock',
+      } as any;
+
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        vector: mockVector,
+        embedder: mockEmbedder,
+        options: {
+          lastMessages: false,
+          semanticRecall: {
+            scope: 'thread',
+            topK: 2,
+            messageRange: 0,
+            ...(threshold !== undefined ? { threshold } : {}),
+          },
+          generateTitle: false,
+        },
+      });
+
+      await memory.createThread({ threadId, resourceId });
+      await memory.saveMessages({ messages });
+
+      return { memory, messages, mockVector, threadId, resourceId };
+    };
+
+    it('filters out vector results below semanticRecall.threshold in direct recall', async () => {
+      const { memory, messages, threadId, resourceId } = await createSemanticRecallMemory(0.8);
+
+      const result = await memory.recall({ threadId, resourceId, vectorSearchString: 'remember this' });
+
+      expect(result.messages.map(m => m.id)).toEqual([messages[1]!.id]);
+    });
+
+    it('includes vector results that meet semanticRecall.threshold in direct recall', async () => {
+      const { memory, messages, threadId, resourceId } = await createSemanticRecallMemory(0.9);
+
+      const result = await memory.recall({ threadId, resourceId, vectorSearchString: 'remember this' });
+
+      expect(result.messages.map(m => m.id)).toEqual([messages[1]!.id]);
+    });
+
+    it('preserves existing direct recall behavior when semanticRecall.threshold is not set', async () => {
+      const { memory, messages, threadId, resourceId } = await createSemanticRecallMemory();
+
+      const result = await memory.recall({ threadId, resourceId, vectorSearchString: 'remember this' });
+
+      expect(result.messages.map(m => m.id)).toEqual(messages.map(m => m.id));
+    });
+
+    it('matches processor-based threshold behavior by filtering before message inclusion', async () => {
+      const { memory, messages, mockVector, threadId, resourceId } = await createSemanticRecallMemory(0.8);
+
+      const result = await memory.recall({ threadId, resourceId, vectorSearchString: 'remember this' });
+
+      expect(mockVector.query).toHaveBeenCalledTimes(1);
+      expect(result.messages.some(m => m.id === messages[0]!.id)).toBe(false);
+      expect(result.messages.some(m => m.id === messages[1]!.id)).toBe(true);
+    });
+  });
+
   describe('toModelOutput persistence', () => {
     it('should preserve raw tool result and stored modelOutput through save/load cycle', async () => {
       const memory = new Memory({
@@ -2269,6 +2493,65 @@ describe('Memory', () => {
 
       await expect(memory.deleteThread('thread-789')).resolves.not.toThrow();
       await expect(memory.deleteMessages(['msg-789'])).resolves.not.toThrow();
+    });
+
+    it('passes observation options to the ObservationalMemory engine', async () => {
+      const storage = new InMemoryStore();
+      const memory = new Memory({
+        storage,
+        options: {
+          observationalMemory: {
+            observation: {
+              observeAttachments: 'auto',
+              bufferOnIdle: true,
+            },
+          },
+        },
+      });
+
+      const engine = await (memory as any)._initOMEngine();
+
+      expect(engine?.getObservationConfig().observeAttachments).toBe('auto');
+      expect(engine?.getObservationConfig().bufferOnIdle).toBe(true);
+    });
+
+    it('should clear thread-scoped observational memory when deleting a thread', async () => {
+      const storage = new InMemoryStore();
+      const memory = new Memory({
+        storage,
+        options: {
+          observationalMemory: {
+            scope: 'thread',
+          },
+        },
+      });
+      const memoryStore = await storage.getStore('memory');
+      const threadId = 'thread-with-observations';
+      const resourceId = 'resource-with-observations';
+
+      await memory.saveThread({
+        thread: {
+          id: threadId,
+          resourceId,
+          title: 'Thread with observations',
+          metadata: {},
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+      await memoryStore?.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      await expect(memoryStore?.getObservationalMemory(threadId, resourceId)).resolves.not.toBeNull();
+
+      await memory.deleteThread(threadId);
+
+      await expect(memory.getThreadById({ threadId })).resolves.toBeNull();
+      await expect(memoryStore?.getObservationalMemory(threadId, resourceId)).resolves.toBeNull();
     });
 
     it('should batch message vector deletions when messageIds exceed batch size', async () => {

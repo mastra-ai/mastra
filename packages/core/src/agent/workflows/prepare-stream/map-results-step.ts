@@ -14,6 +14,14 @@ import type { SaveQueueManager } from '../../save-queue';
 import { getModelOutputForTripwire } from '../../trip-wire';
 import type { AgentMethodType } from '../../types';
 import { isSupportedLanguageModel } from '../../utils';
+import type { PrepareStreamRunScope } from './run-scope';
+import {
+  CONVERTED_TOOLS_KEY,
+  INITIAL_SIGNAL_ECHOES_KEY,
+  LOOP_OPTIONS_KEY,
+  MESSAGE_LIST_KEY,
+  PROCESSOR_STATES_KEY,
+} from './run-scope-keys';
 import type { AgentCapabilities, PrepareMemoryStepOutput, PrepareToolsStepOutput } from './schema';
 
 interface MapResultsStepOptions<OUTPUT = undefined> {
@@ -29,10 +37,7 @@ interface MapResultsStepOptions<OUTPUT = undefined> {
   agentId: string;
   methodType: AgentMethodType;
   saveQueueManager?: SaveQueueManager;
-  /**
-   * Shared processor state map that persists across agent turns.
-   */
-  processorStates?: Map<string, Record<string, unknown>>;
+  runScope: PrepareStreamRunScope<OUTPUT>;
 }
 
 export function createMapResultsStep<OUTPUT = undefined>({
@@ -48,6 +53,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
   agentId,
   methodType,
   saveQueueManager,
+  runScope,
 }: MapResultsStepOptions<OUTPUT>): Step<
   string,
   unknown,
@@ -58,15 +64,19 @@ export function createMapResultsStep<OUTPUT = undefined>({
   ModelLoopStreamArgs<any, OUTPUT>
 >['execute'] {
   return async ({ inputData, bail, ..._observabilityContext }) => {
-    const toolsData = inputData['prepare-tools-step'];
     const memoryData = inputData['prepare-memory-step'];
+
+    // Class instances written to runScope by upstream steps. These never travel
+    // through inputData because the evented engine JSON-serializes step outputs.
+    const messageList = runScope.getOrThrow(MESSAGE_LIST_KEY);
+    const convertedTools = runScope.get(CONVERTED_TOOLS_KEY);
 
     let threadCreatedByStep = false;
 
     const result = {
       ...options,
       agentId,
-      tools: toolsData.convertedTools,
+      tools: convertedTools,
       runId,
       temperature: options.modelSettings?.temperature,
       toolChoice: options.toolChoice,
@@ -74,7 +84,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
       threadId: memoryData.thread?.id ?? threadIdFromArgs,
       resourceId,
       requestContext,
-      messageList: memoryData.messageList,
+      messageList,
       onStepFinish: async (props: any) => {
         // When OM is enabled saving per step corrupts things because OM handles its own saving
         const shouldSavePerStep = options.savePerStep && !memoryConfig?.observationalMemory;
@@ -92,7 +102,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
           }
 
           if (saveQueueManager && memoryData.thread?.id) {
-            await saveQueueManager.flushMessages(memoryData.messageList!, memoryData.thread.id, memoryConfig);
+            await saveQueueManager.flushMessages(messageList, memoryData.thread.id, memoryConfig);
           }
         }
 
@@ -123,7 +133,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
           ...createObservabilityContext({ currentSpan: agentSpan }),
           options: options,
           model: agentModel,
-          messageList: memoryData.messageList,
+          messageList,
         });
 
         // End agent span with tripwire information after fallback completes
@@ -215,14 +225,13 @@ export function createMapResultsStep<OUTPUT = undefined>({
         : options.errorProcessors || capabilities.errorProcessors
       : options.errorProcessors || [];
 
-    const messageList = memoryData.messageList!;
-
     const modelMethodType: ModelMethodType = getModelMethodFromAgentMethod(methodType);
 
     const loopOptions = {
       methodType: modelMethodType,
       agentId,
       requestContext: result.requestContext!,
+      actor: options.actor,
       ...createObservabilityContext({ currentSpan: agentSpan }),
       runId,
       toolChoice: result.toolChoice,
@@ -284,6 +293,28 @@ export function createMapResultsStep<OUTPUT = undefined>({
             return;
           }
 
+          if (payload.finishReason === 'suspended') {
+            agentSpan?.end({
+              output: {
+                status: 'suspended',
+                reason: payload.suspendReason,
+                toolName: payload.toolName,
+                toolCallId: payload.toolCallId,
+              },
+            });
+            return;
+          }
+
+          if (payload.finishReason === 'aborted') {
+            agentSpan?.end({
+              output: {
+                status: 'aborted',
+                reason: 'abort',
+              },
+            });
+            return;
+          }
+
           // Skip memory persistence when the abort signal has fired.
           // The LLM response may have continued after the caller disconnected,
           // and we should not persist a partial or full response for an aborted request.
@@ -311,6 +342,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
                 threadExists: memoryData.threadExists,
                 structuredOutput: !!options.structuredOutput?.schema,
                 overrideScorers: options.scorers,
+                onTitleGenerated: options.memory?.onTitleGenerated,
               });
             } catch (e) {
               capabilities.logger.error('Error saving memory on finish', {
@@ -360,14 +392,23 @@ export function createMapResultsStep<OUTPUT = undefined>({
       modelSettings: {
         ...(options.modelSettings || {}),
       },
-      messageList: memoryData.messageList!,
+      messageList,
+      initialSignalEchoes: runScope.get(INITIAL_SIGNAL_ECHOES_KEY),
       maxProcessorRetries: options.maxProcessorRetries,
       // IsTaskComplete scoring for supervisor patterns
       isTaskComplete: options.isTaskComplete,
+      // Native goal config (agent-level): the in-loop goal step judges the
+      // thread's active objective each qualifying iteration.
+      goal: capabilities.agent.__getGoalConfig(),
       // Iteration hook for supervisor patterns
       onIterationComplete: options.onIterationComplete,
-      processorStates: memoryData.processorStates,
+      processorStates: runScope.get(PROCESSOR_STATES_KEY),
     };
+
+    // Park the assembled (class-instance- and closure-laden) options on the
+    // factory closure's runScope. stream-step reads from here; the workflow
+    // engine never sees these non-JSON-safe refs in step inputs/outputs.
+    runScope.set(LOOP_OPTIONS_KEY, loopOptions as ModelLoopStreamArgs<any, unknown>);
 
     return loopOptions;
   };

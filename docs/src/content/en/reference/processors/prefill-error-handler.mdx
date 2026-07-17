@@ -31,9 +31,10 @@ import { Agent } from '@mastra/core/agent'
 import { PrefillErrorHandler } from '@mastra/core/processors'
 
 export const agent = new Agent({
+  id: 'my-agent',
   name: 'my-agent',
   instructions: 'You are a helpful assistant.',
-  model: 'anthropic/claude-opus-4-6',
+  model: '__GATEWAY_ANTHROPIC_MODEL_OPUS__',
   errorProcessors: [new PrefillErrorHandler()],
 })
 ```
@@ -52,9 +53,10 @@ const customErrorHandler: Processor = {
 }
 
 export const agent = new Agent({
+  id: 'my-agent',
   name: 'my-agent',
   instructions: 'You are a helpful assistant.',
-  model: 'anthropic/claude-opus-4-6',
+  model: '__GATEWAY_ANTHROPIC_MODEL_OPUS__',
   errorProcessors: [customErrorHandler],
 })
 ```

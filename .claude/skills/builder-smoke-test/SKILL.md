@@ -26,7 +26,7 @@ This skill is for **branch QA** — it complements the release-time `mastra-smok
 | 7   | **Registry**           | `references/registry.md`         | `--test registry` or full                                               |
 | 8   | **Agents**             | `references/agents.md`           | `--test agents` or full                                                 |
 | 9   | **Picker Allowlists**  | `references/picker-allowlist.md` | `--test pickers` or full                                                |
-| 10  | **Stars**              | `references/stars.md`            | `--test stars` or full                                                  |
+| 10  | **Favorites**          | `references/favorites.md`        | `--test favorites` or full (formerly `stars`)                           |
 | 11  | **Permissions / RBAC** | `references/permissions.md`      | `--test permissions` or full                                            |
 | 12  | **Infrastructure**     | `references/infrastructure.md`   | `--test infrastructure` or full                                         |
 | 13  | **Channels**           | `references/channels.md`         | `--test channels` or full                                               |
@@ -57,14 +57,14 @@ Example: `--test skills,registry,agents` → Setup + Skills + Registry + Agents.
 
 `--scope` runs a curated group of related sections. Setup is always implied.
 
-| Scope    | Includes                                                  |
-| -------- | --------------------------------------------------------- |
-| `rbac`   | permissions, auth                                         |
-| `skills` | skills, registry, defaults                                |
-| `agents` | agents, pickers, defaults, model-policy                   |
-| `infra`  | infrastructure, channels, reconciliation                  |
-| `ui`     | ui                                                        |
-| `quick`  | workspace, skills, agents, stars, ui (skips long-running) |
+| Scope    | Includes                                                      |
+| -------- | ------------------------------------------------------------- |
+| `rbac`   | permissions, auth                                             |
+| `skills` | skills, registry, defaults                                    |
+| `agents` | agents, pickers, defaults, model-policy                       |
+| `infra`  | infrastructure, channels, reconciliation                      |
+| `ui`     | ui                                                            |
+| `quick`  | workspace, skills, agents, favorites, ui (skips long-running) |
 
 `--scope` and `--test` can be combined; the union is run.
 
@@ -76,7 +76,7 @@ Example: `--test skills,registry,agents` → Setup + Skills + Registry + Agents.
 
 # Specific sections
 /builder-smoke-test --test workspace,skills
-/builder-smoke-test --test agents,stars
+/builder-smoke-test --test agents,favorites
 /builder-smoke-test --test reconciliation
 /builder-smoke-test --test ui
 
@@ -142,7 +142,7 @@ accordingly:
 - **Required (every run):** `setup.md`. Any failure here blocks the rest
   of the run.
 - **Standard (default tiers for `full`, `quick`, scope shortcuts):**
-  `workspace.md`, `skills.md`, `agents.md`, `stars.md`, `ui.md` (core),
+  `workspace.md`, `skills.md`, `agents.md`, `favorites.md`, `ui.md` (core),
   `auth.md` when `--auth on`.
 - **Extended (only when explicitly selected via `--test`/`--scope` or
   the matching code surface changed):** `reconciliation.md`,
@@ -389,11 +389,11 @@ run the per-section commands in `references/<section>.md`.
 | Registry install  | `POST /editor/builder/registries/:registryId/install`                      |
 | Workspace CRUD    | `GET/POST/PATCH/DELETE /stored/workspaces[/:id]`                           |
 | Agent CRUD        | `GET/POST/PATCH/DELETE /stored/agents[/:id]`                               |
-| Agent star        | `PUT / DELETE /stored/agents/:id/star`                                     |
+| Agent favorite    | `PUT / DELETE /stored/agents/:id/favorite`                                 |
 | Agent avatar      | `PATCH /stored/agents/:id` with `metadata.avatarUrl` (owner-only)          |
 | Skill CRUD        | `GET/POST/PATCH/DELETE /stored/skills[/:id]`                               |
 | Skill publish     | `POST /stored/skills/:id/publish`                                          |
-| Skill star        | `PUT / DELETE /stored/skills/:id/star`                                     |
+| Skill favorite    | `PUT / DELETE /stored/skills/:id/favorite`                                 |
 | Auth me           | `GET /api/auth/me` (returns logged-in user + roles + permissions)          |
 | Auth refresh      | `POST /auth/refresh`                                                       |
 
@@ -507,7 +507,7 @@ Some flows are documented in `references/` but are not driven by the smoke-test 
 - `references/registry.md` — skills.sh browse/install, library Copy flow, origin badges, gating
 - `references/agents.md` — stored agent CRUD, skill attachment, model swap, delete-from-edit, avatar upload
 - `references/picker-allowlist.md` — tools/agents/workflows pickers respect allowlists
-- `references/stars.md` — star/unstar agents and skills, idempotency
+- `references/favorites.md` — favorite/unfavorite agents and skills, idempotency (formerly `stars.md`)
 - `references/permissions.md` — viewer/member/admin/owner gating, role expectation matrix, UI impersonation, auth-off bypass
 - `references/infrastructure.md` — `/editor/builder/infrastructure` payload + UI
 - `references/channels.md` — Slack provider visibility, connectChannel tool

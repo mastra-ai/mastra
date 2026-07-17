@@ -9,7 +9,7 @@ packages:
 
 # Redis Storage
 
-The Redis storage implementation provides a high-performance storage solution using direct Redis connections via [node-redis](https://github.com/redis/node-redis) (the official Redis client for Node.js). It supports standalone Redis, and through custom client configuration, Redis Sentinel and Cluster deployments.
+The Redis storage implementation provides a high-performance storage solution using direct Redis connections via [`node-redis`](https://github.com/redis/node-redis) (the official Redis client for Node.js). It supports standalone Redis, and through custom client configuration, Redis Sentinel and Cluster deployments.
 
 ## Installation
 
@@ -50,7 +50,7 @@ await storage.init()
 
 ### Using Pre-configured Client
 
-For advanced configurations like Sentinel or Cluster, you can pass a pre-configured redis client:
+For advanced configurations like Sentinel or Cluster, you can pass a pre-configured Redis client:
 
 ```typescript
 import { RedisStore } from '@mastra/redis'
@@ -188,7 +188,7 @@ const storage = new RedisStore({
 
 ### Accessing the Underlying Client
 
-You can access the underlying redis client for custom operations:
+You can access the underlying Redis client for custom operations:
 
 ```typescript
 const storage = new RedisStore({
@@ -227,7 +227,7 @@ export const redisAgent = new Agent({
   name: 'Redis Agent',
   instructions:
     'You are an AI agent with the ability to automatically recall memories from previous interactions.',
-  model: 'openai/gpt-4o',
+  model: '__GATEWAY_OPENAI_MODEL__',
   memory: new Memory({
     storage: new RedisStore({
       id: 'redis-agent-storage',

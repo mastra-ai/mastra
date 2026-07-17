@@ -1,0 +1,39 @@
+---
+title: "Skill registries | Agent Builder"
+description: Let the Agent Builder browse and install community skills from opt-in skill registries.
+packages:
+  - "@mastra/core"
+  - "@mastra/editor"
+---
+
+# Skill registries
+
+:::note
+The Agent Builder is part of the Mastra Enterprise Edition. Production deployments require a valid EE license. [Contact sales](https://mastra.ai/contact) for more information.
+:::
+
+Registries let the Agent Builder browse and install community skills directly from the UI. All registries are opt-in. When no registry is enabled, the Builder hides registry browse UI entirely.
+
+## Quickstart
+
+Enable the [skills.sh](https://skills.sh) registry:
+
+```typescript title="src/mastra/index.ts"
+import { MastraEditor } from '@mastra/editor'
+
+new MastraEditor({
+  builder: {
+    enabled: true,
+    registries: {
+      skillsSh: { enabled: true },
+    },
+  },
+})
+```
+
+The Builder library tab now exposes a **Browse** view backed by skills.sh. End users can preview a skill, then install it into an agent. See the [AgentBuilderOptions reference](/reference/editor/agent-builder/agent-builder-options) for the full `registries` schema.
+
+## Related
+
+- [Configuration](/docs/agent-builder/configuration): Wire registries alongside the rest of the Builder config.
+- [AgentBuilderOptions reference](/reference/editor/agent-builder/agent-builder-options): Every field on `builder`.

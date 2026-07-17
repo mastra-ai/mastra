@@ -203,7 +203,273 @@ Path to a JSON file containing named [request context](/docs/server/request-cont
 mastra studio --request-context-presets ./presets.json
 ```
 
+## `mastra deploy`
+
+Builds and deploys your project to a named environment on Mastra platform. This is the recommended command for all new deploys and replaces both [`mastra studio deploy`](#mastra-studio-deploy) and [`mastra server deploy`](#mastra-server-deploy), which continue to work but should no longer be used for new setups.
+
+Requires authentication via [`mastra auth login`](#mastra-auth-login) or a `MASTRA_API_TOKEN` environment variable.
+
+```bash
+mastra deploy
+mastra deploy --env staging
+mastra deploy --env production --region eu
+```
+
+The command runs `mastra build`, zips the output, uploads it to the selected environment, and then polls the deploy status while streaming build logs until the deploy reaches a terminal state.
+
+Organization, project, and environment are resolved in order from: environment variable (`MASTRA_ORG_ID`, `MASTRA_PROJECT_ID`), CLI flag (`--org`, `--project`, `--env`), `.mastra-project.json` config file, current org from credentials, and lastly interactive prompt. On first deploy, the CLI saves the resolved org and project IDs to `.mastra-project.json` so subsequent deploys skip the prompts.
+
+If the project doesn't exist yet, the CLI creates it from the `package.json` `name` field after confirmation. If the target environment doesn't exist, the CLI creates it (defaulting to `type: staging` for anything other than `production`) after confirmation. Combined with `--yes`, this creates and deploys everything in one non-interactive command:
+
+```bash
+mastra deploy --env staging --yes
+```
+
+When `--env <name>` is set and `--env-file` isn't, the CLI auto-selects `.env.<name>` from the project directory if present (for example `.env.staging`). The `<name>` value is validated against a strict allowlist before being interpolated into a file path.
+
+### Arguments
+
+#### `[dir]`
+
+Project directory. Defaults to the current directory.
+
+### Flags
+
+#### `--env`
+
+Target environment name. Defaults to `production`. Auto-selects `.env.<name>` from the project directory when `--env-file` isn't set. If the environment doesn't exist, the CLI creates it after confirmation.
+
+#### `--org`
+
+Organization ID. Can also be set via the `MASTRA_ORG_ID` environment variable.
+
+#### `--project`
+
+Project ID, slug, or name. Can also be set via the `MASTRA_PROJECT_ID` environment variable. If no project matches, the value is used as the name of a new project to create on deploy.
+
+#### `-y, --yes`
+
+Auto-accept defaults without confirmation prompts, including creating projects and environments.
+
+#### `-c, --config`
+
+Path to the project config file. Defaults to `.mastra-project.json`.
+
+#### `--env-file`
+
+Path to the env file to bundle with the deploy (relative to the project directory). When set, disables the `.env.<name>` auto-selection based on `--env`.
+
+```bash
+mastra deploy --env staging --env-file .env.staging.local
+```
+
+#### `--region`
+
+Region for a newly created environment (for example `eu`). Applied only when the CLI creates the environment.
+
+#### `--skip-build`
+
+Skip the build step and deploy the existing `.mastra/output` directory. The CLI warns if the existing build is stale relative to the current source.
+
+#### `--skip-preflight`
+
+Skip the pre-upload validation of the built output.
+
+#### `--debug`
+
+Enable debug logs during the build step.
+
+### CI/CD usage
+
+Set `MASTRA_API_TOKEN`, `MASTRA_ORG_ID`, and `MASTRA_PROJECT_ID` as environment variables for headless deploys. Interactive prompts are skipped automatically when `MASTRA_API_TOKEN` is set. Combine with `--yes` to auto-accept environment creation.
+
+```bash
+export MASTRA_API_TOKEN="..."
+export MASTRA_ORG_ID="..."
+export MASTRA_PROJECT_ID="..."
+mastra deploy --env staging --yes
+```
+
+## `mastra env`
+
+Manages environments on Mastra platform. Environments are named deploy targets (for example `production`, `staging`, `preview-42`) that belong to a project. The current organization is resolved from stored credentials.
+
+Every subcommand resolves its project from, in order: the `MASTRA_PROJECT_ID` environment variable, the `--project <name|slug|id>` flag, or the `.mastra-project.json` file written by [`mastra deploy`](#mastra-deploy) in the current directory. Run from your project directory and you never need to name the project.
+
+### `mastra env list`
+
+Lists environments for a project. Each environment shows its latest deploy (with an `(active)` marker when it's serving traffic) and the env var names injected by managed resources such as attached databases.
+
+```bash
+mastra env list
+```
+
+#### `--json`
+
+Emit machine-readable JSON. Only non-sensitive metadata (id, name, slug, type, region, branch, URLs, managed env var names, and latest deploy status) is included so the output is safe to log in CI.
+
+### `mastra env create`
+
+Creates a new environment for a project.
+
+```bash
+mastra env create staging --type staging --region eu
+```
+
+#### `-t, --type`
+
+Environment type. One of `production`, `staging`, or `preview`. Defaults to `staging`.
+
+#### `-r, --region`
+
+Region for the environment (for example `eu`).
+
+#### `--json`
+
+Emit machine-readable JSON. Sensitive fields are omitted, as with [`mastra env list`](#mastra-env-list).
+
+### `mastra env delete`
+
+Deletes an environment.
+
+```bash
+mastra env delete <env>
+```
+
+`<env>` can be an environment name, slug, or ID. The CLI prompts for confirmation unless `--yes` is passed.
+
+#### `-y, --yes`
+
+Skip the confirmation prompt.
+
+### `mastra env restart`
+
+Restarts an environment's running service so saved env vars (including managed vars from attached databases) take effect immediately, without a new deploy.
+
+```bash
+mastra env restart <env>
+```
+
+`<env>` can be an environment name, slug, or ID. Fails with a conflict error if the environment has never been deployed.
+
+### `mastra env vars pull`
+
+Pulls an environment's env vars into a local env file (default: `.env`). The file contains the merged set a deploy actually runs with: vars stored on the environment (for example, added in the dashboard's environment editor) plus project-level vars, with project values winning on conflict. Managed vars injected by attached databases are listed as comments (names only) since their values are platform-managed secrets.
+
+```bash
+mastra env vars pull
+mastra env vars pull <env> --output .env.staging
+```
+
+`<env>` can be an environment name, slug, or ID, and can be omitted when the project has exactly one environment. The file is written with `0600` permissions.
+
+#### `-o, --output`
+
+File to write. Defaults to `.env`.
+
+### `mastra env db`
+
+Manages databases attached to a project on Mastra platform. Databases are provisioned from a managed provider (for example Turso or Neon) and inject their connection env vars into deploys automatically.
+
+A database is either **environment-scoped** (its env vars only go to one environment) or **shared** (project-scoped: its env vars go to all environments). Pass the environment argument to work with environment-scoped databases; omit it for shared databases.
+
+Creating and deleting databases requires the `admin` role in the organization.
+
+### `mastra env db list`
+
+Lists databases attached to a project, including provider, provisioning status, scope (which environment each database feeds), and the env var names each database injects. Pass an environment to only show databases feeding that environment (environment-scoped plus shared).
+
+```bash
+mastra env db list
+mastra env db list <env>
+```
+
+#### `--json`
+
+Emit machine-readable JSON.
+
+### `mastra env db create`
+
+Provisions a managed database, attaches it, and polls until it's ready. Provisioning errors are printed with the provider's error detail.
+
+With an environment argument, the database is scoped to that environment: only it receives the database's connection env vars, and the provider region is derived from the environment's region. Without one, the database is shared by all environments.
+
+```bash
+mastra env db create <env> --kind turso
+mastra env db create --kind neon --name my-app-db --region aws-us-east-1
+```
+
+#### `--kind`
+
+Database provider (required). One of `turso` or `neon`.
+
+#### `--name`
+
+Database name. Defaults to a name derived from the project slug (for example `my-app-db`).
+
+#### `--region`
+
+Provider region ID for shared databases. Ignored for environment-scoped databases.
+
+#### `--no-wait`
+
+Return immediately after the attach is queued instead of polling until the database is ready. Check progress later with `mastra env db show`.
+
+#### `--json`
+
+Emit machine-readable JSON.
+
+### `mastra env db show`
+
+Shows database details and, once the database is ready, its connection env vars. Secret values are masked by default.
+
+```bash
+mastra env db show <database>
+```
+
+`<database>` can be a database ID or name.
+
+#### `--show-secrets`
+
+Print secret connection values instead of masking them.
+
+#### `--json`
+
+Emit machine-readable JSON. Secret values are masked unless `--show-secrets` is passed.
+
+### `mastra env db delete`
+
+Permanently deletes a database with the provider, including all of its data. This can't be undone. The CLI prompts for confirmation unless `--yes` is passed. After deletion, deploys no longer receive the database's env vars.
+
+```bash
+mastra env db delete <database>
+```
+
+#### `-y, --yes`
+
+Skip the confirmation prompt.
+
+### `mastra env deploys`
+
+Lists deploys for a project, newest first. Deploys that are serving traffic are marked `(active)`.
+
+```bash
+mastra env deploys [environment]
+```
+
+Omit `[environment]` to show deploys across all environments; pass an environment name, slug, or ID to filter to one.
+
+#### `--json`
+
+Emit machine-readable JSON.
+
 ## `mastra studio deploy`
+
+:::info
+
+`mastra studio deploy` continues to work but is superseded by [`mastra deploy`](#mastra-deploy), which supports named environments (`--env staging`, `--env production`) on a single project. New setups should use `mastra deploy`.
+
+:::
 
 Builds and deploys your project to Mastra platform. Requires authentication via [`mastra auth login`](#mastra-auth-login) or a `MASTRA_API_TOKEN` environment variable.
 
@@ -320,6 +586,12 @@ Lists all projects in the current organization.
 Creates a new project through an interactive prompt. This command doesn't accept a `--name` flag; for non-interactive project creation, use [`mastra studio deploy --project <name> --yes`](#mastra-studio-deploy) instead, which creates the project and deploys to it in one step.
 
 ## `mastra server deploy`
+
+:::info
+
+`mastra server deploy` continues to work but is superseded by [`mastra deploy`](#mastra-deploy), which deploys a single project to multiple named environments instead of separate Studio and Server commands. New setups should use `mastra deploy`.
+
+:::
 
 Builds and deploys your project to Server on Mastra platform. Works the same as [`mastra studio deploy`](#mastra-studio-deploy) with the same flags, arguments, and resolution logic.
 
@@ -601,6 +873,7 @@ Runs database migrations to update your storage schema. This command is useful w
 The command bundles your project, connects to your configured storage backend, and executes any pending migrations. Currently supports:
 
 - **Duplicate spans migration**: Removes duplicate `(traceId, spanId)` entries and adds a unique constraint to ensure data integrity.
+- **ClickHouse legacy-to-vNext span migration**: Copies historical spans from the legacy `mastra_ai_spans` table to the vNext `mastra_span_events` schema. Runs in batches to stay within memory limits. See the [ClickHouse storage reference](/reference/storage/clickhouse#migrating-from-legacy-to-vnext) for details.
 
 ```bash
 mastra migrate
@@ -615,10 +888,10 @@ It accepts [common flags][common-flags].
 Calls a Mastra runtime server with JSON input and JSON output. Use it for local development servers, deployed Mastra platform projects, self-hosted Mastra servers, or hosted Mastra Platform Observability APIs.
 
 ```bash
-mastra api agent list --pretty
+mastra api agent list
 mastra api agent run weather-agent '{"messages":"What is the weather in London?"}'
 mastra api tool execute get-weather '{"location":"San Francisco"}'
-mastra api trace list '{"page":0,"perPage":20}' --pretty
+mastra api trace list '{"page":0,"perPage":20}'
 ```
 
 Use `mastra api <resource> <action> --help` to see examples for a command.
@@ -678,6 +951,14 @@ Target a specific Mastra server URL.
 mastra api --url https://example.com agent list
 ```
 
+#### `--server-api-prefix <prefix>`
+
+Set the API route prefix of the target server. Defaults to `/api`. Use this when the server is mounted under a custom prefix (for example a `@mastra/fastify` `MastraServer` with `prefix: "/api/mastra-studio"`), the same way `mastra studio` accepts `--server-api-prefix`. You can also set the `MASTRA_API_PREFIX` environment variable instead of passing the flag.
+
+```bash
+mastra api --url https://example.com --server-api-prefix /api/mastra-studio agent list
+```
+
 #### `--header <"Key: Value">`
 
 Send a custom HTTP header. Repeat the flag to send multiple headers.
@@ -729,7 +1010,7 @@ mastra api trace list '{"page":0,"perPage":20}'
 Routes that support filters accept them in the same JSON input. For example, observability trace listing supports pagination and route-supported filters:
 
 ```bash
-mastra api trace list '{"page":0,"perPage":20,"filters":{"spanType":"agent"}}' --pretty
+mastra api trace list '{"page":0,"perPage":20,"filters":{"spanType":"agent"}}'
 ```
 
 ### Get command-specific help
@@ -985,8 +1266,8 @@ Lists observability traces. Pass optional JSON input for route-supported filters
 
 ```bash
 mastra api trace list [input]
-mastra api trace list '{"page":0,"perPage":20}' --pretty
-mastra api trace list '{"page":0,"perPage":20}' --verbose --pretty
+mastra api trace list '{"page":0,"perPage":20}'
+mastra api trace list '{"page":0,"perPage":20}' --verbose
 ```
 
 `trace list` returns lightweight root span records by default so you can page through traces without fetching large input, output, attributes, or metadata payloads. Pass `--verbose` to fetch the full root span records.
@@ -1234,7 +1515,11 @@ Prints help message and exits.
 
 By default, Mastra collects anonymous information about your project like your OS, Mastra version or Node.js version. You can read the [source code](https://github.com/mastra-ai/mastra/blob/main/packages/cli/src/analytics/index.ts) to check what's collected.
 
-You can opt out of the CLI analytics by setting an environment variable:
+When a server started with `mastra dev` or `mastra start` has observability metrics enabled, Mastra also sends anonymous, aggregated model usage at startup: input and output token counts per provider and model, plus the command (`dev` or `start`) and `NODE_ENV`. No prompts, responses, or other message content is ever sent. You can read the [source code](https://github.com/mastra-ai/mastra/blob/main/packages/core/src/telemetry/usage-telemetry.ts) to check what's collected.
+
+At server startup, Mastra also sends an anonymous project-surface snapshot: counts of registered agents, agent controllers, workflows, tools, processors, vector stores, scorers, workspaces, MCP servers, gateways, and channels, plus booleans for memory, voice, editor, and observability usage and the coarse storage backend category. It doesn't send names or identifiers. You can read the [source code](https://github.com/mastra-ai/mastra/blob/main/packages/core/src/telemetry/feature-telemetry.ts) to check what's collected.
+
+You can opt out of all CLI and usage analytics by setting an environment variable:
 
 ```bash
 MASTRA_TELEMETRY_DISABLED=1

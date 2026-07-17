@@ -29,6 +29,19 @@ export class ObservationStep {
     return this._prepared;
   }
 
+  /**
+   * Serialize to a minimal, acyclic snapshot.
+   *
+   * The `turn` back-reference exists only so a step can read context off its parent turn at
+   * runtime. It closes the `ObservationTurn._currentStep -> ObservationStep.turn` cycle, so
+   * serializing it throws "Converting circular structure to JSON" (e.g. when a turn is stashed
+   * in processor state that flows into a processor-workflow snapshot). The parent turn fully
+   * owns the step, so omitting the back-reference is lossless.
+   */
+  toJSON() {
+    return { stepNumber: this.stepNumber, prepared: this._prepared };
+  }
+
   /** Step context from prepare(). Throws if prepare() hasn't been called. */
   get context(): StepContext {
     if (!this._context) throw new Error('Step not prepared yet — call prepare() first');
@@ -263,11 +276,16 @@ export class ObservationStep {
             ?.lastObservedMessageCursor
         : undefined;
 
+      const pendingMessageIds = new Set(
+        [...messageList.get.input.db(), ...messageList.get.response.db()].map(msg => msg.id).filter(Boolean),
+      );
+
       filterObservedMessages({
         messageList,
         record: this.turn.record,
         useMarkerBoundaryPruning: this.stepNumber === 0,
         fallbackCursor,
+        preserveMessageIds: pendingMessageIds,
       });
     }
 

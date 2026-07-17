@@ -1,14 +1,10 @@
-import {
-  Button,
-  ErrorState,
-  ListSearch,
-  NoDataPageLayout,
-  PageLayout,
-  PermissionDenied,
-  SessionExpired,
-  is401UnauthorizedError,
-  is403ForbiddenError,
-} from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
+import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { CalendarClockIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
@@ -55,17 +51,15 @@ function Workflows() {
   return (
     <PageLayout>
       <PageLayout.TopArea>
-        <div className="flex items-center justify-between gap-3">
+        <PageLayout.Row align="center" stack="responsive">
           <div className="max-w-120 flex-1">
             <ListSearch onSearch={setSearch} label="Filter workflows" placeholder="Filter by name or description" />
           </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <Button as={Link} to="/workflows/schedules" variant="ghost">
-              <CalendarClockIcon />
-              Schedules
-            </Button>
-          </div>
-        </div>
+          <Button as={Link} to="/workflows/schedules" variant="primary" className="shrink-0">
+            <CalendarClockIcon />
+            Schedules
+          </Button>
+        </PageLayout.Row>
       </PageLayout.TopArea>
 
       <WorkflowsList workflows={workflows || {}} isLoading={isLoading} search={search} />

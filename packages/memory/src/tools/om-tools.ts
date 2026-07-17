@@ -1,8 +1,8 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { MemoryConfigInternal } from '@mastra/core/memory';
 import { createTool } from '@mastra/core/tools';
+import type { JSONSchema7 } from 'json-schema';
 import { estimateTokenCount } from 'tokenx';
-import { z } from 'zod';
 
 import {
   formatToolResultForObserver,
@@ -1158,105 +1158,100 @@ export const recallTool = (
   return createTool({
     id: 'recall',
     description,
-    inputSchema: z.object({
-      ...(isResourceScope
-        ? {
-            mode: z
-              .enum(['messages', 'threads', 'search'])
-              .optional()
-              .describe(
-                'What to retrieve. "messages" (default) pages through message history. "threads" lists all threads for the current user. "search" finds messages by semantic similarity across all threads.',
-              ),
-            threadId: z
-              .string()
-              .min(1)
-              .optional()
-              .describe(
-                'Browse a different thread, or use "current" for the active thread. Use mode="threads" first to discover thread IDs.',
-              ),
-            before: z
-              .string()
-              .optional()
-              .describe(
-                'For mode="threads": only show threads created before this date. ISO 8601 or natural date string (e.g. "2026-03-15", "2026-03-10T00:00:00Z").',
-              ),
-            after: z
-              .string()
-              .optional()
-              .describe(
-                'For mode="threads": only show threads created after this date. ISO 8601 or natural date string (e.g. "2026-03-01", "2026-03-10T00:00:00Z").',
-              ),
-          }
-        : {
-            mode: z
-              .enum(['messages', 'threads', 'search'])
-              .optional()
-              .describe(
-                'What to retrieve. "messages" (default) pages through message history. "threads" returns info about the current thread. "search" finds messages by semantic similarity in this thread.',
-              ),
-          }),
-      query: z
-        .string()
-        .min(1)
-        .optional()
-        .describe('Search query for mode="search". Finds messages semantically similar to this text.'),
-      cursor: z
-        .string()
-        .min(1)
-        .optional()
-        .describe(
-          'A message ID to use as the pagination cursor. For mode="messages", omit both cursor and threadId to browse the current thread. If only cursor is provided, it must belong to the current thread. Extract it from the start or end of an observation group range.',
-        ),
-      anchor: z
-        .enum(['start', 'end'])
-        .optional()
-        .describe(
-          'For mode="messages" without a cursor, page from the start (oldest-first) or end (newest-first) of the thread. Defaults to "start".',
-        ),
-      page: z
-        .number()
-        .int()
-        .min(-50)
-        .max(50)
-        .optional()
-        .describe(
-          'Pagination offset. For messages: positive pages move forward from cursor, negative move backward. For threads: page number (0-indexed). 0 is treated as 1 for messages.',
-        ),
-      limit: z
-        .number()
-        .int()
-        .positive()
-        .max(20)
-        .optional()
-        .describe('Maximum number of items to return per page. Defaults to 20.'),
-      detail: z
-        .enum(['low', 'high'])
-        .optional()
-        .describe(
-          'Detail level for messages. "low" (default) returns truncated text and tool names. "high" returns full content with tool args/results.',
-        ),
-      partType: z
-        .enum(['text', 'tool-call', 'tool-result', 'reasoning', 'image', 'file'])
-        .optional()
-        .describe('Filter results to only include parts of this type. Only applies to mode="messages".'),
-      toolName: z
-        .string()
-        .min(1)
-        .optional()
-        .describe(
-          'Filter results to only include tool-call and tool-result parts matching this tool name. Only applies to mode="messages".',
-        ),
-      partIndex: z
-        .number()
-        .int()
-        .min(0)
-        .optional()
-        .describe(
-          'Fetch a single part from the cursor message by its positional index. When provided, returns only that part at high detail. Indices are shown as [p0], [p1], etc. in recall results.',
-        ),
-    }),
-    execute: async (
-      {
+    inputSchema: {
+      $schema: 'http://json-schema.org/draft-07/schema#',
+      type: 'object',
+      properties: {
+        ...(isResourceScope
+          ? {
+              mode: {
+                type: 'string',
+                enum: ['messages', 'threads', 'search'],
+                description:
+                  'What to retrieve. "messages" (default) pages through message history. "threads" lists all threads for the current user. "search" finds messages by semantic similarity across all threads.',
+              },
+              threadId: {
+                type: 'string',
+                minLength: 1,
+                description:
+                  'Browse a different thread, or "current" for the active thread. Use mode="threads" first to discover thread IDs.',
+              },
+              before: {
+                type: 'string',
+                description:
+                  'For mode="threads": only show threads created before this date. ISO 8601 or natural date string (e.g. "2026-03-15", "2026-03-10T00:00:00Z").',
+              },
+              after: {
+                type: 'string',
+                description:
+                  'For mode="threads": only show threads created after this date. ISO 8601 or natural date string (e.g. "2026-03-01", "2026-03-10T00:00:00Z").',
+              },
+            }
+          : {
+              mode: {
+                type: 'string',
+                enum: ['messages', 'threads', 'search'],
+                description:
+                  'What to retrieve. "messages" (default) pages through message history. "threads" returns info about the current thread. "search" finds messages by semantic similarity in this thread.',
+              },
+            }),
+        query: {
+          type: 'string',
+          minLength: 1,
+          description: 'Search query for mode="search". Finds messages semantically similar to this text.',
+        },
+        cursor: {
+          type: 'string',
+          minLength: 1,
+          description:
+            'A message ID to use as the pagination cursor. For mode="messages", omit both cursor and threadId to browse the current thread. If only cursor is provided, it must belong to the current thread. Extract it from the start or end of an observation group range.',
+        },
+        anchor: {
+          type: 'string',
+          enum: ['start', 'end'],
+          description:
+            'For mode="messages" without a cursor, page from the start (oldest-first) or end (newest-first) of the thread. Defaults to "start".',
+        },
+        page: {
+          type: 'integer',
+          minimum: -50,
+          maximum: 50,
+          description:
+            'Pagination offset. For messages: positive pages move forward from cursor, negative move backward. For threads: page number (0-indexed). 0 is treated as 1 for messages.',
+        },
+        limit: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 20,
+          description: 'Maximum number of items to return per page. Defaults to 20.',
+        },
+        detail: {
+          type: 'string',
+          enum: ['low', 'high'],
+          description:
+            'Detail level for messages. "low" (default) returns truncated text and tool names. "high" returns full content with tool args/results.',
+        },
+        partType: {
+          type: 'string',
+          enum: ['text', 'tool-call', 'tool-result', 'reasoning', 'image', 'file'],
+          description: 'Filter results to only include parts of this type. Only applies to mode="messages".',
+        },
+        toolName: {
+          type: 'string',
+          minLength: 1,
+          description:
+            'Filter results to only include tool-call and tool-result parts matching this tool name. Only applies to mode="messages".',
+        },
+        partIndex: {
+          type: 'integer',
+          minimum: 0,
+          description:
+            'Fetch a single part from the cursor message by its positional index. When provided, returns only that part at high detail. Indices are shown as [p0], [p1], etc. in recall results.',
+        },
+      },
+    } satisfies JSONSchema7,
+    execute: async (inputData, context) => {
+      const {
         mode,
         query,
         cursor,
@@ -1270,7 +1265,7 @@ export const recallTool = (
         partIndex,
         before,
         after,
-      }: {
+      } = inputData as {
         mode?: 'messages' | 'threads' | 'search';
         query?: string;
         cursor?: string;
@@ -1284,9 +1279,7 @@ export const recallTool = (
         partIndex?: number;
         before?: string;
         after?: string;
-      },
-      context,
-    ) => {
+      };
       const memory = (context as any)?.memory as RecallMemory | undefined;
       const currentThreadId = context?.agent?.threadId;
       const resourceId = context?.agent?.resourceId;
@@ -1357,17 +1350,21 @@ export const recallTool = (
         });
       }
 
-      const usedDefaultThreadId = isResourceScope && !explicitThreadId && !cursor && Boolean(currentThreadId);
-      const defaultThreadNote = usedDefaultThreadId
-        ? `threadId wasn't passed so used default ${currentThreadId}.\n\n`
-        : '';
-      const effectiveThreadId = explicitThreadId || (usedDefaultThreadId ? 'current' : undefined);
-      const resolvedThreadId = effectiveThreadId === 'current' ? currentThreadId : effectiveThreadId;
-      const hasExplicitThreadId = typeof resolvedThreadId === 'string' && resolvedThreadId.length > 0;
+      const usedDefaultThreadId = !explicitThreadId && !cursor && Boolean(currentThreadId);
+      const defaultThreadNote =
+        usedDefaultThreadId && isResourceScope ? `threadId wasn't passed so used default ${currentThreadId}.\n\n` : '';
+      // Reuse the shared `resolvedExplicitThreadId` ('current' -> currentThreadId) mapping,
+      // falling back to the current thread when no threadId or cursor was provided.
+      const resolvedThreadId = resolvedExplicitThreadId || (usedDefaultThreadId ? currentThreadId : undefined);
+      const hasResolvedThreadId = typeof resolvedThreadId === 'string' && resolvedThreadId.length > 0;
       const hasCursor = typeof cursor === 'string' && cursor.length > 0;
 
-      if (!hasExplicitThreadId && !hasCursor) {
-        throw new Error('Either cursor or threadId is required for mode="messages"');
+      if (!hasResolvedThreadId && !hasCursor) {
+        throw new Error(
+          isResourceScope
+            ? 'No active thread context and no cursor or threadId was provided for mode="messages". Pass a threadId (use mode="threads" to discover thread IDs) or a message ID as cursor.'
+            : 'No active thread context for mode="messages". This tool is limited to the current thread and no current thread could be resolved.',
+        );
       }
 
       let targetThreadId: string | undefined;
@@ -1376,7 +1373,7 @@ export const recallTool = (
       if (!isResourceScope) {
         targetThreadId = currentThreadId;
         threadScope = currentThreadId || undefined;
-      } else if (hasExplicitThreadId) {
+      } else if (hasResolvedThreadId) {
         if (!resourceId) {
           throw new Error('Resource ID is required for recall');
         }
@@ -1396,7 +1393,7 @@ export const recallTool = (
         threadScope = currentThreadId || undefined;
       }
 
-      if (hasCursor && !hasExplicitThreadId && !currentThreadId) {
+      if (hasCursor && !hasResolvedThreadId && !currentThreadId) {
         if (!isResourceScope) {
           throw new Error('Current thread is required when browsing by cursor');
         }

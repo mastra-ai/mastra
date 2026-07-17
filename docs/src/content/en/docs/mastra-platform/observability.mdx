@@ -33,7 +33,7 @@ The CLI authenticates with Mastra platform, creates a platform project, writes t
 
 ### Existing non-Mastra projects
 
-If you already have an application, such as a Next.js app, but have not added Mastra yet, run `mastra init` and enable Mastra Observability when prompted:
+If you already have an application, such as a Next.js app, but haven't added Mastra yet, run `mastra init` and enable Mastra Observability when prompted:
 
 ```bash npm2yarn
 npx mastra init
@@ -68,7 +68,11 @@ See [Mastra platform configuration](/docs/mastra-platform/configuration#observab
 After your project is publishing traces, logs, or scores to Mastra Platform Observability, you can query that data from your terminal with the Mastra CLI or with `curl`.
 
 ```bash npm2yarn
-npx mastra api trace list --pretty
+npx mastra api trace list
 ```
 
 For observability commands, the CLI targets the hosted observability API and can infer credentials from your project environment. See the [`mastra api` CLI reference](/reference/cli/mastra#mastra-api) for available observability commands, filtering, pagination, credential resolution, and direct `curl` examples.
+
+## Related
+
+- 📹 [Mastra observability and Studio workshop](https://www.youtube.com/watch?v=dKO_a3RPra0)

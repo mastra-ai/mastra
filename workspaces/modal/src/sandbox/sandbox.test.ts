@@ -355,6 +355,8 @@ describe('ModalProcessManager', () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toBe('hello\n');
     expect(result.stderr).toBe('warning\n');
+    expect(result.killed).toBeUndefined();
+    expect(result.timedOut).toBeUndefined();
   });
 
   it('wait() returns failure for non-zero exit code', async () => {
@@ -462,6 +464,8 @@ describe('ModalProcessManager', () => {
     const result = await handle.wait();
     expect(result.success).toBe(false);
     expect(result.exitCode).toBe(137);
+    expect(result.killed).toBe(true);
+    expect(result.timedOut).toBe(false);
   });
 
   it('sendStdin() throws not supported', async () => {
@@ -483,6 +487,8 @@ describe('ModalProcessManager', () => {
 
     expect(result.exitCode).toBe(124);
     expect(result.success).toBe(false);
+    expect(result.killed).toBe(true);
+    expect(result.timedOut).toBe(true);
   }, 5000);
 
   it('list() returns tracked processes', async () => {
@@ -550,5 +556,49 @@ describe('ModalSandbox.retryOnDead()', () => {
 
     await expect(sandbox.processes.spawn('cmd')).rejects.toThrow('permission denied');
     expect(callCount).toBe(1);
+  });
+});
+
+describe('ModalSandbox.derive', () => {
+  it('constructs an unstarted sibling without any I/O', () => {
+    const template = new ModalSandbox({ tokenId: 'tid', tokenSecret: 'tsec', appName: 'mastra' });
+
+    const child = template.derive({ id: 'mc-project-1' });
+
+    expect(child).toBeInstanceOf(ModalSandbox);
+    expect(child).not.toBe(template);
+    expect(child.id).toBe('mc-project-1');
+    expect(child.status).toBe('pending');
+    expect(mockSandboxes.create).not.toHaveBeenCalled();
+  });
+
+  it('inherits template config and applies env override', () => {
+    const template = new ModalSandbox({ tokenId: 'tid', tokenSecret: 'tsec', appName: 'mastra', env: { BASE: '1' } });
+
+    const child = template.derive({ env: { GITHUB_TOKEN: 'ghs_abc' } });
+
+    expect(child['_constructorOptions']).toMatchObject({
+      tokenId: 'tid',
+      tokenSecret: 'tsec',
+      appName: 'mastra',
+      env: { GITHUB_TOKEN: 'ghs_abc' },
+    });
+  });
+
+  it('maps idleTimeoutMinutes to timeoutMs', () => {
+    const template = new ModalSandbox({ tokenId: 'tid', tokenSecret: 'tsec', timeoutMs: 120_000 });
+
+    const child = template.derive({ idleTimeoutMinutes: 15 });
+
+    expect(child['_constructorOptions']).toMatchObject({ timeoutMs: 900_000 });
+  });
+
+  it('inherits template defaults when no overrides are passed', () => {
+    const template = new ModalSandbox({ tokenId: 'tid', tokenSecret: 'tsec', timeoutMs: 120_000, env: { BASE: '1' } });
+
+    const child = template.derive();
+
+    expect(child.id).not.toBe(template.id);
+    expect(child['_constructorOptions']).toMatchObject({ tokenId: 'tid', timeoutMs: 120_000, env: { BASE: '1' } });
   });
 });

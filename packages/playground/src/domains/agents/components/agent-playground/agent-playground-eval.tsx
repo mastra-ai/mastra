@@ -1,18 +1,14 @@
-import {
-  Badge,
-  Button,
-  Checkbox,
-  Chip,
-  Collapsible,
-  CollapsibleTrigger,
-  CollapsibleContent,
-  CopyButton,
-  ScrollArea,
-  Spinner,
-  Txt,
-  Icon,
-  cn,
-} from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
+import { Chip } from '@mastra/playground-ui/components/Chip';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/playground-ui/components/Collapsible';
+import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -32,7 +28,6 @@ import type { AgentExperiment } from '../../hooks/use-agent-experiments';
 import { useAgentVersions } from '../../hooks/use-agent-versions';
 import { formatVersionLabel } from './format-version-label';
 import { useDatasetExperimentResults, useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
-import { TraceDialog } from '@/domains/observability/components/trace-dialog';
 import { useLinkComponent } from '@/lib/framework';
 
 function formatTimestamp(dateStr: string | Date): string {
@@ -344,9 +339,7 @@ export function ExperimentResultsPanel({
   ) => void;
   onCreateScorer?: (items: Array<{ input: unknown; output: unknown }>) => void;
 }) {
-  const client = useMastraClient();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [viewingTraceId, setViewingTraceId] = useState<string | undefined>();
   const experimentStatus = experiment.status as 'running' | 'pending' | 'completed' | 'failed';
   const {
     data: results,
@@ -361,16 +354,10 @@ export function ExperimentResultsPanel({
   });
   const { data: scoresByItemId } = useScoresByExperimentId(experiment.id, experimentStatus);
 
-  const agentId = experiment.targetType === 'agent' ? experiment.targetId : '';
+  const agentId = experiment.targetType === 'agent' ? experiment.targetId : undefined;
   const { data: agentVersionsData } = useAgentVersions({ agentId });
   const agentVersions = agentVersionsData?.versions ?? [];
   const { navigate } = useLinkComponent();
-
-  const { data: traceData, isLoading: isLoadingTrace } = useQuery({
-    queryKey: ['trace-light', viewingTraceId],
-    queryFn: () => client.getTraceLight(viewingTraceId!),
-    enabled: !!viewingTraceId,
-  });
 
   const toggleItem = (id: string) => {
     setSelectedIds(prev => {
@@ -634,7 +621,7 @@ export function ExperimentResultsPanel({
                           <CopyButton content={result.traceId} tooltip="Copy trace ID" size="sm" />
                           <button
                             type="button"
-                            onClick={() => setViewingTraceId(result.traceId!)}
+                            onClick={() => navigate(`/traces/${result.traceId}`)}
                             className="flex items-center gap-1 text-xs text-accent1 hover:text-accent2 transition-colors cursor-pointer"
                           >
                             <ExternalLink className="h-3 w-3" />
@@ -647,7 +634,7 @@ export function ExperimentResultsPanel({
                     <ResultOutputSection
                       output={result.output}
                       traceId={result.traceId}
-                      onViewTrace={setViewingTraceId}
+                      onViewTrace={tid => navigate(`/traces/${tid}`)}
                     />
                   )}
                 </div>
@@ -671,16 +658,6 @@ export function ExperimentResultsPanel({
           </div>
         )}
       </ScrollArea>
-
-      {/* Trace Dialog */}
-      <TraceDialog
-        traceId={viewingTraceId}
-        traceSpans={traceData?.spans}
-        isOpen={!!viewingTraceId}
-        onClose={() => setViewingTraceId(undefined)}
-        isLoadingSpans={isLoadingTrace}
-        computeTraceLink={(tid, spanId) => `/observability?traceId=${tid}${spanId ? `&spanId=${spanId}` : ''}`}
-      />
     </div>
   );
 }

@@ -57,6 +57,8 @@ export type ThreadOMMetadata = {
   suggestedResponse?: string;
   /** Observer-generated thread title */
   threadTitle?: string;
+  /** Extracted Observational Memory values keyed by extractor slug */
+  extracted?: Record<string, unknown>;
   /** Timestamp of the last observed message in this thread (ISO string for JSON serialization) */
   lastObservedAt?: string;
   /** Cursor pointing at the last observed message (for replay pruning fallback) */
@@ -182,15 +184,42 @@ type BaseWorkingMemory = {
    * @default 'resource'
    */
   scope?: 'thread' | 'resource';
+  /**
+   * Experimental: deliver working memory to the model as a state signal instead of folding
+   * it into the system message. Storage is unchanged. When `true`, `Memory` auto-attaches
+   * a state-signal processor that emits snapshots or deltas with dedup via `cacheKey`, and
+   * registers the working-memory tool as `setWorkingMemory` instead of `updateWorkingMemory`.
+   *
+   * Not supported with template working memory `version: 'vnext'`.
+   *
+   * @default false
+   * @see docs/src/content/en/docs/agents/signals.mdx
+   */
+  useStateSignals?: boolean;
+  /**
+   * Whether the main agent manages working memory directly through tool/instruction injection.
+   * Set to false when another path, such as Observational Memory extractors,
+   * owns working memory updates.
+   *
+   * @default true
+   */
+  agentManaged?: boolean;
   /** @deprecated The `use` option has been removed. Working memory always uses tool-call mode. */
   use?: never;
 };
 
-type TemplateWorkingMemory = BaseWorkingMemory & {
-  template: string;
-  schema?: never;
-  version?: 'stable' | 'vnext';
-};
+type TemplateWorkingMemory =
+  | (BaseWorkingMemory & {
+      template: string;
+      schema?: never;
+      version?: 'stable';
+    })
+  | (Omit<BaseWorkingMemory, 'useStateSignals'> & {
+      template: string;
+      schema?: never;
+      version: 'vnext';
+      useStateSignals?: false;
+    });
 
 type SchemaWorkingMemory = BaseWorkingMemory & {
   schema: PublicSchema;
@@ -397,7 +426,7 @@ export type SemanticRecall = {
  */
 export type ObservationalMemoryModelSettings = AgentExecutionOptions['modelSettings'];
 
-export type ObservationalMemoryActivationTTL = number | string | false;
+export type ObservationalMemoryActivationTTL = number | string | 'auto' | false;
 
 /**
  * Configuration for the observation step in Observational Memory.
@@ -414,6 +443,16 @@ export interface ObservationalMemoryObservationConfig {
    * @default 'google/gemini-2.5-flash'
    */
   model?: AgentConfig['model'];
+
+  /**
+   * Manage working memory through Observational Memory extraction.
+   * When enabled alongside `workingMemory.enabled`, Memory supplies defaults that
+   * disable main-agent working memory management and add the WorkingMemoryExtractor.
+   * Set `workingMemory.agentManaged: true` to keep main-agent tools/instructions enabled.
+   *
+   * @default false
+   */
+  manageWorkingMemory?: boolean;
 
   /**
    * Token count of unobserved messages that triggers observation.
@@ -511,6 +550,7 @@ export interface ObservationalMemoryObservationConfig {
   /**
    * Time before buffered observations are force-activated after inactivity.
    * Accepts milliseconds as a number, a duration string like `"5m"` or `"1hr"`,
+   * `"auto"` to choose a provider-aware TTL from the actor model's prompt-cache behavior,
    * or `false` to disable top-level `activateAfterIdle` for observations.
    * If unset, top-level `activateAfterIdle` is used for observations.
    */
@@ -589,6 +629,16 @@ export interface ObservationalMemoryObservationConfig {
    * @default false
    */
   threadTitle?: boolean;
+
+  /**
+   * Whether image/file attachment parts are forwarded to the Observer LLM.
+   * - `true` forwards attachments
+   * - `false` drops attachments and leaves placeholder text
+   * - `'auto'` checks model capabilities to decide
+   *
+   * @default true
+   */
+  observeAttachments?: 'auto' | boolean;
 }
 
 /**
@@ -659,6 +709,7 @@ export interface ObservationalMemoryReflectionConfig {
   /**
    * Time before buffered reflections are force-activated after inactivity.
    * Accepts milliseconds as a number, a duration string like `"5m"` or `"1hr"`,
+   * `"auto"` to choose a provider-aware TTL from the actor model's prompt-cache behavior,
    * or `false` to disable idle activation for reflections.
    * Reflections do not inherit top-level `activateAfterIdle`; set this explicitly to enable.
    */
@@ -774,7 +825,8 @@ export interface ObservationalMemoryOptions {
 
   /**
    * Time before buffered observations are force-activated after inactivity.
-   * Accepts milliseconds as a number or a duration string like `"5m"` or `"1hr"`.
+   * Accepts milliseconds as a number, a duration string like `"5m"` or `"1hr"`,
+   * or `"auto"` to choose a provider-aware TTL from the actor model's prompt-cache behavior.
    * When the gap between the current time and the last assistant message part's `createdAt`
    * exceeds this value, buffered observations activate regardless of whether the
    * token threshold has been reached. Useful to align with prompt cache TTLs.
@@ -785,6 +837,7 @@ export interface ObservationalMemoryOptions {
    * @example 300_000
    * @example "5m"
    * @example "1hr"
+   * @example "auto"
    */
   activateAfterIdle?: ObservationalMemoryActivationTTL;
 
@@ -819,7 +872,7 @@ export interface ObservationalMemoryOptions {
   temporalMarkers?: boolean;
 
   /**
-   * **Experimental.** Enable retrieval-mode observation groups as durable pointers
+   * Enable retrieval-mode observation groups as durable pointers
    * to raw message history. When enabled, observation groups keep `_range`
    * metadata visible in context and a `recall` tool is registered so the actor
    * can inspect raw messages behind a stored observation summary.
@@ -832,7 +885,6 @@ export interface ObservationalMemoryOptions {
    * `scope` defaults to `'resource'` (cross-thread browsing, thread listing, and search).
    * Set to `'thread'` to restrict to the current thread only.
    *
-   * @experimental
    * @default false
    */
   retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource' };
@@ -1272,8 +1324,7 @@ export type SerializedObservationalMemoryConfig = {
   temporalMarkers?: boolean;
 
   /**
-   * **Experimental.** Enable retrieval-mode observation groups as durable pointers to raw message history.
-   * @experimental
+   * Enable retrieval-mode observation groups as durable pointers to raw message history.
    */
   retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource' };
 
@@ -1288,6 +1339,9 @@ export type SerializedObservationalMemoryConfig = {
 export type SerializedObservationalMemoryObservationConfig = {
   /** Observer model ID */
   model?: string;
+  /** Manage working memory through Observational Memory extraction. */
+  manageWorkingMemory?: boolean;
+
   /** Token count threshold that triggers observation */
   messageTokens?: number;
   /** Model settings (temperature, maxOutputTokens, etc.) */
@@ -1310,6 +1364,8 @@ export type SerializedObservationalMemoryObservationConfig = {
   previousObserverTokens?: number | false;
   /** Whether the Observer should suggest thread titles */
   threadTitle?: boolean;
+  /** Whether image/file attachment parts are forwarded to the Observer LLM */
+  observeAttachments?: 'auto' | boolean;
 };
 
 /** Serializable subset of ObservationalMemoryReflectionConfig */

@@ -11,7 +11,7 @@
 
 import { isDeepStrictEqual } from 'node:util';
 import type { RequestContext } from '@mastra/core/di';
-import type { SandboxInfo, ProviderStatus, MastraSandboxOptions } from '@mastra/core/workspace';
+import type { SandboxInfo, ProviderStatus, MastraSandboxOptions, SandboxDeriveOptions } from '@mastra/core/workspace';
 import { MastraSandbox, SandboxError, SandboxNotReadyError } from '@mastra/core/workspace';
 import Docker from 'dockerode';
 import type { Container, ContainerInfo } from 'dockerode';
@@ -39,8 +39,15 @@ type DockerSandboxTmpfs = Record<string, string>;
 // =============================================================================
 
 export interface DockerSandboxOptions extends Omit<MastraSandboxOptions, 'processes'> {
-  /** Unique identifier for this sandbox instance. Used for container naming and reconnection. */
+  /** Unique identifier for this sandbox instance. Used for label-based reconnection. */
   id?: string;
+  /**
+   * Container display name passed to Docker as `--name`.
+   * Characters outside `[a-zA-Z0-9_.-]` are replaced with `-` and the result
+   * is prefixed if it would not start with an alphanumeric character.
+   * @default the sandbox `id`
+   */
+  name?: string;
   /** Docker image to use.
    * @default 'node:22-slim'
    */
@@ -157,6 +164,7 @@ export class DockerSandbox extends MastraSandbox {
   private _container: Container | null = null;
 
   /** Configuration */
+  private readonly _containerName: string;
   private readonly _image: string;
   private readonly _command: string[];
   private readonly _env: Record<string, string>;
@@ -179,6 +187,7 @@ export class DockerSandbox extends MastraSandbox {
   private readonly _workingDir: string;
   private readonly _labels: Record<string, string>;
   private readonly _instructionsOverride?: InstructionsOption;
+  private readonly _constructorOptions: DockerSandboxOptions;
 
   constructor(options: DockerSandboxOptions = {}) {
     const processManager = new DockerProcessManager({
@@ -193,6 +202,7 @@ export class DockerSandbox extends MastraSandbox {
     });
 
     this.id = options.id ?? this._generateId();
+    this._containerName = sanitizeContainerName(options.name ?? this.id);
     this._image = options.image ?? 'node:22-slim';
     this._command = options.command ?? ['sleep', 'infinity'];
     this._env = options.env ?? {};
@@ -220,6 +230,30 @@ export class DockerSandbox extends MastraSandbox {
     };
     this._instructionsOverride = options.instructions;
     this._docker = new Docker(options.dockerOptions);
+    this._constructorOptions = { ...options };
+  }
+
+  /**
+   * Construct a sibling `DockerSandbox` that inherits this sandbox's
+   * configuration (image, resource limits, security options, labels,
+   * connection options) with per-instance overrides.
+   *
+   * Performs no I/O — the derived sandbox provisions (or reconnects to an
+   * existing container labelled with the same logical `id`) on its own
+   * `start()`. Use it when one configured sandbox acts as the template for a
+   * fleet of independent sandboxes (e.g. one per project).
+   *
+   * `options.idleTimeoutMinutes` is ignored (Docker containers have no
+   * provider-side idle teardown; `timeout` here is a command timeout), and
+   * `options.sandboxId` is ignored because reconnection is by logical `id`.
+   */
+  derive(options: SandboxDeriveOptions = {}): DockerSandbox {
+    const { id: _id, name: _name, ...base } = this._constructorOptions;
+    return new DockerSandbox({
+      ...base,
+      ...(options.id !== undefined && { id: options.id }),
+      ...(options.env !== undefined && { env: options.env }),
+    });
   }
 
   /**
@@ -280,6 +314,7 @@ export class DockerSandbox extends MastraSandbox {
     // Create container
     this.logger.debug(`${LOG_PREFIX} Creating container with image ${this._image}...`);
     this._container = await this._docker.createContainer({
+      name: this._containerName,
       Image: this._image,
       Cmd: this._command,
       Env: envArray,
@@ -568,6 +603,14 @@ export class DockerSandbox extends MastraSandbox {
 // =============================================================================
 // Error detection helpers
 // =============================================================================
+
+// Docker container name regex (`^[a-zA-Z0-9][a-zA-Z0-9_.-]+$`) — first char must be
+// alphanumeric, remaining chars from `[a-zA-Z0-9_.-]`, total length ≥ 2.
+function sanitizeContainerName(value: string): string {
+  const replaced = value.replace(/[^a-zA-Z0-9_.-]/g, '-');
+  const withLeading = /^[a-zA-Z0-9]/.test(replaced) ? replaced : `s-${replaced}`;
+  return withLeading.length >= 2 ? withLeading : `${withLeading}-sandbox`;
+}
 
 function isContainerNotRunningError(error: unknown): boolean {
   if (error instanceof Error) {

@@ -1,13 +1,17 @@
+import { DrawerInteractive } from '@/ds/components/Drawer';
 import { cn } from '@/lib/utils';
 
 export type SideDialogContentProps = {
   children?: React.ReactNode;
   className?: string;
-  isCentered?: boolean;
-  isFullHeight?: boolean;
-  variant?: 'default' | 'confirmation';
 };
 
 export function SideDialogContent({ children, className }: SideDialogContentProps) {
-  return <div className={cn('p-6 pl-9 overflow-y-scroll grid gap-6 content-start pb-8', className)}>{children}</div>;
+  return (
+    <DrawerInteractive
+      render={
+        <div className={cn('grid content-start gap-6 overflow-y-scroll p-6 pb-8 pl-9', className)}>{children}</div>
+      }
+    />
+  );
 }

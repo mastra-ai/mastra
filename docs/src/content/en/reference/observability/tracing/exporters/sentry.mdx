@@ -164,6 +164,7 @@ Mastra span types are mapped to Sentry operations:
 | `MODEL_CHUNK` | _(skipped)_ |
 | `TOOL_CALL` | `gen_ai.execute_tool` |
 | `MCP_TOOL_CALL` | `gen_ai.execute_tool` |
+| `PROVIDER_TOOL_CALL` | `gen_ai.execute_tool` |
 | `WORKFLOW_RUN` | `workflow.run` |
 | `WORKFLOW_STEP` | `workflow.step` |
 | `WORKFLOW_CONDITIONAL` | `workflow.conditional` |
@@ -195,6 +196,7 @@ The exporter sets these standard OpenTelemetry attributes:
 
 - `sentry.origin`: `auto.ai.mastra` (identifies spans from Mastra)
 - `ai.span.type`: Mastra span type
+- `gen_ai.conversation.id`: Chat thread identifier, set from `metadata.threadId` to group spans in Sentry's Conversations view
 
 **MODEL\_GENERATION spans:**
 

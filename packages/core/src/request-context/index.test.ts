@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { RequestContext } from './index';
+import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from './index';
 
 describe('RequestContext', () => {
   describe('constructor', () => {
@@ -166,6 +166,133 @@ describe('RequestContext', () => {
         userId: 'user-123',
         feature: 'dark-mode',
       });
+    });
+
+    it('should skip values that transitively reference another RequestContext that references back (cross-context cycle)', () => {
+      // Without the reentry guard this hangs the Node event loop at 100% CPU.
+      // V8's in-call cycle detection does NOT catch this case because each
+      // `isSerializable(value)` is a fresh `JSON.stringify(value)` call with
+      // a fresh internal cycle stack — recursion happens across calls, not
+      // within one. The pattern appears in real agent runtimes where one
+      // RequestContext stores a service object that references a second
+      // RequestContext (e.g. a sub-agent's), and the second references back.
+      const ctxA = new RequestContext();
+      const ctxB = new RequestContext();
+      ctxA.set('ref', { other: ctxB });
+      ctxB.set('ref', { other: ctxA });
+      ctxA.set('serializable', 'value');
+
+      const start = Date.now();
+      const json = ctxA.toJSON();
+      const elapsed = Date.now() - start;
+
+      // Failure mode is unbounded recursion; even on a slow CI node this
+      // completes in microseconds. The threshold is loose on purpose to
+      // assert "did not hang", not "is fast".
+      expect(elapsed).toBeLessThan(2000);
+      // The serializable key is preserved; the cyclic key is filtered the
+      // same way circular in-value references are.
+      expect(json).toEqual({ serializable: 'value' });
+      expect(json).not.toHaveProperty('ref');
+    });
+
+    it('should skip values that contain a direct self-back-reference to the same context', () => {
+      const ctx = new RequestContext();
+      ctx.set('userId', 'user-123');
+      // Stored value contains a reference back to the owning context.
+      ctx.set('bridge', { ctx });
+
+      const start = Date.now();
+      const json = ctx.toJSON();
+      const elapsed = Date.now() - start;
+
+      expect(elapsed).toBeLessThan(2000);
+      expect(json).toEqual({ userId: 'user-123' });
+      expect(json).not.toHaveProperty('bridge');
+    });
+
+    it('should skip values in a 3-way cycle A → B → C → A', () => {
+      const A = new RequestContext();
+      const B = new RequestContext();
+      const C = new RequestContext();
+      A.set('userId', 'a-user');
+      A.set('next', { c: B });
+      B.set('next', { c: C });
+      C.set('next', { c: A });
+
+      const start = Date.now();
+      const json = A.toJSON();
+      const elapsed = Date.now() - start;
+
+      expect(elapsed).toBeLessThan(2000);
+      expect(json).toEqual({ userId: 'a-user' });
+      expect(json).not.toHaveProperty('next');
+    });
+
+    it('should produce a finite, cycle-free JSON string when JSON.stringify is called on a context with cross-context back-references', () => {
+      const ctxA = new RequestContext();
+      const ctxB = new RequestContext();
+      ctxA.set('ref', { other: ctxB });
+      ctxB.set('ref', { other: ctxA });
+      ctxA.set('serializable', 'value');
+
+      const start = Date.now();
+      const serialized = JSON.stringify(ctxA);
+      const elapsed = Date.now() - start;
+
+      expect(elapsed).toBeLessThan(2000);
+      const parsed = JSON.parse(serialized);
+      expect(parsed).toEqual({ serializable: 'value' });
+    });
+  });
+
+  describe('serializeForSpan', () => {
+    it('should redact the auth token key', () => {
+      const ctx = new RequestContext();
+      ctx.set(MASTRA_AUTH_TOKEN_KEY, 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.secret');
+      ctx.set('userId', 'user-123');
+
+      const result = ctx.serializeForSpan();
+
+      expect(result[MASTRA_AUTH_TOKEN_KEY]).toBe('[REDACTED]');
+      expect(result['userId']).toBe('user-123');
+    });
+
+    it('should include primitive values as-is', () => {
+      const ctx = new RequestContext();
+      ctx.set('str', 'hello');
+      ctx.set('num', 42);
+      ctx.set('bool', true);
+      ctx.set('nil', null);
+      ctx.set('undef', undefined);
+
+      const result = ctx.serializeForSpan();
+
+      expect(result).toEqual({
+        str: 'hello',
+        num: 42,
+        bool: true,
+        nil: null,
+        undef: undefined,
+      });
+    });
+
+    it('should replace non-primitive values with type placeholders', () => {
+      const ctx = new RequestContext();
+      ctx.set('obj', { nested: 'value' });
+      ctx.set('arr', [1, 2, 3]);
+      ctx.set('fn', () => {});
+
+      const result = ctx.serializeForSpan();
+
+      expect(result['obj']).toBe('[object]');
+      expect(result['arr']).toBe('[object]');
+      expect(result['fn']).toBe('[function]');
+    });
+
+    it('should return empty object for empty context', () => {
+      const ctx = new RequestContext();
+      expect(ctx.serializeForSpan()).toEqual({});
     });
   });
 });

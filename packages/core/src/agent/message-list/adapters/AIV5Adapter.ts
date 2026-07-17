@@ -1,11 +1,24 @@
-import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils-v5';
 import * as AIV5 from '@internal/ai-sdk-v5';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../../../tools/payload-transform';
-import { categorizeFileData, createDataUri, parseDataUri } from '../prompt/image-utils';
-import type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart, MessageSource } from '../state/types';
+import type { ImageContent } from '../prompt/image-utils';
+import {
+  categorizeFileData,
+  createDataUri,
+  imageContentToString,
+  parseDataUri,
+  resolveFilePartMediaTypeAndData,
+} from '../prompt/image-utils';
+import type {
+  MastraDBMessage,
+  MastraMessageContentV2,
+  MastraMessagePart,
+  MastraToolInvocationPart,
+  MessageSource,
+} from '../state/types';
 import type { AIV5Type } from '../types';
+import { findToolCallArgs } from '../utils/provider-compat';
 import { sanitizeToolName } from '../utils/tool-name';
 
 /**
@@ -36,6 +49,23 @@ function getSignalType(message: MastraDBMessage): string | undefined {
   return message.type;
 }
 
+function getSignalTagName(message: MastraDBMessage): string | undefined {
+  const signal = message.content.metadata?.signal;
+  if (signal && typeof signal === 'object' && !Array.isArray(signal)) {
+    const tagName = (signal as Record<string, unknown>).tagName;
+    if (typeof tagName === 'string') return tagName;
+  }
+
+  const type = getSignalType(message);
+  if (type === 'user') return 'user';
+  if (type === 'reactive') return message.type;
+  return type;
+}
+
+function isUserSignalType(type: string | undefined): boolean {
+  return type === 'user' || type === 'user-message';
+}
+
 function getTextContent(message: MastraDBMessage): string {
   return typeof message.content.content === 'string'
     ? message.content.content
@@ -51,15 +81,23 @@ function toSignalDataPart(message: MastraDBMessage): AIV5Type.DataUIPart<AIV5.UI
     signal.metadata && typeof signal.metadata === 'object' && !Array.isArray(signal.metadata)
       ? (signal.metadata as Record<string, unknown>)
       : {};
+  const attributes =
+    signal.attributes && typeof signal.attributes === 'object' && !Array.isArray(signal.attributes)
+      ? (signal.attributes as Record<string, unknown>)
+      : {};
 
   const type = getSignalType(message) ?? 'signal';
+  const tagName = getSignalTagName(message) ?? type;
   return {
-    type: `data-${type}`,
+    type: type === 'user' ? 'data-user-message' : 'data-signal',
     data: {
       id: typeof signal.id === 'string' ? signal.id : message.id,
       type,
+      tagName,
       contents: 'contents' in signal ? signal.contents : getTextContent(message),
       createdAt: typeof signal.createdAt === 'string' ? signal.createdAt : message.createdAt.toISOString(),
+      ...(typeof signal.acceptedAt === 'string' ? { acceptedAt: signal.acceptedAt } : {}),
+      ...(Object.keys(attributes).length ? { attributes } : {}),
       ...(Object.keys(metadata).length ? { metadata } : {}),
     },
   } as AIV5Type.DataUIPart<AIV5.UIDataTypes>;
@@ -186,7 +224,7 @@ export class AIV5Adapter {
    */
   static toUIMessage(dbMsg: MastraDBMessage, options?: { transformToolPayloads?: boolean }): AIV5Type.UIMessage {
     const signalType = dbMsg.role === 'signal' ? getSignalType(dbMsg) : undefined;
-    const isUserMessageSignal = signalType === 'user-message';
+    const isUserMessageSignal = isUserSignalType(signalType);
     const transformToolPayloads = options?.transformToolPayloads ?? true;
     const parts: AIV5Type.UIMessage['parts'] = [];
     const metadata: Record<string, unknown> = { ...(dbMsg.content.metadata || {}) };
@@ -300,6 +338,19 @@ export class AIV5Adapter {
               callProviderMetadata: mergeMastraCreatedAt(part.providerMetadata, part.createdAt),
               providerExecuted: (part as { providerExecuted?: boolean }).providerExecuted,
             } satisfies AIV5Type.ToolUIPart);
+          } else if (inv.state === 'output-denied') {
+            // v5 has no denied state. Downgrade to a single output-available part whose output is
+            // the denial reason, so v5 UI consumers — and the next LLM turn's prompt, which is
+            // built through this adapter — see a tool result instead of a dangling tool call.
+            parts.push({
+              type: `tool-${inv.toolName}`,
+              toolCallId: inv.toolCallId,
+              input: getDisplayTransform(part.providerMetadata, 'input-available', inv.args, transformToolPayloads),
+              output: inv.approval?.reason ?? 'Tool call was not approved by the user',
+              state: 'output-available',
+              callProviderMetadata: mergeMastraCreatedAt(part.providerMetadata, part.createdAt),
+              providerExecuted: (part as { providerExecuted?: boolean }).providerExecuted,
+            } satisfies AIV5Type.ToolUIPart);
           } else {
             parts.push({
               type: `tool-${inv.toolName}`,
@@ -341,30 +392,35 @@ export class AIV5Adapter {
 
         // Convert file parts from V2 format (data) to AIV5 format (url)
         if (part.type === 'file') {
+          // v5-shaped file parts (`mediaType`/`url`) can reach this v2→v5 path; resolve both
+          // shapes so the media type survives (instead of the image/png default) and the
+          // payload is read from `url` when v5-shaped. Mirrors #17366.
+          const { mediaType: fileMimeType, data: fileData } = resolveFilePartMediaTypeAndData(part);
+
           // Skip file parts that came from experimental_attachments to avoid duplicates
-          if (typeof part.data === 'string' && attachmentUrls.has(part.data)) {
+          if (typeof fileData === 'string' && attachmentUrls.has(fileData)) {
             continue;
           }
 
           const categorized =
-            typeof part.data === 'string'
-              ? categorizeFileData(part.data, part.mimeType)
-              : { type: 'raw' as const, mimeType: part.mimeType, data: part.data };
+            typeof fileData === 'string'
+              ? categorizeFileData(fileData, fileMimeType)
+              : { type: 'raw' as const, mimeType: fileMimeType, data: fileData };
 
-          if (categorized.type === 'url' && typeof part.data === 'string') {
+          if (categorized.type === 'url' && typeof fileData === 'string') {
             const v5UIPart: AIV5Type.FileUIPart = {
               type: 'file' as const,
-              url: part.data,
+              url: fileData,
               mediaType: categorized.mimeType || 'image/png',
             };
             v5UIPart.providerMetadata = mergeMastraCreatedAt(part.providerMetadata, part.createdAt);
             parts.push(v5UIPart);
           } else {
             let filePartData: string;
-            let extractedMimeType = part.mimeType;
+            let extractedMimeType = fileMimeType;
 
-            if (typeof part.data === 'string') {
-              const parsed = parseDataUri(part.data);
+            if (typeof fileData === 'string') {
+              const parsed = parseDataUri(fileData);
 
               if (parsed.isDataUri) {
                 filePartData = parsed.base64Content;
@@ -372,10 +428,12 @@ export class AIV5Adapter {
                   extractedMimeType = extractedMimeType || parsed.mimeType;
                 }
               } else {
-                filePartData = part.data;
+                filePartData = fileData;
               }
             } else {
-              filePartData = part.data;
+              // Non-string payload (defensive: stored file parts carry string data/url):
+              // coerce so `filePartData` stays typed `string`.
+              filePartData = imageContentToString(fileData as ImageContent, extractedMimeType);
             }
 
             const finalMimeType = extractedMimeType || 'image/png';
@@ -610,7 +668,7 @@ export class AIV5Adapter {
               },
               providerMetadata: callProviderMetadata,
               createdAt: getMastraCreatedAt(callProviderMetadata),
-            } satisfies ToolInvocationUIPart & { providerMetadata?: AIV5Type.ProviderMetadata; createdAt?: number };
+            } satisfies MastraToolInvocationPart;
           }
           return {
             type: 'tool-invocation' as const,
@@ -622,13 +680,13 @@ export class AIV5Adapter {
             },
             providerMetadata: callProviderMetadata,
             createdAt: getMastraCreatedAt(callProviderMetadata),
-          } satisfies ToolInvocationUIPart & { providerMetadata?: AIV5Type.ProviderMetadata; createdAt?: number };
+          } satisfies MastraToolInvocationPart;
         }
 
         if (p.type === 'reasoning') {
           return {
             type: 'reasoning' as const,
-            reasoning: '',
+            reasoning: p.text,
             details: [
               {
                 type: 'text' as const,
@@ -766,7 +824,11 @@ export class AIV5Adapter {
   /**
    * Direct conversion from AIV5 ModelMessage to MastraDBMessage
    */
-  static fromModelMessage(modelMsg: AIV5Type.ModelMessage, _messageSource?: MessageSource): MastraDBMessage {
+  static fromModelMessage(
+    modelMsg: AIV5Type.ModelMessage,
+    _messageSource?: MessageSource,
+    context: { dbMessages?: MastraDBMessage[] } = {},
+  ): MastraDBMessage {
     const content = Array.isArray(modelMsg.content)
       ? modelMsg.content
       : [{ type: 'text', text: modelMsg.content } satisfies AIV5.TextPart];
@@ -828,6 +890,19 @@ export class AIV5Adapter {
               : toolResultPart.output;
         };
 
+        // When the matching tool-call isn't in this same model message (e.g. the
+        // server resume path or an AG-UI host replaying a tool-result on its own),
+        // recover the original args from prior persisted messages before falling
+        // back to the tool-result's own `input` field, then finally to `{}`.
+        // Persisting `args: {}` poisons the LLM via in-context learning (issue #16017).
+        const recoveredArgs = context.dbMessages
+          ? findToolCallArgs(context.dbMessages, toolResultPart.toolCallId)
+          : undefined;
+        const fallbackArgs =
+          recoveredArgs && Object.keys(recoveredArgs).length > 0
+            ? recoveredArgs
+            : ((toolResultPart as AIV5Type.ToolResultPart & { input?: Record<string, unknown> }).input ?? {});
+
         if (matchingCall) {
           updateMatchingCallInvocationResult(toolResultPart, matchingCall);
         } else {
@@ -835,7 +910,7 @@ export class AIV5Adapter {
             state: 'call',
             toolCallId: toolResultPart.toolCallId,
             toolName: sanitizeToolName(toolResultPart.toolName),
-            args: {},
+            args: fallbackArgs,
           };
           updateMatchingCallInvocationResult(toolResultPart, call);
           toolInvocations.push(call);
@@ -853,7 +928,7 @@ export class AIV5Adapter {
             toolInvocation: {
               toolCallId: toolResultPart.toolCallId,
               toolName: sanitizeToolName(toolResultPart.toolName),
-              args: {},
+              args: fallbackArgs,
               state: 'call',
             },
           };
@@ -867,7 +942,7 @@ export class AIV5Adapter {
       } else if (part.type === 'reasoning') {
         const v2ReasoningPart: MastraDBMessage['content']['parts'][number] = {
           type: 'reasoning',
-          reasoning: '',
+          reasoning: part.text,
           details: [{ type: 'text', text: part.text }],
         };
         if (part.providerOptions) {

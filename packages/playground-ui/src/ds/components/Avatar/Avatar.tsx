@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 import { Txt } from '../Txt';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -9,6 +11,8 @@ export type AvatarProps = {
   name: string;
   size?: AvatarSize;
   interactive?: boolean;
+  color?: string;
+  textColor?: string;
 };
 
 const sizeClasses: Record<AvatarSize, string> = {
@@ -17,21 +21,32 @@ const sizeClasses: Record<AvatarSize, string> = {
   lg: 'h-avatar-lg w-avatar-lg',
 };
 
-export const Avatar = ({ src, name, size = 'sm', interactive = false }: AvatarProps) => {
+export const Avatar = ({ src, name, size = 'sm', interactive = false, color, textColor }: AvatarProps) => {
+  const [didError, setDidError] = useState(false);
+  const initial = name.trim()[0]?.toUpperCase() ?? 'A';
+  const showImage = Boolean(src) && !didError;
+  const showFallbackTint = !showImage && Boolean(color);
+
   return (
     <div
       className={cn(
         sizeClasses[size],
-        'border border-border1 bg-surface3 shrink-0 overflow-hidden rounded-full flex items-center justify-center',
+        'flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-border1',
+        !showFallbackTint && 'bg-surface3',
         transitions.all,
         interactive && 'cursor-pointer hover:scale-105 hover:border-neutral2 hover:shadow-sm',
       )}
+      style={showFallbackTint ? { backgroundColor: color } : undefined}
     >
-      {src ? (
-        <img src={src} alt={name} className="h-full w-full object-cover" />
+      {showImage ? (
+        <img src={src} alt={name} className="size-full object-cover" onError={() => setDidError(true)} />
       ) : (
-        <Txt variant="ui-md" className="text-center text-neutral4">
-          {name[0].toUpperCase()}
+        <Txt
+          variant="ui-md"
+          className={cn('text-center', !showFallbackTint && 'text-neutral4')}
+          style={showFallbackTint && textColor ? { color: textColor } : undefined}
+        >
+          {initial}
         </Txt>
       )}
     </div>

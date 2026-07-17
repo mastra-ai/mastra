@@ -1,6 +1,7 @@
 import type { WritableStream } from 'node:stream/web';
 import type { TextStreamPart } from '@internal/ai-sdk-v4';
 import type { z } from 'zod/v4';
+import type { ActorSignal } from '../auth/ee';
 import type { SerializedError } from '../error';
 import type { MastraScorers } from '../evals';
 import type { PubSub } from '../events/pubsub';
@@ -25,6 +26,7 @@ export type OutputWriter<TChunk = any> = (chunk: TChunk, options?: { messageId?:
  */
 export type WorkflowRunStartOptions = {
   outputWriter?: OutputWriter;
+  actor?: ActorSignal;
   tracingOptions?: TracingOptions;
   outputOptions?: {
     includeState?: boolean;
@@ -103,6 +105,8 @@ export type StepFailure<P, R, S, T> = {
   metadata?: StepMetadata;
   /** Tripwire data when step failed due to processor rejection */
   tripwire?: StepTripwireInfo;
+  /** Step failure marked as non-retryable (MastraNonRetryableError). */
+  nonRetryable?: true;
 };
 
 export type StepSuspended<P, S, T> = {
@@ -147,13 +151,25 @@ export type StepPaused<P, R, S, T> = {
   metadata?: StepMetadata;
 };
 
+export type StepSkipped<P, R, S, T> = {
+  status: 'skipped';
+  payload: P;
+  resumePayload?: R;
+  suspendPayload?: S;
+  suspendOutput?: T;
+  startedAt: number;
+  endedAt: number;
+  metadata?: StepMetadata;
+};
+
 export type StepResult<P, R, S, T> =
   | StepSuccess<P, R, S, T>
   | StepFailure<P, R, S, T>
   | StepSuspended<P, S, T>
   | StepRunning<P, R, S, T>
   | StepWaiting<P, R, S, T>
-  | StepPaused<P, R, S, T>;
+  | StepPaused<P, R, S, T>
+  | StepSkipped<P, R, S, T>;
 
 /**
  * Serialized version of StepFailure where error is a SerializedError
@@ -173,7 +189,8 @@ export type SerializedStepResult<P, R, S, T> =
   | StepSuspended<P, S, T>
   | StepRunning<P, R, S, T>
   | StepWaiting<P, R, S, T>
-  | StepPaused<P, R, S, T>;
+  | StepPaused<P, R, S, T>
+  | StepSkipped<P, R, S, T>;
 
 export type TimeTravelContext<P, R, S, T> = Record<
   string,
@@ -271,7 +288,8 @@ export type WorkflowRunStatus =
   | 'pending'
   | 'canceled'
   | 'bailed'
-  | 'paused';
+  | 'paused'
+  | 'skipped';
 
 export type WorkflowResumeLabel = {
   stepId: string;
@@ -467,6 +485,17 @@ export interface WorkflowOptions {
   }) => boolean;
 
   /**
+   * Transforms the run snapshot immediately before it is persisted.
+   * Called at every snapshot persist site (both engines). Must be a pure
+   * function returning JSON-safe data — the snapshot may cross a pubsub
+   * codec boundary. Defaults to identity (no change).
+   *
+   * Used internally by agent-loop workflows to strip data that is never
+   * read on resume (stale suspend payloads, duplicated message arrays).
+   */
+  pruneSnapshot?: (params: { snapshot: WorkflowRunState; workflowStatus: WorkflowRunStatus }) => WorkflowRunState;
+
+  /**
    * Called when workflow execution completes (success, failed, suspended, or tripwire).
    * This callback is invoked server-side without requiring client-side .watch().
    * Errors thrown in this callback are caught and logged, not propagated.
@@ -486,6 +515,7 @@ export type WorkflowInfo = {
   allSteps: Record<string, SerializedStep>;
   name: string | undefined;
   description: string | undefined;
+  metadata?: Record<string, unknown> | undefined;
   stepGraph: SerializedStepFlowEntry[];
   inputSchema: string | undefined;
   outputSchema: string | undefined;
@@ -523,10 +553,34 @@ export type StepFlowEntry<TEngineType = DefaultEngineType> =
   | {
       type: 'foreach';
       step: Step;
-      opts: {
-        concurrency: number;
-      };
+      opts: ForeachOptions;
     };
+
+/**
+ * Context passed to a foreach {@link ForeachConcurrencyResolver} when the
+ * foreach entry is about to execute.
+ */
+export interface ForeachConcurrencyContext {
+  /** The array the foreach iterates over (output of the previous step). */
+  inputData: unknown;
+  /** Returns the workflow run's init data (the workflow input). */
+  getInitData: () => unknown;
+}
+
+/**
+ * Resolves the foreach concurrency at execution time, per run.
+ *
+ * Use this instead of a static number when the effective concurrency depends
+ * on run input (e.g. per-run options). Workflow graphs are built once and
+ * shared across runs, so a resolver is the only safe way to vary concurrency
+ * per run — mutating a shared options object races between concurrent runs
+ * and does not survive durable-engine replays.
+ */
+export type ForeachConcurrencyResolver = (context: ForeachConcurrencyContext) => number;
+
+export interface ForeachOptions {
+  concurrency: number | ForeachConcurrencyResolver;
+}
 
 export type SerializedStep<TEngineType = DefaultEngineType> = Pick<
   Step<any, any, any, any, any, any, TEngineType>,
@@ -580,7 +634,10 @@ export type SerializedStepFlowEntry =
       type: 'foreach';
       step: SerializedStep;
       opts: {
-        concurrency: number;
+        /** Static concurrency. Omitted when a resolver function is used. */
+        concurrency?: number;
+        /** Source of the concurrency resolver function, when one is used. */
+        fn?: string;
       };
     };
 
@@ -589,9 +646,7 @@ export type StepWithComponent = Step<string, any, any, any, any, any> & {
   steps?: Record<string, StepWithComponent>;
 };
 
-type InferParsedPublicSchema<TSchema extends PublicSchema<any>> = TSchema extends { _output: infer Output }
-  ? Output
-  : InferPublicSchema<TSchema>;
+type InferParsedPublicSchema<TSchema extends PublicSchema<any>> = InferPublicSchema<TSchema>;
 
 /**
  * StepParams with schema-based inference for better type errors.
@@ -820,6 +875,7 @@ export type WorkflowConfig<
   mastra?: Mastra;
   id: TWorkflowId;
   description?: string | undefined;
+  metadata?: Record<string, unknown> | undefined;
   inputSchema: PublicSchema<TInput>;
   outputSchema: PublicSchema<TOutput>;
   stateSchema?: PublicSchema<TState>;
@@ -850,6 +906,50 @@ export type WorkflowConfig<
    * `requestContextSchema` respectively.
    */
   schedule?: WorkflowScheduleInput<NoInfer<TInput>, NoInfer<TState>, NoInfer<TRequestContext>>;
+};
+
+/**
+ * Infers the output type from a schema type that may be `undefined`.
+ * Returns `unknown` when no schema is provided.
+ */
+export type InferSchemaOutput<T> = T extends PublicSchema<any> ? InferPublicSchema<T> : unknown;
+
+/**
+ * Schema-typed variant of `WorkflowConfig` used by `createWorkflow` factories.
+ *
+ * Instead of inferring output types through the `PublicSchema<TOutput>` union
+ * (which forces TypeScript to distribute across 8+ union members and triggers
+ * TS2589 "Type instantiation is excessively deep"), this type infers the
+ * **schema type itself** (shallow inference) and defers output-type extraction
+ * to `InferSchemaOutput` / `InferPublicSchema` (which use `_output` / `_type`
+ * / `~standard` fast paths).
+ */
+export type CreateWorkflowParams<
+  TWorkflowId extends string = string,
+  TStateSchema extends PublicSchema<any> | undefined = undefined,
+  TInputSchema extends PublicSchema<any> = PublicSchema<any>,
+  TOutputSchema extends PublicSchema<any> = PublicSchema<any>,
+  TSteps extends Step[] = Step[],
+  TRequestContextSchema extends PublicSchema<any> | undefined = undefined,
+> = {
+  mastra?: Mastra;
+  id: TWorkflowId;
+  description?: string | undefined;
+  metadata?: Record<string, unknown> | undefined;
+  inputSchema: TInputSchema;
+  outputSchema: TOutputSchema;
+  stateSchema?: TStateSchema;
+  requestContextSchema?: TRequestContextSchema;
+  executionEngine?: ExecutionEngine;
+  steps?: TSteps;
+  retryConfig?: { attempts?: number; delay?: number };
+  options?: WorkflowOptions;
+  type?: WorkflowType;
+  schedule?: WorkflowScheduleInput<
+    NoInfer<InferSchemaOutput<TInputSchema>>,
+    NoInfer<InferSchemaOutput<TStateSchema>>,
+    NoInfer<InferSchemaOutput<TRequestContextSchema>>
+  >;
 };
 
 /**

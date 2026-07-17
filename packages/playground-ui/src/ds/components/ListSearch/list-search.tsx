@@ -15,6 +15,7 @@ export type ListSearchProps = {
    * (e.g. from a Reset button). If omitted, ListSearch manages its own state.
    */
   value?: string;
+  variant?: InputProps['variant'];
 };
 
 export const ListSearch = ({
@@ -24,6 +25,7 @@ export const ListSearch = ({
   debounceMs = 300,
   size,
   value: controlledValue,
+  variant = 'outline',
 }: ListSearchProps) => {
   const id = useId();
   const [internalValue, setInternalValue] = useState(controlledValue ?? '');
@@ -68,7 +70,8 @@ export const ListSearch = ({
       onChange={handleChange}
       onReset={handleReset}
       size={size}
-      className="w-full max-w-[30rem]"
+      variant={variant}
+      className="max-w-120 w-full"
     />
   );
 };

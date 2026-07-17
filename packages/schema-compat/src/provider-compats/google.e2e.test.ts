@@ -82,6 +82,24 @@ const allSchemas = {
     ])
     .describe('give an valid object'),
 
+  // Discriminated union — must serialise as `anyOf` (not `oneOf`) for Gemini REST tool-calling
+  // to populate args correctly. See issue #17057.
+  discriminatedUnion: z
+    .discriminatedUnion('kind', [
+      z.object({ kind: z.literal('circle'), r: z.number() }),
+      z.object({ kind: z.literal('square'), s: z.number() }),
+    ])
+    .describe('a circle with radius r or a square with side s'),
+
+  // Literal — must serialise as `enum: [literal]` (not `const`) for Gemini.
+  literal: z.literal('the-only-allowed-value').describe('exactly the string "the-only-allowed-value"'),
+
+  // Tuple — Zod emits `items: [...]` (Draft-4 tuple form), but Google's typedef
+  // requires `items: Schema` (singular). Layer must rewrite to a single-schema
+  // `anyOf` to avoid `400 Unknown name "items" ... Proto field is not repeating`.
+  // See issue #17057's audit.
+  tuple: z.tuple([z.string(), z.number()]).describe('two-element tuple: a string followed by a number'),
+
   // Default values
   default: z.string().default('test').describe('sample text that is the default value'),
 } as const;
@@ -130,6 +148,13 @@ const expectedOutput = {
   unionObjects: expect.toSatisfy(
     v => ('amount' in v && 'inventoryItemName' in v) || ('type' in v && 'permissions' in v),
   ),
+  discriminatedUnion: expect.toSatisfy(
+    v => (v?.kind === 'circle' && typeof v?.r === 'number') || (v?.kind === 'square' && typeof v?.s === 'number'),
+  ),
+  literal: 'the-only-allowed-value',
+  tuple: expect.toSatisfy(
+    v => Array.isArray(v) && v.length === 2 && typeof v[0] === 'string' && typeof v[1] === 'number',
+  ),
   default: expect.any(String),
   enum: expect.stringMatching(/^[ABC]$/),
   nativeEnum: expect.stringMatching(/^[ABC]$/),
@@ -140,7 +165,7 @@ describe('Google e2e test', () => {
   beforeAll(() => mock.start());
   afterAll(() => mock.saveAndStop());
 
-  it('should be succesful with structured_output', { timeout: 60000 }, async () => {
+  it('should be successful with structured_output', { timeout: 60000 }, async () => {
     const schema = z.object(allSchemas);
 
     const model = google('gemini-3.1-pro-preview');

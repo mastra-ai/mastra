@@ -7,13 +7,7 @@ packages:
 
 # AzureBlobFilesystem
 
-Stores files in Azure Blob Storage containers.
-
-:::info
-
-For interface details, see [WorkspaceFilesystem Interface](/reference/workspace/filesystem).
-
-:::
+Stores files in Azure Blob Storage containers. For interface details, see [WorkspaceFilesystem Interface](/reference/workspace/filesystem).
 
 ## Installation
 
@@ -38,15 +32,16 @@ const workspace = new Workspace({
 })
 
 const agent = new Agent({
+  id: 'file-agent',
   name: 'file-agent',
-  model: 'anthropic/claude-opus-4-6',
+  model: '__GATEWAY_ANTHROPIC_MODEL_OPUS__',
   workspace,
 })
 ```
 
 ### Account key
 
-Use an account name and account key when you do not want to pass a full connection string:
+Use an account name and account key when you don't want to pass a full connection string:
 
 ```typescript
 import { AzureBlobFilesystem } from '@mastra/azure/blob'
@@ -258,7 +253,7 @@ const config = filesystem.getMountConfig()
 
 :::note
 
-Azure Blob sandbox mounting depends on sandbox support for `azure-blob` mount configs. Use `filesystem` for direct workspace file operations when your sandbox provider does not support Azure Blob mounts.
+Azure Blob sandbox mounting depends on sandbox support for `azure-blob` mount configs. Use `filesystem` for direct workspace file operations when your sandbox provider doesn't support Azure Blob mounts.
 
 :::
 

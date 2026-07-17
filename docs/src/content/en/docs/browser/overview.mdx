@@ -17,6 +17,7 @@ Mastra supports two SDK providers and one CLI provider:
 - [**AgentBrowser**](/docs/browser/agent-browser): A Playwright-based provider with accessibility-first element targeting. Best for general web automation and scraping.
 - [**Stagehand**](/docs/browser/stagehand): A Browserbase provider with AI-powered element detection. Best for complex interactions that benefit from natural language selectors.
 - [**BrowserViewer**](/docs/browser/browser-viewer): A CLI provider that launches Chrome and injects CDP URLs into CLI tools like agent-browser, browser-use, and browse. Best for workspace agents that drive browsers through shell commands.
+- [**Browser recording (alpha)**](/docs/browser/recording): An opt-in tool layer that saves browser sessions as Motion-JPEG AVI videos with optional captions.
 
 ## When to use browser
 
@@ -62,7 +63,7 @@ export const webAgent = new Agent({
   id: 'web-agent',
   name: 'Web Agent',
   description: 'A web automation assistant that can navigate websites and complete tasks.',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   browser,
   instructions:
     'You are a web automation assistant. Use browser tools to navigate websites and complete tasks.',
@@ -116,7 +117,7 @@ npm install ws @hono/node-ws
 
 :::note
 
-These packages are not included by default because they are incompatible with serverless environments like Cloudflare Workers. If they are not installed, screencast is disabled but all other browser functionality works normally.
+These packages aren't included by default because they're incompatible with serverless environments like Cloudflare Workers. If they aren't installed, screencast is disabled but all other browser functionality works normally.
 
 :::
 
@@ -138,5 +139,7 @@ const browser = new AgentBrowser({
 
 - [AgentBrowser](/docs/browser/agent-browser)
 - [Stagehand](/docs/browser/stagehand)
+- [Browser recording (alpha)](/docs/browser/recording)
 - [BrowserViewer](/docs/browser/browser-viewer)
 - [MastraBrowser reference](/reference/browser/mastra-browser)
+- 📹 [Mastra browser capabilities workshop](https://www.youtube.com/watch?v=E9KFsZEnQO8\&t=5s)

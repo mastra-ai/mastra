@@ -1,7 +1,7 @@
-import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import type { ComponentPropsWithoutRef } from 'react';
 import type { SidebarState } from './main-sidebar-context';
 import { useMaybeSidebar } from './main-sidebar-context';
+import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
 import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
 
@@ -25,15 +25,15 @@ export function MainSidebarNavHeader({
   const ctx = useMaybeSidebar();
   const state: SidebarState = stateProp ?? ctx?.state ?? 'default';
   const isMobile = ctx?.isMobile ?? false;
-  const Link: LinkComponent | 'a' = LinkProp ?? ctx?.LinkComponent ?? 'a';
+  const Link: LinkComponent = LinkProp ?? ctx?.LinkComponent ?? 'a';
   const showTitle = state === 'default' && !isMobile;
 
   return (
-    <div className={cn('min-w-0 min-h-8 flex items-center mt-2 mb-0.5', className)}>
+    <div className={cn('mt-2 mb-0.5 flex min-h-8 min-w-0 items-center', className)}>
       {showTitle ? (
         <header
           {...props}
-          className={cn('min-w-0 max-w-full truncate text-ui-sm font-medium pl-3', {
+          className={cn('max-w-full min-w-0 truncate pl-3 text-ui-sm font-medium', {
             'text-neutral5': isActive,
             'text-neutral3/70': !isActive,
           })}
@@ -41,7 +41,7 @@ export function MainSidebarNavHeader({
           {href ? (
             <Link
               href={href}
-              className={cn('block min-w-0 truncate transition-colors duration-normal', {
+              className={cn('duration-normal block min-w-0 truncate transition-colors', {
                 'hover:text-neutral5': !isActive,
                 'text-neutral5': isActive,
               })}

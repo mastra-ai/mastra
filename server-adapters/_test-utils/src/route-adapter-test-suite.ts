@@ -91,6 +91,11 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       '/auth/credentials/sign-in',
       '/auth/credentials/sign-up',
       '/auth/refresh',
+      // Requires an authenticated admin caller (MASTRA_USER_PERMISSIONS_KEY is a reserved
+      // request-context key set only by the auth middleware) and an RBAC provider with
+      // getPermissionsForRole. Per-status behavior is covered in
+      // packages/server/src/server/handlers/auth.test.ts.
+      '/auth/roles/:roleId/permissions',
     ];
     // Skip routes that require external dependencies (APIs)
     const routesRequiringExternalDeps = [
@@ -106,14 +111,60 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       '/memory/observational-memory/buffer-status',
       // skill publish requires blob storage not available in InMemoryStore
       '/stored/skills/:storedSkillId/publish',
+      // POST /stored/agents requires a builder-resolved model policy and a
+      // model-allowlist-compatible payload; the generic test suite produces a
+      // payload that fails allowlist enforcement. Behavior is covered by
+      // packages/server/src/server/handlers/stored-agents.test.ts.
+      '/stored/agents',
+      // Favorites toggles require an existing stored entity AND an
+      // authenticated caller (callerId is read from the auth-middleware
+      // request context). Behavior is covered by stored-{agent,skill}-favorites
+      // unit tests; the generic test suite can't satisfy both prereqs.
+      '/stored/agents/:storedAgentId/favorite',
+      '/stored/skills/:storedSkillId/favorite',
+      // Change request creation requires a source-control provider that can open
+      // PRs; the generic test sutie has no provider. Covered by stored-agents tests.
+      '/stored/agents/:storedAgentId/change-request',
+      // Builder registry routes that require external API calls + builder config
+      '/editor/builder/registries',
+      '/editor/builder/registries/:registryId/search',
+      '/editor/builder/registries/:registryId/popular',
+      '/editor/builder/registries/:registryId/preview',
+      '/editor/builder/registries/:registryId/install',
       // Long-lived SSE streams: stay open until the client disconnects, so the
-      // test harness's real-HTTP-server cleanup (server.close awaiting drain)
+      // test test suite's real-HTTP-server cleanup (server.close awaiting drain)
       // hangs. These routes' behavior is exercised in unit tests.
       '/background-tasks/stream',
       '/agents/:agentId/observe',
+      // Tool-provider connection routes that require a persisted connection
+      // row matching the supplied connectionId. The test suite uses a generic
+      // 'test-connection-id' that isn't seeded, so the fail-closed ownership
+      // guard returns 403. Behavior is covered by
+      // packages/server/src/server/handlers/tool-providers.test.ts.
+      '/tool-providers/:providerId/connections/:connectionId',
+      '/tool-providers/:providerId/connections/:connectionId/usage',
+      // Tool-provider authorize + connection-status routes require a real
+      // OAuth provider config; the generic test suite produces a payload the
+      // mock provider can't authorize. Covered by tool-providers.test.ts.
+      '/tool-providers/:providerId/authorize',
+      '/tool-providers/:providerId/connection-status',
+      // Tool-provider auth-status requires a live provider auth lookup that
+      // the mock provider doesn't implement. Covered by tool-providers.test.ts.
+      '/tool-providers/:providerId/auth-status/:authId',
+      // Tool-provider connections list relies on storage rows being seeded
+      // for the test author. Covered by tool-providers.test.ts.
+      '/tool-providers/:providerId/connections',
     ];
     // Routes under these prefixes are excluded (e.g. /datasets needs a datasets storage domain)
-    const excludedPrefixes = ['/datasets'];
+    const excludedPrefixes = [
+      '/datasets',
+      // Agent-controller routes resolve a registered AgentController via
+      // mastra.getAgentController(id) and operate on a live session keyed by
+      // resourceId. The generic test context registers no controller, so every
+      // route fails closed with 404. Behavior is covered by
+      // packages/server/src/server/handlers/agent-controller.test.ts.
+      '/agent-controller',
+    ];
     const isExcluded = (r: ServerRoute) =>
       r.deprecated ||
       r.responseType === 'mcp-http' ||
@@ -424,21 +475,28 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
                 const testField = 'testBodyField';
                 const testValue = 'testValue123';
 
+                const body = {
+                  ...(typeof request.body === 'object' && request.body !== null ? request.body : {}),
+                  [testField]: testValue,
+                };
+                const strictBody = !route.bodySchema.safeParse(body).success;
+
                 const httpRequest: HttpRequest = {
                   method: request.method,
                   path: request.path,
                   query: request.query,
-                  body: {
-                    ...(typeof request.body === 'object' && request.body !== null ? request.body : {}),
-                    [testField]: testValue,
-                  },
+                  body,
                 };
 
                 const response = await executeHttpRequest(app, httpRequest);
 
-                // Should succeed - body fields should be spread correctly
-                // Handler receives both `body: {...}` AND individual fields
-                expect(response.status).toBeLessThan(400);
+                if (strictBody) {
+                  // strict schema: adapter must surface the validation rejection, exactly 400
+                  expect(response.status).toBe(400);
+                } else {
+                  // lenient schema: unknown field must be ignored, request must succeed
+                  expect(response.status).toBeLessThan(400);
+                }
               });
             }
           });

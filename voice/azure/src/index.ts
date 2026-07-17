@@ -1,5 +1,5 @@
 import { Readable } from 'node:stream';
-import { MastraVoice } from '@mastra/core/voice';
+import { MastraVoice } from '@internal/voice';
 import * as Azure from 'microsoft-cognitiveservices-speech-sdk';
 import { AZURE_VOICES } from './voices';
 import type { VoiceId } from './voices';

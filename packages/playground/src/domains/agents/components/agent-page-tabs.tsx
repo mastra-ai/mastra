@@ -1,13 +1,18 @@
-import { Tab, TabList, Tabs, Tooltip, TooltipContent, TooltipTrigger, Txt, Icon } from '@mastra/playground-ui';
+import { Tab, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { ExternalLink, EyeIcon, FlaskConical, MessageSquare, ClipboardCheck, GitBranch } from 'lucide-react';
 
 import { useLinkComponent } from '@/lib/framework';
 
+/** Tabs that render a pill in the bar. Routes without a pill (e.g. settings) pass `'none'`. */
 export type AgentPageTab = 'chat' | 'versions' | 'evaluate' | 'review' | 'traces';
 
 interface AgentPageTabsProps {
   agentId: string;
-  activeTab: AgentPageTab;
+  /** `'none'` (or any non-tab value) leaves the bar unhighlighted. */
+  activeTab: AgentPageTab | 'none';
   showPlayground?: boolean;
   showObservability?: boolean;
   reviewBadge?: number;
@@ -110,13 +115,21 @@ export function AgentPageTabs({
     traces: `/agents/${agentId}/traces`,
   };
 
-  const handleTabChange = (value: AgentPageTab) => {
+  const handleTabChange = (value: AgentPageTab | 'none') => {
+    if (value === 'none') return;
     navigate(hrefMap[value]);
   };
 
   return (
-    <div className="flex items-center gap-2 p-1.5">
-      <Tabs value={activeTab} defaultTab={activeTab} onValueChange={handleTabChange} className="flex-1 min-w-0">
+    // Below lg the rightSlot buttons wrap onto their own line (right-aligned)
+    // when the full tab list no longer fits, so the tabs keep the full row width.
+    <div className="flex min-w-0 items-center gap-2 p-1.5 max-lg:flex-wrap">
+      <Tabs
+        value={activeTab}
+        defaultTab={activeTab}
+        onValueChange={handleTabChange}
+        className="flex-1 min-w-0 max-lg:flex-auto"
+      >
         <TabList variant="pill-ghost">
           <AgentTab value="chat" icon={<MessageSquare />} label="Chat" />
           <AgentTab
@@ -150,7 +163,7 @@ export function AgentPageTabs({
           />
         </TabList>
       </Tabs>
-      {rightSlot && <div className="flex items-center gap-2">{rightSlot}</div>}
+      {rightSlot && <div className="ml-auto flex items-center gap-2">{rightSlot}</div>}
     </div>
   );
 }

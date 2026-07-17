@@ -1,0 +1,13 @@
+{
+  "attachment": [
+    "gemma4:31b",
+    "kimi-k2.5",
+    "kimi-k2.6",
+    "kimi-k2.7-code",
+    "minimax-m3",
+    "mistral-large-3:675b",
+    "qwen3.5:397b"
+  ],
+  "temperature": ["glm-5.2", "minimax-m3", "nemotron-3-nano:30b", "nemotron-3-super", "nemotron-3-ultra"],
+  "structuredOutput": ["glm-5.2", "kimi-k2.7-code"]
+}

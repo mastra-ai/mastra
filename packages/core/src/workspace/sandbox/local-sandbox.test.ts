@@ -8,7 +8,7 @@ import { createSandboxTestSuite } from '../../../../../workspaces/_test-utils/sr
 import { RequestContext } from '../../request-context';
 import type { WorkspaceFilesystem } from '../filesystem/filesystem';
 import { IsolationUnavailableError } from './errors';
-import { LocalSandbox, MARKER_DIR } from './local-sandbox';
+import { LocalSandbox, getMarkerDir } from './local-sandbox';
 import { detectIsolation, isIsolationAvailable, isSeatbeltAvailable, isBwrapAvailable } from './native-sandbox';
 
 describe('LocalSandbox', () => {
@@ -64,6 +64,60 @@ describe('LocalSandbox', () => {
     it('should expand ~ in working directory', () => {
       const customSandbox = new LocalSandbox({ workingDirectory: '~/my-sandbox' });
       expect(customSandbox.workingDirectory).toBe(path.join(os.homedir(), 'my-sandbox'));
+    });
+  });
+
+  // ===========================================================================
+  // Derivation
+  // ===========================================================================
+  describe('derive', () => {
+    it('constructs an unstarted sibling inheriting configuration', () => {
+      const template = new LocalSandbox({ workingDirectory: tempDir, env: { BASE: '1' } });
+
+      const child = template.derive({ id: 'mc-project-1' });
+
+      expect(child).toBeInstanceOf(LocalSandbox);
+      expect(child).not.toBe(template);
+      expect(child.id).toBe('mc-project-1');
+      expect(child.status).toBe('pending');
+      expect(child.workingDirectory).toBe(tempDir);
+      expect(child.isolation).toBe(template.isolation);
+    });
+
+    it('applies env overrides and can execute commands after start', async () => {
+      const template = new LocalSandbox({ workingDirectory: tempDir, env: { PATH: process.env.PATH } });
+
+      const child = template.derive({ env: { PATH: process.env.PATH ?? '', DERIVED_VAR: 'derived-value' } });
+      await child._start();
+      try {
+        const result = await child.executeCommand!('sh', ['-c', 'echo "$DERIVED_VAR"']);
+        expect(result.success).toBe(true);
+        expect(result.stdout.trim()).toBe('derived-value');
+      } finally {
+        await child._destroy();
+      }
+    });
+
+    it('inherits the template env when no env override is passed', async () => {
+      const template = new LocalSandbox({
+        workingDirectory: tempDir,
+        env: { PATH: process.env.PATH, TEMPLATE_VAR: 'from-template' },
+      });
+
+      const child = template.derive();
+      await child._start();
+      try {
+        const result = await child.executeCommand!('sh', ['-c', 'echo "$TEMPLATE_VAR"']);
+        expect(result.stdout.trim()).toBe('from-template');
+      } finally {
+        await child._destroy();
+      }
+    });
+
+    it('ignores sandboxId and idleTimeoutMinutes (no local equivalent)', () => {
+      const template = new LocalSandbox({ workingDirectory: tempDir });
+      const child = template.derive({ sandboxId: 'ignored', idleTimeoutMinutes: 15, id: 'local-child' });
+      expect(child.id).toBe('local-child');
     });
   });
 
@@ -1042,8 +1096,8 @@ describe('LocalSandbox', () => {
       // Write a matching marker file
       const markerFilename = mountSandbox.mounts.markerFilename(hostPath);
       const configHash = mountSandbox.mounts.computeConfigHash(config);
-      await fs.mkdir(MARKER_DIR, { recursive: true });
-      await fs.writeFile(path.join(MARKER_DIR, markerFilename), `${hostPath}|${configHash}`);
+      await fs.mkdir(getMarkerDir(), { recursive: true });
+      await fs.writeFile(path.join(getMarkerDir(), markerFilename), `${hostPath}|${configHash}`);
 
       try {
         const result = await mountSandbox.mount(makeMockLocalFs(basePath), mountPath);
@@ -1052,7 +1106,7 @@ describe('LocalSandbox', () => {
         const target = await fs.readlink(hostPath);
         expect(target).toBe(basePath);
       } finally {
-        await fs.unlink(path.join(MARKER_DIR, markerFilename)).catch(() => {});
+        await fs.unlink(path.join(getMarkerDir(), markerFilename)).catch(() => {});
         await fs.unlink(hostPath).catch(() => {});
       }
     });
@@ -1111,7 +1165,7 @@ describe('LocalSandbox', () => {
 
       // Read and verify marker file
       const markerFilename = mountSandbox.mounts.markerFilename(hostPath);
-      const markerPath = path.join(MARKER_DIR, markerFilename);
+      const markerPath = path.join(getMarkerDir(), markerFilename);
 
       try {
         const content = await fs.readFile(markerPath, 'utf-8');
@@ -1142,8 +1196,8 @@ describe('LocalSandbox', () => {
       await fs.symlink(oldBasePath, hostPath);
       const markerFilename = mountSandbox.mounts.markerFilename(hostPath);
       const oldHash = mountSandbox.mounts.computeConfigHash(oldConfig);
-      await fs.mkdir(MARKER_DIR, { recursive: true });
-      await fs.writeFile(path.join(MARKER_DIR, markerFilename), `${hostPath}|${oldHash}`);
+      await fs.mkdir(getMarkerDir(), { recursive: true });
+      await fs.writeFile(path.join(getMarkerDir(), markerFilename), `${hostPath}|${oldHash}`);
 
       try {
         const result = await mountSandbox.mount(makeMockLocalFs(newBasePath), mountPath);
@@ -1157,7 +1211,7 @@ describe('LocalSandbox', () => {
         const content = await fs.readFile(path.join(hostPath, 'new.txt'), 'utf-8');
         expect(content).toBe('new content');
       } finally {
-        await fs.unlink(path.join(MARKER_DIR, markerFilename)).catch(() => {});
+        await fs.unlink(path.join(getMarkerDir(), markerFilename)).catch(() => {});
         await fs.unlink(hostPath).catch(() => {});
       }
     });

@@ -1,19 +1,14 @@
 'use client';
 
-import {
-  Button,
-  CodeEditor,
-  Label,
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-  SideDialog,
-  TextAndIcon,
-  toast,
-} from '@mastra/playground-ui';
-import type { SideDialogRootProps } from '@mastra/playground-ui';
+import type { DatasetItemToolMock } from '@mastra/client-js';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { Label } from '@mastra/playground-ui/components/Label';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@mastra/playground-ui/components/Select';
+import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
+import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideDialog';
+import { TextAndIcon } from '@mastra/playground-ui/components/Text';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { DatabaseIcon } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
@@ -27,11 +22,16 @@ type SaveAsDatasetItemDialogProps = {
   initialTrajectory?: string;
   /** Whether the trajectory is still being fetched */
   trajectoryLoading?: boolean;
+  /** JSON string of the tool mocks (array of { toolName, args, output }) */
+  initialToolMocks?: string;
   breadcrumb: ReactNode;
   isOpen: boolean;
   onClose: () => void;
   level?: SideDialogRootProps['level'];
-  source?: { type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result'; referenceId?: string };
+  source?: {
+    type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
+    referenceId?: string;
+  };
 };
 
 export function SaveAsDatasetItemDialog({
@@ -39,6 +39,7 @@ export function SaveAsDatasetItemDialog({
   initialGroundTruth,
   initialTrajectory,
   trajectoryLoading,
+  initialToolMocks,
   breadcrumb,
   isOpen,
   onClose,
@@ -49,6 +50,7 @@ export function SaveAsDatasetItemDialog({
   const [input, setInput] = useState('');
   const [groundTruth, setGroundTruth] = useState('');
   const [expectedTrajectory, setExpectedTrajectory] = useState('');
+  const [toolMocks, setToolMocks] = useState('');
   // source is passed through — not editable in the UI
 
   const { data, isLoading: isDatasetsLoading } = useDatasets();
@@ -58,18 +60,61 @@ export function SaveAsDatasetItemDialog({
 
   const prevOpenRef = useRef(false);
   const trajectorySeededRef = useRef(false);
+  const inputSeededRef = useRef(false);
+  const groundTruthSeededRef = useRef(false);
   useEffect(() => {
     if (isOpen && !prevOpenRef.current) {
       setInput(initialInput);
       setGroundTruth(initialGroundTruth);
       setExpectedTrajectory(initialTrajectory ?? '');
+      setToolMocks(initialToolMocks ?? '');
       trajectorySeededRef.current = !!initialTrajectory;
+      inputSeededRef.current = initialInput !== '{}';
+      groundTruthSeededRef.current = !!initialGroundTruth;
     }
     prevOpenRef.current = isOpen;
     if (!isOpen) {
       trajectorySeededRef.current = false;
+      inputSeededRef.current = false;
+      groundTruthSeededRef.current = false;
     }
-  }, [isOpen, initialInput, initialGroundTruth, initialTrajectory]);
+  }, [isOpen, initialInput, initialGroundTruth, initialTrajectory, initialToolMocks]);
+
+  // Mark fields as user-edited so async seeding won't overwrite them.
+  const handleInputChange = (value: string) => {
+    inputSeededRef.current = true;
+    setInput(value);
+  };
+
+  const handleGroundTruthChange = (value: string) => {
+    groundTruthSeededRef.current = true;
+    setGroundTruth(value);
+  };
+
+  const handleExpectedTrajectoryChange = (value: string) => {
+    trajectorySeededRef.current = true;
+    setExpectedTrajectory(value);
+  };
+
+  const handleToolMocksChange = (value: string) => {
+    setToolMocks(value);
+  };
+
+  // Seed input when it arrives asynchronously after the dialog is already open
+  useEffect(() => {
+    if (isOpen && initialInput !== '{}' && !inputSeededRef.current) {
+      setInput(initialInput);
+      inputSeededRef.current = true;
+    }
+  }, [isOpen, initialInput]);
+
+  // Seed groundTruth when it arrives asynchronously after the dialog is already open
+  useEffect(() => {
+    if (isOpen && initialGroundTruth && !groundTruthSeededRef.current) {
+      setGroundTruth(initialGroundTruth);
+      groundTruthSeededRef.current = true;
+    }
+  }, [isOpen, initialGroundTruth]);
 
   // Seed trajectory when it arrives asynchronously after the dialog is already open
   useEffect(() => {
@@ -115,12 +160,28 @@ export function SaveAsDatasetItemDialog({
       }
     }
 
+    let parsedToolMocks: DatasetItemToolMock[] | undefined;
+    if (toolMocks.trim()) {
+      try {
+        const parsed = JSON.parse(toolMocks);
+        if (!Array.isArray(parsed)) {
+          toast.error('Tool Mocks must be a JSON array');
+          return;
+        }
+        parsedToolMocks = parsed as DatasetItemToolMock[];
+      } catch {
+        toast.error('Tool Mocks must be valid JSON');
+        return;
+      }
+    }
+
     try {
       await addItem.mutateAsync({
         datasetId: selectedDatasetId,
         input: parsedInput,
         groundTruth: parsedGroundTruth,
         expectedTrajectory: parsedTrajectory,
+        toolMocks: parsedToolMocks,
         ...(source ? { source } : {}),
       });
 
@@ -131,6 +192,7 @@ export function SaveAsDatasetItemDialog({
       setInput('{}');
       setGroundTruth('');
       setExpectedTrajectory('');
+      setToolMocks('');
       onClose();
     } catch (error) {
       toast.error(`Failed to save item: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -191,19 +253,34 @@ export function SaveAsDatasetItemDialog({
 
           <div className="grid gap-2">
             <Label htmlFor="item-input">Input (JSON) *</Label>
-            <CodeEditor value={input} onChange={setInput} showCopyButton={false} className="min-h-[120px]" />
+            <CodeEditor value={input} onChange={handleInputChange} showCopyButton={false} className="min-h-[120px]" />
           </div>
 
           <div className="grid gap-2">
             <Label htmlFor="item-ground-truth">Ground Truth (JSON, optional)</Label>
-            <CodeEditor value={groundTruth} onChange={setGroundTruth} showCopyButton={false} className="min-h-[80px]" />
+            <CodeEditor
+              value={groundTruth}
+              onChange={handleGroundTruthChange}
+              showCopyButton={false}
+              className="min-h-[80px]"
+            />
           </div>
 
           <div className="grid gap-2">
             <Label htmlFor="item-trajectory">Expected Trajectory (JSON, optional)</Label>
             <CodeEditor
               value={expectedTrajectory}
-              onChange={setExpectedTrajectory}
+              onChange={handleExpectedTrajectoryChange}
+              showCopyButton={false}
+              className="min-h-[80px]"
+            />
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="item-tool-mocks">Tool Mocks (JSON, optional)</Label>
+            <CodeEditor
+              value={toolMocks}
+              onChange={handleToolMocksChange}
               showCopyButton={false}
               className="min-h-[80px]"
             />
@@ -218,7 +295,7 @@ export function SaveAsDatasetItemDialog({
               variant="default"
               disabled={addItem.isPending || trajectoryLoading || !selectedDatasetId || datasets.length === 0}
             >
-              {addItem.isPending ? 'Saving...' : trajectoryLoading ? 'Loading trajectory...' : 'Save Item'}
+              {addItem.isPending ? 'Saving...' : trajectoryLoading ? 'Loading...' : 'Save Item'}
             </Button>
           </div>
         </form>

@@ -74,6 +74,19 @@ async function initializePackageJson(pm: PackageManager): Promise<void> {
     node: '>=22.13.0',
   };
 
+  // pnpm v11+ writes devEngines.packageManager with a semver range (e.g.
+  // "^11.3.0"). Corepack ≤0.35.0 (bundled with Node 22) reads this field
+  // too and rejects ranges, so we must remove both the legacy packageManager
+  // field and devEngines.packageManager to avoid the error:
+  //   "Invalid package manager specification in package.json (pnpm@^11.3.0)"
+  delete packageJson.packageManager;
+  if (packageJson.devEngines?.packageManager) {
+    delete packageJson.devEngines.packageManager;
+    if (Object.keys(packageJson.devEngines).length === 0) {
+      delete packageJson.devEngines;
+    }
+  }
+
   await fs.writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2));
 }
 
@@ -259,6 +272,25 @@ export const createMastraProject = async ({
       );
     }
 
+    // Write pnpm workspace config for pnpm v11
+    if (pm === 'pnpm') {
+      await fs.writeFile(
+        'pnpm-workspace.yaml',
+        `packages:
+  - '.'
+minimumReleaseAgeExclude:
+  - mastra
+  - "@mastra/*"
+allowBuilds:
+  esbuild: true
+  sharp: true
+onlyBuiltDependencies:
+  - esbuild
+  - sharp
+`,
+      );
+    }
+
     s.stop('Project structure created');
 
     s.start(`Installing ${pm} dependencies`);
@@ -327,6 +359,8 @@ export const createMastraProject = async ({
       await exec(`echo *.db-* >> .gitignore`);
       await exec(`echo .netlify >> .gitignore`);
       await exec(`echo .vercel >> .gitignore`);
+      await exec(`echo *.duckdb >> .gitignore`);
+      await exec(`echo *.duckdb.wal >> .gitignore`);
     } catch (error) {
       throw new Error(`Failed to create .gitignore: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }

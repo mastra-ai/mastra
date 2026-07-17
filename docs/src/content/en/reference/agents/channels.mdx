@@ -1,6 +1,6 @@
 ---
 title: "Reference: Channels | Agents"
-description: "API reference for agent channels, which connect agents to messaging platforms like Slack, Discord, and Telegram."
+description: "API reference for the ChannelConfig agent channels object, which connects agents to messaging platforms like Slack, Discord, and Telegram."
 packages:
   - "@mastra/core"
 ---
@@ -9,7 +9,7 @@ packages:
 
 **Added in:** `@mastra/core@1.22.0`
 
-Channels connect agents to messaging platforms. Configure them via the `channels` property on the `Agent` constructor. See the [Channels guide](/docs/agents/channels) for concepts and platform setup instructions.
+Channels connect agents to messaging platforms. Configure them via the `channels` property on the `Agent` constructor. The object you pass is a `ChannelConfig`. See the [Channels overview](/docs/capabilities/channels/overview) for concepts and platform setup instructions.
 
 ## Usage example
 
@@ -22,7 +22,7 @@ export const supportAgent = new Agent({
   id: 'support-agent',
   name: 'Support Agent',
   instructions: 'You are a helpful support assistant.',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   channels: {
     adapters: {
       slack: createSlackAdapter(),
@@ -33,6 +33,8 @@ export const supportAgent = new Agent({
 ```
 
 ## Parameters
+
+The `channels` property accepts a `ChannelConfig` object with the following fields:
 
 <PropertiesTable
   content={[
@@ -53,9 +55,9 @@ export const supportAgent = new Agent({
     name: 'inlineMedia',
     type: 'string[] | ((mimeType: string) => boolean)',
     isOptional: true,
-    defaultValue: "['image/*']",
+    defaultValue: "['image/png', 'image/jpeg', 'image/webp', 'application/pdf']",
     description:
-      'Controls which attachment types are sent as file parts to the model. Types that do not match are described as text summaries. Accepts an array of mime type globs or a predicate function.',
+      'Controls which attachment types are sent as file parts to the model. Types that do not match are described as text summaries. Accepts an array of mime type globs or a predicate function. The default matches the formats supported by major vision models.',
   },
   {
     name: 'inlineLinks',
@@ -90,11 +92,11 @@ export const supportAgent = new Agent({
   },
   {
     name: 'threadContext',
-    type: '{ maxMessages?: number }',
+    type: '{ maxMessages?: number; addSystemMessage?: boolean }',
     isOptional: true,
-    defaultValue: '{ maxMessages: 10 }',
+    defaultValue: '{ maxMessages: 10, addSystemMessage: true }',
     description:
-      'Fetch recent messages from the platform when the agent is first mentioned in a thread. Set `maxMessages: 0` to disable. Only applies to non-DM threads.',
+      'How the agent picks up context about the current thread. `maxMessages` controls how many recent platform messages are fetched on first mention (set to `0` to disable; only applies to non-DM threads). `addSystemMessage: false` skips the built-in system message that tells the agent which channel/platform a request came from.',
   },
   {
     name: 'chatOptions',
@@ -102,6 +104,27 @@ export const supportAgent = new Agent({
     isOptional: true,
     description:
       'Additional options passed directly to the [Chat SDK](https://chat-sdk.dev/docs/usage). Use for advanced configuration such as `dedupeTtlMs`, `fallbackStreamingPlaceholderText`, `lockScope`, and `messageHistory`.',
+  },
+  {
+    name: 'resolveResourceId',
+    type: '(ctx: ResolveResourceIdContext) => string | Promise<string>',
+    isOptional: true,
+    description:
+      'Decide which `resourceId` owns resource-level memory for a channel thread, separately from who sent the message. Runs only when a new thread is created; reused threads keep their stored owner and never call the hook. Return `ctx.defaultResourceId` (`${platform}:${message.author.userId}`) to keep the built-in behavior.',
+  },
+  {
+    name: 'waitUntil',
+    type: '(promise: Promise<unknown>) => void',
+    isOptional: true,
+    description:
+      'Platform `waitUntil` function. Required on Vercel so background agent runs survive after the webhook returns 200. On Vercel pass `waitUntil` from `@vercel/functions`. Cloudflare Workers and Netlify Functions are detected automatically from the request context. AWS Lambda does not need `waitUntil` because it waits for the event loop to drain naturally.',
+  },
+  {
+    name: 'resolveWaitUntil',
+    type: '(c: Context) => ((promise: Promise<unknown>) => void) | undefined',
+    isOptional: true,
+    description:
+      'Resolver for runtimes where `waitUntil` lives on the Hono request context but is not covered by the built-in helper. Resolution order: bare `waitUntil` → `resolveWaitUntil(c)` → default (Cloudflare Workers, Netlify).',
   },
 ]}
 />
@@ -116,14 +139,19 @@ import { createDiscordAdapter } from '@chat-adapter/discord'
 import { createSlackAdapter } from '@chat-adapter/slack'
 
 const agent = new Agent({
+  id: 'example',
   name: 'Example',
   instructions: '...',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   channels: {
     adapters: {
       discord: {
         adapter: createDiscordAdapter(),
-        cards: false,
+        toolDisplay: 'text',
+        cors: {
+          origin: ['https://customer-saas.example'],
+          credentials: true,
+        },
         gateway: false,
       },
       slack: createSlackAdapter(), // Plain adapter uses defaults
@@ -152,16 +180,15 @@ const agent = new Agent({
     name: 'cards',
     type: 'boolean',
     isOptional: true,
-    defaultValue: 'true',
     description:
-      'Render tool calls as interactive rich cards with buttons. Set to `false` to use plain text formatting instead. When disabled and a tool requires approval, the agent uses `autoResumeSuspendedTools` to let the LLM decide based on conversation context.',
+      '**Deprecated** — use `toolDisplay` instead. When `toolDisplay` is not set, `cards: true` maps to `toolDisplay: "cards"` and `cards: false` maps to `toolDisplay: "text"`. IDEs flag the field with a strikethrough; runtime behavior is preserved.',
   },
   {
-    name: 'formatToolCall',
-    type: '(info: { toolName, args, result, isError? }) => PostableMessage | null',
+    name: 'cors',
+    type: 'CorsOptions',
     isOptional: true,
     description:
-      'Override how tool calls are rendered in the chat. Called once per tool invocation after the result is available. Return `null` to suppress the message entirely.',
+      'CORS configuration for this adapter webhook route. Use this for browser-based channel adapters that need cross-origin credentials.',
   },
   {
     name: 'formatError',
@@ -171,14 +198,128 @@ const agent = new Agent({
     description:
       'Override how errors are rendered in the chat. Return a user-friendly message instead of exposing the raw error.',
   },
+  {
+    name: 'formatToolCall',
+    type: '(args: { toolName: string; args: unknown; result: unknown; isError: boolean }) => PostableMessage | null',
+    isOptional: true,
+    description:
+      '**Deprecated** — use `toolDisplay` (function form) instead. When set, runs as a `ToolDisplayFn` that only fires on `result`/`error` events; `running` and `approval` events fall through to no render. Mutually exclusive with `toolDisplay` at the type level.',
+  },
+  {
+    name: 'streaming',
+    type: 'boolean | { updateIntervalMs?: number }',
+    isOptional: true,
+    defaultValue: 'false (true for Slack)',
+    description:
+      'Stream agent text deltas to the channel as the agent generates them instead of buffering and posting once per step. Requires the underlying adapter to support post-and-edit streaming. Slack defaults to `true`; other adapters default to `false`.',
+  },
+  {
+    name: 'toolDisplay',
+    type: "'cards' | 'text' | 'timeline' | 'grouped' | 'hidden' | ToolDisplayFn",
+    isOptional: true,
+    defaultValue: "'cards' ('grouped' for Slack)",
+    description:
+      'How tool calls are rendered in the channel. `"cards"` posts per-tool running/result cards as rich Block Kit. `"text"` posts the same lifecycle as plain text (no Block Kit). `"timeline"` and `"grouped"` stream tool state as inline `task_update` chunks (requires `streaming: true`; Slack only today — other adapters may render a placeholder). `"hidden"` executes tools silently. Pass a function to render tool events yourself; return `{ kind: "post", message }` for a discrete post/edit, `{ kind: "stream", chunk }` to push into the active streaming widget, or `undefined` to skip rendering that event. Approve/deny prompts always render as a separate card regardless of mode.',
+  },
+  {
+    name: 'typingStatus',
+    type: 'boolean | ((chunk: AgentChunkType, ctx: TypingStatusContext) => string | false | null | undefined | void)',
+    isOptional: true,
+    defaultValue: 'true',
+    description:
+      'Control the platform typing indicator. `true` uses built-in defaults (`is typing…` on text, `is calling {tool}…` on tool-call, `is waiting for approval…` on tool-call-approval). `false` suppresses typing entirely — useful when a live streaming widget (e.g. `toolDisplay: "grouped"` in Slack) already conveys progress. Pass a function to set custom status copy per chunk; return a string to set the status, or `false`/`null`/`undefined` to leave it unchanged. Compose with `defaultTypingStatus` (exported from `@mastra/core/channels`) to fall back to defaults for chunks you don\'t handle.',
+  },
 ]}
 />
+
+## Tool display modes
+
+`toolDisplay` controls how tool calls render in chat. The default `'cards'`
+posts a "Running…" card per tool and edits it with the result, matching the
+behavior in earlier versions. `'text'` is the same lifecycle but without rich
+Block Kit, useful for platforms that don't render cards well.
+
+`'timeline'` and `'grouped'` stream tool state as inline `task_update` chunks
+alongside the agent's text. These modes require `streaming: true` and rely on
+the chat adapter to render the chunks. Slack supports both natively; other
+adapters may render a placeholder until they ship support. If `streaming` is
+disabled, the channel logs a one-time warning and falls back to `'cards'`.
+
+`'hidden'` executes tools silently. Only the typing status indicates work in
+progress.
+
+Pass a function to `toolDisplay` for fully custom rendering. The function
+receives a `ToolDisplayEvent` (`running` / `result` / `error` / `approval`)
+and a `ToolDisplayContext` (`{ mode, platform }`); return `{ kind: 'post',
+message }` for a discrete post/edit, `{ kind: 'stream', chunk }` to push into
+the active streaming widget, or `undefined` to skip rendering that event.
+
+Approve/deny prompts (`requireApproval`) always render as a separate card
+regardless of mode, because inline task entries can't carry interactive
+buttons.
+
+```typescript title="src/mastra/agents/streaming.ts"
+import { Agent } from '@mastra/core/agent'
+import { createSlackAdapter } from '@chat-adapter/slack'
+
+const agent = new Agent({
+  id: 'streaming-agent',
+  name: 'Streaming Agent',
+  instructions: '...',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  channels: {
+    adapters: {
+      slack: {
+        adapter: createSlackAdapter(),
+        streaming: true, // already the Slack default
+        toolDisplay: 'timeline',
+      },
+    },
+  },
+})
+```
+
+## Custom typing status
+
+Pass a function to `typingStatus` to customize the status copy. The function is
+called once per stream chunk; return a string to set the status, or `false` /
+`null` / `undefined` to leave the current status unchanged. Return values are
+de-duplicated so the platform only sees a call when the status changes.
+
+`defaultTypingStatus` is exported from `@mastra/core/channels` so you can
+fall back to the built-in defaults for chunks you don't handle.
+
+```typescript title="src/mastra/agents/custom-typing.ts"
+import { Agent } from '@mastra/core/agent'
+import { defaultTypingStatus } from '@mastra/core/channels'
+import { createDiscordAdapter } from '@chat-adapter/discord'
+
+const agent = new Agent({
+  id: 'custom-typing-agent',
+  name: 'Custom Typing Agent',
+  instructions: '...',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  channels: {
+    adapters: {
+      discord: {
+        adapter: createDiscordAdapter(),
+        typingStatus: (chunk, ctx) => {
+          if (chunk.type === 'tool-call' && chunk.payload.toolName === 'searchDocs') {
+            return 'is searching docs…'
+          }
+          return defaultTypingStatus(chunk, ctx)
+        },
+      },
+    },
+  },
+})
+```
 
 ## Handlers
 
 Override built-in event handlers. Each handler can be:
 
-- **Omitted**: uses the default Mastra handler (routes to `agent.stream` and posts the response)
+- **Omitted**: uses the default Mastra handler (routes the message through the agent and posts the response)
 - **`false`**: disables the handler entirely
 - **A function** `(thread, message, defaultHandler) => Promise<void>`: wraps or replaces the default
 
@@ -187,9 +328,10 @@ import { Agent } from '@mastra/core/agent'
 import { createSlackAdapter } from '@chat-adapter/slack'
 
 const agent = new Agent({
+  id: 'custom-handler-agent',
   name: 'Custom Handler Agent',
   instructions: '...',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   channels: {
     adapters: {
       slack: createSlackAdapter(),
@@ -238,9 +380,71 @@ type ChannelHandler = (
 ) => Promise<void>
 ```
 
+## Resource ID resolution
+
+By default a channel thread's memory `resourceId` is `${platform}:${message.author.userId}`. The sender owns the memory, scoped per platform. For apps with a shared identity, such as single sign-on (SSO), this splits memory: the same user gets `feishu:user_123` in a Feishu DM but `user_123` on the web.
+
+Pass `resolveResourceId` to decide memory ownership separately from the sender. It runs only when a new thread is created. Reused threads keep their stored `resourceId` and never call the hook, so existing conversations don't depend on the resolver being available. Return `ctx.defaultResourceId` to fall back to the built-in behavior.
+
+```typescript title="src/mastra/agents/sso-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { createSlackAdapter } from '@chat-adapter/slack'
+
+const agent = new Agent({
+  id: 'sso-agent',
+  name: 'SSO Agent',
+  instructions: '...',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  channels: {
+    adapters: {
+      slack: createSlackAdapter(),
+    },
+    resolveResourceId: async ({ thread, message }) => {
+      // DM: share resource-level memory with the web app by using the bare SSO id
+      if (thread.isDM) {
+        return await resolveSsoUserId(message)
+      }
+      // Group chat: the conversation owns the memory; the sender stays the actor
+      return thread.channelId
+    },
+  },
+})
+```
+
+The `ResolveResourceIdContext` passed to the function:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'platform',
+    type: 'string',
+    description: 'Platform name (e.g. `slack`, `discord`).',
+  },
+  {
+    name: 'thread',
+    type: 'Thread',
+    description:
+      'The channel thread the message arrived on. Use `thread.isDM` to tell DMs apart from group/channel threads.',
+  },
+  {
+    name: 'message',
+    type: 'Message',
+    description: 'The incoming message. `message.author.userId` is the actor/sender, not necessarily the memory owner.',
+  },
+  {
+    name: 'defaultResourceId',
+    type: 'string',
+    description:
+      'The built-in default (`${platform}:${message.author.userId}`). Return this to keep the current behavior.',
+  },
+]}
+/>
+
 ## Inline media
 
-Controls which attachment types (images, video, PDFs, etc.) are sent as file parts to the model. Types that do not match are described as text summaries so the agent knows about the file without crashing models that reject unsupported types.
+Controls which attachment types (images, video, PDFs, etc.) are sent as file parts to the model. Types that don't match are described as text summaries so the agent knows about the file without crashing models that reject unsupported types.
+
+The default (`['image/png', 'image/jpeg', 'image/webp', 'application/pdf']`) matches the formats supported by major vision models. Override `inlineMedia` to expand the list (e.g. `['image/*', 'audio/*']`) or replace it entirely with a predicate function.
 
 Supported glob patterns:
 
@@ -269,6 +473,6 @@ type InlineLinkEntry =
 
 ## Related
 
-- [Channels guide](/docs/agents/channels): Concepts, quickstart, and platform setup
+- [Channels overview](/docs/capabilities/channels/overview): Concepts, quickstart, and platform setup
 - [Agent class](/reference/agents/agent): Constructor parameters and methods
 - [Chat SDK adapters](https://chat-sdk.dev/adapters): Adapter configuration and platform setup

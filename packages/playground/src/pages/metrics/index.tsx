@@ -1,39 +1,36 @@
-import type { DatePreset, PropertyFilterToken } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { MetricsFlexGrid } from '@mastra/playground-ui/components/MetricsFlexGrid';
+import { Notice } from '@mastra/playground-ui/components/Notice';
+import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { PropertyFilterCreator } from '@mastra/playground-ui/components/PropertyFilter';
+import type { PropertyFilterToken } from '@mastra/playground-ui/components/PropertyFilter';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { DateRangeSelector } from '@mastra/playground-ui/domains/metrics/components/date-range-selector';
+import { useAgentRunsKpiMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-agent-runs-kpi-metrics';
+import { MetricsProvider, isValidPreset, useMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics';
+import type { DatePreset, DateRange } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics';
 import {
-  Notice,
-  Button,
-  DateRangeSelector,
-  EmptyState,
-  ErrorState,
-  MetricsFlexGrid,
-  MetricsProvider,
-  NoDataPageLayout,
-  PageLayout,
-  PermissionDenied,
-  PropertyFilterCreator,
-  SessionExpired,
   applyMetricsPropertyFilterTokens,
   clearSavedMetricsFilters,
   createMetricsPropertyFilterFields,
   getMetricsPropertyFilterTokens,
   hasAnyMetricsFilterParams,
-  is401UnauthorizedError,
-  is403ForbiddenError,
-  isValidPreset,
   loadMetricsFiltersFromStorage,
   saveMetricsFiltersToStorage,
-  toast,
-  useAgentRunsKpiMetrics,
-  useMetrics,
-  useEntityNames,
-  useEnvironments,
-  useServiceNames,
-  useTags,
-} from '@mastra/playground-ui';
+} from '@mastra/playground-ui/domains/metrics/metrics-filters';
+import { useEntityNames } from '@mastra/playground-ui/domains/traces/hooks/use-entity-names';
+import { useEnvironments } from '@mastra/playground-ui/domains/traces/hooks/use-environments';
+import { useServiceNames } from '@mastra/playground-ui/domains/traces/hooks/use-service-names';
+import { useTags } from '@mastra/playground-ui/domains/traces/hooks/use-tags';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { useMastraPackages } from '@/domains/configuration/hooks/use-mastra-packages';
+import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
 import { LatencyCard } from '@/domains/metrics/components/latency-card';
 import { MemoryCard } from '@/domains/metrics/components/memory-card';
 import {
@@ -46,21 +43,34 @@ import {
 import { MetricsToolbar } from '@/domains/metrics/components/metrics-toolbar';
 import { ModelUsageCostCard } from '@/domains/metrics/components/model-usage-cost-card';
 import { TokenUsageByAgentCard } from '@/domains/metrics/components/token-usage-by-agent-card';
+import { TokenUsageTimelineCard } from '@/domains/metrics/components/token-usage-timeline-card';
 import { TracesVolumeCard } from '@/domains/metrics/components/traces-volume-card';
 
-const ANALYTICS_OBSERVABILITY_TYPES = new Set([
-  'ObservabilityStorageClickhouseVNext',
-  'ObservabilityStorageDuckDB',
-  'ObservabilityInMemory',
-]);
-
 const PERIOD_PARAM = 'period';
+const DATE_FROM_PARAM = 'dateFrom';
+const DATE_TO_PARAM = 'dateTo';
 
 export default function Metrics() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const urlPreset = searchParams.get(PERIOD_PARAM);
   const preset: DatePreset = isValidPreset(urlPreset) ? urlPreset : '24h';
+
+  // Concrete from/to bounds only apply to the 'custom' preset; relative presets
+  // derive their window from the preset alone.
+  const customRange = useMemo<DateRange | undefined>(() => {
+    if (preset !== 'custom') return undefined;
+    const parseBound = (raw: string | null) => {
+      if (!raw) return undefined;
+      const date = new Date(raw);
+      return Number.isNaN(date.getTime()) ? undefined : date;
+    };
+    const from = parseBound(searchParams.get(DATE_FROM_PARAM));
+    const to = parseBound(searchParams.get(DATE_TO_PARAM));
+    if (!from && !to) return undefined;
+    return { from, to };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preset, searchParams.toString()]);
 
   // Derive tokens straight from the URL. Memoized on a stable digest so the
   // array identity only changes when the URL actually changes — this prevents
@@ -81,6 +91,33 @@ export default function Metrics() {
             params.delete(PERIOD_PARAM);
           } else {
             params.set(PERIOD_PARAM, next);
+          }
+          if (next !== 'custom') {
+            params.delete(DATE_FROM_PARAM);
+            params.delete(DATE_TO_PARAM);
+          }
+          return params;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
+  const handleCustomRangeChange = useCallback(
+    (range: DateRange | undefined) => {
+      setSearchParams(
+        prev => {
+          const params = new URLSearchParams(prev);
+          if (range?.from) {
+            params.set(DATE_FROM_PARAM, range.from.toISOString());
+          } else {
+            params.delete(DATE_FROM_PARAM);
+          }
+          if (range?.to) {
+            params.set(DATE_TO_PARAM, range.to.toISOString());
+          } else {
+            params.delete(DATE_TO_PARAM);
           }
           return params;
         },
@@ -131,6 +168,8 @@ export default function Metrics() {
       filterTokens={filterTokens}
       onPresetChange={handlePresetChange}
       onFilterTokensChange={handleFilterTokensChange}
+      customRange={customRange}
+      onCustomRangeChange={handleCustomRangeChange}
     >
       <MetricsContent />
     </MetricsProvider>
@@ -143,10 +182,7 @@ function MetricsContent() {
   const { filterTokens, setFilterTokens } = useMetrics();
   const [autoFocusFilterFieldId, setAutoFocusFilterFieldId] = useState<string | undefined>();
 
-  const { data: packagesData, isLoading: isPackagesLoading } = useMastraPackages();
-  const observabilityType = packagesData?.observabilityStorageType;
-  const supportsMetrics = observabilityType ? ANALYTICS_OBSERVABILITY_TYPES.has(observabilityType) : false;
-  const isInMemory = observabilityType === 'ObservabilityInMemory';
+  const { supportsMetrics, isInMemory, isLoading: isPackagesLoading } = useObservabilityStorageCapabilities();
 
   const { data: tagsData, isLoading: isTagsLoading } = useTags();
   const { data: entityNamesData, isLoading: isEntityNamesLoading } = useEntityNames();
@@ -269,7 +305,7 @@ function MetricsContent() {
           <EmptyState
             iconSlot={<CircleSlashIcon />}
             titleSlot="Metrics are not available with your current storage"
-            descriptionSlot="Metrics require ClickHouse, DuckDB, or in-memory storage for observability. Relational databases (PostgreSQL, LibSQL) do not support metrics collection. To enable metrics on an existing project, switch the observability storage in the Mastra configuration."
+            descriptionSlot="Metrics require ClickHouse, DuckDB, Postgres v-next, Spanner, or in-memory storage for observability. Other relational databases (LibSQL, MSSQL) and document stores (MongoDB) do not support metrics collection. To enable metrics on an existing project, switch the observability storage in the Mastra configuration."
             actionSlot={
               <Button
                 variant="ghost"
@@ -289,7 +325,7 @@ function MetricsContent() {
             <Notice variant="info" title="Metrics are not persisted">
               <Notice.Message>
                 This project uses in-memory storage for observability. Metrics will be lost on every server restart. For
-                persistent metrics, switch the observability storage to ClickHouse or DuckDB.
+                persistent metrics, switch the observability storage to ClickHouse, DuckDB, Postgres v-next, or Spanner.
               </Notice.Message>
             </Notice>
           )}
@@ -305,6 +341,7 @@ function MetricsContent() {
           <MetricsFlexGrid>
             <ModelUsageCostCard />
             <TokenUsageByAgentCard />
+            <TokenUsageTimelineCard />
             <MemoryCard />
             <TracesVolumeCard />
             <LatencyCard />

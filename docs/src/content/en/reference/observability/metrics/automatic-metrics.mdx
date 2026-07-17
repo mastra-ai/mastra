@@ -20,9 +20,9 @@ Metrics are extracted from spans when they end. The observability layer inspects
 Two conditions must be true for a metric to reach storage:
 
 1. `MastraStorageExporter` is configured as an exporter.
-1. The storage backend supports metrics (ClickHouse or DuckDB).
+1. The storage backend supports metrics (ClickHouse, DuckDB, or Postgres v-next with the observability domain enabled).
 
-If metrics aren't appearing, see [troubleshooting](#troubleshooting).
+If metrics aren't available, see [troubleshooting](#troubleshooting).
 
 ## Duration metrics
 
@@ -31,7 +31,7 @@ Duration metrics record execution time in milliseconds, calculated from the span
 | Metric name | Span type | Description |
 | - | - | - |
 | `mastra_agent_duration_ms` | `AGENT_RUN` | Execution time of an agent run |
-| `mastra_tool_duration_ms` | `TOOL_CALL`, `MCP_TOOL_CALL` | Execution time of a tool call, including MCP tool calls |
+| `mastra_tool_duration_ms` | `TOOL_CALL`, `MCP_TOOL_CALL`, `PROVIDER_TOOL_CALL` | Execution time of a tool call, including MCP and provider-executed tool calls |
 | `mastra_workflow_duration_ms` | `WORKFLOW_RUN` | Execution time of a workflow run |
 | `mastra_model_duration_ms` | `MODEL_GENERATION` | Execution time of a model generation |
 | `mastra_processor_duration_ms` | `PROCESSOR_RUN` | Execution time of a processor run |
@@ -119,19 +119,25 @@ When you spot a spike in latency or token usage on the Metrics dashboard, correl
 
 ## Troubleshooting
 
-### No metrics are appearing
+### No metrics are available
 
 - **Observability is configured**: Verify that your `Mastra` instance has an `observability` config with at least one exporter.
 - **`MastraStorageExporter` or `MastraPlatformExporter` is present**: Other exporters (Datadog, Langfuse, etc.) don't surface metrics in Mastra. `MastraStorageExporter` is required for the local Studio dashboard, and `MastraPlatformExporter` is required to view metrics in Mastra platform.
-- **Storage supports metrics**: Metrics require an OLAP-capable store (ClickHouse or DuckDB). Row-oriented databases (PostgreSQL, LibSQL, MSSQL) and document stores (MongoDB) are not supported for metrics.
+- **Storage supports metrics**: Metrics require an analytics-capable store (ClickHouse, DuckDB, or Postgres v-next with the observability domain enabled). Other row-oriented databases (LibSQL, MSSQL) and document stores (MongoDB) aren't supported for metrics.
 - **Sampling isn't 0%**: If sampling probability is `0` or strategy is `never`, all spans become no-ops and no metrics are extracted.
 
 ### Duration metrics are missing
 
 - **Span has timestamps**: Duration is calculated from `startTime` and `endTime`. If either is missing, the metric is skipped.
-- **Span type maps to a metric**: Only `AGENT_RUN`, `TOOL_CALL`, `MCP_TOOL_CALL`, `WORKFLOW_RUN`, `MODEL_GENERATION`, and `PROCESSOR_RUN` spans produce duration metrics.
+- **Span type maps to a metric**: Only `AGENT_RUN`, `TOOL_CALL`, `MCP_TOOL_CALL`, `PROVIDER_TOOL_CALL`, `WORKFLOW_RUN`, `MODEL_GENERATION`, and `PROCESSOR_RUN` spans produce duration metrics.
 
 ### Token metrics are missing
 
 - **Span is a model generation**: Token metrics are only emitted from `MODEL_GENERATION` spans.
 - **Provider reports usage**: The model provider must include `usage` data in its response. If usage is absent, no token metrics are emitted.
+
+## Related
+
+- [Metrics overview](/docs/observability/metrics/overview)
+- [Querying metrics](/docs/observability/metrics/querying)
+- [Studio observability](/docs/studio/observability)

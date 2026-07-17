@@ -1,16 +1,18 @@
 import { jsonLanguage } from '@codemirror/lang-json';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
-import { languages } from '@codemirror/language-data';
-import { EditorState } from '@codemirror/state';
+import { EditorState, Prec } from '@codemirror/state';
 import type { Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { tags as t } from '@lezer/highlight';
 import { draculaInit } from '@uiw/codemirror-theme-dracula';
 import CodeMirror from '@uiw/react-codemirror';
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
+import { cva } from 'class-variance-authority';
+import type { VariantProps } from 'class-variance-authority';
 import { forwardRef, useMemo } from 'react';
 import type { HTMLAttributes } from 'react';
+import { codeLanguages } from './code-languages';
 import { createVariableAutocomplete } from './variable-autocomplete-extension';
 import { variableHighlight } from './variable-highlight-extension';
 import { CopyButton } from '@/ds/components/CopyButton';
@@ -24,7 +26,7 @@ export type CodeEditorLanguage = 'json' | 'markdown';
 function buildDarkTheme(): Extension {
   const baseTheme = draculaInit({
     settings: {
-      fontFamily: 'var(--geist-mono)',
+      fontFamily: 'var(--font-mono)',
       fontSize: '0.8rem',
       lineHighlight: 'transparent',
       gutterBackground: 'transparent',
@@ -78,7 +80,7 @@ function buildDarkTheme(): Extension {
       boxShadow: '0 8px 16px rgba(0, 0, 0, 0.2)',
     },
     '.cm-tooltip-autocomplete > ul': {
-      fontFamily: 'var(--geist-mono)',
+      fontFamily: 'var(--font-mono)',
     },
     '.cm-completionLabel': {
       color: 'var(--neutral6)',
@@ -119,7 +121,7 @@ function buildLightTheme(): Extension {
       fontSize: '0.8rem',
     },
     '&.cm-editor .cm-scroller': {
-      fontFamily: 'var(--geist-mono)',
+      fontFamily: 'var(--font-mono)',
     },
     '.cm-gutters': {
       backgroundColor: 'transparent',
@@ -154,7 +156,7 @@ function buildLightTheme(): Extension {
       boxShadow: '0 8px 16px rgba(0, 0, 0, 0.2)',
     },
     '.cm-tooltip-autocomplete > ul': {
-      fontFamily: 'var(--geist-mono)',
+      fontFamily: 'var(--font-mono)',
     },
     '.cm-completionLabel': {
       color: 'var(--neutral6)',
@@ -216,10 +218,57 @@ function buildLightTheme(): Extension {
   return [editorTheme, syntaxHighlighting(highlightStyle)];
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- shared hook intentionally co-located with the editor it themes
 export const useCodemirrorTheme = (): Extension => {
   const isDark = useTheme().resolvedTheme === 'dark';
   return useMemo(() => (isDark ? buildDarkTheme() : buildLightTheme()), [isDark]);
 };
+
+const codeEditorVariants = cva(
+  cn(
+    'relative overflow-hidden font-mono outline-hidden focus-within:outline-hidden focus:outline-hidden',
+    'duration-normal transition-colors ease-out-custom',
+  ),
+  {
+    variants: {
+      variant: {
+        default: 'rounded-md border border-border1 bg-surface3 p-1 focus-within:border-neutral6/20',
+        embedded: 'rounded-none border-none bg-transparent p-0',
+      },
+    },
+    defaultVariants: {
+      variant: 'default',
+    },
+  },
+);
+
+const editorFocusAttributes = Prec.highest(
+  EditorView.editorAttributes.of({
+    style: 'outline: none',
+  }),
+);
+
+const editorFocusTheme = Prec.highest(
+  EditorView.theme({
+    '&': {
+      outline: 'none',
+    },
+    '&.cm-focused': {
+      outline: 'none',
+    },
+    '.cm-scroller': {
+      outline: 'none',
+    },
+    '.cm-content': {
+      outline: 'none',
+    },
+    '.cm-content:focus': {
+      outline: 'none',
+    },
+  }),
+);
+
+const editorFocusExtensions: Extension[] = [editorFocusAttributes, editorFocusTheme];
 
 export type CodeEditorProps = {
   data?: Record<string, unknown> | Array<Record<string, unknown>>;
@@ -235,9 +284,12 @@ export type CodeEditorProps = {
   autoFocus?: boolean;
   /** Show line numbers in the gutter (default: true) */
   lineNumbers?: boolean;
+  /** Wrap long lines within the editor viewport (default: true) */
+  lineWrapping?: boolean;
   /** When false, makes the editor read-only */
   editable?: boolean;
-} & Omit<HTMLAttributes<HTMLDivElement>, 'onChange'>;
+} & VariantProps<typeof codeEditorVariants> &
+  Omit<HTMLAttributes<HTMLDivElement>, 'onChange'>;
 
 export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
   (
@@ -253,7 +305,9 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       schema,
       autoFocus,
       lineNumbers = true,
+      lineWrapping = true,
       editable,
+      variant,
       ...props
     },
     ref,
@@ -262,13 +316,16 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
     const formattedCode = data ? JSON.stringify(data, null, 2) : (value ?? '');
 
     const extensions = useMemo(() => {
-      const exts: Extension[] = [];
+      const exts: Extension[] = [...editorFocusExtensions];
+
+      if (lineWrapping) {
+        exts.push(EditorView.lineWrapping);
+      }
 
       if (language === 'json') {
         exts.push(jsonLanguage);
       } else if (language === 'markdown') {
-        exts.push(markdown({ base: markdownLanguage, codeLanguages: languages }));
-        exts.push(EditorView.lineWrapping);
+        exts.push(markdown({ base: markdownLanguage, codeLanguages }));
       }
 
       if (highlightVariables && language === 'markdown') {
@@ -284,13 +341,10 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       }
 
       return exts;
-    }, [language, highlightVariables, schema, editable]);
+    }, [language, highlightVariables, schema, editable, lineWrapping]);
 
     return (
-      <div
-        className={cn('rounded-md bg-surface3 p-1 font-mono relative border border-border1 overflow-hidden', className)}
-        {...props}
-      >
+      <div className={cn(codeEditorVariants({ variant }), className)} {...props}>
         {showCopyButton && <CopyButton content={formattedCode} className="absolute top-2 right-2 z-20" />}
         <CodeMirror
           ref={ref}
@@ -310,20 +364,3 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
     );
   },
 );
-
-export async function highlight(code: string, language: string) {
-  const { codeToTokens, bundledLanguages } = await import('shiki');
-
-  if (!(language in bundledLanguages)) return null;
-
-  const { tokens } = await codeToTokens(code, {
-    lang: language as keyof typeof bundledLanguages,
-    defaultColor: false,
-    themes: {
-      light: 'github-light',
-      dark: 'github-dark',
-    },
-  });
-
-  return tokens;
-}

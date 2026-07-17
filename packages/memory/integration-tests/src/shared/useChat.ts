@@ -5,6 +5,7 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { useChat } from '@ai-sdk/react';
+import { getLLMTestMode } from '@internal/llm-recorder';
 import { hasRealApiKey } from '@internal/test-utils';
 import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
 import { MastraClient } from '@mastra/client-js';
@@ -18,9 +19,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createWeatherAgent } from '../v4/mastra/agents/weather';
 import { createWeatherAgent as createWeatherAgentV5 } from '../v5/mastra/agents/weather';
 
-// These tests spawn a child Mastra server process, so MSW can't intercept
-// the LLM requests. They require real API keys.
-const skipUseChatTests = !hasRealApiKey('openai');
+// These tests spawn a child Mastra server process. The parent Vitest MSW
+// recorder cannot intercept that process, so they only run as live tests.
+const runUseChatLiveTests = getLLMTestMode() === 'live' && hasRealApiKey('openai');
 
 // Set up JSDOM environment for React testing
 const dom = new JSDOM('<!doctype html><html><body></body></html>', {
@@ -51,7 +52,7 @@ async function getAvailablePort(): Promise<number> {
 }
 
 export function setupUseChatV4() {
-  describe.skipIf(skipUseChatTests)('should stream via useChat after tool call', () => {
+  describe.skipIf(!runUseChatLiveTests)('should stream via useChat after tool call', () => {
     let mastraServer: ReturnType<typeof spawn>;
     let port: number;
     let agent: ReturnType<typeof createWeatherAgent>;
@@ -281,7 +282,7 @@ export function setupUseChatV4() {
 }
 
 export function setupUseChatV5Plus({ useChatFunc, version }: { useChatFunc: any; version: 'v5' | 'v6' }) {
-  describe.skipIf(skipUseChatTests)('should stream via useChat after tool call (v5+)', () => {
+  describe.skipIf(!runUseChatLiveTests)('should stream via useChat after tool call (v5+)', () => {
     let mastraServer: ReturnType<typeof spawn>;
     let port: number;
     let agent: ReturnType<typeof createWeatherAgentV5>;

@@ -27,7 +27,7 @@ The URL path for the route. Supports path parameters using `:param` syntax.
 registerApiRoute("/items/:itemId", { ... })
 ```
 
-**Note:** Paths can't start with `/api/` as this prefix is reserved for Mastra server routes.
+**Note:** Custom route paths can't start with the server's configured `apiPrefix` (default: `/api`), as that prefix is reserved for built-in Mastra routes. If you set a custom `apiPrefix`, only that prefix is reserved — for example, with `apiPrefix: '/mastra/api'`, paths like `/api/my-endpoint` are allowed.
 
 ### options
 
@@ -47,14 +47,22 @@ registerApiRoute("/items/:itemId", { ... })
   },
   {
     name: 'createHandler',
-    type: '(c: Context) => Promise<Handler>',
-    description: 'Async factory function to create the handler. Use either `handler` or `createHandler`, not both.',
+    type: '({ mastra }: { mastra: Mastra }) => Promise<ApiRouteHandler>',
+    description:
+      'Async factory that receives the Mastra instance and returns the route handler. Runs once at server startup, so it can perform one-time setup. Use either `handler` or `createHandler`, not both.',
     isOptional: true,
   },
   {
     name: 'middleware',
     type: 'MiddlewareHandler | MiddlewareHandler[]',
     description: 'Route-specific middleware functions',
+    isOptional: true,
+  },
+  {
+    name: 'cors',
+    type: 'CorsOptions',
+    description:
+      'Route-specific CORS configuration. Use this when one custom route needs a different cross-origin policy from `server.cors`.',
     isOptional: true,
   },
   {
@@ -225,6 +233,23 @@ registerApiRoute('/protected', {
 })
 ```
 
+### Route with CORS
+
+Use route-specific CORS when one custom route needs cross-origin credentials, but the rest of the server should keep the global CORS policy.
+
+```typescript
+registerApiRoute('/customer-webhook', {
+  method: 'POST',
+  cors: {
+    origin: ['https://customer-saas.example'],
+    credentials: true,
+  },
+  handler: async c => {
+    return c.json({ ok: true })
+  },
+})
+```
+
 ### Route with OpenAPI Documentation
 
 ```typescript
@@ -279,12 +304,13 @@ For routes that need async initialization:
 ```typescript
 registerApiRoute('/dynamic', {
   method: 'GET',
-  createHandler: async c => {
-    // Perform async setup
+  createHandler: async ({ mastra }) => {
+    // Perform one-time async setup
     const config = await loadConfig()
+    const agent = mastra.getAgent('weatherAgent')
 
     return async c => {
-      return c.json({ config })
+      return c.json({ config, agent: agent.name })
     }
   },
 })

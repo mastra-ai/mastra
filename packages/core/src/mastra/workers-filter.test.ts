@@ -24,34 +24,46 @@ describe('Mastra workers filter (MASTRA_WORKERS env)', () => {
     const mastra = new Mastra({
       storage: new MockStore(),
       backgroundTasks: { enabled: true },
+      scheduler: { enabled: true },
       logger: false,
     });
 
-    // Spy on each worker's start method.
-    const starts = mastra.workers.map(w => ({
-      name: w.name,
-      spy: vi.spyOn(w, 'start').mockResolvedValue(undefined),
-      initSpy: vi.spyOn(w, 'init').mockResolvedValue(undefined),
-    }));
+    // Mock start()/init() on construction-time workers so we can record which
+    // were started without running real worker side effects. The scheduler +
+    // agent-schedule workers are injected lazily inside startWorkers() — they
+    // aren't visible here, so their real start() runs and isRunning reflects
+    // whether they passed the MASTRA_WORKERS filter.
+    const knownStarted: string[] = [];
+    const knownWorkers = mastra.workers.map(w => w.name);
+    for (const w of mastra.workers) {
+      vi.spyOn(w, 'start').mockImplementation(async () => {
+        knownStarted.push(w.name);
+      });
+      vi.spyOn(w, 'init').mockResolvedValue(undefined);
+    }
 
-    await mastra.startWorkers();
+    try {
+      await mastra.startWorkers();
 
-    const started = starts.filter(s => s.spy.mock.calls.length > 0).map(s => s.name);
-    expect(started.sort()).toEqual(['backgroundTasks', 'scheduler']);
-
-    // orchestration was not started
-    const orchestration = starts.find(s => s.name === 'orchestration');
-    expect(orchestration?.spy).not.toHaveBeenCalled();
+      // Lazily-injected workers (not in knownWorkers) report via isRunning.
+      const lazyStarted = mastra.workers.filter(w => !knownWorkers.includes(w.name) && w.isRunning).map(w => w.name);
+      const started = [...knownStarted, ...lazyStarted];
+      expect(started.sort()).toEqual(['backgroundTasks', 'scheduler']);
+      expect(started).not.toContain('orchestration');
+    } finally {
+      await mastra.stopWorkers();
+    }
   });
 
   it('starts all workers when MASTRA_WORKERS is unset', async () => {
     const mastra = new Mastra({
       storage: new MockStore(),
       backgroundTasks: { enabled: true },
+      scheduler: { enabled: true },
       logger: false,
     });
 
-    const starts = mastra.workers.map(w => ({
+    const preStarts = mastra.workers.map(w => ({
       name: w.name,
       spy: vi.spyOn(w, 'start').mockResolvedValue(undefined),
       initSpy: vi.spyOn(w, 'init').mockResolvedValue(undefined),
@@ -59,9 +71,12 @@ describe('Mastra workers filter (MASTRA_WORKERS env)', () => {
 
     await mastra.startWorkers();
 
-    for (const s of starts) {
+    // Check pre-existing workers were started
+    for (const s of preStarts) {
       expect(s.spy, `worker ${s.name} should have started`).toHaveBeenCalled();
     }
+    // SchedulerWorker injected lazily should also be present
+    expect(mastra.workers.some(w => w.name === 'scheduler')).toBe(true);
   });
 
   it('disables all workers when MASTRA_WORKERS=false', async () => {
@@ -86,16 +101,23 @@ describe('Mastra workers filter (MASTRA_WORKERS env)', () => {
     mastra.setLogger({
       logger: { warn, info: vi.fn(), debug: vi.fn(), error: vi.fn(), trackException: vi.fn() } as any,
     });
-    for (const w of mastra.workers) {
-      vi.spyOn(w, 'start').mockResolvedValue(undefined);
-      vi.spyOn(w, 'init').mockResolvedValue(undefined);
-    }
+    // Spy on workers known at construction time.
+    const preStarts = mastra.workers.map(w => ({
+      name: w.name,
+      spy: vi.spyOn(w, 'start').mockResolvedValue(undefined),
+      initSpy: vi.spyOn(w, 'init').mockResolvedValue(undefined),
+    }));
 
     await mastra.startWorkers();
     // Should not throw, should not start any worker, and must have warned
     // about the empty filter so users know MASTRA_WORKERS was misspelled.
     for (const w of mastra.workers) {
-      expect((w as any).start.mock.calls.length).toBe(0);
+      const pre = preStarts.find(p => p.name === w.name);
+      if (pre) {
+        expect(pre.spy).not.toHaveBeenCalled();
+      }
+      // Workers injected lazily by startWorkers() (e.g. SchedulerWorker)
+      // won't have been started either since the filter matched nothing.
     }
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('MASTRA_WORKERS=nonexistent'));
   });

@@ -29,6 +29,7 @@ const SPAN_TYPE_CONFIG: Partial<Record<SpanType, { opType: string; opName: strin
   [SpanType.MODEL_GENERATION]: { opType: 'gen_ai.chat', opName: 'chat' },
   [SpanType.TOOL_CALL]: { opType: 'gen_ai.execute_tool', opName: 'execute_tool' },
   [SpanType.MCP_TOOL_CALL]: { opType: 'gen_ai.execute_tool', opName: 'execute_tool' },
+  [SpanType.PROVIDER_TOOL_CALL]: { opType: 'gen_ai.execute_tool', opName: 'execute_tool' },
   [SpanType.WORKFLOW_RUN]: { opType: 'workflow.run', opName: 'workflow' },
   [SpanType.WORKFLOW_STEP]: { opType: 'workflow.step', opName: 'step' },
   [SpanType.WORKFLOW_CONDITIONAL]: { opType: 'workflow.conditional', opName: 'step' },
@@ -57,6 +58,7 @@ const ATTRIBUTE_KEYS = {
   GEN_AI_RESPONSE_STREAMING: 'gen_ai.response.streaming',
   GEN_AI_RESPONSE_TOOL_CALLS: 'gen_ai.response.tool_calls',
   GEN_AI_RESPONSE_TEXT: 'gen_ai.response.text',
+  GEN_AI_CONVERSATION_ID: 'gen_ai.conversation.id',
   GEN_AI_COMPLETION_START_TIME: 'gen_ai.completion_start_time',
   GEN_AI_TOOL_CALL_ID: 'gen_ai.tool.call.id',
   TOOL_SUCCESS: 'tool.success',
@@ -229,7 +231,7 @@ export class SentryExporter extends BaseExporter {
     });
 
     // Track tool calls as children of MODEL_GENERATION spans for gen_ai.response.tool_calls attribute
-    if (span.type === SpanType.TOOL_CALL && resolvedParentId) {
+    if ((span.type === SpanType.TOOL_CALL || span.type === SpanType.PROVIDER_TOOL_CALL) && resolvedParentId) {
       this.trackToolCallForParent(span, resolvedParentId);
     }
   }
@@ -353,6 +355,7 @@ export class SentryExporter extends BaseExporter {
     }
 
     this.setAttributeIfDefined(attributes, ATTRIBUTE_KEYS.TAGS, span.tags?.join(','));
+    this.setAttributeIfDefined(attributes, ATTRIBUTE_KEYS.GEN_AI_CONVERSATION_ID, span.metadata?.threadId);
 
     this.addInputOutputAttributes(attributes, span);
 
@@ -360,7 +363,7 @@ export class SentryExporter extends BaseExporter {
       this.addModelGenerationAttributes(attributes, span);
     }
 
-    if (span.type === SpanType.TOOL_CALL) {
+    if (span.type === SpanType.TOOL_CALL || span.type === SpanType.PROVIDER_TOOL_CALL) {
       this.addToolCallAttributes(attributes, span);
     }
 

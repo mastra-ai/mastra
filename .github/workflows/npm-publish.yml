@@ -45,24 +45,25 @@ jobs:
       )
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
+      issues: write
       id-token: write
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v5
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271
         name: Install pnpm
         with:
           run_install: false
 
       - name: Setup Node.js 24.x
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@04be95cf3511ea51ebf9f224ddfb99cc7ab87cd4
         with:
-          node-version: 24
+          node-version: 24.18.0
           registry-url: 'https://registry.npmjs.org'
           cache: 'pnpm'
           package-manager-cache: false
@@ -135,6 +136,19 @@ jobs:
             --endpoint-url "${STUDIO_ENDPOINT_URL}" \
             --delete
 
+      - name: Notify linked issues (alpha available)
+        if: ${{ !inputs.dry_run }}
+        continue-on-error: true
+        run: |
+          pnpm install --ignore-workspace --ignore-scripts
+          npx tsx index.ts
+        working-directory: scripts/release-issue-notification
+        env:
+          MODE: alpha-released
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+
   # ===========================================
   # STABLE RELEASE: Manual trigger only
   # ===========================================
@@ -145,12 +159,11 @@ jobs:
       github.event.inputs.publish_type == 'stable'
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
       id-token: write
     steps:
       - name: Initial checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           fetch-depth: 1
           persist-credentials: false
@@ -159,11 +172,14 @@ jobs:
         id: app-auth
         uses: ./.github/actions/app-auth
         with:
-          app-id: ${{ vars.DANE_APP_ID }}
+          client-id: ${{ vars.DANE_CLIENT_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-issues: write
 
       - name: Re-checkout with app token
-        uses: actions/checkout@v5
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           token: ${{ steps.app-auth.outputs.token }}
           fetch-depth: 0
@@ -179,15 +195,15 @@ jobs:
             echo "files_exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271
         name: Install pnpm
         with:
           run_install: false
 
       - name: Setup Node.js 24.x
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@04be95cf3511ea51ebf9f224ddfb99cc7ab87cd4
         with:
-          node-version: 24
+          node-version: 24.18.0
           registry-url: 'https://registry.npmjs.org'
           cache: 'pnpm'
           package-manager-cache: false
@@ -276,6 +292,19 @@ jobs:
           pnpm changeset-cli tag
           git push origin --tags
 
+      - name: Notify linked issues (stable released)
+        if: ${{ !inputs.dry_run }}
+        continue-on-error: true
+        run: |
+          pnpm install --ignore-workspace --ignore-scripts
+          npx tsx index.ts
+        working-directory: scripts/release-issue-notification
+        env:
+          MODE: stable-released
+          GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+
   enter_prerelease:
     needs: stable
     if: |
@@ -288,11 +317,10 @@ jobs:
       )
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
     steps:
       - name: Initial checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           fetch-depth: 1
           persist-credentials: false
@@ -301,25 +329,27 @@ jobs:
         id: app-auth
         uses: ./.github/actions/app-auth
         with:
-          app-id: ${{ vars.DANE_APP_ID }}
+          client-id: ${{ vars.DANE_CLIENT_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
 
       - name: Re-checkout with app token
-        uses: actions/checkout@v5
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           token: ${{ steps.app-auth.outputs.token }}
           fetch-depth: 0
           persist-credentials: true
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271
         name: Install pnpm
         with:
           run_install: false
 
       - name: Setup Node.js 24.x
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@04be95cf3511ea51ebf9f224ddfb99cc7ab87cd4
         with:
-          node-version: 24
+          node-version: 24.18.0
           registry-url: 'https://registry.npmjs.org'
           cache: 'pnpm'
           package-manager-cache: false
@@ -358,8 +388,7 @@ jobs:
       github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
       id-token: write
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
@@ -367,7 +396,7 @@ jobs:
       TURBO_CACHE: remote:r
     steps:
       - name: Initial checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           fetch-depth: 1
           persist-credentials: false
@@ -376,25 +405,27 @@ jobs:
         id: app-auth
         uses: ./.github/actions/app-auth
         with:
-          app-id: ${{ vars.DANE_APP_ID }}
+          client-id: ${{ vars.DANE_CLIENT_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: read
 
       - name: Re-checkout with app token
-        uses: actions/checkout@v5
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           token: ${{ steps.app-auth.outputs.token }}
           fetch-depth: 0
           persist-credentials: true
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271
         name: Install pnpm
         with:
           run_install: false
 
       - name: Setup Node.js 24.x
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@04be95cf3511ea51ebf9f224ddfb99cc7ab87cd4
         with:
-          node-version: 24
+          node-version: 24.18.0
           registry-url: 'https://registry.npmjs.org'
           cache: 'pnpm'
           package-manager-cache: false
@@ -439,6 +470,9 @@ jobs:
           echo "Finished updating workspace dependencies. $changed_count files updated."
         shell: bash
 
+      - name: Update lockfile
+        run: pnpm install --no-frozen-lockfile --lockfile-only
+
       - name: Build
         run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" build
 
@@ -455,6 +489,18 @@ jobs:
       - name: Run Changeset Pre Exit
         if: steps.check-snapshot-pre-json.outputs.files_exists == 'true'
         run: pnpm changeset-cli pre exit
+
+      - name: Add snapshot-only package bumps
+        run: |
+          cat > .changeset/snapshot-forced-packages.md <<'EOF'
+          ---
+          '@mastra/observability': patch
+          '@mastra/auth-studio': patch
+          '@mastra/core': patch
+          ---
+
+          Include observability, auth studio, and core in snapshot publishes.
+          EOF
 
       - name: Run Changeset Version Snapshot
         run: pnpm changeset-cli version --snapshot ${{ env.FINAL_TAG }}

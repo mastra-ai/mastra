@@ -3,34 +3,39 @@ import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
 
 import {
-  sharedFormElementStyle,
-  sharedFormElementFocusStyle,
+  inputOutlineAndFocusStyle,
+  inputSurfaceAndFocusStyle,
   sharedFormElementDisabledStyle,
+  unstyledFormElementStyle,
 } from '@/ds/primitives/form-element';
 import { cn } from '@/lib/utils';
 
 const textareaVariants = cva(
   cn(
     // Base styles with enhanced transitions
-    'flex w-full text-neutral6 border bg-transparent',
-    'transition-all duration-normal ease-out-custom',
+    'flex w-full border bg-transparent text-neutral6',
+    'duration-normal transition-all ease-out-custom',
     // Better placeholder styling
-    'placeholder:text-neutral2 placeholder:transition-opacity placeholder:duration-normal',
+    'placeholder:duration-normal placeholder:text-neutral2 placeholder:transition-opacity',
     'focus:placeholder:opacity-70',
     // Textarea specific
-    'min-h-[80px] resize-y',
+    'min-h-20 resize-y',
   ),
   {
     variants: {
       variant: {
-        default: cn(sharedFormElementStyle, sharedFormElementFocusStyle, sharedFormElementDisabledStyle),
-        unstyled: 'border-0 bg-transparent shadow-none focus:shadow-none focus:ring-0',
+        default: cn(inputSurfaceAndFocusStyle, 'rounded-xl', sharedFormElementDisabledStyle),
+        filled: cn(inputSurfaceAndFocusStyle, 'rounded-xl', sharedFormElementDisabledStyle),
+        outline: cn(inputOutlineAndFocusStyle, 'rounded-xl', sharedFormElementDisabledStyle),
+        unstyled: unstyledFormElementStyle,
       },
+      // Text tokens mirror the Input size scale (sm→ui-sm, md/default→ui-md, lg→ui-lg)
+      // so a Textarea reads at the same size as a sibling Input.
       size: {
         sm: 'px-2 py-1.5 text-ui-sm',
-        md: 'px-3 py-2 text-ui-sm',
+        md: 'px-3 py-2 text-ui-md',
         default: 'px-3 py-2 text-ui-md',
-        lg: 'px-4 py-3 text-ui-sm',
+        lg: 'px-4 py-3 text-ui-lg',
       },
     },
     defaultVariants: {
@@ -52,8 +57,7 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
       <textarea
         className={cn(
           textareaVariants({ variant, size }),
-          // Error state styling
-          error && 'border-error focus:ring-error focus:shadow-glow-accent2',
+          error && 'border-error focus-visible:border-error',
           className,
         )}
         data-testid={testId}
@@ -66,4 +70,4 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
 );
 Textarea.displayName = 'Textarea';
 
-export { Textarea, textareaVariants };
+export { Textarea };

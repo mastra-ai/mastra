@@ -50,7 +50,7 @@ const glutenCheckerScorer = createScorer({
   id: 'gluten-checker',
   description: 'Check if recipes contain gluten ingredients',
   judge: {                    // Optional: for prompt object steps
-    model: 'openai/gpt-5.4',
+    model: '__GATEWAY_OPENAI_MODEL__',
     instructions: 'You are a Chef that identifies if recipes contain gluten.'
   }
 })
@@ -77,7 +77,7 @@ const quoteSourcesScorer = createScorer({
   id: 'quote-sources',
   description: 'Check if the response includes sources',
   judge: {
-    model: 'openai/gpt-5-mini',
+    model: '__GATEWAY_OPENAI_MODEL_MINI__',
     instructions: 'You are a strict evaluator.',
   },
 })
@@ -349,13 +349,7 @@ A custom scorer in Mastra uses `createScorer` with four core components:
 1. [**Score Generation**](#score-generation)
 1. [**Reason Generation**](#reason-generation)
 
-Together, these components allow you to define custom evaluation logic using LLMs as judges.
-
-:::info
-
-Visit [createScorer](/reference/evals/create-scorer) for the full API and configuration options.
-
-:::
+Together, these components allow you to define custom evaluation logic using LLMs as judges. Visit [createScorer](/reference/evals/create-scorer) for the full API and configuration options.
 
 ```typescript title="src/mastra/scorers/gluten-checker.ts"
 import { createScorer } from '@mastra/core/evals'
@@ -415,7 +409,7 @@ export const glutenCheckerScorer = createScorer({
   id: 'gluten-checker',
   description: 'Check if the output contains any gluten',
   judge: {
-    model: 'openai/gpt-5-mini',
+    model: '__GATEWAY_OPENAI_MODEL_MINI__',
     instructions: GLUTEN_INSTRUCTIONS,
   },
 })
@@ -450,7 +444,7 @@ Sets up the LLM model and defines its role as a domain expert.
 
 ```typescript prettier:false
 judge: {
-  model: 'openai/gpt-5-mini',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
   instructions: GLUTEN_INSTRUCTIONS,
 }
 ```

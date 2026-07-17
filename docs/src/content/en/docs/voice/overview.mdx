@@ -29,9 +29,9 @@ import TabItem from "@theme/TabItem";
 
 Mastra's Voice system provides a unified interface for voice interactions, enabling text-to-speech (TTS), speech-to-text (STT), and real-time speech-to-speech (STS) capabilities in your applications.
 
-## Adding voice to agents
+## Add voice to agents
 
-To learn how to integrate voice capabilities into your agents, check out the [Adding Voice to Agents](/docs/agents/adding-voice) documentation. This section covers how to use both single and multiple voice providers, as well as real-time interactions.
+Pass a voice provider to an agent with the `voice` property. The same property supports text-to-speech (TTS), speech-to-text (STT), and real-time speech-to-speech (STS), depending on the provider you configure.
 
 ```typescript
 import { Agent } from '@mastra/core/agent'
@@ -43,7 +43,7 @@ const voiceAgent = new Agent({
   id: 'voice-agent',
   name: 'Voice Agent',
   instructions: 'You are a voice assistant that can help users with their tasks.',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   voice: new OpenAIVoice(),
 })
 ```
@@ -68,7 +68,7 @@ For detailed configuration options and advanced features, check out our [Text-to
       id: 'voice-agent',
       name: 'Voice Agent',
       instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: 'openai/gpt-5.4',
+      model: '__GATEWAY_OPENAI_MODEL__',
       voice: new OpenAIVoice(),
     })
 
@@ -96,7 +96,7 @@ For detailed configuration options and advanced features, check out our [Text-to
       id: 'voice-agent',
       name: 'Voice Agent',
       instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: 'openai/gpt-5.4',
+      model: '__GATEWAY_OPENAI_MODEL__',
       voice: new AzureVoice(),
     })
 
@@ -123,7 +123,7 @@ For detailed configuration options and advanced features, check out our [Text-to
       id: 'voice-agent',
       name: 'Voice Agent',
       instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: 'openai/gpt-5.4',
+      model: '__GATEWAY_OPENAI_MODEL__',
       voice: new ElevenLabsVoice(),
     })
 
@@ -150,7 +150,7 @@ For detailed configuration options and advanced features, check out our [Text-to
       id: 'voice-agent',
       name: 'Voice Agent',
       instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: 'openai/gpt-5.4',
+      model: '__GATEWAY_OPENAI_MODEL__',
       voice: new PlayAIVoice(),
     })
 
@@ -177,7 +177,7 @@ For detailed configuration options and advanced features, check out our [Text-to
       id: 'voice-agent',
       name: 'Voice Agent',
       instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: 'openai/gpt-5.4',
+      model: '__GATEWAY_OPENAI_MODEL__',
       voice: new GoogleVoice(),
     })
 
@@ -204,7 +204,7 @@ For detailed configuration options and advanced features, check out our [Text-to
       id: 'voice-agent',
       name: 'Voice Agent',
       instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: 'openai/gpt-5.4',
+      model: '__GATEWAY_OPENAI_MODEL__',
       voice: new CloudflareVoice(),
     })
 
@@ -231,7 +231,7 @@ For detailed configuration options and advanced features, check out our [Text-to
       id: 'voice-agent',
       name: 'Voice Agent',
       instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: 'openai/gpt-5.4',
+      model: '__GATEWAY_OPENAI_MODEL__',
       voice: new DeepgramVoice(),
     })
 
@@ -258,7 +258,7 @@ For detailed configuration options and advanced features, check out our [Text-to
       id: 'voice-agent',
       name: 'Voice Agent',
       instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: 'openai/gpt-5.4',
+      model: '__GATEWAY_OPENAI_MODEL__',
       voice: new InworldVoice(),
     })
 
@@ -285,7 +285,7 @@ For detailed configuration options and advanced features, check out our [Text-to
       id: 'voice-agent',
       name: 'Voice Agent',
       instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: 'openai/gpt-5.4',
+      model: '__GATEWAY_OPENAI_MODEL__',
       voice: new SpeechifyVoice(),
     })
 
@@ -312,7 +312,7 @@ For detailed configuration options and advanced features, check out our [Text-to
       id: 'voice-agent',
       name: 'Voice Agent',
       instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: 'openai/gpt-5.4',
+      model: '__GATEWAY_OPENAI_MODEL__',
       voice: new SarvamVoice(),
     })
 
@@ -339,7 +339,7 @@ For detailed configuration options and advanced features, check out our [Text-to
       id: 'voice-agent',
       name: 'Voice Agent',
       instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: 'openai/gpt-5.4',
+      model: '__GATEWAY_OPENAI_MODEL__',
       voice: new MurfVoice(),
     })
 
@@ -378,7 +378,7 @@ You can download a sample audio file from [here](https://github.com/mastra-ai/re
       id: 'voice-agent',
       name: 'Voice Agent',
       instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: 'openai/gpt-5.4',
+      model: '__GATEWAY_OPENAI_MODEL__',
       voice: new OpenAIVoice(),
     })
 
@@ -407,7 +407,7 @@ You can download a sample audio file from [here](https://github.com/mastra-ai/re
       id: 'voice-agent',
       name: 'Voice Agent',
       instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: 'openai/gpt-5.4',
+      model: '__GATEWAY_OPENAI_MODEL__',
       voice: new AzureVoice(),
     })
 
@@ -435,7 +435,7 @@ You can download a sample audio file from [here](https://github.com/mastra-ai/re
       id: 'voice-agent',
       name: 'Voice Agent',
       instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: 'openai/gpt-5.4',
+      model: '__GATEWAY_OPENAI_MODEL__',
       voice: new ElevenLabsVoice(),
     })
 
@@ -463,7 +463,7 @@ You can download a sample audio file from [here](https://github.com/mastra-ai/re
       id: 'voice-agent',
       name: 'Voice Agent',
       instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: 'openai/gpt-5.4',
+      model: '__GATEWAY_OPENAI_MODEL__',
       voice: new GoogleVoice(),
     })
 
@@ -491,7 +491,7 @@ You can download a sample audio file from [here](https://github.com/mastra-ai/re
       id: 'voice-agent',
       name: 'Voice Agent',
       instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: 'openai/gpt-5.4',
+      model: '__GATEWAY_OPENAI_MODEL__',
       voice: new CloudflareVoice(),
     })
 
@@ -519,7 +519,7 @@ You can download a sample audio file from [here](https://github.com/mastra-ai/re
       id: 'voice-agent',
       name: 'Voice Agent',
       instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: 'openai/gpt-5.4',
+      model: '__GATEWAY_OPENAI_MODEL__',
       voice: new DeepgramVoice(),
     })
 
@@ -547,7 +547,7 @@ You can download a sample audio file from [here](https://github.com/mastra-ai/re
       id: 'voice-agent',
       name: 'Voice Agent',
       instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: 'openai/gpt-5.4',
+      model: '__GATEWAY_OPENAI_MODEL__',
       voice: new InworldVoice(),
     })
 
@@ -575,7 +575,7 @@ You can download a sample audio file from [here](https://github.com/mastra-ai/re
       id: 'voice-agent',
       name: 'Voice Agent',
       instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: 'openai/gpt-5.4',
+      model: '__GATEWAY_OPENAI_MODEL__',
       voice: new SarvamVoice(),
     })
 
@@ -610,7 +610,7 @@ For detailed configuration options and advanced features, check out [Speech to S
       id: 'voice-agent',
       name: 'Voice Agent',
       instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: 'openai/gpt-5.4',
+      model: '__GATEWAY_OPENAI_MODEL__',
       voice: new OpenAIRealtimeVoice(),
     })
 
@@ -640,7 +640,7 @@ For detailed configuration options and advanced features, check out [Speech to S
       id: 'voice-agent',
       name: 'Voice Agent',
       instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: 'openai/gpt-5.4',
+      model: '__GATEWAY_OPENAI_MODEL__',
       voice: new GeminiLiveVoice({
         // Live API mode
         apiKey: process.env.GOOGLE_API_KEY,
@@ -689,7 +689,7 @@ For detailed configuration options and advanced features, check out [Speech to S
       id: 'voice-agent',
       name: 'Voice Agent',
       instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: 'openai/gpt-5.4',
+      model: '__GATEWAY_OPENAI_MODEL__',
       voice: new NovaSonicVoice({
         region: 'us-east-1',
         speaker: 'matthew',
@@ -720,6 +720,48 @@ For detailed configuration options and advanced features, check out [Speech to S
     ```
 
     Visit the [AWS Nova Sonic Reference](/reference/voice/aws-nova-sonic) for more information on the AWS Nova Sonic voice provider.
+  </TabItem>
+
+  <TabItem value="inworld-realtime" label="Inworld Realtime">
+    ```typescript
+    import { Agent } from '@mastra/core/agent'
+    import { playAudio, getMicrophoneStream } from '@mastra/node-audio'
+    import { InworldRealtimeVoice } from '@mastra/voice-inworld'
+
+    const voiceAgent = new Agent({
+      id: 'voice-agent',
+      name: 'Voice Agent',
+      instructions: 'You are a voice assistant that can help users with their tasks.',
+      model: '__GATEWAY_OPENAI_MODEL__',
+      voice: new InworldRealtimeVoice({
+        apiKey: process.env.INWORLD_API_KEY,
+        model: 'inworld/models/gemma-4-26b-a4b-it',
+        speaker: 'Sarah',
+      }),
+    })
+
+    // Connect before using speak/send
+    await voiceAgent.voice.connect()
+
+    // Listen for agent audio (PCM stream)
+    voiceAgent.voice.on('speaker', stream => {
+      playAudio(stream)
+    })
+
+    // Listen for text responses and transcriptions
+    voiceAgent.voice.on('writing', ({ text, role }) => {
+      console.log(`${role}: ${text}`)
+    })
+
+    // Initiate the conversation
+    await voiceAgent.voice.speak('How can I help you today?')
+
+    // Send continuous audio from the microphone
+    const micStream = getMicrophoneStream()
+    await voiceAgent.voice.send(micStream)
+    ```
+
+    Visit the [Inworld Realtime Reference](/reference/voice/inworld-realtime) for more information on the Inworld Realtime voice provider.
   </TabItem>
 
   <TabItem value="xai" label="xAI">
@@ -1089,6 +1131,26 @@ Each voice provider can be configured with different models and options. Below a
     Visit the [AWS Nova Sonic Reference](/reference/voice/aws-nova-sonic) for more information on the AWS Nova Sonic voice provider.
   </TabItem>
 
+  <TabItem value="inworld-realtime" label="Inworld Realtime">
+    ```typescript
+    // Inworld Realtime Voice Configuration
+    const voice = new InworldRealtimeVoice({
+      apiKey: process.env.INWORLD_API_KEY,
+      model: 'inworld/models/gemma-4-26b-a4b-it',
+      speaker: 'Sarah',
+      // Typed Inworld realtime knobs (semantic VAD, playback speed, MCP tool routing, ...)
+      session: {
+        audio: {
+          output: { speed: 1.1 },
+          input: { turn_detection: { type: 'semantic_vad', eagerness: 'high' } },
+        },
+      },
+    })
+    ```
+
+    Visit the [Inworld Realtime Reference](/reference/voice/inworld-realtime) for more information on the Inworld Realtime voice provider.
+  </TabItem>
+
   <TabItem value="aisdk" label="AI SDK">
     ```typescript
     // AI SDK Voice Configuration
@@ -1107,14 +1169,14 @@ Each voice provider can be configured with different models and options. Below a
       id: 'aisdk-voice-agent',
       name: 'AI SDK Voice Agent',
       instructions: 'You are a helpful assistant with voice capabilities.',
-      model: 'openai/gpt-5.4',
+      model: '__GATEWAY_OPENAI_MODEL__',
       voice,
     })
     ```
   </TabItem>
 </Tabs>
 
-### Using Multiple Voice Providers
+### Using multiple voice providers
 
 This example demonstrates how to create and use two different voice providers in Mastra: OpenAI for speech-to-text (STT) and PlayAI for text-to-speech (TTS).
 

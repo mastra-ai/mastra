@@ -56,7 +56,7 @@ const agent = new Agent({
   id: 'test-agent',
   name: 'Test Agent',
   instructions: 'You are a helpful assistant',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   memory: new Memory({
     storage: new LibSQLStore({
       id: 'memory-store',
@@ -106,7 +106,7 @@ import { openai } from '@ai-sdk/openai'
 const agent = new Agent({
   name: 'semantic-agent',
   instructions: 'You are a helpful assistant with semantic memory',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   memory: new Memory({
     storage: new LibSQLStore({
       id: 'memory-store',
@@ -159,7 +159,7 @@ import { openai } from '@ai-sdk/openai'
 const agent = new Agent({
   name: 'working-memory-agent',
   instructions: 'You are an assistant with working memory',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   memory: new Memory({
     storage: new LibSQLStore({
       id: 'memory-store',
@@ -191,7 +191,7 @@ const customMessageHistory = new MessageHistory({
 const agent = new Agent({
   name: 'custom-memory-agent',
   instructions: 'You are a helpful assistant',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   memory: new Memory({
     storage: new LibSQLStore({ id: 'memory-store', url: 'file:memory.db' }),
     lastMessages: 10, // This would normally add MessageHistory(10)
@@ -259,9 +259,10 @@ const contentBlocker = {
 }
 
 const agent = new Agent({
+  id: 'safe-agent',
   name: 'safe-agent',
   instructions: 'You are a helpful assistant',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   memory: new Memory({ lastMessages: 10 }),
   // Your guardrail runs BEFORE memory saves
   outputProcessors: [contentBlocker],
@@ -298,9 +299,10 @@ const inputValidator = {
 }
 
 const agent = new Agent({
+  id: 'validated-agent',
   name: 'validated-agent',
   instructions: 'You are a helpful assistant',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   memory: new Memory({ lastMessages: 10 }),
   // Your guardrail runs AFTER memory loads history
   inputProcessors: [inputValidator],
@@ -315,6 +317,73 @@ const agent = new Agent({
 | Output | Before memory saves | Nothing saved to storage |
 
 Both scenarios are safe - guardrails prevent inappropriate content from being persisted to memory
+
+## Handling large attachments
+
+Some storage providers enforce record size limits that base64-encoded file attachments can exceed:
+
+| Provider | Record size limit |
+| - | - |
+| [DynamoDB](/reference/storage/dynamodb) | 400 KB |
+| [Convex](/reference/storage/convex) | 1 MiB |
+| [Cloudflare D1](/reference/storage/cloudflare-d1) | 1 MiB |
+
+PostgreSQL, MongoDB, and libSQL have higher limits and are usually unaffected.
+
+Use an input processor to upload attachments to external storage, then replace them with URL references before messages are persisted.
+
+```typescript title="src/mastra/processors/attachment-uploader.ts"
+import type { Processor } from '@mastra/core/processors'
+import type { MastraDBMessage } from '@mastra/core/memory'
+
+export class AttachmentUploader implements Processor {
+  id = 'attachment-uploader'
+
+  async processInput({ messages }: { messages: MastraDBMessage[] }) {
+    return Promise.all(messages.map(message => this.processMessage(message)))
+  }
+
+  async processMessage(message: MastraDBMessage) {
+    const attachments = message.content.experimental_attachments
+    if (!attachments?.length) return message
+
+    const uploaded = await Promise.all(
+      attachments.map(async attachment => {
+        if (!attachment.url?.startsWith('data:')) return attachment
+
+        const url = await this.upload(attachment.url, attachment.contentType)
+        return { ...attachment, url }
+      }),
+    )
+
+    return { ...message, content: { ...message.content, experimental_attachments: uploaded } }
+  }
+
+  async upload(dataUri: string, contentType?: string): Promise<string> {
+    const base64 = dataUri.split(',')[1]
+    const buffer = Buffer.from(base64, 'base64')
+
+    throw new Error('Implement upload() with your storage provider')
+  }
+}
+```
+
+Use the processor with your agent:
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+import { AttachmentUploader } from '../processors/attachment-uploader'
+
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support agent',
+  instructions: 'Answer customer support questions.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  memory: new Memory({ lastMessages: 10 }),
+  inputProcessors: [new AttachmentUploader()],
+})
+```
 
 ## Related documentation
 

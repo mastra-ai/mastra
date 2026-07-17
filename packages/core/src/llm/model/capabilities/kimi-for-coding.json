@@ -1,0 +1,5 @@
+{
+  "attachment": ["k2p7", "kimi-for-coding-highspeed"],
+  "temperature": ["k2p5", "k2p6", "k3", "kimi-k2-thinking"],
+  "structuredOutput": ["k2p5", "k2p6", "k2p7", "k3", "kimi-for-coding-highspeed", "kimi-k2-thinking"]
+}

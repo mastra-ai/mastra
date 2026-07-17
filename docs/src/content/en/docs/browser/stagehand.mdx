@@ -34,13 +34,13 @@ import { StagehandBrowser } from '@mastra/stagehand'
 
 const browser = new StagehandBrowser({
   headless: false,
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
 })
 
 export const stagehandAgent = new Agent({
   id: 'stagehand-agent',
   name: 'Stagehand Agent',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   browser,
   instructions: `You are a web automation assistant.
 
@@ -104,16 +104,16 @@ Use screenshots when you need to visually inspect the page — for example, eval
 ```typescript
 const browser = new StagehandBrowser({
   headless: false,
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
 })
 ```
 
-To disable the screenshot tool for models that do not support vision, use `excludeTools`:
+To disable the screenshot tool for models that don't support vision, use `excludeTools`:
 
 ```typescript
 const browser = new StagehandBrowser({
   headless: false,
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   excludeTools: ['stagehand_screenshot'],
 })
 ```
@@ -127,18 +127,31 @@ const browser = new StagehandBrowser({
   env: 'BROWSERBASE',
   apiKey: process.env.BROWSERBASE_API_KEY,
   projectId: process.env.BROWSERBASE_PROJECT_ID,
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
 })
 ```
 
-:::note
-
 See [StagehandBrowser reference](/reference/browser/stagehand-browser) for all configuration options.
 
-:::
+## Recording
+
+Stagehand can opt into alpha browser recording tools:
+
+```typescript
+const browser = new StagehandBrowser({
+  headless: false,
+  model: '__GATEWAY_OPENAI_MODEL__',
+  recording: {
+    outputDir: './browser-recordings',
+  },
+})
+```
+
+This adds `browser_record` and `browser_record_caption` to the agent's toolset. See [Browser recording (alpha)](/docs/browser/recording) for details.
 
 ## Related
 
 - [Browser overview](/docs/browser/overview)
 - [AgentBrowser](/docs/browser/agent-browser)
+- [Browser recording (alpha)](/docs/browser/recording)
 - [StagehandBrowser reference](/reference/browser/stagehand-browser)

@@ -1,116 +1,19 @@
-import { cn } from '@mastra/playground-ui';
+import type {
+  DataOmObservationStartPart,
+  DataOmObservationEndPart,
+  DataOmObservationFailedPart,
+  DataOmBufferingStartPart,
+  DataOmBufferingEndPart,
+  DataOmBufferingFailedPart,
+} from '@mastra/memory/processors';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Brain, CheckCircle2, XCircle, Loader2, CloudCog } from 'lucide-react';
 import { useEffect } from 'react';
 
-/**
- * Types for OM observation markers streamed from the agent.
- * These match the types defined in @mastra/memory.
- */
-export interface ObservationMarkerConfig {
-  messageTokens: number;
-  observationTokens: number;
-  scope: 'thread' | 'resource';
-}
-
-export interface DataOmObservationStartPart {
-  type: 'data-om-observation-start';
-  data: {
-    startedAt: string;
-    tokensToObserve: number;
-    recordId: string;
-    threadId: string;
-    threadIds: string[];
-    config: ObservationMarkerConfig;
-  };
-}
-
-export interface DataOmObservationEndPart {
-  type: 'data-om-observation-end';
-  data: {
-    completedAt: string;
-    durationMs: number;
-    tokensObserved: number;
-    observationTokens: number;
-    recordId: string;
-    threadId: string;
-  };
-}
-
-export interface DataOmObservationFailedPart {
-  type: 'data-om-observation-failed';
-  data: {
-    failedAt: string;
-    durationMs: number;
-    tokensAttempted: number;
-    error: string;
-    recordId: string;
-    threadId: string;
-  };
-}
-
-/**
- * Async buffering marker types - non-blocking background observation/reflection.
- */
-export interface DataOmBufferingStartPart {
-  type: 'data-om-buffering-start';
-  data: {
-    startedAt: string;
-    tokensToObserve: number;
-    recordId: string;
-    cycleId: string;
-    threadId?: string;
-    resourceId?: string;
-    operationType: 'observation' | 'reflection';
-  };
-}
-
-export interface DataOmBufferingEndPart {
-  type: 'data-om-buffering-end';
-  data: {
-    completedAt: string;
-    durationMs: number;
-    tokensObserved: number;
-    observationTokens: number;
-    recordId: string;
-    cycleId: string;
-  };
-}
-
-export interface DataOmBufferingFailedPart {
-  type: 'data-om-buffering-failed';
-  data: {
-    failedAt: string;
-    durationMs: number;
-    error: string;
-    recordId: string;
-    cycleId: string;
-  };
-}
-
-export type DataOmBufferingPart = DataOmBufferingStartPart | DataOmBufferingEndPart | DataOmBufferingFailedPart;
-
-export type DataOmObservationPart =
-  | DataOmObservationStartPart
-  | DataOmObservationEndPart
-  | DataOmObservationFailedPart
-  | DataOmBufferingPart;
-
-/**
- * Check if a part is an OM observation marker.
- */
-export function isObservationMarker(part: { type: string }): part is DataOmObservationPart {
-  return (
-    part.type === 'data-om-observation-start' ||
-    part.type === 'data-om-observation-end' ||
-    part.type === 'data-om-observation-failed' ||
-    part.type === 'data-om-buffering-start' ||
-    part.type === 'data-om-buffering-end' ||
-    part.type === 'data-om-buffering-failed'
-  );
-}
+import type { OmMarkerPart, OmObservationMarkerPart } from '../../../services/om-types';
 
 interface ObservationMarkerProps {
-  part: DataOmObservationPart;
+  part: OmMarkerPart;
   /** Callback when observation completes (for triggering sidebar refresh) */
   onObservationComplete?: (data: DataOmObservationEndPart['data']) => void;
   /** Callback when observation fails */
@@ -184,11 +87,15 @@ const ObservationStartMarker = ({ data }: { data: DataOmObservationStartPart['da
 /**
  * Shows observation completed successfully.
  */
+const hasExtractedValue = (value: unknown) => value !== undefined && value !== null && value !== '';
+
 const ObservationEndMarker = ({ data }: { data: DataOmObservationEndPart['data'] }) => {
   const tokensK = (data.tokensObserved / 1000).toFixed(1);
   const compressionRatio =
     data.tokensObserved > 0 ? ((1 - data.observationTokens / data.tokensObserved) * 100).toFixed(0) : 0;
   const durationSec = (data.durationMs / 1000).toFixed(1);
+  const extractedCount = Object.values(data.extractedValues ?? {}).filter(hasExtractedValue).length;
+  const extractionFailureCount = data.extractionFailures?.length ?? 0;
 
   return (
     <div
@@ -202,6 +109,8 @@ const ObservationEndMarker = ({ data }: { data: DataOmObservationEndPart['data']
       <CheckCircle2 className="h-3 w-3" />
       <span>
         Observed {tokensK}k tokens → {compressionRatio}% compression ({durationSec}s)
+        {extractedCount > 0 ? ` · ${extractedCount} extracted` : ''}
+        {extractionFailureCount > 0 ? ` · ${extractionFailureCount} failed` : ''}
       </span>
     </div>
   );
@@ -233,7 +142,7 @@ const ObservationFailedMarker = ({ data }: { data: DataOmObservationFailedPart['
  * Shows async buffering in progress.
  */
 const BufferingStartMarker = ({ data }: { data: DataOmBufferingStartPart['data'] }) => {
-  const tokensK = (data.tokensToObserve / 1000).toFixed(1);
+  const tokensK = (data.tokensToBuffer / 1000).toFixed(1);
   const label = data.operationType === 'reflection' ? 'Buffering reflection' : 'Buffering observations';
 
   return (
@@ -258,10 +167,12 @@ const BufferingStartMarker = ({ data }: { data: DataOmBufferingStartPart['data']
  * Shows async buffering completed.
  */
 const BufferingEndMarker = ({ data }: { data: DataOmBufferingEndPart['data'] }) => {
-  const tokensK = (data.tokensObserved / 1000).toFixed(1);
+  const tokensK = (data.tokensBuffered / 1000).toFixed(1);
   const compressionRatio =
-    data.tokensObserved > 0 ? ((1 - data.observationTokens / data.tokensObserved) * 100).toFixed(0) : 0;
+    data.tokensBuffered > 0 ? ((1 - data.bufferedTokens / data.tokensBuffered) * 100).toFixed(0) : 0;
   const durationSec = (data.durationMs / 1000).toFixed(1);
+  const extractedCount = Object.values(data.extractedValues ?? {}).filter(hasExtractedValue).length;
+  const extractionFailureCount = data.extractionFailures?.length ?? 0;
 
   return (
     <div
@@ -275,6 +186,8 @@ const BufferingEndMarker = ({ data }: { data: DataOmBufferingEndPart['data'] }) 
       <CloudCog className="h-3 w-3" />
       <span>
         Buffered {tokensK}k tokens → {compressionRatio}% compression ({durationSec}s)
+        {extractedCount > 0 ? ` · ${extractedCount} extracted` : ''}
+        {extractionFailureCount > 0 ? ` · ${extractionFailureCount} failed` : ''}
       </span>
     </div>
   );
@@ -304,7 +217,7 @@ const BufferingFailedMarker = ({ data }: { data: DataOmBufferingFailedPart['data
  * Compact inline indicator for observation (alternative display).
  * Can be used when space is limited.
  */
-export const ObservationIndicator = ({ part }: { part: DataOmObservationPart }) => {
+export const ObservationIndicator = ({ part }: { part: OmObservationMarkerPart }) => {
   if (part.type === 'data-om-observation-start') {
     return (
       <span className="inline-flex items-center gap-1 text-accent1" title="Observing...">

@@ -1,0 +1,207 @@
+name: Flag Spam Comments
+
+on:
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+
+jobs:
+  check-comment:
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    runs-on: starsling-ubuntu-24.04
+    permissions:
+      issues: read
+      pull-requests: read
+
+    steps:
+      - name: Check for spam and notify via Slack DM
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_USER_ID: 'U086EV0DN8H'
+        with:
+          script: |
+            const comment = context.payload.comment;
+            const issue = context.payload.issue;
+
+            if (!comment || !issue) {
+              console.log('Missing comment or issue payload (likely workflow_dispatch). Skipping.');
+              return;
+            }
+
+            const author = comment.user;
+
+            // Skip known bots
+            const allowedBots = [
+              'dane[bot]',
+              'vercel[bot]',
+              'changeset-bot[bot]',
+              'socket-security[bot]',
+            ];
+            if (author.type === 'Bot' || allowedBots.includes(author.login)) {
+              console.log(`Skipping bot comment by ${author.login}`);
+              return;
+            }
+
+            // Skip comments from trusted repo associations
+            const trustedAssociations = ['OWNER', 'MEMBER', 'COLLABORATOR', 'CONTRIBUTOR'];
+            if (trustedAssociations.includes(comment.author_association)) {
+              console.log(`Skipping comment by ${author.login} (${comment.author_association})`);
+              return;
+            }
+
+            // Fetch full user profile for age and activity data
+            const { data: user } = await github.rest.users.getByUsername({
+              username: author.login,
+            });
+
+            const accountAgeDays = Math.floor(
+              (Date.now() - new Date(user.created_at).getTime()) / (1000 * 60 * 60 * 24),
+            );
+
+            // Collect spam signals
+            const signals = [];
+
+            if (accountAgeDays < 90) {
+              signals.push(`Account is only ${accountAgeDays} days old`);
+            }
+
+            if (user.public_repos < 3) {
+              signals.push(`Only ${user.public_repos} public repo(s)`);
+            }
+
+            if (user.followers < 2) {
+              signals.push(`Only ${user.followers} follower(s)`);
+            }
+
+            // Check comment content for spam patterns
+            const body = comment.body || '';
+            const spamPatterns = [
+              { regex: /check\s*out/i, label: 'promotional language' },
+              { regex: /visit\s+my/i, label: 'promotional language' },
+              { regex: /hire\s+me/i, label: 'self-promotion' },
+              { regex: /follow\s+me/i, label: 'self-promotion' },
+              { regex: /subscribe/i, label: 'self-promotion' },
+              { regex: /\b(discount|coupon|promo)\b/i, label: 'commercial spam' },
+              { regex: /\b(buy\s+now|order\s+now)\b/i, label: 'commercial spam' },
+              { regex: /\b(crypto|nft|token|airdrop|web3)\b/i, label: 'crypto spam' },
+              { regex: /\b(SEO|backlink|guest\s*post)\b/i, label: 'SEO spam' },
+              { regex: /whatsapp|telegram\.me|t\.me\//i, label: 'messenger spam' },
+            ];
+
+            const matchedLabels = [
+              ...new Set(spamPatterns.filter((p) => p.regex.test(body)).map((p) => p.label)),
+            ];
+            if (matchedLabels.length > 0) {
+              signals.push(`Content matches: ${matchedLabels.join(', ')}`);
+            }
+
+            // Count external links (excluding github.com, githubusercontent.com)
+            const linkRegex = /https?:\/\/(?!github\.com|githubusercontent\.com)[^\s)>\]]+/gi;
+            const externalLinks = (body.match(linkRegex) || []).length;
+            if (externalLinks > 2) {
+              signals.push(`Contains ${externalLinks} external links`);
+            }
+
+            // Flag if 2+ signals are present
+            if (signals.length < 2) {
+              console.log(
+                `Comment by ${author.login} has ${signals.length} signal(s), not enough to flag.`,
+              );
+              return;
+            }
+
+            console.log(
+              `Flagging comment by ${author.login} with ${signals.length} signal(s): ${signals.join('; ')}`,
+            );
+
+            // Build Slack DM
+            const truncatedBody =
+              body.length > 500 ? body.substring(0, 500) + '…' : body;
+            const issueType = issue.pull_request ? 'PR' : 'Issue';
+
+            const slackMessage = {
+              channel: process.env.SLACK_USER_ID,
+              text: `Potential spam comment on ${issueType} #${issue.number} by ${author.login}`,
+              blocks: [
+                {
+                  type: 'section',
+                  text: {
+                    type: 'mrkdwn',
+                    text: `*:warning: Potential spam comment on ${issueType} <${issue.html_url}|#${issue.number}: ${issue.title}>*`,
+                  },
+                },
+                {
+                  type: 'section',
+                  fields: [
+                    {
+                      type: 'mrkdwn',
+                      text: `*Author:* <https://github.com/${author.login}|${author.login}>`,
+                    },
+                    {
+                      type: 'mrkdwn',
+                      text: `*Association:* ${comment.author_association}`,
+                    },
+                    {
+                      type: 'mrkdwn',
+                      text: `*Account age:* ${accountAgeDays} days`,
+                    },
+                    {
+                      type: 'mrkdwn',
+                      text: `*Public repos:* ${user.public_repos}`,
+                    },
+                  ],
+                },
+                {
+                  type: 'section',
+                  text: {
+                    type: 'mrkdwn',
+                    text: `*Flags:*\n${signals.map((s) => `• ${s}`).join('\n')}`,
+                  },
+                },
+                {
+                  type: 'section',
+                  text: {
+                    type: 'mrkdwn',
+                    text: `*Comment:*\n>>>${truncatedBody}`,
+                  },
+                },
+                {
+                  type: 'actions',
+                  elements: [
+                    {
+                      type: 'button',
+                      text: { type: 'plain_text', text: 'View Comment' },
+                      url: comment.html_url,
+                    },
+                    {
+                      type: 'button',
+                      text: { type: 'plain_text', text: 'View User Profile' },
+                      url: `https://github.com/${author.login}`,
+                    },
+                    {
+                      type: 'button',
+                      text: { type: 'plain_text', text: 'Block User' },
+                      url: `https://github.com/organizations/mastra-ai/settings/blocked_users`,
+                      style: 'danger',
+                    },
+                  ],
+                },
+              ],
+            };
+
+            const response = await fetch('https://slack.com/api/chat.postMessage', {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(slackMessage),
+            });
+
+            const result = await response.json();
+            if (result.ok) {
+              console.log(`Slack DM sent about comment by ${author.login}`);
+            } else {
+              core.warning(`Failed to send Slack DM: ${result.error}`);
+            }

@@ -22,6 +22,7 @@ import type {
   ScorerTargetScope,
 } from './core';
 import type { FeedbackInput } from './feedback';
+import type { CostContext } from './metrics';
 import type { ScoreInput } from './scores';
 
 // ============================================================================
@@ -54,6 +55,23 @@ export enum SpanType {
   PROCESSOR_RUN = 'processor_run',
   /** Function/tool execution with inputs, outputs, errors */
   TOOL_CALL = 'tool_call',
+  /**
+   * Client-side tool execution marker. The server creates this span
+   * when the model emits a client tool call, injects its W3C carrier
+   * into the outgoing tool-call chunk, then ends the span once tool
+   * args are available. Child spans/logs from inside the client tool's
+   * execute function flow back as OTLP/JSON via the ClientObservabilityProxy
+   * interface in @mastra/observability and parent themselves under this
+   * span via parentSpanId reference.
+   */
+  CLIENT_TOOL_CALL = 'client_tool_call',
+  /**
+   * Provider-executed (server-side) tool span. Reconstructed from
+   * tool-call and tool-result stream chunks for tools the model
+   * provider executes (e.g. Anthropic code execution, server-side
+   * web search). Opened on tool-call chunk, closed on tool-result.
+   */
+  PROVIDER_TOOL_CALL = 'provider_tool_call',
   /** Workflow run - root span for workflow processes */
   WORKFLOW_RUN = 'workflow_run',
   /** Workflow step execution with step status, data flow */
@@ -97,7 +115,19 @@ export { EntityType };
 /**
  * Base attributes that all spans can have
  */
-export interface AIBaseAttributes {}
+export interface AIBaseAttributes {
+  /**
+   * Token usage rolled up from internal descendant spans whose own
+   * MODEL_GENERATION spans are filtered from the exported trace (e.g.
+   * Mastra-owned processors that run with `tracingPolicy.internal`).
+   *
+   * Accumulated on the closest exported ancestor at descendant-end time,
+   * so cost / token attribution survives even when the descendant model
+   * spans themselves are hidden. Token-usage metrics auto-extract from
+   * this field on the ancestor when present.
+   */
+  internalUsage?: UsageStats;
+}
 
 /**
  * Agent Run attributes
@@ -206,6 +236,8 @@ export interface ModelGenerationAttributes extends AIBaseAttributes {
   resultType?: 'tool_selection' | 'response_generation' | 'reasoning' | 'planning';
   /** Token usage statistics */
   usage?: UsageStats;
+  /** Estimated cost context, when provided directly by an SDK or provider */
+  costContext?: CostContext;
   /** Model parameters */
   parameters?: {
     maxOutputTokens?: number;
@@ -327,6 +359,45 @@ export interface ModelChunkAttributes extends AIBaseAttributes {
 export interface ToolCallAttributes extends AIBaseAttributes {
   toolType?: string;
   toolDescription?: string;
+  success?: boolean;
+}
+
+/**
+ * Client Tool Call attributes.
+ *
+ * CLIENT_TOOL_CALL is a server-side marker span for a tool call that
+ * will execute in the client SDK. It is created early so its W3C
+ * carrier can be sent to the client, then ended once tool args are
+ * available. Richer telemetry from inside the client tool's execute
+ * function (child spans, logs) is forwarded back via the
+ * ClientObservabilityProxy interface in @mastra/observability and
+ * parented under this span via parentSpanId reference.
+ */
+export interface ClientToolCallAttributes extends AIBaseAttributes {
+  /** Tool category, e.g. 'tool', 'function' */
+  toolType?: string;
+  /** Tool description from createTool */
+  toolDescription?: string;
+  /** Optional environment hint reported by the client (browser, node, deno, etc.) */
+  clientEnvironment?: string;
+}
+
+/**
+ * Provider Tool Call attributes.
+ *
+ * PROVIDER_TOOL_CALL is a synthetic span reconstructed from stream
+ * chunks for tools executed by the model provider (e.g. Anthropic
+ * code execution, server-side web search). The span is opened on
+ * the tool-call chunk and closed on the paired tool-result chunk.
+ */
+export interface ProviderToolCallAttributes extends AIBaseAttributes {
+  /** Tool category: 'provider-tool' */
+  toolType?: string;
+  /** Tool description from tool definition */
+  toolDescription?: string;
+  /** Provider tool call ID (e.g. 'srvtoolu_...') */
+  toolCallId?: string;
+  /** Whether the provider reported success or error */
   success?: boolean;
 }
 
@@ -643,6 +714,8 @@ export interface SpanTypeMap {
   [SpanType.MODEL_INFERENCE]: ModelInferenceAttributes;
   [SpanType.MODEL_CHUNK]: ModelChunkAttributes;
   [SpanType.TOOL_CALL]: ToolCallAttributes;
+  [SpanType.CLIENT_TOOL_CALL]: ClientToolCallAttributes;
+  [SpanType.PROVIDER_TOOL_CALL]: ProviderToolCallAttributes;
   [SpanType.MCP_TOOL_CALL]: MCPToolCallAttributes;
   [SpanType.PROCESSOR_RUN]: ProcessorRunAttributes;
   [SpanType.WORKFLOW_STEP]: WorkflowStepAttributes;

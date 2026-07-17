@@ -7,5 +7,9 @@ export type DashboardCardProps = {
 };
 
 export function DashboardCard({ children, className }: DashboardCardProps) {
-  return <div className={cn('border border-border1 rounded-lg p-6 bg-surface2', className)}>{children}</div>;
+  return (
+    <div className={cn('rounded-xl border border-border1 bg-surface-overlay-soft px-4 py-3', className)}>
+      {children}
+    </div>
+  );
 }

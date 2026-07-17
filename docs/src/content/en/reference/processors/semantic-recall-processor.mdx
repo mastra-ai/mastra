@@ -166,9 +166,10 @@ const semanticRecall = new SemanticRecall({
 })
 
 export const agent = new Agent({
+  id: 'semantic-memory-agent',
   name: 'semantic-memory-agent',
   instructions: 'You are a helpful assistant with semantic memory recall',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   inputProcessors: [semanticRecall, new MessageHistory({ storage, lastMessages: 50 })],
   outputProcessors: [semanticRecall, new MessageHistory({ storage })],
 })

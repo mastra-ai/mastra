@@ -1,16 +1,21 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import { InternalSpans } from '../../../observability';
-import { createWorkflow } from '../../../workflows/workflow';
+import { createWorkflow } from '../../../workflows/create';
 import type { OuterLLMRun } from '../../types';
+import { pruneAgentLoopSnapshot } from '../prune-snapshot';
 import { llmIterationOutputSchema } from '../schema';
 import type { LLMIterationData } from '../schema';
 import { createBackgroundTaskCheckStep } from './background-task-check-step';
+import { createGoalStep } from './goal-step';
 import { createIsTaskCompleteStep } from './is-task-complete-step';
 import { createLLMExecutionStep } from './llm-execution-step';
 import { createLLMMappingStep } from './llm-mapping-step';
+import { createSignalDrainStep } from './signal-drain-step';
 import { resolveConfiguredToolCallConcurrency, resolveToolCallConcurrency } from './tool-call-concurrency';
 import type { ToolCallForeachOptions } from './tool-call-concurrency';
 import { createToolCallStep } from './tool-call-step';
+
+export const AGENTIC_EXECUTION_WORKFLOW_ID = 'executionWorkflow';
 
 export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
   models,
@@ -57,14 +62,26 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
     ...rest,
   });
 
+  const signalDrainStep = createSignalDrainStep({
+    models,
+    _internal,
+    ...rest,
+  });
+
   const isTaskCompleteStep = createIsTaskCompleteStep({
     models,
     _internal,
     ...rest,
   });
 
+  const goalStep = createGoalStep({
+    models,
+    _internal,
+    ...rest,
+  });
+
   return createWorkflow({
-    id: 'executionWorkflow',
+    id: AGENTIC_EXECUTION_WORKFLOW_ID,
     inputSchema: llmIterationOutputSchema,
     outputSchema: llmIterationOutputSchema,
     options: {
@@ -73,7 +90,21 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
         // VNext execution as internal
         internal: InternalSpans.WORKFLOW,
       },
-      shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
+      shouldPersistSnapshot: params => {
+        // We need a persisted snapshot record to support `resumeStream()`.
+        // - Create the initial record early ("pending")
+        // - Update it when execution is suspended ("paused"/"suspended")
+        // Avoid persisting "running" snapshots so we don't overwrite an existing suspended snapshot.
+        return (
+          params.workflowStatus === 'pending' ||
+          params.workflowStatus === 'paused' ||
+          params.workflowStatus === 'suspended'
+        );
+      },
+      // Agent-loop snapshots are pure resume artifacts — strip everything a
+      // resume never reads (stale suspend payloads, duplicated message
+      // arrays, AI SDK step history) before persisting.
+      pruneSnapshot: pruneAgentLoopSnapshot,
       validateInputs: false,
     },
   })
@@ -81,13 +112,28 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
     .map(
       async ({ inputData }) => {
         const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
-        return typedInputData.output.toolCalls || [];
+        const toolCalls = typedInputData.output.toolCalls || [];
+        // Recompute concurrency from the step's effective active tool set (set by
+        // llm-execution-step), NOT from the tools the model actually called. A
+        // registered approval/suspending tool that the model did not call this
+        // step must still force sequential execution, so narrowing to called
+        // tool names here would incorrectly allow concurrent execution.
+        const stepActiveTools = _internal?.stepActiveTools as string[] | undefined;
+        toolCallForeachOptions.concurrency = resolveToolCallConcurrency({
+          requireToolApproval: rest.requireToolApproval,
+          tools: ((_internal?.stepTools as Tools | undefined) ?? rest.tools) as Tools | undefined,
+          activeTools: stepActiveTools,
+          configuredConcurrency: configuredToolCallConcurrency,
+        });
+        return toolCalls;
       },
       { id: 'map-tool-calls' },
     )
     .foreach(toolCallStep, toolCallForeachOptions)
     .then(llmMappingStep)
     .then(backgroundTaskCheckStep)
+    .then(signalDrainStep)
     .then(isTaskCompleteStep)
+    .then(goalStep)
     .commit();
 }

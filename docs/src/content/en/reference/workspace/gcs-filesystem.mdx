@@ -7,13 +7,7 @@ packages:
 
 # GCSFilesystem
 
-Stores files in Google Cloud Storage.
-
-:::info
-
-For interface details, see [WorkspaceFilesystem Interface](/reference/workspace/filesystem).
-
-:::
+Stores files in Google Cloud Storage. For interface details, see [WorkspaceFilesystem Interface](/reference/workspace/filesystem).
 
 ## Installation
 
@@ -39,8 +33,9 @@ const workspace = new Workspace({
 })
 
 const agent = new Agent({
+  id: 'file-agent',
   name: 'file-agent',
-  model: 'anthropic/claude-opus-4-6',
+  model: '__GATEWAY_ANTHROPIC_MODEL_OPUS__',
   workspace,
 })
 ```
@@ -247,6 +242,7 @@ See [E2BSandbox reference](/reference/workspace/e2b-sandbox) for more details on
 ## Related
 
 - [WorkspaceFilesystem interface](/reference/workspace/filesystem)
+- [ArchilFilesystem reference](/reference/workspace/archil-filesystem)
 - [S3Filesystem reference](/reference/workspace/s3-filesystem)
 - [AzureBlobFilesystem reference](/reference/workspace/azure-blob-filesystem)
 - [E2BSandbox reference](/reference/workspace/e2b-sandbox)

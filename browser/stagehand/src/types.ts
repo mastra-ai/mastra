@@ -2,23 +2,26 @@
  * Stagehand Browser Types
  */
 
-import type { BrowserConfig as BaseBrowserConfig } from '@mastra/core/browser';
+import type { ModelConfiguration as StagehandModelConfiguration } from '@browserbasehq/stagehand';
+import type { BrowserConfig as BaseBrowserConfig, BrowserRecordingOptions } from '@mastra/core/browser';
 import type { StagehandToolName } from './tools/constants';
 
 /**
- * Model configuration for Stagehand AI operations
+ * Model configuration for Stagehand AI operations.
  */
-export type ModelConfiguration =
-  | string // Format: "provider/model" (e.g., "openai/gpt-4o", "anthropic/claude-3-5-sonnet-20241022")
-  | {
-      modelName: string;
-      apiKey?: string;
-      baseURL?: string;
-    };
+export type ModelConfiguration = StagehandModelConfiguration;
 
 /**
  * Stagehand-specific configuration fields.
  */
+export interface StagehandLogLine {
+  category?: string;
+  message: string;
+  level?: 0 | 1 | 2;
+  timestamp?: string;
+  auxiliary?: Record<string, { value: string; type: string }>;
+}
+
 interface StagehandConfigExtensions {
   /**
    * Environment to run the browser in
@@ -45,6 +48,16 @@ interface StagehandConfigExtensions {
   model?: ModelConfiguration;
 
   /**
+   * Enable Stagehand experimental features.
+   */
+  experimental?: boolean;
+
+  /**
+   * Disable the Stagehand API so model execution runs locally.
+   */
+  disableAPI?: boolean;
+
+  /**
    * Enable self-healing selectors.
    * When enabled, Stagehand uses AI to find elements even when selectors fail.
    * @default true
@@ -58,13 +71,27 @@ interface StagehandConfigExtensions {
   domSettleTimeout?: number;
 
   /**
-   * Logging verbosity level
-   * - 0: Silent
-   * - 1: Errors only
-   * - 2: Verbose
-   * @default 1
+   * Logging verbosity level.
+   * - 0: Suppress INFO/DEBUG logs
+   * - 1: Include INFO logs
+   * - 2: Include DEBUG logs
+   *
+   * @default 0
    */
   verbose?: 0 | 1 | 2;
+
+  /**
+   * Optional Stagehand logger hook. When provided, Stagehand log lines are
+   * routed here instead of being written directly to the process console.
+   */
+  logger?: (line: StagehandLogLine) => void;
+
+  /**
+   * Disable Stagehand's Pino console logging backend.
+   *
+   * @default true
+   */
+  disablePino?: boolean;
 
   /**
    * Custom system prompt for AI operations (act, extract, observe)
@@ -81,6 +108,14 @@ interface StagehandConfigExtensions {
    * @default false
    */
   preserveUserDataDir?: boolean;
+
+  /**
+   * Alpha: opt into browser recording tools.
+   *
+   * Recording tools are disabled by default. Provide an output directory to add
+   * `browser_record` and `browser_record_caption` to this browser's toolset.
+   */
+  recording?: BrowserRecordingOptions;
 
   /**
    * Tool names to exclude from the browser toolset.

@@ -44,8 +44,8 @@ export function NoticeRoot({ variant, title, icon, action, children, className }
     return (
       <div
         className={cn(
-          'relative @container rounded-2xl border p-3 text-ui-md leading-ui-md',
-          'animate-in fade-in-0 slide-in-from-top-2 duration-200',
+          '@container relative rounded-2xl border p-3 text-ui-md leading-ui-md',
+          'animate-in duration-200 fade-in-0 slide-in-from-top-2',
           classes,
           className,
         )}
@@ -64,17 +64,17 @@ export function NoticeRoot({ variant, title, icon, action, children, className }
   return (
     <div
       className={cn(
-        'relative @container flex flex-col gap-4 rounded-2xl border p-3',
-        'animate-in fade-in-0 slide-in-from-top-2 duration-200',
+        '@container relative flex flex-col gap-4 rounded-2xl border p-3',
+        'animate-in duration-200 fade-in-0 slide-in-from-top-2',
         classes,
         className,
       )}
     >
       <div className="flex h-4 items-center gap-2 [&>svg]:size-4">
         {resolvedIcon}
-        <span className="text-ui-sm font-medium uppercase tracking-wide leading-none">{title}</span>
+        <span className="text-ui-sm leading-none font-medium tracking-wide uppercase">{title}</span>
       </div>
-      {action && <div className="absolute right-2 top-2 hidden @md:block">{action}</div>}
+      {action && <div className="absolute top-2 right-2 hidden @md:block">{action}</div>}
       {(children || action) && (
         <div className="flex flex-col gap-5">
           {children}

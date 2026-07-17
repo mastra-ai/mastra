@@ -1,5 +1,3 @@
-import crypto from 'node:crypto';
-
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import { createVectorErrorId } from '@mastra/core/storage';
 import { MastraVector } from '@mastra/core/vector';
@@ -16,7 +14,7 @@ import type {
   UpsertVectorParams,
 } from '@mastra/core/vector';
 
-import type { ConvexAdminClientConfig } from '../storage/client';
+import type { ConvexAdminClientConfig, RawStorageResult } from '../storage/client';
 import { ConvexAdminClient } from '../storage/client';
 import type { StorageRequest } from '../storage/types';
 
@@ -31,6 +29,7 @@ type VectorFilter = {
 };
 
 const INDEX_METADATA_TABLE = 'mastra_vector_indexes';
+const VECTOR_QUERY_PAGE_SIZE = 256;
 
 export type ConvexVectorConfig = ConvexAdminClientConfig & {
   id: string;
@@ -99,10 +98,7 @@ export class ConvexVector extends MastraVector<VectorFilter> {
       throw new Error(`Index ${indexName} not found`);
     }
 
-    const vectors = await this.callStorage<VectorRecord[]>({
-      op: 'queryTable',
-      tableName: this.vectorTable(indexName),
-    });
+    const vectors = await this.queryAllVectors(indexName);
 
     return {
       dimension: index.dimension,
@@ -146,10 +142,7 @@ export class ConvexVector extends MastraVector<VectorFilter> {
       });
     }
 
-    const vectors = await this.callStorage<VectorRecord[]>({
-      op: 'queryTable',
-      tableName: this.vectorTable(indexName),
-    });
+    const vectors = await this.queryAllVectors(indexName);
 
     const filtered =
       filter && !this.isEmptyFilter(filter)
@@ -188,10 +181,7 @@ export class ConvexVector extends MastraVector<VectorFilter> {
       }
 
       // Update by filter - find all matching records and update them
-      const vectors = await this.callStorage<VectorRecord[]>({
-        op: 'queryTable',
-        tableName: this.vectorTable(params.indexName),
-      });
+      const vectors = await this.queryAllVectors(params.indexName);
 
       const matching = vectors.filter(record => this.matchesFilter(record.metadata, filter));
 
@@ -280,10 +270,7 @@ export class ConvexVector extends MastraVector<VectorFilter> {
     }
 
     // Find all matching vectors and delete them
-    const vectors = await this.callStorage<VectorRecord[]>({
-      op: 'queryTable',
-      tableName: this.vectorTable(indexName),
-    });
+    const vectors = await this.queryAllVectors(indexName);
 
     const matchingIds = vectors.filter(record => this.matchesFilter(record.metadata, filter)).map(record => record.id);
 
@@ -404,6 +391,32 @@ export class ConvexVector extends MastraVector<VectorFilter> {
 
   private async callStorage<T = any>(request: StorageRequest): Promise<T> {
     return this.client.callStorage<T>(request);
+  }
+
+  private async queryAllVectors(indexName: string): Promise<VectorRecord[]> {
+    const vectors: VectorRecord[] = [];
+    let cursor: string | null = null;
+    let hasMore = true;
+
+    while (hasMore) {
+      const response: RawStorageResult<VectorRecord[]> = await this.client.callStorageRaw<VectorRecord[]>({
+        op: 'queryTable',
+        tableName: this.vectorTable(indexName),
+        pageSize: VECTOR_QUERY_PAGE_SIZE,
+        cursor,
+      });
+
+      vectors.push(...response.result);
+
+      const nextCursor = response.continuationCursor ?? null;
+      hasMore = response.hasMore ?? false;
+      if (hasMore && (!nextCursor || nextCursor === cursor)) {
+        throw new Error('ConvexVector: paginated vector query did not return a valid continuation cursor');
+      }
+      cursor = nextCursor;
+    }
+
+    return vectors;
   }
 
   /**

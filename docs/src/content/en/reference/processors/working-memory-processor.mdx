@@ -157,9 +157,10 @@ const storage = new PostgresStorage({
 })
 
 export const agent = new Agent({
+  id: 'personalized-agent',
   name: 'personalized-agent',
   instructions: 'You are a helpful assistant that remembers user preferences',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   inputProcessors: [
     new WorkingMemory({
       storage,

@@ -13,6 +13,32 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 
+/**
+ * Convert Express request to Web API Request for accessing headers, cookies, etc.
+ */
+function toWebRequest(req: Request): globalThis.Request {
+  const protocol = req.protocol || 'http';
+  const host = req.get('host') || 'localhost';
+  const url = `${protocol}://${host}${req.originalUrl || req.url}`;
+
+  const headers = new Headers();
+  for (const [key, value] of Object.entries(req.headers)) {
+    if (value) {
+      if (Array.isArray(value)) {
+        value.forEach(v => headers.append(key, v));
+      } else {
+        headers.set(key, value);
+      }
+    }
+  }
+
+  return new globalThis.Request(url, {
+    method: req.method,
+    headers,
+    // Note: body is not needed as it's already parsed
+  });
+}
+
 import { MASTRA_OPTIONS } from '../constants';
 import { MastraExceptionFilter } from '../filters/mastra-exception.filter';
 import { MastraRouteGuard } from '../guards/mastra-route.guard';
@@ -79,6 +105,7 @@ export class MastraController {
       body,
       requestContext: this.requestContext.requestContext,
       abortSignal: this.requestContext.abortSignal,
+      request: toWebRequest(req),
     });
   }
 

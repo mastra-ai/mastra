@@ -54,6 +54,7 @@ function isSpanInternal(spanType: SpanType, flags?: InternalSpans): boolean {
     // Tool-related spans
     case SpanType.TOOL_CALL:
     case SpanType.MCP_TOOL_CALL:
+    case SpanType.PROVIDER_TOOL_CALL:
       return (flags & InternalSpans.TOOL) !== 0;
 
     // Model-related spans

@@ -1,15 +1,11 @@
-import {
-  AlertDialog,
-  Button,
-  CopyButton,
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
-  TooltipProvider,
-  AmazonIcon,
-  AzureIcon,
-  GoogleIcon,
-} from '@mastra/playground-ui';
+import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { AmazonIcon } from '@mastra/playground-ui/icons/AmazonIcon';
+import { AzureIcon } from '@mastra/playground-ui/icons/AzureIcon';
+import { GoogleIcon } from '@mastra/playground-ui/icons/GoogleIcon';
 import {
   File,
   Folder,
@@ -31,7 +27,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { coldarkDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
+import { coldarkCold, coldarkDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 import type { FileEntry } from '../types';
 
 // =============================================================================
@@ -499,10 +495,12 @@ function getLanguageFromExtension(ext?: string): string | null {
  * Highlighted code display component using Prism.
  */
 function HighlightedCode({ content, language }: { content: string; language: string }) {
+  const isDark = useTheme().resolvedTheme === 'dark';
+
   return (
     <SyntaxHighlighter
       language={language}
-      style={coldarkDark}
+      style={isDark ? coldarkDark : coldarkCold}
       customStyle={{
         margin: 0,
         padding: '1rem',
@@ -511,7 +509,7 @@ function HighlightedCode({ content, language }: { content: string; language: str
       }}
       codeTagProps={{
         style: {
-          fontFamily: 'var(--geist-mono), ui-monospace, monospace',
+          fontFamily: 'var(--font-mono)',
         },
       }}
     >
@@ -553,7 +551,7 @@ export function FileViewer({ path, content, isLoading, mimeType, onClose }: File
       </div>
 
       {/* Content */}
-      <div className="max-h-[500px] overflow-auto h-full" style={{ backgroundColor: 'black' }}>
+      <div className="max-h-[500px] overflow-auto h-full bg-surface2">
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-6 w-6 animate-spin text-neutral3" />

@@ -47,7 +47,7 @@ export interface CodeDiffProps {
 function buildDiffDarkTheme(): Extension {
   return draculaInit({
     settings: {
-      fontFamily: 'var(--geist-mono)',
+      fontFamily: 'var(--font-mono)',
       fontSize: '0.8125rem',
       lineHighlight: 'transparent',
       gutterBackground: 'transparent',
@@ -66,7 +66,7 @@ function buildDiffLightTheme(): Extension {
       fontSize: '0.8125rem',
     },
     '&.cm-editor .cm-scroller': {
-      fontFamily: 'var(--geist-mono)',
+      fontFamily: 'var(--font-mono)',
     },
     '.cm-gutters': {
       backgroundColor: 'transparent',
@@ -139,11 +139,11 @@ export function CodeDiff({ codeA, codeB }: CodeDiffProps) {
   }, [codeA, codeB, theme]);
 
   return (
-    <div className="relative overflow-auto rounded-xl border dark:border-white/10 border-border1 dark:bg-black/20 bg-surface3">
-      <div className="absolute left-1/2 top-0 h-full w-px dark:bg-white/10 bg-border1 z-10" />
+    <div className="relative overflow-auto rounded-xl border border-border1 bg-surface3 dark:border-white/10 dark:bg-black/20">
+      <div className="absolute top-0 left-1/2 z-10 h-full w-px bg-border1 dark:bg-white/10" />
       <div
         ref={containerRef}
-        className="[&_.cm-mergeViewEditor]:flex-1 [&_.cm-editor]:bg-transparent [&_.cm-editor]:p-6 [&_.cm-gutters]:bg-transparent"
+        className="[&_.cm-editor]:bg-transparent [&_.cm-editor]:p-6 [&_.cm-gutters]:bg-transparent [&_.cm-mergeViewEditor]:flex-1"
       />
     </div>
   );

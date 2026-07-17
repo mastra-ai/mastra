@@ -538,6 +538,82 @@ describe('DefaultExporter', () => {
         expect(mockObservabilityStore.batchCreateSpans).toHaveBeenCalledTimes(2);
       });
 
+      it('should report a failed flush and retry it after the configured delay without new traffic', async () => {
+        const emitDropEvent = vi.fn();
+        const exporter = new DefaultExporter({
+          strategy: 'batch-with-updates',
+          maxRetries: 3,
+          retryDelayMs: 25,
+          maxBatchSize: 10,
+          logger: mockLogger,
+        });
+        await exporter.init({ mastra: mockMastra, emitDropEvent });
+
+        mockObservabilityStore.batchCreateSpans
+          .mockRejectedValueOnce(new Error('Storage error'))
+          .mockRejectedValueOnce(new Error('Storage error'))
+          .mockResolvedValueOnce(undefined);
+
+        await exporter.exportTracingEvent(createMockEvent(TracingEventType.SPAN_STARTED));
+        await exporter.flush();
+
+        expect(mockObservabilityStore.batchCreateSpans).toHaveBeenCalledTimes(1);
+        expect(mockLogger.warn).toHaveBeenCalledWith('Failed to persist observability events', {
+          signal: 'tracing',
+          eventCount: 1,
+          retryAttempt: 1,
+          maxRetries: 3,
+          nextRetryDelayMs: 25,
+          error: 'Storage error',
+        });
+        expect(mockLogger.debug).not.toHaveBeenCalledWith('Batch flushed', expect.anything());
+        expect(emitDropEvent).not.toHaveBeenCalled();
+        expect(timers).toHaveLength(1);
+        expect(timers[0].delay).toBe(25);
+
+        timers[0].fn();
+        await new Promise(resolve => setImmediate(resolve));
+
+        expect(mockObservabilityStore.batchCreateSpans).toHaveBeenCalledTimes(2);
+        expect(timers).toHaveLength(2);
+        expect(timers[1].delay).toBe(50);
+
+        timers[1].fn();
+        await new Promise(resolve => setImmediate(resolve));
+
+        expect(mockObservabilityStore.batchCreateSpans).toHaveBeenCalledTimes(3);
+        expect(emitDropEvent).not.toHaveBeenCalled();
+      });
+
+      it('should use the scheduled retry attempt when a failed batch contains mixed retry counts', async () => {
+        const exporter = new DefaultExporter({
+          strategy: 'batch-with-updates',
+          maxRetries: 3,
+          retryDelayMs: 25,
+          maxBatchSize: 2,
+          logger: mockLogger,
+        });
+        await exporter.init({ mastra: mockMastra });
+
+        mockObservabilityStore.batchCreateSpans.mockRejectedValue(new Error('Storage error'));
+
+        await exporter.exportTracingEvent(createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'span-1'));
+        await exporter.flush();
+        await exporter.exportTracingEvent(createMockEvent(TracingEventType.SPAN_STARTED, 'trace-2', 'span-2'));
+
+        expect(mockObservabilityStore.batchCreateSpans).toHaveBeenCalledTimes(2);
+        expect(mockLogger.warn).toHaveBeenLastCalledWith('Failed to persist observability events', {
+          signal: 'tracing',
+          eventCount: 2,
+          retryAttempt: 1,
+          maxRetries: 3,
+          nextRetryDelayMs: 25,
+          error: 'Storage error',
+        });
+        expect(timers).toHaveLength(1);
+        expect(timers[0].delay).toBe(25);
+      });
+
       it('should drop events after max retries exceeded', async () => {
         const exporter = new DefaultExporter({
           strategy: 'batch-with-updates',
@@ -627,6 +703,40 @@ describe('DefaultExporter', () => {
         );
       });
 
+      it('should preserve prior-call deferred updates when a later flushSpanUpdates call hits a transient error', async () => {
+        const exporter = new DefaultExporter({
+          strategy: 'batch-with-updates',
+          maxRetries: 3,
+          maxBatchSize: 10,
+          logger: mockLogger,
+        });
+        await exporter.init({ mastra: mockMastra });
+
+        // span-a is started + flushed so it lives in the created-spans set
+        await exporter.exportTracingEvent(createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'span-a'));
+        await exporter.flush();
+        mockObservabilityStore.batchUpdateSpans.mockClear();
+
+        // span-b's update arrives before its create — gets deferred by flushSpanUpdates call 1
+        // span-a's end arrives — flushSpanUpdates call 2 batch-updates and fails transiently
+        await exporter.exportTracingEvent(createMockEvent(TracingEventType.SPAN_UPDATED, 'trace-1', 'span-b'));
+        await exporter.exportTracingEvent(createMockEvent(TracingEventType.SPAN_ENDED, 'trace-1', 'span-a'));
+
+        mockObservabilityStore.batchUpdateSpans.mockRejectedValueOnce(new Error('Transient failure'));
+        await exporter.flush();
+
+        // span-b's deferred update must NOT have been wiped by the call-2 error path.
+        // Now create span-b and flush — the update should be processed.
+        await exporter.exportTracingEvent(createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'span-b'));
+        await exporter.flush();
+
+        const allUpdateRecords = mockObservabilityStore.batchUpdateSpans.mock.calls.flatMap(
+          (call: any) => call[0].records,
+        );
+        const spanBUpdates = allUpdateRecords.filter((u: any) => u.spanId === 'span-b');
+        expect(spanBUpdates.length).toBeGreaterThanOrEqual(1);
+      });
+
       it('should emit drop events when deferred updates exhaust retries', async () => {
         const emitDropEvent = vi.fn();
         const exporter = new DefaultExporter({
@@ -648,6 +758,7 @@ describe('DefaultExporter', () => {
           }),
         );
         expect(emitDropEvent.mock.calls[0][0]).not.toHaveProperty('error');
+        expect(mockLogger.debug).not.toHaveBeenCalledWith('Batch flushed', expect.anything());
       });
     });
 

@@ -1,0 +1,221 @@
+---
+title: "Reference: createCodeMode() | Tools and MCP"
+description: "API reference for createCodeMode(), used to run multi-tool computations in a sandbox."
+packages:
+  - "@mastra/core"
+---
+
+# createCodeMode()
+
+**Added in:** `@mastra/core@1.38.0`
+
+The `createCodeMode()` function returns a tool and generated instructions that let an agent run multi-tool computations as one TypeScript function. The generated code runs in a workspace sandbox, and each `external_*` call runs the real tool on the host with validation, request context, and tracing.
+
+For a conceptual overview, see [Code mode](/docs/agents/code-mode).
+
+## Usage example
+
+Create a code mode tool, add its generated instructions to the agent, and register the returned tool with the same id.
+
+```typescript title="src/mastra/agents/shop-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { createCodeMode, createTool } from '@mastra/core/tools'
+import { LocalSandbox } from '@mastra/core/workspace'
+import { z } from 'zod'
+
+const getTopProducts = createTool({
+  id: 'getTopProducts',
+  description: 'Get top selling products',
+  inputSchema: z.object({ limit: z.number() }),
+  outputSchema: z.object({
+    products: z.array(z.object({ id: z.string(), name: z.string(), totalSales: z.number() })),
+  }),
+  execute: async ({ limit }) => fetchTopProducts(limit),
+})
+
+const getProductRatings = createTool({
+  id: 'getProductRatings',
+  description: 'Get ratings for a product',
+  inputSchema: z.object({ productId: z.string() }),
+  outputSchema: z.object({ ratings: z.array(z.object({ score: z.number() })) }),
+  execute: async ({ productId }) => fetchRatings(productId),
+})
+
+const { tool, instructions } = createCodeMode({
+  tools: { getTopProducts, getProductRatings },
+  sandbox: new LocalSandbox(),
+})
+
+export const shopAgent = new Agent({
+  id: 'shop-assistant',
+  name: 'shop-assistant',
+  instructions: ['You are a helpful shopping assistant.', instructions],
+  model: '__GATEWAY_OPENAI_MODEL__',
+  tools: { execute_typescript: tool },
+})
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'config',
+    type: 'CodeModeConfig',
+    description: 'Configuration for the code mode tool and generated instructions.',
+    properties: [
+      {
+        type: 'CodeModeConfig',
+        parameters: [
+          {
+            name: 'tools',
+            type: 'ToolsInput',
+            description:
+              'Tools exposed to the generated code as `external_<id>` functions. Only these tools can be called.',
+          },
+          {
+            name: 'sandbox',
+            type: 'WorkspaceSandbox',
+            description:
+              'Sandbox used to execute the generated code. Required unless the agent runs in a workspace that provides a sandbox. Pass `new LocalSandbox()` to run on the host explicitly.',
+            isOptional: true,
+          },
+          {
+            name: 'timeout',
+            type: 'number',
+            description: 'Execution timeout in milliseconds.',
+            isOptional: true,
+            defaultValue: '30000',
+          },
+          {
+            name: 'id',
+            type: 'string',
+            description: 'The generated tool id.',
+            isOptional: true,
+            defaultValue: 'execute_typescript',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'transport',
+    type: 'CodeModeTransport',
+    description:
+      'Optional transport implementation used to run the generated code in the sandbox. The default transport uses stdio JSON-RPC over the workspace sandbox process API.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Returns
+
+Returns a `CodeModeResult` object.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'tool',
+    type: 'Tool<any, any>',
+    description: 'The generated code mode tool. By default, its id is `execute_typescript`.',
+  },
+  {
+    name: 'instructions',
+    type: 'string',
+    description: 'Generated model instructions with typed `external_*` declarations for the configured tools.',
+  },
+]}
+/>
+
+## CodeModeToolResult
+
+The generated tool returns a `CodeModeToolResult`.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'success',
+    type: 'boolean',
+    description: 'Whether the generated code ran to completion without throwing.',
+  },
+  {
+    name: 'result',
+    type: 'unknown',
+    description: 'The value returned by the generated code.',
+    isOptional: true,
+  },
+  {
+    name: 'logs',
+    type: 'string[]',
+    description:
+      'Captured console output from `console.log`, `console.info`, `console.warn`, and `console.error`, in order.',
+    isOptional: true,
+  },
+  {
+    name: 'error',
+    type: '{ message: string; name?: string; line?: number }',
+    description: 'Error details when the generated code throws or fails to execute.',
+    isOptional: true,
+    properties: [
+      {
+        type: '{ message: string; name?: string; line?: number }',
+        parameters: [
+          {
+            name: 'message',
+            type: 'string',
+            description: 'Error message.',
+          },
+          {
+            name: 'name',
+            type: 'string',
+            description: 'Error name, when available.',
+            isOptional: true,
+          },
+          {
+            name: 'line',
+            type: 'number',
+            description: 'Line number associated with the failure, when available.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## Inspecting instructions
+
+Use `createCodeModeInstructions()` to inspect the exact prompt content generated for a set of tools.
+
+```typescript title="src/mastra/tools/code-mode-instructions.ts"
+import { createCodeModeInstructions } from '@mastra/core/tools'
+
+console.log(
+  createCodeModeInstructions({
+    tools: { getTopProducts, getProductRatings },
+  }),
+)
+```
+
+The instructions include the usage contract and one typed `declare function external_<id>(...)` line for each configured tool. Tool ids are sanitized into valid TypeScript function names, and conflicting sanitized names throw an error.
+
+## createCodeModeTool()
+
+Use `createCodeModeTool()` when you only need the tool and want to manage instructions separately. Most agents should use `createCodeMode()` so the tool and matching instructions stay together.
+
+```typescript title="src/mastra/tools/code-mode-tool.ts"
+import { createCodeModeTool } from '@mastra/core/tools'
+import { LocalSandbox } from '@mastra/core/workspace'
+
+export const codeModeTool = createCodeModeTool({
+  tools: { getTopProducts, getProductRatings },
+  sandbox: new LocalSandbox(),
+})
+```
+
+## Related
+
+- [Code mode](/docs/agents/code-mode)
+- [createTool()](/reference/tools/create-tool)
+- [Workspace overview](/docs/workspace/overview)

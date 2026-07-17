@@ -269,6 +269,27 @@ function getStorageFromContext({ mastra }: Pick<MemoryContext, 'mastra'>): Mastr
   return mastra.getStorage();
 }
 
+function agentSupportsMemory(agent: Agent | null): boolean {
+  if (!agent) return true; // unresolved → storage fallback still applies
+
+  const candidate = agent as Agent & {
+    supportsMemory?: () => boolean;
+    hasOwnMemory?: () => boolean;
+  };
+
+  // Explicit opt-out via duck-typed supportsMemory() (kept as an escape hatch)
+  if (typeof candidate.supportsMemory === 'function' && !candidate.supportsMemory()) {
+    return false;
+  }
+
+  // A resolved agent with no own memory genuinely has memory disabled
+  if (typeof candidate.hasOwnMemory === 'function' && !candidate.hasOwnMemory()) {
+    return false;
+  }
+
+  return true;
+}
+
 /**
  * Gets the agent from context for OM processor detection.
  */
@@ -540,7 +561,11 @@ export const GET_MEMORY_STATUS_ROUTE = createRoute({
         return { result: true, memoryType: 'local' as const, observationalMemory: omStatus };
       }
 
-      // Fallback to storage (covers stored agents whose memory can't be resolved)
+      if (!agentSupportsMemory(agent)) {
+        return { result: false };
+      }
+
+      // Fallback to storage (covers unresolved/stored agents and the no-agentId case)
       const storage = getStorageFromContext({ mastra });
       if (storage) {
         return { result: true };
@@ -1136,7 +1161,11 @@ export const LIST_MESSAGES_ROUTE = createRoute({
           filter,
           includeSystemReminders,
         });
-        return result;
+        const uiMessages = (result as { uiMessages?: unknown }).uiMessages;
+        return {
+          ...result,
+          uiMessages: Array.isArray(uiMessages) ? uiMessages : null,
+        };
       }
 
       // Fallback to storage (covers stored agents whose memory can't be resolved)
@@ -1165,7 +1194,10 @@ export const LIST_MESSAGES_ROUTE = createRoute({
             include,
             filter,
           });
-          return result;
+          return {
+            ...result,
+            uiMessages: null,
+          };
         }
       }
 
@@ -1266,8 +1298,14 @@ export const SAVE_MESSAGES_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Messages should be an array' });
       }
 
+      // The body schema is intentionally permissive (unknown[]); narrow to the
+      // fields this handler validates and normalizes.
+      const incomingMessages = messages as Array<
+        { id?: string; threadId?: string; resourceId?: string; createdAt?: string | Date } & Record<string, unknown>
+      >;
+
       const resourceIdByThread = new Map<string, string>();
-      for (const message of messages) {
+      for (const message of incomingMessages) {
         if (!message.threadId || !message.resourceId) {
           continue;
         }
@@ -1282,7 +1320,7 @@ export const SAVE_MESSAGES_ROUTE = createRoute({
       }
 
       // Validate that all messages have threadId and resourceId
-      const invalidMessages = messages.filter(message => !message.threadId || !message.resourceId);
+      const invalidMessages = incomingMessages.filter(message => !message.threadId || !message.resourceId);
       if (invalidMessages.length > 0) {
         throw new HTTPException(400, {
           message: `All messages must have threadId and resourceId fields. Found ${invalidMessages.length} invalid message(s).`,
@@ -1291,7 +1329,7 @@ export const SAVE_MESSAGES_ROUTE = createRoute({
 
       // If effectiveResourceId is set, validate all messages belong to this resource
       if (effectiveResourceId) {
-        const unauthorizedMessages = messages.filter(message => message.resourceId !== effectiveResourceId);
+        const unauthorizedMessages = incomingMessages.filter(message => message.resourceId !== effectiveResourceId);
         if (unauthorizedMessages.length > 0) {
           throw new HTTPException(403, {
             message: 'Access denied: cannot save messages for a different resource',
@@ -1299,7 +1337,7 @@ export const SAVE_MESSAGES_ROUTE = createRoute({
         }
 
         // Validate that all threads belong to this resource (prevents cross-resource data pollution)
-        const threadIds = [...new Set(messages.map(m => m.threadId).filter(Boolean))] as string[];
+        const threadIds = [...new Set(incomingMessages.map(m => m.threadId).filter(Boolean))] as string[];
         for (const threadId of threadIds) {
           const thread = await memory.getThreadById({ threadId });
           await enforceThreadAccess({
@@ -1312,7 +1350,7 @@ export const SAVE_MESSAGES_ROUTE = createRoute({
           });
         }
       } else {
-        const threadIds = [...new Set(messages.map(m => m.threadId).filter(Boolean))] as string[];
+        const threadIds = [...new Set(incomingMessages.map(m => m.threadId).filter(Boolean))] as string[];
         for (const threadId of threadIds) {
           const thread = await memory.getThreadById({ threadId });
           await enforceThreadAccess({
@@ -1326,7 +1364,7 @@ export const SAVE_MESSAGES_ROUTE = createRoute({
         }
       }
 
-      const processedMessages = messages.map(message => ({
+      const processedMessages = incomingMessages.map(message => ({
         ...message,
         id: message.id || memory.generateId(),
         createdAt: message.createdAt ? new Date(message.createdAt) : new Date(),

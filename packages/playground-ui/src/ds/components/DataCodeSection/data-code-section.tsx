@@ -11,9 +11,10 @@ import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import ReactCodeMirror from '@uiw/react-codemirror';
 import { AlignJustifyIcon, AlignLeftIcon, ExpandIcon, XIcon } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { ButtonWithTooltip } from '@/ds/components/Button';
+import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { CopyButton } from '@/ds/components/CopyButton';
+import { DataPanelSectionHeading } from '@/ds/components/DataPanel/data-panel-section-heading';
 import {
   Dialog,
   DialogClose,
@@ -70,7 +71,7 @@ function searchHighlightExtension(): Extension {
 function buildDarkTheme(): Extension {
   return draculaInit({
     settings: {
-      fontFamily: 'var(--geist-mono)',
+      fontFamily: 'var(--font-mono)',
       fontSize: '0.75rem',
       lineHighlight: 'transparent',
       gutterBackground: 'transparent',
@@ -89,7 +90,7 @@ function buildLightTheme(): Extension {
       fontSize: '0.75rem',
     },
     '&.cm-editor .cm-scroller': {
-      fontFamily: 'var(--geist-mono)',
+      fontFamily: 'var(--font-mono)',
     },
     '.cm-gutters': {
       backgroundColor: 'transparent',
@@ -244,15 +245,7 @@ export function DataCodeSection({
   return (
     <div className={cn('flex flex-col gap-2', className)}>
       <div className="flex items-center justify-between">
-        <div
-          className={cn(
-            'flex items-center gap-1.5 text-ui-sm uppercase tracking-widest text-neutral2',
-            '[&>svg]:size-3.5',
-          )}
-        >
-          {icon}
-          {title}
-        </div>
+        <DataPanelSectionHeading icon={icon}>{title}</DataPanelSectionHeading>
         <div className="flex items-center gap-2">
           {!usePlainTextView && (
             <SearchFieldBlock
@@ -271,30 +264,25 @@ export function DataCodeSection({
           <ButtonsGroup>
             <CopyButton content={codeStr || 'No content'} size="sm" />
             {hasMultilineText && (
-              <ButtonWithTooltip
+              <Button
                 size="sm"
                 aria-label={showAsMultilineText ? 'Show escaped newlines' : 'Show multiline text'}
-                tooltipContent={showAsMultilineText ? 'Show escaped newlines' : 'Show multiline text'}
+                tooltip={showAsMultilineText ? 'Show escaped newlines' : 'Show multiline text'}
                 onClick={() => setShowAsMultilineText(v => !v)}
               >
                 {showAsMultilineText ? <AlignLeftIcon /> : <AlignJustifyIcon />}
-              </ButtonWithTooltip>
+              </Button>
             )}
-            <ButtonWithTooltip
-              size="sm"
-              aria-label="Expand"
-              tooltipContent="Expand"
-              onClick={() => setExpandedOpen(true)}
-            >
+            <Button size="sm" aria-label="Expand" tooltip="Expand" onClick={() => setExpandedOpen(true)}>
               <ExpandIcon />
-            </ButtonWithTooltip>
+            </Button>
           </ButtonsGroup>
         </div>
       </div>
 
-      <div className="dark:bg-black/20 bg-surface3 p-3 overflow-hidden rounded-lg border dark:border-white/10 border-border1 text-neutral4 text-ui-sm break-all max-h-[30vh] overflow-y-auto">
+      <div className="max-h-[30vh] overflow-hidden overflow-y-auto rounded-lg border border-border1 bg-surface3 p-3 text-ui-sm break-all text-neutral4 dark:border-white/10 dark:bg-black/20">
         {usePlainTextView ? (
-          <div className="text-neutral4 font-mono break-all">
+          <div className="font-mono break-all text-neutral4">
             <pre className="text-wrap">{finalCodeStr}</pre>
           </div>
         ) : (
@@ -309,9 +297,9 @@ export function DataCodeSection({
       </div>
 
       <Dialog open={expandedOpen} onOpenChange={setExpandedOpen}>
-        <DialogContent className="max-w-[90vw]! h-[calc(100vh-6rem)]! grid grid-rows-[auto_1fr] [&>.absolute]:hidden">
+        <DialogContent className="grid h-[calc(100vh-6rem)]! max-w-[90vw]! grid-rows-[auto_1fr] [&>.absolute]:hidden">
           <DialogHeader className="flex-row items-center justify-between">
-            <DialogTitle className="flex items-center gap-1.5 [&>svg]:size-3.5 text-ui-sm min-w-0 truncate">
+            <DialogTitle className="flex min-w-0 items-center gap-1.5 truncate text-ui-sm [&>svg]:size-3.5">
               {dialogTitle ?? (
                 <>
                   {icon}
@@ -320,7 +308,7 @@ export function DataCodeSection({
               )}
             </DialogTitle>
             <DialogDescription>Expanded code view</DialogDescription>
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex shrink-0 items-center gap-2">
               {!expandedMultiline && (
                 <SearchFieldBlock
                   name="expanded-code-search"
@@ -336,27 +324,27 @@ export function DataCodeSection({
               <ButtonsGroup>
                 <CopyButton content={codeStr || 'No content'} size="sm" />
                 {hasMultilineText && (
-                  <ButtonWithTooltip
+                  <Button
                     size="sm"
                     aria-label={expandedMultiline ? 'Show escaped newlines' : 'Show multiline text'}
-                    tooltipContent={expandedMultiline ? 'Show escaped newlines' : 'Show multiline text'}
+                    tooltip={expandedMultiline ? 'Show escaped newlines' : 'Show multiline text'}
                     onClick={() => setExpandedMultiline(v => !v)}
                   >
                     {expandedMultiline ? <AlignLeftIcon /> : <AlignJustifyIcon />}
-                  </ButtonWithTooltip>
+                  </Button>
                 )}
                 <DialogClose asChild>
-                  <ButtonWithTooltip size="sm" aria-label="Close" tooltipContent="Close">
+                  <Button size="sm" aria-label="Close" tooltip="Close">
                     <XIcon />
-                  </ButtonWithTooltip>
+                  </Button>
                 </DialogClose>
               </ButtonsGroup>
             </div>
           </DialogHeader>
           <div className="overflow-auto px-6 pb-6">
             {expandedMultiline ? (
-              <div className="dark:bg-black/20 bg-surface3 p-3 overflow-hidden rounded-lg border dark:border-white/10 border-border1 text-neutral4 text-ui-sm break-all overflow-y-auto">
-                <div className="text-neutral4 font-mono break-all">
+              <div className="overflow-hidden overflow-y-auto rounded-lg border border-border1 bg-surface3 p-3 text-ui-sm break-all text-neutral4 dark:border-white/10 dark:bg-black/20">
+                <div className="font-mono break-all text-neutral4">
                   <pre className="text-wrap">{expandedFinalCodeStr}</pre>
                 </div>
               </div>

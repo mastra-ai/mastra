@@ -1,0 +1,20 @@
+services:
+  db:
+    image: mysql:9.7
+    container_name: 'mysql-test-db'
+    ports:
+      - '3306:3306'
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_USER: ${MYSQL_USER:-mastra}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-mastra}
+      MYSQL_DATABASE: ${MYSQL_DB:-mastra}
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost', '-u', 'root', '-proot']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - mysqldata:/var/lib/mysql
+volumes:
+  mysqldata:

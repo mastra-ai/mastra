@@ -31,6 +31,10 @@ export const AgentStreamEventTypes = {
   ERROR: 'error',
   /** Workflow suspended (e.g., for tool approval) */
   SUSPENDED: 'suspended',
+  /** Execution aborted by abortSignal */
+  ABORT: 'abort',
+  /** Single agentic-loop iteration completed (observability hook) */
+  ITERATION_COMPLETE: 'iteration-complete',
 } as const;
 
 /**
@@ -41,10 +45,9 @@ export const DurableAgentDefaults = {
   MAX_STEPS: 5,
   /**
    * Default tool call concurrency.
-   * NOTE: Currently unused — durable workflows run tool calls sequentially
-   * (concurrency: 1) because tool approval and suspension require sequential
-   * execution. The serialized toolCallConcurrency option is preserved in
-   * workflow input for future use when dynamic foreach concurrency is supported.
+   * Applied by `resolveDurableToolCallConcurrency` when a run doesn't
+   * configure `toolCallConcurrency`. Approval / suspend-capable tool sets
+   * always run sequentially (concurrency: 1) regardless of this value.
    */
   TOOL_CALL_CONCURRENCY: 10,
 } as const;
@@ -65,4 +68,6 @@ export const DurableStepIds = {
   AGENTIC_LOOP: 'durable-agentic-loop',
   /** Scorer execution step */
   SCORER_EXECUTION: 'durable-scorer-execution',
+  /** isTaskComplete evaluation step */
+  IS_TASK_COMPLETE: 'durable-is-task-complete',
 } as const;

@@ -33,8 +33,9 @@ export function PickMultiPanel({ field, tokens, onChange }: PickMultiPanelProps)
   // show their default option pre-selected before the user explicitly picks one.
   const selectedValue = typeof token?.value === 'string' ? token.value : !field.multi ? field.defaultValue : undefined;
   const selectedValues = useMemo<string[]>(() => {
-    if (Array.isArray(token?.value)) return token!.value as string[];
-    if (typeof token?.value === 'string') return [token.value];
+    const value = token?.value;
+    if (Array.isArray(value)) return value;
+    if (typeof value === 'string') return [value];
     return [];
   }, [token]);
 
@@ -61,7 +62,7 @@ export function PickMultiPanel({ field, tokens, onChange }: PickMultiPanelProps)
 
       {field.isLoading ? (
         <div className="flex items-center gap-2 px-2 py-1.5 text-ui-sm text-neutral3">
-          <Spinner size="sm" className="w-3 h-3" color="var(--neutral3)" />
+          <Spinner size="sm" className="size-3 text-neutral3" />
           Loading options…
         </div>
       ) : filteredOptions.length === 0 ? (
@@ -74,7 +75,7 @@ export function PickMultiPanel({ field, tokens, onChange }: PickMultiPanelProps)
               <label
                 key={option.value}
                 title={option.label}
-                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-ui-md text-neutral4 hover:bg-surface4 hover:text-neutral6 cursor-pointer focus-within:bg-surface4 focus-within:text-neutral6 min-w-0"
+                className="flex min-w-0 cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-ui-md text-neutral4 focus-within:bg-surface4 focus-within:text-neutral6 hover:bg-surface4 hover:text-neutral6"
               >
                 <Checkbox
                   data-pick-multi-item=""
@@ -90,7 +91,7 @@ export function PickMultiPanel({ field, tokens, onChange }: PickMultiPanelProps)
                   }}
                   className="shrink-0"
                 />
-                <span className="truncate min-w-0 flex-1">{option.label}</span>
+                <span className="min-w-0 flex-1 truncate">{option.label}</span>
               </label>
             );
           })}
@@ -105,19 +106,19 @@ export function PickMultiPanel({ field, tokens, onChange }: PickMultiPanelProps)
             <label
               key={option.value}
               title={option.label}
-              className="flex items-center gap-2 rounded-md px-2 py-1.5 text-ui-md text-neutral4 hover:bg-surface4 hover:text-neutral6 cursor-pointer focus-within:bg-surface4 focus-within:text-neutral6 min-w-0"
+              className="flex min-w-0 cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-ui-md text-neutral4 focus-within:bg-surface4 focus-within:text-neutral6 hover:bg-surface4 hover:text-neutral6"
             >
               <RadioGroupItem data-pick-multi-item="" value={option.value} className="shrink-0" />
-              <span className="truncate min-w-0 flex-1">{option.label}</span>
+              <span className="min-w-0 flex-1 truncate">{option.label}</span>
             </label>
           ))}
           {!field.omitAnyOption && (
             <label
               title="Any"
-              className="flex items-center gap-2 rounded-md px-2 py-1.5 text-ui-md text-neutral4 hover:bg-surface4 hover:text-neutral6 cursor-pointer focus-within:bg-surface4 focus-within:text-neutral6 min-w-0"
+              className="flex min-w-0 cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-ui-md text-neutral4 focus-within:bg-surface4 focus-within:text-neutral6 hover:bg-surface4 hover:text-neutral6"
             >
               <RadioGroupItem data-pick-multi-item="" value="Any" className="shrink-0" />
-              <span className="truncate min-w-0 flex-1">Any</span>
+              <span className="min-w-0 flex-1 truncate">Any</span>
             </label>
           )}
         </RadioGroup>
