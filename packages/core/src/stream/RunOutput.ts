@@ -154,8 +154,7 @@ export class WorkflowRunOutput<
         }),
       )
       .catch(reason => {
-        // eslint-disable-next-line no-console
-        console.log(' something went wrong', reason);
+        self.#finalizeWithError(reason);
       });
   }
 
@@ -207,6 +206,58 @@ export class WorkflowRunOutput<
     totalUsage.cachedInputTokens += parseInt(usage?.cachedInputTokens?.toString() ?? '0', 10);
     totalUsage.cacheCreationInputTokens += parseInt(usage?.cacheCreationInputTokens?.toString() ?? '0', 10);
     this.#usageCount = totalUsage;
+  }
+
+  /**
+   * Finalize the run when the underlying stream pipeline rejects.
+   *
+   * When `pipeTo` rejects, the WritableStream's `close()` never runs, so without
+   * this the terminal `workflow-finish` event would never fire, the delayed
+   * `result`/`usage` promises would never settle, and every `fullStream` consumer
+   * would hang forever. Mirror the `close()` path but mark the run as failed.
+   */
+  #finalizeWithError(reason: unknown) {
+    // A clean close already finalized the run; nothing to do.
+    if (this.#streamFinished) {
+      return;
+    }
+
+    const error = reason instanceof Error ? reason : new Error(String(reason));
+    this.#streamError = error;
+    // The run terminated because the stream pipeline rejected, so it failed —
+    // overwrite any earlier non-terminal status (paused/suspended/canceled/tripwire)
+    // so downstream consumers always see a failed terminal status.
+    this.#status = 'failed';
+
+    // Emit a terminal finish so fullStream consumers stop waiting and close.
+    this.#emitter.emit('chunk', {
+      type: 'workflow-finish',
+      runId: this.runId,
+      from: ChunkFrom.WORKFLOW,
+      payload: {
+        workflowStatus: this.#status,
+        metadata: {
+          error: this.#streamError,
+          errorMessage: this.#streamError.message,
+        },
+        output: {
+          usage: this.#usageCount,
+        },
+      },
+    });
+
+    // Reject any still-pending delayed promises so result/usage callers see the
+    // error instead of awaiting forever.
+    Object.entries(this.#delayedPromises).forEach(([_key, promise]) => {
+      if (promise.status.type === 'pending') {
+        promise.reject(error);
+      }
+    });
+
+    this.#streamFinished = true;
+    this.#emitter.emit('finish');
+
+    console.error('[WorkflowRunOutput] workflow stream pipeline error', error);
   }
 
   /**
@@ -322,8 +373,7 @@ export class WorkflowRunOutput<
         }),
       )
       .catch(reason => {
-        // eslint-disable-next-line no-console
-        console.log(' something went wrong', reason);
+        self.#finalizeWithError(reason);
       });
   }
 
@@ -346,6 +396,26 @@ export class WorkflowRunOutput<
 
   get fullStream(): ReadableStream<WorkflowStreamEvent> {
     const self = this;
+
+    // Each fullStream access returns a new replayable stream backed by the shared
+    // emitter, so several consumers can attach at once. Keep this consumer's own
+    // handlers in the closure so cancel() can detach only them — using
+    // removeAllListeners() here would strip every other consumer's handlers too,
+    // stopping their chunks and preventing them from ever closing.
+    let chunkHandler: ((chunk: WorkflowStreamEvent) => void) | undefined;
+    let finishHandler: (() => void) | undefined;
+
+    const detach = () => {
+      if (chunkHandler) {
+        self.#emitter.off('chunk', chunkHandler);
+        chunkHandler = undefined;
+      }
+      if (finishHandler) {
+        self.#emitter.off('finish', finishHandler);
+        finishHandler = undefined;
+      }
+    };
+
     return new ReadableStream<WorkflowStreamEvent>({
       start(controller) {
         // Replay existing buffered chunks
@@ -360,13 +430,12 @@ export class WorkflowRunOutput<
         }
 
         // Listen for new chunks and stream finish
-        const chunkHandler = (chunk: WorkflowStreamEvent) => {
+        chunkHandler = (chunk: WorkflowStreamEvent) => {
           controller.enqueue(chunk);
         };
 
-        const finishHandler = () => {
-          self.#emitter.off('chunk', chunkHandler);
-          self.#emitter.off('finish', finishHandler);
+        finishHandler = () => {
+          detach();
           controller.close();
         };
 
@@ -382,8 +451,9 @@ export class WorkflowRunOutput<
       },
 
       cancel() {
-        // Stream was cancelled, clean up
-        self.#emitter.removeAllListeners();
+        // This consumer opted out — detach only its listeners so other
+        // fullStream consumers keep receiving chunks and still close on finish.
+        detach();
       },
     });
   }
