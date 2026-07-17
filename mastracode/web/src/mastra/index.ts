@@ -2,9 +2,9 @@
  * Platform-deployable Mastra entry for MastraCode.
  *
  * This module is the ONE place deployment env is read. It maps today's env
- * vars onto explicit `MastraFactory` config — instances for behaviors (pubsub),
- * plain values for config (database connection string, publicUrl, origins) —
- * so anyone reading the entry sees exactly which env var feeds which slot.
+ * vars onto explicit `MastraFactory` config — instances for behaviors (pubsub,
+ * storage, vector), plain values for config (publicUrl, origins) — so anyone
+ * reading the entry sees exactly which env var feeds which slot.
  * Everything else (feature readiness, route/middleware assembly, controller
  * construction) lives in `MastraFactory` (`../web/factory-entry.ts`).
  *
@@ -22,8 +22,10 @@ import { join } from 'node:path';
 import { Mastra } from '@mastra/core/mastra';
 import { LocalSandbox } from '@mastra/core/workspace';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
+import { PgVector, PostgresStore } from '@mastra/pg';
 import { RailwaySandbox } from '@mastra/railway';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
+import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
 import { BetterAuthWebAuth } from '../web/auth-better-adapter.js';
 import type { WebAuthAdapter } from '../web/auth-adapter.js';
 import { WorkOSWebAuth } from '../web/auth-workos-adapter.js';
@@ -156,6 +158,23 @@ if (sandboxKind === 'railway') {
   );
 }
 
+// Single app Postgres: one PostgresStore (and one pg pool) powers agent
+// storage, the factory app tables, the distributed project lock, and
+// better-auth. The paired PgVector rides the same database for recall search.
+// Unset (bare local dev) → no instances; the SDK mount falls back to its
+// default local libSQL resolution and app-DB-gated features stay off.
+const appDatabaseUrl = process.env.APP_DATABASE_URL;
+const storage = appDatabaseUrl
+  ? new PostgresStore({
+      id: 'mastra-code-storage',
+      connectionString: appDatabaseUrl,
+      retention: DEFAULT_RETENTION,
+    })
+  : undefined;
+const vector = appDatabaseUrl
+  ? new PgVector({ id: 'mastra-code-vectors', connectionString: appDatabaseUrl })
+  : undefined;
+
 export const factory = new MastraFactory({
   auth,
   sandbox: {
@@ -167,10 +186,11 @@ export const factory = new MastraFactory({
     maxSandboxes: positiveInt(process.env.MASTRACODE_MAX_SANDBOXES),
   },
   // Agent state (threads, messages, memory, OM, recall vectors) lives in the
-  // single app Postgres alongside the github/app tables — one shared DB for
-  // all users, separated by `resourceId` scoping. Unset (bare local dev) →
-  // default storage resolution applies (local libSQL file).
-  database: process.env.APP_DATABASE_URL,
+  // single app Postgres alongside the github/app tables — one shared DB (and
+  // pg pool) for all users, separated by `resourceId` scoping. Unset (bare
+  // local dev) → default storage resolution applies (local libSQL file).
+  storage,
+  vector,
   pubsub,
   // Browser-facing origin. On the platform the SPA is hosted separately, so
   // this MUST be set to the public API origin.

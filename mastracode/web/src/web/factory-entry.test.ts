@@ -2,15 +2,30 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { LocalSandbox } from '@mastra/core/workspace';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
+import { PostgresStore, PgVector } from '@mastra/pg';
 import type { WebAuthAdapter, WebAuthAdapterInitContext } from './auth-adapter.js';
 import { MastraFactory } from './factory-entry.js';
 import { getFactoryWorkspace } from './factory/workspace.js';
 import {
   __resetRuntimeConfigForTests,
-  getAppDatabaseUrl,
   getSeededAuthAdapter,
   getSeededSandbox,
+  getSeededStorage,
+  getSharedAppPool,
 } from './runtime-config.js';
+import { FactoryStore } from './storage/factory-store.js';
+
+/**
+ * A PostgresStore whose init is stubbed — prepare() must call it (single init
+ * path) but these wiring tests never reach a real database. FactoryStore.init
+ * is stubbed at the prototype for the same reason (its per-domain DDL is
+ * covered by the pg domain suites).
+ */
+function fakePgStorage(): PostgresStore {
+  const storage = new PostgresStore({ id: 'factory-test-storage', connectionString: 'postgres://cfg/app' });
+  vi.spyOn(storage, 'init').mockResolvedValue(undefined);
+  return storage;
+}
 
 /**
  * `MastraFactory.prepare()` wiring: explicit config flows through to the SDK
@@ -51,6 +66,8 @@ async function prepareFactory(config: ConstructorParameters<typeof MastraFactory
 beforeEach(() => {
   vi.clearAllMocks();
   __resetRuntimeConfigForTests();
+  // Domain DDL never runs in these wiring tests (covered by the pg domain suites).
+  vi.spyOn(FactoryStore.prototype, 'init').mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -79,10 +96,19 @@ describe('MastraFactory.prepare', () => {
   it('seeds the runtime-config registry with the explicit config', async () => {
     const auth = fakeAdapter();
     const sandbox = new LocalSandbox({ workingDirectory: '/tmp/mc-factory-test' });
-    await prepareFactory({ database: 'postgres://cfg/app', auth, sandbox: { machine: sandbox } });
-    expect(getAppDatabaseUrl()).toBe('postgres://cfg/app');
+    const storage = fakePgStorage();
+    await prepareFactory({ storage, auth, sandbox: { machine: sandbox } });
+    expect(getSeededStorage()).toBe(storage);
+    expect(getSharedAppPool()).toBe(storage.pool);
     expect(getSeededAuthAdapter()).toBe(auth);
     expect(getSeededSandbox()?.machine).toBe(sandbox);
+  });
+
+  it('runs the single init path: storage.init() then the factory domains', async () => {
+    const storage = fakePgStorage();
+    await prepareFactory({ storage });
+    expect(storage.init).toHaveBeenCalledOnce();
+    expect(FactoryStore.prototype.init).toHaveBeenCalledExactlyOnceWith({ pool: storage.pool });
   });
 
   it('leaves the sandbox runtime unset when the slot is omitted', async () => {
@@ -129,9 +155,12 @@ describe('MastraFactory.prepare', () => {
     expect(getSeededSandbox()?.maxSandboxes).toBe(5);
   });
 
-  it('maps database onto the pg storage config for the SDK mount', async () => {
-    const config = await prepareFactory({ database: 'postgres://cfg/app' });
-    expect(config.storage).toEqual({ backend: 'pg', connectionString: 'postgres://cfg/app' });
+  it('forwards the storage and vector instances to the SDK mount', async () => {
+    const storage = fakePgStorage();
+    const vector = new PgVector({ id: 'factory-test-vectors', connectionString: 'postgres://cfg/app' });
+    const config = await prepareFactory({ storage, vector });
+    expect(config.storage).toBe(storage);
+    expect(config.vectorStore).toBe(vector);
   });
 
   it('installs the Web Factory workspace resolver instead of changing the SDK default', async () => {
@@ -139,9 +168,10 @@ describe('MastraFactory.prepare', () => {
     expect(config.workspace).toBe(getFactoryWorkspace);
   });
 
-  it('omits storage when no database is configured', async () => {
+  it('omits storage when no instance is configured', async () => {
     const config = await prepareFactory({});
     expect(config).not.toHaveProperty('storage');
+    expect(config).not.toHaveProperty('vectorStore');
   });
 
   it('passes the pubsub instance through with cross-process leases enabled', async () => {
@@ -153,14 +183,15 @@ describe('MastraFactory.prepare', () => {
 
   it('calls adapter.init once with the factory context', async () => {
     const auth = fakeAdapter();
+    const storage = fakePgStorage();
     await prepareFactory({
       auth,
-      database: 'postgres://cfg/app',
+      storage,
       publicUrl: 'https://factory.acme.com/',
       allowedOrigins: ['https://app.acme.com/'],
     });
     expect(auth.init).toHaveBeenCalledExactlyOnceWith({
-      databaseUrl: 'postgres://cfg/app',
+      storage,
       publicUrl: 'https://factory.acme.com',
       allowedOrigins: ['https://app.acme.com'],
     } satisfies WebAuthAdapterInitContext);

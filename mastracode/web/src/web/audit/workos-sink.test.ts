@@ -12,7 +12,7 @@ vi.mock('../auth', async () => {
 
 import type { WebAuthAdapter } from '../auth-adapter';
 import { __resetRuntimeConfigForTests, seedRuntimeConfig } from '../runtime-config';
-import type { AuditEventRow } from './schema';
+import type { AuditEventRow } from '../storage/domains/audit/base';
 import { forwardToWorkOS, toWorkOSEvent } from './workos-sink';
 
 function makeRow(overrides: Partial<AuditEventRow> = {}): AuditEventRow {
