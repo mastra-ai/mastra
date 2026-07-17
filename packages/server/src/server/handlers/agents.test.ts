@@ -1334,7 +1334,8 @@ describe('Agent Routes Authorization', () => {
         } as any),
       ).rejects.toThrow(
         new HTTPException(400, {
-          message: 'Agent does not support recover. Only durable agents (createDurableAgent) can recover runs.',
+          message:
+            'Agent.recover() is only available on agents constructed with `durable: true`. Configure `new Agent({ durable: true })` or retrieve the durable agent from a registered Mastra instance.',
         }),
       );
     });
