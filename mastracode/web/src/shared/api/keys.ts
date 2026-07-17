@@ -14,8 +14,8 @@ export const queryKeys = {
   githubIssues: (githubProjectId: string | undefined, label?: string) =>
     ['github', 'issues', githubProjectId ?? null, label ?? null] as const,
   githubPulls: (githubProjectId: string | undefined) => ['github', 'prs', githubProjectId ?? null] as const,
-  githubProjectSettings: (githubProjectId: string | undefined) =>
-    ['github', 'project-settings', githubProjectId ?? null] as const,
+  githubRepositorySettings: (githubProjectId: string | undefined) =>
+    ['github', 'repository-settings', githubProjectId ?? null] as const,
   linearStatus: () => ['linear', 'status'] as const,
   linearProjects: () => ['linear', 'projects'] as const,
   linearIssues: () => ['linear', 'issues'] as const,

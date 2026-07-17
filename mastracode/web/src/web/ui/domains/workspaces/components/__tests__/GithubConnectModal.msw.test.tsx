@@ -115,7 +115,7 @@ describe('GithubConnectModal', () => {
     saveFactories([]);
     server.use(
       http.get(`${ORIGIN}/web/github/repos`, () => HttpResponse.json({ repos: [repo] })),
-      http.post(`${ORIGIN}/web/github/projects`, () => HttpResponse.json({ project: createdRepositoryPayload })),
+      http.post(`${ORIGIN}/web/github/repositories`, () => HttpResponse.json({ repository: createdRepositoryPayload })),
     );
     const projectsHook = renderHookWithProviders(() => useFactoriesQuery());
     const { onProjectCreated } = renderModal(undefined, projectsHook.client);
@@ -142,14 +142,14 @@ describe('GithubConnectModal', () => {
     saveFactories([]);
     server.use(
       http.get(`${ORIGIN}/web/github/repos`, () => HttpResponse.json({ repos: [repo] })),
-      http.post(`${ORIGIN}/web/github/projects`, () => HttpResponse.json({ error: 'failed' }, { status: 500 })),
+      http.post(`${ORIGIN}/web/github/repositories`, () => HttpResponse.json({ error: 'failed' }, { status: 500 })),
     );
 
     renderModal();
 
     await userEvent.click(await screen.findByRole('button', { name: /mastra-ai\/mastra/i }));
 
-    expect(await screen.findByText('Failed to create project (500)')).toBeInTheDocument();
+    expect(await screen.findByText('Failed to create connected repository (500)')).toBeInTheDocument();
     expect(loadFactories()).toEqual([]);
   });
 

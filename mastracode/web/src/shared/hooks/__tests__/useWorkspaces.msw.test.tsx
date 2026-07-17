@@ -90,7 +90,7 @@ describe('workspaces query hooks', () => {
   it('creates a workspace, upserts it, selects it, and refreshes consumers', async () => {
     saveFactory(rootFactory);
     server.use(
-      http.post(`${ORIGIN}/web/github/projects/${GITHUB_PROJECT_ID}/worktree`, async ({ request }) => {
+      http.post(`${ORIGIN}/web/github/repositories/${GITHUB_PROJECT_ID}/worktree`, async ({ request }) => {
         const body = (await request.json()) as { branch: string };
         expect(body.branch).toBe('feat-docs');
         return HttpResponse.json({
@@ -127,7 +127,7 @@ describe('workspaces query hooks', () => {
   it('deletes a workspace, cascades threads, and falls back selection', async () => {
     saveFactory(rootFactory);
     server.use(
-      http.post(`${ORIGIN}/web/github/projects/${GITHUB_PROJECT_ID}/worktree/delete`, async ({ request }) => {
+      http.post(`${ORIGIN}/web/github/repositories/${GITHUB_PROJECT_ID}/worktree/delete`, async ({ request }) => {
         const body = (await request.json()) as { branch: string };
         expect(body.branch).toBe('feat-ui');
         return HttpResponse.json({ ok: true });

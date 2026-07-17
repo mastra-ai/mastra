@@ -146,7 +146,7 @@ function useMetricsHandlers(metrics: FactoryMetrics = makeMetrics()): MetricsSta
     http.get(`${SESSION}/threads`, () => HttpResponse.json({ threads: [] })),
     http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () => HttpResponse.json({ messages: [] })),
     http.get(`${SESSION}/stream`, () => emptySse()),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${GITHUB_PROJECT_ID}/metrics`, ({ request }) => {
+    http.get(`${TEST_BASE_URL}/web/factory/repositories/${GITHUB_PROJECT_ID}/metrics`, ({ request }) => {
       const days = new URL(request.url).searchParams.get('days') ?? '';
       state.requestedDays.push(days);
       return HttpResponse.json({ metrics: { ...metrics, windowDays: Number(days) || metrics.windowDays } });

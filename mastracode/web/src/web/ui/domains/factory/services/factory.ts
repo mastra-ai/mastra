@@ -2,7 +2,7 @@
  * Browser-side helpers for the Factory pages (Intake / Review).
  *
  * Reads a GitHub project's open issues and open (non-draft) pull requests
- * through the server's `/web/github/projects/:id/*` routes, which are behind
+ * through the server's `/web/github/repositories/:id/*` routes, which are behind
  * the WorkOS auth gate and scoped to the caller's organization. Tokens never
  * reach the browser — the server talks to GitHub with its installation token.
  */
@@ -52,7 +52,7 @@ async function getProjectResource<T>(
   for (const [key, value] of Object.entries(params ?? {})) {
     if (value !== undefined) search.set(key, value);
   }
-  const url = `${baseUrl}/web/github/projects/${encodeURIComponent(githubProjectId)}/${resource}?${search}`;
+  const url = `${baseUrl}/web/github/repositories/${encodeURIComponent(githubProjectId)}/${resource}?${search}`;
   const res = await fetch(url, {
     headers: { Accept: 'application/json' },
     credentials: 'include',
@@ -93,7 +93,7 @@ export async function startProjectIssueTriage(
   issue: GithubIssue,
 ): Promise<StartIssueTriageResult> {
   const res = await fetch(
-    `${baseUrl}/web/github/projects/${encodeURIComponent(githubProjectId)}/issues/${issue.number}/triage`,
+    `${baseUrl}/web/github/repositories/${encodeURIComponent(githubProjectId)}/issues/${issue.number}/triage`,
     {
       method: 'POST',
       headers: { Accept: 'application/json', 'Content-Type': 'application/json' },

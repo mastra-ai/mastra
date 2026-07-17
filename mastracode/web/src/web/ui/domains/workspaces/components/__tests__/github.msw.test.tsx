@@ -19,7 +19,7 @@ const ORIGIN = TEST_BASE_URL;
 const PROJECT = 'proj-1';
 
 function gitOpUrl(action: string): string {
-  return `${ORIGIN}/web/github/projects/${PROJECT}/${action}`;
+  return `${ORIGIN}/web/github/repositories/${PROJECT}/${action}`;
 }
 
 describe('github git-op helpers', () => {
@@ -179,8 +179,8 @@ describe('github open-repo journey', () => {
   it('given a connected user, when they pick a repo, then the project is created, materialized, and activated', async () => {
     server.use(
       http.get(`${ORIGIN}/web/github/repos`, () => HttpResponse.json({ repos: [repo] })),
-      http.post(`${ORIGIN}/web/github/projects`, () => HttpResponse.json({ project: createdProject })),
-      http.post(`${ORIGIN}/web/github/projects/ghp_1/ensure`, () => HttpResponse.json(materialized)),
+      http.post(`${ORIGIN}/web/github/repositories`, () => HttpResponse.json({ repository: createdProject })),
+      http.post(`${ORIGIN}/web/github/repositories/ghp_1/ensure`, () => HttpResponse.json(materialized)),
     );
     const user = userEvent.setup();
 

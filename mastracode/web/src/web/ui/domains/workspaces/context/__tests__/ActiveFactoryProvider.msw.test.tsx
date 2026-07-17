@@ -41,7 +41,7 @@ const GITHUB_FACTORY: GithubFactory = {
   },
 };
 
-const ENSURE_URL = `${TEST_BASE_URL}/web/github/projects/ghp_1/ensure`;
+const ENSURE_URL = `${TEST_BASE_URL}/web/github/repositories/ghp_1/ensure`;
 
 const materialized: MaterializeResult = {
   resourceId: 'resource-gh',

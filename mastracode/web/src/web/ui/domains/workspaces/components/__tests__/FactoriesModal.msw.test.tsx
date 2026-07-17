@@ -35,7 +35,7 @@ beforeEach(() => {
   useOverlayControllerHandlers();
   server.use(
     http.get(FS_URL, () => HttpResponse.json(rootListing)),
-    http.get(`${TEST_BASE_URL}/web/project/resolve`, ({ request }) => {
+    http.get(`${TEST_BASE_URL}/web/codebase/resolve`, ({ request }) => {
       expect(new URL(request.url).searchParams.get('path')).toBe('/projects');
       return HttpResponse.json({
         resourceId: 'resource-projects',

@@ -123,7 +123,7 @@ export interface GithubFactory extends FactoryBase {
 
 export type Factory = LocalFactory | GithubFactory;
 
-/** Temporary Phase 1 transport DTO returned by `POST /web/github/projects`. */
+/** Transport DTO returned by `POST /web/github/repositories`. */
 export interface GithubConnectedRepositoryPayload {
   id: string;
   name: string;
@@ -135,7 +135,7 @@ export interface GithubConnectedRepositoryPayload {
 /** The resourceId used when no factory is selected. */
 export const DEFAULT_RESOURCE_ID = 'web-demo-user';
 
-interface ResolvedCodebase {
+export interface ResolvedCodebase {
   resourceId: string;
   name: string;
   rootPath: string;
@@ -216,13 +216,13 @@ function isFactory(value: unknown): value is Factory {
 
 /**
  * Ask the server for the TUI-compatible resourceId (and canonical name/branch)
- * for an absolute path. Route rename to `/web/codebase/resolve` lands in Phase 3.
+ * for an absolute path. Resolves TUI-compatible codebase identity.
  */
-export async function resolveProjectPath(baseUrl: string, path: string): Promise<ResolvedCodebase> {
-  const res = await fetch(`${baseUrl}/web/project/resolve?path=${encodeURIComponent(path)}`, {
+export async function resolveCodebasePath(baseUrl: string, path: string): Promise<ResolvedCodebase> {
+  const res = await fetch(`${baseUrl}/web/codebase/resolve?path=${encodeURIComponent(path)}`, {
     credentials: 'include',
   });
-  if (!res.ok) throw new Error(`Failed to resolve project (${res.status})`);
+  if (!res.ok) throw new Error(`Failed to resolve codebase (${res.status})`);
   return (await res.json()) as ResolvedCodebase;
 }
 
@@ -259,7 +259,7 @@ export async function loadFactoriesWithResolvedIds(_baseUrl: string): Promise<Fa
  * `binding.path` (not the response-only `rootPath`).
  */
 export async function addLocalFactory(baseUrl: string, name: string, path: string): Promise<LocalFactory> {
-  const resolved = await resolveProjectPath(baseUrl, path);
+  const resolved = await resolveCodebasePath(baseUrl, path);
   const factories = loadFactories();
   const factory: LocalFactory = {
     id: crypto.randomUUID(),

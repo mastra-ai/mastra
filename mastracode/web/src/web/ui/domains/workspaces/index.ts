@@ -12,7 +12,7 @@ export * from '../../../../shared/hooks/useEnsureRepoMaterialized';
 export * from '../../../../shared/hooks/useGithubGitOps';
 export * from '../../../../shared/hooks/useGithubRepos';
 export * from '../../../../shared/hooks/useGithubStatus';
-export * from '../../../../shared/hooks/useProjectSettings';
+export * from '../../../../shared/hooks/useRepositorySettings';
 export * from '../../../../shared/hooks/useFactories';
 export * from '../../../../shared/hooks/useWorkspaces';
 export * from './services/github';

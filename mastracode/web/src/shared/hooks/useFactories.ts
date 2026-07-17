@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import { createProjectFromRepo } from '../../web/ui/domains/workspaces/services/github';
+import { createConnectedRepository } from '../../web/ui/domains/workspaces/services/github';
 import type { GithubRepo } from '../../web/ui/domains/workspaces/services/github';
 import {
   addGithubFactory,
@@ -51,7 +51,7 @@ export function useCreateGithubFactoryMutation() {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (repo: GithubRepo) => addGithubFactory(await createProjectFromRepo(baseUrl, repo)),
+    mutationFn: async (repo: GithubRepo) => addGithubFactory(await createConnectedRepository(baseUrl, repo)),
     onSuccess: () => invalidateFactories(queryClient),
   });
 }

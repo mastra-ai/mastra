@@ -4,9 +4,9 @@ import { useEffect, useState } from 'react';
 
 import { useToast } from '../../../ui';
 import {
-  useProjectSettingsQuery,
-  useSaveProjectSettingsMutation,
-} from '../../../../../shared/hooks/useProjectSettings';
+  useRepositorySettingsQuery,
+  useSaveRepositorySettingsMutation,
+} from '../../../../../shared/hooks/useRepositorySettings';
 import { useFactoriesQuery } from '../../../../../shared/hooks/useFactories';
 import type { GithubFactory } from '../../workspaces/services/factories';
 import { isGithubFactory } from '../../workspaces/services/factories';
@@ -19,8 +19,8 @@ import { isGithubFactory } from '../../workspaces/services/factories';
 function FactorySetupRow({ factory }: { factory: GithubFactory }) {
   const { toast } = useToast();
   const githubProjectId = factory.binding.githubProjectId;
-  const settingsQuery = useProjectSettingsQuery(githubProjectId);
-  const saveMutation = useSaveProjectSettingsMutation();
+  const settingsQuery = useRepositorySettingsQuery(githubProjectId);
+  const saveMutation = useSaveRepositorySettingsMutation();
 
   const saved = settingsQuery.data?.setupCommand ?? '';
   const [draft, setDraft] = useState(saved);

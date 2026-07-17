@@ -13,10 +13,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import { ToastProvider } from '../../../../ui';
-import type { ProjectSettings } from '../../../workspaces/services/github';
+import type { RepositorySettings } from '../../../workspaces/services/github';
 import { FactorySetupSection } from '../FactorySetupSection';
 
-const SETTINGS_URL = `${TEST_BASE_URL}/web/github/projects/ghp-1/settings`;
+const SETTINGS_URL = `${TEST_BASE_URL}/web/github/repositories/ghp-1/settings`;
 const FIELD = 'Setup command for mastra';
 
 function seedGithubProject() {
@@ -38,12 +38,12 @@ function seedGithubProject() {
   );
 }
 
-function useSettingsHandlers(initial: ProjectSettings = { setupCommand: null }) {
-  const saved: ProjectSettings[] = [];
+function useSettingsHandlers(initial: RepositorySettings = { setupCommand: null }) {
+  const saved: RepositorySettings[] = [];
   server.use(
     http.get(SETTINGS_URL, () => HttpResponse.json(initial)),
     http.post(SETTINGS_URL, async ({ request }) => {
-      const next = (await request.json()) as ProjectSettings;
+      const next = (await request.json()) as RepositorySettings;
       saved.push(next);
       return HttpResponse.json(next);
     }),

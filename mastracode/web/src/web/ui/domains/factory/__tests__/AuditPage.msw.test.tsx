@@ -131,7 +131,7 @@ function useAuditHandlers(options: AuditHandlerOptions = {}): AuditHandlerState 
     http.get(`${SESSION}/threads`, () => HttpResponse.json({ threads: [] })),
     http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () => HttpResponse.json({ messages: [] })),
     http.get(`${SESSION}/stream`, () => emptySse()),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${GITHUB_PROJECT_ID}/audit`, ({ request }) => {
+    http.get(`${TEST_BASE_URL}/web/factory/repositories/${GITHUB_PROJECT_ID}/audit`, ({ request }) => {
       const url = new URL(request.url);
       state.requests.push({ actions: url.searchParams.get('actions'), before: url.searchParams.get('before') });
       const page = pages[Math.min(state.requests.length - 1, pages.length - 1)]!;

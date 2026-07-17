@@ -109,7 +109,7 @@ function renderRoutes(
   if (options?.project?.binding.kind === 'github') {
     const workItems = Array.from({ length: options.workItemCount ?? 0 }, (_, index) => ({ id: `work-${index}` }));
     server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${options.project.binding.githubProjectId}/work-items`, async () => {
+      http.get(`${TEST_BASE_URL}/web/factory/repositories/${options.project.binding.githubProjectId}/work-items`, async () => {
         await options.workItemsReady;
         if (options.workItemsError) return HttpResponse.json({ error: 'Factory unavailable' }, { status: 500 });
         return HttpResponse.json({ workItems });

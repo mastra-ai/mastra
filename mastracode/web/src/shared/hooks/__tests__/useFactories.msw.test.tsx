@@ -61,7 +61,7 @@ describe('factories query hooks', () => {
   it('adds a local factory, persists it, and refreshes factory query consumers', async () => {
     saveFactories([localFactory]);
     server.use(
-      http.get(`${ORIGIN}/web/project/resolve`, ({ request }) => {
+      http.get(`${ORIGIN}/web/codebase/resolve`, ({ request }) => {
         expect(new URL(request.url).searchParams.get('path')).toBe('/repo/new-app');
         return HttpResponse.json({
           resourceId: 'resource-new',
@@ -132,9 +132,9 @@ describe('factories query hooks', () => {
 
   it('creates a GitHub factory with a browser id distinct from githubProjectId and de-duplicates by repository id', async () => {
     server.use(
-      http.post(`${ORIGIN}/web/github/projects`, async () => {
+      http.post(`${ORIGIN}/web/github/repositories`, async () => {
         return HttpResponse.json({
-          project: {
+          repository: {
             id: 'github-project-1',
             name: 'acme/mastra',
             source: 'github',
