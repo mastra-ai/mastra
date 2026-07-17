@@ -14,6 +14,17 @@ import type { WorkItemRow, WorkItemStageEntry } from '../../../storage/domains/w
 import { BOARD_STAGES } from './stages';
 
 /**
+ * The row shape the aggregation reads. The server-side `WorkItemRow` stamps
+ * `createdAt` as a `Date`, but the client list endpoint serializes it to an
+ * ISO string — accepting both keeps the function usable from the wire type
+ * without a mapping layer. Everything else matches `WorkItemRow`.
+ */
+export type QueueHealthWorkItem = Omit<WorkItemRow, 'createdAt' | 'updatedAt'> & {
+  createdAt: Date | string;
+  updatedAt: Date | string;
+};
+
+/**
  * Terminal stage — items here are completed, not in the queue. Redefined
  * locally (the server constant in `factory/metrics.ts`) rather than imported
  * from the UI `stages.ts`, which is explicitly UI-only.
@@ -60,7 +71,7 @@ function parseTime(iso: string): number {
  * one per held stage. Replicated from `factory/metrics.ts:openEntries` (that
  * helper is module-private and `metrics.ts` stays untouched per the plan).
  */
-function openEntries(item: WorkItemRow): WorkItemStageEntry[] {
+function openEntries(item: QueueHealthWorkItem): WorkItemStageEntry[] {
   return item.stageHistory.filter(
     entry => entry.exitedAt === undefined && entry.stage !== DONE_STAGE && item.stages.includes(entry.stage),
   );
@@ -90,7 +101,7 @@ function chartStages(): string[] {
  * falls back to the item's `createdAt`.
  */
 export function computeQueueHealth(
-  items: WorkItemRow[],
+  items: QueueHealthWorkItem[],
   activePaths: ReadonlySet<string>,
   config: QueueHealthConfig,
   now: Date = new Date(),
@@ -120,7 +131,7 @@ export function computeQueueHealth(
       // Fall back to creation time when history has no open entry for the
       // held stage (mirrors metrics.ts aging fallback; shouldn't happen since
       // history is server-appended).
-      const enteredAt = entry?.enteredAt ?? item.createdAt.toISOString();
+      const enteredAt = entry?.enteredAt ?? (item.createdAt instanceof Date ? item.createdAt.toISOString() : item.createdAt);
       const ageSeconds = Math.max(0, Math.round((nowMs - parseTime(enteredAt)) / 1000));
       const bucket = bucketFor(ageSeconds, thresholds);
 

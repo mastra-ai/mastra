@@ -22,6 +22,7 @@ import { useWorkItemsQuery } from '../../shared/hooks/useWorkItems';
 import { AuditPage } from './domains/factory/AuditPage';
 import { BoardPage } from './domains/factory/BoardPage';
 import { MetricsPage } from './domains/factory/MetricsPage';
+import { OverviewPage } from './domains/factory/OverviewPage';
 
 /**
  * Full-page placeholder while `/auth/me` resolves — a shimmer block instead
@@ -112,6 +113,7 @@ export function createAppRoutes(): RouteObject[] {
             // session provider binds to the user's own resourceId + worktree.
             { path: 'user/threads/:threadId', element: <ThreadPage /> },
             { path: 'factory/board', element: <BoardPage /> },
+            { path: 'factory/overview', element: <OverviewPage /> },
             { path: 'factory/metrics', element: <MetricsPage /> },
             { path: 'factory/audit', element: <AuditPage /> },
             // Legacy Factory pages, folded into the Board.
