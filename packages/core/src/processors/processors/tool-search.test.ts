@@ -4,6 +4,8 @@ import { MessageList } from '../../agent/message-list';
 import { RequestContext, MASTRA_THREAD_ID_KEY } from '../../request-context';
 import { createTool } from '../../tools';
 import type { Tool } from '../../tools';
+import type { CoreTool } from '../../tools/types';
+import { makeCoreTool } from '../../utils';
 import type { ProcessInputStepArgs } from '../index';
 import { ToolSearchProcessor } from './tool-search';
 
@@ -16,8 +18,16 @@ function createMockTool(id: string, description: string): Tool<any, any> {
   });
 }
 
+function createMockCoreTool(id: string, description: string): CoreTool {
+  return makeCoreTool(createMockTool(id, description), {
+    name: id,
+    requestContext: new RequestContext(),
+    tracingContext: {},
+  });
+}
+
 // Helper to create ProcessInputStepArgs
-function createMockArgs(threadId?: string, tools?: Record<string, Tool<any, any>>): ProcessInputStepArgs {
+function createMockArgs(threadId?: string, tools?: Record<string, unknown>): ProcessInputStepArgs {
   const requestContext = new RequestContext();
   if (threadId) {
     requestContext.set(MASTRA_THREAD_ID_KEY, threadId);
@@ -1550,6 +1560,92 @@ describe('ToolSearchProcessor', () => {
       const allowedResult = await processor.processInputStep(allowedArgs);
       const allowedSearch = await allowedResult.tools?.search_tools!.execute?.({ query: 'github issue' }, undefined);
       expect(allowedSearch.results.map(r => r.name)).toContain('mcp_github_create_issue');
+    });
+
+    it('should search and load CoreTool-shaped resolved tools (post makeCoreTool)', async () => {
+      const coreTool = createMockCoreTool('mcp_github_create_issue', 'Create GitHub issue via MCP');
+      const processor = new ToolSearchProcessor({
+        tools: {},
+        includeResolvedTools: true,
+      });
+
+      const args = createMockArgs('thread-mcp-core', { mcp_github_create_issue: coreTool });
+      const result = await processor.processInputStep(args);
+
+      expect(result.tools?.mcp_github_create_issue).toBeUndefined();
+
+      const searchResult = await result.tools?.search_tools!.execute?.({ query: 'github issue' }, undefined);
+      expect(searchResult.results.map(r => r.name)).toContain('mcp_github_create_issue');
+
+      const loadResult = await result.tools?.load_tool!.execute?.({ toolName: 'mcp_github_create_issue' }, undefined);
+      expect(loadResult.success).toBe(true);
+
+      const next = await processor.processInputStep(args);
+      expect(next.tools?.mcp_github_create_issue).toBe(coreTool);
+    });
+
+    it('should resolve loaded resolved tools via getLoadedToolsForRequestContext when stepArgs are provided', async () => {
+      const coreTool = createMockCoreTool('mcp_send_email', 'Send email via MCP');
+      const processor = new ToolSearchProcessor({
+        tools: {},
+        includeResolvedTools: true,
+      });
+
+      const args = createMockArgs('thread-loaded-resolved', { mcp_send_email: coreTool });
+      const result = await processor.processInputStep(args);
+      await result.tools!.load_tool!.execute!({ toolName: 'mcp_send_email' }, undefined);
+
+      const loaded = await processor.getLoadedToolsForRequestContext({
+        stepArgs: args,
+        requestContext: args.requestContext,
+      });
+
+      expect(loaded.mcp_send_email).toBe(coreTool);
+    });
+
+    it('should auto-load resolved tools from search when autoLoad is enabled', async () => {
+      const mcpTool = createMockTool('mcp_weather_forecast', 'Get weather forecast via MCP');
+      const processor = new ToolSearchProcessor({
+        tools: {},
+        includeResolvedTools: true,
+        search: { autoLoad: true },
+      });
+
+      const args = createMockArgs('thread-mcp-autoload', { mcp_weather_forecast: mcpTool });
+      const result = await processor.processInputStep(args);
+
+      expect(result.tools?.load_tool).toBeUndefined();
+      expect(result.tools?.mcp_weather_forecast).toBeUndefined();
+
+      const searchResult = await result.tools?.search_tools!.execute?.({ query: 'weather' }, undefined);
+      expect(searchResult.results.map(r => r.name)).toContain('mcp_weather_forecast');
+
+      const next = await processor.processInputStep(args);
+      expect(next.tools?.mcp_weather_forecast).toBe(mcpTool);
+    });
+
+    it('should ignore resolved entries without a string id when includeResolvedTools is enabled', async () => {
+      const mcpTool = createMockTool('mcp_indexed', 'Indexed MCP tool');
+      const clientTool = {
+        description: 'Client tool without id',
+        parameters: {},
+        execute: async () => ({}),
+      };
+
+      const processor = new ToolSearchProcessor({
+        tools: {},
+        includeResolvedTools: true,
+      });
+
+      const args = createMockArgs('thread-no-id', { mcp_indexed: mcpTool, client_tool: clientTool });
+      const result = await processor.processInputStep(args);
+
+      expect(result.tools?.client_tool).toBeUndefined();
+      expect(result.tools?.mcp_indexed).toBeUndefined();
+
+      const searchResult = await result.tools?.search_tools!.execute?.({ query: 'indexed' }, undefined);
+      expect(searchResult.results.map(r => r.name)).toContain('mcp_indexed');
+      expect(searchResult.results.map(r => r.name)).not.toContain('client_tool');
     });
   });
 });

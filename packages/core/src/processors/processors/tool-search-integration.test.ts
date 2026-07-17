@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod/v4';
 
 import { Agent } from '../../agent';
@@ -459,4 +460,185 @@ describe('ToolSearchProcessor Integration with Agent', () => {
     expect(toolSearchEvent.message?.content).toContain('search_tools');
     expect(toolSearchEvent.message?.content).toContain('load_tool');
   });
+});
+
+describe('ToolSearchProcessor includeResolvedTools integration', () => {
+  it('should search and load tools from agent.convertTools toolsets output', async () => {
+    const mcpTool = createTool({
+      id: 'mcp_github_create_issue',
+      description: 'Create GitHub issue via MCP',
+      inputSchema: z.object({ title: z.string() }),
+      execute: async ({ title }) => ({ issueNumber: 1, title }),
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        text: 'ok',
+        content: [{ type: 'text', text: 'ok' }],
+        warnings: [],
+      }),
+    });
+
+    const toolSearch = new ToolSearchProcessor({
+      tools: {},
+      includeResolvedTools: true,
+    });
+
+    const agent = new Agent({
+      id: 'tool-search-mcp-convert-tools-agent',
+      name: 'tool-search-mcp-convert-tools-agent',
+      instructions: 'Test agent',
+      model: mockModel,
+      inputProcessors: [toolSearch],
+    });
+
+    const convertedTools = await agent['convertTools']({
+      requestContext: new RequestContext(),
+      methodType: 'stream',
+      toolsets: {
+        githubMcp: {
+          mcp_github_create_issue: mcpTool,
+        },
+      },
+    });
+
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_THREAD_ID_KEY, 'thread-convert-tools');
+
+    const args = {
+      messageList: new MessageList({}),
+      requestContext,
+      tools: convertedTools,
+    };
+
+    const result = await toolSearch.processInputStep(args);
+
+    expect(result.tools?.mcp_github_create_issue).toBeUndefined();
+
+    const searchResult = await result.tools!.search_tools!.execute!({ query: 'github issue' });
+    expect(searchResult.results.map(r => r.name)).toContain('mcp_github_create_issue');
+
+    const loadResult = await result.tools!.load_tool!.execute!({ toolName: 'mcp_github_create_issue' });
+    expect(loadResult.success).toBe(true);
+
+    const next = await toolSearch.processInputStep(args);
+    expect(next.tools?.mcp_github_create_issue).toBeDefined();
+    expect(typeof next.tools?.mcp_github_create_issue?.execute).toBe('function');
+  });
+
+  it('should load and execute toolset-only tools through agent.stream', async () => {
+    const executeMcpTool = vi.fn().mockResolvedValue({ issueNumber: 42 });
+
+    const mcpTool = createTool({
+      id: 'mcp_github_create_issue',
+      description: 'Create GitHub issue via MCP',
+      inputSchema: z.object({ title: z.string() }),
+      execute: executeMcpTool,
+    });
+
+    let callCount = 0;
+    const mockModel = new MockLanguageModelV2({
+      doStream: async () => {
+        callCount++;
+
+        if (callCount === 1) {
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call',
+                toolCallId: 'load-call',
+                toolName: 'load_tool',
+                input: JSON.stringify({ toolName: 'mcp_github_create_issue' }),
+                providerExecuted: false,
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+              },
+            ]),
+          };
+        }
+
+        if (callCount === 2) {
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call',
+                toolCallId: 'mcp-call',
+                toolName: 'mcp_github_create_issue',
+                input: JSON.stringify({ title: 'Bug fix' }),
+                providerExecuted: false,
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 15, outputTokens: 5, totalTokens: 20 },
+              },
+            ]),
+          };
+        }
+
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-2', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Done.' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 20, outputTokens: 5, totalTokens: 25 },
+            },
+          ]),
+        };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'tool-search-mcp-stream-agent',
+      name: 'Tool Search MCP Stream Agent',
+      instructions: 'Load tools before using them.',
+      model: mockModel,
+      inputProcessors: [
+        new ToolSearchProcessor({
+          tools: {},
+          includeResolvedTools: true,
+        }),
+      ],
+    });
+
+    const stream = await agent.stream('Create a github issue', {
+      maxSteps: 5,
+      toolsets: {
+        githubMcp: {
+          mcp_github_create_issue: mcpTool,
+        },
+      },
+    });
+
+    const toolErrors: unknown[] = [];
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'tool-error') {
+        toolErrors.push(chunk.payload);
+      }
+    }
+
+    expect(toolErrors).toEqual([]);
+    expect(executeMcpTool).toHaveBeenCalledWith({ title: 'Bug fix' }, expect.anything());
+  }, 30000);
 });

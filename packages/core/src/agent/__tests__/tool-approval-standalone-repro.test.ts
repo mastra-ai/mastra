@@ -411,10 +411,14 @@ describe('tool approval with ToolSearchProcessor', () => {
     toolId,
     agentId,
     inputProcessors,
+    toolsets,
   }: {
     toolId: string;
     agentId: string;
     inputProcessors: (args: { toolId: string; dynamicApprovalTool: any }) => any[];
+    toolsets?:
+      | Record<string, Record<string, any>>
+      | ((args: { toolId: string; dynamicApprovalTool: any }) => Record<string, Record<string, any>>);
   }) => {
     const executeDynamicTool = vi.fn().mockResolvedValue({ ok: true });
 
@@ -511,7 +515,11 @@ describe('tool approval with ToolSearchProcessor', () => {
     });
 
     const agent = mastra.getAgent('userAgent');
-    const stream = await agent.stream('Load and use the approval tool', { maxSteps: 5 });
+    const resolvedToolsets = typeof toolsets === 'function' ? toolsets({ toolId, dynamicApprovalTool }) : toolsets;
+    const stream = await agent.stream('Load and use the approval tool', {
+      maxSteps: 5,
+      ...(resolvedToolsets ? { toolsets: resolvedToolsets } : {}),
+    });
 
     let toolCallId = '';
     for await (const chunk of stream.fullStream) {
@@ -546,6 +554,24 @@ describe('tool approval with ToolSearchProcessor', () => {
           },
         }),
       ],
+    });
+  }, 30000);
+
+  it('executes a toolset-only dynamically loaded tool after approval resume when includeResolvedTools is enabled', async () => {
+    await expectDynamicallyLoadedToolAfterApprovalResume({
+      toolId: 'dynamic_toolset_approval_tool',
+      agentId: 'tool-search-toolset-approval-agent',
+      inputProcessors: () => [
+        new ToolSearchProcessor({
+          tools: {},
+          includeResolvedTools: true,
+        }),
+      ],
+      toolsets: ({ toolId, dynamicApprovalTool }) => ({
+        dynamicMcp: {
+          [toolId]: dynamicApprovalTool,
+        },
+      }),
     });
   }, 30000);
 
