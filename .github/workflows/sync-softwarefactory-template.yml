@@ -11,6 +11,7 @@ on:
     paths:
       - 'mastracode/web/**'
       - 'mastracode/mastra-factory/scripts/sync-template.mjs'
+      - 'mastracode/mastra-factory/template/**'
   workflow_dispatch: # Allow manual triggers
 
 jobs:

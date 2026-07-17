@@ -34,10 +34,11 @@ node bin/cli.mjs my-app --default --template-dir ./template-out
 `scripts/sync-template.mjs` generates the template tree from `mastracode/web`:
 
 - `link:` deps → caret ranges on published versions (anchored on local monorepo versions by default, verified on npm; `--tag latest` for stable dist-tags)
-- monorepo tsconfig → standalone, test files/deps stripped, user-facing README/scripts
+- monorepo tsconfig → standalone, test files/deps stripped, user-facing scripts
+- checked-in `template/README.md` → user-facing README (version tokens filled at sync)
 - `.env.schema` → `.env.example` (varlock decorators removed)
 
-Syncing to [softwarefactory-template](https://github.com/mastra-ai/softwarefactory-template) is automated, mirroring the `templates/*` process: the `sync-softwarefactory-template` workflow regenerates the template (`--tag latest`) and force-pushes it on every push to `main` that touches `mastracode/web` or the sync script. The monorepo is the source of truth — direct commits to the template repo get overwritten.
+Syncing to [softwarefactory-template](https://github.com/mastra-ai/softwarefactory-template) is automated, mirroring the `templates/*` process: the `sync-softwarefactory-template` workflow regenerates the template (`--tag latest`) and force-pushes it on every push to `main` that touches `mastracode/web`, the sync script, or `template/README.md`. The monorepo is the source of truth — direct commits to the template repo get overwritten.
 
 ```bash
 node scripts/sync-template.mjs            # writes ./template-out (local development)

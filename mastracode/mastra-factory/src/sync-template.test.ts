@@ -75,6 +75,14 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
     expect(fs.existsSync(path.join(outDir, 'README.md'))).toBe(true);
     expect(fs.existsSync(path.join(outDir, 'tsconfig.json'))).toBe(true);
 
+    // README is the checked-in template with version tokens filled (no bare {{tokens}} left).
+    const readme = fs.readFileSync(path.join(outDir, 'README.md'), 'utf8');
+    expect(readme).toContain('# Mastra Software Factory');
+    expect(readme).toContain('npx mastra-factory');
+    expect(readme).not.toMatch(/\{\{[^}]+\}\}/);
+    expect(readme).toMatch(/@mastra\/core@\d/);
+    expect(readme).toMatch(/@mastra\/code-sdk@\d/);
+
     // The dev script is a direct mapping of the web project's own dev flow —
     // no generated wrapper script.
     expect(fs.existsSync(path.join(outDir, 'scripts', 'dev.mjs'))).toBe(false);
