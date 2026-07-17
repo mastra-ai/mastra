@@ -72,5 +72,49 @@ describe('ChatLayout', () => {
 
       expect(screen.getByRole('button', { name: 'right-panel-opened' })).toBeInTheDocument();
     });
+
+    it('uses the shipped compact and expanded widths', () => {
+      const { rerender } = render(
+        <ChatLayout sidebar={<div />} content={<div />} rightPanel={<div>right-panel-content</div>} />,
+      );
+      const panelContent = screen.getByText('right-panel-content');
+      const panelFrame = panelContent.parentElement;
+      if (!panelFrame) throw new Error('Right panel frame was not rendered');
+      expect(panelFrame).toHaveStyle({ width: '320px' });
+
+      rerender(<ChatLayout sidebar={<div />} content={<div />} rightPanel={<div>right-panel-content</div>} rightPanelExpanded />);
+
+      expect(panelFrame).toHaveStyle({ width: '720px' });
+    });
+  });
+
+  describe('given the right panel is available but closed', () => {
+    it('uses the existing Files reopen copy by default', () => {
+      render(<ChatLayout sidebar={<div />} content={<div />} rightPanelAvailable />);
+
+      expect(screen.getByRole('button', { name: 'Open workspace files' })).toHaveTextContent('Files');
+    });
+
+    it('supports contextual reopen copy without changing the trigger behavior', async () => {
+      const user = userEvent.setup();
+      let opened = 0;
+      render(
+        <ChatLayout
+          sidebar={<div />}
+          content={<div />}
+          rightPanelAvailable
+          rightPanelOpenLabel="Context"
+          rightPanelOpenAriaLabel="Open task and workspace context"
+          onRightPanelOpen={() => {
+            opened += 1;
+          }}
+        />,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Open task and workspace context' }));
+
+      expect(screen.getByRole('button', { name: 'Open task and workspace context' })).toHaveTextContent('Context');
+      expect(opened).toBe(1);
+    });
   });
 });

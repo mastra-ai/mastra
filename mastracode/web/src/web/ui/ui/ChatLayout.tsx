@@ -24,6 +24,8 @@ type ChatLayoutProps = {
   rightPanel?: ReactNode;
   rightPanelExpanded?: boolean;
   rightPanelAvailable?: boolean;
+  rightPanelOpenLabel?: string;
+  rightPanelOpenAriaLabel?: string;
   onRightPanelOpen?: () => void;
 };
 
@@ -42,6 +44,8 @@ export function ChatLayout({
   rightPanel,
   rightPanelExpanded = false,
   rightPanelAvailable = false,
+  rightPanelOpenLabel = 'Files',
+  rightPanelOpenAriaLabel = 'Open workspace files',
   onRightPanelOpen,
 }: ChatLayoutProps) {
   const frameRef = useRef<HTMLDivElement>(null);
@@ -68,13 +72,14 @@ export function ChatLayout({
         {!rightPanel && rightPanelAvailable ? (
           <button
             type="button"
-            className="absolute right-2 top-2 hidden items-center text-icon6 lg:inline-flex"
+            className="absolute right-2 top-2 hidden items-center gap-1 text-icon6 lg:inline-flex"
             onClick={onRightPanelOpen}
-            aria-label="Open workspace files"
+            aria-label={rightPanelOpenAriaLabel}
           >
             <span className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border2 bg-surface1 shadow-sm hover:bg-surface2">
               <FilledArrowLeft />
             </span>
+            <span className="text-xs text-icon3">{rightPanelOpenLabel}</span>
           </button>
         ) : null}
       </div>
@@ -91,9 +96,9 @@ function DesktopRightPanelFrame({
   initialWidth: number;
   children: ReactNode;
 }) {
-  const [resizedWidth, setResizedWidth] = useState<number | undefined>();
+  const [resizedPanel, setResizedPanel] = useState<{ initialWidth: number; width: number } | undefined>();
   const resizeCleanupRef = useRef<(() => void) | undefined>(undefined);
-  const rightPanelWidth = resizedWidth ?? initialWidth;
+  const rightPanelWidth = resizedPanel?.initialWidth === initialWidth ? resizedPanel.width : initialWidth;
 
   useEffect(() => () => resizeCleanupRef.current?.(), []);
 
@@ -108,7 +113,10 @@ function DesktopRightPanelFrame({
     const startX = event.clientX;
     const startWidth = rightPanelWidth;
     const onPointerMove = (moveEvent: PointerEvent) => {
-      setResizedWidth(clampRightPanelWidth(startWidth - (moveEvent.clientX - startX)));
+      setResizedPanel({
+        initialWidth,
+        width: clampRightPanelWidth(startWidth - (moveEvent.clientX - startX)),
+      });
     };
     const cleanup = () => {
       window.removeEventListener('pointermove', onPointerMove);

@@ -21,6 +21,8 @@ export const queryKeys = {
   linearIssues: () => ['linear', 'issues'] as const,
   intakeConfig: () => ['intake', 'config'] as const,
   workItems: (githubProjectId: string | undefined) => ['factory', 'work-items', githubProjectId ?? null] as const,
+  factoryThreadTaskContext: (githubProjectId: string, threadId: string) =>
+    ['factory', 'thread-task-context', githubProjectId, threadId] as const,
   factoryMetrics: (githubProjectId: string | undefined, days: number) =>
     ['factory', 'metrics', githubProjectId ?? null, days] as const,
   factoryHealthThresholds: (githubProjectId: string | undefined) =>
