@@ -996,7 +996,10 @@ describe('Factory Board — persisted cards', () => {
 
     await screen.findByTestId('board-column-intake');
     const card = within(column('execute')).getByTestId('work-item-card');
-    expect(within(card).getByRole('link', { name: /Fix flaky test/ })).toHaveAttribute('href', '/threads/thread-work');
+    expect(within(card).getByRole('link', { name: 'Issue: Fix flaky test' })).toHaveAttribute(
+      'href',
+      '/threads/thread-work',
+    );
   });
 
   it('given plan and work sessions on the same thread, when the Board renders, then the card shows a single thread link', async () => {
@@ -1106,7 +1109,7 @@ describe('Factory Board — persisted cards', () => {
 
     await screen.findByTestId('board-column-intake');
     const card = within(column('execute')).getByTestId('work-item-card');
-    await userEvent.click(within(card).getByRole('link', { name: /Fix flaky test/ }));
+    await userEvent.click(within(card).getByRole('link', { name: 'Issue: Fix flaky test' }));
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-work'));
     const stored = JSON.parse(localStorage.getItem('mastracode-factories') ?? '[]') as Factory[];
@@ -2301,7 +2304,10 @@ describe('Factory Board — open session from the card title', () => {
 
     await screen.findByTestId('board-column-intake');
     const card = within(column('intake')).getByTestId('work-item-card');
-    expect(within(card).getByRole('link', { name: /Fix flaky test/ })).toHaveAttribute('href', '/threads/thread-work');
+    expect(within(card).getByRole('link', { name: 'Issue: Fix flaky test' })).toHaveAttribute(
+      'href',
+      '/threads/thread-work',
+    );
     // A chat session occupies no run slot: Investigate and Build stay offered.
     await userEvent.click(within(card).getByRole('button', { name: 'Actions for Fix flaky test' }));
     expect(await screen.findByRole('menuitem', { name: 'Investigate' })).toBeInTheDocument();
