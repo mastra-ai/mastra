@@ -539,10 +539,14 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           }
         }
 
+        const body = typeof params.body === 'object' && params.body !== null ? params.body : {};
         const handlerParams = {
           ...params.urlParams,
           ...params.queryParams,
-          ...(typeof params.body === 'object' ? params.body : {}),
+          ...body,
+          ...('requestContext' in body
+            ? { bodyRequestContext: body.requestContext as Record<string, unknown> | undefined }
+            : {}),
           requestContext: res.locals.requestContext,
           mastra: this.mastra,
           registeredTools: res.locals.registeredTools,

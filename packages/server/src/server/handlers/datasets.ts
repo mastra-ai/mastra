@@ -5,6 +5,7 @@ import { resolveModelConfig } from '@mastra/core/llm';
 import { RequestContext } from '@mastra/core/request-context';
 import type { DatasetItemSource, DatasetItemToolMock, TargetType } from '@mastra/core/storage';
 import { z } from 'zod';
+import { isReservedRequestContextKey } from '../constants';
 import { HTTPException } from '../http-exception';
 import type { StatusCode } from '../http-exception';
 import { successResponseSchema } from '../schemas/common';
@@ -57,6 +58,20 @@ function assertDatasetsAvailable(): void {
   if (!coreFeatures.has('datasets')) {
     throw new HTTPException(501, { message: 'Datasets require @mastra/core >= 1.4.0' });
   }
+}
+
+// Auth middleware owns these legacy aliases in addition to the reserved
+// mastra__* keys. Do not let caller-supplied experiment context spoof them.
+const AUTH_OWNED_BODY_REQUEST_CONTEXT_KEYS = new Set(['user', 'userPermissions', 'userRoles']);
+
+function filterBodyRequestContext(requestContext?: Record<string, unknown>): Record<string, unknown> | undefined {
+  if (!requestContext) return undefined;
+
+  return Object.fromEntries(
+    Object.entries(requestContext).filter(
+      ([key]) => !isReservedRequestContextKey(key) && !AUTH_OWNED_BODY_REQUEST_CONTEXT_KEYS.has(key),
+    ),
+  );
 }
 
 interface SchemaValidationLike extends Error {
@@ -643,31 +658,24 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
     'Triggers a new experiment on the dataset against the specified target. Returns immediately with pending status; execution happens in background.',
   tags: ['Datasets'],
   requiresAuth: true,
-  handler: async ({ mastra, datasetId, ...params }) => {
+  handler: async ({ mastra, datasetId, requestContext: serverRequestContext, bodyRequestContext, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const {
-        targetType,
-        targetId,
-        scorerIds,
-        version,
-        agentVersion,
-        maxConcurrency,
-        requestContext: rawRequestContext,
-        versions,
-      } = params as {
+      const { targetType, targetId, scorerIds, version, agentVersion, maxConcurrency, versions } = params as {
         targetType: 'agent' | 'workflow' | 'scorer';
         targetId: string;
         scorerIds?: string[];
         version?: number;
         agentVersion?: string;
         maxConcurrency?: number;
-        requestContext?: Record<string, unknown> | RequestContext;
         versions?: { agents?: Record<string, { versionId: string } | { status: 'draft' | 'published' }> };
       };
-      // The adapter middleware merges body + query requestContext into a RequestContext instance.
-      // startExperimentAsync expects a plain Record, so convert it.
-      const requestContext = rawRequestContext instanceof RequestContext ? rawRequestContext.all : rawRequestContext;
+      const authRequestContext =
+        serverRequestContext instanceof RequestContext ? serverRequestContext.all : serverRequestContext;
+      const requestContext = {
+        ...authRequestContext,
+        ...filterBodyRequestContext(bodyRequestContext),
+      };
       const ds = await mastra.datasets.get({ id: datasetId });
       const result = await ds.startExperimentAsync({
         targetType,

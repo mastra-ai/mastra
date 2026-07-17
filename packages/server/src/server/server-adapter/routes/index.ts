@@ -50,6 +50,8 @@ import { WORKSPACE_ROUTES } from './workspace';
 export type ServerContext = {
   mastra: Mastra;
   requestContext: RequestContext;
+  /** The unmerged request context supplied in the request body. */
+  bodyRequestContext?: Record<string, unknown>;
   registeredTools?: ToolsInput;
   taskStore?: InMemoryTaskStore;
   abortSignal: AbortSignal;
