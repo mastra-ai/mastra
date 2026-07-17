@@ -130,8 +130,8 @@ jobs:
 
       - name: Install and build the CLI
         run: |
-          pnpm install --frozen-lockfile --filter ./mastracode/create-softwarefactory...
-          pnpm --filter ./mastracode/create-softwarefactory build
+          pnpm install --frozen-lockfile --filter ./mastracode/mastra-factory...
+          pnpm --filter ./mastracode/mastra-factory build
 
       - name: Install e2e test dependencies
         working-directory: ./e2e-tests/softwarefactory

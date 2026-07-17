@@ -14,7 +14,7 @@ const analytics = new Analytics(pkg.version);
 const program = new Command();
 
 program
-  .name('create-softwarefactory')
+  .name('mastra-factory')
   .description('Create a Mastra Software Factory project')
   .version(pkg.version, '-v, --version')
   .argument('[project-name]', 'Directory name of the project')

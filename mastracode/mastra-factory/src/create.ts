@@ -92,7 +92,7 @@ export async function create(args: CreateArgs): Promise<void> {
     try {
       await runInherit('git', ['init', '-q'], { cwd: projectPath });
       await runInherit('git', ['add', '-A'], { cwd: projectPath });
-      await runInherit('git', ['commit', '-q', '-m', 'Initial commit from create-softwarefactory'], {
+      await runInherit('git', ['commit', '-q', '-m', 'Initial commit from mastra-factory'], {
         cwd: projectPath,
       });
     } catch {

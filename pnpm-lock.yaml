@@ -2194,7 +2194,7 @@ importers:
         specifier: 'catalog:'
         version: 4.4.3
 
-  mastracode/create-softwarefactory:
+  mastracode/mastra-factory:
     dependencies:
       '@clack/prompts':
         specifier: ^1.7.0

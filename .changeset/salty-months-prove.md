@@ -1,11 +1,11 @@
 ---
-'create-softwarefactory': patch
+'mastra-factory': patch
 ---
 
-Added the create-softwarefactory CLI. It scaffolds a Mastra Software Factory project: enter a project name and the CLI clones the template, installs dependencies, and initializes git. Configuration (model providers, integrations, database) happens in the web UI on first load.
+Added the mastra-factory CLI. It scaffolds a Mastra Software Factory project: enter a project name and the CLI clones the template, installs dependencies, and initializes git. Configuration (model providers, integrations, database) happens in the web UI on first load.
 
 ```bash
-npm create softwarefactory my-factory
+npx mastra-factory my-factory
 cd my-factory
 npm run dev
 ```

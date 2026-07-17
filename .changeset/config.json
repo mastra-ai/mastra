@@ -16,7 +16,7 @@
     "@internal/*",
     "!mastra",
     "!create-mastra",
-    "!create-softwarefactory",
+    "!mastra-factory",
     "!mastracode",
     "!@mastra/*",
     "!@internal/playground",

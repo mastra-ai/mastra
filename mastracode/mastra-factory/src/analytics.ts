@@ -5,7 +5,7 @@ import path from 'node:path';
 import { PostHog } from 'posthog-node';
 
 /**
- * Minimal PostHog analytics for create-softwarefactory, mirroring the
+ * Minimal PostHog analytics for mastra-factory, mirroring the
  * create-mastra pattern (same project key, same opt-out env var, same
  * ~/.mastra/analytics.json distinct-id store).
  */
@@ -57,7 +57,7 @@ export class Analytics {
       this.client?.capture({
         distinctId: this.distinctId,
         event,
-        properties: { ...properties, cli: 'create-softwarefactory', version: this.version },
+        properties: { ...properties, cli: 'mastra-factory', version: this.version },
       });
     } catch {
       // analytics must never break the CLI

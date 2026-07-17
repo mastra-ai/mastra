@@ -8,10 +8,10 @@ import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, '..', '..');
-const cliRoot = join(rootDir, 'mastracode', 'create-softwarefactory');
+const cliRoot = join(rootDir, 'mastracode', 'mastra-factory');
 
 /**
- * Validates the artifacts users receive from `npm create softwarefactory`
+ * Validates the artifacts users receive from `npx mastra-factory`
  * against the monorepo's local package set (served by the E2E registry):
  * generate the template from mastracode/web, scaffold with the CLI's
  * --default path, then typecheck, build, boot, and probe the scaffold.
@@ -38,7 +38,7 @@ describe('softwarefactory template', () => {
     scaffoldDir = join(workDir, 'factory');
 
     // The CLI bin runs from dist; build it (cheap, tsup).
-    await execa('pnpm', ['--filter', './mastracode/create-softwarefactory', 'build'], {
+    await execa('pnpm', ['--filter', './mastracode/mastra-factory', 'build'], {
       cwd: rootDir,
       stdio: 'inherit',
     });

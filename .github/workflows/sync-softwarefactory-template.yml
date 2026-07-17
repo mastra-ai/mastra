@@ -10,7 +10,7 @@ on:
       - main
     paths:
       - 'mastracode/web/**'
-      - 'mastracode/create-softwarefactory/scripts/sync-template.mjs'
+      - 'mastracode/mastra-factory/scripts/sync-template.mjs'
   workflow_dispatch: # Allow manual triggers
 
 jobs:
@@ -47,7 +47,7 @@ jobs:
         # (the coherent set these sources were built against) and verifies each
         # exists on npm — failing loudly here beats pushing a template whose
         # sources need unpublished APIs. Re-run after the alpha publish if so.
-        run: node mastracode/create-softwarefactory/scripts/sync-template.mjs --out "$RUNNER_TEMP/template-out"
+        run: node mastracode/mastra-factory/scripts/sync-template.mjs --out "$RUNNER_TEMP/template-out"
 
       # Sources can legitimately be ahead of npm between release trains
       # (version exists on npm but the sources need unpublished APIs), so the

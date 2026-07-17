@@ -1,9 +1,9 @@
-# create-softwarefactory
+# mastra-factory
 
 Scaffolding CLI for the **Mastra Software Factory** — an open-source, agent-powered software delivery environment built on [Mastra](https://mastra.ai).
 
 ```bash
-npm create softwarefactory
+npx mastra-factory
 ```
 
 The CLI is intentionally minimal: it asks for a project name, clones the [softwarefactory-template](https://github.com/mastra-ai/softwarefactory-template), installs dependencies, and offers to initialize git. That's it — run `npm run dev` and finish setup (model providers, integrations, database) from the web UI on first load. An "auth with the Mastra platform" step is planned as a follow-up.
@@ -11,7 +11,7 @@ The CLI is intentionally minimal: it asks for a project name, clones the [softwa
 ## Flags
 
 ```text
-npm create softwarefactory [project-name] -- [options]
+npx mastra-factory [project-name] -- [options]
 
     --default              Non-interactive: default name, init git
     --template-ref <ref>   Pin a template repo tag/branch
@@ -21,11 +21,11 @@ npm create softwarefactory [project-name] -- [options]
 
 ## Development (monorepo)
 
-This package lives in the `mastra-ai/mastra` monorepo at `mastracode/create-softwarefactory`. Releases go through the monorepo's changesets release train (it is un-ignored in `.changeset/config.json`) — add a changeset with your change and the train versions and publishes it.
+This package lives in the `mastra-ai/mastra` monorepo at `mastracode/mastra-factory`. Releases go through the monorepo's changesets release train (it is un-ignored in `.changeset/config.json`) — add a changeset with your change and the train versions and publishes it.
 
 ```bash
-pnpm --filter ./mastracode/create-softwarefactory build   # bundle src -> dist
-pnpm --filter ./mastracode/create-softwarefactory test    # vitest
+pnpm --filter ./mastracode/mastra-factory build   # bundle src -> dist
+pnpm --filter ./mastracode/mastra-factory test    # vitest
 node bin/cli.mjs my-app --default --template-dir ./template-out
 ```
 

@@ -1,11 +1,11 @@
 {
-  "name": "create-softwarefactory",
-  "version": "0.1.1",
-  "description": "Create a Mastra Software Factory project: an agent-powered software delivery environment built on Mastra. Run `npm create softwarefactory` to scaffold, configure integrations, and get started.",
+  "name": "mastra-factory",
+  "version": "0.0.1",
+  "description": "Create a Mastra Software Factory project: an agent-powered software delivery environment built on Mastra. Run `npx mastra-factory` to scaffold and get started.",
   "type": "module",
   "license": "Apache-2.0",
   "bin": {
-    "create-softwarefactory": "./bin/cli.mjs"
+    "mastra-factory": "./bin/cli.mjs"
   },
   "files": [
     "bin",
@@ -24,7 +24,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",
-    "directory": "mastracode/create-softwarefactory"
+    "directory": "mastracode/mastra-factory"
   },
   "homepage": "https://github.com/mastra-ai/softwarefactory-template",
   "bugs": {

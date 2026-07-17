@@ -307,7 +307,7 @@ function writeEnvExample() {
     .trimStart();
   const header = [
     '# Mastra Software Factory environment.',
-    '# Copied to .env by `npm create softwarefactory`; every value is optional —',
+    '# Copied to .env by `npx mastra-factory`; every value is optional —',
     '# features light up as their variables are set (see README.md).',
     '# Validation source of truth: .env.schema (varlock).',
     '',
@@ -344,7 +344,7 @@ function writeReadme(pins) {
 
 An open source, agent-powered software delivery environment built on [Mastra](https://mastra.ai). Connect GitHub and Linear, pull issues into an intake board, hand them to coding agents, and ship pull requests — from a web app you own and can deploy anywhere.
 
-Created with [\`npm create softwarefactory\`](https://www.npmjs.com/package/create-softwarefactory).
+Created with [\`npx mastra-factory\`](https://www.npmjs.com/package/mastra-factory).
 
 ## Quick start
 
