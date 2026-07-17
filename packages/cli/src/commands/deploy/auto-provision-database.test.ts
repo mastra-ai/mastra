@@ -47,7 +47,7 @@ function makeCtx(overrides: Partial<AutoProvisionContext> = {}): AutoProvisionCo
     projectId: 'proj-1',
     projectName: 'My App',
     projectSlug: 'my-app',
-    environment: { id: 'env-prod', slug: 'my-app-production', name: 'production' },
+    environment: { id: 'env-prod', slug: 'my-app-production', name: 'production', type: 'production' },
     autoAccept: false,
     ...overrides,
   };
@@ -233,7 +233,7 @@ describe('maybeAutoProvisionDatabases', () => {
 
     await maybeAutoProvisionDatabases(
       [tursoIssue()],
-      makeCtx({ environment: { id: 'env-stg', slug: 'stg', name: 'staging' } }),
+      makeCtx({ environment: { id: 'env-stg', slug: 'stg', name: 'staging', type: 'staging' } }),
     );
 
     expect(attachDatabaseMock).toHaveBeenCalledWith(
@@ -251,7 +251,7 @@ describe('maybeAutoProvisionDatabases', () => {
 
     await maybeAutoProvisionDatabases(
       [tursoIssue()],
-      makeCtx({ environment: { id: 'env-eu', slug: 'my-app--eu', name: 'eu' } }),
+      makeCtx({ environment: { id: 'env-eu', slug: 'my-app--eu', name: 'eu', type: 'preview' } }),
     );
 
     expect(attachDatabaseMock).toHaveBeenCalledWith(
@@ -269,7 +269,7 @@ describe('maybeAutoProvisionDatabases', () => {
 
     await maybeAutoProvisionDatabases(
       [tursoIssue()],
-      makeCtx({ environment: { id: 'env-prod', slug: 'my-app', name: 'production' } }),
+      makeCtx({ environment: { id: 'env-prod', slug: 'my-app', name: 'production', type: 'production' } }),
     );
 
     expect(attachDatabaseMock).toHaveBeenCalledWith(

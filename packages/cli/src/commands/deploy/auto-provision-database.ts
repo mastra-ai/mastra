@@ -31,7 +31,7 @@ export interface AutoProvisionContext {
   projectName: string;
   /** Project slug, used to derive a default database name. */
   projectSlug: string | null;
-  environment: Pick<Environment, 'id' | 'slug' | 'name'>;
+  environment: Pick<Environment, 'id' | 'slug' | 'name' | 'type'>;
   /**
    * Skip the auto-provision flow entirely (`--yes` / `--auto-accept`). We
    * treat "accept all defaults" as "don't prompt me for infrastructure
@@ -137,7 +137,7 @@ export async function maybeAutoProvisionDatabases(
 async function provisionOne(ctx: AutoProvisionContext, provider: DatabaseKind): Promise<ProjectDatabase> {
   const name = defaultDatabaseName(
     { name: ctx.projectName, slug: ctx.projectSlug },
-    { name: ctx.environment.name, slug: ctx.environment.slug },
+    { name: ctx.environment.name, slug: ctx.environment.slug, type: ctx.environment.type },
   );
   const created = await attachDatabase(ctx.token, ctx.orgId, ctx.projectId, {
     kind: provider,

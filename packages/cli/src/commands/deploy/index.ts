@@ -830,7 +830,12 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
       projectId,
       projectName,
       projectSlug,
-      environment: { id: environment.id, slug: environment.slug, name: environment.name },
+      environment: {
+        id: environment.id,
+        slug: environment.slug,
+        name: environment.name,
+        type: environment.type,
+      },
       autoAccept,
     });
     if (autoProvisioned.provisioned.length > 0) {

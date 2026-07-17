@@ -78,31 +78,78 @@ export function formatScope(db: Pick<ProjectDatabase, 'environmentId'>, environm
 
 /**
  * Derive a provider-safe default database name from the project slug/name,
- * optionally suffixed with an environment slug/name for env-scoped attaches.
+ * optionally suffixed with an environment discriminator for env-scoped
+ * attaches.
  *
  * Turso names become DNS labels, so: lowercase letters, digits, hyphens,
  * no leading/trailing hyphen, max 64 chars.
  *
- * When `environment` is provided, the name includes an env-derived suffix
- * (e.g. `my-app-eu-db`). Two env-scoped databases in the same project must
- * have different names — the platform rejects duplicates — so the suffix
- * is essential for auto-provisioning across environments.
+ * When `environment` is provided and its type is not `production`, the name
+ * includes an env-derived suffix (e.g. `my-app-eu-db`). Two env-scoped
+ * databases in the same project must have different names — the platform
+ * rejects duplicates — so the suffix is essential for auto-provisioning
+ * across environments. The `production` env is treated as the canonical
+ * default and stays unsuffixed so existing single-env projects keep the
+ * clean `<project>-db` name.
+ *
+ * We identify production by `environment.type`, not by name/slug matching,
+ * because users are free to rename their production env to `main`, `live`,
+ * etc., and a non-prod env named `production` should still be suffixed.
+ *
+ * If the resulting name would exceed 64 chars, we truncate the *project*
+ * segment rather than the tail — otherwise `slice(0, 64)` would eat the
+ * env discriminator and re-create the collision this function exists to
+ * prevent.
  */
+const MAX_DB_NAME_LEN = 64;
+const DB_NAME_TAIL = '-db';
+
 export function defaultDatabaseName(
   project: Pick<Project, 'name' | 'slug'>,
-  environment?: Pick<Environment, 'name' | 'slug'> | null,
+  environment?: Pick<Environment, 'name' | 'slug' | 'type'> | null,
 ): string {
   const projectPart = sanitizeSegment(project.slug || project.name) || 'mastra';
+
+  const shouldSuffix = Boolean(environment) && environment!.type !== 'production';
   // Prefer the env name over the slug: platforms sometimes derive the
   // production env's slug from the project name (e.g. `smoke-envdbux-1784317673`),
   // which would produce ugly `<project>-<project>-db` duplication.
-  const envPart = environment ? sanitizeSegment(environment.name || environment.slug || '') : '';
-  // Treat `production` as the canonical default — don't suffix, so the
-  // common single-env project gets a clean `<project>-db`. Suffix every
-  // other env so multi-env auto-provision doesn't collide on the name.
-  const shouldSuffix = envPart && envPart !== 'production' && envPart !== projectPart;
-  const base = shouldSuffix ? `${projectPart}-${envPart}` : projectPart;
-  return `${base}-db`.slice(0, 64).replace(/-+$/g, '');
+  const envPart = shouldSuffix ? sanitizeSegment(environment!.name || environment!.slug || '') : '';
+
+  if (!envPart) {
+    return truncateToMax(projectPart) + DB_NAME_TAIL;
+  }
+
+  // Reserve room for `-<envPart>-db` and truncate the project segment first
+  // so the discriminator survives. `slice(0, 64)` on the full string would
+  // eat the tail — losing the very thing that keeps names distinct across
+  // environments (issue: same project, different envs → identical truncated
+  // name → duplicate rejected by the platform).
+  const separatorLen = 1; // '-' between project and env
+  const overhead = separatorLen + envPart.length + DB_NAME_TAIL.length;
+  let projectRoom = MAX_DB_NAME_LEN - overhead;
+  let envSegment = envPart;
+  if (projectRoom < 1) {
+    // Extreme case: env name alone eats the whole budget. Give the project
+    // segment 1 char (always keep some project context) and clamp the env
+    // to what remains — but keep at least 1 char of env so the discriminator
+    // survives.
+    projectRoom = 1;
+    const envRoom = MAX_DB_NAME_LEN - projectRoom - separatorLen - DB_NAME_TAIL.length;
+    envSegment = envPart.slice(0, Math.max(1, envRoom));
+  }
+  const projectSegment = truncateToMax(projectPart, projectRoom) || projectPart.slice(0, 1);
+  return `${projectSegment}-${envSegment}${DB_NAME_TAIL}`;
+}
+
+/**
+ * Truncate an already-sanitized segment to at most `max` chars, dropping any
+ * trailing hyphens produced by the cut so the result is still a valid DNS
+ * label fragment.
+ */
+function truncateToMax(segment: string, max: number = MAX_DB_NAME_LEN - DB_NAME_TAIL.length): string {
+  if (max < 1) return '';
+  return segment.slice(0, max).replace(/-+$/g, '');
 }
 
 function sanitizeSegment(input: string): string {
