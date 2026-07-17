@@ -5,7 +5,12 @@ import { useOverlays } from '../../lib/overlays';
 import { Sidebar } from '../../Sidebar';
 import { ChatLayout } from '../../ui';
 import { renderedPaths, WorkspaceViewerPanel } from '../workspace-viewer';
-import { activeWorkspacePath, EmptyProjectState, findUserSessionByThreadId, useActiveProjectContext } from '../workspaces';
+import {
+  activeWorkspacePath,
+  EmptyProjectState,
+  findUserSessionByThreadId,
+  useActiveProjectContext,
+} from '../workspaces';
 import { ChatHeader } from './components/ChatHeader';
 import { ChatMessageList } from './components/ChatMessageList';
 import { ChatOverlays } from './components/ChatOverlays';
@@ -25,7 +30,9 @@ export function ThreadPage() {
   const [workspaceViewerExpanded, setWorkspaceViewerExpanded] = useState(false);
   const userSessionMatch = threadId ? findUserSessionByThreadId(threadId) : undefined;
   const workspaceProject = userSessionMatch?.project ?? activeProject;
-  const workspacePath = workspaceProject ? activeWorkspacePath(workspaceProject, userSessionMatch?.worktree) : undefined;
+  const workspacePath = workspaceProject
+    ? activeWorkspacePath(workspaceProject, userSessionMatch?.worktree)
+    : undefined;
 
   return (
     <ChatLayout
