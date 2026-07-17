@@ -20,12 +20,7 @@
 import { createHash } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { ensureSandbox, reportProgress, teardownSandbox } from '../sandbox/fleet';
-import type {
-  MaterializationSandbox,
-  ProgressFn,
-  SandboxBindingStore,
-  SandboxCommandResult,
-} from '../sandbox/fleet';
+import type { MaterializationSandbox, ProgressFn, SandboxBindingStore, SandboxCommandResult } from '../sandbox/fleet';
 import { getAppDb } from './db';
 import { githubProjectSandboxes } from './schema';
 import type { GithubProjectSandboxRow } from './schema';
