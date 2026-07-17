@@ -997,6 +997,7 @@ describe('Factory Board — persisted cards', () => {
       breadcrumbSection: 'Work',
       breadcrumbPath: '/factory/work',
       breadcrumbTitle: 'Issue #12: Fix flaky test',
+      composerPrNumber: undefined,
       buttonName: 'Open Review: PR #34: Review fix flaky test',
       destinationThreadId: 'thread-related-review',
       destinationWorktreePath: reviewWorktreePath,
@@ -1008,6 +1009,7 @@ describe('Factory Board — persisted cards', () => {
       breadcrumbSection: 'Review',
       breadcrumbPath: '/factory/review',
       breadcrumbTitle: 'PR #34: Review fix flaky test',
+      composerPrNumber: 34,
       buttonName: 'Open Work item: Issue #12: Fix flaky test',
       destinationThreadId: THREAD_ID,
       destinationWorktreePath: issueWorktreePath,
@@ -1020,6 +1022,7 @@ describe('Factory Board — persisted cards', () => {
       breadcrumbSection,
       breadcrumbPath,
       breadcrumbTitle,
+      composerPrNumber,
       buttonName,
       destinationThreadId,
       destinationWorktreePath,
@@ -1051,6 +1054,11 @@ describe('Factory Board — persisted cards', () => {
       const breadcrumb = within(header).getByRole('navigation', { name: 'Factory session breadcrumb' });
       expect(within(breadcrumb).getByRole('link', { name: breadcrumbSection })).toHaveAttribute('href', breadcrumbPath);
       expect(within(breadcrumb).getByText(breadcrumbTitle)).toBeInTheDocument();
+      if (composerPrNumber) {
+        expect(
+          await screen.findByRole('link', { name: `Open open mastra-ai/mastra pull request ${composerPrNumber}` }),
+        ).toHaveAttribute('href', `https://github.com/mastra-ai/mastra/pull/${composerPrNumber}`);
+      }
 
       await userEvent.click(within(header).getByRole('button', { name: buttonName }));
 
@@ -1063,6 +1071,41 @@ describe('Factory Board — persisted cards', () => {
       ).toBe(destinationWorktreePath);
     },
   );
+
+  it('given a Review session already subscribed to its Factory PR, when the composer renders, then the PR link is not duplicated', async () => {
+    const relatedProject: Factory = {
+      ...projectWithIssueWorktree,
+      binding: {
+        ...projectWithIssueWorktree.binding,
+        selectedWorktreePath: reviewWorktreePath,
+        worktrees: [
+          ...projectWithIssueWorktree.binding.worktrees,
+          { branch: 'factory/pr-34', worktreePath: reviewWorktreePath, baseBranch: 'main' },
+        ],
+      },
+    };
+    useBoardHandlers({ workItems: relatedWorkItems });
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () =>
+        HttpResponse.json({
+          subscriptions: [
+            {
+              id: 'subscription-34',
+              repoFullName: 'mastra-ai/mastra',
+              pullRequestNumber: 34,
+              status: 'open',
+              url: 'https://github.com/mastra-ai/mastra/pull/34',
+            },
+          ],
+        }),
+      ),
+    );
+    renderAt('/threads/thread-related-review', relatedProject, connectedStatus, {
+      sessionThreadId: 'thread-related-review',
+    });
+
+    expect(await screen.findAllByRole('link', { name: 'Open open mastra-ai/mastra pull request 34' })).toHaveLength(1);
+  });
 
   it('given a related work session whose worktree is gone, when the review thread renders, then it still links to the work item', async () => {
     const reviewOnlyProject: Factory = {

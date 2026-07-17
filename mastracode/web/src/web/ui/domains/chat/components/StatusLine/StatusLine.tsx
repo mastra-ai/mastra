@@ -21,7 +21,9 @@ export function StatusLine() {
   const { activeFactory } = useActiveFactoryContext();
   const { baseUrl, resourceId, projectPath } = useChatSessionContext();
   const { transcript, busy } = useChatTranscript();
-  const projectRepositoryId = activeFactory ? selectedRepository(activeFactory)?.projectRepositoryId : undefined;
+  const repository = activeFactory ? selectedRepository(activeFactory) : undefined;
+  const projectRepositoryId = repository?.projectRepositoryId;
+  const factoryProjectId = activeFactory?.binding.kind === 'factory' ? activeFactory.binding.factoryProjectId : undefined;
 
   return (
     <div
@@ -41,6 +43,8 @@ export function StatusLine() {
         resourceId={resourceId}
         projectPath={projectPath}
         projectRepositoryId={projectRepositoryId}
+        factoryProjectId={factoryProjectId}
+        repositorySlug={repository?.slug}
         threadId={threadId}
         transcriptEntries={transcript.entries}
         busy={busy}
