@@ -23,8 +23,14 @@ export function runInherit(
         // Don't reject yet — wait for `close` so the caller never proceeds
         // while the child is still running. Escalate if SIGTERM is ignored.
         timedOut = true;
-        child.kill('SIGTERM');
-        killTimer = setTimeout(() => child.kill('SIGKILL'), 5_000);
+        if (process.platform === 'win32' && child.pid) {
+          // `shell: true` means child.kill() would only hit the cmd.exe
+          // wrapper — taskkill /T terminates the whole process tree.
+          spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+        } else {
+          child.kill('SIGTERM');
+          killTimer = setTimeout(() => child.kill('SIGKILL'), 5_000);
+        }
       }, options.timeoutMs);
     }
     const clearTimers = () => {
