@@ -24,8 +24,8 @@ import {
   useAbortAgentControllerMutation,
   useSendAgentControllerMessageMutation,
   useSteerAgentControllerMutation,
-} from '../hooks/useAgentControllerRunMutations';
-import { useCreateAgentControllerThreadMutation } from '../hooks/useAgentControllerThreadMutations';
+} from '../../../../../shared/hooks/useAgentControllerRunMutations';
+import { useCreateAgentControllerThreadMutation } from '../../../../../shared/hooks/useAgentControllerThreadMutations';
 import { matchCommands } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { getModeColor } from './mode-colors';

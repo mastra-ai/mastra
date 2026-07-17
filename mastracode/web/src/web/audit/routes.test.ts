@@ -53,14 +53,18 @@ vi.mock('./store', () => ({
 }));
 
 // Web auth stays real (disabled in tests → context-var user), but the WorkOS
-// availability gate and provider are controllable for the portal-link specs.
-let webAuthEnabled = false;
+// capability gate and provider are controllable for the portal-link specs.
+// `isWebAuthEnabled` is pinned true so the specs prove the portal link gates
+// on the adapter *kind* (WorkOS), not on auth being enabled — under
+// better-auth, auth is enabled but the portal link must still 404.
+let workosAuthActive = false;
 
 vi.mock('../auth', async () => {
   const actual = (await vi.importActual('../auth')) as Record<string, unknown>;
   return {
     ...actual,
-    isWebAuthEnabled: () => webAuthEnabled,
+    isWebAuthEnabled: () => true,
+    isWorkOSAuth: () => workosAuthActive,
     getWorkOSProvider: () => ({ getWorkOS: () => ({ tag: 'workos-client' }) }),
   };
 });
@@ -115,7 +119,7 @@ beforeEach(() => {
   projects = [];
   listCalls = [];
   listResult = { events: [] };
-  webAuthEnabled = false;
+  workosAuthActive = false;
   portalCalls = [];
   portalFailure = undefined;
 });
@@ -209,15 +213,15 @@ describe('GET /web/audit/portal-link', () => {
     expect(res.status).toBe(403);
   });
 
-  it("404s when WorkOS auth isn't configured so the UI hides the button", async () => {
-    webAuthEnabled = false;
+  it('404s when the active auth adapter is not WorkOS (e.g. better-auth) so the UI hides the button', async () => {
+    workosAuthActive = false;
     const res = await buildApp(orgUser).request('/web/audit/portal-link');
     expect(res.status).toBe(404);
     expect(portalCalls).toHaveLength(0);
   });
 
   it('returns a one-time audit_logs portal URL for the org', async () => {
-    webAuthEnabled = true;
+    workosAuthActive = true;
     const res = await buildApp(orgUser).request('/web/audit/portal-link');
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ url: 'https://portal.workos.com/one-time-link' });
@@ -227,7 +231,7 @@ describe('GET /web/audit/portal-link', () => {
   });
 
   it('502s when the portal link cannot be generated', async () => {
-    webAuthEnabled = true;
+    workosAuthActive = true;
     portalFailure = new Error('workos down');
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const res = await buildApp(orgUser).request('/web/audit/portal-link');

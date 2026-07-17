@@ -1016,6 +1016,16 @@
       "permanent": true
     },
     {
+      "source": "/docs/frameworks/agents",
+      "destination": "/docs/agents/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/guide/tools",
+      "destination": "/docs/agents/using-tools",
+      "permanent": true
+    },
+    {
       "source": "/docs/agents/channels/llms.txt",
       "destination": "/docs/capabilities/channels/overview/llms.txt",
       "permanent": true
@@ -1748,6 +1758,16 @@
     {
       "source": "/docs/scorers/creating-custom-scorers/llms.txt",
       "destination": "/docs/evals/custom-scorers/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/agents/llms.txt",
+      "destination": "/docs/agents/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/guide/tools/llms.txt",
+      "destination": "/docs/agents/using-tools/llms.txt",
       "permanent": true
     }
   ]

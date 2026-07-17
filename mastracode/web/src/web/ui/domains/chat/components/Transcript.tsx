@@ -11,6 +11,7 @@ import { MessageFactory } from '@mastra/react';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react';
 import {
   Bell,
+  BookOpen,
   ChevronDown,
   CircleDot,
   CircleX,
@@ -33,7 +34,7 @@ import { useChatTranscript } from '../context/useChatTranscript';
 import {
   useApproveAgentControllerToolMutation,
   useRespondAgentControllerSuspensionMutation,
-} from '../hooks/useAgentControllerRunMutations';
+} from '../../../../../shared/hooks/useAgentControllerRunMutations';
 import { stripSerializedAnsi } from '../services/ansi';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 
@@ -97,6 +98,66 @@ function stringify(v: unknown): string {
 function lastSegment(id: string): string {
   const parts = id.split('/');
   return parts[parts.length - 1] ?? id;
+}
+
+interface SkillActivation {
+  name: string;
+  content: string;
+  arguments?: string;
+}
+
+const skillActivationPattern = /^<skill name="([a-z0-9]+(?:-[a-z0-9]+)*)">\n([\s\S]+)\n<\/skill>$/;
+const skillArgumentsMarker = '\n\nARGUMENTS: ';
+
+function parseSkillActivation(text: string): SkillActivation | undefined {
+  const match = skillActivationPattern.exec(text.trim());
+  if (!match) return undefined;
+
+  const content = match[2];
+  const argumentsIndex = content.lastIndexOf(skillArgumentsMarker);
+  return {
+    name: match[1],
+    content,
+    arguments: argumentsIndex >= 0 ? content.slice(argumentsIndex + skillArgumentsMarker.length).trim() : undefined,
+  };
+}
+
+function SkillActivationCard({ activation }: { activation: SkillActivation }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <Collapsible open={expanded} onOpenChange={setExpanded} className="min-w-64 max-w-full">
+      <CollapsibleTrigger
+        className="w-full rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent1"
+        aria-label={`${expanded ? 'Hide' : 'Show'} ${activation.name} skill contents`}
+      >
+        <span className="flex items-center gap-2">
+          <span className="flex items-center gap-1.5 text-icon3">
+            <BookOpen size={14} aria-hidden="true" />
+            <Txt as="span" variant="ui-xs" className="uppercase tracking-wide">
+              Skill
+            </Txt>
+          </span>
+          <Txt as="span" variant="ui-sm" font="mono" className="text-icon6">
+            {activation.name}
+          </Txt>
+          <ChevronDown
+            size={13}
+            aria-hidden="true"
+            className={`ml-auto shrink-0 text-icon3 transition-transform ${expanded ? 'rotate-180' : ''}`}
+          />
+        </span>
+        {activation.arguments && (
+          <span className="mt-1 block truncate text-ui-xs text-icon3">{activation.arguments}</span>
+        )}
+      </CollapsibleTrigger>
+      <CollapsibleContent className="mt-2 max-h-96 overflow-y-auto border-t border-border1 pt-2">
+        <div className="prose text-ui-sm">
+          <Markdown>{activation.content}</Markdown>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -742,19 +803,27 @@ function MessageBubble({ entry }: { entry: MessageEntry }) {
   };
 
   const renderers = {
-    Text: (part: TextPart) =>
-      entry.message.role === 'user' ? (
-        <div className="prose">
-          <Markdown>{part.text}</Markdown>
-        </div>
-      ) : (
+    Text: (part: TextPart) => {
+      if (entry.message.role === 'user') {
+        const activation = parseSkillActivation(part.text);
+        return activation ? (
+          <SkillActivationCard activation={activation} />
+        ) : (
+          <div className="prose">
+            <Markdown>{part.text}</Markdown>
+          </div>
+        );
+      }
+
+      return (
         <div className="prose">
           <Markdown>{part.text}</Markdown>
           {entry.streaming && part === lastTextPart && (
             <span className="ml-0.5 inline-block h-[1em] w-0.5 animate-pulse bg-accent1 align-text-bottom" />
           )}
         </div>
-      ),
+      );
+    },
     Reasoning: (part: ReasoningPart) => (
       <div className="my-1.5 border-l-2 border-border1 pl-2.5 text-ui-sm italic text-icon3 [&_p]:my-0.5">
         <Markdown>{part.reasoning}</Markdown>

@@ -1,5 +1,65 @@
 # @mastra/client-js
 
+## 1.33.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`4cfdd64`](https://github.com/mastra-ai/mastra/commit/4cfdd645794feaea0c4ea711e70ecdfbef0c5b8e)]:
+  - @mastra/core@1.52.0-alpha.4
+
+## 1.33.0-alpha.3
+
+### Minor Changes
+
+- Added a `requestContext` option to agent controller session methods in @mastra/client-js. You can now pass custom request context to `sendMessage`, `steer`, `followUp`, `approveTool`, and `respondToToolSuspension`, matching what `agent.generate()` already supports. The context is merged into the run's request context on the server, so it reaches dynamic instructions and tools. ([#19531](https://github.com/mastra-ai/mastra/pull/19531))
+
+  ```ts
+  const session = client.getAgentController('code').session('user-1');
+  await session.sendMessage('hello', { requestContext: { userId: 'user-1', tier: 'pro' } });
+  ```
+
+- Added reconnect support to `AgentControllerSession.subscribe()` so SSE subscriptions recover after proxy timeouts or transport errors. Fixes #19202. ([#19560](https://github.com/mastra-ai/mastra/pull/19560))
+
+  ```ts
+  await session.subscribe({
+    onEvent: event => {
+      /* handle event */
+    },
+    reconnect: true,
+  });
+  ```
+
+### Patch Changes
+
+- Fixed AgentController live events and thread history returning serialized message timestamps instead of Date values. ([#18783](https://github.com/mastra-ai/mastra/pull/18783))
+
+- Fixed AgentControllerSession.subscribe() so it resolves only after the stream is established and rejects when it cannot connect (leaving no background retry loop). Reconnect now applies only after an established stream drops, backs off exponentially, and fires a new onReconnect callback on each re-established stream so consumers can re-sync missed events: ([#19580](https://github.com/mastra-ai/mastra/pull/19580))
+
+  ```ts
+  const subscription = await session.subscribe({
+    onEvent: event => applyEvent(event),
+    onError: error => showDisconnected(error),
+    reconnect: { maxRetries: 5, delayMs: 1000, maxDelayMs: 30_000 },
+    onReconnect: async () => {
+      // Events emitted while disconnected are not replayed — re-sync state.
+      applyState(await session.state());
+    },
+  });
+  ```
+
+- Added stable metrics and logs capability reporting for observability storage. The system packages response now includes `observabilityStorageCapabilities` with `metrics` and `logs` flags, enabling capability-based detection that is resilient to bundler-generated constructor name changes. ([#19305](https://github.com/mastra-ai/mastra/pull/19305))
+
+  ```typescript
+  const packages = await client.getSystemPackages();
+  console.log(packages.observabilityStorageCapabilities?.metrics); // true
+  console.log(packages.observabilityStorageCapabilities?.logs); // true
+  ```
+
+  Studio now uses the capability response instead of relying on constructor names, with a fallback for older servers.
+
+- Updated dependencies [[`1426af2`](https://github.com/mastra-ai/mastra/commit/1426af24975879c000d13ac75673f630fcc970c1), [`975295d`](https://github.com/mastra-ai/mastra/commit/975295d418552f0d46a59edfef4c3ee555f9930a), [`85e4fb5`](https://github.com/mastra-ai/mastra/commit/85e4fb50087a81c74df3a762f53b56373db0b912), [`ef03c0c`](https://github.com/mastra-ai/mastra/commit/ef03c0cfc62367a458e4cc56462e2148b35681c5), [`4fb4d88`](https://github.com/mastra-ai/mastra/commit/4fb4d881bc107acee13890ad4d78661016c510ed), [`4eba27a`](https://github.com/mastra-ai/mastra/commit/4eba27adcf60f991df0e62f94b3e75b4e67f3b4b), [`c701be3`](https://github.com/mastra-ai/mastra/commit/c701be32d7d9aa94a66da8c6cc38dcac6856f464)]:
+  - @mastra/core@1.52.0-alpha.3
+
 ## 1.32.1-alpha.2
 
 ### Patch Changes
