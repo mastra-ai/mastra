@@ -24,7 +24,7 @@ npm create softwarefactory [project-name] -- [options]
 
 ## Development (monorepo)
 
-This package lives in the `mastra-ai/mastra` monorepo at `mastracode/create-softwarefactory` and is currently versioned and published manually.
+This package lives in the `mastra-ai/mastra` monorepo at `mastracode/create-softwarefactory`. Releases go through the monorepo's changesets release train (it is un-ignored in `.changeset/config.json`) — add a changeset with your change and the train versions and publishes it.
 
 ```bash
 pnpm --filter ./mastracode/create-softwarefactory build   # bundle src -> dist
@@ -36,13 +36,14 @@ node bin/cli.mjs my-app --default --template-dir ./template-out
 
 `scripts/sync-template.mjs` generates the template tree from `mastracode/web`:
 
-- `link:` deps → exact published versions (local monorepo versions by default, verified on npm; `--tag latest` for stable dist-tags)
+- `link:` deps → caret ranges on published versions (anchored on local monorepo versions by default, verified on npm; `--tag latest` for stable dist-tags)
 - monorepo tsconfig → standalone, test files/deps stripped, user-facing README/scripts
 - `.env.schema` → `.env.example` (varlock decorators removed)
 
+Syncing to [softwarefactory-template](https://github.com/mastra-ai/softwarefactory-template) is automated, mirroring the `templates/*` process: the `sync-softwarefactory-template` workflow regenerates the template (`--tag latest`) and force-pushes it on every push to `main` that touches `mastracode/web` or the sync script. The monorepo is the source of truth — direct commits to the template repo get overwritten.
+
 ```bash
-node scripts/sync-template.mjs            # writes ./template-out
-cd template-out && git init ...           # review, push to the template repo, tag
+node scripts/sync-template.mjs            # writes ./template-out (local development)
 ```
 
 ## License

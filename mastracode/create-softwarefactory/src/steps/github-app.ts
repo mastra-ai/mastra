@@ -4,7 +4,9 @@ import color from 'picocolors';
 
 import type { CreateContext } from '../context.js';
 
-const GITHUB_DOCS_URL = 'https://mastra.ai/docs/software-factory/github';
+// Setup guidance lives in the generated project README (same content as the
+// template repo README) until dedicated docs pages ship.
+const GITHUB_DOCS_URL = 'https://github.com/mastra-ai/softwarefactory-template#github';
 
 /**
  * Optional GitHub connection step (requires database + WorkOS). Guides the
@@ -42,6 +44,9 @@ export async function githubAppStep(ctx: CreateContext): Promise<void> {
     { key: 'GITHUB_APP_SLUG', label: 'App slug (from the app URL)' },
     { key: 'GITHUB_APP_PRIVATE_KEY', label: 'Private key (paste PEM contents)', secret: true },
   ];
+  // Buffer the credentials locally and only stage them into the env once the
+  // whole form succeeds — cancelling midway must leave the env untouched.
+  const collected: Record<string, string> = {};
   for (const field of fields) {
     const value = field.secret
       ? await p.password({ message: field.label })
@@ -51,7 +56,10 @@ export async function githubAppStep(ctx: CreateContext): Promise<void> {
       ctx.analytics.trackEvent('sf_github_configured', { configured: false, mode: 'manual' });
       return;
     }
-    ctx.env.set(field.key, String(value).trim());
+    collected[field.key] = String(value).trim();
+  }
+  for (const [key, value] of Object.entries(collected)) {
+    ctx.env.set(key, value);
   }
   ctx.env.set('GITHUB_APP_WEBHOOK_SECRET', randomBytes(24).toString('hex'));
   ctx.githubConfigured = true;

@@ -3,28 +3,31 @@
  * Produces the Mastra Software Factory template tree from `mastracode/web`.
  *
  * The template is the web project minus monorepo coupling:
- *   - `link:` deps           -> exact published versions (verified on npm)
+ *   - `link:` deps           -> caret ranges on published versions (verified on npm)
  *   - monorepo tsconfig      -> standalone tsconfig
  *   - contributor README     -> user-facing README
  *   - e2e/tests/test deps    -> stripped
  *   - monorepo-only scripts  -> user-facing scripts (dev/build/start/deploy)
  *   - .env.schema            -> also emitted as .env.example (decorators stripped)
  *
- * Versions: by default the template pins the LOCAL monorepo version of each
- * Mastra package — that's the coherent set CI released together (usually
- * alphas) and matches the source the template was cut from. Each pin is
- * verified to exist on npm. `--tag latest` pins the `latest` dist-tags
- * instead (use for release-train syncs where stable versions contain all
- * required changes). Because pins may be prereleases, the template ships an
- * `.npmrc` with `legacy-peer-deps=true` — npm's strict resolver rejects
- * prerelease pins like `1.51.1-alpha.1` against peer ranges like `>=1.50.0-0`.
+ * Versions: Mastra deps become caret ranges (`^1.51.0` style), matching the
+ * monorepo's other templates (templates/* float via `latest`/caret). By
+ * default the range is anchored on the LOCAL monorepo version of each
+ * package (verified to exist on npm); `--tag latest` anchors on the `latest`
+ * dist-tags instead — that's what the automated sync uses. Because anchors
+ * may be prereleases in the default mode, the template ships an `.npmrc`
+ * with `legacy-peer-deps=true` — npm's strict resolver rejects prereleases
+ * like `1.51.1-alpha.1` against peer ranges like `>=1.50.0-0`.
  *
  * Usage:
  *   node scripts/sync-template.mjs [--out <dir>] [--tag latest]
  *
  * Output defaults to `template-out/` next to this package (gitignored).
- * Publish flow (v1, manual): run this, review the tree, push it to
- * github.com/mastra-ai/softwarefactory-template, tag a release.
+ * Publish flow: automated — the sync-softwarefactory-template workflow runs
+ * this with `--tag latest` on pushes to main touching `mastracode/web` and
+ * force-syncs github.com/mastra-ai/softwarefactory-template, mirroring the
+ * templates/* sync process (one-way overwrite; the monorepo is the source of
+ * truth).
  */
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -198,9 +201,12 @@ function transformPackageJson() {
     for (const [name, relPath] of Object.entries(LINKED_PACKAGES)) {
       if (!deps[name]) continue;
       const version = resolvePinnedVersion(name, relPath);
-      deps[name] = version;
+      // Caret ranges, matching the monorepo's other templates (templates/*):
+      // the scaffold floats to compatible releases instead of freezing the
+      // exact set that existed at sync time.
+      deps[name] = `^${version}`;
       pins.push([name, version]);
-      console.log(`  ✓ ${name}@${version}`);
+      console.log(`  ✓ ${name}@^${version}`);
     }
   }
 
@@ -326,8 +332,10 @@ function writeDevScript() {
  * both are ready.
  *
  * Ports are overridable: PORT for the API server, MASTRACODE_UI_PORT for the
- * UI. The banner reports the URLs the servers actually bound (Vite hops to a
- * free port when its default is taken).
+ * UI. The UI port is strict (no hopping to a free port): OAuth callbacks are
+ * registered against the configured origin, so a silently relocated UI would
+ * break every WorkOS/GitHub/Linear redirect. Change MASTRACODE_UI_PORT and
+ * MASTRACODE_PUBLIC_URL together.
  *
  * Env is loaded/validated by varlock from .env against .env.schema.
  */
@@ -422,7 +430,19 @@ run(
   { MASTRACODE_UI_PORT: uiPort, MASTRACODE_API_TARGET: serverUrl },
   text => {
     // eslint-disable-next-line no-control-regex
-    const match = text.replace(/\\u001b\\[[0-9;]*m/g, '').match(/Local:\\s+(https?:\\/\\/\\S+?)\\/?\\s/);
+    const clean = text.replace(/\\u001b\\[[0-9;]*m/g, '');
+    if (/Port \\d+ is (already )?in use/i.test(clean)) {
+      console.error('');
+      console.error(\`[ui] Port \${uiPort} is already in use — the UI port is strict because OAuth\`);
+      console.error('[ui] callback URLs (WorkOS/GitHub/Linear) are registered against it.');
+      console.error('[ui] Either free the port, or relocate the app:');
+      console.error('[ui]   1. Run with MASTRACODE_UI_PORT=<port> npm run dev');
+      console.error('[ui]   2. Set MASTRACODE_PUBLIC_URL=http://localhost:<port> in .env');
+      console.error('[ui]   3. Update the callback URLs registered on your OAuth apps to match');
+      console.error('');
+      return;
+    }
+    const match = clean.match(/Local:\\s+(https?:\\/\\/\\S+?)\\/?\\s/);
     if (match) {
       uiUrl = match[1];
       printBanner();
@@ -460,6 +480,10 @@ npm run dev
 
 With zero configuration the app runs in local, auth-less mode (agents + local storage, no integrations). Features enable themselves as you add environment variables — see below.
 
+### Ports
+
+The UI port is **strict**: if 5173 is taken, \`npm run dev\` fails instead of moving to a free port, because OAuth callback URLs (WorkOS/GitHub/Linear) are registered against the configured origin and would silently break. To run on a different port, change both together — run with \`MASTRACODE_UI_PORT=<port>\` and set \`MASTRACODE_PUBLIC_URL=http://localhost:<port>\` in \`.env\` (then update the callback URLs on your OAuth apps). The API server port is overridable with \`PORT\`.
+
 ## Configuration
 
 All configuration lives in \`.env\` (validated against \`.env.schema\` by [varlock](https://varlock.dev)). Every value is optional; each feature activates when its variables are set. Restart \`npm run dev\` after changing \`.env\`.
@@ -478,7 +502,7 @@ All configuration lives in \`.env\` (validated against \`.env.schema\` by [varlo
 Integrations and shared agent state need Postgres **with the pgvector extension**. Two easy options:
 
 - **Local Docker** (recommended to start): \`npm run db:up\` starts Postgres on \`localhost:54329\` matching \`APP_DATABASE_URL=postgres://user:pass@localhost:54329/mastracode_web\` (plus Redis on \`localhost:63799\`).
-- **Hosted Postgres**: any provider works if pgvector is available (Neon, Supabase, Railway, RDS, ...). See https://mastra.ai/docs/software-factory/database
+- **Hosted Postgres**: any provider works if pgvector is available (Neon, Supabase, Railway, RDS, ...) — enable the extension and set \`APP_DATABASE_URL\`.
 
 Without \`APP_DATABASE_URL\`, agent state falls back to a local libSQL file and integrations stay off.
 
@@ -490,19 +514,17 @@ Integrations are per-organization, so they require sign-in, powered by [WorkOS](
 2. In WorkOS → Redirects, add \`http://localhost:5173/auth/callback\`.
 3. Set \`WORKOS_COOKIE_PASSWORD\` to a random 32+ character string.
 
-Guide: https://mastra.ai/docs/software-factory/auth
-
 ### GitHub
 
-The Factory connects to GitHub through a GitHub App you own. \`npm create softwarefactory\` can create it for you automatically (manifest flow). To do it manually: https://mastra.ai/docs/software-factory/github
+The Factory connects to GitHub through a GitHub App you own. \`npm create softwarefactory\` walks you through creating one (guided manual entry); to do it yourself, create an app at https://github.com/settings/apps/new (or under your org) and set the \`GITHUB_APP_*\` variables in \`.env\`.
 
-The app needs **contents, issues, pull requests, metadata** permissions. Set its callback URL to \`<your app origin>/auth/github/callback\`.
+The app needs **Contents, Issues, Pull requests** (Read & write) and **Metadata** (Read-only) permissions. Set its callback URL to \`<your app origin>/auth/github/callback\`.
 
 Webhooks (optional — powers auto-triage and PR notifications, requires a public host; GitHub rejects localhost webhook URLs): in the App settings, set the webhook URL to \`https://<public-host>/web/github/webhook\` with the \`GITHUB_APP_WEBHOOK_SECRET\` from \`.env\` as the secret, activate it, and subscribe to the **issues, issue_comment, pull_request, pull_request_review, pull_request_review_comment** events. Local development works without webhooks; issues are fetched on demand.
 
 ### Linear (optional)
 
-Create a Linear OAuth app and set \`LINEAR_CLIENT_ID\` / \`LINEAR_CLIENT_SECRET\`. Guide: https://mastra.ai/docs/software-factory/linear
+Create a Linear OAuth app (Linear → Settings → API → OAuth applications → New) with callback URL \`<your app origin>/auth/linear/callback\`, then set \`LINEAR_CLIENT_ID\` / \`LINEAR_CLIENT_SECRET\` in \`.env\`.
 
 ## Scripts
 
@@ -523,7 +545,7 @@ Create a Linear OAuth app and set \`LINEAR_CLIENT_ID\` / \`LINEAR_CLIENT_SECRET\
 
 ## Versions
 
-This project pins exact versions of the Mastra packages (currently \`@mastra/core@${versions['@mastra/core']}\`, \`@mastra/code-sdk@${versions['@mastra/code-sdk']}\`). Upgrade them together when updating.
+The Mastra packages use caret ranges (currently anchored on \`@mastra/core@${versions['@mastra/core']}\` and \`@mastra/code-sdk@${versions['@mastra/code-sdk']}\`). Upgrade them together when updating.
 
 ## License
 
@@ -560,4 +582,4 @@ writeDevScript();
 writeReadme(pins);
 
 console.log(`sync-template: done. Template written to ${outDir}`);
-console.log('Next: review the tree, then push to the template repo and tag a release.');
+console.log('The sync-softwarefactory-template workflow pushes this to the template repo on main.');

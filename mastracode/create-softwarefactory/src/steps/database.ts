@@ -4,7 +4,9 @@ import color from 'picocolors';
 import { DOCKER_DATABASE_URL } from '../context.js';
 import type { CreateContext } from '../context.js';
 
-const DB_DOCS_URL = 'https://mastra.ai/docs/software-factory/database';
+// Setup guidance lives in the generated project README (same content as the
+// template repo README) until dedicated docs pages ship.
+const DB_DOCS_URL = 'https://github.com/mastra-ai/softwarefactory-template#database';
 
 export function isPostgresUrl(value: string): boolean {
   try {
@@ -12,6 +14,16 @@ export function isPostgresUrl(value: string): boolean {
     return url.protocol === 'postgres:' || url.protocol === 'postgresql:';
   } catch {
     return false;
+  }
+}
+
+/** Credential-safe description of an invalid URL for error messages. */
+export function describeUrlShape(value: string): string {
+  try {
+    const url = new URL(value);
+    return `${url.protocol}//${url.host || '<no host>'}`;
+  } catch {
+    return 'a value that is not a valid URL';
   }
 }
 
@@ -25,7 +37,8 @@ export async function databaseStep(
 ): Promise<void> {
   if (preset.dbUrl) {
     if (!isPostgresUrl(preset.dbUrl)) {
-      throw new Error(`--db-url must be a postgres:// URL (got ${preset.dbUrl})`);
+      // Don't echo the full URL — it may embed credentials.
+      throw new Error(`--db-url must be a postgres:// URL (got ${describeUrlShape(preset.dbUrl)})`);
     }
     ctx.env.set('APP_DATABASE_URL', preset.dbUrl);
     ctx.databaseConfigured = true;

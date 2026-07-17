@@ -79,15 +79,21 @@ describe('githubAppStep', () => {
     });
   });
 
-  it('cancel mid-entry pushes a follow-up and stops without configuring', async () => {
+  it('cancel mid-entry leaves the env completely untouched', async () => {
     const { ctx, env } = makeCtx();
     prompts.confirm.mockResolvedValue(true);
-    prompts.text.mockResolvedValueOnce('12345').mockResolvedValueOnce(CANCEL);
+    // Three fields succeed (including a secret), cancel happens on the fourth —
+    // nothing may be staged, not even the fields entered before the cancel.
+    prompts.text
+      .mockResolvedValueOnce('12345') // App ID
+      .mockResolvedValueOnce('Iv1.abc') // Client ID
+      .mockResolvedValueOnce(CANCEL); // App slug — cancelled
+    prompts.password.mockResolvedValueOnce('shhh'); // Client secret
 
     await githubAppStep(ctx);
 
     expect(ctx.githubConfigured).toBe(false);
-    expect(env.has('GITHUB_APP_WEBHOOK_SECRET')).toBe(false);
+    expect(env.size).toBe(0);
     expect(ctx.followUps.some(f => f.includes('GITHUB_APP_'))).toBe(true);
   });
 

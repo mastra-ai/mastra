@@ -7,7 +7,7 @@ import { useSearchParams } from 'react-router';
 
 import { useApiConfig } from '../../../../../shared/api/config';
 import { Wordmark } from '../../../ui';
-import { useWebAuth } from '../hooks/useWebAuth';
+import { useWebAuth } from '../../../../../shared/hooks/useWebAuth';
 import { navigateAfterSignIn, redirectToLogin, signInWithPassword, signUpWithPassword } from '../services/auth';
 
 /**

@@ -4,8 +4,8 @@ import color from 'picocolors';
 import type { CreateContext } from '../context.js';
 
 const PROVIDERS = {
-  anthropic: { label: 'Anthropic', envVar: 'ANTHROPIC_API_KEY', keyPrefix: 'sk-ant-' },
-  openai: { label: 'OpenAI', envVar: 'OPENAI_API_KEY', keyPrefix: 'sk-' },
+  anthropic: { label: 'Anthropic', envVar: 'ANTHROPIC_API_KEY' },
+  openai: { label: 'OpenAI', envVar: 'OPENAI_API_KEY' },
 } as const;
 
 export type LlmProvider = keyof typeof PROVIDERS;

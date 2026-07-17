@@ -30,6 +30,11 @@ program
     if (args.llm !== undefined && !isLlmProvider(String(args.llm))) {
       throw new Error(`--llm must be "openai" or "anthropic" (got ${String(args.llm)})`);
     }
+    if (args.llmApiKey !== undefined && args.llm === undefined) {
+      // Without a provider the key has no env var to land in — fail instead
+      // of silently dropping it (which --default would otherwise do).
+      throw new Error('--llm-api-key requires --llm <provider>');
+    }
     let timeout: number | undefined;
     if (args.timeout !== undefined) {
       timeout = args.timeout === true ? 60_000 : Number(args.timeout);

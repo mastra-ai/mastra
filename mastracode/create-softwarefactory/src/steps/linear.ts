@@ -3,7 +3,9 @@ import color from 'picocolors';
 
 import type { CreateContext } from '../context.js';
 
-const LINEAR_DOCS_URL = 'https://mastra.ai/docs/software-factory/linear';
+// Setup guidance lives in the generated project README (same content as the
+// template repo README) until dedicated docs pages ship.
+const LINEAR_DOCS_URL = 'https://github.com/mastra-ai/softwarefactory-template#linear-optional';
 
 /**
  * Optional Linear intake step (requires database + WorkOS). The user creates

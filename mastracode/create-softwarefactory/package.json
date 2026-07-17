@@ -1,6 +1,6 @@
 {
   "name": "create-softwarefactory",
-  "version": "0.1.2",
+  "version": "0.1.1",
   "description": "Create a Mastra Software Factory project: an agent-powered software delivery environment built on Mastra. Run `npm create softwarefactory` to scaffold, configure integrations, and get started.",
   "type": "module",
   "license": "Apache-2.0",

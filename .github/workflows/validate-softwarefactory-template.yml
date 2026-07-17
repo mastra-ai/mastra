@@ -1,0 +1,102 @@
+name: Validate Software Factory Template
+
+# Validates the artifacts users receive from `npm create softwarefactory`:
+# generates the template from mastracode/web, scaffolds a project with the
+# CLI's --default path, then typechecks, builds, boots, and probes it.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+    paths:
+      - 'mastracode/web/**'
+      - 'mastracode/create-softwarefactory/**'
+      - '.github/workflows/validate-softwarefactory-template.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  validate-template:
+    name: Generate, scaffold, boot, probe
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      MASTRA_TELEMETRY_DISABLED: '1'
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+        with:
+          install-dependencies: 'false'
+
+      - name: Install and build the CLI
+        run: |
+          pnpm install --frozen-lockfile --filter ./mastracode/create-softwarefactory...
+          pnpm --filter ./mastracode/create-softwarefactory build
+
+      - name: Generate the template from mastracode/web
+        # Default mode: caret ranges anchored on the local monorepo versions —
+        # the coherent set these sources were built against (verified on npm).
+        run: node mastracode/create-softwarefactory/scripts/sync-template.mjs --out "$RUNNER_TEMP/template"
+
+      - name: Scaffold a project with create-softwarefactory --default
+        working-directory: ${{ runner.temp }}
+        run: node "$GITHUB_WORKSPACE/mastracode/create-softwarefactory/bin/cli.mjs" ci-factory --default --template-dir "$RUNNER_TEMP/template" --timeout 900000
+
+      - name: Assert scaffold .env health
+        working-directory: ${{ runner.temp }}/ci-factory
+        run: |
+          set -euo pipefail
+          grep -q '^MASTRACODE_PUBLIC_URL=http://localhost:5173$' .env
+          grep -q '^APP_DATABASE_URL=' .env
+          # Unset vars must stay commented placeholders: an active `KEY=` loads
+          # as the empty string and poisons `process.env.X ?? default`.
+          grep -q '^# WORKOS_API_KEY=' .env
+          if grep -qE '^[A-Z][A-Z0-9_]*=$' .env; then
+            echo 'Found active empty env assignments:' >&2
+            grep -nE '^[A-Z][A-Z0-9_]*=$' .env >&2
+            exit 1
+          fi
+
+      - name: Typecheck the scaffold
+        working-directory: ${{ runner.temp }}/ci-factory
+        run: npm run check
+
+      - name: Build the scaffold
+        working-directory: ${{ runner.temp }}/ci-factory
+        run: npm run build
+
+      - name: Boot the scaffold and probe UI/API routes
+        working-directory: ${{ runner.temp }}/ci-factory
+        run: |
+          set -euo pipefail
+          npm run dev > /tmp/sf-dev.log 2>&1 &
+          DEV_PID=$!
+          trap 'kill "$DEV_PID" 2>/dev/null || true' EXIT
+
+          ready=""
+          for _ in $(seq 1 90); do
+            if curl -fsS -o /dev/null http://localhost:5173/ &&
+               curl -fsS -o /dev/null http://localhost:4111/api; then
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          if [ -z "$ready" ]; then
+            echo 'Dev server did not become ready:' >&2
+            cat /tmp/sf-dev.log >&2
+            exit 1
+          fi
+
+          # Proxied web-surface route through the Vite dev server.
+          curl -fsS -o /dev/null http://localhost:5173/web/config/providers
+
+          echo 'UI root, API, and proxied /web routes all healthy.'
