@@ -9,7 +9,8 @@
  * page. Driven through a memory router over the real route table with MSW at
  * the network boundary.
  */
-import type { AgentControllerSessionState, AgentControllerThreadInfo, MastraDBMessage } from '@mastra/client-js';
+import type { AgentControllerSessionState, AgentControllerThreadInfo } from '@mastra/client-js';
+import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { QueryClient } from '@tanstack/react-query';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';

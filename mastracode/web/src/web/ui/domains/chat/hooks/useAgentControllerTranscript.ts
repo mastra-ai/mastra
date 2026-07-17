@@ -1,4 +1,5 @@
-import type { AgentControllerEvent, AgentControllerOMProgress, MastraDBMessage } from '@mastra/client-js';
+import type { AgentControllerEvent, AgentControllerOMProgress } from '@mastra/client-js';
+import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { useReducer, useRef } from 'react';
 
 import { createInitialTranscript, transcriptReducer } from '../services/transcript';

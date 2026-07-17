@@ -11,6 +11,7 @@ import { findUserSessionByThreadId } from '../../workspaces/services/projects';
 import { deriveProjectPath } from '../../../../../shared/hooks/useWorkspaces';
 import { useAgentControllerThreadMessages } from '../../../../../shared/hooks/useAgentControllerThreadMessages';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
+import { normalizeMessages } from '../services/transcript';
 import { ChatModelsProvider } from './ChatModelsProvider';
 import { ChatModesProvider } from './ChatModesProvider';
 import { ChatPermissionsProvider } from './ChatPermissionsProvider';
@@ -99,7 +100,7 @@ export function ChatSessionBoundary({
     <ChatTranscriptProvider
       key={`${resourceId}:${threadId ?? 'draft'}`}
       threadId={threadId}
-      initialMessages={messagesQuery.data}
+      initialMessages={normalizeMessages(messagesQuery.data)}
     >
       <ChatModesProvider>
         <ChatModelsProvider>

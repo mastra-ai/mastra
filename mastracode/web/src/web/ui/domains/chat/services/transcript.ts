@@ -197,6 +197,47 @@ export interface OutgoingFile {
   filename?: string;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function normalizeMessage(message: unknown): MastraDBMessage {
+  if (!isRecord(message)) {
+    return {
+      id: `message-${Date.now()}`,
+      role: 'assistant',
+      createdAt: new Date(),
+      content: { format: 2, parts: [] },
+    };
+  }
+
+  const rawContent = message.content;
+  const metadata = isRecord(rawContent) && isRecord(rawContent.metadata) ? rawContent.metadata : undefined;
+  const content = Array.isArray(rawContent)
+    ? { format: 2 as const, parts: rawContent as MastraMessagePart[] }
+    : isRecord(rawContent) && Array.isArray(rawContent.parts)
+      ? { format: 2 as const, parts: rawContent.parts as MastraMessagePart[], metadata }
+      : { format: 2 as const, parts: [] };
+  const rawCreatedAt = message.createdAt;
+
+  return {
+    id: typeof message.id === 'string' ? message.id : `message-${Date.now()}`,
+    role:
+      message.role === 'user' || message.role === 'assistant' || message.role === 'system' || message.role === 'signal'
+        ? message.role
+        : 'assistant',
+    createdAt:
+      rawCreatedAt instanceof Date
+        ? rawCreatedAt
+        : new Date(typeof rawCreatedAt === 'string' ? rawCreatedAt : Date.now()),
+    content,
+  };
+}
+
+export function normalizeMessages(messages: unknown[] | undefined): MastraDBMessage[] | undefined {
+  return messages?.map(normalizeMessage);
+}
+
 type Action =
   | { type: 'event'; event: AgentControllerEvent }
   | { type: 'localUser'; text: string; steer?: boolean; files?: OutgoingFile[] }
@@ -284,7 +325,7 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent): Transcri
 
     case 'message_start':
     case 'message_update': {
-      const message = event.message as MastraDBMessage;
+      const message = normalizeMessage(event.message);
       const next = upsertMessage(state, message, true);
       if (message.role !== 'assistant') return next;
       // Only streamed assistant content opens the decode window — empty or
@@ -301,8 +342,9 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent): Transcri
       return { ...decoded, pending: false };
     }
     case 'message_end': {
-      const next = upsertMessage(state, event.message, false);
-      return event.message.role === 'assistant' ? { ...next, pending: false } : next;
+      const message = normalizeMessage(event.message);
+      const next = upsertMessage(state, message, false);
+      return message.role === 'assistant' ? { ...next, pending: false } : next;
     }
 
     case 'tool_input_start':
