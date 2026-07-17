@@ -10,7 +10,7 @@ import {
   requireAgentControllerSession,
 } from '../../web/ui/domains/chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../web/ui/domains/chat/services/constants';
-import { waitForThreadPageReady } from '../../web/ui/domains/chat/services/threadPageReadiness';
+import { queueThreadPageKickoff } from '../../web/ui/domains/chat/services/threadPageReadiness';
 // Deep imports (not the workspaces barrel) to avoid provider/component cycles.
 import { useActiveProjectContext } from '../../web/ui/domains/workspaces/context/ActiveProjectProvider';
 import { deriveProjectPath, useCreateWorkspaceMutation } from './useWorkspaces';
@@ -133,21 +133,18 @@ export function useStartFactoryRun() {
         queryKey: queryKeys.agentControllerThreads(AGENT_CONTROLLER_ID, resourceId, projectPath),
       });
 
-      // Mount the destination thread and wait for its history + live connection
-      // before dispatch. The coordinator remains the single dispatch owner;
-      // route mounts only report readiness and never send messages.
-      const pageReady = waitForThreadPageReady({ resourceId, projectPath, threadId });
+      // Hand the kickoff to the destination page before navigating. The mounted
+      // transcript claims it exactly once, projects the user message locally,
+      // and sends through the same path as the composer.
+      const kickoffAccepted = queueThreadPageKickoff({ resourceId, projectPath, threadId }, kickoffMessage);
       void navigate(`/threads/${threadId}`);
       try {
-        await pageReady;
+        await kickoffAccepted;
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'The Factory thread did not become ready';
+        const message = error instanceof Error ? error.message : 'The Factory thread did not accept its kickoff';
         void navigate('/new', { replace: true, state: { routeErrorNotice: message } });
         throw error;
       }
-      void scopedSession.sendMessage(kickoffMessage).catch(error => {
-        console.error('Factory kickoff dispatch failed after navigation', error);
-      });
 
       // File the board card now that the run is underway, hanging the run's
       // session ref off the requested role. Best-effort: the run itself

@@ -1142,29 +1142,65 @@ describe('Factory Board — investigate flow', () => {
     ]);
   });
 
-  it('given a prepared skill, when Factory starts the run, then the destination thread is mounted before exactly one dispatch', async () => {
+  it('given a prepared skill, when Factory starts the run, then the mounted thread projects it before exactly one dispatch settles', async () => {
     const state = useBoardHandlers({ issues });
     const captured = useFactoryRunHandlers('factory-issue-12');
     let pathWhenDispatched: string | undefined;
+    let releaseDispatch!: () => void;
+    const dispatchResponse = new Promise<void>(resolve => {
+      releaseDispatch = resolve;
+    });
     let router!: ReturnType<typeof renderAt>['router'];
     server.use(
       http.post(`${SESSION}/messages`, async ({ request }) => {
         pathWhenDispatched = router.state.location.pathname;
         captured.messages.push((await request.json()) as Record<string, unknown>);
+        await dispatchResponse;
         return HttpResponse.json({ ok: true });
       }),
     );
     ({ router } = renderAt('/factory/board'));
 
+    try {
+      const intake = await screen.findByTestId('board-column-intake');
+      await within(intake).findByText('Fix flaky test');
+      await userEvent.click(within(intake).getByRole('button', { name: 'Investigate Fix flaky test' }));
+
+      expect(await screen.findByRole('button', { name: /Show understand-issue skill contents/ })).toBeInTheDocument();
+      await waitFor(() => expect(captured.messages).toHaveLength(1));
+      expect(pathWhenDispatched).toBe('/threads/thread-factory');
+      expect(captured.skillInvocations).toHaveLength(1);
+      expect(captured.messages[0]?.message).toContain('<skill name="understand-issue">');
+      await waitFor(() => expect(state.posts).toHaveLength(1));
+    } finally {
+      releaseDispatch();
+    }
+  });
+
+  it('given a mounted kickoff whose dispatch fails, then the skill stays visible without leaving the transcript pending', async () => {
+    useBoardHandlers({ issues });
+    useFactoryRunHandlers('factory-issue-12');
+    let releaseDispatch!: () => void;
+    const dispatchResponse = new Promise<void>(resolve => {
+      releaseDispatch = resolve;
+    });
+    server.use(
+      http.post(`${SESSION}/messages`, async () => {
+        await dispatchResponse;
+        return HttpResponse.json({ error: 'kickoff failed' }, { status: 500 });
+      }),
+    );
+    renderAt('/factory/board');
+
     const intake = await screen.findByTestId('board-column-intake');
-    await within(intake).findByText('Fix flaky test');
     await userEvent.click(within(intake).getByRole('button', { name: 'Investigate Fix flaky test' }));
 
-    await waitFor(() => expect(captured.messages).toHaveLength(1));
-    expect(pathWhenDispatched).toBe('/threads/thread-factory');
-    expect(captured.skillInvocations).toHaveLength(1);
-    expect(captured.messages[0]?.message).toContain('<skill name="understand-issue">');
-    await waitFor(() => expect(state.posts).toHaveLength(1));
+    expect(await screen.findByRole('button', { name: /Show understand-issue skill contents/ })).toBeInTheDocument();
+    expect(screen.getByText('Thinking…')).toBeInTheDocument();
+    releaseDispatch();
+    await waitFor(() => expect(screen.queryByText('Thinking…')).not.toBeInTheDocument());
+    expect(await screen.findByText(/kickoff failed|500/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Show understand-issue skill contents/ })).toBeInTheDocument();
   });
 
   it('given a missing workspace skill, when Investigate is clicked, then the error is visible and no fallback prompt or card is dispatched', async () => {

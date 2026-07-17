@@ -1,36 +1,38 @@
 import { describe, expect, it } from 'vitest';
 
-import { markThreadPageReady, waitForThreadPageReady } from './threadPageReadiness';
+import { claimThreadPageKickoffs, queueThreadPageKickoff } from './threadPageReadiness';
 
 const key = { resourceId: 'resource-a', projectPath: '/worktree/a', threadId: 'thread-a' };
 
-describe('thread page readiness', () => {
-  it('releases every waiter for the exact scoped thread', async () => {
-    const first = waitForThreadPageReady(key, 100);
-    const second = waitForThreadPageReady(key, 100);
+describe('thread page kickoff', () => {
+  it('hands the kickoff to the exact scoped thread and resolves when accepted', async () => {
+    const accepted = queueThreadPageKickoff(key, 'hello', 100);
 
-    markThreadPageReady(key);
+    const [kickoff] = claimThreadPageKickoffs(key);
 
-    await expect(Promise.all([first, second])).resolves.toEqual([undefined, undefined]);
+    expect(kickoff?.message).toBe('hello');
+    kickoff?.accept();
+    await expect(accepted).resolves.toBeUndefined();
+    expect(claimThreadPageKickoffs(key)).toEqual([]);
   });
 
-  it('does not release a waiter from another resource or project scope', async () => {
-    const waiting = waitForThreadPageReady(key, 10);
+  it('does not expose a kickoff to another resource or project scope', async () => {
+    const accepted = queueThreadPageKickoff(key, 'hello', 10);
 
-    markThreadPageReady({ ...key, resourceId: 'resource-b' });
-    markThreadPageReady({ ...key, projectPath: '/worktree/b' });
+    expect(claimThreadPageKickoffs({ ...key, resourceId: 'resource-b' })).toEqual([]);
+    expect(claimThreadPageKickoffs({ ...key, projectPath: '/worktree/b' })).toEqual([]);
 
-    await expect(waiting).rejects.toThrow('Timed out waiting for thread thread-a to become ready');
+    await expect(accepted).rejects.toThrow('Timed out waiting for thread thread-a to accept its kickoff');
   });
 
-  it('removes timed-out waiters so a later wait can resolve normally', async () => {
-    await expect(waitForThreadPageReady(key, 1)).rejects.toThrow(
-      'Timed out waiting for thread thread-a to become ready',
-    );
+  it('queues concurrent kickoffs for the same thread in order', async () => {
+    const firstAccepted = queueThreadPageKickoff(key, 'first', 100);
+    const secondAccepted = queueThreadPageKickoff(key, 'second', 100);
 
-    const next = waitForThreadPageReady(key, 100);
-    markThreadPageReady(key);
-
-    await expect(next).resolves.toBeUndefined();
+    const kickoffs = claimThreadPageKickoffs(key);
+    expect(kickoffs.map(kickoff => kickoff.message)).toEqual(['first', 'second']);
+    expect(claimThreadPageKickoffs(key)).toEqual([]);
+    kickoffs.forEach(kickoff => kickoff.accept());
+    await expect(Promise.all([firstAccepted, secondAccepted])).resolves.toEqual([undefined, undefined]);
   });
 });
