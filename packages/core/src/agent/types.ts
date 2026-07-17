@@ -1218,6 +1218,18 @@ export interface DurableAgentLike {
    * getMemory(), etc. to the wrapped Agent instance.
    */
   [key: string]: any;
+  /**
+   * Recover active runs for this durable agent.
+   */
+  recoverActiveRuns(): Promise<{
+    recovered: Array<{ runId: string }>;
+    succeeded: number;
+    failed: number;
+  }>;
+  /**
+   * Recover a specific run for this durable agent.
+   */
+  recover(runId: string, options?: any): Promise<any>;
 }
 
 /**
@@ -1232,6 +1244,8 @@ export function isDurableAgentLike(obj: any): obj is DurableAgentLike {
     obj.agent !== null &&
     typeof obj.agent === 'object' &&
     typeof obj.agent.id === 'string' &&
-    typeof obj.stream === 'function'
+    typeof obj.stream === 'function' &&
+    typeof obj.recover === 'function' &&
+    typeof obj.recoverActiveRuns === 'function'
   );
 }
