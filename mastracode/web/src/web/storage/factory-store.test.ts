@@ -30,6 +30,14 @@ describe('FactoryStore', () => {
     expect(() => store.register(makeDomain('intake'))).toThrow(/already registered/);
   });
 
+  it('exposes the model-credentials domain via the typed accessor', () => {
+    const store = new FactoryStore();
+    expect(() => store.credentials).toThrow(/not registered/);
+    const credentials = makeDomain('model-credentials');
+    store.register(credentials);
+    expect(store.credentials).toBe(credentials);
+  });
+
   it('init() initializes every registered domain with the shared context', async () => {
     const store = new FactoryStore();
     const initA = vi.fn(async () => {});

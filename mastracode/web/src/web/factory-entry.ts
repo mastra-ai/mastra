@@ -40,6 +40,7 @@ import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { seedRuntimeConfig } from './runtime-config.js';
 import { FactoryStore } from './storage/factory-store.js';
 import { AuditStoragePG } from './storage/domains/audit/pg.js';
+import { ModelCredentialsStoragePG } from './storage/domains/credentials/pg.js';
 import { IntakeStoragePG } from './storage/domains/intake/pg.js';
 import { WorkItemsStoragePG } from './storage/domains/work-items/pg.js';
 import { handleServerError } from './server-error.js';
@@ -194,6 +195,7 @@ export class MastraFactory {
       factoryStore.register(new IntakeStoragePG());
       factoryStore.register(new AuditStoragePG());
       factoryStore.register(new WorkItemsStoragePG());
+      factoryStore.register(new ModelCredentialsStoragePG());
     }
 
     // Sandbox machine validation: GitHub projects need one sandbox per
