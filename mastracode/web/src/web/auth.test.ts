@@ -94,6 +94,7 @@ function buildApp() {
   const app = new Hono();
   const enabled = mountWebAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
   app.get('*', c => c.text('ok'));
+  app.post('*', c => c.text('ok'));
   return { app, enabled };
 }
 
@@ -161,6 +162,25 @@ describe('mountWebAuth gate (enabled)', () => {
     const { app } = buildApp();
 
     const res = await app.request('/web/projects', { headers: { Accept: 'application/json' } });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: 'unauthorized' });
+  });
+
+  it('lets unauthenticated GitHub webhook deliveries reach the route handler', async () => {
+    mockAuthenticate.mockResolvedValue(null);
+    const { app } = buildApp();
+
+    const res = await app.request('/web/github/webhook', { method: 'POST', headers: { Accept: 'application/json' } });
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe('ok');
+    expect(mockAuthenticate).not.toHaveBeenCalled();
+  });
+
+  it('does not bypass auth for non-POST GitHub webhook requests', async () => {
+    mockAuthenticate.mockResolvedValue(null);
+    const { app } = buildApp();
+
+    const res = await app.request('/web/github/webhook', { method: 'GET', headers: { Accept: 'application/json' } });
     expect(res.status).toBe(401);
     expect(await res.json()).toEqual({ error: 'unauthorized' });
   });
@@ -264,7 +284,7 @@ describe('mountWebAuth /auth routes (enabled)', () => {
     const { app } = buildApp();
     const res = await app.request('/auth/me');
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ authenticated: false, user: null });
+    expect(await res.json()).toEqual({ authenticated: false, user: null, provider: 'workos' });
   });
 
   it('/auth/me reports the user when authenticated', async () => {
@@ -272,10 +292,14 @@ describe('mountWebAuth /auth routes (enabled)', () => {
     const { app } = buildApp();
     const res = await app.request('/auth/me');
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ authenticated: true, user: { email: 'user@example.com', name: 'User' } });
+    expect(await res.json()).toEqual({
+      authenticated: true,
+      user: { email: 'user@example.com', name: 'User' },
+      provider: 'workos',
+    });
   });
 
-  it('/auth/me surfaces the organization id to the SPA', async () => {
+  it('/auth/me surfaces the organization id and stable user id to the SPA', async () => {
     mockAuthenticate.mockResolvedValue({
       workosId: 'user_1',
       email: 'user@example.com',
@@ -287,7 +311,8 @@ describe('mountWebAuth /auth routes (enabled)', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       authenticated: true,
-      user: { email: 'user@example.com', name: 'User', organizationId: 'org_a' },
+      user: { email: 'user@example.com', name: 'User', organizationId: 'org_a', userId: 'user_1' },
+      provider: 'workos',
     });
   });
 });

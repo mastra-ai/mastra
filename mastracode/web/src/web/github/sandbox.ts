@@ -1,231 +1,34 @@
 /**
- * Sandbox provisioning + repo materialization for GitHub-backed projects.
+ * Repo materialization for GitHub-backed projects.
  *
  * A GitHub repo is never cloned onto the server host. Instead each project gets
- * its own isolated cloud sandbox (a `MastraSandbox`, e.g. a Railway VM) and the
- * repo is cloned *inside* that sandbox. The agent's file tools and command tools
- * then operate entirely against the remote checkout.
+ * its own isolated sandbox (provisioned by the fleet in `../sandbox/fleet`) and
+ * the repo is cloned *inside* that sandbox. The agent's file tools and command
+ * tools then operate entirely against the remote checkout.
  *
- * - `ensureProjectSandbox(row)` provisions a new sandbox (persisting its provider
- *   id so re-opens reattach) or reattaches to the stored one.
+ * - `ensureProjectSandbox(row)` / `teardownProjectSandbox(row)` bind the fleet's
+ *   provision/reattach/teardown lifecycle to the per-(project,user) sandbox row.
  * - `materializeRepo(row, token)` runs `git clone` (first open) or `git pull`
  *   (re-open) inside the sandbox, using a short-lived installation token that is
  *   scrubbed from the git remote afterwards so it never persists in the VM.
  *
- * The Railway sandbox is constructed behind a swappable factory so tests can
- * inject a fake sandbox and other providers can be added later.
+ * This module owns everything git/GitHub: clone/pull, commit/push, worktrees,
+ * and `gh pr create`. Sandbox provisioning, budgets, and workdir layout live in
+ * the fleet module.
  */
 
 import { createHash } from 'node:crypto';
-import { RailwaySandbox } from '@mastra/railway';
-import { eq } from 'drizzle-orm';
-import { getAppDb } from './db';
-import { getLocalSandboxRoot, LocalSandbox } from './local-sandbox';
-import { githubProjectSandboxes } from './schema';
-import type { GithubProjectSandboxRow } from './schema';
+import { ensureSandbox, reportProgress, teardownSandbox } from '../sandbox/fleet';
+import type { MaterializationSandbox, ProgressFn, SandboxBindingStore, SandboxCommandResult } from '../sandbox/fleet';
+import type { GithubProjectSandboxRow, GithubStorage } from './storage/base';
 
-/** Minimal command result shape we depend on. */
-export interface SandboxCommandResult {
-  exitCode: number;
-  stdout: string;
-  stderr: string;
-}
-
-/**
- * Minimal live-sandbox surface this module needs: an id, a way to start it, a
- * way to learn the provider's reattach id, and command execution.
- */
-export interface MaterializationSandbox {
-  readonly id: string;
-  start(): Promise<void>;
-  getInfo(): Promise<{ metadata?: Record<string, unknown> }>;
-  executeCommand(command: string, args?: string[], options?: { timeout?: number }): Promise<SandboxCommandResult>;
-  /** Tear down the underlying VM. Optional: providers without it are no-ops. */
-  stop?(): Promise<void>;
-}
-
-/**
- * A coarse-grained step of the sandbox-preparation flow, reported as it happens
- * so the UI can show the user what the server is doing instead of a static
- * "Preparing…" toast. `phase` is a stable machine token; `message` is
- * user-facing copy.
- */
-export interface PrepareProgress {
-  phase: 'reattaching' | 'provisioning' | 'preparing-workspace' | 'cloning' | 'pulling' | 'finalizing' | 'done';
-  message: string;
-}
-
-/** Callback invoked with each preparation step. Best-effort; never throws. */
-export type ProgressFn = (event: PrepareProgress) => void;
-
-function reportProgress(onProgress: ProgressFn | undefined, event: PrepareProgress): void {
-  if (!onProgress) return;
-  try {
-    onProgress(event);
-  } catch {
-    // Progress reporting must never break the actual work.
-  }
-}
-
-/**
- * Factory that builds a (not-yet-started) sandbox. When `providerSandboxId` is
- * provided the sandbox should reattach to that existing VM instead of
- * provisioning a new one.
- */
-export type SandboxFactory = (opts: {
-  providerSandboxId?: string;
-  env?: Record<string, string>;
-  /** Idle teardown window (minutes). The provider stops the VM after this idle period. */
-  idleTimeoutMinutes?: number;
-}) => MaterializationSandbox;
-
-/**
- * Resolve the active sandbox provider. An explicit `MASTRACODE_SANDBOX_PROVIDER`
- * always wins. Otherwise we pick automatically: Railway when a Railway token is
- * configured, else the local host-process provider. This means a repo can
- * always be opened — Railway in a configured cloud deploy, local in dev — with
- * no extra env wiring.
- */
-export function getSandboxProvider(): string {
-  const explicit = process.env.MASTRACODE_SANDBOX_PROVIDER;
-  if (explicit) return explicit;
-  return process.env.RAILWAY_API_TOKEN ? 'railway' : 'local';
-}
-
-/**
- * True when a sandbox provider is usable. The local provider is always usable
- * (it runs git on the host process), so this is only false when an explicit
- * provider is misconfigured (e.g. `railway` selected without a token, or an
- * unknown provider name).
- */
-export function isSandboxEnabled(): boolean {
-  const provider = getSandboxProvider();
-  if (provider === 'railway') {
-    return Boolean(process.env.RAILWAY_API_TOKEN);
-  }
-  if (provider === 'local') {
-    return true;
-  }
-  return false;
-}
-
-/**
- * Compute the in-sandbox working directory for a repo. Server-side only; never
- * derived from client input.
- */
-export function computeSandboxWorkdir(repoFullName: string): string {
-  const repoName = repoFullName.split('/').pop() || 'repo';
-  // The local provider runs on the host filesystem, where a cloud path like
-  // `/workspace` is not writable. `MASTRACODE_SANDBOX_WORKDIR` documents
-  // itself as cloud-only (and the schema defaults it to `/workspace`), so the
-  // local provider ignores it and checks out under the local sandbox root.
-  if (getSandboxProvider() === 'local') {
-    return `${getLocalSandboxRoot().replace(/\/$/, '')}/${repoName}`;
-  }
-  const base = process.env.MASTRACODE_SANDBOX_WORKDIR;
-  if (base) {
-    // If the configured base already ends with the repo name, use it as-is.
-    return base.endsWith(`/${repoName}`) ? base : `${base.replace(/\/$/, '')}/${repoName}`;
-  }
-  return `/workspace/${repoName}`;
-}
-
-/**
- * Idle teardown window for provisioned sandboxes, in minutes. Read from
- * `MASTRACODE_SANDBOX_IDLE_MINUTES`; defaults to 30. The provider stops an idle
- * VM after this window so abandoned sandboxes don't linger (GC). A re-open
- * detects the stopped VM and re-provisions cleanly.
- */
-export function getSandboxIdleMinutes(): number | undefined {
-  const raw = process.env.MASTRACODE_SANDBOX_IDLE_MINUTES;
-  if (raw === undefined || raw === '') return 30;
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed <= 0) return 30;
-  return Math.floor(parsed);
-}
-
-/**
- * Per-replica cap on concurrently *provisioned* sandboxes. Reads
- * `MASTRACODE_MAX_SANDBOXES`; 0 / unset means unlimited. This is a lightweight
- * per-process budget to keep a single replica from exhausting provider quota —
- * it is not a global, cross-replica scheduler (that is a deferred follow-up).
- */
-export function getMaxSandboxes(): number {
-  const raw = process.env.MASTRACODE_MAX_SANDBOXES;
-  if (raw === undefined || raw === '') return 0;
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed <= 0) return 0;
-  return Math.floor(parsed);
-}
-
-/**
- * Count of sandboxes this replica has freshly provisioned and not yet torn
- * down. Reattaches to existing VMs do not count (they reuse an already-billed
- * sandbox). Used to enforce `getMaxSandboxes()`.
- */
-let liveSandboxCount = 0;
-
-/** Current live (freshly provisioned, not torn down) sandbox count. */
-export function getLiveSandboxCount(): number {
-  return liveSandboxCount;
-}
-
-/** For tests: reset the live-sandbox counter to a known state. */
-export function __resetLiveSandboxCount(value = 0): void {
-  liveSandboxCount = value;
-}
-
-/** Raised when provisioning would exceed the per-replica sandbox budget. */
-export class SandboxBudgetError extends Error {
-  readonly code = 'sandbox-budget-exceeded' as const;
-  constructor(readonly max: number) {
-    super(
-      `Sandbox budget exceeded: this server already has ${max} active sandbox(es) ` +
-        `(MASTRACODE_MAX_SANDBOXES=${max}). Close an existing project's sandbox and try again.`,
-    );
-    this.name = 'SandboxBudgetError';
-  }
-}
-
-/** Railway-backed sandbox, optionally reattaching by id. */
-const railwayFactory: SandboxFactory = ({ providerSandboxId, env, idleTimeoutMinutes }) =>
-  new RailwaySandbox({
-    ...(providerSandboxId ? { sandboxId: providerSandboxId } : {}),
-    ...(env ? { env } : {}),
-    ...(idleTimeoutMinutes !== undefined ? { idleTimeoutMinutes } : {}),
-  });
-
-/** Local host-process sandbox (single-user dev; no tenant isolation). */
-const localFactory: SandboxFactory = ({ providerSandboxId }) =>
-  new LocalSandbox(providerSandboxId ? { sandboxId: providerSandboxId } : {});
-
-/**
- * Default factory: dispatch on the configured provider. Resolved per call so
- * `MASTRACODE_SANDBOX_PROVIDER` is honored without re-importing the module.
- */
-const defaultFactory: SandboxFactory = opts =>
-  getSandboxProvider() === 'local' ? localFactory(opts) : railwayFactory(opts);
-
-let sandboxFactory: SandboxFactory = defaultFactory;
-
-/** Override the sandbox factory (tests / alternative providers). */
-export function setSandboxFactory(factory: SandboxFactory): void {
-  sandboxFactory = factory;
-}
-
-/** Reset to the default provider-dispatching factory. */
-export function resetSandboxFactory(): void {
-  sandboxFactory = defaultFactory;
-}
-
-/**
- * The provider's reattach id for a started sandbox. For Railway this is the
- * underlying `railwaySandboxId` in `getInfo().metadata`.
- */
-async function readProviderSandboxId(sandbox: MaterializationSandbox): Promise<string | undefined> {
-  const info = await sandbox.getInfo();
-  const id = info.metadata?.railwaySandboxId ?? info.metadata?.sandboxId;
-  return typeof id === 'string' ? id : undefined;
+/** Adapt a per-(project,user) sandbox binding row to the fleet's persistence seam. */
+function bindingStore(row: GithubProjectSandboxRow, storage: GithubStorage): SandboxBindingStore {
+  return {
+    sandboxId: row.sandboxId,
+    setSandboxId: id => (id === null ? storage.clearSandboxBinding(row.id) : storage.setSandboxId(row.id, id)),
+    clear: () => storage.clearSandboxBinding(row.id),
+  };
 }
 
 /**
@@ -234,90 +37,26 @@ async function readProviderSandboxId(sandbox: MaterializationSandbox): Promise<s
  */
 export async function ensureProjectSandbox(
   row: GithubProjectSandboxRow,
+  storage: GithubStorage,
   onProgress?: ProgressFn,
 ): Promise<MaterializationSandbox> {
-  const idleTimeoutMinutes = getSandboxIdleMinutes();
-
-  // Reattach path: if we have a stored sandbox id, try to reattach. The VM may
-  // have been torn down by the provider's idle GC (or otherwise died), in which
-  // case `start()` fails. Recover by clearing the stale id and provisioning a
-  // fresh sandbox so the next open succeeds instead of being permanently wedged.
-  if (row.sandboxId) {
-    reportProgress(onProgress, { phase: 'reattaching', message: 'Reconnecting to your sandbox…' });
-    const reattached = sandboxFactory({ providerSandboxId: row.sandboxId, idleTimeoutMinutes });
-    try {
-      await reattached.start();
-      return reattached;
-    } catch {
-      await getAppDb()
-        .update(githubProjectSandboxes)
-        .set({ sandboxId: null })
-        .where(eq(githubProjectSandboxes.id, row.id));
-      // fall through to fresh provision below
-    }
-  }
-
-  // Fresh provision: enforce the per-replica budget before spending quota.
-  const max = getMaxSandboxes();
-  if (max > 0 && liveSandboxCount >= max) {
-    throw new SandboxBudgetError(max);
-  }
-
-  reportProgress(onProgress, { phase: 'provisioning', message: 'Provisioning a new sandbox…' });
-  const sandbox = sandboxFactory({ idleTimeoutMinutes });
-  await sandbox.start();
-  liveSandboxCount += 1;
-
-  const providerSandboxId = await readProviderSandboxId(sandbox);
-  if (providerSandboxId) {
-    await getAppDb()
-      .update(githubProjectSandboxes)
-      .set({ sandboxId: providerSandboxId })
-      .where(eq(githubProjectSandboxes.id, row.id));
-  }
-
-  return sandbox;
+  return ensureSandbox(bindingStore(row, storage), onProgress);
 }
 
 /**
  * Tear down a user's sandbox for a project: stop the live VM (best-effort) and
  * clear the persisted `sandboxId`/`materializedAt` on the per-(project,user)
- * binding row so the next open re-provisions cleanly. Decrements the
- * per-replica live-sandbox counter.
+ * binding row so the next open re-provisions cleanly.
  *
  * @param row     the per-(project,user) sandbox binding to tear down
  * @param sandbox an already-reattached live sandbox to stop, when available
  */
 export async function teardownProjectSandbox(
   row: GithubProjectSandboxRow,
+  storage: GithubStorage,
   sandbox?: MaterializationSandbox,
 ): Promise<void> {
-  if (sandbox?.stop) {
-    try {
-      await sandbox.stop();
-    } catch {
-      // Best-effort: the VM may already be gone (idle GC). Still clear the row.
-    }
-  }
-  if (row.sandboxId) {
-    if (liveSandboxCount > 0) liveSandboxCount -= 1;
-    await getAppDb()
-      .update(githubProjectSandboxes)
-      .set({ sandboxId: null, materializedAt: null })
-      .where(eq(githubProjectSandboxes.id, row.id));
-  }
-}
-
-/**
- * Reattach to an already-provisioned sandbox by its provider id and start it.
- * Used by the workspace seam when opening a GitHub project that was already
- * materialized (sandbox id + workdir carried on controller state), so no DB
- * round-trip is needed.
- */
-export async function reattachProjectSandbox(providerSandboxId: string): Promise<MaterializationSandbox> {
-  const sandbox = sandboxFactory({ providerSandboxId, idleTimeoutMinutes: getSandboxIdleMinutes() });
-  await sandbox.start();
-  return sandbox;
+  return teardownSandbox(bindingStore(row, storage), sandbox);
 }
 
 /**
@@ -390,6 +129,7 @@ export async function materializeRepo(
   repoInfo: RepoMaterializeInfo,
   sandbox: MaterializationSandbox,
   token: string,
+  storage: GithubStorage,
   onProgress?: ProgressFn,
 ): Promise<void> {
   const workdir = sandboxRow.sandboxWorkdir;
@@ -463,10 +203,7 @@ export async function materializeRepo(
 
   // 4. Mark materialized.
   reportProgress(onProgress, { phase: 'finalizing', message: 'Finalizing workspace…' });
-  await getAppDb()
-    .update(githubProjectSandboxes)
-    .set({ materializedAt: new Date() })
-    .where(eq(githubProjectSandboxes.id, sandboxRow.id));
+  await storage.markSandboxMaterialized(sandboxRow.id);
 }
 
 /**
@@ -719,7 +456,7 @@ export async function commitAll(
 export class WorktreeError extends Error {
   constructor(
     message: string,
-    readonly code: 'invalid-branch' | 'worktree-failed',
+    readonly code: 'invalid-branch' | 'worktree-failed' | 'setup-failed',
   ) {
     super(message);
     this.name = 'WorktreeError';
@@ -769,17 +506,26 @@ export interface EnsureWorktreeResult {
 /**
  * Create (or reuse) a git worktree + branch inside the sandbox for a unit of
  * work. Idempotent: if a worktree already exists at the computed path it is
- * reused. The branch is created from `baseBranch` when it does not yet exist.
+ * reused. The branch is created from the freshly fetched `origin/<baseBranch>`
+ * — never the sandbox's possibly stale local ref — so new worktrees always
+ * start from the latest remote state.
  *
- * @param sandbox      live sandbox containing the base checkout
- * @param repoWorkdir  the base repo checkout path inside the sandbox
- * @param branch       the feature branch (ref-validated server-side)
- * @param baseBranch   the branch to fork from (ref-validated; default's repo branch)
+ * @param sandbox       live sandbox containing the base checkout
+ * @param repoWorkdir   the base repo checkout path inside the sandbox
+ * @param branch        the feature branch (ref-validated server-side)
+ * @param baseBranch    the branch to fork from (ref-validated; defaults to the repo's default branch)
+ * @param token         short-lived installation token used only for the base-branch fetch
+ * @param repoFullName  `owner/repo` used to build the tokenized remote URL
  */
 export async function ensureWorktree(
   sandbox: MaterializationSandbox,
   repoWorkdir: string,
-  { branch, baseBranch }: { branch: string; baseBranch: string },
+  {
+    branch,
+    baseBranch,
+    token,
+    repoFullName,
+  }: { branch: string; baseBranch: string; token: string; repoFullName: string },
 ): Promise<EnsureWorktreeResult> {
   if (!isValidGitRef(branch)) {
     throw new WorktreeError(`Invalid branch name '${branch}'.`, 'invalid-branch');
@@ -797,22 +543,112 @@ export async function ensureWorktree(
     return { worktreePath, branch, baseBranch, reused: true };
   }
 
-  // Make sure the base ref is present locally before forking from it.
-  await sh(sandbox, `git -C ${shellQuote(repoWorkdir)} fetch origin ${shellQuote(baseBranch)}`);
+  // Fetch the latest base ref from origin before forking. The explicit refspec
+  // updates `refs/remotes/origin/<base>` even when the checkout was created as
+  // a single-branch clone. The fetch needs the install token (the resting
+  // remote is tokenless), and a failure is a hard error — silently forking a
+  // stale local ref is worse than failing the request.
+  const baseRef = `origin/${baseBranch}`;
+  await withInstallToken(sandbox, repoWorkdir, repoFullName, token, async () => {
+    const fetch = await sh(
+      sandbox,
+      `git -C ${shellQuote(repoWorkdir)} fetch origin ${shellQuote(`+refs/heads/${baseBranch}:refs/remotes/${baseRef}`)}`,
+    );
+    if (fetch.exitCode !== 0) {
+      throw classifyGitFailure(fetch, 'pull-failed');
+    }
+  });
 
   // Create the worktree. If the branch already exists, check it out into the
-  // worktree; otherwise create it from the base branch. `git worktree add -B`
+  // worktree; otherwise create it from the fetched base. `git worktree add -B`
   // creates-or-resets the branch to the base, which keeps this idempotent for a
   // fresh worktree while still working when the branch already exists remotely.
+  // `--no-track` keeps the feature branch from tracking origin/<base>; pushes
+  // set their own upstream via `push -u`.
   const add = await sh(
     sandbox,
-    `git -C ${shellQuote(repoWorkdir)} worktree add -B ${shellQuote(branch)} ${shellQuote(worktreePath)} ${shellQuote(baseBranch)}`,
+    `git -C ${shellQuote(repoWorkdir)} worktree add --no-track -B ${shellQuote(branch)} ${shellQuote(worktreePath)} ${shellQuote(baseRef)}`,
   );
   if (add.exitCode !== 0) {
     throw new WorktreeError(`git worktree add failed: ${add.stderr.trim() || add.stdout.trim()}`, 'worktree-failed');
   }
 
   return { worktreePath, branch, baseBranch, reused: false };
+}
+
+/**
+ * Run the project's setup command (e.g. `pnpm i && pnpm build`) inside a
+ * freshly created worktree. Called before the worktree is handed to any agent
+ * run so the checkout is ready to build/test. A non-zero exit is a hard error —
+ * starting agent work in a half-set-up tree is worse than failing the request.
+ *
+ * Security model: the command is intentionally arbitrary shell — that is the
+ * feature (install deps, build, seed fixtures). It is only configurable by
+ * authenticated org members (the settings route is gated by
+ * `resolveOrgTenant` + org-scoped project lookup, with length and
+ * control-character validation), and it executes exclusively inside the
+ * project's isolated sandbox — the same environment where org members already
+ * run arbitrary shell via the agent's command tool. It never runs on the web
+ * server host, so it grants no privilege beyond what sandbox access already
+ * provides.
+ *
+ * @param sandbox       live sandbox containing the worktree
+ * @param worktreePath  the server-computed worktree path the command runs in
+ * @param command       the org-configured setup shell command
+ */
+export async function runWorktreeSetup(
+  sandbox: MaterializationSandbox,
+  worktreePath: string,
+  command: string,
+): Promise<void> {
+  const result = await sh(sandbox, `cd ${shellQuote(worktreePath)} && { ${command}\n}`);
+  if (result.exitCode !== 0) {
+    const detail = (result.stderr.trim() || result.stdout.trim()).slice(-2000);
+    throw new WorktreeError(`Setup command failed (exit ${result.exitCode}): ${detail}`, 'setup-failed');
+  }
+}
+
+/**
+ * Remove a worktree (and its local feature branch) from the sandbox. The
+ * checkout is removed with `--force` — the caller owns confirming that any
+ * uncommitted work in it can be discarded. Idempotent: a worktree whose
+ * directory is already gone only has its metadata pruned.
+ *
+ * @param sandbox       live sandbox containing the base checkout
+ * @param repoWorkdir   the base repo checkout path inside the sandbox
+ * @param branch        the worktree's feature branch (ref-validated)
+ * @param worktreePath  the persisted, server-computed worktree path
+ */
+export async function removeWorktree(
+  sandbox: MaterializationSandbox,
+  repoWorkdir: string,
+  { branch, worktreePath }: { branch: string; worktreePath: string },
+): Promise<void> {
+  if (!isValidGitRef(branch)) {
+    throw new WorktreeError(`Invalid branch name '${branch}'.`, 'invalid-branch');
+  }
+
+  const remove = await sh(
+    sandbox,
+    `git -C ${shellQuote(repoWorkdir)} worktree remove --force ${shellQuote(worktreePath)}`,
+  );
+  if (remove.exitCode !== 0) {
+    // Tolerate a checkout that's already gone (e.g. a fresh sandbox after
+    // re-provisioning): prune stale metadata and only fail when the directory
+    // still exists, meaning git genuinely refused to remove it.
+    await sh(sandbox, `git -C ${shellQuote(repoWorkdir)} worktree prune`);
+    const exists = await sh(sandbox, `test -e ${shellQuote(worktreePath)}`);
+    if (exists.exitCode === 0) {
+      throw new WorktreeError(
+        `git worktree remove failed: ${remove.stderr.trim() || remove.stdout.trim()}`,
+        'worktree-failed',
+      );
+    }
+  }
+
+  // Best-effort local branch cleanup; the branch may not exist locally anymore
+  // or may still be pushed remotely — neither should fail the removal.
+  await sh(sandbox, `git -C ${shellQuote(repoWorkdir)} branch -D ${shellQuote(branch)}`);
 }
 
 // ---------------------------------------------------------------------------

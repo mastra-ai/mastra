@@ -81,10 +81,6 @@ export function OMSection({ resourceId, models }: { resourceId?: string; models:
   const [localError, setLocalError] = useState<string | null>(null);
   const error = localError ?? mutationError ?? (omQuery.error instanceof Error ? omQuery.error.message : null);
 
-  // Local threshold drafts so typing doesn't fire a request per keystroke. They
-  // re-seed from the query's config during render whenever that config changes —
-  // no effect needed (react-best-practices: derive-from-props, no useEffect
-  // state reset).
   const [obsDraft, setObsDraft] = useState('');
   const [refDraft, setRefDraft] = useState('');
   const [seededFrom, setSeededFrom] = useState<OMConfig | null>(null);
@@ -163,8 +159,8 @@ export function OMSection({ resourceId, models }: { resourceId?: string; models:
   return (
     <div className="flex flex-col gap-4">
       <Txt as="p" variant="ui-sm" className="text-icon3">
-        Observer and reflector models, their token thresholds, and attachment observation. Mirrors the TUI{' '}
-        <code>/om</code> command.
+        Observer and reflector models, their token settings, and attachment observation. Mirrors the TUI{' '}
+        <code>/memory</code> command.
       </Txt>
       {error && (
         <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg">
@@ -180,7 +176,10 @@ export function OMSection({ resourceId, models }: { resourceId?: string; models:
         {modelSelect(config?.reflectorModelId ?? '', v => switchModel('reflector', v))}
       </Field>
 
-      <Field label="Observation threshold" hint="Tokens in the message window before an observation fires">
+      <Field
+        label="Messages before observation"
+        hint="Message tokens before the Observer runs. More means a larger message window per observation."
+      >
         <Input
           size="sm"
           type="number"
@@ -193,7 +192,10 @@ export function OMSection({ resourceId, models }: { resourceId?: string; models:
         />
       </Field>
 
-      <Field label="Reflection threshold" hint="Accumulated observation tokens before a reflection fires">
+      <Field
+        label="Observations before reflection"
+        hint="Accumulated observation tokens before the Reflector compresses them. More means less frequent compression."
+      >
         <Input
           size="sm"
           type="number"

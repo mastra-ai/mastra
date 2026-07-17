@@ -31,7 +31,7 @@ describe('AgentController signal history rendering', () => {
     return { controller, session, memoryStorage, thread };
   }
 
-  it('renders persisted user-message signals as user content', async () => {
+  it('returns persisted user-message signals as DB-native signal messages', async () => {
     const { session, memoryStorage, thread } = await createControllerWithThread();
 
     await memoryStorage.saveMessages({
@@ -54,13 +54,19 @@ describe('AgentController signal history rendering', () => {
     const messages = await session.thread.listActiveMessages();
 
     expect(messages).toHaveLength(1);
+    // DB-native: no flattening — the persisted signal message is returned verbatim,
+    // with role 'signal', nested content.parts, and signal identity on metadata.
     expect(messages[0]).toMatchObject({
       id: 'signal-user-1',
-      role: 'user',
-      content: [
-        { type: 'text', text: 'hello from signal' },
-        { type: 'image', data: 'data:image/png;base64,abc', mimeType: 'image/png' },
-      ],
+      role: 'signal',
+      content: {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'hello from signal' },
+          { type: 'file', data: 'data:image/png;base64,abc', mimeType: 'image/png' },
+        ],
+        metadata: { signal: { id: 'signal-user-1', type: 'user', tagName: 'user' } },
+      },
     });
   });
 
@@ -88,7 +94,7 @@ describe('AgentController signal history rendering', () => {
     }
   });
 
-  it('renders persisted system-reminder signals as system reminder content', async () => {
+  it('returns persisted system-reminder signals as DB-native signal messages', async () => {
     const { session, memoryStorage, thread } = await createControllerWithThread();
 
     await memoryStorage.saveMessages({
@@ -108,26 +114,25 @@ describe('AgentController signal history rendering', () => {
 
     const messages = await session.thread.listActiveMessages();
 
-    expect(messages).toEqual([
-      {
-        id: 'signal-reminder-1',
-        role: 'user',
-        createdAt: new Date('2024-01-01T00:00:00.000Z'),
-        content: [
-          {
-            type: 'system_reminder',
-            message: 'continue from here',
-            reminderType: 'temporal-gap',
-            path: '/tmp/project',
-            precedesMessageId: undefined,
-            gapText: undefined,
-            gapMs: undefined,
-            timestamp: undefined,
-            goalMaxTurns: undefined,
-            judgeModelId: undefined,
+    expect(messages).toHaveLength(1);
+    // DB-native: the reminder is a 'signal'-role message whose content.parts carry the
+    // text, and the signal identity/attributes live on content.metadata.signal.
+    expect(messages[0]).toMatchObject({
+      id: 'signal-reminder-1',
+      role: 'signal',
+      createdAt: new Date('2024-01-01T00:00:00.000Z'),
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: 'continue from here' }],
+        metadata: {
+          signal: {
+            id: 'signal-reminder-1',
+            type: 'reactive',
+            tagName: 'system-reminder',
+            attributes: { type: 'temporal-gap', path: '/tmp/project' },
           },
-        ],
+        },
       },
-    ]);
+    });
   });
 });

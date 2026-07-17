@@ -2,8 +2,8 @@ import type { PermissionPolicy, ToolCategory } from '@mastra/client-js';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 
-import { useAgentControllerPermissions } from '../hooks/useAgentControllerPermissions';
-import { useSetPermissionForCategoryMutation } from '../hooks/useAgentControllerPermissionMutations';
+import { useAgentControllerPermissions } from '../../../../../shared/hooks/useAgentControllerPermissions';
+import { useSetPermissionForCategoryMutation } from '../../../../../shared/hooks/useAgentControllerPermissionMutations';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { ChatPermissionsContext } from './ChatPermissionsContext';
 import type { ChatPermissionsApi } from './ChatPermissionsContext';
@@ -14,11 +14,12 @@ interface ChatPermissionsProviderProps {
 }
 
 export function ChatPermissionsProvider({ children }: ChatPermissionsProviderProps) {
-  const { resourceId, baseUrl, sessionEnabled } = useChatSessionContext();
+  const { resourceId, projectPath, baseUrl, sessionEnabled } = useChatSessionContext();
   const [pendingPermissionCategory, setPendingPermissionCategory] = useState<ToolCategory | null>(null);
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
+    projectPath,
     baseUrl,
     enabled: sessionEnabled,
   };

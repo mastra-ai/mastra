@@ -4,15 +4,23 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { ChatSessionTestProvider as ChatSessionProvider } from '../../../chat/context/ChatSessionTestProvider';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
-import { ChatCommandsProvider } from '../../../chat/context/ChatCommandsProvider';
-import { ChatSessionProvider } from '../../../chat/context/ChatSessionProvider';
 import type { Project } from '../../../workspaces';
 import { ActiveProjectProvider } from '../../../workspaces';
 import { SettingsPanel } from '../../index';
+import { loadDoneSound, playDoneSound } from '../../services/doneSound';
+
+// The completion sound synthesizes audio via AudioContext, which jsdom
+// doesn't provide; mock playback (persistence stays real) so specs can
+// assert the preview fired.
+vi.mock('../../services/doneSound', async importOriginal => ({
+  ...(await importOriginal<typeof import('../../services/doneSound')>()),
+  playDoneSound: vi.fn(),
+}));
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
 const RESOURCE_ID = 'resource-settings-panel';
@@ -132,11 +140,9 @@ function ThemeProbe() {
 function Harness({ children }: { children: ReactNode }) {
   return (
     <ActiveProjectProvider>
-      <ChatSessionProvider>
-        <ChatCommandsProvider>
-          <ThemeProbe />
-          {children}
-        </ChatCommandsProvider>
+      <ChatSessionProvider threadId={THREAD_ID} deferUntilMessagesReady={false}>
+        <ThemeProbe />
+        {children}
       </ChatSessionProvider>
     </ActiveProjectProvider>
   );
@@ -169,18 +175,65 @@ describe('SettingsPanel', () => {
       expect(screen.queryByText('Density')).not.toBeInTheDocument();
       expect(screen.queryByText('Spacing between messages and controls')).not.toBeInTheDocument();
     });
+
+    it('persists the completion sound choice and previews it', async () => {
+      const user = userEvent.setup();
+      vi.mocked(playDoneSound).mockClear();
+      renderSettingsPanel();
+
+      const soundGroup = screen.getByRole('group', { name: 'Completion sound' });
+      await user.click(within(soundGroup).getByRole('button', { name: 'Arcade' }));
+
+      expect(loadDoneSound()).toBe('arcade');
+      expect(playDoneSound).toHaveBeenCalledWith('arcade');
+
+      await user.click(within(soundGroup).getByRole('button', { name: 'None' }));
+      expect(loadDoneSound()).toBe('none');
+    });
+  });
+
+  describe('when managing projects', () => {
+    it('removes the active project and reconciles the project selection', async () => {
+      const user = userEvent.setup();
+      renderSettingsPanel();
+
+      await user.click(screen.getByRole('tab', { name: 'Projects' }));
+      expect(screen.getByText('/tmp/settings-panel')).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Remove Settings Panel Project' }));
+
+      await waitFor(() => expect(localStorage.getItem('mastracode-active-project')).toBeNull());
+      await user.click(screen.getByRole('tab', { name: 'Projects' }));
+      await screen.findByText('No configured projects.');
+      expect(JSON.parse(localStorage.getItem('mastracode-projects') ?? '[]')).toEqual([]);
+    });
+
+    it('keeps the project visible and reports storage failures', async () => {
+      const user = userEvent.setup();
+      renderSettingsPanel();
+      await user.click(screen.getByRole('tab', { name: 'Projects' }));
+      const storageError = new Error('Project storage is unavailable');
+      const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementationOnce(() => {
+        throw storageError;
+      });
+
+      await user.click(screen.getByRole('button', { name: 'Remove Settings Panel Project' }));
+
+      expect(await screen.findByText(storageError.message)).toBeInTheDocument();
+      expect(screen.getByText('Settings Panel Project')).toBeInTheDocument();
+      setItem.mockRestore();
+    });
   });
 
   describe('when changing model preferences', () => {
-    it('switches the selected model through the chat model provider', async () => {
+    it('updates the thinking level through the chat settings provider', async () => {
       const user = userEvent.setup();
       const captured = renderSettingsPanel();
 
       await user.click(screen.getByRole('tab', { name: /model/i }));
-      await user.click(await screen.findByRole('button', { name: /openai \/ gpt-4o-mini/i }));
-      await user.click(screen.getByRole('option', { name: /claude-sonnet anthropic/i }));
+      await user.click(await screen.findByRole('button', { name: 'High' }));
 
-      await waitFor(() => expect(captured.modelIds).toContain('anthropic/claude-sonnet'));
+      await waitFor(() => expect(captured.stateUpdates).toContainEqual({ thinkingLevel: 'high' }));
     });
   });
 

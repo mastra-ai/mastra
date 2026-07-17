@@ -29,5 +29,15 @@
     "@cf/qwen/qwq-32b",
     "@cf/zai-org/glm-4.7-flash",
     "@cf/zai-org/glm-5.2"
+  ],
+  "structuredOutput": [
+    "@cf/google/gemma-4-26b-a4b-it",
+    "@cf/moonshotai/kimi-k2.6",
+    "@cf/moonshotai/kimi-k2.7-code",
+    "@cf/nvidia/nemotron-3-120b-a12b",
+    "@cf/openai/gpt-oss-120b",
+    "@cf/openai/gpt-oss-20b",
+    "@cf/zai-org/glm-4.7-flash",
+    "@cf/zai-org/glm-5.2"
   ]
 }

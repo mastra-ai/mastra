@@ -2,46 +2,11 @@ import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as AuthModule from '../auth';
 
-// ── Mocks ────────────────────────────────────────────────────────────────
-vi.mock('drizzle-orm', () => ({
-  eq: (column: any, value: any) => ({ kind: 'eq', column: column?.name, value }),
-  and: (...conds: any[]) => ({ kind: 'and', conds: conds.filter(Boolean) }),
-}));
-
 // In-memory linear_connections table.
 let connections: Array<Record<string, any>> = [];
 
-function matches(table: any, row: any, cond: any): boolean {
-  if (!cond) return true;
-  if (cond.kind === 'and') return cond.conds.every((c: any) => matches(table, row, c));
-  if (cond.kind === 'eq') {
-    for (const [jsKey, col] of Object.entries(table)) {
-      if ((col as any)?.name === cond.column) return row[jsKey] === cond.value;
-    }
-    return false;
-  }
-  return true;
-}
-
-vi.mock('../github/db', () => ({
-  getAppDb: () => ({
-    select: () => ({
-      from: (table: any) => ({
-        where: async (cond: any) => connections.filter(row => matches(table, row, cond)),
-      }),
-    }),
-    insert: () => ({
-      values: (vals: any) => ({
-        onConflictDoUpdate: (opts: any) => {
-          const existing = connections.find(row => row.orgId === vals.orgId);
-          if (existing) Object.assign(existing, opts?.set ?? {});
-          else connections.push({ id: `id-${connections.length + 1}`, ...vals });
-          return Promise.resolve();
-        },
-      }),
-    }),
-  }),
-}));
+import { LinearStorageInMemory } from './storage/inmemory';
+const linearStorage = new LinearStorageInMemory();
 
 let featureEnabled = true;
 vi.mock('./config', () => ({
@@ -49,17 +14,16 @@ vi.mock('./config', () => ({
   getLinearFeatureDiagnostics: () => ({}),
 }));
 
-vi.mock('../github/config', () => ({
-  signState: (orgId: string, userId: string) => `state.${orgId}.${userId}`,
-  verifyState: (state: string | undefined) => {
-    if (!state?.startsWith('state.')) return null;
-    const [orgId, userId] = state.slice('state.'.length).split('.');
-    if (!orgId || !userId) return null;
-    return { orgId, userId };
-  },
+const exchangeLinearOAuthCode = vi.fn(async () => ({
+  accessToken: 'linear-token',
+  refreshToken: 'linear-refresh',
+  expiresAt: new Date('2026-07-14T00:00:00Z'),
 }));
-
-const exchangeLinearOAuthCode = vi.fn(async () => 'linear-token');
+const refreshLinearAccessToken = vi.fn(async () => ({
+  accessToken: 'linear-token-2',
+  refreshToken: 'linear-refresh-2',
+  expiresAt: new Date('2026-07-15T00:00:00Z'),
+}));
 const fetchLinearWorkspace = vi.fn(async () => ({ name: 'Acme', urlKey: 'acme' }));
 const listLinearProjects = vi.fn(async () => [
   { id: 'proj-1', name: 'Q3 Roadmap', state: 'started', teams: [{ id: 'team-1', key: 'ENG', name: 'Engineering' }] },
@@ -84,15 +48,33 @@ const listActiveLinearIssues = vi.fn(async (_token: string, _after?: string, _pr
   nextCursor: 'cursor-2',
 }));
 
-vi.mock('./client', () => ({
-  buildLinearAuthorizeUrl: (state: string, redirectUri: string) =>
+// Stub integration instance: real DI through `MountLinearRoutesOptions.linear`
+// instead of module mocking — mirrors how the factory hands the instance to
+// `buildLinearRoutes` in production.
+const linearStub = {
+  id: 'linear',
+  storageDomain: linearStorage,
+  buildAuthorizeUrl: (state: string, redirectUri: string) =>
     `https://linear.app/oauth/authorize?state=${state}&redirect_uri=${encodeURIComponent(redirectUri)}`,
-  exchangeLinearOAuthCode: (...args: any[]) => exchangeLinearOAuthCode(...(args as [])),
-  fetchLinearWorkspace: (...args: any[]) => fetchLinearWorkspace(...(args as [])),
-  listLinearProjects: (...args: any[]) => listLinearProjects(...(args as [])),
-  listActiveLinearIssues: (token: string, after?: string, projectIds?: string[]) =>
+  exchangeOAuthCode: (...args: any[]) => exchangeLinearOAuthCode(...(args as [])),
+  refreshAccessToken: (...args: any[]) => refreshLinearAccessToken(...(args as [])),
+  fetchWorkspace: (...args: any[]) => fetchLinearWorkspace(...(args as [])),
+  listProjects: (...args: any[]) => listLinearProjects(...(args as [])),
+  listActiveIssues: (token: string, after?: string, projectIds?: string[]) =>
     listActiveLinearIssues(token, after, projectIds),
-}));
+} as unknown as import('./integration').LinearIntegration;
+
+// Deterministic state signer injected the same way the factory does it.
+const stateSigner: import('../state-signing').StateSigner = {
+  stable: true,
+  sign: (orgId: string, userId: string) => `state.${orgId}.${userId}`,
+  verify: (state: string | undefined) => {
+    if (!state?.startsWith('state.')) return null;
+    const [orgId, userId] = state.slice('state.'.length).split('.');
+    if (!orgId || !userId) return null;
+    return { orgId, userId };
+  },
+};
 
 const getIntakeConfig = vi.fn(async () => ({
   github: { enabled: true, projectIds: null as string[] | null },
@@ -125,7 +107,10 @@ import { mountApiRoutes } from '../test-utils';
 import { buildLinearRoutes } from './routes';
 
 // ── Test harness ─────────────────────────────────────────────────────────
-function buildApp(user: { workosId: string; organizationId?: string | null } | null) {
+function buildApp(
+  user: { workosId: string; organizationId?: string | null } | null,
+  signer: import('../state-signing').StateSigner | null = stateSigner,
+) {
   const app = new Hono();
   app.use('*', async (c, next) => {
     if (user) {
@@ -134,22 +119,30 @@ function buildApp(user: { workosId: string; organizationId?: string | null } | n
     }
     await next();
   });
-  mountApiRoutes(app as any, buildLinearRoutes({ baseUrl: 'http://localhost:4111' }));
+  mountApiRoutes(
+    app as any,
+    buildLinearRoutes({ baseUrl: 'http://localhost:4111', linear: linearStub, stateSigner: signer ?? undefined }),
+  );
   return app;
 }
 
-const connect = () =>
+const connect = (overrides: Record<string, any> = {}) =>
   connections.push({
     id: 'conn-1',
     orgId: 'org1',
     userId: 'u1',
     accessToken: 'linear-token',
+    refreshToken: 'linear-refresh',
+    // Unexpired by default; tests override to simulate expiry.
+    expiresAt: new Date(Date.now() + 60 * 60 * 1000),
     workspaceName: 'Acme',
     workspaceUrlKey: 'acme',
+    ...overrides,
   });
 
 beforeEach(() => {
   connections = [];
+  linearStorage.connections = connections as any;
   featureEnabled = true;
   cookieUser = null;
   getIntakeConfig.mockClear();
@@ -160,6 +153,7 @@ beforeEach(() => {
   listActiveLinearIssues.mockClear();
   listLinearProjects.mockClear();
   exchangeLinearOAuthCode.mockClear();
+  refreshLinearAccessToken.mockClear();
   fetchLinearWorkspace.mockClear();
 });
 
@@ -171,6 +165,11 @@ describe('status route', () => {
   it('reports disabled without the feature', async () => {
     featureEnabled = false;
     const res = await buildApp({ workosId: 'u1' }).request('/web/linear/status');
+    expect(await res.json()).toMatchObject({ enabled: false, connected: false, reason: 'missing_config' });
+  });
+
+  it('reports disabled without a state signer', async () => {
+    const res = await buildApp({ workosId: 'u1' }, null).request('/web/linear/status');
     expect(await res.json()).toMatchObject({ enabled: false, connected: false, reason: 'missing_config' });
   });
 
@@ -219,7 +218,13 @@ describe('callback route', () => {
     expect(res.status).toBe(302);
     expect(res.headers.get('location')).toBe('/?linear=connected');
     expect(exchangeLinearOAuthCode).toHaveBeenCalledWith('abc', 'http://localhost:4111/auth/linear/callback');
-    expect(connections[0]).toMatchObject({ orgId: 'org1', accessToken: 'linear-token', workspaceName: 'Acme' });
+    expect(connections[0]).toMatchObject({
+      orgId: 'org1',
+      accessToken: 'linear-token',
+      refreshToken: 'linear-refresh',
+      expiresAt: new Date('2026-07-14T00:00:00Z'),
+      workspaceName: 'Acme',
+    });
   });
 
   it('replaces an existing connection for the org', async () => {
@@ -325,6 +330,54 @@ describe('issues route', () => {
     const res = await buildApp({ workosId: 'u1' }).request('/web/linear/issues');
     expect(res.status).toBe(404);
     expect(listActiveLinearIssues).not.toHaveBeenCalled();
+  });
+
+  it('refreshes an expired access token and persists the rotated token set', async () => {
+    connect({ expiresAt: new Date(Date.now() - 1000) });
+    const res = await buildApp({ workosId: 'u1' }).request('/web/linear/issues');
+    expect(res.status).toBe(200);
+    expect(refreshLinearAccessToken).toHaveBeenCalledWith('linear-refresh');
+    expect(listActiveLinearIssues).toHaveBeenCalledWith('linear-token-2', undefined, ['proj-1']);
+    expect(connections[0]).toMatchObject({
+      accessToken: 'linear-token-2',
+      refreshToken: 'linear-refresh-2',
+      expiresAt: new Date('2026-07-15T00:00:00Z'),
+    });
+  });
+
+  it('does not refresh an unexpired token', async () => {
+    connect();
+    await buildApp({ workosId: 'u1' }).request('/web/linear/issues');
+    expect(refreshLinearAccessToken).not.toHaveBeenCalled();
+    expect(listActiveLinearIssues).toHaveBeenCalledWith('linear-token', undefined, ['proj-1']);
+  });
+
+  it('409s with linear_reauth_required when the token is expired and has no refresh token', async () => {
+    connect({ expiresAt: new Date(Date.now() - 1000), refreshToken: null });
+    const res = await buildApp({ workosId: 'u1' }).request('/web/linear/issues');
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: 'linear_reauth_required' });
+    expect(listActiveLinearIssues).not.toHaveBeenCalled();
+  });
+
+  it('409s with linear_reauth_required when the refresh grant is rejected', async () => {
+    connect({ expiresAt: new Date(Date.now() - 1000) });
+    const err = new Error('Linear token refresh failed (400)');
+    (err as any).status = 400;
+    refreshLinearAccessToken.mockRejectedValueOnce(err);
+    const res = await buildApp({ workosId: 'u1' }).request('/web/linear/issues');
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: 'linear_reauth_required' });
+  });
+
+  it('409s with linear_reauth_required when Linear rejects the access token', async () => {
+    connect();
+    const err = new Error('Linear API request failed (401)');
+    (err as any).status = 401;
+    listActiveLinearIssues.mockRejectedValueOnce(err);
+    const res = await buildApp({ workosId: 'u1' }).request('/web/linear/issues');
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: 'linear_reauth_required' });
   });
 
   it('502s when the Linear API fails', async () => {

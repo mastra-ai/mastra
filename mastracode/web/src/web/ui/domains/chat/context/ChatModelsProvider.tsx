@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-import { useSwitchAgentControllerModelMutation } from '../hooks/useAgentControllerStateMutations';
+import { useSwitchAgentControllerModelMutation } from '../../../../../shared/hooks/useAgentControllerStateMutations';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { ChatModelsContext } from './ChatModelsContext';
 import type { ChatModelsApi } from './ChatModelsContext';
@@ -12,11 +12,12 @@ interface ChatModelsProviderProps {
 }
 
 export function ChatModelsProvider({ children }: ChatModelsProviderProps) {
-  const { resourceId, baseUrl, sessionEnabled } = useChatSessionContext();
+  const { resourceId, projectPath, baseUrl, sessionEnabled } = useChatSessionContext();
   const { state } = useChatConnection();
   const switchModelMutation = useSwitchAgentControllerModelMutation({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
+    projectPath,
     baseUrl,
     enabled: sessionEnabled,
   });

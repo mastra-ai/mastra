@@ -5,12 +5,12 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useApiConfig } from '../../../../../shared/api/config';
 import { useToast } from '../../../ui';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
-import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../../factory/hooks/useIntakeConfig';
-import { useLinearProjectsQuery, useLinearStatusQuery } from '../../factory/hooks/useLinearData';
-import { connectLinear } from '../../factory/services/linear';
+import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../../../../../shared/hooks/useIntakeConfig';
+import { useLinearProjectsQuery, useLinearStatusQuery } from '../../../../../shared/hooks/useLinearData';
+import { connectLinear, isLinearReauthError } from '../../factory/services/linear';
 import type { LinearProject } from '../../factory/services/linear';
 import type { IntakeConfig } from '../../factory/services/intake';
-import { useProjectsQuery } from '../../workspaces/hooks/useProjects';
+import { useProjectsQuery } from '../../../../../shared/hooks/useProjects';
 
 /**
  * Toggle `id` in the selection list. `null` means "nothing selected" (nothing
@@ -197,9 +197,28 @@ export function IntakeSection() {
               </Button>
             )}
           </div>
+        ) : config.linear.enabled && isLinearReauthError(linearProjectsQuery.error) ? (
+          // Connected on paper, but the token is expired/revoked: offer the
+          // OAuth flow again instead of a silently empty project picker.
+          <div className="flex items-center gap-3 pl-1">
+            <Txt as="span" variant="ui-xs" className="text-icon3">
+              Linear authorization expired. Reconnect to keep syncing issues.
+            </Txt>
+            <Button size="xs" onClick={() => connectLinear(baseUrl)}>
+              Reconnect Linear
+            </Button>
+          </div>
         ) : (
           config.linear.enabled && (
             <div className="flex flex-col gap-2.5 pl-1">
+              <div className="flex items-center gap-2">
+                <Txt as="span" variant="ui-xs" className="text-icon3">
+                  Connected to {linearStatus?.workspace?.name ?? 'a Linear workspace'}
+                </Txt>
+                <Button size="xs" variant="ghost" onClick={() => connectLinear(baseUrl)}>
+                  Reconnect
+                </Button>
+              </div>
               {groupLinearProjectsByTeam(linearProjectsQuery.data ?? []).map(group => (
                 <div key={group.id} className="flex flex-col gap-1" role="group" aria-label={group.label}>
                   <div className="flex items-baseline gap-2">

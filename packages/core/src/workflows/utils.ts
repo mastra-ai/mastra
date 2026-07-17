@@ -7,6 +7,8 @@ import { removeUndefinedValues } from '../utils';
 import type { ExecutionGraph } from './execution-engine';
 import type { Step } from './step';
 import type {
+  ForeachConcurrencyContext,
+  ForeachOptions,
   RestartExecutionParams,
   StepFlowEntry,
   StepResult,
@@ -576,6 +578,25 @@ export function cleanStepResult(stepResult: unknown): unknown {
   }
 
   return cleaned;
+}
+
+/**
+ * Resolves the effective concurrency for a foreach entry at execution time.
+ *
+ * Supports both a static number and a {@link ForeachConcurrencyResolver}
+ * function that derives concurrency from the run's input. Invalid or
+ * non-positive values fall back to 1 (sequential).
+ */
+export function resolveForeachConcurrency(
+  opts: ForeachOptions | undefined,
+  context: ForeachConcurrencyContext,
+): number {
+  const configured = opts?.concurrency ?? 1;
+  const resolved = typeof configured === 'function' ? configured(context) : configured;
+  if (typeof resolved !== 'number' || !Number.isFinite(resolved) || resolved < 1) {
+    return 1;
+  }
+  return Math.floor(resolved);
 }
 
 const RESUME_SNAPSHOT_POLL_INTERVAL_MS = 25;

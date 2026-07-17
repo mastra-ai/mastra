@@ -1,5 +1,11 @@
 {
-  "attachment": ["MiniMaxAI/MiniMax-M3", "Qwen/Qwen3.5-9B", "google/gemma-4-31B-it", "moonshotai/Kimi-K2.6"],
+  "attachment": [
+    "MiniMaxAI/MiniMax-M3",
+    "Qwen/Qwen3.5-9B",
+    "google/gemma-4-31B-it",
+    "moonshotai/Kimi-K2.6",
+    "thinkingmachines/Inkling"
+  ],
   "temperature": [
     "LiquidAI/LFM2-24B-A2B",
     "MiniMaxAI/MiniMax-M2.7",
@@ -23,6 +29,24 @@
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b",
     "pearl-ai/gemma-4-31b-it",
+    "thinkingmachines/Inkling",
+    "zai-org/GLM-5",
+    "zai-org/GLM-5.1",
+    "zai-org/GLM-5.2"
+  ],
+  "structuredOutput": [
+    "MiniMaxAI/MiniMax-M2.7",
+    "MiniMaxAI/MiniMax-M3",
+    "Qwen/Qwen2.5-7B-Instruct-Turbo",
+    "Qwen/Qwen3.5-9B",
+    "deepseek-ai/DeepSeek-V4-Pro",
+    "google/gemma-3n-E4B-it",
+    "google/gemma-4-31B-it",
+    "moonshotai/Kimi-K2.6",
+    "moonshotai/Kimi-K2.7-Code",
+    "nvidia/nemotron-3-ultra-550b-a55b",
+    "openai/gpt-oss-20b",
+    "thinkingmachines/Inkling",
     "zai-org/GLM-5",
     "zai-org/GLM-5.1",
     "zai-org/GLM-5.2"

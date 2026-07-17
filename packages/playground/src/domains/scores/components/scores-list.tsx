@@ -20,7 +20,7 @@ const COLUMN_LABELS: Record<ToggleableColumn, string> = {
 function buildColumns(visible: Set<ToggleableColumn>): string {
   const parts: string[] = ['auto', 'auto', 'minmax(0, 10rem)'];
   if (visible.has('entity')) parts.push('minmax(0, 14rem)');
-  if (visible.has('input')) parts.push('minmax(0, 100rem)');
+  if (visible.has('input')) parts.push('minmax(0, 40rem)');
   return parts.join(' ');
 }
 
@@ -153,7 +153,7 @@ export function ScoresList({
     <div
       className={cn('grid h-full min-h-0 gap-4 items-start', hasSidePanel ? 'grid-cols-[1fr_1fr]' : 'grid-cols-[1fr]')}
     >
-      <div className="flex flex-col h-full min-h-0 gap-0">
+      <div className="flex flex-col h-full min-h-0 min-w-0 gap-0">
         <div className="flex items-center justify-end pb-2 shrink-0">
           <DropdownMenu>
             <DropdownMenu.Trigger asChild>

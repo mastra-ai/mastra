@@ -11,6 +11,7 @@ describe('Remove deployer', () => {
   it.for([
     ['./__fixtures__/basic.js'],
     ['./__fixtures__/basic-with-const.js'],
+    ['./__fixtures__/basic-with-exported-const.js'],
     ['./__fixtures__/basic-with-import.js'],
     ['./__fixtures__/basic-with-spread.js'],
     ['./__fixtures__/basic-with-function.js'],

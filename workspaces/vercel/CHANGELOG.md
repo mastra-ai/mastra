@@ -1,5 +1,44 @@
 # @mastra/vercel
 
+## 1.3.0-alpha.0
+
+### Minor Changes
+
+- Added `clone()` support to the sandbox providers. `clone()` constructs an unstarted sibling sandbox that inherits the template's configuration (credentials, image, resources) with per-instance overrides for `id` and `env`, so one configured sandbox can act as a template for a fleet of sandbox clones (for example, one per project). ([#19616](https://github.com/mastra-ai/mastra/pull/19616))
+
+  ```ts
+  const template = new E2BSandbox({ apiKey, template: 'base' });
+
+  const projectSandbox = template.clone({
+    id: 'mc-project-42',
+    env: { GITHUB_TOKEN: token },
+    idleTimeoutMinutes: 30,
+  });
+  await projectSandbox.start();
+  ```
+
+  `idleTimeoutMinutes` is a best-effort hint that maps to each provider's native lifetime knob (Railway `idleTimeoutMinutes`, E2B/Modal/Vercel timeout in milliseconds, Daytona `autoStopInterval`, Blaxel TTL duration). Docker and Apple Container ignore it since they have no provider-side idle teardown.
+
+- Added networking and bulk file upload support to `VercelSandbox`: ([#19577](https://github.com/mastra-ai/mastra/pull/19577))
+  - **Public port URLs**: `sandbox.networking.getPortUrl(port)` returns the public URL for a declared port, enabling preview URLs and deploys with the new `@mastra/deployer-sandbox` package.
+  - **Bulk file upload**: `sandbox.writeFiles(files)` uploads multiple files in one call using the Vercel Sandbox SDK.
+  - **Named sandbox resume**: when `sandboxName` is set, `start()` now reuses an existing sandbox with that name instead of always creating a new one. Stopping a named sandbox snapshots its filesystem, and the next `start()` resumes it.
+  - **Real destroy**: `destroy()` now permanently deletes the sandbox and its snapshots (previously it only stopped it). Use `stop()` for a resumable snapshot-stop.
+  - **Resume-less lookups**: `networking.getPortUrl()`, `stop()`, and `destroy()` on a named sandbox now attach to the existing sandbox with `resume: false` when the instance hasn't been started in the current process. Resolving a URL or tearing down a stopped sandbox never wakes it (and never starts billing).
+
+  ```typescript
+  import { VercelSandbox } from '@mastra/vercel';
+
+  const sandbox = new VercelSandbox({ sandboxName: 'my-preview', ports: [4111] });
+  await sandbox.start();
+  const url = await sandbox.networking.getPortUrl(4111);
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`ec857fc`](https://github.com/mastra-ai/mastra/commit/ec857fc79c264b53b38e16478c789b7177f2ad59), [`e1f2fae`](https://github.com/mastra-ai/mastra/commit/e1f2faebaf048c3d4c2e2c01d293767c195d5794), [`63aa799`](https://github.com/mastra-ai/mastra/commit/63aa799c6b44eacc7806cda6846b7c5bbee06b37), [`73db8db`](https://github.com/mastra-ai/mastra/commit/73db8db90d69ab6153c7942749f624db0d96952d), [`73db8db`](https://github.com/mastra-ai/mastra/commit/73db8db90d69ab6153c7942749f624db0d96952d), [`76b7181`](https://github.com/mastra-ai/mastra/commit/76b71810366e6d90b9d3973149d1c7ba3659ffb9), [`0c0e8d7`](https://github.com/mastra-ai/mastra/commit/0c0e8d7becd4d1445c656b78d5d845f606c1ff9d), [`9f7c67a`](https://github.com/mastra-ai/mastra/commit/9f7c67abeeb52c41c51a9b5edee60b62afe7cd8d), [`3b65e68`](https://github.com/mastra-ai/mastra/commit/3b65e68d7f1c771c7a70eea42d83fefdd28cad88), [`e3868e2`](https://github.com/mastra-ai/mastra/commit/e3868e22babfffd0133771669ca724501c2dd58e)]:
+  - @mastra/core@1.52.0-alpha.5
+
 ## 1.2.0
 
 ### Minor Changes

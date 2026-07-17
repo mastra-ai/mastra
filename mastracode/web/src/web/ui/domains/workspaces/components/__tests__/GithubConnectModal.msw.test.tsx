@@ -15,7 +15,7 @@ vi.mock('../../services/github', async importOriginal => {
   const actual = await importOriginal<typeof import('../../services/github')>();
   return { ...actual, connectGithub: connectGithubMock, manageGithubConnection: manageGithubConnectionMock };
 });
-import { useProjectsQuery } from '../../hooks/useProjects';
+import { useProjectsQuery } from '../../../../../../shared/hooks/useProjects';
 import type { GithubRepo, GithubStatus } from '../../services/github';
 import { loadProjects, saveProjects } from '../../services/projects';
 import type { Project } from '../../services/projects';

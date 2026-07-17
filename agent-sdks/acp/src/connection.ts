@@ -250,6 +250,19 @@ export class ACPConnection {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
+    // Keep an 'error' listener attached for the lifetime of the process so a
+    // failed spawn (e.g. ENOENT) rejects initialization instead of crashing
+    // the host process with an unhandled 'error' event.
+    const processFailure = new Promise<never>((_, reject) => {
+      this.agentProcess!.on('error', error => {
+        reject(error instanceof Error ? error : new Error(String(error)));
+      });
+      this.agentProcess!.on('exit', (code, signal) => {
+        reject(new Error(`ACP agent process exited during initialization (code: ${code}, signal: ${signal})`));
+      });
+    });
+    processFailure.catch(() => undefined);
+
     this.agentProcess.stderr.on('data', chunk => {
       this.stderr += String(chunk);
     });
@@ -265,36 +278,40 @@ export class ACPConnection {
         filesystem: new LocalFilesystem({ basePath: this.options.cwd ?? process.cwd() }),
       });
 
-    this.connection = new ClientSideConnection(
-      () => new ACPClient(() => this.currentPrompt, workspace, this.options.onPermissionRequest),
-      stream,
-    );
-
     try {
-      await this.connection.initialize(this.getInitializeRequest());
+      this.connection = new ClientSideConnection(() => {
+        const defaultClient = new ACPClient(() => this.currentPrompt, workspace, this.options.onPermissionRequest);
+        return this.options.createClient?.(defaultClient) ?? defaultClient;
+      }, stream);
 
-      if (this.options.authMethodId) {
-        await this.connection.authenticate({ methodId: this.options.authMethodId });
-      }
-
-      this.session = await this.connection.newSession(this.getNewSessionRequest());
-
-      if (this.options.model) {
-        const available = this.session.models?.availableModels;
-
-        if (available && !available.some(m => m.modelId === this.options.model)) {
-          const ids = available.map(m => m.modelId).join(', ') || '(none)';
-          throw new Error(`Model "${this.options.model}" is not available. Available models: ${ids}`);
-        }
-
-        await this.connection.unstable_setSessionModel({
-          sessionId: this.session.sessionId,
-          modelId: this.options.model,
-        });
-      }
+      await Promise.race([processFailure, this.initializeSession()]);
     } catch (error) {
       this.disconnect();
       throw this.withStderr(error);
+    }
+  }
+
+  private async initializeSession(): Promise<void> {
+    await this.connection!.initialize(this.getInitializeRequest());
+
+    if (this.options.authMethodId) {
+      await this.connection!.authenticate({ methodId: this.options.authMethodId });
+    }
+
+    this.session = await this.connection!.newSession(this.getNewSessionRequest());
+
+    if (this.options.model) {
+      const available = this.session.models?.availableModels;
+
+      if (available && !available.some(m => m.modelId === this.options.model)) {
+        const ids = available.map(m => m.modelId).join(', ') || '(none)';
+        throw new Error(`Model "${this.options.model}" is not available. Available models: ${ids}`);
+      }
+
+      await this.connection!.unstable_setSessionModel({
+        sessionId: this.session.sessionId,
+        modelId: this.options.model,
+      });
     }
   }
 

@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { GithubStorageInMemory } from './storage/inmemory';
 
 // ── Scenario tests (S1, S2) ──────────────────────────────────────────────
 // These exercise the *composition* of the real Phase 4 git route handlers
@@ -26,6 +27,7 @@ interface Tables {
   worktrees: Array<Record<string, any>>;
 }
 const tables: Tables = { installations: [], projects: [], sandboxes: [], worktrees: [] };
+const githubStorage = new GithubStorageInMemory();
 
 vi.mock('./db', () => {
   const makeDb = () => ({
@@ -59,7 +61,10 @@ vi.mock('./db', () => {
   return { getAppDb: () => makeDb() };
 });
 
-vi.mock('./client', () => ({
+// Stub integration instance: routes consume the injected `github` instance —
+// real DI instead of module mocking (client.ts no longer exists).
+const githubStub = {
+  storageDomain: githubStorage,
   buildInstallUrl: (state: string) => `https://github.com/apps/test/installations/new?state=${state}`,
   buildOAuthIdentifyUrl: (state: string) => `https://github.com/login/oauth/authorize?state=${state}`,
   exchangeOAuthCode: vi.fn(async () => 'user-token'),
@@ -90,13 +95,34 @@ vi.mock('./client', () => ({
   ),
   // A fresh token string per call so the scenario can prove per-op minting.
   mintInstallationToken: vi.fn(async () => `install-token-${++mintCount}`),
-}));
+};
+
+// Deterministic state signer stub (replaces the old signState/verifyState mocks).
+const stateSigner = {
+  stable: true,
+  sign: (orgId: string, userId: string) => `state.${orgId}.${userId}`,
+  verify: (state: string | undefined) => {
+    if (!state?.startsWith('state.')) return null;
+    const [orgId, userId] = state.slice('state.'.length).split('.');
+    if (!orgId || !userId) return null;
+    return { orgId, userId };
+  },
+};
 
 let mintCount = 0;
 
-const ensureProjectSandbox = vi.fn(async (_row: any) => ({ id: 'sb' }));
+const subscribeToPullRequest = vi.fn(async (_input: unknown) => ({ created: true }));
+vi.spyOn(githubStorage, 'subscribeToPullRequest').mockImplementation(subscribeToPullRequest as any);
+vi.mock('./subscriptions', () => ({
+  subscribeToPullRequest: (input: unknown) => subscribeToPullRequest(input),
+}));
+
+const ensureProjectSandbox = vi.fn(async (row: any, storage: GithubStorageInMemory) => {
+  await storage.setSandboxId(row.id, 'sb');
+  return { id: 'sb' };
+});
 const materializeRepo = vi.fn(async () => {});
-const reattachProjectSandbox = vi.fn(async (_id: string) => ({ id: 'sb' }));
+const reattachSandbox = vi.fn(async (_id: string) => ({ id: 'sb' }));
 const ensureWorktree = vi.fn(async (_sb: any, _workdir: string, opts: { branch: string; baseBranch: string }) => ({
   worktreePath: `/workspace/hello/../worktrees/${opts.branch}`,
   branch: opts.branch,
@@ -108,6 +134,21 @@ let pushImpl: (...args: any[]) => Promise<void> = async () => {};
 const pushBranch = vi.fn((...args: any[]) => pushImpl(...args));
 const createPullRequest = vi.fn(async () => ({ url: 'https://github.com/octo/hello/pull/1' }));
 let sandboxEnabled = true;
+vi.mock('../sandbox/fleet', () => {
+  class SandboxBudgetError extends Error {
+    readonly code = 'sandbox-budget-exceeded';
+    constructor(readonly max: number) {
+      super(`Sandbox budget exceeded: ${max}`);
+    }
+  }
+  return {
+    computeSandboxWorkdir: (repo: string) => `/workspace/${repo.split('/').pop()}`,
+    getSandboxProvider: () => 'railway',
+    isSandboxEnabled: () => sandboxEnabled,
+    reattachSandbox: (id: string) => reattachSandbox(id),
+    SandboxBudgetError,
+  };
+});
 vi.mock('./sandbox', () => {
   class MaterializeError extends Error {
     code: string;
@@ -124,12 +165,8 @@ vi.mock('./sandbox', () => {
     }
   }
   return {
-    computeSandboxWorkdir: (repo: string) => `/workspace/${repo.split('/').pop()}`,
-    getSandboxProvider: () => 'railway',
-    isSandboxEnabled: () => sandboxEnabled,
-    ensureProjectSandbox: (row: any) => ensureProjectSandbox(row),
+    ensureProjectSandbox: (row: any, storage: GithubStorageInMemory) => ensureProjectSandbox(row, storage),
     materializeRepo: (...args: any[]) => materializeRepo(...(args as [])),
-    reattachProjectSandbox: (id: string) => reattachProjectSandbox(id),
     ensureWorktree: (sb: any, workdir: string, opts: any) => ensureWorktree(sb, workdir, opts),
     commitAll: (...args: any[]) => commitAll(...(args as [])),
     pushBranch: (...args: any[]) => pushBranch(...(args as [])),
@@ -144,13 +181,7 @@ vi.mock('./sandbox', () => {
 let featureEnabled = true;
 vi.mock('./config', () => ({
   isGithubFeatureEnabled: () => featureEnabled,
-  signState: (orgId: string, userId: string) => `state.${orgId}.${userId}`,
-  verifyState: (state: string | undefined) => {
-    if (!state?.startsWith('state.')) return null;
-    const [orgId, userId] = state.slice('state.'.length).split('.');
-    if (!orgId || !userId) return null;
-    return { orgId, userId };
-  },
+  getGithubFeatureDiagnostics: () => ({}),
 }));
 
 import { mountApiRoutes } from '../test-utils';
@@ -217,7 +248,9 @@ function updateRows(table: any, vals: any, cond?: any): void {
   }
 }
 
-import { githubInstallations, githubProjectSandboxes, githubWorktrees } from './schema';
+const githubInstallations = {};
+const githubProjectSandboxes = {};
+const githubWorktrees = {};
 installationsRef = githubInstallations;
 worktreesRef = githubWorktrees;
 sandboxesRef = githubProjectSandboxes;
@@ -239,7 +272,10 @@ function buildApp(user: { workosId: string; organizationId?: string } | null) {
     if (user) c.set('webAuthUser' as never, user as never);
     await next();
   });
-  mountApiRoutes(app as any, buildGithubRoutes({ baseUrl: 'http://localhost:4111' }));
+  mountApiRoutes(
+    app as any,
+    buildGithubRoutes({ baseUrl: 'http://localhost:4111', github: githubStub as any, stateSigner }),
+  );
   return app;
 }
 
@@ -256,6 +292,11 @@ beforeEach(() => {
   tables.projects = [];
   tables.sandboxes = [];
   tables.worktrees = [];
+  githubStorage.installations = tables.installations as any;
+  githubStorage.projects = tables.projects as any;
+  githubStorage.sandboxes = tables.sandboxes as any;
+  githubStorage.worktrees = tables.worktrees as any;
+  githubStorage.subscriptions = [];
   featureEnabled = true;
   sandboxEnabled = true;
   // No Postgres in these scenario tests: keep the project lock in-process.
@@ -265,11 +306,12 @@ beforeEach(() => {
   pushImpl = async () => {};
   ensureProjectSandbox.mockClear();
   materializeRepo.mockClear();
-  reattachProjectSandbox.mockClear();
+  reattachSandbox.mockClear();
   ensureWorktree.mockClear();
   commitAll.mockClear();
   pushBranch.mockClear();
   createPullRequest.mockClear();
+  subscribeToPullRequest.mockClear();
 });
 
 afterEach(() => {
@@ -280,10 +322,7 @@ afterEach(() => {
 // ── S1: full write-back journey ──────────────────────────────────────────
 describe('S1: full write-back journey through the real route handlers', () => {
   it('drives create → ensure → worktree → commit → push → pr for one user', async () => {
-    const mintModule = (await import('./client')) as unknown as {
-      mintInstallationToken: ReturnType<typeof vi.fn>;
-    };
-    const mint = mintModule.mintInstallationToken;
+    const mint = githubStub.mintInstallationToken;
     tables.installations.push({
       orgId: 'org1',
       userId: 'u1',
@@ -369,6 +408,8 @@ describe('S1: full write-back journey through the real route handlers', () => {
       title: 'My PR',
       body: 'Adds a thing',
       worktreePath: persistedWorktreePath,
+      sessionId: 'session-1',
+      threadId: 'thread-1',
     });
     expect(prRes.status).toBe(200);
     expect(await prRes.json()).toMatchObject({ url: 'https://github.com/octo/hello/pull/1' });
@@ -377,6 +418,48 @@ describe('S1: full write-back journey through the real route handlers', () => {
     expect(prToken).toMatch(/^install-token-/);
     // The push and PR tokens are distinct mints (never reused across ops).
     expect(prToken).not.toBe(pushToken);
+    expect(subscribeToPullRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        githubProjectId: projectId,
+        pullRequestNumber: 1,
+        sessionId: 'session-1',
+        ownerId: 'u1',
+        resourceId: projectId,
+        threadId: 'thread-1',
+        sessionScope: persistedWorktreePath,
+        source: 'factory-pr-create',
+      }),
+    );
+  });
+
+  it('keeps PR creation compatible when no originating session is supplied', async () => {
+    const app = buildApp({ workosId: 'u1', organizationId: 'org1' });
+    const projectId = 'project-compat';
+    tables.projects.push({
+      id: projectId,
+      orgId: 'org1',
+      userId: 'u1',
+      installationId: 7,
+      repoFullName: 'octo/hello',
+      repoId: 99,
+      defaultBranch: 'main',
+    });
+    tables.sandboxes.push({
+      id: 'sbrow-compat',
+      githubProjectId: projectId,
+      userId: 'u1',
+      sandboxId: 'sb-compat',
+      sandboxWorkdir: '/workspace/hello',
+      materializedAt: new Date(),
+    });
+
+    const response = await postJson(app, `/web/github/projects/${projectId}/pr`, {
+      branch: 'feat/x',
+      title: 'My PR',
+    });
+
+    expect(response.status).toBe(200);
+    expect(subscribeToPullRequest).not.toHaveBeenCalled();
   });
 });
 

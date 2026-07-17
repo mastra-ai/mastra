@@ -1,13 +1,16 @@
 import type {
   AgentControllerEvent,
   KnownAgentControllerEvent,
-  AgentControllerMessage,
   AgentControllerTaskSnapshot,
   AgentControllerOMProgress,
 } from '@mastra/client-js';
-import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent';
+import type {
+  AgentControllerEvent as CoreAgentControllerEvent,
+  MastraDBMessage,
+  MastraMessagePart,
+} from '@mastra/core/agent-controller';
 
-import { toMastraDBMessage } from './agent-controller-message-accumulator';
+import { stripAnsi } from './ansi';
 
 /**
  * Transcript model + reducer.
@@ -87,6 +90,7 @@ export interface NotificationEntry {
   source?: string;
   notifKind?: string;
   priority?: string;
+  metadata?: Record<string, unknown>;
 }
 
 /** A notification summary batching multiple pending notifications. */
@@ -144,8 +148,6 @@ export interface GoalSnapshot {
 
 export interface TranscriptState {
   entries: TimelineEntry[];
-  /** Whether the agent is mid-run (driven by agent_start/agent_end events). */
-  running: boolean;
   /**
    * Whether a turn the user just initiated is awaiting its first response.
    * Set the instant the user sends/steers (synchronously, before any SSE
@@ -182,7 +184,6 @@ export interface TranscriptState {
 
 export const initialTranscript: TranscriptState = {
   entries: [],
-  running: false,
   pending: false,
   tasks: [],
   followUpCount: 0,
@@ -193,9 +194,25 @@ export const initialTranscript: TranscriptState = {
 
 let noticeSeq = 0;
 
+/** A file attached to an outgoing message (base64-encoded, mirrors the client-js `sendMessage` files option). */
+export interface OutgoingFile {
+  data: string;
+  mediaType: string;
+  filename?: string;
+}
+
+type CanonicalMessageEvent = Extract<
+  CoreAgentControllerEvent,
+  { type: 'message_start' | 'message_update' | 'message_end' }
+>;
+type TranscriptEvent =
+  | Exclude<KnownAgentControllerEvent, { type: 'message_start' | 'message_update' | 'message_end' }>
+  | CanonicalMessageEvent;
+
 type Action =
-  | { type: 'event'; event: AgentControllerEvent }
-  | { type: 'localUser'; text: string; steer?: boolean }
+  | { type: 'event'; event: AgentControllerEvent | CoreAgentControllerEvent }
+  | { type: 'localUser'; text: string; steer?: boolean; files?: OutgoingFile[] }
+  | { type: 'clearPending' }
   | { type: 'localNotice'; text: string; level: 'info' | 'error' }
   | { type: 'resolvePrompt'; id: string }
   | {
@@ -203,18 +220,24 @@ type Action =
       threadId?: string;
       omProgress?: AgentControllerOMProgress;
       usage?: UsageSnapshot;
-    }
-  | {
-      /**
-       * Patch transcript-owned metadata (OM/usage) from an authoritative
-       * `session.state()` fetch without touching the timeline or thread binding.
-       * Used after thread switches, where the state fetch can resolve *after*
-       * history hydration — it must never wipe already-rendered entries.
-       */
-      type: 'syncState';
-      omProgress?: AgentControllerOMProgress;
-      usage?: UsageSnapshot;
     };
+
+/**
+ * Mirror the server's signal → content split (stream-content.ts): outgoing
+ * attachments surface as `file` parts; images keep only data + mimeType while
+ * other files carry their filename for download affordances.
+ */
+function toOutgoingFilePart(file: OutgoingFile): MastraMessagePart {
+  if (file.mediaType.startsWith('image/')) {
+    return { type: 'file', data: file.data, mimeType: file.mediaType };
+  }
+  return {
+    type: 'file',
+    data: file.data,
+    mimeType: file.mediaType,
+    ...(file.filename ? { filename: file.filename } : {}),
+  };
+}
 
 export function transcriptReducer(state: TranscriptState, action: Action): TranscriptState {
   switch (action.type) {
@@ -225,12 +248,6 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
         omProgress: action.omProgress,
         usage: action.usage,
       };
-    case 'syncState':
-      return {
-        ...state,
-        omProgress: action.omProgress,
-        usage: action.usage,
-      };
     case 'localUser':
       return {
         ...state,
@@ -238,15 +255,21 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
         entries: [
           ...state.entries,
           toMessageEntry(
-            toMastraDBMessage({
+            {
               id: `local-${Date.now()}-${noticeSeq++}`,
               role: 'user',
-              content: [{ type: 'text', text: action.text }],
-            }),
+              createdAt: new Date(),
+              content: {
+                format: 2,
+                parts: [{ type: 'text', text: action.text }, ...(action.files ?? []).map(toOutgoingFilePart)],
+              },
+            },
             { steer: action.steer },
           ),
         ],
       };
+    case 'clearPending':
+      return { ...state, pending: false };
     case 'localNotice':
       return pushNotice(state, action.level, action.text);
     case 'resolvePrompt':
@@ -258,22 +281,24 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
   }
 }
 
-function applyEvent(state: TranscriptState, raw: AgentControllerEvent): TranscriptState {
-  const event = raw as KnownAgentControllerEvent;
+function applyEvent(state: TranscriptState, raw: AgentControllerEvent | CoreAgentControllerEvent): TranscriptState {
+  const event = raw as TranscriptEvent;
   switch (event.type) {
     case 'agent_start':
       // Reset the rate at the start of a new turn (not at the end) so the last
       // turn's tokens/sec stays visible while idle — short single-step turns
       // would otherwise zero it before it could be read.
-      return { ...state, running: true, tokensPerSec: 0, _decodeStartedAt: 0 };
+      return { ...state, tokensPerSec: 0, _decodeStartedAt: 0 };
     case 'agent_end':
       // Keep tokensPerSec as the last turn's reading; only clear the in-flight
       // decode window so a stale start can't bleed into the next turn.
-      return { ...state, running: false, pending: false, _decodeStartedAt: 0 };
+      return { ...state, pending: false, _decodeStartedAt: 0 };
 
     case 'message_start':
     case 'message_update': {
-      const next = upsertAssistant(state, event.message, true);
+      const message = event.message;
+      const next = upsertMessage(state, message, true);
+      if (message.role !== 'assistant') return next;
       // Only streamed assistant content opens the decode window — empty or
       // tool-only updates must not count toward tokens/sec.
       if (!hasAssistantText(next)) {
@@ -287,15 +312,22 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent): Transcri
       // First streamed assistant content clears the "thinking" pending state.
       return { ...decoded, pending: false };
     }
-    case 'message_end':
-      return { ...upsertAssistant(state, event.message, false), pending: false };
+    case 'message_end': {
+      const message = event.message;
+      const next = upsertMessage(state, message, false);
+      return message.role === 'assistant' ? { ...next, pending: false } : next;
+    }
 
     case 'tool_input_start':
       return withTool(state, event.toolCallId, t => ({ ...t, toolName: event.toolName }), {
         toolName: event.toolName,
       });
-    case 'tool_input_delta':
-      return withTool(state, event.toolCallId, t => ({ ...t, argsText: t.argsText + event.argsTextDelta }));
+    case 'tool_input_delta': {
+      // Display processors may transform argsTextDelta to a non-string payload.
+      if (typeof event.argsTextDelta !== 'string') return state;
+      const argsTextDelta = event.argsTextDelta;
+      return withTool(state, event.toolCallId, t => ({ ...t, argsText: t.argsText + argsTextDelta }));
+    }
     case 'tool_start':
       return withTool(
         state,
@@ -307,7 +339,7 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent): Transcri
         },
       );
     case 'shell_output':
-      return withTool(state, event.toolCallId, t => ({ ...t, output: t.output + event.output }));
+      return withTool(state, event.toolCallId, t => ({ ...t, output: t.output + stripAnsi(event.output) }));
     case 'tool_update':
       return withTool(state, event.toolCallId, t => ({ ...t, result: event.partialResult }));
     case 'tool_end':
@@ -357,6 +389,7 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent): Transcri
             source: event.source,
             notifKind: event.kind,
             priority: event.priority,
+            metadata: event.metadata,
           },
         ],
       };
@@ -415,11 +448,12 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent): Transcri
       return { ...state, entries };
     }
 
-    // Thread lifecycle.
+    // Thread lifecycle events are surfaced by the sidebar (query invalidation)
+    // and toasts, not as transcript notices — a worktree deletion can cascade
+    // over many threads and would otherwise spam the open conversation.
     case 'thread_created':
-      return pushNotice(state, 'info', `Created thread: ${event.thread.title || event.thread.id}`);
     case 'thread_deleted':
-      return pushNotice(state, 'info', `Deleted thread ${event.threadId}`);
+      return state;
 
     // Usage tracking.
     case 'usage_update': {
@@ -433,15 +467,13 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent): Transcri
       const stepTokens = (usageSnap.completionTokens ?? 0) + (usageSnap.reasoningTokens ?? 0);
       let tps = state.tokensPerSec;
       if (state._decodeStartedAt > 0 && stepTokens > 0) {
-        const decodeSec = (now - state._decodeStartedAt) / 1000;
-        if (decodeSec > 0) {
-          const instantaneous = stepTokens / decodeSec;
-          const alpha = 0.3;
-          tps =
-            state.tokensPerSec > 0
-              ? Math.round(alpha * instantaneous + (1 - alpha) * state.tokensPerSec)
-              : Math.round(instantaneous);
-        }
+        const decodeSec = Math.max((now - state._decodeStartedAt) / 1000, 0.001);
+        const instantaneous = stepTokens / decodeSec;
+        const alpha = 0.3;
+        tps =
+          state.tokensPerSec > 0
+            ? Math.round(alpha * instantaneous + (1 - alpha) * state.tokensPerSec)
+            : Math.round(instantaneous);
       }
       return {
         ...state,
@@ -532,37 +564,55 @@ export function createInitialTranscript({
   omProgress,
   usage,
 }: {
-  messages?: AgentControllerMessage[];
+  messages?: MastraDBMessage[];
   threadId?: string;
   omProgress?: AgentControllerOMProgress;
   usage?: UsageSnapshot;
 } = {}): TranscriptState {
-  return { ...initialTranscript, entries: messagesToEntries(messages), threadId, omProgress, usage };
+  return {
+    ...initialTranscript,
+    entries: messagesToEntries(messages),
+    threadId,
+    omProgress,
+    usage,
+  };
 }
 
-function messagesToEntries(messages: AgentControllerMessage[]): TimelineEntry[] {
-  return messages.map(message => toMessageEntry(toMastraDBMessage(message), { streaming: false }));
+function messagesToEntries(messages: MastraDBMessage[]): TimelineEntry[] {
+  return messages.map(message => toMessageEntry(message, { streaming: false }));
 }
 
 function toMessageEntry(
   message: MastraDBMessage,
   options: { streaming?: boolean; steer?: boolean; runtimeTools?: Record<string, ToolCall> } = {},
 ): MessageEntry {
+  const signalMetadata = message.role === 'signal' ? message.content.metadata?.signal : undefined;
+  const signal =
+    signalMetadata && typeof signalMetadata === 'object' && !Array.isArray(signalMetadata)
+      ? (signalMetadata as Record<string, unknown>)
+      : undefined;
+  const isUserSignal = signal?.type === 'user' || signal?.type === 'user-message';
+  const attributes =
+    signal?.attributes && typeof signal.attributes === 'object' && !Array.isArray(signal.attributes)
+      ? (signal.attributes as Record<string, unknown>)
+      : undefined;
+  const displayMessage = isUserSignal ? { ...message, role: 'user' as const } : message;
+
   return {
     kind: 'message',
     id: message.id,
-    message,
+    message: displayMessage,
     runtimeTools: options.runtimeTools,
     streaming: options.streaming,
-    steer: options.steer,
+    steer: options.steer ?? (isUserSignal ? attributes?.delivery === 'while-active' : undefined),
   };
 }
 
-function upsertAssistant(state: TranscriptState, message: AgentControllerMessage, streaming: boolean): TranscriptState {
-  if (message.role !== 'assistant') return state;
+function upsertMessage(state: TranscriptState, message: MastraDBMessage, streaming: boolean): TranscriptState {
+  if (message.role !== 'assistant' && message.role !== 'signal') return state;
   const entries = [...state.entries];
-  let idx = entries.findIndex(e => e.kind === 'message' && e.message.role === 'assistant' && e.id === message.id);
-  if (idx === -1) {
+  let idx = entries.findIndex(e => e.kind === 'message' && e.id === message.id);
+  if (message.role === 'assistant' && idx === -1) {
     const latestIdx = latestAssistantIndex(entries);
     const latest = latestIdx === -1 ? undefined : entries[latestIdx];
     if (latest?.kind === 'message' && latest.message.role === 'assistant' && latest.id.startsWith('assistant-tools-')) {
@@ -571,7 +621,7 @@ function upsertAssistant(state: TranscriptState, message: AgentControllerMessage
   }
   const prev = idx !== -1 ? entries[idx] : undefined;
   const prevEntry = prev?.kind === 'message' ? prev : undefined;
-  const nextMessage = preserveRuntimeToolParts(toMastraDBMessage(message), prevEntry?.message);
+  const nextMessage = message.role === 'assistant' ? preserveRuntimeToolParts(message, prevEntry?.message) : message;
   const entry = toMessageEntry(nextMessage, { streaming, runtimeTools: prevEntry?.runtimeTools });
 
   if (idx === -1) entries.push(entry);
@@ -601,9 +651,16 @@ function hasAssistantText(state: TranscriptState): boolean {
   const idx = latestAssistantIndex(state.entries);
   if (idx === -1) return false;
   const entry = state.entries[idx];
-  if (entry.kind !== 'message') return false;
+  if (entry.kind !== 'message' || !Array.isArray(entry.message.content.parts)) return false;
   return entry.message.content.parts.some(
-    part => part.type === 'text' && 'text' in part && part.text.trim().length > 0,
+    (part: unknown) =>
+      typeof part === 'object' &&
+      part !== null &&
+      'type' in part &&
+      part.type === 'text' &&
+      'text' in part &&
+      typeof part.text === 'string' &&
+      part.text.trim().length > 0,
   );
 }
 
@@ -625,11 +682,12 @@ function withTool(
   const entries = [...state.entries];
   let idx = latestAssistantIndex(entries);
   if (idx === -1) {
-    const message = toMastraDBMessage({
+    const message: MastraDBMessage = {
       id: `assistant-tools-${Date.now()}`,
       role: 'assistant',
-      content: [],
-    });
+      createdAt: new Date(),
+      content: { format: 2, parts: [] },
+    };
     entries.push(toMessageEntry(message, { streaming: false }));
     idx = entries.length - 1;
   }
