@@ -78,38 +78,39 @@ function buildSubAgent() {
 }
 
 function buildSupervisor(subAgent: Agent, memory: MockMemory) {
-  let step = 0;
   const model = new MockLanguageModelV2({
-    doStream: async () => {
-      step += 1;
-      const chunks =
-        step === 1
-          ? [
-              {
-                type: 'tool-call',
-                toolCallId: 'sup-tc-r4',
-                toolName: 'agent-subAgent',
-                input: JSON.stringify({ prompt: `Process order ${ORDER}.`, maxSteps: 3 }),
-              },
-              {
-                type: 'finish',
-                finishReason: 'tool-calls',
-                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-              },
-            ]
-          : [
-              { type: 'text-start', id: 'sup-final-t' },
-              { type: 'text-delta', id: 'sup-final-t', delta: 'Order processed.' },
-              { type: 'text-end', id: 'sup-final-t' },
-              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
-            ];
+    doStream: async ({ prompt }) => {
+      // Content-driven so the mock stays stable across an instance rebuild
+      // (a closure step counter would reset and delegate again after resume).
+      const text = JSON.stringify(prompt);
+      const hasDelegationResult = text.includes('"tool-result"') && text.includes('agent-subAgent');
+      const chunks = hasDelegationResult
+        ? [
+            { type: 'text-start', id: 'sup-final-t' },
+            { type: 'text-delta', id: 'sup-final-t', delta: 'Order processed.' },
+            { type: 'text-end', id: 'sup-final-t' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+          ]
+        : [
+            {
+              type: 'tool-call',
+              toolCallId: 'sup-tc-r4',
+              toolName: 'agent-subAgent',
+              input: JSON.stringify({ prompt: `Process order ${ORDER}.`, maxSteps: 3 }),
+            },
+            {
+              type: 'finish',
+              finishReason: 'tool-calls',
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            },
+          ];
 
       return {
         rawCall: { rawPrompt: null, rawSettings: {} },
         warnings: [],
         stream: convertArrayToReadableStream([
           { type: 'stream-start', warnings: [] },
-          { type: 'response-metadata', id: `sup-${step}`, modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'response-metadata', id: 'sup-resp', modelId: 'mock-model-id', timestamp: new Date(0) },
           ...chunks,
         ] as any),
       };
@@ -214,13 +215,27 @@ describe('persisted delegated approval runId', () => {
       { runId: entry.runId, toolCallId: entry.toolCallId },
     );
     const errors: string[] = [];
+    const newApprovals: string[] = [];
+    let finalText = '';
     for await (const chunk of resumed.fullStream) {
       if (chunk.type === 'error' || chunk.type === 'tool-error') {
         errors.push(JSON.stringify((chunk as any).payload ?? chunk));
+      }
+      if (chunk.type === 'tool-call-approval') {
+        newApprovals.push((chunk as any).payload?.toolCallId);
+      }
+      if (chunk.type === 'text-delta') {
+        finalText += (chunk as any).payload?.text ?? '';
       }
     }
 
     expect(errors).toEqual([]);
     expect(processedOrders).toEqual([ORDER]);
+    // The resumed leg must complete: final supervisor output, no re-delegation,
+    // no second approval request, and nothing left suspended.
+    expect(newApprovals).toEqual([]);
+    expect(finalText).toContain('Order processed.');
+    const { runs: remaining } = await freshAgent.listSuspendedRuns();
+    expect(remaining).toEqual([]);
   }, 30_000);
 });
