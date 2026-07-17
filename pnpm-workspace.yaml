@@ -134,7 +134,9 @@ overrides:
   jws: ^4.0.1
   client-js-e2e-tests-zod-v3>zod: ^3.24.0
   client-js-e2e-tests-zod-v4>zod: ^4.3.6
-  better-auth: ^1.4.18
+  # >=1.6.13 fixes stored XSS via javascript: redirect_uri in oidc-provider/mcp
+  # (GHSA Dependabot alert #2266).
+  better-auth: ^1.6.13
   js-yaml: ^3.15.0
   glob@<=10.5.0: 10.5.0
   # image-size 2.x (incl. 2.0.2 latest) has unpatched DoS infinite-loop flaws
@@ -192,6 +194,7 @@ overrides:
   http-proxy-middleware@>=0.16.0 <2.0.10: 2.0.10
   launch-editor@<2.14.1: 2.14.1
   mdast-util-to-hast@>=13.0.0 <13.2.1: 13.2.1
+  websocket-driver@<0.7.5: 0.7.5
   '@babel/core@>=7.0.0 <7.29.6': 7.29.7
   '@babel/plugin-transform-modules-systemjs@>=7.12.0 <7.29.4': 7.29.7
   dompurify@>=3.0.0 <3.4.11: 3.4.11

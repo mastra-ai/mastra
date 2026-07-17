@@ -34,6 +34,28 @@ import type { SandboxProcessManager } from './process-manager';
 import type { CommandResult, ExecuteCommandOptions, SandboxInfo } from './types';
 
 // =============================================================================
+// Sandbox Derivation
+// =============================================================================
+
+/**
+ * Options for deriving an independent sibling sandbox from a configured
+ * instance. See {@link WorkspaceSandbox.derive}.
+ */
+export interface SandboxDeriveOptions {
+  /** Unique identifier for the derived sandbox instance. */
+  id?: string;
+  /**
+   * Reattach to an existing provider sandbox (by the provider's own id)
+   * instead of provisioning a new one.
+   */
+  sandboxId?: string;
+  /** Environment variables baked into the derived sandbox. */
+  env?: Record<string, string>;
+  /** Idle teardown window (minutes) for the derived sandbox. */
+  idleTimeoutMinutes?: number;
+}
+
+// =============================================================================
 // Sandbox Interface
 // =============================================================================
 
@@ -71,6 +93,25 @@ export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
    * @returns A string describing how to use this sandbox
    */
   getInstructions?(opts?: { requestContext?: RequestContext }): string;
+
+  // ---------------------------------------------------------------------------
+  // Derivation (Optional)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Construct an independent sibling sandbox that inherits this sandbox's
+   * configuration (credentials, provider settings, defaults) with
+   * per-instance overrides.
+   *
+   * Performs no I/O — the derived sandbox provisions (or reattaches, when
+   * `sandboxId` is set) on its own `start()`. Implement this when one
+   * configured sandbox should act as the template for a fleet of independent
+   * sandboxes (e.g. one per project).
+   *
+   * Optional — consumers that need fleets (like the MastraCode web factory)
+   * only support sandboxes that implement it.
+   */
+  derive?(options?: SandboxDeriveOptions): WorkspaceSandbox;
 
   // ---------------------------------------------------------------------------
   // Command Execution

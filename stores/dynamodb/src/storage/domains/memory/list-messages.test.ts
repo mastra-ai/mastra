@@ -317,6 +317,66 @@ describe('DynamoDB listMessages pagination', () => {
     expect(result.hasMore).toBe(true);
   });
 
+  it('does not suppress hasMore when include adds messages outside the date range filter', async () => {
+    const thread = createSampleThread();
+    await memory.saveThread({ thread });
+
+    const base = Date.now();
+    const messages: MastraDBMessage[] = Array.from({ length: 10 }, (_, i) =>
+      createSampleMessageV2({
+        threadId: thread.id,
+        createdAt: new Date(base + i * 1000),
+        content: { content: `msg-${i}` },
+      }),
+    );
+    await memory.saveMessages({ messages });
+
+    // Filter matches msg-4..msg-9 (total 6). Page 0 returns msg-4, msg-5, msg-6.
+    // Include targets msg-0 with context msg-0..msg-2 — all outside the date range.
+    // The 3 filtered + 3 included = 6 returned messages must NOT satisfy total=6:
+    // msg-7..msg-9 still match the filter and remain unfetched.
+    const result = await memory.listMessages({
+      threadId: thread.id,
+      perPage: 3,
+      page: 0,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+      filter: { dateRange: { start: new Date(base + 4000) } },
+      include: [{ id: messages[0]!.id, withNextMessages: 2 }],
+    });
+
+    expect(result.total).toBe(6);
+    expect(result.messages.map(getMessageText)).toEqual(['msg-0', 'msg-1', 'msg-2', 'msg-4', 'msg-5', 'msg-6']);
+    expect(result.hasMore).toBe(true);
+  });
+
+  it('reports hasMore false when pagination plus include return all filtered messages', async () => {
+    const thread = createSampleThread();
+    await memory.saveThread({ thread });
+
+    const base = Date.now();
+    const messages: MastraDBMessage[] = Array.from({ length: 5 }, (_, i) =>
+      createSampleMessageV2({
+        threadId: thread.id,
+        createdAt: new Date(base + i * 1000),
+        content: { content: `msg-${i}` },
+      }),
+    );
+    await memory.saveMessages({ messages });
+
+    // Page 0 returns msg-0..msg-2; include pulls msg-3 and msg-4 → all 5 returned.
+    const result = await memory.listMessages({
+      threadId: thread.id,
+      perPage: 3,
+      page: 0,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+      include: [{ id: messages[3]!.id, withNextMessages: 1 }],
+    });
+
+    expect(result.total).toBe(5);
+    expect(result.messages).toHaveLength(5);
+    expect(result.hasMore).toBe(false);
+  });
+
   it('supports exclusive date range boundaries via between() plus where()', async () => {
     const thread = createSampleThread();
     await memory.saveThread({ thread });

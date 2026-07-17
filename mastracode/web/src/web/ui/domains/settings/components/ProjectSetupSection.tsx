@@ -3,8 +3,11 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEffect, useState } from 'react';
 
 import { useToast } from '../../../ui';
-import { useProjectSettingsQuery, useSaveProjectSettingsMutation } from '../../workspaces/hooks/useProjectSettings';
-import { useProjectsQuery } from '../../workspaces/hooks/useProjects';
+import {
+  useProjectSettingsQuery,
+  useSaveProjectSettingsMutation,
+} from '../../../../../shared/hooks/useProjectSettings';
+import { useProjectsQuery } from '../../../../../shared/hooks/useProjects';
 import type { Project } from '../../workspaces/services/projects';
 
 /**

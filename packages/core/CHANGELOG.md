@@ -1,5 +1,89 @@
 # @mastra/core
 
+## 1.52.0-alpha.4
+
+### Patch Changes
+
+- Improve stored `runEvals` per-turn scores (follow-up to multi-turn `turns`). Each persisted per-turn scorer/gate result is now labeled with its turn index (`metadata.turnIndex`), carries the conversation's shared `threadId`, and links to that turn's own trace span instead of the item-level span. This lets the scores UI group and label per-turn scores by conversation and turn, and resolve each score to the correct trace. ([#19491](https://github.com/mastra-ai/mastra/pull/19491))
+
+## 1.52.0-alpha.3
+
+### Minor Changes
+
+- Update the experimental AgentController message surface to use the canonical `MastraDBMessage` shape. ([#18783](https://github.com/mastra-ai/mastra/pull/18783))
+
+  The AgentController now emits, persists, and returns DB-native messages where message parts live under `content.parts`, terminal status lives under `content.metadata`, and completed tool invocations retain their explicit error state. Signals such as system reminders and notifications now arrive as separate messages with `role: 'signal'` instead of being flattened into assistant message content.
+
+  This affects the experimental AgentController event and session APIs, including `message_start`, `message_update`, `message_end`, `currentMessage`, `listMessages`, `listActiveMessages`, `firstUserMessage`, and `firstUserMessages`.
+
+  ```ts
+  agentController.subscribe(event => {
+    if (event.type === 'message_end' && event.message.role === 'assistant') {
+      // Before: parts were flattened directly onto the message
+      // After: read parts and terminal status from the DB-native shape
+      const text = event.message.content.parts
+        .filter(part => part.type === 'text')
+        .map(part => part.text)
+        .join('');
+      const stopReason = event.message.content.metadata?.stopReason;
+    }
+  });
+
+  // System reminders and notifications are now separate messages
+  const messages = await agentController.session.thread.listActiveMessages();
+  const signals = messages.filter(message => message.role === 'signal');
+  ```
+
+### Patch Changes
+
+- Added a `durable` field to `AgentConfig` so an agent can opt into durable execution without a separate `createDurableAgent` call. Setting `durable: true` (or `durable: { cache, pubsub, maxSteps, cleanupTimeoutMs }`) auto-wraps the agent with `createDurableAgent` when it is attached to a `Mastra` instance; the factory function remains available for advanced use. ([#19371](https://github.com/mastra-ai/mastra/pull/19371))
+
+  ```ts
+  const agent = new Agent({
+    id: 'my-agent',
+    name: 'My Agent',
+    instructions: 'You are a helpful assistant',
+    model,
+    durable: true, // or: { maxSteps: 10, cleanupTimeoutMs: 60_000 }
+  });
+
+  export const mastra = new Mastra({ agents: { agent } });
+  ```
+
+- Cap the LLM-provided delegation `maxSteps` at the sub-agent's own `defaultOptions.maxSteps`. Previously a supervisor's model could silently raise a sub-agent's step budget past its configured default via the delegation tool's optional `maxSteps` argument. The supervisor's model can still reduce the budget, and `onDelegationStart`'s `modifiedMaxSteps` (developer code) still overrides the cap. A warning is logged when a value is capped. ([#19529](https://github.com/mastra-ai/mastra/pull/19529))
+
+- Remove leftover branches that selected the evented workflow engine inside the regular `Agent` loop. The agentic-execution workflow now always uses the in-process workflow engine, and `Agent` no longer maintains an ephemeral `Mastra` (with its own pubsub and `startWorkers()` lifecycle) just to host the evented path. This removes a class of subtle behavior differences between the two engines from `Agent.stream()` / `Agent.generate()` and simplifies the suspend/resume scope lifecycle. ([#18666](https://github.com/mastra-ai/mastra/pull/18666))
+
+  No public API changes. The evented workflow infrastructure itself is unchanged and continues to be used by background tasks, notifications, the score-traces workflow, and other subsystems that explicitly opt into it.
+
+- Fixed `requestContext` typing in the dynamic `skills` agent option. When an agent defines `requestContextSchema`, the `skills` callback now receives a typed `RequestContext` (with key autocomplete and typo checking), matching `instructions`, `tools`, `memory`, and the other dynamic options. Previously it was always `RequestContext<unknown>`. ([#19554](https://github.com/mastra-ai/mastra/pull/19554))
+
+  ```typescript
+  const agent = new Agent({
+    requestContextSchema: z.object({ documentId: z.string(), userId: z.string() }),
+    // Before: requestContext was RequestContext<unknown> — any key compiled
+    // After: requestContext is RequestContext<{ documentId: string; userId: string }>
+    skills: ({ requestContext }) => {
+      requestContext.get('documentId'); // typed as string
+      return ['./skills/basic'];
+    },
+  });
+  ```
+
+  Fixes [#19553](https://github.com/mastra-ai/mastra/issues/19553)
+
+- Fix the `createDurableAgent` JSDoc examples to construct `RedisServerCache` with a connected Redis client (`{ client }`) instead of a `{ url }` config the class does not accept. ([#19569](https://github.com/mastra-ai/mastra/pull/19569))
+
+- Added stable metrics and logs capability reporting for observability storage. The system packages response now includes `observabilityStorageCapabilities` with `metrics` and `logs` flags, enabling capability-based detection that is resilient to bundler-generated constructor name changes. ([#19305](https://github.com/mastra-ai/mastra/pull/19305))
+
+  ```typescript
+  const packages = await client.getSystemPackages();
+  console.log(packages.observabilityStorageCapabilities?.metrics); // true
+  console.log(packages.observabilityStorageCapabilities?.logs); // true
+  ```
+
+  Studio now uses the capability response instead of relying on constructor names, with a fallback for older servers.
+
 ## 1.52.0-alpha.2
 
 ### Minor Changes

@@ -104,7 +104,7 @@ const MAX_TOTAL_FILE_DATA_LENGTH = 28 * 1024 * 1024;
  * server-controlled). Declared on run-triggering body schemas so the OpenAPI
  * spec documents it.
  */
-const bodyRequestContextSchema = z.record(z.string(), z.any()).optional();
+const bodyRequestContextSchema = z.record(z.string(), z.unknown()).optional();
 
 const sendMessageBodySchema = z.object({
   message: z.string(),
@@ -135,7 +135,7 @@ const toolSuspensionBodySchema = z.object({
   // Free-form resume payload. For ask_user this is a string (or string[] for
   // multi-select); for submit_plan it's `{ action, feedback? }`; for
   // request_access it's "Yes"/"No".
-  resumeData: z.any(),
+  resumeData: z.unknown(),
   requestContext: bodyRequestContextSchema,
 });
 const switchModeBodySchema = z.object({ modeId: z.string() });
@@ -180,7 +180,7 @@ const sendNotificationBodySchema = z.object({
   kind: z.string(),
   summary: z.string(),
   priority: z.enum(['low', 'medium', 'high', 'urgent']).optional(),
-  payload: z.any().optional(),
+  payload: z.unknown().optional(),
   sourceId: z.string().optional(),
   dedupeKey: z.string().optional(),
   coalesceKey: z.string().optional(),
@@ -257,18 +257,29 @@ const threadResponseSchema = z.object({
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
 });
-const messageContentSchema = z
+const messagePartSchema = z
   .object({
     type: z.string(),
+  })
+  .passthrough();
+// Mirrors the persisted `MastraMessageContentV2` shape (AI-SDK-v4 `UIMessage`-style):
+// `format: 2` plus a nested `parts` array, with optional companion fields preserved.
+const messageContentV2Schema = z
+  .object({
+    format: z.literal(2),
+    parts: z.array(messagePartSchema),
   })
   .passthrough();
 const listMessagesResponseSchema = z.object({
   messages: z.array(
     z.object({
       id: z.string(),
-      role: z.enum(['user', 'assistant', 'system']),
-      content: z.array(messageContentSchema),
+      role: z.enum(['user', 'assistant', 'system', 'tool', 'signal']),
+      content: messageContentV2Schema,
       createdAt: z.string().optional(),
+      threadId: z.string().optional(),
+      resourceId: z.string().optional(),
+      type: z.string().optional(),
     }),
   ),
 });
@@ -288,7 +299,7 @@ const workspaceStatusResponseSchema = z.object({
   isReady: z.boolean(),
 });
 const omRecordResponseSchema = z.object({
-  record: z.any().optional(),
+  record: z.unknown().optional(),
 });
 const permissionPolicyEnum = z.enum(['allow', 'ask', 'deny']);
 const toolCategoryEnum = z.enum(['read', 'edit', 'execute', 'mcp', 'other']);
@@ -1030,8 +1041,11 @@ export const LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE = createRoute({
         messages: messages.map(m => ({
           id: m.id,
           role: m.role,
-          content: m.content as Array<{ type: string; [key: string]: unknown }>,
+          content: m.content as { format: 2; parts: Array<{ type: string; [key: string]: unknown }> },
           createdAt: m.createdAt instanceof Date ? m.createdAt.toISOString() : undefined,
+          threadId: m.threadId,
+          resourceId: m.resourceId,
+          type: m.type,
         })),
       };
     } catch (error) {

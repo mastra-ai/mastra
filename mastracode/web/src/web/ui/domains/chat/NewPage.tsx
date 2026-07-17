@@ -7,11 +7,14 @@ import { Sidebar } from '../../Sidebar';
 import { ChatLayout, FolderIcon } from '../../ui';
 import type { Project } from '../workspaces';
 import { EmptyProjectState, useActiveProjectContext } from '../workspaces';
-import { deriveProjectPath } from '../workspaces/hooks/useWorkspaces';
+import { deriveProjectPath } from '../../../../shared/hooks/useWorkspaces';
 import { ChatHeader } from './components/ChatHeader';
+import { ChatOverlays } from './components/ChatOverlays';
 import { ComposerPanel } from './components/ComposerPanel';
 import { TranscriptEntries } from './components/Transcript';
+import { ChatSessionBoundary } from './context/ChatSessionProvider';
 import { useChatTranscript } from './context/useChatTranscript';
+import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 
 const draftStartClass = 'flex w-full max-w-xl flex-col items-stretch gap-6';
 
@@ -25,19 +28,22 @@ export function NewPage() {
       header={<ChatHeader />}
       sidebarOpen={overlays.isOpen('sidebar')}
       onSidebarClose={() => overlays.close('sidebar')}
-      content={
-        activeProject ? (
-          <NewPageContent activeProject={activeProject} />
-        ) : (
-          <EmptyProjectState onOpenProjects={() => overlays.open('projects')} />
-        )
+      main={
+        <ChatSessionBoundary>
+          {activeProject ? (
+            <NewPageContent activeProject={activeProject} />
+          ) : (
+            <EmptyProjectState onOpenProjects={() => overlays.open('projects')} />
+          )}
+          <ChatOverlays />
+        </ChatSessionBoundary>
       }
-      footer={null}
     />
   );
 }
 
 function NewPageContent({ activeProject }: { activeProject: Project }) {
+  useGlobalShortcuts();
   const { transcript } = useChatTranscript();
   const location = useLocation();
   const locationState = location.state as { routeErrorNotice?: string } | null;

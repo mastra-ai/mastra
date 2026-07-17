@@ -43,7 +43,10 @@ jobs:
 
       - name: Install registry setup dependencies
         working-directory: ./e2e-tests/_local-registry-setup
-        run: pnpm install --ignore-workspace --frozen-lockfile
+        # No --ignore-workspace: the directory has its own pnpm-workspace.yaml
+        # (its workspace root), which also holds the security overrides that
+        # must be read for the lockfile config to match.
+        run: pnpm install --frozen-lockfile
 
       - name: Publish packages to local registry storage
         working-directory: ./e2e-tests/_local-registry-setup
