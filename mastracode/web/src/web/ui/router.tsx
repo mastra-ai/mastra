@@ -8,6 +8,7 @@
  * mirrors the guard: signed-in (or auth-disabled) visitors are sent back to
  * `/` so the app can choose the active project's board or draft composer.
  */
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { createBrowserRouter, Navigate, Outlet, useLocation, useSearchParams } from 'react-router';
 import type { RouteObject } from 'react-router';
@@ -73,6 +74,15 @@ function RootLanding() {
   const workItems = useWorkItemsQuery(githubProjectId);
 
   if (githubProjectId && workItems.isPending) return <AuthPendingSkeleton label="Loading Factory board" />;
+  if (githubProjectId && workItems.isError) {
+    return (
+      <div className="flex h-dvh w-full items-center justify-center bg-surface1 p-4">
+        <Notice variant="destructive">
+          {workItems.error instanceof Error ? workItems.error.message : 'Failed to load Factory work'}
+        </Notice>
+      </div>
+    );
+  }
   return <Navigate to={githubProjectId && (workItems.data?.length ?? 0) > 0 ? '/factory/board' : '/new'} replace />;
 }
 

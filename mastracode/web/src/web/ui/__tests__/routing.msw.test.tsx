@@ -98,7 +98,7 @@ const AUTHENTICATED = () =>
 function renderRoutes(
   initialEntry: string,
   authMe: () => Response | Promise<Response>,
-  options?: { project?: Project; workItemCount?: number; workItemsReady?: Promise<void> },
+  options?: { project?: Project; workItemCount?: number; workItemsReady?: Promise<void>; workItemsError?: boolean },
 ) {
   seedProject(options?.project);
   useAgentControllerHandlers();
@@ -108,6 +108,7 @@ function renderRoutes(
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${options.project.githubProjectId}/work-items`, async () => {
         await options.workItemsReady;
+        if (options.workItemsError) return HttpResponse.json({ error: 'Factory unavailable' }, { status: 500 });
         return HttpResponse.json({ workItems });
       }),
       http.get(`${TEST_BASE_URL}/web/github/status`, () =>
@@ -190,6 +191,21 @@ describe('MastraCode web routing', () => {
     expect(router.state.location.pathname).toBe('/');
     resolveWorkItems();
     await expectPathname(router, '/factory/board');
+  });
+
+  it('given persisted Factory work cannot be loaded, when visiting /, then the app does not redirect', async () => {
+    const project: Project = {
+      id: 'github-project',
+      name: 'mastra-ai/mastra',
+      source: 'github',
+      githubProjectId: 'github-project-id',
+      resourceId: RESOURCE_ID,
+      createdAt: 1,
+    };
+    const { router } = renderRoutes('/', AUTHENTICATED, { project, workItemsError: true });
+
+    expect(await screen.findByText('Factory unavailable')).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/');
   });
 
   it('given a GitHub project has no persisted Factory work, when visiting /, then the user lands on /new', async () => {
