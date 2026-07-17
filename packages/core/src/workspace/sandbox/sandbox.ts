@@ -34,24 +34,24 @@ import type { SandboxProcessManager } from './process-manager';
 import type { CommandResult, ExecuteCommandOptions, SandboxInfo } from './types';
 
 // =============================================================================
-// Sandbox Derivation
+// Sandbox Cloning
 // =============================================================================
 
 /**
- * Options for deriving an independent sibling sandbox from a configured
- * instance. See {@link WorkspaceSandbox.derive}.
+ * Options for cloning a configured sandbox's configuration into an independent
+ * sibling sandbox. See {@link WorkspaceSandbox.clone}.
  */
-export interface SandboxDeriveOptions {
-  /** Unique identifier for the derived sandbox instance. */
+export interface SandboxCloneOptions {
+  /** Unique identifier for the sandbox clone instance. */
   id?: string;
   /**
    * Reattach to an existing provider sandbox (by the provider's own id)
    * instead of provisioning a new one.
    */
   sandboxId?: string;
-  /** Environment variables baked into the derived sandbox. */
+  /** Environment variables baked into the sandbox clone. */
   env?: Record<string, string>;
-  /** Idle teardown window (minutes) for the derived sandbox. */
+  /** Idle teardown window (minutes) for the sandbox clone. */
   idleTimeoutMinutes?: number;
 }
 
@@ -95,7 +95,7 @@ export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
   getInstructions?(opts?: { requestContext?: RequestContext }): string;
 
   // ---------------------------------------------------------------------------
-  // Derivation (Optional)
+  // Cloning (Optional)
   // ---------------------------------------------------------------------------
 
   /**
@@ -103,7 +103,7 @@ export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
    * configuration (credentials, provider settings, defaults) with
    * per-instance overrides.
    *
-   * Performs no I/O — the derived sandbox provisions (or reattaches, when
+   * Performs no I/O — the sandbox clone provisions (or reattaches, when
    * `sandboxId` is set) on its own `start()`. Implement this when one
    * configured sandbox should act as the template for a fleet of independent
    * sandboxes (e.g. one per project).
@@ -111,7 +111,7 @@ export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
    * Optional — consumers that need fleets (like the MastraCode web factory)
    * only support sandboxes that implement it.
    */
-  derive?(options?: SandboxDeriveOptions): WorkspaceSandbox;
+  clone?(options?: SandboxCloneOptions): WorkspaceSandbox;
 
   // ---------------------------------------------------------------------------
   // Command Execution

@@ -16,7 +16,7 @@ import type {
   ProviderStatus,
   MountManager,
   MastraSandboxOptions,
-  SandboxDeriveOptions,
+  SandboxCloneOptions,
 } from '@mastra/core/workspace';
 
 /**
@@ -213,7 +213,7 @@ export class E2BSandbox extends MastraSandbox {
    * configuration (credentials, template, network, metadata, instructions)
    * with per-instance overrides.
    *
-   * Performs no I/O — the derived sandbox provisions (or reconnects to an
+   * Performs no I/O — the sandbox clone provisions (or reconnects to an
    * existing E2B sandbox with the same logical `id`) on its own `start()`.
    * Use it when one configured sandbox acts as the template for a fleet of
    * independent sandboxes (e.g. one per project).
@@ -221,7 +221,7 @@ export class E2BSandbox extends MastraSandbox {
    * `options.idleTimeoutMinutes` maps to the E2B sandbox `timeout` (ms);
    * `options.sandboxId` is ignored because E2B reconnects by logical `id`.
    */
-  derive(options: SandboxDeriveOptions = {}): E2BSandbox {
+  clone(options: SandboxCloneOptions = {}): E2BSandbox {
     const { id: _id, ...base } = this._constructorOptions;
     return new E2BSandbox({
       ...base,

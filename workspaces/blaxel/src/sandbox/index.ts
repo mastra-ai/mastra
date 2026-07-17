@@ -18,7 +18,7 @@ import type {
   ProviderStatus,
   MountManager,
   MastraSandboxOptions,
-  SandboxDeriveOptions,
+  SandboxCloneOptions,
 } from '@mastra/core/workspace';
 import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 
@@ -203,7 +203,7 @@ export class BlaxelSandbox extends MastraSandbox {
    * configuration (image, memory, region, runtimes, ports, labels) with
    * per-instance overrides.
    *
-   * Performs no I/O — the derived sandbox provisions (or reconnects to an
+   * Performs no I/O — the sandbox clone provisions (or reconnects to an
    * existing Blaxel sandbox with the same logical `id` via
    * `createIfNotExists`) on its own `start()`. Use it when one configured
    * sandbox acts as the template for a fleet of independent sandboxes
@@ -213,7 +213,7 @@ export class BlaxelSandbox extends MastraSandbox {
    * string); `options.sandboxId` is ignored because Blaxel reconnects by
    * logical `id`.
    */
-  derive(options: SandboxDeriveOptions = {}): BlaxelSandbox {
+  clone(options: SandboxCloneOptions = {}): BlaxelSandbox {
     const { id: _id, ...base } = this._constructorOptions;
     return new BlaxelSandbox({
       ...base,

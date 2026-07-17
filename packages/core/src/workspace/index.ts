@@ -86,7 +86,7 @@ export type { FilesystemMountConfig, MountResult, FilesystemIcon } from './files
 export { MountManager } from './sandbox';
 export type {
   WorkspaceSandbox,
-  SandboxDeriveOptions,
+  SandboxCloneOptions,
   ExecutionResult,
   CommandOptions,
   CommandResult,

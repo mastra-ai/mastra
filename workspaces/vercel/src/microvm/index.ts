@@ -18,7 +18,7 @@ import type {
   InstructionsOption,
   MastraSandboxOptions,
   ProviderStatus,
-  SandboxDeriveOptions,
+  SandboxCloneOptions,
   SandboxInfo,
 } from '@mastra/core/workspace';
 import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
@@ -150,7 +150,7 @@ export class VercelSandbox extends MastraSandbox {
    * configuration (credentials, runtime, resources, ports, metadata,
    * instructions) with per-instance overrides.
    *
-   * Performs no I/O — the derived sandbox provisions a fresh MicroVM on its
+   * Performs no I/O — the sandbox clone provisions a fresh MicroVM on its
    * own `start()` (Vercel sandboxes cannot be reconnected to, so
    * `options.sandboxId` is ignored). Use it when one configured sandbox acts
    * as the template for a fleet of independent sandboxes (e.g. one per
@@ -158,7 +158,7 @@ export class VercelSandbox extends MastraSandbox {
    *
    * `options.idleTimeoutMinutes` maps to the Vercel sandbox `timeout` (ms).
    */
-  derive(options: SandboxDeriveOptions = {}): VercelSandbox {
+  clone(options: SandboxCloneOptions = {}): VercelSandbox {
     const { id: _id, sandboxName: _sandboxName, ...base } = this._constructorOptions;
     return new VercelSandbox({
       ...base,

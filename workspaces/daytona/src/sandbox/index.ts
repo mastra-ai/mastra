@@ -25,7 +25,7 @@ import type {
   MountManager,
   CommandResult,
   ExecuteCommandOptions,
-  SandboxDeriveOptions,
+  SandboxCloneOptions,
 } from '@mastra/core/workspace';
 import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 
@@ -281,7 +281,7 @@ export class DaytonaSandbox extends MastraSandbox {
    * configuration (credentials, snapshot/image, resources, network policy)
    * with per-instance overrides.
    *
-   * Performs no I/O — the derived sandbox provisions (or reconnects to an
+   * Performs no I/O — the sandbox clone provisions (or reconnects to an
    * existing Daytona sandbox with the same logical `id`) on its own `start()`.
    * Use it when one configured sandbox acts as the template for a fleet of
    * independent sandboxes (e.g. one per project).
@@ -290,7 +290,7 @@ export class DaytonaSandbox extends MastraSandbox {
    * (minutes); `options.sandboxId` is ignored because Daytona reconnects by
    * logical `id`.
    */
-  derive(options: SandboxDeriveOptions = {}): DaytonaSandbox {
+  clone(options: SandboxCloneOptions = {}): DaytonaSandbox {
     const { id: _id, name: _name, ...base } = this._constructorOptions;
     return new DaytonaSandbox({
       ...base,
