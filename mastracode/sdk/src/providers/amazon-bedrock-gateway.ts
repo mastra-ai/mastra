@@ -4,9 +4,47 @@ import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { fromNodeProviderChain } from '@aws-sdk/credential-providers';
 import { MastraModelGateway } from '@mastra/core/llm';
 import type { GatewayAuthRequest, GatewayAuthResult, GatewayLanguageModel, ProviderConfig } from '@mastra/core/llm';
+import { wrapLanguageModel } from 'ai';
+import type { LanguageModelMiddleware } from 'ai';
 import { getBedrockModelCatalog } from './amazon-bedrock.js';
 
 type ModelRequestHeaders = Record<string, string>;
+
+/**
+ * Insert Bedrock prompt-cache breakpoints so long agentic threads bill the
+ * re-sent prefix at the cache-read rate instead of full-price input every turn.
+ *
+ * Bedrock uses `providerOptions.bedrock.cachePoint` ({ type: 'default' }) — a
+ * different key from Anthropic's `providerOptions.anthropic.cacheControl`, which
+ * is why the general prompt-cache middleware (Anthropic-only) never applied here.
+ * We mark the last system message and the most recent message, matching how the
+ * Anthropic path places its two breakpoints. Models that don't support cache
+ * points ignore the field, so this is safe to always apply.
+ */
+export const bedrockCacheMiddleware: LanguageModelMiddleware = {
+  specificationVersion: 'v3',
+  transformParams: async ({ params }) => {
+    const prompt = [...params.prompt];
+    const cachePoint = { bedrock: { cachePoint: { type: 'default' as const } } };
+    const mark = (msg: (typeof prompt)[number]) => ({
+      ...msg,
+      providerOptions: { ...msg.providerOptions, ...cachePoint },
+    });
+
+    for (let i = prompt.length - 1; i >= 0; i--) {
+      if (prompt[i]!.role === 'system') {
+        prompt[i] = mark(prompt[i]!);
+        break;
+      }
+    }
+    const lastIdx = prompt.length - 1;
+    if (lastIdx >= 0) {
+      prompt[lastIdx] = mark(prompt[lastIdx]!);
+    }
+
+    return { ...params, prompt };
+  },
+};
 
 export const AMAZON_BEDROCK_GATEWAY_ID = 'amazon-bedrock';
 
@@ -64,7 +102,13 @@ function bedrockProvider(modelId: string, headers?: ModelRequestHeaders) {
     credentialProvider: fromNodeProviderChain(),
     headers,
   });
-  return bedrock(modelId);
+  // `@ai-sdk/amazon-bedrock` returns a LanguageModelV2 while `wrapLanguageModel`
+  // is typed for V3; the SDK wraps both at runtime, so cast to bridge the types
+  // (same pattern the gateway uses elsewhere).
+  return wrapLanguageModel({
+    model: bedrock(modelId) as any,
+    middleware: [bedrockCacheMiddleware],
+  });
 }
 
 /**
