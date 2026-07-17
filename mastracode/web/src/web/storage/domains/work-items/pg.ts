@@ -38,9 +38,10 @@ CREATE TABLE IF NOT EXISTS work_items (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS work_items_project_source_key_unique
-  ON work_items (github_project_id, source_key)
+CREATE UNIQUE INDEX IF NOT EXISTS work_items_org_project_source_key_unique
+  ON work_items (org_id, github_project_id, source_key)
   WHERE source_key IS NOT NULL;
+DROP INDEX IF EXISTS work_items_project_source_key_unique;
 `;
 
 interface WorkItemDbRow {
@@ -140,8 +141,8 @@ export class WorkItemsStoragePG extends WorkItemsStorage {
       const updated = await this.#withTx(client =>
         this.#applyUpdateLocked(
           client,
-          'github_project_id = $1 AND source_key = $2',
-          [githubProjectId, input.sourceKey],
+          'org_id = $1 AND github_project_id = $2 AND source_key = $3',
+          [orgId, githubProjectId, input.sourceKey],
           input,
           userId,
           now,

@@ -24,10 +24,14 @@ import { __resetRuntimeConfigForTests, seedRuntimeConfig } from './runtime-confi
 // Mock @mastra/auth-workos so WorkOSWebAuth never constructs a real client.
 const mockAuthenticate = vi.fn();
 const mockGetLoginUrl = vi.fn(() => 'https://workos.example/login');
+const mockListOrganizationMemberships = vi.fn();
 vi.mock('@mastra/auth-workos', () => ({
   MastraAuthWorkos: class {
     getLoginUrl = mockGetLoginUrl;
     authenticateToken = mockAuthenticate;
+    getWorkOS = () => ({
+      userManagement: { listOrganizationMemberships: mockListOrganizationMemberships },
+    });
   },
 }));
 
@@ -92,6 +96,75 @@ describe('active adapter resolution', () => {
   it('getWorkOSProvider throws when the active adapter is not WorkOS', () => {
     seedRuntimeConfig({ authAdapter: fakeAdapter() });
     expect(() => getWorkOSProvider()).toThrow(/not WorkOS/);
+  });
+});
+
+describe('WorkOSWebAuth organization admin authorization', () => {
+  const user = { workosId: 'user_1', organizationId: 'org_1' };
+
+  it('allows the admin membership in the active organization', async () => {
+    mockListOrganizationMemberships.mockResolvedValue({
+      autoPagination: async () => [
+        { organizationId: 'org_other', role: { slug: 'admin' } },
+        { organizationId: 'org_1', role: { slug: 'admin' } },
+      ],
+    });
+    const adapter = new WorkOSWebAuth({ redirectUri: 'http://localhost:4111/auth/callback' });
+
+    await expect(adapter.isOrganizationAdmin(user, 'org_1')).resolves.toBe(true);
+    expect(mockListOrganizationMemberships).toHaveBeenCalledWith({ userId: 'user_1' });
+  });
+
+  it('allows an owner membership', async () => {
+    mockListOrganizationMemberships.mockResolvedValue({
+      autoPagination: async () => [{ organizationId: 'org_1', role: { slug: 'owner' } }],
+    });
+    const adapter = new WorkOSWebAuth({ redirectUri: 'http://localhost:4111/auth/callback' });
+
+    await expect(adapter.isOrganizationAdmin(user, 'org_1')).resolves.toBe(true);
+  });
+
+  it('allows a multi-role membership whose roles include admin', async () => {
+    mockListOrganizationMemberships.mockResolvedValue({
+      autoPagination: async () => [
+        {
+          organizationId: 'org_1',
+          role: { slug: 'member' },
+          roles: [{ slug: 'member' }, { slug: 'admin' }],
+        },
+      ],
+    });
+    const adapter = new WorkOSWebAuth({ redirectUri: 'http://localhost:4111/auth/callback' });
+
+    await expect(adapter.isOrganizationAdmin(user, 'org_1')).resolves.toBe(true);
+  });
+
+  it('denies a multi-role membership without an admin role', async () => {
+    mockListOrganizationMemberships.mockResolvedValue({
+      autoPagination: async () => [
+        {
+          organizationId: 'org_1',
+          role: { slug: 'member' },
+          roles: [{ slug: 'member' }, { slug: 'billing' }],
+        },
+      ],
+    });
+    const adapter = new WorkOSWebAuth({ redirectUri: 'http://localhost:4111/auth/callback' });
+
+    await expect(adapter.isOrganizationAdmin(user, 'org_1')).resolves.toBe(false);
+  });
+
+  it('denies members, cross-organization requests, and provider failures', async () => {
+    mockListOrganizationMemberships.mockResolvedValue({
+      autoPagination: async () => [{ organizationId: 'org_1', role: { slug: 'member' } }],
+    });
+    const adapter = new WorkOSWebAuth({ redirectUri: 'http://localhost:4111/auth/callback' });
+
+    await expect(adapter.isOrganizationAdmin(user, 'org_1')).resolves.toBe(false);
+    await expect(adapter.isOrganizationAdmin(user, 'org_2')).resolves.toBe(false);
+
+    mockListOrganizationMemberships.mockRejectedValue(new Error('workos unavailable'));
+    await expect(adapter.isOrganizationAdmin(user, 'org_1')).resolves.toBe(false);
   });
 });
 

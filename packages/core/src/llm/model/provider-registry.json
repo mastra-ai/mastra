@@ -1094,7 +1094,7 @@
       "apiKeyEnvVar": "KIMI_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Kimi For Coding",
-      "models": ["k2p5", "k2p6", "k2p7", "k3", "kimi-for-coding-highspeed", "kimi-k2-thinking"],
+      "models": ["k2p7", "k3", "kimi-for-coding-highspeed"],
       "docUrl": "https://www.kimi.com/code/docs/en/third-party-tools/other-coding-agents.html",
       "gateway": "models.dev",
       "npm": "@ai-sdk/anthropic"
@@ -7654,7 +7654,7 @@
       "zai-org/GLM-5.1",
       "zai-org/GLM-5.2"
     ],
-    "kimi-for-coding": ["k2p5", "k2p6", "k2p7", "k3", "kimi-for-coding-highspeed", "kimi-k2-thinking"],
+    "kimi-for-coding": ["k2p7", "k3", "kimi-for-coding-highspeed"],
     "crossmodel": [
       "anthropic/claude-fable-5",
       "anthropic/claude-haiku-4-5",

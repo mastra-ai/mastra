@@ -280,6 +280,10 @@ vi.mock('../providers/github-copilot.js', () => ({
   setAuthStorage: vi.fn(),
 }));
 
+vi.mock('../providers/xai.js', () => ({
+  setAuthStorage: vi.fn(),
+}));
+
 vi.mock('../tools/index.js', () => ({
   defaultTools: {},
 }));
@@ -380,6 +384,7 @@ describe('createMastraCode', () => {
     delete process.env.MC_E2E_PRIMARY_KEY;
     delete process.env.MC_E2E_SECONDARY_KEY;
     delete process.env.MASTRA_GATEWAY_API_KEY;
+    delete process.env.MASTRA_GATEWAY_URL;
   });
 
   it('registers the MastraCode gateway and app-provided model hooks on AgentController', async () => {
@@ -443,6 +448,27 @@ describe('createMastraCode', () => {
     expect(controllerConstructorMock).toHaveBeenCalled();
     const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as { memory?: unknown } | undefined;
     expect(typeof agentControllerConfig?.memory).toBe('function');
+  });
+
+  it('passes an injected vector to dynamic memory', async () => {
+    const vector = { id: 'custom-vector' };
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode({ vector: vector as any });
+
+    expect(getDynamicMemoryMock).toHaveBeenCalledWith(expect.anything(), vector);
+    expect(createVectorStoreMock).not.toHaveBeenCalled();
+  });
+
+  it('requires an explicit backend for unknown injected storage implementations', async () => {
+    const { MastraCompositeStore } = await import('@mastra/core/storage');
+    const storage = Object.create(MastraCompositeStore.prototype) as InstanceType<typeof MastraCompositeStore>;
+    const { createMastraCode } = await import('../index.js');
+
+    await expect(createMastraCode({ storage })).rejects.toThrow(
+      'storageBackend is required when injecting a custom storage instance.',
+    );
+    expect(createStorageMock).not.toHaveBeenCalled();
   });
 
   it('uses caller memory while applying configDir to startup services and state', async () => {
