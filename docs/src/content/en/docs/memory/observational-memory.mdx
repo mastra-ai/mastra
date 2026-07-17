@@ -4,6 +4,7 @@ description: "Learn how Observational Memory keeps your agent's context window s
 packages:
   - "@mastra/core"
   - "@mastra/memory"
+  - "@mastra/oracledb"
 ---
 
 # Observational Memory
@@ -107,7 +108,7 @@ For an AI SDK example, see [Using Mastra Memory](/guides/build-your-ui/ai-sdk-ui
 
 :::note
 
-OM currently only supports `@mastra/pg`, `@mastra/libsql`, `@mastra/mongodb`, and `@mastra/convex` storage adapters.
+OM currently only supports `@mastra/pg`, `@mastra/libsql`, `@mastra/mongodb`, `@mastra/convex`, and `@mastra/oracledb` storage adapters.
 It uses background agents for managing memory. When no model is set, the default model is `google/gemini-2.5-flash`.
 
 :::

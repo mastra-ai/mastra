@@ -1,0 +1,510 @@
+---
+title: "Reference: OracleDB vector store | Vectors"
+description: Documentation for the Oracle Database vector provider in Mastra.
+packages:
+  - "@mastra/core"
+  - "@mastra/fastembed"
+  - "@mastra/memory"
+  - "@mastra/oracledb"
+  - "@mastra/rag"
+---
+
+# OracleDB vector store
+
+`OracleVector` stores embeddings in Oracle Database `VECTOR` columns and exposes them through Mastra's vector interface. Each logical Mastra vector index is mapped to an Oracle vector table through a registry table, while metadata is stored as Oracle JSON for structured filtering.
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/oracledb@latest
+```
+
+## Usage
+
+```ts
+import { OracleVector } from '@mastra/oracledb'
+
+const vector = new OracleVector({
+  id: 'oracle-vector',
+  user: process.env.ORACLE_DATABASE_USER,
+  password: process.env.ORACLE_DATABASE_PASSWORD,
+  connectString: process.env.ORACLE_DATABASE_CONNECT_STRING,
+})
+
+await vector.createIndex({
+  indexName: 'memory_messages',
+  dimension: 1536,
+  metric: 'cosine',
+})
+
+await vector.upsert({
+  indexName: 'memory_messages',
+  vectors: [embedding],
+  metadata: [{ resource_id: 'user-1', thread_id: 'thread-1' }],
+})
+
+const results = await vector.query({
+  indexName: 'memory_messages',
+  queryVector,
+  topK: 5,
+  filter: { resource_id: 'user-1' },
+})
+```
+
+By default, `OracleVector` uses exact search with no approximate vector index. Configure IVF or HNSW when your dataset and latency requirements need approximate search.
+
+## Constructor options
+
+Pass Oracle connection options (`user`, `password`, `connectString`, `pool`, wallet options, or `externalAuth`) directly, or pass `poolManager` to share the pool used by `OracleStore`. The vector-specific options are:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this vector store instance.',
+  },
+  {
+    name: 'poolManager',
+    type: 'OraclePoolManager',
+    description: 'Shared Oracle pool manager. Use this to share one Oracle pool with `OracleStore`.',
+    isOptional: true,
+  },
+  {
+    name: 'schemaName',
+    type: 'string',
+    description: 'Oracle schema name used to qualify the vector registry and vector tables.',
+    isOptional: true,
+  },
+  {
+    name: 'tablePrefix',
+    type: 'string',
+    description: 'Prefix used for physical Oracle vector tables.',
+    isOptional: true,
+    defaultValue: "'MASTRA_VEC'",
+  },
+  {
+    name: 'registryTableName',
+    type: 'string',
+    description: 'Oracle table used to map Mastra logical index names to physical vector tables.',
+    isOptional: true,
+    defaultValue: "'MASTRA_VECTOR_INDEXES'",
+  },
+  {
+    name: 'defaultIndexConfig',
+    type: 'OracleVectorIndexConfig',
+    description: 'Default Oracle vector index configuration.',
+    isOptional: true,
+    defaultValue: "{ type: 'none', accuracy: 95 }",
+  },
+  {
+    name: 'defaultMetadataIndexes',
+    type: 'string[]',
+    description: 'Metadata fields to index automatically when vector tables are created.',
+    isOptional: true,
+    defaultValue: "['thread_id', 'resource_id', 'message_id', 'source_id']",
+  },
+  {
+    name: 'defaultVectorFormat',
+    type: "'vector' | 'bit' | 'int8'",
+    description: 'Default Oracle vector format for dense, binary, and int8 embeddings.',
+    isOptional: true,
+    defaultValue: "'vector'",
+  },
+  {
+    name: 'upsertBatchSize',
+    type: 'number',
+    description: 'Number of vectors sent per Oracle `executeMany` call. The full upsert commits once after all batches succeed.',
+    isOptional: true,
+    defaultValue: '200',
+  },
+]}
+/>
+
+## Constructor examples
+
+### Shared pool with OracleStore
+
+```ts
+import { OracleStore, OracleVector } from '@mastra/oracledb'
+
+const storage = new OracleStore({ id: 'oracle-storage', user, password, connectString })
+
+const vector = new OracleVector({
+  id: 'oracle-vector',
+  poolManager: storage.getPoolManager(),
+})
+```
+
+For Autonomous Database and mTLS connections, pass `walletLocation`, `walletPassword`, and `configDir` in the same constructor.
+
+## Methods
+
+### `createIndex()`
+
+Creates the registry row, physical Oracle vector table, metadata indexes, and optionally an Oracle vector index.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Logical Mastra index name. The provider maps this to a valid Oracle table name internally.',
+  },
+  {
+    name: 'dimension',
+    type: 'number',
+    description: 'Vector dimension. This must match the embedding model output size.',
+  },
+  {
+    name: 'metric',
+    type: "'cosine' | 'euclidean' | 'dotproduct' | 'hamming' | 'jaccard'",
+    isOptional: true,
+    defaultValue: 'cosine',
+    description: 'Distance metric for similarity search. Binary vectors support `hamming` and `jaccard`.',
+  },
+  {
+    name: 'vectorFormat',
+    type: "'vector' | 'bit' | 'int8'",
+    isOptional: true,
+    defaultValue: 'vector',
+    description: 'Oracle vector storage format.',
+  },
+  {
+    name: 'indexConfig',
+    type: 'OracleVectorIndexConfig',
+    isOptional: true,
+    defaultValue: "{ type: 'none', accuracy: 95 }",
+    description: 'Oracle vector index configuration. `none` means exact search with no approximate vector index.',
+  },
+  {
+    name: 'buildIndex',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'true',
+    description: 'Whether to build the Oracle vector index when `indexConfig.type` is `ivf` or `hnsw`.',
+  },
+  {
+    name: 'metadataIndexes',
+    type: 'string[]',
+    isOptional: true,
+    description: 'Metadata field names to index for faster JSON metadata filtering.',
+  },
+]}
+/>
+
+#### `OracleVectorIndexConfig`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'type',
+    type: "'none' | 'ivf' | 'hnsw'",
+    description: 'Oracle vector index type.',
+    isOptional: true,
+    defaultValue: "'none'",
+  },
+  {
+    name: 'accuracy',
+    type: 'number',
+    description: 'Target accuracy for approximate vector search.',
+    isOptional: true,
+    defaultValue: '95',
+  },
+  {
+    name: 'ivf.neighborPartitions',
+    type: 'number',
+    description: 'Oracle IVF neighbor partitions setting.',
+    isOptional: true,
+  },
+  {
+    name: 'hnsw.neighbors',
+    type: 'number',
+    description: 'Oracle HNSW neighbor setting.',
+    isOptional: true,
+  },
+  {
+    name: 'hnsw.efConstruction',
+    type: 'number',
+    description: 'Oracle HNSW build-time construction setting.',
+    isOptional: true,
+  },
+]}
+/>
+
+#### Index configuration
+
+```ts
+await vector.createIndex({
+  indexName: 'support_articles',
+  dimension: 1536,
+  metric: 'cosine',
+  indexConfig: {
+    type: 'ivf',
+    accuracy: 95,
+    ivf: {
+      neighborPartitions: 32,
+    },
+  },
+})
+```
+
+The default is `indexConfig: { type: 'none' }`, which uses exact search and requires no approximate index tuning. Use IVF or HNSW only when your data volume and latency requirements justify approximate search. HNSW is configured with `indexConfig: { type: 'hnsw', hnsw: { neighbors, efConstruction } }` and requires Oracle Vector Pool memory, which `configureVectorMemory()` can allocate for local or self-managed databases.
+
+### `upsert()`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to upsert vectors into.',
+  },
+  {
+    name: 'vectors',
+    type: 'number[][]',
+    description: 'Array of embedding vectors.',
+  },
+  {
+    name: 'metadata',
+    type: 'Record<string, any>[]',
+    isOptional: true,
+    description: 'Metadata stored as Oracle JSON. Must align by position with `vectors`.',
+  },
+  {
+    name: 'ids',
+    type: 'string[]',
+    isOptional: true,
+    description: 'Optional vector IDs. IDs are generated when omitted.',
+  },
+]}
+/>
+
+### `query()`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to query.',
+  },
+  {
+    name: 'queryVector',
+    type: 'number[]',
+    description: 'Query vector.',
+  },
+  {
+    name: 'topK',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '10',
+    description: 'Number of results to return.',
+  },
+  {
+    name: 'filter',
+    type: 'Record<string, any>',
+    isOptional: true,
+    description: 'Mastra metadata filter translated to Oracle JSON predicates.',
+  },
+  {
+    name: 'includeVector',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description: 'Whether to include the vector in each result.',
+  },
+  {
+    name: 'minScore',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '-1',
+    description: 'Minimum similarity score threshold.',
+  },
+  {
+    name: 'queryMode',
+    type: "'exact' | 'approx'",
+    isOptional: true,
+    description: 'Oracle query mode. Exact search is used by default when no approximate vector index is configured.',
+  },
+  {
+    name: 'targetAccuracy',
+    type: 'number',
+    isOptional: true,
+    description: 'Target accuracy for approximate Oracle vector queries.',
+  },
+]}
+/>
+
+### `listIndexes()`
+
+Returns the logical Mastra index names recorded in the Oracle vector registry table.
+
+### `describeIndex()`
+
+Returns Oracle index metadata, including the physical table name, dimension, vector count, metric, index type, vector format, and configured accuracy.
+
+### `deleteIndex()`
+
+Deletes the Oracle vector table and removes the registry entry for the logical index.
+
+### `updateVector()`
+
+Update vectors by ID or metadata filter. Either `id` or `filter` must be provided, but not both. The `update` object may include `vector`, `metadata`, or both.
+
+```ts
+await vector.updateVector({ indexName: 'support_articles', id: 'doc-1', update: { metadata: { status: 'reviewed' } } })
+```
+
+### `deleteVector()`
+
+Deletes a single vector by ID.
+
+### `deleteVectors()`
+
+Deletes multiple vectors by IDs or by metadata filter. Either `ids` or `filter` must be provided, but not both.
+
+### `buildIndex()`
+
+Builds an Oracle vector index for an existing logical index. If the resolved index type is `none`, this method is a no-op.
+
+### `rebuildIndex()`
+
+Drops and recreates the Oracle vector index for an existing logical index, typically after changing approximate-index tuning.
+
+### Index diagnostics
+
+Use `getIndexStatus({ indexName })` to inspect Oracle catalog status, and `indexAccuracyQuery({ indexName, queryVector, topK, targetAccuracy })` to run `DBMS_VECTOR.INDEX_ACCURACY_QUERY` for approximate indexes.
+
+### `configureVectorMemory()`
+
+Allocates Oracle Vector Pool memory, which HNSW indexes require. This calls `ALTER SYSTEM SET VECTOR_MEMORY_SIZE`, so it requires a privileged connection such as `SYSDBA` or `SYSTEM`.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'size',
+    type: 'string',
+    description: 'Vector pool size, as an integer optionally followed by `K`, `M`, or `G` (for example `"512M"`).',
+  },
+  {
+    name: 'scope',
+    type: "'MEMORY' | 'SPFILE' | 'BOTH'",
+    isOptional: true,
+    defaultValue: "'MEMORY'",
+    description: "Oracle ALTER SYSTEM scope. Use 'SPFILE' or 'BOTH' so the setting survives a database restart.",
+  },
+]}
+/>
+
+### `disconnect()`
+
+Closes the Oracle pool when `OracleVector` created the pool manager. If you provide `pool` or `poolManager`, you own that lifecycle.
+
+## Metadata filters
+
+`OracleVector` accepts Mastra's standard metadata filter syntax. Filters are translated into Oracle JSON predicates with bound values:
+
+- scalar comparisons use `JSON_VALUE`
+- array, existence, and element-match checks use `JSON_EXISTS`
+- regex filters use `REGEXP_LIKE`
+- string contains filters use case-insensitive `LIKE`
+
+```ts
+const results = await vector.query({
+  indexName: 'memory_messages',
+  queryVector,
+  topK: 5,
+  filter: {
+    resource_id: 'user-1',
+    tags: { $contains: 'support' },
+    score: { $gte: 0.8 },
+    $or: [{ source: 'docs' }, { source: 'tickets' }],
+  },
+})
+```
+
+Metadata is stored as native Oracle JSON, so the rows are also readable directly with standard Oracle JDBC tools such as DBeaver and SQL Developer.
+
+Use `ORACLEDB_PROMPT` when an agent should generate Oracle-compatible metadata filters for `createVectorQueryTool()`:
+
+```ts
+import { Agent } from '@mastra/core/agent'
+import { createVectorQueryTool } from '@mastra/rag'
+import { fastembed } from '@mastra/fastembed'
+import { ORACLEDB_PROMPT } from '@mastra/oracledb'
+
+const vectorQueryTool = createVectorQueryTool({
+  vectorStoreName: 'oracle',
+  indexName: 'support_articles',
+  model: fastembed,
+  enableFilter: true,
+})
+
+export const ragAgent = new Agent({
+  id: 'oracle-rag-agent',
+  name: 'Oracle RAG Agent',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  instructions: `
+Use the retrieval tool when you need source context.
+Available metadata fields: resource_id, thread_id, source, category, tags.
+${ORACLEDB_PROMPT}
+`,
+  tools: { vectorQueryTool },
+})
+```
+
+## Response types
+
+Query results are returned in this format:
+
+```ts
+interface QueryResult {
+  id: string
+  score: number
+  metadata: Record<string, any>
+  vector?: number[]
+}
+```
+
+## Usage example
+
+```ts title="src/mastra/agents/oracle-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+import { fastembed } from '@mastra/fastembed'
+import { OracleStore, OracleVector } from '@mastra/oracledb'
+
+const storage = new OracleStore({
+  id: 'oracle-storage',
+  user: process.env.ORACLE_DATABASE_USER,
+  password: process.env.ORACLE_DATABASE_PASSWORD,
+  connectString: process.env.ORACLE_DATABASE_CONNECT_STRING,
+})
+
+const vector = new OracleVector({
+  id: 'oracle-vector',
+  poolManager: storage.getPoolManager(),
+})
+
+export const oracleAgent = new Agent({
+  id: 'oracle-agent',
+  name: 'Oracle Agent',
+  instructions: 'You are an assistant with OracleDB-backed memory and semantic recall.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  memory: new Memory({
+    storage,
+    vector,
+    embedder: fastembed,
+    options: {
+      semanticRecall: { topK: 3, messageRange: 2 },
+    },
+  }),
+})
+```
+
+## Related
+
+- [OracleDB storage](/reference/storage/oracledb)
+- [Metadata Filters](/reference/rag/metadata-filters)
+- [Vector databases](/docs/rag/vector-databases)
