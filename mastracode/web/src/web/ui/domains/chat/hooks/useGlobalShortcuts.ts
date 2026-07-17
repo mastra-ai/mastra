@@ -4,25 +4,22 @@ import { useActiveProjectContext } from '../../workspaces';
 import { useChatTranscript } from '../context/useChatTranscript';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { useAbortAgentControllerMutation } from './useAgentControllerRunMutations';
+import { useAbortAgentControllerMutation } from '../../../../../shared/hooks/useAgentControllerRunMutations';
 
 export function useGlobalShortcuts() {
   const overlays = useOverlays();
   const { projects } = useActiveProjectContext();
-  const { resourceId, sessionEnabled, baseUrl } = useChatSessionContext();
+  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { busy } = useChatTranscript();
   const abortMutation = useAbortAgentControllerMutation({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
+    projectPath,
     baseUrl,
     enabled: sessionEnabled,
   });
 
   useKeyDown({
-    'mod+k': e => {
-      e.preventDefault();
-      overlays.toggle('palette');
-    },
     '?': e => {
       const target = e.target as HTMLElement | null;
       const typing = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable;
@@ -39,10 +36,6 @@ export function useGlobalShortcuts() {
       }
       if (overlays.isOpen('settings')) {
         overlays.close('settings');
-        return;
-      }
-      if (overlays.isOpen('palette')) {
-        overlays.close('palette');
         return;
       }
       if (overlays.isOpen('sidebar')) {

@@ -42,6 +42,7 @@ import { githubSignalsIncrementalScenario } from './github-signals-incremental.j
 import { githubSignalsNotificationReloadScenario } from './github-signals-notification-reload.js';
 import { githubSignalsPollingInboxScenario } from './github-signals-polling-inbox.js';
 import { githubSignalsUnsubscribeReloadScenario } from './github-signals-unsubscribe-reload.js';
+import { goalJudgeSingleRenderScenario } from './goal-judge-single-render.js';
 import { headlessMcpToolAvailabilityScenario } from './headless-mcp-tool-availability.js';
 import { integrationCommandsScenario } from './integration-commands.js';
 import { lifecycleHooksConfiguredScenario } from './lifecycle-hooks-configured.js';
@@ -67,6 +68,7 @@ import { omGlobalSettingsPersistenceScenario } from './om-global-settings-persis
 import { omModelOverrideReloadScenario } from './om-model-override-reload.js';
 import { omPackStartupRestoreScenario } from './om-pack-startup-restore.js';
 import { omSettingsScenario } from './om-settings.js';
+import { omStatusIndicatorScenario } from './om-status-indicator.js';
 import { omThresholdPersistenceScenario } from './om-threshold-persistence.js';
 import { openaiStrictSchemaScenario } from './openai-strict-schema.js';
 import { persistentGoalCommandsScenario } from './persistent-goal-commands.js';
@@ -79,8 +81,10 @@ import {
   pluginsAssetsLoadingScenario,
   pluginsBlockedConfigScenario,
   pluginsCommandUiScenario,
-  pluginsGithubInstallGhCliScenario,
-  pluginsGithubInstallMissingPackageManagerScenario,
+  pluginsGithubInstallInvalidPackageManagerScenario,
+  pluginsGithubInstallMissingCorepackScenario,
+  pluginsGithubInstallPnpm10Scenario,
+  pluginsGithubInstallPnpm11Scenario,
   pluginsGithubPollUpdateScenario,
   pluginsLocalHotReloadScenario,
   pluginsLocalToolScenario,
@@ -94,6 +98,7 @@ import { providerHistoryCompatScenario } from './provider-history-compat.js';
 import { providerHistoryRejectionRetryScenario } from './provider-history-rejection-retry.js';
 import { pruneCommandScenario } from './prune-command.js';
 import { quietSettingsScenario } from './quiet-settings.js';
+import { quietStreamingPreviewHeightScenario } from './quiet-streaming-preview-height.js';
 import { quietToolHistoryParityScenario } from './quiet-tool-history-parity.js';
 import { reportIssueCommandScenario } from './report-issue-command.js';
 import { requestAccessModalScenario } from './request-access-modal.js';
@@ -193,6 +198,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'github-signals-notification-reload': githubSignalsNotificationReloadScenario,
   'github-signals-polling-inbox': githubSignalsPollingInboxScenario,
   'github-signals-unsubscribe-reload': githubSignalsUnsubscribeReloadScenario,
+  'goal-judge-single-render': goalJudgeSingleRenderScenario,
   'controller-api-config': controllerApiConfigScenario,
   'headless-mcp-tool-availability': headlessMcpToolAvailabilityScenario,
   'visible-commands': visibleCommandsScenario,
@@ -220,6 +226,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'om-model-override-reload': omModelOverrideReloadScenario,
   'om-pack-startup-restore': omPackStartupRestoreScenario,
   'om-settings': omSettingsScenario,
+  'om-status-indicator': omStatusIndicatorScenario,
   'om-threshold-persistence': omThresholdPersistenceScenario,
   'openai-strict-schema': openaiStrictSchemaScenario,
   'persistent-goal-commands': persistentGoalCommandsScenario,
@@ -230,8 +237,10 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'plan-approval-request-changes': planApprovalRequestChangesScenario,
   'plugins-local-tool': pluginsLocalToolScenario,
   'plugins-local-hot-reload': pluginsLocalHotReloadScenario,
-  'plugins-github-install-gh-cli': pluginsGithubInstallGhCliScenario,
-  'plugins-github-install-missing-package-manager': pluginsGithubInstallMissingPackageManagerScenario,
+  'plugins-github-install-gh-cli-pnpm-10': pluginsGithubInstallPnpm10Scenario,
+  'plugins-github-install-gh-cli-pnpm-11': pluginsGithubInstallPnpm11Scenario,
+  'plugins-github-install-missing-corepack': pluginsGithubInstallMissingCorepackScenario,
+  'plugins-github-install-invalid-package-manager': pluginsGithubInstallInvalidPackageManagerScenario,
   'plugins-github-poll-update': pluginsGithubPollUpdateScenario,
   'plugins-blocked-config': pluginsBlockedConfigScenario,
   'plugins-scaffold-install-tool': pluginsScaffoldInstallToolScenario,
@@ -245,6 +254,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'prompt-queue-interleave': promptQueueInterleaveScenario,
   'prune-command': pruneCommandScenario,
   'quiet-settings': quietSettingsScenario,
+  'quiet-streaming-preview-height': quietStreamingPreviewHeightScenario,
   'quiet-tool-history-parity': quietToolHistoryParityScenario,
   'report-issue-command': reportIssueCommandScenario,
   'request-access-modal': requestAccessModalScenario,

@@ -5,6 +5,20 @@ import { createClient } from 'redis';
 import type { RedisClientOptions, RedisClientType } from 'redis';
 
 /**
+ * Flatten an error into searchable text. node-redis MULTI failures throw a
+ * `MultiErrorReply` whose own message is just "N commands failed…" — the real
+ * per-command errors (e.g. BUSYGROUP) live in `err.replies`, so those are
+ * folded in too.
+ */
+function errorText(err: unknown): string {
+  const parts: string[] = [err instanceof Error ? err.message : String(err)];
+  if (err instanceof Error && 'replies' in err && Array.isArray((err as { replies?: unknown[] }).replies)) {
+    parts.push(...(err as { replies: unknown[] }).replies.map(r => String(r)));
+  }
+  return parts.join('; ');
+}
+
+/**
  * Mastra PubSub backed by Redis Streams.
  *
  * - Each topic maps to a Redis stream key `<prefix>:<topic>`.
@@ -27,6 +41,20 @@ export interface RedisStreamsPubSubConfig {
    * 10_000 — set to 0 to disable trimming.
    */
   maxStreamLength?: number;
+  /**
+   * Idle expiry (in ms): a sliding TTL refreshed on every write to the stream
+   * (publish, nack retry, group re-creation). Each write resets it, so an
+   * actively-used stream never expires mid-flight; a stream left idle for the
+   * full duration is deleted by Redis automatically.
+   *
+   * This is a BACKSTOP, not the primary cleanup. Normal cleanup is explicit:
+   * `clearTopic` deletes a topic's stream the moment its lifecycle ends. This
+   * option only bounds memory for streams that never reach a `clearTopic` call
+   * — e.g. a run that crashed before cleanup — so they don't linger forever.
+   *
+   * Defaults to 0 (disabled) to preserve existing behavior.
+   */
+  streamIdleTtlMs?: number;
   /**
    * How often (in ms) each subscription runs XAUTOCLAIM to recover messages
    * that an earlier consumer in the group read but never acked. Defaults to
@@ -69,6 +97,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
   #keyPrefix: string;
   #blockMs: number;
   #maxStreamLength: number;
+  #streamIdleTtlMs: number;
   #reclaimIntervalMs: number;
   #reclaimIdleMs: number;
   #maxDeliveryAttempts: number;
@@ -92,9 +121,21 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     const url = options.url ?? options.redisOptions?.url ?? 'redis://localhost:6379';
     this.#connectOptions = { ...options.redisOptions, url };
     this.#writeClient = createClient(this.#connectOptions) as RedisClientType;
+    this.#logger = options.logger;
+    this.#attachErrorLogger(this.#writeClient, 'write');
     this.#keyPrefix = options.keyPrefix ?? 'mastra:topic';
     this.#blockMs = options.blockMs ?? 1000;
     this.#maxStreamLength = options.maxStreamLength ?? 10_000;
+    const ttl = options.streamIdleTtlMs ?? 0;
+    // Must be a non-negative integer: node-redis serializes the PEXPIRE arg with
+    // toString(), and Redis rejects a non-integer/Infinity ('value is not an
+    // integer or out of range'). Without this guard a bad value would poison
+    // every publish MULTI and be silently swallowed on the nack/recovery
+    // paths, so fail fast at construction instead.
+    if (!Number.isInteger(ttl) || ttl < 0) {
+      throw new Error(`redis-streams: streamIdleTtlMs must be a non-negative integer (milliseconds), got ${ttl}`);
+    }
+    this.#streamIdleTtlMs = ttl;
     this.#reclaimIntervalMs = options.reclaimIntervalMs ?? 30_000;
     this.#reclaimIdleMs = options.reclaimIdleMs ?? 60_000;
     const cap = options.maxDeliveryAttempts ?? 5;
@@ -108,7 +149,33 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     } else {
       this.#maxDeliveryAttempts = cap;
     }
-    this.#logger = options.logger;
+  }
+
+  /**
+   * Attach the `'error'` listener node-redis requires on every client. Without
+   * one, a mid-life socket close makes the client emit an unhandled `'error'`,
+   * which (per EventEmitter semantics) throws from inside RedisSocket's error
+   * handler BEFORE the built-in reconnect is scheduled — the process gets an
+   * uncaughtException and the client is left permanently un-reconnected
+   * (isOpen=true, isReady=false), hanging every subsequent command. Merely
+   * having a listener lets node-redis's own reconnect run.
+   *
+   * Logged at warn so operators can see connection churn, throttled to one line
+   * per 30s per client: node-redis re-emits `'error'` roughly every 500ms while
+   * a server is unreachable, and with one reader client per subscription an
+   * outage would otherwise flood the logs with thousands of identical lines.
+   */
+  #attachErrorLogger(client: RedisClientType, role: 'write' | 'read', extra: Record<string, unknown> = {}): void {
+    let lastWarnAt = 0;
+    client.on('error', err => {
+      const now = Date.now();
+      if (now - lastWarnAt < 30_000) return;
+      lastWarnAt = now;
+      this.#logger?.warn?.(`redis-streams: ${role} client connection error (node-redis will reconnect)`, {
+        ...extra,
+        err: err instanceof Error ? err.message : err,
+      });
+    });
   }
 
   #subKey(topic: string, cb: EventCallback): string {
@@ -170,12 +237,31 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
         threshold: this.#maxStreamLength,
       };
     }
-    const promise = this.#writeClient.xAdd(
-      this.#streamKey(topic),
-      '*',
-      { event: JSON.stringify(payload) },
-      xaddOptions,
-    );
+    const streamKey = this.#streamKey(topic);
+    // When a TTL is configured the write and its PEXPIRE run in one MULTI
+    // transaction. A detached PEXPIRE could fail or be skipped (process exit)
+    // after a successful XADD — and on the *last* write before a topic is
+    // abandoned there is no "next write" to self-heal, leaving an immortal
+    // stream despite the TTL. Atomicity closes that window.
+    const promise =
+      this.#streamIdleTtlMs > 0
+        ? this.#writeClient
+            .multi()
+            .xAdd(streamKey, '*', { event: JSON.stringify(payload) }, xaddOptions)
+            .pExpire(streamKey, this.#streamIdleTtlMs)
+            .exec()
+            .then(replies => {
+              // XADD in the same transaction guarantees the key exists, so
+              // PEXPIRE must reply 1; anything else means the TTL backstop is
+              // not actually armed for this stream.
+              if (Number(replies[1]) !== 1) {
+                this.#logger?.warn?.('redis-streams: PEXPIRE inside publish MULTI did not apply', {
+                  streamKey,
+                  reply: String(replies[1]),
+                });
+              }
+            })
+        : this.#writeClient.xAdd(streamKey, '*', { event: JSON.stringify(payload) }, xaddOptions);
     this.#pendingPublishes.add(promise);
     try {
       await promise;
@@ -226,6 +312,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     // Each subscription gets a dedicated reader connection because XREADGROUP
     // with BLOCK > 0 holds the connection until a message arrives.
     const readClient = createClient(this.#connectOptions) as RedisClientType;
+    this.#attachErrorLogger(readClient, 'read', { topic });
     await readClient.connect();
 
     const sub: Subscription = {
@@ -343,6 +430,38 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     // Wait for any in-flight publishes to settle.
     if (this.#pendingPublishes.size > 0) {
       await Promise.allSettled([...this.#pendingPublishes]);
+    }
+  }
+
+  /**
+   * Delete a topic's stream, and with it every consumer group on that stream.
+   * This is the Redis implementation of the optional `clearTopic` hook that
+   * consumers (e.g. `DurableAgent`) call to free a topic once its lifecycle is
+   * over — without it, a persistent backend accumulates every finished run's
+   * stream until Redis exhausts its memory.
+   *
+   * Because it removes events for ALL consumers and destroys their groups, only
+   * call it once nothing will read the topic again. A subscriber still attached
+   * when the stream is deleted recovers on its own (the read loop recreates the
+   * group on NOGROUP) but will have missed the deleted entries.
+   *
+   * Best-effort and non-throwing: callers commonly invoke this fire-and-forget
+   * (`void clearTopic(...)`), so a rejection would surface as an
+   * unhandledRejection. Failures are swallowed and logged; the `streamIdleTtlMs`
+   * backstop (when configured) reclaims anything a failed delete leaves behind.
+   */
+  async clearTopic(topic: string): Promise<void> {
+    if (this.#closed) return;
+    try {
+      await this.#ensureWriterConnected();
+      await this.#writeClient.del(this.#streamKey(topic));
+    } catch (err) {
+      // warn, not debug: a failed delete means the memory leak clearTopic
+      // exists to prevent is silently recurring for this topic.
+      this.#logger?.warn?.('redis-streams: clearTopic failed', {
+        topic,
+        err: err instanceof Error ? err.message : err,
+      });
     }
   }
 
@@ -494,12 +613,52 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
         });
       } catch (err) {
         if (sub.stopped) return;
-        this.#logger?.debug?.('redis-streams: xReadGroup failed', {
-          topic: sub.topic,
-          group: sub.group,
-          err: err instanceof Error ? err.message : err,
-        });
-        // Connection error or similar — pause briefly then retry.
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes('NOGROUP')) {
+          // The stream or its consumer group was deleted out from under us
+          // (clearTopic, a streamIdleTtlMs expiry, or an external FLUSH). XREADGROUP
+          // returns NOGROUP immediately, ignoring BLOCK, so without recovery
+          // this loop busy-retries forever and the subscriber goes permanently
+          // deaf — a later publish recreates the stream but not the group.
+          // Recreate the group (anchored at '0', matching subscribe()) so
+          // delivery resumes.
+          try {
+            if (this.#streamIdleTtlMs > 0) {
+              // MKSTREAM recreates an (empty) stream key, so the TTL must be
+              // stamped in the same MULTI — a detached PEXPIRE that fails or is
+              // skipped would leave an abandoned-but-recreated topic lingering
+              // forever with no further write to self-heal it. Note that when
+              // the group already exists (a sibling won the race), exec()
+              // throws a MultiErrorReply whose message does NOT contain
+              // "BUSYGROUP" — it lives in err.replies — while the PEXPIRE in
+              // the same transaction still applies, so the TTL is refreshed
+              // even on that path.
+              await this.#writeClient
+                .multi()
+                .xGroupCreate(sub.streamKey, sub.group, '0', { MKSTREAM: true })
+                .pExpire(sub.streamKey, this.#streamIdleTtlMs)
+                .exec();
+            } else {
+              await this.#writeClient.xGroupCreate(sub.streamKey, sub.group, '0', { MKSTREAM: true });
+            }
+            this.#logger?.debug?.('redis-streams: recreated consumer group after NOGROUP', {
+              topic: sub.topic,
+              group: sub.group,
+            });
+          } catch (recreateErr) {
+            const rmsg = errorText(recreateErr);
+            if (!rmsg.includes('BUSYGROUP')) {
+              this.#logger?.debug?.('redis-streams: consumer group re-create failed', { topic: sub.topic, err: rmsg });
+            }
+          }
+        } else {
+          this.#logger?.debug?.('redis-streams: xReadGroup failed', {
+            topic: sub.topic,
+            group: sub.group,
+            err: msg,
+          });
+        }
+        // Pause briefly then retry (with the group recreated, if it was NOGROUP).
         await new Promise(r => setTimeout(r, 100));
         continue;
       }
@@ -591,7 +750,21 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
         deliveryAttempt: attempt + 1,
       };
       try {
-        await this.#writeClient.xAdd(sub.streamKey, '*', { event: JSON.stringify(next) });
+        if (this.#streamIdleTtlMs > 0) {
+          // A nack republish is a write that keeps this stream in use, so it
+          // must refresh the TTL too — otherwise a retry near the end of the
+          // original window inherits the old expiry and the stream can be
+          // deleted while the retry is still being processed. Same MULTI as
+          // the write for the same reason as publish(): the republish may be
+          // the stream's final write.
+          await this.#writeClient
+            .multi()
+            .xAdd(sub.streamKey, '*', { event: JSON.stringify(next) })
+            .pExpire(sub.streamKey, this.#streamIdleTtlMs)
+            .exec();
+        } else {
+          await this.#writeClient.xAdd(sub.streamKey, '*', { event: JSON.stringify(next) });
+        }
       } catch (err) {
         this.#logger?.warn?.('redis-streams: nack republish failed; leaving original pending for reclaim', {
           topic: sub.topic,

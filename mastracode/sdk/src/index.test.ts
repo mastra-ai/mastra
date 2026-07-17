@@ -135,7 +135,7 @@ vi.mock('./onboarding/settings.js', () => ({
     },
     observability: { resources: {}, localTracing: false },
   })),
-  MEMORY_GATEWAY_PROVIDER: 'mastra',
+  MASTRA_GATEWAY_PROVIDER: 'mastra',
   resolveModelDefaults: vi.fn(() => ({ build: '', plan: '', fast: '' })),
   resolveOmModel: vi.fn(() => ''),
   resolveOmRoleModel: vi.fn(() => ''),
@@ -154,6 +154,10 @@ vi.mock('./providers/openai-codex.js', () => ({
 }));
 
 vi.mock('./providers/github-copilot.js', () => ({
+  setAuthStorage: vi.fn(),
+}));
+
+vi.mock('./providers/xai.js', () => ({
   setAuthStorage: vi.fn(),
 }));
 
@@ -222,6 +226,7 @@ describe('createAuthStorage', () => {
     const claudeMax = await import('./providers/claude-max.js');
     const openaiCodex = await import('./providers/openai-codex.js');
     const githubCopilot = await import('./providers/github-copilot.js');
+    const xai = await import('./providers/xai.js');
     const { createAuthStorage } = await import('./index.js');
 
     const authStorage = createAuthStorage();
@@ -229,6 +234,7 @@ describe('createAuthStorage', () => {
     expect(claudeMax.setAuthStorage).toHaveBeenCalledWith(authStorage);
     expect(openaiCodex.setAuthStorage).toHaveBeenCalledWith(authStorage);
     expect(githubCopilot.setAuthStorage).toHaveBeenCalledWith(authStorage);
+    expect(xai.setAuthStorage).toHaveBeenCalledWith(authStorage);
   });
 });
 

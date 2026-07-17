@@ -256,7 +256,7 @@ vi.mock('../onboarding/packs.js', () => ({
 vi.mock('../onboarding/settings.js', () => ({
   getCustomProviderId: vi.fn(),
   loadSettings: loadSettingsMock,
-  MEMORY_GATEWAY_PROVIDER: 'mastra',
+  MASTRA_GATEWAY_PROVIDER: 'mastra',
   resolveModelDefaults: vi.fn(() => ({ build: '', plan: '', fast: '' })),
   resolveOmModel: vi.fn(() => ''),
   resolveOmRoleModel: vi.fn(() => ''),
@@ -277,6 +277,10 @@ vi.mock('../providers/openai-codex.js', () => ({
 }));
 
 vi.mock('../providers/github-copilot.js', () => ({
+  setAuthStorage: vi.fn(),
+}));
+
+vi.mock('../providers/xai.js', () => ({
   setAuthStorage: vi.fn(),
 }));
 
@@ -380,6 +384,7 @@ describe('createMastraCode', () => {
     delete process.env.MC_E2E_PRIMARY_KEY;
     delete process.env.MC_E2E_SECONDARY_KEY;
     delete process.env.MASTRA_GATEWAY_API_KEY;
+    delete process.env.MASTRA_GATEWAY_URL;
   });
 
   it('registers the MastraCode gateway and app-provided model hooks on AgentController', async () => {
@@ -406,7 +411,7 @@ describe('createMastraCode', () => {
     expect(agentControllerConfig?.subagents).toEqual([subagent]);
   }, 10_000);
 
-  it('uses configured memory gateway settings when creating the MastraCode gateway', async () => {
+  it('uses configured mastra gateway settings when creating the MastraCode gateway', async () => {
     const settings = createMockSettings();
     settings.memoryGateway = { baseUrl: 'https://gateway.example.com/v1' };
     loadSettingsMock.mockReturnValue(settings);
@@ -443,6 +448,27 @@ describe('createMastraCode', () => {
     expect(controllerConstructorMock).toHaveBeenCalled();
     const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as { memory?: unknown } | undefined;
     expect(typeof agentControllerConfig?.memory).toBe('function');
+  });
+
+  it('passes an injected vector to dynamic memory', async () => {
+    const vector = { id: 'custom-vector' };
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode({ vector: vector as any });
+
+    expect(getDynamicMemoryMock).toHaveBeenCalledWith(expect.anything(), vector);
+    expect(createVectorStoreMock).not.toHaveBeenCalled();
+  });
+
+  it('requires an explicit backend for unknown injected storage implementations', async () => {
+    const { MastraCompositeStore } = await import('@mastra/core/storage');
+    const storage = Object.create(MastraCompositeStore.prototype) as InstanceType<typeof MastraCompositeStore>;
+    const { createMastraCode } = await import('../index.js');
+
+    await expect(createMastraCode({ storage })).rejects.toThrow(
+      'storageBackend is required when injecting a custom storage instance.',
+    );
+    expect(createStorageMock).not.toHaveBeenCalled();
   });
 
   it('uses caller memory while applying configDir to startup services and state', async () => {
@@ -796,6 +822,19 @@ describe('createMastraCode', () => {
       | undefined;
     expect(agentConfig?.inputProcessors?.map(processor => processor.id)).toContain('provider-history-compat');
     expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toContain('provider-history-compat');
+  });
+
+  it('does not configure the polling GitHub provider when the embedding disables it', async () => {
+    loadSettingsMock.mockReturnValue({
+      ...createMockSettings(),
+      signals: { unixSocketPubSub: false, experimentalGithubSignals: true },
+    });
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode({ disableGithubSignals: true });
+
+    const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as { signals?: Array<{ id?: string }> } | undefined;
+    expect(agentConfig?.signals?.map(signal => signal.id)).not.toContain('github-signals');
   });
 
   it('configures GitHubSignals as a signal provider for local PR subscriptions', async () => {

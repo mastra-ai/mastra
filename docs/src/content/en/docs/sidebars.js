@@ -922,6 +922,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'evals/multi-turn',
+              label: 'Multi-turn Evals',
+            },
+            {
+              type: 'doc',
               id: 'evals/custom-scorers',
               label: 'Custom Scorers',
             },
@@ -979,6 +984,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'deployment/sandbox',
+              label: 'Sandbox',
+            },
+            {
+              type: 'doc',
               id: 'deployment/web-framework',
               label: 'Web Framework',
             },
@@ -1001,6 +1011,22 @@ const sidebars = {
           type: 'doc',
           id: 'mastra-platform/overview',
           label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/deploy',
+          label: 'Deploy',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/environments',
+          label: 'Environments',
+          customProps: {
+            tags: ['new'],
+          },
         },
         {
           type: 'doc',

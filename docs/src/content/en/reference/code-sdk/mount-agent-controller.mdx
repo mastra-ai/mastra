@@ -88,6 +88,13 @@ const { controller } = await mountAgentControllerOnMastra({ mastra })
     isOptional: true,
   },
   {
+    name: 'postToolObserver',
+    type: '(context: ToolAfterHookContext) => void | Promise<void>',
+    description:
+      'Observes completed tool calls without replacing the tool or changing hook-manager behavior. Observer errors are logged and do not fail successful tool calls.',
+    isOptional: true,
+  },
+  {
     name: 'disabledTools',
     type: 'string[]',
     description: 'Tools removed from the dynamic tool set before exposure to the model.',

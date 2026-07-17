@@ -7,11 +7,11 @@ import {
   usePauseAgentControllerGoalMutation,
   useResumeAgentControllerGoalMutation,
   useSetAgentControllerGoalMutation,
-} from '../hooks/useAgentControllerGoalMutations';
+} from '../../../../../shared/hooks/useAgentControllerGoalMutations';
 import {
   useAbortAgentControllerMutation,
   useFollowUpAgentControllerMutation,
-} from '../hooks/useAgentControllerRunMutations';
+} from '../../../../../shared/hooks/useAgentControllerRunMutations';
 import type { SlashCommand } from '../services/commands';
 import { SLASH_COMMANDS } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
@@ -25,12 +25,18 @@ const TOOL_CATEGORIES: ToolCategory[] = ['read', 'edit', 'execute', 'mcp', 'othe
 
 export function useRunPaletteCommand(setComposerCommandName: Dispatch<SetStateAction<string | undefined>>) {
   const { activeProject } = useActiveProjectContext();
-  const { resourceId, sessionEnabled, baseUrl } = useChatSessionContext();
-  const { transcript, localUser, pushNotice } = useChatTranscript();
+  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
+  const { transcript, busy, localUser, pushNotice } = useChatTranscript();
   const { activeModeId } = useChatModes();
   const { activeModelId, setModel } = useChatModels();
 
-  const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, baseUrl, enabled: sessionEnabled };
+  const hookArgs = {
+    agentControllerId: AGENT_CONTROLLER_ID,
+    resourceId,
+    projectPath,
+    baseUrl,
+    enabled: sessionEnabled,
+  };
   const clearGoalMutation = useClearAgentControllerGoalMutation(hookArgs);
   const pauseGoalMutation = usePauseAgentControllerGoalMutation(hookArgs);
   const resumeGoalMutation = useResumeAgentControllerGoalMutation(hookArgs);
@@ -94,7 +100,7 @@ export function useRunPaletteCommand(setComposerCommandName: Dispatch<SetStateAc
             `Mode: ${activeModeId ?? '—'}`,
             `Model: ${activeModelId ?? '—'}`,
             `Thread: ${transcript.threadId ?? '—'}`,
-            `Running: ${transcript.running}`,
+            `Running: ${busy}`,
           ].join('\n'),
         );
         return;

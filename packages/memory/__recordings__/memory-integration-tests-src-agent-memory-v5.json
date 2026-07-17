@@ -1332,7 +1332,7 @@
       }
     },
     {
-      "hash": "c609edb5cbc03e8d",
+      "hash": "a68b5b627bb6ec86",
       "request": {
         "url": "https://openrouter.ai/api/v1/chat/completions",
         "method": "POST",
@@ -1341,7 +1341,12 @@
           "messages": [
             {
               "role": "system",
-              "content": "You are a helpful assistant that thinks through problems."
+              "content": [
+                {
+                  "text": "You are a helpful assistant that thinks through problems.",
+                  "type": "text"
+                }
+              ]
             },
             {
               "role": "user",

@@ -50,6 +50,8 @@ const CODE_HIGHLIGHT_THEME: HighlightTheme = {
 const COMPACT_TOOL_COLOR = mastra.orange;
 const COMPACT_TOOL_ARGS_BG = '#141414';
 const QUIET_TOOL_RAIL = tintHex(COMPACT_TOOL_COLOR, 0.35);
+const QUIET_CODE_PREVIEW_MAX_CHARS = 2_000;
+const QUIET_SHELL_COMMAND_HIGHLIGHT_MAX_CHARS = 2_000;
 
 function normalizeHexColor(color: string | undefined): string | undefined {
   if (!color || !/^#[0-9a-f]{6}$/i.test(color)) return undefined;
@@ -203,6 +205,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   private streamingOutput = ''; // Buffer for streaming shell output
   private quietDisplayMode: QuietToolDisplayMode;
   private quietPreviewLineLimit: number;
+  private quietPreviewRowFloor = 0;
   private compactToolContinuation = false;
   private compactToolHasFollowingContinuation = false;
   private compactToolPreviousSummary: string | undefined;
@@ -278,6 +281,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   setQuietPreviewLineLimit(limit: number): void {
     const normalizedLimit = Number.isFinite(limit) ? limit : 2;
     this.quietPreviewLineLimit = Math.min(8, Math.max(0, Math.floor(normalizedLimit)));
+    this.quietPreviewRowFloor = Math.min(this.quietPreviewRowFloor, this.quietPreviewLineLimit);
     this.rebuild();
   }
 
@@ -306,7 +310,12 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   }
 
   hasQuietStreamingPreview(): boolean {
-    return this.quietDisplayMode === 'quiet' && this.quietPreviewLineLimit > 0 && this.getQuietActivePreview() !== '';
+    return (
+      this.quietDisplayMode === 'quiet' &&
+      this.toolName !== MC_TOOLS.EXECUTE_COMMAND &&
+      this.quietPreviewLineLimit > 0 &&
+      (this.quietPreviewRowFloor > 0 || this.getQuietActivePreview() !== '')
+    );
   }
 
   setCompactToolContinuation(continuation: boolean, previousSummary?: string): void {
@@ -443,22 +452,31 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       return [];
 
     const preview = this.getQuietActivePreview();
-    if (!preview) return [];
+    let lines: string[] = [];
 
-    if (this.isQuietCodePreviewTool()) {
-      return this.getQuietCodePreviewLines(preview, maxLineWidth);
+    if (preview) {
+      if (this.isQuietCodePreviewTool()) {
+        lines = this.getQuietCodePreviewLines(preview, maxLineWidth);
+      } else {
+        const firstLineWidth = Math.max(10, maxLineWidth - 4);
+        const continuationWidth = Math.max(10, maxLineWidth - 4);
+        const wrapped = this.wrapPreviewLines(preview, firstLineWidth, continuationWidth).slice(
+          -this.quietPreviewLineLimit,
+        );
+
+        lines = wrapped.map(line => {
+          const linePrefix = `  ${chalk.hex(this.getQuietToolRailColor())('│')} `;
+          return truncateAnsi(`${linePrefix}${this.formatQuietActivePreview(line)}`, maxLineWidth);
+        });
+      }
     }
 
-    const firstLineWidth = Math.max(10, maxLineWidth - 4);
-    const continuationWidth = Math.max(10, maxLineWidth - 4);
-    const wrapped = this.wrapPreviewLines(preview, firstLineWidth, continuationWidth).slice(
-      -this.quietPreviewLineLimit,
-    );
-
-    return wrapped.map(line => {
+    this.quietPreviewRowFloor = Math.min(this.quietPreviewLineLimit, Math.max(this.quietPreviewRowFloor, lines.length));
+    const padding = Array.from({ length: this.quietPreviewRowFloor - lines.length }, () => {
       const linePrefix = `  ${chalk.hex(this.getQuietToolRailColor())('│')} `;
-      return truncateAnsi(`${linePrefix}${this.formatQuietActivePreview(line)}`, maxLineWidth);
+      return truncateAnsi(linePrefix, maxLineWidth);
     });
+    return [...padding, ...lines];
   }
 
   private getQuietCodePreviewLines(preview: string, maxLineWidth: number): string[] {
@@ -510,95 +528,110 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     }
   }
 
-  private tokenizeQuietShellCommand(command: string): Array<{ text: string; color: (value: string) => string }> {
-    const tokens = command.match(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\s+|&&|\|\||[|;&()<>]|[^\s|;&()<>]+/g) ?? [''];
+  private highlightQuietShellCommandToken(token: string): string {
+    if (token === '&&' || token === '||' || token === '|' || token === ';' || token === '&') {
+      return theme.fg('muted', token);
+    }
+    if (token === '(' || token === ')' || token === '<' || token === '>') {
+      return theme.fg('muted', token);
+    }
+    if (/^\d+(?:\.\d+)?$/.test(token)) return chalk.white(token);
+    if (SHELL_CONTROL_WORDS.has(token)) return chalk.blue(token);
+    return theme.fg('toolArgs', token);
+  }
 
-    return tokens.map(token => {
-      if (/^\s+$/.test(token)) return { text: token, color: (value: string) => value };
-      if ((token.startsWith('"') && token.endsWith('"')) || (token.startsWith("'") && token.endsWith("'"))) {
-        return { text: token, color: chalk.white };
+  private highlightQuietShellCommandLine(
+    line: string,
+    quote: 'single' | 'double' | undefined,
+  ): { line: string; quote: 'single' | 'double' | undefined } {
+    let highlighted = '';
+    let plain = '';
+    let quoted = '';
+    let activeQuote = quote;
+
+    const flushPlain = () => {
+      if (!plain) return;
+      highlighted += plain.replace(
+        /&&|\|\||[|;&()<>]|-{1,2}[a-zA-Z0-9_.=/-]+|\b\d+(?:\.\d+)?\b|\b[a-zA-Z_][a-zA-Z0-9_]*\b/g,
+        token => this.highlightQuietShellCommandToken(token),
+      );
+      plain = '';
+    };
+    const flushQuoted = () => {
+      if (!quoted) return;
+      highlighted += chalk.white(quoted);
+      quoted = '';
+    };
+
+    for (let index = 0; index < line.length; index++) {
+      const char = line[index]!;
+
+      if (activeQuote) {
+        quoted += char;
+        let precedingBackslashes = 0;
+        for (let cursor = index - 1; cursor >= 0 && line[cursor] === '\\'; cursor--) {
+          precedingBackslashes++;
+        }
+        const closesQuote =
+          (activeQuote === 'single' && char === "'") ||
+          (activeQuote === 'double' && char === '"' && precedingBackslashes % 2 === 0);
+        if (closesQuote) {
+          flushQuoted();
+          activeQuote = undefined;
+        }
+        continue;
       }
-      if (token === '&&' || token === '||' || token === '|' || token === ';' || token === '&') {
-        return { text: token, color: (value: string) => theme.fg('muted', value) };
+
+      if (char === "'" || char === '"') {
+        flushPlain();
+        activeQuote = char === "'" ? 'single' : 'double';
+        quoted += char;
+        continue;
       }
-      if (token === '(' || token === ')' || token === '<' || token === '>') {
-        return { text: token, color: (value: string) => theme.fg('muted', value) };
-      }
-      if (SHELL_CONTROL_WORDS.has(token)) {
-        return { text: token, color: chalk.blue };
-      }
-      return { text: token, color: (value: string) => theme.fg('toolArgs', value) };
-    });
+
+      plain += char;
+    }
+
+    flushPlain();
+    flushQuoted();
+    return { line: highlighted, quote: activeQuote };
   }
 
   private wrapQuietShellCommand(command: string, width: number): string[] {
     const lines: string[] = [];
     let current = '';
     let currentWidth = 0;
+    let highlightedChars = 0;
+    let quote: 'single' | 'double' | undefined;
 
     const pushCurrent = () => {
-      lines.push(current);
+      const highlightLength = Math.min(current.length, QUIET_SHELL_COMMAND_HIGHLIGHT_MAX_CHARS - highlightedChars);
+      const highlighted = this.highlightQuietShellCommandLine(current.slice(0, highlightLength), quote);
+      lines.push(highlighted.line + current.slice(highlightLength));
+      highlightedChars += highlightLength;
+      quote = highlighted.quote;
       current = '';
       currentWidth = 0;
     };
 
-    const takeVisiblePrefix = (text: string, maxWidth: number): string => {
-      let chunk = '';
-      let chunkWidth = 0;
-
-      for (const char of text) {
-        const charWidth = visibleWidth(char);
-        if (chunk && chunkWidth + charWidth > maxWidth) break;
-        chunk += char;
-        chunkWidth += charWidth;
-        if (chunkWidth >= maxWidth) break;
+    for (const char of command) {
+      if (char === '\n') {
+        pushCurrent();
+        continue;
       }
 
-      return chunk;
-    };
-
-    const wrapSourceLine = (sourceLine: string) => {
-      for (const token of this.tokenizeQuietShellCommand(sourceLine)) {
-        let remaining = token.text;
-
-        while (remaining.length > 0) {
-          if (currentWidth === 0 && /^\s+$/.test(remaining)) break;
-
-          const available = width - currentWidth;
-          if (available <= 0) {
-            pushCurrent();
-            continue;
-          }
-
-          const remainingWidth = visibleWidth(remaining);
-          if (remainingWidth <= available) {
-            current += token.color(remaining);
-            currentWidth += remainingWidth;
-            break;
-          }
-
-          if (currentWidth > 0 && !/^\s+$/.test(remaining)) {
-            pushCurrent();
-            continue;
-          }
-
-          const chunk = takeVisiblePrefix(remaining, available);
-          current += token.color(chunk);
-          currentWidth += visibleWidth(chunk);
-          remaining = remaining.slice(chunk.length);
-          pushCurrent();
-        }
+      const charWidth = visibleWidth(char);
+      if (current && currentWidth + charWidth > width) {
+        pushCurrent();
       }
-    };
+      if (!current && /^\s$/.test(char)) continue;
 
-    const sourceLines = command.split('\n');
-    sourceLines.forEach((sourceLine, index) => {
-      wrapSourceLine(sourceLine);
-      if (index < sourceLines.length - 1) pushCurrent();
-    });
+      current += char;
+      currentWidth += charWidth;
+    }
 
-    if (current) lines.push(current);
-    return lines.length ? lines : [''];
+    if (current || lines.length === 0) pushCurrent();
+    return lines;
   }
 
   private wrapPreviewLines(preview: string, firstLineWidth: number, continuationWidth: number): string[] {
@@ -735,7 +768,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       case MC_TOOLS.STRING_REPLACE_LSP:
         return this.formatQuietEditPreview();
       case MC_TOOLS.WRITE_FILE:
-        return this.getMultilinePreview('content', Number.POSITIVE_INFINITY, false);
+        return this.getLatestCodePreview('content');
       case MC_TOOLS.SEARCH_CONTENT:
         return this.formatSearchDetail();
       case MC_TOOLS.LSP_INSPECT:
@@ -747,9 +780,25 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
 
   private formatQuietEditPreview(): string {
     return (
-      this.getMultilinePreview('new_str', Number.POSITIVE_INFINITY, false) ||
-      this.getMultilinePreview('new_string', Number.POSITIVE_INFINITY, false)
+      this.getLatestCodePreview('new_str') ||
+      this.getLatestCodePreview('new_string') ||
+      this.getLatestCodePreview('old_str') ||
+      this.getLatestCodePreview('old_string')
     );
+  }
+
+  private getLatestCodePreview(key: string): string {
+    const value = this.getFirstStringArg(key);
+    if (!value) return '';
+    const normalized = value.replace(/\r\n/g, '\n').replace(/^\n+|\n+$/g, '');
+    if (!normalized) return '';
+    const lines = normalized.split('\n');
+    const latestLines = lines.slice(-Math.max(1, this.quietPreviewLineLimit)).join('\n');
+    if (this.isPartial && (this.toolName === MC_TOOLS.WRITE_FILE || this.toolName === MC_TOOLS.STRING_REPLACE_LSP)) {
+      return latestLines;
+    }
+    if (latestLines.length <= QUIET_CODE_PREVIEW_MAX_CHARS) return latestLines;
+    return latestLines.slice(-QUIET_CODE_PREVIEW_MAX_CHARS);
   }
 
   private formatQuietErrorPreview(): string {
@@ -909,19 +958,6 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
 
   private looksLikeViewOutput(output: string): boolean {
     return output.split('\n').some(line => /^\s*\d+[\t→]/.test(line));
-  }
-
-  private getMultilinePreview(key: string, maxLength = 80, includeLineCount = true): string {
-    const value = this.getFirstStringArg(key);
-    if (!value) return '';
-
-    const lines = value.split('\n');
-    const previewText = includeLineCount ? (lines[0] ?? '') : value.replace(/\r\n/g, '\n').replace(/^\n+|\n+$/g, '');
-    const truncated =
-      Number.isFinite(maxLength) && previewText.length > maxLength
-        ? `${previewText.slice(0, maxLength)}…`
-        : previewText;
-    return includeLineCount && lines.length > 1 ? `${truncated} (${lines.length} lines)` : truncated;
   }
 
   private stripAnsi(value: string): string {

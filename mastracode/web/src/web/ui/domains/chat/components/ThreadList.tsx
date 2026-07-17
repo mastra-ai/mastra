@@ -13,16 +13,13 @@ import { useOverlays } from '../../../lib/overlays';
 import { useToast } from '../../../ui';
 import { useActiveProjectContext } from '../../workspaces/context/ActiveProjectProvider';
 import { useChatSessionContext } from '../context/useChatSessionContext';
-import { useChatTranscript } from '../context/useChatTranscript';
 import {
   useCloneAgentControllerThreadMutation,
   useDeleteAgentControllerThreadMutation,
   useRenameAgentControllerThreadMutation,
-} from '../hooks/useAgentControllerThreadMutations';
-import { useAgentControllerThreads } from '../hooks/useAgentControllerThreads';
+} from '../../../../../shared/hooks/useAgentControllerThreadMutations';
+import { useAgentControllerThreads } from '../../../../../shared/hooks/useAgentControllerThreads';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-
-const MAX_THREADS = 5;
 
 export function ThreadList() {
   const { activeProject } = useActiveProjectContext();
@@ -41,19 +38,23 @@ export function ThreadList() {
 
   if (!activeProject) return null;
 
+  // Worktrees hold a single conversation: show its title for context, but no
+  // "Threads" header/count, no rename/clone/delete actions, and no way to
+  // create more threads. Every GitHub chat target is a worktree (the repo
+  // root is not a workspace), so any GitHub project path is read-only here.
+  const readOnly = activeProject.source === 'github' && Boolean(projectPath);
+
   const threads = threadsQuery.data ?? [];
   const activeThreadId = routeThreadId;
-  const sortedThreads = [...threads]
-    .sort((a, b) => {
-      const ta = a.updatedAt ?? a.createdAt ?? '';
-      const tb = b.updatedAt ?? b.createdAt ?? '';
-      return tb.localeCompare(ta);
-    })
-    .slice(0, MAX_THREADS);
+  const sortedThreads = [...threads].sort((a, b) => {
+    const ta = a.updatedAt ?? a.createdAt ?? '';
+    const tb = b.updatedAt ?? b.createdAt ?? '';
+    return tb.localeCompare(ta);
+  });
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
-      <ThreadListHeader threadCount={threads.length} />
+      {!readOnly && <ThreadListHeader threadCount={threads.length} />}
       <div role="list" className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
         {sortedThreads.length === 0 && (
           <Txt as="div" variant="ui-sm" className="px-2 py-3 text-icon3">
@@ -68,14 +69,10 @@ export function ThreadList() {
               key={thread.id}
               thread={thread}
               active={thread.id === activeThreadId}
+              readOnly={readOnly}
               onStartRename={() => setRenamingId(thread.id)}
             />
           ),
-        )}
-        {threads.length > MAX_THREADS && (
-          <Txt as="div" variant="ui-xs" className="px-2 py-1.5 text-icon3">
-            +{threads.length - MAX_THREADS} more
-          </Txt>
         )}
       </div>
     </div>
@@ -158,14 +155,15 @@ function RenameThreadRow({ thread, onDone }: { thread: AgentControllerThreadInfo
 function ThreadRow({
   thread,
   active,
+  readOnly,
   onStartRename,
 }: {
   thread: AgentControllerThreadInfo;
   active: boolean;
+  readOnly: boolean;
   onStartRename: () => void;
 }) {
   const hookArgs = useThreadHookArgs();
-  const { reset } = useChatTranscript();
   const overlays = useOverlays();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -181,7 +179,6 @@ function ThreadRow({
 
   const cloneThread = async () => {
     const clonedThread = await cloneThreadMutation.mutateAsync({ sourceThreadId: thread.id });
-    reset(clonedThread.id);
     toast('Thread cloned', 'success');
     void navigate(`/threads/${clonedThread.id}`);
   };
@@ -190,7 +187,6 @@ function ThreadRow({
     await deleteThreadMutation.mutateAsync(thread.id);
     toast('Thread deleted');
     if (thread.id === routeThreadId) {
-      reset();
       void navigate('/new');
     }
   };
@@ -205,28 +201,30 @@ function ThreadRow({
         <span className="truncate text-ui-sm text-icon6">{thread.title || 'Untitled thread'}</span>
         <span className="text-ui-xs text-icon3">{relativeTime(thread.updatedAt ?? thread.createdAt ?? '')}</span>
       </button>
-      <DropdownMenu>
-        <DropdownMenu.Trigger
-          render={
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Thread actions"
-              className="absolute right-1 top-1 opacity-0 group-hover:opacity-100 data-[popup-open]:opacity-100"
-            >
-              <MoreHorizontal size={15} />
-            </Button>
-          }
-        />
-        <DropdownMenu.Content align="end" className="min-w-28">
-          <DropdownMenu.Item onClick={onStartRename}>Rename</DropdownMenu.Item>
-          <DropdownMenu.Item onClick={() => void cloneThread()}>Clone</DropdownMenu.Item>
-          <DropdownMenu.Item variant="destructive" onClick={() => void deleteThread()}>
-            Delete
-          </DropdownMenu.Item>
-        </DropdownMenu.Content>
-      </DropdownMenu>
+      {!readOnly && (
+        <DropdownMenu>
+          <DropdownMenu.Trigger
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Thread actions"
+                className="absolute right-1 top-1 opacity-0 group-hover:opacity-100 data-[popup-open]:opacity-100"
+              >
+                <MoreHorizontal size={15} />
+              </Button>
+            }
+          />
+          <DropdownMenu.Content align="end" className="min-w-28">
+            <DropdownMenu.Item onClick={onStartRename}>Rename</DropdownMenu.Item>
+            <DropdownMenu.Item onClick={() => void cloneThread()}>Clone</DropdownMenu.Item>
+            <DropdownMenu.Item variant="destructive" onClick={() => void deleteThread()}>
+              Delete
+            </DropdownMenu.Item>
+          </DropdownMenu.Content>
+        </DropdownMenu>
+      )}
     </div>
   );
 }

@@ -42,6 +42,28 @@ export async function handleAskQuestion(
   const { state } = ctx;
 
   return new Promise(resolve => {
+    // The suspended run can die after the question is rendered (e.g. persisting
+    // the suspended snapshot failed), in which case the session cancels the
+    // suspension because the answer could never be resumed. That cancellation
+    // must bypass the TUI's serialized event queue — the queue is parked on
+    // this very promise — so listen on the session directly and retract the
+    // prompt out-of-band.
+    let cancelled = false;
+    let retract: () => void = () => {};
+    const unsubscribeCancel =
+      state.session.subscribe?.(event => {
+        if (event.type !== 'tool_suspension_cancelled' || event.toolCallId !== toolCallId) return;
+        if (cancelled) return;
+        cancelled = true;
+        unsubscribeCancel();
+        retract();
+        resolve();
+      }) ?? (() => {});
+    const finish = () => {
+      unsubscribeCancel();
+      resolve();
+    };
+
     if (state.options.inlineQuestions) {
       // Look up the streaming component created for THIS tool call. Using the
       // per-toolCallId map (instead of the single lastAskUserComponent field)
@@ -50,7 +72,23 @@ export async function handleAskQuestion(
       const askUserComponent = state.pendingAskUserComponents?.get(toolCallId) ?? state.lastAskUserComponent;
       state.pendingAskUserComponents?.delete(toolCallId);
 
+      let shownComponent: AskQuestionInlineComponent | undefined = askUserComponent;
+      retract = () => {
+        shownComponent?.dismiss();
+        if (state.activeInlineQuestion === shownComponent) {
+          state.activeInlineQuestion = undefined;
+          processNextInlineQuestion(state);
+        }
+        state.ui.requestRender();
+      };
+
       const activate = () => {
+        // Retracted while waiting in the queue — skip activation and let the
+        // next queued question take the slot.
+        if (cancelled) {
+          processNextInlineQuestion(state);
+          return;
+        }
         try {
           let questionComponent: AskQuestionInlineComponent;
 
@@ -67,19 +105,19 @@ export async function handleAskQuestion(
               onSubmit: answer => {
                 state.activeInlineQuestion = undefined;
                 state.session.respondToToolSuspension({ toolCallId, resumeData: answer });
-                resolve();
+                finish();
                 processNextInlineQuestion(state);
               },
               onSubmitMulti: answers => {
                 state.activeInlineQuestion = undefined;
                 state.session.respondToToolSuspension({ toolCallId, resumeData: answers });
-                resolve();
+                finish();
                 processNextInlineQuestion(state);
               },
               onCancel: () => {
                 state.activeInlineQuestion = undefined;
                 state.session.respondToToolSuspension({ toolCallId, resumeData: '(skipped)' });
-                resolve();
+                finish();
                 processNextInlineQuestion(state);
               },
             });
@@ -96,19 +134,19 @@ export async function handleAskQuestion(
                 onSubmit: answer => {
                   state.activeInlineQuestion = undefined;
                   state.session.respondToToolSuspension({ toolCallId, resumeData: answer });
-                  resolve();
+                  finish();
                   processNextInlineQuestion(state);
                 },
                 onSubmitMulti: answers => {
                   state.activeInlineQuestion = undefined;
                   state.session.respondToToolSuspension({ toolCallId, resumeData: answers });
-                  resolve();
+                  finish();
                   processNextInlineQuestion(state);
                 },
                 onCancel: () => {
                   state.activeInlineQuestion = undefined;
                   state.session.respondToToolSuspension({ toolCallId, resumeData: '(skipped)' });
-                  resolve();
+                  finish();
                   processNextInlineQuestion(state);
                 },
               },
@@ -118,6 +156,7 @@ export async function handleAskQuestion(
           }
 
           // Store as active question
+          shownComponent = questionComponent;
           state.activeInlineQuestion = questionComponent;
 
           state.ui.requestRender();
@@ -131,7 +170,7 @@ export async function handleAskQuestion(
           // Don't let ask_user errors crash the process — skip the question
           state.activeInlineQuestion = undefined;
           state.session.respondToToolSuspension({ toolCallId, resumeData: '(skipped)' });
-          resolve();
+          finish();
           processNextInlineQuestion(state);
         }
       };
@@ -143,6 +182,10 @@ export async function handleAskQuestion(
         activate();
       }
     } else {
+      retract = () => {
+        state.ui.hideOverlay();
+        state.ui.requestRender();
+      };
       // Dialog mode: Show overlay. Multiline opt-in matches the inline branch.
       const dialog = new AskQuestionDialogComponent({
         question,
@@ -153,17 +196,17 @@ export async function handleAskQuestion(
         onSubmit: answer => {
           state.ui.hideOverlay();
           state.session.respondToToolSuspension({ toolCallId, resumeData: answer });
-          resolve();
+          finish();
         },
         onSubmitMulti: answers => {
           state.ui.hideOverlay();
           state.session.respondToToolSuspension({ toolCallId, resumeData: answers });
-          resolve();
+          finish();
         },
         onCancel: () => {
           state.ui.hideOverlay();
           state.session.respondToToolSuspension({ toolCallId, resumeData: '(skipped)' });
-          resolve();
+          finish();
         },
       });
       showModalOverlay(state.ui, dialog, { widthPercent: 0.7 });

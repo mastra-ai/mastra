@@ -1,4 +1,5 @@
 {
   "attachment": ["google/gemma-4-31b-it", "minimaxai/minimax-m3", "moonshotai/kimi-k2.6"],
-  "temperature": ["google/gemma-4-31b-it", "minimaxai/minimax-m3", "moonshotai/kimi-k2.6", "zai-org/glm-5.2"]
+  "temperature": ["google/gemma-4-31b-it", "minimaxai/minimax-m3", "moonshotai/kimi-k2.6", "zai-org/glm-5.2"],
+  "structuredOutput": ["google/gemma-4-31b-it", "minimaxai/minimax-m3", "moonshotai/kimi-k2.6", "zai-org/glm-5.2"]
 }

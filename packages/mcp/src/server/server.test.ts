@@ -2,6 +2,7 @@ import http from 'node:http';
 import path from 'node:path';
 import type { ServerType } from '@hono/node-server';
 import { serve } from '@hono/node-server';
+import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
 import type { ToolsInput } from '@mastra/core/agent';
 import type { MCPServerConfig, Repository, PackageInfo, RemoteInfo } from '@mastra/core/mcp';
@@ -21,7 +22,6 @@ import type {
   ListResourceTemplatesResult,
   Prompt,
 } from '@modelcontextprotocol/sdk/types.js';
-import { MockLanguageModelV2, convertArrayToReadableStream } from 'ai/test';
 import getPort from 'get-port';
 import { Hono } from 'hono';
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi, beforeEach } from 'vitest';
@@ -2611,9 +2611,10 @@ describe('MCPServer - Elicitation', () => {
       message: 'This should fail gracefully',
     });
 
-    // When no elicitation handler is provided, the server's elicitInput should fail
-    // and the tool should return a reject response
-    expect(result.content[0].text).toContain('Method not found');
+    // When no elicitation handler is provided, the client does not advertise the
+    // elicitation capability, so the server's elicitInput fails before sending and
+    // the tool returns the error text.
+    expect(result.content[0].text).toContain('Client does not support form elicitation');
   });
 
   it('should validate elicitation request schema structure', async () => {
@@ -2698,24 +2699,32 @@ describe('MCPServer - Elicitation', () => {
       },
     });
 
-    // Each client registers its own independent handler
-    elicitationClient1.elicitation.onRequest('elicitation1', client1Handler);
-    elicitationClient2.elicitation.onRequest('elicitation2', client2Handler);
+    // Each client registers its own independent handler. onRequest is async (it
+    // resolves the per-server client), so it must be awaited before listTools()
+    // connects — otherwise the elicitation capability may be registered after
+    // connect(), which the SDK rejects.
+    await elicitationClient1.elicitation.onRequest('elicitation1', client1Handler);
+    await elicitationClient2.elicitation.onRequest('elicitation2', client2Handler);
 
-    const tools = await elicitationClient1.listTools();
-    const tool = tools['elicitation1_testElicitationTool'];
-    expect(tool).toBeDefined();
-    await tool.execute!({
-      message: 'Please provide your information',
-    });
+    try {
+      const tools = await elicitationClient1.listTools();
+      const tool = tools['elicitation1_testElicitationTool'];
+      expect(tool).toBeDefined();
+      await tool.execute!({
+        message: 'Please provide your information',
+      });
 
-    const tools2 = await elicitationClient2.listTools();
-    const tool2 = tools2['elicitation2_testElicitationTool'];
-    expect(tool2).toBeDefined();
+      const tools2 = await elicitationClient2.listTools();
+      const tool2 = tools2['elicitation2_testElicitationTool'];
+      expect(tool2).toBeDefined();
 
-    // Verify handlers are isolated - they should not interfere with each other
-    expect(client1Handler).toHaveBeenCalled();
-    expect(client2Handler).not.toHaveBeenCalled();
+      // Verify handlers are isolated - they should not interfere with each other
+      expect(client1Handler).toHaveBeenCalled();
+      expect(client2Handler).not.toHaveBeenCalled();
+    } finally {
+      await elicitationClient1.disconnect();
+      await elicitationClient2.disconnect();
+    }
   }, 10000);
 
   it('should support custom timeout in elicitation request options', async () => {

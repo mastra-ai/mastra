@@ -4,13 +4,12 @@ import { useOverlays } from '../../../lib/overlays';
 import { useToast } from '../../../ui';
 import { SettingsPanel } from '../../settings';
 import { GithubConnectModal, ProjectsModal, useActiveProjectContext, useGithubStatusQuery } from '../../workspaces';
-import { CommandPalette } from './CommandPalette';
 import { ShortcutsOverlay } from './ShortcutsOverlay';
 
 /** Mounts the active chat overlays. Each overlay owns its provider-backed behavior. */
 export function ChatOverlays() {
   const overlays = useOverlays();
-  const { activeProject, projects, selectProject, preparing, prepareError } = useActiveProjectContext();
+  const { projects, selectProject, preparing, prepareError } = useActiveProjectContext();
   const { toast } = useToast();
   const githubStatus = useGithubStatusQuery().data;
 
@@ -27,7 +26,6 @@ export function ChatOverlays() {
 
   return (
     <>
-      {overlays.isOpen('palette') && activeProject && <CommandPalette />}
       {overlays.isOpen('settings') && <SettingsPanel onClose={() => overlays.close('settings')} />}
       {overlays.isOpen('shortcuts') && <ShortcutsOverlay />}
       {projectsOpen && <ProjectsModal />}

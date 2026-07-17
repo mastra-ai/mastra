@@ -956,6 +956,76 @@
       "permanent": true
     },
     {
+      "source": "/docs/agents/input-processors",
+      "destination": "/docs/agents/processors",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/model-providers",
+      "destination": "/models",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/model-usage",
+      "destination": "/models",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/ai-sdk",
+      "destination": "/models",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/using-with-agents-and-tools",
+      "destination": "/docs/workflows/agents-and-tools",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/using-agents-and-tools",
+      "destination": "/docs/workflows/agents-and-tools",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/steps",
+      "destination": "/reference/workflows/step",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/agents",
+      "destination": "/docs/workflows/agents-and-tools",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/flow-control",
+      "destination": "/docs/workflows/control-flow",
+      "permanent": true
+    },
+    {
+      "source": "/docs/evals/running-evals",
+      "destination": "/docs/evals/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/scorers/custom-scorers",
+      "destination": "/docs/evals/custom-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/docs/scorers/creating-custom-scorers",
+      "destination": "/docs/evals/custom-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/agents",
+      "destination": "/docs/agents/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/guide/tools",
+      "destination": "/docs/agents/using-tools",
+      "permanent": true
+    },
+    {
       "source": "/docs/agents/channels/llms.txt",
       "destination": "/docs/capabilities/channels/overview/llms.txt",
       "permanent": true
@@ -1628,6 +1698,76 @@
     {
       "source": "/docs/agents/file-based-agents/llms.txt",
       "destination": "/docs/getting-started/file-based-agents/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/input-processors/llms.txt",
+      "destination": "/docs/agents/processors/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/model-providers/llms.txt",
+      "destination": "/models/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/model-usage/llms.txt",
+      "destination": "/models/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/ai-sdk/llms.txt",
+      "destination": "/models/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/using-with-agents-and-tools/llms.txt",
+      "destination": "/docs/workflows/agents-and-tools/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/using-agents-and-tools/llms.txt",
+      "destination": "/docs/workflows/agents-and-tools/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/steps/llms.txt",
+      "destination": "/reference/workflows/step/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/agents/llms.txt",
+      "destination": "/docs/workflows/agents-and-tools/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/flow-control/llms.txt",
+      "destination": "/docs/workflows/control-flow/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/evals/running-evals/llms.txt",
+      "destination": "/docs/evals/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/scorers/custom-scorers/llms.txt",
+      "destination": "/docs/evals/custom-scorers/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/scorers/creating-custom-scorers/llms.txt",
+      "destination": "/docs/evals/custom-scorers/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/agents/llms.txt",
+      "destination": "/docs/agents/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/guide/tools/llms.txt",
+      "destination": "/docs/agents/using-tools/llms.txt",
       "permanent": true
     }
   ]

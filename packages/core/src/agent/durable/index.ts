@@ -45,18 +45,19 @@
  *
  * @example Custom cache backend (e.g., Redis)
  * ```typescript
- * import { RedisServerCache } from '@mastra/redis'; // hypothetical
+ * import { RedisServerCache } from '@mastra/redis';
+ * import Redis from 'ioredis';
  *
  * const durableAgent = createDurableAgent({
  *   agent,
- *   cache: new RedisServerCache({ url: 'redis://...' }),
+ *   cache: new RedisServerCache({ client: new Redis('redis://...') }),
  * });
  * ```
  *
  * @example Cache inheritance from Mastra
  * ```typescript
  * const mastra = new Mastra({
- *   cache: new RedisServerCache({ url: 'redis://...' }),
+ *   cache: new RedisServerCache({ client: new Redis('redis://...') }),
  *   agents: {
  *     myAgent: createDurableAgent({ agent }), // Inherits Redis cache from Mastra
  *   },
@@ -156,12 +157,14 @@ export {
 // Utility functions for runtime resolution
 export {
   resolveRuntimeDependencies,
+  rebuildRunToolsFromMastra,
   resolveModel,
   resolveInternalState,
   resolveTool,
   toolRequiresApproval,
   type ResolvedRuntimeDependencies,
   type ResolveRuntimeOptions,
+  type RebuiltRunTools,
 } from './utils/resolve-runtime';
 
 // Workflow creation
@@ -187,6 +190,7 @@ export {
   calculateAccumulatedUsage,
   buildStepRecord,
   createBaseIterationStateUpdate,
+  resolveDurableToolCallConcurrency,
 } from './workflows/shared';
 export type {
   ToolExecutionContext,

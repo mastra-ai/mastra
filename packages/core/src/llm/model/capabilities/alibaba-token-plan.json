@@ -18,5 +18,6 @@
     "qwen3.7-plus",
     "wan2.7-image",
     "wan2.7-image-pro"
-  ]
+  ],
+  "structuredOutput": ["deepseek-v3.2", "deepseek-v4-flash", "deepseek-v4-pro", "glm-5.1", "glm-5.2", "qwen3.6-flash"]
 }
