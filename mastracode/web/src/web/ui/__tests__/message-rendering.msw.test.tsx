@@ -292,7 +292,10 @@ describe('MastraCode message rendering', () => {
       expect(document.body).toHaveTextContent('from hydrate');
       expect(screen.getByText('checking files')).toBeInTheDocument();
       const card = screen.getByRole('group', { name: 'Tool: view' });
-      expect(within(card).getByText('Done')).toBeInTheDocument();
+      // Successful tools render no status badge; only running/failed states are labeled.
+      expect(within(card).queryByText('Done')).not.toBeInTheDocument();
+      expect(within(card).queryByText('Running')).not.toBeInTheDocument();
+      expect(within(card).queryByText('Failed')).not.toBeInTheDocument();
     });
   });
 
@@ -382,7 +385,8 @@ describe('MastraCode message rendering', () => {
     renderChat();
 
     const card = await findToolCard('execute_command');
-    expect(within(card).getByText('Done')).toBeInTheDocument();
+    // Successful tools render no status badge; only running/failed states are labeled.
+    expect(within(card).queryByText('Done')).not.toBeInTheDocument();
     expect(within(card).getByText('passing tests')).toBeInTheDocument();
   });
 
