@@ -32,7 +32,8 @@ export interface MistralListenOptions {
 }
 
 export class MistralVoice extends MastraVoice {
-  private client: Mistral;
+  private speechClient: Mistral;
+  private listeningClient: Mistral;
 
   constructor({
     speechModel,
@@ -57,16 +58,21 @@ export class MistralVoice extends MastraVoice {
       speaker: speaker ?? DEFAULT_SPEAKER,
     });
 
-    const apiKey = speechModel?.apiKey ?? listeningModel?.apiKey ?? defaultApiKey;
-    if (!apiKey) {
-      throw new Error('No API key provided. Set MISTRAL_API_KEY or pass apiKey in speechModel/listeningModel.');
+    const speechApiKey = speechModel?.apiKey ?? defaultApiKey;
+    if (!speechApiKey) {
+      throw new Error('No API key provided for speech model. Set MISTRAL_API_KEY or pass apiKey in speechModel.');
     }
+    this.speechClient = new Mistral({ apiKey: speechApiKey });
 
-    this.client = new Mistral({ apiKey });
+    const listeningApiKey = listeningModel?.apiKey ?? defaultApiKey;
+    if (!listeningApiKey) {
+      throw new Error('No API key provided for listening model. Set MISTRAL_API_KEY or pass apiKey in listeningModel.');
+    }
+    this.listeningClient = new Mistral({ apiKey: listeningApiKey });
   }
 
   async getSpeakers(): Promise<Array<{ voiceId: string; name: string; languages?: string[]; gender?: string | null }>> {
-    const response = await this.client.audio.voices.list({ type: 'preset', limit: 100 });
+    const response = await this.speechClient.audio.voices.list({ type: 'preset', limit: 100 });
     return response.items.map(voice => ({
       voiceId: voice.id,
       name: voice.name,
@@ -91,7 +97,7 @@ export class MistralVoice extends MastraVoice {
       return this.speakStreaming(text, speechModel, voiceId, responseFormat, refAudio, rest);
     }
 
-    const response = await this.client.audio.speech.complete({
+    const response = await this.speechClient.audio.speech.complete({
       input: text,
       model: speechModel,
       voiceId,
@@ -115,7 +121,7 @@ export class MistralVoice extends MastraVoice {
     refAudio?: string,
     rest?: Record<string, any>,
   ): Promise<NodeJS.ReadableStream> {
-    const eventStream = await this.client.audio.speech.complete({
+    const eventStream = await this.speechClient.audio.speech.complete({
       input: text,
       model,
       voiceId,
@@ -155,7 +161,7 @@ export class MistralVoice extends MastraVoice {
 
     const { language, diarize, contextBias, timestampGranularities, filetype, ...rest } = options ?? {};
 
-    const response = await this.client.audio.transcriptions.complete({
+    const response = await this.listeningClient.audio.transcriptions.complete({
       model: this.listeningModel?.name ?? 'voxtral-mini-latest',
       file: {
         fileName: `audio.${filetype ?? 'mp3'}`,
