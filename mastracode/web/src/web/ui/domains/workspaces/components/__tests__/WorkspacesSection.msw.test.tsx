@@ -236,7 +236,7 @@ describe('WorkspacesSection', () => {
     expect(screen.queryByRole('button', { name: 'user/alice-notes' })).not.toBeInTheDocument();
   });
 
-  it('groups related issue and PR sessions into always-visible Work and Review sections with reciprocal indicators', async () => {
+  it('groups related issue and PR sessions into uncluttered, always-visible Work and Review sections', async () => {
     seedActiveFactory(githubProject);
     useAgentControllerHandlers(relatedWorkItems);
 
@@ -247,15 +247,9 @@ describe('WorkspacesSection', () => {
     expect(screen.queryByRole('button', { name: 'Work Sessions' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Review Sessions' })).not.toBeInTheDocument();
     expect(await within(workGroup).findByRole('button', { name: 'feat-ui' })).toBeInTheDocument();
-    const reviewRelation = await within(workGroup).findByRole('button', { name: 'Open Review: PR #25' });
     expect(await within(reviewGroup).findByRole('button', { name: 'feat-api' })).toBeInTheDocument();
-    const workRelation = await within(reviewGroup).findByRole('button', { name: 'Open Work item: Issue #24' });
-
-    await userEvent.click(reviewRelation);
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-review'));
-
-    await userEvent.click(workRelation);
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-work'));
+    expect(within(workGroup).queryByText('Review: PR #25')).not.toBeInTheDocument();
+    expect(within(reviewGroup).queryByText('Work item: Issue #24')).not.toBeInTheDocument();
   });
 
   it('shows only the five most recently updated sessions in each Factory section', async () => {

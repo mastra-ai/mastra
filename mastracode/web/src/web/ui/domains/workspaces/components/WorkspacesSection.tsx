@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playgr
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useQueryClient } from '@tanstack/react-query';
-import { GitBranch, Link2, MoreHorizontal } from 'lucide-react';
+import { GitBranch, MoreHorizontal } from 'lucide-react';
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
@@ -25,8 +25,6 @@ import {
 } from '../../../../../shared/hooks/useWorkspaces';
 import { createAgentControllerClient, requireAgentControllerSession } from '../../chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
-import { relatedWorkItems, relationshipLabel } from '../../factory/services/relationships';
-import type { WorkItemSessionRef } from '../../factory/services/workItems';
 import { useActiveFactoryContext } from '../context/ActiveFactoryProvider';
 import { isServerFactory, selectedRepository } from '../services/factories';
 import type { Worktree } from '../services/factories';
@@ -86,17 +84,9 @@ export function WorkspacesSection() {
   );
   const rows = worktrees.map(worktree => {
     const item = workItemByPath.get(worktree.worktreePath);
-    const related = item ? relatedWorkItems(item, allWorkItems).at(0) : undefined;
-    const relationSession = related
-      ? Object.values(related.sessions)
-          .filter(session => worktrees.some(candidate => candidate.worktreePath === session.projectPath))
-          .at(-1)
-      : undefined;
     return {
       worktree,
       label: titleByPath[worktree.worktreePath],
-      relation: related ? relationshipLabel(related) : undefined,
-      relationSession,
       active: worktree.worktreePath === selectedPath,
       running: runningByPath[worktree.worktreePath] === true,
       attention: attentionByPath[worktree.worktreePath] === true,
@@ -173,11 +163,6 @@ export function WorkspacesSection() {
     }
   };
 
-  const openRelatedSession = async (sessionRef: WorkItemSessionRef) => {
-    await selectWorkspace.mutateAsync(sessionRef.projectPath);
-    void navigate(`/threads/${sessionRef.threadId}`, { replace: true });
-  };
-
   const confirmDeleteWorktree = () => {
     if (!confirmDelete) return;
     const target = confirmDelete;
@@ -213,7 +198,6 @@ export function WorkspacesSection() {
             onSuccess: () => void openWorktreeThread(row.worktree.worktreePath),
           });
         }}
-        onOpenRelation={sessionRef => void openRelatedSession(sessionRef)}
         onDelete={worktree => setConfirmDelete(worktree)}
       />
       <WorkspaceGroup
@@ -230,7 +214,6 @@ export function WorkspacesSection() {
             onSuccess: () => void openWorktreeThread(row.worktree.worktreePath),
           });
         }}
-        onOpenRelation={sessionRef => void openRelatedSession(sessionRef)}
         onDelete={worktree => setConfirmDelete(worktree)}
       />
 
@@ -269,8 +252,6 @@ export function WorkspacesSection() {
 interface FactoryWorkspaceRow {
   worktree: Worktree;
   label?: string;
-  relation?: string;
-  relationSession?: WorkItemSessionRef;
   active: boolean;
   running: boolean;
   attention: boolean;
@@ -283,14 +264,12 @@ function WorkspaceGroup({
   rows,
   pending,
   onSelect,
-  onOpenRelation,
   onDelete,
 }: {
   title: 'Work Sessions' | 'Review Sessions';
   rows: FactoryWorkspaceRow[];
   pending: boolean;
   onSelect: (row: FactoryWorkspaceRow) => void;
-  onOpenRelation: (sessionRef: WorkItemSessionRef) => void;
   onDelete: (worktree: Worktree) => void;
 }) {
   return (
@@ -306,14 +285,11 @@ function WorkspaceGroup({
             key={row.worktree.worktreePath}
             worktree={row.worktree}
             label={row.label}
-            relation={row.relation}
-            relationSession={row.relationSession}
             active={row.active}
             running={row.running}
             attention={row.attention}
             disabled={pending}
             onSelect={() => onSelect(row)}
-            onOpenRelation={row.relationSession ? () => onOpenRelation(row.relationSession!) : undefined}
             onDelete={() => onDelete(row.worktree)}
           />
         ))}
@@ -332,29 +308,22 @@ function WorkspaceGroup({
 export function WorkspaceRow({
   worktree,
   label,
-  relation,
-  relationSession,
   active,
   running,
   attention,
   disabled,
   onSelect,
-  onOpenRelation,
   onDelete,
 }: {
   worktree: Worktree;
   /** Display name (e.g. the session's thread title); defaults to the worktree's branch. */
   label?: string;
-  /** Reciprocal Factory item linked to this session. */
-  relation?: string;
-  relationSession?: WorkItemSessionRef;
   active: boolean;
   running: boolean;
   /** A run finished here and the user hasn't opened the workspace since. */
   attention: boolean;
   disabled: boolean;
   onSelect: () => void;
-  onOpenRelation?: () => void;
   onDelete?: () => void;
 }) {
   const name = label ?? worktree.branch;
@@ -387,24 +356,6 @@ export function WorkspaceRow({
           />
         ) : null}
       </button>
-      {relation &&
-        (relationSession && onOpenRelation ? (
-          <button
-            type="button"
-            disabled={disabled}
-            onClick={onOpenRelation}
-            aria-label={`Open ${relation}`}
-            className="mx-2 mb-1 flex max-w-[calc(100%-1rem)] items-center gap-1 truncate text-left text-ui-xs text-icon4 hover:text-icon6 hover:underline disabled:opacity-70"
-          >
-            <Link2 size={10} className="shrink-0" aria-hidden />
-            <span className="truncate">{relation}</span>
-          </button>
-        ) : (
-          <span className="mx-2 mb-1 flex items-center gap-1 truncate text-ui-xs text-icon4">
-            <Link2 size={10} className="shrink-0" aria-hidden />
-            <span className="truncate">{relation}</span>
-          </span>
-        ))}
       {onDelete && (
         <DropdownMenu>
           <DropdownMenu.Trigger

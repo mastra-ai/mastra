@@ -994,6 +994,9 @@ describe('Factory Board — persisted cards', () => {
       surface: 'Work',
       initialThreadId: THREAD_ID,
       initialWorktreePath: issueWorktreePath,
+      breadcrumbSection: 'Work',
+      breadcrumbPath: '/factory/work',
+      breadcrumbTitle: 'Issue #12: Fix flaky test',
       buttonName: 'Open Review: PR #34: Review fix flaky test',
       destinationThreadId: 'thread-related-review',
       destinationWorktreePath: reviewWorktreePath,
@@ -1002,13 +1005,25 @@ describe('Factory Board — persisted cards', () => {
       surface: 'Review',
       initialThreadId: 'thread-related-review',
       initialWorktreePath: reviewWorktreePath,
+      breadcrumbSection: 'Review',
+      breadcrumbPath: '/factory/review',
+      breadcrumbTitle: 'PR #34: Review fix flaky test',
       buttonName: 'Open Work item: Issue #12: Fix flaky test',
       destinationThreadId: THREAD_ID,
       destinationWorktreePath: issueWorktreePath,
     },
   ])(
     'given related sessions on the $surface thread, when the related session is opened, then its worktree becomes active before navigation',
-    async ({ initialThreadId, initialWorktreePath, buttonName, destinationThreadId, destinationWorktreePath }) => {
+    async ({
+      initialThreadId,
+      initialWorktreePath,
+      breadcrumbSection,
+      breadcrumbPath,
+      breadcrumbTitle,
+      buttonName,
+      destinationThreadId,
+      destinationWorktreePath,
+    }) => {
       const relatedProject: Factory = {
         ...projectWithIssueWorktree,
         binding: {
@@ -1032,7 +1047,12 @@ describe('Factory Board — persisted cards', () => {
         sessionThreadId: initialThreadId,
       });
 
-      await userEvent.click(await screen.findByRole('button', { name: buttonName }));
+      const header = await screen.findByRole('region', { name: 'Factory session' });
+      const breadcrumb = within(header).getByRole('navigation', { name: 'Factory session breadcrumb' });
+      expect(within(breadcrumb).getByRole('link', { name: breadcrumbSection })).toHaveAttribute('href', breadcrumbPath);
+      expect(within(breadcrumb).getByText(breadcrumbTitle)).toBeInTheDocument();
+
+      await userEvent.click(within(header).getByRole('button', { name: buttonName }));
 
       await waitFor(() => expect(router.state.location.pathname).toBe(`/threads/${destinationThreadId}`));
       const stored = JSON.parse(localStorage.getItem('mastracode-factories') ?? '[]') as Factory[];

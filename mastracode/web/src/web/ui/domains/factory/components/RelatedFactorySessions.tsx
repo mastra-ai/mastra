@@ -19,7 +19,20 @@ function latestLiveSession(item: WorkItem, livePaths: ReadonlySet<string>): Work
     .at(-1);
 }
 
-export function RelatedFactorySessions() {
+function itemNumber(item: WorkItem): string | undefined {
+  const number = item.metadata.number;
+  if (typeof number === 'number' || typeof number === 'string') return String(number);
+  return item.sourceKey?.split(':').at(-1) || undefined;
+}
+
+function sessionTitle(item: WorkItem): string {
+  const number = itemNumber(item);
+  if (item.source === 'github-pr' && number) return `PR #${number}: ${item.title}`;
+  if (item.source === 'github-issue' && number) return `Issue #${number}: ${item.title}`;
+  return item.title;
+}
+
+export function FactorySessionHeader() {
   const { activeFactory } = useActiveFactoryContext();
   const { threadId } = useParams();
   const navigate = useNavigate();
@@ -46,7 +59,9 @@ export function RelatedFactorySessions() {
   const relatedItems = relatedWorkItems(currentItem, allItems);
   const livePaths = new Set((workspaces.data?.worktrees ?? []).map(worktree => worktree.worktreePath));
   const destinations = relatedItems.map(item => ({ item, session: latestLiveSession(item, livePaths) }));
-  if (destinations.length === 0) return null;
+  const isReview = currentItem.source === 'github-pr';
+  const section = isReview ? 'Review' : 'Work';
+  const sectionPath = isReview ? '/factory/review' : '/factory/work';
 
   const openSession = async (session: WorkItemSessionRef) => {
     await selectWorkspace.mutateAsync(session.projectPath);
@@ -54,37 +69,52 @@ export function RelatedFactorySessions() {
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-2 px-3 pt-3 md:px-5" aria-label="Related Factory sessions">
-      {destinations.map(({ item, session }) => {
-        const label = relationshipLabel(item);
-        if (!session) {
-          return (
-            <Link
-              key={item.id}
-              to={relationshipPath(item)}
-              className="flex items-center gap-1.5 rounded-md px-2 py-1 text-ui-sm text-icon4 hover:bg-surface3 hover:text-icon6"
-              aria-label={`Open ${label}: ${item.title}`}
-            >
-              <Link2 size={13} aria-hidden />
-              {label}
-            </Link>
-          );
-        }
-        return (
-          <Button
-            key={item.id}
-            type="button"
-            variant="ghost"
-            size="sm"
-            aria-label={`Open ${label}: ${item.title}`}
-            disabled={selectWorkspace.isPending}
-            onClick={() => void openSession(session)}
-          >
-            <Link2 size={13} aria-hidden />
-            {label}
-          </Button>
-        );
-      })}
-    </div>
+    <header role="region" className="border-b border-border1 px-3 py-2.5 md:px-5" aria-label="Factory session">
+      <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <nav className="flex min-w-0 items-center gap-2 text-ui-sm" aria-label="Factory session breadcrumb">
+          <Link to={sectionPath} className="shrink-0 font-medium text-icon4 hover:text-icon6 hover:underline">
+            {section}
+          </Link>
+          <span className="text-icon3" aria-hidden>
+            /
+          </span>
+          <span className="truncate text-icon6">{sessionTitle(currentItem)}</span>
+        </nav>
+        {destinations.length > 0 ? (
+          <div className="flex shrink-0 flex-wrap items-center gap-1">
+            {destinations.map(({ item, session }) => {
+              const label = relationshipLabel(item);
+              if (!session) {
+                return (
+                  <Link
+                    key={item.id}
+                    to={relationshipPath(item)}
+                    className="flex items-center gap-1.5 rounded-md px-2 py-1 text-ui-sm text-icon4 hover:bg-surface3 hover:text-icon6"
+                    aria-label={`Open ${label}: ${item.title}`}
+                  >
+                    <Link2 size={13} aria-hidden />
+                    {label}
+                  </Link>
+                );
+              }
+              return (
+                <Button
+                  key={item.id}
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  aria-label={`Open ${label}: ${item.title}`}
+                  disabled={selectWorkspace.isPending}
+                  onClick={() => void openSession(session)}
+                >
+                  <Link2 size={13} aria-hidden />
+                  {label}
+                </Button>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
+    </header>
   );
 }
