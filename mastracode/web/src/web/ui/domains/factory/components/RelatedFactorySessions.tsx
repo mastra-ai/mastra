@@ -62,7 +62,7 @@ export function RelatedFactorySessions() {
             <Link
               key={item.id}
               to={relationshipPath(item)}
-              className="flex items-center gap-1.5 rounded-md px-2 py-1 text-ui-sm text-accent2 hover:bg-surface3"
+              className="flex items-center gap-1.5 rounded-md px-2 py-1 text-ui-sm text-icon4 hover:bg-surface3 hover:text-icon6"
               aria-label={`Open ${label}: ${item.title}`}
             >
               <Link2 size={13} aria-hidden />

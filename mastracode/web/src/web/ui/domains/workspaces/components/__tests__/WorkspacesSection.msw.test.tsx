@@ -247,9 +247,15 @@ describe('WorkspacesSection', () => {
     expect(screen.queryByRole('button', { name: 'Work Sessions' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Review Sessions' })).not.toBeInTheDocument();
     expect(await within(workGroup).findByRole('button', { name: 'feat-ui' })).toBeInTheDocument();
-    expect(await within(workGroup).findByText('Review: PR #25')).toBeInTheDocument();
+    const reviewRelation = await within(workGroup).findByRole('button', { name: 'Open Review: PR #25' });
     expect(await within(reviewGroup).findByRole('button', { name: 'feat-api' })).toBeInTheDocument();
-    expect(await within(reviewGroup).findByText('Work item: Issue #24')).toBeInTheDocument();
+    const workRelation = await within(reviewGroup).findByRole('button', { name: 'Open Work item: Issue #24' });
+
+    await userEvent.click(reviewRelation);
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-review'));
+
+    await userEvent.click(workRelation);
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-work'));
   });
 
   it('shows only the five most recently updated sessions in each Factory section', async () => {

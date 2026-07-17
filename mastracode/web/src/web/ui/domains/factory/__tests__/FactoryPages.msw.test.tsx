@@ -886,11 +886,33 @@ describe('Factory Board — persisted cards', () => {
           source: 'github-pr',
           sourceKey: 'github-pr:34',
           stages: ['review'],
+          sessions: {
+            review: {
+              projectPath: '/sandbox/mastra/worktrees/factory-pr-34',
+              branch: 'factory/pr-34',
+              threadId: 'thread-review',
+              startedBy: 'user-1',
+            },
+          },
           metadata: { headBranch: 'factory/issue-12' },
         }),
       ],
     });
-    renderAt('/factory/work');
+    renderAt('/factory/work', {
+      ...githubProject,
+      binding: {
+        ...githubProject.binding,
+        worktrees: [
+          ...githubProject.binding.worktrees,
+          {
+            branch: 'factory/issue-12',
+            worktreePath: '/sandbox/mastra/worktrees/factory-issue-12',
+            baseBranch: 'main',
+          },
+          { branch: 'factory/pr-34', worktreePath: '/sandbox/mastra/worktrees/factory-pr-34', baseBranch: 'main' },
+        ],
+      },
+    });
 
     const workColumn = await screen.findByTestId('board-column-review');
     const workCard = within(workColumn).getByTestId('work-item-card');
@@ -898,7 +920,7 @@ describe('Factory Board — persisted cards', () => {
     expect(within(workCard).queryByText('PR Review:')).not.toBeInTheDocument();
     expect(within(workCard).getByRole('link', { name: 'Open Review: PR #34' })).toHaveAttribute(
       'href',
-      '/factory/review',
+      '/threads/thread-review',
     );
 
     const nav = screen.getByRole('navigation', { name: 'Factory' });
@@ -909,7 +931,7 @@ describe('Factory Board — persisted cards', () => {
     expect(within(reviewCard).queryByText('Issue:')).not.toBeInTheDocument();
     expect(within(reviewCard).getByRole('link', { name: 'Open Work item: Issue #12' })).toHaveAttribute(
       'href',
-      '/factory/work',
+      '/threads/thread-work',
     );
   });
 

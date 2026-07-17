@@ -21,6 +21,9 @@ export function useWorkItemsQuery(factoryProjectId: string | undefined) {
     queryKey: queryKeys.workItems(factoryProjectId),
     queryFn: () => listWorkItems(baseUrl, factoryProjectId!),
     enabled: Boolean(factoryProjectId),
+    // Relationships can be created by GitHub ingestion or another open tab.
+    // Keep thread-page counterpart links current without requiring a reload.
+    refetchInterval: 5_000,
   });
 }
 

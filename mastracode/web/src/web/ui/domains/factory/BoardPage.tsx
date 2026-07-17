@@ -5,7 +5,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { CircleDot, EllipsisVertical, ExternalLink, GitCompareArrows, Link2, Plus } from 'lucide-react';
 import type { ComponentType, DragEvent } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { useNavigate } from 'react-router';
 
 import { useApiConfig } from '../../../../shared/api/config';
 import { useSelectWorkspaceMutation, useWorkspacesQuery } from '../../../../shared/hooks/useWorkspaces';
@@ -971,9 +971,7 @@ function WorkItemCard({
       data-testid="work-item-card"
       data-related={relatedItems.length > 0 ? 'true' : undefined}
       onDragStart={event => setDragPayload(event, { kind: 'work-item', id: item.id, fromStage: columnStage })}
-      className={`flex cursor-grab flex-col gap-1.5 rounded-md border bg-surface4 p-2 active:cursor-grabbing ${
-        relatedItems.length > 0 ? 'border-accent2/50 ring-1 ring-accent2/20' : 'border-border1'
-      }`}
+      className="flex cursor-grab flex-col gap-1.5 rounded-md border border-border1 bg-surface4 p-2 active:cursor-grabbing"
     >
       <div className="flex items-start gap-2">
         <Icon size={14} className={`mt-0.5 shrink-0 ${iconClassName}`} aria-hidden />
@@ -1045,16 +1043,25 @@ function WorkItemCard({
       </div>
       {relatedItems.map(related => {
         const relationText = relationshipLabel(related);
+        const relatedLiveSessions = Object.fromEntries(
+          Object.entries(related.sessions).filter(([, session]) => liveWorktreePaths.has(session.projectPath)),
+        );
+        const relatedSession = itemThreadSession(relatedLiveSessions);
         return (
-          <Link
+          <a
             key={related.id}
-            to={relationshipPath(related)}
-            className="flex items-center gap-1 text-ui-xs text-accent2 hover:underline"
+            href={relatedSession ? `/threads/${relatedSession.threadId}` : relationshipPath(related)}
+            onClick={event => {
+              if (!relatedSession) return;
+              event.preventDefault();
+              onOpenThread(relatedSession);
+            }}
+            className="flex items-center gap-1 text-ui-xs text-icon4 hover:text-icon6 hover:underline"
             aria-label={`Open ${relationText}`}
           >
             <Link2 size={11} aria-hidden />
             <span className="truncate">{relationText}</span>
-          </Link>
+          </a>
         );
       })}
       {otherStages.length > 0 && (
