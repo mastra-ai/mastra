@@ -49,7 +49,9 @@ The two scopes can't overlap for the same provider. Because a project-scoped dat
 
 ## Attach with the CLI
 
-Create and attach a database in one command. The CLI polls until it's ready, which takes a few seconds:
+You don't have to run this command up front. If your project needs a hosted database but doesn't have one yet, `mastra deploy` offers to attach one for you when the deploy preflight check runs. Say yes and the deploy continues without leaving the CLI.
+
+Alternatively, create and attach a database ahead of time. The CLI polls until it's ready, which takes a few seconds:
 
 ```bash
 # Scoped to a single environment (the CLI picks the only one, or prompts if there are several)

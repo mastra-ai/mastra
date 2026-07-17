@@ -298,6 +298,41 @@ describe('preflightBuildOutput', () => {
       expect(issue?.fix).toContain('mastra env db create --kind turso');
     });
 
+    it('attaches a create-managed-database autofix hint when the guard var maps to a provider', async () => {
+      writeBundle(`export {};`);
+      writeMetadata({ localPaths: [guardedDetection] });
+
+      const issues = await preflightBuildOutput(tmpDir, {}, { hasEnvFile: false, managedEnvVarNames: [] });
+      const issue = issues.find(i => i.code === 'LOCAL_STORAGE_PATH');
+      expect(issue?.autofix).toEqual({
+        kind: 'create-managed-database',
+        provider: 'turso',
+        envVarName: 'TURSO_DATABASE_URL',
+      });
+    });
+
+    it('attaches an autofix hint on the hasEnvFile branch too (lint / no platform context)', async () => {
+      writeBundle(`export {};`);
+      writeMetadata({ localPaths: [{ ...guardedDetection, guardedBy: 'DATABASE_URL' }] });
+
+      const issues = await preflightBuildOutput(tmpDir, {}, { hasEnvFile: true });
+      const issue = issues.find(i => i.code === 'LOCAL_STORAGE_PATH');
+      expect(issue?.autofix).toEqual({
+        kind: 'create-managed-database',
+        provider: 'neon',
+        envVarName: 'DATABASE_URL',
+      });
+    });
+
+    it('omits the autofix hint when the guard var does not map to a known provider', async () => {
+      writeBundle(`export {};`);
+      writeMetadata({ localPaths: [{ ...guardedDetection, guardedBy: 'MY_CUSTOM_DB_URL' }] });
+
+      const issues = await preflightBuildOutput(tmpDir, {}, { hasEnvFile: true });
+      const issue = issues.find(i => i.code === 'LOCAL_STORAGE_PATH');
+      expect(issue?.autofix).toBeUndefined();
+    });
+
     it('names the exact db create command when preflight runs without platform context (lint path)', async () => {
       writeBundle(`export {};`);
       writeMetadata({ localPaths: [{ ...guardedDetection, guardedBy: 'DATABASE_URL' }] });

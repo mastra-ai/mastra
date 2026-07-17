@@ -32,6 +32,7 @@ import type { Environment } from '../env/platform-api.js';
 import { getDeployEnvFiles, loadDeployEnvFromDotenv, readEnvVars, getMastraVersion } from '../studio/deploy.js';
 import { createProject } from '../studio/platform-api.js';
 import { getProjectConfigToSave, loadProjectConfig, saveProjectConfig } from '../studio/project-config.js';
+import { maybeAutoProvisionDatabases } from './auto-provision-database.js';
 import { getOverwrittenEnvKeys } from './env-vars.js';
 import { assertDeployDir } from './validate-dir.js';
 
@@ -802,13 +803,33 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
   // stored vars (request wins), so platform-stored vars don't false-alarm.
   if (!skipPreflight) {
     const preflightEnv = mergePreflightEnvVars(environment.envVars, envVars);
-    const issues = await preflightBuildOutput(targetDir, preflightEnv, {
+    let issues = await preflightBuildOutput(targetDir, preflightEnv, {
       hasEnvFile: hasAmbientEnvFile,
       // Managed resources (e.g. attached databases) inject vars at deploy
       // time; the platform exposes their names on the environment. Absent
       // field = older platform = incomplete env picture (soften to warnings).
       managedEnvVarNames: environment.managedEnvVarNames ?? null,
     });
+
+    // If preflight flagged a blocking issue that a managed database would
+    // fix (e.g. TURSO_DATABASE_URL missing), offer to attach one inline
+    // rather than failing the deploy and asking the user to run
+    // `mastra env db create` themselves.
+    const autoProvisioned = await maybeAutoProvisionDatabases(issues, {
+      token,
+      orgId,
+      projectId,
+      projectName,
+      projectSlug,
+      environment: { id: environment.id, slug: environment.slug },
+      autoAccept,
+    });
+    issues = autoProvisioned.issues;
+    if (autoProvisioned.provisioned.length > 0) {
+      const attached = autoProvisioned.provisioned.map(d => `${d.name} (${d.kind})`).join(', ');
+      p.log.success(`Attached managed database: ${attached}`);
+    }
+
     const outcome = await printPreflightIssues(issues, { autoAccept });
     if (outcome === 'blocked') {
       p.cancel('Deploy blocked by preflight errors.');

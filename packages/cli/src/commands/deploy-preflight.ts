@@ -4,6 +4,7 @@ import { join } from 'node:path';
 
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
+import type { DatabaseKind } from './db/platform-api.js';
 import { DB_ENV_VAR_NAMES } from './db/platform-api.js';
 
 /* ------------------------------------------------------------------ */
@@ -12,11 +13,23 @@ import { DB_ENV_VAR_NAMES } from './db/platform-api.js';
 
 export type PreflightIssueCode = 'MISSING_ENV_VAR' | 'LOCAL_STORAGE_PATH';
 
+/**
+ * Structured hint describing how deploy can offer to auto-fix an issue
+ * before it becomes a blocking error. Consumed by
+ * `deploy/auto-provision-database.ts` when running in an interactive TTY.
+ */
+export type PreflightAutofix = {
+  kind: 'create-managed-database';
+  provider: DatabaseKind;
+  envVarName: string;
+};
+
 export interface PreflightIssue {
   code: PreflightIssueCode;
   severity: 'error' | 'warning';
   message: string;
   fix: string;
+  autofix?: PreflightAutofix;
 }
 
 /* ------------------------------------------------------------------ */
@@ -384,6 +397,21 @@ export function dbCreateCommandFor(envVarName: string): string {
   return 'mastra env db create';
 }
 
+/**
+ * If `envVarName` is injected by a known managed database provider, return
+ * the structured autofix hint deploy uses to offer inline provisioning.
+ * Returns undefined for env vars that don't map to a provider — those still
+ * get a text-only fix.
+ */
+export function dbAutofixFor(envVarName: string): PreflightAutofix | undefined {
+  for (const [kind, names] of Object.entries(DB_ENV_VAR_NAMES) as [DatabaseKind, string[]][]) {
+    if (names.includes(envVarName)) {
+      return { kind: 'create-managed-database', provider: kind, envVarName };
+    }
+  }
+  return undefined;
+}
+
 async function checkLocalStoragePaths(
   outputDir: string,
   metadata: PreflightMetadata | null,
@@ -456,6 +484,7 @@ async function checkLocalStoragePaths(
           severity: 'error',
           message: `${truncate(d.value, 80)} will be used at runtime because ${d.guardedBy} is not set (${d.hint})`,
           fix: `Set ${d.guardedBy} in your env file or the environment's stored vars, or create a managed database that provides it: ${dbCreateCommandFor(d.guardedBy)}`,
+          autofix: dbAutofixFor(d.guardedBy),
         });
       }
     } else if (hasEnvFile) {
@@ -464,6 +493,7 @@ async function checkLocalStoragePaths(
         severity: 'error',
         message: `${truncate(d.value, 80)} will be used at runtime because ${d.guardedBy} is not set (${d.hint})`,
         fix: `Set ${d.guardedBy} in your env file, or create a managed database that provides it: ${dbCreateCommandFor(d.guardedBy)}. If the platform already injects it, re-run with --skip-preflight.`,
+        autofix: dbAutofixFor(d.guardedBy),
       });
     } else {
       issues.push({
