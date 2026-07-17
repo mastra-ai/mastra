@@ -18,7 +18,7 @@ import { registerApiRoute } from '@mastra/core/server';
 import { and, eq } from 'drizzle-orm';
 import type { Context } from 'hono';
 
-import { ensureWebAuthUser, getWorkOSProvider, isWebAuthEnabled, webAuthTenant } from '../auth';
+import { ensureWebAuthUser, getWorkOSProvider, isWorkOSAuth, webAuthTenant } from '../auth';
 import { getAppDb } from '../github/db';
 import { githubProjects } from '../github/schema';
 import { listAuditEvents } from './store';
@@ -119,7 +119,7 @@ export function buildAuditRoutes(deps: AuditRoutesDeps): ApiRoute[] {
         const tenant = await resolveTenant(c);
         if ('response' in tenant) return tenant.response;
 
-        if (!isWebAuthEnabled()) {
+        if (!isWorkOSAuth()) {
           return c.json({ error: 'not_available' }, 404);
         }
         try {

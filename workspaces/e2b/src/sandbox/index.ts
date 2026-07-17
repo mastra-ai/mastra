@@ -18,6 +18,7 @@ import type {
   MastraSandboxOptions,
   SandboxFileInput,
   SandboxNetworking,
+  SandboxDeriveOptions,
 } from '@mastra/core/workspace';
 
 /**
@@ -194,6 +195,7 @@ export class E2BSandbox extends MastraSandbox {
   private readonly network?: SandboxNetworkOpts;
   private readonly connectionOpts: Record<string, string>;
   private readonly _instructionsOverride?: InstructionsOption;
+  private readonly _constructorOptions: E2BSandboxOptions;
 
   /** Resolved template ID after building (if needed) */
   private _resolvedTemplateId?: string;
@@ -222,12 +224,36 @@ export class E2BSandbox extends MastraSandbox {
     };
 
     this._instructionsOverride = options.instructions;
+    this._constructorOptions = { ...options };
 
     // Start template preparation immediately in background
     // This way template build (if needed) begins before start() is called
     this._templatePreparePromise = this.resolveTemplate().catch(err => {
       this.logger.debug(`${LOG_PREFIX} Template preparation error (will retry on start):`, err);
       return ''; // Return empty string, will be retried in start()
+    });
+  }
+
+  /**
+   * Construct a sibling `E2BSandbox` that inherits this sandbox's
+   * configuration (credentials, template, network, metadata, instructions)
+   * with per-instance overrides.
+   *
+   * Performs no I/O — the derived sandbox provisions (or reconnects to an
+   * existing E2B sandbox with the same logical `id`) on its own `start()`.
+   * Use it when one configured sandbox acts as the template for a fleet of
+   * independent sandboxes (e.g. one per project).
+   *
+   * `options.idleTimeoutMinutes` maps to the E2B sandbox `timeout` (ms);
+   * `options.sandboxId` is ignored because E2B reconnects by logical `id`.
+   */
+  derive(options: SandboxDeriveOptions = {}): E2BSandbox {
+    const { id: _id, ...base } = this._constructorOptions;
+    return new E2BSandbox({
+      ...base,
+      ...(options.id !== undefined && { id: options.id }),
+      ...(options.env !== undefined && { env: options.env }),
+      ...(options.idleTimeoutMinutes !== undefined && { timeout: options.idleTimeoutMinutes * 60_000 }),
     });
   }
 

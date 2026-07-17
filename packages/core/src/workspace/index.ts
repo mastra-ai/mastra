@@ -88,6 +88,7 @@ export type {
   WorkspaceSandbox,
   SandboxNetworking,
   SandboxFileInput,
+  SandboxDeriveOptions,
   ExecutionResult,
   CommandOptions,
   CommandResult,

@@ -52,26 +52,29 @@ import { withProjectLock } from './project-lock';
 import { handleGithubWebhook } from './webhook';
 import type { GithubIssueTriageRunInput, GithubIssueTriageRunResult } from './webhook';
 import {
-  commitAll,
   computeSandboxWorkdir,
+  getSandboxProvider,
+  isSandboxEnabled,
+  reattachSandbox,
+  SandboxBudgetError,
+} from '../sandbox/fleet';
+import type { MaterializationSandbox, PrepareProgress, ProgressFn } from '../sandbox/fleet';
+import {
+  commitAll,
   computeWorktreePath,
   createPullRequest,
   ensureProjectSandbox,
   ensureWorktree,
-  getSandboxProvider,
-  isSandboxEnabled,
   isValidGitRef as isValidGitRefSandbox,
   materializeRepo,
   MaterializeError,
   pushBranch,
-  reattachProjectSandbox,
   removeWorktree,
   runWorktreeSetup,
-  SandboxBudgetError,
   teardownProjectSandbox,
   WorktreeError,
 } from './sandbox';
-import type { GitIdentity, MaterializationSandbox, PrepareProgress, ProgressFn } from './sandbox';
+import type { GitIdentity } from './sandbox';
 import { githubInstallations, githubProjects, githubProjectSandboxes, githubWorktrees } from './schema';
 import type { GithubProjectRow, GithubProjectSandboxRow } from './schema';
 import { listPullRequestSubscriptionsForThread, subscribeToPullRequest } from './subscriptions';
@@ -865,7 +868,7 @@ async function resolveProjectSandbox(sandboxRow: GithubProjectSandboxRow): Promi
   if (!sandboxRow.sandboxId) {
     throw new MaterializeError('Project sandbox is not provisioned. Open the project first.', 'clone-failed');
   }
-  return reattachProjectSandbox(sandboxRow.sandboxId);
+  return reattachSandbox(sandboxRow.sandboxId);
 }
 
 /**
@@ -1353,7 +1356,7 @@ function buildProjectGitRoutes(): ApiRoute[] {
 
         try {
           return await withProjectLock(`${project.id}:${userId}`, async () => {
-            const sandbox = await reattachProjectSandbox(sandboxRow.sandboxId!);
+            const sandbox = await reattachSandbox(sandboxRow.sandboxId!);
             await teardownProjectSandbox(sandboxRow, sandbox);
             return c.json({ tornDown: true });
           });

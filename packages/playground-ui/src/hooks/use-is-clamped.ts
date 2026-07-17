@@ -30,16 +30,17 @@ export function useIsClamped<TElement extends HTMLElement = HTMLElement>({
 
     measure();
 
-    if (typeof ResizeObserver === 'undefined') return;
-
-    const observer = new ResizeObserver(measure);
-    observer.observe(element);
+    let observer: ResizeObserver | undefined;
+    if (typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(measure);
+      observer.observe(element);
+    }
     // Font swaps change line wrapping without resizing the observed box.
     document.fonts?.ready.then(measure).catch(() => {});
 
     return () => {
       stopped = true;
-      observer.disconnect();
+      observer?.disconnect();
     };
   }, [element, enabled]);
 

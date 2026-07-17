@@ -2627,3 +2627,45 @@ describe('E2BSandbox Shared Conformance', () => {
   createSandboxLifecycleTests(getContext);
   createMountOperationsTests(getContext);
 });
+
+describe('E2BSandbox.derive', () => {
+  it('constructs an unstarted sibling without any I/O', () => {
+    const template = new E2BSandbox({ apiKey: 'e2b-key', template: 'base-tpl', timeout: 120_000 });
+
+    const child = template.derive({ id: 'mc-project-1' });
+
+    expect(child).toBeInstanceOf(E2BSandbox);
+    expect(child).not.toBe(template);
+    expect(child.id).toBe('mc-project-1');
+    expect(child.status).toBe('pending');
+  });
+
+  it('inherits template config and applies env override', () => {
+    const template = new E2BSandbox({ apiKey: 'e2b-key', template: 'base-tpl', env: { BASE: '1' } });
+
+    const child = template.derive({ env: { GITHUB_TOKEN: 'ghs_abc' } });
+
+    expect(child['_constructorOptions']).toMatchObject({
+      apiKey: 'e2b-key',
+      template: 'base-tpl',
+      env: { GITHUB_TOKEN: 'ghs_abc' },
+    });
+  });
+
+  it('maps idleTimeoutMinutes to the E2B timeout in milliseconds', () => {
+    const template = new E2BSandbox({ apiKey: 'e2b-key', timeout: 120_000 });
+
+    const child = template.derive({ idleTimeoutMinutes: 15 });
+
+    expect(child['_constructorOptions']).toMatchObject({ timeout: 900_000 });
+  });
+
+  it('inherits template defaults when no overrides are passed', () => {
+    const template = new E2BSandbox({ apiKey: 'e2b-key', timeout: 120_000, env: { BASE: '1' } });
+
+    const child = template.derive();
+
+    expect(child.id).not.toBe(template.id);
+    expect(child['_constructorOptions']).toMatchObject({ apiKey: 'e2b-key', timeout: 120_000, env: { BASE: '1' } });
+  });
+});

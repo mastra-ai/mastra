@@ -19,6 +19,7 @@ import type {
   MastraSandboxOptions,
   ProviderStatus,
   SandboxFileInput,
+  SandboxDeriveOptions,
   SandboxInfo,
   SandboxNetworking,
 } from '@mastra/core/workspace';
@@ -141,6 +142,7 @@ export class VercelSandbox extends MastraSandbox {
   private readonly _env: Record<string, string>;
   private readonly _metadata: Record<string, unknown>;
   private readonly _instructionsOverride?: InstructionsOption;
+  private readonly _constructorOptions: VercelSandboxOptions;
 
   constructor(options: VercelSandboxOptions = {}) {
     super({
@@ -161,6 +163,30 @@ export class VercelSandbox extends MastraSandbox {
     this._env = options.env ?? {};
     this._metadata = options.metadata ?? {};
     this._instructionsOverride = options.instructions;
+    this._constructorOptions = { ...options };
+  }
+
+  /**
+   * Construct a sibling `VercelSandbox` that inherits this sandbox's
+   * configuration (credentials, runtime, resources, ports, metadata,
+   * instructions) with per-instance overrides.
+   *
+   * Performs no I/O — the derived sandbox provisions a fresh MicroVM on its
+   * own `start()` (Vercel sandboxes cannot be reconnected to, so
+   * `options.sandboxId` is ignored). Use it when one configured sandbox acts
+   * as the template for a fleet of independent sandboxes (e.g. one per
+   * project).
+   *
+   * `options.idleTimeoutMinutes` maps to the Vercel sandbox `timeout` (ms).
+   */
+  derive(options: SandboxDeriveOptions = {}): VercelSandbox {
+    const { id: _id, sandboxName: _sandboxName, ...base } = this._constructorOptions;
+    return new VercelSandbox({
+      ...base,
+      ...(options.id !== undefined && { id: options.id }),
+      ...(options.env !== undefined && { env: options.env }),
+      ...(options.idleTimeoutMinutes !== undefined && { timeout: options.idleTimeoutMinutes * 60_000 }),
+    });
   }
 
   /**

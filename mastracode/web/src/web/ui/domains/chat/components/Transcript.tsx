@@ -11,6 +11,7 @@ import { MessageFactory } from '@mastra/react';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react';
 import {
   Bell,
+  BookOpen,
   ChevronDown,
   CircleDot,
   CircleX,
@@ -33,7 +34,7 @@ import { useChatTranscript } from '../context/useChatTranscript';
 import {
   useApproveAgentControllerToolMutation,
   useRespondAgentControllerSuspensionMutation,
-} from '../hooks/useAgentControllerRunMutations';
+} from '../../../../../shared/hooks/useAgentControllerRunMutations';
 import { stripSerializedAnsi } from '../services/ansi';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 
@@ -97,6 +98,66 @@ function stringify(v: unknown): string {
 function lastSegment(id: string): string {
   const parts = id.split('/');
   return parts[parts.length - 1] ?? id;
+}
+
+interface SkillActivation {
+  name: string;
+  content: string;
+  arguments?: string;
+}
+
+const skillActivationPattern = /^<skill name="([a-z0-9]+(?:-[a-z0-9]+)*)">\n([\s\S]+)\n<\/skill>$/;
+const skillArgumentsMarker = '\n\nARGUMENTS: ';
+
+function parseSkillActivation(text: string): SkillActivation | undefined {
+  const match = skillActivationPattern.exec(text.trim());
+  if (!match) return undefined;
+
+  const content = match[2];
+  const argumentsIndex = content.lastIndexOf(skillArgumentsMarker);
+  return {
+    name: match[1],
+    content,
+    arguments: argumentsIndex >= 0 ? content.slice(argumentsIndex + skillArgumentsMarker.length).trim() : undefined,
+  };
+}
+
+function SkillActivationCard({ activation }: { activation: SkillActivation }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <Collapsible open={expanded} onOpenChange={setExpanded} className="min-w-64 max-w-full">
+      <CollapsibleTrigger
+        className="w-full rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent1"
+        aria-label={`${expanded ? 'Hide' : 'Show'} ${activation.name} skill contents`}
+      >
+        <span className="flex items-center gap-2">
+          <span className="flex items-center gap-1.5 text-icon3">
+            <BookOpen size={14} aria-hidden="true" />
+            <Txt as="span" variant="ui-xs" className="uppercase tracking-wide">
+              Skill
+            </Txt>
+          </span>
+          <Txt as="span" variant="ui-sm" font="mono" className="text-icon6">
+            {activation.name}
+          </Txt>
+          <ChevronDown
+            size={13}
+            aria-hidden="true"
+            className={`ml-auto shrink-0 text-icon3 transition-transform ${expanded ? 'rotate-180' : ''}`}
+          />
+        </span>
+        {activation.arguments && (
+          <span className="mt-1 block truncate text-ui-xs text-icon3">{activation.arguments}</span>
+        )}
+      </CollapsibleTrigger>
+      <CollapsibleContent className="mt-2 max-h-96 overflow-y-auto border-t border-border1 pt-2">
+        <div className="prose text-ui-sm">
+          <Markdown>{activation.content}</Markdown>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -742,19 +803,27 @@ function MessageBubble({ entry }: { entry: MessageEntry }) {
   };
 
   const renderers = {
-    Text: (part: TextPart) =>
-      entry.message.role === 'user' ? (
-        <div className="prose">
-          <Markdown>{part.text}</Markdown>
-        </div>
-      ) : (
+    Text: (part: TextPart) => {
+      if (entry.message.role === 'user') {
+        const activation = parseSkillActivation(part.text);
+        return activation ? (
+          <SkillActivationCard activation={activation} />
+        ) : (
+          <div className="prose">
+            <Markdown>{part.text}</Markdown>
+          </div>
+        );
+      }
+
+      return (
         <div className="prose">
           <Markdown>{part.text}</Markdown>
           {entry.streaming && part === lastTextPart && (
             <span className="ml-0.5 inline-block h-[1em] w-0.5 animate-pulse bg-accent1 align-text-bottom" />
           )}
         </div>
-      ),
+      );
+    },
     Reasoning: (part: ReasoningPart) => (
       <div className="my-1.5 border-l-2 border-border1 pl-2.5 text-ui-sm italic text-icon3 [&_p]:my-0.5">
         <Markdown>{part.reasoning}</Markdown>
@@ -780,7 +849,7 @@ function MessageBubble({ entry }: { entry: MessageEntry }) {
             <NotificationSummaryCard key={notification.id} entry={notification} />
           ),
         )}
-        {hasRenderablePart && (
+        {hasRenderablePart && entry.message.role !== 'signal' && (
           <MessageFactory message={entry.message} roles={roles} {...renderers} fallback={() => null} />
         )}
       </div>
@@ -822,6 +891,8 @@ function toolFromInvocationPart(part: ToolInvocationPart, runtime?: ToolCall): T
 }
 
 function notificationMetadata(entry: MessageEntry): Array<NotificationEntry | NotificationSummaryEntry> {
+  if (entry.message.role === 'signal') return signalNotifications(entry);
+
   const harnessContent = entry.message.content.metadata?.harnessContent;
   if (!Array.isArray(harnessContent)) return [];
 
@@ -864,6 +935,55 @@ function notificationMetadata(entry: MessageEntry): Array<NotificationEntry | No
     });
   }
   return notifications;
+}
+
+/**
+ * Persisted notification signals are DB-native `role: 'signal'` rows whose
+ * original signal payload lives under `content.metadata.signal` (see
+ * `signalToDBMessage` in @mastra/core). Rebuild notification cards from it so
+ * they survive transcript hydration.
+ */
+function signalNotifications(entry: MessageEntry): Array<NotificationEntry | NotificationSummaryEntry> {
+  const signal = entry.message.content.metadata?.signal;
+  if (!isRecord(signal) || signal.type !== 'notification') return [];
+
+  const text = (entry.message.content.parts ?? [])
+    .map(part => (part.type === 'text' ? part.text : ''))
+    .filter(Boolean)
+    .join('\n')
+    .trim();
+  const attributes = isRecord(signal.attributes) ? signal.attributes : {};
+  const metadata = isRecord(signal.metadata) ? signal.metadata : {};
+
+  if (signal.tagName === 'notification-summary') {
+    const summary = isRecord(metadata.notificationSummary) ? metadata.notificationSummary : {};
+    return [
+      {
+        kind: 'notification_summary',
+        id: `${entry.id}-signal-summary`,
+        message: text,
+        pending: typeof summary.pending === 'number' ? summary.pending : 0,
+        bySource: isNumberRecord(summary.bySource) ? summary.bySource : {},
+        byPriority: isNumberRecord(summary.byPriority) ? summary.byPriority : {},
+        notificationIds: Array.isArray(summary.notificationIds)
+          ? summary.notificationIds.filter((id: unknown): id is string => typeof id === 'string')
+          : [],
+      },
+    ];
+  }
+
+  return [
+    {
+      kind: 'notification',
+      id: `${entry.id}-signal-notification`,
+      notificationId: typeof attributes.id === 'string' ? attributes.id : undefined,
+      message: text,
+      source: typeof attributes.source === 'string' ? attributes.source : undefined,
+      notifKind: typeof attributes.kind === 'string' ? attributes.kind : undefined,
+      priority: typeof attributes.priority === 'string' ? attributes.priority : undefined,
+      metadata,
+    },
+  ];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
