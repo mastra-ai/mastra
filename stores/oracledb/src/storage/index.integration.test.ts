@@ -1,7 +1,7 @@
 import { TABLE_THREADS, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
 
-import { OracleStore } from '..';
+import { OracleStore } from '.';
 
 const runIntegration = process.env.RUN_ORACLE_STORAGE_INTEGRATION === 'true';
 const describeIntegration = runIntegration ? describe : describe.skip;

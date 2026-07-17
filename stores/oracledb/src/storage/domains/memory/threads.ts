@@ -6,6 +6,7 @@ import type { StorageListThreadsInput, StorageListThreadsOutput } from '@mastra/
 import { asBindParameters, executeOptions, jsonBind, rows } from '../../../shared/connection';
 import type { ObjectRow } from '../../../shared/connection';
 import { assertJsonPath } from '../../../vector/identifiers';
+import type { OracleTxClient } from '../../db';
 import { toDate } from '../../domain-utils';
 import { THREAD_CREATED_AT, THREAD_RESOURCE_ID, THREAD_UPDATED_AT } from './schema';
 import {
@@ -62,55 +63,70 @@ export async function saveThread(
   { thread }: { thread: StorageThreadType },
 ): Promise<StorageThreadType> {
   try {
-    // Upsert threads because titles and metadata are often produced after the
-    // first message, while the thread id must remain stable for memory lookups.
-    await ctx.db.none(
-      `
-          MERGE INTO ${table(ctx, TABLE_THREADS)} target
-          USING (
-            SELECT
-              :id AS id,
-              :resourceId AS resource_id,
-              :title AS title,
-              :metadata AS metadata,
-              :createdAt AS created_at,
-              :updatedAt AS updated_at
-            FROM dual
-          ) source
-          ON (target.id = source.id)
-          WHEN MATCHED THEN UPDATE SET
-            target.${THREAD_RESOURCE_ID} = source.resource_id,
-            target.title = source.title,
-            target.metadata = source.metadata,
-            target.${THREAD_UPDATED_AT} = source.updated_at
-          WHEN NOT MATCHED THEN INSERT (
-            id,
-            ${THREAD_RESOURCE_ID},
-            title,
-            metadata,
-            ${THREAD_CREATED_AT},
-            ${THREAD_UPDATED_AT}
-          ) VALUES (
-            source.id,
-            source.resource_id,
-            source.title,
-            source.metadata,
-            source.created_at,
-            source.updated_at
-          )`,
-      {
-        id: thread.id,
-        resourceId: thread.resourceId,
-        title: optionalStringBind(thread.title),
-        metadata: jsonBind(thread.metadata ?? {}),
-        createdAt: thread.createdAt ?? new Date(),
-        updatedAt: thread.updatedAt ?? new Date(),
-      },
-    );
+    await mergeThreadRow(ctx, ctx.db, thread);
     return thread;
   } catch (error) {
     throw storageError('SAVE_THREAD', 'FAILED', { threadId: thread.id }, error);
   }
+}
+
+/**
+ * Upserts one thread row against the given client. Extracted out of
+ * `saveThread` so `cloneThread` (memory/index.ts) can run the same MERGE
+ * inside its own transaction, alongside the cloned messages insert, instead
+ * of committing independently — a failure inserting the cloned messages must
+ * not leave an orphaned, message-less cloned thread behind.
+ */
+export async function mergeThreadRow(
+  ctx: Pick<MemoryContext, 'schemaName'>,
+  client: Pick<OracleTxClient, 'none'>,
+  thread: StorageThreadType,
+): Promise<void> {
+  // Upsert threads because titles and metadata are often produced after the
+  // first message, while the thread id must remain stable for memory lookups.
+  await client.none(
+    `
+        MERGE INTO ${table(ctx, TABLE_THREADS)} target
+        USING (
+          SELECT
+            :id AS id,
+            :resourceId AS resource_id,
+            :title AS title,
+            :metadata AS metadata,
+            :createdAt AS created_at,
+            :updatedAt AS updated_at
+          FROM dual
+        ) source
+        ON (target.id = source.id)
+        WHEN MATCHED THEN UPDATE SET
+          target.${THREAD_RESOURCE_ID} = source.resource_id,
+          target.title = source.title,
+          target.metadata = source.metadata,
+          target.${THREAD_UPDATED_AT} = source.updated_at
+        WHEN NOT MATCHED THEN INSERT (
+          id,
+          ${THREAD_RESOURCE_ID},
+          title,
+          metadata,
+          ${THREAD_CREATED_AT},
+          ${THREAD_UPDATED_AT}
+        ) VALUES (
+          source.id,
+          source.resource_id,
+          source.title,
+          source.metadata,
+          source.created_at,
+          source.updated_at
+        )`,
+    {
+      id: thread.id,
+      resourceId: thread.resourceId,
+      title: optionalStringBind(thread.title),
+      metadata: jsonBind(thread.metadata ?? {}),
+      createdAt: thread.createdAt ?? new Date(),
+      updatedAt: thread.updatedAt ?? new Date(),
+    },
+  );
 }
 
 export async function updateThread(

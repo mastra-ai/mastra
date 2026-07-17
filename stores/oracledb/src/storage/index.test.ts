@@ -112,6 +112,14 @@ createConfigValidationTests({
       },
     },
     {
+      description: 'external auth config without user or password',
+      config: {
+        id: 'oracle-valid-external-auth-no-user-config',
+        connectString: connection.connectString,
+        externalAuth: true,
+      },
+    },
+    {
       description: 'preconfigured pool manager',
       config: {
         id: 'oracle-valid-pool-manager-config',
@@ -181,6 +189,51 @@ describe('OracleStore facade', () => {
       [{ id: 'R001_MEMORY_SCHEMA', status: 'reapplied' }],
       [{ id: 'R001_MEMORY_SCHEMA', status: 'reapplied' }],
     ]);
+    for (const init of domainInits) {
+      expect(init).not.toHaveBeenCalled();
+    }
+  });
+
+  it('waits for an in-flight init before running a forced migrate', async () => {
+    const store = new OracleStore({
+      id: 'oracle-store-migrate-waits-for-init',
+      poolManager: { getPool: vi.fn(), close: vi.fn() } as any,
+    });
+    const domainInits = Object.values(store.stores).map(domain =>
+      vi.spyOn(domain as { init: () => Promise<void> }, 'init').mockResolvedValue(undefined),
+    );
+    const resolvers: Array<(value: Array<{ id: string; status: string }>) => void> = [];
+    const migrationRegistry = {
+      run: vi.fn(
+        () =>
+          new Promise<Array<{ id: string; status: string }>>(resolve => {
+            resolvers.push(resolve);
+          }),
+      ),
+      list: vi.fn(),
+    };
+    (store as any).migrationRegistry = migrationRegistry;
+
+    // migrate() starts while init() is still in flight, a genuine overlap
+    // (unlike the coalescing test above, where migrate() starts after init()
+    // has already resolved).
+    const initPromise = store.init();
+    const migratePromise = store.migrate();
+
+    expect(migrationRegistry.run).toHaveBeenCalledTimes(1);
+    expect(migrationRegistry.run.mock.calls[0]?.[1]).toEqual({ forceRepeatable: false });
+
+    resolvers[0]?.([{ id: 'R001_MEMORY_SCHEMA', status: 'applied' }]);
+    await initPromise;
+
+    // The forced run must only start after init() settles, and it must be
+    // its own forced (forceRepeatable: true) run rather than reusing init's.
+    await vi.waitFor(() => expect(migrationRegistry.run).toHaveBeenCalledTimes(2));
+    expect(migrationRegistry.run.mock.calls[1]?.[1]).toEqual({ forceRepeatable: true });
+
+    resolvers[1]?.([{ id: 'R001_MEMORY_SCHEMA', status: 'reapplied' }]);
+    await expect(migratePromise).resolves.toEqual([{ id: 'R001_MEMORY_SCHEMA', status: 'reapplied' }]);
+
     for (const init of domainInits) {
       expect(init).not.toHaveBeenCalled();
     }
@@ -265,5 +318,73 @@ describe('OracleStore facade', () => {
     await expect(store.migrate()).rejects.toThrow(/migration failed/i);
     expect((store as any).migrationPromise).toBeUndefined();
     expect((store as any).initPromise).toBeUndefined();
+  });
+});
+
+describe('OracleStore first-PR domains', () => {
+  it('exposes only the selected storage domains', () => {
+    const store = new OracleStore({
+      id: 'first-pr-domain-test',
+      pool: {} as any,
+    });
+
+    expect(Object.keys(store.stores).sort()).toEqual([
+      'agents',
+      'mcpClients',
+      'memory',
+      'observability',
+      'scorerDefinitions',
+      'scores',
+      'workflows',
+    ]);
+  });
+
+  it('registers only selected storage migrations', () => {
+    const store = new OracleStore({
+      id: 'first-pr-migrations-test',
+      pool: {} as any,
+    });
+
+    const migrations = (
+      store as unknown as {
+        storageMigrations: () => Array<{ id: string }>;
+      }
+    ).storageMigrations();
+
+    expect(migrations.map(migration => migration.id)).toEqual([
+      'R001_MEMORY_SCHEMA',
+      'R002_WORKFLOWS_SCHEMA',
+      'R003_OBSERVABILITY_SCHEMA',
+      'R004_SCORES_SCHEMA',
+      'R005_SCORER_DEFINITIONS_SCHEMA',
+      'R006_MCP_CLIENTS_SCHEMA',
+      'R007_AGENTS_SCHEMA',
+    ]);
+  });
+
+  it('assigns stable checksums to repeatable storage migrations', () => {
+    const store = new OracleStore({
+      id: 'repeatable-checksum-test',
+      pool: {} as any,
+    });
+
+    const migrations = (
+      store as unknown as {
+        storageMigrations: () => Array<{ checksum?: string }>;
+      }
+    ).storageMigrations();
+
+    expect(migrations.every(migration => /^[A-F0-9]{64}$/.test(migration.checksum ?? ''))).toBe(true);
+  });
+
+  it('rejects invalid message batch sizes at construction time', () => {
+    expect(
+      () =>
+        new OracleStore({
+          id: 'invalid-message-batch',
+          pool: {} as any,
+          messageBatchSize: 0,
+        }),
+    ).toThrow(/messageBatchSize/i);
   });
 });

@@ -70,11 +70,15 @@ export class OraclePoolManager {
 }
 
 export function validateOracleConnectionConfig(config: OracleConnectionConfig): void {
-  if (!config.pool && (!config.user || !config.connectString)) {
-    throw new Error('Provide either an Oracle pool or user/connectString credentials');
-  }
-  if (!config.pool && !config.externalAuth && !config.password) {
-    throw new Error('Password is required unless externalAuth is enabled');
+  if (!config.pool) {
+    // External authentication (OS/Kerberos/wallet TLS) identifies the session
+    // without explicit credentials, so user and password may both be omitted.
+    if (!config.connectString || (!config.externalAuth && !config.user)) {
+      throw new Error('Provide either an Oracle pool or user/connectString credentials');
+    }
+    if (!config.externalAuth && !config.password) {
+      throw new Error('Password is required unless externalAuth is enabled');
+    }
   }
 }
 

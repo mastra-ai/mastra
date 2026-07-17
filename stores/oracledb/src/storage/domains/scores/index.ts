@@ -369,7 +369,18 @@ export class ScoresOracle extends ScoresStorage {
     // still character types and leave CLOB columns untouched.
     for (const columnName of SCORE_LONG_TEXT_COLUMNS) {
       const dataType = await this.scoreColumnDataType(columnName);
-      if (!dataType || dataType === 'CLOB' || dataType === 'NCLOB') continue;
+      if (dataType === 'CLOB' || dataType === 'NCLOB') continue;
+
+      if (!dataType) {
+        // The narrow column can be missing entirely because a previous
+        // migration crashed between DROP and RENAME, leaving the CLOB copy
+        // parked under its temporary name. Only skip when there is genuinely
+        // nothing to repair; otherwise fall through so the migration resumes
+        // instead of leaving the table permanently missing the column.
+        const tempExists = await this.scoreColumnExists(scoreTempClobColumnName(columnName));
+        if (!tempExists) continue;
+      }
+
       await this.migrateScoreTextColumnToClob(columnName);
     }
   }
@@ -415,13 +426,57 @@ export class ScoresOracle extends ScoresStorage {
     return row?.nullable;
   }
 
+  private async scoreColumnExists(columnName: string): Promise<boolean> {
+    // Variant of scoreColumnDataType that only checks presence, used to detect
+    // an orphaned temp CLOB column (or a dropped original column) after a
+    // partially-failed migration, without caring about its data type.
+    const binds: Record<string, string> = {
+      tableName: TABLE_SCORERS,
+      columnName,
+    };
+    const ownerPredicate = this.schemaName ? 'owner = UPPER(:schemaName)' : `owner = SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA')`;
+    if (this.schemaName) binds.schemaName = this.schemaName;
+
+    const row = await this.db.oneOrNone<{ exists: number }>(
+      `SELECT 1 AS "exists" FROM all_tab_columns WHERE ${ownerPredicate} AND table_name = UPPER(:tableName) AND column_name IN (:columnName, UPPER(:columnName)) FETCH FIRST 1 ROW ONLY`,
+      binds,
+    );
+
+    return row !== null;
+  }
+
   private async migrateScoreTextColumnToClob(columnName: (typeof SCORE_LONG_TEXT_COLUMNS)[number]): Promise<void> {
     const oldColumn = scoreColumnSql(columnName);
-    const tempColumn = `ORACLE_TMP_${columnName.toUpperCase()}_CLOB`;
+    const tempColumn = scoreTempClobColumnName(columnName);
 
-    await this.db.executeDdl(`ALTER TABLE ${this.table()} ADD (${tempColumn} CLOB)`, [-1430]);
-    await this.db.none(`UPDATE ${this.table()} SET ${tempColumn} = TO_CLOB(${oldColumn}) WHERE ${oldColumn} IS NOT NULL`);
-    await this.db.executeDdl(`ALTER TABLE ${this.table()} DROP COLUMN ${oldColumn}`);
+    // Oracle commits each DDL statement immediately - ADD, DROP, and RENAME
+    // are not wrapped in one transaction - so a previous call to this method
+    // can crash partway through (e.g. after DROP but before RENAME, which
+    // would otherwise leave the table missing the column forever). Check
+    // which steps already ran and resume from there instead of blindly
+    // repeating the full sequence.
+    const oldExists = await this.scoreColumnExists(columnName);
+    const tempExists = await this.scoreColumnExists(tempColumn);
+
+    if (!oldExists && tempExists) {
+      // DROP already completed on a previous attempt; only RENAME is pending.
+      await this.db.executeDdl(`ALTER TABLE ${this.table()} RENAME COLUMN ${tempColumn} TO ${oldColumn}`);
+      return;
+    }
+
+    if (!tempExists) {
+      // Nothing has run yet: create the CLOB column and copy the existing
+      // narrow-column data into it.
+      await this.db.executeDdl(`ALTER TABLE ${this.table()} ADD (${tempColumn} CLOB)`, [-1430]);
+      await this.db.none(`UPDATE ${this.table()} SET ${tempColumn} = TO_CLOB(${oldColumn}) WHERE ${oldColumn} IS NOT NULL`);
+    }
+
+    if (oldExists) {
+      // ADD/UPDATE completed (just now or on a previous attempt) but DROP
+      // never ran.
+      await this.db.executeDdl(`ALTER TABLE ${this.table()} DROP COLUMN ${oldColumn}`);
+    }
+
     await this.db.executeDdl(`ALTER TABLE ${this.table()} RENAME COLUMN ${tempColumn} TO ${oldColumn}`);
   }
 
@@ -465,7 +520,9 @@ export class ScoresOracle extends ScoresStorage {
       const limit = perPageInput === false ? total : perPage;
       const end = perPageInput === false ? total : offset + perPage;
       const rows = await this.db.execute<ScoreRow>(
-        `${this.selectScores()} FROM ${this.table()} ${whereClause} ORDER BY ${SCORE_CREATED_AT} DESC OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY`,
+        // `id ASC` breaks ties between rows with identical createdAt timestamps so
+        // pages stay stable instead of duplicating or dropping rows across pages.
+        `${this.selectScores()} FROM ${this.table()} ${whereClause} ORDER BY ${SCORE_CREATED_AT} DESC, id ASC OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY`,
         { ...binds, offset, limit },
       );
 
@@ -578,4 +635,8 @@ function defaultScoreIndexes(indexName: (name: string) => string): OracleCreateI
 
 function scoreColumnSql(columnName: string): string {
   return /^[a-z][a-z0-9_]*$/.test(columnName) ? columnName : `"${columnName}"`;
+}
+
+function scoreTempClobColumnName(columnName: string): string {
+  return `ORACLE_TMP_${columnName.toUpperCase()}_CLOB`;
 }

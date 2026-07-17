@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
-import { ErrorCategory } from '@mastra/core/error';
+import { ErrorCategory, MastraError } from '@mastra/core/error';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import { MemoryStorage, TABLE_MESSAGES, TABLE_OBSERVATIONAL_MEMORY, TABLE_RESOURCES, TABLE_THREADS } from '@mastra/core/storage';
 import type {
@@ -34,6 +34,7 @@ import type { OracleCreateIndexOptions } from '../../db';
 import type { OracleDomainConfig } from '../../types';
 import {
   deleteMessages,
+  insertMessageBatch,
   listMessages,
   listMessagesByResourceId,
   listMessagesById,
@@ -63,7 +64,7 @@ import {
 } from './observational-buffering';
 import { getResourceById, saveResource, updateResource } from './resources';
 import { clearAllMemoryTables, initMemorySchema } from './schema';
-import { deleteThread, getThreadById, listThreads, saveThread, updateThread } from './threads';
+import { deleteThread, getThreadById, listThreads, mergeThreadRow, saveThread, updateThread } from './threads';
 import { storageError } from './utils';
 import type { MemoryContext } from './utils';
 
@@ -242,8 +243,18 @@ export class MemoryOracle extends MemoryStorage {
       } satisfies MastraDBMessage;
     });
 
-    await this.saveThread({ thread });
-    if (clonedMessages.length) await this.saveMessages({ messages: clonedMessages });
+    try {
+      // Merge the destination thread and insert its cloned messages in one
+      // transaction: a failure partway through (e.g. a message insert error)
+      // must not leave an orphaned, message-less clone of the thread committed.
+      await this.db.tx(async client => {
+        await mergeThreadRow(this.ctx, client, thread);
+        if (clonedMessages.length) await insertMessageBatch(this.ctx, client, clonedMessages);
+      });
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw storageError('CLONE_THREAD', 'FAILED', { threadId: newThreadId }, error);
+    }
 
     return { thread, clonedMessages, messageIdMap };
   }

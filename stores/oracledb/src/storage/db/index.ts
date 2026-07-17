@@ -237,9 +237,10 @@ export class OracleDB {
       if (await this.hasColumn(tableName, columnName)) continue;
 
       // Additive migrations use ALTER TABLE ADD and tolerate concurrent runs that add the same column first.
-      await this.executeDdl(`ALTER TABLE ${this.table(tableName)} ADD (${oracleColumnDefinition(tableName, columnName, column)})`, [
-        -1430,
-      ]);
+      await this.executeDdl(
+        `ALTER TABLE ${this.table(tableName)} ADD (${oracleColumnDefinition(tableName, columnName, column, this.config.schemaName)})`,
+        [-1430],
+      );
     }
   }
 
@@ -537,7 +538,7 @@ export function generateOracleTableSQL({
 }): string {
   const compositePrimaryKeySet = compositePrimaryKey ? new Set(compositePrimaryKey) : undefined;
   const columns = Object.entries(schema).map(([columnName, column]) =>
-    oracleColumnDefinition(tableName, columnName, column, compositePrimaryKeySet),
+    oracleColumnDefinition(tableName, columnName, column, schemaName, compositePrimaryKeySet),
   );
   const constraints = compositePrimaryKey?.length
     ? [`PRIMARY KEY (${compositePrimaryKey.map(columnName => formatColumnName(columnName)).join(', ')})`]
@@ -577,6 +578,7 @@ function oracleColumnDefinition(
   tableName: TABLE_NAMES,
   columnName: string,
   column: StorageColumn,
+  schemaName?: string,
   compositePrimaryKeySet?: Set<string>,
 ): string {
   const constraints: string[] = [];
@@ -585,7 +587,9 @@ function oracleColumnDefinition(
   if (!column.nullable && !column.primaryKey) constraints.push('NOT NULL');
   if (column.primaryKey && !isCompositePrimaryKeyColumn) constraints.push('PRIMARY KEY');
   if (column.references) {
-    constraints.push(`REFERENCES ${qualifyName(column.references.table)} (${formatColumnName(column.references.column)})`);
+    constraints.push(
+      `REFERENCES ${qualifyName(column.references.table, schemaName)} (${formatColumnName(column.references.column)})`,
+    );
   }
 
   return [formatColumnName(columnName), oracleColumnType(tableName, columnName, column), ...constraints].join(' ');
@@ -755,7 +759,11 @@ export async function createOracleIndex(
   options: OracleCreateIndexOptions,
   schemaName?: string,
 ): Promise<void> {
-  await executeDdl(connection, generateOracleIndexSQL(options, schemaName), [-955, -1408]);
+  // ORA-01408 ("column list already indexed") must propagate rather than being
+  // swallowed: a custom index request with different visibility, compression,
+  // or tablespace settings than an existing index on the same columns must not
+  // be silently skipped. Only ORA-00955 (name already used) is safe to ignore here.
+  await executeDdl(connection, generateOracleIndexSQL(options, schemaName), [-955]);
 }
 
 export function filterIndexesForTables(

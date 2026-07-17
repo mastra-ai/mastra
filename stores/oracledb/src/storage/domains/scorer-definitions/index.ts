@@ -319,12 +319,14 @@ export class ScorerDefinitionsOracle extends ScorerDefinitionsStorage {
       }
 
       const limit = perPageInput === false ? total : perPage;
+      // `id ASC` breaks ties between rows sharing the same order-by value so
+      // pages stay stable instead of duplicating or dropping rows across pages.
       const rows = await this.db.manyOrNone<ScorerDefinitionRow>(
         `${this.scorerSelect()} FROM ${this.table(
           TABLE_SCORER_DEFINITIONS,
         )} ${whereClause} ORDER BY ${this.scorerOrderColumn(
           field,
-        )} ${direction} OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY`,
+        )} ${direction}, id ASC OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY`,
         { ...binds, offset, limit },
       );
 
@@ -492,12 +494,14 @@ export class ScorerDefinitionsOracle extends ScorerDefinitionsStorage {
       }
 
       const limit = perPageInput === false ? total : perPage;
+      // `id ASC` breaks ties between versions sharing the same order-by value so
+      // pages stay stable instead of duplicating or dropping rows across pages.
       const rows = await this.db.manyOrNone<ScorerDefinitionVersionRow>(
         `${this.versionSelect()} FROM ${this.table(
           TABLE_SCORER_DEFINITION_VERSIONS,
         )} WHERE ${VERSION_SCORER_DEFINITION_ID} = :scorerDefinitionId ORDER BY ${this.versionOrderColumn(
           field,
-        )} ${direction} OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY`,
+        )} ${direction}, id ASC OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY`,
         { scorerDefinitionId, offset, limit },
       );
 

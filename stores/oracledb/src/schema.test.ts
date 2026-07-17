@@ -6,7 +6,6 @@ import {
 import { describe, expect, it } from 'vitest';
 
 import { exportSchemas } from './schema';
-import { OracleStore } from './storage';
 
 describe('Oracle schema export', () => {
   it('exports schema-qualified storage DDL and vector registry DDL by default', () => {
@@ -187,73 +186,5 @@ describe('Oracle schema export', () => {
     expect(ddl).toContain('servers JSON NOT NULL');
     expect(ddl).toContain('CREATE UNIQUE INDEX "APP_SCHEMA"."MASTRA_MCP_CLIENT_VERSIONS_CLIENT_VERSION_IDX"');
     expect(ddl).toContain('CREATE INDEX "APP_SCHEMA"."MCP_CLIENT_CATEGORY_IDX"');
-  });
-});
-
-describe('OracleStore first-PR domains', () => {
-  it('exposes only the selected storage domains', () => {
-    const store = new OracleStore({
-      id: 'first-pr-domain-test',
-      pool: {} as any,
-    });
-
-    expect(Object.keys(store.stores).sort()).toEqual([
-      'agents',
-      'mcpClients',
-      'memory',
-      'observability',
-      'scorerDefinitions',
-      'scores',
-      'workflows',
-    ]);
-  });
-
-  it('registers only selected storage migrations', () => {
-    const store = new OracleStore({
-      id: 'first-pr-migrations-test',
-      pool: {} as any,
-    });
-
-    const migrations = (
-      store as unknown as {
-        storageMigrations: () => Array<{ id: string }>;
-      }
-    ).storageMigrations();
-
-    expect(migrations.map(migration => migration.id)).toEqual([
-      'R001_MEMORY_SCHEMA',
-      'R002_WORKFLOWS_SCHEMA',
-      'R003_OBSERVABILITY_SCHEMA',
-      'R004_SCORES_SCHEMA',
-      'R005_SCORER_DEFINITIONS_SCHEMA',
-      'R006_MCP_CLIENTS_SCHEMA',
-      'R007_AGENTS_SCHEMA',
-    ]);
-  });
-
-  it('assigns stable checksums to repeatable storage migrations', () => {
-    const store = new OracleStore({
-      id: 'repeatable-checksum-test',
-      pool: {} as any,
-    });
-
-    const migrations = (
-      store as unknown as {
-        storageMigrations: () => Array<{ checksum?: string }>;
-      }
-    ).storageMigrations();
-
-    expect(migrations.every(migration => /^[A-F0-9]{64}$/.test(migration.checksum ?? ''))).toBe(true);
-  });
-
-  it('rejects invalid message batch sizes at construction time', () => {
-    expect(
-      () =>
-        new OracleStore({
-          id: 'invalid-message-batch',
-          pool: {} as any,
-          messageBatchSize: 0,
-        }),
-    ).toThrow(/messageBatchSize/i);
   });
 });

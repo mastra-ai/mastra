@@ -1,5 +1,7 @@
+import { MastraError } from '@mastra/core/error';
 import type { StorageResourceType } from '@mastra/core/storage';
 import { TABLE_RESOURCES } from '@mastra/core/storage';
+import type { Connection } from 'oracledb';
 
 import { executeOptions, jsonBind, rows } from '../../../shared/connection';
 import type { ObjectRow } from '../../../shared/connection';
@@ -111,15 +113,84 @@ export async function updateResource(
     return ctx.saveResource({ resource });
   }
 
-  const updated = {
-    ...existing,
-    workingMemory: workingMemory !== undefined ? workingMemory : existing.workingMemory,
-    metadata: metadata ? { ...(existing.metadata ?? {}), ...metadata } : existing.metadata,
-    updatedAt: new Date(),
-  };
+  try {
+    return await ctx.db.tx(async (_client, connection) => {
+      // Re-read under FOR UPDATE so a concurrent updateResource on the same id
+      // cannot interleave between this lock and the MERGE below, which would
+      // otherwise let one writer's workingMemory/metadata clobber the other's.
+      const result = await connection.execute<ObjectRow>(
+        `${resourceSelect()} FROM ${table(ctx, TABLE_RESOURCES)} WHERE id = :resourceId FOR UPDATE`,
+        { resourceId },
+        executeOptions(),
+      );
+      const row = rows(result)[0] as ResourceRow | undefined;
+      const locked = row ? parseResource(row) : existing;
 
-  await ctx.saveResource({ resource: updated });
-  return updated;
+      const updated: StorageResourceType = {
+        ...locked,
+        workingMemory: workingMemory !== undefined ? workingMemory : locked.workingMemory,
+        metadata: metadata ? { ...(locked.metadata ?? {}), ...metadata } : locked.metadata,
+        updatedAt: new Date(),
+      };
+
+      await mergeResourceRow(ctx, connection, updated);
+      return updated;
+    });
+  } catch (error) {
+    if (error instanceof MastraError) throw error;
+    throw storageError('UPDATE_RESOURCE', 'FAILED', { resourceId }, error);
+  }
+}
+
+/**
+ * Upserts one resource row against the given raw connection. Shared by
+ * `saveResource` (auto-commit) and `updateResource`, which runs this inside
+ * the SAME transaction as the FOR UPDATE lock above, so the merge sees and
+ * replaces exactly the row it locked.
+ */
+async function mergeResourceRow(
+  ctx: Pick<MemoryContext, 'schemaName'>,
+  connection: Connection,
+  resource: StorageResourceType,
+): Promise<void> {
+  await connection.execute(
+    `
+        MERGE INTO ${table(ctx, TABLE_RESOURCES)} target
+        USING (
+          SELECT
+            :id AS id,
+            :workingMemory AS working_memory,
+            :metadata AS metadata,
+            :createdAt AS created_at,
+            :updatedAt AS updated_at
+          FROM dual
+        ) source
+        ON (target.id = source.id)
+        WHEN MATCHED THEN UPDATE SET
+          target.${RESOURCE_WORKING_MEMORY} = source.working_memory,
+          target.metadata = source.metadata,
+          target.${RESOURCE_UPDATED_AT} = source.updated_at
+        WHEN NOT MATCHED THEN INSERT (
+          id,
+          ${RESOURCE_WORKING_MEMORY},
+          metadata,
+          ${RESOURCE_CREATED_AT},
+          ${RESOURCE_UPDATED_AT}
+        ) VALUES (
+          source.id,
+          source.working_memory,
+          source.metadata,
+          source.created_at,
+          source.updated_at
+        )`,
+    {
+      id: resource.id,
+      workingMemory: optionalClobStringBind(resource.workingMemory),
+      metadata: jsonBind(resource.metadata ?? {}),
+      createdAt: resource.createdAt ?? new Date(),
+      updatedAt: resource.updatedAt ?? new Date(),
+    },
+  );
 }
 
 function parseResource(row: ResourceRow): StorageResourceType {

@@ -196,7 +196,7 @@ export async function batchUpdateSpans(
     const now = new Date();
     const groups = new Map<string, { columns: SpanColumn[]; binds: Record<string, unknown>[] }>();
 
-    for (const record of args.records) {
+    for (const record of coalesceSpanUpdates(args.records)) {
       const columns = updateColumns(record.updates);
       const data = { ...record.updates, updatedAt: now } as Record<string, unknown>;
       const key = columns.join('\0');
@@ -494,6 +494,32 @@ async function distinctContextValues(
   );
 
   return rows.map(row => row.value);
+}
+
+type SpanUpdateRecord = BatchUpdateSpansArgs['records'][number];
+
+function coalesceSpanUpdates(records: SpanUpdateRecord[]): SpanUpdateRecord[] {
+  // batchUpdateSpans groups records by changed-column shape so executeMany can
+  // bind each shape once. That grouping reorders execution relative to the
+  // batch's insertion order, so repeated updates to the same (traceId, spanId)
+  // pair must be coalesced here first -- in insertion order, merging later
+  // updates over earlier ones -- so only the last value for each field within
+  // a batch ever reaches Oracle (see CR-10).
+  const order: string[] = [];
+  const merged = new Map<string, SpanUpdateRecord>();
+
+  for (const record of records) {
+    const key = `${record.traceId}\0${record.spanId}`;
+    const existing = merged.get(key);
+    if (existing) {
+      existing.updates = { ...existing.updates, ...record.updates };
+    } else {
+      order.push(key);
+      merged.set(key, { traceId: record.traceId, spanId: record.spanId, updates: { ...record.updates } });
+    }
+  }
+
+  return order.map(key => merged.get(key) as SpanUpdateRecord);
 }
 
 function updateColumns(updates: Record<string, unknown>): SpanColumn[] {

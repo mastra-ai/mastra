@@ -80,7 +80,7 @@ describe('Oracle storage table DDL', () => {
     });
 
     expect(tableSql).toContain('PRIMARY KEY (id, "parentId")');
-    expect(tableSql).toContain('REFERENCES "MASTRA_THREADS" (id)');
+    expect(tableSql).toContain('REFERENCES "APP"."MASTRA_THREADS" (id)');
     expect(tableSql).toContain('"size" NUMBER(10)');
   });
 });

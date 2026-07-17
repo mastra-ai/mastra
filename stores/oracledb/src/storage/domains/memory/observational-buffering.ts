@@ -16,7 +16,7 @@ import type { Connection } from 'oracledb';
 import { asBindParameters, executeOptions, nullableClobBind, nullableJsonBind, rows } from '../../../shared/connection';
 import type { ObjectRow } from '../../../shared/connection';
 import { toDate } from '../../domain-utils';
-import { insertOMRecord, omSelect } from './observational';
+import { insertOMRecord, omSelect, parseOMRow } from './observational';
 import type { ObservationalMemoryRow } from './observational';
 import {
   OM_ACTIVE_OBSERVATIONS,
@@ -197,18 +197,22 @@ export async function swapBufferedReflectionToActive(
       const unreflectedContent = currentObservations.split('\n').slice(reflectedLineCount).join('\n').trim();
       const newObservations = unreflectedContent ? `${bufferedReflection}\n\n${unreflectedContent}` : bufferedReflection;
       const now = new Date();
+      // Derive the carried-over fields from the row we just locked (FOR UPDATE
+      // above) instead of input.currentRecord, which can be stale if another
+      // writer updated generationCount/config/metadata/etc. concurrently.
+      const lockedRecord = parseOMRow(row);
       const newRecord: ObservationalMemoryRecord = {
         id: randomUUID(),
-        scope: input.currentRecord.scope,
-        threadId: input.currentRecord.threadId,
-        resourceId: input.currentRecord.resourceId,
+        scope: lockedRecord.scope,
+        threadId: lockedRecord.threadId,
+        resourceId: lockedRecord.resourceId,
         createdAt: now,
         updatedAt: now,
-        lastObservedAt: input.currentRecord.lastObservedAt,
+        lastObservedAt: lockedRecord.lastObservedAt,
         originType: 'reflection',
-        generationCount: input.currentRecord.generationCount + 1,
+        generationCount: lockedRecord.generationCount + 1,
         activeObservations: newObservations,
-        totalTokensObserved: input.currentRecord.totalTokensObserved,
+        totalTokensObserved: lockedRecord.totalTokensObserved,
         observationTokenCount: Math.round(input.tokenCount),
         pendingMessageTokens: 0,
         isReflecting: false,
@@ -217,9 +221,9 @@ export async function swapBufferedReflectionToActive(
         isBufferingReflection: false,
         lastBufferedAtTokens: 0,
         lastBufferedAtTime: null,
-        config: input.currentRecord.config,
-        metadata: input.currentRecord.metadata,
-        observedTimezone: input.currentRecord.observedTimezone,
+        config: lockedRecord.config,
+        metadata: lockedRecord.metadata,
+        observedTimezone: lockedRecord.observedTimezone,
       };
 
       await insertOMRecord(ctx, connection, newRecord, now);

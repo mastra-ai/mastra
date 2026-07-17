@@ -95,13 +95,13 @@ export async function batchCreateScores(
   if (args.scores.length === 0) return;
 
   try {
-    for (const score of args.scores) {
-      await db.insert({
-        tableName: TABLE_SCORERS,
-        schema: SCORE_SCHEMA,
-        record: scoreRecordToTableRecord(score),
-      });
-    }
+    // batchInsert wraps every insert in one transaction so a failure partway
+    // through the batch leaves zero rows persisted instead of a partial write.
+    await db.batchInsert({
+      tableName: TABLE_SCORERS,
+      schema: SCORE_SCHEMA,
+      records: args.scores.map(scoreRecordToTableRecord),
+    });
   } catch (error) {
     throw storageError('BATCH_CREATE_SCORES', 'FAILED', { count: args.scores.length }, error, ErrorCategory.USER);
   }
@@ -185,8 +185,10 @@ function scoreRecordToTableRecord(score: ScoreRecord): Record<string, unknown> {
   const id = score.scoreId ?? randomUUID();
   const timestamp = score.timestamp instanceof Date ? score.timestamp : new Date(score.timestamp ?? Date.now());
   const source = score.scoreSource ?? score.source ?? 'observability';
-  const metadata = {
-    ...(score.metadata ?? {}),
+  // Filter out undefined contextual fields BEFORE merging over score.metadata.
+  // Otherwise an undefined top-level field (e.g. score.entityName) would clobber
+  // a value already present under the same key in the original metadata.
+  const contextualMetadata = removeUndefined({
     entityName: score.entityName,
     entityVersionId: score.entityVersionId,
     parentEntityType: score.parentEntityType,
@@ -208,7 +210,8 @@ function scoreRecordToTableRecord(score: ScoreRecord): Record<string, unknown> {
     tags: score.tags,
     scoreTraceId: score.scoreTraceId,
     scope: score.scope,
-  };
+  });
+  const metadata = { ...(score.metadata ?? {}), ...contextualMetadata };
 
   // Observability scores and evaluator scores share Mastra's scorer table.
   // Fields that do not exist as first-class scorer columns are folded into

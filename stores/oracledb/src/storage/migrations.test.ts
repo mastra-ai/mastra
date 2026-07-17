@@ -172,4 +172,46 @@ describe('OracleMigrationRegistry', () => {
       ]),
     ).rejects.toThrow(/4000 characters or fewer/i);
   });
+
+  it('accepts a custom checksum at the ledger column limit and rejects one over it', async () => {
+    const registry = new OracleMigrationRegistry({ db: new FakeMigrationDb() });
+    const validRun = async () => undefined;
+    const maxLengthChecksum = 'A'.repeat(128);
+
+    const accepted = await registry.run([
+      { id: 'V003_MAX_CHECKSUM', name: 'Max length checksum', checksum: maxLengthChecksum, run: validRun },
+    ]);
+    expect(accepted[0]?.checksum).toBe(maxLengthChecksum);
+
+    await expect(
+      registry.run([
+        { id: 'V004_OVERSIZED_CHECKSUM', name: 'Oversized checksum', checksum: 'A'.repeat(129), run: validRun },
+      ]),
+    ).rejects.toThrow(/128 characters or fewer/i);
+  });
+
+  it('rejects changing the kind of an already applied migration', async () => {
+    const db = new FakeMigrationDb();
+    const registry = new OracleMigrationRegistry({ db });
+
+    await registry.run([
+      {
+        id: 'V005_KIND_CHANGE',
+        name: 'Kind change test',
+        kind: 'versioned',
+        run: async () => undefined,
+      },
+    ]);
+
+    await expect(
+      registry.run([
+        {
+          id: 'V005_KIND_CHANGE',
+          name: 'Kind change test',
+          kind: 'repeatable',
+          run: async () => undefined,
+        },
+      ]),
+    ).rejects.toThrow(/already applied as versioned and cannot be changed to repeatable/i);
+  });
 });

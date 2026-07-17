@@ -101,6 +101,14 @@ export class OracleStore extends MastraCompositeStore {
   }
 
   async migrate(): Promise<OracleMigrationResult[]> {
+    // If an init() is already in flight, let it settle first so a concurrent
+    // migrate() still gets its own forced (forceRepeatable: true) run instead
+    // of coalescing into the unforced init promise. runMigrations()'s finally
+    // block clears migrationPromise/initPromise on settle, so this always
+    // starts a fresh forced run afterward.
+    if (this.initPromise) {
+      await this.initPromise;
+    }
     return this.runMigrationsOnce(true);
   }
 

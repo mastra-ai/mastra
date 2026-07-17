@@ -53,6 +53,8 @@ describe('Oracle shared connection helpers', () => {
     expect(() => validateOracleConnectionConfig({})).toThrow(/credentials/i);
     expect(() => validateOracleConnectionConfig({ user, connectString })).toThrow(/Password/i);
     expect(() => validateOracleConnectionConfig({ user, connectString, externalAuth: true })).not.toThrow();
+    expect(() => validateOracleConnectionConfig({ connectString, externalAuth: true })).not.toThrow();
+    expect(() => validateOracleConnectionConfig({ user, externalAuth: true })).toThrow(/credentials/i);
     expect(normalizeBatchSize(undefined, 'batch', 25)).toBe(25);
     expect(() => normalizeBatchSize(0, 'batch', 25)).toThrow(/positive integer/i);
     const poolOptions = buildPoolOptions({

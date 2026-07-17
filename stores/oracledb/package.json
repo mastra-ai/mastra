@@ -30,7 +30,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test:vector-integration": "RUN_ORACLE_VECTOR_INTEGRATION=true vitest run src/vector/index.integration.test.ts",
-    "test:storage-integration": "RUN_ORACLE_STORAGE_INTEGRATION=true vitest run --fileParallelism=false src/storage/index.test.ts src/storage/db/schema.integration.test.ts"
+    "test:storage-integration": "RUN_ORACLE_STORAGE_INTEGRATION=true vitest run --fileParallelism=false src/storage/index.test.ts src/storage/index.integration.test.ts"
   },
   "license": "Apache-2.0",
   "dependencies": {

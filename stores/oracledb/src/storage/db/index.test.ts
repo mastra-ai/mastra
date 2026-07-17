@@ -93,6 +93,26 @@ describe('OracleDB facade', () => {
     expect(ddl).toContain('NOLOGGING PARALLEL ONLINE INVISIBLE');
   });
 
+  it('propagates ORA-01408 instead of silently skipping a custom index request', async () => {
+    const ora01408 = Object.assign(new Error('ORA-01408: such column list already indexed'), { errorNum: 1408 });
+    const { db } = createDb({
+      execute: vi.fn(async () => {
+        throw ora01408;
+      }),
+    });
+
+    // A custom index requesting different visibility/compression than an existing
+    // index on the same columns must abort init, not be swallowed like ORA-00955.
+    await expect(
+      db.createIndex({
+        name: 'idx_custom_visibility',
+        table: TABLE_THREADS,
+        columns: ['resourceId'],
+        invisible: true,
+      }),
+    ).rejects.toThrow(/ORA-01408/);
+  });
+
   it('executes bulk, DDL, schema, and generic table operations', async () => {
     const thread = {
       id: 'thread-1',

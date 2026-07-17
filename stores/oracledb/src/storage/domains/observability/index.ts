@@ -1,7 +1,6 @@
 import { ObservabilityStorage, TABLE_SPANS } from '@mastra/core/storage';
 import type {
   BatchCreateLogsArgs,
-  BatchCreateMetricsArgs,
   BatchCreateScoresArgs,
   BatchCreateSpansArgs,
   BatchDeleteTracesArgs,
@@ -131,12 +130,6 @@ export class ObservabilityOracle extends ObservabilityStorage {
 
   async batchCreateScores(args: BatchCreateScoresArgs): Promise<void> {
     return scoresOps.batchCreateScores(this.db, this.schemaName, args);
-  }
-
-  async batchCreateMetrics(_args: BatchCreateMetricsArgs): Promise<void> {
-    // The Oracle provider does not persist the metrics domain yet. Accepting the
-    // telemetry callback keeps workflows from surfacing unsupported-provider
-    // noise while spans, logs, and scores remain durable in Oracle.
   }
 
   async getScoreById(scoreId: string): Promise<ScoreRecord | null> {

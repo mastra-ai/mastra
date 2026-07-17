@@ -295,10 +295,12 @@ export class MCPClientsOracle extends MCPClientsStorage {
       }
 
       const limit = perPageInput === false ? total : perPage;
+      // `id ASC` breaks ties between rows sharing the same order-by value so
+      // pages stay stable instead of duplicating or dropping rows across pages.
       const rows = await this.db.manyOrNone<MCPClientRow>(
         `${this.clientSelect()} FROM ${this.table(TABLE_MCP_CLIENTS)} ${whereClause} ORDER BY ${this.clientOrderColumn(
           field,
-        )} ${direction} OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY`,
+        )} ${direction}, id ASC OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY`,
         { ...binds, offset, limit },
       );
 
@@ -439,12 +441,14 @@ export class MCPClientsOracle extends MCPClientsStorage {
       }
 
       const limit = perPageInput === false ? total : perPage;
+      // `id ASC` breaks ties between versions sharing the same order-by value so
+      // pages stay stable instead of duplicating or dropping rows across pages.
       const rows = await this.db.manyOrNone<MCPClientVersionRow>(
         `${this.versionSelect()} FROM ${this.table(
           TABLE_MCP_CLIENT_VERSIONS,
         )} WHERE ${VERSION_MCP_CLIENT_ID} = :mcpClientId ORDER BY ${this.versionOrderColumn(
           field,
-        )} ${direction} OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY`,
+        )} ${direction}, id ASC OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY`,
         { mcpClientId, offset, limit },
       );
 

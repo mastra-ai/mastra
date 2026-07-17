@@ -14,6 +14,7 @@ import type { Connection } from 'oracledb';
 import { asBindParameters, clobBind, executeOptions, rows } from '../../../shared/connection';
 import type { ObjectRow } from '../../../shared/connection';
 import { quoteIdentifier } from '../../../vector/identifiers';
+import type { OracleTxClient } from '../../db';
 import { toDate } from '../../domain-utils';
 import { MESSAGE_CREATED_AT, MESSAGE_RESOURCE_ID, THREAD_UPDATED_AT } from './schema';
 import {
@@ -164,63 +165,7 @@ export async function saveMessages(
     }
 
     await ctx.db.tx(async client => {
-      const stringExecuteManyOptions: oracledb.ExecuteManyOptions = {
-        bindDefs: {
-          id: { type: oracledb.STRING, maxSize: 512 },
-          threadId: { type: oracledb.STRING, maxSize: 512 },
-          content: { type: oracledb.STRING, maxSize: 4000 },
-          role: { type: oracledb.STRING, maxSize: 512 },
-          type: { type: oracledb.STRING, maxSize: 64 },
-          createdAt: { type: oracledb.DB_TYPE_TIMESTAMP_TZ },
-          resourceId: { type: oracledb.STRING, maxSize: 512 },
-        },
-      };
-      const clobExecuteManyOptions: oracledb.ExecuteManyOptions = {
-        bindDefs: {
-          ...stringExecuteManyOptions.bindDefs,
-          content: { type: oracledb.DB_TYPE_CLOB },
-        },
-      };
-      const stringMessageBinds: MessageSaveBind[] = [];
-      const clobMessageBinds: MessageSaveBind[] = [];
-
-      for (const message of messages) {
-        const messageThreadId = message.threadId;
-        const messageResourceId = message.resourceId;
-        if (!messageThreadId || !messageResourceId) {
-          throw new Error('Each message must include threadId and resourceId');
-        }
-        const content = serializeContent(message.content);
-        const bind = {
-          id: message.id,
-          threadId: messageThreadId,
-          content,
-          role: message.role,
-          type: message.type ?? 'v2',
-          createdAt: message.createdAt ?? new Date(),
-          resourceId: messageResourceId,
-        };
-        if (Buffer.byteLength(content, 'utf8') <= MAX_MESSAGE_STRING_BIND_BYTES) {
-          stringMessageBinds.push(bind);
-        } else {
-          clobMessageBinds.push(bind);
-        }
-      }
-
-      for (const chunk of chunkValues(stringMessageBinds, ctx.messageBatchSize)) {
-        await client.executeMany(messageMergeSql(ctx), chunk, stringExecuteManyOptions);
-      }
-      // Large or multipart messages still use CLOB binds; small messages take
-      // the cheaper string path above, which avoids CLOB allocation overhead.
-      for (const chunk of chunkValues(clobMessageBinds, ctx.messageBatchSize)) {
-        await client.executeMany(messageMergeSql(ctx), chunk, clobExecuteManyOptions);
-      }
-
-      const updatedAt = new Date();
-      await client.executeMany(
-        `UPDATE ${table(ctx, TABLE_THREADS)} SET ${THREAD_UPDATED_AT} = :updatedAt WHERE id = :threadId`,
-        Array.from(threadIds, messageThreadId => ({ updatedAt, threadId: messageThreadId })),
-      );
+      await insertMessageBatch(ctx, client, messages);
     });
 
     const list = new MessageList().add(messages as (MastraMessageV1 | MastraDBMessage)[], 'memory');
@@ -229,6 +174,76 @@ export async function saveMessages(
     if (error instanceof MastraError) throw error;
     throw storageError('SAVE_MESSAGES', 'FAILED', { threadIds: Array.from(threadIds).join(',') }, error);
   }
+}
+
+/**
+ * Batch-inserts/merges message rows and touches their threads' updatedAt
+ * against the given transactional client. Extracted out of `saveMessages` so
+ * `cloneThread` (memory/index.ts) can run this in the SAME transaction as the
+ * destination thread MERGE — a failure here must not leave an orphaned,
+ * message-less cloned thread committed. Does not verify that the owning
+ * thread exists; `saveMessages` checks that before opening its transaction.
+ */
+export async function insertMessageBatch(ctx: MemoryContext, client: OracleTxClient, messages: MastraDBMessage[]): Promise<void> {
+  const threadIds = new Set<string>();
+  const stringExecuteManyOptions: oracledb.ExecuteManyOptions = {
+    bindDefs: {
+      id: { type: oracledb.STRING, maxSize: 512 },
+      threadId: { type: oracledb.STRING, maxSize: 512 },
+      content: { type: oracledb.STRING, maxSize: 4000 },
+      role: { type: oracledb.STRING, maxSize: 512 },
+      type: { type: oracledb.STRING, maxSize: 64 },
+      createdAt: { type: oracledb.DB_TYPE_TIMESTAMP_TZ },
+      resourceId: { type: oracledb.STRING, maxSize: 512 },
+    },
+  };
+  const clobExecuteManyOptions: oracledb.ExecuteManyOptions = {
+    bindDefs: {
+      ...stringExecuteManyOptions.bindDefs,
+      content: { type: oracledb.DB_TYPE_CLOB },
+    },
+  };
+  const stringMessageBinds: MessageSaveBind[] = [];
+  const clobMessageBinds: MessageSaveBind[] = [];
+
+  for (const message of messages) {
+    const messageThreadId = message.threadId;
+    const messageResourceId = message.resourceId;
+    if (!messageThreadId || !messageResourceId) {
+      throw new Error('Each message must include threadId and resourceId');
+    }
+    threadIds.add(messageThreadId);
+    const content = serializeContent(message.content);
+    const bind = {
+      id: message.id,
+      threadId: messageThreadId,
+      content,
+      role: message.role,
+      type: message.type ?? 'v2',
+      createdAt: message.createdAt ?? new Date(),
+      resourceId: messageResourceId,
+    };
+    if (Buffer.byteLength(content, 'utf8') <= MAX_MESSAGE_STRING_BIND_BYTES) {
+      stringMessageBinds.push(bind);
+    } else {
+      clobMessageBinds.push(bind);
+    }
+  }
+
+  for (const chunk of chunkValues(stringMessageBinds, ctx.messageBatchSize)) {
+    await client.executeMany(messageMergeSql(ctx), chunk, stringExecuteManyOptions);
+  }
+  // Large or multipart messages still use CLOB binds; small messages take
+  // the cheaper string path above, which avoids CLOB allocation overhead.
+  for (const chunk of chunkValues(clobMessageBinds, ctx.messageBatchSize)) {
+    await client.executeMany(messageMergeSql(ctx), chunk, clobExecuteManyOptions);
+  }
+
+  const updatedAt = new Date();
+  await client.executeMany(
+    `UPDATE ${table(ctx, TABLE_THREADS)} SET ${THREAD_UPDATED_AT} = :updatedAt WHERE id = :threadId`,
+    Array.from(threadIds, messageThreadId => ({ updatedAt, threadId: messageThreadId })),
+  );
 }
 
 export async function updateMessages(
@@ -253,6 +268,11 @@ export async function updateMessages(
 
   try {
     await ctx.db.tx(async client => {
+      // Message ids whose content/threadId/resourceId actually changed. Those
+      // fields feed semantic-recall embeddings/metadata, so the vectors for
+      // these ids are stale once the update below commits.
+      const semanticRecallMessageIds: string[] = [];
+
       for (const updatePayload of messages) {
         const existing = existingById.get(updatePayload.id);
         if (!existing) continue;
@@ -262,6 +282,7 @@ export async function updateMessages(
 
         const setParts: string[] = [];
         const binds: Record<string, unknown> = { id };
+        let invalidatesSemanticRecallVectors = false;
 
         threadIdsToUpdate.add(existing.threadId!);
         if (fieldsToUpdate.threadId && fieldsToUpdate.threadId !== existing.threadId) {
@@ -273,14 +294,17 @@ export async function updateMessages(
           // Partial content updates merge into the stored V2 envelope instead
           // of overwriting metadata/content subfields independently.
           binds.content = clobBind(serializeContent(mergeMessageContent(existing.content, fieldsToUpdate.content)));
+          invalidatesSemanticRecallVectors = true;
         }
         if (fieldsToUpdate.threadId) {
           setParts.push('thread_id = :threadId');
           binds.threadId = fieldsToUpdate.threadId;
+          invalidatesSemanticRecallVectors = true;
         }
         if (fieldsToUpdate.resourceId) {
           setParts.push(`${MESSAGE_RESOURCE_ID} = :resourceId`);
           binds.resourceId = fieldsToUpdate.resourceId;
+          invalidatesSemanticRecallVectors = true;
         }
         if (fieldsToUpdate.role) {
           setParts.push('role = :role');
@@ -294,6 +318,17 @@ export async function updateMessages(
         if (setParts.length > 0) {
           await client.none(`UPDATE ${table(ctx, TABLE_MESSAGES)} SET ${setParts.join(', ')} WHERE id = :id`, binds);
         }
+
+        if (invalidatesSemanticRecallVectors) {
+          semanticRecallMessageIds.push(id);
+        }
+      }
+
+      if (semanticRecallMessageIds.length > 0) {
+        // Delete stale semantic-recall vectors in the same transaction as the
+        // message update, so a subsequent retrieval never surfaces embeddings
+        // for content/thread/resource state that no longer exists.
+        await deleteSemanticRecallVectorsByMessageIds(ctx, client, semanticRecallMessageIds);
       }
 
       const updatedAt = new Date();

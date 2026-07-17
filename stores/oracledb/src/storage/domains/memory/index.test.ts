@@ -1,4 +1,5 @@
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
+import type { Connection } from 'oracledb';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { OracleTxClient } from '../../db';
@@ -34,6 +35,36 @@ function createThread(id: string): StorageThreadType {
     createdAt: new Date('2026-01-01T00:00:00.000Z'),
     updatedAt: new Date('2026-01-01T00:00:00.000Z'),
   };
+}
+
+// Backs cloneThread's `ctx.db.tx` transaction with a REAL OracleDB (not a
+// mocked `db.tx`), so a rejection from `connection.executeMany` exercises the
+// actual commit/rollback wiring in OracleDB.tx instead of a hand-rolled stand-in.
+function createFakeConnection(options: { failMessageInsert?: boolean } = {}) {
+  const executeCalls: string[] = [];
+  const executeManyCalls: string[] = [];
+  const execute = vi.fn(async (sql: string) => {
+    executeCalls.push(sql);
+    return { rowsAffected: 1, rows: [] };
+  });
+  const executeMany = vi.fn(async (sql: string) => {
+    executeManyCalls.push(sql);
+    if (options.failMessageInsert && sql.includes('MASTRA_MESSAGES')) {
+      throw new Error('simulated message insert failure');
+    }
+    return { rowsAffected: 1 };
+  });
+  const commit = vi.fn(async () => {});
+  const rollback = vi.fn(async () => {});
+  const connection = { execute, executeMany, commit, rollback } as unknown as Connection;
+  return { connection, executeCalls, executeManyCalls, commit, rollback };
+}
+
+function createMemoryOracleWithConnection(connection: Connection): MemoryOracle {
+  const poolManager = {
+    withConnection: (callback: (connection: Connection) => Promise<unknown>) => callback(connection),
+  };
+  return new MemoryOracle({ poolManager: poolManager as any });
 }
 
 describe('MemoryOracle message consistency', () => {
@@ -126,5 +157,81 @@ describe('MemoryOracle message consistency', () => {
         }),
       ]),
     );
+  });
+});
+
+describe('MemoryOracle cloneThread atomicity (CR-12)', () => {
+  const sourceThread = createThread('thread-source');
+  const sourceMessage = createMessage('msg-1', sourceThread.id);
+
+  function mockCloneLookups(memory: MemoryOracle): void {
+    // Destination thread never exists yet; only the source thread id resolves.
+    (memory as any).getThreadById = vi.fn(async ({ threadId }: { threadId: string }) =>
+      threadId === sourceThread.id ? sourceThread : null,
+    );
+    (memory as any).listMessagesById = vi.fn(async () => ({ messages: [sourceMessage] }));
+  }
+
+  it('rolls back the destination thread merge when the message insert fails, leaving no orphaned clone', async () => {
+    const { connection, commit, rollback } = createFakeConnection({ failMessageInsert: true });
+    const memory = createMemoryOracleWithConnection(connection);
+    mockCloneLookups(memory);
+
+    await expect(
+      memory.cloneThread({
+        sourceThreadId: sourceThread.id,
+        newThreadId: 'thread-dest',
+        options: { messageFilter: { messageIds: [sourceMessage.id] } },
+      }),
+    ).rejects.toThrow(/simulated message insert failure|CLONE_THREAD/i);
+
+    // The thread MERGE and the cloned-messages insert ran on the SAME
+    // connection inside one transaction: since the message insert failed,
+    // the whole transaction must roll back instead of leaving the thread
+    // MERGE committed as an orphaned, message-less clone.
+    expect(commit).not.toHaveBeenCalled();
+    expect(rollback).toHaveBeenCalledTimes(1);
+  });
+
+  it('merges the destination thread and inserts cloned messages in a single transaction on success', async () => {
+    const { connection, executeCalls, executeManyCalls, commit, rollback } = createFakeConnection();
+    const memory = createMemoryOracleWithConnection(connection);
+    mockCloneLookups(memory);
+
+    const result = await memory.cloneThread({
+      sourceThreadId: sourceThread.id,
+      newThreadId: 'thread-dest',
+      options: { messageFilter: { messageIds: [sourceMessage.id] } },
+    });
+
+    expect(result.thread.id).toBe('thread-dest');
+    expect(result.clonedMessages).toHaveLength(1);
+    expect(executeCalls.some(sql => sql.includes('MERGE INTO "MASTRA_THREADS"'))).toBe(true);
+    expect(executeManyCalls.some(sql => sql.includes('"MASTRA_MESSAGES"'))).toBe(true);
+    // One transaction, one commit -- both writes shared the same connection.
+    expect(commit).toHaveBeenCalledTimes(1);
+    expect(rollback).not.toHaveBeenCalled();
+  });
+
+  it('skips the message insert entirely (and still commits) when the source thread has no messages', async () => {
+    const { connection, executeCalls, executeManyCalls, commit } = createFakeConnection();
+    const memory = createMemoryOracleWithConnection(connection);
+    (memory as any).getThreadById = vi.fn(async ({ threadId }: { threadId: string }) =>
+      threadId === sourceThread.id ? sourceThread : null,
+    );
+    // messageIds is non-empty so messagesForClone takes the listMessagesById
+    // path; the mock returning no rows simulates "already deleted"/no match.
+    (memory as any).listMessagesById = vi.fn(async () => ({ messages: [] }));
+
+    const result = await memory.cloneThread({
+      sourceThreadId: sourceThread.id,
+      newThreadId: 'thread-dest',
+      options: { messageFilter: { messageIds: ['msg-does-not-exist'] } },
+    });
+
+    expect(result.clonedMessages).toHaveLength(0);
+    expect(executeCalls.some(sql => sql.includes('MERGE INTO "MASTRA_THREADS"'))).toBe(true);
+    expect(executeManyCalls).toHaveLength(0);
+    expect(commit).toHaveBeenCalledTimes(1);
   });
 });

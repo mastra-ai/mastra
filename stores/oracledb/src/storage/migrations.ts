@@ -68,6 +68,9 @@ const MIGRATION_ID_PATTERN = /^[A-Za-z][A-Za-z0-9_.:-]*$/;
 const MAX_MIGRATION_ID_LENGTH = 256;
 const MAX_MIGRATION_NAME_LENGTH = 512;
 const MAX_MIGRATION_DESCRIPTION_LENGTH = 4000;
+// Matches the ledger's checksum VARCHAR2(128) column so an oversized custom
+// checksum fails fast in normalizeMigration() instead of during record().
+const MAX_MIGRATION_CHECKSUM_LENGTH = 128;
 
 // The ledger is intentionally small: it only records migration identity,
 // checksum, and timestamps, leaving domain code responsible for idempotent DDL.
@@ -99,6 +102,12 @@ export class OracleMigrationRegistry {
     for (const migration of migrations) {
       const normalized = normalizeMigration(migration);
       const current = applied.get(normalized.id);
+
+      if (current && current.kind !== normalized.kind) {
+        throw new Error(
+          `Oracle migration ${normalized.id} was already applied as ${current.kind} and cannot be changed to ${normalized.kind}.`,
+        );
+      }
 
       if (current && normalized.kind === 'versioned') {
         if (current.checksum !== normalized.checksum) {
@@ -208,7 +217,7 @@ function normalizeMigration(migration: OracleMigration): NormalizedOracleMigrati
   const name = normalizeMigrationName(migration.name);
   const kind = migration.kind ?? 'versioned';
   const description = normalizeMigrationDescription(migration.description);
-  const checksum = migration.checksum ?? checksumMigration({ id, name, kind, description });
+  const checksum = normalizeMigrationChecksum(migration.checksum) ?? checksumMigration({ id, name, kind, description });
 
   return {
     ...migration,
@@ -249,6 +258,15 @@ function normalizeMigrationDescription(value: string | undefined): string | unde
     throw new Error(`Oracle migration description must be ${MAX_MIGRATION_DESCRIPTION_LENGTH} characters or fewer`);
   }
   return description;
+}
+
+function normalizeMigrationChecksum(value: string | undefined): string | undefined {
+  const checksum = value?.trim();
+  if (!checksum) return undefined;
+  if (checksum.length > MAX_MIGRATION_CHECKSUM_LENGTH) {
+    throw new Error(`Oracle migration checksum must be ${MAX_MIGRATION_CHECKSUM_LENGTH} characters or fewer`);
+  }
+  return checksum;
 }
 
 function checksumMigration(input: {
