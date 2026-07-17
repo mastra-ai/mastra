@@ -390,7 +390,7 @@ describe('Datasets Handlers', () => {
   });
 
   describe('item tool mocks', () => {
-    it('round-trips toolMocks through add, get, and update', async () => {
+    it('round-trips toolMocks and unmockedToolPolicy through add, get, and update', async () => {
       const dataset = await mastra.datasets.create({ name: 'Mocks DS' });
       const toolMocks = [
         { toolName: 'getWeather', args: { city: 'Seattle' }, output: { temp: 52 } },
@@ -402,9 +402,11 @@ describe('Datasets Handlers', () => {
         datasetId: dataset.id,
         input: { q: 'weather' },
         toolMocks,
+        unmockedToolPolicy: 'deny',
       } as any)) as any;
 
       expect(added.toolMocks).toEqual(toolMocks);
+      expect(added.unmockedToolPolicy).toBe('deny');
 
       const fetched = (await GET_ITEM_ROUTE.handler({
         ...createTestServerContext({ mastra }),
@@ -413,8 +415,9 @@ describe('Datasets Handlers', () => {
       } as any)) as any;
 
       expect(fetched.toolMocks).toEqual(toolMocks);
+      expect(fetched.unmockedToolPolicy).toBe('deny');
 
-      // SCD-2: updating an unrelated field preserves toolMocks
+      // SCD-2: updating an unrelated field preserves tool mock settings
       const updated = (await UPDATE_ITEM_ROUTE.handler({
         ...createTestServerContext({ mastra }),
         datasetId: dataset.id,
@@ -423,6 +426,16 @@ describe('Datasets Handlers', () => {
       } as any)) as any;
 
       expect(updated.toolMocks).toEqual(toolMocks);
+      expect(updated.unmockedToolPolicy).toBe('deny');
+
+      const replaced = (await UPDATE_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        itemId: added.id,
+        unmockedToolPolicy: 'allow',
+      } as any)) as any;
+
+      expect(replaced.unmockedToolPolicy).toBe('allow');
     });
   });
 });
