@@ -139,7 +139,7 @@ function renderSection(initialPath = '/') {
       <ToastProvider>
         <ActiveProjectProvider>
           <ChatSessionProvider>
-            <WorkspacesSection />
+            <WorkspacesSection defaultOpen />
             <LocationProbe />
           </ChatSessionProvider>
         </ActiveProjectProvider>

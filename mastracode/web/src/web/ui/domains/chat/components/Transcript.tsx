@@ -72,7 +72,7 @@ import type {
 
 // Monospace, scrollable container for serialized args/results/file dumps.
 const resultBlock =
-  'm-0 mt-1 max-h-72 overflow-y-auto whitespace-pre-wrap break-all rounded-sm bg-surface1 p-2 font-mono text-xs leading-normal text-icon5';
+  'm-0 mt-1 max-h-72 max-w-full overflow-auto whitespace-pre rounded-sm bg-surface1 p-2 font-mono text-xs leading-normal text-icon5';
 
 // Prompt cards (approval / suspension) — an elevated card with a colored left rail.
 const promptCardBase = 'rounded-lg border border-border1 bg-surface3 px-4 py-3 shadow-md';
@@ -118,7 +118,7 @@ const STATUS_VARIANT: Record<ToolCall['status'], 'info' | 'success' | 'error'> =
 /** Label + copy header for a section inside a tool card body. */
 function ToolSection({ label, copyText, children }: { label: string; copyText: string; children: ReactNode }) {
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex min-w-0 max-w-full flex-col gap-1">
       <div className="flex items-center justify-between gap-2">
         <Txt as="span" variant="ui-xs" className="text-icon3 uppercase tracking-wide">
           {label}
@@ -137,7 +137,7 @@ function DiffView({ oldText, newText, path }: { oldText: string; newText: string
   const added = newText.split('\n');
   return (
     <div
-      className="overflow-x-auto rounded-xl border border-border1 bg-surface1 font-mono text-xs leading-normal"
+      className="min-w-0 max-w-full overflow-x-auto rounded-xl border border-border1 bg-surface1 font-mono text-xs leading-normal"
       role="group"
       aria-label="File change"
     >
@@ -239,7 +239,7 @@ function ToolCard({
     <Collapsible
       open={expanded}
       onOpenChange={setExpanded}
-      className={`overflow-hidden bg-surface3 ${toolGroupClasses(groupPosition)}`}
+      className={`min-w-0 max-w-full overflow-hidden bg-surface3 ${toolGroupClasses(groupPosition)}`}
       role="group"
       aria-label={`Tool: ${tool.toolName}`}
     >
@@ -274,7 +274,7 @@ function ToolCard({
           </Badge>
         </span>
       </CollapsibleTrigger>
-      <CollapsibleContent className="flex flex-col gap-2 px-2 pb-2">
+      <CollapsibleContent className="flex min-w-0 max-w-full flex-col gap-2 px-2 pb-2">
         {edit ? (
           edit.new_string !== undefined ? (
             <ToolSection label={edit.path ?? 'Change'} copyText={edit.new_string}>
@@ -293,7 +293,7 @@ function ToolCard({
         ) : null}
         {tool.output && (
           <ToolSection label="Output" copyText={tool.output}>
-            <pre className="m-0 max-h-72 overflow-y-auto whitespace-pre-wrap break-all rounded-xl bg-surface1 px-3 py-2 font-mono text-xs leading-normal text-icon3">
+            <pre className="m-0 max-h-72 max-w-full overflow-auto whitespace-pre rounded-xl bg-surface1 px-3 py-2 font-mono text-xs leading-normal text-icon3">
               {tool.output}
             </pre>
           </ToolSection>
@@ -301,7 +301,7 @@ function ToolCard({
         {resultText !== undefined && <DsCodeBlock code={truncate(resultText, 800)} lang="json" fileName="Result" />}
       </CollapsibleContent>
       {!expanded && tool.output && (
-        <pre className="mx-2 mb-2 max-h-72 overflow-y-auto whitespace-pre-wrap break-all rounded-xl bg-surface1 px-3 py-2 font-mono text-xs leading-normal text-icon3 opacity-75">
+        <pre className="mx-2 mb-2 max-h-72 max-w-full overflow-auto whitespace-pre rounded-xl bg-surface1 px-3 py-2 font-mono text-xs leading-normal text-icon3 opacity-75">
           {truncate(tool.output, 180)}
         </pre>
       )}

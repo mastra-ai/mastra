@@ -95,12 +95,14 @@ export async function createDriver(opts: {
   const session = controller.session(opts.resourceId);
 
   let state: TranscriptState = initialTranscript;
+  let running = false;
   const apply = (next: TranscriptState) => {
     state = next;
   };
 
   await session.create();
   const initial = await session.state();
+  running = initial.running === true;
   let sessionState: { modeId?: string; modelId?: string } = {
     modeId: initial.modeId,
     modelId: initial.modelId,
@@ -116,6 +118,12 @@ export async function createDriver(opts: {
         sessionState = { ...sessionState, modeId: known.modeId };
       } else if (known.type === 'model_changed') {
         sessionState = { ...sessionState, modelId: known.modelId };
+      } else if (known.type === 'agent_start') {
+        running = true;
+      } else if (known.type === 'agent_end') {
+        running = false;
+      } else if (known.type === 'display_state_changed') {
+        running = known.displayState.isRunning === true;
       }
       apply(transcriptReducer(state, { type: 'event', event }));
     },
@@ -215,7 +223,7 @@ export async function createDriver(opts: {
         timeoutMs,
       ),
     waitForIdle: (timeoutMs = 15_000) =>
-      waitFor(() => (!state.running ? true : undefined), 'idle', timeoutMs).then(() => undefined),
+      waitFor(() => (!running ? true : undefined), 'idle', timeoutMs).then(() => undefined),
     sendNotification: async input => {
       await session.sendNotification(input);
     },

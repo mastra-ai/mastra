@@ -146,7 +146,6 @@ describe('tokens/sec (reducer-level)', () => {
       type: 'event',
       event: { type: 'agent_start' } as any,
     });
-    expect(state.running).toBe(true);
     expect(state.tokensPerSec).toBe(0);
 
     // Step 1: 10 tokens over 0.5s decode = 20 tok/s (first EMA).
@@ -158,12 +157,11 @@ describe('tokens/sec (reducer-level)', () => {
     state = decodeStep(state, { startMs: 2000, endMs: 2500, completionTokens: 15 });
     expect(state.tokensPerSec).toBe(23);
 
-    // Turn ends: stop running but keep the last reading visible while idle.
+    // Turn end keeps the last reading visible while idle.
     state = transcriptReducer(state, {
       type: 'event',
       event: { type: 'agent_end', reason: 'done' } as any,
     });
-    expect(state.running).toBe(false);
     expect(state.tokensPerSec).toBe(23);
 
     // The next turn clears it on agent_start.

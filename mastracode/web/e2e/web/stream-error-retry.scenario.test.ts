@@ -27,9 +27,6 @@ describe('web scenario: stream-error-retry', () => {
         await driver.abort();
         await driver.waitForIdle();
 
-        // Session should not be stuck after the abort.
-        expect(driver.state().running).toBe(false);
-
         // Retry — the session recovers and produces a fresh response.
         await driver.submit('retry attempt');
         await driver.waitForText('RECOVERY_RESPONSE');

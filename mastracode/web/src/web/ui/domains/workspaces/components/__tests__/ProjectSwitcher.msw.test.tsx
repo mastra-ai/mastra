@@ -69,28 +69,23 @@ describe('ProjectSwitcher', () => {
     expect(screen.getByText('Select a project…')).toBeInTheDocument();
   });
 
-  it('when the switcher is clicked, then the projects overlay opens and the sidebar closes', async () => {
+  it('when the switcher is clicked, then the inline project menu opens without opening the project picker', async () => {
     seedProject();
     renderSwitcher();
 
-    await userEvent.click(screen.getByRole('button', { name: 'open sidebar' }));
-    expect(screen.getByTestId('sidebar-open')).toHaveTextContent('yes');
+    await userEvent.click(screen.getByRole('button', { name: 'Select project' }));
 
-    await waitFor(() => expect(screen.getByText('MastraCode Test')).toBeInTheDocument());
-    await userEvent.click(screen.getByTitle('/tmp/mastracode-test'));
-
-    expect(screen.getByTestId('projects-open')).toHaveTextContent('yes');
-    expect(screen.getByTestId('sidebar-open')).toHaveTextContent('no');
+    expect(await screen.findByRole('menuitem', { name: /MastraCode Test/ })).toBeInTheDocument();
+    expect(screen.getByTestId('projects-open')).toHaveTextContent('no');
   });
 
-  it('when the manage-projects button is clicked, then the projects overlay opens and the sidebar closes', async () => {
+  it('when Open local project is selected, then the projects overlay opens', async () => {
     seedProject();
     renderSwitcher();
 
-    await userEvent.click(screen.getByRole('button', { name: 'open sidebar' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Manage projects' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Select project' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Open local project' }));
 
     expect(screen.getByTestId('projects-open')).toHaveTextContent('yes');
-    expect(screen.getByTestId('sidebar-open')).toHaveTextContent('no');
   });
 });

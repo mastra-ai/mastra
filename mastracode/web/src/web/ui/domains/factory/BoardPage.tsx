@@ -349,7 +349,6 @@ export function BoardPage() {
     <FactoryPageShell
       title="Board"
       description="Issues and pull requests across intake, work, review, and done."
-      maxWidthClassName="max-w-7xl"
     >
       {project => <Board project={project} />}
     </FactoryPageShell>

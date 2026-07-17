@@ -192,6 +192,39 @@ describe('SettingsPanel', () => {
     });
   });
 
+  describe('when managing projects', () => {
+    it('removes the active project and reconciles the project selection', async () => {
+      const user = userEvent.setup();
+      renderSettingsPanel();
+
+      await user.click(screen.getByRole('tab', { name: 'Projects' }));
+      expect(screen.getByText('/tmp/settings-panel')).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Remove Settings Panel Project' }));
+
+      await waitFor(() => expect(localStorage.getItem('mastracode-active-project')).toBeNull());
+      await user.click(screen.getByRole('tab', { name: 'Projects' }));
+      await screen.findByText('No configured projects.');
+      expect(JSON.parse(localStorage.getItem('mastracode-projects') ?? '[]')).toEqual([]);
+    });
+
+    it('keeps the project visible and reports storage failures', async () => {
+      const user = userEvent.setup();
+      renderSettingsPanel();
+      await user.click(screen.getByRole('tab', { name: 'Projects' }));
+      const storageError = new Error('Project storage is unavailable');
+      const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementationOnce(() => {
+        throw storageError;
+      });
+
+      await user.click(screen.getByRole('button', { name: 'Remove Settings Panel Project' }));
+
+      expect(await screen.findByText(storageError.message)).toBeInTheDocument();
+      expect(screen.getByText('Settings Panel Project')).toBeInTheDocument();
+      setItem.mockRestore();
+    });
+  });
+
   describe('when changing model preferences', () => {
     it('switches the selected model through the chat model provider', async () => {
       const user = userEvent.setup();

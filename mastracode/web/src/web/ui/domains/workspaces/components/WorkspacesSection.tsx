@@ -1,9 +1,10 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useQueryClient } from '@tanstack/react-query';
-import { GitBranch, MoreHorizontal } from 'lucide-react';
+import { ChevronRight, GitBranch, MessagesSquare, MoreHorizontal } from 'lucide-react';
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
@@ -30,7 +31,7 @@ import type { Worktree } from '../services/projects';
  * there is no nested thread list. Sessions are created by board runs, not
  * ad hoc, so there is no create affordance here.
  */
-export function WorkspacesSection() {
+export function WorkspacesSection({ defaultOpen = false }: { defaultOpen?: boolean }) {
   const { baseUrl } = useApiConfig();
   const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
   const workspaces = useWorkspacesQuery(activeProject);
@@ -150,37 +151,45 @@ export function WorkspacesSection() {
   };
 
   return (
-    <section className="flex flex-col gap-2" aria-label="Factory sessions">
-      <div className="flex items-center justify-between px-1">
-        <Txt as="span" variant="ui-xs" className="text-icon3 uppercase tracking-wide">
-          Sessions
-        </Txt>
-      </div>
-
-      <div className="flex flex-col gap-1">
-        {worktrees.map(worktree => {
-          const active = worktree.worktreePath === selectedPath;
-          return (
-            <WorkspaceRow
-              key={worktree.worktreePath}
-              worktree={worktree}
-              label={titleByPath[worktree.worktreePath]}
-              active={active}
-              running={runningByPath[worktree.worktreePath] === true}
-              attention={attentionByPath[worktree.worktreePath] === true}
-              disabled={pending}
-              onSeen={() => clearAttention(worktree.worktreePath)}
-              onSelect={() => {
-                clearAttention(worktree.worktreePath);
-                selectWorkspace.mutate(worktree.worktreePath, {
-                  onSuccess: () => void openWorktreeThread(worktree.worktreePath),
-                });
-              }}
-              onDelete={() => setConfirmDelete(worktree)}
-            />
-          );
-        })}
-      </div>
+    <section aria-label="Factory sessions">
+      <Collapsible defaultOpen={defaultOpen}>
+        <CollapsibleTrigger className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-icon3 transition hover:bg-surface3 hover:text-icon5">
+          <span className="flex items-center">
+            <MessagesSquare size={13} />
+          </span>
+          <span className="truncate">Sessions</span>
+          <ChevronRight className="ml-auto shrink-0" size={13} />
+        </CollapsibleTrigger>
+        <CollapsibleContent className="flex flex-col gap-1 pt-1">
+          {worktrees.map(worktree => {
+            const active = worktree.worktreePath === selectedPath;
+            return (
+              <WorkspaceRow
+                key={worktree.worktreePath}
+                worktree={worktree}
+                label={titleByPath[worktree.worktreePath]}
+                active={active}
+                running={runningByPath[worktree.worktreePath] === true}
+                attention={attentionByPath[worktree.worktreePath] === true}
+                disabled={pending}
+                onSeen={() => clearAttention(worktree.worktreePath)}
+                onSelect={() => {
+                  clearAttention(worktree.worktreePath);
+                  selectWorkspace.mutate(worktree.worktreePath, {
+                    onSuccess: () => void openWorktreeThread(worktree.worktreePath),
+                  });
+                }}
+                onDelete={() => setConfirmDelete(worktree)}
+              />
+            );
+          })}
+          {worktrees.length === 0 && (
+            <Txt as="p" variant="ui-xs" className="m-0 px-2 py-1 text-icon3">
+              Sessions appear when work starts from the Factory board.
+            </Txt>
+          )}
+        </CollapsibleContent>
+      </Collapsible>
 
       {confirmDelete && (
         <Dialog open onOpenChange={open => !open && setConfirmDelete(null)}>
