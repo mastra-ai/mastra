@@ -694,6 +694,24 @@ export function Transcript() {
   return <TranscriptEntries entries={transcript.entries} onApprove={onApprove} onRespond={onRespond} />;
 }
 
+function followsToolEntry(entries: TimelineEntry[], index: number): boolean {
+  const current = entries[index];
+  if (current?.kind !== 'message' || current.message.role !== 'assistant') return false;
+
+  for (let previousIndex = index - 1; previousIndex >= 0; previousIndex--) {
+    const previous = entries[previousIndex];
+    if (previous.kind !== 'message') return false;
+    if (previous.message.role === 'user') return false;
+    if (previous.message.role === 'signal') continue;
+
+    const parts = previous.message.content.parts;
+    if (parts.some(part => part.type === 'text' && part.text.trim().length > 0)) return false;
+    if (parts.some(part => part.type === 'tool-invocation')) return true;
+  }
+
+  return false;
+}
+
 export function TranscriptEntries({
   entries,
   onApprove,
@@ -705,10 +723,10 @@ export function TranscriptEntries({
 }) {
   return (
     <>
-      {entries.map(entry => {
+      {entries.map((entry, index) => {
         switch (entry.kind) {
           case 'message':
-            return <MessageBubble key={entry.id} entry={entry} />;
+            return <MessageBubble key={entry.id} entry={entry} followsToolEntry={followsToolEntry(entries, index)} />;
           case 'notice':
             return <NoticeCard key={entry.id} entry={entry} />;
           case 'approval':
@@ -729,7 +747,7 @@ export function TranscriptEntries({
   );
 }
 
-function MessageBubble({ entry }: { entry: MessageEntry }) {
+function MessageBubble({ entry, followsToolEntry }: { entry: MessageEntry; followsToolEntry: boolean }) {
   // null = no group override; true/false = expand/collapse all in this bubble.
   const [allExpanded, setAllExpanded] = useState<boolean | undefined>(undefined);
   const parts = entry.message.content.parts ?? [];
@@ -812,7 +830,7 @@ function MessageBubble({ entry }: { entry: MessageEntry }) {
       }
 
       return (
-        <div className={`prose ${followsTool ? 'mt-3' : ''}`}>
+        <div className={`prose ${followsTool || followsToolEntry ? 'mt-3' : ''}`}>
           <Markdown>{part.text}</Markdown>
           {entry.streaming && part === lastTextPart && (
             <span className="ml-0.5 inline-block h-[1em] w-0.5 animate-pulse bg-accent1 align-text-bottom" />
