@@ -205,10 +205,9 @@ type CanonicalMessageEvent = Extract<
   CoreAgentControllerEvent,
   { type: 'message_start' | 'message_update' | 'message_end' }
 >;
-type TranscriptEvent = Exclude<
-  KnownAgentControllerEvent,
-  { type: 'message_start' | 'message_update' | 'message_end' }
-> | CanonicalMessageEvent;
+type TranscriptEvent =
+  | Exclude<KnownAgentControllerEvent, { type: 'message_start' | 'message_update' | 'message_end' }>
+  | CanonicalMessageEvent;
 
 type Action =
   | { type: 'event'; event: AgentControllerEvent | CoreAgentControllerEvent }
