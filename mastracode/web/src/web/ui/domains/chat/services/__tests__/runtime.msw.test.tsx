@@ -40,7 +40,6 @@ describe('chat runtime reducer', () => {
       message: {
         id: 'assistant-1',
         role: 'assistant',
-        createdAt: new Date(),
         content: { format: 2, parts: [{ type: 'text', text: 'Working' }] },
       },
     });
