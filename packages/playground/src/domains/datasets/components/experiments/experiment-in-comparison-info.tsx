@@ -2,7 +2,7 @@ import type { DatasetExperiment } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Chip } from '@mastra/playground-ui/components/Chip';
 import type { ChipProps } from '@mastra/playground-ui/components/Chip';
-import { TextAndIcon } from '@mastra/playground-ui/components/Text';
+import { getShortId, TextAndIcon } from '@mastra/playground-ui/components/Text';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { format } from 'date-fns';
 import { LayersIcon, TargetIcon, CalendarIcon, ArrowRightIcon, ArrowLeftIcon, HashIcon } from 'lucide-react';
@@ -39,7 +39,7 @@ export function ExperimentInComparisonInfo({ datasetId, experiment, type }: Expe
   }
 
   const createdAt = experiment.createdAt ? new Date(experiment.createdAt) : null;
-  const shortId = experiment.id.length > 8 ? experiment.id.slice(0, 8) : experiment.id;
+  const shortId = getShortId(experiment.id) ?? experiment.id;
   const displayName = experiment.name ?? shortId;
 
   const experimentLink = (

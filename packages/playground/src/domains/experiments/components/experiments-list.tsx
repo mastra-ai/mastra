@@ -5,6 +5,7 @@ import {
   DataListSkeleton as EntityListSkeleton,
 } from '@mastra/playground-ui/components/DataList';
 import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
+import { getShortId } from '@mastra/playground-ui/components/Text';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { useMemo } from 'react';
 import { useLinkComponent } from '@/lib/framework';
@@ -15,7 +16,7 @@ import { useLinkComponent } from '@/lib/framework';
  * unnamed), and the description surfaced in a tooltip when present.
  */
 function ExperimentNameCell({ experiment }: { experiment: DatasetExperiment }) {
-  const shortId = experiment.id.slice(0, 8);
+  const shortId = getShortId(experiment.id) ?? experiment.id;
 
   if (!experiment.name) {
     return <span className="block truncate font-mono text-neutral4">{shortId}</span>;
@@ -125,7 +126,9 @@ export function ExperimentsList({
       </EntityList.Top>
 
       {filteredData.map(exp => {
-        const dsName = exp.datasetId ? (datasetMap.get(exp.datasetId) ?? exp.datasetId.slice(0, 8)) : '—';
+        const dsName = exp.datasetId
+          ? (datasetMap.get(exp.datasetId) ?? getShortId(exp.datasetId) ?? exp.datasetId)
+          : '—';
         const status = exp.status ?? 'pending';
         const succeeded = exp.succeededCount ?? 0;
         const failed = exp.failedCount ?? 0;
