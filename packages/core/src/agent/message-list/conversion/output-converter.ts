@@ -450,8 +450,50 @@ export function aiV5UIMessagesToAIV5ModelMessages(
   // would misplace message-level providerOptions onto the tool message.
   const converted: AIV5Type.ModelMessage[] = [];
   for (const uiMsg of preprocessed) {
-    const produced = AIV5.convertToModelMessages([uiMsg]);
+    let modifiedUiMsg = uiMsg;
+    const mappedPartIndices: number[] = [];
+
+    if (uiMsg.parts) {
+      const hasInputAvailable = uiMsg.parts.some(
+        (p: any) => p && typeof p === 'object' && p.type?.startsWith('tool-') && p.state === 'input-available'
+      );
+
+      if (hasInputAvailable) {
+        modifiedUiMsg = {
+          ...uiMsg,
+          parts: uiMsg.parts.map((p: any, idx: number) => {
+            if (p && typeof p === 'object' && p.type?.startsWith('tool-') && p.state === 'input-available') {
+              mappedPartIndices.push(idx);
+              return {
+                ...p,
+                state: 'output-available',
+                output: '__DUMMY_OUTPUT_TO_BE_STRIPPED__',
+              };
+            }
+            return p;
+          }),
+        };
+      }
+    }
+
+    const produced = AIV5.convertToModelMessages([modifiedUiMsg]);
     if (produced.length === 0) continue;
+
+    let filteredProduced = produced;
+    if (mappedPartIndices.length > 0) {
+      filteredProduced = produced.filter((msg: any) => {
+        if (msg.role === 'tool' && Array.isArray(msg.content)) {
+          const cleanContent = msg.content.filter(
+            (part: any) => !(part && part.type === 'tool-result' && part.result === '__DUMMY_OUTPUT_TO_BE_STRIPPED__')
+          );
+          if (cleanContent.length === 0) {
+            return false;
+          }
+          msg.content = cleanContent;
+        }
+        return true;
+      });
+    }
 
     const providerMetadata =
       uiMsg.metadata && typeof uiMsg.metadata === 'object' && 'providerMetadata' in uiMsg.metadata
@@ -460,18 +502,18 @@ export function aiV5UIMessagesToAIV5ModelMessages(
 
     if (providerMetadata) {
       let target = -1;
-      for (let index = produced.length - 1; index >= 0; index--) {
-        if (produced[index]?.role === uiMsg.role) {
+      for (let index = filteredProduced.length - 1; index >= 0; index--) {
+        if (filteredProduced[index]?.role === uiMsg.role) {
           target = index;
           break;
         }
       }
       if (target !== -1) {
-        produced[target] = { ...produced[target], providerOptions: providerMetadata } as AIV5Type.ModelMessage;
+        filteredProduced[target] = { ...filteredProduced[target], providerOptions: providerMetadata } as AIV5Type.ModelMessage;
       }
     }
 
-    converted.push(...produced);
+    converted.push(...filteredProduced);
   }
 
   const withFileMetadata = restoreAssistantFileProviderMetadata(converted, preprocessed);
