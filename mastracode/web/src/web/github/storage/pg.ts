@@ -352,6 +352,7 @@ export class GithubStoragePG extends GithubStorage {
          installation_id = EXCLUDED.installation_id,
          repo_full_name = EXCLUDED.repo_full_name,
          default_branch = EXCLUDED.default_branch,
+         sandbox_provider = EXCLUDED.sandbox_provider,
          sandbox_workdir = EXCLUDED.sandbox_workdir
        RETURNING *`,
       [

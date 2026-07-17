@@ -78,6 +78,7 @@ export class GithubStorageInMemory extends GithubStorage {
       existing.installationId = input.installationId;
       existing.repoFullName = input.repoFullName;
       existing.defaultBranch = input.defaultBranch;
+      existing.sandboxProvider = input.sandboxProvider;
       existing.sandboxWorkdir = input.sandboxWorkdir;
       return existing;
     }
