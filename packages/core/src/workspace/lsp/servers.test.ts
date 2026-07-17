@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -322,17 +322,27 @@ describe('BUILTIN_SERVERS command()', () => {
     rmSync(tempDir, { recursive: true, force: true });
   });
 
-  /** Create a fake typescript install: package.json (+ optional tsserver.js) and a tsc bin shim. */
+  /** Create a fake typescript install: package.json (+ optional tsserver.js) and its bundled tsc bin entry. */
   function installFakeTypescript(dir: string, version: string, opts?: { tsserver?: boolean; tscBin?: boolean }) {
     const pkgDir = join(dir, 'node_modules', 'typescript');
     mkdirSync(join(pkgDir, 'lib'), { recursive: true });
-    writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({ name: 'typescript', version, main: 'lib/x.js' }));
+    const withBin = opts?.tscBin !== false;
+    writeFileSync(
+      join(pkgDir, 'package.json'),
+      JSON.stringify({
+        name: 'typescript',
+        version,
+        main: 'lib/x.js',
+        ...(withBin ? { bin: { tsc: './bin/tsc' } } : {}),
+      }),
+    );
     writeFileSync(join(pkgDir, 'lib', 'x.js'), '');
     if (opts?.tsserver) writeFileSync(join(pkgDir, 'lib', 'tsserver.js'), '');
-    if (opts?.tscBin !== false) {
-      mkdirSync(join(dir, 'node_modules', '.bin'), { recursive: true });
-      writeFileSync(join(dir, 'node_modules', '.bin', 'tsc'), '');
+    if (withBin) {
+      mkdirSync(join(pkgDir, 'bin'), { recursive: true });
+      writeFileSync(join(pkgDir, 'bin', 'tsc'), '');
     }
+    return pkgDir;
   }
 
   describe('typescript (TS ≤6 — tsserver.js exists)', () => {
@@ -343,6 +353,7 @@ describe('BUILTIN_SERVERS command()', () => {
       try {
         installFakeTypescript(tempDir, '5.9.3', { tsserver: true });
         const bin = join(tempDir, 'node_modules', '.bin', 'typescript-language-server');
+        mkdirSync(join(tempDir, 'node_modules', '.bin'), { recursive: true });
         writeFileSync(bin, '');
 
         expect(tsCommand(tempDir)).toBe(`${bin} --stdio`);
@@ -376,24 +387,24 @@ describe('BUILTIN_SERVERS command()', () => {
       rmSync(isolatedDir, { recursive: true, force: true });
     });
 
-    it('uses tsc --lsp --stdio when typescript >=7 is installed without tsserver.js', () => {
-      installFakeTypescript(isolatedDir, '7.0.2');
+    it("runs the typescript package's own tsc with --lsp --stdio when typescript >=7 is installed", () => {
+      const pkgDir = installFakeTypescript(isolatedDir, '7.0.2');
 
       const defs = buildServerDefs();
       const result = defs.typescript!.command(isolatedDir);
 
-      expect(result).toBe(`${join(isolatedDir, 'node_modules', '.bin', 'tsc')} --lsp --stdio`);
+      expect(result).toBe(`node ${join(pkgDir, 'bin', 'tsc')} --lsp --stdio`);
     });
 
-    it('resolves typescript and tsc from searchPaths', () => {
+    it('resolves typescript and its tsc from searchPaths', () => {
       const searchDir = realpathSync(mkdtempSync(join(tmpdir(), 'lsp-ts7-search-')));
       try {
-        installFakeTypescript(searchDir, '7.0.2');
+        const pkgDir = installFakeTypescript(searchDir, '7.0.2');
 
         const defs = buildServerDefs({ searchPaths: [searchDir] });
         const result = defs.typescript!.command(isolatedDir);
 
-        expect(result).toBe(`${join(searchDir, 'node_modules', '.bin', 'tsc')} --lsp --stdio`);
+        expect(result).toBe(`node ${join(pkgDir, 'bin', 'tsc')} --lsp --stdio`);
       } finally {
         rmSync(searchDir, { recursive: true, force: true });
       }
@@ -408,12 +419,44 @@ describe('BUILTIN_SERVERS command()', () => {
       expect(defs.typescript!.command(isolatedDir)).toBeUndefined();
     });
 
-    it('returns undefined when typescript >=7 is installed but no tsc bin can be resolved', () => {
-      // No PATH fallback: a bare `tsc` on PATH must never be used
+    it('returns undefined when typescript >=7 is installed but has no usable tsc bin entry', () => {
+      // No shim or PATH fallback: only the validated package's own bin may run
       installFakeTypescript(isolatedDir, '7.0.2', { tscBin: false });
 
       const defs = buildServerDefs();
       expect(defs.typescript!.command(isolatedDir)).toBeUndefined();
+    });
+
+    it('never launches an unrelated tsc shim when typescript >=7 resolves from a searchPath', () => {
+      // Conflicting installs: TS 7 lives in a searchPath, while the workspace
+      // root has a stale shim left behind by an older, removed install.
+      const searchDir = realpathSync(mkdtempSync(join(tmpdir(), 'lsp-ts7-conflict-')));
+      try {
+        const pkgDir = installFakeTypescript(searchDir, '7.0.2');
+        mkdirSync(join(isolatedDir, 'node_modules', '.bin'), { recursive: true });
+        writeFileSync(join(isolatedDir, 'node_modules', '.bin', 'tsc'), '');
+
+        const defs = buildServerDefs({ searchPaths: [searchDir] });
+        const result = defs.typescript!.command(isolatedDir);
+
+        expect(result).toBe(`node ${join(pkgDir, 'bin', 'tsc')} --lsp --stdio`);
+      } finally {
+        rmSync(searchDir, { recursive: true, force: true });
+      }
+    });
+
+    it('resolves through a pnpm-style symlinked install to the real package', () => {
+      // pnpm layout: node_modules/typescript is a symlink into the .pnpm store
+      const storePkgDir = installFakeTypescript(
+        join(isolatedDir, 'node_modules', '.pnpm', 'typescript@7.0.2'),
+        '7.0.2',
+      );
+      symlinkSync(storePkgDir, join(isolatedDir, 'node_modules', 'typescript'), 'dir');
+
+      const defs = buildServerDefs();
+      const result = defs.typescript!.command(isolatedDir);
+
+      expect(result).toBe(`node ${join(storePkgDir, 'bin', 'tsc')} --lsp --stdio`);
     });
 
     it('returns undefined when installed typescript is older than 7 and has no tsserver.js', () => {
@@ -425,6 +468,7 @@ describe('BUILTIN_SERVERS command()', () => {
 
     it('still prefers the typescript-language-server wrapper when tsserver.js exists', () => {
       installFakeTypescript(isolatedDir, '5.9.3', { tsserver: true });
+      mkdirSync(join(isolatedDir, 'node_modules', '.bin'), { recursive: true });
       writeFileSync(join(isolatedDir, 'node_modules', '.bin', 'typescript-language-server'), '');
 
       const defs = buildServerDefs();

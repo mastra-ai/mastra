@@ -251,17 +251,18 @@ export function buildServerDefs(config?: LSPConfig): Record<string, LSPServerDef
         // older tsc that happens to be on PATH when typescript isn't installed.
         const pkg = resolveRequireFromPaths(root, 'typescript/package.json', searchPaths);
         if (!pkg) return undefined;
-        const version = (pkg.require(pkg.resolved) as { version?: string }).version ?? '';
-        if (!(parseInt(version, 10) >= 7)) return undefined;
-        // Prefer the tsc shim that sits next to the resolved typescript package
-        // (handles hoisted/monorepo installs where root has no node_modules/.bin).
-        const siblingBin = join(dirname(dirname(pkg.resolved)), '.bin', 'tsc');
-        if (existsSync(siblingBin)) return `${siblingBin} --lsp --stdio`;
-        // No PATH fallback: a bare `tsc` on PATH cannot be verified to belong
-        // to the typescript install whose version we just validated.
-        const tscBin = resolveNodeBin(root, 'tsc', searchPaths);
-        if (tscBin) return `${tscBin} --lsp --stdio`;
-        return undefined;
+        const manifest = pkg.require(pkg.resolved) as { version?: string; bin?: string | Record<string, string> };
+        if (!(parseInt(manifest.version ?? '', 10) >= 7)) return undefined;
+        // Run the validated package's own bin entry directly instead of a
+        // node_modules/.bin shim or PATH lookup — a shim found elsewhere is not
+        // guaranteed to point at the install whose version we just checked.
+        // This also covers hoisted/monorepo and pnpm layouts, where the usable
+        // shim and the resolved package live in different directories.
+        const binRel = typeof manifest.bin === 'string' ? manifest.bin : manifest.bin?.tsc;
+        if (!binRel) return undefined;
+        const tscEntry = join(dirname(pkg.resolved), binRel);
+        if (!existsSync(tscEntry)) return undefined;
+        return `node ${tscEntry} --lsp --stdio`;
       },
       initialization: (root: string) => {
         // Only TS ≤6 needs the tsserver.path hint; TS 7+ native LSP doesn't use it
