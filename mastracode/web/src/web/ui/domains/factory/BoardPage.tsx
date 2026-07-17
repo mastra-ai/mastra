@@ -626,7 +626,7 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
                   // create button and a click would mint a replacement session
                   // for a perfectly live thread. Hold run/create actions until
                   // liveness is known.
-                  runDisabled={!runEnabled || start.isPending || !workspaces.isSuccess}
+                  runDisabled={!runEnabled || !workspaces.isSuccess}
                   pendingRunRoles={new Set(pendingRuns.filter(run => run.id === item.id).map(run => run.role))}
                   onOpenThread={session => void openThread(session)}
                   onCreateSession={spec =>
