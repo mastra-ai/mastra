@@ -38,6 +38,7 @@ function getCommands(modes: number): HelpEntry[] {
     { key: '/permissions', description: 'Tool approval permissions' },
     { key: '/settings', description: 'Notifications, YOLO, thinking' },
     { key: '/memory', description: 'Configure Observational Memory (/om alias)' },
+    { key: '/knowledge', description: 'Browse scoped Subconscious knowledge' },
     { key: '/review', description: 'Review a GitHub pull request' },
     { key: '/report-issue', description: 'Open or browse mastracode issues' },
     { key: '/cost', description: 'Token usage and costs' },

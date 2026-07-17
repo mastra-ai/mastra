@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { MastraCompositeStore } from './base';
 import type { StorageMastraRef } from './base';
+import { InMemoryDB } from './domains/inmemory-db';
+import { InMemoryKnowledgeStorage } from './domains/knowledge';
 import { InMemoryStore } from './mock';
 
 /**
@@ -107,6 +109,13 @@ describe('MastraCompositeStore — default delegation (issue #16782)', () => {
 });
 
 describe('MastraCompositeStore — disabled domains (`false` override)', () => {
+  it('composes the knowledge domain', async () => {
+    const knowledge = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
+    const composite = new MastraCompositeStore({ id: 'outer', domains: { knowledge } });
+
+    expect(await composite.getStore('knowledge')).toBe(knowledge);
+  });
+
   it('resolves a `false` domain to undefined instead of falling through to default', async () => {
     const inner = new InMemoryStore({ id: 'inner' });
 

@@ -390,6 +390,7 @@ export class MastraCompositeStore extends MastraBase {
         harness: resolve('harness'),
         toolProviderConnections: resolve('toolProviderConnections'),
         notifications: resolve('notifications'),
+        knowledge: resolve('knowledge'),
         // The thread-state domain always has an in-memory store wired by default
         // so the built-in task tools work out of the box without a configured
         // backend. Configure a durable backend for state that must survive a

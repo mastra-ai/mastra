@@ -567,7 +567,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     const queryScope = canonicalizeKnowledgeScope(input.scope);
     return this.#db.knowledgeActivity
       .filter(event => isKnowledgeScopeVisible(event.scope, queryScope))
-      .filter(event => !input.after || event.id > input.after)
+      .filter(event => !input.after || event.id < input.after)
       .sort((a, b) => b.id.localeCompare(a.id))
       .slice(0, input.limit ?? 100)
       .map(event => ({ ...event, scope: [...event.scope], createdAt: new Date(event.createdAt) }));

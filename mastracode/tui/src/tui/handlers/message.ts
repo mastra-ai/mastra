@@ -16,6 +16,10 @@ import { NotificationSummaryComponent } from '../components/notification-summary
 import { NotificationComponent } from '../components/notification.js';
 import { ReactiveSignalComponent } from '../components/reactive-signal.js';
 import { StateSignalComponent } from '../components/state-signal.js';
+import {
+  parseSubconsciousActivitySnapshot,
+  SubconsciousActivityComponent,
+} from '../components/subconscious-activity.js';
 import { SystemReminderComponent } from '../components/system-reminder.js';
 import { TemporalGapComponent } from '../components/temporal-gap.js';
 import { ToolExecutionComponentEnhanced } from '../components/tool-execution-enhanced.js';
@@ -73,6 +77,8 @@ type StreamedStateSignalPart = {
   cacheKey?: string;
   version?: number;
   message?: string;
+  value?: unknown;
+  delta?: unknown;
 };
 
 type StreamedReactiveSignalPart = {
@@ -169,6 +175,8 @@ function toStreamedStateSignalPart(part: AgentControllerMessageContent): Streame
         : undefined,
     version: typeof stateSignal.version === 'number' ? stateSignal.version : undefined,
     message: typeof stateSignal.message === 'string' ? stateSignal.message : undefined,
+    value: stateSignal.value,
+    delta: stateSignal.delta,
   };
 }
 
@@ -233,12 +241,16 @@ function createReminderComponent(reminder: StreamedSystemReminderPart): SystemRe
 
 function addInlineStateSignal(ctx: EventHandlerContext, stateSignal: StreamedStateSignalPart): void {
   const { state } = ctx;
-  const component = new StateSignalComponent({
-    stateId: stateSignal.stateId,
-    mode: stateSignal.mode,
-    version: stateSignal.version,
-    message: stateSignal.message,
-  });
+  const subconsciousActivity =
+    stateSignal.stateId === 'subconscious-activity' ? parseSubconsciousActivitySnapshot(stateSignal.value) : undefined;
+  const component = subconsciousActivity
+    ? new SubconsciousActivityComponent(subconsciousActivity)
+    : new StateSignalComponent({
+        stateId: stateSignal.stateId,
+        mode: stateSignal.mode,
+        version: stateSignal.version,
+        message: stateSignal.message,
+      });
 
   if (state.streamingComponent) {
     const idx = state.chatContainer.children.indexOf(state.streamingComponent as never);

@@ -858,7 +858,7 @@ export class KnowledgePG extends KnowledgeStorage {
     const scope = canonicalizeKnowledgeScope(input.scope);
     const key = knowledgeScopeKey(scope);
     const result = await this.#executor.execute({
-      sql: `SELECT *,scope AS "scopeJson" FROM "${TABLE_KNOWLEDGE_ACTIVITY}" WHERE ${visibleSql}${input.after ? ' AND id > ?' : ''} ORDER BY id DESC LIMIT ?`,
+      sql: `SELECT *,scope AS "scopeJson" FROM "${TABLE_KNOWLEDGE_ACTIVITY}" WHERE ${visibleSql}${input.after ? ' AND id < ?' : ''} ORDER BY id DESC LIMIT ?`,
       args: [key, key, ...(input.after ? [input.after] : []), input.limit ?? 100],
     });
     return result.rows.map(row => ({
