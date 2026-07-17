@@ -6,6 +6,7 @@ import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { MastraServerBase } from '@mastra/core/server';
 import type { ApiRoute, HttpLoggingConfig, ValidationErrorContext, ValidationErrorResponse } from '@mastra/core/server';
+import type { ExecutionContext } from 'hono';
 import { Hono } from 'hono';
 import type { ZodError } from 'zod/v4';
 import { z } from 'zod/v4';
@@ -336,7 +337,11 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   protected customApiRoutes?: ApiRoute[];
   protected mcpOptions?: MCPOptions;
   private customRouteHandler:
-    | ((request: Request, env?: { requestContext?: RequestContext }, executionCtx?: unknown) => Promise<Response>)
+    | ((
+        request: Request,
+        env?: { requestContext?: RequestContext },
+        executionCtx?: ExecutionContext,
+      ) => Promise<Response>)
     | null = null;
 
   constructor({
@@ -925,8 +930,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     // into the internal app so custom route handlers can keep background work
     // alive after the response is sent. Without this third arg, serverless
     // runtimes freeze the invocation on return and kill any in-flight work.
-    this.customRouteHandler = async (request, env, executionCtx) =>
-      app.fetch(request, env, executionCtx as Parameters<typeof app.fetch>[2]);
+    this.customRouteHandler = async (request, env, executionCtx) => app.fetch(request, env, executionCtx);
     return true;
   }
 
@@ -941,7 +945,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     body: unknown,
     requestContext?: RequestContext,
     signal?: AbortSignal,
-    executionCtx?: unknown,
+    executionCtx?: ExecutionContext,
   ): Promise<Response | null> {
     if (!this.customRouteHandler) return null;
 

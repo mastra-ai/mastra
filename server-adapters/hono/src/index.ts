@@ -14,7 +14,7 @@ import {
   serializeStreamChunk,
 } from '@mastra/server/server-adapter';
 import { toReqRes, toFetchResponse } from 'fetch-to-node';
-import type { Context, HonoRequest, MiddlewareHandler } from 'hono';
+import type { Context, ExecutionContext, HonoRequest, MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { stream } from 'hono/streaming';
 export { createAuthMiddleware } from './auth-middleware';
@@ -722,7 +722,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         // `waitUntil`) so custom route handlers can keep background work alive
         // after the response. Hono's `executionCtx` getter throws when no
         // ExecutionContext exists (e.g. Node), so guard the access.
-        let executionCtx: unknown;
+        let executionCtx: ExecutionContext | undefined;
         try {
           executionCtx = c.executionCtx;
         } catch {
