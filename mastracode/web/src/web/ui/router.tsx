@@ -6,7 +6,7 @@
  * React Query hook (shared cache key with the rest of the UI), redirecting
  * unauthenticated sessions to `/signin` when web auth is enabled. `SignInGate`
  * mirrors the guard: signed-in (or auth-disabled) visitors are sent back to
- * `/` so the app can choose the active project's board or draft composer.
+ * `/` so the app can choose the active factory's board or draft composer.
  */
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';

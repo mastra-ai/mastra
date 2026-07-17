@@ -12,7 +12,7 @@ import type { Factory } from '../services/factories';
 
 interface GithubConnectModalProps {
   status: GithubStatus;
-  onProjectCreated: (factory: Factory) => void;
+  onFactoryCreated: (factory: Factory) => void;
   onClose: () => void;
 }
 
@@ -25,23 +25,23 @@ interface GithubConnectModalProps {
  *
  * No clone happens here — the repo is materialized into its sandbox on open.
  */
-export function GithubConnectModal({ status, onProjectCreated, onClose }: GithubConnectModalProps) {
+export function GithubConnectModal({ status, onFactoryCreated, onClose }: GithubConnectModalProps) {
   const { baseUrl } = useApiConfig();
   const connected = status.connected;
   const [query, setQuery] = useState('');
   const reposQuery = useGithubReposQuery(query || undefined, connected);
-  const createProject = useCreateGithubFactoryMutation();
+  const createFactory = useCreateGithubFactoryMutation();
   const repos = reposQuery.data ?? [];
   const loading = reposQuery.isPending;
-  const error = reposQuery.error ?? createProject.error;
-  const busyRepoId = createProject.isPending ? createProject.variables?.id : null;
+  const error = reposQuery.error ?? createFactory.error;
+  const busyRepoId = createFactory.isPending ? createFactory.variables?.id : null;
 
   useKeyDown({ escape: () => onClose() });
 
   const handlePick = async (repo: GithubRepo) => {
     try {
-      const stored = await createProject.mutateAsync(repo);
-      onProjectCreated(stored);
+      const stored = await createFactory.mutateAsync(repo);
+      onFactoryCreated(stored);
       onClose();
     } catch {
       // Mutation state renders the error.

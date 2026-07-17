@@ -1,9 +1,9 @@
 /**
  * BDD coverage for the propless `FactorySwitcher` (`domains/workspaces/components`).
  *
- * The switcher reads the active project from `useActiveFactoryContext` and
+ * The switcher reads the active factory from `useActiveFactoryContext` and
  * drives the factories modal through `useOverlays` — no props. Opening the
- * projects overlay also closes the sidebar drawer (mobile behavior).
+ * factories overlay also closes the sidebar drawer (mobile behavior).
  */
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -58,7 +58,7 @@ function renderSwitcher() {
 }
 
 describe('FactorySwitcher', () => {
-  it('given an active project, then its name and path render', async () => {
+  it('given an active factory, then its name and path render', async () => {
     seedFactory();
     renderSwitcher();
 
@@ -82,7 +82,7 @@ describe('FactorySwitcher', () => {
     expect(screen.getByTestId('projects-open')).toHaveTextContent('no');
   });
 
-  it('when Create factory from local folder is selected, then the projects overlay opens', async () => {
+  it('when Create factory from local folder is selected, then the factories overlay opens', async () => {
     seedFactory();
     renderSwitcher();
 

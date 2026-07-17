@@ -53,7 +53,7 @@ function Field({ label, hint, children }: { label: string; hint: string; childre
  * Observational-memory settings. Mirrors the TUI's `/om` command: the observer
  * and reflector models, their token thresholds, and whether attachments are
  * observed. Everything is session-scoped (resolved from and written to the
- * active project's session), so it needs the project's resourceId.
+ * active factory's session), so it needs the project's resourceId.
  */
 export function OMSection({ resourceId, models }: { resourceId?: string; models: AgentControllerAvailableModel[] }) {
   const omQuery = useOMQuery(resourceId);

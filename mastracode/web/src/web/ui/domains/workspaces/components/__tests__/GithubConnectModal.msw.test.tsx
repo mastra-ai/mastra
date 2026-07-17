@@ -48,16 +48,16 @@ const createdRepositoryPayload = {
 };
 
 function renderModal(
-  onProjectCreated = vi.fn<(project: Factory) => void>(),
+  onFactoryCreated = vi.fn<(project: Factory) => void>(),
   client?: Parameters<typeof renderWithProviders>[1],
   status: GithubStatus = connectedStatus,
 ) {
   return {
-    onProjectCreated,
+    onFactoryCreated,
     ...renderWithProviders(
       createElement(GithubConnectModal, {
         status,
-        onProjectCreated,
+        onFactoryCreated,
         onClose: vi.fn(),
       }),
       client,
@@ -118,7 +118,7 @@ describe('GithubConnectModal', () => {
       http.post(`${ORIGIN}/web/github/repositories`, () => HttpResponse.json({ repository: createdRepositoryPayload })),
     );
     const projectsHook = renderHookWithProviders(() => useFactoriesQuery());
-    const { onProjectCreated } = renderModal(undefined, projectsHook.client);
+    const { onFactoryCreated } = renderModal(undefined, projectsHook.client);
 
     await userEvent.click(await screen.findByRole('button', { name: /mastra-ai\/mastra/i }));
 
@@ -129,7 +129,7 @@ describe('GithubConnectModal', () => {
       binding: { kind: 'github', githubProjectId: 'github-project-1' },
     });
     expect(stored.id).not.toBe('github-project-1');
-    expect(onProjectCreated).toHaveBeenCalledWith(
+    expect(onFactoryCreated).toHaveBeenCalledWith(
       expect.objectContaining({
         id: stored.id,
         binding: expect.objectContaining({ kind: 'github', githubProjectId: 'github-project-1' }),

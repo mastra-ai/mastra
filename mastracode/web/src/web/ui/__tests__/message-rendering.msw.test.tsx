@@ -681,7 +681,7 @@ describe('App mode + theme controls', () => {
       expect(screen.queryByLabelText('Toggle theme')).not.toBeInTheDocument();
     });
 
-    it('does not render a project switcher in the header', async () => {
+    it('does not render a factory switcher in the header', async () => {
       seedMultiMode();
 
       renderChat();
@@ -691,10 +691,10 @@ describe('App mode + theme controls', () => {
       const header = document.querySelector('header');
       expect(header).not.toBeNull();
 
-      // The header must not contain any project switcher.
+      // The header must not contain any factory switcher.
       expect(within(header as HTMLElement).queryByRole('button', { name: 'Select factory' })).not.toBeInTheDocument();
 
-      // The sidebar remains the single source of the project switcher.
+      // The sidebar remains the single source of the factory switcher.
       const switcher = screen.getByRole('button', { name: 'Select factory' });
       expect(switcher).toHaveTextContent('MastraCode Test');
       expect(header).not.toContainElement(switcher);

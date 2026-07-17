@@ -21,7 +21,7 @@ export function FactoriesSection() {
         <Txt variant="ui-lg" className="font-medium">
           Factories
         </Txt>
-        <Txt variant="ui-sm">Remove local folders and GitHub repositories from Mastra Code.</Txt>
+        <Txt variant="ui-sm">Remove factories from this browser. Connected GitHub repositories stay in the org.</Txt>
       </div>
 
       {removeMutation.isError && (

@@ -85,7 +85,16 @@ describe('factories query hooks', () => {
     });
     await waitForMutationsIdle(client);
 
-    expect(loadFactories().map(factory => factory.name)).toEqual(['Mastra', 'New App']);
+    const stored = loadFactories().find(factory => factory.name === 'New App');
+    expect(stored).toMatchObject({
+      name: 'New App',
+      resourceId: 'resource-new',
+      binding: { kind: 'local', path: '/repo/new-app', gitBranch: 'main' },
+    });
+    expect(stored).not.toHaveProperty('path');
+    expect(stored).not.toHaveProperty('source');
+    expect(stored).not.toHaveProperty('rootPath');
+    expect(stored).not.toHaveProperty('gitUrl');
     await waitFor(() =>
       expect(result.current.factories.data.map(factory => factory.name)).toEqual(['Mastra', 'New App']),
     );
@@ -170,6 +179,10 @@ describe('factories query hooks', () => {
     expect(first!.id).not.toBe('github-project-1');
     if (first!.binding.kind !== 'github') throw new Error('expected github binding');
     expect(first!.binding.githubProjectId).toBe('github-project-1');
+    expect(first!.binding.worktrees).toEqual([]);
+    expect(first).not.toHaveProperty('path');
+    expect(first).not.toHaveProperty('source');
+    expect(first).not.toHaveProperty('githubProjectId');
 
     let second: Factory | undefined;
     await act(async () => {

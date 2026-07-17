@@ -2,7 +2,7 @@
  * BDD coverage for the Factory Board page and sidebar section.
  *
  * Drives the real route table through a memory router with the full provider
- * stack (auth guard, Chat providers, ActiveProject context), so the specs
+ * stack (auth guard, Chat providers, ActiveFactory context), so the specs
  * exercise exactly what a user sees: the Factory sidebar link and the kanban
  * board that merges live GitHub/Linear candidates with persisted work items.
  * Only the network is mocked (MSW).
@@ -328,7 +328,7 @@ function useBoardHandlers(options: BoardHandlerOptions = {}): BoardState {
   return state;
 }
 
-function seedActiveProject(project: Factory) {
+function seedActiveFactory(project: Factory) {
   localStorage.setItem('mastracode-factories', JSON.stringify([project]));
   localStorage.setItem('mastracode-active-factory', project.id);
 }
@@ -339,7 +339,7 @@ function renderAt(
   githubStatus: GithubStatus = connectedStatus,
   options: AppHandlerOptions = {},
 ) {
-  seedActiveProject(project);
+  seedActiveFactory(project);
   useAppHandlers(githubStatus, options);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [initialEntry] });

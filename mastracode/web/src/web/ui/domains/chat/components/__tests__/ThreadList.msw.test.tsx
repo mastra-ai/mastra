@@ -2,7 +2,7 @@
  * BDD coverage for the propless `ThreadList` (`domains/chat/components`).
  *
  * The list owns the thread-section behavior end-to-end: it reads threads from
- * focused chat hooks, gates itself on the active project, closes the sidebar
+ * focused chat hooks, gates itself on the active factory, closes the sidebar
  * drawer on navigation, and toasts on thread CRUD. Driven through the real
  * fetch transport with MSW at the network boundary.
  */
@@ -186,7 +186,7 @@ async function openThreadActions(title: string) {
 }
 
 describe('ThreadList', () => {
-  it('given no active project, then nothing renders', () => {
+  it('given no active factory, then nothing renders', () => {
     useAgentControllerHandlers([]);
     renderThreadList();
 

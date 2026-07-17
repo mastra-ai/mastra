@@ -652,7 +652,7 @@ describe('ChatSessionProvider', () => {
   });
 
   describe('when a chat session metadata consumer renders', () => {
-    it('reads session metadata from chat context without taking ownership of active project state', async () => {
+    it('reads session metadata from chat context without taking ownership of active factory state', async () => {
       seedFactory();
       useAgentControllerHandlers();
 

@@ -33,7 +33,7 @@ export function ChatOverlays() {
       {overlays.isOpen('github') && githubStatus && (
         <GithubConnectModal
           status={githubStatus}
-          onProjectCreated={factory => void selectFactory(factory)}
+          onFactoryCreated={factory => void selectFactory(factory)}
           onClose={() => overlays.close('github')}
         />
       )}

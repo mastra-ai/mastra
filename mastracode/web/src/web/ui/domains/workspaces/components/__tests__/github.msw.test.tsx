@@ -168,7 +168,7 @@ describe('github open-repo journey', () => {
         {open && (
           <GithubConnectModal
             status={connectedStatus}
-            onProjectCreated={project => void selectFactory(project)}
+            onFactoryCreated={project => void selectFactory(project)}
             onClose={() => setOpen(false)}
           />
         )}

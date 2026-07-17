@@ -1,7 +1,7 @@
 /**
  * BDD coverage for the propless `WorkspacesSection` (factory Sessions).
  *
- * The section reads the active project from `useActiveFactoryContext` and the
+ * The section reads the active factory from `useActiveFactoryContext` and the
  * agent session from focused chat hooks, so the spec renders it inside the real
  * provider stack and asserts worktree selection through the MSW-captured
  * session-state requests instead of a session spy.
@@ -130,7 +130,7 @@ function useAgentControllerHandlers() {
   );
 }
 
-function seedActiveProject(project: Factory) {
+function seedActiveFactory(project: Factory) {
   saveFactories([project]);
   localStorage.setItem('mastracode-active-factory', project.id);
 }
@@ -162,7 +162,7 @@ function rowContainer(name: string): HTMLElement {
 
 describe('WorkspacesSection', () => {
   it('lists factory worktrees, hides the repo root and user sessions, and marks the selected one active', async () => {
-    seedActiveProject(githubProject);
+    seedActiveFactory(githubProject);
     useAgentControllerHandlers();
 
     renderSection();
@@ -175,7 +175,7 @@ describe('WorkspacesSection', () => {
   });
 
   it('persists the collapsed state across remounts', async () => {
-    seedActiveProject(githubProject);
+    seedActiveFactory(githubProject);
     useAgentControllerHandlers();
 
     const rendered = renderSection();
@@ -194,7 +194,7 @@ describe('WorkspacesSection', () => {
   });
 
   it('does not render for local projects', async () => {
-    seedActiveProject(localProject);
+    seedActiveFactory(localProject);
     useAgentControllerHandlers();
 
     renderSection();
@@ -203,7 +203,7 @@ describe('WorkspacesSection', () => {
   });
 
   it('shows an activity indicator on workspaces with an active thread', async () => {
-    seedActiveProject(githubProject);
+    seedActiveFactory(githubProject);
     useAgentControllerHandlers();
     // One thread listing covers every worktree: each thread carries its
     // worktree's projectPath tag and a server-annotated run state.
@@ -236,7 +236,7 @@ describe('WorkspacesSection', () => {
   });
 
   it('labels rows with their thread title and falls back to the branch when there is none', async () => {
-    seedActiveProject(githubProject);
+    seedActiveFactory(githubProject);
     useAgentControllerHandlers();
     server.use(
       http.get(`${API}/sessions/:resourceId/threads`, () =>
@@ -264,7 +264,7 @@ describe('WorkspacesSection', () => {
   });
 
   it('given a run that finishes, then the dot turns solid and chimes, and opening the workspace dismisses it', async () => {
-    seedActiveProject(githubProject);
+    seedActiveFactory(githubProject);
     useAgentControllerHandlers();
     vi.mocked(playDoneSound).mockClear();
     let featState: 'active' | 'idle' = 'active';
@@ -305,7 +305,7 @@ describe('WorkspacesSection', () => {
   });
 
   it('given workspaces that are idle from the start, then no done indicator or chime fires', async () => {
-    seedActiveProject(githubProject);
+    seedActiveFactory(githubProject);
     useAgentControllerHandlers();
     vi.mocked(playDoneSound).mockClear();
     server.use(
@@ -331,7 +331,7 @@ describe('WorkspacesSection', () => {
   });
 
   it('selects a workspace row and persists its worktree path', async () => {
-    seedActiveProject(githubProject);
+    seedActiveFactory(githubProject);
     useAgentControllerHandlers();
     renderSection();
 
@@ -343,7 +343,7 @@ describe('WorkspacesSection', () => {
   });
 
   it('opens the most recent thread of the new worktree when switching workspaces', async () => {
-    seedActiveProject(githubProject);
+    seedActiveFactory(githubProject);
     useAgentControllerHandlers();
     server.use(
       http.get(`${API}/sessions/:resourceId/threads`, () =>
@@ -363,7 +363,7 @@ describe('WorkspacesSection', () => {
   });
 
   it('opens the most recent thread of the new worktree when switching from /new', async () => {
-    seedActiveProject(githubProject);
+    seedActiveFactory(githubProject);
     useAgentControllerHandlers();
     server.use(
       http.get(`${API}/sessions/:resourceId/threads`, () =>
@@ -382,7 +382,7 @@ describe('WorkspacesSection', () => {
   });
 
   it('creates and opens a thread when the new worktree has none', async () => {
-    seedActiveProject(githubProject);
+    seedActiveFactory(githubProject);
     useAgentControllerHandlers();
     let created = 0;
     server.use(
@@ -400,7 +400,7 @@ describe('WorkspacesSection', () => {
   });
 
   it('opens the active session thread when clicked from a Factory page', async () => {
-    seedActiveProject(githubProject);
+    seedActiveFactory(githubProject);
     useAgentControllerHandlers();
     server.use(
       http.get(`${API}/sessions/:resourceId/threads`, () =>
@@ -423,7 +423,7 @@ describe('WorkspacesSection', () => {
   });
 
   it('opens the titled conversation thread, not a newer empty untitled one', async () => {
-    seedActiveProject(githubProject);
+    seedActiveFactory(githubProject);
     useAgentControllerHandlers();
     server.use(
       http.get(`${API}/sessions/:resourceId/threads`, () =>
@@ -452,7 +452,7 @@ describe('WorkspacesSection', () => {
   });
 
   it('opens the already-selected workspace’s thread when its row is clicked from another page', async () => {
-    seedActiveProject(githubProject);
+    seedActiveFactory(githubProject);
     useAgentControllerHandlers();
     renderSection('/factory/board');
 
@@ -468,7 +468,7 @@ describe('WorkspacesSection', () => {
   });
 
   it('offers no ad-hoc workspace creation — factory sessions come from board runs', async () => {
-    seedActiveProject(githubProject);
+    seedActiveFactory(githubProject);
     useAgentControllerHandlers();
     renderSection();
 
@@ -478,7 +478,7 @@ describe('WorkspacesSection', () => {
   });
 
   it('offers a delete action on every factory worktree', async () => {
-    seedActiveProject(githubProject);
+    seedActiveFactory(githubProject);
     useAgentControllerHandlers();
     renderSection();
 
@@ -488,7 +488,7 @@ describe('WorkspacesSection', () => {
   });
 
   it('deletes a worktree after confirmation, cascading its threads', async () => {
-    seedActiveProject(githubProject);
+    seedActiveFactory(githubProject);
     useAgentControllerHandlers();
     let deletedBranch: unknown;
     const deletedThreads: string[] = [];
@@ -541,7 +541,7 @@ describe('WorkspacesSection', () => {
   });
 
   it('keeps the worktree when the delete confirmation is cancelled', async () => {
-    seedActiveProject(githubProject);
+    seedActiveFactory(githubProject);
     useAgentControllerHandlers();
     let deleteCalled = false;
     server.use(
