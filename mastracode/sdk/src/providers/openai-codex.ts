@@ -13,6 +13,7 @@ import type { MastraModelConfig } from '@mastra/core/llm';
 import { wrapLanguageModel } from 'ai';
 import type { LanguageModelMiddleware } from 'ai';
 import { AuthStorage } from '../auth/storage.js';
+import type { CredentialStore } from '../auth/types.js';
 
 // Codex API endpoint (not standard OpenAI API)
 const CODEX_API_ENDPOINT = 'https://chatgpt.com/backend-api/codex/responses';
@@ -113,7 +114,7 @@ export function createCodexMiddleware(reasoningEffort?: string): LanguageModelMi
  * fetch (`buildCodexStagehandFetch`).
  */
 async function getCodexBearer(
-  authStorage?: AuthStorage,
+  authStorage?: CredentialStore,
 ): Promise<{ accessToken: string; accountId: string | undefined }> {
   const storage = authStorage ?? getAuthStorage();
   storage.reload();
@@ -144,7 +145,7 @@ async function getCodexBearer(
  * SDK already targets the correct URL.
  */
 export function buildOpenAICodexOAuthFetch(
-  opts: { authStorage?: AuthStorage; rewriteUrl?: boolean } = {},
+  opts: { authStorage?: CredentialStore; rewriteUrl?: boolean } = {},
 ): typeof fetch {
   return (async (url: string | URL | Request, init?: Parameters<typeof fetch>[1]) => {
     const { accessToken, accountId } = await getCodexBearer(opts.authStorage);
@@ -399,7 +400,7 @@ async function aggregateCodexStream(response: Response): Promise<string> {
  */
 export function openaiCodexProvider(
   modelId: string = 'codex-mini-latest',
-  options?: { thinkingLevel?: ThinkingLevel; headers?: Record<string, string> },
+  options?: { thinkingLevel?: ThinkingLevel; headers?: Record<string, string>; authStorage?: CredentialStore },
 ): MastraModelConfig {
   const requestedLevel: ThinkingLevel = options?.thinkingLevel ?? 'medium';
   const effectiveLevel = getEffectiveThinkingLevel(modelId, requestedLevel);
@@ -426,7 +427,7 @@ export function openaiCodexProvider(
     apiKey: 'oauth-dummy-key',
     baseURL,
     headers,
-    fetch: buildOpenAICodexOAuthFetch() as any,
+    fetch: buildOpenAICodexOAuthFetch({ authStorage: options?.authStorage }) as any,
   });
 
   // Use the responses API for Codex models

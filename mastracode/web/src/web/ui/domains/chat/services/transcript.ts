@@ -4,7 +4,11 @@ import type {
   AgentControllerTaskSnapshot,
   AgentControllerOMProgress,
 } from '@mastra/client-js';
-import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
+import type {
+  AgentControllerEvent as CoreAgentControllerEvent,
+  MastraDBMessage,
+  MastraMessagePart,
+} from '@mastra/core/agent-controller';
 
 import { stripAnsi } from './ansi';
 
@@ -197,8 +201,16 @@ export interface OutgoingFile {
   filename?: string;
 }
 
+type CanonicalMessageEvent = Extract<
+  CoreAgentControllerEvent,
+  { type: 'message_start' | 'message_update' | 'message_end' }
+>;
+type TranscriptEvent =
+  | Exclude<KnownAgentControllerEvent, { type: 'message_start' | 'message_update' | 'message_end' }>
+  | CanonicalMessageEvent;
+
 type Action =
-  | { type: 'event'; event: AgentControllerEvent }
+  | { type: 'event'; event: AgentControllerEvent | CoreAgentControllerEvent }
   | { type: 'localUser'; text: string; steer?: boolean; files?: OutgoingFile[] }
   | { type: 'clearPending' }
   | { type: 'localNotice'; text: string; level: 'info' | 'error' }
@@ -269,8 +281,8 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
   }
 }
 
-function applyEvent(state: TranscriptState, raw: AgentControllerEvent): TranscriptState {
-  const event = raw as KnownAgentControllerEvent;
+function applyEvent(state: TranscriptState, raw: AgentControllerEvent | CoreAgentControllerEvent): TranscriptState {
+  const event = raw as TranscriptEvent;
   switch (event.type) {
     case 'agent_start':
       // Reset the rate at the start of a new turn (not at the end) so the last
@@ -284,7 +296,7 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent): Transcri
 
     case 'message_start':
     case 'message_update': {
-      const message = event.message as MastraDBMessage;
+      const message = event.message;
       const next = upsertMessage(state, message, true);
       if (message.role !== 'assistant') return next;
       // Only streamed assistant content opens the decode window — empty or
@@ -301,8 +313,9 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent): Transcri
       return { ...decoded, pending: false };
     }
     case 'message_end': {
-      const next = upsertMessage(state, event.message, false);
-      return event.message.role === 'assistant' ? { ...next, pending: false } : next;
+      const message = event.message;
+      const next = upsertMessage(state, message, false);
+      return message.role === 'assistant' ? { ...next, pending: false } : next;
     }
 
     case 'tool_input_start':
