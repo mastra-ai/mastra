@@ -13,46 +13,86 @@ function getStreamingLength(transcript: TranscriptState) {
     : 0;
 }
 
+function nearBottom(el: HTMLDivElement) {
+  return el.scrollHeight - el.scrollTop - el.clientHeight < 160;
+}
+
 export function useTranscriptScroll(transcript: TranscriptState, threadId?: string) {
   const threadRef = useRef<HTMLDivElement>(null);
+  const attachedRef = useRef(true);
+  const programmaticScrollRef = useRef(false);
   const [showScrollDown, setShowScrollDown] = useState(false);
   const streamingLen = getStreamingLength(transcript);
+
+  const setAttached = (attached: boolean) => {
+    attachedRef.current = attached;
+    setShowScrollDown(!attached);
+  };
 
   const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
     const el = threadRef.current;
     if (!el) return;
+    programmaticScrollRef.current = behavior === 'smooth' && el.scrollHeight > el.clientHeight;
+    setAttached(true);
     el.scrollTo({ top: el.scrollHeight, behavior });
+    if (behavior === 'smooth') requestAnimationFrame(() => (programmaticScrollRef.current = false));
   };
 
-  // Scroll position is DOM state; subscribe to scroll events and mirror bottom proximity for UI controls.
+  // Scroll position is DOM state; user-initiated upward scrolls detach follow intent, while
+  // layout growth alone cannot detach an already attached transcript.
   useEffect(() => {
     const el = threadRef.current;
     if (!el) return;
-    const onScroll = () => {
-      const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 160;
-      setShowScrollDown(!nearBottom);
+    const markUserScrollIntent = () => {
+      programmaticScrollRef.current = false;
     };
+    const onScroll = () => {
+      if (nearBottom(el)) {
+        programmaticScrollRef.current = false;
+        setAttached(true);
+        return;
+      }
+      if (programmaticScrollRef.current) return;
+      setAttached(false);
+    };
+    el.addEventListener('wheel', markUserScrollIntent, { passive: true });
+    el.addEventListener('touchmove', markUserScrollIntent, { passive: true });
+    el.addEventListener('keydown', markUserScrollIntent);
     el.addEventListener('scroll', onScroll, { passive: true });
     onScroll();
-    return () => el.removeEventListener('scroll', onScroll);
+    return () => {
+      el.removeEventListener('wheel', markUserScrollIntent);
+      el.removeEventListener('touchmove', markUserScrollIntent);
+      el.removeEventListener('keydown', markUserScrollIntent);
+      el.removeEventListener('scroll', onScroll);
+    };
   }, []);
 
   const scrollToBottomOnThreadChange = useEffectEvent(scrollToBottom);
+  const followLayoutChange = useEffectEvent(() => {
+    if (attachedRef.current) scrollToBottom('auto');
+  });
 
   // Thread changes require imperative DOM scrolling after the new transcript has rendered.
   useEffect(() => {
-    setShowScrollDown(false);
+    setAttached(true);
     const raf = requestAnimationFrame(() => scrollToBottomOnThreadChange('auto'));
     return () => cancelAnimationFrame(raf);
   }, [threadId]);
 
-  // Streaming updates should imperatively follow the DOM scroll only while the user is already near the bottom.
+  // Streaming updates should follow while explicitly attached. Distance-to-bottom can change
+  // because a tool/result expanded; that layout movement is not user intent.
+  useEffect(() => {
+    if (attachedRef.current) scrollToBottom('smooth');
+  }, [transcript.entries.length, transcript.pending, streamingLen]);
+
   useEffect(() => {
     const el = threadRef.current;
-    if (!el) return;
-    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 160;
-    if (nearBottom) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
-  }, [transcript.entries.length, transcript.pending, streamingLen]);
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => followLayoutChange());
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   return { threadRef, showScrollDown, scrollToBottom };
 }
