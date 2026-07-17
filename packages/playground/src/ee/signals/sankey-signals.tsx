@@ -162,7 +162,7 @@ function FlowCard({
                 aria-hidden="true"
                 className="size-2 rounded-[2px]"
                 data-testid="signal-legend-swatch"
-                style={{ backgroundColor: nodeColor(SIGNAL_HUES[signalName]) }}
+                style={{ backgroundColor: nodeColor(getSignalHue(signalName)) }}
               />
               {formatSignalName(signalName)}
             </li>
