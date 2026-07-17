@@ -169,7 +169,7 @@ describe('AskUserBadge', () => {
   });
 
   describe('when a tool call is already running', () => {
-    it('disables the option buttons and does not submit on click', () => {
+    it('disables the option controls and does not submit on click', () => {
       const suspendPayload: AskUserSuspendPayload = {
         question: 'Pick a fruit',
         options: [{ label: 'Apple' }],
@@ -180,10 +180,10 @@ describe('AskUserBadge', () => {
         { isRunning: true },
       );
 
-      const optionButton = within(badge()).getByRole('button', { name: 'Apple' }) as HTMLButtonElement;
-      expect(optionButton.disabled).toBe(true);
+      const optionControl = within(badge()).getByRole<HTMLInputElement>('radio', { name: 'Apple' });
+      expect(optionControl.disabled).toBe(true);
 
-      fireEvent.click(optionButton);
+      fireEvent.click(optionControl);
       expect(approveToolcall).not.toHaveBeenCalled();
     });
 
