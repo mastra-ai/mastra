@@ -447,7 +447,7 @@ describe('MessageList V5 Support', () => {
         });
       });
 
-      it.skip('should convert tool calls from v4 to v5 format', () => {
+      it('should convert tool calls from v4 to v5 format', () => {
         const list = new MessageList({ threadId, resourceId });
         const v4CoreMessage: AIV4CoreMessage = {
           role: 'assistant',
