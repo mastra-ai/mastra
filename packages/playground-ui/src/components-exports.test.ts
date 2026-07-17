@@ -80,4 +80,14 @@ describe('components/* subpath exports', () => {
     const mod = await import('./ds/components/ai/plan');
     expect(mod.Plan).toBeDefined();
   });
+
+  it('AI ask-user entry exports AskUser', async () => {
+    const mod = await import('./ds/components/ai/ask-user');
+    expect(mod.AskUser).toBeDefined();
+  });
+
+  it('AI task-list entry exports TaskList', async () => {
+    const mod = await import('./ds/components/ai/task-list');
+    expect(mod.TaskList).toBeDefined();
+  });
 });
