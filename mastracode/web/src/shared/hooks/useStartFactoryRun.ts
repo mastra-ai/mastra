@@ -57,8 +57,8 @@ export interface StartFactoryRunInput {
   threadTitle: string;
   /** Existing thread tags to prefer before falling back to the session thread. */
   threadTags?: Record<string, string>;
-  /** First user action dispatched to the agent. */
-  invocation: FactoryRunInvocation;
+  /** First user action dispatched to the agent. Omit to open the session without starting a run. */
+  invocation?: FactoryRunInvocation;
   /** Board card to file for this run (kanban record; optional). */
   workItem?: StartFactoryRunWorkItem;
 }
@@ -66,7 +66,9 @@ export interface StartFactoryRunInput {
 /**
  * Start an agent run for a Factory item: create (or reuse) a worktree for the
  * item's branch, create a fresh thread in that workspace, send the kickoff
- * prompt, and navigate to the new thread.
+ * prompt, and navigate to the new thread. Without an `invocation` it opens an
+ * empty session instead: same worktree/thread/card filing, but no message is
+ * sent — the user lands on the thread and types the first message.
  *
  * Sessions are scoped per worktree, so the run targets the NEW worktree's own
  * session (created here with its `projectPath` tag) instead of repointing the
@@ -114,8 +116,8 @@ export function useStartFactoryRun() {
       // the same item, reuse that thread: the prompt lands as a follow-up
       // message instead of leaving a stray second thread in the worktree.
       const threadId = await resolveRunThread(scopedSession, created.threadId, threadTitle, projectPath, threadTags);
-      let kickoffMessage: string;
-      if (invocation.type === 'skill') {
+      let kickoffMessage: string | undefined;
+      if (invocation?.type === 'skill') {
         const skillArguments = `${invocation.arguments.trim()}\n\nPrepared workspace context:\n- Worktree: ${projectPath}\n- Branch: ${branch}`;
         const prepared = await prepareWorkspaceSkill({
           agentControllerId: AGENT_CONTROLLER_ID,
@@ -126,7 +128,7 @@ export function useStartFactoryRun() {
           baseUrl,
         });
         kickoffMessage = prepared.message;
-      } else {
+      } else if (invocation) {
         kickoffMessage = invocation.prompt;
       }
 
@@ -138,16 +140,22 @@ export function useStartFactoryRun() {
 
       // Queue the kickoff before navigating so the destination page can claim it
       // exactly once. Wait for that page's composer path to finish dispatching
-      // before filing the board card as an active run.
-      const kickoffCompleted = queueThreadPageKickoff({ resourceId, projectPath, threadId }, kickoffMessage);
-      void navigate(`/threads/${threadId}`);
-      try {
-        await kickoffCompleted;
-      } catch (error) {
-        if (error instanceof ThreadPageKickoffTimeoutError) {
-          void navigate('/new', { replace: true, state: { routeErrorNotice: error.message } });
+      // before filing the board card as an active run. Without an invocation
+      // (opening an empty session) there is nothing to dispatch — navigate and
+      // let the user type the first message.
+      if (kickoffMessage !== undefined) {
+        const kickoffCompleted = queueThreadPageKickoff({ resourceId, projectPath, threadId }, kickoffMessage);
+        void navigate(`/threads/${threadId}`);
+        try {
+          await kickoffCompleted;
+        } catch (error) {
+          if (error instanceof ThreadPageKickoffTimeoutError) {
+            void navigate('/new', { replace: true, state: { routeErrorNotice: error.message } });
+          }
+          throw error;
         }
-        throw error;
+      } else {
+        void navigate(`/threads/${threadId}`);
       }
 
       // File the board card now that the run is underway, hanging the run's

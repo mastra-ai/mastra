@@ -411,6 +411,51 @@ describe('WorkspacesSection', () => {
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-latest'));
   });
 
+  it('opens the titled conversation thread, not a newer empty untitled one', async () => {
+    seedActiveProject(githubProject);
+    useAgentControllerHandlers();
+    server.use(
+      http.get(`${API}/sessions/:resourceId/threads`, () =>
+        HttpResponse.json({
+          threads: [
+            // The real conversation…
+            {
+              id: 'thread-convo',
+              title: 'Real work',
+              resourceId: 'resource-gh',
+              updatedAt: '2026-06-01T00:00:00.000Z',
+            },
+            // …and a newer untitled thread seeded by session creation, whose
+            // updatedAt sorts first. The row must still open the conversation
+            // it is labeled after.
+            { id: 'thread-seeded', title: '', resourceId: 'resource-gh', updatedAt: '2026-06-09T00:00:00.000Z' },
+          ],
+        }),
+      ),
+    );
+    renderSection('/factory/board');
+
+    await userEvent.click(await screen.findByRole('button', { name: 'feat-ui' }));
+
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-convo'));
+  });
+
+  it('opens the already-selected workspace’s thread when its row is clicked from another page', async () => {
+    seedActiveProject(githubProject);
+    useAgentControllerHandlers();
+    renderSection('/factory/board');
+
+    // feat-api is the selected workspace; its row must still lead to its
+    // conversation when the user is elsewhere (board, /new, …).
+    const row = await screen.findByRole('button', { name: 'feat-api' });
+    expect(row).toHaveAttribute('aria-current', 'true');
+    await userEvent.click(row);
+
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-generic'));
+    // No re-select happened — the workspace selection is unchanged.
+    expect(loadProjects()[0]?.selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-api');
+  });
+
   it('offers no ad-hoc workspace creation — factory sessions come from board runs', async () => {
     seedActiveProject(githubProject);
     useAgentControllerHandlers();
