@@ -48,8 +48,8 @@ export const TaskListProgress = ({ completed, total, className, ...props }: Task
 };
 
 const icons: Record<TaskListItem['status'], ReactNode> = {
-  completed: <CheckCircle2 className="size-3.5 shrink-0 text-green-500" />,
-  in_progress: <Loader2 className="size-3.5 shrink-0 animate-spin text-yellow-500" />,
+  completed: <CheckCircle2 className="size-3.5 shrink-0 text-positive1" />,
+  in_progress: <Loader2 className="size-3.5 shrink-0 text-warning1 motion-safe:animate-spin" />,
   pending: <Circle className="size-3.5 shrink-0 text-neutral4" />,
 };
 
@@ -61,7 +61,7 @@ const statusLabels: Record<TaskListItem['status'], string> = {
 
 const textClasses: Record<TaskListItem['status'], string> = {
   completed: 'text-neutral4 line-through',
-  in_progress: 'font-medium text-yellow-500',
+  in_progress: 'font-medium text-warning1',
   pending: 'text-neutral5',
 };
 

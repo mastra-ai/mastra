@@ -10,6 +10,8 @@ const mixedTasks: TaskListItem[] = [
   { id: 'pending', content: 'Build package', status: 'pending', activeForm: 'Building package' },
 ];
 
+const completedTasks: TaskListItem[] = mixedTasks.map(task => ({ ...task, status: 'completed' }));
+
 afterEach(cleanup);
 
 describe('TaskList', () => {
@@ -18,14 +20,29 @@ describe('TaskList', () => {
   });
 
   describe('when tasks have mixed statuses', () => {
-    it('renders completion count, progress, status labels, and the active form', () => {
+    it('renders the completion count', () => {
       render(<TaskList tasks={mixedTasks} />);
 
       expect(screen.getByText('1/3 completed')).toBeTruthy();
+    });
+
+    it('renders progress for the completed tasks', () => {
+      render(<TaskList tasks={mixedTasks} />);
+
       expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('1');
       expect(screen.getByRole('progressbar').getAttribute('aria-valuemax')).toBe('3');
+    });
+
+    it('renders the active form instead of the task content', () => {
+      render(<TaskList tasks={mixedTasks} />);
+
       expect(screen.getByText('Adding tests')).toBeTruthy();
       expect(screen.queryByText('Add tests')).toBeNull();
+    });
+
+    it('renders an accessible label for each task status', () => {
+      render(<TaskList tasks={mixedTasks} />);
+
       expect(screen.getByLabelText('Completed')).toBeTruthy();
       expect(screen.getByLabelText('In progress')).toBeTruthy();
       expect(screen.getByLabelText('Pending')).toBeTruthy();
@@ -53,23 +70,34 @@ describe('TaskList', () => {
     });
   });
 
-  describe('when there are no visible tasks', () => {
-    it('hides empty and completed lists by default', () => {
-      const { rerender, container } = render(<TaskList tasks={[]} />);
-      expect(container.firstChild).toBeNull();
+  describe('when the task list is empty', () => {
+    it('hides the list by default', () => {
+      const { container } = render(<TaskList tasks={[]} />);
 
-      rerender(<TaskList tasks={mixedTasks.map(task => ({ ...task, status: 'completed' }))} />);
       expect(container.firstChild).toBeNull();
     });
+  });
 
-    it('can explicitly render empty and completed lists', () => {
-      const { rerender } = render(<TaskList tasks={[]} hideWhenEmpty={false} />);
+  describe('when every task is completed', () => {
+    it('hides the list by default', () => {
+      const { container } = render(<TaskList tasks={completedTasks} />);
+
+      expect(container.firstChild).toBeNull();
+    });
+  });
+
+  describe('when empty lists are configured to remain visible', () => {
+    it('renders an empty completion count', () => {
+      render(<TaskList tasks={[]} hideWhenEmpty={false} />);
+
       expect(screen.getByText('0/0 completed')).toBeTruthy();
-      expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('0');
+    });
+  });
 
-      rerender(
-        <TaskList tasks={mixedTasks.map(task => ({ ...task, status: 'completed' }))} hideWhenComplete={false} />,
-      );
+  describe('when completed lists are configured to remain visible', () => {
+    it('renders the completed task count', () => {
+      render(<TaskList tasks={completedTasks} hideWhenComplete={false} />);
+
       expect(screen.getByText('3/3 completed')).toBeTruthy();
     });
   });

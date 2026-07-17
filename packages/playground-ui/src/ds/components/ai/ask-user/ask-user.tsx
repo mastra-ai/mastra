@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useId, useState } from 'react';
 import type { ComponentProps, KeyboardEvent, ReactNode } from 'react';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
@@ -100,24 +100,23 @@ const validOptions = (options: AskUserPayload['options']): AskUserOption[] =>
     Boolean(option && typeof option.label === 'string' && option.label),
   ) ?? [];
 
-export const AskUser = ({
+interface AskUserInputProps extends AskUserProps {
+  options: AskUserOption[];
+}
+
+const AskUserInput = ({
   payload,
+  options,
   result,
   isAnswered = false,
   isSubmitting = false,
   onSubmit,
   footer,
   ...props
-}: AskUserProps) => {
-  const options = useMemo(() => validOptions(payload.options), [payload.options]);
+}: AskUserInputProps) => {
+  const inputId = useId();
   const [text, setText] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
-  const payloadKey = `${payload.question}:${options.map(option => option.label).join('\0')}:${payload.selectionMode ?? ''}`;
-
-  useEffect(() => {
-    setText('');
-    setSelected([]);
-  }, [payloadKey]);
 
   if (result || isAnswered) {
     return (
@@ -143,12 +142,12 @@ export const AskUser = ({
   if (options.length === 0) {
     return (
       <AskUserContainer data-testid="ask-user" {...props}>
-        <label className="mb-2 block font-medium text-neutral6" htmlFor={`ask-user-${payloadKey}`}>
+        <label className="mb-2 block font-medium text-neutral6" htmlFor={inputId}>
           {payload.question}
         </label>
         <div className="flex items-center gap-2">
           <Input
-            id={`ask-user-${payloadKey}`}
+            id={inputId}
             value={text}
             onChange={event => setText(event.target.value)}
             onKeyDown={handleTextKeyDown}
@@ -177,7 +176,7 @@ export const AskUser = ({
             <AskUserOptionControl
               key={option.label}
               type={isMulti ? 'checkbox' : 'radio'}
-              name={`ask-user-${payloadKey}`}
+              name={inputId}
               label={option.label}
               description={option.description}
               disabled={isSubmitting}
@@ -208,4 +207,11 @@ export const AskUser = ({
       </fieldset>
     </AskUserContainer>
   );
+};
+
+export const AskUser = ({ payload, ...props }: AskUserProps) => {
+  const options = validOptions(payload.options);
+  const payloadKey = JSON.stringify([payload.question, options.map(option => option.label), payload.selectionMode]);
+
+  return <AskUserInput key={payloadKey} payload={payload} options={options} {...props} />;
 };
