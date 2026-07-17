@@ -112,6 +112,29 @@ describe('GitHub subscription entry points', () => {
     expect(createGithubSubscriptionTools(requestContext)).toEqual({});
   });
 
+  it('silently skips auto-subscription outside GitHub-project sessions', async () => {
+    const requestContext = new RequestContext();
+    requestContext.set('controller', {
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      scope: '/worktrees/a',
+      session: { id: 'session-1', ownerId: 'user-1', modeId: 'build' },
+      getState: () => ({}),
+    });
+
+    await expect(
+      subscribeCurrentSessionToPullRequest(requestContext, 123, 'auto-gh-pr-create'),
+    ).resolves.toBeUndefined();
+    expect(mocks.subscribe).not.toHaveBeenCalled();
+  });
+
+  it('still rejects the explicit tool path outside GitHub-project sessions', async () => {
+    await expect(subscribeCurrentSessionToPullRequest(new RequestContext(), 123, 'explicit-tool')).rejects.toThrow(
+      'GitHub subscriptions require an authenticated GitHub-project session with an active thread.',
+    );
+    expect(mocks.subscribe).not.toHaveBeenCalled();
+  });
+
   it('subscribes the exact scoped session after verifying the active-project PR', async () => {
     const requestContext = authenticatedRequestContext('/worktrees/a');
 

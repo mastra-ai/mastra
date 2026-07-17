@@ -68,13 +68,13 @@ describe('LocalSandbox', () => {
   });
 
   // ===========================================================================
-  // Derivation
+  // Cloning
   // ===========================================================================
-  describe('derive', () => {
+  describe('clone', () => {
     it('constructs an unstarted sibling inheriting configuration', () => {
       const template = new LocalSandbox({ workingDirectory: tempDir, env: { BASE: '1' } });
 
-      const child = template.derive({ id: 'mc-project-1' });
+      const child = template.clone({ id: 'mc-project-1' });
 
       expect(child).toBeInstanceOf(LocalSandbox);
       expect(child).not.toBe(template);
@@ -87,12 +87,12 @@ describe('LocalSandbox', () => {
     it('applies env overrides and can execute commands after start', async () => {
       const template = new LocalSandbox({ workingDirectory: tempDir, env: { PATH: process.env.PATH } });
 
-      const child = template.derive({ env: { PATH: process.env.PATH ?? '', DERIVED_VAR: 'derived-value' } });
+      const child = template.clone({ env: { PATH: process.env.PATH ?? '', CLONED_VAR: 'cloned-value' } });
       await child._start();
       try {
-        const result = await child.executeCommand!('sh', ['-c', 'echo "$DERIVED_VAR"']);
+        const result = await child.executeCommand!('sh', ['-c', 'echo "$CLONED_VAR"']);
         expect(result.success).toBe(true);
-        expect(result.stdout.trim()).toBe('derived-value');
+        expect(result.stdout.trim()).toBe('cloned-value');
       } finally {
         await child._destroy();
       }
@@ -104,7 +104,7 @@ describe('LocalSandbox', () => {
         env: { PATH: process.env.PATH, TEMPLATE_VAR: 'from-template' },
       });
 
-      const child = template.derive();
+      const child = template.clone();
       await child._start();
       try {
         const result = await child.executeCommand!('sh', ['-c', 'echo "$TEMPLATE_VAR"']);
@@ -116,7 +116,7 @@ describe('LocalSandbox', () => {
 
     it('ignores sandboxId and idleTimeoutMinutes (no local equivalent)', () => {
       const template = new LocalSandbox({ workingDirectory: tempDir });
-      const child = template.derive({ sandboxId: 'ignored', idleTimeoutMinutes: 15, id: 'local-child' });
+      const child = template.clone({ sandboxId: 'ignored', idleTimeoutMinutes: 15, id: 'local-child' });
       expect(child.id).toBe('local-child');
     });
   });

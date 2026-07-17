@@ -1624,11 +1624,11 @@ describe('DaytonaSandbox', () => {
   });
 });
 
-describe('DaytonaSandbox.derive', () => {
+describe('DaytonaSandbox.clone', () => {
   it('constructs an unstarted sibling without any I/O', () => {
     const template = new DaytonaSandbox({ apiKey: 'dt-key', snapshot: 'base-snap' });
 
-    const child = template.derive({ id: 'mc-project-1' });
+    const child = template.clone({ id: 'mc-project-1' });
 
     expect(child).toBeInstanceOf(DaytonaSandbox);
     expect(child).not.toBe(template);
@@ -1639,7 +1639,7 @@ describe('DaytonaSandbox.derive', () => {
   it('inherits template config and applies env override', () => {
     const template = new DaytonaSandbox({ apiKey: 'dt-key', snapshot: 'base-snap', env: { BASE: '1' } });
 
-    const child = template.derive({ env: { GITHUB_TOKEN: 'ghs_abc' } });
+    const child = template.clone({ env: { GITHUB_TOKEN: 'ghs_abc' } });
 
     expect(child['_constructorOptions']).toMatchObject({
       apiKey: 'dt-key',
@@ -1651,7 +1651,7 @@ describe('DaytonaSandbox.derive', () => {
   it('maps idleTimeoutMinutes to autoStopInterval in minutes', () => {
     const template = new DaytonaSandbox({ apiKey: 'dt-key', autoStopInterval: 45 });
 
-    const child = template.derive({ idleTimeoutMinutes: 15 });
+    const child = template.clone({ idleTimeoutMinutes: 15 });
 
     expect(child['_constructorOptions']).toMatchObject({ autoStopInterval: 15 });
   });
@@ -1659,7 +1659,7 @@ describe('DaytonaSandbox.derive', () => {
   it('inherits template defaults when no overrides are passed', () => {
     const template = new DaytonaSandbox({ apiKey: 'dt-key', autoStopInterval: 45, env: { BASE: '1' } });
 
-    const child = template.derive();
+    const child = template.clone();
 
     expect(child.id).not.toBe(template.id);
     expect(child['_constructorOptions']).toMatchObject({ apiKey: 'dt-key', autoStopInterval: 45, env: { BASE: '1' } });

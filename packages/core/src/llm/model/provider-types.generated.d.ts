@@ -986,7 +986,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-5.1',
     'zai-org/GLM-5.2',
   ];
-  readonly 'kimi-for-coding': readonly ['k2p5', 'k2p6', 'k2p7', 'k3', 'kimi-for-coding-highspeed', 'kimi-k2-thinking'];
+  readonly 'kimi-for-coding': readonly ['k2p7', 'k3', 'kimi-for-coding-highspeed'];
   readonly crossmodel: readonly [
     'anthropic/claude-fable-5',
     'anthropic/claude-haiku-4-5',
