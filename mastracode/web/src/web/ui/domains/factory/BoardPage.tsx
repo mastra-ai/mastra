@@ -1,10 +1,10 @@
-import { Button } from '@mastra/playground-ui/components/Button';
+import { Button, buttonVariants } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { CircleDot, EllipsisVertical, GitPullRequest, MessageSquare } from 'lucide-react';
+import { CircleDot, EllipsisVertical, GitPullRequest, MessageSquare, Plus } from 'lucide-react';
 import type { ComponentType, DragEvent } from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 
 import { useApiConfig } from '../../../../shared/api/config';
@@ -42,6 +42,15 @@ const NEEDS_APPROVAL_LABEL = 'needs-approval';
 
 function hasLabel(labels: readonly string[], label: string): boolean {
   return labels.some(item => item.toLowerCase() === label);
+}
+
+function githubNewIssueUrl(repoFullName: string): string | undefined {
+  const [owner, repo, extra] = repoFullName.split('/');
+  if (extra || !owner || !repo || repo === '.' || repo === '..') return undefined;
+  if (!/^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(owner) || !/^[A-Za-z0-9_.-]+$/.test(repo)) {
+    return undefined;
+  }
+  return `https://github.com/${owner}/${repo}/issues/new`;
 }
 
 function metadataLabels(metadata: Record<string, unknown>): string[] {
@@ -381,6 +390,7 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
     'github-prs' as const,
     ...(linearReady ? (['linear'] as const) : []),
   ];
+  const newIssueUrl = config && githubIntakeActive ? githubNewIssueUrl(project.name) : undefined;
   const [intakeSource, setIntakeSource] = useState<IntakeSource>('github');
   const showIntakeSourceSwitch = availableIntakeSources.length > 1;
   const activeIntakeSource: IntakeSource | null = availableIntakeSources.includes(intakeSource)
@@ -399,6 +409,10 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
   const { start, enabled: runEnabled } = useStartFactoryRun();
   const triage = useStartIssueTriageMutation(githubProjectId);
   const navigate = useNavigate();
+  const boardContainerRef = useRef<HTMLDivElement>(null);
+  const laneRefs = useRef(new Map<BoardStageId, HTMLElement>());
+  const autoPositionedProjectRef = useRef<string | undefined>(undefined);
+  const userPositionedProjectRef = useRef<string | undefined>(undefined);
 
   // Worktrees that still exist. A card's session ref whose worktree was
   // deleted is stale: its thread is gone (worktree deletion cascades onto its
@@ -438,6 +452,31 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
     return all.filter(candidate => !known.has(candidate.sourceKey));
   }, [workItems, issues.data, triageIssues.data, pulls.data, linearIssues.data, activeIntakeSource]);
 
+  const boardDataPending =
+    items.isPending ||
+    configQuery.isPending ||
+    linearStatusQuery.isPending ||
+    triageIssues.isPending ||
+    (activeIntakeSource === 'github' && issues.isPending) ||
+    (activeIntakeSource === 'github-prs' && pulls.isPending) ||
+    (activeIntakeSource === 'linear' && linearIssues.isPending);
+
+  useEffect(() => {
+    if (boardDataPending || autoPositionedProjectRef.current === project.id) return;
+    autoPositionedProjectRef.current = project.id;
+    if (userPositionedProjectRef.current === project.id) return;
+
+    const firstPopulatedStage = BOARD_STAGES.find(
+      stage =>
+        workItems.some(item => item.stages.includes(stage.id)) ||
+        candidates.some(candidate => candidate.column === stage.id),
+    );
+    const container = boardContainerRef.current;
+    const lane = firstPopulatedStage ? laneRefs.current.get(firstPopulatedStage.id) : undefined;
+    if (!container || !lane) return;
+    container.scrollTo?.({ left: Math.max(0, lane.offsetLeft - container.offsetLeft), behavior: 'auto' });
+  }, [boardDataPending, candidates, project.id, workItems]);
+
   const moveItem = (id: string, fromStage: string | null, toStage: string) => {
     const item = workItems.find(i => i.id === id);
     if (!item) return;
@@ -475,13 +514,45 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
           {mutationError instanceof Error ? mutationError.message : 'Board action failed'}
         </Notice>
       )}
-      <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-2" aria-label="Board columns">
+      <div
+        ref={boardContainerRef}
+        className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-2"
+        aria-label="Board columns"
+        onPointerDown={() => {
+          userPositionedProjectRef.current = project.id;
+        }}
+        onWheel={() => {
+          userPositionedProjectRef.current = project.id;
+        }}
+        onScroll={() => {
+          // Ignore the scroll event emitted by our own initial scrollTo call.
+          if (autoPositionedProjectRef.current !== project.id) userPositionedProjectRef.current = project.id;
+        }}
+      >
         {BOARD_STAGES.map(stage => (
           <BoardColumn
             key={stage.id}
             stage={stage.id}
             label={stage.label}
+            laneRef={element => {
+              if (element) laneRefs.current.set(stage.id, element);
+              else laneRefs.current.delete(stage.id);
+            }}
             onDrop={handleDrop}
+            headerAction={
+              stage.id === 'intake' && newIssueUrl ? (
+                <a
+                  href={newIssueUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Create GitHub issue"
+                  title="Create GitHub issue"
+                  className={buttonVariants({ variant: 'ghost', size: 'icon-sm' })}
+                >
+                  <Plus size={13} aria-hidden />
+                </a>
+              ) : undefined
+            }
             headerExtras={
               stage.id === 'intake' && showIntakeSourceSwitch ? (
                 <div role="group" aria-label="Intake source" className="flex items-center gap-1 pb-1">
@@ -588,13 +659,17 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
 function BoardColumn({
   stage,
   label,
+  laneRef,
   onDrop,
+  headerAction,
   headerExtras,
   children,
 }: {
   stage: BoardStageId;
   label: string;
+  laneRef: (element: HTMLElement | null) => void;
   onDrop: (payload: DragPayload, toStage: BoardStageId) => void;
+  headerAction?: React.ReactNode;
   /** Pinned below the column title, outside the scrolling card list. */
   headerExtras?: React.ReactNode;
   children: React.ReactNode;
@@ -603,6 +678,7 @@ function BoardColumn({
 
   return (
     <section
+      ref={laneRef}
       aria-label={label}
       data-testid={`board-column-${stage}`}
       className={`flex min-h-0 w-72 shrink-0 flex-col gap-2 rounded-lg border p-2 transition ${
@@ -622,9 +698,12 @@ function BoardColumn({
         if (payload) onDrop(payload, stage);
       }}
     >
-      <Txt as="h2" variant="ui-xs" className="m-0 px-1 uppercase tracking-wide text-icon3">
-        {label}
-      </Txt>
+      <div className="flex items-center justify-between gap-2 px-1">
+        <Txt as="h2" variant="ui-xs" className="m-0 uppercase tracking-wide text-icon3">
+          {label}
+        </Txt>
+        {headerAction}
+      </div>
       {headerExtras}
       {/* Cards scroll inside the swimlane; the page stays fixed. */}
       <div className="flex min-h-16 flex-1 flex-col gap-1.5 overflow-y-auto">{children}</div>
