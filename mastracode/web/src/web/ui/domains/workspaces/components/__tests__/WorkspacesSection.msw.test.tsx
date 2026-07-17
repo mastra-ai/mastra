@@ -21,6 +21,7 @@ import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web
 import { queryKeys } from '../../../../../../shared/api/keys';
 import { ToastProvider } from '../../../../ui';
 import { ChatSessionConfigProvider } from '../../../chat/context/ChatSessionProvider';
+import type { WorkItem } from '../../../factory/services/workItems';
 import { ActiveFactoryProvider } from '../../context/ActiveFactoryProvider';
 import type { Factory } from '../../services/factories';
 import { isServerFactory, loadFactories, saveFactories } from '../../services/factories';
@@ -90,6 +91,57 @@ const localProject: Factory = {
   },
 };
 
+const relatedWorkItems: WorkItem[] = [
+  {
+    id: 'work-issue-24',
+    orgId: 'org-1',
+    createdBy: 'user-1',
+    githubProjectId: GITHUB_PROJECT_ID,
+    source: 'github-issue',
+    sourceKey: 'github-issue:24',
+    parentWorkItemId: null,
+    title: 'Add logs',
+    url: 'https://github.com/mastra-ai/mastra/issues/24',
+    stages: ['execute'],
+    stageHistory: [],
+    sessions: {
+      work: {
+        projectPath: '/sandbox/mastra-worktrees/feat-ui',
+        branch: 'feat-ui',
+        threadId: 'thread-work',
+        startedBy: 'user-1',
+      },
+    },
+    metadata: { number: 24 },
+    createdAt: '2026-07-17T00:00:00Z',
+    updatedAt: '2026-07-17T00:00:00Z',
+  },
+  {
+    id: 'review-pr-25',
+    orgId: 'org-1',
+    createdBy: 'user-1',
+    githubProjectId: GITHUB_PROJECT_ID,
+    source: 'github-pr',
+    sourceKey: 'github-pr:25',
+    parentWorkItemId: 'work-issue-24',
+    title: 'Add logs to Issue #24',
+    url: 'https://github.com/mastra-ai/mastra/pull/25',
+    stages: ['review'],
+    stageHistory: [],
+    sessions: {
+      review: {
+        projectPath: '/sandbox/mastra-worktrees/feat-api',
+        branch: 'feat-api',
+        threadId: 'thread-review',
+        startedBy: 'user-1',
+      },
+    },
+    metadata: { number: 25 },
+    createdAt: '2026-07-17T00:00:00Z',
+    updatedAt: '2026-07-17T00:00:00Z',
+  },
+];
+
 afterEach(() => {
   localStorage.clear();
 });
@@ -105,7 +157,7 @@ function sse(): Response {
 }
 
 /** Registers the full agent-controller handler set. */
-function useAgentControllerHandlers() {
+function useAgentControllerHandlers(workItems: WorkItem[] = []) {
   const sessionState = (resourceId: string) => ({
     controllerId: 'code',
     resourceId,
@@ -135,6 +187,7 @@ function useAgentControllerHandlers() {
     ),
     http.get(`${API}/sessions/:resourceId/threads/:threadId/messages`, () => HttpResponse.json({ messages: [] })),
     http.get(`${API}/sessions/:resourceId/stream`, () => sse()),
+    http.get(`${ORIGIN}/web/factory/repositories/:githubProjectId/work-items`, () => HttpResponse.json({ workItems })),
   );
 }
 
@@ -175,11 +228,27 @@ describe('WorkspacesSection', () => {
 
     renderSection();
 
-    expect(await screen.findByText('Sessions')).toBeInTheDocument();
+    expect(await screen.findByText('Work Items')).toBeInTheDocument();
+    expect(screen.getByText('Reviews')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'feat-api' })).toHaveAttribute('aria-current', 'true');
     expect(screen.getByRole('button', { name: 'feat-ui' })).not.toHaveAttribute('aria-current');
     expect(screen.queryByRole('button', { name: 'main' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'user/alice-notes' })).not.toBeInTheDocument();
+  });
+
+  it('groups related issue and PR sessions into Work Items and Reviews with reciprocal indicators', async () => {
+    seedActiveFactory(githubProject);
+    useAgentControllerHandlers(relatedWorkItems);
+
+    renderSection();
+
+    const workGroup = (await screen.findByRole('button', { name: 'Work Items' })).parentElement;
+    const reviewGroup = screen.getByRole('button', { name: 'Reviews' }).parentElement;
+    if (!workGroup || !reviewGroup) throw new Error('Expected both Factory session groups');
+    expect(await within(workGroup).findByRole('button', { name: 'feat-ui' })).toBeInTheDocument();
+    expect(await within(workGroup).findByText('Review: PR #25')).toBeInTheDocument();
+    expect(await within(reviewGroup).findByRole('button', { name: 'feat-api' })).toBeInTheDocument();
+    expect(await within(reviewGroup).findByText('Work item: Issue #24')).toBeInTheDocument();
   });
 
   it('persists the collapsed state across remounts', async () => {
@@ -187,18 +256,18 @@ describe('WorkspacesSection', () => {
     useAgentControllerHandlers();
 
     const rendered = renderSection();
-    const trigger = await screen.findByRole('button', { name: 'Sessions' });
+    const trigger = await screen.findByRole('button', { name: 'Work Items' });
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
 
     await userEvent.click(trigger);
 
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
-    expect(localStorage.getItem('mastracode-factory-sessions-collapsed')).toBe('true');
+    expect(localStorage.getItem('mastracode-factory-work-items-collapsed')).toBe('true');
 
     rendered.unmount();
     renderSection();
 
-    expect(await screen.findByRole('button', { name: 'Sessions' })).toHaveAttribute('aria-expanded', 'false');
+    expect(await screen.findByRole('button', { name: 'Work Items' })).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('does not render for local projects', async () => {
@@ -207,7 +276,7 @@ describe('WorkspacesSection', () => {
 
     renderSection();
 
-    await waitFor(() => expect(screen.queryByText('Sessions')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText('Work Items')).not.toBeInTheDocument());
   });
 
   it('shows an activity indicator on workspaces with an active thread', async () => {

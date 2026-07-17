@@ -6,6 +6,7 @@ import { useSelectWorkspaceMutation, useWorkspacesQuery } from '../../../../../s
 import { useWorkItemsQuery } from '../../../../../shared/hooks/useWorkItems';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { isServerFactory, useActiveFactoryContext } from '../../workspaces';
+import { relatedWorkItems, relationshipLabel } from '../services/relationships';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
 
 function latestLiveSession(item: WorkItem, livePaths: ReadonlySet<string>): WorkItemSessionRef | undefined {
@@ -35,9 +36,7 @@ export function RelatedFactorySessions() {
   );
   if (!currentItem) return null;
 
-  const relatedItems = allItems.filter(
-    item => item.id === currentItem.parentWorkItemId || item.parentWorkItemId === currentItem.id,
-  );
+  const relatedItems = relatedWorkItems(currentItem, allItems);
   const livePaths = new Set((workspaces.data?.worktrees ?? []).map(worktree => worktree.worktreePath));
   const destinations = relatedItems.flatMap(item => {
     const session = latestLiveSession(item, livePaths);
@@ -52,20 +51,23 @@ export function RelatedFactorySessions() {
 
   return (
     <div className="flex flex-wrap items-center gap-2 px-3 pt-3 md:px-5" aria-label="Related Factory sessions">
-      {destinations.map(({ item, session }) => (
-        <Button
-          key={item.id}
-          type="button"
-          variant="ghost"
-          size="sm"
-          aria-label={`Open related ${item.source === 'github-pr' ? 'review' : 'work'} session: ${item.title}`}
-          disabled={selectWorkspace.isPending}
-          onClick={() => void openSession(session)}
-        >
-          <Link2 size={13} aria-hidden />
-          Open related {item.source === 'github-pr' ? 'review' : 'work'} session
-        </Button>
-      ))}
+      {destinations.map(({ item, session }) => {
+        const label = relationshipLabel(item);
+        return (
+          <Button
+            key={item.id}
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-label={`Open ${label}: ${item.title}`}
+            disabled={selectWorkspace.isPending}
+            onClick={() => void openSession(session)}
+          >
+            <Link2 size={13} aria-hidden />
+            {label}
+          </Button>
+        );
+      })}
     </div>
   );
 }

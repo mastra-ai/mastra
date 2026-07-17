@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playgr
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useQueryClient } from '@tanstack/react-query';
-import { ChevronRight, GitBranch, MessagesSquare, MoreHorizontal } from 'lucide-react';
+import { ChevronRight, GitBranch, GitCompareArrows, Link2, MessagesSquare, MoreHorizontal } from 'lucide-react';
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
@@ -17,6 +17,7 @@ import {
   useWorkspaceThreadTitles,
 } from '../../../../../shared/hooks/useWorkspaceActivity';
 import { useWorkspaceAttention } from '../../../../../shared/hooks/useWorkspaceAttention';
+import { useWorkItemsQuery } from '../../../../../shared/hooks/useWorkItems';
 import {
   deriveProjectPath,
   useDeleteWorkspaceMutation,
@@ -25,11 +26,13 @@ import {
 } from '../../../../../shared/hooks/useWorkspaces';
 import { createAgentControllerClient, requireAgentControllerSession } from '../../chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
+import { relatedWorkItems, relationshipLabel } from '../../factory/services/relationships';
 import { useActiveFactoryContext } from '../context/ActiveFactoryProvider';
 import { isServerFactory, selectedRepository } from '../services/factories';
 import type { Worktree } from '../services/factories';
 
-const SESSIONS_COLLAPSED_STORAGE_KEY = 'mastracode-factory-sessions-collapsed';
+const WORK_ITEMS_COLLAPSED_STORAGE_KEY = 'mastracode-factory-work-items-collapsed';
+const REVIEWS_COLLAPSED_STORAGE_KEY = 'mastracode-factory-reviews-collapsed';
 
 /**
  * Factory sessions: a GitHub project's feature worktrees, rendered as the
@@ -57,10 +60,9 @@ export function WorkspacesSection({ defaultOpen = false }: { defaultOpen?: boole
   });
   const deleteWorkspace = useDeleteWorkspaceMutation(activeFactory, session, scope);
   const [confirmDelete, setConfirmDelete] = useState<Worktree | null>(null);
-  const [open, setOpen] = useState(() => {
-    const collapsed = localStorage.getItem(SESSIONS_COLLAPSED_STORAGE_KEY);
-    return collapsed === null ? defaultOpen : collapsed !== 'true';
-  });
+  const workItems = useWorkItemsQuery(
+    activeFactory && isGithubFactory(activeFactory) ? activeFactory.binding.githubProjectId : undefined,
+  );
   const worktrees = workspaces.data?.worktrees ?? [];
   const activityOptions = {
     agentControllerId: AGENT_CONTROLLER_ID,
@@ -79,6 +81,27 @@ export function WorkspacesSection({ defaultOpen = false }: { defaultOpen?: boole
 
   const selectedPath = workspaces.data?.selected?.worktreePath;
   const pending = selectWorkspace.isPending || deleteWorkspace.isPending;
+  const allWorkItems = workItems.data ?? [];
+  const workItemByPath = new Map(
+    allWorkItems.flatMap(item =>
+      Object.values(item.sessions).map(sessionRef => [sessionRef.projectPath, item] as const),
+    ),
+  );
+  const rows = worktrees.map(worktree => {
+    const item = workItemByPath.get(worktree.worktreePath);
+    const related = item ? relatedWorkItems(item, allWorkItems).at(0) : undefined;
+    return {
+      worktree,
+      label: titleByPath[worktree.worktreePath],
+      relation: related ? relationshipLabel(related) : undefined,
+      active: worktree.worktreePath === selectedPath,
+      running: runningByPath[worktree.worktreePath] === true,
+      attention: attentionByPath[worktree.worktreePath] === true,
+      review: item?.source === 'github-pr',
+    };
+  });
+  const workRows = rows.filter(row => !row.review);
+  const reviewRows = rows.filter(row => row.review);
 
   // Threads are scoped to a worktree, so entering a session lands on its
   // conversation thread (creating one when it has none) — from anywhere,
@@ -161,57 +184,43 @@ export function WorkspacesSection({ defaultOpen = false }: { defaultOpen?: boole
   };
 
   return (
-    <section aria-label="Factory sessions">
-      <Collapsible
-        open={open}
-        onOpenChange={nextOpen => {
-          setOpen(nextOpen);
-          localStorage.setItem(SESSIONS_COLLAPSED_STORAGE_KEY, String(!nextOpen));
+    <section className="flex flex-col gap-1" aria-label="Factory sessions">
+      <WorkspaceGroup
+        title="Work Items"
+        storageKey={WORK_ITEMS_COLLAPSED_STORAGE_KEY}
+        defaultOpen={defaultOpen}
+        rows={workRows}
+        pending={pending}
+        onSelect={row => {
+          clearAttention(row.worktree.worktreePath);
+          if (row.active) {
+            void openWorktreeThread(row.worktree.worktreePath);
+            return;
+          }
+          selectWorkspace.mutate(row.worktree.worktreePath, {
+            onSuccess: () => void openWorktreeThread(row.worktree.worktreePath),
+          });
         }}
-      >
-        <CollapsibleTrigger className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-icon3 transition hover:bg-surface3 hover:text-icon5">
-          <span className="flex items-center">
-            <MessagesSquare size={13} />
-          </span>
-          <span className="truncate">Sessions</span>
-          <ChevronRight className="ml-auto shrink-0" size={13} />
-        </CollapsibleTrigger>
-        <CollapsibleContent className="flex flex-col gap-1 pt-1">
-          {worktrees.map(worktree => {
-            const active = worktree.worktreePath === selectedPath;
-            return (
-              <WorkspaceRow
-                key={worktree.worktreePath}
-                worktree={worktree}
-                label={titleByPath[worktree.worktreePath]}
-                active={active}
-                running={runningByPath[worktree.worktreePath] === true}
-                attention={attentionByPath[worktree.worktreePath] === true}
-                disabled={pending}
-                onSelect={() => {
-                  clearAttention(worktree.worktreePath);
-                  // The active row is already the selected workspace — skip the
-                  // redundant re-select and jump straight to its conversation
-                  // (the user may be on the board, /new, or another page).
-                  if (active) {
-                    void openWorktreeThread(worktree.worktreePath);
-                    return;
-                  }
-                  selectWorkspace.mutate(worktree.worktreePath, {
-                    onSuccess: () => void openWorktreeThread(worktree.worktreePath),
-                  });
-                }}
-                onDelete={() => setConfirmDelete(worktree)}
-              />
-            );
-          })}
-          {worktrees.length === 0 && (
-            <Txt as="p" variant="ui-xs" className="m-0 px-2 py-1 text-icon3">
-              Sessions appear when work starts from the Factory board.
-            </Txt>
-          )}
-        </CollapsibleContent>
-      </Collapsible>
+        onDelete={worktree => setConfirmDelete(worktree)}
+      />
+      <WorkspaceGroup
+        title="Reviews"
+        storageKey={REVIEWS_COLLAPSED_STORAGE_KEY}
+        defaultOpen={defaultOpen}
+        rows={reviewRows}
+        pending={pending}
+        onSelect={row => {
+          clearAttention(row.worktree.worktreePath);
+          if (row.active) {
+            void openWorktreeThread(row.worktree.worktreePath);
+            return;
+          }
+          selectWorkspace.mutate(row.worktree.worktreePath, {
+            onSuccess: () => void openWorktreeThread(row.worktree.worktreePath),
+          });
+        }}
+        onDelete={worktree => setConfirmDelete(worktree)}
+      />
 
       {confirmDelete && (
         <Dialog open onOpenChange={open => !open && setConfirmDelete(null)}>
@@ -245,9 +254,85 @@ export function WorkspacesSection({ defaultOpen = false }: { defaultOpen?: boole
   );
 }
 
+interface FactoryWorkspaceRow {
+  worktree: Worktree;
+  label?: string;
+  relation?: string;
+  active: boolean;
+  running: boolean;
+  attention: boolean;
+  review: boolean;
+}
+
+function WorkspaceGroup({
+  title,
+  storageKey,
+  defaultOpen,
+  rows,
+  pending,
+  onSelect,
+  onDelete,
+}: {
+  title: 'Work Items' | 'Reviews';
+  storageKey: string;
+  defaultOpen: boolean;
+  rows: FactoryWorkspaceRow[];
+  pending: boolean;
+  onSelect: (row: FactoryWorkspaceRow) => void;
+  onDelete: (worktree: Worktree) => void;
+}) {
+  const [open, setOpen] = useState(() => {
+    const collapsed = localStorage.getItem(storageKey);
+    return collapsed === null ? defaultOpen : collapsed !== 'true';
+  });
+  const Icon = title === 'Reviews' ? GitCompareArrows : MessagesSquare;
+
+  return (
+    <Collapsible
+      open={open}
+      onOpenChange={nextOpen => {
+        setOpen(nextOpen);
+        localStorage.setItem(storageKey, String(!nextOpen));
+      }}
+    >
+      <CollapsibleTrigger className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-icon3 transition hover:bg-surface3 hover:text-icon5">
+        <span className="flex items-center">
+          <Icon size={13} />
+        </span>
+        <span className="truncate">{title}</span>
+        <ChevronRight className="ml-auto shrink-0" size={13} />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="flex flex-col gap-1 pt-1">
+        {rows.map(row => (
+          <WorkspaceRow
+            key={row.worktree.worktreePath}
+            worktree={row.worktree}
+            label={row.label}
+            relation={row.relation}
+            active={row.active}
+            running={row.running}
+            attention={row.attention}
+            disabled={pending}
+            onSelect={() => onSelect(row)}
+            onDelete={() => onDelete(row.worktree)}
+          />
+        ))}
+        {rows.length === 0 && (
+          <Txt as="p" variant="ui-xs" className="m-0 px-2 py-1 text-icon3">
+            {title === 'Reviews'
+              ? 'Review sessions appear when a PR review starts.'
+              : 'Work items appear when work starts.'}
+          </Txt>
+        )}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
 export function WorkspaceRow({
   worktree,
   label,
+  relation,
   active,
   running,
   attention,
@@ -258,6 +343,8 @@ export function WorkspaceRow({
   worktree: Worktree;
   /** Display name (e.g. the session's thread title); defaults to the worktree's branch. */
   label?: string;
+  /** Reciprocal Factory item linked to this session. */
+  relation?: string;
   active: boolean;
   running: boolean;
   /** A run finished here and the user hasn't opened the workspace since. */
@@ -272,13 +359,22 @@ export function WorkspaceRow({
       <button
         type="button"
         aria-current={active ? 'true' : undefined}
+        aria-label={name}
         disabled={disabled}
         onClick={onSelect}
         title={worktree.branch}
         className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition ${active ? 'text-icon6' : 'text-icon3 hover:text-icon5'} disabled:cursor-default disabled:opacity-70`}
       >
         <GitBranch size={13} />
-        <span className="truncate">{name}</span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate">{name}</span>
+          {relation && (
+            <span className="flex items-center gap-1 truncate text-ui-xs text-accent2">
+              <Link2 size={10} aria-hidden />
+              {relation}
+            </span>
+          )}
+        </span>
         {running ? (
           <span
             role="status"

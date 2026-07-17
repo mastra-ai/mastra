@@ -36,6 +36,7 @@ import { useWorkItemsQuery } from '../../../../shared/hooks/useWorkItems';
 import type { GithubIssue, GithubPullRequest } from './services/factory';
 import type { LinearIssue } from './services/linear';
 import { connectLinear, isLinearReauthError } from './services/linear';
+import { relatedWorkItems, relationshipLabel } from './services/relationships';
 import type { WorkItem, WorkItemSessionRef, WorkItemSource } from './services/workItems';
 import { BOARD_STAGES, stageLabel } from './stages';
 import type { BoardStageId } from './stages';
@@ -49,10 +50,6 @@ const SOURCE_LABELS: Record<WorkItemSource, string> = {
   'linear-issue': 'Linear',
   manual: 'Manual',
 };
-
-function displayTitle(source: WorkItemSource, title: string): string {
-  return `${SOURCE_LABELS[source]}: ${title}`;
-}
 
 function SourceTitle({ source, title }: { source: WorkItemSource; title: string }) {
   return (
@@ -951,9 +948,7 @@ function WorkItemCard({
   // Offer only runs whose session slot hasn't been used yet on this card.
   const runActions = runSpec === null ? [] : runSpec.actions.filter(action => !(action.role in liveSessions));
   const threadSession = itemThreadSession(liveSessions);
-  const relatedItems = allItems.filter(
-    other => other.id !== item.id && (other.parentWorkItemId === item.id || item.parentWorkItemId === other.id),
-  );
+  const relatedItems = relatedWorkItems(item, allItems);
 
   return (
     <article
@@ -1035,10 +1030,7 @@ function WorkItemCard({
         </DropdownMenu>
       </div>
       {relatedItems.map(related => {
-        const relationText =
-          related.parentWorkItemId === item.id
-            ? `Related ${displayTitle(related.source, related.title)}`
-            : `Related to ${displayTitle(related.source, related.title)}`;
+        const relationText = relationshipLabel(related);
         return (
           <div key={related.id} className="flex items-center gap-1 text-ui-xs text-accent2" aria-label={relationText}>
             <Link2 size={11} aria-hidden />
