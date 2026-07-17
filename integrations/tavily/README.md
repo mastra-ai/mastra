@@ -22,9 +22,10 @@ const tools = createTavilyTools();
 
 const agent = new Agent({
   id: 'realtime-information-agent',
-  name: "Realtime Information Agent",
-  instructions: "You are a realtime information agent that can search the web for the latest information and provide it to the user.",
-  model: "anthropic/claude-sonnet-4-6",
+  name: 'Realtime Information Agent',
+  instructions:
+    'You are a realtime information agent that can search the web for the latest information and provide it to the user.',
+  model: 'anthropic/claude-sonnet-4-6',
   tools,
 });
 ```
@@ -97,11 +98,11 @@ const mapTool = createTavilyMapTool();
 
 ## Configuration
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
+| Option   | Type     | Default                      | Description         |
+| -------- | -------- | ---------------------------- | ------------------- |
 | `apiKey` | `string` | `process.env.TAVILY_API_KEY` | Your Tavily API key |
 
-All tools accept `TavilyClientOptions` from `@tavily/core` (includes `apiKey`, `proxies`, `apiBaseURL`, `clientSource`, `projectId`). If no API key is found, the tool throws a clear error at execution time. `clientSource` defaults to `'mastra'`.
+All tools accept `TavilyClientOptions` from `@tavily/core` (includes `apiKey`, `proxies`, `apiBaseURL`, `clientName`, `projectId`). If no API key is found, the tool throws a clear error at execution time. `clientName` defaults to `'mastra'` and is sent in the `X-Client-Name` header.
 
 ## RAG Pairing Example
 
@@ -113,8 +114,8 @@ import { createTavilySearchTool, createTavilyExtractTool } from '@mastra/tavily'
 
 const agent = new Agent({
   id: 'rag-agent',
-  name: "Research Assistant",
-  model: "anthropic/claude-sonnet-4-6",
+  name: 'Research Assistant',
+  model: 'anthropic/claude-sonnet-4-6',
   instructions: `You are a research assistant. Use tavily-search to find relevant pages, then use tavily-extract to get full content from the best results.`,
   tools: {
     search: createTavilySearchTool(),

@@ -10,8 +10,8 @@
  * truth.
  */
 
-import { getWorkOSProvider, isWebAuthEnabled } from '../auth';
-import type { AuditEventRow } from './schema';
+import { getWorkOSProvider, isWorkOSAuth } from '../auth';
+import type { AuditEventRow } from '../storage/domains/audit/base';
 
 /** WorkOS requires a `context.location`; fall back when the request had none. */
 const UNKNOWN_LOCATION = 'unknown';
@@ -62,11 +62,12 @@ export function toWorkOSEvent(event: AuditEventRow): {
 
 /**
  * Forward one recorded audit event to WorkOS Audit Logs. Never throws; no-op
- * when WorkOS auth isn't configured. Fire-and-forget — callers should not
- * await this on the request path.
+ * unless the active auth adapter is WorkOS (other providers have no WorkOS
+ * client — the local `audit_events` table stays the source of truth).
+ * Fire-and-forget — callers should not await this on the request path.
  */
 export async function forwardToWorkOS(event: AuditEventRow): Promise<void> {
-  if (!isWebAuthEnabled()) return;
+  if (!isWorkOSAuth()) return;
   try {
     const workos = getWorkOSProvider().getWorkOS();
     await workos.auditLogs.createEvent(event.orgId, toWorkOSEvent(event));

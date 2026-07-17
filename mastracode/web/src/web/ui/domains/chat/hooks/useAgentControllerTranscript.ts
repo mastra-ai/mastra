@@ -1,4 +1,4 @@
-import type { AgentControllerEvent, AgentControllerMessage, AgentControllerOMProgress } from '@mastra/client-js';
+import type { AgentControllerEvent, AgentControllerOMProgress, MastraDBMessage } from '@mastra/client-js';
 import { useReducer, useRef } from 'react';
 
 import { createInitialTranscript, transcriptReducer } from '../services/transcript';
@@ -7,8 +7,6 @@ import type { OutgoingFile, TranscriptState, UsageSnapshot } from '../services/t
 export interface SessionStateSnapshot {
   omProgress?: AgentControllerOMProgress;
   tokenUsage?: UsageSnapshot;
-  /** Whether the agent is mid-run per the server snapshot (initial hydration). */
-  running?: boolean;
 }
 
 export function useAgentControllerTranscript({
@@ -17,7 +15,7 @@ export function useAgentControllerTranscript({
   initialState,
 }: {
   initialThreadId?: string;
-  initialMessages?: AgentControllerMessage[];
+  initialMessages?: MastraDBMessage[];
   initialState?: SessionStateSnapshot;
 } = {}) {
   const [transcript, dispatch] = useReducer(transcriptReducer, undefined, () =>
@@ -26,7 +24,6 @@ export function useAgentControllerTranscript({
       threadId: initialThreadId,
       omProgress: initialState?.omProgress,
       usage: initialState?.tokenUsage,
-      running: initialState?.running,
     }),
   );
   const transcriptRef = useRef<TranscriptState>(transcript);
@@ -38,16 +35,6 @@ export function useAgentControllerTranscript({
       threadId,
       omProgress: state?.omProgress,
       usage: state?.tokenUsage,
-      running: state?.running,
-    });
-  };
-
-  const syncState = (state: SessionStateSnapshot) => {
-    dispatch({
-      type: 'syncState',
-      omProgress: state.omProgress,
-      usage: state.tokenUsage,
-      running: state.running,
     });
   };
 
@@ -63,6 +50,10 @@ export function useAgentControllerTranscript({
     dispatch({ type: 'resolvePrompt', id });
   };
 
+  const clearPending = () => {
+    dispatch({ type: 'clearPending' });
+  };
+
   const pushNotice = (text: string, level: 'info' | 'error' = 'info') => {
     dispatch({ type: 'localNotice', text, level });
   };
@@ -71,10 +62,10 @@ export function useAgentControllerTranscript({
     transcript,
     transcriptRef,
     reset,
-    syncState,
     onEvent,
     localUser,
     resolvePrompt,
+    clearPending,
     pushNotice,
   };
 }

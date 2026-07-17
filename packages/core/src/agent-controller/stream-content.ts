@@ -1,16 +1,13 @@
-import { createSignal } from '../agent/signals';
-import type { AgentSignalContents, AgentSignalInput } from '../agent/signals';
 import { getServerSideFallbackInfo } from '../llm/model/server-side-fallback';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../tools/payload-transform';
 import type { ToolPayloadTransformPhase } from '../tools/types';
-import type { AgentControllerMessage, AgentControllerMessageContent, TokenUsage } from './types';
+import type { TokenUsage } from './types';
 
 /**
- * Pure transforms that map raw agent-stream chunk payloads into the
- * `AgentControllerMessage` / `AgentControllerMessageContent` shapes a Session renders. They hold
- * no AgentController or Session state, so they live in their own module and are shared
- * by the run engine (which folds chunks into messages) and the AgentController signal
- * paths (which surface signals as messages).
+ * Pure transforms shared by the run engine for folding raw agent-stream chunk
+ * payloads into the `MastraDBMessage` shape a Session renders, plus terminal
+ * finish-reason and server-side-fallback diagnostics. They hold no
+ * AgentController or Session state, so they live in their own module.
  */
 
 export function getDisplayTransform(metadata: unknown, phase: ToolPayloadTransformPhase, fallback: unknown) {
@@ -18,198 +15,31 @@ export function getDisplayTransform(metadata: unknown, phase: ToolPayloadTransfo
   return hasTransformedToolPayload(transform) ? transform.transformed : fallback;
 }
 
-export function getStringValue(value: unknown): string | undefined {
-  return typeof value === 'string' ? value : undefined;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }
 
-export function getRecordValue(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
-}
-
-export function signalContentsToControllerContent(contents: AgentSignalContents): AgentControllerMessageContent[] {
-  if (typeof contents === 'string') return [{ type: 'text', text: contents }];
-  return contents.flatMap((part): AgentControllerMessageContent[] => {
-    if (part.type === 'text') {
-      return [{ type: 'text', text: part.text }];
-    }
-    if (typeof part.data !== 'string') return [];
-    if (part.mediaType.startsWith('image/')) {
-      return [{ type: 'image', data: part.data, mimeType: part.mediaType }];
-    }
-    return [
-      {
-        type: 'file',
-        data: part.data,
-        mediaType: part.mediaType,
-        filename: part.filename,
-      },
-    ];
-  });
-}
-
-export function toSystemReminderContent(
-  payload: Record<string, unknown>,
-): Extract<AgentControllerMessageContent, { type: 'system_reminder' }> | undefined {
-  const attributes = getRecordValue(payload.attributes);
-  const metadata = getRecordValue(payload.metadata);
-  const message = signalContentsToText(payload.contents);
-  if (!message) return undefined;
-
-  return {
-    type: 'system_reminder',
-    message,
-    reminderType:
-      getStringValue(payload.reminderType) ?? getStringValue(attributes?.type) ?? getStringValue(payload.type),
-    path: getStringValue(payload.path) ?? getStringValue(attributes?.path),
-    precedesMessageId: getStringValue(payload.precedesMessageId) ?? getStringValue(attributes?.precedesMessageId),
-    gapText: getStringValue(payload.gapText) ?? getStringValue(attributes?.gapText),
-    gapMs:
-      typeof payload.gapMs === 'number'
-        ? payload.gapMs
-        : typeof attributes?.gapMs === 'number'
-          ? attributes.gapMs
-          : undefined,
-    timestamp: getStringValue(payload.timestamp) ?? getStringValue(attributes?.timestamp),
-    goalMaxTurns:
-      typeof payload.goalMaxTurns === 'number'
-        ? payload.goalMaxTurns
-        : typeof metadata?.goalMaxTurns === 'number'
-          ? metadata.goalMaxTurns
-          : undefined,
-    judgeModelId: getStringValue(payload.judgeModelId) ?? getStringValue(metadata?.judgeModelId),
-    goalEvaluation: getRecordValue(metadata?.goalEvaluation) as
-      | Extract<AgentControllerMessageContent, { type: 'system_reminder' }>['goalEvaluation']
-      | undefined,
-  };
-}
-
-export function toUserSignalMessage(payload: Record<string, unknown>): AgentControllerMessage | undefined {
-  const id = getStringValue(payload.id);
-  const rawContents = payload.contents;
-  if (!id || rawContents === undefined) return undefined;
-
-  const signal = createSignal({
-    id,
-    type: 'user',
-    tagName: 'user',
-    contents: rawContents as AgentSignalContents,
-    attributes: getRecordValue(payload.attributes) as AgentSignalInput['attributes'],
-    createdAt: getStringValue(payload.createdAt),
-  });
-  const content = signalContentsToControllerContent(signal.contents);
-  if (content.length === 0) return undefined;
-
-  return {
-    id: signal.id,
-    role: 'user',
-    content,
-    createdAt: signal.createdAt,
-    attributes: signal.attributes,
-  };
-}
-
-export function signalContentsToText(contents: unknown): string {
-  if (typeof contents === 'string') return contents;
-  if (!Array.isArray(contents)) return '';
-  return contents
-    .filter((part): part is { type: 'text'; text: string } => getRecordValue(part)?.type === 'text')
-    .map(part => part.text)
-    .join('\n');
-}
-
-export function toStateSignalContent(
-  payload: Record<string, unknown>,
-): Extract<AgentControllerMessageContent, { type: 'state_signal' }> | undefined {
-  const stateMetadata = getRecordValue(getRecordValue(payload.metadata)?.state);
-  const stateId = getStringValue(stateMetadata?.id) ?? getStringValue(payload.tagName) ?? 'state';
-
-  return {
-    type: 'state_signal',
-    id: getStringValue(payload.id),
-    stateId,
-    mode: stateMetadata?.mode === 'delta' ? 'delta' : 'snapshot',
-    cacheKey: getStringValue(stateMetadata?.cacheKey),
-    version: typeof stateMetadata?.version === 'number' ? stateMetadata.version : undefined,
-    message: signalContentsToText(payload.contents),
-  };
-}
-
-export function toNotificationSummaryContent(
-  payload: Record<string, unknown>,
-): Extract<AgentControllerMessageContent, { type: 'notification_summary' }> | undefined {
-  const metadataSummary = getRecordValue(getRecordValue(payload.metadata)?.notificationSummary);
-  const bySource = getRecordValue(metadataSummary?.bySource) ?? {};
-  const byPriority = getRecordValue(metadataSummary?.byPriority) ?? {};
-  const notificationIds = Array.isArray(metadataSummary?.notificationIds)
-    ? metadataSummary.notificationIds.filter((id): id is string => typeof id === 'string')
-    : [];
-  const pending = typeof metadataSummary?.pending === 'number' ? metadataSummary.pending : undefined;
-
-  return {
-    type: 'notification_summary',
-    id: getStringValue(payload.id),
-    message: signalContentsToText(payload.contents),
-    pending: pending ?? notificationIds.length,
-    bySource: Object.fromEntries(
-      Object.entries(bySource).filter((entry): entry is [string, number] => typeof entry[1] === 'number'),
-    ),
-    byPriority: Object.fromEntries(
-      Object.entries(byPriority).filter((entry): entry is [string, number] => typeof entry[1] === 'number'),
-    ),
-    notificationIds,
-  };
-}
-
-export function toReactiveSignalContent(
-  payload: Record<string, unknown>,
-): Extract<AgentControllerMessageContent, { type: 'reactive_signal' }> | undefined {
-  const tagName = getStringValue(payload.tagName);
-  if (!tagName) return undefined;
-
-  return {
-    type: 'reactive_signal',
-    id: getStringValue(payload.id),
-    tagName,
-    message: signalContentsToText(payload.contents),
-    attributes: getRecordValue(payload.attributes),
-    metadata: getRecordValue(payload.metadata),
-  };
-}
-
-export function toNotificationContent(
-  payload: Record<string, unknown>,
-): Extract<AgentControllerMessageContent, { type: 'notification' }> | undefined {
-  const attributes = getRecordValue(payload.attributes) ?? {};
-  const metadata = getRecordValue(payload.metadata) ?? {};
-  const notificationMetadata = getRecordValue(metadata.notification);
-  const message = signalContentsToText(payload.contents);
-  if (!message) return undefined;
-
-  return {
-    type: 'notification',
-    id: getStringValue(payload.id),
-    notificationId: getStringValue(attributes.id) ?? getStringValue(notificationMetadata?.recordId),
-    message,
-    source: getStringValue(attributes.source) ?? getStringValue(notificationMetadata?.source),
-    kind:
-      getStringValue(attributes.kind) ?? getStringValue(attributes.type) ?? getStringValue(notificationMetadata?.kind),
-    priority: getStringValue(attributes.priority) ?? getStringValue(notificationMetadata?.priority),
-    status: getStringValue(attributes.status) ?? getStringValue(notificationMetadata?.status),
-    attributes,
-    metadata,
-  };
+function getAnthropicStopDetails(providerMetadata: unknown): Record<string, unknown> | undefined {
+  if (!isRecord(providerMetadata)) {
+    return undefined;
+  }
+  const anthropic = providerMetadata.anthropic;
+  if (!isRecord(anthropic)) {
+    return undefined;
+  }
+  const stopDetails = anthropic.stopDetails;
+  return isRecord(stopDetails) ? stopDetails : undefined;
 }
 
 /**
  * Map a non-success terminal finish reason (content-filter, error, length) to a
  * user-facing message, or `undefined` for success reasons. A non-success finish
- * must surface as an explicit terminal error rather than a silent `complete`.
+ * must become an explicit terminal error rather than a silent `complete`.
  */
 export function describeNonSuccessFinishReason(reason: string, providerMetadata: unknown): string | undefined {
   switch (reason) {
     case 'content-filter': {
-      const stopDetails = (providerMetadata as { anthropic?: { stopDetails?: Record<string, unknown> } } | undefined)
-        ?.anthropic?.stopDetails;
+      const stopDetails = getAnthropicStopDetails(providerMetadata);
       const explanation =
         stopDetails && typeof stopDetails.explanation === 'string' ? stopDetails.explanation : undefined;
       const category = stopDetails && typeof stopDetails.category === 'string' ? stopDetails.category : undefined;

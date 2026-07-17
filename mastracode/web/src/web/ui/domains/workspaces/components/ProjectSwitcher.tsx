@@ -4,7 +4,7 @@ import { ChevronsUpDown, Folder, Plus } from 'lucide-react';
 
 import { useOverlays } from '../../../lib/overlays';
 import { useActiveProjectContext } from '../context/ActiveProjectProvider';
-import { deriveProjectPath } from '../hooks/useWorkspaces';
+import { deriveProjectPath } from '../../../../../shared/hooks/useWorkspaces';
 
 /**
  * Propless project switcher: shows the active project and opens the projects

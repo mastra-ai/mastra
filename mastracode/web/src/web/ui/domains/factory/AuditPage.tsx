@@ -4,9 +4,9 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 
+import { useAuditEvents, useAuditPortalLink } from '../../../../shared/hooks/useAuditEvents';
 import { relativeTime } from '../../../../shared/lib/date';
 import { FactoryPageShell } from './components/FactoryPageShell';
-import { useAuditEvents, useAuditPortalLink } from './hooks/useAuditEvents';
 import type { AuditEvent } from './services/audit';
 
 /** Action-group filters mapped to the concrete v1 action taxonomy. */

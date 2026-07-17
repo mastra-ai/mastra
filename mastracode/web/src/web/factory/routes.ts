@@ -17,7 +17,7 @@ import { ensureWebAuthUser, webAuthTenant } from '../auth';
 import { getAppDb } from '../github/db';
 import { githubProjects } from '../github/schema';
 import { clampMetricsWindow, computeFactoryMetrics } from './metrics';
-import type { WorkItemRow } from './schema';
+import type { WorkItemRow } from '../storage/domains/work-items/base';
 import type { WorkItemPriorState } from './store';
 import {
   deleteWorkItem,
