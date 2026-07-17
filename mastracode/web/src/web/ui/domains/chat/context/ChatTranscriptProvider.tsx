@@ -1,4 +1,4 @@
-import type { MastraDBMessage } from '@mastra/client-js';
+import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import type { ReactNode } from 'react';
 import { useReducer } from 'react';
 

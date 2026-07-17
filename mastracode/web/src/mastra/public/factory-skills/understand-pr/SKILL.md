@@ -131,7 +131,7 @@ Given the history and the PR's stated goal, does the approach make sense? Is it 
 
 ### Write the understanding artifact
 
-If a working file was provided, update that same file with what you learned and any requested outputs from its handoff instructions. Otherwise, write `.pr-review/HISTORY.md`.
+If a working file was provided, update that same file with what you learned and any requested outputs from its handoff instructions. Otherwise, create `.artifacts/understand-pr/` in the workspace root if needed, then write `.artifacts/understand-pr/HISTORY.md` there. Treat this file as a durable session artifact for Mastra Code Web, and tell the user the artifact path when done.
 
 Capture what you learned:
 

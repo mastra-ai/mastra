@@ -1,17 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-// `pushBranch` writes a DB row only on success paths in some flows; the unit
-// suite stubs `./db` the same way so the helpers can run without Postgres.
-vi.mock('./db', () => ({
-  getAppDb: () => ({
-    update: () => ({
-      set: () => ({
-        where: async () => {},
-      }),
-    }),
-  }),
-}));
-
 import type { MaterializationSandbox, SandboxCommandResult } from '../sandbox/fleet';
 import { createPullRequest, MaterializeError, pushBranch } from './sandbox';
 

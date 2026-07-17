@@ -986,7 +986,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-5.1',
     'zai-org/GLM-5.2',
   ];
-  readonly 'kimi-for-coding': readonly ['k2p5', 'k2p6', 'k2p7', 'k3', 'kimi-for-coding-highspeed', 'kimi-k2-thinking'];
+  readonly 'kimi-for-coding': readonly ['k2p7', 'k3', 'kimi-for-coding-highspeed'];
   readonly crossmodel: readonly [
     'anthropic/claude-fable-5',
     'anthropic/claude-haiku-4-5',
@@ -1391,6 +1391,7 @@ export type ProviderModelsMap = {
     'kimi-k2-6',
     'kimi-k2-7-code',
     'kimi-k2-7-code-highspeed',
+    'kimi-k3',
     'mimo-v2-5',
     'mimo-v2-5-pro',
     'minimax-m2-7',
@@ -3290,7 +3291,6 @@ export type ProviderModelsMap = {
     'mancer/weaver',
     'meta-llama/llama-3.1-70b-instruct',
     'meta-llama/llama-3.1-8b-instruct',
-    'meta-llama/llama-3.2-11b-vision-instruct',
     'meta-llama/llama-3.2-1b-instruct',
     'meta-llama/llama-3.2-3b-instruct',
     'meta-llama/llama-3.2-3b-instruct:free',
@@ -3344,7 +3344,6 @@ export type ProviderModelsMap = {
     'nousresearch/hermes-3-llama-3.1-70b',
     'nousresearch/hermes-4-405b',
     'nousresearch/hermes-4-70b',
-    'nvidia/llama-3.3-nemotron-super-49b-v1.5',
     'nvidia/nemotron-3-nano-30b-a3b',
     'nvidia/nemotron-3-nano-30b-a3b:free',
     'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
@@ -3998,6 +3997,7 @@ export type ProviderModelsMap = {
     'openai/gpt-oss-120b',
     'openai/gpt-oss-20b',
     'pearl-ai/gemma-4-31b-it',
+    'thinkingmachines/Inkling',
     'zai-org/GLM-5',
     'zai-org/GLM-5.1',
     'zai-org/GLM-5.2',
@@ -4858,6 +4858,7 @@ export type ProviderModelsMap = {
     'moonshotai/kimi-k2.6',
     'moonshotai/kimi-k2.7-code',
     'moonshotai/kimi-k2.7-code-free',
+    'moonshotai/kimi-k3',
     'openai/gpt-5',
     'openai/gpt-5-codex',
     'openai/gpt-5.1',

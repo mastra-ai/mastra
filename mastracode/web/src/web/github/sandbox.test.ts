@@ -1,19 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Capture DB updates without a real Postgres. `getAppDb()` returns a chainable
-// stub whose terminal `.where()` records the `set(...)` payload.
 const dbUpdates: Array<Record<string, unknown>> = [];
-vi.mock('./db', () => ({
-  getAppDb: () => ({
-    update: () => ({
-      set: (values: Record<string, unknown>) => ({
-        where: async () => {
-          dbUpdates.push(values);
-        },
-      }),
-    }),
-  }),
-}));
 
 import { resetSandboxFactory, setSandboxFactory } from '../sandbox/fleet';
 import type { MaterializationSandbox, SandboxCommandResult } from '../sandbox/fleet';
@@ -21,10 +8,10 @@ import {
   computeWorktreePath,
   configureGitIdentity,
   createPullRequest,
-  ensureProjectSandbox,
+  ensureProjectSandbox as ensureProjectSandboxWithStorage,
   ensureWorktree,
   isValidGitRef,
-  materializeRepo,
+  materializeRepo as materializeRepoWithStorage,
   MaterializeError,
   pushBranch,
   resolveGitIdentity,
@@ -35,18 +22,18 @@ import {
   WorktreeError,
 } from './sandbox';
 import type { RepoMaterializeInfo } from './sandbox';
-import type { GithubProjectSandboxRow } from './schema';
+import type { GithubProjectSandboxRow, GithubStorage } from './storage/base';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { __resetRuntimeConfigForTests, seedRuntimeConfig } from '../runtime-config';
 
-/** Minimal derivable template sandbox standing in for Railway/Local instances. */
+/** Minimal cloneable template sandbox standing in for Railway/Local instances. */
 function templateSandbox(opts: { provider?: string; idleTimeoutMinutes?: number } = {}): WorkspaceSandbox {
   const template = {
     id: 'template-1',
     name: 'Template',
     provider: opts.provider ?? 'railway',
     ...(opts.idleTimeoutMinutes !== undefined ? { idleTimeoutMinutes: opts.idleTimeoutMinutes } : {}),
-    derive: () => template,
+    clone: () => template,
   };
   return template as unknown as WorkspaceSandbox;
 }
@@ -108,6 +95,34 @@ function makeRow(overrides: Partial<GithubProjectSandboxRow> = {}): GithubProjec
 
 function makeRepoInfo(overrides: Partial<RepoMaterializeInfo> = {}): RepoMaterializeInfo {
   return { repoFullName: 'octocat/hello', defaultBranch: 'main', ...overrides };
+}
+
+const storage = {
+  setSandboxId: vi.fn(async (_id: string, sandboxId: string) => {
+    dbUpdates.push({ sandboxId });
+  }),
+  clearSandboxBinding: vi.fn(async () => {
+    dbUpdates.push({ sandboxId: null });
+  }),
+  markSandboxMaterialized: vi.fn(async () => {
+    dbUpdates.push({ materializedAt: new Date() });
+  }),
+} as unknown as GithubStorage;
+
+function ensureProjectSandbox(
+  row: GithubProjectSandboxRow,
+  onProgress?: Parameters<typeof ensureProjectSandboxWithStorage>[2],
+) {
+  return ensureProjectSandboxWithStorage(row, storage, onProgress);
+}
+
+function materializeRepo(
+  row: GithubProjectSandboxRow,
+  repoInfo: RepoMaterializeInfo,
+  sandbox: MaterializationSandbox,
+  token: string,
+) {
+  return materializeRepoWithStorage(row, repoInfo, sandbox, token, storage);
 }
 
 beforeEach(() => {

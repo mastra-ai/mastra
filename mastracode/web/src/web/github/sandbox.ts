@@ -18,34 +18,16 @@
  */
 
 import { createHash } from 'node:crypto';
-import { eq } from 'drizzle-orm';
 import { ensureSandbox, reportProgress, teardownSandbox } from '../sandbox/fleet';
-import type {
-  MaterializationSandbox,
-  ProgressFn,
-  SandboxBindingStore,
-  SandboxCommandResult,
-} from '../sandbox/fleet';
-import { getAppDb } from './db';
-import { githubProjectSandboxes } from './schema';
-import type { GithubProjectSandboxRow } from './schema';
+import type { MaterializationSandbox, ProgressFn, SandboxBindingStore, SandboxCommandResult } from '../sandbox/fleet';
+import type { GithubProjectSandboxRow, GithubStorage } from './storage/base';
 
 /** Adapt a per-(project,user) sandbox binding row to the fleet's persistence seam. */
-function bindingStore(row: GithubProjectSandboxRow): SandboxBindingStore {
+function bindingStore(row: GithubProjectSandboxRow, storage: GithubStorage): SandboxBindingStore {
   return {
     sandboxId: row.sandboxId,
-    setSandboxId: async id => {
-      await getAppDb()
-        .update(githubProjectSandboxes)
-        .set({ sandboxId: id })
-        .where(eq(githubProjectSandboxes.id, row.id));
-    },
-    clear: async () => {
-      await getAppDb()
-        .update(githubProjectSandboxes)
-        .set({ sandboxId: null, materializedAt: null })
-        .where(eq(githubProjectSandboxes.id, row.id));
-    },
+    setSandboxId: id => (id === null ? storage.clearSandboxBinding(row.id) : storage.setSandboxId(row.id, id)),
+    clear: () => storage.clearSandboxBinding(row.id),
   };
 }
 
@@ -55,9 +37,10 @@ function bindingStore(row: GithubProjectSandboxRow): SandboxBindingStore {
  */
 export async function ensureProjectSandbox(
   row: GithubProjectSandboxRow,
+  storage: GithubStorage,
   onProgress?: ProgressFn,
 ): Promise<MaterializationSandbox> {
-  return ensureSandbox(bindingStore(row), onProgress);
+  return ensureSandbox(bindingStore(row, storage), onProgress);
 }
 
 /**
@@ -70,9 +53,10 @@ export async function ensureProjectSandbox(
  */
 export async function teardownProjectSandbox(
   row: GithubProjectSandboxRow,
+  storage: GithubStorage,
   sandbox?: MaterializationSandbox,
 ): Promise<void> {
-  return teardownSandbox(bindingStore(row), sandbox);
+  return teardownSandbox(bindingStore(row, storage), sandbox);
 }
 
 /**
@@ -145,6 +129,7 @@ export async function materializeRepo(
   repoInfo: RepoMaterializeInfo,
   sandbox: MaterializationSandbox,
   token: string,
+  storage: GithubStorage,
   onProgress?: ProgressFn,
 ): Promise<void> {
   const workdir = sandboxRow.sandboxWorkdir;
@@ -218,10 +203,7 @@ export async function materializeRepo(
 
   // 4. Mark materialized.
   reportProgress(onProgress, { phase: 'finalizing', message: 'Finalizing workspace…' });
-  await getAppDb()
-    .update(githubProjectSandboxes)
-    .set({ materializedAt: new Date() })
-    .where(eq(githubProjectSandboxes.id, sandboxRow.id));
+  await storage.markSandboxMaterialized(sandboxRow.id);
 }
 
 /**

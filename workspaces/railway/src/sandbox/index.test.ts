@@ -385,11 +385,11 @@ describe('RailwaySandbox', () => {
     });
   });
 
-  describe('derive', () => {
+  describe('clone', () => {
     it('constructs an unstarted sibling without any I/O', () => {
       const template = new RailwaySandbox({ token: 'tok', environmentId: 'env-1' });
 
-      const child = template.derive({ id: 'mc-project-1' });
+      const child = template.clone({ id: 'mc-project-1' });
 
       expect(child).toBeInstanceOf(RailwaySandbox);
       expect(child).not.toBe(template);
@@ -401,7 +401,7 @@ describe('RailwaySandbox', () => {
 
     it('does not require the template to be started', () => {
       const template = new RailwaySandbox({ token: 'tok' });
-      expect(() => template.derive()).not.toThrow();
+      expect(() => template.clone()).not.toThrow();
     });
 
     it('inherits credentials and applies env + idle timeout overrides on start', async () => {
@@ -412,7 +412,7 @@ describe('RailwaySandbox', () => {
         networkIsolation: 'PRIVATE',
       });
 
-      const child = template.derive({
+      const child = template.clone({
         env: { GITHUB_TOKEN: 'ghs_abc' },
         idleTimeoutMinutes: 15,
       });
@@ -432,7 +432,7 @@ describe('RailwaySandbox', () => {
     it('reattaches to a provider sandbox when sandboxId is passed', async () => {
       const template = new RailwaySandbox({ token: 'tok', environmentId: 'env-1' });
 
-      const child = template.derive({ sandboxId: 'rw-sandbox-123' });
+      const child = template.clone({ sandboxId: 'rw-sandbox-123' });
       await child._start();
 
       expect(mockConnect).toHaveBeenCalledWith(
@@ -449,7 +449,7 @@ describe('RailwaySandbox', () => {
         env: { BASE: '1' },
       });
 
-      const child = template.derive();
+      const child = template.clone();
       await child._start();
 
       expect(mockCreate).toHaveBeenCalledWith(

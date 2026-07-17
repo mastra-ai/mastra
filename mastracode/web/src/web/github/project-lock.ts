@@ -20,7 +20,8 @@
  */
 
 import { createHash } from 'node:crypto';
-import { getAppDbPool } from './db';
+
+import { getSharedAppPool } from '../runtime-config';
 
 /** Minimal pg pool surface used by the distributed lock (for testability). */
 export interface LockPool {
@@ -92,7 +93,10 @@ export async function withDbAdvisoryLock<T>(key: string, fn: () => Promise<T>, p
     return fn();
   }
 
-  const pool: LockPool = poolOverride ?? (getAppDbPool() as unknown as LockPool);
+  const pool = poolOverride ?? (getSharedAppPool() as LockPool | undefined);
+  if (!pool) {
+    throw new Error('Distributed project locking requires PostgresStore in the factory storage slot.');
+  }
   const [k1, k2] = hashKey(key);
   const client = await pool.connect();
   try {

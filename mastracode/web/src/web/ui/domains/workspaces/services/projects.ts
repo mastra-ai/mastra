@@ -298,6 +298,12 @@ export function selectedWorktree(project: Project): Worktree | undefined {
   return match ?? list[0];
 }
 
+export function activeWorkspacePath(project: Project, userSession?: Worktree): string | undefined {
+  if (userSession) return userSession.worktreePath;
+  if (project.source === 'github') return selectedWorktree(project)?.worktreePath;
+  return project.path;
+}
+
 /**
  * Append (or update) a worktree on a project and persist. De-duped by branch.
  * Returns the updated project. Does NOT change the selection.
