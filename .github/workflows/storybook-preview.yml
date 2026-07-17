@@ -1,0 +1,101 @@
+name: Storybook preview
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions: {}
+
+concurrency:
+  group: storybook-preview-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    name: Deploy Storybook preview
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 30
+    if: >
+      github.repository == 'mastra-ai/mastra' &&
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '/storybook') &&
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: remote:rw
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PLAYGROUND_UI_PROJECT_ID }}
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Acknowledge comment
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        with:
+          script: |
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: 'rocket',
+            });
+
+      - name: Resolve PR head
+        id: pr
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        with:
+          script: |
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+            core.setOutput('sha', pr.head.sha);
+
+      - name: Checkout PR head
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        with:
+          ref: ${{ steps.pr.outputs.sha }}
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Build workspace dependencies
+        run: pnpm turbo build --filter ./packages/playground-ui
+
+      - name: Build Storybook
+        run: pnpm --filter @mastra/playground-ui build-storybook
+
+      - name: Deploy to Vercel
+        id: deploy
+        working-directory: packages/playground-ui
+        run: |
+          mkdir -p .vercel/output/static
+          echo '{"version":3}' > .vercel/output/config.json
+          cp -R storybook-static/. .vercel/output/static/
+          url=$(pnpm dlx vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Comment preview URL
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `📖 Storybook preview ready: ${{ steps.deploy.outputs.url }} (commit ${{ steps.pr.outputs.sha }})`,
+            });
+
+      - name: Comment on failure
+        if: failure()
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `❌ Storybook preview failed: https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+            });
