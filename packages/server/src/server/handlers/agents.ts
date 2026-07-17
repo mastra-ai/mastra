@@ -2748,7 +2748,7 @@ export const RECOVER_ROUTE = createRoute({
       // Durable-agent check via duck-typing to avoid a hard runtime dep on the
       // DurableAgent class inside @mastra/core (mirrors the pattern used by
       // Mastra.recoverAllDurableAgents()).
-      if (typeof (agent as any).recover !== 'function') {
+      if (!isDurableAgentLike(agent)) {
         throw new HTTPException(400, {
           message: 'Agent does not support recover. Only durable agents (createDurableAgent) can recover runs.',
         });

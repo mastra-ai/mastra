@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import { createDurableAgent, DurableAgent } from '@mastra/core/agent/durable';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
@@ -575,6 +576,7 @@ describe('Agent Routes Authorization', () => {
   let storage: InMemoryStore;
   let mockMemory: MockMemory;
   let mockAgent: Agent;
+  let mockDurableAgent: DurableAgent;
   let mastra: Mastra;
 
   beforeEach(() => {
@@ -1278,6 +1280,30 @@ describe('Agent Routes Authorization', () => {
   });
 
   describe('RECOVER_ROUTE', () => {
+    beforeEach(() => {
+      mockAgent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'test-instructions',
+        model: {} as any,
+        memory: mockMemory,
+      });
+      mockDurableAgent = createDurableAgent({
+        agent: mockAgent,
+        id: 'test-durable-agent',
+        name: 'test-durable-agent',
+      });
+
+      mastra = new Mastra({
+        agents: {
+          'test-agent': mockAgent,
+          'test-durable-agent': mockDurableAgent,
+        },
+        storage,
+        logger: false,
+      });
+    });
+
     async function persistDurableAgenticLoopRun({
       runId,
       resourceId,
@@ -1296,7 +1322,12 @@ describe('Agent Routes Authorization', () => {
           runId,
           status,
           value: {},
-          context: {},
+          context: {
+            input: {
+              agentId: 'test-durable-agent',
+              __workflowKind: 'durable-agent',
+            },
+          } as any,
           activePaths: [],
           activeStepsPath: {},
           serializedStepGraph: [],
@@ -1334,8 +1365,7 @@ describe('Agent Routes Authorization', () => {
         } as any),
       ).rejects.toThrow(
         new HTTPException(400, {
-          message:
-            'Agent.recover() is only available on agents constructed with `durable: true`. Configure `new Agent({ durable: true })` or retrieve the durable agent from a registered Mastra instance.',
+          message: 'Agent does not support recover. Only durable agents (createDurableAgent) can recover runs.',
         }),
       );
     });
@@ -1351,7 +1381,7 @@ describe('Agent Routes Authorization', () => {
       await expect(
         RECOVER_ROUTE.handler({
           mastra,
-          agentId: 'test-agent',
+          agentId: 'test-durable-agent',
           requestContext,
           abortSignal: new AbortController().signal,
           runId: 'recover-run-owned-by-b',
@@ -1366,7 +1396,7 @@ describe('Agent Routes Authorization', () => {
     it('should call agent.recover(runId, { abortSignal }) and return fullStream', async () => {
       const expectedStream = new ReadableStream();
       const recoverMock = vi.fn().mockResolvedValue({ fullStream: expectedStream });
-      (mockAgent as any).recover = recoverMock;
+      (mockDurableAgent as any).recover = recoverMock;
 
       await persistDurableAgenticLoopRun({ runId: 'recover-run-1' });
 
@@ -1375,7 +1405,7 @@ describe('Agent Routes Authorization', () => {
 
       const result = await RECOVER_ROUTE.handler({
         mastra,
-        agentId: 'test-agent',
+        agentId: 'test-durable-agent',
         requestContext,
         abortSignal: abortController.signal,
         runId: 'recover-run-1',
@@ -1397,7 +1427,7 @@ describe('Agent Routes Authorization', () => {
 
       await RECOVER_ROUTE.handler({
         mastra,
-        agentId: 'test-agent',
+        agentId: 'test-durable-agent',
         requestContext,
         abortSignal: new AbortController().signal,
         runId: 'recover-run-versions',
