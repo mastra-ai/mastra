@@ -2,4 +2,4 @@
 '@mastra/mongodb': patch
 ---
 
-Fixed `MongoDBVector.createIndex()` leaving the companion full-text search index missing when the vector index already existed. Each of the two Atlas Search index creations now treats IndexAlreadyExists independently, so an interrupted or repeated `createIndex` call completes the remaining index instead of skipping it.
+Fixed `MongoDBVector.createIndex()` leaving index setup incomplete. Previously, when the vector search index already existed, the call silently skipped creating the companion full-text search index. Repeated or interrupted `createIndex()` calls now finish creating the remaining search index instead of leaving setup incomplete.
