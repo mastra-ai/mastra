@@ -12,6 +12,7 @@ import {
   useActiveProjectContext,
 } from '../workspaces';
 import { ChatHeader } from './components/ChatHeader';
+import { RelatedFactorySessions } from '../factory/components/RelatedFactorySessions';
 import { ChatMessageList } from './components/ChatMessageList';
 import { ChatOverlays } from './components/ChatOverlays';
 import { ComposerPanel } from './components/ComposerPanel';
@@ -95,5 +96,12 @@ function ThreadPageContent() {
   useRouteThreadSync();
   useThreadPageKickoffs();
 
-  return <ChatMessageList />;
+  return (
+    <div className="flex min-h-0 flex-col">
+      <RelatedFactorySessions />
+      <div className="min-h-0 flex-1 overflow-hidden">
+        <ChatMessageList />
+      </div>
+    </div>
+  );
 }
