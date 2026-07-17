@@ -164,7 +164,7 @@ describe('MastraFactory.prepare', () => {
     const vector = new PgVector({ id: 'factory-test-vectors', connectionString: 'postgres://cfg/app' });
     const config = await prepareFactory({ storage, vector });
     expect(config.storage).toBe(storage);
-    expect(config.vectorStore).toBe(vector);
+    expect(config.vector).toBe(vector);
   });
 
   it('installs the Web Factory workspace resolver instead of changing the SDK default', async () => {
@@ -175,7 +175,7 @@ describe('MastraFactory.prepare', () => {
   it('omits storage when no instance is configured', async () => {
     const config = await prepareFactory({});
     expect(config).not.toHaveProperty('storage');
-    expect(config).not.toHaveProperty('vectorStore');
+    expect(config).not.toHaveProperty('vector');
   });
 
   it('passes the pubsub instance through with cross-process leases enabled', async () => {
