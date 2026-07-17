@@ -1417,54 +1417,80 @@ describe('DefaultExecutionEngine.execute cancellation onFinish contract', () => 
       options: {
         validateInputs: true,
         shouldPersistSnapshot: () => false,
-        onFinish: result => {
+        onFinish: (result: any) => {
           onFinishResult = result;
         },
       } as any,
     });
 
-    const step = {
+    const persistSpy = vi.spyOn(engine as any, 'persistStepUpdate').mockResolvedValue(undefined);
+
+    const step1 = {
       id: 'step1',
       inputSchema: z.any(),
       outputSchema: z.any(),
-      execute: async () => {
-        // Trigger cancel
+      execute: async ({ inputData }: any) => {
+        // Trigger cancel during step 1 so step 2 is skipped and engine loop catches cancellation
         abortController.abort();
-        return { data: 'test' };
+        // Return a payload matching input to test deduplication
+        return {
+          ...inputData,
+        };
+      },
+    };
+
+    const step2 = {
+      id: 'step2',
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+      execute: async () => {
+        return { data: 'should-not-run' };
       },
     };
 
     const graph = {
       id: 'test-graph',
       steps: [
-        {
-          type: 'step' as const,
-          step,
-        },
+        { type: 'step' as const, step: step1 },
+        { type: 'step' as const, step: step2 },
       ],
     };
+
+    const inputData = { data: 'test-input' };
 
     const result = await engine.execute({
       workflowId: 'test-workflow',
       runId: 'test-run',
       graph,
+      input: inputData,
       serializedStepGraph: [],
       pubsub,
       requestContext,
       abortController,
+      outputOptions: { includeState: true },
     });
 
     expect(result.status).toBe('canceled');
+    expect(result.runId).toBe('test-run');
+    expect(result.state).toBeDefined(); // Ensure state exists in output
+
+    // Top-level input is preserved
+    expect((result as any).input).toEqual(inputData);
+
     expect(onFinishResult).toBeDefined();
     expect(onFinishResult?.status).toBe('canceled');
 
     // The returned steps and onFinish steps should be identically normalized
-    // and neither should contain internal metadata or un-deduplicated payloads (when path deduplication is active).
     expect(result.steps).toEqual(onFinishResult?.steps);
 
-    // Ensure raw nestedRunId is omitted
+    // Payload deduplication: step1 output matches input, so payload should be removed
     const step1Result = result.steps?.step1 as any;
-    expect(step1Result?.metadata?.nestedRunId).toBeUndefined();
+    expect(step1Result?.payload).toBeUndefined();
+
+    // Verify raw persistence: persistStepUpdate receives the un-deduplicated payload
+    expect(persistSpy).toHaveBeenCalled();
+    const persistArgs = persistSpy.mock.calls[0][0] as any;
+    expect(persistArgs.stepResults.step1.payload).toEqual(inputData);
   });
 });
 
@@ -1510,4 +1536,3 @@ describe('DefaultExecutionEngine.executeStepWithRetry', () => {
     }
   });
 });
-

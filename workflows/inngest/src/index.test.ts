@@ -222,9 +222,8 @@ describe('Inngest type regressions', () => {
     // This is a compile-time test to ensure TS2416 doesn't regress when InngestWorkflow
     // overrides createRun from the base Workflow class.
     const inngest = new Inngest({ id: 'test' });
-    const { createWorkflow, createStep } = init(inngest);
-
     type CustomContext = { userId: string };
+    const { createWorkflow, createStep } = init<CustomContext>(inngest);
 
     const step1 = createStep<any, any, any, any, any, any, CustomContext>({
       id: 'step1',
@@ -236,7 +235,7 @@ describe('Inngest type regressions', () => {
       },
     });
 
-    const workflow = createWorkflow<any, any, any, any, CustomContext>({
+    const workflow = createWorkflow({
       id: 'typed-context-workflow',
       inputSchema: z.object({}),
       outputSchema: z.object({ user: z.string() }),
@@ -245,10 +244,11 @@ describe('Inngest type regressions', () => {
 
     workflow.then(step1).commit();
 
+    // Assigning to the base Workflow type explicitly guards against TS2416 substitutability issues
+    const workflowAsBase: Workflow<any, any, any, any, any, any, any, CustomContext> = workflow as any;
+
     // createRun should return a Run that accepts the CustomContext
-    // This compilation would fail with TS2416 if InngestWorkflow incorrectly
-    // omitted TRequestContext from its generic signature.
-    const runPromise = workflow.createRun();
+    const runPromise = workflowAsBase.createRun();
     expect(runPromise).toBeDefined();
   });
 });

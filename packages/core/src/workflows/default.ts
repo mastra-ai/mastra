@@ -860,11 +860,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         });
 
         return {
-          status: 'canceled',
-          result: undefined,
-          error: undefined,
-          steps: formattedResult.steps,
-          tripwire: undefined,
+          ...formattedResult,
           runId,
           ...(params.outputOptions?.includeState ? { state: lastState } : {}),
         } as any;
@@ -1010,6 +1006,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
         return {
           ...result,
+          runId,
           ...(lastOutput.result.status === 'suspended' && params.outputOptions?.includeResumeLabels
             ? { resumeLabels: lastOutput.mutableContext.resumeLabels }
             : {}),
@@ -1050,7 +1047,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
         delete result.result;
 
-        return { ...result, status: 'paused', ...(params.outputOptions?.includeState ? { state: lastState } : {}) };
+        return {
+          ...result,
+          runId,
+          status: 'paused',
+          ...(params.outputOptions?.includeState ? { state: lastState } : {}),
+        };
       }
     }
 
@@ -1107,9 +1109,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     }
 
     if (params.outputOptions?.includeState) {
-      return { ...result, state: lastState };
+      return { ...result, runId, state: lastState };
     }
-    return result;
+    return { ...result, runId };
   }
 
   getStepOutput(stepResults: Record<string, any>, step?: StepFlowEntry): any {

@@ -1180,4 +1180,6 @@ export type FormattedWorkflowResult = {
   tripwire?: StepTripwireInfo;
   /** The sequence of step IDs executed in this run */
   stepExecutionPath?: string[];
+  /** The unique identifier for this workflow run */
+  runId: string;
 };

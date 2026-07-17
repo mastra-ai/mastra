@@ -97,10 +97,9 @@ export async function getEditDiagnosticsText(workspace: Workspace, filePath: str
     // Use the filesystem's path resolution to get the real disk path.
     // This correctly handles contained: true (virtual paths → basePath)
     // and contained: false (absolute paths used as-is).
-    // and contained: false (absolute paths used as-is).
     // Use posix resolve to ensure POSIX LSP paths don't get Windows drive letters appended,
     // but fall back to win32 resolve if the root is explicitly a Windows absolute path.
-    const isWindowsRoot = /^[A-Z]:[\\/]/i.test(lspManager.root);
+    const isWindowsRoot = path.win32.isAbsolute(lspManager.root);
     const absolutePath =
       workspace.filesystem?.resolveAbsolutePath?.(filePath) ??
       (isWindowsRoot
