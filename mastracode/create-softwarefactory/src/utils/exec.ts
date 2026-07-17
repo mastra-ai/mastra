@@ -27,9 +27,12 @@ export function runInherit(
           // `shell: true` means child.kill() would only hit the cmd.exe
           // wrapper — taskkill /T terminates the whole process tree.
           const killer = spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
-          // If taskkill can't run, fall back to killing the wrapper so the
-          // `close` handler still fires and the promise settles.
+          // If taskkill can't run or fails, fall back to killing the wrapper
+          // so the `close` handler still fires and the promise settles.
           killer.on('error', () => child.kill());
+          killer.on('exit', code => {
+            if (code !== 0) child.kill();
+          });
         } else {
           child.kill('SIGTERM');
           killTimer = setTimeout(() => child.kill('SIGKILL'), 5_000);
