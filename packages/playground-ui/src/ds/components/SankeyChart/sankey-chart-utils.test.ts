@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildSankeyChartGraph,
   getSankeyChartCurveSelection,
+  getSankeyChartNodeWeights,
   getSankeyChartValue,
   reorderSankeyChartColumns,
 } from './sankey-chart-utils';
@@ -64,6 +65,41 @@ describe('SankeyChart utilities', () => {
         nodes: [{ value: 'API' }, { value: 'GPT' }],
         links: [{ value: 2, records: [validRecord] }],
       });
+    });
+  });
+
+  describe('when graph nodes have weighted incoming and outgoing links', () => {
+    it('derives source, target, and intermediate node weights using Sankey conservation', () => {
+      const graph = buildSankeyChartGraph(
+        [
+          { source: 'API', model: 'GPT', status: 'Success', count: 2 },
+          { source: 'API', model: 'GPT', status: 'Error', count: 3 },
+          { source: 'UI', model: 'GPT', status: 'Success', count: 4 },
+        ],
+        columns,
+        record => Number(record.count),
+      );
+
+      expect(Object.fromEntries(getSankeyChartNodeWeights(graph))).toEqual({
+        '["source","string","API"]': 5,
+        '["model","string","GPT"]': 9,
+        '["status","string","Success"]': 6,
+        '["status","string","Error"]': 3,
+        '["source","string","UI"]': 4,
+      });
+    });
+
+    it('uses the greater total when an intermediate node has mismatched incoming and outgoing weights', () => {
+      const graph = buildSankeyChartGraph(
+        [
+          { source: 'API', model: 'GPT', status: 'Success', count: 2 },
+          { source: 'UI', model: 'GPT', status: '', count: 5 },
+        ],
+        columns,
+        record => Number(record.count),
+      );
+
+      expect(getSankeyChartNodeWeights(graph).get('["model","string","GPT"]')).toBe(7);
     });
   });
 

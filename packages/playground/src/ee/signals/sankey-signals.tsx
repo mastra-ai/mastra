@@ -1,12 +1,14 @@
 import { Card, CardContent, CardFooter, CardHeader } from '@mastra/playground-ui/components/Card';
 import { nodeColor, Sankey, SankeyChart } from '@mastra/playground-ui/components/SankeyChart';
+import type { SankeyChartColumn, SankeyChartRecord } from '@mastra/playground-ui/components/SankeyChart';
 import { SignalsOverviewPage as SignalsEmptyState } from '@mastra/playground-ui/ee/signals';
 import { ExternalLink } from 'lucide-react';
 
 import { useThemeFlow } from './hooks/use-theme-flow';
 import { useThemeSnapshots } from './hooks/use-theme-snapshots';
-import { themeFlowToSankeyData } from './sankey-signals-data';
-import type { ThemeFlowResponse, ThemeNode, TraceSignalName } from './types';
+import { buildSignalGraphSummary } from './sankey-signals-data';
+import type { SignalGraphNodeSummary, SignalGraphStageSummary } from './sankey-signals-data';
+import type { TraceSignalName } from './types';
 import { Link } from '@/lib/link';
 
 const SIGNAL_ORDER: TraceSignalName[] = ['goal', 'outcome', 'behavior', 'sentiment'];
@@ -40,7 +42,15 @@ function getSignalHue(signalName: string) {
   return 0;
 }
 
-function SignalDistribution({ signalName, nodes }: { signalName: TraceSignalName; nodes: ThemeNode[] }) {
+function SignalDistribution({
+  signalName,
+  traceCount,
+  nodes,
+}: {
+  signalName: TraceSignalName;
+  traceCount: number;
+  nodes: SignalGraphNodeSummary[];
+}) {
   const label = formatSignalName(signalName);
   const color = nodeColor(SIGNAL_HUES[signalName]);
 
@@ -52,6 +62,7 @@ function SignalDistribution({ signalName, nodes }: { signalName: TraceSignalName
         </h3>
       </CardHeader>
       <CardContent className="space-y-4 p-4">
+        <p className="font-mono text-[10px] tracking-wider text-neutral3">{traceLabel(traceCount)}</p>
         <div
           aria-label={`${label} stacked distribution`}
           className="flex h-1.5 overflow-hidden rounded-sm bg-surface4"
@@ -98,21 +109,37 @@ function SignalDistribution({ signalName, nodes }: { signalName: TraceSignalName
   );
 }
 
-function SignalDistributions({ flow }: { flow: ThemeFlowResponse }) {
+function SignalDistributions({ stages }: { stages: SignalGraphStageSummary[] }) {
   return (
     <section aria-label="Signal distributions" className="grid grid-cols-4 gap-3">
       {SIGNAL_ORDER.map(signalName => {
-        const stage = flow.stages.find(currentStage => currentStage.signalName === signalName);
-        return <SignalDistribution key={signalName} signalName={signalName} nodes={stage?.nodes ?? []} />;
+        const stage = stages.find(currentStage => currentStage.signalName === signalName);
+        return (
+          <SignalDistribution
+            key={signalName}
+            signalName={signalName}
+            traceCount={stage?.traceCount ?? 0}
+            nodes={stage?.nodes ?? []}
+          />
+        );
       })}
     </section>
   );
 }
 
-function FlowCard({ flow, height }: { flow: ThemeFlowResponse; height?: number }) {
-  const { records, columns } = themeFlowToSankeyData(flow);
+function FlowCard({
+  columns,
+  records,
+  stages,
+  height,
+}: {
+  columns: SankeyChartColumn[];
+  records: SankeyChartRecord[];
+  stages: SignalGraphStageSummary[];
+  height?: number;
+}) {
   const chartColumns = columns.map(column => {
-    const stage = flow.stages.find(currentStage => currentStage.signalName === column.id);
+    const stage = stages.find(currentStage => currentStage.signalName === column.id);
     const clusterCount = stage?.nodes.length ?? 0;
     return {
       ...column,
@@ -129,7 +156,7 @@ function FlowCard({ flow, height }: { flow: ThemeFlowResponse; height?: number }
           getColumnHue={column => getSignalHue(column.id)}
           getRecordWeight={record => Number(record.traceCount)}
         >
-          <SankeyChart height={height ?? 680} margin={{ top: 40, right: 80, bottom: 48, left: 80 }} />
+          <SankeyChart height={height ?? 680} margin={{ top: 64, right: 160, bottom: 48, left: 160 }} />
         </Sankey>
       </CardContent>
       <CardFooter className="flex justify-between gap-6 border-t border-border1 bg-surface2 px-4 py-3">
@@ -187,7 +214,8 @@ export function SankeySignals({ entityId, entityType = 'agent', signalNames, hei
     return <SignalsEmptyState LinkComponent={Link} />;
   }
 
-  const clusterCount = flow.stages.reduce((total, stage) => total + stage.nodes.length, 0);
+  const graphSummary = buildSignalGraphSummary(flow);
+  const clusterCount = graphSummary.stages.reduce((total, stage) => total + stage.nodes.length, 0);
 
   return (
     <main className="space-y-7 p-6">
@@ -204,7 +232,7 @@ export function SankeySignals({ entityId, entityType = 'agent', signalNames, hei
           </p>
           <ul aria-label="Signal analysis metrics" className="mt-5 flex flex-wrap gap-2">
             <li className="rounded-md border border-border1 bg-surface2 px-3 py-1.5 text-xs text-neutral4">
-              {traceLabel(flow.snapshot.traceCount)} analyzed
+              {traceLabel(graphSummary.analyzedTraceCount)} analyzed
             </li>
             <li className="rounded-md border border-border1 bg-surface2 px-3 py-1.5 text-xs text-neutral4">
               {clusterCount} clusters
@@ -226,8 +254,13 @@ export function SankeySignals({ entityId, entityType = 'agent', signalNames, hei
       </header>
       <div className="overflow-x-auto" data-scroll-container="horizontal" data-testid="signals-analysis-scroll">
         <div className="min-w-[920px] space-y-4" data-min-width="920" data-testid="signals-analysis-canvas">
-          <FlowCard flow={flow} height={height} />
-          <SignalDistributions flow={flow} />
+          <FlowCard
+            columns={graphSummary.columns}
+            records={graphSummary.records}
+            stages={graphSummary.stages}
+            height={height}
+          />
+          <SignalDistributions stages={graphSummary.stages} />
         </div>
       </div>
     </main>

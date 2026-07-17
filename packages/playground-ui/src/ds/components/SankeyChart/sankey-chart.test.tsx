@@ -114,17 +114,33 @@ describe('SankeyChart', () => {
     const outcomeLabel = [...container.querySelectorAll('svg text')].find(element => element.textContent === 'Outcome');
     expect(channelLabel?.getAttribute('text-anchor')).toBe('middle');
     expect(outcomeLabel?.getAttribute('text-anchor')).toBe('middle');
-    const node = container.querySelector('svg rect[rx="3"]');
-    expect(node?.getAttribute('x')).toBe('120');
+    const nodes = [...container.querySelectorAll('svg rect[rx="3"]')];
+    const node = nodes[0];
+    const nextNode = nodes.find(
+      candidate => candidate !== node && candidate.getAttribute('x') === node?.getAttribute('x'),
+    );
+    expect(node?.getAttribute('x')).toBe('160');
     expect(node?.getAttribute('width')).toBe('7');
-    expect(channelLabel?.getAttribute('x')).toBe('123.5');
+    expect(Number(node?.getAttribute('height'))).toBeLessThan(180);
+    expect(
+      Number(nextNode?.getAttribute('y')) - Number(node?.getAttribute('y')) - Number(node?.getAttribute('height')),
+    ).toBeCloseTo(56);
+    expect(channelLabel?.getAttribute('x')).toBe('163.5');
     const searchLabel = [...container.querySelectorAll('svg text')].find(element => element.textContent === 'Search');
-    expect(searchLabel?.getAttribute('font-size')).toBe('12.5');
-    expect(searchLabel?.getAttribute('paint-order')).toBeNull();
-    expect(searchLabel?.getAttribute('style')).toContain('drop-shadow');
+    expect(searchLabel?.getAttribute('font-size')).toBe('11');
+    expect(searchLabel?.getAttribute('text-anchor')).toBe('middle');
+    expect(searchLabel?.getAttribute('x')).toBe('163.5');
+    expect(Number(searchLabel?.getAttribute('y'))).toBeGreaterThan(Number(channelLabel?.getAttribute('y')) + 16);
+    expect(Number(searchLabel?.getAttribute('y'))).toBeLessThan(Number(node?.getAttribute('y')));
+    expect(searchLabel?.getAttribute('style')).toBeNull();
+    const searchDetails = [...container.querySelectorAll('svg text')].find(
+      element => element.textContent === '3 (75%)' && element.getAttribute('x') === '163.5',
+    );
+    expect(searchDetails?.getAttribute('text-anchor')).toBe('middle');
+    expect(Number(searchDetails?.getAttribute('y'))).toBeLessThan(Number(node?.getAttribute('y')) - 4);
     const lostLabel = [...container.querySelectorAll('svg text')].find(element => element.textContent === 'Lost');
-    expect(lostLabel?.getAttribute('text-anchor')).toBe('start');
-    expect(container.querySelector('svg text[font-size="10.5"]')).not.toBeNull();
+    expect(lostLabel?.getAttribute('text-anchor')).toBe('middle');
+    expect(container.querySelector('svg text[font-size="9.5"]')).not.toBeNull();
   });
 
   it('shows each node count with its percentage of the column total', async () => {

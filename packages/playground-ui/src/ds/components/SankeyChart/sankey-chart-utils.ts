@@ -136,6 +136,20 @@ export function buildSankeyChartGraph(
   return { nodes, links: [...linksById.values()] };
 }
 
+export function getSankeyChartNodeWeights(graph: SankeyChartGraph): Map<string, number> {
+  const incomingWeights = new Map<string, number>();
+  const outgoingWeights = new Map<string, number>();
+
+  for (const link of graph.links) {
+    outgoingWeights.set(link.sourceNode.id, (outgoingWeights.get(link.sourceNode.id) ?? 0) + link.value);
+    incomingWeights.set(link.targetNode.id, (incomingWeights.get(link.targetNode.id) ?? 0) + link.value);
+  }
+
+  return new Map(
+    graph.nodes.map(node => [node.id, Math.max(incomingWeights.get(node.id) ?? 0, outgoingWeights.get(node.id) ?? 0)]),
+  );
+}
+
 export function getSankeyChartCurveSelection(link: SankeyChartLink): SankeyChartCurveSelection {
   return {
     source: { column: link.sourceNode.column, value: link.sourceNode.value },

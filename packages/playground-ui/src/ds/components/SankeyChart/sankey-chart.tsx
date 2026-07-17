@@ -18,7 +18,7 @@ export type SankeyChartProps = {
 export function SankeyChart({
   height = 320,
   className,
-  margin = { top: 40, right: 120, bottom: 12, left: 120 },
+  margin = { top: 64, right: 160, bottom: 12, left: 160 },
   onCurveClick,
 }: SankeyChartProps) {
   const { graph, enabledColumns, hueMap } = useSankeyRenderContext();
@@ -48,7 +48,7 @@ export function SankeyChart({
             <RechartsSankey
               data={graph}
               nodeWidth={7}
-              nodePadding={18}
+              nodePadding={56}
               margin={margin}
               node={(props: SankeyNodeRendererProps) => {
                 const node = graph.nodes[props.index];
@@ -134,7 +134,7 @@ function SankeyNode({
   const numericValue = typeof payload.value === 'number' ? payload.value : Number(payload.value);
   const value = Number.isFinite(numericValue) ? String(numericValue) : '';
   const percentage = total > 0 && Number.isFinite(numericValue) ? Math.round((numericValue / total) * 100) : 0;
-  const labelX = x + width + 8;
+  const labelX = x + width / 2;
   const columnLabelX = x + width / 2;
   const hue = hueMap[name] ?? 0;
 
@@ -148,16 +148,15 @@ function SankeyNode({
       <rect x={x} y={y} width={width} height={height} rx={3} fill={nodeColor(hue)} />
       <text
         x={labelX}
-        y={y + height / 2 - 4}
-        textAnchor="start"
+        y={y - 24}
+        textAnchor="middle"
         fill={Colors.neutral5}
-        fontSize={12.5}
+        fontSize={11}
         fontFamily="var(--font-mono)"
-        style={{ filter: `drop-shadow(0 0 6px ${Colors.surface1})` }}
       >
         {name}
       </text>
-      <text x={labelX} y={y + height / 2 + 10} textAnchor="start" fill={Colors.neutral3} fontSize={10.5}>
+      <text x={labelX} y={y - 8} textAnchor="middle" fill={Colors.neutral3} fontSize={9.5}>
         {value} ({percentage}%)
       </text>
     </g>

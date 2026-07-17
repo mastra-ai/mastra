@@ -280,6 +280,37 @@ export const fourStageThemeFlowResponse: ThemeFlowResponse = {
   ],
 };
 
+export const inconsistentTraceCountThemeFlowResponse: ThemeFlowResponse = {
+  ...fourStageThemeFlowResponse,
+  snapshot: {
+    ...fourStageThemeFlowResponse.snapshot,
+    traceCount: 80,
+  },
+  stages: fourStageThemeFlowResponse.stages.map((stage, stageIndex) => ({
+    ...stage,
+    traceCount: 70 + stageIndex * 10,
+    nodes: [
+      ...stage.nodes.map((node, nodeIndex) => ({
+        ...node,
+        traceCount: node.traceCount + 20 + nodeIndex,
+        stageShare: 0.9 - nodeIndex * 0.1,
+      })),
+      ...(stage.signalName === 'goal'
+        ? [
+            {
+              nodeId: 'goal-disconnected',
+              kind: 'theme',
+              themeId: 'theme-goal-disconnected',
+              label: 'Metadata only goal',
+              traceCount: 99,
+              stageShare: 0.99,
+            },
+          ]
+        : []),
+    ],
+  })),
+};
+
 export const singleStageThemeFlowResponse: ThemeFlowResponse = {
   ...themeFlowResponse,
   stages: themeFlowResponse.stages.slice(0, 1),

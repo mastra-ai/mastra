@@ -4,13 +4,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SankeySignals } from '../sankey-signals';
 import { themeFlowToSankeyData } from '../sankey-signals-data';
 import {
   emptyThemeSnapshotsResponse,
   fourStageThemeFlowResponse,
+  inconsistentTraceCountThemeFlowResponse,
   singleStageThemeFlowResponse,
   themeFlowResponse,
   themeSnapshotsResponse,
@@ -18,6 +19,26 @@ import {
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:3100';
+
+class ChartResizeObserver implements ResizeObserver {
+  constructor(private readonly callback: ResizeObserverCallback) {}
+
+  observe(target: Element) {
+    const size = { blockSize: 680, inlineSize: 800 };
+    const entry = {
+      target,
+      contentRect: new DOMRectReadOnly(0, 0, 800, 680),
+      borderBoxSize: [size],
+      contentBoxSize: [size],
+      devicePixelContentBoxSize: [size],
+    } satisfies ResizeObserverEntry;
+    this.callback([entry], this);
+  }
+
+  unobserve() {}
+
+  disconnect() {}
+}
 
 function renderSankeySignals() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -33,10 +54,14 @@ function renderSankeySignals() {
 beforeEach(() => {
   window.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT = BASE_URL;
   window.MASTRA_PLATFORM_PROJECT_ID = 'project-1';
+  vi.stubGlobal('ResizeObserver', ChartResizeObserver);
+  vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(800);
+  vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(680);
 });
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   window.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT = undefined;
   window.MASTRA_PLATFORM_PROJECT_ID = undefined;
 });
@@ -205,9 +230,6 @@ describe('SankeySignals', () => {
       for (const distribution of [goal, outcome, behavior, sentiment]) {
         expect(distribution.classList.contains('shadow-elevated')).toBe(true);
       }
-      for (const distribution of [goal, outcome, behavior, sentiment]) {
-        expect(within(distribution).queryByText('50 traces')).toBeNull();
-      }
       expect(within(goal).getByText('Resolve support request')).not.toBeNull();
       expect(within(goal).getByText('22 · 44%')).not.toBeNull();
       expect(within(goal).getAllByTestId('distribution-stack')).toHaveLength(1);
@@ -223,6 +245,75 @@ describe('SankeySignals', () => {
       expect(analysis.getAttribute('data-scroll-container')).toBe('horizontal');
       expect(within(analysis).getByTestId('signals-analysis-canvas').getAttribute('data-min-width')).toBe('920');
       expect(screen.getByTestId('signals-page-header').closest('[data-scroll-container]')).toBeNull();
+    });
+  });
+
+  describe('when API count metadata disagrees with the weighted graph', () => {
+    beforeEach(() => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(themeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
+          HttpResponse.json(inconsistentTraceCountThemeFlowResponse),
+        ),
+      );
+    });
+
+    it('uses the entry-stage graph total in the header badge', async () => {
+      renderSankeySignals();
+
+      const metrics = await screen.findByRole('list', { name: 'Signal analysis metrics' });
+      expect(within(metrics).getByText('50 traces analyzed')).not.toBeNull();
+      expect(within(metrics).queryByText('80 traces analyzed')).toBeNull();
+    });
+
+    it('uses graph-derived totals for every distribution', async () => {
+      renderSankeySignals();
+
+      const distributions = await screen.findByRole('region', { name: 'Signal distributions' });
+      for (const signalName of ['Goal', 'Outcome', 'Behavior', 'Sentiment']) {
+        const distribution = within(distributions).getByRole('article', { name: `${signalName} distribution` });
+        expect(within(distribution).getByText('50 traces')).not.toBeNull();
+      }
+    });
+
+    it('uses graph-derived node counts and percentages in every distribution row', async () => {
+      renderSankeySignals();
+
+      const distributions = await screen.findByRole('region', { name: 'Signal distributions' });
+      const expectedRows = {
+        Goal: ['22 · 44%', '17 · 34%', '11 · 22%'],
+        Outcome: ['31 · 62%', '19 · 38%'],
+        Behavior: ['34 · 68%', '16 · 32%'],
+        Sentiment: ['29 · 58%', '21 · 42%'],
+      };
+
+      for (const [signalName, rows] of Object.entries(expectedRows)) {
+        const distribution = within(distributions).getByRole('article', { name: `${signalName} distribution` });
+        for (const row of rows) expect(within(distribution).getByText(row)).not.toBeNull();
+      }
+      expect(within(distributions).queryByText('Metadata only goal')).toBeNull();
+    });
+
+    it('shows the same graph-derived counts and percentages on chart nodes', async () => {
+      renderSankeySignals();
+
+      const chart = await screen.findByRole('region', { name: 'Signal theme flow' });
+      for (const label of [
+        '22 (44%)',
+        '17 (34%)',
+        '11 (22%)',
+        '31 (62%)',
+        '19 (38%)',
+        '34 (68%)',
+        '16 (32%)',
+        '29 (58%)',
+        '21 (42%)',
+      ]) {
+        expect(await within(chart).findByText(label)).not.toBeNull();
+      }
+      expect(within(chart).queryByText('Metadata only goal')).toBeNull();
     });
   });
 

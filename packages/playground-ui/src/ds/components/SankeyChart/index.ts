@@ -6,6 +6,7 @@ export { buildSankeyHueMap, hashHue, nodeColor, nodeColorVivid } from './sankeyC
 export {
   buildSankeyChartGraph,
   getSankeyChartCurveSelection,
+  getSankeyChartNodeWeights,
   getSankeyChartValue,
   reorderSankeyChartColumns,
 } from './sankey-chart-utils';
