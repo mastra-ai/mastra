@@ -5410,9 +5410,6 @@ importers:
       '@mastra/react':
         specifier: workspace:*
         version: link:../../client-sdks/react
-      '@playwright/test':
-        specifier: ^1.60.0
-        version: 1.60.0
       '@storybook/addon-a11y':
         specifier: ^10.4.1
         version: 10.4.2(storybook@10.4.2(@testing-library/dom@10.4.1)(@types/react@19.2.17)(bufferutil@4.1.0)(prettier@3.8.3)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))
