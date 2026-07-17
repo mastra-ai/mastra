@@ -172,10 +172,14 @@ describe('registerTenantCredentialResolver', () => {
     await expect(resolveCredentialStore(ctx)!.getApiKey('openai')).resolves.toBe('personal-key');
   });
 
-  it('resolves no store without an authenticated tenant', () => {
+  it('fails closed without an authenticated tenant', async () => {
     registerTenantCredentialResolver();
-    expect(resolveCredentialStore(new RequestContext())).toBeUndefined();
-    expect(resolveCredentialStore(undefined)).toBeUndefined();
+    const withoutContext = resolveCredentialStore(undefined);
+    const emptyContext = resolveCredentialStore(new RequestContext());
+
+    expect(withoutContext).toMatchObject({ allowEnvironmentFallback: false });
+    expect(emptyContext).toBe(withoutContext);
+    await expect(withoutContext?.getApiKey('openai')).resolves.toBeUndefined();
   });
 
   it('clears registration on reset (local fallback restored)', () => {
