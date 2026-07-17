@@ -50,6 +50,24 @@ describe('PlatformSandbox', () => {
     expect(body.template).toBeUndefined();
   });
 
+  it('sends the caller id on the create wire body so the platform can key recovery on it', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi.fn().mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
+
+    const sandbox = new PlatformSandbox({
+      id: 'mc-project-42',
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+    });
+
+    await sandbox._start();
+
+    const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
+    expect(body.id).toBe('mc-project-42');
+  });
+
   it('reattaches when constructed with a sandbox id', async () => {
     const fetchMock = vi.fn().mockResolvedValue(json({ exitCode: 0, stdout: 'ok', stderr: '' }));
     const sandbox = new PlatformSandbox({

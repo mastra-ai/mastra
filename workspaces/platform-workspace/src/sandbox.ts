@@ -175,6 +175,11 @@ export class PlatformSandbox extends MastraSandbox {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
+        // Sent so the platform can associate the provisioned resource with a
+        // caller-stable identifier (used for opt-in checkpoint recovery). The
+        // platform treats it as an advisory key: unknown values fall through
+        // to a fresh sandbox, matching pre-existing behavior.
+        id: this.id,
         environmentId: this._environmentId,
         idleTimeoutMinutes: this._idleTimeoutMinutes,
         networkIsolation: this._networkIsolation,
