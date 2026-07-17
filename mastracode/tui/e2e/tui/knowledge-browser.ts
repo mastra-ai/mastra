@@ -78,6 +78,17 @@ export const knowledgeBrowserScenario: McE2eScenario = {
           resolutionScope: resourceScope,
           defaultScope: resourceScope,
         });
+        for (let index = 0; index < 25; index++) {
+          await knowledge.appendFact({
+            id: `01KXKNOWLEDGEFILLER${String(index).padStart(8, '0')}`,
+            parentEntityId: atlas.id,
+            text: `Atlas launch checkpoint ${index + 1} is complete.`,
+            scope: resourceScope,
+            sourceThreadId: primary.id,
+            resolutionScope: resourceScope,
+            defaultScope: resourceScope,
+          });
+        }
         await knowledge.appendFact({
           id: '01KXKNOWLEDGEFACT0000000002',
           parentEntityId: beta.id,
@@ -109,15 +120,31 @@ export const knowledgeBrowserScenario: McE2eScenario = {
     terminal.write('\x1b[B');
     terminal.write('\r');
     await runtime.waitForScreenText(/\[entities\]/i, terminal);
+    await runtime.waitForScreenText(/Sort: Relevant.*recent window/i, terminal);
+    terminal.write('\x13');
+    await runtime.waitForScreenText(/Sort: Recent/i, terminal);
+    terminal.write('\x13');
+    await runtime.waitForScreenText(/Sort: Connected.*recent window/i, terminal);
     terminal.write('Atlas launch');
-    await runtime.waitForScreenText(/Atlas launch.*exact:resource/i, terminal);
+    await runtime.waitForScreenText(/Atlas launch.*1 links.*exact:resource/i, terminal);
     await runtime.waitForScreenTextAbsent(/Foreign project secret/i, terminal);
     terminal.write('\r');
-    await runtime.waitForScreenText(/Atlas launch depends on.*Beta service/i, terminal);
-    await runtime.waitForScreenText(/Related entities/i, terminal);
+    await runtime.waitForScreenText(/Atlas launch checkpoint/i, terminal);
+    await runtime.waitForScreenText(/Load more facts/i, terminal);
+    await runtime.waitForScreenText(/Outgoing links \(partial\)/i, terminal);
+    terminal.write('\r');
+    await runtime.waitForScreenText(/→ Beta service/i, terminal);
+    await runtime.waitForScreenTextAbsent(/Outgoing links \(partial\)/i, terminal);
+    await runtime.waitForScreenText(/Load more incoming facts/i, terminal);
+    terminal.write('\r');
+    await runtime.waitForScreenTextAbsent(/Load more incoming facts/i, terminal);
     terminal.write('\r');
     await runtime.waitForScreenText(/Beta service health checks are green/i, terminal);
-    runtime.printScreen('knowledge relation traversal', terminal);
+    await runtime.waitForScreenText(/Referenced by/i, terminal);
+    await runtime.waitForScreenText(/← Atlas launch/i, terminal);
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Entities.*Atlas launch.*Beta service.*Atlas launch/i, terminal);
+    runtime.printScreen('knowledge directional relation traversal', terminal);
 
     terminal.write('\x7f');
     terminal.write('\t');

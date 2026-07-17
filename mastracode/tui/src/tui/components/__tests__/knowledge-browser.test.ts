@@ -39,7 +39,8 @@ function record(
 
 function entityDetail(
   entity: KnowledgeInspectorRecordSummary,
-  relatedEntities = [] as KnowledgeInspectorRecordSummary[],
+  outgoingTargets = [] as KnowledgeInspectorRecordSummary[],
+  incomingParents = [] as KnowledgeInspectorRecordSummary[],
 ): KnowledgeInspectorEntityDetail {
   return {
     identityKey: 'identity-1',
@@ -54,7 +55,8 @@ function entityDetail(
       },
     ],
     incomingFacts: [],
-    relatedEntities,
+    outgoingTargets: { items: outgoingTargets, partial: false },
+    incomingParents: { items: incomingParents, partial: false },
   };
 }
 
@@ -140,7 +142,7 @@ describe('KnowledgeBrowserComponent', () => {
     browser.handleInput('\r');
     await settle();
 
-    expect(inspector.listEntities).toHaveBeenCalledWith({ level: 'resource', limit: 12 });
+    expect(inspector.listEntities).toHaveBeenCalledWith({ level: 'resource', sort: 'relevant', limit: 12 });
     expect(text(browser)).toContain('[inherited:org]');
     expect(text(browser)).toContain('[exact:resource]');
   });
@@ -155,13 +157,79 @@ describe('KnowledgeBrowserComponent', () => {
     browser.handleInput('\r');
     await settle();
 
-    expect(text(browser)).toContain('Related entities');
-    expect(text(browser)).toContain('Beta');
+    expect(text(browser)).toContain('Outgoing links');
+    expect(text(browser)).toContain('→ Beta');
     browser.handleInput('\r');
     await settle();
     expect(inspector.getEntity).toHaveBeenLastCalledWith({ handle: 'entity:Beta' });
     expect(text(browser)).toContain('Beta ships Friday');
+    expect(text(browser)).toContain('Entities / Atlas / Beta');
+    browser.handleInput('\x7f');
+    expect(text(browser)).toContain('Atlas ships Friday');
     expect(text(browser)).toContain('resource:resource-project-alpha');
+  });
+
+  it('shows incoming parent relationships and navigates back through breadcrumbs', async () => {
+    const atlas = record('Atlas');
+    const portfolio = record('Portfolio');
+    const inspector = createInspector({
+      listEntities: vi.fn(async () => ({
+        identityKey: 'identity-1',
+        scopeLevel: 'resource' as const,
+        items: [atlas],
+        sort: 'relevant' as const,
+        coverage: 'recent-window' as const,
+      })),
+      getEntity: vi.fn(async ({ handle }) =>
+        handle === atlas.handle ? entityDetail(atlas, [], [portfolio]) : entityDetail(portfolio),
+      ),
+    });
+    const { browser } = createBrowser(inspector);
+    await settle();
+    browser.handleInput('j');
+    browser.handleInput('\r');
+    await settle();
+    browser.handleInput('\r');
+    await settle();
+
+    expect(text(browser)).toContain('Referenced by');
+    expect(text(browser)).toContain('← Portfolio');
+    browser.handleInput('\r');
+    await settle();
+    expect(text(browser)).toContain('Entities / Atlas / Portfolio');
+    browser.handleInput('\x7f');
+    expect(text(browser)).toContain('Referenced by');
+  });
+
+  it('cycles entity sorting between relevant, recent, and connected', async () => {
+    const inspector = createInspector({
+      listEntities: vi.fn(async input => ({
+        identityKey: 'identity-1',
+        scopeLevel: 'resource' as const,
+        items: [
+          { ...record(input.sort ?? 'relevant'), sampledRelationshipDegree: input.sort === 'recent' ? undefined : 3 },
+        ],
+        sort: input.sort,
+        coverage: input.sort === 'recent' ? ('exact' as const) : ('recent-window' as const),
+      })),
+    });
+    const { browser } = createBrowser(inspector);
+    await settle();
+    browser.handleInput('j');
+    browser.handleInput('\r');
+    await settle();
+    expect(text(browser)).toContain('Sort: Relevant · recent window');
+    expect(text(browser)).toContain('3 links');
+
+    browser.handleInput('\x13');
+    await settle();
+    expect(text(browser)).toContain('Sort: Recent');
+    expect(inspector.listEntities).toHaveBeenLastCalledWith(
+      expect.objectContaining({ sort: 'recent', level: 'resource' }),
+    );
+    browser.handleInput('\x13');
+    await settle();
+    expect(text(browser)).toContain('Sort: Connected · recent window');
   });
 
   it('keeps pages separate, follows resolved page links, and leaves unresolved links as text', async () => {
@@ -236,7 +304,12 @@ describe('KnowledgeBrowserComponent', () => {
     browser.handleInput('\r');
     await settle();
 
-    expect(inspector.listEntities).toHaveBeenLastCalledWith({ level: 'resource', cursor: 'next-page', limit: 12 });
+    expect(inspector.listEntities).toHaveBeenLastCalledWith({
+      level: 'resource',
+      sort: 'relevant',
+      cursor: 'next-page',
+      limit: 12,
+    });
     expect(text(browser)).toContain('Atlas');
     expect(text(browser)).toContain('Beta');
   });

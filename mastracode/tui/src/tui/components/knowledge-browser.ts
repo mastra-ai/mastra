@@ -5,6 +5,7 @@ import type {
   KnowledgeInspectorActivityItem,
   KnowledgeInspectorActivityList,
   KnowledgeInspectorEntityDetail,
+  KnowledgeInspectorEntitySort,
   KnowledgeInspectorPageDetail,
   KnowledgeInspectorRecordList,
   KnowledgeInspectorRecordSummary,
@@ -31,6 +32,7 @@ export interface KnowledgeBrowserOptions {
 }
 
 const SECTIONS: KnowledgeBrowserSection[] = ['scopes', 'entities', 'pages', 'activity'];
+const ENTITY_SORTS: KnowledgeInspectorEntitySort[] = ['relevant', 'recent', 'connected'];
 const PAGE_SIZE = 12;
 const MAX_BODY_LINES = 10;
 const MIN_CONTENT_WIDTH = 20;
@@ -63,8 +65,11 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
   private activity: KnowledgeInspectorActivityItem[] = [];
   private nextCursor?: string;
   private query = '';
+  private entitySort: KnowledgeInspectorEntitySort = 'relevant';
+  private entityCoverage?: 'exact' | 'recent-window';
   private selectedIndex = 0;
   private detail?: Detail;
+  private detailHistory: Detail[] = [];
   private detailTargets: Target[] = [];
   private loading = false;
   private error?: string;
@@ -101,6 +106,7 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
         this.level = tree.defaultLevel;
         this.section = 'scopes';
         this.detail = undefined;
+        this.detailHistory = [];
         this.query = '';
         this.records = [];
         this.activity = [];
@@ -141,6 +147,7 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
         this.level = tree.defaultLevel;
         this.section = 'scopes';
         this.detail = undefined;
+        this.detailHistory = [];
         this.records = [];
         this.activity = [];
         this.nextCursor = undefined;
@@ -155,6 +162,7 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
         result = await this.inspector.listEntities({
           level: this.level,
           namePrefix: this.query || undefined,
+          sort: this.entitySort,
           cursor,
           limit: PAGE_SIZE,
         });
@@ -175,8 +183,9 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
         const items = (result as KnowledgeInspectorActivityList).items;
         this.activity = append ? [...this.activity, ...items] : items;
       } else {
-        const items = (result as KnowledgeInspectorRecordList).items;
-        this.records = append ? [...this.records, ...items] : items;
+        const recordResult = result as KnowledgeInspectorRecordList;
+        this.records = append ? [...this.records, ...recordResult.items] : recordResult.items;
+        if (this.section === 'entities') this.entityCoverage = recordResult.coverage;
       }
       this.nextCursor = result.nextCursor;
       if (!append) this.selectedIndex = 0;
@@ -201,6 +210,8 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
           ? ({ type: 'entity', value: await this.inspector.getEntity({ handle: record.handle }) } as const)
           : ({ type: 'page', value: await this.inspector.getPage({ handle: record.handle }) } as const);
       if (requestVersion !== this.requestVersion || detail.value.identityKey !== this.identityKey) return;
+      if (this.detail) this.detailHistory.push(this.detail);
+      else this.detailHistory = [];
       this.detail = detail;
       this.selectedIndex = 0;
     } catch (error) {
@@ -211,6 +222,20 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
         this.renderNow();
       }
     }
+  }
+
+  private mergeRecords(
+    current: KnowledgeInspectorRecordSummary[],
+    next: KnowledgeInspectorRecordSummary[],
+  ): KnowledgeInspectorRecordSummary[] {
+    return [
+      ...new Map(
+        [...current, ...next].map(item => [
+          `${item.type}:${item.kind ?? ''}:${item.name}:${item.scope.level}:${item.scope.id}`,
+          item,
+        ]),
+      ).values(),
+    ];
   }
 
   private async loadMoreFacts(kind: 'facts' | 'incoming'): Promise<void> {
@@ -243,14 +268,14 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
           incomingFacts:
             kind === 'incoming' ? [...current.incomingFacts, ...next.incomingFacts] : current.incomingFacts,
           incomingFactsNextCursor: kind === 'incoming' ? next.incomingFactsNextCursor : current.incomingFactsNextCursor,
-          relatedEntities: [
-            ...new Map(
-              [...current.relatedEntities, ...next.relatedEntities].map(item => [
-                `${item.type}:${item.kind ?? ''}:${item.name}:${item.scope.level}:${item.scope.id}`,
-                item,
-              ]),
-            ).values(),
-          ],
+          outgoingTargets: {
+            items: this.mergeRecords(current.outgoingTargets.items, next.outgoingTargets.items),
+            partial: kind === 'facts' ? next.outgoingTargets.partial : current.outgoingTargets.partial,
+          },
+          incomingParents: {
+            items: this.mergeRecords(current.incomingParents.items, next.incomingParents.items),
+            partial: kind === 'incoming' ? next.incomingParents.partial : current.incomingParents.partial,
+          },
         },
       };
     } catch (error) {
@@ -312,6 +337,7 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
     const index = SECTIONS.indexOf(this.section);
     this.section = SECTIONS[(index + delta + SECTIONS.length) % SECTIONS.length]!;
     this.detail = undefined;
+    this.detailHistory = [];
     this.selectedIndex = 0;
     this.query = '';
     this.records = [];
@@ -319,6 +345,15 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
     this.nextCursor = undefined;
     if (this.section === 'scopes') await this.refresh();
     else await this.loadSection();
+  }
+
+  private async cycleEntitySort(): Promise<void> {
+    const index = ENTITY_SORTS.indexOf(this.entitySort);
+    this.entitySort = ENTITY_SORTS[(index + 1) % ENTITY_SORTS.length]!;
+    this.records = [];
+    this.nextCursor = undefined;
+    this.selectedIndex = 0;
+    await this.loadSection();
   }
 
   handleInput(data: string): void {
@@ -329,6 +364,8 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
       void this.changeSection(-1);
     } else if (matchesKey(data, 'tab')) {
       void this.changeSection(1);
+    } else if (!this.detail && this.section === 'entities' && matchesKey(data, 'ctrl+s')) {
+      void this.cycleEntitySort();
     } else if (kb.matches(data, 'tui.select.up') || data === 'k') {
       this.move(-1);
     } else if (kb.matches(data, 'tui.select.down') || data === 'j') {
@@ -337,7 +374,7 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
       void this.selectCurrent();
     } else if (data === '\x7f' || data === '\b') {
       if (this.detail) {
-        this.detail = undefined;
+        this.detail = this.detailHistory.pop();
         this.selectedIndex = 0;
         this.renderNow();
       } else if (this.query && (this.section === 'entities' || this.section === 'pages')) {
@@ -362,8 +399,11 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
 
   private breadcrumb(width: number): string {
     const scopeId = this.scopeTree?.roots.find(root => root.level === this.level)?.id ?? 'unavailable';
-    const recordName = this.detail?.type === 'entity' ? this.detail.value.entity.name : this.detail?.value.page.name;
-    const suffix = recordName ? ` / ${recordName}` : '';
+    const detailName = (detail: Detail): string =>
+      detail.type === 'entity' ? detail.value.entity.name : detail.value.page.name;
+    const trail = this.detail ? [...this.detailHistory.map(detailName), detailName(this.detail)] : [];
+    const section = this.section[0]!.toUpperCase() + this.section.slice(1);
+    const suffix = ` / ${section}${trail.map(name => ` / ${name}`).join('')}`;
     const prefix = `Knowledge / ${this.level}:`;
     const idWidth = Math.max(6, width - visibleWidth(prefix + suffix) - 2);
     return truncateAnsi(
@@ -397,8 +437,10 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
     const lines = this.records.map((record, index) => {
       const marker = index === this.selectedIndex ? '→' : ' ';
       const kind = record.kind ? ` (${record.kind})` : '';
+      const degree =
+        record.sampledRelationshipDegree === undefined ? '' : ` · ${record.sampledRelationshipDegree} links`;
       const badge = scopeLabel(record, this.level);
-      return truncateAnsi(`${marker} ${record.name}${kind} ${theme.fg('muted', badge)}`, width);
+      return truncateAnsi(`${marker} ${record.name}${kind}${degree} ${theme.fg('muted', badge)}`, width);
     });
     if (this.nextCursor) lines.push(`${this.selectedIndex === this.records.length ? '→' : ' '} Load more…`);
     if (!this.loading && lines.length === 0) lines.push(theme.fg('muted', `No ${this.section} found.`));
@@ -438,17 +480,28 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
     if (detail.incomingFactsNextCursor) {
       lines.push(this.selectableLine('Load more incoming facts…', { type: 'more-incoming' }, width));
     }
-    lines.push('', theme.bold('Related entities'));
-    for (const related of detail.relatedEntities) {
+    lines.push('', theme.bold(`Outgoing links${detail.outgoingTargets.partial ? ' (partial)' : ''}`));
+    for (const related of detail.outgoingTargets.items) {
       lines.push(
         this.selectableLine(
-          `${related.name} ${scopeLabel(related, this.level)}`,
+          `→ ${related.name} ${scopeLabel(related, this.level)}`,
           { type: 'record', record: related },
           width,
         ),
       );
     }
-    if (detail.relatedEntities.length === 0) lines.push(theme.fg('muted', '  No related entities.'));
+    if (detail.outgoingTargets.items.length === 0) lines.push(theme.fg('muted', '  No outgoing links.'));
+    lines.push('', theme.bold(`Referenced by${detail.incomingParents.partial ? ' (partial)' : ''}`));
+    for (const parent of detail.incomingParents.items) {
+      lines.push(
+        this.selectableLine(
+          `← ${parent.name} ${scopeLabel(parent, this.level)}`,
+          { type: 'record', record: parent },
+          width,
+        ),
+      );
+    }
+    if (detail.incomingParents.items.length === 0) lines.push(theme.fg('muted', '  No incoming parents.'));
     return lines;
   }
 
@@ -478,6 +531,11 @@ export class KnowledgeBrowserComponent implements Component, Focusable {
   render(width: number): string[] {
     const contentWidth = Math.max(MIN_CONTENT_WIDTH, width - 4);
     const lines = [this.breadcrumb(contentWidth), this.renderTabs(contentWidth), ''];
+    if (this.section === 'entities' && !this.detail) {
+      const coverage = this.entityCoverage === 'recent-window' ? ' · recent window' : '';
+      const label = this.entitySort[0]!.toUpperCase() + this.entitySort.slice(1);
+      lines.push(theme.fg('muted', `Sort: ${label}${coverage} · Ctrl+S change`), '');
+    }
     if (this.query && !this.detail) lines.push(truncateAnsi(`Filter: ${this.query}`, contentWidth), '');
     if (this.error) lines.push(theme.fg('error', truncateAnsi(`Error: ${this.error}`, contentWidth)), '');
     if (this.detail?.type === 'entity') lines.push(...this.renderEntityDetail(this.detail.value, contentWidth));
