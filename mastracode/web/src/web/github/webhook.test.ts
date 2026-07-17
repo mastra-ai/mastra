@@ -2,7 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GithubSignalSubscriptionRow } from './storage/base';
 
 const getRepositoryCollaboratorPermission = vi.fn<
-  () => Promise<'admin' | 'maintain' | 'write' | 'triage' | 'read' | 'none' | undefined>
+  (
+    installationId: number,
+    repoFullName: string,
+    username: string,
+    signal?: AbortSignal,
+  ) => Promise<'admin' | 'maintain' | 'write' | 'triage' | 'read' | 'none' | undefined>
 >(async () => 'write');
 // Stub integration: dispatch consumes the injected instance for permission checks.
 const githubStub = { getRepositoryCollaboratorPermission } as unknown as import('./integration').GithubIntegration;
@@ -107,14 +112,23 @@ describe('dispatchGithubWebhook', () => {
     );
 
     expect(result).toEqual({ delivered: 0, failed: 0, ignored: true });
-    expect(getRepositoryCollaboratorPermission).toHaveBeenCalledWith(7, 'octo/hello', 'ada');
+    expect(getRepositoryCollaboratorPermission).toHaveBeenCalledWith(
+      7,
+      'octo/hello',
+      'ada',
+      expect.any(AbortSignal),
+    );
     expect(listSubscriptions).not.toHaveBeenCalled();
   });
 
   it('fails closed when the collaborator permission check times out', async () => {
     vi.useFakeTimers();
     try {
-      getRepositoryCollaboratorPermission.mockImplementation(() => new Promise(() => undefined));
+      let permissionSignal: AbortSignal | undefined;
+      getRepositoryCollaboratorPermission.mockImplementation((_installationId, _repository, _sender, signal) => {
+        permissionSignal = signal;
+        return new Promise(() => undefined);
+      });
       const listSubscriptions = vi.fn(async () => [subscription('a', '/worktrees/a')]);
       const result = dispatchGithubWebhook(
         parsed('issue_comment', 'created', {
@@ -127,6 +141,7 @@ describe('dispatchGithubWebhook', () => {
       await vi.advanceTimersByTimeAsync(5_000);
 
       await expect(result).resolves.toEqual({ delivered: 0, failed: 0, ignored: true });
+      expect(permissionSignal?.aborted).toBe(true);
       expect(listSubscriptions).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();

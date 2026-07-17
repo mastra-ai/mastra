@@ -372,12 +372,21 @@ async function isAuthorizedGithubSender(
     return AUTHORIZED_BOTS.has(normalizedSender);
   }
   if (!github) return false;
+  const abortController = new AbortController();
   let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
     const permission = await Promise.race([
-      github.getRepositoryCollaboratorPermission(notification.metadata.installationId, repository, sender),
+      github.getRepositoryCollaboratorPermission(
+        notification.metadata.installationId,
+        repository,
+        sender,
+        abortController.signal,
+      ),
       new Promise<undefined>(resolve => {
-        timeout = setTimeout(() => resolve(undefined), PERMISSION_CHECK_TIMEOUT_MS);
+        timeout = setTimeout(() => {
+          abortController.abort();
+          resolve(undefined);
+        }, PERMISSION_CHECK_TIMEOUT_MS);
       }),
     ]);
     return permission !== undefined && AUTHORIZED_PERMISSIONS.has(permission);

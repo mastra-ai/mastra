@@ -259,6 +259,7 @@ export class GithubIntegration implements FactoryIntegration {
     installationId: number,
     repoFullName: string,
     username: string,
+    signal?: AbortSignal,
   ): Promise<GithubRepositoryPermission | undefined> {
     const parts = splitRepoFullName(repoFullName);
     if (!parts) return undefined;
@@ -266,6 +267,7 @@ export class GithubIntegration implements FactoryIntegration {
       const { data } = await this.getInstallationOctokit(installationId).repos.getCollaboratorPermissionLevel({
         ...parts,
         username,
+        request: { signal },
       });
       return data.permission as GithubRepositoryPermission;
     } catch {
