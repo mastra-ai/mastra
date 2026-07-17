@@ -284,7 +284,10 @@ async function resolveEnvironment(
   const envType =
     envName.toLowerCase() === 'production' ? 'production' : envName.toLowerCase() === 'staging' ? 'staging' : 'preview';
 
-  if (!autoAccept) {
+  // Skip the "create it?" prompt for production. A first deploy naturally
+  // creates production — the confirmation is noise. Still prompt for
+  // non-standard names in case the user made a typo (e.g. `--env prodcution`).
+  if (!autoAccept && envType !== 'production') {
     const confirmed = await p.confirm({
       message: `Environment "${envName}" doesn't exist. Create it?`,
       initialValue: true,
