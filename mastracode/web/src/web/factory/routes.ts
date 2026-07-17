@@ -24,6 +24,7 @@ import {
   parseUpdateWorkItem,
   updateWorkItem,
   upsertWorkItem,
+  WorkItemRelationError,
 } from './store';
 
 function loose(c: unknown): Context {
@@ -178,26 +179,33 @@ export function buildFactoryRoutes(storage?: GithubStorage): ApiRoute[] {
         const input = parseCreateWorkItem(body);
         if (!input) return c.json({ error: 'invalid_work_item' }, 400);
 
-        const result = await upsertWorkItem({
-          orgId: resolved.orgId,
-          userId: resolved.userId,
-          githubProjectId: resolved.projectId,
-          input,
-        });
-        const item = result.item;
-        if (result.created) {
-          await emitAudit(loose(c), {
-            action: 'factory.work_item.created',
-            projectId: resolved.projectId,
-            targets: [{ type: 'work_item', id: item.id, name: item.title }],
-            metadata: { source: item.source, sourceKey: item.sourceKey, stages: item.stages },
+        try {
+          const result = await upsertWorkItem({
+            orgId: resolved.orgId,
+            userId: resolved.userId,
+            githubProjectId: resolved.projectId,
+            input,
           });
-        } else {
-          // Source-key reuse: the POST updated an existing card, so audit it
-          // as an update (plus stage/run events) instead of a false creation.
-          await auditWorkItemPatch(loose(c), item, result.previous, input as unknown as Record<string, unknown>);
+          const item = result.item;
+          if (result.created) {
+            await emitAudit(loose(c), {
+              action: 'factory.work_item.created',
+              projectId: resolved.projectId,
+              targets: [{ type: 'work_item', id: item.id, name: item.title }],
+              metadata: { source: item.source, sourceKey: item.sourceKey, stages: item.stages },
+            });
+          } else {
+            // Source-key reuse: the POST updated an existing card, so audit it
+            // as an update (plus stage/run events) instead of a false creation.
+            await auditWorkItemPatch(loose(c), item, result.previous, input as unknown as Record<string, unknown>);
+          }
+          return c.json({ workItem: item });
+        } catch (error) {
+          if (error instanceof WorkItemRelationError) {
+            return c.json({ error: error.code, message: error.message }, 400);
+          }
+          throw error;
         }
-        return c.json({ workItem: item });
       },
     }),
 
@@ -217,10 +225,17 @@ export function buildFactoryRoutes(storage?: GithubStorage): ApiRoute[] {
         const patch = parseUpdateWorkItem(body);
         if (!patch) return c.json({ error: 'invalid_work_item_patch' }, 400);
 
-        const updated = await updateWorkItem(tenant.orgId, id, tenant.userId, patch);
-        if (!updated) return c.json({ error: 'Work item not found' }, 404);
-        await auditWorkItemPatch(loose(c), updated.item, updated.previous, patch as Record<string, unknown>);
-        return c.json({ workItem: updated.item });
+        try {
+          const updated = await updateWorkItem(tenant.orgId, id, tenant.userId, patch);
+          if (!updated) return c.json({ error: 'Work item not found' }, 404);
+          await auditWorkItemPatch(loose(c), updated.item, updated.previous, patch as Record<string, unknown>);
+          return c.json({ workItem: updated.item });
+        } catch (error) {
+          if (error instanceof WorkItemRelationError) {
+            return c.json({ error: error.code, message: error.message }, 400);
+          }
+          throw error;
+        }
       },
     }),
 

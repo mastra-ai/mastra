@@ -56,6 +56,8 @@ export interface WorkItemRow {
   source: WorkItemSource;
   /** Dedupe key (e.g. 'github-issue:123', 'linear:ENG-42'); null for manual cards. */
   sourceKey: string | null;
+  /** Optional originating issue item for a separate PR review item. */
+  parentWorkItemId: string | null;
   title: string;
   /** External link (issue/PR); null for manual cards. */
   url: string | null;
@@ -81,6 +83,7 @@ export interface WorkItemSessionInput {
 export interface CreateWorkItemInput {
   source: WorkItemSource;
   sourceKey: string | null;
+  parentWorkItemId?: string | null;
   title: string;
   url: string | null;
   stages: string[];
@@ -89,6 +92,7 @@ export interface CreateWorkItemInput {
 }
 
 export interface UpdateWorkItemInput {
+  parentWorkItemId?: string | null;
   title?: string;
   url?: string | null;
   stages?: string[];
@@ -106,6 +110,33 @@ export interface WorkItemPriorState {
 export type UpsertWorkItemResult =
   | { created: true; item: WorkItemRow }
   | { created: false; item: WorkItemRow; previous: WorkItemPriorState };
+
+export class WorkItemRelationError extends Error {
+  readonly code = 'invalid_work_item_relation';
+}
+
+export function validateParentRelation(
+  projectItems: WorkItemRow[],
+  itemId: string | undefined,
+  parentWorkItemId: string | null,
+): void {
+  if (parentWorkItemId === null) return;
+  const byId = new Map(projectItems.map(item => [item.id, item]));
+  const parent = byId.get(parentWorkItemId);
+  if (!parent) throw new WorkItemRelationError('Related work item not found in this project.');
+  if (itemId === parentWorkItemId) throw new WorkItemRelationError('A work item cannot relate to itself.');
+
+  const visited = new Set<string>();
+  let cursor: WorkItemRow | undefined = parent;
+  while (cursor?.parentWorkItemId) {
+    if (cursor.parentWorkItemId === itemId) {
+      throw new WorkItemRelationError('This relationship would create a cycle.');
+    }
+    if (visited.has(cursor.id)) throw new WorkItemRelationError('The related work item chain contains a cycle.');
+    visited.add(cursor.id);
+    cursor = byId.get(cursor.parentWorkItemId);
+  }
+}
 
 /**
  * Diff `oldStages` → `newStages` and return the updated history: exited stages
@@ -168,6 +199,7 @@ export function computeWorkItemPatch(
     sessionRoles: Object.keys(existing.sessions),
   };
   const changes: Partial<WorkItemRow> = { updatedAt: now };
+  if (patch.parentWorkItemId !== undefined) changes.parentWorkItemId = patch.parentWorkItemId;
   if (patch.title !== undefined) changes.title = patch.title;
   if (patch.url !== undefined) changes.url = patch.url;
   if (patch.stages !== undefined) {
