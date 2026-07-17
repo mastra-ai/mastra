@@ -1,8 +1,18 @@
+import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button, buttonVariants } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { CircleDot, EllipsisVertical, GitCompareArrows, Link2, MessageSquare, Plus } from 'lucide-react';
+import {
+  CircleDot,
+  EllipsisVertical,
+  GitCompareArrows,
+  GitMerge,
+  GitPullRequestClosed,
+  Link2,
+  MessageSquare,
+  Plus,
+} from 'lucide-react';
 import type { ComponentType, DragEvent } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -112,7 +122,20 @@ function belongsToBoard(item: WorkItem, kind: BoardKind): boolean {
   return kind === 'review' ? item.source === 'github-pr' : item.source !== 'github-pr';
 }
 
-function itemAppearsInStage(item: WorkItem, stage: BoardStageId, stages: ReadonlyArray<{ id: BoardStageId }>): boolean {
+function itemAppearsInStage(
+  item: WorkItem,
+  stage: BoardStageId,
+  stages: ReadonlyArray<{ id: BoardStageId }>,
+  /** Review board only: whether the item has a live review session. */
+  reviewSessionExists?: boolean,
+): boolean {
+  // Review lifecycle: Intake is the only sessionless lane. A card with a live
+  // review session renders in its recorded stage; without one it renders in
+  // Intake regardless of what its stages say (e.g. pre-lifecycle seed data).
+  if (reviewSessionExists !== undefined) {
+    if (reviewSessionExists) return item.stages.includes(stage);
+    return stage === 'intake';
+  }
   if (item.stages.includes(stage)) return true;
   return stage === 'intake' && !stages.some(candidate => item.stages.includes(candidate.id));
 }
@@ -123,6 +146,184 @@ function itemStageOptions(item: WorkItem): ReadonlyArray<{ id: BoardStageId; lab
 
 function itemStageLabel(item: WorkItem, stage: string): string {
   return itemStageOptions(item).find(candidate => candidate.id === stage)?.label ?? stageLabel(stage);
+}
+
+// ── Review lifecycle (Review board only) ────────────────────────────────────
+
+/**
+ * Review board columns are Factory review lifecycle states, not GitHub status:
+ * Intake holds PRs with no review session, Reviewing holds PRs a separate
+ * review Worker is actively producing feedback on, Done holds reviews that
+ * reached an explicit terminal outcome (completed or canceled). GitHub's
+ * open/merged/closed state is card provenance only and never moves the card.
+ */
+type ReviewTransitionKind = 'start-review' | 'complete-review' | 'cancel-review' | 'abandon-review';
+
+interface ReviewTransition {
+  kind: ReviewTransitionKind;
+  item: WorkItem;
+  /** Board stage the card moves from. */
+  fromStage: BoardStageId;
+  /** Board stage the card moves to once the transition is confirmed. */
+  toStage: BoardStageId;
+  title: string;
+  description: string;
+  confirmLabel: string;
+}
+
+/**
+ * A sessionless item renders in Intake (see `itemAppearsInStage`), so any
+ * persisted stage beyond Intake is only a label until a review session
+ * actually exists — moving out of it abandons nothing and needs no prompt.
+ */
+function hasReviewSession(item: WorkItem, liveWorktreePaths: ReadonlySet<string>): boolean {
+  const session = item.sessions.review;
+  return session !== undefined && liveWorktreePaths.has(session.projectPath);
+}
+
+/**
+ * The guarded transition a Review-board move requests, or `null` when the
+ * move is an ordinary stage patch (filing a candidate, or dragging a
+ * sessionless card whose non-Intake stage is only a label).
+ */
+function reviewTransitionForMove(
+  item: WorkItem,
+  fromStage: BoardStageId,
+  toStage: BoardStageId,
+  liveWorktreePaths: ReadonlySet<string>,
+): ReviewTransition | null {
+  if (fromStage === toStage) return null;
+  const sessionExists = hasReviewSession(item, liveWorktreePaths);
+  if (toStage === 'review') {
+    return sessionExists
+      ? null
+      : {
+          kind: 'start-review',
+          item,
+          fromStage,
+          toStage,
+          title: 'Start review?',
+          description: `Start a Factory review of "${item.title}"? A review session will be created and the review Worker will be dispatched.`,
+          confirmLabel: 'Start review',
+        };
+  }
+  if (toStage === 'done') {
+    const terminal = item.metadata.prState === 'merged' || item.metadata.prState === 'closed';
+    return terminal
+      ? {
+          kind: 'complete-review',
+          item,
+          fromStage,
+          toStage,
+          title: 'Mark review complete?',
+          description: `Mark the Factory review of "${item.title}" as complete? The pull request is ${item.metadata.prState as string}.`,
+          confirmLabel: 'Mark complete',
+        }
+      : {
+          kind: 'cancel-review',
+          item,
+          fromStage,
+          toStage,
+          title: 'Cancel review?',
+          description: `This pull request is still open — mark the Factory review of "${item.title}" as canceled?`,
+          confirmLabel: 'Cancel review',
+        };
+  }
+  if (toStage === 'intake' && sessionExists) {
+    return {
+      kind: 'abandon-review',
+      item,
+      fromStage,
+      toStage,
+      title: 'Abandon review?',
+      description: `Abandon the in-progress Factory review of "${item.title}"? The card returns to Intake; the review session is kept but no longer attached.`,
+      confirmLabel: 'Abandon review',
+    };
+  }
+  return null;
+}
+
+/** Menu transitions a Review card offers, replacing raw column targets. */
+function reviewMenuTransitions(
+  item: WorkItem,
+  columnStage: BoardStageId,
+  liveWorktreePaths: ReadonlySet<string>,
+): ReviewTransition[] {
+  const transitions: Array<ReviewTransition | null> = [];
+  if (columnStage !== 'review') {
+    // Re-entering Reviewing with a live session just moves the card — no new
+    // dispatch — so offer it as a plain resume without a confirmation.
+    transitions.push(
+      hasReviewSession(item, liveWorktreePaths)
+        ? {
+            kind: 'start-review',
+            item,
+            fromStage: columnStage,
+            toStage: 'review',
+            title: 'Resume review?',
+            description: `Move "${item.title}" back to Reviewing? Its existing review session is reused — no new dispatch.`,
+            confirmLabel: 'Resume review',
+          }
+        : columnStage === 'intake'
+          ? reviewTransitionForMove(item, 'intake', 'review', liveWorktreePaths)
+          : null,
+    );
+  }
+  if (columnStage !== 'done') {
+    transitions.push(reviewTransitionForMove(item, columnStage, 'done', liveWorktreePaths));
+  }
+  if (columnStage === 'review') {
+    transitions.push(reviewTransitionForMove(item, 'review', 'intake', liveWorktreePaths));
+  }
+  return transitions.filter((transition): transition is ReviewTransition => transition !== null);
+}
+
+/** Menu label for a transition, phrased as the lifecycle action it performs. */
+function reviewTransitionLabel(transition: ReviewTransition): string {
+  switch (transition.kind) {
+    case 'start-review':
+      return transition.title === 'Resume review?' ? 'Resume review…' : 'Start review…';
+    case 'complete-review':
+      return 'Mark review complete…';
+    case 'cancel-review':
+      return 'Cancel review…';
+    case 'abandon-review':
+      return 'Abandon review…';
+  }
+}
+
+/**
+ * GitHub pull-request state badge on a Review card: pure provenance, never a
+ * lifecycle input. `metadata.prState` is written by GitHub ingestion (Segment
+ * 12); until then open PRs render no badge, and terminal states show whenever
+ * the card was filed with the state recorded.
+ */
+function prStateBadge(item: WorkItem): React.ReactNode {
+  if (item.source !== 'github-pr') return null;
+  const state = item.metadata.prState;
+  if (state === 'merged') {
+    return (
+      <span
+        className="flex items-center gap-1 rounded-full bg-surface5 px-1.5 py-0.5 text-ui-xs text-accent3"
+        aria-label="Pull request merged"
+      >
+        <GitMerge size={11} aria-hidden />
+        Merged
+      </span>
+    );
+  }
+  if (state === 'closed') {
+    return (
+      <span
+        className="flex items-center gap-1 rounded-full bg-surface5 px-1.5 py-0.5 text-ui-xs text-icon4"
+        aria-label="Pull request closed"
+      >
+        <GitPullRequestClosed size={11} aria-hidden />
+        Closed
+      </span>
+    );
+  }
+  return null;
 }
 
 /**
@@ -578,9 +779,71 @@ function Board({ project, kind }: { project: Project & { githubProjectId: string
     update.mutate({ id, patch: { stages: next } });
   };
 
+  // Review board moves are lifecycle transitions, not raw stage patches:
+  // starting a review dispatches a review session, terminal moves confirm the
+  // outcome first, and abandoning detaches the review session from the card.
+  const [pendingTransition, setPendingTransition] = useState<ReviewTransition | null>(null);
+
+  /** Perform a confirmed (or unguarded) Review-board move. */
+  const applyReviewMove = (transition: ReviewTransition) => {
+    const { item, fromStage, toStage } = transition;
+    if (transition.kind === 'start-review') {
+      // A live review session means this is a resume: just move the card.
+      if (hasReviewSession(item, liveWorktreePaths)) {
+        moveItem(item.id, fromStage, toStage);
+        return;
+      }
+      const spec = itemRunSpec(item);
+      const action = spec?.actions.find(candidate => candidate.role === 'review');
+      if (spec === null || action === undefined) return;
+      start.mutate({
+        branch: spec.branch,
+        threadTitle: spec.threadTitle,
+        threadTags: action.threadTags,
+        invocation: action.invocation,
+        workItem: {
+          id: item.id,
+          role: action.role,
+          existingRoles: Object.keys(item.sessions),
+          stages: stagesAfterRunStart(item.stages, action.stage),
+          source: item.source,
+          sourceKey: item.sourceKey,
+          title: item.title,
+        },
+      });
+      return;
+    }
+    if (transition.kind === 'abandon-review') {
+      const sessions = { ...item.sessions };
+      delete sessions.review;
+      update.mutate({ id: item.id, patch: { stages: ['intake'], sessions } });
+      return;
+    }
+    // complete-review / cancel-review: the confirmed move itself.
+    moveItem(item.id, fromStage, toStage);
+  };
+
+  /**
+   * Entry point for Review-board moves (drops and menu picks). Guarded
+   * transitions open the confirmation dialog; everything else applies at once.
+   */
+  const requestReviewMove = (item: WorkItem, fromStage: BoardStageId, toStage: BoardStageId) => {
+    const transition = reviewTransitionForMove(item, fromStage, toStage, liveWorktreePaths);
+    if (transition === null) {
+      moveItem(item.id, fromStage, toStage);
+      return;
+    }
+    setPendingTransition(transition);
+  };
+
   const handleDrop = (payload: DragPayload, toStage: BoardStageId) => {
     if (payload.kind === 'work-item') {
       if (payload.fromStage === toStage) return;
+      if (review) {
+        const item = workItems.find(i => i.id === payload.id);
+        if (item) requestReviewMove(item, payload.fromStage as BoardStageId, toStage);
+        return;
+      }
       moveItem(payload.id, payload.fromStage, toStage);
       return;
     }
@@ -669,7 +932,14 @@ function Board({ project, kind }: { project: Project & { githubProjectId: string
             }
           >
             {workItems
-              .filter(item => itemAppearsInStage(item, stage.id, stages))
+              .filter(item =>
+                itemAppearsInStage(
+                  item,
+                  stage.id,
+                  stages,
+                  review ? hasReviewSession(item, liveWorktreePaths) : undefined,
+                ),
+              )
               .map(item => (
                 <WorkItemCard
                   key={`${item.id}:${stage.id}`}
@@ -697,8 +967,26 @@ function Board({ project, kind }: { project: Project & { githubProjectId: string
                       },
                     })
                   }
-                  onMove={toStage => moveItem(item.id, stage.id, toStage)}
+                  onMove={toStage =>
+                    review
+                      ? requestReviewMove(item, stage.id, toStage as BoardStageId)
+                      : moveItem(item.id, stage.id, toStage)
+                  }
                   onRemove={() => remove.mutate(item.id)}
+                  moveMenu={
+                    review ? (
+                      <>
+                        {reviewMenuTransitions(item, stage.id, liveWorktreePaths).map(transition => (
+                          <DropdownMenu.Item
+                            key={`${transition.kind}:${transition.toStage}`}
+                            onClick={() => setPendingTransition(transition)}
+                          >
+                            {reviewTransitionLabel(transition)}
+                          </DropdownMenu.Item>
+                        ))}
+                      </>
+                    ) : undefined
+                  }
                 />
               ))}
             {candidates
@@ -747,6 +1035,33 @@ function Board({ project, kind }: { project: Project & { githubProjectId: string
           </BoardColumn>
         ))}
       </div>
+      <AlertDialog
+        open={pendingTransition !== null}
+        onOpenChange={open => {
+          if (!open) setPendingTransition(null);
+        }}
+      >
+        <AlertDialog.Content>
+          <AlertDialog.Header>
+            <AlertDialog.Title>{pendingTransition?.title}</AlertDialog.Title>
+          </AlertDialog.Header>
+          <AlertDialog.Body>
+            <AlertDialog.Description>{pendingTransition?.description}</AlertDialog.Description>
+          </AlertDialog.Body>
+          <AlertDialog.Footer>
+            <AlertDialog.Cancel>No, keep as is</AlertDialog.Cancel>
+            <AlertDialog.Action
+              onClick={() => {
+                const transition = pendingTransition;
+                setPendingTransition(null);
+                if (transition) applyReviewMove(transition);
+              }}
+            >
+              {pendingTransition?.confirmLabel}
+            </AlertDialog.Action>
+          </AlertDialog.Footer>
+        </AlertDialog.Content>
+      </AlertDialog>
     </div>
   );
 }
@@ -843,6 +1158,7 @@ function WorkItemCard({
   onStartRun,
   onMove,
   onRemove,
+  moveMenu,
 }: {
   item: WorkItem;
   columnStage: BoardStageId;
@@ -855,6 +1171,11 @@ function WorkItemCard({
   onStartRun: (spec: ItemRunSpec, action: RunAction) => void;
   onMove: (toStage: string) => void;
   onRemove: () => void;
+  /**
+   * Lifecycle transition menu items replacing the raw column list (Review
+   * board). When omitted, the default per-stage "Move to …" items render.
+   */
+  moveMenu?: React.ReactNode;
 }) {
   const { icon: Icon, className: iconClassName } = SOURCE_ICONS[item.source];
   const otherStages = item.stages.filter(stage => stage !== columnStage);
@@ -920,13 +1241,14 @@ function WorkItemCard({
                   </DropdownMenu.Item>
                 );
               })}
-            {itemStageOptions(item)
-              .filter(stage => stage.id !== columnStage)
-              .map(stage => (
-                <DropdownMenu.Item key={stage.id} onClick={() => onMove(stage.id)}>
-                  {stage.id === 'done' ? 'Mark done' : `Move to ${stage.label}`}
-                </DropdownMenu.Item>
-              ))}
+            {moveMenu ??
+              itemStageOptions(item)
+                .filter(stage => stage.id !== columnStage)
+                .map(stage => (
+                  <DropdownMenu.Item key={stage.id} onClick={() => onMove(stage.id)}>
+                    {stage.id === 'done' ? 'Mark done' : `Move to ${stage.label}`}
+                  </DropdownMenu.Item>
+                ))}
             <DropdownMenu.Item onClick={onRemove}>Remove</DropdownMenu.Item>
           </DropdownMenu.Content>
         </DropdownMenu>
@@ -943,8 +1265,9 @@ function WorkItemCard({
           </div>
         );
       })}
-      {(otherStages.length > 0 || threadSession !== null) && (
+      {(otherStages.length > 0 || threadSession !== null || prStateBadge(item) !== null) && (
         <div className="flex flex-wrap items-center gap-1.5">
+          {prStateBadge(item)}
           {otherStages.map(stage => (
             <span key={stage} className="rounded-full bg-surface5 px-1.5 py-0.5 text-ui-xs text-icon4">
               {itemStageLabel(item, stage)}
