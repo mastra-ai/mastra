@@ -288,6 +288,18 @@ describe('ModelCredentialsStoragePG', () => {
     expect(queries[0]!.text).toBe(MODEL_CREDENTIALS_DDL);
   });
 
+  it('rejects org-scoped OAuth credentials before issuing an upsert', async () => {
+    const { queries, ctx } = fakePool();
+    const domain = new ModelCredentialsStoragePG();
+    await domain.init(ctx);
+    const queryCount = queries.length;
+
+    await expect(domain.setCredential({ orgId: 'org1' }, 'anthropic', oauthCred)).rejects.toThrow(
+      'OAuth credentials must be user-scoped',
+    );
+    expect(queries).toHaveLength(queryCount);
+  });
+
   it('upserts user rows and org rows against their own partial-unique conflict targets', async () => {
     const { queries, ctx } = fakePool();
     const domain = new ModelCredentialsStoragePG();

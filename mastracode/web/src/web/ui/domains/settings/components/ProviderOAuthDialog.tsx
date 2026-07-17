@@ -53,8 +53,12 @@ function PasteCodeDialog({ provider, session, onClose, onComplete }: ProviderOAu
     }
   };
 
+  const close = () => {
+    if (!completeMutation.isPending) onClose();
+  };
+
   return (
-    <Dialog open onOpenChange={open => !open && onClose()}>
+    <Dialog open onOpenChange={open => !open && close()}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Sign in to {displayName}</DialogTitle>
@@ -85,7 +89,9 @@ function PasteCodeDialog({ provider, session, onClose, onComplete }: ProviderOAu
           )}
         </DialogBody>
         <DialogFooter>
-          <Button onClick={onClose}>Cancel</Button>
+          <Button disabled={completeMutation.isPending} onClick={close}>
+            Cancel
+          </Button>
           <Button
             variant="primary"
             disabled={!code.trim() || completeMutation.isPending}
@@ -101,7 +107,8 @@ function PasteCodeDialog({ provider, session, onClose, onComplete }: ProviderOAu
 
 function DeviceCodeDialog({ provider, session, onClose, onComplete }: ProviderOAuthDialogProps) {
   const displayName = providerDisplayName(provider);
-  const { mutate: poll } = usePollProviderOAuth();
+  const pollMutation = usePollProviderOAuth();
+  const { mutate: poll } = pollMutation;
   const onCompleteRef = useRef(onComplete);
   const [nextPollAt, setNextPollAt] = useState(() => Date.now() + (session.nextPollMs ?? 1000));
   const [flowError, setFlowError] = useState<string>();
@@ -141,8 +148,12 @@ function DeviceCodeDialog({ provider, session, onClose, onComplete }: ProviderOA
     if (session.userCode) await navigator.clipboard.writeText(session.userCode);
   };
 
+  const close = () => {
+    if (!pollMutation.isPending) onClose();
+  };
+
   return (
-    <Dialog open onOpenChange={open => !open && onClose()}>
+    <Dialog open onOpenChange={open => !open && close()}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Sign in to {displayName}</DialogTitle>
@@ -181,7 +192,9 @@ function DeviceCodeDialog({ provider, session, onClose, onComplete }: ProviderOA
           )}
         </DialogBody>
         <DialogFooter>
-          <Button onClick={onClose}>Cancel</Button>
+          <Button disabled={pollMutation.isPending} onClick={close}>
+            Cancel
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

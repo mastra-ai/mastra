@@ -541,6 +541,8 @@ async function loginOpenAICodexDevice(options: {
     instructions: pending.instructions,
   });
 
+  await sleep(pending.intervalMs);
+
   while (true) {
     if (options.signal?.aborted) {
       throw new Error('Login cancelled');

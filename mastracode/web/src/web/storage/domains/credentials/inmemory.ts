@@ -7,7 +7,7 @@
 
 import type { AuthCredential, OAuthCredential } from '@mastra/code-sdk/auth/types';
 
-import { ModelCredentialsStorage, isOAuthCredentialExpired } from './base';
+import { ModelCredentialsStorage, assertCredentialScope, isOAuthCredentialExpired } from './base';
 import type {
   CreateLoginSessionInput,
   CredentialRecord,
@@ -41,6 +41,7 @@ export class ModelCredentialsStorageInMemory extends ModelCredentialsStorage {
   }
 
   async setCredential(tenant: CredentialTenant, provider: string, credential: AuthCredential): Promise<void> {
+    assertCredentialScope(tenant, credential);
     this.#rows.set(this.#key(tenant, provider), { credential: structuredClone(credential), updatedAt: new Date() });
   }
 
@@ -118,6 +119,29 @@ export class ModelCredentialsStorageInMemory extends ModelCredentialsStorage {
       this.#sessions.delete(sessionId);
       return undefined;
     }
+    return structuredClone(row);
+  }
+
+  async claimLoginSession(
+    sessionId: string,
+    owner: Pick<LoginSessionRow, 'orgId' | 'userId' | 'provider' | 'kind'>,
+  ): Promise<LoginSessionRow | undefined> {
+    const row = this.#sessions.get(sessionId);
+    const now = Date.now();
+    if (!row || row.expiresAt.getTime() <= now) {
+      if (row) this.#sessions.delete(sessionId);
+      return undefined;
+    }
+    if (
+      row.orgId !== owner.orgId ||
+      row.userId !== owner.userId ||
+      row.provider !== owner.provider ||
+      row.kind !== owner.kind ||
+      (row.nextPollAt !== null && row.nextPollAt.getTime() > now)
+    ) {
+      return undefined;
+    }
+    row.nextPollAt = row.expiresAt;
     return structuredClone(row);
   }
 

@@ -15,7 +15,7 @@ import type pg from 'pg';
 import type { AuthCredential, OAuthCredential } from '@mastra/code-sdk/auth/types';
 
 import type { FactoryStorageContext } from '../../domain';
-import { ModelCredentialsStorage, isOAuthCredentialExpired } from './base';
+import { ModelCredentialsStorage, assertCredentialScope, isOAuthCredentialExpired } from './base';
 import type {
   CreateLoginSessionInput,
   CredentialRecord,
@@ -136,6 +136,7 @@ export class ModelCredentialsStoragePG extends ModelCredentialsStorage {
   }
 
   async setCredential(tenant: CredentialTenant, provider: string, credential: AuthCredential): Promise<void> {
+    assertCredentialScope(tenant, credential);
     // The two partial unique indexes force per-arity conflict targets: user
     // rows conflict on (org_id, user_id, provider), org rows on (org_id, provider).
     const conflict =
@@ -243,6 +244,26 @@ export class ModelCredentialsStoragePG extends ModelCredentialsStorage {
       return undefined;
     }
     return toSessionRow(row);
+  }
+
+  async claimLoginSession(
+    sessionId: string,
+    owner: Pick<LoginSessionRow, 'orgId' | 'userId' | 'provider' | 'kind'>,
+  ): Promise<LoginSessionRow | undefined> {
+    const { rows } = await this.#db.query<LoginSessionDbRow>(
+      `UPDATE oauth_login_sessions
+       SET next_poll_at = expires_at
+       WHERE session_id = $1
+         AND org_id = $2
+         AND user_id = $3
+         AND provider = $4
+         AND kind = $5
+         AND expires_at > now()
+         AND (next_poll_at IS NULL OR next_poll_at <= now())
+       RETURNING *`,
+      [sessionId, owner.orgId, owner.userId, owner.provider, owner.kind],
+    );
+    return rows[0] ? toSessionRow(rows[0]) : undefined;
   }
 
   async touchLoginSession(

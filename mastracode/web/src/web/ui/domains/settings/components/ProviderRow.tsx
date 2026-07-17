@@ -37,11 +37,12 @@ const SOURCE_VARIANT: Record<ProviderInfo['source'], 'success' | 'info' | 'defau
 interface ProviderRowProps {
   provider: ProviderInfo;
   authEnabled: boolean;
+  disabled?: boolean;
   startingOAuth: boolean;
   onStartOAuth: (provider: string, mode?: string) => Promise<void>;
 }
 
-export function ProviderRow({ provider, authEnabled, startingOAuth, onStartOAuth }: ProviderRowProps) {
+export function ProviderRow({ provider, authEnabled, disabled = false, startingOAuth, onStartOAuth }: ProviderRowProps) {
   const displayName = providerDisplayName(provider.provider);
   const saveKeyMutation = useSaveProviderKey();
   const removeKeyMutation = useRemoveProviderKey();
@@ -50,7 +51,8 @@ export function ProviderRow({ provider, authEnabled, startingOAuth, onStartOAuth
   const [keyDraft, setKeyDraft] = useState('');
   const [scope, setScope] = useState<'user' | 'org'>(provider.source === 'stored-org' ? 'org' : 'user');
 
-  const busy = saveKeyMutation.isPending || removeKeyMutation.isPending || signOutMutation.isPending || startingOAuth;
+  const busy =
+    disabled || saveKeyMutation.isPending || removeKeyMutation.isPending || signOutMutation.isPending || startingOAuth;
   const mutationError = saveKeyMutation.error ?? removeKeyMutation.error ?? signOutMutation.error;
   const error = mutationError instanceof Error ? mutationError.message : undefined;
   const signedIn = provider.source === 'oauth' || provider.source === 'oauth-user';

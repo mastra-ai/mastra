@@ -55,13 +55,16 @@ export async function startAnthropicLogin(): Promise<AnthropicLoginStart> {
 
 /**
  * Complete an Anthropic login: parse the pasted authorization input
- * (full URL, `code#state`, query string, or bare code) and exchange it
- * for tokens using the verifier from `startAnthropicLogin()`.
+ * (full URL, `code#state`, or query string), validate its state, and exchange
+ * it for tokens using the verifier from `startAnthropicLogin()`.
  */
 export async function completeAnthropicLogin(input: string, verifier: string): Promise<OAuthCredentials> {
   const { code, state } = parseAuthorizationInput(input);
   if (!code) {
     throw new Error('Missing authorization code');
+  }
+  if (!state || state !== verifier) {
+    throw new Error('Invalid authorization state');
   }
 
   const tokenResponse = await fetch(TOKEN_URL, {
@@ -73,9 +76,7 @@ export async function completeAnthropicLogin(input: string, verifier: string): P
       grant_type: 'authorization_code',
       client_id: CLIENT_ID,
       code,
-      // The authorize request uses the verifier as `state`, so a missing
-      // pasted state falls back to the verifier.
-      state: state ?? verifier,
+      state,
       redirect_uri: REDIRECT_URI,
       code_verifier: verifier,
     }),

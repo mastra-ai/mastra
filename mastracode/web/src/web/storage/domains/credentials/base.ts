@@ -85,6 +85,13 @@ export function isOAuthCredentialExpired(credential: OAuthCredential, now = Date
   return now >= credential.expires;
 }
 
+/** OAuth plan credentials are personal and must always have an owning user. */
+export function assertCredentialScope(tenant: CredentialTenant, credential: AuthCredential): void {
+  if (credential.type === 'oauth' && !tenant.userId) {
+    throw new Error('OAuth credentials must be user-scoped');
+  }
+}
+
 /**
  * Abstract model-credentials storage. Backends own their DDL in `init()`;
  * query methods are the typed surface the provider OAuth/key routes and the
@@ -134,6 +141,16 @@ export abstract class ModelCredentialsStorage implements FactoryStorageDomain {
    * cleanup) and reported as absent.
    */
   abstract getLoginSession(sessionId: string): Promise<LoginSessionRow | undefined>;
+
+  /**
+   * Atomically claim a due login session for one upstream completion/poll attempt.
+   * Returns undefined when the session is missing, expired, owned by another
+   * tenant/provider, or already claimed by a concurrent request.
+   */
+  abstract claimLoginSession(
+    sessionId: string,
+    owner: Pick<LoginSessionRow, 'orgId' | 'userId' | 'provider' | 'kind'>,
+  ): Promise<LoginSessionRow | undefined>;
 
   /** Update a pending flow's serialized state and/or next allowed poll time. */
   abstract touchLoginSession(

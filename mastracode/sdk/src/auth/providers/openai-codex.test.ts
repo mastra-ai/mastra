@@ -242,12 +242,13 @@ describe('OpenAI Codex device OAuth', () => {
       );
     vi.stubGlobal('fetch', fetchMock);
     const onAuth = vi.fn();
+    const sleep = vi.fn(async () => {});
     const { __testing } = await import('./openai-codex.js');
 
     await expect(
       __testing.loginOpenAICodexDevice({
         onAuth,
-        sleep: async () => {},
+        sleep,
       }),
     ).resolves.toMatchObject({
       access: expect.any(String),
@@ -259,6 +260,7 @@ describe('OpenAI Codex device OAuth', () => {
       url: 'https://auth.openai.com/codex/device',
       instructions: 'Enter code: ABCD-EFGH',
     });
+    expect(sleep).toHaveBeenNthCalledWith(1, 1000);
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
       'https://auth.openai.com/api/accounts/deviceauth/usercode',

@@ -101,6 +101,7 @@ export function ProvidersSection() {
               key={provider.provider}
               provider={provider}
               authEnabled={authEnabled}
+              disabled={startOAuthMutation.isPending}
               startingOAuth={startingProvider === provider.provider}
               onStartOAuth={startOAuth}
             />
@@ -140,6 +141,7 @@ export function ProvidersSection() {
                 key={provider.provider}
                 provider={provider}
                 authEnabled={authEnabled}
+                disabled={startOAuthMutation.isPending}
                 startingOAuth={startingProvider === provider.provider}
                 onStartOAuth={startOAuth}
               />

@@ -46,7 +46,7 @@ describe('completeAnthropicLogin', () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ access_token: 'at', refresh_token: 'rt', expires_in: 3600 }));
 
     const before = Date.now();
-    const creds = await completeAnthropicLogin('the-code#the-state', 'the-verifier');
+    const creds = await completeAnthropicLogin('the-code#the-verifier', 'the-verifier');
 
     expect(creds.access).toBe('at');
     expect(creds.refresh).toBe('rt');
@@ -59,7 +59,7 @@ describe('completeAnthropicLogin', () => {
     expect(body).toMatchObject({
       grant_type: 'authorization_code',
       code: 'the-code',
-      state: 'the-state',
+      state: 'the-verifier',
       code_verifier: 'the-verifier',
     });
   });
@@ -67,21 +67,19 @@ describe('completeAnthropicLogin', () => {
   it('accepts a full redirect URL paste', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ access_token: 'at', refresh_token: 'rt', expires_in: 3600 }));
 
-    await completeAnthropicLogin('https://console.anthropic.com/oauth/code/callback?code=abc&state=xyz', 'v');
+    await completeAnthropicLogin('https://console.anthropic.com/oauth/code/callback?code=abc&state=v', 'v');
 
     const body = JSON.parse((fetchMock.mock.calls[0]![1] as RequestInit).body as string);
     expect(body.code).toBe('abc');
-    expect(body.state).toBe('xyz');
+    expect(body.state).toBe('v');
   });
 
-  it('falls back to the verifier when the paste has no state', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ access_token: 'at', refresh_token: 'rt', expires_in: 3600 }));
-
-    await completeAnthropicLogin('bare-code', 'the-verifier');
-
-    const body = JSON.parse((fetchMock.mock.calls[0]![1] as RequestInit).body as string);
-    expect(body.code).toBe('bare-code');
-    expect(body.state).toBe('the-verifier');
+  it('rejects missing or mismatched state before token exchange', async () => {
+    await expect(completeAnthropicLogin('bare-code', 'the-verifier')).rejects.toThrow('Invalid authorization state');
+    await expect(completeAnthropicLogin('code#wrong-state', 'the-verifier')).rejects.toThrow(
+      'Invalid authorization state',
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('throws on empty input', async () => {
@@ -91,7 +89,7 @@ describe('completeAnthropicLogin', () => {
 
   it('throws with the response body when the exchange fails', async () => {
     fetchMock.mockResolvedValueOnce(new Response('invalid_grant', { status: 400 }));
-    await expect(completeAnthropicLogin('code#state', 'v')).rejects.toThrow('Token exchange failed: invalid_grant');
+    await expect(completeAnthropicLogin('code#v', 'v')).rejects.toThrow('Token exchange failed: invalid_grant');
   });
 });
 
@@ -104,7 +102,7 @@ describe('loginAnthropic', () => {
       url => {
         seenUrl = url;
       },
-      async () => 'code#state',
+      async () => `code#${new URL(seenUrl!).searchParams.get('state')}`,
     );
 
     expect(seenUrl).toContain('https://claude.ai/oauth/authorize');

@@ -119,7 +119,14 @@ const OAUTH_FLOWS: Record<string, OAuthFlow> = {
       };
     },
     poll: async pending => {
-      const r = await pollGitHubCopilotDeviceLogin(pending as unknown as CopilotDeviceLoginPending);
+      const p = pending as unknown as CopilotDeviceLoginPending;
+      // Web flows are always started against github.com (no Enterprise input).
+      // Never let deserialized session state redirect server-side polling to
+      // an arbitrary hostname.
+      if (p.domain !== 'github.com' || p.enterpriseDomain !== undefined) {
+        return { status: 'failed', error: 'Unsupported GitHub host' };
+      }
+      const r = await pollGitHubCopilotDeviceLogin(p);
       if (r.status === 'complete') return { status: 'complete', credentials: r.credentials };
       if (r.status === 'pending') return { status: 'pending', nextPollMs: r.nextPollMs, pending: { ...r.pending } };
       return { status: 'failed', error: r.error };
@@ -292,10 +299,19 @@ export function buildOAuthRoutes(options: { authStorage?: AuthStorage } = {}): A
         if (!session) return c.json({ error: 'session_not_found' }, 404);
         if (session.kind !== 'paste-code') return c.json({ error: 'wrong_session_kind' }, 400);
 
+        const claimed = await sessionStore(ctx).claimLoginSession(sessionId, {
+          orgId: session.orgId,
+          userId: session.userId,
+          provider,
+          kind: 'paste-code',
+        });
+        if (!claimed) return c.json({ error: 'oauth_in_progress' }, 409);
+
         let credentials: OAuthCredentials;
         try {
-          credentials = await flow.complete(session.pending, code);
+          credentials = await flow.complete(claimed.pending, code);
         } catch (error) {
+          await sessionStore(ctx).touchLoginSession(sessionId, { nextPollAt: null });
           return c.json({ error: error instanceof Error ? error.message : String(error) }, 400);
         }
 
@@ -332,7 +348,21 @@ export function buildOAuthRoutes(options: { authStorage?: AuthStorage } = {}): A
           return c.json({ status: 'pending', nextPollMs: nextPollAt - now });
         }
 
-        const result = await flow.poll(session.pending);
+        const claimed = await sessionStore(ctx).claimLoginSession(sessionId, {
+          orgId: session.orgId,
+          userId: session.userId,
+          provider,
+          kind: 'device-code',
+        });
+        if (!claimed) return c.json({ status: 'pending', nextPollMs: 250 });
+
+        let result: OAuthFlowPoll;
+        try {
+          result = await flow.poll(claimed.pending);
+        } catch (error) {
+          await sessionStore(ctx).touchLoginSession(sessionId, { nextPollAt: null });
+          throw error;
+        }
 
         if (result.status === 'complete') {
           await persistOAuthCredential(ctx, provider, result.credentials, authStorage);

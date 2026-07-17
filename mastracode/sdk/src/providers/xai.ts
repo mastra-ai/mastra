@@ -53,22 +53,14 @@ export function buildXAIOAuthFetch(opts: { authStorage?: CredentialStore } = {})
       throw new Error('Failed to refresh xAI token. Please /login again.');
     }
 
-    // Preserve existing headers, strip auth-related ones.
-    const headers = new Headers();
+    // Preserve existing headers, strip auth-related ones. Explicit init
+    // headers override headers carried by an incoming Request.
+    const headers = new Headers(url instanceof Request ? url.headers : undefined);
     if (init?.headers) {
-      const source =
-        init.headers instanceof Headers
-          ? init.headers
-          : Array.isArray(init.headers)
-            ? new Headers(init.headers as Array<[string, string]>)
-            : new Headers(init.headers as Record<string, string>);
-      source.forEach((value, key) => {
-        const lower = key.toLowerCase();
-        if (lower !== 'authorization' && lower !== 'x-api-key') {
-          headers.set(key, value);
-        }
-      });
+      new Headers(init.headers).forEach((value, key) => headers.set(key, value));
     }
+    headers.delete('authorization');
+    headers.delete('x-api-key');
 
     headers.set('Authorization', `Bearer ${accessToken}`);
 

@@ -5,20 +5,35 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // Mock the SDK flow primitives at the module boundary; the routes' session
 // bookkeeping, tenancy scoping, and rate limiting are what's under test.
 
-const startAnthropicLogin = vi.fn();
-const completeAnthropicLogin = vi.fn();
+const {
+  startAnthropicLogin,
+  completeAnthropicLogin,
+  startCodexDeviceLogin,
+  pollCodexDeviceLogin,
+  startGitHubCopilotDeviceLogin,
+  pollGitHubCopilotDeviceLogin,
+} = vi.hoisted(() => ({
+  startAnthropicLogin: vi.fn(),
+  completeAnthropicLogin: vi.fn(),
+  startCodexDeviceLogin: vi.fn(),
+  pollCodexDeviceLogin: vi.fn(),
+  startGitHubCopilotDeviceLogin: vi.fn(),
+  pollGitHubCopilotDeviceLogin: vi.fn(),
+}));
 vi.mock('@mastra/code-sdk/auth/providers/anthropic', async importOriginal => ({
   ...(await importOriginal<object>()),
   startAnthropicLogin: (...args: unknown[]) => startAnthropicLogin(...args),
   completeAnthropicLogin: (...args: unknown[]) => completeAnthropicLogin(...args),
 }));
-
-const startCodexDeviceLogin = vi.fn();
-const pollCodexDeviceLogin = vi.fn();
 vi.mock('@mastra/code-sdk/auth/providers/openai-codex', async importOriginal => ({
   ...(await importOriginal<object>()),
   startCodexDeviceLogin: (...args: unknown[]) => startCodexDeviceLogin(...args),
   pollCodexDeviceLogin: (...args: unknown[]) => pollCodexDeviceLogin(...args),
+}));
+vi.mock('@mastra/code-sdk/auth/providers/github-copilot', async importOriginal => ({
+  ...(await importOriginal<object>()),
+  startGitHubCopilotDeviceLogin: (...args: unknown[]) => startGitHubCopilotDeviceLogin(...args),
+  pollGitHubCopilotDeviceLogin: (...args: unknown[]) => pollGitHubCopilotDeviceLogin(...args),
 }));
 
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
@@ -79,6 +94,17 @@ beforeEach(async () => {
     deadlineAt: Date.now() + 900_000,
   });
   pollCodexDeviceLogin.mockResolvedValue({ status: 'pending', nextPollMs: 5000 });
+  startGitHubCopilotDeviceLogin.mockResolvedValue({
+    domain: 'github.com',
+    deviceCode: 'dc-1',
+    userCode: 'WXYZ-5678',
+    url: 'https://github.com/login/device',
+    instructions: 'Enter code: WXYZ-5678',
+    intervalMs: 5000,
+    intervalMultiplier: 1,
+    deadlineAt: Date.now() + 900_000,
+  });
+  pollGitHubCopilotDeviceLogin.mockResolvedValue({ status: 'pending', nextPollMs: 5000 });
 });
 
 afterEach(() => {
@@ -220,6 +246,48 @@ describe('device-code flow (openai)', () => {
     const res = await post(buildApp(userB), '/web/config/providers/openai/oauth/poll', { sessionId });
     expect(res.status).toBe(404);
     expect(pollCodexDeviceLogin).not.toHaveBeenCalled();
+  });
+});
+
+// ── Device-code flow (GitHub Copilot) ────────────────────────────────────
+
+describe('device-code flow (github-copilot)', () => {
+  it('polls github.com sessions normally', async () => {
+    const app = buildApp(userA);
+    const { sessionId } = await (await post(app, '/web/config/providers/github-copilot/oauth/start')).json();
+    await makePollable(sessionId);
+
+    const res = await post(app, '/web/config/providers/github-copilot/oauth/poll', { sessionId });
+    expect(await res.json()).toMatchObject({ status: 'pending' });
+    expect(pollGitHubCopilotDeviceLogin).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses to poll a session whose stored state points at a non-github.com host', async () => {
+    const app = buildApp(userA);
+    const { sessionId } = await (await post(app, '/web/config/providers/github-copilot/oauth/start')).json();
+    const session = await seed.credentials.getLoginSession(sessionId);
+    await seed.credentials.touchLoginSession(sessionId, {
+      pending: { ...session!.pending, domain: 'evil.example.com' },
+      nextPollAt: new Date(Date.now() - 1),
+    });
+
+    const res = await post(app, '/web/config/providers/github-copilot/oauth/poll', { sessionId });
+    expect(await res.json()).toMatchObject({ status: 'failed', error: 'Unsupported GitHub host' });
+    expect(pollGitHubCopilotDeviceLogin).not.toHaveBeenCalled();
+  });
+
+  it('refuses to poll a session whose stored state carries an enterprise domain', async () => {
+    const app = buildApp(userA);
+    const { sessionId } = await (await post(app, '/web/config/providers/github-copilot/oauth/start')).json();
+    const session = await seed.credentials.getLoginSession(sessionId);
+    await seed.credentials.touchLoginSession(sessionId, {
+      pending: { ...session!.pending, enterpriseDomain: 'company.ghe.com' },
+      nextPollAt: new Date(Date.now() - 1),
+    });
+
+    const res = await post(app, '/web/config/providers/github-copilot/oauth/poll', { sessionId });
+    expect(await res.json()).toMatchObject({ status: 'failed', error: 'Unsupported GitHub host' });
+    expect(pollGitHubCopilotDeviceLogin).not.toHaveBeenCalled();
   });
 });
 

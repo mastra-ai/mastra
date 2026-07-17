@@ -33,6 +33,20 @@ export type CredentialStoreProvider = (tenant: CredentialTenant) => CredentialSt
 
 let credentialStoreProvider: CredentialStoreProvider | undefined;
 
+const unavailableTenantCredentialStore: CredentialStore = {
+  allowEnvironmentFallback: false,
+  reload() {},
+  get() {
+    return undefined;
+  },
+  getStoredApiKey() {
+    return undefined;
+  },
+  async getApiKey() {
+    return undefined;
+  },
+};
+
 /** Register (or clear) the tenant credential store provider. Deployed-web only. */
 export function setCredentialStoreProvider(provider: CredentialStoreProvider | undefined): void {
   credentialStoreProvider = provider;
@@ -68,13 +82,14 @@ export function resolveTenantFromRequestContext(requestContext?: RequestContext)
 }
 
 /**
- * Resolve the credential store for a request: the registered provider's
- * tenant store when both a provider and an authenticated tenant exist,
- * otherwise `undefined` (caller falls back to the global `AuthStorage`).
+ * Resolve the credential store for a request. Local mode returns `undefined`
+ * and keeps the global `AuthStorage` behavior. Once deployed web registers a
+ * provider, missing tenant identity or unavailable tenant storage fails closed
+ * through an empty store that also disables process-environment fallback.
  */
 export function resolveCredentialStore(requestContext?: RequestContext): CredentialStore | undefined {
   if (!credentialStoreProvider) return undefined;
   const tenant = resolveTenantFromRequestContext(requestContext);
-  if (!tenant) return undefined;
-  return credentialStoreProvider(tenant);
+  if (!tenant) return unavailableTenantCredentialStore;
+  return credentialStoreProvider(tenant) ?? unavailableTenantCredentialStore;
 }

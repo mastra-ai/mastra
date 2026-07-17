@@ -232,6 +232,25 @@ describe('gateway oauth fetch wrappers', () => {
     expect(headers.get('Content-Type')).toBe('application/json');
   });
 
+  it('preserves non-auth headers from an incoming Request', async () => {
+    xaiStorage.get.mockReturnValue({ type: 'oauth', access: 'stale', expires: Date.now() + 60_000 });
+    xaiStorage.getApiKey.mockResolvedValue('xai-oauth-token');
+    fetchMock.mockResolvedValueOnce(new Response('{}', { status: 200 }));
+
+    const { buildXAIOAuthFetch } = await import('../xai.js');
+    const fetchWithOAuth = buildXAIOAuthFetch({ authStorage: xaiStorage as any });
+    const request = new Request('https://api.x.ai/v1/chat/completions', {
+      headers: { 'Content-Type': 'application/json', 'X-Request-ID': 'request-1', Authorization: 'Bearer caller-key' },
+    });
+
+    await fetchWithOAuth(request);
+
+    const headers = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
+    expect(headers.get('Authorization')).toBe('Bearer xai-oauth-token');
+    expect(headers.get('Content-Type')).toBe('application/json');
+    expect(headers.get('X-Request-ID')).toBe('request-1');
+  });
+
   it('annotates xAI fetch errors with the request URL', async () => {
     xaiStorage.get.mockReturnValue({ type: 'oauth', access: 'token', expires: Date.now() + 60_000 });
     xaiStorage.getApiKey.mockResolvedValue('xai-oauth-token');

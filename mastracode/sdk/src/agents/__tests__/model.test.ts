@@ -13,10 +13,11 @@ const mockAuthStorageInstance = vi.hoisted(() => ({
 vi.mock('../../auth/storage.js', () => {
   return {
     AuthStorage: class MockAuthStorage {
-      reload = mockAuthStorageInstance.reload;
-      get = mockAuthStorageInstance.get;
-      getStoredApiKey = mockAuthStorageInstance.getStoredApiKey;
-      isLoggedIn = mockAuthStorageInstance.isLoggedIn;
+      constructor() {
+        // Every construction resolves to the shared singleton so tests can
+        // assert the exact instance handed to provider factories.
+        return mockAuthStorageInstance as unknown as MockAuthStorage;
+      }
     },
   };
 });
@@ -284,7 +285,7 @@ describe('resolveModel', () => {
 
       expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514', {
         headers: undefined,
-        authStorage: expect.anything(),
+        authStorage: mockAuthStorageInstance,
       });
     });
 
@@ -361,7 +362,7 @@ describe('resolveModel', () => {
 
       expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514', {
         headers: undefined,
-        authStorage: expect.anything(),
+        authStorage: mockAuthStorageInstance,
       });
     });
 
@@ -382,7 +383,7 @@ describe('resolveModel', () => {
           'x-thread-id': 'thread-123',
           'x-resource-id': 'resource-456',
         },
-        authStorage: expect.anything(),
+        authStorage: mockAuthStorageInstance,
       });
     });
 
@@ -398,7 +399,7 @@ describe('resolveModel', () => {
 
       expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-opus-4-6', {
         headers: undefined,
-        authStorage: expect.anything(),
+        authStorage: mockAuthStorageInstance,
       });
     });
 
@@ -467,7 +468,7 @@ describe('resolveModel', () => {
           'x-thread-id': 'thread-123',
           'x-resource-id': 'resource-456',
         },
-        authStorage: expect.anything(),
+        authStorage: mockAuthStorageInstance,
       });
     });
 
@@ -496,7 +497,7 @@ describe('resolveModel', () => {
       expect(openaiCodexProvider).toHaveBeenCalledWith('gpt-5.2-codex', {
         thinkingLevel: 'high',
         headers: undefined,
-        authStorage: expect.anything(),
+        authStorage: mockAuthStorageInstance,
       });
     });
   });
@@ -701,7 +702,7 @@ describe('resolveModel', () => {
         'Bearer msk_gateway_key_123',
       );
       expect(buildOpenAICodexOAuthFetch).toHaveBeenCalledWith({
-        authStorage: expect.anything(),
+        authStorage: mockAuthStorageInstance,
         rewriteUrl: false,
       });
       expect(wrapLanguageModel).toHaveBeenCalled();
@@ -822,7 +823,7 @@ describe('resolveModel', () => {
       expect(MastraGateway).toHaveBeenCalledWith({ baseUrl: 'https://gateway-api.mastra.ai' });
       expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4', {
         headers: undefined,
-        authStorage: expect.anything(),
+        authStorage: mockAuthStorageInstance,
       });
       delete process.env['MASTRA_GATEWAY_API_KEY'];
     });
