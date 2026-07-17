@@ -16,6 +16,7 @@ const MAX_RESOURCE_ID_LENGTH = 512;
 const MAX_SCOPE_LENGTH = 2048;
 const MAX_ARGUMENTS_LENGTH = 16_384;
 const SKILL_NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 interface SkillInvocationBody {
   resourceId: string;
@@ -26,8 +27,8 @@ interface SkillInvocationBody {
 
 interface SessionAuthorizationResult {
   allowed: boolean;
-  status?: 401 | 403;
-  code?: 'unauthorized' | 'session_forbidden';
+  status?: 400 | 401 | 403;
+  code?: 'invalid_request' | 'unauthorized' | 'session_forbidden';
   message?: string;
 }
 
@@ -90,7 +91,11 @@ async function authorizeSessionAddress(
   if (address.resourceId === tenant.userId) return { allowed: true };
 
   // Factory sessions are keyed by githubProjectId and scoped to a worktree that
-  // is owned by the current org user. Never accept an arbitrary resource/scope.
+  // is owned by the current org user. Never pass a malformed project id into
+  // the UUID-backed worktree lookup or accept an arbitrary resource/scope.
+  if (!UUID_RE.test(address.resourceId)) {
+    return { allowed: false, status: 400, code: 'invalid_request', message: 'Invalid skill invocation request.' };
+  }
   if (!tenant.orgId || !address.scope) {
     return { allowed: false, status: 403, code: 'session_forbidden', message: 'Session access denied.' };
   }

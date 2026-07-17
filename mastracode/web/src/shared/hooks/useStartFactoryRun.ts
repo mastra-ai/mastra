@@ -10,7 +10,10 @@ import {
   requireAgentControllerSession,
 } from '../../web/ui/domains/chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../web/ui/domains/chat/services/constants';
-import { queueThreadPageKickoff } from '../../web/ui/domains/chat/services/threadPageReadiness';
+import {
+  queueThreadPageKickoff,
+  ThreadPageKickoffTimeoutError,
+} from '../../web/ui/domains/chat/services/threadPageReadiness';
 // Deep imports (not the workspaces barrel) to avoid provider/component cycles.
 import { useActiveProjectContext } from '../../web/ui/domains/workspaces/context/ActiveProjectProvider';
 import { deriveProjectPath, useCreateWorkspaceMutation } from './useWorkspaces';
@@ -133,16 +136,17 @@ export function useStartFactoryRun() {
         queryKey: queryKeys.agentControllerThreads(AGENT_CONTROLLER_ID, resourceId, projectPath),
       });
 
-      // Hand the kickoff to the destination page before navigating. The mounted
-      // transcript claims it exactly once, projects the user message locally,
-      // and sends through the same path as the composer.
-      const kickoffAccepted = queueThreadPageKickoff({ resourceId, projectPath, threadId }, kickoffMessage);
+      // Queue the kickoff before navigating so the destination page can claim it
+      // exactly once. Wait for that page's composer path to finish dispatching
+      // before filing the board card as an active run.
+      const kickoffCompleted = queueThreadPageKickoff({ resourceId, projectPath, threadId }, kickoffMessage);
       void navigate(`/threads/${threadId}`);
       try {
-        await kickoffAccepted;
+        await kickoffCompleted;
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'The Factory thread did not accept its kickoff';
-        void navigate('/new', { replace: true, state: { routeErrorNotice: message } });
+        if (error instanceof ThreadPageKickoffTimeoutError) {
+          void navigate('/new', { replace: true, state: { routeErrorNotice: error.message } });
+        }
         throw error;
       }
 

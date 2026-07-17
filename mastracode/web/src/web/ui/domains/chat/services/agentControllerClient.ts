@@ -89,7 +89,16 @@ async function requestWorkspaceSkill(
     },
   );
   if (response.ok) {
-    const result = (await response.json()) as { skill?: unknown; message?: unknown };
+    let result: { skill?: unknown; message?: unknown };
+    try {
+      result = (await response.json()) as typeof result;
+    } catch {
+      throw new WorkspaceSkillInvocationError(
+        'Skill invocation returned an invalid response.',
+        502,
+        'invalid_response',
+      );
+    }
     if (typeof result.skill === 'string' && typeof result.message === 'string') {
       return { skill: result.skill, message: result.message };
     }

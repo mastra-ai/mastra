@@ -311,8 +311,21 @@ describe('workspace skill invocation route', () => {
       }),
     );
 
-    const denied = await invoke(app, {
+    const malformed = await invoke(app, {
       resourceId: 'project-1',
+      scope: '/worktrees/review-42',
+      name: 'understand-pr',
+    });
+    expect(malformed.status).toBe(400);
+    expect(await malformed.json()).toEqual({
+      error: 'invalid_request',
+      message: 'Invalid skill invocation request.',
+    });
+    expect(where).not.toHaveBeenCalled();
+
+    const projectId = '00000000-0000-4000-8000-000000000001';
+    const denied = await invoke(app, {
+      resourceId: projectId,
       scope: '/worktrees/review-42',
       name: 'understand-pr',
     });
@@ -325,12 +338,12 @@ describe('workspace skill invocation route', () => {
 
     where.mockResolvedValueOnce([{ id: 'worktree-1' }]);
     const allowed = await invoke(app, {
-      resourceId: 'project-1',
+      resourceId: projectId,
       scope: '/worktrees/review-42',
       name: 'understand-pr',
     });
     expect(allowed.status).toBe(200);
-    expect(getSessionByResource).toHaveBeenCalledWith('project-1', '/worktrees/review-42');
+    expect(getSessionByResource).toHaveBeenCalledWith(projectId, '/worktrees/review-42');
     expect(sendMessage).toHaveBeenCalledOnce();
   });
 

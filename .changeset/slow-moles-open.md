@@ -12,4 +12,17 @@ const session = await controller.createSession({ resourceId, scope });
 const workspace = session.getWorkspace();
 ```
 
-Mastra Code workspace resolvers can now accept an isolated read-only skill extension. Mastra Code Web uses this seam to expose its server-owned `understand-issue` and `understand-pr` `SKILL.md` assets to Factory sessions without adding them to default SDK or TUI workspaces.
+Mastra Code workspace resolvers can now accept an isolated read-only skill extension:
+
+```ts
+const workspace = await getDynamicWorkspace({
+  requestContext,
+  skillExtension: {
+    id: 'review-skills',
+    paths: ['/__review_skills__'],
+    createSource: fallback => new ReviewSkillSource(fallback),
+  },
+});
+```
+
+This lets SDK consumers compose additional read-only skill roots into selected workspaces without changing the default workspace skill set.

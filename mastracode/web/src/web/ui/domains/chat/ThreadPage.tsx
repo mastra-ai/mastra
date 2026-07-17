@@ -1,4 +1,3 @@
-import { useEffect, useRef } from 'react';
 import { useParams } from 'react-router';
 
 import { useOverlays } from '../../lib/overlays';
@@ -12,12 +11,7 @@ import { ComposerPanel } from './components/ComposerPanel';
 import { ChatMessageBoundary, ChatSessionBoundary } from './context/ChatSessionProvider';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 import { useRouteThreadSync } from '../../../../shared/hooks/useRouteThreadSync';
-import { useSendAgentControllerMessageMutation } from '../../../../shared/hooks/useAgentControllerRunMutations';
-import { useChatConnection } from './context/useChatConnection';
-import { useChatSessionContext } from './context/useChatSessionContext';
-import { useChatTranscript } from './context/useChatTranscript';
-import { AGENT_CONTROLLER_ID } from './services/constants';
-import { claimThreadPageKickoffs } from './services/threadPageReadiness';
+import { useThreadPageKickoffs } from './hooks/useThreadPageKickoffs';
 
 const threadComposerContainerClass = 'w-full px-3 md:px-5';
 const threadComposerInnerClass = 'mx-auto w-full max-w-[80ch]';
@@ -68,50 +62,7 @@ function ThreadComposer() {
 
 function ThreadPageContent() {
   useRouteThreadSync();
-  const { status, threadId: activeThreadId } = useChatConnection();
-  const { resourceId, projectPath, baseUrl, sessionEnabled } = useChatSessionContext();
-  const { localUser, clearPending, pushNotice } = useChatTranscript();
-  const { threadId: routeThreadId } = useParams();
-  const sendMessage = useSendAgentControllerMessageMutation({
-    agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    projectPath,
-    baseUrl,
-    enabled: sessionEnabled,
-  });
-  const pendingKickoffs = useRef(0);
-
-  useEffect(() => {
-    if (status !== 'ready' || !routeThreadId || activeThreadId !== routeThreadId) return;
-    const kickoffs = claimThreadPageKickoffs({ resourceId, projectPath, threadId: routeThreadId });
-    for (const kickoff of kickoffs) {
-      localUser(kickoff.message);
-      pendingKickoffs.current += 1;
-      const dispatch = sendMessage.mutateAsync(kickoff.message);
-      kickoff.accept();
-      void dispatch.then(
-        () => {
-          pendingKickoffs.current -= 1;
-        },
-        error => {
-          pendingKickoffs.current -= 1;
-          if (pendingKickoffs.current === 0) clearPending();
-          const message = error instanceof Error ? error.message : 'Factory kickoff dispatch failed';
-          pushNotice(message, 'error');
-        },
-      );
-    }
-  }, [
-    activeThreadId,
-    clearPending,
-    localUser,
-    projectPath,
-    pushNotice,
-    resourceId,
-    routeThreadId,
-    sendMessage,
-    status,
-  ]);
+  useThreadPageKickoffs();
 
   return <ChatMessageList />;
 }

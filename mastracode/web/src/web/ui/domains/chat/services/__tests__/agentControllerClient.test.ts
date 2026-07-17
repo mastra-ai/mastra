@@ -117,6 +117,24 @@ describe('workspace skill requests', () => {
     });
   });
 
+  it('normalizes malformed successful responses to a typed error', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('not json'));
+
+    const invocation = invokeWorkspaceSkill({
+      agentControllerId: 'code',
+      resourceId: 'project-1',
+      name: 'understand-pr',
+    });
+
+    await expect(invocation).rejects.toEqual(
+      expect.objectContaining<Partial<WorkspaceSkillInvocationError>>({
+        name: 'WorkspaceSkillInvocationError',
+        status: 502,
+        code: 'invalid_response',
+      }),
+    );
+  });
+
   it('surfaces typed server errors', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ error: 'skill_not_found', message: 'Skill not found: understand-pr.' }), {
