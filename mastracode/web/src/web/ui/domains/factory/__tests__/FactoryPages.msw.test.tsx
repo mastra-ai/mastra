@@ -811,10 +811,24 @@ describe('Factory Board — persisted cards', () => {
           source: 'github-pr',
           sourceKey: 'github-pr:34',
           stages: ['review'],
+          sessions: {
+            review: {
+              projectPath: '/sandbox/mastra/worktrees/factory-pr-34',
+              branch: 'factory/pr-34',
+              threadId: 'thread-related-review',
+              startedBy: 'user-1',
+            },
+          },
         }),
       ],
     });
-    renderAt('/factory/work');
+    renderAt('/factory/work', {
+      ...githubProject,
+      worktrees: [
+        ...(githubProject.worktrees ?? []),
+        { branch: 'factory/pr-34', worktreePath: '/sandbox/mastra/worktrees/factory-pr-34', baseBranch: 'main' },
+      ],
+    });
 
     const workColumn = await screen.findByTestId('board-column-review');
     const workCard = within(workColumn).getByTestId('work-item-card');
@@ -1314,6 +1328,186 @@ describe('Factory Board — drag and drop', () => {
   });
 });
 
+describe('Factory Review board — lifecycle transitions', () => {
+  const prItem = (overrides: Partial<WorkItem> = {}) =>
+    makeWorkItem({
+      id: 'wi-pr-1',
+      title: 'Add factory pages',
+      source: 'github-pr',
+      sourceKey: 'github-pr:34',
+      url: 'https://github.com/mastra-ai/mastra/pull/34',
+      metadata: { number: 34, author: 'grace', headBranch: 'feat/factory', baseBranch: 'main' },
+      ...overrides,
+    });
+
+  const reviewSession = {
+    review: {
+      projectPath: '/sandbox/mastra/worktrees/factory-pr-34',
+      branch: 'factory/pr-34',
+      threadId: 'thread-related-review',
+      startedBy: 'user-1',
+    },
+  };
+
+  /** Project with the review worktree present so review session refs are live. */
+  const projectWithReviewWorktree: Project = {
+    ...githubProject,
+    worktrees: [
+      ...(githubProject.worktrees ?? []),
+      { branch: 'factory/pr-34', worktreePath: '/sandbox/mastra/worktrees/factory-pr-34', baseBranch: 'main' },
+    ],
+  };
+
+  it('given an Intake PR card, when dragged to Reviewing and the prompt is declined, then it stays in Intake with no session created', async () => {
+    const state = useBoardHandlers({ workItems: [prItem()] });
+    renderAt('/factory/review');
+
+    const intake = await screen.findByTestId('board-column-intake');
+    await within(intake).findByText('Add factory pages');
+    dragTo(within(intake).getByTestId('work-item-card'), column('review'));
+
+    const dialog = await screen.findByRole('alertdialog');
+    expect(within(dialog).getByText('Start review?')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'No, keep as is' }));
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+    expect(within(column('intake')).getByText('Add factory pages')).toBeInTheDocument();
+    expect(state.patches).toEqual([]);
+    expect(state.posts).toEqual([]);
+  });
+
+  it('given an Intake PR card, when dragged to Reviewing and confirmed, then a review session is created and the card moves', async () => {
+    const state = useBoardHandlers({ workItems: [prItem()] });
+    const captured = useFactoryRunHandlers('factory-pr-34');
+    renderAt('/factory/review');
+
+    const intake = await screen.findByTestId('board-column-intake');
+    await within(intake).findByText('Add factory pages');
+    dragTo(within(intake).getByTestId('work-item-card'), column('review'));
+
+    const dialog = await screen.findByRole('alertdialog');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Start review' }));
+
+    // The review run dispatches exactly once and files the card into Reviewing.
+    await waitFor(() => expect(captured.skillInvocations).toHaveLength(1));
+    await waitFor(() =>
+      expect(state.patches).toEqual([expect.objectContaining({ id: 'wi-pr-1', stages: ['review'] })]),
+    );
+    // The run navigated to the new thread; the card itself carries the Reviewing stage.
+    const card = state.items.find(i => i.id === 'wi-pr-1');
+    expect(card?.stages).toEqual(['review']);
+    expect(card?.sessions.review?.threadId).toBeDefined();
+  });
+
+  it('given an open PR card in Reviewing, when dragged to Done and declined, then the cancel confirmation leaves it unchanged', async () => {
+    const state = useBoardHandlers({
+      workItems: [prItem({ stages: ['review'], sessions: reviewSession })],
+    });
+    renderAt('/factory/review', projectWithReviewWorktree);
+
+    const reviewing = await screen.findByTestId('board-column-review');
+    await within(reviewing).findByText('Add factory pages');
+    dragTo(within(reviewing).getByTestId('work-item-card'), column('done'));
+
+    const dialog = await screen.findByRole('alertdialog');
+    expect(
+      within(dialog).getByText(/This pull request is still open — mark the Factory review .* as canceled\?/),
+    ).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'No, keep as is' }));
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+    expect(within(column('review')).getByText('Add factory pages')).toBeInTheDocument();
+    expect(state.patches).toEqual([]);
+  });
+
+  it('given an open PR card in Reviewing, when dragged to Done and confirmed, then the card is canceled into Done', async () => {
+    const state = useBoardHandlers({
+      workItems: [prItem({ stages: ['review'], sessions: reviewSession })],
+    });
+    renderAt('/factory/review', projectWithReviewWorktree);
+
+    const reviewing = await screen.findByTestId('board-column-review');
+    await within(reviewing).findByText('Add factory pages');
+    dragTo(within(reviewing).getByTestId('work-item-card'), column('done'));
+
+    const dialog = await screen.findByRole('alertdialog');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel review' }));
+
+    await waitFor(() => expect(state.patches).toEqual([{ id: 'wi-pr-1', stages: ['done'] }]));
+    expect(within(column('done')).getByText('Add factory pages')).toBeInTheDocument();
+  });
+
+  it('given a merged PR card in Reviewing, when dragged to Done, then the completion wording shows no cancel copy', async () => {
+    const state = useBoardHandlers({
+      workItems: [
+        prItem({
+          stages: ['review'],
+          sessions: reviewSession,
+          metadata: { number: 34, headBranch: 'feat/factory', prState: 'merged' },
+        }),
+      ],
+    });
+    renderAt('/factory/review', projectWithReviewWorktree);
+
+    const reviewing = await screen.findByTestId('board-column-review');
+    await within(reviewing).findByText('Add factory pages');
+    expect(within(reviewing).getByLabelText('Pull request merged')).toBeInTheDocument();
+    dragTo(within(reviewing).getByTestId('work-item-card'), column('done'));
+
+    const dialog = await screen.findByRole('alertdialog');
+    expect(within(dialog).getByText('Mark review complete?')).toBeInTheDocument();
+    expect(within(dialog).queryByText(/still open/)).not.toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Mark complete' }));
+
+    await waitFor(() => expect(state.patches).toEqual([{ id: 'wi-pr-1', stages: ['done'] }]));
+  });
+
+  it('given a Reviewing card, when dragged back to Intake and confirmed, then the review session detaches and the card returns', async () => {
+    const state = useBoardHandlers({
+      workItems: [prItem({ stages: ['review'], sessions: reviewSession })],
+    });
+    renderAt('/factory/review', projectWithReviewWorktree);
+
+    const reviewing = await screen.findByTestId('board-column-review');
+    await within(reviewing).findByText('Add factory pages');
+    dragTo(within(reviewing).getByTestId('work-item-card'), column('intake'));
+
+    const dialog = await screen.findByRole('alertdialog');
+    expect(within(dialog).getByText('Abandon review?')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Abandon review' }));
+
+    await waitFor(() =>
+      expect(state.patches).toEqual([expect.objectContaining({ id: 'wi-pr-1', stages: ['intake'] })]),
+    );
+    expect(state.patches[0]!.sessions).toEqual({});
+    await waitFor(() => expect(within(column('intake')).getByText('Add factory pages')).toBeInTheDocument());
+  });
+
+  it('given a sessionless card beyond Intake, when rendered, then it appears in Intake as the only sessionless lane', async () => {
+    useBoardHandlers({ workItems: [prItem({ stages: ['review'] })] });
+    renderAt('/factory/review');
+
+    const intake = await screen.findByTestId('board-column-intake');
+    await waitFor(() => expect(within(intake).getByText('Add factory pages')).toBeInTheDocument());
+    expect(within(column('review')).queryByText('Add factory pages')).not.toBeInTheDocument();
+  });
+
+  it('given an Intake PR card with a live review session, when the card menu opens, then it offers lifecycle transitions instead of raw column targets', async () => {
+    useBoardHandlers({ workItems: [prItem()] });
+    renderAt('/factory/review');
+
+    const intake = await screen.findByTestId('board-column-intake');
+    await within(intake).findByText('Add factory pages');
+    await userEvent.click(within(intake).getByRole('button', { name: 'Actions for Add factory pages' }));
+
+    const menu = await screen.findByRole('menu');
+    expect(within(menu).getByText('Start review…')).toBeInTheDocument();
+    expect(within(menu).getByText('Cancel review…')).toBeInTheDocument();
+    expect(within(menu).queryByText('Move to Reviewing')).not.toBeInTheDocument();
+    expect(within(menu).queryByText('Move to Intake')).not.toBeInTheDocument();
+  });
+});
+
 interface CapturedRun {
   worktree?: Record<string, unknown>;
   threadTitles: string[];
@@ -1761,6 +1955,16 @@ describe('Factory Board — investigate flow', () => {
           url: 'https://github.com/mastra-ai/mastra/pull/34',
           stages: ['review'],
           metadata: { number: 34, headBranch: 'feat/factory-pages', baseBranch: 'main' },
+          // The previous run's worktree was deleted (session ref is stale):
+          // the card keeps its Reviewing stage and the review run is re-offered.
+          sessions: {
+            review: {
+              projectPath: '/sandbox/mastra/worktrees/factory-pr-34',
+              branch: 'factory/pr-34',
+              threadId: THREAD_ID,
+              startedBy: 'user-1',
+            },
+          },
         }),
       ],
     });
@@ -1781,8 +1985,9 @@ describe('Factory Board — investigate flow', () => {
       http.post(`${SESSION}/thread`, () => HttpResponse.json({ ok: true })),
     );
 
-    await screen.findByTestId('board-column-review');
-    await userEvent.click(within(column('review')).getByRole('button', { name: 'Actions for Add factory pages' }));
+    await screen.findByTestId('board-column-intake');
+    // The stale session renders the card in Intake, where the review run is re-offered.
+    await userEvent.click(within(column('intake')).getByRole('button', { name: 'Actions for Add factory pages' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Review' }));
 
     await waitFor(() => expect(router.state.location.pathname).toBe(`/threads/${THREAD_ID}`));
