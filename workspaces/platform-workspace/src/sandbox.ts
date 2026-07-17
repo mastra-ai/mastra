@@ -6,6 +6,7 @@ import type {
   MastraSandboxOptions,
   ProcessInfo,
   ProviderStatus,
+  SandboxCloneOptions,
   SandboxInfo,
   SpawnProcessOptions,
 } from '@mastra/core/workspace';
@@ -163,6 +164,34 @@ export class PlatformSandbox extends MastraSandbox {
 
   private generateId(): string {
     return `platform-sandbox-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  /**
+   * Construct a sibling {@link PlatformSandbox} that inherits this sandbox's
+   * credentials and defaults (access token, project, environment, network
+   * isolation, timeout, instructions, env, idle timeout) with per-instance
+   * overrides from `options`.
+   *
+   * Performs no I/O and does not require this sandbox to be started — the
+   * returned sandbox is not started and provisions (or reattaches, when
+   * `sandboxId` is set) on its own `start()`. Use it when one configured
+   * sandbox acts as the template for a fleet of independent sandboxes
+   * (e.g. one per project).
+   */
+  clone(options: SandboxCloneOptions = {}): PlatformSandbox {
+    return new PlatformSandbox({
+      ...(options.id !== undefined && { id: options.id }),
+      accessToken: this._client.accessToken,
+      projectId: this._client.projectId,
+      fetch: this._client.fetch,
+      environmentId: this._environmentId,
+      ...(options.sandboxId !== undefined && { sandboxId: options.sandboxId }),
+      idleTimeoutMinutes: options.idleTimeoutMinutes ?? this._idleTimeoutMinutes,
+      ...(this._networkIsolation !== undefined && { networkIsolation: this._networkIsolation }),
+      env: options.env ?? this._env,
+      ...(this._timeout !== undefined && { timeout: this._timeout }),
+      ...(this._instructionsOverride !== undefined && { instructions: this._instructionsOverride }),
+    });
   }
 
   async start(): Promise<void> {
