@@ -26,14 +26,14 @@ import { executeWithContext } from '../../observability/utils';
 import { RequestContext } from '../../request-context';
 import { isStandardSchemaWithJSON, toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import type { StandardSchemaWithJSON } from '../../schema';
-import { getNeedsApprovalFn, isVercelTool, isProviderDefinedTool } from '../../tools/toolchecks';
+import { getNeedsApprovalFn, isMastraTool, isVercelTool, isProviderDefinedTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
 import { safeStringify } from '../../utils';
 import { isZodObject, safeExtendZodObject } from '../../utils/zod-utils';
 
 import type { SuspendOptions } from '../../workflows';
 import { ToolStream } from '../stream';
-import { INPUT_VALIDATED_BY_BUILDER } from '../tool';
+import type { Tool } from '../tool';
 import type {
   CoreTool,
   McpMetadata,
@@ -638,7 +638,6 @@ export class CoreToolBuilder extends MastraBase {
             runId: options.runId,
             requestContext: mergeRequestContexts(options.requestContext, execOptions.requestContext),
             actor: execOptions.actor,
-            ...(inputValidatedByBuilder ? { [INPUT_VALIDATED_BY_BUILDER]: true as const } : {}),
             // Workspace for file operations and command execution
             // Execution-time workspace (from prepareStep/processInputStep) takes precedence over build-time workspace
             workspace: execOptions.workspace ?? options.workspace,
@@ -739,7 +738,16 @@ export class CoreToolBuilder extends MastraBase {
             }
           }
 
-          result = await executeWithContext({ span: toolSpan, fn: async () => tool?.execute?.(args, toolContext) });
+          result = await executeWithContext({
+            span: toolSpan,
+            fn: async () => {
+              if (inputValidatedByBuilder && isMastraTool(tool)) {
+                return (tool as Tool).executeWithPrevalidatedInput(args as any, toolContext);
+              }
+
+              return tool?.execute?.(args, toolContext);
+            },
+          });
         }
 
         if (suspendData) {
