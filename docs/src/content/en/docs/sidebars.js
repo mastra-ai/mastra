@@ -1035,6 +1035,14 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'mastra-platform/regions',
+          label: 'Regions',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'mastra-platform/observability',
           label: 'Observability',
         },
