@@ -579,6 +579,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'agent-controller/factory-rules',
+              label: 'Factory Rules',
+            },
+            {
+              type: 'doc',
               id: 'agent-controller/session',
               label: 'Session',
             },
