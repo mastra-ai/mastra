@@ -1583,6 +1583,16 @@ To pass data to your tools, populate `req.auth` on the Node.js request object in
 ```typescript
 import express from 'express'
 
+type MCPAuthenticatedRequest = express.Request & {
+  auth?: {
+    token: string
+    clientId: string
+    scopes: string[]
+    expiresAt?: number
+    extra?: Record<string, unknown>
+  }
+}
+
 const app = express()
 
 // Auth middleware - set req.auth before the MCP handler
@@ -1600,11 +1610,12 @@ app.use('/mcp', async (req, res, next) => {
     const user = await verifyToken(token)
 
     // This entire object becomes context.mcp.extra.authInfo
-    // @ts-ignore - req.auth is read by the MCP SDK
-    req.auth = {
+    const authenticatedRequest = req as MCPAuthenticatedRequest
+    authenticatedRequest.auth = {
       token,
-      clientId: user.userId,
+      clientId: user.clientId,
       scopes: user.scopes,
+      expiresAt: user.expiresAt,
       extra: {
         userId: user.userId,
         email: user.email,
@@ -1706,6 +1717,16 @@ import { MCPServer } from '@mastra/mcp'
 import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 
+type MCPAuthenticatedRequest = express.Request & {
+  auth?: {
+    token: string
+    clientId: string
+    scopes: string[]
+    expiresAt?: number
+    extra?: Record<string, unknown>
+  }
+}
+
 const issuer = process.env.JWT_ISSUER
 const audience = process.env.JWT_AUDIENCE
 const jwksUri = process.env.JWT_JWKS_URI
@@ -1724,13 +1745,22 @@ const verifyToken = async (token: string) => {
     requiredClaims: ['exp'],
   })
 
-  if (!payload.sub || typeof payload.email !== 'string') {
-    throw new Error('Token must contain sub and email claims')
+  const clientId =
+    typeof payload.client_id === 'string'
+      ? payload.client_id
+      : typeof payload.azp === 'string'
+        ? payload.azp
+        : undefined
+
+  if (!payload.sub || typeof payload.email !== 'string' || !clientId || !payload.exp) {
+    throw new Error('Token must contain sub, email, exp, and client_id or azp claims')
   }
 
   return {
     userId: payload.sub,
+    clientId,
     email: payload.email,
+    expiresAt: payload.exp,
     scopes: typeof payload.scope === 'string' ? payload.scope.split(' ') : [],
   }
 }
@@ -1780,11 +1810,12 @@ app.use('/mcp', async (req, res, next) => {
     const user = await verifyToken(token)
 
     // This entire object becomes context.mcp.extra.authInfo
-    // @ts-ignore - req.auth is read by the MCP SDK
-    req.auth = {
+    const authenticatedRequest = req as MCPAuthenticatedRequest
+    authenticatedRequest.auth = {
       token,
-      clientId: user.userId,
+      clientId: user.clientId,
       scopes: user.scopes,
+      expiresAt: user.expiresAt,
       extra: {
         userId: user.userId,
         email: user.email,
