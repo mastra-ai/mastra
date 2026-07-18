@@ -1009,6 +1009,35 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return row ? toDeferredDecision(row) : null;
   }
 
+  /** Resolve exact active agent authority; partial session matches never authorize. */
+  async findActiveRunBinding(address: FactoryRunBindingAddress): Promise<FactoryRunBindingRecord | null> {
+    const row = await this.#db.findOne<GovernanceDbRow>('factory_run_bindings', {
+      org_id: address.orgId,
+      factory_project_id: address.factoryProjectId,
+      thread_id: address.threadId,
+      resource_id: address.resourceId,
+      project_path: address.projectPath,
+      status: 'active',
+    });
+    return row ? toBinding(row) : null;
+  }
+
+  /** Revoke one exact tenant-scoped binding. */
+  async revokeRunBinding(input: RevokeFactoryRunBindingInput): Promise<FactoryRunBindingRecord | null> {
+    let revoked = false;
+    const row = await this.#db.updateAtomic<GovernanceDbRow>(
+      'factory_run_bindings',
+      { id: input.bindingId, org_id: input.orgId, factory_project_id: input.factoryProjectId },
+      current => {
+        if (current.status !== 'active') return null;
+        revoked = true;
+        return { status: 'revoked', revoked_at: input.revokedAt };
+      },
+    );
+    return revoked && row ? toBinding(row) : null;
+  }
+
+  /** List binding history, optionally narrowed to one work item. */
   async listRunBindings(
     orgId: string,
     factoryProjectId: string,

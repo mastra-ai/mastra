@@ -45,6 +45,7 @@ export interface WebApiRoutesDeps {
   integrations?: IntegrationRegistration[];
   intakeReady: boolean;
   factoryReady: boolean;
+  factoryTransitionService?: FactoryTransitionService;
   onFactoryRuntime?: (runtime: { transitionService: FactoryTransitionService }) => void;
 }
 
@@ -187,7 +188,9 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
   const factoryRoutes = (() => {
     if (!deps.factoryReady) return [];
     const workItems = getFactoryStorage().getDomain<WorkItemsStorage>('work-items');
-    const transitionService = new FactoryTransitionService({ rules: getSeededFactoryRules(), storage: workItems });
+    const transitionService =
+      deps.factoryTransitionService ??
+      new FactoryTransitionService({ rules: getSeededFactoryRules(), storage: workItems });
     deps.onFactoryRuntime?.({ transitionService });
     return buildFactoryRoutes({
       audit: deps.audit,
