@@ -128,6 +128,25 @@ describe('computeQueueHealth', () => {
     expect(health.stages.find(s => s.stage === 'execute')!.buckets.red).toBe(1);
   });
 
+  it('ages a revisited stage from its current (latest) open entry, not the stale earlier one', () => {
+    // execute → review → execute: the first execute visit was closed, then a
+    // second open execute entry was appended. Two open execute entries can
+    // coexist transiently if the close stamp is missing; even with a proper
+    // close, the latest open entry is the current visit and must win.
+    const item = makeItem({
+      stages: ['execute'],
+      stageHistory: [
+        { stage: 'execute', enteredAt: secondsAgo(259200), by: 'u1' }, // stale earlier visit (72h)
+        { stage: 'execute', enteredAt: secondsAgo(3600), by: 'u1' }, // current visit (1h → green)
+      ],
+    });
+    const health = computeQueueHealth([item], new Set(), DEFAULT, NOW);
+    const execute = health.stages.find(s => s.stage === 'execute')!;
+    expect(execute.total).toBe(1);
+    expect(execute.buckets.green).toBe(1); // aged from the current 1h visit, not the stale 72h one
+    expect(health.entries[0]!.ageSeconds).toBe(3600);
+  });
+
   it('exposes a flat entries index with itemId/title/url/stage/age/bucket/active', () => {
     const item = inStage('review', 100, { title: 'Fix login', url: 'https://github.com/acme/app/issues/1' });
     const health = computeQueueHealth([item], new Set(), DEFAULT, NOW);

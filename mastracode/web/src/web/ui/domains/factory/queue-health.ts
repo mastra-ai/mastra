@@ -86,6 +86,20 @@ function bucketFor(ageSeconds: number, thresholdsSeconds: number[]): AgeBucket {
   return AGE_BUCKETS[Math.min(index, AGE_BUCKETS.length - 1)]!;
 }
 
+/**
+ * The open entry for the item's *current* visit to `stage`. Re-entering a
+ * stage (execute → review → execute) appends a new open entry without closing
+ * the earlier one, so multiple open entries can coexist for one stage; the
+ * current visit is the latest, so scan from the end. (`Array.prototype.findLast`
+ * with an explicit loop keeps the module's ES target simple.)
+ */
+function latestOpenEntryFor(open: WorkItemStageEntry[], stage: string): WorkItemStageEntry | undefined {
+  for (let i = open.length - 1; i >= 0; i--) {
+    if (open[i]!.stage === stage) return open[i]!;
+  }
+  return undefined;
+}
+
 /** Board stage ids in column order, minus the terminal `done` stage. */
 function chartStages(): string[] {
   return BOARD_STAGES.map(s => s.id).filter(id => id !== DONE_STAGE);
@@ -127,7 +141,7 @@ export function computeQueueHealth(
       const stageAgg = byStage.get(stage);
       if (!stageAgg) continue; // stage not on the board — not charted
 
-      const entry = open.find(e => e.stage === stage);
+      const entry = latestOpenEntryFor(open, stage);
       // Fall back to creation time when history has no open entry for the
       // held stage (mirrors metrics.ts aging fallback; shouldn't happen since
       // history is server-appended).

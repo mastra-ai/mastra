@@ -17,6 +17,7 @@ import type { GithubStorage } from '../github/storage/base';
 import { clampMetricsWindow, computeFactoryMetrics } from './metrics';
 import { getFactoryStore } from '../runtime-config';
 import type { WorkItemRow } from '../storage/domains/work-items/base';
+import { thresholdsOrDefault } from '../storage/domains/queue-health/base';
 import type { WorkItemPriorState } from './store';
 import {
   deleteWorkItem,
@@ -175,8 +176,12 @@ export function buildFactoryRoutes(storage?: GithubStorage): ApiRoute[] {
         if ('response' in resolved) return resolved.response;
         const store = getFactoryStore();
         await store.ensureReady('queue-health');
-        const config = await store.queueHealth.getConfig(resolved.orgId, resolved.projectId);
-        return c.json({ thresholds: config.thresholdsSeconds });
+        const stored = await store.queueHealth.getConfig(resolved.orgId, resolved.projectId);
+        // Validate at the read choke point: `getConfig` round-trips a stored
+        // JSONB row, and only `saveConfig` validates on write — a corrupted or
+        // hand-edited row (empty / non-ascending) would otherwise flow to the
+        // chart and invert bucket colors. Fall back to the default on invalid.
+        return c.json({ thresholds: thresholdsOrDefault(stored) });
       },
     }),
 

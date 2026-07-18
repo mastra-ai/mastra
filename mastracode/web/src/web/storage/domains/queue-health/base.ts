@@ -41,6 +41,22 @@ export function assertValidThresholds(config: QueueHealthConfig): void {
 }
 
 /**
+ * Return `config.thresholdsSeconds` when valid, else the default. Validation
+ * lives at the `saveConfig` write boundary, but `getConfig` round-trips a
+ * stored JSONB row — a corrupted or hand-edited row (empty / non-ascending)
+ * would otherwise reach the chart and invert bucket colors, so the read route
+ * re-validates and falls back.
+ */
+export function thresholdsOrDefault(config: QueueHealthConfig): number[] {
+  try {
+    assertValidThresholds(config);
+    return config.thresholdsSeconds;
+  } catch {
+    return DEFAULT_QUEUE_HEALTH_CONFIG.thresholdsSeconds;
+  }
+}
+
+/**
  * Abstract queue-health settings storage. Backends own their DDL in `init()`;
  * query methods are the typed surface the health threshold route consumes.
  */

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { DEFAULT_QUEUE_HEALTH_CONFIG } from './base';
+import { DEFAULT_QUEUE_HEALTH_CONFIG, thresholdsOrDefault } from './base';
 import { QueueHealthStorageInMemory } from './inmemory';
 
 describe('QueueHealthStorageInMemory', () => {
@@ -45,5 +45,18 @@ describe('QueueHealthStorageInMemory', () => {
   it('rejects an empty thresholdsSeconds', async () => {
     const store = new QueueHealthStorageInMemory();
     await expect(store.saveConfig('org1', 'proj1', { thresholdsSeconds: [] })).rejects.toThrow(/non-empty/);
+  });
+});
+
+describe('thresholdsOrDefault', () => {
+  it('returns the stored thresholds when valid', () => {
+    expect(thresholdsOrDefault({ thresholdsSeconds: [60, 300, 3600] })).toEqual([60, 300, 3600]);
+  });
+
+  it('falls back to the default on a corrupted/hand-edited row (empty or non-ascending)', () => {
+    expect(thresholdsOrDefault({ thresholdsSeconds: [] })).toEqual(DEFAULT_QUEUE_HEALTH_CONFIG.thresholdsSeconds);
+    expect(thresholdsOrDefault({ thresholdsSeconds: [300, 60] })).toEqual(
+      DEFAULT_QUEUE_HEALTH_CONFIG.thresholdsSeconds,
+    );
   });
 });
