@@ -77,12 +77,7 @@ function OverviewContent({ githubProjectId }: { githubProjectId: string }) {
             Loading queue health…
           </Txt>
         ) : (
-          <QueueHealthChart
-            health={health}
-            thresholdsSeconds={thresholds}
-            selected={selected}
-            onSelect={setSelected}
-          />
+          <QueueHealthChart health={health} thresholdsSeconds={thresholds} selected={selected} onSelect={setSelected} />
         )}
       </section>
 
@@ -108,10 +103,7 @@ function useActivePaths(): ReadonlySet<string> {
     baseUrl,
     enabled: sessionEnabled && activeProject?.source === 'github',
   });
-  return useMemo(
-    () => new Set(Object.keys(runningByPath).filter(path => runningByPath[path])),
-    [runningByPath],
-  );
+  return useMemo(() => new Set(Object.keys(runningByPath).filter(path => runningByPath[path])), [runningByPath]);
 }
 
 function DrillDownList({

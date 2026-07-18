@@ -72,12 +72,7 @@ export function QueueHealthChart({ health, thresholdsSeconds, selected, onSelect
     <div className="flex flex-col gap-3">
       <ul className="m-0 flex list-none flex-col gap-2 p-0">
         {health.stages.map(stage => (
-          <StageBar
-            key={stage.stage}
-            stage={stage}
-            selected={selected}
-            onSelect={onSelect}
-          />
+          <StageBar key={stage.stage} stage={stage} selected={selected} onSelect={onSelect} />
         ))}
       </ul>
       <Legend thresholdsSeconds={thresholdsSeconds} />
@@ -148,12 +143,7 @@ function StageBar({
 
           {/* Active-work overlay: right-anchored, width ∝ activeCount. */}
           {stage.activeCount > 0 ? (
-            <ActiveStripes
-              key="active"
-              stage={stage.stage}
-              activeCount={stage.activeCount}
-              total={stage.total}
-            />
+            <ActiveStripes key="active" stage={stage.stage} activeCount={stage.activeCount} total={stage.total} />
           ) : null}
         </div>
       )}
@@ -181,8 +171,7 @@ function ActiveStripes({ stage, activeCount, total }: { stage: string; activeCou
       title={`${activeCount} active`}
       style={{
         width: `${widthPct}%`,
-        backgroundImage:
-          'repeating-linear-gradient(45deg, rgba(255,255,255,0.55) 0 4px, transparent 4px 12px)',
+        backgroundImage: 'repeating-linear-gradient(45deg, rgba(255,255,255,0.55) 0 4px, transparent 4px 12px)',
         backgroundSize: '16px 16px',
       }}
       className={[

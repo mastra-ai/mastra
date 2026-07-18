@@ -145,7 +145,8 @@ export function computeQueueHealth(
       // Fall back to creation time when history has no open entry for the
       // held stage (mirrors metrics.ts aging fallback; shouldn't happen since
       // history is server-appended).
-      const enteredAt = entry?.enteredAt ?? (item.createdAt instanceof Date ? item.createdAt.toISOString() : item.createdAt);
+      const enteredAt =
+        entry?.enteredAt ?? (item.createdAt instanceof Date ? item.createdAt.toISOString() : item.createdAt);
       const ageSeconds = Math.max(0, Math.round((nowMs - parseTime(enteredAt)) / 1000));
       const bucket = bucketFor(ageSeconds, thresholds);
 

@@ -82,7 +82,13 @@ function makeWorkItem(overrides: Partial<WorkItem> & Pick<WorkItem, 'id' | 'titl
 }
 
 /** An item entered into `stage` `ageSeconds` ago (open history entry). */
-function inStage(id: string, title: string, stage: string, ageSeconds: number, extra: Partial<WorkItem> = {}): WorkItem {
+function inStage(
+  id: string,
+  title: string,
+  stage: string,
+  ageSeconds: number,
+  extra: Partial<WorkItem> = {},
+): WorkItem {
   return makeWorkItem({
     id,
     title,
