@@ -659,17 +659,28 @@ describe('LocalSandbox', () => {
 
       it('should generate a bwrap command with --bind when readOnly is false or undefined', () => {
         const workspacePath = '/path/to/workspace';
-        const { args } = buildBwrapCommand('echo 1', workspacePath, {});
 
-        // Should use --bind for the workspace path
-        let foundBind = false;
-        for (let i = 0; i <= args.length - 3; i++) {
-          if (args[i] === '--bind' && args[i + 1] === workspacePath && args[i + 2] === workspacePath) {
-            foundBind = true;
+        // 1. Test undefined case
+        const { args: argsUndefined } = buildBwrapCommand('echo 1', workspacePath, {});
+        let foundBindUndefined = false;
+        for (let i = 0; i <= argsUndefined.length - 3; i++) {
+          if (argsUndefined[i] === '--bind' && argsUndefined[i + 1] === workspacePath && argsUndefined[i + 2] === workspacePath) {
+            foundBindUndefined = true;
             break;
           }
         }
-        expect(foundBind).toBe(true);
+        expect(foundBindUndefined).toBe(true);
+
+        // 2. Test false case
+        const { args: argsFalse } = buildBwrapCommand('echo 1', workspacePath, { readOnly: false });
+        let foundBindFalse = false;
+        for (let i = 0; i <= argsFalse.length - 3; i++) {
+          if (argsFalse[i] === '--bind' && argsFalse[i + 1] === workspacePath && argsFalse[i + 2] === workspacePath) {
+            foundBindFalse = true;
+            break;
+          }
+        }
+        expect(foundBindFalse).toBe(true);
       });
 
       it('should generate a seatbelt profile without file-write* for workspace when readOnly is true', () => {
@@ -684,10 +695,14 @@ describe('LocalSandbox', () => {
 
       it('should generate a seatbelt profile with file-write* for workspace when readOnly is false or undefined', () => {
         const workspacePath = '/path/to/workspace';
-        const profile = generateSeatbeltProfile(workspacePath, {});
 
-        // Should allow write to the workspace
-        expect(profile).toContain(`(allow file-write* (subpath "${workspacePath}"))`);
+        // 1. Test undefined case
+        const profileUndefined = generateSeatbeltProfile(workspacePath, {});
+        expect(profileUndefined).toContain(`(allow file-write* (subpath "${workspacePath}"))`);
+
+        // 2. Test false case
+        const profileFalse = generateSeatbeltProfile(workspacePath, { readOnly: false });
+        expect(profileFalse).toContain(`(allow file-write* (subpath "${workspacePath}"))`);
       });
     });
   });
@@ -902,6 +917,56 @@ describe('LocalSandbox', () => {
           .catch(() => false),
       ).toBe(false);
     });
+
+    it('should respect readOnly working directory restriction', async () => {
+      if (os.platform() !== 'darwin') {
+        return;
+      }
+
+      const rwDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-rw-path-'));
+      const testFile = path.join(tempDir, 'workspace-file.txt');
+      await fs.writeFile(testFile, 'initial content');
+
+      const seatbeltSandbox = new LocalSandbox({
+        workingDirectory: tempDir,
+        isolation: 'seatbelt',
+        nativeSandbox: {
+          readOnly: true,
+          readWritePaths: [rwDir],
+        },
+      });
+
+      await seatbeltSandbox._start();
+
+      // 1. Reading an existing workspace file succeeds
+      const readResult = await seatbeltSandbox.executeCommand('cat', [testFile]);
+      expect(readResult.success).toBe(true);
+      expect(readResult.stdout.trim()).toBe('initial content');
+
+      // 2. Creating or overwriting a workspace file fails
+      const writeResult = await seatbeltSandbox.executeCommand('sh', [
+        '-c',
+        `echo "new content" > "${tempDir}/blocked-file.txt"`,
+      ]);
+      expect(writeResult.success).toBe(false);
+      expect(writeResult.stderr).toContain('Operation not permitted');
+
+      // Verify host filesystem is unchanged
+      const blockedFileExists = await fs.access(path.join(tempDir, 'blocked-file.txt')).then(() => true).catch(() => false);
+      expect(blockedFileExists).toBe(false);
+
+      // 3. Writing inside an explicit readWritePaths exception succeeds
+      const rwFile = path.join(rwDir, 'allowed-file.txt');
+      const rwResult = await seatbeltSandbox.executeCommand('sh', [
+        '-c',
+        `echo "allowed content" > "${rwFile}"`,
+      ]);
+      expect(rwResult.success).toBe(true);
+
+      // Clean up
+      await seatbeltSandbox._destroy();
+      await fs.rm(rwDir, { recursive: true, force: true });
+    });
   });
 
   // ===========================================================================
@@ -1006,6 +1071,55 @@ describe('LocalSandbox', () => {
       expect(result.success).toBe(true);
 
       await bwrapSandbox._destroy();
+    });
+
+    it('should respect readOnly working directory restriction', async () => {
+      if (os.platform() !== 'linux' || !isBwrapAvailable()) {
+        return;
+      }
+
+      const rwDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-rw-path-'));
+      const testFile = path.join(tempDir, 'workspace-file.txt');
+      await fs.writeFile(testFile, 'initial content');
+
+      const bwrapSandbox = new LocalSandbox({
+        workingDirectory: tempDir,
+        isolation: 'bwrap',
+        nativeSandbox: {
+          readOnly: true,
+          readWritePaths: [rwDir],
+        },
+      });
+
+      await bwrapSandbox._start();
+
+      // 1. Reading an existing workspace file succeeds
+      const readResult = await bwrapSandbox.executeCommand('cat', [testFile]);
+      expect(readResult.success).toBe(true);
+      expect(readResult.stdout.trim()).toBe('initial content');
+
+      // 2. Creating or overwriting a workspace file fails
+      const writeResult = await bwrapSandbox.executeCommand('node', [
+        '-e',
+        `require('fs').writeFileSync('${tempDir}/blocked-file.txt', 'new content')`,
+      ]);
+      expect(writeResult.success).toBe(false);
+
+      // Verify host filesystem is unchanged
+      const blockedFileExists = await fs.access(path.join(tempDir, 'blocked-file.txt')).then(() => true).catch(() => false);
+      expect(blockedFileExists).toBe(false);
+
+      // 3. Writing inside an explicit readWritePaths exception succeeds
+      const rwFile = path.join(rwDir, 'allowed-file.txt');
+      const rwResult = await bwrapSandbox.executeCommand('node', [
+        '-e',
+        `require('fs').writeFileSync('${rwFile}', 'allowed content')`,
+      ]);
+      expect(rwResult.success).toBe(true);
+
+      // Clean up
+      await bwrapSandbox._destroy();
+      await fs.rm(rwDir, { recursive: true, force: true });
     });
   });
 
