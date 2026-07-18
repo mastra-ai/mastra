@@ -310,7 +310,7 @@ export class Tool<
         const isResuming = !!(context?.resumeData || context?.agent?.resumeData);
 
         let data: any = inputData;
-        if (!isResuming) {
+        if (!isResuming && !context?.inputValidatedByBuilder) {
           // Validate input if schema exists
           const validationResult = validateToolInput(this.inputSchema, inputData, this.id);
           if (validationResult.error) {
