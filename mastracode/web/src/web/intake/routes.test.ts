@@ -213,7 +213,7 @@ describe('parseIntakeConfig', () => {
 describe('GET /web/intake/config with prerelease storage rows', () => {
   it('returns defaults when a stored row still uses github.projectIds', async () => {
     // Seed through the in-memory raw path so the typed save path cannot rewrite it.
-    (seed.intake as { seedRawConfig?: (orgId: string, userId: string, raw: unknown) => void }).seedRawConfig?.(
+    (seed.intake as { seedRawConfig: (orgId: string, userId: string, raw: unknown) => void }).seedRawConfig(
       'org1',
       'u1',
       {

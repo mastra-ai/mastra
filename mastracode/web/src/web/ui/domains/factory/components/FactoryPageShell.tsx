@@ -44,8 +44,8 @@ export function FactoryPageShell({ title, description, children }: FactoryPageSh
           children(githubFactory)
         ) : (
           <Notice variant="info">
-            Board requires a Factory connected to GitHub. Connect GitHub from the factories menu to see issues and pull
-            requests.
+            {title} requires a Factory connected to GitHub. Connect GitHub from the factories menu to see issues and
+            pull requests.
           </Notice>
         )
       ) : (

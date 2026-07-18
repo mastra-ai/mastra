@@ -303,7 +303,7 @@ describe('Sidebar', () => {
     });
   });
 
-  describe('when a GitHub project is active', () => {
+  describe('when a GitHub factory is active', () => {
     it('expands factory Sessions as a navigation item without showing the repo root', async () => {
       seedFactory(githubProject);
       useAuthHandler();

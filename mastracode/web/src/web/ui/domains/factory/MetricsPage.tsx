@@ -125,13 +125,14 @@ function useAgentsRunningCount(): number {
   const { activeFactory, resourceId, sessionEnabled } = useActiveFactoryContext();
   const workspaces = useWorkspacesQuery(activeFactory);
   const worktrees = workspaces.data?.worktrees ?? [];
+  const projectPath = deriveProjectPath(activeFactory) || undefined;
   const runningByPath = useWorkspaceActivity({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    projectPath: deriveProjectPath(activeFactory) || undefined,
+    projectPath,
     worktreePaths: worktrees.map(worktree => worktree.worktreePath),
     baseUrl,
-    enabled: sessionEnabled && Boolean(activeFactory && isGithubFactory(activeFactory)),
+    enabled: sessionEnabled && Boolean(activeFactory && isGithubFactory(activeFactory) && projectPath),
   });
   return Object.values(runningByPath).filter(Boolean).length;
 }

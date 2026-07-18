@@ -39,8 +39,8 @@ const githubProject: Factory = {
     githubProjectId: GITHUB_PROJECT_ID,
     gitBranch: 'main',
     sandboxWorkdir: '/sandbox/mastra',
-    selectedWorktreePath: '/sandbox/mastra',
-    worktrees: [{ branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' }],
+    selectedWorktreePath: '/sandbox/mastra/worktrees/main',
+    worktrees: [{ branch: 'main', worktreePath: '/sandbox/mastra/worktrees/main', baseBranch: 'main' }],
   },
 };
 
@@ -438,7 +438,7 @@ describe('Factory Board routing', () => {
   it('given GitHub is not connected, when visiting the Board, then a connect notice renders instead of columns', async () => {
     renderAt('/factory/board', githubProject, notConnectedStatus);
 
-    expect(await screen.findByText(/Board requires a Factory connected to GitHub/)).toBeInTheDocument();
+    expect(await screen.findByText(/requires a Factory connected to GitHub/)).toBeInTheDocument();
     expect(screen.queryByTestId('board-column-intake')).not.toBeInTheDocument();
   });
 });

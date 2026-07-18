@@ -97,7 +97,7 @@ export function useRunPaletteCommand(setComposerCommandName: Dispatch<SetStateAc
         pushNotice(
           [
             `Factory: ${activeFactory?.name ?? '(none)'}`,
-            `Path: ${activeFactory ? deriveProjectPath(activeFactory) || '(default workspace)' : '(default workspace)'}`,
+            `Path: ${activeFactory ? deriveProjectPath(activeFactory) || '(no workspace selected)' : '(none)'}`,
             `Mode: ${activeModeId ?? '—'}`,
             `Model: ${activeModelId ?? '—'}`,
             `Thread: ${transcript.threadId ?? '—'}`,

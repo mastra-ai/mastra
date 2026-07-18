@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { queryKeys } from '../api/keys';
 import {
@@ -25,6 +25,9 @@ export function useActiveFactory() {
   const ensureMaterialized = useEnsureRepoMaterializedMutation();
   const [selectedFactoryId, setSelectedFactoryId] = useState<string | null>(() => loadActiveFactoryId());
   const [preparing, setPreparing] = useState<PreparingState | null>(null);
+  // Monotonic selection token so a newer local/null/GitHub selection supersedes
+  // an in-flight materialization instead of re-activating the previous target.
+  const selectionRequestRef = useRef(0);
   // Derived: a selection pointing at a deleted factory counts as no selection.
   const activeFactoryId =
     selectedFactoryId && factories.some(factory => factory.id === selectedFactoryId) ? selectedFactoryId : null;
@@ -38,17 +41,21 @@ export function useActiveFactory() {
   }, [activeFactoryId]);
 
   const selectFactory = async (factory: Factory | null) => {
+    const requestId = ++selectionRequestRef.current;
+
     if (!factory) {
+      setPreparing(null);
       setSelectedFactoryId(null);
       return;
     }
 
     if (isGithubFactory(factory)) {
-      await selectGithubFactory(factory);
+      await selectGithubFactory(factory, requestId);
       return;
     }
 
     // Local factories always carry a required resourceId from creation.
+    setPreparing(null);
     setSelectedFactoryId(factory.id);
   };
 
@@ -58,26 +65,32 @@ export function useActiveFactory() {
    * On failure the previous selection is kept — activating with the default
    * scope would silently bind the session to the wrong workspace.
    */
-  const selectGithubFactory = async (factory: GithubFactory) => {
-    // Guard rapid re-clicks: one materialization at a time.
-    if (ensureMaterialized.isPending) return;
-
+  const selectGithubFactory = async (factory: GithubFactory, requestId: number) => {
     setPreparing({ factoryId: factory.id, message: 'Preparing sandbox…' });
     try {
       const result = await ensureMaterialized.mutateAsync({
         githubProjectId: factory.binding.githubProjectId,
-        onProgress: event => setPreparing({ factoryId: factory.id, message: event.message }),
+        onProgress: event => {
+          if (selectionRequestRef.current !== requestId) return;
+          setPreparing({ factoryId: factory.id, message: event.message });
+        },
       });
+      // A newer selection won while materialization was still running — discard
+      // this result so it cannot stomp the user's latest choice.
+      if (selectionRequestRef.current !== requestId) return;
       applyMaterializeResult(factory, result);
       // Refresh the factories query from localStorage so the selection sees the
       // persisted resourceId (otherwise the session would briefly be disabled).
       await queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
+      if (selectionRequestRef.current !== requestId) return;
       setSelectedFactoryId(factory.id);
     } catch {
       // The mutation retains the error (exposed as `prepareError`); selection
       // stays unchanged so the user can retry by re-selecting the factory.
     } finally {
-      setPreparing(null);
+      if (selectionRequestRef.current === requestId) {
+        setPreparing(null);
+      }
     }
   };
 
