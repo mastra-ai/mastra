@@ -80,6 +80,15 @@ export type CommitFactoryRuleEvaluationResult =
   | { status: 'replayed'; result: Record<string, unknown> }
   | { status: 'missing' };
 
+export interface FactoryToolResultCursorRecord {
+  bindingId: string;
+  orgId: string;
+  factoryProjectId: string;
+  lastMessageId: string;
+  lastMessageCreatedAt: Date;
+  updatedAt: Date;
+}
+
 export interface FactoryRuleEvaluationRecord {
   id: string;
   ingressId: string;
@@ -89,6 +98,7 @@ export interface FactoryRuleEvaluationRecord {
   outcome: 'accepted' | 'rejected';
   code: string | null;
   reason: string | null;
+  causalChain: Array<{ ingressId: string; decisionType: string }>;
   createdAt: Date;
 }
 
@@ -344,7 +354,7 @@ function toWorkItem(row: WorkItemDbRow): WorkItemRow {
   return {
     id: row.id,
     orgId: row.org_id,
-    factoryProjectId: row.factory_project_id,
+    factoryProjectId: String(row.factory_project_id),
     externalSource: row.external_source,
     parentWorkItemId: row.parent_work_item_id,
     title: row.title,
@@ -564,6 +574,17 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
     },
   },
   {
+    name: 'factory_tool_result_cursors',
+    columns: {
+      binding_id: { type: 'text', primaryKey: true },
+      org_id: { type: 'text' },
+      factory_project_id: { type: 'text' },
+      last_message_id: { type: 'text' },
+      last_message_created_at: { type: 'timestamp' },
+      updated_at: { type: 'timestamp' },
+    },
+  },
+  {
     name: 'factory_pending_starts',
     columns: {
       id: { type: 'uuid-pk' },
@@ -603,7 +624,7 @@ function toBinding(row: GovernanceDbRow): FactoryRunBindingRecord {
   return {
     id: row.id,
     orgId: row.org_id,
-    factoryProjectId: row.factory_project_id,
+    factoryProjectId: String(row.factory_project_id),
     workItemId: String(row.work_item_id),
     role: String(row.role),
     threadId: String(row.thread_id),
@@ -619,7 +640,7 @@ function toDeferredDecision(row: GovernanceDbRow): FactoryDeferredDecisionRecord
   return {
     id: row.id,
     orgId: row.org_id,
-    factoryProjectId: row.factory_project_id,
+    factoryProjectId: String(row.factory_project_id),
     evaluationId: String(row.evaluation_id),
     workItemId: String(row.work_item_id),
     idempotencyKey: String(row.idempotency_key),
@@ -642,7 +663,7 @@ function toPendingStart(row: GovernanceDbRow): FactoryPendingStartRecord {
   return {
     id: row.id,
     orgId: row.org_id,
-    factoryProjectId: row.factory_project_id,
+    factoryProjectId: String(row.factory_project_id),
     bindingId: String(row.binding_id),
     kickoffKey: String(row.kickoff_key),
     message: (row.message as string | null) ?? null,
@@ -978,6 +999,114 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       : commit();
   }
 
+  async commitRuleEvaluation(input: CommitFactoryRuleEvaluationInput): Promise<CommitFactoryRuleEvaluationResult> {
+    return this.storage.withTransaction(async ops => {
+      const prior = await ops.findOne<GovernanceDbRow>('factory_rule_ingress', {
+        org_id: input.orgId,
+        factory_project_id: input.factoryProjectId,
+        identity: input.ingress.identity,
+      });
+      if (prior) return { status: 'replayed' as const, result: prior.result as Record<string, unknown> };
+      const itemRow = await ops.findOne<WorkItemDbRow>('work_items', {
+        id: input.workItemId,
+        org_id: input.orgId,
+        factory_project_id: input.factoryProjectId,
+      });
+      if (!itemRow) return { status: 'missing' as const };
+      const item = toRow(itemRow);
+      const stale = item.revision !== input.expectedRevision;
+      const outcome = stale ? 'rejected' : input.outcome.status;
+      const code = stale ? 'stale' : (input.outcome.code ?? null);
+      const reason = stale
+        ? 'The work item changed before this rule evaluation committed.'
+        : (input.outcome.reason ?? null);
+      const decisions = outcome === 'accepted' ? input.decisions : [];
+      const result = { status: outcome, itemId: item.id, revision: item.revision, code, reason, decisions };
+      const ingress = await ops.insertOne<GovernanceDbRow>('factory_rule_ingress', {
+        org_id: input.orgId,
+        factory_project_id: input.factoryProjectId,
+        identity: input.ingress.identity,
+        trigger_type: input.ingress.triggerType,
+        transition_id: input.ingress.identity,
+        result,
+        created_at: input.now,
+      });
+      const evaluation = await ops.insertOne<GovernanceDbRow>('factory_rule_evaluations', {
+        ingress_id: ingress.id,
+        work_item_id: item.id,
+        rule_set_version: input.ruleSetVersion,
+        expected_revision: input.expectedRevision,
+        outcome,
+        code,
+        reason,
+        causal_chain: input.causalChain,
+        created_at: input.now,
+      });
+      for (const [effectOrdinal, decision] of decisions.entries()) {
+        await ops.insertOne<GovernanceDbRow>('factory_deferred_decisions', {
+          org_id: input.orgId,
+          factory_project_id: input.factoryProjectId,
+          evaluation_id: evaluation.id,
+          work_item_id: item.id,
+          idempotency_key: String(decision.idempotencyKey),
+          effect_ordinal: effectOrdinal,
+          effect_hash: factoryDecisionHash(decision),
+          causal_chain: input.causalChain,
+          decision,
+          status: 'pending',
+          attempts: 0,
+          available_at: input.now,
+          lease_owner: null,
+          lease_expires_at: null,
+          last_error: null,
+          completed_at: null,
+          created_at: new Date(input.now.getTime() + effectOrdinal),
+          updated_at: input.now,
+        });
+      }
+      return { status: 'committed' as const, result };
+    });
+  }
+
+  async getToolResultCursor(
+    orgId: string,
+    factoryProjectId: string,
+    bindingId: string,
+  ): Promise<FactoryToolResultCursorRecord | null> {
+    const row = await this.#db.findOne<GovernanceDbRow>('factory_tool_result_cursors', {
+      org_id: orgId,
+      factory_project_id: factoryProjectId,
+      binding_id: bindingId,
+    });
+    return row
+      ? {
+          bindingId: String(row.binding_id),
+          orgId: row.org_id,
+          factoryProjectId: String(row.factory_project_id),
+          lastMessageId: String(row.last_message_id),
+          lastMessageCreatedAt: row.last_message_created_at as Date,
+          updatedAt: row.updated_at as Date,
+        }
+      : null;
+  }
+
+  async advanceToolResultCursor(cursor: FactoryToolResultCursorRecord): Promise<void> {
+    const current = await this.getToolResultCursor(cursor.orgId, cursor.factoryProjectId, cursor.bindingId);
+    if (current && current.lastMessageCreatedAt > cursor.lastMessageCreatedAt) return;
+    await this.#db.upsertOne<GovernanceDbRow>(
+      'factory_tool_result_cursors',
+      ['binding_id'],
+      {
+        binding_id: cursor.bindingId,
+        org_id: cursor.orgId,
+        factory_project_id: cursor.factoryProjectId,
+        last_message_id: cursor.lastMessageId,
+        last_message_created_at: cursor.lastMessageCreatedAt,
+        updated_at: cursor.updatedAt,
+      },
+    );
+  }
+
   async listDeferredDecisions(orgId: string, factoryProjectId: string): Promise<FactoryDeferredDecisionRecord[]> {
     return (
       await this.#db.findMany<GovernanceDbRow>(
@@ -1022,6 +1151,19 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return row ? toBinding(row) : null;
   }
 
+  /** Resolve exact bound-session state for processor awareness; ambiguous cross-tenant matches return null. */
+  async findRunBindingBySession(address: FactoryRunBindingSessionAddress): Promise<FactoryRunBindingRecord | null> {
+    const rows = await this.#db.findMany<GovernanceDbRow>('factory_run_bindings', {
+      factory_project_id: address.factoryProjectId,
+      thread_id: address.threadId,
+      resource_id: address.resourceId,
+      project_path: address.projectPath,
+    });
+    const activeRows = rows.filter(row => row.status === 'active');
+    if (activeRows.length === 1) return toBinding(activeRows[0]!);
+    return activeRows.length === 0 && rows.length === 1 ? toBinding(rows[0]!) : null;
+  }
+
   /** Revoke one exact tenant-scoped binding. */
   async revokeRunBinding(input: RevokeFactoryRunBindingInput): Promise<FactoryRunBindingRecord | null> {
     let revoked = false;
@@ -1035,6 +1177,11 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       },
     );
     return revoked && row ? toBinding(row) : null;
+  }
+
+  /** Enumerate active bindings for the server-owned restart reconciler. */
+  async listActiveRunBindings(): Promise<FactoryRunBindingRecord[]> {
+    return (await this.#db.findMany<GovernanceDbRow>('factory_run_bindings', { status: 'active' })).map(toBinding);
   }
 
   /** List binding history, optionally narrowed to one work item. */

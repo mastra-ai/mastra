@@ -83,7 +83,11 @@ function enumValue<T extends string>(value: unknown, allowed: readonly T[], labe
   return value as T;
 }
 
-function sanitizeJsonValue(value: unknown, depth = 0, seen = new Set<object>()): FactoryRuleJsonValue {
+export function normalizeFactoryRuleJsonValue(
+  value: unknown,
+  depth = 0,
+  seen = new Set<object>(),
+): FactoryRuleJsonValue {
   if (value === null || typeof value === 'boolean' || typeof value === 'string') return value;
   if (typeof value === 'number') {
     if (!Number.isFinite(value)) throw new FactoryRuleValidationError('Rule metadata must contain finite numbers.');
@@ -99,7 +103,7 @@ function sanitizeJsonValue(value: unknown, depth = 0, seen = new Set<object>()):
       if (value.length > MAX_JSON_COLLECTION_SIZE) {
         throw new FactoryRuleValidationError('Rule metadata contains too many entries.');
       }
-      return value.map(entry => sanitizeJsonValue(entry, depth + 1, seen));
+      return value.map(entry => normalizeFactoryRuleJsonValue(entry, depth + 1, seen));
     }
     if (!isPlainObject(value)) throw new FactoryRuleValidationError('Rule metadata must use plain objects.');
     const entries = Object.entries(value);
@@ -111,7 +115,7 @@ function sanitizeJsonValue(value: unknown, depth = 0, seen = new Set<object>()):
       const normalizedKey = boundedString(key, 'Rule metadata key', 128, IDENTIFIER_RE);
       sanitized[normalizedKey] = SENSITIVE_KEY_RE.test(normalizedKey)
         ? '[REDACTED]'
-        : sanitizeJsonValue(entry, depth + 1, seen);
+        : normalizeFactoryRuleJsonValue(entry, depth + 1, seen);
     }
     return sanitized;
   } finally {
@@ -121,7 +125,7 @@ function sanitizeJsonValue(value: unknown, depth = 0, seen = new Set<object>()):
 
 function sanitizeMetadata(value: unknown): Record<string, FactoryRuleJsonValue> | undefined {
   if (value === undefined) return undefined;
-  const sanitized = sanitizeJsonValue(value);
+  const sanitized = normalizeFactoryRuleJsonValue(value);
   if (!isPlainObject(sanitized)) throw new FactoryRuleValidationError('Rule metadata must be an object.');
   if (JSON.stringify(sanitized).length > MAX_METADATA_JSON_LENGTH) {
     throw new FactoryRuleValidationError('Rule metadata is too large.');

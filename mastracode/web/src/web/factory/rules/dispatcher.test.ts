@@ -87,6 +87,26 @@ async function queueDecision(storage: WorkItemsStorage, decision: FactoryCommitD
 }
 
 describe('FactoryDecisionDispatcher', () => {
+  it('reconciles persisted tool results before claiming each dispatch batch', async () => {
+    const storage = (await seedFactoryStorageForTests()).workItems;
+    const reconcileToolResults = vi.fn(async () => {});
+    const { controller } = createSession();
+    const transitionService = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      reconcileToolResults,
+    });
+
+    await dispatcher.runOnce();
+
+    expect(reconcileToolResults).toHaveBeenCalledTimes(1);
+  });
+
   it('allows only one concurrent lease owner to claim a decision', async () => {
     const storage = (await seedFactoryStorageForTests()).workItems;
     await queueDecision(storage, {

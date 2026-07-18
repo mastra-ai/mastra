@@ -34,6 +34,7 @@ export interface FactoryDecisionDispatcherOptions {
   transitionService: Pick<FactoryTransitionService, 'transition'>;
   storage?: WorkItemsStorage;
   ownerId?: string;
+  reconcileToolResults?: () => Promise<void>;
 }
 
 function sanitizeDispatchError(error: unknown): string {
@@ -81,6 +82,7 @@ export class FactoryDecisionDispatcher {
   readonly #transitionService: Pick<FactoryTransitionService, 'transition'>;
   readonly #storage: WorkItemsStorage;
   readonly #ownerId: string;
+  readonly #reconcileToolResults?: () => Promise<void>;
   #timer?: ReturnType<typeof setInterval>;
   #activeRun?: Promise<void>;
 
@@ -89,6 +91,7 @@ export class FactoryDecisionDispatcher {
     this.#transitionService = options.transitionService;
     this.#storage = options.storage ?? getWorkItemsStorage();
     this.#ownerId = options.ownerId ?? `factory-dispatcher:${randomUUID()}`;
+    this.#reconcileToolResults = options.reconcileToolResults;
   }
 
   start(): void {
@@ -105,6 +108,7 @@ export class FactoryDecisionDispatcher {
   }
 
   async runOnce(now = new Date()): Promise<void> {
+    await this.#reconcileToolResults?.();
     const leaseExpiresAt = new Date(now.getTime() + LEASE_MS);
     const [decisions, starts] = await Promise.all([
       this.#storage.claimDeferredDecisions({

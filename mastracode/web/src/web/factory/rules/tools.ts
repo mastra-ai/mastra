@@ -1,27 +1,13 @@
-import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import type { WebAuthUser } from '../../auth';
-import { getWebAuthOrgId } from '../../auth';
 import type { IntegrationTools } from '../../factory-integration';
 import type { WorkItemsStorage } from '../../storage/domains/work-items/base';
+import { getFactorySessionAddress } from './binding-context';
 import { FACTORY_RULE_STAGES } from './types';
 import type { FactoryRuleBoard } from './types';
 import type { FactoryTransitionService } from './transition-service';
-
-interface FactorySessionState {
-  factoryProjectId?: string;
-}
-
-interface FactorySessionAddress {
-  orgId: string;
-  factoryProjectId: string;
-  threadId: string;
-  resourceId: string;
-  projectPath: string;
-}
 
 const transitionInputSchema = z
   .object({
@@ -30,22 +16,6 @@ const transitionInputSchema = z
     rationale: z.string().trim().min(1).max(1_000),
   })
   .strict();
-
-function sessionAddress(requestContext: RequestContext | undefined): FactorySessionAddress | null {
-  if (!requestContext || typeof requestContext.get !== 'function') return null;
-  const context = requestContext.get('controller') as AgentControllerRequestContext<FactorySessionState> | undefined;
-  const user = requestContext.get('user') as WebAuthUser | undefined;
-  const orgId = getWebAuthOrgId(user);
-  const factoryProjectId = context?.getState().factoryProjectId;
-  if (!context?.threadId || !context.resourceId || !context.scope || !orgId || !factoryProjectId) return null;
-  return {
-    orgId,
-    factoryProjectId,
-    threadId: context.threadId,
-    resourceId: context.resourceId,
-    projectPath: context.scope,
-  };
-}
 
 function boardForSource(type: string | undefined): FactoryRuleBoard {
   return type === 'pull-request' ? 'review' : 'work';
@@ -56,7 +26,7 @@ export async function createFactoryTransitionTools(options: {
   storage: WorkItemsStorage;
   transitionService: Pick<FactoryTransitionService, 'transition'>;
 }): Promise<IntegrationTools> {
-  const address = sessionAddress(options.requestContext);
+  const address = getFactorySessionAddress(options.requestContext);
   if (!address) return {};
   const availableBinding = await options.storage.findActiveRunBinding(address);
   if (!availableBinding) return {};
@@ -68,7 +38,7 @@ export async function createFactoryTransitionTools(options: {
         'Request a governed stage transition for the Factory work item exactly bound to this thread. Use the current revision from the factory-phase signal and explain why the transition is appropriate.',
       inputSchema: transitionInputSchema,
       execute: async ({ stage, expectedRevision, rationale }, execution) => {
-        const currentAddress = sessionAddress(execution.requestContext);
+        const currentAddress = getFactorySessionAddress(execution.requestContext);
         const toolCallId = execution.agent?.toolCallId;
         if (!currentAddress || !toolCallId) {
           throw new Error('Factory transitions require an authenticated bound agent tool call.');

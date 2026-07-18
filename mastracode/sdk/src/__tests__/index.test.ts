@@ -829,6 +829,25 @@ describe('createMastraCode', () => {
     expect(transientConnectionPolicy.delayMs!({ retryCount: 10 })).toBe(30000);
   });
 
+  it('prepends embedding input processors without replacing mandatory built-ins', async () => {
+    const { createMastraCode } = await import('../index.js');
+    const customProcessor = { id: 'embedding-reconciler', processInputStep: vi.fn() };
+
+    await createMastraCode({ inputProcessors: [customProcessor] });
+
+    const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as
+      | { inputProcessors?: Array<{ id?: string }> }
+      | undefined;
+    const processors = agentConfig?.inputProcessors ?? [];
+    expect(processors[0]).toBe(customProcessor);
+    expect(processors.map(processor => processor.id)).toEqual([
+      'embedding-reconciler',
+      'plan-rejection-abort',
+      'agents-md-injector',
+      'provider-history-compat',
+    ]);
+  });
+
   it('configures ProviderHistoryCompat for prompt and API error compatibility', async () => {
     const { createMastraCode } = await import('../index.js');
 
