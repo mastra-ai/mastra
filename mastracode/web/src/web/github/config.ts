@@ -64,7 +64,7 @@ export function getGithubFeatureDiagnostics(): GithubFeatureDiagnostics {
   return {
     githubAppConfigured: github !== undefined,
     webAuthEnabled: isWebAuthEnabled(),
-    appDbConfigured: github?.storageDomain !== undefined,
+    appDbConfigured: github?.sourceControlStorage !== undefined,
     stateSecretConfigured: getSeededStateSigner()?.stable ?? false,
     sandboxEnabled: isSandboxEnabled(),
     sandboxProvider: getSandboxProvider(),

@@ -24,7 +24,6 @@ async function enableLinearFeature(options?: { stableStateSigner?: boolean }): P
   seedRuntimeConfig({
     storage: seed.storage,
     authAdapter: { kind: 'workos' } as WebAuthAdapter,
-    domainRegistry: seed.registry,
     integrations: [linearStub],
     // No explicit secret ⇒ per-process random signer (stable: false).
     stateSigner: createStateSigner(options?.stableStateSigner ? 'explicit-secret' : undefined),

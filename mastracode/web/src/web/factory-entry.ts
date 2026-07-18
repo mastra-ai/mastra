@@ -33,12 +33,12 @@ import { getFactoryWorkspace } from './factory/workspace.js';
 import { parseCreatedPullRequest, subscribeCurrentSessionToPullRequest } from './github/session-subscriptions.js';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { getSeededGithubIntegration, seedRuntimeConfig } from './runtime-config.js';
-import { DomainRegistry } from './storage/domain-registry.js';
 import { AuditStorage } from './storage/domains/audit/base.js';
 import { ModelCredentialsStorage } from './storage/domains/credentials/base.js';
 import { createTenantCredentialPrimer, registerTenantCredentialResolver } from './tenant-credentials.js';
 import { IntakeStorage } from './storage/domains/intake/base.js';
 import { IntegrationStorage } from './storage/domains/integrations/base.js';
+import { SourceControlStorage } from './storage/domains/source-control/base.js';
 import { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import { handleServerError } from './server-error.js';
 import { createStateSigner } from './state-signing.js';
@@ -204,20 +204,16 @@ export class MastraFactory {
       integrationIds.add(integration.id);
     }
 
-    // Registry of factory app-table storage domains. Built-ins register here;
-    // integration-provided domains flow through the same register() path and
-    // initialize with everything else in the single prepare() init below.
-    const domainRegistry = new DomainRegistry();
-    domainRegistry.register(new IntakeStorage());
-    domainRegistry.register(new AuditStorage());
-    domainRegistry.register(new WorkItemsStorage());
-    domainRegistry.register(new ModelCredentialsStorage());
+    // FactoryStorage owns every app-table domain and initializes them through
+    // the same lifecycle as the backend connection.
+    storage.registerDomain(new IntakeStorage());
+    storage.registerDomain(new AuditStorage());
+    storage.registerDomain(new WorkItemsStorage());
+    storage.registerDomain(new ModelCredentialsStorage());
     // Generic integration storage (connections/subscriptions/settings) — the
     // default persistence surface for integrations without a bespoke domain.
-    domainRegistry.register(new IntegrationStorage());
-    for (const integration of integrations) {
-      if (integration.storageDomain) domainRegistry.register(integration.storageDomain);
-    }
+    const integrationStorage = storage.registerDomain(new IntegrationStorage());
+    const sourceControlStorage = storage.registerDomain(new SourceControlStorage());
 
     // Multi-replica deployments (distributed pubsub configured) need
     // cross-replica serialization; warn loud when the storage backend can't
@@ -245,10 +241,10 @@ export class MastraFactory {
       );
     }
 
-    // Seed the registry FIRST: the readiness checks below reach the app
-    // tables through the seeded domain registry (`getDomainRegistry()`), gate
-    // on the active auth adapter via `isWebAuthEnabled()`, and probe the
-    // sandbox runtime via `isSandboxEnabled()`.
+    // Seed runtime config first: readiness checks below reach app domains
+    // through the seeded FactoryStorage, gate on the active auth adapter via
+    // `isWebAuthEnabled()`, and probe the sandbox runtime via
+    // `isSandboxEnabled()`.
     // One shared OAuth state signer per boot: explicit `stateSecret` when
     // provided, else the GitHub integration's webhook secret (deployment-stable
     // by construction), else a per-process random secret (`stable: false`) —
@@ -264,7 +260,6 @@ export class MastraFactory {
     seedRuntimeConfig({
       storage,
       vector,
-      domainRegistry,
       integrations,
       publicUrl: publicOrigin,
       authAdapter: auth,
@@ -287,13 +282,9 @@ export class MastraFactory {
     // adapter must not boot.
     await auth?.init?.({ storage, publicUrl: publicOrigin, allowedOrigins });
 
-    // Single init path: the storage backend's own init (connection + Mastra
-    // table DDL) is a hard error — a factory without its database must not
-    // boot …
+    // Single init path: backend connection failure is a hard boot error;
+    // registered app domains initialize fail-soft inside FactoryStorage.
     await storage.init();
-    // … then every registered factory app-table domain. Fail-soft per domain:
-    // a failed domain marks its feature gates off without aborting boot.
-    await domainRegistry.init({ storage });
 
     // Per-tenant model credentials: once the credentials domain is up, model
     // resolution goes through the caller's own store and the SDK stops
@@ -321,18 +312,12 @@ export class MastraFactory {
     for (const integration of integrations) {
       if (integration.id === 'github') integrationReady.set('github', githubReady);
       else if (integration.id === 'linear') integrationReady.set('linear', linearReady);
-      else if (integration.storageDomain) {
-        integrationReady.set(integration.id, domainRegistry.isReady(integration.storageDomain.name));
-      } else {
-        // No bespoke domain: the integration persists (if at all) through the
-        // generic built-in integration storage.
-        integrationReady.set(integration.id, domainRegistry.isReady('integrations'));
-      }
+      else integrationReady.set(integration.id, storage.isDomainReady('integrations'));
     }
     const readyIntegrations = integrations.map(integration => ({
       integration,
       ready: integrationReady.get(integration.id) ?? false,
-      ensureReady: () => domainRegistry.ensureReady(integration.storageDomain?.name ?? 'integrations'),
+      ensureReady: () => storage.ensureDomainReady(integration.id === 'github' ? 'source-control' : 'integrations'),
     }));
 
     // Boot assertion: an active integration that signs OAuth `state` needs a
@@ -440,7 +425,8 @@ export class MastraFactory {
           authStorage,
           publicOrigin,
           stateSigner,
-          integrationStorage: domainRegistry.integrations,
+          integrationStorage,
+          sourceControlStorage,
           integrations: readyIntegrations,
           intakeReady,
           factoryReady,

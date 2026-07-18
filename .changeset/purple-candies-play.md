@@ -2,4 +2,4 @@
 '@mastra/core': minor
 ---
 
-Added a FactoryStorage contract for backends that share one database between Mastra agent state and application collections.
+Added a FactoryStorage contract that owns application storage domains, initializes them with the shared backend, and reports per-domain readiness and initialization errors.

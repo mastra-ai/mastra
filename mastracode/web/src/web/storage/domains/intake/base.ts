@@ -12,10 +12,8 @@
  * hides the source entirely regardless of selection.
  */
 
-import { UniqueViolationError } from '@mastra/core/storage';
+import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
-
-import type { FactoryStorageContext, FactoryStorageDomain } from '../../domain';
 
 export interface IntakeConfig {
   github: {
@@ -53,18 +51,21 @@ export const INTAKE_SETTINGS_SCHEMA: CollectionSchema = {
  * Intake settings storage, written once against the generic
  * `FactoryStorageOps` surface — works on any `FactoryStorage` backend.
  */
-export class IntakeStorage implements FactoryStorageDomain {
-  readonly name = 'intake';
-  #ops?: FactoryStorageOps;
+export class IntakeStorage extends FactoryStorageDomain {
+  constructor() {
+    super('intake');
+  }
 
-  async init(ctx: FactoryStorageContext): Promise<void> {
-    await ctx.storage.ensureCollections([INTAKE_SETTINGS_SCHEMA]);
-    this.#ops = ctx.storage.ops;
+  async init(): Promise<void> {
+    await this.ensureCollections([INTAKE_SETTINGS_SCHEMA]);
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.ops.deleteMany('intake_settings', {});
   }
 
   get #db(): FactoryStorageOps {
-    if (!this.#ops) throw new Error('[IntakeStorage] Not initialized — init() has not succeeded.');
-    return this.#ops;
+    return this.ops;
   }
 
   /** Read the caller's intake config, falling back to {@link DEFAULT_INTAKE_CONFIG}. */

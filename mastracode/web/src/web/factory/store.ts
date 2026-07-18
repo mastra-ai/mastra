@@ -4,13 +4,14 @@
  *
  * Validation mirrors `../intake/store` — untrusted route bodies are parsed
  * into bounded, sanitized shapes or rejected wholesale. Persistence is
- * delegated to the `work-items` factory storage domain registered on the
- * seeded {@link DomainRegistry} (see `../storage/domains/work-items`); stage
+ * delegated to the `work-items` domain registered on the seeded
+ * `FactoryStorage` (see `../storage/domains/work-items`); stage
  * history is appended exclusively there (server-side) on every stage
  * transition so it can never drift from `stages`.
  */
 
-import { getDomainRegistry } from '../runtime-config';
+import { getFactoryStorage } from '../runtime-config';
+import { getWorkItemsStorage } from '../storage/domains';
 import type {
   CreateWorkItemInput,
   UpdateWorkItemInput,
@@ -165,9 +166,9 @@ export function parseUpdateWorkItem(body: unknown): UpdateWorkItemInput | null {
 }
 
 async function workItemsDomain() {
-  const store = getDomainRegistry();
-  await store.ensureReady('work-items');
-  return store.workItems;
+  const storage = getFactoryStorage();
+  await storage.ensureDomainReady('work-items');
+  return getWorkItemsStorage();
 }
 
 /** List the org's work items for a project, newest first. */

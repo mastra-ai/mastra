@@ -4,8 +4,9 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import type { WebAuthUser } from '../auth';
 import { getWebAuthOrgId, getWebAuthUserId } from '../auth';
+import type { SourceControlProject } from '../storage/domains/source-control/base';
 import type { GithubIntegration } from './integration';
-import type { GithubProjectRow } from './storage/base';
+import { subscribeToPullRequest, unsubscribeFromPullRequest } from './subscriptions';
 
 type GithubSessionState = { githubProjectId?: string };
 
@@ -15,7 +16,7 @@ const pullRequestInputSchema = z.object({
 
 interface SessionTarget {
   context: AgentControllerRequestContext<GithubSessionState>;
-  project: GithubProjectRow;
+  project: SourceControlProject;
   orgId: string;
   userId: string;
 }
@@ -54,27 +55,28 @@ async function resolveSessionTarget(requestContext: RequestContext, github: Gith
     throw new Error('GitHub subscriptions require an authenticated GitHub-project session with an active thread.');
   }
 
-  const project = await github.storageDomain.getOrgProject(orgId, githubProjectId);
+  const project = await github.sourceControlStorage.projects.getOrg(orgId, githubProjectId);
   if (!project) throw new Error('GitHub project not found for this organization.');
   return { context, project, orgId, userId };
 }
 
 async function verifyPullRequest(target: SessionTarget, pullRequest: number, github: GithubIntegration) {
-  const [owner, repo] = target.project.repoFullName.split('/');
+  const [owner, repo] = target.project.repositorySlug.split('/');
   if (!owner || !repo) throw new Error('GitHub project repository is invalid.');
-  const octokit = github.getInstallationOctokit(target.project.installationId);
+  const octokit = github.getInstallationOctokit(Number(target.project.installationExternalId));
   const { data } = await octokit.pulls.get({ owner, repo, pull_number: pullRequest });
-  if (data.base.repo.id !== target.project.repoId)
+  if (String(data.base.repo.id) !== target.project.repositoryExternalId)
     throw new Error('Pull request repository does not match the active project.');
 }
 
 async function subscriptionInput(target: SessionTarget, pullRequestNumber: number) {
   return {
     orgId: target.orgId,
-    installationId: target.project.installationId,
-    githubProjectId: target.project.id,
-    repoId: target.project.repoId,
-    pullRequestNumber,
+    installationExternalId: target.project.installationExternalId,
+    projectId: target.project.id,
+    repositoryExternalId: target.project.repositoryExternalId,
+    repositorySlug: target.project.repositorySlug,
+    changeRequestId: String(pullRequestNumber),
     sessionId: target.context.session.id,
     ownerId: target.context.session.ownerId,
     resourceId: target.context.resourceId,
@@ -97,9 +99,9 @@ export async function subscribeCurrentSessionToPullRequest(
   // "this session cannot subscribe" as an error.
   if (source === 'auto-gh-pr-create' && !isGithubProjectSession(requestContext)) return undefined;
   const target = await resolveSessionTarget(requestContext, github);
-  const number = parsePullRequest(pullRequest, target.project.repoFullName);
+  const number = parsePullRequest(pullRequest, target.project.repositorySlug);
   await verifyPullRequest(target, number, github);
-  await github.storageDomain.subscribeToPullRequest({ ...(await subscriptionInput(target, number)), source });
+  await subscribeToPullRequest({ ...(await subscriptionInput(target, number)), source }, github.integrationStorage);
   return number;
 }
 
@@ -109,8 +111,8 @@ export async function unsubscribeCurrentSessionFromPullRequest(
   github: GithubIntegration,
 ) {
   const target = await resolveSessionTarget(requestContext, github);
-  const number = parsePullRequest(pullRequest, target.project.repoFullName);
-  await github.storageDomain.unsubscribeFromPullRequest(await subscriptionInput(target, number));
+  const number = parsePullRequest(pullRequest, target.project.repositorySlug);
+  await unsubscribeFromPullRequest(await subscriptionInput(target, number), github.integrationStorage);
   return number;
 }
 

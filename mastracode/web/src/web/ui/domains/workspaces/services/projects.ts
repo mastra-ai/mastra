@@ -196,7 +196,7 @@ export async function addProject(baseUrl: string, name: string, path: string): P
 
 /**
  * Persist a project created from a GitHub repo. The server already created the
- * `github_projects` row and returned a `Project`-shaped payload; we just store
+ * `source_control_projects` row and returned a `Project`-shaped payload; we just store
  * it locally (de-duped by `githubProjectId`) so it shows up in the project list.
  * The `resourceId` is filled in later, on open, by `ensureRepoMaterialized`.
  */

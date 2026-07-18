@@ -19,9 +19,8 @@ const oauth = (tag: string, expires: number) => ({
 
 async function makeStore(): Promise<ModelCredentialsStorage> {
   const backend = new LibSQLFactoryStorage({ id: 'credentials-test', url: ':memory:' });
+  const domain = backend.registerDomain(new ModelCredentialsStorage());
   await backend.init();
-  const domain = new ModelCredentialsStorage();
-  await domain.init({ storage: backend });
   return domain;
 }
 

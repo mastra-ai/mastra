@@ -443,7 +443,7 @@ export class PgFactoryStorage extends FactoryStorage {
     return this.#mastraStorage;
   }
 
-  async init(): Promise<void> {
+  protected async initStorage(): Promise<void> {
     await this.#pool.query('SELECT 1');
   }
 

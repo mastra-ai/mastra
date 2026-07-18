@@ -13,7 +13,7 @@
  * only). Tokens are stored server-side only and rewritten on every refresh.
  */
 
-import { getDomainRegistry } from '../runtime-config';
+import { getIntegrationStorage } from '../storage/domains';
 import type { IntegrationStorageHandle } from '../storage/domains/integrations/base';
 
 /**
@@ -75,7 +75,7 @@ export interface LinearTokenUpdate {
 }
 
 function store(): IntegrationStorageHandle<LinearConnectionData> {
-  return getDomainRegistry().integrations.forIntegration<LinearConnectionData>('linear');
+  return getIntegrationStorage().forIntegration<LinearConnectionData>('linear');
 }
 
 /** The org's connection, or null when Linear has not been connected. */

@@ -20,9 +20,8 @@ describe('clampAuditLimit', () => {
 
 async function makeStorage(): Promise<AuditStorage> {
   const backend = new LibSQLFactoryStorage({ id: 'audit-test', url: ':memory:' });
+  const domain = backend.registerDomain(new AuditStorage());
   await backend.init();
-  const domain = new AuditStorage();
-  await domain.init({ storage: backend });
   return domain;
 }
 

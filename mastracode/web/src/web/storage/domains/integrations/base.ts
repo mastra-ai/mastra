@@ -10,9 +10,8 @@
  * org scoping is enforced by construction through the pre-scoped handle
  * returned by {@link IntegrationStorage.forIntegration}.
  *
- * Integrations with a genuinely relational model (e.g. GitHub's
- * installations/projects/worktrees/sandboxes) instead bring a bespoke
- * `FactoryIntegration.storageDomain` — see `../../../factory-integration.ts`.
+ * Source-control integrations additionally use the shared, provider-scoped
+ * source-control domain for installations, projects, worktrees, and sandboxes.
  *
  * Payloads (`data` / `config`) are JSON documents typed per-integration via
  * the handle's generics. JSON round-trips exactly what JSON can represent:
@@ -20,10 +19,8 @@
  * `Date`s.
  */
 
-import { UniqueViolationError } from '@mastra/core/storage';
+import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
-
-import type { FactoryStorageContext, FactoryStorageDomain } from '../../domain';
 
 export const INTEGRATION_CONNECTIONS_SCHEMA: CollectionSchema = {
   name: 'integration_connections',
@@ -143,10 +140,7 @@ export interface IntegrationStorageHandle<
      * rotation etc.). Returns the updated connection, or `null` when the org
      * has no connection.
      */
-    update(
-      orgId: string,
-      fn: (data: TConnection) => TConnection,
-    ): Promise<IntegrationConnection<TConnection> | null>;
+    update(orgId: string, fn: (data: TConnection) => TConnection): Promise<IntegrationConnection<TConnection> | null>;
     /** Remove the org's connection. Returns whether a row was deleted. */
     delete(orgId: string): Promise<boolean>;
   };
@@ -155,6 +149,7 @@ export interface IntegrationStorageHandle<
     /** All subscriptions for an external object (webhook fan-out), optionally filtered by status. */
     listByTarget(targetKey: string, opts?: { status?: string }): Promise<IntegrationSubscription<TSubscription>[]>;
     listBySession(sessionId: string): Promise<IntegrationSubscription<TSubscription>[]>;
+    listByThread(resourceId: string, threadId: string): Promise<IntegrationSubscription<TSubscription>[]>;
     updateStatus(id: string, status: string): Promise<void>;
     delete(id: string): Promise<boolean>;
     /** Targeted cleanup, always org-scoped. Returns the number of rows deleted. */
@@ -198,22 +193,27 @@ interface SubscriptionRow extends Record<string, unknown> {
  * The built-in generic integration domain, written once against the
  * `FactoryStorageOps` surface — works on any `FactoryStorage` backend.
  */
-export class IntegrationStorage implements FactoryStorageDomain {
-  readonly name = 'integrations';
-  #ops?: FactoryStorageOps;
+export class IntegrationStorage extends FactoryStorageDomain {
+  constructor() {
+    super('integrations');
+  }
 
-  async init(ctx: FactoryStorageContext): Promise<void> {
-    await ctx.storage.ensureCollections([
+  async init(): Promise<void> {
+    await this.ensureCollections([
       INTEGRATION_CONNECTIONS_SCHEMA,
       INTEGRATION_SUBSCRIPTIONS_SCHEMA,
       INTEGRATION_SETTINGS_SCHEMA,
     ]);
-    this.#ops = ctx.storage.ops;
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.ops.deleteMany('integration_subscriptions', {});
+    await this.ops.deleteMany('integration_settings', {});
+    await this.ops.deleteMany('integration_connections', {});
   }
 
   get #db(): FactoryStorageOps {
-    if (!this.#ops) throw new Error('[IntegrationStorage] Not initialized — init() has not succeeded.');
-    return this.#ops;
+    return this.ops;
   }
 
   /** A typed handle pre-scoped to `integrationId`. */
@@ -319,6 +319,14 @@ export class IntegrationStorage implements FactoryStorageDomain {
           const rows = await db().findMany<SubscriptionRow>(
             'integration_subscriptions',
             { ...scoped, session_id: sessionId },
+            { orderBy: [['created_at', 'asc']] },
+          );
+          return rows.map(mapSubscription);
+        },
+        listByThread: async (resourceId, threadId) => {
+          const rows = await db().findMany<SubscriptionRow>(
+            'integration_subscriptions',
+            { ...scoped, resource_id: resourceId, thread_id: threadId },
             { orderBy: [['created_at', 'asc']] },
           );
           return rows.map(mapSubscription);

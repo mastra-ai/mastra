@@ -7,9 +7,8 @@
  * via getters instead of reading deployment env themselves.
  *
  * The registry holds *instances*, not connection strings: the factory storage
- * backend (shared by agent state and every app-table consumer), the vector
- * store, and the {@link DomainRegistry} of app-table domains initialized
- * against the factory storage backend.
+ * backend (shared by agent state and every app-table consumer and owner of the
+ * app-table domains) and the vector store.
  */
 
 import type { FactoryStorage } from '@mastra/core/storage';
@@ -20,7 +19,6 @@ import type { FactoryIntegration } from './factory-integration.js';
 import type { GithubIntegration } from './github/integration.js';
 import type { LinearIntegration } from './linear/integration.js';
 import type { StateSigner } from './state-signing.js';
-import type { DomainRegistry } from './storage/domain-registry.js';
 
 /**
  * Factory-resolved sandbox runtime: the machine GitHub projects clone their
@@ -56,12 +54,6 @@ export interface WebRuntimeConfig {
   authAdapter?: WebAuthAdapter;
   /** Active sandbox runtime, or `undefined` when sandboxes are disabled. */
   sandbox?: WebSandboxRuntime;
-  /**
-   * Registry of factory app-table storage domains (intake, audit, work-items,
-   * integration-provided), initialized by `MastraFactory.prepare()` against
-   * the factory storage backend. `undefined` only when the factory never ran.
-   */
-  domainRegistry?: DomainRegistry;
   /** Registered integrations (GitHub, Linear, third-party), keyed by their stable id. */
   integrations?: FactoryIntegration[];
   /** Shared OAuth state signer created by the factory (see `./state-signing.ts`). */
@@ -124,20 +116,6 @@ export function getSeededAuthAdapter(): WebAuthAdapter | undefined {
  */
 export function getSeededSandbox(): WebSandboxRuntime | undefined {
   return seeded?.sandbox;
-}
-
-/**
- * The seeded {@link DomainRegistry}, for the app-table wrapper modules
- * (intake/audit/work-items stores). Throws when the factory never ran —
- * callers behind a readiness gate never hit this; ungated callers (audit
- * recording) treat it as a normal failure.
- */
-export function getDomainRegistry(): DomainRegistry {
-  const registry = seeded?.domainRegistry;
-  if (!registry) {
-    throw new Error('MastraCode Web: factory storage unavailable — MastraFactory.prepare() has not run.');
-  }
-  return registry;
 }
 
 /** Look up a registered integration by its stable id. */

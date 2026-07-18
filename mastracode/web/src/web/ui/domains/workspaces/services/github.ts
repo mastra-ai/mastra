@@ -115,8 +115,8 @@ export async function listGithubRepos(baseUrl: string, query?: string): Promise<
 }
 
 /**
- * Create a project from a repo. The server persists a `github_projects` row
- * (no sandbox, no clone yet) and returns a `Project` payload of `source: github`.
+ * Create a project from a repo. The server persists a `source_control_projects`
+ * row (no sandbox, no clone yet) and returns a `Project` payload of `source: github`.
  */
 export async function createProjectFromRepo(baseUrl: string, repo: GithubRepo): Promise<Project> {
   const res = await fetch(`${baseUrl}/web/github/projects`, {

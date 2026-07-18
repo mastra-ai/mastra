@@ -2,4 +2,4 @@
 '@mastra/pg': minor
 ---
 
-Added PgFactoryStorage for persisting Mastra agent state and application collections through one PostgreSQL pool.
+Added PgFactoryStorage for persisting Mastra agent state and lifecycle-managed application domains through one PostgreSQL pool.

@@ -10,9 +10,8 @@ import { DEFAULT_INTAKE_CONFIG, IntakeStorage } from './base';
 
 async function makeStorage(): Promise<IntakeStorage> {
   const backend = new LibSQLFactoryStorage({ id: 'intake-test', url: ':memory:' });
+  const domain = backend.registerDomain(new IntakeStorage());
   await backend.init();
-  const domain = new IntakeStorage();
-  await domain.init({ storage: backend });
   return domain;
 }
 

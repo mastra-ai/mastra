@@ -29,6 +29,7 @@
  */
 
 import type { MastraCompositeStore } from './base';
+import { StorageDomain } from './domains/base';
 
 /** Values storable in (and filterable on) a collection column. */
 export type CollectionValue = string | number | boolean | Date | null;
@@ -207,10 +208,57 @@ export interface FactoryStorageOps {
 }
 
 /**
+ * Base class for application domains owned by a {@link FactoryStorage}.
+ * Domains are bound once when registered and share their owner's connection.
+ */
+export abstract class FactoryStorageDomain extends StorageDomain {
+  override readonly name: string;
+  #storage?: FactoryStorage;
+
+  protected constructor(name: string) {
+    if (!name.trim()) {
+      throw new Error('Factory storage domain name must not be empty');
+    }
+    super({ component: 'STORAGE', name });
+    this.name = name;
+  }
+
+  /** @internal Bound by {@link FactoryStorage.registerDomain}. */
+  __bindFactoryStorage(storage: FactoryStorage): void {
+    if (this.#storage && this.#storage !== storage) {
+      throw new Error(`Factory storage domain '${this.name}' is already bound to another storage instance`);
+    }
+    this.#storage = storage;
+  }
+
+  protected get storage(): FactoryStorage {
+    if (!this.#storage) {
+      throw new Error(`Factory storage domain '${this.name}' has not been registered`);
+    }
+    return this.#storage;
+  }
+
+  protected get ops(): FactoryStorageOps {
+    return this.storage.ops;
+  }
+
+  protected ensureCollections(schemas: CollectionSchema[]): Promise<void> {
+    return this.storage.ensureCollections(schemas);
+  }
+}
+
+/**
  * A pluggable application-storage backend: one database powering agent state
  * (via {@link getMastraStorage}) and app-owned collections (via {@link ops}).
  */
 export abstract class FactoryStorage {
+  readonly #domains = new Map<string, FactoryStorageDomain>();
+  readonly #readyDomains = new Set<string>();
+  readonly #domainErrors = new Map<string, unknown>();
+  readonly #domainInitPromises = new Map<string, Promise<void>>();
+  #storageReady = false;
+  #storageInitPromise?: Promise<void>;
+
   /**
    * Agent-state store (threads, messages, memory, OM) for this database,
    * sharing this backend's connection. Callers pass the result to the Mastra
@@ -219,8 +267,53 @@ export abstract class FactoryStorage {
    */
   abstract getMastraStorage(): MastraCompositeStore;
 
-  /** Open/validate the connection. Idempotent. */
-  abstract init(): Promise<void>;
+  /** Open/validate the backend, then initialize registered domains fail-soft. */
+  async init(): Promise<void> {
+    await this.#ensureStorageReady();
+    await Promise.all([...this.#domains.keys()].map(name => this.#initDomain(name).catch(() => undefined)));
+  }
+
+  /** Backend-specific connection initialization. */
+  protected abstract initStorage(): Promise<void>;
+
+  registerDomain<T extends FactoryStorageDomain>(domain: T): T {
+    if (this.#domains.has(domain.name)) {
+      throw new Error(`Factory storage domain '${domain.name}' is already registered`);
+    }
+    domain.__bindFactoryStorage(this);
+    this.#domains.set(domain.name, domain);
+    return domain;
+  }
+
+  getDomain<T extends FactoryStorageDomain = FactoryStorageDomain>(name: string): T {
+    const domain = this.#domains.get(name);
+    if (!domain) {
+      throw new Error(`Factory storage domain '${name}' is not registered`);
+    }
+    return domain as T;
+  }
+
+  hasDomain(name: string): boolean {
+    return this.#domains.has(name);
+  }
+
+  domainNames(): string[] {
+    return [...this.#domains.keys()];
+  }
+
+  isDomainReady(name: string): boolean {
+    return this.#readyDomains.has(name);
+  }
+
+  domainInitError(name: string): unknown {
+    return this.#domainErrors.get(name);
+  }
+
+  async ensureDomainReady(name: string): Promise<void> {
+    this.getDomain(name);
+    await this.#ensureStorageReady();
+    await this.#initDomain(name);
+  }
 
   /**
    * Map each domain's declarative schema to backend DDL. Idempotent and
@@ -249,4 +342,45 @@ export abstract class FactoryStorage {
    * user-provided instance.
    */
   authDatabase?(): FactoryAuthDatabase;
+
+  async #ensureStorageReady(): Promise<void> {
+    if (this.#storageReady) return;
+    if (this.#storageInitPromise) return this.#storageInitPromise;
+
+    const initPromise = (async () => {
+      await this.initStorage();
+      this.#storageReady = true;
+    })();
+    this.#storageInitPromise = initPromise;
+
+    try {
+      await initPromise;
+    } finally {
+      if (this.#storageInitPromise === initPromise) {
+        this.#storageInitPromise = undefined;
+      }
+    }
+  }
+
+  #initDomain(name: string): Promise<void> {
+    if (this.#readyDomains.has(name)) return Promise.resolve();
+    const pending = this.#domainInitPromises.get(name);
+    if (pending) return pending;
+
+    const domain = this.getDomain(name);
+    this.#domainErrors.delete(name);
+    const initPromise = (async () => {
+      try {
+        await domain.init();
+        this.#readyDomains.add(name);
+      } catch (error) {
+        this.#domainErrors.set(name, error);
+        throw error;
+      } finally {
+        this.#domainInitPromises.delete(name);
+      }
+    })();
+    this.#domainInitPromises.set(name, initPromise);
+    return initPromise;
+  }
 }

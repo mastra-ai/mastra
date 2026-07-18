@@ -24,8 +24,8 @@ vi.mock('../audit/store', () => ({
   listAuditEvents: async () => ({ events: [] }),
 }));
 
-import { GithubStorageInMemory } from '../github/storage/inmemory';
 import { __resetRuntimeConfigForTests } from '../runtime-config';
+import type { SourceControlStorageHandle } from '../storage/domains/source-control/base';
 import { seedFactoryStorageForTests } from '../storage/test-utils';
 import type { FactoryStorageTestSeed } from '../storage/test-utils';
 import { mountApiRoutes } from '../test-utils';
@@ -33,11 +33,11 @@ import { buildFactoryRoutes } from './routes';
 import { parseCreateWorkItem, parseUpdateWorkItem } from './store';
 
 // ── Test harness ─────────────────────────────────────────────────────────
-let githubStorage!: GithubStorageInMemory;
+let sourceControlStorage!: SourceControlStorageHandle;
 
 function buildApp(
   user: { workosId: string; organizationId?: string } | null,
-  storage: GithubStorageInMemory | null = githubStorage,
+  storage: SourceControlStorageHandle | null = sourceControlStorage,
 ) {
   const app = new Hono();
   app.use('*', async (c, next) => {
@@ -49,22 +49,20 @@ function buildApp(
 }
 
 const orgUser = { workosId: 'u1', organizationId: 'org1' };
-const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
+let PROJECT_ID = '';
 
-function seedProject(orgId = 'org1', id = PROJECT_ID) {
-  githubStorage.projects.push({
-    id,
+async function seedProject(orgId = 'org1') {
+  const project = await sourceControlStorage.projects.upsert({
     orgId,
-    userId: 'u1',
-    installationId: 1,
-    repoFullName: 'acme/app',
-    repoId: 1,
+    createdByUserId: 'u1',
+    installationExternalId: '1',
+    repositorySlug: `acme/${orgId}-app`,
+    repositoryExternalId: orgId === 'org1' ? '1' : `1-${orgId}`,
     defaultBranch: 'main',
     sandboxProvider: 'local',
     sandboxWorkdir: '/tmp/acme-app',
-    setupCommand: null,
-    createdAt: new Date(),
   });
+  PROJECT_ID = project.id;
 }
 
 const listItems = () => seed.workItems.list('org1', PROJECT_ID);
@@ -90,10 +88,10 @@ let seed: FactoryStorageTestSeed;
 
 beforeEach(async () => {
   seed = await seedFactoryStorageForTests();
-  githubStorage = new GithubStorageInMemory();
+  sourceControlStorage = seed.sourceControl.forIntegration('github');
   auditRecorded = [];
   auditFailure = undefined;
-  seedProject();
+  await seedProject();
 });
 
 afterEach(() => {
@@ -114,8 +112,7 @@ describe('auth and scoping', () => {
   });
 
   it('404s when the project belongs to another org', async () => {
-    githubStorage.projects = [];
-    seedProject('other-org');
+    await seedProject('other-org');
     const res = await json('GET', `/web/factory/projects/${PROJECT_ID}/work-items`);
     expect(res.status).toBe(404);
   });
@@ -322,8 +319,7 @@ describe('GET /web/factory/projects/:id/metrics', () => {
   it('401s without a user and 404s for projects outside the org', async () => {
     expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/metrics`, undefined, null)).status).toBe(401);
 
-    githubStorage.projects = [];
-    seedProject('other-org');
+    await seedProject('other-org');
     expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/metrics`)).status).toBe(404);
   });
 

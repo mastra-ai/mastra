@@ -20,9 +20,8 @@ const input = {
 
 async function makeStorage(): Promise<WorkItemsStorage> {
   const backend = new LibSQLFactoryStorage({ id: 'work-items-test', url: ':memory:' });
+  const domain = backend.registerDomain(new WorkItemsStorage());
   await backend.init();
-  const domain = new WorkItemsStorage();
-  await domain.init({ storage: backend });
   return domain;
 }
 

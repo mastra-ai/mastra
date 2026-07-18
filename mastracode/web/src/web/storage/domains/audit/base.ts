@@ -37,9 +37,8 @@
  * whose message drove the run.
  */
 
+import { FactoryStorageDomain } from '@mastra/core/storage';
 import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
-
-import type { FactoryStorageContext, FactoryStorageDomain } from '../../domain';
 
 /** What an audit event acted on (WorkOS Audit Logs target shape). */
 export interface AuditTarget {
@@ -210,18 +209,21 @@ function toRow(db: AuditEventDbRow): AuditEventRow {
  * surface. `record()` normalizes inputs (defaults, metadata bounding);
  * `list()` is keyset-paginated on `(occurred_at, id)` newest-first.
  */
-export class AuditStorage implements FactoryStorageDomain {
-  readonly name = 'audit';
-  #ops?: FactoryStorageOps;
+export class AuditStorage extends FactoryStorageDomain {
+  constructor() {
+    super('audit');
+  }
 
-  async init(ctx: FactoryStorageContext): Promise<void> {
-    await ctx.storage.ensureCollections([AUDIT_EVENTS_SCHEMA]);
-    this.#ops = ctx.storage.ops;
+  async init(): Promise<void> {
+    await this.ensureCollections([AUDIT_EVENTS_SCHEMA]);
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.ops.deleteMany('audit_events', {});
   }
 
   get #db(): FactoryStorageOps {
-    if (!this.#ops) throw new Error('[AuditStorage] Not initialized — init() has not succeeded.');
-    return this.#ops;
+    return this.ops;
   }
 
   /** Append one audit event. Throws on failure — swallow-on-failure lives in the caller. */

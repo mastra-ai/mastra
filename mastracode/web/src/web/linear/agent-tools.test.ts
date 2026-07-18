@@ -2,7 +2,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { seedRuntimeConfig } from '../runtime-config';
-import { GithubStorageInMemory } from '../github/storage/inmemory';
+import { SourceControlStorageInMemory } from '../storage/domains/source-control/inmemory';
 import { seedFactoryStorageForTests } from '../storage/test-utils';
 import { upsertLinearConnection, type UpsertLinearConnectionInput } from './storage';
 
@@ -11,23 +11,25 @@ vi.mock('./config', () => ({
   isLinearFeatureEnabled: () => featureEnabled,
 }));
 
-class FailableGithubStorage extends GithubStorageInMemory {
-  shouldFail = false;
-
-  override async getProjectById(projectId: string) {
-    if (this.shouldFail) throw new Error('connection refused');
-    return super.getProjectById(projectId);
-  }
-}
-
-const githubStorage = new FailableGithubStorage();
+const sourceControlStorage = new SourceControlStorageInMemory();
+let projectLookupShouldFail = false;
+const sourceControlStorageHandle = {
+  ...sourceControlStorage,
+  projects: {
+    ...sourceControlStorage.projects,
+    getById: async (projectId: string) => {
+      if (projectLookupShouldFail) throw new Error('connection refused');
+      return sourceControlStorage.projects.getById(projectId);
+    },
+  },
+};
 const fetchLinearIssueDetail = vi.fn();
 const createLinearIssueComment = vi.fn();
 const refreshLinearAccessToken = vi.fn();
 
 const githubStub = {
   id: 'github',
-  storageDomain: githubStorage,
+  sourceControlStorage: sourceControlStorageHandle,
   getInstallationOctokit: vi.fn(),
 } as unknown as import('../github/integration').GithubIntegration;
 
@@ -55,17 +57,19 @@ function requestContextFor(resourceId: string | undefined): RequestContext {
 }
 
 function seedProject(): void {
-  githubStorage.projects.push({
+  sourceControlStorage.projectsRows.push({
     id: PROJECT_ID,
     orgId: ORG_ID,
-    userId: 'user-1',
-    installationId: 123,
-    repoFullName: 'acme/app',
-    repoId: 456,
+    integrationId: 'github',
+    createdByUserId: 'user-1',
+    installationExternalId: '123',
+    repositorySlug: 'acme/app',
+    repositoryExternalId: '456',
     defaultBranch: 'main',
     sandboxProvider: 'local',
     sandboxWorkdir: '/workspace/acme-app',
     setupCommand: null,
+    providerMetadata: {},
     createdAt: new Date(),
   });
 }
@@ -102,13 +106,12 @@ const issueDetail = {
 };
 
 beforeEach(async () => {
-  githubStorage.projects = [];
-  githubStorage.shouldFail = false;
+  sourceControlStorage.projectsRows = [];
+  projectLookupShouldFail = false;
   featureEnabled = true;
   const seed = await seedFactoryStorageForTests();
   seedRuntimeConfig({
     storage: seed.storage,
-    domainRegistry: seed.registry,
     integrations: [githubStub, linearStub],
   });
   clearLinearAgentToolCaches();
@@ -174,13 +177,13 @@ describe('buildLinearAgentTools — exposure gating', () => {
     seedProject();
     await seedConnection();
 
-    githubStorage.shouldFail = true;
+    projectLookupShouldFail = true;
     expect(await buildLinearAgentTools({ linear: linearStub, requestContext: requestContextFor(PROJECT_ID) })).toEqual(
       {},
     );
 
     // Database recovers: the next request must retry the lookup and get tools.
-    githubStorage.shouldFail = false;
+    projectLookupShouldFail = false;
     const tools = await buildLinearAgentTools({ linear: linearStub, requestContext: requestContextFor(PROJECT_ID) });
     expect(tools).toHaveProperty('linear_get_issue');
   });

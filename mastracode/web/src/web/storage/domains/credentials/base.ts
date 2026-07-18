@@ -23,12 +23,10 @@
  * any replica can complete or poll a flow started on another.
  */
 
-import { UniqueViolationError } from '@mastra/core/storage';
+import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
 
 import type { AuthCredential, OAuthCredential } from '@mastra/code-sdk/auth/types';
-
-import type { FactoryStorageContext, FactoryStorageDomain } from '../../domain';
 
 /** Owning tenant of a credential row. `userId` absent = org-scoped row. */
 export interface CredentialTenant {
@@ -181,18 +179,22 @@ function tenantWhere(tenant: CredentialTenant, provider: string): CollectionWher
  * ride `updateAtomic` so concurrent replicas serialize instead of
  * invalidating each other's rotating tokens / double-claiming a flow.
  */
-export class ModelCredentialsStorage implements FactoryStorageDomain {
-  readonly name = 'model-credentials';
-  #ops?: FactoryStorageOps;
+export class ModelCredentialsStorage extends FactoryStorageDomain {
+  constructor() {
+    super('model-credentials');
+  }
 
-  async init(ctx: FactoryStorageContext): Promise<void> {
-    await ctx.storage.ensureCollections([MODEL_CREDENTIALS_SCHEMA, OAUTH_LOGIN_SESSIONS_SCHEMA]);
-    this.#ops = ctx.storage.ops;
+  async init(): Promise<void> {
+    await this.ensureCollections([MODEL_CREDENTIALS_SCHEMA, OAUTH_LOGIN_SESSIONS_SCHEMA]);
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.ops.deleteMany('oauth_login_sessions', {});
+    await this.ops.deleteMany('model_provider_credentials', {});
   }
 
   get #db(): FactoryStorageOps {
-    if (!this.#ops) throw new Error('[ModelCredentialsStorage] Not initialized — init() has not succeeded.');
-    return this.#ops;
+    return this.ops;
   }
 
   /** Read the tenant's credential for a provider at exactly that scope. */

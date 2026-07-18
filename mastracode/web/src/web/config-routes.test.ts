@@ -186,7 +186,7 @@ describe('provider key routes with a tenant', () => {
   beforeEach(async () => {
     seed = await seedFactoryStorageForTests();
     isOrganizationAdmin.mockResolvedValue(true);
-    seedRuntimeConfig({ domainRegistry: seed.registry, authAdapter });
+    seedRuntimeConfig({ storage: seed.storage, authAdapter });
   });
 
   afterEach(() => {

@@ -168,9 +168,8 @@ function localSessions(): Promise<ModelCredentialsStorage> {
   localSessionsPromise ??= (async () => {
     const { LibSQLFactoryStorage } = await import('@mastra/libsql');
     const storage = new LibSQLFactoryStorage({ id: 'local-oauth-sessions', url: ':memory:' });
+    const store = storage.registerDomain(new ModelCredentialsStorage());
     await storage.init();
-    const store = new ModelCredentialsStorage();
-    await store.init({ storage });
     return store;
   })();
   return localSessionsPromise;

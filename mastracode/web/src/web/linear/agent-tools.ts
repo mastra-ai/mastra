@@ -59,7 +59,7 @@ async function resolveOrgId(resourceId: string): Promise<string | null> {
   let orgId: string | null;
   try {
     const github = getSeededGithubIntegration();
-    const project = github ? await github.storageDomain.getProjectById(resourceId) : null;
+    const project = github ? await github.sourceControlStorage.projects.getById(resourceId) : null;
     orgId = project?.orgId ?? null;
   } catch {
     // Transient database failure: skip the tools for this request but don't

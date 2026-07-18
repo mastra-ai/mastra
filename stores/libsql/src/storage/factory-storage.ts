@@ -397,7 +397,7 @@ export class LibSQLFactoryStorage extends FactoryStorage {
     return this.#mastraStorage;
   }
 
-  async init(): Promise<void> {
+  protected async initStorage(): Promise<void> {
     await this.#client.execute('SELECT 1');
   }
 

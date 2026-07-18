@@ -21,11 +21,11 @@ import { buildFsRoutes } from './fs-routes.js';
 import { buildOAuthRoutes } from './oauth-routes.js';
 import { getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './github/config.js';
 import { buildFactoryRoutes } from './factory/routes.js';
-import type { GithubStorage } from './github/storage/base.js';
 import { buildIntakeRoutes } from './intake/routes.js';
-import { getDomainRegistry, getSeededStateSigner } from './runtime-config.js';
+import { getFactoryStorage, getSeededStateSigner } from './runtime-config.js';
 import { getLinearFeatureDiagnostics, isLinearFeatureEnabled } from './linear/config.js';
 import type { IntegrationStorage } from './storage/domains/integrations/base.js';
+import type { SourceControlStorage } from './storage/domains/source-control/base.js';
 import { registerSandboxReattach } from './sandbox-reattach-registration.js';
 import { buildSkillRoutes } from './skills/routes.js';
 import type { StateSigner } from './state-signing.js';
@@ -55,8 +55,9 @@ export interface WebApiRoutesDeps {
    * integration via its {@link IntegrationContext}.
    */
   stateSigner?: StateSigner;
-  /** Generic integration persistence handed to each integration route set. */
+  /** Integration persistence domains used to build provider-scoped handles. */
   integrationStorage: IntegrationStorage;
+  sourceControlStorage: SourceControlStorage;
   /**
    * Registered integrations with their readiness (resolved ahead of time by
    * the factory so this stays synchronous). Ready → the integration's full
@@ -85,7 +86,7 @@ export interface WebApiRoutesDeps {
 export async function resolveFactoryReady(githubReady: boolean): Promise<boolean> {
   if (!githubReady) return false;
   try {
-    await getDomainRegistry().ensureReady('work-items');
+    await getFactoryStorage().ensureDomainReady('work-items');
     return true;
   } catch (err) {
     process.stderr.write(
@@ -105,7 +106,7 @@ export async function resolveFactoryReady(githubReady: boolean): Promise<boolean
 export async function resolveIntakeReady(anySourceReady: boolean): Promise<boolean> {
   if (!anySourceReady) return false;
   try {
-    await getDomainRegistry().ensureReady('intake');
+    await getFactoryStorage().ensureDomainReady('intake');
     return true;
   } catch (err) {
     process.stderr.write(
@@ -150,7 +151,7 @@ export async function resolveLinearReady(): Promise<boolean> {
 
   try {
     // Linear persists through the built-in generic integration-storage domain.
-    await getDomainRegistry().ensureReady('integrations');
+    await getFactoryStorage().ensureDomainReady('integrations');
     process.stderr.write('MastraCode Web: Linear routes enabled\n');
     return true;
   } catch (err) {
@@ -184,7 +185,7 @@ export async function resolveGithubReady(): Promise<boolean> {
       'MastraCode Web: GitHub routes disabled',
       `  WorkOS auth:          ${diag.webAuthEnabled ? 'enabled' : 'disabled'}`,
       `  GitHub App config:    ${diag.githubAppConfigured ? 'configured' : `missing ${missing.join(', ')}`}`,
-      `  App DB:               ${diag.appDbConfigured ? 'configured' : 'not configured (no GitHub storage domain registered)'}`,
+      `  App DB:               ${diag.appDbConfigured ? 'configured' : 'not configured (source-control storage unavailable)'}`,
       `  State secret:         ${diag.stateSecretConfigured ? 'configured' : 'random per-process (multi-replica unsafe)'}`,
       `  Sandbox provider:     ${diag.sandboxProvider} (${diag.sandboxEnabled ? 'enabled' : 'disabled'})`,
     ];
@@ -205,7 +206,8 @@ export async function resolveGithubReady(): Promise<boolean> {
   }
 
   try {
-    await getDomainRegistry().ensureReady('github');
+    const storage = getFactoryStorage();
+    await Promise.all([storage.ensureDomainReady('integrations'), storage.ensureDomainReady('source-control')]);
     process.stderr.write(
       [
         'MastraCode Web: GitHub routes enabled',
@@ -382,19 +384,20 @@ function disabledIntegrationStatusRoutes(id: string): ApiRoute[] {
 export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
   const registrations = deps.integrations ?? [];
   const githubRegistration = registrations.find(({ integration }) => integration.id === 'github');
-  const githubStorage = githubRegistration?.integration.storageDomain as GithubStorage | undefined;
-  const ctx = deps.stateSigner
-    ? {
-        baseUrl: deps.publicOrigin,
-        controller: deps.controller,
-        stateSigner: deps.stateSigner,
-        storage: deps.integrationStorage,
-        hooks: { runIssueTriage: (input: IssueTriageRunInput) => runIssueTriage(deps, input) },
-      }
-    : undefined;
+  const githubStorage = githubRegistration ? deps.sourceControlStorage.forIntegration('github') : undefined;
   const integrationRoutes = registrations.flatMap(registration => {
     const { integration, ready, ensureReady } = registration;
-    if (!ctx) return disabledIntegrationStatusRoutes(integration.id);
+    if (!deps.stateSigner) return disabledIntegrationStatusRoutes(integration.id);
+    const ctx = {
+      baseUrl: deps.publicOrigin,
+      controller: deps.controller,
+      stateSigner: deps.stateSigner,
+      storage: {
+        generic: deps.integrationStorage.forIntegration(integration.id),
+        sourceControl: deps.sourceControlStorage.forIntegration(integration.id),
+      },
+      hooks: { runIssueTriage: (input: IssueTriageRunInput) => runIssueTriage(deps, input) },
+    };
     if (ready) return integration.routes(ctx);
     if (!ensureReady) return disabledIntegrationStatusRoutes(integration.id);
     return integration.routes(ctx).map(route => {
@@ -446,8 +449,8 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
     ...buildSkillRoutes({
       controllerId: deps.controllerId,
       controller: deps.controller,
-      githubStorage,
-      ensureGithubReady: githubRegistration?.ensureReady,
+      sourceControlStorage: githubStorage,
+      ensureSourceControlReady: githubRegistration?.ensureReady,
     }),
     ...integrationRoutes,
     ...absentStubs,

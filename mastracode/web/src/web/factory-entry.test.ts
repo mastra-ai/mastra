@@ -10,7 +10,6 @@ import { getFactoryWorkspace } from './factory/workspace.js';
 import type { FactoryIntegration, IntegrationContext } from './factory-integration.js';
 import {
   __resetRuntimeConfigForTests,
-  getDomainRegistry,
   getFactoryStorage,
   getSeededAuthAdapter,
   getSeededIntegration,
@@ -18,17 +17,11 @@ import {
   getSeededStateSigner,
   getSeededStorage,
 } from './runtime-config.js';
-import { DomainRegistry } from './storage/domain-registry.js';
-
-/**
- * A FactoryStorage whose init is stubbed — prepare() must call it (single init
- * path) but these wiring tests never reach a real database. DomainRegistry.init
- * is stubbed at the prototype for the same reason (its per-domain DDL is
- * covered by the domain suites against libsql `:memory:`).
- */
+/** A real in-memory FactoryStorage with init spied for boot-order assertions. */
 function fakeStorage(): LibSQLFactoryStorage {
   const storage = new LibSQLFactoryStorage({ url: ':memory:', id: 'factory-test-storage' });
-  vi.spyOn(storage, 'init').mockResolvedValue(undefined);
+  const init = storage.init.bind(storage);
+  vi.spyOn(storage, 'init').mockImplementation(() => init());
   return storage;
 }
 
@@ -71,8 +64,6 @@ async function prepareFactory(config: ConstructorParameters<typeof MastraFactory
 beforeEach(() => {
   vi.clearAllMocks();
   __resetRuntimeConfigForTests();
-  // Domain DDL never runs in these wiring tests (covered by the domain suites).
-  vi.spyOn(DomainRegistry.prototype, 'init').mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -115,11 +106,19 @@ describe('MastraFactory.prepare', () => {
     expect(getSeededSandbox()?.machine).toBe(sandbox);
   });
 
-  it('runs the single init path: storage.init() then the factory domains', async () => {
+  it('registers and initializes factory domains through the storage lifecycle', async () => {
     const storage = fakeStorage();
     await prepareFactory({ storage });
     expect(storage.init).toHaveBeenCalledOnce();
-    expect(DomainRegistry.prototype.init).toHaveBeenCalledExactlyOnceWith({ storage });
+    expect(storage.domainNames()).toEqual([
+      'intake',
+      'audit',
+      'work-items',
+      'model-credentials',
+      'integrations',
+      'source-control',
+    ]);
+    expect(storage.domainNames().every(name => storage.isDomainReady(name))).toBe(true);
   });
 
   it('leaves the sandbox runtime unset when the slot is omitted', async () => {
@@ -271,13 +270,6 @@ describe('MastraFactory.prepare integrations', () => {
     expect(getSeededIntegration('missing')).toBeUndefined();
   });
 
-  it('registers an integration-provided storage domain into the DomainRegistry', async () => {
-    const domain = { name: 'custom-domain', init: vi.fn(async () => {}) };
-    const custom = fakeIntegration({ id: 'custom', storageDomain: domain });
-    await prepareFactory({ storage: fakeStorage(), integrations: [custom] });
-    expect(getDomainRegistry().get('custom-domain')).toBe(domain);
-  });
-
   it("folds a ready integration's routes into buildApiRoutes", async () => {
     const routes = vi.fn((_ctx: IntegrationContext) => [
       { path: '/web/custom/status', method: 'GET' as const, handler: () => new Response() },
@@ -292,28 +284,6 @@ describe('MastraFactory.prepare integrations', () => {
     const ctx = routes.mock.calls[0]![0];
     expect(ctx.stateSigner).toBe(getSeededStateSigner());
     expect(typeof ctx.hooks?.runIssueTriage).toBe('function');
-  });
-
-  it('retries a failed integration domain before serving its routes', async () => {
-    const ensureReady = vi.spyOn(DomainRegistry.prototype, 'ensureReady').mockResolvedValue(undefined);
-    const domain = { name: 'retryable-domain', init: vi.fn(async () => {}) };
-    const handler = vi.fn(async () => new Response('ready'));
-    const custom = fakeIntegration({
-      id: 'retryable',
-      storageDomain: domain,
-      routes: vi.fn(() => [{ path: '/web/retryable', method: 'GET' as const, handler }]),
-    });
-    const config = await prepareFactory({ storage: fakeStorage(), integrations: [custom] });
-    const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{
-      path: string;
-      handler?: (c: unknown, next: () => Promise<void>) => Promise<Response>;
-    }>;
-    const route = buildApiRoutes({ controller: {}, authStorage: {} }).find(r => r.path === '/web/retryable');
-    expect(route?.handler).toBeTypeOf('function');
-    const response = await route!.handler!({} as never, async () => {});
-    expect(response.status).toBe(200);
-    expect(ensureReady).toHaveBeenCalledWith('retryable-domain');
-    expect(handler).toHaveBeenCalledOnce();
   });
 
   it('mounts disabled-status stubs for the known ids when no integrations are registered', async () => {
@@ -337,20 +307,6 @@ describe('MastraFactory.prepare integrations', () => {
     const tools = await extraTools({ requestContext: {} });
     expect(tools.customAgentTool).toBe(agentTool);
     expect(tools.customSessionTool).toBe(sessionTool);
-  });
-
-  it('retries a failed integration domain before resolving its tools', async () => {
-    const ensureReady = vi.spyOn(DomainRegistry.prototype, 'ensureReady').mockResolvedValue(undefined);
-    const customTool = { description: 'recovered' };
-    const custom = fakeIntegration({
-      id: 'retryable-tools',
-      storageDomain: { name: 'retryable-tools-domain', init: vi.fn(async () => {}) },
-      agentTools: vi.fn(async () => ({ customTool }) as never),
-    });
-    const config = await prepareFactory({ storage: fakeStorage(), integrations: [custom] });
-    const extraTools = config.extraTools as (args: { requestContext: object }) => Promise<Record<string, unknown>>;
-    await expect(extraTools({ requestContext: {} })).resolves.toEqual({ customTool });
-    expect(ensureReady).toHaveBeenCalledWith('retryable-tools-domain');
   });
 
   it('rejects duplicate tool keys from integrations', async () => {

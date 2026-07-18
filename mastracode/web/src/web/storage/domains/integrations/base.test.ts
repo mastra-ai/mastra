@@ -17,9 +17,8 @@ describe('IntegrationStorage', () => {
 
   beforeEach(async () => {
     backend = new LibSQLFactoryStorage({ id: 'integrations-test', url: ':memory:' });
+    domain = backend.registerDomain(new IntegrationStorage());
     await backend.init();
-    domain = new IntegrationStorage();
-    await domain.init({ storage: backend });
     store = domain.forIntegration('incidentio');
   });
 
@@ -29,7 +28,7 @@ describe('IntegrationStorage', () => {
 
   it('throws before init', async () => {
     const fresh = new IntegrationStorage();
-    await expect(fresh.forIntegration('x').connections.get('org-1')).rejects.toThrow(/Not initialized/);
+    await expect(fresh.forIntegration('x').connections.get('org-1')).rejects.toThrow(/has not been registered/);
   });
 
   describe('connections', () => {

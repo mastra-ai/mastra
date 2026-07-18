@@ -331,7 +331,7 @@ describe('gating', () => {
 
   it('401s unauthenticated requests when an auth adapter is active', async () => {
     seedRuntimeConfig({
-      domainRegistry: seed.registry,
+      storage: seed.storage,
       authAdapter: { kind: 'test', authenticate: async () => null } as unknown as WebAuthAdapter,
     });
     const res = await post(buildApp(null), '/web/config/providers/anthropic/oauth/start');

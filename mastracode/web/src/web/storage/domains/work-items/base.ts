@@ -8,8 +8,8 @@
  * so evolving the board's columns never needs a schema change. A single item
  * can sit in several stages at once (e.g. `['execute','review']`).
  *
- * Tenancy is **org-first**, like `github_projects`: the board is shared by the
- * whole org, scoped to one project. `created_by` and the per-entry `by` /
+ * Tenancy is **org-first**, like `source_control_projects`: the board is shared
+ * by the whole org, scoped to one project. `created_by` and the per-entry `by` /
  * `startedBy` fields record who did what, but never scope reads.
  *
  * Stage history is appended exclusively here (server-side) on every stage
@@ -19,10 +19,8 @@
  * merges never silently drop each other.
  */
 
-import { UniqueViolationError } from '@mastra/core/storage';
+import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
-
-import type { FactoryStorageContext, FactoryStorageDomain } from '../../domain';
 
 /** Where a work item was materialized from. */
 export type WorkItemSource = 'github-issue' | 'github-pr' | 'linear-issue' | 'manual';
@@ -271,18 +269,21 @@ function patchColumns(changes: Partial<WorkItemRow>): Partial<WorkItemDbRow> {
  * Work item storage, written once against the generic `FactoryStorageOps`
  * surface. Query methods are the typed surface the factory routes consume.
  */
-export class WorkItemsStorage implements FactoryStorageDomain {
-  readonly name = 'work-items';
-  #ops?: FactoryStorageOps;
+export class WorkItemsStorage extends FactoryStorageDomain {
+  constructor() {
+    super('work-items');
+  }
 
-  async init(ctx: FactoryStorageContext): Promise<void> {
-    await ctx.storage.ensureCollections([WORK_ITEMS_SCHEMA]);
-    this.#ops = ctx.storage.ops;
+  async init(): Promise<void> {
+    await this.ensureCollections([WORK_ITEMS_SCHEMA]);
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.ops.deleteMany('work_items', {});
   }
 
   get #db(): FactoryStorageOps {
-    if (!this.#ops) throw new Error('[WorkItemsStorage] Not initialized — init() has not succeeded.');
-    return this.#ops;
+    return this.ops;
   }
 
   /** List the org's work items for a project, newest first. */
