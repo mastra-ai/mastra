@@ -876,6 +876,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
                 traceId: workflowSpan.traceId,
                 spanId: workflowSpan.id,
                 parentSpanId: workflowSpan.getParentSpanId(),
+                ...(workflowSpan.metadata ? { tracingMetadata: workflowSpan.metadata } : {}),
+                ...(workflowSpan.tags?.length ? { tracingTags: workflowSpan.tags } : {}),
               }
             : {};
 
