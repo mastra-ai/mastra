@@ -664,7 +664,11 @@ describe('LocalSandbox', () => {
         const { args: argsUndefined } = buildBwrapCommand('echo 1', workspacePath, {});
         let foundBindUndefined = false;
         for (let i = 0; i <= argsUndefined.length - 3; i++) {
-          if (argsUndefined[i] === '--bind' && argsUndefined[i + 1] === workspacePath && argsUndefined[i + 2] === workspacePath) {
+          if (
+            argsUndefined[i] === '--bind' &&
+            argsUndefined[i + 1] === workspacePath &&
+            argsUndefined[i + 2] === workspacePath
+          ) {
             foundBindUndefined = true;
             break;
           }
@@ -683,14 +687,14 @@ describe('LocalSandbox', () => {
         expect(foundBindFalse).toBe(true);
       });
 
-      it('should generate a seatbelt profile without file-write* for workspace when readOnly is true', () => {
-        const workspacePath = '/path/to/workspace';
+      it('should exclude a read-only workspace from broad temp directory write permissions', () => {
+        const workspacePath = '/private/var/folders/path/to/workspace';
         const profile = generateSeatbeltProfile(workspacePath, { readOnly: true });
 
-        // Should not allow write to the workspace
         expect(profile).not.toContain(`(allow file-write* (subpath "${workspacePath}"))`);
-        // Should still allow write to temp folders
-        expect(profile).toContain('(allow file-write* (subpath "/private/tmp"))');
+        expect(profile).toContain(
+          `(allow file-write* (require-all (subpath "/private/var/folders") (require-not (subpath "${workspacePath}"))))`,
+        );
       });
 
       it('should generate a seatbelt profile with file-write* for workspace when readOnly is false or undefined', () => {
@@ -923,7 +927,9 @@ describe('LocalSandbox', () => {
         return;
       }
 
-      const rwDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-rw-path-'));
+      const rwDir = path.join(tempDir, 'writable');
+      const unrelatedTempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-unrelated-temp-'));
+      await fs.mkdir(rwDir);
       const testFile = path.join(tempDir, 'workspace-file.txt');
       await fs.writeFile(testFile, 'initial content');
 
@@ -936,36 +942,39 @@ describe('LocalSandbox', () => {
         },
       });
 
-      await seatbeltSandbox._start();
+      try {
+        await seatbeltSandbox._start();
 
-      // 1. Reading an existing workspace file succeeds
-      const readResult = await seatbeltSandbox.executeCommand('cat', [testFile]);
-      expect(readResult.success).toBe(true);
-      expect(readResult.stdout.trim()).toBe('initial content');
+        // 1. Reading an existing workspace file succeeds
+        const readResult = await seatbeltSandbox.executeCommand('cat', [testFile]);
+        expect(readResult.success).toBe(true);
+        expect(readResult.stdout.trim()).toBe('initial content');
 
-      // 2. Creating or overwriting a workspace file fails
-      const writeResult = await seatbeltSandbox.executeCommand('sh', [
-        '-c',
-        `echo "new content" > "${tempDir}/blocked-file.txt"`,
-      ]);
-      expect(writeResult.success).toBe(false);
-      expect(writeResult.stderr).toContain('Operation not permitted');
+        // 2. Creating or overwriting a workspace file fails
+        const blockedFile = path.join(tempDir, 'blocked-file.txt');
+        const writeResult = await seatbeltSandbox.executeCommand('sh', ['-c', `echo "new content" > "${blockedFile}"`]);
+        expect(writeResult.success).toBe(false);
+        expect(writeResult.stderr).toContain('Operation not permitted');
+        await expect(fs.access(blockedFile)).rejects.toThrow();
 
-      // Verify host filesystem is unchanged
-      const blockedFileExists = await fs.access(path.join(tempDir, 'blocked-file.txt')).then(() => true).catch(() => false);
-      expect(blockedFileExists).toBe(false);
+        // 3. Writing inside a nested readWritePaths exception succeeds
+        const rwFile = path.join(rwDir, 'allowed-file.txt');
+        const rwResult = await seatbeltSandbox.executeCommand('sh', ['-c', `echo "allowed content" > "${rwFile}"`]);
+        expect(rwResult.success).toBe(true);
+        await expect(fs.readFile(rwFile, 'utf8')).resolves.toContain('allowed content');
 
-      // 3. Writing inside an explicit readWritePaths exception succeeds
-      const rwFile = path.join(rwDir, 'allowed-file.txt');
-      const rwResult = await seatbeltSandbox.executeCommand('sh', [
-        '-c',
-        `echo "allowed content" > "${rwFile}"`,
-      ]);
-      expect(rwResult.success).toBe(true);
-
-      // Clean up
-      await seatbeltSandbox._destroy();
-      await fs.rm(rwDir, { recursive: true, force: true });
+        // 4. Writing elsewhere in the temp root remains allowed
+        const unrelatedTempFile = path.join(unrelatedTempDir, 'allowed-file.txt');
+        const tempResult = await seatbeltSandbox.executeCommand('sh', [
+          '-c',
+          `echo "temp content" > "${unrelatedTempFile}"`,
+        ]);
+        expect(tempResult.success).toBe(true);
+        await expect(fs.readFile(unrelatedTempFile, 'utf8')).resolves.toContain('temp content');
+      } finally {
+        await seatbeltSandbox._destroy();
+        await fs.rm(unrelatedTempDir, { recursive: true, force: true });
+      }
     });
   });
 
@@ -1106,7 +1115,10 @@ describe('LocalSandbox', () => {
       expect(writeResult.success).toBe(false);
 
       // Verify host filesystem is unchanged
-      const blockedFileExists = await fs.access(path.join(tempDir, 'blocked-file.txt')).then(() => true).catch(() => false);
+      const blockedFileExists = await fs
+        .access(path.join(tempDir, 'blocked-file.txt'))
+        .then(() => true)
+        .catch(() => false);
       expect(blockedFileExists).toBe(false);
 
       // 3. Writing inside an explicit readWritePaths exception succeeds
