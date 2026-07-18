@@ -291,7 +291,7 @@ Channels on serverless platforms may need `waitUntil` and shared pub/sub configu
 
 ### Idle servers
 
-Platform servers scale down to idle when they aren't receiving traffic, and that's fine for Slack. Slack retries webhook delivery, so the next event, such as a mention or direct message, wakes the server and it resumes handling requests. The first response after the server has been idle can take a little longer while it starts up. Subsequent messages respond at normal speed while the server stays warm.
+Platform servers scale down to idle when they aren't receiving traffic, and that's fine for Slack. The next event, such as a mention or direct message, wakes the server by delivering its webhook request, and the server resumes handling requests. The first response after the server has been idle can take a little longer while it starts up, which is expected. Slack expects a `200` acknowledgement within 3 seconds and retries the event up to three times when delivery fails or times out, so a very slow cold start may take a retry before the agent responds. Subsequent messages respond at normal speed while the server stays warm.
 
 ## Related
 
