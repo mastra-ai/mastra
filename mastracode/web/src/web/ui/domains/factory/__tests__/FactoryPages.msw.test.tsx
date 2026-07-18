@@ -429,7 +429,9 @@ describe('Factory Board routing', () => {
   it('given a local project, when visiting the Board, then a GitHub-only notice renders instead of columns', async () => {
     renderAt('/factory/board', localProject);
 
-    expect(await screen.findByText(/Board, metrics, and audit require a Factory connected to GitHub/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Board, metrics, and audit require a Factory connected to GitHub/),
+    ).toBeInTheDocument();
     expect(screen.queryByTestId('board-column-intake')).not.toBeInTheDocument();
   });
 

@@ -109,11 +109,14 @@ function renderRoutes(
   if (options?.project?.binding.kind === 'github') {
     const workItems = Array.from({ length: options.workItemCount ?? 0 }, (_, index) => ({ id: `work-${index}` }));
     server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/repositories/${options.project.binding.githubProjectId}/work-items`, async () => {
-        await options.workItemsReady;
-        if (options.workItemsError) return HttpResponse.json({ error: 'Factory unavailable' }, { status: 500 });
-        return HttpResponse.json({ workItems });
-      }),
+      http.get(
+        `${TEST_BASE_URL}/web/factory/repositories/${options.project.binding.githubProjectId}/work-items`,
+        async () => {
+          await options.workItemsReady;
+          if (options.workItemsError) return HttpResponse.json({ error: 'Factory unavailable' }, { status: 500 });
+          return HttpResponse.json({ workItems });
+        },
+      ),
       http.get(`${TEST_BASE_URL}/web/github/status`, () =>
         HttpResponse.json({ enabled: true, connected: false, installations: [] }),
       ),
@@ -162,16 +165,16 @@ describe('MastraCode web routing', () => {
 
   it('given a GitHub project has persisted Factory work, when visiting /, then the user lands on the board', async () => {
     const project: Factory = {
-  id: 'github-project',
-  name: 'mastra-ai/mastra',
-  resourceId: RESOURCE_ID,
-  createdAt: 1,
-  binding: {
-    kind: 'github',
-    githubProjectId: 'github-project-id',
-    worktrees: [],
-  },
-};
+      id: 'github-project',
+      name: 'mastra-ai/mastra',
+      resourceId: RESOURCE_ID,
+      createdAt: 1,
+      binding: {
+        kind: 'github',
+        githubProjectId: 'github-project-id',
+        worktrees: [],
+      },
+    };
     const { router } = renderRoutes('/', AUTHENTICATED, { project, workItemCount: 1 });
 
     await expectPathname(router, '/factory/board');
@@ -180,16 +183,16 @@ describe('MastraCode web routing', () => {
 
   it('given Factory work is still loading, when visiting /, then the app waits before choosing a destination', async () => {
     const project: Factory = {
-  id: 'github-project',
-  name: 'mastra-ai/mastra',
-  resourceId: RESOURCE_ID,
-  createdAt: 1,
-  binding: {
-    kind: 'github',
-    githubProjectId: 'github-project-id',
-    worktrees: [],
-  },
-};
+      id: 'github-project',
+      name: 'mastra-ai/mastra',
+      resourceId: RESOURCE_ID,
+      createdAt: 1,
+      binding: {
+        kind: 'github',
+        githubProjectId: 'github-project-id',
+        worktrees: [],
+      },
+    };
     let resolveWorkItems!: () => void;
     const workItemsReady = new Promise<void>(resolve => {
       resolveWorkItems = resolve;
@@ -204,16 +207,16 @@ describe('MastraCode web routing', () => {
 
   it('given persisted Factory work cannot be loaded, when visiting /, then the app does not redirect', async () => {
     const project: Factory = {
-  id: 'github-project',
-  name: 'mastra-ai/mastra',
-  resourceId: RESOURCE_ID,
-  createdAt: 1,
-  binding: {
-    kind: 'github',
-    githubProjectId: 'github-project-id',
-    worktrees: [],
-  },
-};
+      id: 'github-project',
+      name: 'mastra-ai/mastra',
+      resourceId: RESOURCE_ID,
+      createdAt: 1,
+      binding: {
+        kind: 'github',
+        githubProjectId: 'github-project-id',
+        worktrees: [],
+      },
+    };
     const { router } = renderRoutes('/', AUTHENTICATED, { project, workItemsError: true });
 
     expect(await screen.findByText('Factory unavailable')).toBeInTheDocument();
@@ -222,16 +225,16 @@ describe('MastraCode web routing', () => {
 
   it('given a GitHub project has no persisted Factory work, when visiting /, then the user lands on /new', async () => {
     const project: Factory = {
-  id: 'github-project',
-  name: 'mastra-ai/mastra',
-  resourceId: RESOURCE_ID,
-  createdAt: 1,
-  binding: {
-    kind: 'github',
-    githubProjectId: 'github-project-id',
-    worktrees: [],
-  },
-};
+      id: 'github-project',
+      name: 'mastra-ai/mastra',
+      resourceId: RESOURCE_ID,
+      createdAt: 1,
+      binding: {
+        kind: 'github',
+        githubProjectId: 'github-project-id',
+        worktrees: [],
+      },
+    };
     const { router } = renderRoutes('/', AUTHENTICATED, { project });
 
     await expectPathname(router, '/new');

@@ -60,15 +60,15 @@ describe('web UI stylesheet entry', () => {
 
 function seedFactory() {
   const project: Factory = {
-  id: 'project-test',
-  name: 'MastraCode Test',
-  resourceId: RESOURCE_ID,
-  createdAt: 1,
-  binding: {
-    kind: 'local',
-    path: PROJECT_PATH,
-  },
-};
+    id: 'project-test',
+    name: 'MastraCode Test',
+    resourceId: RESOURCE_ID,
+    createdAt: 1,
+    binding: {
+      kind: 'local',
+      path: PROJECT_PATH,
+    },
+  };
   localStorage.setItem('mastracode-factories', JSON.stringify([project]));
   localStorage.setItem('mastracode-active-factory', project.id);
 }

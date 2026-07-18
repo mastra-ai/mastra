@@ -12,7 +12,11 @@ export function FactoriesModal() {
   const { selectFactory } = useActiveFactoryContext();
   const addLocalFactory = useAddFactoryMutation();
   const error =
-    addLocalFactory.error instanceof Error ? addLocalFactory.error.message : addLocalFactory.error ? String(addLocalFactory.error) : null;
+    addLocalFactory.error instanceof Error
+      ? addLocalFactory.error.message
+      : addLocalFactory.error
+        ? String(addLocalFactory.error)
+        : null;
 
   const handlePick = async (path: string, name: string) => {
     try {
@@ -32,8 +36,8 @@ export function FactoriesModal() {
         </DialogHeader>
         <div className="flex flex-col gap-3 px-5 pb-5">
           <Txt as="p" variant="ui-sm" className="text-icon3">
-            Choose a folder on this machine. A Factory binds to that directory so its threads, memory, and workspace stay
-            scoped there — and are shared with the terminal.
+            Choose a folder on this machine. A Factory binds to that directory so its threads, memory, and workspace
+            stay scoped there — and are shared with the terminal.
           </Txt>
           <DirectoryBrowser
             onPick={(path, name) => void handlePick(path, name)}

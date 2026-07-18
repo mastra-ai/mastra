@@ -1097,7 +1097,9 @@ describe('issues route', () => {
 
   it('403s for a personal (no-org) account', async () => {
     seedMaterializedProject();
-    const res = await buildApp({ workosId: 'u1', organizationId: undefined }).request('/web/github/repositories/p1/issues');
+    const res = await buildApp({ workosId: 'u1', organizationId: undefined }).request(
+      '/web/github/repositories/p1/issues',
+    );
     expect(res.status).toBe(403);
     expect(listRepoOpenIssues).not.toHaveBeenCalled();
   });

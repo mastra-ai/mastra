@@ -36,15 +36,15 @@ afterEach(() => {
 
 function seedFactory() {
   const project: Factory = {
-  id: 'project-test',
-  name: 'MastraCode Test',
-  resourceId: RESOURCE_ID,
-  createdAt: 1,
-  binding: {
-    kind: 'local',
-    path: '/tmp/mastracode-test',
-  },
-};
+    id: 'project-test',
+    name: 'MastraCode Test',
+    resourceId: RESOURCE_ID,
+    createdAt: 1,
+    binding: {
+      kind: 'local',
+      path: '/tmp/mastracode-test',
+    },
+  };
   localStorage.setItem('mastracode-factories', JSON.stringify([project]));
   localStorage.setItem('mastracode-active-factory', project.id);
 }

@@ -56,18 +56,18 @@ const githubProject: Factory = {
     sandboxWorkdir: '/sandbox/mastra',
     selectedWorktreePath: '/sandbox/mastra-worktrees/feat-api',
     worktrees: [
-    // Legacy repo-root entry persisted by older builds — never a workspace.
-    { branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' },
-    { branch: 'feat-ui', worktreePath: '/sandbox/mastra-worktrees/feat-ui', baseBranch: 'main' },
-    { branch: 'feat-api', worktreePath: '/sandbox/mastra-worktrees/feat-api', baseBranch: 'main' },
-    // Personal user session — listed by the User Sessions section instead.
-    {
-      branch: 'user/alice-notes',
-      worktreePath: '/sandbox/mastra-worktrees/user-alice-notes',
-      baseBranch: 'main',
-      threadId: 'thread-user',
-    },
-  ],
+      // Legacy repo-root entry persisted by older builds — never a workspace.
+      { branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' },
+      { branch: 'feat-ui', worktreePath: '/sandbox/mastra-worktrees/feat-ui', baseBranch: 'main' },
+      { branch: 'feat-api', worktreePath: '/sandbox/mastra-worktrees/feat-api', baseBranch: 'main' },
+      // Personal user session — listed by the User Sessions section instead.
+      {
+        branch: 'user/alice-notes',
+        worktreePath: '/sandbox/mastra-worktrees/user-alice-notes',
+        baseBranch: 'main',
+        threadId: 'thread-user',
+      },
+    ],
   },
 };
 
@@ -337,7 +337,9 @@ describe('WorkspacesSection', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: 'feat-ui' }));
 
-    await waitFor(() => expect(storedGithubFactory().binding.selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-ui'));
+    await waitFor(() =>
+      expect(storedGithubFactory().binding.selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-ui'),
+    );
     // Let the open-thread flow settle so its requests can't leak into later tests.
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-generic'));
   });

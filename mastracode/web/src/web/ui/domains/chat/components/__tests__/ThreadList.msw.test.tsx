@@ -50,9 +50,9 @@ const worktreeProject: Factory = {
     sandboxWorkdir: '/sandbox/mastra',
     selectedWorktreePath: '/sandbox/mastra-worktrees/feat-ui',
     worktrees: [
-    { branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' },
-    { branch: 'feat-ui', worktreePath: '/sandbox/mastra-worktrees/feat-ui', baseBranch: 'main' },
-  ],
+      { branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' },
+      { branch: 'feat-ui', worktreePath: '/sandbox/mastra-worktrees/feat-ui', baseBranch: 'main' },
+    ],
   },
 };
 
@@ -240,7 +240,10 @@ describe('ThreadList', () => {
   it('given a GitHub project, then the list is read-only even when the repo-root path was persisted as selected', async () => {
     // Legacy projects could persist the repo root as the selected worktree;
     // it is no longer a workspace, so GitHub lists never expose thread controls.
-    seedFactory({ ...worktreeProject, binding: { ...worktreeProject.binding, selectedWorktreePath: '/sandbox/mastra'  } });
+    seedFactory({
+      ...worktreeProject,
+      binding: { ...worktreeProject.binding, selectedWorktreePath: '/sandbox/mastra' },
+    });
     useAgentControllerHandlers([threadOne]);
     renderThreadList();
 

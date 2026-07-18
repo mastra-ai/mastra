@@ -60,7 +60,11 @@ export function ThreadPage() {
       }
       main={
         <ChatSessionBoundary threadId={threadId}>
-          {activeFactory ? <ThreadPageMain /> : <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />}
+          {activeFactory ? (
+            <ThreadPageMain />
+          ) : (
+            <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />
+          )}
           <ChatOverlays />
         </ChatSessionBoundary>
       }

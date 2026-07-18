@@ -207,7 +207,11 @@ describe('POST /web/factory/repositories/:id/work-items', () => {
   it('400s on an invalid body', async () => {
     const res = await json('POST', `/web/factory/repositories/${PROJECT_ID}/work-items`, createBody({ stages: [] }));
     expect(res.status).toBe(400);
-    const bad = await json('POST', `/web/factory/repositories/${PROJECT_ID}/work-items`, createBody({ source: 'jira' }));
+    const bad = await json(
+      'POST',
+      `/web/factory/repositories/${PROJECT_ID}/work-items`,
+      createBody({ source: 'jira' }),
+    );
     expect(bad.status).toBe(400);
   });
 });

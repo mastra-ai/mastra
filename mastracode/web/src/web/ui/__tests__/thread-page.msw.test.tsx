@@ -68,15 +68,15 @@ afterEach(() => {
 
 function seedFactory(projects?: Factory[], activeFactoryId?: string) {
   const project: Factory = {
-  id: 'project-test',
-  name: 'MastraCode Test',
-  resourceId: RESOURCE_ID,
-  createdAt: 1,
-  binding: {
-    kind: 'local',
-    path: '/tmp/mastracode-test',
-  },
-};
+    id: 'project-test',
+    name: 'MastraCode Test',
+    resourceId: RESOURCE_ID,
+    createdAt: 1,
+    binding: {
+      kind: 'local',
+      path: '/tmp/mastracode-test',
+    },
+  };
   const storedProjects = projects ?? [project];
   localStorage.setItem('mastracode-factories', JSON.stringify(storedProjects));
   localStorage.setItem('mastracode-active-factory', activeFactoryId ?? storedProjects[0]?.id ?? project.id);
@@ -230,33 +230,33 @@ async function expectPathname(router: ReturnType<typeof createMemoryRouter>, pat
 describe('MastraCode thread pages', () => {
   it('hides user-session workspace files when the thread belongs to another project', async () => {
     const activeFactory: Factory = {
-  id: 'project-active',
-  name: 'Active factory',
-  resourceId: RESOURCE_ID,
-  createdAt: 1,
-  binding: {
-    kind: 'local',
-    path: '/tmp/active-project',
-  },
-};
+      id: 'project-active',
+      name: 'Active factory',
+      resourceId: RESOURCE_ID,
+      createdAt: 1,
+      binding: {
+        kind: 'local',
+        path: '/tmp/active-project',
+      },
+    };
     const threadProject: Factory = {
-  id: 'project-thread',
-  name: 'Thread project',
-  resourceId: RESOURCE_ID,
-  createdAt: 2,
-  binding: {
-    kind: 'github',
-    githubProjectId: 'github-thread',
-    worktrees: [
-        {
-          branch: 'user/thread-session',
-          worktreePath: '/tmp/thread-project-session',
-          baseBranch: 'main',
-          threadId: threadOne.id,
-        },
-      ],
-  },
-};
+      id: 'project-thread',
+      name: 'Thread project',
+      resourceId: RESOURCE_ID,
+      createdAt: 2,
+      binding: {
+        kind: 'github',
+        githubProjectId: 'github-thread',
+        worktrees: [
+          {
+            branch: 'user/thread-session',
+            worktreePath: '/tmp/thread-project-session',
+            baseBranch: 'main',
+            threadId: threadOne.id,
+          },
+        ],
+      },
+    };
 
     useAgentControllerHandlers();
     renderRoutes(`/user/threads/${threadOne.id}`, [activeFactory, threadProject], activeFactory.id);

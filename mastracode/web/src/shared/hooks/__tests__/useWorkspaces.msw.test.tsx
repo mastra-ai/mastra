@@ -81,9 +81,7 @@ describe('workspaces query hooks', () => {
     await waitForMutationsIdle(client);
 
     const stored = loadFactories()[0];
-    expect(isGithubFactory(stored!) && stored.binding.selectedWorktreePath).toBe(
-      '/sandbox/mastra-worktrees/feat-api',
-    );
+    expect(isGithubFactory(stored!) && stored.binding.selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-api');
     await waitFor(() => expect(result.current.workspaces.data?.selected?.branch).toBe('feat-api'));
   });
 

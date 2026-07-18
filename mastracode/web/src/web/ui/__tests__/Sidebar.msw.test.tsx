@@ -71,9 +71,9 @@ const githubProject: Factory = {
     sandboxWorkdir: '/sandbox/mastra',
     selectedWorktreePath: '/sandbox/mastra',
     worktrees: [
-    { branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' },
-    { branch: 'feat-ui', worktreePath: '/sandbox/mastra-worktrees/feat-ui', baseBranch: 'main' },
-  ],
+      { branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' },
+      { branch: 'feat-ui', worktreePath: '/sandbox/mastra-worktrees/feat-ui', baseBranch: 'main' },
+    ],
   },
 };
 
