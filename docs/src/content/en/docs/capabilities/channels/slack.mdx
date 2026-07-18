@@ -241,6 +241,10 @@ The main mechanism for controlling access is channel membership. The bot only re
 
 For finer control, gate on the sender's identity. Every request carries the sender's Slack user ID in the channel [request context](#request-context), so you can allow or deny specific users in an input processor or tool before the agent acts.
 
+### Server authentication
+
+The Slack webhook route is exempt from Mastra's [server authentication](/docs/server/auth). Slack can't send a bearer token, so Mastra registers the channel webhook as a public route and verifies each request with the Slack signing secret instead. This holds even when you enable a provider like [`MastraAuthSimple`](/docs/server/auth/simple-auth): the rest of your API stays protected, but the webhook route relies on the signing secret rather than your server auth. Keep `SLACK_SIGNING_SECRET` set so the adapter can reject requests that Slack didn't sign.
+
 ### External channels
 
 Shared channels ([Slack Connect](https://slack.com/connect)) let people from other workspaces join a conversation. If a workspace member adds the bot to a shared channel, everyone in that channel can talk to the agent, including external members outside your organization. Anyone who can reach the agent can also reach the tools and data it has access to.
