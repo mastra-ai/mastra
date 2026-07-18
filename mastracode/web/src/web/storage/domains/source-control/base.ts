@@ -214,6 +214,12 @@ export interface ProjectRepository {
   updatedAt: Date;
 }
 
+export interface ExternalRepositoryProjectTarget {
+  orgId: string;
+  factoryProjectId: string;
+  projectRepository: ProjectRepository;
+}
+
 export interface LinkProjectRepositoryInput {
   orgId: string;
   connectionId: string;
@@ -288,6 +294,10 @@ export interface SourceControlStorageHandle {
   };
   readonly projectRepositories: {
     list(args: { orgId: string; connectionId: string }): Promise<ProjectRepository[]>;
+    listByExternalRepository(args: {
+      installationExternalId: string;
+      repositoryExternalId: string;
+    }): Promise<ExternalRepositoryProjectTarget[]>;
     get(args: { orgId: string; id: string }): Promise<ProjectRepository | null>;
     link(args: LinkProjectRepositoryInput): Promise<ProjectRepository>;
     update(args: { orgId: string; id: string; input: UpdateProjectRepositoryInput }): Promise<ProjectRepository | null>;
@@ -701,6 +711,42 @@ export class SourceControlStorage extends FactoryStorageDomain {
           return (
             await db().findMany<ProjectRepositoryDbRow>(PROJECT_REPOSITORIES, { connection_id: connectionId })
           ).map(toProjectRepository);
+        },
+        listByExternalRepository: async ({ installationExternalId, repositoryExternalId }) => {
+          const targets: ExternalRepositoryProjectTarget[] = [];
+          const installations = await db().findMany<InstallationDbRow>(INSTALLATIONS, {
+            integration_id: integrationId,
+            external_id: installationExternalId,
+          });
+          for (const installation of installations) {
+            const repository = await db().findOne<RepositoryDbRow>(REPOSITORIES, {
+              installation_id: installation.id,
+              external_id: repositoryExternalId,
+            });
+            if (!repository) continue;
+            const links = await db().findMany<ProjectRepositoryDbRow>(PROJECT_REPOSITORIES, {
+              repository_id: repository.id,
+            });
+            for (const link of links) {
+              const connection = await db().findOne<ConnectionDbRow>(CONNECTIONS, {
+                id: link.connection_id,
+                integration_id: integrationId,
+                installation_id: installation.id,
+              });
+              if (!connection) continue;
+              const project = await db().findOne<Record<string, unknown>>(FACTORY_PROJECTS, {
+                id: connection.factory_project_id,
+                org_id: installation.org_id,
+              });
+              if (!project) continue;
+              targets.push({
+                orgId: installation.org_id,
+                factoryProjectId: connection.factory_project_id,
+                projectRepository: toProjectRepository(link),
+              });
+            }
+          }
+          return targets;
         },
         get: getProjectRepository,
         link: async input => {

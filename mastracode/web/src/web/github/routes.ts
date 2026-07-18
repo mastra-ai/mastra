@@ -38,7 +38,7 @@ import { getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './config';
 import type { GithubIntegration } from './integration';
 import { withProjectLock } from './project-lock';
 import { handleGithubWebhook } from './webhook';
-import type { GithubIssueTriageRunInput, GithubIssueTriageRunResult } from './webhook';
+import type { GithubIssueTriageRunInput, GithubIssueTriageRunResult, ParsedGithubWebhook } from './webhook';
 import {
   computeSandboxWorkdir,
   getSandboxProvider,
@@ -98,6 +98,8 @@ export interface MountGithubRoutesOptions {
   runIssueTriage?: (input: GithubIssueTriageRunInput) => Promise<GithubIssueTriageRunResult>;
   /** Best-effort audit emission supplied by the factory-owned audit domain. */
   emitAudit?: AuditEmitter['emit'];
+  /** Authoritative Factory rule ingress for normalized, signature-verified GitHub deliveries. */
+  ingestFactoryEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
 }
 
 /**
@@ -398,6 +400,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         const result = await handleGithubWebhook(loose(c), {
           github,
           runIssueTriage: runBoardIssueTriage,
+          ingestFactoryEvent: options.ingestFactoryEvent,
           ...(options.controller
             ? {
                 controller: options.controller,

@@ -65,10 +65,11 @@ export interface FactoryRuleIngressRecord {
 export interface CommitFactoryRuleEvaluationInput {
   orgId: string;
   factoryProjectId: string;
-  workItemId: string;
+  workItemId: string | null;
   ingress: { identity: string; triggerType: string };
   ruleSetVersion: string;
-  expectedRevision: number;
+  expectedRevision: number | null;
+  actor: Record<string, unknown> | null;
   outcome: { status: 'accepted' | 'rejected'; code?: string; reason?: string };
   decisions: Record<string, unknown>[];
   causalChain: Array<{ ingressId: string; decisionType: string }>;
@@ -92,9 +93,9 @@ export interface FactoryToolResultCursorRecord {
 export interface FactoryRuleEvaluationRecord {
   id: string;
   ingressId: string;
-  workItemId: string;
+  workItemId: string | null;
   ruleSetVersion: string;
-  expectedRevision: number;
+  expectedRevision: number | null;
   outcome: 'accepted' | 'rejected';
   code: string | null;
   reason: string | null;
@@ -109,11 +110,12 @@ export interface FactoryDeferredDecisionRecord {
   orgId: string;
   factoryProjectId: string;
   evaluationId: string;
-  workItemId: string;
+  workItemId: string | null;
   idempotencyKey: string;
   effectOrdinal: number;
   effectHash: string;
   causalChain: Array<{ ingressId: string; decisionType: string }>;
+  actor: Record<string, unknown> | null;
   decision: Record<string, unknown>;
   status: FactoryDispatchStatus;
   attempts: number;
@@ -516,9 +518,9 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
     columns: {
       id: { type: 'uuid-pk' },
       ingress_id: { type: 'text' },
-      work_item_id: { type: 'text' },
+      work_item_id: { type: 'text', nullable: true },
       rule_set_version: { type: 'text' },
-      expected_revision: { type: 'integer' },
+      expected_revision: { type: 'integer', nullable: true },
       outcome: { type: 'text' },
       code: { type: 'text', nullable: true },
       reason: { type: 'text', nullable: true },
@@ -533,11 +535,12 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       org_id: { type: 'text' },
       factory_project_id: { type: 'text' },
       evaluation_id: { type: 'text' },
-      work_item_id: { type: 'text' },
+      work_item_id: { type: 'text', nullable: true },
       idempotency_key: { type: 'text' },
       effect_ordinal: { type: 'integer' },
       effect_hash: { type: 'text' },
       causal_chain: { type: 'json' },
+      actor: { type: 'json', nullable: true },
       decision: { type: 'json' },
       status: { type: 'text' },
       attempts: { type: 'integer' },
@@ -642,11 +645,12 @@ function toDeferredDecision(row: GovernanceDbRow): FactoryDeferredDecisionRecord
     orgId: row.org_id,
     factoryProjectId: String(row.factory_project_id),
     evaluationId: String(row.evaluation_id),
-    workItemId: String(row.work_item_id),
+    workItemId: row.work_item_id === null || row.work_item_id === undefined ? null : String(row.work_item_id),
     idempotencyKey: String(row.idempotency_key),
     effectOrdinal: Number(row.effect_ordinal),
     effectHash: String(row.effect_hash),
     causalChain: (row.causal_chain as FactoryDeferredDecisionRecord['causalChain']) ?? [],
+    actor: (row.actor as Record<string, unknown> | null) ?? null,
     decision: row.decision as Record<string, unknown>,
     status: row.status as FactoryDispatchStatus,
     attempts: Number(row.attempts),
@@ -975,6 +979,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
                 effect_ordinal: index,
                 effect_hash: factoryDecisionHash(decision),
                 causal_chain: input.causalChain,
+                actor: null,
                 decision,
                 status: 'pending',
                 attempts: 0,
@@ -1000,72 +1005,89 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   async commitRuleEvaluation(input: CommitFactoryRuleEvaluationInput): Promise<CommitFactoryRuleEvaluationResult> {
-    return this.storage.withTransaction(async ops => {
-      const prior = await ops.findOne<GovernanceDbRow>('factory_rule_ingress', {
-        org_id: input.orgId,
-        factory_project_id: input.factoryProjectId,
-        identity: input.ingress.identity,
-      });
-      if (prior) return { status: 'replayed' as const, result: prior.result as Record<string, unknown> };
-      const itemRow = await ops.findOne<WorkItemDbRow>('work_items', {
-        id: input.workItemId,
-        org_id: input.orgId,
-        factory_project_id: input.factoryProjectId,
-      });
-      if (!itemRow) return { status: 'missing' as const };
-      const item = toRow(itemRow);
-      const stale = item.revision !== input.expectedRevision;
-      const outcome = stale ? 'rejected' : input.outcome.status;
-      const code = stale ? 'stale' : (input.outcome.code ?? null);
-      const reason = stale
-        ? 'The work item changed before this rule evaluation committed.'
-        : (input.outcome.reason ?? null);
-      const decisions = outcome === 'accepted' ? input.decisions : [];
-      const result = { status: outcome, itemId: item.id, revision: item.revision, code, reason, decisions };
-      const ingress = await ops.insertOne<GovernanceDbRow>('factory_rule_ingress', {
-        org_id: input.orgId,
-        factory_project_id: input.factoryProjectId,
-        identity: input.ingress.identity,
-        trigger_type: input.ingress.triggerType,
-        transition_id: input.ingress.identity,
-        result,
-        created_at: input.now,
-      });
-      const evaluation = await ops.insertOne<GovernanceDbRow>('factory_rule_evaluations', {
-        ingress_id: ingress.id,
-        work_item_id: item.id,
-        rule_set_version: input.ruleSetVersion,
-        expected_revision: input.expectedRevision,
-        outcome,
-        code,
-        reason,
-        causal_chain: input.causalChain,
-        created_at: input.now,
-      });
-      for (const [effectOrdinal, decision] of decisions.entries()) {
-        await ops.insertOne<GovernanceDbRow>('factory_deferred_decisions', {
+    const commit = () =>
+      this.storage.withTransaction<CommitFactoryRuleEvaluationResult>(async ops => {
+        const prior = await ops.findOne<GovernanceDbRow>('factory_rule_ingress', {
           org_id: input.orgId,
           factory_project_id: input.factoryProjectId,
-          evaluation_id: evaluation.id,
-          work_item_id: item.id,
-          idempotency_key: String(decision.idempotencyKey),
-          effect_ordinal: effectOrdinal,
-          effect_hash: factoryDecisionHash(decision),
-          causal_chain: input.causalChain,
-          decision,
-          status: 'pending',
-          attempts: 0,
-          available_at: input.now,
-          lease_owner: null,
-          lease_expires_at: null,
-          last_error: null,
-          completed_at: null,
-          created_at: new Date(input.now.getTime() + effectOrdinal),
-          updated_at: input.now,
+          identity: input.ingress.identity,
         });
-      }
-      return { status: 'committed' as const, result };
-    });
+        if (prior) return { status: 'replayed' as const, result: prior.result as Record<string, unknown> };
+        const itemRow = input.workItemId
+          ? await ops.findOne<WorkItemDbRow>('work_items', {
+              id: input.workItemId,
+              org_id: input.orgId,
+              factory_project_id: input.factoryProjectId,
+            })
+          : null;
+        if (input.workItemId !== null && !itemRow) return { status: 'missing' as const };
+        const item = itemRow ? toRow(itemRow) : null;
+        const stale = item !== null && item.revision !== input.expectedRevision;
+        const outcome = stale ? 'rejected' : input.outcome.status;
+        const code = stale ? 'stale' : (input.outcome.code ?? null);
+        const reason = stale
+          ? 'The work item changed before this rule evaluation committed.'
+          : (input.outcome.reason ?? null);
+        const decisions = outcome === 'accepted' ? input.decisions : [];
+        const result = {
+          status: outcome,
+          itemId: item?.id ?? null,
+          revision: item?.revision ?? null,
+          code,
+          reason,
+          decisions,
+        };
+        const ingress = await ops.insertOne<GovernanceDbRow>('factory_rule_ingress', {
+          org_id: input.orgId,
+          factory_project_id: input.factoryProjectId,
+          identity: input.ingress.identity,
+          trigger_type: input.ingress.triggerType,
+          transition_id: input.ingress.identity,
+          result,
+          created_at: input.now,
+        });
+        const evaluation = await ops.insertOne<GovernanceDbRow>('factory_rule_evaluations', {
+          ingress_id: ingress.id,
+          work_item_id: item?.id ?? null,
+          rule_set_version: input.ruleSetVersion,
+          expected_revision: input.expectedRevision,
+          outcome,
+          code,
+          reason,
+          causal_chain: input.causalChain,
+          created_at: input.now,
+        });
+        for (const [effectOrdinal, decision] of decisions.entries()) {
+          await ops.insertOne<GovernanceDbRow>('factory_deferred_decisions', {
+            org_id: input.orgId,
+            factory_project_id: input.factoryProjectId,
+            evaluation_id: evaluation.id,
+            work_item_id: item?.id ?? null,
+            idempotency_key: String(decision.idempotencyKey),
+            effect_ordinal: effectOrdinal,
+            effect_hash: factoryDecisionHash(decision),
+            causal_chain: input.causalChain,
+            actor: input.actor,
+            decision,
+            status: 'pending',
+            attempts: 0,
+            available_at: input.now,
+            lease_owner: null,
+            lease_expires_at: null,
+            last_error: null,
+            completed_at: null,
+            created_at: new Date(input.now.getTime() + effectOrdinal),
+            updated_at: input.now,
+          });
+        }
+        return { status: 'committed' as const, result };
+      });
+    return this.storage.withDistributedLock
+      ? this.storage.withDistributedLock(
+          `factory-ingress:${input.orgId}:${input.factoryProjectId}:${input.ingress.identity}`,
+          commit,
+        )
+      : commit();
   }
 
   async getToolResultCursor(

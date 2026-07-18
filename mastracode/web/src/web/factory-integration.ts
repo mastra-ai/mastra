@@ -23,6 +23,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import type { MastraWorker } from '@mastra/core/worker';
 
 import type { AuditEmitter } from './audit/domain.js';
+import type { ParsedGithubWebhook } from './github/webhook.js';
 import type { AuditEventRow } from './storage/domains/audit/base.js';
 import type { StateSigner } from './state-signing.js';
 import type { IntegrationStorageHandle } from './storage/domains/integrations/base.js';
@@ -33,6 +34,7 @@ import type { SourceControlStorageHandle } from './storage/domains/source-contro
 /** Factory-owned hooks integrations may invoke. */
 export interface IntegrationHooks {
   emitAudit?: AuditEmitter['emit'];
+  ingestGithubEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
 }
 
 /**

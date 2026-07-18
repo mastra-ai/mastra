@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import type {
   CreateProjectSourceControlConnectionInput,
+  ExternalRepositoryProjectTarget,
   LinkProjectRepositoryInput,
   ProjectRepository,
   ProjectRepositorySandbox,
@@ -184,6 +185,38 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       (await this.connections.get({ orgId, id: connectionId }))
         ? this.projectRepositoriesRows.filter(row => row.connectionId === connectionId)
         : [],
+    listByExternalRepository: async ({
+      installationExternalId,
+      repositoryExternalId,
+    }: {
+      installationExternalId: string;
+      repositoryExternalId: string;
+    }): Promise<ExternalRepositoryProjectTarget[]> => {
+      const targets: ExternalRepositoryProjectTarget[] = [];
+      for (const installation of this.installationsRows.filter(row => row.externalId === installationExternalId)) {
+        const repository = this.repositoriesRows.find(
+          row => row.installationId === installation.id && row.externalId === repositoryExternalId,
+        );
+        if (!repository) continue;
+        for (const projectRepository of this.projectRepositoriesRows.filter(
+          row => row.repositoryId === repository.id,
+        )) {
+          const connection = this.connectionsRows.find(
+            row =>
+              row.id === projectRepository.connectionId &&
+              row.installationId === installation.id &&
+              row.integrationId === this.integrationId,
+          );
+          if (!connection) continue;
+          targets.push({
+            orgId: installation.orgId,
+            factoryProjectId: connection.factoryProjectId,
+            projectRepository,
+          });
+        }
+      }
+      return targets;
+    },
     get: async ({ orgId, id }: { orgId: string; id: string }): Promise<ProjectRepository | null> => {
       const row = this.projectRepositoriesRows.find(candidate => candidate.id === id);
       if (!row) return null;

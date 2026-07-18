@@ -52,6 +52,7 @@ type CompletedToolResult = {
   messageCreatedAt: Date;
   toolCallId: string;
   toolName: string;
+  input: FactoryRuleJsonValue;
   status: 'success' | 'error';
   value: FactoryRuleJsonValue;
 };
@@ -138,6 +139,7 @@ function completedToolResults(message: MastraDBMessage): CompletedToolResult[] {
       messageCreatedAt: createdAt,
       toolCallId,
       toolName: toolName.slice(0, 256),
+      input: boundedResult(invocation.args ?? {}),
       status: state === 'error' ? 'error' : 'success',
       value: state === 'error' ? boundedError(invocation.result ?? invocation.error) : boundedResult(invocation.result),
     });
@@ -207,6 +209,16 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       storage: WorkItemsStorage;
       transitionService?: Pick<FactoryTransitionService, 'transition'>;
       messageReader?: PersistedMessageReader;
+      recordPullRequestProvenance?: (input: {
+        binding: FactoryRunBindingRecord;
+        item: WorkItemRow;
+        assistantMessageId: string;
+        toolCallId: string;
+        toolName: string;
+        toolInput: FactoryRuleJsonValue;
+        toolResult: FactoryRuleJsonValue;
+        status: 'success' | 'error';
+      }) => Promise<void>;
     },
   ) {}
 
@@ -338,6 +350,16 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     for (const message of messages) {
       for (const toolResult of completedToolResults(message)) {
         if (toolCallIds && !toolCallIds.has(toolResult.toolCallId)) continue;
+        await this.options.recordPullRequestProvenance?.({
+          binding,
+          item,
+          assistantMessageId: toolResult.assistantMessageId,
+          toolCallId: toolResult.toolCallId,
+          toolName: toolResult.toolName,
+          toolInput: toolResult.input,
+          toolResult: toolResult.value,
+          status: toolResult.status,
+        });
         await this.ingestToolResult(binding, item, toolResult);
       }
     }
@@ -417,6 +439,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       ingress: { identity: ingressId, triggerType: 'tool.result' },
       ruleSetVersion: this.options.rules.version,
       expectedRevision: item.revision,
+      actor: { ...context.actor },
       outcome,
       decisions: decisions.map(entry => ({ ...entry })),
       causalChain: [],

@@ -25,7 +25,7 @@ function requestContext(overrides: Partial<{ threadId: string; scope: string; au
   return context;
 }
 
-async function prepare(storage: WorkItemsStorage) {
+async function prepare(storage: WorkItemsStorage, role = 'work') {
   return storage.prepareRunStart({
     orgId: 'org-1',
     userId: 'user-1',
@@ -44,7 +44,7 @@ async function prepare(storage: WorkItemsStorage) {
         metadata: {},
       },
     },
-    role: 'work',
+    role,
     session: { projectPath: '/worktree', branch: 'factory/issue-1', threadId: 'thread-1' },
     resourceId: 'resource-1',
     kickoffKey: 'kickoff-1',
@@ -59,6 +59,7 @@ function toolMessage(
     toolName?: string;
     state?: 'call' | 'result' | 'error';
     result?: unknown;
+    args?: unknown;
     createdAt?: Date;
   } = {},
 ) {
@@ -76,7 +77,7 @@ function toolMessage(
           toolInvocation: {
             toolCallId: options.toolCallId ?? 'tool-call-1',
             toolName: options.toolName ?? 'submit_plan',
-            args: {},
+            args: options.args ?? {},
             state: options.state ?? 'result',
             result: options.result ?? { approved: true },
           },
@@ -136,6 +137,61 @@ describe('FactoryPhaseStateProcessor', () => {
         result: { status: 'success', value: { approved: true } },
       }),
     );
+  });
+
+  it('runs the durable terminal tool observer before rule reconciliation', async () => {
+    const storage = (await seedFactoryStorageForTests()).workItems;
+    await prepare(storage);
+    const recordPullRequestProvenance = vi.fn(async () => undefined);
+    const processor = new FactoryPhaseStateProcessor({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+      recordPullRequestProvenance,
+    });
+
+    await processor.processInputStep(
+      inputArgs(requestContext(), [
+        toolMessage({
+          toolName: 'execute_command',
+          args: { command: 'gh pr create --title test' },
+          result: { stdout: 'https://github.com/acme/repo/pull/17' },
+        }),
+      ]),
+    );
+
+    expect(recordPullRequestProvenance).toHaveBeenCalledWith(
+      expect.objectContaining({
+        assistantMessageId: 'assistant-1',
+        toolCallId: 'tool-call-1',
+        toolName: 'execute_command',
+        toolInput: { command: 'gh pr create --title test' },
+        status: 'success',
+      }),
+    );
+  });
+
+  it('moves an approved plan to Building before emitting the next phase signal', async () => {
+    const storage = (await seedFactoryStorageForTests()).workItems;
+    const prepared = await prepare(storage, 'plan');
+    const rules = defaultFactoryRules({ version: 'rules-v1' });
+    const transitionService = new FactoryTransitionService({ rules, storage });
+    const processor = new FactoryPhaseStateProcessor({ rules, storage, transitionService });
+
+    await processor.processInputStep(
+      inputArgs(requestContext(), [
+        toolMessage({ result: { content: 'Plan approved. Proceed with implementation.' } }),
+      ]),
+    );
+
+    await expect(storage.get({ orgId: 'org-1', id: prepared.item.id })).resolves.toMatchObject({
+      revision: 2,
+      stages: ['execute'],
+    });
+    const signal = await processor.computeStateSignal(stateArgs(requestContext()));
+    expect(signal).toMatchObject({
+      attributes: { board: 'work', stage: 'execute', role: 'plan', revision: 2 },
+    });
+    expect(signal?.contents).toContain('Factory work phase: Building (execute)');
   });
 
   it('uses completed step results to avoid reconciling unrelated historical messages', async () => {

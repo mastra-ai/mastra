@@ -11,7 +11,7 @@ import type {
   WorkItemsStorage,
 } from '../../storage/domains/work-items/base.js';
 import { getWorkItemsStorage } from '../../storage/domains.js';
-import type { FactoryCommitDecision, FactoryRuleCausalEntry } from './types.js';
+import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleBoard, FactoryRuleCausalEntry } from './types.js';
 import { FACTORY_RULE_STAGES } from './types.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import { MAX_FACTORY_RULE_CAUSAL_DEPTH, validateFactoryRuleDecision } from './validation.js';
@@ -58,6 +58,24 @@ function externalSourceForDecision(decision: Extract<FactoryCommitDecision, { ty
           ? ['linear', 'issue']
           : ['factory', 'manual'];
   return { integrationId, type, externalId: decision.sourceKey, url: decision.url ?? undefined };
+}
+
+function deferredActor(record: FactoryDeferredDecisionRecord): FactoryRuleActor {
+  const actor = record.actor;
+  if (
+    actor?.type === 'github' &&
+    typeof actor.login === 'string' &&
+    typeof actor.trusted === 'boolean' &&
+    typeof actor.factoryAuthored === 'boolean'
+  ) {
+    return {
+      type: 'github',
+      login: actor.login,
+      trusted: actor.trusted,
+      factoryAuthored: actor.factoryAuthored,
+    };
+  }
+  return { type: 'system', id: 'factory-rule-dispatcher' };
 }
 
 function leaseIdentity(
@@ -178,7 +196,7 @@ export class FactoryDecisionDispatcher {
         const result = await this.#transitionService.transition({
           orgId: record.orgId,
           factoryProjectId: record.factoryProjectId,
-          workItemId: record.workItemId,
+          workItemId: item.id,
           board: decision.board,
           stage: decision.stage,
           expectedRevision: item.revision,
@@ -286,7 +304,7 @@ export class FactoryDecisionDispatcher {
       board,
       stage: 'intake',
       expectedRevision: result.item.revision,
-      actor: { type: 'system', id: 'factory-rule-dispatcher' },
+      actor: deferredActor(record),
       ingress: { type: 'rule', identity: `decision:${record.idempotencyKey}:initial-entry` },
       cause: 'linked_item_materialized',
       causalChain,
@@ -311,12 +329,14 @@ export class FactoryDecisionDispatcher {
   }
 
   async #requireItem(record: FactoryDeferredDecisionRecord) {
+    if (!record.workItemId) throw new Error('Factory decision is not linked to a work item.');
     const item = await this.#storage.get({ orgId: record.orgId, id: record.workItemId });
     if (!item) throw new Error('Factory work item not found.');
     return item;
   }
 
   async #requireBinding(record: FactoryDeferredDecisionRecord, role?: string): Promise<FactoryRunBindingRecord> {
+    if (!record.workItemId) throw new Error('Factory decision is not linked to a work item.');
     const bindings = await this.#storage.listRunBindings(record.orgId, record.factoryProjectId, record.workItemId);
     const binding = bindings
       .filter(candidate => candidate.status === 'active' && (role === undefined || candidate.role === role))

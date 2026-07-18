@@ -995,6 +995,7 @@ export class GithubIntegration implements FactoryIntegration {
         ? input => runGithubIssueTriage({ controller: ctx.controller!, input })
         : undefined,
       emitAudit: ctx.hooks?.emitAudit,
+      ingestFactoryEvent: ctx.hooks?.ingestGithubEvent,
     });
   }
 

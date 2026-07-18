@@ -11,9 +11,11 @@ import type { FactoryIntegration, IntegrationContext } from './factory-integrati
 import { getGithubFeatureDiagnostics } from './github/config.js';
 import { getLinearFeatureDiagnostics } from './linear/config.js';
 import { buildFactoryRoutes } from './factory/routes.js';
+import { FactoryGithubEventService } from './factory/rules/github-service.js';
 import { FactoryStartCoordinator } from './factory/rules/start-coordinator.js';
 import { FactoryTransitionService } from './factory/rules/transition-service.js';
 import { buildFsRoutes } from './fs-routes.js';
+import type { GithubIntegration } from './github/integration.js';
 import { buildIntakeRoutes } from './intake/routes.js';
 import { buildOAuthRoutes } from './oauth-routes.js';
 import { getFactoryStorage, getSeededFactoryRules } from './runtime-config.js';
@@ -175,10 +177,28 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
   const registrations = deps.integrations ?? [];
   const githubRegistration = registrations.find(({ integration }) => integration.id === 'github');
   const githubStorage = githubRegistration ? deps.sourceControlStorage.forIntegration('github') : undefined;
+  const githubIntegration = githubRegistration?.integration as GithubIntegration | undefined;
+  const workItems = deps.factoryReady ? getFactoryStorage().getDomain<WorkItemsStorage>('work-items') : undefined;
+  const githubEventService =
+    githubIntegration && githubStorage && workItems
+      ? new FactoryGithubEventService({
+          github: githubIntegration,
+          sourceControl: githubStorage,
+          integrationStorage: deps.integrationStorage.forIntegration('github'),
+          storage: workItems,
+          rules: getSeededFactoryRules()!,
+        })
+      : undefined;
   const integrationRoutes = registrations.flatMap(registration => {
     const { integration } = registration;
     if (!deps.stateSigner) return disabledIntegrationStatusRoutes(integration.id);
     const context = buildIntegrationContext({ ...deps, stateSigner: deps.stateSigner, emitAudit }, integration.id);
+    if (integration.id === 'github' && githubEventService) {
+      context.hooks = {
+        ...context.hooks,
+        ingestGithubEvent: event => githubEventService.ingest(event),
+      };
+    }
     return guardIntegrationRoutes({ ...registration, routes: integration.routes(context) });
   });
   // Absent known integrations still get their disabled-status stub.
@@ -186,8 +206,7 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
     .filter(id => !registrations.some(({ integration }) => integration.id === id))
     .flatMap(disabledIntegrationStatusRoutes);
   const factoryRoutes = (() => {
-    if (!deps.factoryReady) return [];
-    const workItems = getFactoryStorage().getDomain<WorkItemsStorage>('work-items');
+    if (!deps.factoryReady || !workItems) return [];
     const transitionService =
       deps.factoryTransitionService ??
       new FactoryTransitionService({ rules: getSeededFactoryRules(), storage: workItems });

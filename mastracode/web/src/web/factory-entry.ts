@@ -39,6 +39,8 @@ import { FactoryTransitionService } from './factory/rules/transition-service.js'
 import type { FactoryRules } from './factory/rules/types.js';
 import { assertFactoryRules } from './factory/rules/validation.js';
 import { getFactoryWorkspace } from './factory/workspace.js';
+import type { GithubIntegration } from './github/integration.js';
+import { recordFactoryPullRequestProvenance } from './github/provenance.js';
 import { ProjectDomain } from './projects/domain.js';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { getFactoryStorage, seedRuntimeConfig } from './runtime-config.js';
@@ -424,6 +426,8 @@ export class MastraFactory {
     const intakeReady =
       integrations.some(integration => integration.intake !== undefined) && storage.isDomainReady('intake');
     const factoryReady = storage.isDomainReady('projects') && storage.isDomainReady('work-items');
+    const githubIntegration = integrations.find(integration => integration.id === 'github') as
+      GithubIntegration | undefined;
     const workItemsStorage = storage.isDomainReady('work-items')
       ? storage.getDomain<WorkItemsStorage>('work-items')
       : undefined;
@@ -435,6 +439,17 @@ export class MastraFactory {
           rules,
           storage: workItemsStorage,
           ...(transitionService ? { transitionService } : {}),
+          ...(githubIntegration
+            ? {
+                recordPullRequestProvenance: (input: Parameters<typeof recordFactoryPullRequestProvenance>[3]) =>
+                  recordFactoryPullRequestProvenance(
+                    githubIntegration,
+                    sourceControlStorage.forIntegration('github'),
+                    integrationStorage.forIntegration('github'),
+                    input,
+                  ),
+              }
+            : {}),
           ...(storage
             ? {
                 messageReader: {
