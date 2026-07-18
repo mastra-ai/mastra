@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.52.0-alpha.4",
+  "version": "1.52.0-alpha.6",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -719,6 +719,16 @@
       "require": {
         "types": "./dist/utils/collect-tool-mocks.d.ts",
         "default": "./dist/utils/collect-tool-mocks.cjs"
+      }
+    },
+    "./utils/safe-stringify": {
+      "import": {
+        "types": "./dist/utils/safe-stringify.d.ts",
+        "default": "./dist/utils/safe-stringify.js"
+      },
+      "require": {
+        "types": "./dist/utils/safe-stringify.d.ts",
+        "default": "./dist/utils/safe-stringify.cjs"
       }
     },
     "./loop/server": {

@@ -100,7 +100,7 @@ Pass `--region` when a deploy creates a new environment to control where it runs
 mastra deploy --env production --region eu
 ```
 
-The region is fixed when the environment is created. Databases attached to an environment are placed near that environment's region automatically.
+The region is fixed when the environment is created. Databases attached to an environment are placed near that environment's region automatically, and observability data is routed to the ingest region that matches the environment's residency zone. See [Regions](/docs/mastra-platform/regions) for the full list of supported regions, database placement, and observability co-location.
 
 ## Preflight checks
 
@@ -162,6 +162,7 @@ mastra deploy --env production --yes
 ## Related
 
 - [Environments](/docs/mastra-platform/environments)
+- [Regions](/docs/mastra-platform/regions)
 - [Hosted databases](/docs/mastra-platform/database)
 - [`mastra deploy` CLI reference](/reference/cli/mastra#mastra-deploy)
 - [Configuration](/docs/mastra-platform/configuration)

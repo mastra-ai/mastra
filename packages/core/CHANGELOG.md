@@ -1,5 +1,145 @@
 # @mastra/core
 
+## 1.52.0-alpha.6
+
+### Patch Changes
+
+- Fixed `new Agent({ durable: true })` to actually use the durable execution path when used standalone (without being registered on a `Mastra` instance). ([#19632](https://github.com/mastra-ai/mastra/pull/19632))
+
+  Previously, `durable: true` only took effect when the agent was attached to a `Mastra`. Constructing an agent with `durable: true` and calling `agent.stream(...)` directly silently ran through the non-durable path.
+
+  Now `stream`, `generate`, `resumeStream`, `resumeGenerate`, `approveToolCall`, `declineToolCall`, `streamUntilIdle`, `resume`, `recover`, `listActiveRuns`, `recoverActiveRuns`, `observe`, and `prepare` all run through the durable execution path on a standalone `new Agent({ durable: true })`.
+
+  ```ts
+  const agent = new Agent({
+    id: 'my-agent',
+    name: 'My Agent',
+    instructions: 'You are a helpful assistant',
+    model,
+    durable: true,
+  });
+
+  // Now runs through the durable execution path.
+  await agent.stream('hi');
+  ```
+
+- Fixed native Agent goals continuing to invoke the judge after an unretried API error. ([#19662](https://github.com/mastra-ai/mastra/pull/19662))
+
+- Fixed dataset item writes to reject circular payloads with a clear validation error before storage, instead of failing with database-specific serialization errors. Silently lossy JSON values (nested `undefined`, functions, symbols, bigints, and non-finite numbers) and non-plain objects (`Date`, `Map`, `Set`, class instances, and custom `toJSON()` objects) are now also rejected with the offending path, so identical `externalId` retries can no longer conflict with the persisted payload. Added a public `safeStringify` utility for serializing values that may contain circular references. ([#19603](https://github.com/mastra-ai/mastra/pull/19603))
+
+  ```ts
+  import { safeStringify, ensureSerializable } from '@mastra/core/utils/safe-stringify';
+
+  const value: Record<string, unknown> = { prompt: 'hello' };
+  value.self = value;
+
+  safeStringify(value); // '{"prompt":"hello","self":"[Circular]"}'
+  ensureSerializable(value); // { prompt: 'hello', self: '[Circular]' }
+  ```
+
+## 1.52.0-alpha.5
+
+### Minor Changes
+
+- `mastra build` now deploys in one step for push-style deployers. Deployers can opt in with the new `deployOnBuild` flag on the deployer contract, and the build runs their `deploy()` right after bundling. `SandboxDeployer` from `@mastra/deployer-sandbox` opts in, so configuring it means `mastra build` bundles your project, deploys it into the sandbox, and prints the live URL. Existing platform deployers are unchanged. ([#19577](https://github.com/mastra-ai/mastra/pull/19577))
+
+  ```typescript
+  import { Mastra } from '@mastra/core/mastra';
+  import { SandboxDeployer } from '@mastra/deployer-sandbox';
+  import { VercelSandbox } from '@mastra/vercel';
+
+  export const mastra = new Mastra({
+    deployer: new SandboxDeployer({
+      sandbox: new VercelSandbox({ sandboxName: 'my-preview', ports: [4111] }),
+    }),
+  });
+  ```
+
+  ```bash
+  mastra build # bundles AND deploys — prints the live URL
+  ```
+
+- Added an optional `networking` capability and `writeFiles()` method to the `WorkspaceSandbox` interface. Sandbox providers that expose public port URLs can now implement `networking.getPortUrl(port)`, which enables preview URLs and sandbox deploys (see the new `@mastra/deployer-sandbox` package). Use the new `supportsNetworking()` type guard to detect the capability at runtime. ([#19577](https://github.com/mastra-ai/mastra/pull/19577))
+
+  ```typescript
+  import { supportsNetworking } from '@mastra/core/workspace';
+
+  if (supportsNetworking(sandbox)) {
+    const url = await sandbox.networking.getPortUrl(4111);
+  }
+  ```
+
+- Added `onTitleGenerated` callback to memory options. When `generateTitle` is enabled, pass `onTitleGenerated` in the `memory` property of `agent.generate()` or `agent.stream()` to be notified when the thread title has been generated and persisted to storage. This is a per-request callback, so each request handler can use its own callback with direct access to its response stream — no storage adapter wrapping needed. ([#18998](https://github.com/mastra-ai/mastra/pull/18998))
+
+  **Example:**
+
+  ```ts
+  await agent.stream('Hello', {
+    memory: {
+      thread: threadId,
+      resource: userId,
+      onTitleGenerated: title => {
+        res.write(`event: title\ndata: ${JSON.stringify({ title })}\n\n`);
+      },
+    },
+  });
+  ```
+
+- Added access to the workspace resolved for an AgentController session. ([#19547](https://github.com/mastra-ai/mastra/pull/19547))
+
+  Use the session-owned workspace when an operation must remain isolated to that session:
+
+  ```ts
+  const session = await controller.createSession({ resourceId, scope });
+  const workspace = session.getWorkspace();
+  ```
+
+  Mastra Code workspace resolvers can now accept an isolated read-only skill extension:
+
+  ```ts
+  const workspace = await getDynamicWorkspace({
+    requestContext,
+    skillExtension: {
+      id: 'review-skills',
+      paths: ['/__review_skills__'],
+      createSource: fallback => new ReviewSkillSource(fallback),
+    },
+  });
+  ```
+
+  This lets SDK consumers compose additional read-only skill roots into selected workspaces without changing the default workspace skill set.
+
+- Added an optional `clone()` method to the `WorkspaceSandbox` contract, along with the new `SandboxCloneOptions` type. `clone()` constructs an unstarted sibling sandbox that inherits the template's configuration (credentials, image, resources) with per-instance overrides — without performing any I/O. This lets one configured sandbox act as a template for a fleet of sandbox clones (for example, one per project). ([#19616](https://github.com/mastra-ai/mastra/pull/19616))
+
+  ```ts
+  const template = new RailwaySandbox({ token, environmentId });
+
+  // Fresh sandbox clone for a project — provisions on start()
+  const projectSandbox = template.clone({
+    id: 'mc-project-42',
+    env: { GITHUB_TOKEN: token },
+    idleTimeoutMinutes: 30,
+  });
+  await projectSandbox.start();
+  ```
+
+  `LocalSandbox` implements `clone()` out of the box.
+
+### Patch Changes
+
+- dependencies updates: ([#19611](https://github.com/mastra-ai/mastra/pull/19611))
+  - Updated dependency [`@ai-sdk/provider-utils-v7@npm:@ai-sdk/provider-utils@5.0.9` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v7/v/5.0.9) (from `npm:@ai-sdk/provider-utils@5.0.7`, in `dependencies`)
+
+- Fixed bounded process output stalling other requests while high-volume commands continue streaming. ([#19600](https://github.com/mastra-ai/mastra/pull/19600))
+
+- Fixed goal judge results rendering more than once during live goal runs. ([#19613](https://github.com/mastra-ai/mastra/pull/19613))
+
+- Fixed workflow cancellation for tool-wrapped steps. Cooperative tools can now stop early when `run.cancel()` is called. Fixes #19599. ([#19602](https://github.com/mastra-ai/mastra/pull/19602))
+
+- Fixed workspace LSP support for TypeScript 7 projects. Code inspection (diagnostics, hover) now works in workspaces using TypeScript 7, including hoisted monorepo and pnpm installations. No configuration changes are needed — existing `lsp: true` setups keep working, and TypeScript 6 and earlier behavior is unchanged. ([#19618](https://github.com/mastra-ai/mastra/pull/19618))
+
+  Fixes [#19601](https://github.com/mastra-ai/mastra/issues/19601)
+
 ## 1.52.0-alpha.4
 
 ### Patch Changes

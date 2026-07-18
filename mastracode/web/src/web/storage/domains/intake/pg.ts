@@ -40,7 +40,7 @@ export class IntakeStoragePG extends IntakeStorage {
       'SELECT config FROM intake_settings WHERE org_id = $1 AND user_id = $2',
       [orgId, userId],
     );
-    return rows[0]?.config ?? DEFAULT_INTAKE_CONFIG;
+    return structuredClone(rows[0]?.config ?? DEFAULT_INTAKE_CONFIG);
   }
 
   async saveConfig(orgId: string, userId: string, config: IntakeConfig): Promise<void> {

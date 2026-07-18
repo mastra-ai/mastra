@@ -18,7 +18,7 @@ export class IntakeStorageInMemory extends IntakeStorage {
 
   async getConfig(orgId: string, userId: string): Promise<IntakeConfig> {
     const config = this.#configs.get(this.#key(orgId, userId));
-    return config ? structuredClone(config) : DEFAULT_INTAKE_CONFIG;
+    return structuredClone(config ?? DEFAULT_INTAKE_CONFIG);
   }
 
   async saveConfig(orgId: string, userId: string, config: IntakeConfig): Promise<void> {

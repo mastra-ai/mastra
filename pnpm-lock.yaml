@@ -3943,7 +3943,7 @@ importers:
         version: 6.1.7
       shell-quote:
         specifier: npm:shell-quote@^1
-        version: 1.8.4
+        version: 1.10.0
       strip-json-comments:
         specifier: ^5.0.3
         version: 5.0.3
@@ -28133,8 +28133,8 @@ packages:
     resolution: {integrity: sha512-7++dFhtcx3353uBaq8DDR4NuxBetBzC7ZQOhmTQInHEd6bSrXdiEyzCvG07Z44UYdLShWUyXt5M/yhz8ekcb1A==}
     engines: {node: '>=8'}
 
-  shell-quote@1.8.4:
-    resolution: {integrity: sha512-VsC6n6vz1ihYYyZZwX7YZSF5l5x36ca17OC+a69h94YqB7X6XLwf+5MOgynYir2SLFUbl8gIYvBo8K8RoNQ6bQ==}
+  shell-quote@1.10.0:
+    resolution: {integrity: sha512-w1aiOKwKuRgtwAReIIj89puqg+I7GvX4IbLrvmhXbzQsj1+Zwi4VO3+fa6ZF91TWSjIxoEkKnMeHcLEODK5ZXA==}
     engines: {node: '>= 0.4'}
 
   shiki@1.29.2:
@@ -33998,7 +33998,7 @@ snapshots:
       form-data: 4.0.6
       isomorphic-ws: 5.0.0(ws@8.21.0(bufferutil@4.1.0))
       pathe: 2.0.3
-      shell-quote: 1.8.4
+      shell-quote: 1.10.0
       tar: 7.5.16
       tslib: 2.8.1
     transitivePeerDependencies:
@@ -48324,7 +48324,7 @@ snapshots:
   launch-editor@2.14.1:
     dependencies:
       picocolors: 1.1.1
-      shell-quote: 1.8.4
+      shell-quote: 1.10.0
 
   layout-base@1.0.2: {}
 
@@ -49870,7 +49870,7 @@ snapshots:
       picomatch: 4.0.5
       pidtree: 1.0.0
       read-package-json-fast: 6.0.0
-      shell-quote: 1.8.4
+      shell-quote: 1.10.0
       which: 7.0.0
 
   npm-run-path@4.0.1:
@@ -52819,7 +52819,7 @@ snapshots:
 
   shebang-regex@3.0.0: {}
 
-  shell-quote@1.8.4: {}
+  shell-quote@1.10.0: {}
 
   shiki@1.29.2:
     dependencies:
@@ -53551,7 +53551,7 @@ snapshots:
     dependencies:
       bluebird: 3.7.2
       lodash: 4.18.1
-      shell-quote: 1.8.4
+      shell-quote: 1.10.0
       source-map-support: 0.5.21
 
   teeny-request@10.1.0:

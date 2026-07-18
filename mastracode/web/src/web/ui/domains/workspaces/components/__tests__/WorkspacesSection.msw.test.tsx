@@ -20,7 +20,7 @@ import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import { queryKeys } from '../../../../../../shared/api/keys';
 import { ToastProvider } from '../../../../ui';
-import { ChatSessionProvider } from '../../../chat/context/ChatSessionProvider';
+import { ChatSessionConfigProvider } from '../../../chat/context/ChatSessionProvider';
 import { ActiveProjectProvider } from '../../context/ActiveProjectProvider';
 import type { Project } from '../../services/projects';
 import { playDoneSound } from '../../../settings/services/doneSound';
@@ -85,9 +85,8 @@ function sse(): Response {
   );
 }
 
-/** Registers the full agent-controller handler set and captures session-state writes. */
-function useAgentControllerHandlers(): { stateUpdates: Array<Record<string, unknown>> } {
-  const stateUpdates: Array<Record<string, unknown>> = [];
+/** Registers the full agent-controller handler set. */
+function useAgentControllerHandlers() {
   const sessionState = (resourceId: string) => ({
     controllerId: 'code',
     resourceId,
@@ -104,10 +103,9 @@ function useAgentControllerHandlers(): { stateUpdates: Array<Record<string, unkn
     http.get(`${API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', label: 'Build' }] })),
     http.get(`${API}/models`, () => HttpResponse.json({ models: [] })),
     http.get(`${API}/sessions/:resourceId`, ({ params }) => HttpResponse.json(sessionState(String(params.resourceId)))),
-    http.put(`${API}/sessions/:resourceId/state`, async ({ params, request }) => {
-      stateUpdates.push((await request.json()) as Record<string, unknown>);
-      return HttpResponse.json(sessionState(String(params.resourceId)));
-    }),
+    http.put(`${API}/sessions/:resourceId/state`, ({ params }) =>
+      HttpResponse.json(sessionState(String(params.resourceId))),
+    ),
     http.get(`${API}/sessions/:resourceId/permissions`, () => HttpResponse.json({ categories: {}, tools: {} })),
     http.get(`${API}/sessions/:resourceId/threads`, () => HttpResponse.json({ threads: [] })),
     // Entering an empty worktree creates a thread; handle it here so tests
@@ -119,8 +117,6 @@ function useAgentControllerHandlers(): { stateUpdates: Array<Record<string, unkn
     http.get(`${API}/sessions/:resourceId/threads/:threadId/messages`, () => HttpResponse.json({ messages: [] })),
     http.get(`${API}/sessions/:resourceId/stream`, () => sse()),
   );
-
-  return { stateUpdates };
 }
 
 function seedActiveProject(project: Project) {
@@ -138,10 +134,10 @@ function renderSection(initialPath = '/') {
     <MemoryRouter initialEntries={[initialPath]}>
       <ToastProvider>
         <ActiveProjectProvider>
-          <ChatSessionProvider>
-            <WorkspacesSection />
+          <ChatSessionConfigProvider>
+            <WorkspacesSection defaultOpen />
             <LocationProbe />
-          </ChatSessionProvider>
+          </ChatSessionConfigProvider>
         </ActiveProjectProvider>
       </ToastProvider>
     </MemoryRouter>,
@@ -165,6 +161,25 @@ describe('WorkspacesSection', () => {
     expect(screen.getByRole('button', { name: 'feat-ui' })).not.toHaveAttribute('aria-current');
     expect(screen.queryByRole('button', { name: 'main' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'user/alice-notes' })).not.toBeInTheDocument();
+  });
+
+  it('persists the collapsed state across remounts', async () => {
+    seedActiveProject(githubProject);
+    useAgentControllerHandlers();
+
+    const rendered = renderSection();
+    const trigger = await screen.findByRole('button', { name: 'Sessions' });
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+
+    await userEvent.click(trigger);
+
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(localStorage.getItem('mastracode-factory-sessions-collapsed')).toBe('true');
+
+    rendered.unmount();
+    renderSection();
+
+    expect(await screen.findByRole('button', { name: 'Sessions' })).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('does not render for local projects', async () => {
@@ -304,18 +319,13 @@ describe('WorkspacesSection', () => {
     expect(playDoneSound).not.toHaveBeenCalled();
   });
 
-  it('selects a workspace row and rebinds the session to its worktree path', async () => {
+  it('selects a workspace row and persists its worktree path', async () => {
     seedActiveProject(githubProject);
-    const { stateUpdates } = useAgentControllerHandlers();
+    useAgentControllerHandlers();
     renderSection();
 
     await userEvent.click(await screen.findByRole('button', { name: 'feat-ui' }));
 
-    await waitFor(() =>
-      expect(stateUpdates).toContainEqual({
-        state: { projectPath: '/sandbox/mastra-worktrees/feat-ui' },
-      }),
-    );
     await waitFor(() => expect(loadProjects()[0]?.selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-ui'));
     // Let the open-thread flow settle so its requests can't leak into later tests.
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-generic'));
@@ -378,7 +388,7 @@ describe('WorkspacesSection', () => {
     expect(created).toBe(1);
   });
 
-  it('opens the session thread when switching workspaces from a Factory page', async () => {
+  it('opens the active session thread when clicked from a Factory page', async () => {
     seedActiveProject(githubProject);
     useAgentControllerHandlers();
     server.use(
@@ -392,11 +402,58 @@ describe('WorkspacesSection', () => {
     );
     renderSection('/factory/board');
 
-    await userEvent.click(await screen.findByRole('button', { name: 'feat-ui' }));
+    const activeSession = await screen.findByRole('button', { name: 'feat-api' });
+    expect(activeSession).toHaveAttribute('aria-current', 'true');
+    await userEvent.click(activeSession);
 
     // A session row IS its conversation — clicking it opens the thread even
     // from worktree-independent pages like the board.
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-latest'));
+  });
+
+  it('opens the titled conversation thread, not a newer empty untitled one', async () => {
+    seedActiveProject(githubProject);
+    useAgentControllerHandlers();
+    server.use(
+      http.get(`${API}/sessions/:resourceId/threads`, () =>
+        HttpResponse.json({
+          threads: [
+            // The real conversation…
+            {
+              id: 'thread-convo',
+              title: 'Real work',
+              resourceId: 'resource-gh',
+              updatedAt: '2026-06-01T00:00:00.000Z',
+            },
+            // …and a newer untitled thread seeded by session creation, whose
+            // updatedAt sorts first. The row must still open the conversation
+            // it is labeled after.
+            { id: 'thread-seeded', title: '', resourceId: 'resource-gh', updatedAt: '2026-06-09T00:00:00.000Z' },
+          ],
+        }),
+      ),
+    );
+    renderSection('/factory/board');
+
+    await userEvent.click(await screen.findByRole('button', { name: 'feat-ui' }));
+
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-convo'));
+  });
+
+  it('opens the already-selected workspace’s thread when its row is clicked from another page', async () => {
+    seedActiveProject(githubProject);
+    useAgentControllerHandlers();
+    renderSection('/factory/board');
+
+    // feat-api is the selected workspace; its row must still lead to its
+    // conversation when the user is elsewhere (board, /new, …).
+    const row = await screen.findByRole('button', { name: 'feat-api' });
+    expect(row).toHaveAttribute('aria-current', 'true');
+    await userEvent.click(row);
+
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-generic'));
+    // No re-select happened — the workspace selection is unchanged.
+    expect(loadProjects()[0]?.selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-api');
   });
 
   it('offers no ad-hoc workspace creation — factory sessions come from board runs', async () => {

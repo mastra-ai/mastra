@@ -37,7 +37,12 @@ describe('chat runtime reducer', () => {
 
     const streaming = runtimeReducer(initialChatRuntime, {
       type: 'message_update',
-      message: { id: 'assistant-1', role: 'assistant', content: [{ type: 'text', text: 'Working' }] },
+      message: {
+        id: 'assistant-1',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: { format: 2, parts: [{ type: 'text', text: 'Working' }] },
+      },
     });
     vi.advanceTimersByTime(1000);
     const measured = runtimeReducer(streaming, {

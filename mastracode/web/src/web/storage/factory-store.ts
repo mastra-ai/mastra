@@ -12,6 +12,7 @@
 
 import type { FactoryStorageContext, FactoryStorageDomain } from './domain';
 import type { AuditStorage } from './domains/audit/base';
+import type { ModelCredentialsStorage } from './domains/credentials/base';
 import type { IntakeStorage } from './domains/intake/base';
 import type { WorkItemsStorage } from './domains/work-items/base';
 
@@ -60,6 +61,11 @@ export class FactoryStore {
   /** Work items domain (built-in). Throws when not registered. */
   get workItems(): WorkItemsStorage {
     return this.#require('work-items') as WorkItemsStorage;
+  }
+
+  /** Model provider credentials domain (built-in). Throws when not registered. */
+  get credentials(): ModelCredentialsStorage {
+    return this.#require('model-credentials') as ModelCredentialsStorage;
   }
 
   /** Names of all registered domains, in registration order. */

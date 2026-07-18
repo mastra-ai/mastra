@@ -9,12 +9,12 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { ChatSessionTestProvider as ChatSessionProvider } from '../../context/ChatSessionTestProvider';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import type { Project } from '../../../workspaces';
 import { ActiveProjectProvider } from '../../../workspaces';
 import { ChatCommandsProvider } from '../../context/ChatCommandsProvider';
-import { ChatSessionProvider } from '../../context/ChatSessionProvider';
 import { ComposerPanel } from '../ComposerPanel';
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
