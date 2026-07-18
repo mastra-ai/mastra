@@ -215,6 +215,7 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
       audit: deps.audit,
       transitionService,
       startCoordinator: new FactoryStartCoordinator(deps.controller, workItems, transitionService),
+      decisionStorage: workItems,
     });
   })();
   return [

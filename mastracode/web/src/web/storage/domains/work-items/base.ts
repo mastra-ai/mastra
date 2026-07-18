@@ -105,6 +105,19 @@ export interface FactoryRuleEvaluationRecord {
 
 export type FactoryDispatchStatus = 'pending' | 'leased' | 'retry' | 'succeeded' | 'failed';
 
+export interface FactoryDeferredDecisionPageInput {
+  orgId: string;
+  factoryProjectId: string;
+  statuses?: FactoryDispatchStatus[];
+  before?: { createdAt: Date; id: string };
+  limit: number;
+}
+
+export interface FactoryDeferredDecisionPage {
+  decisions: FactoryDeferredDecisionRecord[];
+  hasMore: boolean;
+}
+
 export interface FactoryDeferredDecisionRecord {
   id: string;
   orgId: string;
@@ -1135,6 +1148,27 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     ).map(toDeferredDecision);
   }
 
+  /** Read a bounded newest-first status page without exposing another tenant. */
+  async listDeferredDecisionPage(input: FactoryDeferredDecisionPageInput): Promise<FactoryDeferredDecisionPage> {
+    const rows = await this.#db.findMany<GovernanceDbRow>(
+      'factory_deferred_decisions',
+      {
+        org_id: input.orgId,
+        factory_project_id: input.factoryProjectId,
+        ...(input.statuses ? { status: { in: input.statuses } } : {}),
+      },
+      {
+        orderBy: [
+          ['created_at', 'desc'],
+          ['id', 'desc'],
+        ],
+        limit: input.limit + 1,
+        ...(input.before ? { cursor: { values: [input.before.createdAt, input.before.id] } } : {}),
+      },
+    );
+    return { decisions: rows.slice(0, input.limit).map(toDeferredDecision), hasMore: rows.length > input.limit };
+  }
+
   async claimDeferredDecisions(input: FactoryLeaseClaimInput): Promise<FactoryDeferredDecisionRecord[]> {
     return this.#claimLeases('factory_deferred_decisions', input, toDeferredDecision);
   }
@@ -1154,6 +1188,35 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   async failDeferredDecision(input: FactoryDispatchFailureInput): Promise<FactoryDeferredDecisionRecord | null> {
     const row = await this.#failLease('factory_deferred_decisions', input);
     return row ? toDeferredDecision(row) : null;
+  }
+
+  /** Requeue the same idempotent terminal effect; non-failed decisions are never rerun. */
+  async retryDeferredDecision(
+    orgId: string,
+    factoryProjectId: string,
+    decisionId: string,
+    now: Date,
+  ): Promise<FactoryDeferredDecisionRecord | null> {
+    let retried = false;
+    const row = await this.#db.updateAtomic<GovernanceDbRow>(
+      'factory_deferred_decisions',
+      { id: decisionId, org_id: orgId, factory_project_id: factoryProjectId },
+      current => {
+        if (current.status !== 'failed') return null;
+        retried = true;
+        return {
+          status: 'retry',
+          attempts: 0,
+          available_at: now,
+          lease_owner: null,
+          lease_expires_at: null,
+          last_error: null,
+          completed_at: null,
+          updated_at: now,
+        };
+      },
+    );
+    return retried && row ? toDeferredDecision(row) : null;
   }
 
   /** Resolve exact active agent authority; partial session matches never authorize. */

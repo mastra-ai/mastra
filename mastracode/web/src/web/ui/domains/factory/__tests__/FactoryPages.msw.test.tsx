@@ -19,6 +19,7 @@ import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/web-ui
 import type { GithubStatus, Factory } from '../../workspaces';
 import { createAppRoutes } from '../../../router';
 import { FactoryItemActions } from '../components/FactoryItemActions';
+import type { FactoryDecisionSummary } from '../services/decisions';
 import type { GithubIssue, GithubPullRequest } from '../services/factory';
 import type { IntakeConfig } from '../services/intake';
 import type { LinearIssue, LinearStatus } from '../services/linear';
@@ -251,10 +252,12 @@ interface BoardState {
   deletes: string[];
   triageRequests: Array<{ number: number; body: unknown }>;
   issueRequests: Array<string | null>;
+  decisionRetries: string[];
 }
 
 interface BoardHandlerOptions {
   workItems?: WorkItem[];
+  decisions?: FactoryDecisionSummary[];
   issues?: GithubIssue[];
   triageIssues?: GithubIssue[];
   pullRequests?: GithubPullRequest[];
@@ -275,6 +278,7 @@ function useBoardHandlers(options: BoardHandlerOptions = {}): BoardState {
     deletes: [],
     triageRequests: [],
     issueRequests: [],
+    decisionRetries: [],
   };
   server.use(
     http.get(`${TEST_BASE_URL}/web/github/projects/${PROJECT_REPOSITORY_ID}/issues`, ({ request }) => {
@@ -300,6 +304,25 @@ function useBoardHandlers(options: BoardHandlerOptions = {}): BoardState {
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/work-items`, () =>
       HttpResponse.json({ workItems: state.items }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/decisions`, ({ request }) => {
+      const statuses = new URL(request.url).searchParams.get('statuses')?.split(',');
+      const decisions = (options.decisions ?? []).filter(decision => !statuses || statuses.includes(decision.status));
+      return HttpResponse.json({ decisions });
+    }),
+    http.post(
+      `${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/decisions/:decisionId/retry`,
+      ({ params }) => {
+        const decisionId = String(params.decisionId);
+        state.decisionRetries.push(decisionId);
+        const decision = (options.decisions ?? []).find(candidate => candidate.id === decisionId);
+        if (!decision || decision.status !== 'failed') {
+          return HttpResponse.json({ error: 'decision_not_retryable' }, { status: 409 });
+        }
+        decision.status = 'retry';
+        decision.completedAt = null;
+        return HttpResponse.json({ decision });
+      },
     ),
     http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/work-items`, async ({ request }) => {
       const body = (await request.json()) as CreateWorkItemInput;
@@ -1511,6 +1534,54 @@ describe('Factory Board — persisted cards', () => {
     expect(within(canonicalCard).getByRole('alert')).toHaveTextContent(
       'The card changed before this move was evaluated.',
     );
+  });
+
+  it('given durable rule effects, when the board polls status, then affected cards show retry, failure, and safe requeue', async () => {
+    const state = useBoardHandlers({
+      workItems: [
+        makeWorkItem({ id: 'wi-retry', title: 'Retrying card' }),
+        makeWorkItem({ id: 'wi-failed', title: 'Failed card' }),
+      ],
+      decisions: [
+        {
+          id: 'decision-retry',
+          evaluationId: 'evaluation-retry',
+          workItemId: 'wi-retry',
+          type: 'invokeSkill',
+          status: 'retry',
+          attempts: 2,
+          lastError: 'Session temporarily unavailable.',
+          createdAt: '2026-07-10T00:00:00Z',
+          updatedAt: '2026-07-10T00:01:00Z',
+          completedAt: null,
+        },
+        {
+          id: 'decision-failed',
+          evaluationId: 'evaluation-failed',
+          workItemId: 'wi-failed',
+          type: 'notify',
+          status: 'failed',
+          attempts: 5,
+          lastError: 'Delivery exhausted its retry budget.',
+          createdAt: '2026-07-10T00:00:00Z',
+          updatedAt: '2026-07-10T00:05:00Z',
+          completedAt: null,
+        },
+      ],
+    });
+    renderAt('/factory/work');
+
+    const intake = await screen.findByTestId('board-column-intake');
+    const retrying = await within(intake).findByRole('article', { name: 'Retrying card' });
+    expect(within(retrying).getByRole('status')).toHaveTextContent('Rule effect retrying · invokeSkill · attempt 2');
+    const failed = within(column('intake')).getByRole('article', { name: 'Failed card' });
+    expect(within(failed).getByRole('alert')).toHaveTextContent(
+      'Rule effect failed: Delivery exhausted its retry budget.',
+    );
+
+    await userEvent.click(within(failed).getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(state.decisionRetries).toEqual(['decision-failed']));
+    await waitFor(() => expect(within(failed).getByRole('status')).toHaveTextContent('Rule effect retrying'));
   });
 
   it('given a card in Triage, when Investigate is chosen, then triage exits and the card moves to Planning', async () => {

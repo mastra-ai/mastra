@@ -24,6 +24,7 @@ import {
   useStartIssueTriageMutation,
 } from '../../../../shared/hooks/useFactoryData';
 import { useIntakeConfigQuery } from '../../../../shared/hooks/useIntakeConfig';
+import { useFactoryDecisionStatus, useRetryFactoryDecision } from '../../../../shared/hooks/useFactoryDecisions';
 import { useLinearIssuesQuery, useLinearStatusQuery } from '../../../../shared/hooks/useLinearData';
 import { useStartFactoryRun } from '../../../../shared/hooks/useStartFactoryRun';
 import type { FactoryRunInvocation } from '../../../../shared/hooks/useStartFactoryRun';
@@ -34,6 +35,7 @@ import {
   useUpsertWorkItemMutation,
 } from '../../../../shared/hooks/useWorkItems';
 import { useWorkItemsQuery } from '../../../../shared/hooks/useWorkItems';
+import type { FactoryDecisionStatus, FactoryDecisionSummary } from './services/decisions';
 import type { GithubIssue, GithubPullRequest } from './services/factory';
 import type { LinearIssue } from './services/linear';
 import { connectLinear, isLinearReauthError } from './services/linear';
@@ -392,6 +394,7 @@ function externalLinkLabel(source: WorkItemSource): string {
 // ── Drag & drop (native HTML5; the card menus are the accessible fallback) ──
 
 const CARD_MIME = 'application/x-factory-card';
+const ACTIVE_DECISION_STATUSES: FactoryDecisionStatus[] = ['pending', 'leased', 'retry', 'failed'];
 
 type DragPayload =
   | { kind: 'work-item'; id: string; fromStage: string }
@@ -484,6 +487,15 @@ function BoardContent({
   const review = kind === 'review';
   const stages = boardStages(kind);
   const items = useWorkItemsQuery(factoryProjectId);
+  const decisionStatus = useFactoryDecisionStatus(factoryProjectId, ACTIVE_DECISION_STATUSES);
+  const retryDecision = useRetryFactoryDecision(factoryProjectId);
+  const decisionByItem = useMemo(() => {
+    const byItem = new Map<string, FactoryDecisionSummary>();
+    for (const decision of decisionStatus.data?.decisions ?? []) {
+      if (decision.workItemId && !byItem.has(decision.workItemId)) byItem.set(decision.workItemId, decision);
+    }
+    return byItem;
+  }, [decisionStatus.data]);
   const configQuery = useIntakeConfigQuery();
   const linearStatusQuery = useLinearStatusQuery();
 
@@ -744,6 +756,9 @@ function BoardContent({
                   runDisabled={!runEnabled || !workspaces.isSuccess}
                   evaluating={transition.pendingItemIds.includes(item.id)}
                   transitionReason={transitionReasons[item.id]}
+                  decision={decisionByItem.get(item.id)}
+                  retryingDecisionId={retryDecision.isPending ? retryDecision.variables : undefined}
+                  onRetryDecision={decisionId => retryDecision.mutate(decisionId)}
                   pendingRunRoles={new Set(pendingRuns.filter(run => run.id === item.id).map(run => run.role))}
                   onOpenThread={session => void openThread(session)}
                   onCreateSession={spec =>
@@ -940,6 +955,13 @@ function itemThreadSession(sessions: Record<string, WorkItemSessionRef>): WorkIt
   return refs.at(-1) ?? null;
 }
 
+function decisionStatusText(decision: FactoryDecisionSummary): string {
+  if (decision.status === 'pending') return `Rule effect pending · ${decision.type}`;
+  if (decision.status === 'leased') return `Rule effect dispatching · ${decision.type} · attempt ${decision.attempts}`;
+  if (decision.status === 'retry') return `Rule effect retrying · ${decision.type} · attempt ${decision.attempts}`;
+  return decision.lastError ? `Rule effect failed: ${decision.lastError}` : `Rule effect failed · ${decision.type}`;
+}
+
 function WorkItemCard({
   item,
   columnStage,
@@ -948,6 +970,9 @@ function WorkItemCard({
   runDisabled,
   evaluating,
   transitionReason,
+  decision,
+  retryingDecisionId,
+  onRetryDecision,
   pendingRunRoles,
   onOpenThread,
   onCreateSession,
@@ -963,6 +988,9 @@ function WorkItemCard({
   runDisabled: boolean;
   evaluating: boolean;
   transitionReason?: string;
+  decision?: FactoryDecisionSummary;
+  retryingDecisionId?: string;
+  onRetryDecision: (decisionId: string) => void;
   pendingRunRoles: ReadonlySet<string>;
   onOpenThread: (session: WorkItemSessionRef) => void;
   /** Title click when the card has no live session: open an empty session (no run). */
@@ -1108,6 +1136,27 @@ function WorkItemCard({
         <span role="status" aria-live="polite" className="text-ui-xs text-icon4">
           Evaluating…
         </span>
+      )}
+      {!evaluating && decision !== undefined && (
+        <div className="flex items-center justify-between gap-2">
+          <span
+            role={decision.status === 'failed' ? 'alert' : 'status'}
+            className={`text-ui-xs ${decision.status === 'failed' ? 'text-error' : 'text-icon4'}`}
+          >
+            {decisionStatusText(decision)}
+          </span>
+          {decision.status === 'failed' ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={retryingDecisionId === decision.id}
+              onClick={() => onRetryDecision(decision.id)}
+            >
+              {retryingDecisionId === decision.id ? 'Retrying…' : 'Retry'}
+            </Button>
+          ) : null}
+        </div>
       )}
       {!evaluating && transitionReason !== undefined && (
         <span role="alert" className="text-ui-xs text-error">

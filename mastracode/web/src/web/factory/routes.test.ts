@@ -56,6 +56,7 @@ function buildApp(
       audit,
       transitionService: new FactoryTransitionService({ rules: builtInFactoryRules(), storage: seed.workItems }),
       startCoordinator,
+      decisionStorage: seed.workItems,
     }),
   );
   return app;
@@ -786,6 +787,86 @@ describe('audit events', () => {
     expect(await listItems()).toHaveLength(0);
 
     warn.mockRestore();
+  });
+});
+
+// ── Durable decision status ──────────────────────────────────────────────
+describe('decision status', () => {
+  async function queueDecision(identity: string, now: string, orgId = 'org1') {
+    await seed.workItems.commitRuleEvaluation({
+      orgId,
+      factoryProjectId: PROJECT_ID,
+      workItemId: null,
+      ingress: { identity, triggerType: 'test' },
+      ruleSetVersion: 'rules-v1',
+      expectedRevision: null,
+      actor: { type: 'human', id: 'u1' },
+      outcome: { status: 'accepted' },
+      decisions: [{ type: 'notify', idempotencyKey: identity, title: 'Rule update', body: 'Bounded body' }],
+      causalChain: [],
+      now: new Date(now),
+    });
+  }
+
+  it('returns a bounded tenant-scoped newest-first page with an opaque cursor', async () => {
+    await queueDecision('effect-1', '2030-01-01T00:00:00.000Z');
+    await queueDecision('effect-2', '2030-01-01T00:01:00.000Z');
+    await queueDecision('other-org', '2030-01-01T00:02:00.000Z', 'org2');
+
+    const first = await json('GET', `/web/factory/projects/${PROJECT_ID}/decisions?statuses=pending&limit=1`);
+    expect(first.status).toBe(200);
+    const firstPage = await first.json();
+    expect(firstPage.decisions).toEqual([
+      expect.objectContaining({ type: 'notify', status: 'pending', attempts: 0, lastError: null }),
+    ]);
+    expect(firstPage.decisions[0]).not.toHaveProperty('orgId');
+    expect(firstPage.decisions[0]).not.toHaveProperty('decision');
+    expect(firstPage.nextCursor).toEqual(expect.any(String));
+
+    const second = await json(
+      'GET',
+      `/web/factory/projects/${PROJECT_ID}/decisions?statuses=pending&limit=1&before=${encodeURIComponent(firstPage.nextCursor)}`,
+    );
+    expect(second.status).toBe(200);
+    const secondPage = await second.json();
+    expect(secondPage.decisions).toHaveLength(1);
+    expect(secondPage.decisions[0].createdAt).toBe('2030-01-01T00:00:00.000Z');
+    expect(secondPage.nextCursor).toBeUndefined();
+  });
+
+  it('requeues only a tenant-scoped failed effect while preserving its identity', async () => {
+    await queueDecision('effect-retry', '2030-01-01T00:00:00.000Z');
+    const now = new Date('2030-01-01T00:01:00.000Z');
+    const [leased] = await seed.workItems.claimDeferredDecisions({
+      ownerId: 'worker-1',
+      now,
+      leaseExpiresAt: new Date('2030-01-01T00:02:00.000Z'),
+      limit: 1,
+    });
+    await seed.workItems.failDeferredDecision({
+      id: leased!.id,
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      ownerId: 'worker-1',
+      now,
+      availableAt: now,
+      lastError: 'terminal failure',
+      terminal: true,
+    });
+
+    const response = await json('POST', `/web/factory/projects/${PROJECT_ID}/decisions/${leased!.id}/retry`);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      decision: expect.objectContaining({ id: leased!.id, evaluationId: leased!.evaluationId, status: 'retry' }),
+    });
+    const denied = await json('POST', `/web/factory/projects/${PROJECT_ID}/decisions/${leased!.id}/retry`);
+    expect(denied.status).toBe(409);
+  });
+
+  it('rejects malformed cursors instead of silently restarting pagination', async () => {
+    const response = await json('GET', `/web/factory/projects/${PROJECT_ID}/decisions?before=not-a-cursor`);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: 'invalid_cursor' });
   });
 });
 
