@@ -12,10 +12,11 @@ function createScoresOracle(): ScoresOracle {
  * state the same way real ADD/DROP/RENAME DDL would, so tests can simulate a
  * migration crashing partway through and resuming on a later call.
  *
- * `failOnce` matches the SQL statement that should fail exactly once (mirroring
- * Oracle rejecting/erroring on that one statement before the process crashed);
- * every later call - including a retry of the same statement - succeeds, since
- * a real second attempt would run against a database not stuck in that fault.
+ * `failOnce` matches the SQL statement that should fail exactly once - DDL via
+ * `executeDdl` or the UPDATE copy via `none` (mirroring Oracle
+ * rejecting/erroring on that one statement before the process crashed); every
+ * later call - including a retry of the same statement - succeeds, since a
+ * real second attempt would run against a database not stuck in that fault.
  */
 function createFakeScoresDb(initialExists: Record<string, boolean>, failOnce?: (sql: string) => boolean) {
   const exists: Record<string, boolean> = { ...initialExists };
@@ -51,6 +52,10 @@ function createFakeScoresDb(initialExists: Record<string, boolean>, failOnce?: (
 
   const none = vi.fn(async (sql: string) => {
     noneCalls.push(sql);
+    if (failurePending && failOnce?.(sql)) {
+      failurePending = false;
+      throw new Error(`simulated DML failure: ${sql}`);
+    }
   });
 
   return { db: { oneOrNone, executeDdl, none }, executeDdlCalls, noneCalls, exists };
@@ -72,8 +77,12 @@ describe('ScoresOracle CLOB migration recovery', () => {
     expect(noneCalls).toEqual([expect.stringContaining('UPDATE')]);
   });
 
-  it('skips ADD/UPDATE and only drops+renames when the temp column already exists', async () => {
-    // Simulates a previous attempt where ADD + UPDATE succeeded but DROP failed.
+  it('re-runs the copy before dropping when both columns exist (temp existence is not proof the copy ran)', async () => {
+    // Simulates a previous attempt that stopped somewhere after ADD - maybe
+    // after the copy (DROP failed), maybe before it (UPDATE failed). The two
+    // states are indistinguishable from column metadata, so the original
+    // column is treated as the source of truth and the idempotent copy runs
+    // again before the destructive DROP.
     const scores = createScoresOracle();
     const { db, executeDdlCalls, noneCalls } = createFakeScoresDb({ reason: true, ORACLE_TMP_REASON_CLOB: true });
     (scores as any).db = db;
@@ -84,7 +93,7 @@ describe('ScoresOracle CLOB migration recovery', () => {
       expect.stringContaining('DROP COLUMN reason'),
       expect.stringContaining('RENAME COLUMN ORACLE_TMP_REASON_CLOB TO reason'),
     ]);
-    expect(noneCalls).toEqual([]);
+    expect(noneCalls).toEqual([expect.stringContaining('UPDATE')]);
   });
 
   it('only renames when the narrow column was already dropped on a previous attempt', async () => {
@@ -113,16 +122,45 @@ describe('ScoresOracle CLOB migration recovery', () => {
     expect(executeDdlCalls.filter(sql => sql.includes('ADD ('))).toHaveLength(1);
     expect(executeDdlCalls.filter(sql => sql.includes('DROP COLUMN'))).toHaveLength(1);
 
-    // Second call (no longer failing) must resume from DROP, not repeat ADD/UPDATE.
+    // Second call (no longer failing) resumes without repeating ADD, but does
+    // re-run the idempotent copy: the original column still exists, and there
+    // is no way to tell a DROP-failed attempt from an UPDATE-failed one, so
+    // re-copying before DROP is the safe default.
     const noneCallCountBeforeRetry = (db.none as any).mock.calls.length;
     await (scores as any).migrateScoreTextColumnToClob('reason');
 
     expect(executeDdlCalls.filter(sql => sql.includes('ADD ('))).toHaveLength(1);
     expect(executeDdlCalls.filter(sql => sql.includes('DROP COLUMN'))).toHaveLength(2);
     expect(executeDdlCalls.filter(sql => sql.includes('RENAME COLUMN'))).toHaveLength(1);
-    expect((db.none as any).mock.calls.length).toBe(noneCallCountBeforeRetry);
+    expect((db.none as any).mock.calls.length).toBe(noneCallCountBeforeRetry + 1);
     // Migration completed: the CLOB copy now lives under the original column
     // name and the temporary column is gone.
+    expect(exists.reason).toBe(true);
+    expect(exists.ORACLE_TMP_REASON_CLOB).toBe(false);
+  });
+
+  it('re-runs the copy on retry when the first attempt failed during the UPDATE copy', async () => {
+    const scores = createScoresOracle();
+    const { db, executeDdlCalls, noneCalls, exists } = createFakeScoresDb({ reason: true }, sql => sql.includes('UPDATE'));
+    (scores as any).db = db;
+
+    await expect((scores as any).migrateScoreTextColumnToClob('reason')).rejects.toThrow(/simulated DML failure/);
+
+    // First attempt: ADD succeeded but the copy failed, so the temp CLOB
+    // exists yet holds no data. Nothing destructive may have run: the
+    // original column - the only one with the data - must survive.
+    expect(exists.reason).toBe(true);
+    expect(exists.ORACLE_TMP_REASON_CLOB).toBe(true);
+    expect(executeDdlCalls).toEqual([expect.stringContaining('ADD (ORACLE_TMP_REASON_CLOB CLOB)')]);
+
+    // Retry: the temp column existing must NOT skip the copy. The UPDATE runs
+    // again (successfully this time) before DROP/RENAME complete the swap.
+    await (scores as any).migrateScoreTextColumnToClob('reason');
+
+    expect(noneCalls.filter(sql => sql.includes('UPDATE'))).toHaveLength(2);
+    expect(executeDdlCalls.filter(sql => sql.includes('ADD ('))).toHaveLength(1);
+    expect(executeDdlCalls.filter(sql => sql.includes('DROP COLUMN'))).toHaveLength(1);
+    expect(executeDdlCalls.filter(sql => sql.includes('RENAME COLUMN'))).toHaveLength(1);
     expect(exists.reason).toBe(true);
     expect(exists.ORACLE_TMP_REASON_CLOB).toBe(false);
   });

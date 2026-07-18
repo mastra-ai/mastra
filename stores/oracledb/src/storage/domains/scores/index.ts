@@ -452,28 +452,25 @@ export class ScoresOracle extends ScoresStorage {
     // Oracle commits each DDL statement immediately - ADD, DROP, and RENAME
     // are not wrapped in one transaction - so a previous call to this method
     // can crash partway through (e.g. after DROP but before RENAME, which
-    // would otherwise leave the table missing the column forever). Check
-    // which steps already ran and resume from there instead of blindly
-    // repeating the full sequence.
+    // would otherwise leave the table missing the column forever). Resume
+    // from the observable column state instead of blindly repeating the full
+    // sequence. The temp column existing is NOT proof the copy ran: a crash
+    // can land between ADD and UPDATE, so while the original column is still
+    // present it stays the source of truth and the copy re-runs.
     const oldExists = await this.scoreColumnExists(columnName);
     const tempExists = await this.scoreColumnExists(tempColumn);
 
-    if (!oldExists && tempExists) {
-      // DROP already completed on a previous attempt; only RENAME is pending.
-      await this.db.executeDdl(`ALTER TABLE ${this.table()} RENAME COLUMN ${tempColumn} TO ${oldColumn}`);
-      return;
-    }
-
     if (!tempExists) {
-      // Nothing has run yet: create the CLOB column and copy the existing
-      // narrow-column data into it.
       await this.db.executeDdl(`ALTER TABLE ${this.table()} ADD (${tempColumn} CLOB)`, [-1430]);
-      await this.db.none(`UPDATE ${this.table()} SET ${tempColumn} = TO_CLOB(${oldColumn}) WHERE ${oldColumn} IS NOT NULL`);
     }
 
     if (oldExists) {
-      // ADD/UPDATE completed (just now or on a previous attempt) but DROP
-      // never ran.
+      // The UPDATE is idempotent (it rewrites the temp CLOB from the original
+      // column), so re-running it on every attempt that still has the
+      // original column is safe - and required, or a retry after a failed
+      // copy would DROP the only column holding the data and RENAME an
+      // empty CLOB into its place.
+      await this.db.none(`UPDATE ${this.table()} SET ${tempColumn} = TO_CLOB(${oldColumn}) WHERE ${oldColumn} IS NOT NULL`);
       await this.db.executeDdl(`ALTER TABLE ${this.table()} DROP COLUMN ${oldColumn}`);
     }
 
