@@ -473,11 +473,15 @@ export class Tool<
 
   /** @internal Used by CoreToolBuilder after compat-aware input validation. */
   executeWithPrevalidatedInput(inputData: TSchemaIn, context?: any) {
-    if (!this.#runExecute) {
-      throw new Error(`Tool "${this.id}" has no execute function`);
+    if (this.#runExecute) {
+      return this.#runExecute(inputData, context, true);
     }
 
-    return this.#runExecute(inputData, context, true);
+    if (this.execute) {
+      return this.execute(inputData, context);
+    }
+
+    throw new Error(`Tool "${this.id}" has no execute function`);
   }
 }
 

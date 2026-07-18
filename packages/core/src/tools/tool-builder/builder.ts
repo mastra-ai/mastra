@@ -741,8 +741,11 @@ export class CoreToolBuilder extends MastraBase {
           result = await executeWithContext({
             span: toolSpan,
             fn: async () => {
-              if (inputValidatedByBuilder && isMastraTool(tool)) {
-                return (tool as Tool).executeWithPrevalidatedInput(args as any, toolContext);
+              const executeWithPrevalidatedInput =
+                inputValidatedByBuilder && isMastraTool(tool) ? (tool as Tool).executeWithPrevalidatedInput : undefined;
+
+              if (typeof executeWithPrevalidatedInput === 'function') {
+                return executeWithPrevalidatedInput.call(tool, args as any, toolContext);
               }
 
               return tool?.execute?.(args, toolContext);
