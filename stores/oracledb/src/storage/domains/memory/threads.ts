@@ -71,11 +71,10 @@ export async function saveThread(
 }
 
 /**
- * Upserts one thread row against the given client. Extracted out of
- * `saveThread` so `cloneThread` (memory/index.ts) can run the same MERGE
- * inside its own transaction, alongside the cloned messages insert, instead
- * of committing independently — a failure inserting the cloned messages must
- * not leave an orphaned, message-less cloned thread behind.
+ * Upserts one thread row against the given client. Only `saveThread` may
+ * upsert; `cloneThread` (memory/index.ts) uses the insert-only
+ * `insertThreadRow` below so a concurrent clone can never overwrite an
+ * existing destination thread.
  */
 export async function mergeThreadRow(
   ctx: Pick<MemoryContext, 'schemaName'>,
@@ -117,6 +116,47 @@ export async function mergeThreadRow(
           source.metadata,
           source.created_at,
           source.updated_at
+        )`,
+    {
+      id: thread.id,
+      resourceId: thread.resourceId,
+      title: optionalStringBind(thread.title),
+      metadata: jsonBind(thread.metadata ?? {}),
+      createdAt: thread.createdAt ?? new Date(),
+      updatedAt: thread.updatedAt ?? new Date(),
+    },
+  );
+}
+
+/**
+ * Insert-only variant of `mergeThreadRow` for `cloneThread` (memory/index.ts).
+ * The clone destination must be brand new, so an existing row has to fail the
+ * INSERT (ORA-00001) — which the caller translates to DESTINATION_EXISTS —
+ * instead of being silently updated by a MERGE. Runs against the caller's
+ * transaction client, alongside the cloned-messages insert, so a failure
+ * partway through rolls back the whole clone.
+ */
+export async function insertThreadRow(
+  ctx: Pick<MemoryContext, 'schemaName'>,
+  client: Pick<OracleTxClient, 'none'>,
+  thread: StorageThreadType,
+): Promise<void> {
+  await client.none(
+    `
+        INSERT INTO ${table(ctx, TABLE_THREADS)} (
+          id,
+          ${THREAD_RESOURCE_ID},
+          title,
+          metadata,
+          ${THREAD_CREATED_AT},
+          ${THREAD_UPDATED_AT}
+        ) VALUES (
+          :id,
+          :resourceId,
+          :title,
+          :metadata,
+          :createdAt,
+          :updatedAt
         )`,
     {
       id: thread.id,

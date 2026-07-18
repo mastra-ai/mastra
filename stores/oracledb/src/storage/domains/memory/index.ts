@@ -27,7 +27,7 @@ import type {
   UpdateObservationalMemoryConfigInput,
 } from '@mastra/core/storage';
 
-import { normalizeBatchSize } from '../../../shared/connection';
+import { isOracleErrorCode, normalizeBatchSize } from '../../../shared/connection';
 import { normalizeIdentifier } from '../../../vector/identifiers';
 import { filterIndexesForTables, OracleDB } from '../../db';
 import type { OracleCreateIndexOptions } from '../../db';
@@ -64,7 +64,7 @@ import {
 } from './observational-buffering';
 import { getResourceById, saveResource, updateResource } from './resources';
 import { clearAllMemoryTables, initMemorySchema } from './schema';
-import { deleteThread, getThreadById, listThreads, mergeThreadRow, saveThread, updateThread } from './threads';
+import { deleteThread, getThreadById, insertThreadRow, listThreads, saveThread, updateThread } from './threads';
 import { storageError } from './utils';
 import type { MemoryContext } from './utils';
 
@@ -244,11 +244,22 @@ export class MemoryOracle extends MemoryStorage {
     });
 
     try {
-      // Merge the destination thread and insert its cloned messages in one
+      // Insert the destination thread and its cloned messages in one
       // transaction: a failure partway through (e.g. a message insert error)
       // must not leave an orphaned, message-less clone of the thread committed.
       await this.db.tx(async client => {
-        await mergeThreadRow(this.ctx, client, thread);
+        try {
+          // Insert-only, never MERGE: the existence check above is only a
+          // friendly fast path, so a concurrent clone that won the race must
+          // surface here as a unique-key violation instead of silently
+          // updating the winner's thread and mixing both message batches.
+          await insertThreadRow(this.ctx, client, thread);
+        } catch (error) {
+          if (isOracleErrorCode(error, [-1])) {
+            throw storageError('CLONE_THREAD', 'DESTINATION_EXISTS', { threadId: newThreadId }, error, ErrorCategory.USER);
+          }
+          throw error;
+        }
         if (clonedMessages.length) await insertMessageBatch(this.ctx, client, clonedMessages);
       });
     } catch (error) {
