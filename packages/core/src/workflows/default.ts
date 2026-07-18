@@ -50,6 +50,43 @@ import type {
 export type { ExecutionContext } from './types';
 
 /**
+ * Upper bound (in approximate serialized characters) for the payload-deduplication
+ * comparison in `fmtReturnValue`. The dedup exists to shrink small execution-log
+ * entries; for large values the `JSON.stringify` comparison itself becomes the
+ * dominant cost. Agent output processors run on the workflow engine once per
+ * stream chunk, and their step payloads carry the accumulated streaming context,
+ * so an unbounded comparison re-serializes an ever-growing multi-megabyte object
+ * on every chunk — O(chunks × context size) CPU (#19373). Past this bound the
+ * payload is simply retained, which consumers already handle (the dedup is
+ * conditional).
+ */
+const DEDUP_STRINGIFY_MAX_CHARS = 32_768;
+
+/** Sentinel returned by `boundedStringify` when the size bound is exceeded. */
+const DEDUP_TOO_LARGE = Symbol('mastra.dedup.tooLarge');
+
+/**
+ * `JSON.stringify` that aborts once a rough size estimate passes
+ * `DEDUP_STRINGIFY_MAX_CHARS`, returning `DEDUP_TOO_LARGE` instead. Under the
+ * bound the output is byte-for-byte identical to a bare `JSON.stringify`.
+ */
+function boundedStringify(value: unknown): string | undefined | typeof DEDUP_TOO_LARGE {
+  let approxChars = 0;
+  try {
+    return JSON.stringify(value, (key, v) => {
+      approxChars += key.length + 3 + (typeof v === 'string' ? v.length + 2 : 8);
+      if (approxChars > DEDUP_STRINGIFY_MAX_CHARS) {
+        throw DEDUP_TOO_LARGE;
+      }
+      return v;
+    });
+  } catch (e) {
+    if (e === DEDUP_TOO_LARGE) return DEDUP_TOO_LARGE;
+    throw e;
+  }
+}
+
+/**
  * Default implementation of the ExecutionEngine
  */
 export class DefaultExecutionEngine extends ExecutionEngine {
@@ -576,13 +613,21 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         const optimizedStep = { ...originalStep };
 
         // Remove payload if it matches the output of the previous step (structural comparison
-        // handles deserialized data where reference equality would fail)
+        // handles deserialized data where reference equality would fail). The comparison is
+        // size-bounded: oversized values are treated as non-matching and retained rather than
+        // re-serialized in full, which keeps per-call work O(1) on the hot per-chunk
+        // processor path (#19373).
         let payloadMatchesPrevious = false;
         if (hasPreviousOutput) {
           try {
-            payloadMatchesPrevious =
-              optimizedStep.payload === previousOutput ||
-              JSON.stringify(optimizedStep.payload) === JSON.stringify(previousOutput);
+            if (optimizedStep.payload === previousOutput) {
+              payloadMatchesPrevious = true;
+            } else {
+              const payloadJson = boundedStringify(optimizedStep.payload);
+              const previousJson = payloadJson === DEDUP_TOO_LARGE ? DEDUP_TOO_LARGE : boundedStringify(previousOutput);
+              payloadMatchesPrevious =
+                payloadJson !== DEDUP_TOO_LARGE && previousJson !== DEDUP_TOO_LARGE && payloadJson === previousJson;
+            }
           } catch {
             // non-serializable payload — treat as not matching
           }

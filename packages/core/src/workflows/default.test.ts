@@ -1362,6 +1362,86 @@ describe('DefaultExecutionEngine.fmtReturnValue stepExecutionPath and payload de
 
     expect(result.steps.step1.payload).toBe(circular);
   });
+
+  describe('oversized payloads (#19373)', () => {
+    // Builds a payload whose leaves count how many times they get JSON-serialized,
+    // so the tests can assert the dedup comparison does bounded work instead of
+    // serializing multi-megabyte step payloads in full on every call.
+    function makeCountingPayload(leafCount: number, counter: { count: number }) {
+      return {
+        parts: Array.from({ length: leafCount }, (_, i) => ({
+          toJSON() {
+            counter.count++;
+            return `leaf-${i}-${'x'.repeat(64)}`;
+          },
+        })),
+      };
+    }
+
+    it('should retain (not dedup) an oversized payload even when it structurally matches the previous output', async () => {
+      // ~1.4 MB of identical content on both sides — structurally equal, far past any
+      // reasonable dedup bound. The optimization exists to shrink small execution-log
+      // entries; for oversized values retaining the payload is the safe outcome.
+      const bigParts = Array.from({ length: 20_000 }, (_, i) => `part-${i}-${'x'.repeat(64)}`);
+      const stepResults: Record<string, StepResult<any, any, any, any>> = {
+        input: { parts: bigParts } as any,
+        step1: {
+          status: 'success',
+          output: { value: 2 },
+          payload: { parts: [...bigParts] },
+          startedAt: 1,
+          endedAt: 2,
+        },
+      };
+      const lastOutput: StepResult<any, any, any, any> = stepResults.step1!;
+
+      const result = await engine.fmtReturnValuePublic(pubsub, stepResults, lastOutput, undefined, ['step1']);
+
+      expect(result.steps.step1.payload).toEqual({ parts: bigParts });
+    });
+
+    it('should do bounded serialization work per step instead of stringifying huge payloads in full', async () => {
+      const counter = { count: 0 };
+      const leafCount = 50_000;
+      const stepResults: Record<string, StepResult<any, any, any, any>> = {
+        input: makeCountingPayload(leafCount, counter) as any,
+        step1: {
+          status: 'success',
+          output: { value: 2 },
+          payload: makeCountingPayload(leafCount, counter),
+          startedAt: 1,
+          endedAt: 2,
+        },
+      };
+      const lastOutput: StepResult<any, any, any, any> = stepResults.step1!;
+
+      await engine.fmtReturnValuePublic(pubsub, stepResults, lastOutput, undefined, ['step1']);
+
+      // Unbounded comparison serializes every leaf on both sides (100k+ toJSON calls).
+      // A bounded comparison aborts once the size cap is hit, so only a small prefix
+      // of each side is ever visited.
+      expect(counter.count).toBeLessThan(5_000);
+    });
+
+    it('should still dedup small structurally-equal payloads below the bound', async () => {
+      const small = { items: ['a', 'b', 'c'], nested: { value: 1 } };
+      const stepResults: Record<string, StepResult<any, any, any, any>> = {
+        input: JSON.parse(JSON.stringify(small)) as any,
+        step1: {
+          status: 'success',
+          output: { value: 2 },
+          payload: JSON.parse(JSON.stringify(small)),
+          startedAt: 1,
+          endedAt: 2,
+        },
+      };
+      const lastOutput: StepResult<any, any, any, any> = stepResults.step1!;
+
+      const result = await engine.fmtReturnValuePublic(pubsub, stepResults, lastOutput, undefined, ['step1']);
+
+      expect(result.steps.step1.payload).toBeUndefined();
+    });
+  });
 });
 
 describe('DefaultExecutionEngine.deserializeRequestContext', () => {
