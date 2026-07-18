@@ -156,6 +156,57 @@ describe('transcript reducer message entries', () => {
     expect(steered.role).toBe('signal');
   });
 
+  it('removes empty text parts while preserving surrounding tool and text content', () => {
+    const state = createInitialTranscript({
+      messages: [
+        dbMessage('assistant-1', 'assistant', [
+          { type: 'text', text: '   \n' },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'view',
+              args: { path: 'src/index.ts' },
+              result: 'export const value = 1;',
+            },
+          },
+          { type: 'text', text: 'Summary follows.' },
+        ]),
+      ],
+    });
+
+    expect(messageParts(state.entries[0])).toEqual([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'tool-1',
+          toolName: 'view',
+          args: { path: 'src/index.ts' },
+          result: 'export const value = 1;',
+        },
+      },
+      { type: 'text', text: 'Summary follows.' },
+    ]);
+  });
+
+  it('drops hydrated and streamed messages that contain only empty text', () => {
+    const hydrated = createInitialTranscript({
+      messages: [dbMessage('assistant-empty', 'assistant', [{ type: 'text', text: '  \n ' }])],
+    });
+    expect(hydrated.entries).toEqual([]);
+
+    const streamed = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        message: dbMessage('assistant-empty', 'assistant', [{ type: 'text', text: '\t' }]),
+      },
+    });
+    expect(streamed.entries).toEqual([]);
+  });
+
   it('streams message updates without replacing non-message transcript state', () => {
     const withNotice = transcriptReducer(initialTranscript, {
       type: 'localNotice',

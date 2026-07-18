@@ -579,13 +579,24 @@ export function createInitialTranscript({
 }
 
 function messagesToEntries(messages: MastraDBMessage[]): TimelineEntry[] {
-  return messages.map(message => toMessageEntry(message, { streaming: false }));
+  return messages
+    .map(message => toMessageEntry(message, { streaming: false }))
+    .filter(entry => entry.message.content.parts.length > 0 || hasHarnessContent(entry.message));
+}
+
+/** Harness status/notification parts render from metadata, so a message with no visible parts can still produce output. */
+function hasHarnessContent(message: MastraDBMessage): boolean {
+  const harnessContent = message.content.metadata?.harnessContent;
+  return Array.isArray(harnessContent) && harnessContent.length > 0;
 }
 
 function toMessageEntry(
   message: MastraDBMessage,
   options: { streaming?: boolean; steer?: boolean; runtimeTools?: Record<string, ToolCall> } = {},
 ): MessageEntry {
+  const parts = message.content.parts.filter(part => part.type !== 'text' || part.text.trim().length > 0);
+  const visibleMessage =
+    parts.length === message.content.parts.length ? message : { ...message, content: { ...message.content, parts } };
   const signalMetadata = message.role === 'signal' ? message.content.metadata?.signal : undefined;
   const signal =
     signalMetadata && typeof signalMetadata === 'object' && !Array.isArray(signalMetadata)
@@ -596,7 +607,7 @@ function toMessageEntry(
     signal?.attributes && typeof signal.attributes === 'object' && !Array.isArray(signal.attributes)
       ? (signal.attributes as Record<string, unknown>)
       : undefined;
-  const displayMessage = isUserSignal ? { ...message, role: 'user' as const } : message;
+  const displayMessage = isUserSignal ? { ...visibleMessage, role: 'user' as const } : visibleMessage;
 
   return {
     kind: 'message',
@@ -624,7 +635,9 @@ function upsertMessage(state: TranscriptState, message: MastraDBMessage, streami
   const nextMessage = message.role === 'assistant' ? preserveRuntimeToolParts(message, prevEntry?.message) : message;
   const entry = toMessageEntry(nextMessage, { streaming, runtimeTools: prevEntry?.runtimeTools });
 
-  if (idx === -1) entries.push(entry);
+  if (entry.message.content.parts.length === 0 && !hasHarnessContent(entry.message)) {
+    if (idx !== -1) entries.splice(idx, 1);
+  } else if (idx === -1) entries.push(entry);
   else entries[idx] = entry;
   return { ...state, entries };
 }

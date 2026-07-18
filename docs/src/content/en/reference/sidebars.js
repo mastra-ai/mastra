@@ -125,6 +125,7 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'browser/agent-browser', label: 'AgentBrowser' },
         { type: 'doc', id: 'browser/browser-viewer', label: 'BrowserViewer' },
+        { type: 'doc', id: 'browser/firecrawl-browser', label: 'FirecrawlBrowser' },
         { type: 'doc', id: 'browser/mastra-browser', label: 'MastraBrowser Class' },
         { type: 'doc', id: 'browser/stagehand-browser', label: 'StagehandBrowser' },
       ],

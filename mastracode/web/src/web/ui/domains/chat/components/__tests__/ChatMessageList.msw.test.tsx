@@ -6,7 +6,8 @@
  * Driven end-to-end: real fetch/SSE transport, MSW at the network boundary.
  */
 import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/client-js';
-import { screen, waitFor } from '@testing-library/react';
+import type { MastraDBMessage } from '@mastra/core/agent-controller';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -65,7 +66,7 @@ function sse(events: AgentControllerEvent[] = []): Response {
   );
 }
 
-function useAgentControllerHandlers(events: AgentControllerEvent[] = []) {
+function useAgentControllerHandlers(events: AgentControllerEvent[] = [], messages: MastraDBMessage[] = []) {
   server.use(
     http.post(`${API}/sessions`, () =>
       HttpResponse.json({ controllerId: 'code', resourceId: RESOURCE_ID, threadId: THREAD_ID }),
@@ -76,7 +77,7 @@ function useAgentControllerHandlers(events: AgentControllerEvent[] = []) {
     http.put(`${SESSION}/state`, () => HttpResponse.json(sessionState())),
     http.get(`${SESSION}/permissions`, () => HttpResponse.json({ categories: {}, tools: {} })),
     http.get(`${SESSION}/threads`, () => HttpResponse.json({ threads: [] })),
-    http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () => HttpResponse.json({ messages: [] })),
+    http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () => HttpResponse.json({ messages })),
     http.post(`${SESSION}/goal`, () => HttpResponse.json({})),
     http.put(`${SESSION}/goal`, () => HttpResponse.json({})),
     http.delete(`${SESSION}/goal`, () => HttpResponse.json({})),
@@ -124,6 +125,24 @@ describe('ChatMessageList', () => {
     expect(screen.getByText('/tmp/mastracode-test')).toBeInTheDocument();
   });
 
+  it('given only a whitespace message, then it still shows the welcome state', async () => {
+    seedProject();
+    useAgentControllerHandlers(
+      [],
+      [
+        {
+          id: 'assistant-empty',
+          role: 'assistant',
+          createdAt: new Date(),
+          content: { format: 2, parts: [{ type: 'text', text: '  \n ' }] },
+        },
+      ],
+    );
+    renderMessageList();
+
+    await waitFor(() => expect(screen.getByText('Ready for new conversation')).toBeInTheDocument());
+  });
+
   it('given streamed assistant text, then it renders the transcript entry', async () => {
     seedProject();
     useAgentControllerHandlers([
@@ -142,6 +161,56 @@ describe('ChatMessageList', () => {
     renderMessageList();
 
     await waitFor(() => expect(screen.getByText('Hello from the agent')).toBeInTheDocument());
+  });
+
+  it('given a completed tool followed by text, then it renders a quiet header and separates the summary', async () => {
+    seedProject();
+    useAgentControllerHandlers(
+      [],
+      [
+        {
+          id: 'assistant-tools-1',
+          role: 'assistant',
+          createdAt: new Date(),
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: '   ' },
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'tool-1',
+                  toolName: 'view',
+                  args: { path: 'src/index.ts' },
+                  result: 'export const value = 1;',
+                },
+              },
+              { type: 'text', text: 'Summary follows.' },
+            ],
+          },
+        },
+      ],
+    );
+    renderMessageList();
+
+    const tool = await screen.findByRole('group', { name: 'Tool: view' });
+    expect(within(tool).queryByText('Done')).not.toBeInTheDocument();
+    expect(tool.querySelector('.lucide-chevron-down')).not.toBeInTheDocument();
+    expect(screen.getByText('Summary follows.').closest('.prose')).toHaveClass('mt-3');
+  });
+
+  it('given running and failed tools, then it keeps their status prominent', async () => {
+    seedProject();
+    useAgentControllerHandlers([
+      { type: 'tool_start', toolCallId: 'tool-running', toolName: 'view', args: { path: 'src/index.ts' } },
+      { type: 'tool_start', toolCallId: 'tool-failed', toolName: 'execute_command', args: { command: 'exit 1' } },
+      { type: 'tool_end', toolCallId: 'tool-failed', result: 'failed', isError: true },
+    ]);
+    renderMessageList();
+
+    await waitFor(() => expect(screen.getByText('Running')).toBeInTheDocument());
+    expect(screen.getByText('Failed')).toBeInTheDocument();
   });
 
   it('given a streamed notification signal, then it renders the notification provenance in the transcript', async () => {

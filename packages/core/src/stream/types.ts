@@ -454,6 +454,15 @@ export interface GoalEvaluationPayload {
   /** Whether the goal feedback message is suppressed from memory. */
   suppressFeedback: boolean;
   /**
+   * The goal gate's continuation decision: `true` when the run loops into
+   * another judged iteration, `false` on a terminal evaluation (completion,
+   * waiting for user, judge failure, or budget exhaustion). Only set on final
+   * (non-pending) evaluation chunks. A `true` value marks an iteration
+   * boundary — the turn's messages are persisted and the stream may safely
+   * truncate its run-lifetime buffers.
+   */
+  shouldContinue?: boolean;
+  /**
    * True on the "pre-evaluation" chunk emitted before scoring starts. Display
    * layers use this to show a loading/evaluating indicator while the scorer
    * runs. A second chunk with `pending: false` (or absent) follows once the
