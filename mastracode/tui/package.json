@@ -1,6 +1,6 @@
 {
   "name": "mastracode",
-  "version": "0.31.1-alpha.2",
+  "version": "0.31.1-alpha.6",
   "description": "",
   "type": "module",
   "files": [
@@ -116,7 +116,7 @@
     "@mastra/tavily": "workspace:*",
     "@mastra/voice-deepgram": "workspace:*",
     "@mastra/voice-openai": "workspace:*",
-    "ai": "^6.0.224",
+    "ai": "^6.0.225",
     "chalk": "^5.5.0",
     "cli-highlight": "^2.1.11",
     "execa": "^9.6.1",

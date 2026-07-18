@@ -4,7 +4,11 @@ import type {
   AgentControllerTaskSnapshot,
   AgentControllerOMProgress,
 } from '@mastra/client-js';
-import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
+import type {
+  AgentControllerEvent as CoreAgentControllerEvent,
+  MastraDBMessage,
+  MastraMessagePart,
+} from '@mastra/core/agent-controller';
 
 import { stripAnsi } from './ansi';
 
@@ -144,8 +148,6 @@ export interface GoalSnapshot {
 
 export interface TranscriptState {
   entries: TimelineEntry[];
-  /** Whether the agent is mid-run (driven by agent_start/agent_end events). */
-  running: boolean;
   /**
    * Whether a turn the user just initiated is awaiting its first response.
    * Set the instant the user sends/steers (synchronously, before any SSE
@@ -182,7 +184,6 @@ export interface TranscriptState {
 
 export const initialTranscript: TranscriptState = {
   entries: [],
-  running: false,
   pending: false,
   tasks: [],
   followUpCount: 0,
@@ -200,9 +201,18 @@ export interface OutgoingFile {
   filename?: string;
 }
 
+type CanonicalMessageEvent = Extract<
+  CoreAgentControllerEvent,
+  { type: 'message_start' | 'message_update' | 'message_end' }
+>;
+type TranscriptEvent =
+  | Exclude<KnownAgentControllerEvent, { type: 'message_start' | 'message_update' | 'message_end' }>
+  | CanonicalMessageEvent;
+
 type Action =
-  | { type: 'event'; event: AgentControllerEvent }
+  | { type: 'event'; event: AgentControllerEvent | CoreAgentControllerEvent }
   | { type: 'localUser'; text: string; steer?: boolean; files?: OutgoingFile[] }
+  | { type: 'clearPending' }
   | { type: 'localNotice'; text: string; level: 'info' | 'error' }
   | { type: 'resolvePrompt'; id: string }
   | {
@@ -210,23 +220,6 @@ type Action =
       threadId?: string;
       omProgress?: AgentControllerOMProgress;
       usage?: UsageSnapshot;
-      running?: boolean;
-    }
-  | {
-      /**
-       * Patch transcript-owned metadata (OM/usage/running) from an authoritative
-       * `session.state()` fetch without touching the timeline or thread binding.
-       * Used after thread switches, where the state fetch can resolve *after*
-       * history hydration — it must never wipe already-rendered entries.
-       */
-      type: 'syncState';
-      omProgress?: AgentControllerOMProgress;
-      usage?: UsageSnapshot;
-      /**
-       * Whether the agent is mid-run per the server snapshot. Only applied when
-       * present — an older server that omits it must not clear a live indicator.
-       */
-      running?: boolean;
     };
 
 /**
@@ -254,16 +247,6 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
         threadId: action.threadId,
         omProgress: action.omProgress,
         usage: action.usage,
-        running: action.running ?? false,
-      };
-    case 'syncState':
-      // Fields absent from the snapshot are preserved, so a running-only sync
-      // (or a stale snapshot) never rolls back live OM progress/usage.
-      return {
-        ...state,
-        omProgress: action.omProgress ?? state.omProgress,
-        usage: action.usage ?? state.usage,
-        running: action.running ?? state.running,
       };
     case 'localUser':
       return {
@@ -285,6 +268,8 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
           ),
         ],
       };
+    case 'clearPending':
+      return { ...state, pending: false };
     case 'localNotice':
       return pushNotice(state, action.level, action.text);
     case 'resolvePrompt':
@@ -296,22 +281,22 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
   }
 }
 
-function applyEvent(state: TranscriptState, raw: AgentControllerEvent): TranscriptState {
-  const event = raw as KnownAgentControllerEvent;
+function applyEvent(state: TranscriptState, raw: AgentControllerEvent | CoreAgentControllerEvent): TranscriptState {
+  const event = raw as TranscriptEvent;
   switch (event.type) {
     case 'agent_start':
       // Reset the rate at the start of a new turn (not at the end) so the last
       // turn's tokens/sec stays visible while idle — short single-step turns
       // would otherwise zero it before it could be read.
-      return { ...state, running: true, tokensPerSec: 0, _decodeStartedAt: 0 };
+      return { ...state, tokensPerSec: 0, _decodeStartedAt: 0 };
     case 'agent_end':
       // Keep tokensPerSec as the last turn's reading; only clear the in-flight
       // decode window so a stale start can't bleed into the next turn.
-      return { ...state, running: false, pending: false, _decodeStartedAt: 0 };
+      return { ...state, pending: false, _decodeStartedAt: 0 };
 
     case 'message_start':
     case 'message_update': {
-      const message = event.message as MastraDBMessage;
+      const message = event.message;
       const next = upsertMessage(state, message, true);
       if (message.role !== 'assistant') return next;
       // Only streamed assistant content opens the decode window — empty or
@@ -328,8 +313,9 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent): Transcri
       return { ...decoded, pending: false };
     }
     case 'message_end': {
-      const next = upsertMessage(state, event.message, false);
-      return event.message.role === 'assistant' ? { ...next, pending: false } : next;
+      const message = event.message;
+      const next = upsertMessage(state, message, false);
+      return message.role === 'assistant' ? { ...next, pending: false } : next;
     }
 
     case 'tool_input_start':
@@ -481,15 +467,13 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent): Transcri
       const stepTokens = (usageSnap.completionTokens ?? 0) + (usageSnap.reasoningTokens ?? 0);
       let tps = state.tokensPerSec;
       if (state._decodeStartedAt > 0 && stepTokens > 0) {
-        const decodeSec = (now - state._decodeStartedAt) / 1000;
-        if (decodeSec > 0) {
-          const instantaneous = stepTokens / decodeSec;
-          const alpha = 0.3;
-          tps =
-            state.tokensPerSec > 0
-              ? Math.round(alpha * instantaneous + (1 - alpha) * state.tokensPerSec)
-              : Math.round(instantaneous);
-        }
+        const decodeSec = Math.max((now - state._decodeStartedAt) / 1000, 0.001);
+        const instantaneous = stepTokens / decodeSec;
+        const alpha = 0.3;
+        tps =
+          state.tokensPerSec > 0
+            ? Math.round(alpha * instantaneous + (1 - alpha) * state.tokensPerSec)
+            : Math.round(instantaneous);
       }
       return {
         ...state,
@@ -508,9 +492,6 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent): Transcri
         ...state,
         omProgress: ds.omProgress ?? state.omProgress,
         usage: (ds.tokenUsage as UsageSnapshot | undefined) ?? state.usage,
-        // Canonical run flag: keeps the working indicator honest even when the
-        // paired agent_start/agent_end event was missed (e.g. attach mid-run).
-        running: typeof ds.isRunning === 'boolean' ? ds.isRunning : state.running,
       };
     }
 
@@ -582,13 +563,11 @@ export function createInitialTranscript({
   threadId,
   omProgress,
   usage,
-  running,
 }: {
   messages?: MastraDBMessage[];
   threadId?: string;
   omProgress?: AgentControllerOMProgress;
   usage?: UsageSnapshot;
-  running?: boolean;
 } = {}): TranscriptState {
   return {
     ...initialTranscript,
@@ -596,7 +575,6 @@ export function createInitialTranscript({
     threadId,
     omProgress,
     usage,
-    running: running ?? false,
   };
 }
 
@@ -673,9 +651,16 @@ function hasAssistantText(state: TranscriptState): boolean {
   const idx = latestAssistantIndex(state.entries);
   if (idx === -1) return false;
   const entry = state.entries[idx];
-  if (entry.kind !== 'message') return false;
+  if (entry.kind !== 'message' || !Array.isArray(entry.message.content.parts)) return false;
   return entry.message.content.parts.some(
-    part => part.type === 'text' && 'text' in part && part.text.trim().length > 0,
+    (part: unknown) =>
+      typeof part === 'object' &&
+      part !== null &&
+      'type' in part &&
+      part.type === 'text' &&
+      'text' in part &&
+      typeof part.text === 'string' &&
+      part.text.trim().length > 0,
   );
 }
 

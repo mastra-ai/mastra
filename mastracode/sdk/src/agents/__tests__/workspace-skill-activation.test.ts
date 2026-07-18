@@ -134,4 +134,30 @@ describe('mastracode workspace skill activation', () => {
       await fs.rm(tempDir, { recursive: true, force: true });
     }
   });
+
+  it('does not load Web Factory skills in the default Mastra Code workspace', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastracode-default-skills-'));
+
+    try {
+      const { getDynamicWorkspace } = await import('../workspace.js');
+      const requestContext = new RequestContext();
+      const getState = () => ({
+        projectPath: tempDir,
+        homeDir: tempDir,
+        sandboxAllowedPaths: [],
+      });
+      requestContext.set('controller', {
+        modeId: 'build',
+        getState,
+        session: { state: { get: getState } },
+      });
+
+      const workspace = await getDynamicWorkspace({ requestContext });
+
+      expect(await workspace.skills?.get('understand-issue')).toBeNull();
+      expect(await workspace.skills?.get('understand-pr')).toBeNull();
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
 });

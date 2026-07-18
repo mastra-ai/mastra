@@ -547,6 +547,17 @@ const result = await agent.generate('message for agent')
                   },
                 ],
               },
+              {
+                parameters: [
+                  {
+                    name: 'onTitleGenerated',
+                    type: '(title: string) => void | Promise<void>',
+                    isOptional: true,
+                    description:
+                      'Callback fired asynchronously when a thread title is generated and persisted to storage. Title generation runs in the background and may complete after `generate()` returns. Only fires when `generateTitle` is enabled in memory options and the thread has no existing title.',
+                  },
+                ],
+              },
             ],
           },
           {
@@ -1415,6 +1426,22 @@ You can monitor the progress of multi-step operations using the `onStepFinish` c
 const response = await agent.generate('Help me organize my day', {
   onStepFinish: ({ text, toolCalls, toolResults, finishReason, usage }) => {
     console.log({ text, toolCalls, toolResults, finishReason, usage })
+  },
+})
+```
+
+### Using `onTitleGenerated`
+
+When `generateTitle` is enabled in memory options, title generation runs asynchronously after the response completes. Use `onTitleGenerated` to react when the title is ready — for example, to push it to the client via SSE.
+
+```typescript
+const response = await agent.generate('What is quantum computing?', {
+  memory: {
+    thread: threadId,
+    resource: userId,
+    onTitleGenerated: title => {
+      console.log('Thread title:', title)
+    },
   },
 })
 ```

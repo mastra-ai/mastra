@@ -11,13 +11,13 @@ import { useLocation, useNavigate } from 'react-router';
 import { useApiConfig } from '../../../../../shared/api/config';
 import { queryKeys } from '../../../../../shared/api/keys';
 import { useToast } from '../../../ui/toast';
-import { useWebAuth } from '../../auth/hooks/useWebAuth';
+import { useWebAuth } from '../../../../../shared/hooks/useWebAuth';
 import { userSessionResourceId } from '../../auth/services/auth';
 import { createAgentControllerClient, requireAgentControllerSession } from '../../chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { useActiveProjectContext } from '../context/ActiveProjectProvider';
-import { useWorkspaceActivity } from '../hooks/useWorkspaceActivity';
-import { useWorkspaceAttention } from '../hooks/useWorkspaceAttention';
+import { useWorkspaceActivity } from '../../../../../shared/hooks/useWorkspaceActivity';
+import { useWorkspaceAttention } from '../../../../../shared/hooks/useWorkspaceAttention';
 import { createWorktree, deleteWorktree } from '../services/github';
 import type { Project, Worktree } from '../services/projects';
 import {
@@ -239,7 +239,6 @@ export function UserSessionsSection() {
               running={runningByPath[worktree.worktreePath] === true}
               attention={attentionByPath[worktree.worktreePath] === true}
               disabled={pending}
-              onSeen={() => clearAttention(worktree.worktreePath)}
               onSelect={() => void openSession(worktree)}
               onDelete={() => setConfirmDelete(worktree)}
             />

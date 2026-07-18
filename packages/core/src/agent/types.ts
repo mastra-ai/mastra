@@ -958,6 +958,8 @@ export type AgentMemoryOption = {
   thread: string | (Partial<StorageThreadType> & { id: string });
   resource?: string;
   options?: MemoryConfigInternal;
+  /** Callback fired when a thread title is generated and persisted to storage. */
+  onTitleGenerated?: (title: string) => void | Promise<void>;
 };
 
 /**
@@ -1164,6 +1166,7 @@ export type AgentExecuteOnFinishOptions = {
   threadExists: boolean;
   structuredOutput?: boolean;
   overrideScorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
+  onTitleGenerated?: (title: string) => void | Promise<void>;
 };
 
 export type AgentMethodType = 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
@@ -1218,6 +1221,18 @@ export interface DurableAgentLike {
    * getMemory(), etc. to the wrapped Agent instance.
    */
   [key: string]: any;
+  /**
+   * Recover active runs for this durable agent.
+   */
+  recoverActiveRuns(): Promise<{
+    recovered: Array<{ runId: string }>;
+    succeeded: number;
+    failed: number;
+  }>;
+  /**
+   * Recover a specific run for this durable agent.
+   */
+  recover(runId: string, options?: any): Promise<any>;
 }
 
 /**
@@ -1232,6 +1247,8 @@ export function isDurableAgentLike(obj: any): obj is DurableAgentLike {
     obj.agent !== null &&
     typeof obj.agent === 'object' &&
     typeof obj.agent.id === 'string' &&
-    typeof obj.stream === 'function'
+    typeof obj.stream === 'function' &&
+    typeof obj.recover === 'function' &&
+    typeof obj.recoverActiveRuns === 'function'
   );
 }

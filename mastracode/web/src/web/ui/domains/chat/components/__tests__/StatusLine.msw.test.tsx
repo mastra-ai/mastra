@@ -13,11 +13,11 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { ChatSessionTestProvider as ChatSessionProvider } from '../../context/ChatSessionTestProvider';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import type { Project } from '../../../workspaces';
 import { ActiveProjectProvider } from '../../../workspaces';
-import { ChatSessionProvider } from '../../context/ChatSessionProvider';
 import { StatusLine } from '../StatusLine';
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
@@ -419,6 +419,14 @@ describe('StatusLine', () => {
   });
 
   describe('when the agent is actively working', () => {
+    it('reports Working in the composer status line', async () => {
+      seedProject();
+      useAgentControllerHandlers([{ type: 'agent_start' }]);
+      renderStatusLine();
+
+      expect(await screen.findByRole('status')).toHaveTextContent('Working…');
+    });
+
     it('shows the observational memory phase while observing', async () => {
       seedProject();
       useAgentControllerHandlers([{ type: 'om_observation_start' }]);

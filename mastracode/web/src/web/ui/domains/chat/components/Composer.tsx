@@ -1,4 +1,4 @@
-import type { MastraDBMessage } from '@mastra/client-js';
+import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import {
@@ -24,8 +24,8 @@ import {
   useAbortAgentControllerMutation,
   useSendAgentControllerMessageMutation,
   useSteerAgentControllerMutation,
-} from '../hooks/useAgentControllerRunMutations';
-import { useCreateAgentControllerThreadMutation } from '../hooks/useAgentControllerThreadMutations';
+} from '../../../../../shared/hooks/useAgentControllerRunMutations';
+import { useCreateAgentControllerThreadMutation } from '../../../../../shared/hooks/useAgentControllerThreadMutations';
 import { matchCommands } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { getModeColor } from './mode-colors';

@@ -10,7 +10,9 @@ vi.mock('../auth', async () => {
   };
 });
 
-import type { AuditEventRow } from './schema';
+import type { WebAuthAdapter } from '../auth-adapter';
+import { __resetRuntimeConfigForTests, seedRuntimeConfig } from '../runtime-config';
+import type { AuditEventRow } from '../storage/domains/audit/base';
 import { forwardToWorkOS, toWorkOSEvent } from './workos-sink';
 
 function makeRow(overrides: Partial<AuditEventRow> = {}): AuditEventRow {
@@ -36,6 +38,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  __resetRuntimeConfigForTests();
   delete process.env.WORKOS_API_KEY;
   delete process.env.WORKOS_CLIENT_ID;
 });
@@ -69,6 +72,18 @@ describe('forwardToWorkOS', () => {
   it('is a no-op when WorkOS auth is not configured', async () => {
     await forwardToWorkOS(makeRow());
     expect(createEvent).not.toHaveBeenCalled();
+  });
+
+  it('is a no-op when auth is enabled but the active adapter is not WorkOS (better-auth)', async () => {
+    seedRuntimeConfig({ authAdapter: { kind: 'better-auth' } as WebAuthAdapter });
+    await forwardToWorkOS(makeRow());
+    expect(createEvent).not.toHaveBeenCalled();
+  });
+
+  it('forwards when the factory seeded a WorkOS adapter', async () => {
+    seedRuntimeConfig({ authAdapter: { kind: 'workos' } as WebAuthAdapter });
+    await forwardToWorkOS(makeRow());
+    expect(createEvent).toHaveBeenCalledTimes(1);
   });
 
   it('forwards the mapped event scoped to the org when configured', async () => {

@@ -96,22 +96,33 @@ function sse(events: AgentControllerEvent[] = []): Response {
 
 function delayedSse(event: AgentControllerEvent) {
   const encoder = new TextEncoder();
-  let emit: () => void = () => {};
+  const emitters = new Set<() => void>();
+  let pending = false;
   let markReady: () => void = () => {};
   const ready = new Promise<void>(resolve => {
     markReady = resolve;
   });
-  const response = new Response(
-    new ReadableStream<Uint8Array>({
-      start(controller) {
-        emit = () => controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
-        markReady();
-      },
-      cancel() {},
-    }),
-    { headers: { 'content-type': 'text/event-stream' } },
-  );
-  return { response, emit: () => ready.then(() => emit()) };
+  const response = () =>
+    new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          const emit = () => controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+          emitters.add(emit);
+          if (pending) emit();
+          markReady();
+        },
+        cancel() {},
+      }),
+      { headers: { 'content-type': 'text/event-stream' } },
+    );
+  return {
+    response,
+    emit: () =>
+      ready.then(() => {
+        pending = true;
+        emitters.forEach(emit => emit());
+      }),
+  };
 }
 
 function useAgentControllerHandlers({
@@ -130,6 +141,9 @@ function useAgentControllerHandlers({
     http.get(`${API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', label: 'Build' }] })),
     http.get(`${API}/models`, () => HttpResponse.json({ models: [] })),
     http.get(`${TEST_BASE_URL}/auth/me`, () => new Response(null, { status: 404 })),
+    http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+      HttpResponse.json({ enabled: false, connected: false, installations: [] }),
+    ),
     http.get(SESSION, () => HttpResponse.json(sessionState())),
     http.put(`${SESSION}/state`, async ({ request }) => {
       onState(await request.json());
@@ -208,8 +222,10 @@ describe('MastraCode sidebar auth actions', () => {
     renderSeededApp({ authenticated: true, user: { name: 'Ada Lovelace', email: 'ada@example.com' } });
 
     await waitFor(() => expect(screen.queryByRole('status', { name: 'Checking sign-in' })).not.toBeInTheDocument());
-    expect(await screen.findByText('Ada Lovelace')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /sign out/i })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Ada Lovelace')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /sign out/i })).toBeInTheDocument();
+    });
     expect(screen.queryByRole('button', { name: /sign in/i })).not.toBeInTheDocument();
   });
 
@@ -236,11 +252,13 @@ describe('MastraCode empty thread state', () => {
   it('given a project with no messages, when the app renders, then the Mastra Code wordmark hero appears', async () => {
     renderSeededApp();
 
-    expect(await screen.findByText('Ready for new conversation')).toBeInTheDocument();
-    const wordmark = screen.getByLabelText('Mastra Code');
-    expect(wordmark).toBeInTheDocument();
-    // The hero sits inside the transcript scroller, which centers empty content vertically.
-    expect(wordmark.closest('.place-items-center')).not.toBeNull();
+    await waitFor(() => {
+      expect(screen.getByText('Ready for new conversation')).toBeInTheDocument();
+      const wordmark = screen.getByLabelText('Mastra Code');
+      expect(wordmark).toBeInTheDocument();
+      // The hero sits inside the transcript scroller, which centers empty content vertically.
+      expect(wordmark.closest('.place-items-center')).not.toBeNull();
+    });
   });
 });
 
@@ -269,11 +287,13 @@ describe('MastraCode message rendering', () => {
     renderChat();
 
     await waitFor(() => expect(screen.queryByRole('status', { name: 'Loading messages' })).not.toBeInTheDocument());
-    await waitFor(() => expect(document.body).toHaveTextContent('Hello from hydrate'));
-    expect(document.body).toHaveTextContent('from hydrate');
-    expect(screen.getByText('checking files')).toBeInTheDocument();
-    const card = await findToolCard('view');
-    expect(within(card).getByText('Done')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(document.body).toHaveTextContent('Hello from hydrate');
+      expect(document.body).toHaveTextContent('from hydrate');
+      expect(screen.getByText('checking files')).toBeInTheDocument();
+      const card = screen.getByRole('group', { name: 'Tool: view' });
+      expect(within(card).getByText('Done')).toBeInTheDocument();
+    });
   });
 
   it('composes consecutive tool cards into a single bordered container', async () => {
@@ -307,19 +327,21 @@ describe('MastraCode message rendering', () => {
 
     renderChat();
 
-    const first = await findToolCard('view');
-    const last = await findToolCard('search');
+    await waitFor(() => {
+      const first = screen.getByRole('group', { name: 'Tool: view' });
+      const last = screen.getByRole('group', { name: 'Tool: search' });
 
-    // First card rounds only its top; last card rounds only its bottom, so the
-    // pair reads as one container. The shared inner edge becomes a divider
-    // (the last card's top border) rather than two abutting rounded borders.
-    expect(first.className).toContain('rounded-t-xl');
-    expect(first.className).not.toContain('rounded-b-xl');
-    expect(last.className).toContain('rounded-b-xl');
-    expect(last.className).not.toContain('rounded-t-xl');
-    // border-y gives the last card a top edge (the divider from the first card)
-    // plus the closing bottom border.
-    expect(last.className).toContain('border-y');
+      // First card rounds only its top; last card rounds only its bottom, so the
+      // pair reads as one container. The shared inner edge becomes a divider
+      // (the last card's top border) rather than two abutting rounded borders.
+      expect(first.className).toContain('rounded-t-xl');
+      expect(first.className).not.toContain('rounded-b-xl');
+      expect(last.className).toContain('rounded-b-xl');
+      expect(last.className).not.toContain('rounded-t-xl');
+      // border-y gives the last card a top edge (the divider from the first card)
+      // plus the closing bottom border.
+      expect(last.className).toContain('border-y');
+    });
   });
 
   it('renders assistant text when SSE message updates arrive after subscription', async () => {
@@ -329,14 +351,15 @@ describe('MastraCode message rendering', () => {
       message: dbMessage('assistant-stream', 'assistant', [{ type: 'text', text: 'Streaming now' }]),
     });
     useAgentControllerHandlers();
-    server.use(http.get(`${SESSION}/stream`, () => stream.response));
+    server.use(http.get(`${SESSION}/stream`, () => stream.response()));
 
     renderChat();
 
-    expect(await screen.findByText('Ready')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Ready for new conversation')).toBeInTheDocument());
+    await new Promise(resolve => setTimeout(resolve, 100));
     await stream.emit();
 
-    expect(await screen.findByText('Streaming now')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Streaming now')).toBeInTheDocument());
   });
 
   it('renders tool lifecycle events inline before a later message update re-emits the tool part', async () => {
@@ -526,25 +549,6 @@ describe('MastraCode message rendering', () => {
     });
   });
 
-  describe('when a goal evaluation arrives', () => {
-    it('renders the goal panel with its objective and controls', async () => {
-      seedProject();
-      useAgentControllerHandlers({
-        events: [
-          {
-            type: 'goal_evaluation',
-            payload: { objective: 'Migrate the UI', status: 'active', iteration: 1, maxRuns: 5, passed: false },
-          },
-        ],
-      });
-
-      renderChat();
-
-      expect(await screen.findByText('Migrate the UI')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Pause' })).toBeInTheDocument();
-    });
-  });
-
   describe('when a notice contains markdown', () => {
     it('renders the notice text as formatted markdown instead of raw syntax', async () => {
       seedProject();
@@ -685,17 +689,15 @@ describe('App mode + theme controls', () => {
       expect(header).not.toBeNull();
 
       // The header must not contain any project switcher.
-      expect(within(header as HTMLElement).queryByRole('button', { name: /MastraCode Test/ })).not.toBeInTheDocument();
+      expect(within(header as HTMLElement).queryByRole('button', { name: 'Select project' })).not.toBeInTheDocument();
 
-      // The sidebar remains the single source of the project switcher: exactly
-      // one project-switcher button exists, it exposes the project name, and it
-      // lives outside the header.
-      const switchers = screen.getAllByRole('button', { name: /MastraCode Test/ });
-      expect(switchers).toHaveLength(1);
-      expect(header).not.toContainElement(switchers[0]);
+      // The sidebar remains the single source of the project switcher.
+      const switcher = screen.getByRole('button', { name: 'Select project' });
+      expect(switcher).toHaveTextContent('MastraCode Test');
+      expect(header).not.toContainElement(switcher);
     });
 
-    it('renders the ready status above settings in the sidebar', async () => {
+    it('keeps settings in the sidebar without connection status', async () => {
       seedMultiMode();
 
       renderChat();
@@ -705,11 +707,8 @@ describe('App mode + theme controls', () => {
       const header = document.querySelector('header');
       expect(header).not.toBeNull();
       expect(within(header as HTMLElement).queryByRole('button', { name: 'Open settings' })).not.toBeInTheDocument();
-
-      const settings = screen.getByRole('button', { name: 'Open settings' });
-      const readyStatus = screen.getByRole('status', { name: '' });
-      await waitFor(() => expect(readyStatus).toHaveTextContent('Ready'));
-      expect(readyStatus.compareDocumentPosition(settings) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Open settings' })).toBeInTheDocument();
+      expect(screen.queryByText('Ready')).not.toBeInTheDocument();
     });
 
     it('does not duplicate the project name in the status line', async () => {

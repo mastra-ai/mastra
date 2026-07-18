@@ -5,6 +5,7 @@ packages:
   - "@mastra/core"
   - "@mastra/agent-browser"
   - "@mastra/stagehand"
+  - "@mastra/browser-firecrawl"
   - "@mastra/browser-viewer"
 ---
 
@@ -12,10 +13,11 @@ packages:
 
 Browser support enables agents to navigate websites, interact with page elements, fill forms, and extract data. Mastra provides browser capabilities through SDK providers that wrap browser automation libraries and a CLI provider for agents that drive browsers through command-line tools.
 
-Mastra supports two SDK providers and one CLI provider:
+Mastra supports three SDK providers and one CLI provider:
 
 - [**AgentBrowser**](/docs/browser/agent-browser): A Playwright-based provider with accessibility-first element targeting. Best for general web automation and scraping.
 - [**Stagehand**](/docs/browser/stagehand): A Browserbase provider with AI-powered element detection. Best for complex interactions that benefit from natural language selectors.
+- [**FirecrawlBrowser**](/docs/browser/firecrawl): A Firecrawl Browser Sandbox provider that runs AgentBrowser tools against hosted browser sessions. Best for running automation on hosted browser sessions without managing local browser infrastructure.
 - [**BrowserViewer**](/docs/browser/browser-viewer): A CLI provider that launches Chrome and injects CDP URLs into CLI tools like agent-browser, browser-use, and browse. Best for workspace agents that drive browsers through shell commands.
 - [**Browser recording (alpha)**](/docs/browser/recording): An opt-in tool layer that saves browser sessions as Motion-JPEG AVI videos with optional captions.
 
@@ -74,7 +76,19 @@ The agent automatically receives all browser tools from the provider.
 
 ## Cloud providers
 
-Both SDK providers support connecting to cloud browser services instead of launching a local browser.
+All SDK providers support connecting to cloud browser services instead of launching a local browser.
+
+### Firecrawl Browser Sandbox (FirecrawlBrowser native)
+
+FirecrawlBrowser provisions hosted sessions through the Firecrawl API:
+
+```typescript
+import { FirecrawlBrowser } from '@mastra/browser-firecrawl'
+
+const browser = new FirecrawlBrowser({
+  apiKey: process.env.FIRECRAWL_API_KEY,
+})
+```
 
 ### Browserbase (Stagehand native)
 
@@ -139,6 +153,7 @@ const browser = new AgentBrowser({
 
 - [AgentBrowser](/docs/browser/agent-browser)
 - [Stagehand](/docs/browser/stagehand)
+- [Firecrawl](/docs/browser/firecrawl)
 - [Browser recording (alpha)](/docs/browser/recording)
 - [BrowserViewer](/docs/browser/browser-viewer)
 - [MastraBrowser reference](/reference/browser/mastra-browser)

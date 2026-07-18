@@ -13,16 +13,13 @@ import { useOverlays } from '../../../lib/overlays';
 import { useToast } from '../../../ui';
 import { useActiveProjectContext } from '../../workspaces/context/ActiveProjectProvider';
 import { useChatSessionContext } from '../context/useChatSessionContext';
-import { useChatTranscript } from '../context/useChatTranscript';
 import {
   useCloneAgentControllerThreadMutation,
   useDeleteAgentControllerThreadMutation,
   useRenameAgentControllerThreadMutation,
-} from '../hooks/useAgentControllerThreadMutations';
-import { useAgentControllerThreads } from '../hooks/useAgentControllerThreads';
+} from '../../../../../shared/hooks/useAgentControllerThreadMutations';
+import { useAgentControllerThreads } from '../../../../../shared/hooks/useAgentControllerThreads';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-
-const MAX_THREADS = 5;
 
 export function ThreadList() {
   const { activeProject } = useActiveProjectContext();
@@ -49,13 +46,11 @@ export function ThreadList() {
 
   const threads = threadsQuery.data ?? [];
   const activeThreadId = routeThreadId;
-  const sortedThreads = [...threads]
-    .sort((a, b) => {
-      const ta = a.updatedAt ?? a.createdAt ?? '';
-      const tb = b.updatedAt ?? b.createdAt ?? '';
-      return tb.localeCompare(ta);
-    })
-    .slice(0, MAX_THREADS);
+  const sortedThreads = [...threads].sort((a, b) => {
+    const ta = a.updatedAt ?? a.createdAt ?? '';
+    const tb = b.updatedAt ?? b.createdAt ?? '';
+    return tb.localeCompare(ta);
+  });
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
@@ -78,11 +73,6 @@ export function ThreadList() {
               onStartRename={() => setRenamingId(thread.id)}
             />
           ),
-        )}
-        {threads.length > MAX_THREADS && (
-          <Txt as="div" variant="ui-xs" className="px-2 py-1.5 text-icon3">
-            +{threads.length - MAX_THREADS} more
-          </Txt>
         )}
       </div>
     </div>
@@ -174,7 +164,6 @@ function ThreadRow({
   onStartRename: () => void;
 }) {
   const hookArgs = useThreadHookArgs();
-  const { reset } = useChatTranscript();
   const overlays = useOverlays();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -190,7 +179,6 @@ function ThreadRow({
 
   const cloneThread = async () => {
     const clonedThread = await cloneThreadMutation.mutateAsync({ sourceThreadId: thread.id });
-    reset(clonedThread.id);
     toast('Thread cloned', 'success');
     void navigate(`/threads/${clonedThread.id}`);
   };
@@ -199,7 +187,6 @@ function ThreadRow({
     await deleteThreadMutation.mutateAsync(thread.id);
     toast('Thread deleted');
     if (thread.id === routeThreadId) {
-      reset();
       void navigate('/new');
     }
   };

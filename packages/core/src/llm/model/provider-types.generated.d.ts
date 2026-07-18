@@ -18,9 +18,11 @@ export type ProviderModelsMap = {
   ];
   readonly ambient: readonly [
     'ambient/large',
+    'deepseek/deepseek-v4-flash',
     'moonshotai/kimi-k2.6',
     'moonshotai/kimi-k2.7-code',
     'stepfun/step-3.7-flash',
+    'xiaomi/mimo-v2.5',
     'z-ai/glm-5.2',
     'zai-org/GLM-5.1-FP8',
     'zai-org/GLM-5.2-FP8',
@@ -986,7 +988,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-5.1',
     'zai-org/GLM-5.2',
   ];
-  readonly 'kimi-for-coding': readonly ['k2p5', 'k2p6', 'k2p7', 'kimi-for-coding-highspeed', 'kimi-k2-thinking'];
+  readonly 'kimi-for-coding': readonly ['k2p7', 'k3', 'kimi-for-coding-highspeed'];
   readonly crossmodel: readonly [
     'anthropic/claude-fable-5',
     'anthropic/claude-haiku-4-5',
@@ -1048,6 +1050,7 @@ export type ProviderModelsMap = {
     'openai/gpt-oss-120b',
     'openai/whisper-large-v3',
     'openai/whisper-large-v3-turbo',
+    'zai-org/GLM-5.2',
   ];
   readonly sarvam: readonly ['sarvam-105b', 'sarvam-30b'];
   readonly databricks: readonly [
@@ -1285,6 +1288,7 @@ export type ProviderModelsMap = {
     'kimi-k2.6',
     'kimi-k2.7-code',
     'kimi-k2.7-code-highspeed',
+    'kimi-k3',
     'llama-3-70b-instruct',
     'llama-3.1-70b-instruct',
     'llama-3.1-nemotron-ultra-253b',
@@ -1389,6 +1393,7 @@ export type ProviderModelsMap = {
     'kimi-k2-6',
     'kimi-k2-7-code',
     'kimi-k2-7-code-highspeed',
+    'kimi-k3',
     'mimo-v2-5',
     'mimo-v2-5-pro',
     'minimax-m2-7',
@@ -1721,6 +1726,7 @@ export type ProviderModelsMap = {
     'kimi-k2.6',
     'kimi-k2.7-code',
     'kimi-k2.7-code-highspeed',
+    'kimi-k3',
   ];
   readonly 'minimax-coding-plan': readonly [
     'MiniMax-M2',
@@ -2312,6 +2318,7 @@ export type ProviderModelsMap = {
     'minimax-m2.5',
     'tc-code-latest',
   ];
+  readonly thinkingmachines: readonly ['inkling'];
   readonly nebius: readonly [
     'MiniMaxAI/MiniMax-M2.5',
     'NousResearch/Hermes-4-405B',
@@ -2482,8 +2489,10 @@ export type ProviderModelsMap = {
     'deepseek-v4-pro',
     'glm-5.1',
     'glm-5.2',
+    'grok-4.5',
     'kimi-k2.6',
     'kimi-k2.7-code',
+    'kimi-k3',
     'mimo-v2.5',
     'mimo-v2.5-pro',
     'minimax-m2.7',
@@ -3133,7 +3142,6 @@ export type ProviderModelsMap = {
   ];
   readonly 'tencent-tokenhub': readonly ['hy3', 'hy3-preview'];
   readonly deepinfra: readonly [
-    'MiniMaxAI/MiniMax-M2.5',
     'MiniMaxAI/MiniMax-M2.7',
     'MiniMaxAI/MiniMax-M3',
     'Qwen/Qwen3-32B',
@@ -3162,9 +3170,7 @@ export type ProviderModelsMap = {
     'moonshotai/Kimi-K2.5',
     'moonshotai/Kimi-K2.6',
     'moonshotai/Kimi-K2.7-Code',
-    'nvidia/Llama-3.3-Nemotron-Super-49B-v1.5',
     'nvidia/Nemotron-3-Nano-30B-A3B',
-    'nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning',
     'openai/gpt-oss-120b',
     'openai/gpt-oss-20b',
     'zai-org/GLM-4.6',
@@ -3185,6 +3191,7 @@ export type ProviderModelsMap = {
     'kimi-k2.6',
     'kimi-k2.7-code',
     'kimi-k2.7-code-highspeed',
+    'kimi-k3',
   ];
   readonly openrouter: readonly [
     'ai21/jamba-large-1.7',
@@ -3284,7 +3291,6 @@ export type ProviderModelsMap = {
     'mancer/weaver',
     'meta-llama/llama-3.1-70b-instruct',
     'meta-llama/llama-3.1-8b-instruct',
-    'meta-llama/llama-3.2-11b-vision-instruct',
     'meta-llama/llama-3.2-1b-instruct',
     'meta-llama/llama-3.2-3b-instruct',
     'meta-llama/llama-3.2-3b-instruct:free',
@@ -3293,6 +3299,7 @@ export type ProviderModelsMap = {
     'meta-llama/llama-4-maverick',
     'meta-llama/llama-4-scout',
     'meta-llama/llama-guard-4-12b',
+    'meta/muse-spark-1.1',
     'microsoft/phi-4',
     'microsoft/wizardlm-2-8x22b',
     'minimax/minimax-01',
@@ -3327,6 +3334,7 @@ export type ProviderModelsMap = {
     'moonshotai/kimi-k2.5',
     'moonshotai/kimi-k2.6',
     'moonshotai/kimi-k2.7-code',
+    'moonshotai/kimi-k3',
     'morph/morph-v3-fast',
     'morph/morph-v3-large',
     'nex-agi/nex-n2-mini',
@@ -3336,7 +3344,6 @@ export type ProviderModelsMap = {
     'nousresearch/hermes-3-llama-3.1-70b',
     'nousresearch/hermes-4-405b',
     'nousresearch/hermes-4-70b',
-    'nvidia/llama-3.3-nemotron-super-49b-v1.5',
     'nvidia/nemotron-3-nano-30b-a3b',
     'nvidia/nemotron-3-nano-30b-a3b:free',
     'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
@@ -3496,6 +3503,7 @@ export type ProviderModelsMap = {
     'thedrummer/rocinante-12b',
     'thedrummer/skyfall-36b-v2',
     'thedrummer/unslopnemo-12b',
+    'thinkingmachines/inkling',
     'undi95/remm-slerp-l2-13b',
     'upstage/solar-pro-3',
     'writer/palmyra-x5',
@@ -3650,6 +3658,7 @@ export type ProviderModelsMap = {
     'nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B',
     'nvidia/Nemotron-120B-A12B',
     'openai/gpt-oss-120b',
+    'thinkingmachines/inkling',
     'zai-org/GLM-4.7',
     'zai-org/GLM-5',
     'zai-org/GLM-5.1',
@@ -3989,6 +3998,7 @@ export type ProviderModelsMap = {
     'openai/gpt-oss-120b',
     'openai/gpt-oss-20b',
     'pearl-ai/gemma-4-31b-it',
+    'thinkingmachines/Inkling',
     'zai-org/GLM-5',
     'zai-org/GLM-5.1',
     'zai-org/GLM-5.2',
@@ -4041,7 +4051,9 @@ export type ProviderModelsMap = {
     'anthropic/claude-opus-4.5',
     'anthropic/claude-opus-4.6',
     'anthropic/claude-opus-4.7',
+    'anthropic/claude-opus-4.7-fast',
     'anthropic/claude-opus-4.8',
+    'anthropic/claude-opus-4.8-fast',
     'anthropic/claude-sonnet-4',
     'anthropic/claude-sonnet-4.5',
     'anthropic/claude-sonnet-4.6',
@@ -4165,6 +4177,7 @@ export type ProviderModelsMap = {
     'moonshotai/kimi-k2.6',
     'moonshotai/kimi-k2.7-code',
     'moonshotai/kimi-k2.7-code-highspeed',
+    'moonshotai/kimi-k3',
     'morph/morph-v3-fast',
     'morph/morph-v3-large',
     'nvidia/nemotron-3-nano-30b-a3b',
@@ -4219,6 +4232,7 @@ export type ProviderModelsMap = {
     'openai/gpt-realtime-2',
     'openai/gpt-realtime-2.1',
     'openai/gpt-realtime-mini',
+    'openai/gpt-realtime-whisper',
     'openai/o1',
     'openai/o3',
     'openai/o3-deep-research',
@@ -4247,6 +4261,7 @@ export type ProviderModelsMap = {
     'sakana/fugu-ultra',
     'stepfun/step-3.5-flash',
     'stepfun/step-3.7-flash',
+    'thinkingmachines/inkling',
     'voyage/rerank-2.5',
     'voyage/rerank-2.5-lite',
     'voyage/voyage-3-large',
@@ -4844,6 +4859,7 @@ export type ProviderModelsMap = {
     'moonshotai/kimi-k2.6',
     'moonshotai/kimi-k2.7-code',
     'moonshotai/kimi-k2.7-code-free',
+    'moonshotai/kimi-k3',
     'openai/gpt-5',
     'openai/gpt-5-codex',
     'openai/gpt-5.1',

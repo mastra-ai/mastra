@@ -25,9 +25,8 @@ import {
   detectPackageManager,
   fetchChangelog,
   fetchLatestVersion,
-  getInstallCommand,
   isNewerVersion,
-  runUpdate,
+  performUpdate,
 } from '@mastra/code-sdk/utils/update-check';
 import type { AgentSignalAttributes } from '@mastra/core/agent';
 import {
@@ -1703,14 +1702,14 @@ export class MastraTUI {
 
     if (answer === 'Yes') {
       showInfo(this.state, `Updating to v${latestVersion}…`);
-      const ok = await runUpdate(pm, latestVersion);
-      if (ok) {
-        showInfo(this.state, `Updated to v${latestVersion}. Please restart Mastra Code.`);
+      const outcome = await performUpdate(pm, latestVersion);
+      if (outcome.status === 'updated') {
+        // Printed after TUI teardown — a message rendered inside it is lost in the exit race.
         this.stop();
+        console.info(outcome.message);
         process.exit(0);
       } else {
-        const cmd = getInstallCommand(pm, latestVersion);
-        showError(this.state, `Auto-update failed. Run \`${cmd}\` manually.`);
+        showError(this.state, outcome.message);
       }
     } else {
       // User declined — save the dismissed version

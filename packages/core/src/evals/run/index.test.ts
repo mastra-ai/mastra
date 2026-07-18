@@ -2039,6 +2039,104 @@ describe('runEvals', () => {
         score: 0.75,
         source: 'TEST',
       });
+      // Each persisted per-turn score is labeled with its turn index so the UI can
+      // group/label them, and turns share the same conversation thread id.
+      const turnIndexes = perTurnCalls.map(([payload]: any[]) => payload.metadata?.turnIndex).sort();
+      expect(turnIndexes).toEqual([0, 1]);
+      const threadIds = perTurnCalls.map(([payload]: any[]) => payload.threadId);
+      expect(threadIds[0]).toBeTruthy();
+      expect(threadIds[0]).toBe(threadIds[1]);
+    });
+
+    it('preserves existing score metadata and links each turn to its own trace span', async () => {
+      let callIndex = 0;
+      const dummyModel = new MockLanguageModelV2({
+        doGenerate: async () => ({
+          content: [{ type: 'text', text: 'turn response' }],
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        }),
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'turn response' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        }),
+      });
+
+      const agent = new Agent({
+        id: 'turnProvenanceAgent',
+        name: 'Turn Provenance Agent',
+        instructions: 'Mock',
+        model: dummyModel,
+      });
+
+      // Give each turn a deterministic, distinct trace/span pair so we can assert
+      // that each persisted per-turn score links to *its own* turn's span.
+      const originalGenerate = agent.generate.bind(agent);
+      vi.spyOn(agent, 'generate').mockImplementation(async (input: any, options: any) => {
+        const result: any = await originalGenerate(input, options);
+        result.traceId = `trace-${callIndex}`;
+        result.spanId = `span-${callIndex}`;
+        callIndex++;
+        return result;
+      });
+
+      const storage = new InMemoryStore();
+      const mastra = new Mastra({ agents: { turnProvenanceAgent: agent }, logger: false, storage });
+
+      const scoresStore = (await mastra.getStorage()!.getStore('scores'))!;
+      const saveScoreSpy = vi.spyOn(scoresStore, 'saveScore');
+
+      const perTurnScorer = createScorer({
+        id: 'per-turn-meta',
+        name: 'per-turn-meta',
+        description: 'per-turn',
+      }).generateScore(() => 0.5);
+      mastra.addScorer(perTurnScorer, 'per-turn-meta');
+
+      // Real scorer result, augmented with its own metadata (including a `turnIndex`
+      // that the system-owned value must override) to prove existing metadata survives.
+      const originalRun = perTurnScorer.run.bind(perTurnScorer);
+      vi.spyOn(perTurnScorer, 'run').mockImplementation(async (input: any) => {
+        const result: any = await originalRun(input);
+        result.metadata = { ...(result.metadata ?? {}), custom: 'preserved', turnIndex: 'should-be-overwritten' };
+        return result;
+      });
+
+      await runEvals({
+        data: [
+          {
+            turns: [
+              { input: 'first', scorers: [perTurnScorer] },
+              { input: 'second', scorers: [perTurnScorer] },
+            ],
+          },
+        ],
+        target: mastra.getAgent('turnProvenanceAgent'),
+      });
+
+      const perTurnCalls = saveScoreSpy.mock.calls
+        .map(([payload]: any[]) => payload)
+        .filter((payload: any) => payload?.scorerId === 'per-turn-meta')
+        .sort((a: any, b: any) => a.metadata.turnIndex - b.metadata.turnIndex);
+      expect(perTurnCalls).toHaveLength(2);
+
+      perTurnCalls.forEach((payload: any, index: number) => {
+        // Existing scorer metadata survives, and the system-owned turnIndex wins.
+        expect(payload.metadata.custom).toBe('preserved');
+        expect(payload.metadata.turnIndex).toBe(index);
+        // Each stored score links to its own turn's trace/span pair.
+        expect(payload.traceId).toBe(`trace-${index}`);
+        expect(payload.spanId).toBe(`span-${index}`);
+      });
     });
   });
 });

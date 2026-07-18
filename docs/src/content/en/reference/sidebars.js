@@ -125,6 +125,7 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'browser/agent-browser', label: 'AgentBrowser' },
         { type: 'doc', id: 'browser/browser-viewer', label: 'BrowserViewer' },
+        { type: 'doc', id: 'browser/firecrawl-browser', label: 'FirecrawlBrowser' },
         { type: 'doc', id: 'browser/mastra-browser', label: 'MastraBrowser Class' },
         { type: 'doc', id: 'browser/stagehand-browser', label: 'StagehandBrowser' },
       ],
@@ -767,6 +768,7 @@ const sidebars = {
         { type: 'doc', id: 'voice/inworld-realtime', label: 'Inworld Realtime' },
         { type: 'doc', id: 'voice/livekit', label: 'LiveKit' },
         { type: 'doc', id: 'voice/mastra-voice', label: 'Mastra Voice' },
+        { type: 'doc', id: 'voice/mistral', label: 'Mistral' },
         { type: 'doc', id: 'voice/murf', label: 'Murf' },
         { type: 'doc', id: 'voice/openai', label: 'OpenAI' },
         { type: 'doc', id: 'voice/openai-realtime', label: 'OpenAI Realtime' },

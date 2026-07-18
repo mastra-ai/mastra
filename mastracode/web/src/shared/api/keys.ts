@@ -35,6 +35,11 @@ export const queryKeys = {
   modelPacksAll: () => ['model-packs'] as const,
   om: (resourceId: string | undefined) => ['om', resourceId ?? null] as const,
   fsList: (path: string | undefined) => ['fs-list', path ?? null] as const,
+  artifactsList: (path: string | undefined) => ['artifacts-list', path ?? null] as const,
+  workspaceRenderedList: (workspacePath: string | undefined, renderedRoot: string | undefined) =>
+    ['workspace-rendered-list', workspacePath ?? null, renderedRoot ?? null] as const,
+  workspaceFile: (workspacePath: string | undefined, filePath: string | undefined) =>
+    ['workspace-file', workspacePath ?? null, filePath ?? null] as const,
   agentControllerModels: (agentControllerId: string | undefined) =>
     ['agent-controller', agentControllerId ?? null, 'models'] as const,
   agentControllerModes: (agentControllerId: string | undefined) =>
@@ -54,6 +59,16 @@ export const queryKeys = {
     resourceId: string | undefined,
     projectPath: string | undefined,
   ) => ['agent-controller', agentControllerId ?? null, 'connection', resourceId ?? null, projectPath ?? null] as const,
+  agentControllerConnectionInit: (
+    agentControllerId: string | undefined,
+    resourceId: string | undefined,
+    projectPath: string | undefined,
+  ) => [...queryKeys.agentControllerConnection(agentControllerId, resourceId, projectPath), 'init'] as const,
+  agentControllerConnectionState: (
+    agentControllerId: string | undefined,
+    resourceId: string | undefined,
+    projectPath: string | undefined,
+  ) => [...queryKeys.agentControllerConnection(agentControllerId, resourceId, projectPath), 'state'] as const,
   // Kept outside agentControllerSession for the same reason as connection:
   // this is a lightweight activity poll, not session state to invalidate. One
   // entry covers every worktree sharing the resource (single thread listing).
