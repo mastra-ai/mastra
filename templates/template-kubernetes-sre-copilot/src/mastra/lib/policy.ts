@@ -65,10 +65,21 @@ export interface PolicyLogEntry {
 /** In-memory log of every policy decision made this process. Exposed for the agent/UI to inspect. */
 export const policyLog: PolicyLogEntry[] = [];
 
+/**
+ * Caps `policyLog` at the most recent N entries. This process is long-running (`mastra dev`/
+ * `mastra start`), and every single tool call — allowed or rejected — appends here, so an
+ * unbounded array is a slow memory leak over a long enough session. 1000 entries is generous for
+ * interactive/debugging use while keeping worst-case memory bounded.
+ */
+const MAX_POLICY_LOG_ENTRIES = 1000;
+
 /** Records one policy decision to `policyLog` and warns on the console if the call was rejected. */
 function logAttempt(toolName: string, action: ActionType, allowed: boolean) {
   const entry: PolicyLogEntry = { timestamp: new Date().toISOString(), toolName, action, allowed };
   policyLog.push(entry);
+  if (policyLog.length > MAX_POLICY_LOG_ENTRIES) {
+    policyLog.splice(0, policyLog.length - MAX_POLICY_LOG_ENTRIES);
+  }
   if (!allowed) {
     console.warn(`[policy] rejected non-read tool call: ${toolName}`);
   }

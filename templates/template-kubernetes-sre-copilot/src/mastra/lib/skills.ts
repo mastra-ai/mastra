@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { resolve, sep } from 'node:path';
 
 /**
  * Loads a workspace runbook's SKILL.md content by name (e.g. "crashloopbackoff"). The diagnosis
@@ -33,8 +33,12 @@ export async function loadSkill(name: string): Promise<string> {
   const path = resolve(skillsDir, name, 'SKILL.md');
 
   // Belt-and-suspenders: even though SAFE_SKILL_NAME already rules out "../" segments, confirm
-  // the resolved path didn't escape the skills directory before reading it.
-  if (!path.startsWith(skillsDir)) {
+  // the resolved path didn't escape the skills directory before reading it. Checking against
+  // `skillsDir + sep` rather than bare `skillsDir` matters: a bare-prefix check would let a
+  // sibling directory that merely starts with the same characters (e.g. "skills-sibling") pass,
+  // since "…/skills-sibling/x".startsWith("…/skills") is true.
+  const skillsDirWithSep = skillsDir.endsWith(sep) ? skillsDir : skillsDir + sep;
+  if (!path.startsWith(skillsDirWithSep)) {
     throw new Error(`Resolved skill path for "${name}" escaped the skills directory.`);
   }
 

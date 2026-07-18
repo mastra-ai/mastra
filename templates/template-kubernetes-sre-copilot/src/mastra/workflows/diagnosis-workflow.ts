@@ -59,7 +59,11 @@ const CLASSIFICATION_PATTERNS: Array<{ failureType: FailureType; pattern: RegExp
   },
   {
     failureType: 'PVCPending',
-    pattern: /"phase"\s*:\s*"pending"|unbound.{0,40}persistentvolumeclaim|unschedulable/i,
+    // Quotes around phase/pending are optional so this matches both JSON (`"phase":"pending"`,
+    // what a naive reader might expect) and YAML (`phase: Pending`, what kubernetes-mcp-server
+    // actually returns — see extractField's doc comment below for the same lesson learned once
+    // already in this file).
+    pattern: /"?phase"?\s*:\s*"?pending"?|unbound.{0,40}persistentvolumeclaim|unschedulable/i,
     reason: 'Pod is Pending with an unbound PersistentVolumeClaim / unschedulable condition',
   },
 ];

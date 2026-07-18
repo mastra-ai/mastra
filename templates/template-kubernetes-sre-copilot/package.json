@@ -18,7 +18,6 @@
     "ai-agent"
   ],
   "license": "Apache-2.0",
-  "packageManager": "pnpm@11.3.0",
   "type": "module",
   "engines": {
     "node": ">=22.13.0"

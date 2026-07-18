@@ -17,7 +17,7 @@ type instead of letting a model free-associate over cluster state, and returns e
 an **evidence graph** — each claim in the output traces back to the specific tool call that
 produced it.
 
-```
+```text
 Service Unavailable
   → Deployment not Ready
     → Pod CrashLoopBackOff
@@ -29,7 +29,7 @@ Service Unavailable
 
 ## Architecture
 
-```
+```text
 User
   ↓
 Mastra Agent (read-only instructions, no write tools registered)
@@ -73,7 +73,7 @@ cp .env.example .env
 
 Fill in your `.env`:
 
-```
+```dotenv
 OPENAI_API_KEY=sk-...
 # Optional — omit to use your default kubeconfig / in-cluster config
 KUBECONFIG=
