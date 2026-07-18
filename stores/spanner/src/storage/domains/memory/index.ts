@@ -920,7 +920,7 @@ export class MemorySpanner extends MemoryStorage {
             }
             if (threadIdsToUpdate.size > 0) {
               const threadParams: Record<string, any> = {};
-              const inClauses = Array.from(threadIdsToUpdate).map((tid, i) => {
+              const inClauses = Array.from(threadIdsToUpdate, (tid, i) => {
                 const name = `tid${i}`;
                 threadParams[name] = tid;
                 return `@${name}`;

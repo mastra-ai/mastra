@@ -701,7 +701,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         this.client.insert({
           table: TABLE_THREADS,
           format: 'JSONEachRow',
-          values: Array.from(threadIdSet.values()).map(thread => ({
+          values: Array.from(threadIdSet.values(), thread => ({
             id: thread.id,
             resourceId: thread.resourceId,
             title: thread.title,
@@ -1347,7 +1347,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         const now = new Date().toISOString().replace('Z', '');
 
         // Get existing threads to preserve their data
-        const threadUpdatePromises = Array.from(threadIdsToUpdate).map(async threadId => {
+        const threadUpdatePromises = Array.from(threadIdsToUpdate, async threadId => {
           // Get existing thread data - get newest version by updatedAt
           const threadResult = await this.client.query({
             query: `SELECT id, resourceId, title, metadata, createdAt FROM ${TABLE_THREADS} WHERE id = {threadId:String} ORDER BY updatedAt DESC LIMIT 1`,

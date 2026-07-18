@@ -494,7 +494,7 @@ export class StoreMemoryRedis extends MemoryStorage {
       return [];
     }
 
-    const keysToFetch = Array.from(messageIds).map(id => getMessageKey(messageIdToThreadIds[id]!, id));
+    const keysToFetch = Array.from(messageIds, id => getMessageKey(messageIdToThreadIds[id]!, id));
     const results = await this.client.mGet(keysToFetch);
 
     return results.filter((data): data is string => data !== null).map(data => JSON.parse(data) as MastraDBMessage);

@@ -518,7 +518,7 @@ export class DaytonaSandbox extends MastraSandbox {
       status: this.status,
       createdAt: this._createdAt ?? new Date(),
       mounts: this.mounts
-        ? Array.from(this.mounts.entries).map(([path, entry]) => ({
+        ? Array.from(this.mounts.entries, ([path, entry]) => ({
             path,
             filesystem: entry.filesystem?.provider ?? entry.config?.type ?? 'unknown',
           }))

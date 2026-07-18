@@ -122,7 +122,7 @@ class PlatformProcessManager extends SandboxProcessManager<PlatformSandbox> {
   }
 
   async list(): Promise<ProcessInfo[]> {
-    return Array.from(this._tracked.values()).map(handle => ({
+    return Array.from(this._tracked.values(), handle => ({
       pid: handle.pid,
       command: handle.command,
       running: handle.exitCode === undefined,

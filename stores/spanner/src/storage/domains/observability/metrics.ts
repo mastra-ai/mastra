@@ -1196,7 +1196,7 @@ export async function getMetricTimeSeries(
         });
       }
       return {
-        series: Array.from(seriesMap.values()).map(s => ({
+        series: Array.from(seriesMap.values(), s => ({
           name: s.name,
           costUnit: s.costUnits.size === 1 ? Array.from(s.costUnits)[0]! : null,
           points: s.points,

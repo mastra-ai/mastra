@@ -271,7 +271,7 @@ export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
   }
 
   async list(): Promise<ProcessInfo[]> {
-    return Array.from(this._tracked.values()).map(handle => ({
+    return Array.from(this._tracked.values(), handle => ({
       pid: handle.pid,
       running: handle.exitCode === undefined,
       exitCode: handle.exitCode,

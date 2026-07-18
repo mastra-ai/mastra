@@ -108,7 +108,7 @@ function collectDirectUpdates(versionBumps: VersionBumps, context: UpdateContext
     if (!pkgInfo) continue;
 
     if (pkgInfo.packageJson?.peerDependencies?.[corePackage]) {
-      const cloned = JSON.parse(JSON.stringify(pkgInfo.packageJson));
+      const cloned = structuredClone(pkgInfo.packageJson);
       cloned.peerDependencies[corePackage] = `>=${context.nextCoreVersion}-0 <${context.nextMajorVersion}-0`;
       if (cloned.peerDependencies[corePackage] !== pkgInfo.packageJson.peerDependencies?.[corePackage]) {
         directUpdatedPackages.set(name, cloned);
@@ -129,7 +129,7 @@ function collectIndirectUpdates(
     if (pkg.packageJson.name === corePackage) continue;
 
     if (!directUpdatedPackages.has(pkg.packageJson.name) && pkg.packageJson.peerDependencies?.[corePackage]) {
-      const cloned = JSON.parse(JSON.stringify(pkg.packageJson));
+      const cloned = structuredClone(pkg.packageJson);
       const [before] = cloned.peerDependencies[corePackage].split(' ');
       cloned.peerDependencies[corePackage] = `${before} <${context.nextMajorVersion}-0`;
 

@@ -47,7 +47,7 @@ function snapshotRequestContextEntries(
   let any = false;
   for (const [key, value] of requestContext.entries()) {
     try {
-      const cloned = JSON.parse(JSON.stringify(value));
+      const cloned = structuredClone(value);
       out[key as string] = cloned;
       any = true;
     } catch {

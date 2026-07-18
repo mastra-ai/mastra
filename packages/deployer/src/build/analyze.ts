@@ -307,7 +307,7 @@ async function validateOutput(
 
   const externalMetadataParentPaths = [
     projectRoot,
-    ...Array.from(workspaceMap.values()).map(pkgInfo => pkgInfo.location),
+    ...Array.from(workspaceMap.values(), pkgInfo => pkgInfo.location),
   ];
 
   // store resolve map for validation
@@ -526,7 +526,7 @@ export async function analyzeBundle(
   // Filesystem-relative workspace paths for filtering workspace imports from rollup output.
   // Normalize to forward slashes so the startsWith check works on Windows where
   // path.relative() produces backslashes but rollup uses forward slashes.
-  const relativeWorkspaceFolderPaths = Array.from(workspaceMap.values()).map(pkgInfo =>
+  const relativeWorkspaceFolderPaths = Array.from(workspaceMap.values(), pkgInfo =>
     slash(relative(workspaceRoot || projectRoot, pkgInfo.location)),
   );
 
@@ -570,7 +570,7 @@ export async function analyzeBundle(
           versionInfo,
           importerParentPaths(importerId, [
             projectRoot,
-            ...Array.from(workspaceMap.values()).map(pkgInfo => pkgInfo.location),
+            ...Array.from(workspaceMap.values(), pkgInfo => pkgInfo.location),
           ]),
         );
         allUsedExternals.set(pkgName, preferDependencyInfo(allUsedExternals.get(pkgName), dependencyInfo));
@@ -611,7 +611,7 @@ export async function analyzeBundle(
 
   const externalMetadataParentPaths = [
     projectRoot,
-    ...Array.from(workspaceMap.values()).map(pkgInfo => pkgInfo.location),
+    ...Array.from(workspaceMap.values(), pkgInfo => pkgInfo.location),
     // Last resort: resolve from the deployer's own installed location. Some externals are
     // discovered inside externalized packages (e.g. optional dynamic imports like
     // `import('typescript')` in @mastra/core) without being installed in the user's project.

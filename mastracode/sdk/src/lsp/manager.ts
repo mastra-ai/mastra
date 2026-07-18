@@ -94,7 +94,7 @@ class LSPManager {
    * Shutdown all clients
    */
   async shutdownAll(): Promise<void> {
-    const shutdownPromises = Array.from(this.clients.values()).map(client => client.shutdown());
+    const shutdownPromises = Array.from(this.clients.values(), client => client.shutdown());
     await Promise.all(shutdownPromises);
     this.clients.clear();
     this.initializationPromises.clear();

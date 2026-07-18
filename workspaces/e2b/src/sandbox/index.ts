@@ -461,7 +461,7 @@ export class E2BSandbox extends MastraSandbox {
       provider: this.provider,
       status: this.status,
       createdAt: this._createdAt ?? new Date(),
-      mounts: Array.from(this.mounts.entries).map(([path, entry]) => ({
+      mounts: Array.from(this.mounts.entries, ([path, entry]) => ({
         path,
         filesystem: entry.filesystem?.provider ?? entry.config?.type ?? 'unknown',
       })),

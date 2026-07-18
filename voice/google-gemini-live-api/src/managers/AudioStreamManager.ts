@@ -240,7 +240,7 @@ export class AudioStreamManager {
     currentResponseId?: string;
     streamDetails: Array<{ responseId: string; created: number; destroyed: boolean }>;
   } {
-    const streamDetails = Array.from(this.speakerStreams.entries()).map(([responseId, stream]) => ({
+    const streamDetails = Array.from(this.speakerStreams.entries(), ([responseId, stream]) => ({
       responseId,
       created: stream.created || 0,
       destroyed: stream.destroyed,

@@ -1456,7 +1456,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       groupMap.get(key)!.push(m);
     }
 
-    const groups = Array.from(groupMap.entries()).map(([key, records]) => {
+    const groups = Array.from(groupMap.entries(), ([key, records]) => {
       const costSummary = this.summarizeCost(records);
       return {
         dimensions: JSON.parse(key) as Record<string, string | null>,
@@ -1505,7 +1505,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       }
 
       return {
-        series: Array.from(seriesMap.values()).map(({ displayName, buckets }) => {
+        series: Array.from(seriesMap.values(), ({ displayName, buckets }) => {
           const seriesRecords = Array.from(buckets.values()).flat();
           const costSummary = this.summarizeCost(seriesRecords);
           return {
@@ -2017,7 +2017,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       groupMap.get(key)!.push(score);
     }
 
-    const groups = Array.from(groupMap.entries()).map(([key, records]) => ({
+    const groups = Array.from(groupMap.entries(), ([key, records]) => ({
       dimensions: JSON.parse(key) as Record<string, string | null>,
       value:
         this.aggregate(
@@ -2059,7 +2059,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       }
 
       return {
-        series: Array.from(seriesMap.entries()).map(([key, bucketMap]) => ({
+        series: Array.from(seriesMap.entries(), ([key, bucketMap]) => ({
           name: seriesNames.get(key)!,
           points: Array.from(bucketMap.entries())
             .sort(([a], [b]) => a - b)
@@ -2324,7 +2324,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       groupMap.get(key)!.push(feedback);
     }
 
-    const groups = Array.from(groupMap.entries()).map(([key, records]) => ({
+    const groups = Array.from(groupMap.entries(), ([key, records]) => ({
       dimensions: JSON.parse(key) as Record<string, string | null>,
       value: (() => {
         const numericEntries = records.flatMap(record => {
@@ -2377,7 +2377,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       }
 
       return {
-        series: Array.from(seriesMap.entries()).map(([key, bucketMap]) => ({
+        series: Array.from(seriesMap.entries(), ([key, bucketMap]) => ({
           name: seriesNames.get(key)!,
           points: Array.from(bucketMap.entries())
             .sort(([a], [b]) => a - b)

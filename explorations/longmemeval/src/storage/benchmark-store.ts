@@ -72,7 +72,7 @@ export class BenchmarkStore extends MastraStorage {
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
     if (this.mode === `read`) return;
     const key = record.id || record.run_id || `${Date.now()}_${Math.random()}`;
-    this.data[tableName].set(key, JSON.parse(JSON.stringify(record))); // Deep clone
+    this.data[tableName].set(key, structuredClone(record)); // Deep clone
   }
 
   async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
@@ -139,7 +139,7 @@ export class BenchmarkStore extends MastraStorage {
 
   async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
     if (this.mode === `read`) return resource;
-    this.data.mastra_resources.set(resource.id, JSON.parse(JSON.stringify(resource)));
+    this.data.mastra_resources.set(resource.id, structuredClone(resource));
     return resource;
   }
 

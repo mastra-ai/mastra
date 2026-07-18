@@ -514,7 +514,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
 
       // Process each thread's messages
       await Promise.all(
-        Array.from(messagesByThread.entries()).map(async ([threadId, threadMessages]) => {
+        Array.from(messagesByThread.entries(), async ([threadId, threadMessages]) => {
           try {
             // Verify thread exists
             const thread = await this.getThreadById({ threadId });
