@@ -1383,6 +1383,136 @@ describe('Factory Board — persisted cards', () => {
     expect(within(column('intake')).queryByTestId('work-item-card')).not.toBeInTheDocument();
   });
 
+  it('given a pending governed move, when the server is evaluating it, then the card appears in its destination with neutral progress and unrelated cards remain usable', async () => {
+    const state = useBoardHandlers({
+      workItems: [
+        makeWorkItem({ id: 'wi-moving', title: 'Move me', source: 'github-issue', sourceKey: 'github-issue:21' }),
+        makeWorkItem({ id: 'wi-other', title: 'Leave me', source: 'github-issue', sourceKey: 'github-issue:22' }),
+      ],
+    });
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    server.use(
+      http.post(
+        `${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/work-items/wi-moving/transition`,
+        async ({ request }) => {
+          const body = (await request.json()) as { stage: string };
+          await gate;
+          const existing = state.items.find(item => item.id === 'wi-moving')!;
+          const updated = { ...existing, stages: [body.stage], revision: existing.revision + 1 };
+          state.items = state.items.map(item => (item.id === updated.id ? updated : item));
+          return HttpResponse.json({
+            result: {
+              status: 'accepted',
+              transitionId: 'transition-pending',
+              itemId: updated.id,
+              revision: updated.revision,
+              stage: body.stage,
+              decisions: [],
+            },
+          });
+        },
+      ),
+    );
+    renderAt('/factory/work');
+
+    await screen.findByTestId('board-column-intake');
+    await userEvent.click(within(column('intake')).getByRole('button', { name: 'Actions for Move me' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Move to Triage' }));
+
+    const movingCard = within(column('triage')).getByRole('article', { name: 'Move me' });
+    expect(movingCard).toHaveAttribute('aria-busy', 'true');
+    expect(within(movingCard).getByRole('status')).toHaveTextContent('Evaluating…');
+    expect(within(movingCard).getByRole('button', { name: 'Actions for Move me' })).toBeDisabled();
+    expect(within(column('intake')).getByRole('button', { name: 'Actions for Leave me' })).toBeEnabled();
+
+    release?.();
+    await waitFor(() => expect(movingCard).not.toHaveAttribute('aria-busy'));
+    expect(within(movingCard).queryByText('Evaluating…')).not.toBeInTheDocument();
+  });
+
+  it('given a rule rejects a move, when evaluation settles, then the card rolls back and shows the exact bounded reason', async () => {
+    useBoardHandlers({
+      workItems: [
+        makeWorkItem({
+          id: 'wi-rejected',
+          title: 'Protected card',
+          source: 'github-issue',
+          sourceKey: 'github-issue:23',
+        }),
+      ],
+    });
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/work-items/wi-rejected/transition`, () =>
+        HttpResponse.json(
+          {
+            result: {
+              status: 'rejected',
+              transitionId: 'transition-rejected',
+              itemId: 'wi-rejected',
+              code: 'forbidden',
+              reason: 'Required checks are still incomplete.',
+            },
+          },
+          { status: 422 },
+        ),
+      ),
+    );
+    renderAt('/factory/work');
+
+    await screen.findByTestId('board-column-intake');
+    await userEvent.click(within(column('intake')).getByRole('button', { name: 'Actions for Protected card' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Move to Triage' }));
+
+    const rolledBackCard = await within(column('intake')).findByRole('article', { name: 'Protected card' });
+    expect(within(rolledBackCard).getByRole('alert')).toHaveTextContent('Required checks are still incomplete.');
+    expect(within(column('triage')).queryByRole('article', { name: 'Protected card' })).not.toBeInTheDocument();
+  });
+
+  it('given a stale move response, when canonical data is refetched, then the card settles at the server stage with the stale reason', async () => {
+    const state = useBoardHandlers({
+      workItems: [
+        makeWorkItem({
+          id: 'wi-stale',
+          title: 'Concurrent card',
+          source: 'github-issue',
+          sourceKey: 'github-issue:24',
+        }),
+      ],
+    });
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/work-items/wi-stale/transition`, () => {
+        state.items = state.items.map(item =>
+          item.id === 'wi-stale' ? { ...item, stages: ['planning'], revision: item.revision + 1 } : item,
+        );
+        return HttpResponse.json(
+          {
+            result: {
+              status: 'rejected',
+              transitionId: 'transition-stale',
+              itemId: 'wi-stale',
+              code: 'stale',
+              reason: 'The card changed before this move was evaluated.',
+            },
+          },
+          { status: 409 },
+        );
+      }),
+    );
+    renderAt('/factory/work');
+
+    await screen.findByTestId('board-column-intake');
+    await userEvent.click(within(column('intake')).getByRole('button', { name: 'Actions for Concurrent card' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Move to Triage' }));
+
+    const canonicalCard = await within(column('planning')).findByRole('article', { name: 'Concurrent card' });
+    expect(within(canonicalCard).getByRole('alert')).toHaveTextContent(
+      'The card changed before this move was evaluated.',
+    );
+  });
+
   it('given a card in Triage, when Investigate is chosen, then triage exits and the card moves to Planning', async () => {
     const state = useBoardHandlers({
       workItems: [

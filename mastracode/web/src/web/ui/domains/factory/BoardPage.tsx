@@ -520,6 +520,7 @@ function BoardContent({
 
   const upsert = useUpsertWorkItemMutation(factoryProjectId);
   const transition = useTransitionWorkItemMutation(factoryProjectId);
+  const [transitionReasons, setTransitionReasons] = useState<Record<string, string>>({});
   const update = useUpdateWorkItemMutation(factoryProjectId);
   const remove = useDeleteWorkItemMutation(factoryProjectId);
   const { start, pendingRuns, enabled: runEnabled } = useStartFactoryRun();
@@ -596,10 +597,34 @@ function BoardContent({
     container.scrollTo?.({ left: Math.max(0, lane.offsetLeft - container.offsetLeft), behavior: 'auto' });
   }, [boardDataPending, boardPositionKey, candidates, stages, workItems]);
 
+  const requestTransition = (item: WorkItem, toStage: string) => {
+    setTransitionReasons(current => {
+      if (!(item.id in current)) return current;
+      const next = { ...current };
+      delete next[item.id];
+      return next;
+    });
+    transition.mutate(
+      { item, board: review ? 'review' : 'work', stage: toStage },
+      {
+        onSuccess: result => {
+          if (result.status !== 'rejected') return;
+          setTransitionReasons(current => ({ ...current, [item.id]: result.reason }));
+        },
+        onError: error => {
+          setTransitionReasons(current => ({
+            ...current,
+            [item.id]: error instanceof Error ? error.message : 'The transition could not be evaluated.',
+          }));
+        },
+      },
+    );
+  };
+
   const moveItem = (id: string, _fromStage: string | null, toStage: string) => {
     const item = workItems.find(i => i.id === id);
     if (!item || (item.stages.length === 1 && item.stages[0] === toStage)) return;
-    transition.mutate({ item, board: review ? 'review' : 'work', stage: toStage });
+    requestTransition(item, toStage);
   };
 
   const handleDrop = (payload: DragPayload, toStage: BoardStageId) => {
@@ -621,7 +646,7 @@ function BoardContent({
         stages: ['intake'],
         metadata,
       });
-      if (toStage !== 'intake') transition.mutate({ item, board: review ? 'review' : 'work', stage: toStage });
+      if (toStage !== 'intake') requestTransition(item, toStage);
     })();
   };
 
@@ -717,6 +742,8 @@ function BoardContent({
                   // for a perfectly live thread. Hold run/create actions until
                   // liveness is known.
                   runDisabled={!runEnabled || !workspaces.isSuccess}
+                  evaluating={transition.pendingItemIds.includes(item.id)}
+                  transitionReason={transitionReasons[item.id]}
                   pendingRunRoles={new Set(pendingRuns.filter(run => run.id === item.id).map(run => run.role))}
                   onOpenThread={session => void openThread(session)}
                   onCreateSession={spec =>
@@ -919,6 +946,8 @@ function WorkItemCard({
   allItems,
   liveWorktreePaths,
   runDisabled,
+  evaluating,
+  transitionReason,
   pendingRunRoles,
   onOpenThread,
   onCreateSession,
@@ -932,6 +961,8 @@ function WorkItemCard({
   /** Worktrees that still exist; session refs outside this set are stale. */
   liveWorktreePaths: ReadonlySet<string>;
   runDisabled: boolean;
+  evaluating: boolean;
+  transitionReason?: string;
   pendingRunRoles: ReadonlySet<string>;
   onOpenThread: (session: WorkItemSessionRef) => void;
   /** Title click when the card has no live session: open an empty session (no run). */
@@ -955,12 +986,17 @@ function WorkItemCard({
 
   return (
     <article
-      draggable
+      draggable={!evaluating}
       aria-label={item.title}
+      aria-busy={evaluating || undefined}
       data-testid="work-item-card"
       data-related={relatedItems.length > 0 ? 'true' : undefined}
-      onDragStart={event => setDragPayload(event, { kind: 'work-item', id: item.id, fromStage: columnStage })}
-      className="flex cursor-grab flex-col gap-1.5 rounded-md border border-border1 bg-surface4 p-2 active:cursor-grabbing"
+      onDragStart={event => {
+        if (!evaluating) setDragPayload(event, { kind: 'work-item', id: item.id, fromStage: columnStage });
+      }}
+      className={`flex flex-col gap-1.5 rounded-md border border-border1 bg-surface4 p-2 ${
+        evaluating ? 'cursor-wait' : 'cursor-grab active:cursor-grabbing'
+      }`}
     >
       <div className="flex items-start gap-2">
         <Icon size={14} className={`mt-0.5 shrink-0 ${iconClassName}`} aria-hidden />
@@ -1000,7 +1036,13 @@ function WorkItemCard({
         <DropdownMenu>
           <DropdownMenu.Trigger
             render={
-              <Button type="button" variant="ghost" size="icon-sm" aria-label={`Actions for ${item.title}`}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                disabled={evaluating}
+                aria-label={`Actions for ${item.title}`}
+              >
                 <EllipsisVertical size={13} aria-hidden />
               </Button>
             }
@@ -1061,6 +1103,16 @@ function WorkItemCard({
             </span>
           ))}
         </div>
+      )}
+      {evaluating && (
+        <span role="status" aria-live="polite" className="text-ui-xs text-icon4">
+          Evaluating…
+        </span>
+      )}
+      {!evaluating && transitionReason !== undefined && (
+        <span role="alert" className="text-ui-xs text-error">
+          {transitionReason}
+        </span>
       )}
     </article>
   );
