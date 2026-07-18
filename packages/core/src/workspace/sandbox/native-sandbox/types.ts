@@ -65,7 +65,7 @@ export interface NativeSandboxConfig {
    * - Paths listed in `readWritePaths` and mounted filesystem targets remain writable.
    * - Providing custom `bwrapArgs` or `seatbeltProfilePath` replaces the generated
    *   sandbox policy and may bypass this read-only restriction entirely.
-   * 
+   *
    * @default false
    */
   readOnly?: boolean;
