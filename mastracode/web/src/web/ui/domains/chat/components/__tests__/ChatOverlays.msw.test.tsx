@@ -53,7 +53,7 @@ describe('ChatOverlays', () => {
     expect(await screen.findByRole('dialog', { name: 'Keyboard shortcuts' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Close' }));
     await user.click(screen.getByRole('button', { name: 'Projects' }));
-    expect(await screen.findByRole('dialog', { name: 'Projects' })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: 'Open a project' })).toBeInTheDocument();
   });
 
   it('forces first-run project setup when no project is active', () => {

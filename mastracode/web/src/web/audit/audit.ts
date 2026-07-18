@@ -11,7 +11,7 @@
 import type { Context } from 'hono';
 
 import { webAuthTenant } from '../auth';
-import type { AuditContext, AuditTarget } from './schema';
+import type { AuditContext, AuditTarget } from '../storage/domains/audit/base';
 import { recordAuditEvent } from './store';
 import { forwardToWorkOS } from './workos-sink';
 

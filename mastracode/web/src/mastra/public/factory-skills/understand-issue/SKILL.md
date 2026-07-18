@@ -209,7 +209,7 @@ Only move to the write-up after the user confirms they genuinely understand the 
 
 ## Phase 7: Understanding File
 
-If a working file was provided, update that same file with the full investigation and any requested outputs from its handoff instructions, then return to the caller so it can handle the lifecycle output. Otherwise, write `.issue-review/UNDERSTANDING.md`.
+If a working file was provided, update that same file with the full investigation and any requested outputs from its handoff instructions, then return to the caller so it can handle the lifecycle output. Otherwise, create `.artifacts/understand-issue/` in the workspace root if needed, then write `.artifacts/understand-issue/UNDERSTANDING.md` there. Treat this file as a durable session artifact for Mastra Code Web, and tell the user the artifact path when done.
 
 Capture:
 

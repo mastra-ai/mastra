@@ -2,9 +2,9 @@
  * Platform-deployable Mastra entry for MastraCode.
  *
  * This module is the ONE place deployment env is read. It maps today's env
- * vars onto explicit `MastraFactory` config — instances for behaviors (pubsub),
- * plain values for config (database connection string, publicUrl, origins) —
- * so anyone reading the entry sees exactly which env var feeds which slot.
+ * vars onto explicit `MastraFactory` config — instances for behaviors (pubsub,
+ * storage, vector), plain values for config (publicUrl, origins) — so anyone
+ * reading the entry sees exactly which env var feeds which slot.
  * Everything else (feature readiness, route/middleware assembly, controller
  * construction) lives in `MastraFactory` (`../web/factory-entry.ts`).
  *
@@ -22,12 +22,17 @@ import { join } from 'node:path';
 import { Mastra } from '@mastra/core/mastra';
 import { LocalSandbox } from '@mastra/core/workspace';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
+import { PgVector, PostgresStore } from '@mastra/pg';
 import { RailwaySandbox } from '@mastra/railway';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
+import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
 import { BetterAuthWebAuth } from '../web/auth-better-adapter.js';
 import type { WebAuthAdapter } from '../web/auth-adapter.js';
 import { WorkOSWebAuth } from '../web/auth-workos-adapter.js';
 import { MastraFactory } from '../web/factory-entry.js';
+import type { FactoryIntegration } from '../web/factory-integration.js';
+import { GithubIntegration } from '../web/github/integration.js';
+import { LinearIntegration } from '../web/linear/integration.js';
 
 /**
  * Parse a positive-integer env knob; anything else means "use the default".
@@ -112,7 +117,7 @@ function localSandboxEnv(): Record<string, string> {
 }
 
 // Sandbox machine, by env precedence (any `WorkspaceSandbox` implementing
-// `derive()` works here too — the factory derives one sandbox per GitHub
+// `clone()` works here too — the factory clones one sandbox per GitHub
 // project from it):
 //   1. MASTRACODE_SANDBOX_PROVIDER=railway|local — explicit selection. Railway
 //      selected without a token is a hard misconfiguration error.
@@ -152,9 +157,86 @@ if (sandboxKind === 'railway') {
 } else {
   throw new Error(
     `Unknown MASTRACODE_SANDBOX_PROVIDER "${sandboxKind}" — expected "railway" or "local" ` +
-      '(or pass any WorkspaceSandbox implementing derive() to MastraFactory).',
+      '(or pass any WorkspaceSandbox implementing clone() to MastraFactory).',
   );
 }
+
+// Integrations, all-or-nothing per integration: setting ANY of an
+// integration's env vars means you intend to enable it, so a partial set is a
+// hard misconfiguration error listing exactly what's missing. No vars set →
+// the integration is omitted entirely: its routes never mount, its tools never
+// register, and its status endpoint reports "not configured".
+function envGroup<K extends string>(
+  vars: Record<K, string | undefined>,
+  integration: string,
+): Record<K, string> | undefined {
+  const entries = Object.entries(vars) as Array<[K, string | undefined]>;
+  const present = entries.filter(([, value]) => value);
+  if (present.length === 0) return undefined;
+  const missing = entries.filter(([, value]) => !value).map(([name]) => name);
+  if (missing.length > 0) {
+    throw new Error(
+      `${integration} integration is partially configured — missing ${missing.join(', ')}. ` +
+        'Set the remaining variable(s) to enable it, or unset the group to disable it.',
+    );
+  }
+  return Object.fromEntries(entries) as Record<K, string>;
+}
+
+// GitHub App: signed-in users install the app, pick repos, and turn them into
+// projects. The webhook secret is optional (webhook deliveries are rejected
+// without it) so it is validated separately from the required group.
+const githubEnv = envGroup(
+  {
+    GITHUB_APP_ID: process.env.GITHUB_APP_ID,
+    GITHUB_APP_PRIVATE_KEY: process.env.GITHUB_APP_PRIVATE_KEY,
+    GITHUB_APP_CLIENT_ID: process.env.GITHUB_APP_CLIENT_ID,
+    GITHUB_APP_CLIENT_SECRET: process.env.GITHUB_APP_CLIENT_SECRET,
+    GITHUB_APP_SLUG: process.env.GITHUB_APP_SLUG,
+  },
+  'GitHub',
+);
+const github = githubEnv
+  ? new GithubIntegration({
+      appId: githubEnv.GITHUB_APP_ID,
+      privateKey: githubEnv.GITHUB_APP_PRIVATE_KEY,
+      clientId: githubEnv.GITHUB_APP_CLIENT_ID,
+      clientSecret: githubEnv.GITHUB_APP_CLIENT_SECRET,
+      slug: githubEnv.GITHUB_APP_SLUG,
+      webhookSecret: process.env.GITHUB_APP_WEBHOOK_SECRET,
+    })
+  : undefined;
+
+// Linear OAuth app: per-org workspace connections + issue intake.
+const linearEnv = envGroup(
+  {
+    LINEAR_CLIENT_ID: process.env.LINEAR_CLIENT_ID,
+    LINEAR_CLIENT_SECRET: process.env.LINEAR_CLIENT_SECRET,
+  },
+  'Linear',
+);
+const linear = linearEnv
+  ? new LinearIntegration({ clientId: linearEnv.LINEAR_CLIENT_ID, clientSecret: linearEnv.LINEAR_CLIENT_SECRET })
+  : undefined;
+
+const integrations: FactoryIntegration[] = [github, linear].filter(i => i !== undefined);
+
+// Single app Postgres: one PostgresStore (and one pg pool) powers agent
+// storage, the factory app tables, the distributed project lock, and
+// better-auth. The paired PgVector rides the same database for recall search.
+// Unset (bare local dev) → no instances; the SDK mount falls back to its
+// default local libSQL resolution and app-DB-gated features stay off.
+const appDatabaseUrl = process.env.APP_DATABASE_URL;
+const storage = appDatabaseUrl
+  ? new PostgresStore({
+      id: 'mastra-code-storage',
+      connectionString: appDatabaseUrl,
+      retention: DEFAULT_RETENTION,
+    })
+  : undefined;
+const vector = appDatabaseUrl
+  ? new PgVector({ id: 'mastra-code-vectors', connectionString: appDatabaseUrl })
+  : undefined;
 
 export const factory = new MastraFactory({
   auth,
@@ -167,10 +249,11 @@ export const factory = new MastraFactory({
     maxSandboxes: positiveInt(process.env.MASTRACODE_MAX_SANDBOXES),
   },
   // Agent state (threads, messages, memory, OM, recall vectors) lives in the
-  // single app Postgres alongside the github/app tables — one shared DB for
-  // all users, separated by `resourceId` scoping. Unset (bare local dev) →
-  // default storage resolution applies (local libSQL file).
-  database: process.env.APP_DATABASE_URL,
+  // single app Postgres alongside the github/app tables — one shared DB (and
+  // pg pool) for all users, separated by `resourceId` scoping. Unset (bare
+  // local dev) → default storage resolution applies (local libSQL file).
+  storage,
+  vector,
   pubsub,
   // Browser-facing origin. On the platform the SPA is hosted separately, so
   // this MUST be set to the public API origin.
@@ -181,6 +264,15 @@ export const factory = new MastraFactory({
     .split(',')
     .map(o => o.trim())
     .filter(Boolean),
+  // Deployment-stable secret for OAuth `state` signing (GitHub/Linear connect
+  // flows). Same resolution the state signer used before it moved into the
+  // factory: webhook secret first, then the WorkOS cookie password. Unset →
+  // per-process random secret (single-process local dev only).
+  stateSecret: process.env.GITHUB_APP_WEBHOOK_SECRET || process.env.WORKOS_COOKIE_PASSWORD || undefined,
+  // Registered integrations. Each is constructed above from its own env group
+  // (all-or-nothing); an absent integration simply isn't registered — its
+  // routes never mount and its status endpoint reports "not configured".
+  integrations,
 });
 
 // Construct the server-owned Mastra HERE so the `new Mastra(...)` literal lives

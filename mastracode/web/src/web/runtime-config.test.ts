@@ -1,57 +1,54 @@
+import { PostgresStore } from '@mastra/pg';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { WebAuthAdapter } from './auth-adapter';
 import {
   __resetRuntimeConfigForTests,
-  getAppDatabaseUrl,
   getPublicUrl,
   getSeededAuthAdapter,
+  getSeededStorage,
+  getSharedAppPool,
   isRuntimeConfigSeeded,
   seedRuntimeConfig,
 } from './runtime-config';
 
-const ORIGINAL_APP_DATABASE_URL = process.env.APP_DATABASE_URL;
-
 describe('runtime-config', () => {
   beforeEach(() => {
     __resetRuntimeConfigForTests();
-    delete process.env.APP_DATABASE_URL;
   });
 
   afterEach(() => {
     __resetRuntimeConfigForTests();
-    if (ORIGINAL_APP_DATABASE_URL === undefined) {
-      delete process.env.APP_DATABASE_URL;
-    } else {
-      process.env.APP_DATABASE_URL = ORIGINAL_APP_DATABASE_URL;
-    }
   });
 
-  describe('getAppDatabaseUrl', () => {
-    it('returns the seeded database URL', () => {
-      seedRuntimeConfig({ databaseUrl: 'postgres://seeded/app' });
-      expect(getAppDatabaseUrl()).toBe('postgres://seeded/app');
+  describe('storage slot', () => {
+    it('returns the seeded storage instance', () => {
+      const storage = new PostgresStore({ id: 'test-storage', connectionString: 'postgres://seeded/app' });
+      seedRuntimeConfig({ storage });
+      expect(getSeededStorage()).toBe(storage);
     });
 
-    it('prefers the seeded config over the env fallback', () => {
-      process.env.APP_DATABASE_URL = 'postgres://env/app';
-      seedRuntimeConfig({ databaseUrl: 'postgres://seeded/app' });
-      expect(getAppDatabaseUrl()).toBe('postgres://seeded/app');
-    });
-
-    it('seeding without a database wins over env (factory config is authoritative)', () => {
-      process.env.APP_DATABASE_URL = 'postgres://env/app';
+    it('is undefined when the factory seeded without storage', () => {
       seedRuntimeConfig({});
-      expect(getAppDatabaseUrl()).toBeUndefined();
+      expect(getSeededStorage()).toBeUndefined();
+    });
+  });
+
+  describe('getSharedAppPool', () => {
+    it('exposes the PostgresStore pool for app-table consumers', () => {
+      const storage = new PostgresStore({ id: 'test-storage', connectionString: 'postgres://seeded/app' });
+      seedRuntimeConfig({ storage });
+      expect(getSharedAppPool()).toBe(storage.pool);
     });
 
-    it('falls back to APP_DATABASE_URL when the factory has not seeded (back-compat)', () => {
-      process.env.APP_DATABASE_URL = 'postgres://env/app';
-      expect(getAppDatabaseUrl()).toBe('postgres://env/app');
+    it('returns undefined for a non-Postgres storage instance', () => {
+      const storage = { init: async () => {} } as unknown as MastraCompositeStore;
+      seedRuntimeConfig({ storage });
+      expect(getSharedAppPool()).toBeUndefined();
     });
 
-    it('treats an empty env var as unconfigured', () => {
-      process.env.APP_DATABASE_URL = '';
-      expect(getAppDatabaseUrl()).toBeUndefined();
+    it('returns undefined before seeding (no env fallback — factory config is authoritative)', () => {
+      expect(getSharedAppPool()).toBeUndefined();
     });
   });
 
@@ -88,9 +85,11 @@ describe('runtime-config', () => {
   });
 
   it('__resetRuntimeConfigForTests clears the seeded config', () => {
-    seedRuntimeConfig({ databaseUrl: 'postgres://seeded/app', publicUrl: 'https://factory.acme.com' });
+    const storage = new PostgresStore({ id: 'test-storage', connectionString: 'postgres://seeded/app' });
+    seedRuntimeConfig({ storage, publicUrl: 'https://factory.acme.com' });
     __resetRuntimeConfigForTests();
     expect(getPublicUrl()).toBeUndefined();
-    expect(getAppDatabaseUrl()).toBeUndefined();
+    expect(getSeededStorage()).toBeUndefined();
+    expect(getSharedAppPool()).toBeUndefined();
   });
 });

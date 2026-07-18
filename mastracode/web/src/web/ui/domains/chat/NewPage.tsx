@@ -26,8 +26,6 @@ export function NewPage() {
     <ChatLayout
       sidebar={<Sidebar />}
       header={<ChatHeader />}
-      sidebarOpen={overlays.isOpen('sidebar')}
-      onSidebarClose={() => overlays.close('sidebar')}
       main={
         <ChatSessionBoundary>
           {activeProject ? (

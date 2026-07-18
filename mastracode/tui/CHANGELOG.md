@@ -1,5 +1,35 @@
 # mastracode
 
+## 0.31.1-alpha.6
+
+### Patch Changes
+
+- Fixed quiet-mode tool previews jumping during streamed updates. ([#19651](https://github.com/mastra-ai/mastra/pull/19651))
+
+- Updated dependencies [[`a40adeb`](https://github.com/mastra-ai/mastra/commit/a40adeb222b961a56a58af56a106106525721b74), [`dfc7769`](https://github.com/mastra-ai/mastra/commit/dfc77695549e4434873051ddd1f6065330ed5ab8), [`821648b`](https://github.com/mastra-ai/mastra/commit/821648bf2871ef840100c7bacbecf676010bd12a), [`11f6cd9`](https://github.com/mastra-ai/mastra/commit/11f6cd96fe42582403416608beb212cc1a2cc79e)]:
+  - @mastra/core@1.52.0-alpha.6
+  - @mastra/code-sdk@0.2.0-alpha.6
+
+## 0.31.1-alpha.5
+
+### Patch Changes
+
+- Fixed goal judge results rendering more than once during live goal runs. ([#19613](https://github.com/mastra-ai/mastra/pull/19613))
+
+- dependencies updates: ([#19611](https://github.com/mastra-ai/mastra/pull/19611))
+  - Updated dependency [`ai@^6.0.225` ↗︎](https://www.npmjs.com/package/ai/v/6.0.225) (from `^6.0.224`, in `dependencies`)
+
+- Fixed delivered steer messages disappearing from the chat after replacing their pending state. ([#19613](https://github.com/mastra-ai/mastra/pull/19613))
+
+- Updated dependencies [[`ec857fc`](https://github.com/mastra-ai/mastra/commit/ec857fc79c264b53b38e16478c789b7177f2ad59), [`ec857fc`](https://github.com/mastra-ai/mastra/commit/ec857fc79c264b53b38e16478c789b7177f2ad59), [`e1f2fae`](https://github.com/mastra-ai/mastra/commit/e1f2faebaf048c3d4c2e2c01d293767c195d5794), [`63aa799`](https://github.com/mastra-ai/mastra/commit/63aa799c6b44eacc7806cda6846b7c5bbee06b37), [`d2ff897`](https://github.com/mastra-ai/mastra/commit/d2ff8979d3069c6101108cdb7815792b0cc1c1b3), [`73db8db`](https://github.com/mastra-ai/mastra/commit/73db8db90d69ab6153c7942749f624db0d96952d), [`bb92559`](https://github.com/mastra-ai/mastra/commit/bb9255954be8323a5ecab7595fe5365c564b3f52), [`89da3cd`](https://github.com/mastra-ai/mastra/commit/89da3cd80c7c9936791ff0c31e244bcc41b0dd12), [`73db8db`](https://github.com/mastra-ai/mastra/commit/73db8db90d69ab6153c7942749f624db0d96952d), [`76b7181`](https://github.com/mastra-ai/mastra/commit/76b71810366e6d90b9d3973149d1c7ba3659ffb9), [`0c0e8d7`](https://github.com/mastra-ai/mastra/commit/0c0e8d7becd4d1445c656b78d5d845f606c1ff9d), [`d7f5f9e`](https://github.com/mastra-ai/mastra/commit/d7f5f9e5d76ed588842bce30fac076ec9e3ad98a), [`9f7c67a`](https://github.com/mastra-ai/mastra/commit/9f7c67abeeb52c41c51a9b5edee60b62afe7cd8d), [`0c52047`](https://github.com/mastra-ai/mastra/commit/0c520470a4547666156b2f18eb794eb8bd2676c8), [`3b65e68`](https://github.com/mastra-ai/mastra/commit/3b65e68d7f1c771c7a70eea42d83fefdd28cad88), [`ec17152`](https://github.com/mastra-ai/mastra/commit/ec17152e7514b5fad37d6ed50f90a937b4bb87a2), [`e3868e2`](https://github.com/mastra-ai/mastra/commit/e3868e22babfffd0133771669ca724501c2dd58e)]:
+  - @mastra/code-sdk@0.2.0-alpha.5
+  - @mastra/core@1.52.0-alpha.5
+  - @mastra/tavily@1.1.1-alpha.0
+  - @mastra/libsql@1.16.1-alpha.0
+  - @mastra/memory@1.23.1-alpha.1
+  - @mastra/observability@1.16.2-alpha.0
+  - @mastra/mcp@1.15.0-alpha.0
+
 ## 0.31.1-alpha.4
 
 ### Patch Changes

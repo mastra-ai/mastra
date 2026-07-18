@@ -10,6 +10,7 @@ import type { MastraModelConfig } from '@mastra/core/llm';
 import { wrapLanguageModel } from 'ai';
 import type { LanguageModelMiddleware } from 'ai';
 import { AuthStorage } from '../auth/storage.js';
+import type { CredentialStore } from '../auth/types.js';
 
 // Required for Claude Max plan OAuth - the endpoint checks for this system message
 const claudeCodeIdentity = "You are Claude Code, Anthropic's official CLI for Claude.";
@@ -147,7 +148,7 @@ export const promptCacheMiddleware: LanguageModelMiddleware = {
  * Preserves non-auth headers from init (critical for gateway auth header to survive
  * when used with the gateway). Strips `authorization` and `x-api-key`.
  */
-export function buildAnthropicOAuthFetch(opts: { authStorage?: AuthStorage } = {}): typeof fetch {
+export function buildAnthropicOAuthFetch(opts: { authStorage?: CredentialStore } = {}): typeof fetch {
   return (async (url: string | URL | Request, init?: Parameters<typeof fetch>[1]) => {
     const storage = opts.authStorage ?? getAuthStorage();
     storage.reload();
@@ -206,7 +207,7 @@ export function buildAnthropicOAuthFetch(opts: { authStorage?: AuthStorage } = {
  */
 export function opencodeClaudeMaxProvider(
   modelId: string = 'claude-sonnet-4-20250514',
-  options?: { headers?: Record<string, string> },
+  options?: { headers?: Record<string, string>; authStorage?: CredentialStore },
 ): MastraModelConfig {
   const headers = options?.headers;
 
@@ -225,7 +226,7 @@ export function opencodeClaudeMaxProvider(
   const anthropic = createAnthropic({
     apiKey: 'oauth-placeholder',
     headers,
-    fetch: buildAnthropicOAuthFetch() as any,
+    fetch: buildAnthropicOAuthFetch({ authStorage: options?.authStorage }) as any,
   });
 
   // Wrap with middleware to inject Claude Code identity and enable prompt caching

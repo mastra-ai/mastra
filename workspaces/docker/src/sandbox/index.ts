@@ -11,7 +11,7 @@
 
 import { isDeepStrictEqual } from 'node:util';
 import type { RequestContext } from '@mastra/core/di';
-import type { SandboxInfo, ProviderStatus, MastraSandboxOptions, SandboxDeriveOptions } from '@mastra/core/workspace';
+import type { SandboxInfo, ProviderStatus, MastraSandboxOptions, SandboxCloneOptions } from '@mastra/core/workspace';
 import { MastraSandbox, SandboxError, SandboxNotReadyError } from '@mastra/core/workspace';
 import Docker from 'dockerode';
 import type { Container, ContainerInfo } from 'dockerode';
@@ -238,7 +238,7 @@ export class DockerSandbox extends MastraSandbox {
    * configuration (image, resource limits, security options, labels,
    * connection options) with per-instance overrides.
    *
-   * Performs no I/O — the derived sandbox provisions (or reconnects to an
+   * Performs no I/O — the sandbox clone provisions (or reconnects to an
    * existing container labelled with the same logical `id`) on its own
    * `start()`. Use it when one configured sandbox acts as the template for a
    * fleet of independent sandboxes (e.g. one per project).
@@ -247,7 +247,7 @@ export class DockerSandbox extends MastraSandbox {
    * provider-side idle teardown; `timeout` here is a command timeout), and
    * `options.sandboxId` is ignored because reconnection is by logical `id`.
    */
-  derive(options: SandboxDeriveOptions = {}): DockerSandbox {
+  clone(options: SandboxCloneOptions = {}): DockerSandbox {
     const { id: _id, name: _name, ...base } = this._constructorOptions;
     return new DockerSandbox({
       ...base,

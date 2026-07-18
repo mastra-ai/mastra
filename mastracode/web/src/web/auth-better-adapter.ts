@@ -2,7 +2,8 @@ import { betterAuth } from 'better-auth';
 import type { BetterAuthOptions } from 'better-auth';
 import { getMigrations } from 'better-auth/db/migration';
 import { organization } from 'better-auth/plugins';
-import { Pool } from 'pg';
+
+import { PostgresStore } from '@mastra/pg';
 
 import type { AuthRouteSpec, WebAuthAdapter, WebAuthAdapterInitContext, WebAuthUser } from './auth-adapter.js';
 import { isCrossSiteAuth, sanitizeReturnTo } from './auth-adapter.js';
@@ -18,9 +19,9 @@ import { isCrossSiteAuth, sanitizeReturnTo } from './auth-adapter.js';
  *
  * Two construction modes:
  * - Default: pass `secret` and the adapter builds its own `betterAuth()`
- *   instance in `init()` on the factory's database (`ctx.databaseUrl`),
- *   running better-auth's programmatic migrations behind a once-per-process
- *   latch (mirrors `ensureFactoryDbReady`).
+ *   instance in `init()` on the shared pg pool of the factory's injected
+ *   storage (`ctx.storage`), running better-auth's programmatic migrations
+ *   behind a once-per-process latch.
  * - Bring-your-own: pass a fully-configured `instance`; the adapter mounts it
  *   as-is and leaves database/migrations to the caller.
  */
@@ -46,6 +47,7 @@ function personalOrgName(user: WebAuthUser, userId: string): string {
 /** Loose row shapes read back from better-auth's internal DB adapter. */
 interface MemberRow {
   organizationId?: string;
+  role?: string;
 }
 interface OrganizationRow {
   id: string;
@@ -92,9 +94,10 @@ export class BetterAuthWebAuth implements WebAuthAdapter {
 
   async init(ctx: WebAuthAdapterInitContext): Promise<void> {
     if (this.#instance) return; // bring-your-own instance: nothing to build
-    if (!ctx.databaseUrl) {
+    const pool = ctx.storage instanceof PostgresStore ? ctx.storage.pool : undefined;
+    if (!pool) {
       throw new Error(
-        'BetterAuthWebAuth needs a database: configure the MastraFactory `database` slot (or pass your own better-auth `instance`).',
+        'BetterAuthWebAuth needs a Postgres database: configure the MastraFactory `storage` slot with a PostgresStore (or pass your own better-auth `instance`).',
       );
     }
     const crossSite = isCrossSiteAuth();
@@ -103,7 +106,7 @@ export class BetterAuthWebAuth implements WebAuthAdapter {
     // is generic over the exact options object, which would make the instance
     // incompatible with the plain `Auth<BetterAuthOptions>` alias we expose.
     const options: BetterAuthOptions = {
-      database: new Pool({ connectionString: ctx.databaseUrl }),
+      database: pool,
       secret: this.#secret,
       // All provider endpoints (sign-in/up/out/session) live under /auth/api/*,
       // which the gate treats as public like every /auth/* path.
@@ -206,6 +209,26 @@ export class BetterAuthWebAuth implements WebAuthAdapter {
    * recover via the unique slug instead of creating duplicates. Best-effort:
    * any failure is swallowed and leaves the user no-org (same as WorkOS).
    */
+  async isOrganizationAdmin(user: WebAuthUser, organizationId: string): Promise<boolean> {
+    const userId = user.id ?? user.workosId;
+    if (!userId || user.organizationId !== organizationId) return false;
+
+    try {
+      await this.#ensureDbReady();
+      const ctx = await this.instance.$context;
+      const membership = (await ctx.adapter.findOne({
+        model: 'member',
+        where: [
+          { field: 'organizationId', value: organizationId },
+          { field: 'userId', value: userId },
+        ],
+      })) as MemberRow | null;
+      return membership?.role === 'owner' || membership?.role === 'admin';
+    } catch {
+      return false;
+    }
+  }
+
   async ensureOrg(user: WebAuthUser): Promise<string | undefined> {
     if (user.organizationId) return user.organizationId;
     const userId = user.id ?? user.workosId;

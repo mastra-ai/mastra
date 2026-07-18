@@ -20,7 +20,7 @@ import type {
   InstructionsOption,
   MastraSandboxOptions,
   ProviderStatus,
-  SandboxDeriveOptions,
+  SandboxCloneOptions,
   SandboxInfo,
 } from '@mastra/core/workspace';
 import { MastraSandbox, ProcessHandle, SandboxExecutionError } from '@mastra/core/workspace';
@@ -261,7 +261,7 @@ export class AppleContainerSandbox extends MastraSandbox {
    * configuration (image, resources, network, security options, labels) with
    * per-instance overrides.
    *
-   * Performs no I/O — the derived sandbox provisions (or reconnects to an
+   * Performs no I/O — the sandbox clone provisions (or reconnects to an
    * existing container labelled with the same logical `id`) on its own
    * `start()`. Use it when one configured sandbox acts as the template for a
    * fleet of independent sandboxes (e.g. one per project).
@@ -270,7 +270,7 @@ export class AppleContainerSandbox extends MastraSandbox {
    * provider-side idle teardown; `timeout` here is a command timeout), and
    * `options.sandboxId` is ignored because reconnection is by logical `id`.
    */
-  derive(options: SandboxDeriveOptions = {}): AppleContainerSandbox {
+  clone(options: SandboxCloneOptions = {}): AppleContainerSandbox {
     const { id: _id, name: _name, ...base } = this._constructorOptions;
     return new AppleContainerSandbox({
       ...base,

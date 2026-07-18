@@ -292,7 +292,10 @@ describe('MastraCode message rendering', () => {
       expect(document.body).toHaveTextContent('from hydrate');
       expect(screen.getByText('checking files')).toBeInTheDocument();
       const card = screen.getByRole('group', { name: 'Tool: view' });
-      expect(within(card).getByText('Done')).toBeInTheDocument();
+      // Successful tools render no status badge; only running/failed states are labeled.
+      expect(within(card).queryByText('Done')).not.toBeInTheDocument();
+      expect(within(card).queryByText('Running')).not.toBeInTheDocument();
+      expect(within(card).queryByText('Failed')).not.toBeInTheDocument();
     });
   });
 
@@ -344,6 +347,33 @@ describe('MastraCode message rendering', () => {
     });
   });
 
+  it('separates assistant text persisted after a tool-only message', async () => {
+    seedProject();
+    useAgentControllerHandlers({
+      messages: [
+        dbMessage('assistant-tools', 'assistant', [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-complete',
+              toolName: 'task_complete',
+              args: { id: 'quality-gate' },
+              result: 'completed',
+            },
+          },
+        ]),
+        dbMessage('completion-signal', 'signal', [{ type: 'text', text: 'Quality gate completed' }]),
+        dbMessage('assistant-summary', 'assistant', [{ type: 'text', text: '## Quality gate' }]),
+      ],
+    });
+
+    renderChat();
+
+    const heading = await screen.findByRole('heading', { name: 'Quality gate' });
+    expect(heading.closest('.prose')).toHaveClass('mt-4');
+  });
+
   it('renders assistant text when SSE message updates arrive after subscription', async () => {
     seedProject();
     const stream = delayedSse({
@@ -382,7 +412,8 @@ describe('MastraCode message rendering', () => {
     renderChat();
 
     const card = await findToolCard('execute_command');
-    expect(within(card).getByText('Done')).toBeInTheDocument();
+    // Successful tools render no status badge; only running/failed states are labeled.
+    expect(within(card).queryByText('Done')).not.toBeInTheDocument();
     expect(within(card).getByText('passing tests')).toBeInTheDocument();
   });
 
@@ -689,14 +720,12 @@ describe('App mode + theme controls', () => {
       expect(header).not.toBeNull();
 
       // The header must not contain any project switcher.
-      expect(within(header as HTMLElement).queryByRole('button', { name: /MastraCode Test/ })).not.toBeInTheDocument();
+      expect(within(header as HTMLElement).queryByRole('button', { name: 'Select project' })).not.toBeInTheDocument();
 
-      // The sidebar remains the single source of the project switcher: exactly
-      // one project-switcher button exists, it exposes the project name, and it
-      // lives outside the header.
-      const switchers = screen.getAllByRole('button', { name: /MastraCode Test/ });
-      expect(switchers).toHaveLength(1);
-      expect(header).not.toContainElement(switchers[0]);
+      // The sidebar remains the single source of the project switcher.
+      const switcher = screen.getByRole('button', { name: 'Select project' });
+      expect(switcher).toHaveTextContent('MastraCode Test');
+      expect(header).not.toContainElement(switcher);
     });
 
     it('keeps settings in the sidebar without connection status', async () => {

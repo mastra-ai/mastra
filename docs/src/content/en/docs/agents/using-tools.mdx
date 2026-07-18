@@ -221,40 +221,44 @@ export const researchAgent = new Agent({
 
 ## Share tools across agents
 
-Direct imports are the simplest choice when one tool is used by one or a small number of agents. Each agent imports the tool and adds it to its `tools` record, as shown in the quickstart above.
+Direct imports are the best choice when one tool is used by multiple agents. Each agent imports the tool and adds it to its `tools` record. Dependencies remain explicit and each agent can be used independently.
 
-For tools shared across agents or retrieved elsewhere from the Mastra instance, register them once with `new Mastra({ tools })`. A function-based Agent `tools` callback can then resolve entries from that registry.
+```typescript title="src/mastra/tools/weather-tool.ts"
+import { createTool } from '@mastra/core/tools'
 
-```typescript title="src/mastra/index.ts"
-import { Agent } from '@mastra/core/agent'
-import { Mastra } from '@mastra/core/mastra'
-import { weatherTool } from './tools/weather-tool'
-
-export const sharedWeatherAgent = new Agent({
-  id: 'shared-weather-agent',
-  name: 'Shared Weather Agent',
-  instructions: `
-    You are a helpful weather assistant.
-    Use the weatherTool to fetch current weather data.`,
-  model: '__GATEWAY_OPENAI_MODEL__',
-  tools: ({ mastra }) => {
-    if (!mastra) {
-      throw new Error('Mastra instance is required to resolve shared tools')
-    }
-
-    return { weatherTool: mastra.getTool('weather') }
-  },
-})
-
-export const mastra = new Mastra({
-  tools: { weather: weatherTool },
-  agents: { sharedWeatherAgent },
+export const weatherTool = createTool({
+  id: 'weather-tool',
+  // Rest of the tool definition...
 })
 ```
 
-Register the tool and Agent on the same Mastra instance. The Agent can then retrieve the shared tool by its registration key in the `tools` callback and return it under the name the model should use. Keep the `mastra` guard because it's optional in the callback type.
+```typescript title="src/mastra/agents/weather-agents.ts"
+import { Agent } from '@mastra/core/agent'
+import { weatherTool } from '../tools/weather-tool'
 
-For API details, see [`Mastra.getTool()`](/reference/core/getTool), [`Mastra.getToolById()`](/reference/core/getToolById), [`Mastra.listTools()`](/reference/core/listTools), and the [`Agent` reference](/reference/agents/agent).
+export const weatherAgent = new Agent({
+  id: 'weather-agent',
+  name: 'Weather Agent',
+  instructions: 'Answer questions about current weather.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  tools: { weatherTool },
+})
+```
+
+```typescript title="src/mastra/agents/travel-agents.ts"
+import { Agent } from '@mastra/core/agent'
+import { weatherTool } from '../tools/weather-tool'
+
+export const travelAgent = new Agent({
+  id: 'travel-agent',
+  name: 'Travel Agent',
+  instructions: 'Help users plan trips.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  tools: { weatherTool },
+})
+```
+
+If you need to access tools from the Mastra instance, see [`Mastra.getTool()`](/reference/core/getTool), [`Mastra.getToolById()`](/reference/core/getToolById), [`Mastra.listTools()`](/reference/core/listTools), and the [`Agent` reference](/reference/agents/agent).
 
 ## Shape output for the model
 

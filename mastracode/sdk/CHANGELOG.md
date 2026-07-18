@@ -1,5 +1,78 @@
 # @mastra/code-sdk
 
+## 0.2.0-alpha.6
+
+### Patch Changes
+
+- Fixed Moonshot AI API key resolution so keys saved via /api-keys (MOONSHOT_API_KEY) work when selecting moonshot models ([#19655](https://github.com/mastra-ai/mastra/pull/19655))
+
+- Updated dependencies [[`a40adeb`](https://github.com/mastra-ai/mastra/commit/a40adeb222b961a56a58af56a106106525721b74), [`821648b`](https://github.com/mastra-ai/mastra/commit/821648bf2871ef840100c7bacbecf676010bd12a), [`11f6cd9`](https://github.com/mastra-ai/mastra/commit/11f6cd96fe42582403416608beb212cc1a2cc79e)]:
+  - @mastra/core@1.52.0-alpha.6
+
+## 0.2.0-alpha.5
+
+### Minor Changes
+
+- Added support for injecting pre-built storage and vector store instances into Mastra Code. `MastraCodeConfig.storage` now accepts a `MastraCompositeStore` instance in addition to a storage config, and the new `MastraCodeConfig.vector` slot accepts a `MastraVector` instance. When an instance is provided it is used as-is — no connection test or LibSQL fallback — so hosted deployments can share a single Postgres connection pool between Mastra storage and application tables. ([#19623](https://github.com/mastra-ai/mastra/pull/19623))
+
+  **Before**
+
+  ```ts
+  await createMastraCode({ storage: { backend: 'pg', connectionString } });
+  ```
+
+  **After**
+
+  ```ts
+  const storage = new PostgresStore({ id: 'code-storage', connectionString });
+  const vector = new PgVector({ id: 'code-vectors', connectionString });
+  await createMastraCode({ storage, vector });
+  ```
+
+- Added step-based OAuth APIs for browser-driven provider sign-in and tenant-aware credential resolution. Hosted applications can now inject a credential store so each request resolves the caller's credentials without copying stored secrets into process environment variables. ([#19638](https://github.com/mastra-ai/mastra/pull/19638))
+
+  ```ts
+  import { startAnthropicLogin } from '@mastra/code-sdk/auth/providers/anthropic';
+
+  const { url, verifier } = await startAnthropicLogin();
+  ```
+
+- Added access to the workspace resolved for an AgentController session. ([#19547](https://github.com/mastra-ai/mastra/pull/19547))
+
+  Use the session-owned workspace when an operation must remain isolated to that session:
+
+  ```ts
+  const session = await controller.createSession({ resourceId, scope });
+  const workspace = session.getWorkspace();
+  ```
+
+  Mastra Code workspace resolvers can now accept an isolated read-only skill extension:
+
+  ```ts
+  const workspace = await getDynamicWorkspace({
+    requestContext,
+    skillExtension: {
+      id: 'review-skills',
+      paths: ['/__review_skills__'],
+      createSource: fallback => new ReviewSkillSource(fallback),
+    },
+  });
+  ```
+
+  This lets SDK consumers compose additional read-only skill roots into selected workspaces without changing the default workspace skill set.
+
+### Patch Changes
+
+- dependencies updates: ([#19611](https://github.com/mastra-ai/mastra/pull/19611))
+  - Updated dependency [`ai@^6.0.225` ↗︎](https://www.npmjs.com/package/ai/v/6.0.225) (from `^6.0.224`, in `dependencies`)
+- Updated dependencies [[`ec857fc`](https://github.com/mastra-ai/mastra/commit/ec857fc79c264b53b38e16478c789b7177f2ad59), [`e1f2fae`](https://github.com/mastra-ai/mastra/commit/e1f2faebaf048c3d4c2e2c01d293767c195d5794), [`63aa799`](https://github.com/mastra-ai/mastra/commit/63aa799c6b44eacc7806cda6846b7c5bbee06b37), [`d2ff897`](https://github.com/mastra-ai/mastra/commit/d2ff8979d3069c6101108cdb7815792b0cc1c1b3), [`73db8db`](https://github.com/mastra-ai/mastra/commit/73db8db90d69ab6153c7942749f624db0d96952d), [`89da3cd`](https://github.com/mastra-ai/mastra/commit/89da3cd80c7c9936791ff0c31e244bcc41b0dd12), [`73db8db`](https://github.com/mastra-ai/mastra/commit/73db8db90d69ab6153c7942749f624db0d96952d), [`76b7181`](https://github.com/mastra-ai/mastra/commit/76b71810366e6d90b9d3973149d1c7ba3659ffb9), [`0c0e8d7`](https://github.com/mastra-ai/mastra/commit/0c0e8d7becd4d1445c656b78d5d845f606c1ff9d), [`9f7c67a`](https://github.com/mastra-ai/mastra/commit/9f7c67abeeb52c41c51a9b5edee60b62afe7cd8d), [`0c52047`](https://github.com/mastra-ai/mastra/commit/0c520470a4547666156b2f18eb794eb8bd2676c8), [`3b65e68`](https://github.com/mastra-ai/mastra/commit/3b65e68d7f1c771c7a70eea42d83fefdd28cad88), [`ec17152`](https://github.com/mastra-ai/mastra/commit/ec17152e7514b5fad37d6ed50f90a937b4bb87a2), [`e3868e2`](https://github.com/mastra-ai/mastra/commit/e3868e22babfffd0133771669ca724501c2dd58e)]:
+  - @mastra/core@1.52.0-alpha.5
+  - @mastra/tavily@1.1.1-alpha.0
+  - @mastra/libsql@1.16.1-alpha.0
+  - @mastra/memory@1.23.1-alpha.1
+  - @mastra/observability@1.16.2-alpha.0
+  - @mastra/mcp@1.15.0-alpha.0
+
 ## 0.2.0-alpha.4
 
 ### Patch Changes

@@ -265,10 +265,10 @@ describe('Factory Audit page', () => {
     });
     renderAt('/factory/audit');
 
-    await screen.findByRole('list', { name: 'Audit events' });
+    const list = await screen.findByRole('list', { name: 'Audit events' });
     await userEvent.click(screen.getByRole('button', { name: 'Load more' }));
 
-    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(2));
+    await waitFor(() => expect(within(list).getAllByRole('listitem')).toHaveLength(2));
     expect(state.requests[1]!.before).toBe('2026-07-15T18:00:00.000Z_evt-1');
     expect(screen.getByText('Created')).toBeInTheDocument();
     // Both pages exhausted — nothing more to load.
