@@ -124,4 +124,14 @@ describe('recordFactoryPullRequestProvenance', () => {
     await recordFactoryPullRequestProvenance(github, sourceControl, integrationStorage, input);
     expect(await integrationStorage.subscriptions.listByTarget('factory-pr-provenance:10:17')).toEqual([]);
   });
+
+  it('fails closed when pull request verification is unavailable', async () => {
+    const { sourceControl, integrationStorage, github, input, pullsGet } = await setup();
+    pullsGet.mockRejectedValueOnce(new Error('GitHub unavailable'));
+
+    await expect(
+      recordFactoryPullRequestProvenance(github, sourceControl, integrationStorage, input),
+    ).resolves.toBeUndefined();
+    expect(await integrationStorage.subscriptions.listByTarget('factory-pr-provenance:10:17')).toEqual([]);
+  });
 });

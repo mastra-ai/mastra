@@ -45,69 +45,75 @@ export async function recordFactoryPullRequestProvenance(
   });
   if (!url) return;
 
-  const match = url.match(/^https:\/\/github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)\/?$/i);
-  if (!match) return;
-  const repositorySlug = match[1]!;
-  let repositoryId: number | undefined;
-  let installationId: number | undefined;
-  for (const connection of await sourceControl.connections.list({
-    orgId: input.binding.orgId,
-    factoryProjectId: input.binding.factoryProjectId,
-  })) {
-    const installation = await sourceControl.installations.get({
+  try {
+    const match = url.match(/^https:\/\/github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)\/?$/i);
+    if (!match) return;
+    const repositorySlug = match[1]!;
+    let repositoryId: number | undefined;
+    let installationId: number | undefined;
+    for (const connection of await sourceControl.connections.list({
       orgId: input.binding.orgId,
-      id: connection.installationId,
-    });
-    if (!installation) continue;
-    for (const link of await sourceControl.projectRepositories.list({
-      orgId: input.binding.orgId,
-      connectionId: connection.id,
+      factoryProjectId: input.binding.factoryProjectId,
     })) {
-      const repository = await sourceControl.repositories.get({ orgId: input.binding.orgId, id: link.repositoryId });
-      if (!repository || repository.slug.toLowerCase() !== repositorySlug.toLowerCase()) continue;
-      repositoryId = Number(repository.externalId);
-      installationId = Number(installation.externalId);
-      break;
+      const installation = await sourceControl.installations.get({
+        orgId: input.binding.orgId,
+        id: connection.installationId,
+      });
+      if (!installation) continue;
+      for (const link of await sourceControl.projectRepositories.list({
+        orgId: input.binding.orgId,
+        connectionId: connection.id,
+      })) {
+        const repository = await sourceControl.repositories.get({ orgId: input.binding.orgId, id: link.repositoryId });
+        if (!repository || repository.slug.toLowerCase() !== repositorySlug.toLowerCase()) continue;
+        repositoryId = Number(repository.externalId);
+        installationId = Number(installation.externalId);
+        break;
+      }
+      if (repositoryId !== undefined) break;
     }
-    if (repositoryId !== undefined) break;
-  }
-  const pullRequestNumber = Number(match[2]);
-  const [owner, repo] = repositorySlug.split('/');
-  if (
-    !owner ||
-    !repo ||
-    repositoryId === undefined ||
-    installationId === undefined ||
-    !Number.isInteger(repositoryId) ||
-    !Number.isInteger(installationId) ||
-    !Number.isInteger(pullRequestNumber) ||
-    pullRequestNumber < 1
-  )
-    return;
-  const targetKey = `factory-pr-provenance:${repositoryId}:${pullRequestNumber}`;
-  if ((await integrationStorage.subscriptions.listByTarget(targetKey)).some(row => row.orgId === input.binding.orgId)) {
-    return;
-  }
+    const pullRequestNumber = Number(match[2]);
+    const [owner, repo] = repositorySlug.split('/');
+    if (
+      !owner ||
+      !repo ||
+      repositoryId === undefined ||
+      installationId === undefined ||
+      !Number.isInteger(repositoryId) ||
+      !Number.isInteger(installationId) ||
+      !Number.isInteger(pullRequestNumber) ||
+      pullRequestNumber < 1
+    )
+      return;
+    const targetKey = `factory-pr-provenance:${repositoryId}:${pullRequestNumber}`;
+    if (
+      (await integrationStorage.subscriptions.listByTarget(targetKey)).some(row => row.orgId === input.binding.orgId)
+    ) {
+      return;
+    }
 
-  const { data } = await github
-    .getInstallationOctokit(installationId)
-    .pulls.get({ owner, repo, pull_number: pullRequestNumber });
-  if (data.base.repo.id !== repositoryId || data.number !== pullRequestNumber || data.html_url !== url) return;
+    const { data } = await github
+      .getInstallationOctokit(installationId)
+      .pulls.get({ owner, repo, pull_number: pullRequestNumber });
+    if (data.base.repo.id !== repositoryId || data.number !== pullRequestNumber || data.html_url !== url) return;
 
-  await integrationStorage.subscriptions.create({
-    orgId: input.binding.orgId,
-    targetKey,
-    threadId: input.binding.threadId,
-    status: 'active',
-    data: {
-      kind: 'factory-pr-provenance',
-      bindingId: input.binding.id,
-      workItemId: input.item.id,
-      repositoryId,
-      pullRequestNumber,
-      pullRequestUrl: url,
-      assistantMessageId: input.assistantMessageId,
-      toolCallId: input.toolCallId,
-    },
-  });
+    await integrationStorage.subscriptions.create({
+      orgId: input.binding.orgId,
+      targetKey,
+      threadId: input.binding.threadId,
+      status: 'active',
+      data: {
+        kind: 'factory-pr-provenance',
+        bindingId: input.binding.id,
+        workItemId: input.item.id,
+        repositoryId,
+        pullRequestNumber,
+        pullRequestUrl: url,
+        assistantMessageId: input.assistantMessageId,
+        toolCallId: input.toolCallId,
+      },
+    });
+  } catch {
+    return;
+  }
 }

@@ -170,6 +170,36 @@ describe('FactoryPhaseStateProcessor', () => {
     );
   });
 
+  it('continues authoritative tool-result ingress when provenance recording fails', async () => {
+    const storage = (await seedFactoryStorageForTests()).workItems;
+    await prepare(storage);
+    const onResult = vi.fn(() => undefined);
+    const processor = new FactoryPhaseStateProcessor({
+      rules: defaultFactoryRules({
+        version: 'rules-v1',
+        overrides: { tools: { execute_command: { onResult } } },
+      }),
+      storage,
+      recordPullRequestProvenance: vi.fn(async () => {
+        throw new Error('GitHub unavailable');
+      }),
+    });
+
+    await expect(
+      processor.processInputStep(
+        inputArgs(requestContext(), [
+          toolMessage({
+            toolName: 'execute_command',
+            args: { command: 'gh pr create --title test' },
+            result: { stdout: 'https://github.com/acme/repo/pull/17' },
+          }),
+        ]),
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(onResult).toHaveBeenCalledTimes(1);
+  });
+
   it('moves an approved plan to Building before emitting the next phase signal', async () => {
     const storage = (await seedFactoryStorageForTests()).workItems;
     const prepared = await prepare(storage, 'plan');

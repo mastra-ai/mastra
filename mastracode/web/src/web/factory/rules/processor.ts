@@ -350,16 +350,20 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     for (const message of messages) {
       for (const toolResult of completedToolResults(message)) {
         if (toolCallIds && !toolCallIds.has(toolResult.toolCallId)) continue;
-        await this.options.recordPullRequestProvenance?.({
-          binding,
-          item,
-          assistantMessageId: toolResult.assistantMessageId,
-          toolCallId: toolResult.toolCallId,
-          toolName: toolResult.toolName,
-          toolInput: toolResult.input,
-          toolResult: toolResult.value,
-          status: toolResult.status,
-        });
+        try {
+          await this.options.recordPullRequestProvenance?.({
+            binding,
+            item,
+            assistantMessageId: toolResult.assistantMessageId,
+            toolCallId: toolResult.toolCallId,
+            toolName: toolResult.toolName,
+            toolInput: toolResult.input,
+            toolResult: toolResult.value,
+            status: toolResult.status,
+          });
+        } catch {
+          // Provenance is supporting evidence and must not block authoritative rule ingress.
+        }
         await this.ingestToolResult(binding, item, toolResult);
       }
     }
