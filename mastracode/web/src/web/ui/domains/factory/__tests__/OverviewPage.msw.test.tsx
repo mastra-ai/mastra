@@ -176,10 +176,11 @@ describe('Factory Overview page', () => {
   it('given work items across age buckets, when the page renders, then the chart shows per-stage bars and the empty-selection hint', async () => {
     useOverviewHandlers({
       workItems: [
-        inStage('wi-1', 'Fresh task', 'intake', 1 * HOUR_S), // green (<4h)
-        inStage('wi-2', 'Aging task', 'intake', 10 * HOUR_S), // amber (4–24h)
+        inStage('wi-1', 'Fresh task', 'triage', 1 * HOUR_S), // green (<4h)
+        inStage('wi-2', 'Aging task', 'triage', 10 * HOUR_S), // amber (4–24h)
         inStage('wi-3', 'Stale execute', 'execute', 40 * HOUR_S), // orange (24–72h)
         inStage('wi-4', 'Critical review', 'review', 100 * HOUR_S), // red (≥72h)
+        inStage('wi-5', 'Intake card', 'intake', 5 * HOUR_S), // hidden: intake not charted
       ],
     });
     renderAt('/factory/overview');
@@ -187,10 +188,12 @@ describe('Factory Overview page', () => {
     expect(await screen.findByRole('heading', { name: 'Queue health' })).toBeInTheDocument();
 
     // One labeled segment per populated (stage, bucket) cohort.
-    expect(await screen.findByRole('button', { name: 'Intake Fresh: 1' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Intake Aging: 1' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Triage Fresh: 1' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Triage Aging: 1' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Building Stale: 1' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Review Critical: 1' })).toBeInTheDocument();
+    // Intake is hidden from the chart even when a persisted intake card exists.
+    expect(screen.queryByRole('button', { name: /Intake/ })).not.toBeInTheDocument();
 
     // The drill-down starts with the select-a-segment hint.
     expect(screen.getByText('Select a segment above to see its tasks.')).toBeInTheDocument();
@@ -200,18 +203,18 @@ describe('Factory Overview page', () => {
     const user = userEvent.setup();
     useOverviewHandlers({
       workItems: [
-        inStage('wi-1', 'Fresh task', 'intake', 1 * HOUR_S),
-        inStage('wi-2', 'Aging task', 'intake', 10 * HOUR_S),
-        inStage('wi-3', 'Another aging', 'intake', 12 * HOUR_S),
+        inStage('wi-1', 'Fresh task', 'triage', 1 * HOUR_S),
+        inStage('wi-2', 'Aging task', 'triage', 10 * HOUR_S),
+        inStage('wi-3', 'Another aging', 'triage', 12 * HOUR_S),
       ],
     });
     renderAt('/factory/overview');
 
-    const aging = await screen.findByRole('button', { name: 'Intake Aging: 2' });
+    const aging = await screen.findByRole('button', { name: 'Triage Aging: 2' });
     await user.click(aging);
 
     const tasks = screen.getByRole('heading', { name: 'Tasks' }).parentElement!;
-    expect(await within(tasks).findByText(/Intake · Aging — 2 tasks/)).toBeInTheDocument();
+    expect(await within(tasks).findByText(/Triage · Aging — 2 tasks/)).toBeInTheDocument();
     expect(within(tasks).getByText('Aging task')).toBeInTheDocument();
     expect(within(tasks).getByText('Another aging')).toBeInTheDocument();
     // The other cohort's task is not listed.

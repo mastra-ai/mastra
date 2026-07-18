@@ -100,9 +100,19 @@ function latestOpenEntryFor(open: WorkItemStageEntry[], stage: string): WorkItem
   return undefined;
 }
 
-/** Board stage ids in column order, minus the terminal `done` stage. */
+/**
+ * Board stage ids in column order, minus the terminal `done` stage and the
+ * `intake` stage. Intake is intentionally hidden: the Board's Intake column
+ * merges persisted `intake` cards with live GitHub/Linear candidates that have
+ * no `work_items` row yet (they're materialized only when acted on), so this
+ * aggregation — which reads persisted rows only — would silently undercount
+ * intake and mislead. The chart therefore shows work that has *entered* the
+ * pipeline (triage onward). To show intake again, remove the filter and merge
+ * live candidates into the page (a deliberate follow-up with its own
+ * age-semantics decision: upstream open-date vs. time-in-stage).
+ */
 function chartStages(): string[] {
-  return BOARD_STAGES.map(s => s.id).filter(id => id !== DONE_STAGE);
+  return BOARD_STAGES.map(s => s.id).filter(id => id !== DONE_STAGE && id !== 'intake');
 }
 
 /**

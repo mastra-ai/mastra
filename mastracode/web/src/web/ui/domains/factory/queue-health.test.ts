@@ -41,9 +41,11 @@ function inStage(stage: string, ageSeconds: number, overrides: Partial<WorkItemR
 }
 
 describe('computeQueueHealth', () => {
-  it('returns an empty chart (all board stages, zeroed) for empty input', () => {
+  it('returns an empty chart (all pipeline stages, zeroed) for empty input', () => {
     const health = computeQueueHealth([], new Set(), DEFAULT, NOW);
-    expect(health.stages.map(s => s.stage)).toEqual(['intake', 'triage', 'planning', 'execute', 'review']);
+    // Intake is hidden: its Board column mixes in unpersisted candidates, so a
+    // persisted-rows-only count would mislead. Chart shows triage onward.
+    expect(health.stages.map(s => s.stage)).toEqual(['triage', 'planning', 'execute', 'review']);
     for (const s of health.stages) {
       expect(s.total).toBe(0);
       expect(s.activeCount).toBe(0);
@@ -51,20 +53,27 @@ describe('computeQueueHealth', () => {
     expect(health.entries).toEqual([]);
   });
 
+  it('excludes the intake stage (its Board column includes unpersisted candidates)', () => {
+    const items = [inStage('intake', 100), inStage('intake', 999999)];
+    const health = computeQueueHealth(items, new Set(), DEFAULT, NOW);
+    expect(health.stages.find(s => s.stage === 'intake')).toBeUndefined();
+    expect(health.entries).toEqual([]);
+  });
+
   it('buckets an item by age with the >= boundary rule (exact boundary moves up)', () => {
     // 4h/24h/72h boundaries: [14400, 86400, 259200]
     const items = [
-      inStage('intake', 14399), // green (<14400)
-      inStage('intake', 14400), // amber (exact boundary → up)
-      inStage('intake', 86399), // amber
-      inStage('intake', 86400), // orange (exact boundary → up)
-      inStage('intake', 259199), // orange
-      inStage('intake', 259200), // red (exact boundary → up)
+      inStage('triage', 14399), // green (<14400)
+      inStage('triage', 14400), // amber (exact boundary → up)
+      inStage('triage', 86399), // amber
+      inStage('triage', 86400), // orange (exact boundary → up)
+      inStage('triage', 259199), // orange
+      inStage('triage', 259200), // red (exact boundary → up)
     ];
     const health = computeQueueHealth(items, new Set(), DEFAULT, NOW);
-    const intake = health.stages.find(s => s.stage === 'intake')!;
-    expect(intake.buckets).toEqual({ green: 1, amber: 2, orange: 2, red: 1 });
-    expect(intake.total).toBe(6);
+    const triage = health.stages.find(s => s.stage === 'triage')!;
+    expect(triage.buckets).toEqual({ green: 1, amber: 2, orange: 2, red: 1 });
+    expect(triage.total).toBe(6);
   });
 
   it('ages a multi-stage item independently per held stage', () => {
