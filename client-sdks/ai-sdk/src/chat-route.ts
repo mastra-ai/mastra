@@ -23,51 +23,143 @@ import type {
   V6UIMessageStream,
 } from './public-types';
 
+export interface V6NativeApprovalResponse {
+  resumeData: Record<string, unknown>;
+  runId: string;
+  toolCallId: string;
+}
+
 /**
- * Scans a v6 UIMessage array for the most recent 'approval-responded' tool
- * part in the last trailing assistant message only. When found, splits the
- * composite approvalId ("${runId}::${toolCallId}") to recover the runId and
- * toolCallId needed for a targeted resumeStream.
- *
- * Only the last trailing assistant message is inspected so that approval
- * responses from earlier turns are never re-processed. Within that message,
- * parts are scanned in reverse so the decision the user just acted on wins
- * over any earlier 'approval-responded' parts that have not yet transitioned
- * to 'output-available'.
- *
- * Returns null when no approval response is present (normal chat turn).
+ * Collects every approval response across all assistant messages in a v6
+ * request. Responses are deduplicated by their composite run/tool-call target,
+ * with the most recent part winning when history contains repeated copies.
  */
-export function extractV6NativeApproval(
-  messages: V6UIMessage[],
-): { resumeData: Record<string, unknown>; runId: string; toolCallId: string } | null {
-  // Only inspect the actual trailing message. If a user has already sent a
-  // follow-up turn after an approval response, we must treat that as a normal
-  // chat submission rather than replaying the stale approval response.
-  const lastAssistantMsg = messages.at(-1);
-  if (!lastAssistantMsg || lastAssistantMsg.role !== 'assistant') return null;
+export function extractV6NativeApprovals(messages: V6UIMessage[]): V6NativeApprovalResponse[] {
+  const byTarget = new Map<string, V6NativeApprovalResponse>();
+  const separator = APPROVAL_ID_SEPARATOR;
 
-  const parts = lastAssistantMsg.parts ?? [];
-  for (let i = parts.length - 1; i >= 0; i--) {
-    const part = parts[i]!;
-    if (!isToolUIPart(part) || part.state !== 'approval-responded') continue;
+  for (const message of messages) {
+    if (message.role !== 'assistant') continue;
 
-    const lastSep = part.approval.id.lastIndexOf(APPROVAL_ID_SEPARATOR);
-    if (lastSep === -1) continue;
-    const runId = part.approval.id.slice(0, lastSep);
-    const toolCallId = part.approval.id.slice(lastSep + APPROVAL_ID_SEPARATOR.length);
-    if (!runId || !toolCallId) continue;
+    for (const part of message.parts ?? []) {
+      if (!isToolUIPart(part) || part.state !== 'approval-responded') continue;
 
-    return {
-      resumeData: {
-        approved: part.approval.approved,
-        ...(part.approval.reason != null ? { reason: part.approval.reason } : {}),
-      },
-      runId,
-      toolCallId,
-    };
+      const lastSep = part.approval.id.lastIndexOf(separator);
+      if (lastSep === -1) continue;
+      const runId = part.approval.id.slice(0, lastSep);
+      const toolCallId = part.approval.id.slice(lastSep + separator.length);
+      if (!runId || !toolCallId) continue;
+      // The composite approval id embeds the same toolCallId the part carries.
+      // A mismatch means the part is malformed or stale, so skip it rather
+      // than resume a tool call the user never answered.
+      if (toolCallId !== part.toolCallId) continue;
+
+      byTarget.set(`${runId}${separator}${toolCallId}`, {
+        resumeData: {
+          approved: part.approval.approved,
+          ...(part.approval.reason != null ? { reason: part.approval.reason } : {}),
+        },
+        runId,
+        toolCallId,
+      });
+    }
   }
 
-  return null;
+  return [...byTarget.values()];
+}
+
+/** Streams exact approval targets sequentially as one v6 UI-message response. */
+function streamV6ApprovalResumes(args: {
+  agent: { resumeStream: (resumeData: unknown, options: unknown) => Promise<unknown> };
+  approvals: V6NativeApprovalResponse[];
+  baseOptions: Record<string, unknown>;
+  structuredOutput?: unknown;
+  messages: V6UIMessage[];
+  lastMessageId?: string;
+  sendStart: boolean;
+  sendFinish: boolean;
+  sendReasoning: boolean;
+  sendSources: boolean;
+  onError?: (error: unknown) => string;
+  messageMetadata?: UIMessageStreamOptionsV6<V6UIMessage>['messageMetadata'];
+}): ReadableStream<any> {
+  const { agent, approvals, baseOptions, structuredOutput, messages, lastMessageId } = args;
+  const { sendStart, sendFinish, sendReasoning, sendSources, onError, messageMetadata } = args;
+
+  return createUIMessageStreamV6<any>({
+    originalMessages: messages,
+    onError,
+    execute: async ({ writer }) => {
+      let startWritten = false;
+      let successfulLegs = 0;
+      let firstResolvedTargetError: unknown;
+      let finalFinish: any;
+
+      for (const approval of approvals) {
+        try {
+          const result = await agent.resumeStream(approval.resumeData, {
+            ...baseOptions,
+            runId: approval.runId,
+            toolCallId: approval.toolCallId,
+            ...(structuredOutput ? { structuredOutput } : {}),
+          });
+
+          for await (const part of toAISdkStream(result as Parameters<typeof toAISdkStream>[0], {
+            from: 'agent',
+            version: 'v6',
+            lastMessageId,
+            sendStart,
+            sendFinish,
+            sendReasoning,
+            sendSources,
+            onError,
+            messageMetadata,
+          })) {
+            if (part.type === 'start') {
+              if (startWritten) continue;
+              startWritten = true;
+              writer.write(part);
+              continue;
+            }
+            // Resume streams can emit tool continuation chunks before their
+            // start chunk. Frame the combined response before forwarding any
+            // such content, then suppress the late duplicate start.
+            if (!startWritten && sendStart) {
+              writer.write({ type: 'start', ...(lastMessageId ? { messageId: lastMessageId } : {}) } as any);
+              startWritten = true;
+            }
+            // Hold each leg's finish until all candidates have been attempted,
+            // then emit only the final successful leg's metadata.
+            if (part.type === 'finish') {
+              finalFinish = part;
+              continue;
+            }
+            writer.write(part);
+          }
+          successfulLegs++;
+        } catch (error) {
+          const id = (error as { id?: string } | undefined)?.id;
+          if (id !== 'AGENT_RESUME_TOOL_CALL_NOT_SUSPENDED' && id !== 'AGENT_RESUME_NO_SNAPSHOT_FOUND') {
+            throw error;
+          }
+          firstResolvedTargetError ??= error;
+        }
+      }
+
+      // Re-sent history may contain already-resolved responses alongside a new
+      // one. Skip only core's exact "not suspended" errors; if none of the
+      // targets resumed, surface the typed error instead of silently dropping
+      // a potentially valid approval.
+      if (successfulLegs === 0 && firstResolvedTargetError) throw firstResolvedTargetError;
+
+      if (!startWritten && sendStart) {
+        writer.write({ type: 'start', ...(lastMessageId ? { messageId: lastMessageId } : {}) } as any);
+      }
+      if (sendFinish) {
+        writer.write(finalFinish ?? ({ type: 'finish' } as any));
+      }
+    },
+  }) as ReadableStream<any>;
 }
 
 export type ChatStreamHandlerParams<
@@ -198,14 +290,6 @@ export async function handleChatStream<OUTPUT = undefined>({
     throw new Error('Messages must be an array of UIMessage objects');
   }
 
-  // For v6: if the user called approve() on the client, AI SDK v6 re-submits the
-  // conversation with the tool part transitioned to 'approval-responded'. Detect
-  // this and route to resumeStream instead of stream.
-  const nativeApproval = version === 'v6' && !resumeData ? extractV6NativeApproval(messages as V6UIMessage[]) : null;
-
-  const effectiveResumeData = nativeApproval?.resumeData ?? resumeData;
-  const effectiveRunId = nativeApproval?.runId ?? runId;
-
   // Capture the last assistant message ID for the stream response.
   // This helps the frontend identify which message the response corresponds to.
   let lastMessageId: string | undefined;
@@ -235,16 +319,40 @@ export async function handleChatStream<OUTPUT = undefined>({
   const baseOptions = {
     ...defaultOptionsRest,
     ...restOptions,
-    ...(effectiveRunId && { runId: effectiveRunId }),
-    ...(nativeApproval?.toolCallId && { toolCallId: nativeApproval.toolCallId }),
+    ...(runId && { runId }),
     requestContext: requestContext || defaultOptions?.requestContext,
     ...(Object.keys(mergedProviderOptions).length > 0 && { providerOptions: mergedProviderOptions }),
   };
 
-  const result = effectiveResumeData
+  // AI SDK v6 re-submits approval responses on assistant tool parts. Scan the
+  // whole request because the answered card may be on an earlier assistant
+  // message, then resume every exact run/tool-call target in request order.
+  // A trailing user message remains a normal chat turn; consuming it as an
+  // approval resume would silently drop the user's new request.
+  if (version === 'v6' && !resumeData && trigger !== 'regenerate-message' && messages.at(-1)?.role === 'assistant') {
+    const approvals = extractV6NativeApprovals(messages as V6UIMessage[]);
+    if (approvals.length > 0) {
+      return streamV6ApprovalResumes({
+        agent: agentObj as unknown as Parameters<typeof streamV6ApprovalResumes>[0]['agent'],
+        approvals,
+        baseOptions,
+        structuredOutput,
+        messages: messages as V6UIMessage[],
+        lastMessageId,
+        sendStart,
+        sendFinish,
+        sendReasoning,
+        sendSources,
+        onError,
+        messageMetadata: messageMetadata as UIMessageStreamOptionsV6<V6UIMessage>['messageMetadata'],
+      });
+    }
+  }
+
+  const result = resumeData
     ? structuredOutput
-      ? await agentObj.resumeStream(effectiveResumeData, { ...baseOptions, structuredOutput })
-      : await agentObj.resumeStream(effectiveResumeData, baseOptions as AgentExecutionOptionsBase<unknown>)
+      ? await agentObj.resumeStream(resumeData, { ...baseOptions, structuredOutput })
+      : await agentObj.resumeStream(resumeData, baseOptions as AgentExecutionOptionsBase<unknown>)
     : structuredOutput
       ? await agentObj.stream(messagesToSend, { ...baseOptions, structuredOutput })
       : await agentObj.stream(messagesToSend, baseOptions as AgentExecutionOptionsBase<unknown>);

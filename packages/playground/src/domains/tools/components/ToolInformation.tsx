@@ -1,4 +1,5 @@
 import type { MCPToolType } from '@mastra/core/mcp';
+import { ClampedText } from '@mastra/playground-ui/components/ClampedText';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { ToolIconMap } from '@/domains/tools/components/ToolIcon';
@@ -13,24 +14,18 @@ export const ToolInformation = ({ toolDescription, toolId, toolType }: ToolInfor
   const ToolIconComponent = ToolIconMap[toolType || 'tool'];
 
   return (
-    <div className="p-5 border-b border-border1">
-      <div className="text-neutral6 flex gap-2">
-        <div>
-          <Icon size="lg" className="bg-surface4 rounded-md p-1">
-            <ToolIconComponent />
-          </Icon>
-        </div>
+    <div className="text-neutral6 flex gap-2">
+      <Icon size="lg" className="bg-surface4 rounded-md p-1 self-start shrink-0">
+        <ToolIconComponent />
+      </Icon>
 
-        <div className="flex gap-4 justify-between w-full min-w-0">
-          <div>
-            <Txt variant="header-md" as="h2" className="font-medium truncate">
-              {toolId}
-            </Txt>
-            <Txt variant="ui-sm" className="text-neutral3">
-              {toolDescription}
-            </Txt>
-          </div>
-        </div>
+      <div className="flex min-w-0 flex-col">
+        <Txt variant="header-md" as="h2" className="font-medium truncate">
+          {toolId}
+        </Txt>
+        <ClampedText variant="ui-sm" className="text-neutral3">
+          {toolDescription}
+        </ClampedText>
       </div>
     </div>
   );

@@ -558,3 +558,47 @@ describe('ModalSandbox.retryOnDead()', () => {
     expect(callCount).toBe(1);
   });
 });
+
+describe('ModalSandbox.clone', () => {
+  it('constructs an unstarted sibling without any I/O', () => {
+    const template = new ModalSandbox({ tokenId: 'tid', tokenSecret: 'tsec', appName: 'mastra' });
+
+    const child = template.clone({ id: 'mc-project-1' });
+
+    expect(child).toBeInstanceOf(ModalSandbox);
+    expect(child).not.toBe(template);
+    expect(child.id).toBe('mc-project-1');
+    expect(child.status).toBe('pending');
+    expect(mockSandboxes.create).not.toHaveBeenCalled();
+  });
+
+  it('inherits template config and applies env override', () => {
+    const template = new ModalSandbox({ tokenId: 'tid', tokenSecret: 'tsec', appName: 'mastra', env: { BASE: '1' } });
+
+    const child = template.clone({ env: { GITHUB_TOKEN: 'ghs_abc' } });
+
+    expect(child['_constructorOptions']).toMatchObject({
+      tokenId: 'tid',
+      tokenSecret: 'tsec',
+      appName: 'mastra',
+      env: { GITHUB_TOKEN: 'ghs_abc' },
+    });
+  });
+
+  it('maps idleTimeoutMinutes to timeoutMs', () => {
+    const template = new ModalSandbox({ tokenId: 'tid', tokenSecret: 'tsec', timeoutMs: 120_000 });
+
+    const child = template.clone({ idleTimeoutMinutes: 15 });
+
+    expect(child['_constructorOptions']).toMatchObject({ timeoutMs: 900_000 });
+  });
+
+  it('inherits template defaults when no overrides are passed', () => {
+    const template = new ModalSandbox({ tokenId: 'tid', tokenSecret: 'tsec', timeoutMs: 120_000, env: { BASE: '1' } });
+
+    const child = template.clone();
+
+    expect(child.id).not.toBe(template.id);
+    expect(child['_constructorOptions']).toMatchObject({ tokenId: 'tid', timeoutMs: 120_000, env: { BASE: '1' } });
+  });
+});

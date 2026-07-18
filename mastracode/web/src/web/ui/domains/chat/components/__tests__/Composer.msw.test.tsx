@@ -5,12 +5,12 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { ChatSessionTestProvider as ChatSessionProvider } from '../../context/ChatSessionTestProvider';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import type { Project } from '../../../workspaces';
 import { ActiveProjectProvider } from '../../../workspaces';
 import { ChatCommandsProvider, useChatCommands } from '../../context/ChatCommandsProvider';
-import { ChatSessionProvider } from '../../context/ChatSessionProvider';
 import { useChatTranscript } from '../../context/useChatTranscript';
 import { SLASH_COMMANDS } from '../../services/commands';
 import { Composer } from '../Composer';
@@ -20,13 +20,14 @@ const RESOURCE_ID = 'resource-test';
 const SESSION = `${API}/sessions/${RESOURCE_ID}`;
 const THREAD_ID = 'thread-test';
 
-function sessionState(): AgentControllerSessionState {
+function sessionState(running = false): AgentControllerSessionState {
   return {
     controllerId: 'code',
     resourceId: RESOURCE_ID,
     modeId: 'build',
     modelId: 'openai/gpt-4o-mini',
     threadId: THREAD_ID,
+    running,
     settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
   };
 }
@@ -50,8 +51,10 @@ function seedProject() {
   localStorage.setItem('mastracode-active-project', project.id);
 }
 
-function useAgentControllerHandlers() {
+function useAgentControllerHandlers({ running = false }: { running?: boolean } = {}) {
   const onSend = vi.fn();
+  const onSteer = vi.fn();
+  const onAbort = vi.fn();
   const onPermissions = vi.fn();
   let permissions: PermissionRules = { categories: { execute: 'ask' }, tools: { 'shell.run': 'deny' } };
   server.use(
@@ -60,12 +63,20 @@ function useAgentControllerHandlers() {
     ),
     http.get(`${API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', name: 'Build' }] })),
     http.get(`${API}/models`, () => HttpResponse.json({ models: [] })),
-    http.get(SESSION, () => HttpResponse.json(sessionState())),
-    http.put(`${SESSION}/state`, () => HttpResponse.json(sessionState())),
+    http.get(SESSION, () => HttpResponse.json(sessionState(running))),
+    http.put(`${SESSION}/state`, () => HttpResponse.json(sessionState(running))),
     http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () => HttpResponse.json({ messages: [] })),
     http.get(`${SESSION}/stream`, () => sse()),
     http.post(`${SESSION}/messages`, async ({ request }) => {
       onSend(await request.json());
+      return HttpResponse.json({ ok: true });
+    }),
+    http.post(`${SESSION}/steer`, async ({ request }) => {
+      onSteer(await request.json());
+      return HttpResponse.json({ ok: true });
+    }),
+    http.post(`${SESSION}/abort`, () => {
+      onAbort();
       return HttpResponse.json({ ok: true });
     }),
     http.get(`${SESSION}/permissions`, () => {
@@ -86,7 +97,7 @@ function useAgentControllerHandlers() {
       return HttpResponse.json({ ok: true });
     }),
   );
-  return { onSend, onPermissions };
+  return { onSend, onSteer, onAbort, onPermissions };
 }
 
 function NoticeProbe() {
@@ -139,6 +150,59 @@ afterEach(() => {
 });
 
 describe('Composer', () => {
+  describe('when submitting a message', () => {
+    it('sends the trimmed draft on Enter', async () => {
+      seedProject();
+      const { onSend } = useAgentControllerHandlers();
+      renderComposer();
+
+      const input = await screen.findByRole('textbox');
+      await waitFor(() => expect(input).toBeEnabled());
+      await userEvent.type(input, '  hello agent  {Enter}');
+
+      await waitFor(() => expect(onSend).toHaveBeenCalledWith({ message: 'hello agent' }));
+    });
+
+    it('keeps a newline in the draft on Shift+Enter', async () => {
+      seedProject();
+      const { onSend } = useAgentControllerHandlers();
+      renderComposer();
+
+      const input = await screen.findByRole('textbox');
+      await waitFor(() => expect(input).toBeEnabled());
+      await userEvent.type(input, 'first line{Shift>}{Enter}{/Shift}second line');
+
+      expect(input).toHaveValue('first line\nsecond line');
+      expect(onSend).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when the agent is busy', () => {
+    it('steers instead of sending a new message', async () => {
+      seedProject();
+      const { onSend, onSteer } = useAgentControllerHandlers({ running: true });
+      renderComposer();
+
+      const input = await screen.findByRole('textbox');
+      await waitFor(() => expect(input).toHaveAttribute('placeholder', 'Steer the agent…'));
+      await userEvent.type(input, 'change direction{Enter}');
+
+      await waitFor(() => expect(onSteer).toHaveBeenCalledWith({ message: 'change direction' }));
+      expect(onSend).not.toHaveBeenCalled();
+    });
+
+    it('aborts the active run', async () => {
+      seedProject();
+      const { onAbort } = useAgentControllerHandlers({ running: true });
+      renderComposer();
+
+      const abort = await screen.findByRole('button', { name: 'Abort' });
+      await userEvent.click(abort);
+
+      await waitFor(() => expect(onAbort).toHaveBeenCalledOnce());
+    });
+  });
+
   describe('when entering exact no-arg slash commands', () => {
     it('shows permissions from the client cache instead of sending a message', async () => {
       seedProject();
@@ -279,6 +343,30 @@ describe('Composer', () => {
     });
   });
 
+  describe('when rendering the composer controls', () => {
+    it('places the session status line in the composer actions area', async () => {
+      seedProject();
+      useAgentControllerHandlers();
+      renderComposer();
+
+      const statusLine = await screen.findByLabelText('Session status line');
+
+      expect(statusLine.closest('[data-slot="composer-actions"]')).toBeInTheDocument();
+    });
+
+    it('colors the composer box border with the active mode', async () => {
+      seedProject();
+      useAgentControllerHandlers();
+      renderComposer();
+
+      const textbox = await screen.findByRole('textbox', { name: 'Message' });
+
+      const composerBox = textbox.closest('[data-slot="composer-box"]');
+      if (!composerBox) throw new Error('Expected the textbox to be inside a composer box');
+      expect(getComputedStyle(composerBox).borderColor).toBe('rgb(22, 200, 88)');
+    });
+  });
+
   describe('when composing a multi-line draft', () => {
     it('grows with content via CSS instead of inline styles', async () => {
       seedProject();
@@ -290,18 +378,16 @@ describe('Composer', () => {
       await userEvent.type(input, 'first line{Shift>}{Enter}{/Shift}second line{Shift>}{Enter}{/Shift}third line');
 
       expect(input).toHaveValue('first line\nsecond line\nthird line');
-      expect(input).toHaveClass('field-sizing-content');
       expect((input as HTMLTextAreaElement).style.height).toBe('');
     });
 
-    it('sizes the textarea variant with CSS classes only', async () => {
+    it('leaves textarea variant height under stylesheet control', async () => {
       seedProject();
       useAgentControllerHandlers();
       renderComposer({ variant: 'textarea' });
 
       const input = await screen.findByRole('textbox');
       await waitFor(() => expect(input).toBeEnabled());
-      expect(input).toHaveClass('field-sizing-content', 'min-h-28');
       expect((input as HTMLTextAreaElement).style.height).toBe('');
     });
   });

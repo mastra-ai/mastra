@@ -1,4 +1,10 @@
+import { useParams } from 'react-router';
+
+import { useActiveProjectContext } from '../../../workspaces';
+import { useChatSessionContext } from '../../context/useChatSessionContext';
+import { useChatTranscript } from '../../context/useChatTranscript';
 import { ActiveModel } from './ActiveModel';
+import { ConnectionActivity } from './ConnectionActivity';
 import { GoalStatus } from './GoalStatus';
 import { ModesSelection } from './ModesSelection';
 import { OperationalMemoryStatus } from './OperationalMemoryStatus';
@@ -11,6 +17,11 @@ import { RuntimeActivity } from './RuntimeActivity';
  * reads its own slice of the existing chat/session context.
  */
 export function StatusLine() {
+  const { threadId } = useParams<{ threadId: string }>();
+  const { activeProject } = useActiveProjectContext();
+  const { baseUrl, resourceId, projectPath } = useChatSessionContext();
+  const { transcript, busy } = useChatTranscript();
+
   return (
     <div
       aria-label="Session status line"
@@ -20,10 +31,19 @@ export function StatusLine() {
       <ActiveModel />
       <OperationalMemoryStatus />
       <RuntimeActivity />
+      <ConnectionActivity />
       <QueuedFollowUps />
       <GoalStatus />
       <span className="flex-1" />
-      <PullRequestLinks />
+      <PullRequestLinks
+        baseUrl={baseUrl}
+        resourceId={resourceId}
+        projectPath={projectPath}
+        githubProjectId={activeProject?.githubProjectId}
+        threadId={threadId}
+        transcriptEntries={transcript.entries}
+        busy={busy}
+      />
     </div>
   );
 }

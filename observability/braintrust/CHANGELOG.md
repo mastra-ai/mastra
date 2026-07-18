@@ -1,5 +1,34 @@
 # @mastra/braintrust
 
+## 1.3.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`ec857fc`](https://github.com/mastra-ai/mastra/commit/ec857fc79c264b53b38e16478c789b7177f2ad59), [`e1f2fae`](https://github.com/mastra-ai/mastra/commit/e1f2faebaf048c3d4c2e2c01d293767c195d5794), [`63aa799`](https://github.com/mastra-ai/mastra/commit/63aa799c6b44eacc7806cda6846b7c5bbee06b37), [`73db8db`](https://github.com/mastra-ai/mastra/commit/73db8db90d69ab6153c7942749f624db0d96952d), [`73db8db`](https://github.com/mastra-ai/mastra/commit/73db8db90d69ab6153c7942749f624db0d96952d), [`76b7181`](https://github.com/mastra-ai/mastra/commit/76b71810366e6d90b9d3973149d1c7ba3659ffb9), [`0c0e8d7`](https://github.com/mastra-ai/mastra/commit/0c0e8d7becd4d1445c656b78d5d845f606c1ff9d), [`9f7c67a`](https://github.com/mastra-ai/mastra/commit/9f7c67abeeb52c41c51a9b5edee60b62afe7cd8d), [`3b65e68`](https://github.com/mastra-ai/mastra/commit/3b65e68d7f1c771c7a70eea42d83fefdd28cad88), [`ec17152`](https://github.com/mastra-ai/mastra/commit/ec17152e7514b5fad37d6ed50f90a937b4bb87a2), [`e3868e2`](https://github.com/mastra-ai/mastra/commit/e3868e22babfffd0133771669ca724501c2dd58e)]:
+  - @mastra/core@1.52.0-alpha.5
+  - @mastra/observability@1.16.2-alpha.0
+
+## 1.3.0-alpha.0
+
+### Minor Changes
+
+- **Breaking change** ([#19507](https://github.com/mastra-ai/mastra/pull/19507))
+
+  Updated the bundled Braintrust SDK from v2 to v3 and replaced the SDK-specific logger and span types with stable Mastra interfaces/shims. Compatible Braintrust v2 and v3 logger and span objects remain supported.
+
+  Braintrust v3 uses a separate W3C trace ID for `root_span_id`. Mastra's returned `spanId` remains the Braintrust row ID and span ID for feedback and lookup.
+
+  **Migration**
+
+  The `BraintrustExporterConfig` interface changed, so if you were using the `braintrustLogger` field or the `getCurrentSpan()` method, those now hold narrower types that are no longer tied to the Braintrust SDK. It is unlikely that this is affecting you but technically a breaking change, which is why it is outlined.
+
+  Applications that independently upgrade Braintrust and use Nunjucks prompt templates should follow the Braintrust v2 to v3 migration guide: https://www.braintrust.dev/docs/sdks/typescript/migrations/v2-to-v3
+
+### Patch Changes
+
+- Updated dependencies [[`8a0d145`](https://github.com/mastra-ai/mastra/commit/8a0d145aadbdf7278665aceaaec364b35dd9bd94), [`bd2f1d2`](https://github.com/mastra-ai/mastra/commit/bd2f1d274d05e60e2366f005ea0d94d5cea0d5ff), [`21a0eb8`](https://github.com/mastra-ai/mastra/commit/21a0eb86746ba0b703acea360d4f84c6a5a493f2), [`de86fd7`](https://github.com/mastra-ai/mastra/commit/de86fd7119f0438381d1a642e3d258143c0b9c29), [`2745031`](https://github.com/mastra-ai/mastra/commit/2745031d1d4a4978f037092da371428c32e2842a), [`db650ce`](https://github.com/mastra-ai/mastra/commit/db650ce490348914e85b93651d83acdf8f2a4c31), [`6354eeb`](https://github.com/mastra-ai/mastra/commit/6354eeb32efa9f5f68f51dda394e90e2ee76f1fb)]:
+  - @mastra/core@1.51.1-alpha.0
+
 ## 1.2.4
 
 ### Patch Changes

@@ -25,12 +25,11 @@ import {
   detectPackageManager,
   fetchChangelog,
   fetchLatestVersion,
-  getInstallCommand,
   isNewerVersion,
-  runUpdate,
+  performUpdate,
 } from '@mastra/code-sdk/utils/update-check';
 import type { AgentSignalAttributes } from '@mastra/core/agent';
-import type { AgentControllerEvent, AgentControllerMessage } from '@mastra/core/agent-controller';
+import type { AgentControllerEvent, MastraDBMessage } from '@mastra/core/agent-controller';
 import type { Workspace } from '@mastra/core/workspace';
 import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation.js';
 import { dispatchSlashCommand } from './command-dispatch.js';
@@ -287,7 +286,7 @@ export class MastraTUI {
         addUserMessage(this.state, {
           id: messageId,
           role: 'user',
-          content: [{ type: 'text', text: msg }],
+          content: { format: 2, parts: [{ type: 'text', text: msg }] },
           createdAt: new Date(),
         });
         flushRender(this.state);
@@ -376,14 +375,17 @@ export class MastraTUI {
     content: string,
     images?: Array<{ data: string; mimeType: string }>,
     id = '',
-  ): AgentControllerMessage {
+  ): MastraDBMessage {
     return {
       id,
       role: 'user',
-      content: [
-        { type: 'text', text: content },
-        ...(images?.map(img => ({ type: 'image' as const, data: img.data, mimeType: img.mimeType })) ?? []),
-      ],
+      content: {
+        format: 2,
+        parts: [
+          { type: 'text', text: content },
+          ...(images?.map(img => ({ type: 'file' as const, data: img.data, mimeType: img.mimeType })) ?? []),
+        ],
+      },
       createdAt: new Date(),
     };
   }
@@ -1660,14 +1662,14 @@ export class MastraTUI {
 
     if (answer === 'Yes') {
       showInfo(this.state, `Updating to v${latestVersion}…`);
-      const ok = await runUpdate(pm, latestVersion);
-      if (ok) {
-        showInfo(this.state, `Updated to v${latestVersion}. Please restart Mastra Code.`);
+      const outcome = await performUpdate(pm, latestVersion);
+      if (outcome.status === 'updated') {
+        // Printed after TUI teardown — a message rendered inside it is lost in the exit race.
         this.stop();
+        console.info(outcome.message);
         process.exit(0);
       } else {
-        const cmd = getInstallCommand(pm, latestVersion);
-        showError(this.state, `Auto-update failed. Run \`${cmd}\` manually.`);
+        showError(this.state, outcome.message);
       }
     } else {
       // User declined — save the dismissed version

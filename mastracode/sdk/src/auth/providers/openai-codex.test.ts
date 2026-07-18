@@ -242,12 +242,13 @@ describe('OpenAI Codex device OAuth', () => {
       );
     vi.stubGlobal('fetch', fetchMock);
     const onAuth = vi.fn();
+    const sleep = vi.fn(async () => {});
     const { __testing } = await import('./openai-codex.js');
 
     await expect(
       __testing.loginOpenAICodexDevice({
         onAuth,
-        sleep: async () => {},
+        sleep,
       }),
     ).resolves.toMatchObject({
       access: expect.any(String),
@@ -259,6 +260,7 @@ describe('OpenAI Codex device OAuth', () => {
       url: 'https://auth.openai.com/codex/device',
       instructions: 'Enter code: ABCD-EFGH',
     });
+    expect(sleep).toHaveBeenNthCalledWith(1, 1000);
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
       'https://auth.openai.com/api/accounts/deviceauth/usercode',
@@ -414,6 +416,122 @@ describe('OpenAI Codex device OAuth', () => {
     });
 
     expect(sleep).toHaveBeenCalledWith(1000);
+  });
+});
+
+describe('Codex device login step primitives', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('startCodexDeviceLogin returns serializable pending state', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValueOnce(
+        new Response(JSON.stringify({ device_auth_id: 'device-123', user_code: 'ABCD-EFGH', interval: 3 }), {
+          status: 200,
+        }),
+      ),
+    );
+    const { startCodexDeviceLogin } = await import('./openai-codex.js');
+
+    const pending = await startCodexDeviceLogin();
+    expect(pending).toMatchObject({
+      deviceAuthId: 'device-123',
+      userCode: 'ABCD-EFGH',
+      url: 'https://auth.openai.com/codex/device',
+      instructions: 'Enter code: ABCD-EFGH',
+      intervalMs: 3000,
+    });
+    expect(pending.deadlineAt).toBeGreaterThan(Date.now());
+    expect(JSON.parse(JSON.stringify(pending))).toEqual(pending);
+  });
+
+  it('pollCodexDeviceLogin reports pending on 403 without throwing', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(new Response('', { status: 403 })));
+    const { pollCodexDeviceLogin } = await import('./openai-codex.js');
+
+    const result = await pollCodexDeviceLogin({
+      deviceAuthId: 'device-123',
+      userCode: 'ABCD-EFGH',
+      url: 'https://auth.openai.com/codex/device',
+      instructions: 'Enter code: ABCD-EFGH',
+      intervalMs: 5000,
+      deadlineAt: Date.now() + 900_000,
+    });
+    expect(result).toEqual({ status: 'pending', nextPollMs: 5000 });
+  });
+
+  it('pollCodexDeviceLogin completes by exchanging the server-held verifier', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ authorization_code: 'auth-code', code_verifier: 'verifier' }), { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            access_token: jwt({ chatgpt_account_id: 'acct-device' }),
+            refresh_token: 'refresh-device',
+            expires_in: 3600,
+          }),
+          { status: 200 },
+        ),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+    const { pollCodexDeviceLogin } = await import('./openai-codex.js');
+
+    const result = await pollCodexDeviceLogin({
+      deviceAuthId: 'device-123',
+      userCode: 'ABCD-EFGH',
+      url: 'https://auth.openai.com/codex/device',
+      instructions: 'Enter code: ABCD-EFGH',
+      intervalMs: 5000,
+      deadlineAt: Date.now() + 900_000,
+    });
+    expect(result.status).toBe('complete');
+    expect(result.status === 'complete' && result.credentials).toMatchObject({
+      refresh: 'refresh-device',
+      accountId: 'acct-device',
+    });
+  });
+
+  it('pollCodexDeviceLogin fails past the deadline without polling upstream', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const { pollCodexDeviceLogin } = await import('./openai-codex.js');
+
+    const result = await pollCodexDeviceLogin({
+      deviceAuthId: 'device-123',
+      userCode: 'ABCD-EFGH',
+      url: 'https://auth.openai.com/codex/device',
+      instructions: 'Enter code: ABCD-EFGH',
+      intervalMs: 5000,
+      deadlineAt: Date.now() - 1,
+    });
+    expect(result).toEqual({
+      status: 'failed',
+      error: 'OpenAI Codex device authorization timed out after 15 minutes',
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('pollCodexDeviceLogin fails loudly on unexpected statuses with the response body', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(new Response('server exploded', { status: 500 })));
+    const { pollCodexDeviceLogin } = await import('./openai-codex.js');
+
+    const result = await pollCodexDeviceLogin({
+      deviceAuthId: 'device-123',
+      userCode: 'ABCD-EFGH',
+      url: 'https://auth.openai.com/codex/device',
+      instructions: 'Enter code: ABCD-EFGH',
+      intervalMs: 5000,
+      deadlineAt: Date.now() + 900_000,
+    });
+    expect(result).toEqual({
+      status: 'failed',
+      error: 'OpenAI Codex device authorization failed: 500 server exploded',
+    });
   });
 });
 

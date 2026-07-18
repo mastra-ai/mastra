@@ -1,10 +1,23 @@
 {
-  "attachment": ["moonshotai/kimi-k2.6", "moonshotai/kimi-k2.7-code", "stepfun/step-3.7-flash"],
+  "attachment": ["moonshotai/kimi-k2.6", "moonshotai/kimi-k2.7-code", "stepfun/step-3.7-flash", "xiaomi/mimo-v2.5"],
   "temperature": [
     "ambient/large",
+    "deepseek/deepseek-v4-flash",
     "moonshotai/kimi-k2.6",
     "moonshotai/kimi-k2.7-code",
     "stepfun/step-3.7-flash",
+    "xiaomi/mimo-v2.5",
+    "z-ai/glm-5.2",
+    "zai-org/GLM-5.1-FP8",
+    "zai-org/GLM-5.2-FP8"
+  ],
+  "structuredOutput": [
+    "ambient/large",
+    "deepseek/deepseek-v4-flash",
+    "moonshotai/kimi-k2.6",
+    "moonshotai/kimi-k2.7-code",
+    "stepfun/step-3.7-flash",
+    "xiaomi/mimo-v2.5",
     "z-ai/glm-5.2",
     "zai-org/GLM-5.1-FP8",
     "zai-org/GLM-5.2-FP8"

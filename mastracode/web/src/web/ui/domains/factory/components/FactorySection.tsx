@@ -1,5 +1,5 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { SquareKanban } from 'lucide-react';
+import { ChartLine, ScrollText, SquareKanban } from 'lucide-react';
 import type { ComponentType, ReactNode } from 'react';
 import { NavLink } from 'react-router';
 
@@ -32,9 +32,11 @@ export function FactorySection({ children }: { children?: ReactNode }) {
       {showBoard && (
         <div className="flex flex-col gap-1">
           <FactoryLink to="/factory/board" icon={SquareKanban} label="Board" />
+          <FactoryLink to="/factory/metrics" icon={ChartLine} label="Metrics" />
+          <FactoryLink to="/factory/audit" icon={ScrollText} label="Audit" />
         </div>
       )}
-      {children && <div className="flex flex-col gap-2 pl-2">{children}</div>}
+      {children}
     </nav>
   );
 }
