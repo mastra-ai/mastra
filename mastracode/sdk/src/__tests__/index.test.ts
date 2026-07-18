@@ -795,20 +795,22 @@ describe('createMastraCode', () => {
     expect(badRequestPolicy.maxRetries).toBe(1);
     expect(badRequestPolicy.delayMs).toBe(2000);
 
-    // Second matcher: ECONNRESET with maxRetries 2 and exponential backoff.
-    const econnresetPolicy = options!.matchers![1] as {
-      match?: unknown;
+    // Second matcher: transient connection failures with maxRetries 2 and exponential backoff.
+    const transientConnectionPolicy = options!.matchers![1] as {
+      match?: (error: unknown) => boolean;
       maxRetries?: number;
       delayMs?: (args: { retryCount: number }) => number;
     };
-    expect(typeof econnresetPolicy.match).toBe('function');
-    expect(econnresetPolicy.maxRetries).toBe(2);
-    expect(typeof econnresetPolicy.delayMs).toBe('function');
-    expect(econnresetPolicy.delayMs!({ retryCount: 0 })).toBe(1000);
-    expect(econnresetPolicy.delayMs!({ retryCount: 1 })).toBe(2000);
-    expect(econnresetPolicy.delayMs!({ retryCount: 2 })).toBe(4000);
+    expect(typeof transientConnectionPolicy.match).toBe('function');
+    expect(transientConnectionPolicy.match!(Object.assign(new Error('write EPIPE'), { code: 'EPIPE' }))).toBe(true);
+    expect(transientConnectionPolicy.match!(new Error('Cannot connect to API: other side closed'))).toBe(true);
+    expect(transientConnectionPolicy.maxRetries).toBe(2);
+    expect(typeof transientConnectionPolicy.delayMs).toBe('function');
+    expect(transientConnectionPolicy.delayMs!({ retryCount: 0 })).toBe(1000);
+    expect(transientConnectionPolicy.delayMs!({ retryCount: 1 })).toBe(2000);
+    expect(transientConnectionPolicy.delayMs!({ retryCount: 2 })).toBe(4000);
     // High retry counts are capped at the max delay (30000ms).
-    expect(econnresetPolicy.delayMs!({ retryCount: 10 })).toBe(30000);
+    expect(transientConnectionPolicy.delayMs!({ retryCount: 10 })).toBe(30000);
   });
 
   it('configures ProviderHistoryCompat for prompt and API error compatibility', async () => {
