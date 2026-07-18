@@ -1,5 +1,17 @@
 # @internal/playground
 
+## 1.20.0-alpha.6
+
+### Patch Changes
+
+- Added date filtering to Evaluation score metrics. ([#19644](https://github.com/mastra-ai/mastra/pull/19644))
+
+- Updated dependencies [[`a40adeb`](https://github.com/mastra-ai/mastra/commit/a40adeb222b961a56a58af56a106106525721b74), [`821648b`](https://github.com/mastra-ai/mastra/commit/821648bf2871ef840100c7bacbecf676010bd12a), [`11f6cd9`](https://github.com/mastra-ai/mastra/commit/11f6cd96fe42582403416608beb212cc1a2cc79e)]:
+  - @mastra/core@1.52.0-alpha.6
+  - @mastra/client-js@1.33.0-alpha.6
+  - @mastra/react@1.2.6-alpha.6
+  - @mastra/playground-ui@42.0.0-alpha.6
+
 ## 1.20.0-alpha.5
 
 ### Patch Changes

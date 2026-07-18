@@ -1,5 +1,15 @@
 # mastracode
 
+## 0.31.1-alpha.6
+
+### Patch Changes
+
+- Fixed quiet-mode tool previews jumping during streamed updates. ([#19651](https://github.com/mastra-ai/mastra/pull/19651))
+
+- Updated dependencies [[`a40adeb`](https://github.com/mastra-ai/mastra/commit/a40adeb222b961a56a58af56a106106525721b74), [`dfc7769`](https://github.com/mastra-ai/mastra/commit/dfc77695549e4434873051ddd1f6065330ed5ab8), [`821648b`](https://github.com/mastra-ai/mastra/commit/821648bf2871ef840100c7bacbecf676010bd12a), [`11f6cd9`](https://github.com/mastra-ai/mastra/commit/11f6cd96fe42582403416608beb212cc1a2cc79e)]:
+  - @mastra/core@1.52.0-alpha.6
+  - @mastra/code-sdk@0.2.0-alpha.6
+
 ## 0.31.1-alpha.5
 
 ### Patch Changes
