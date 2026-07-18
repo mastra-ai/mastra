@@ -155,6 +155,24 @@ describe('FactoryPhaseStateProcessor', () => {
     expect(onResult).toHaveBeenCalledWith(expect.objectContaining({ assistantMessageId: 'current' }));
   });
 
+  it('binds continuation ingress to the newest assistant message when tool-call IDs repeat', async () => {
+    const storage = new WorkItemsStorageInMemory();
+    await prepare(storage);
+    const onResult = vi.fn(() => undefined);
+    const rules = defaultFactoryRules({ version: 'rules-v1', overrides: { tools: { submit_plan: { onResult } } } });
+    const processor = new FactoryPhaseStateProcessor({ rules, storage });
+
+    await processor.processInputStep(
+      inputArgs(requestContext(), [
+        toolMessage({ id: 'older-assistant', toolCallId: 'tool-call-1' }),
+        toolMessage({ id: 'current-assistant', toolCallId: 'tool-call-1' }),
+      ]),
+    );
+
+    expect(onResult).toHaveBeenCalledTimes(1);
+    expect(onResult).toHaveBeenCalledWith(expect.objectContaining({ assistantMessageId: 'current-assistant' }));
+  });
+
   it('normalizes errors and persists rule decisions before returning', async () => {
     const storage = (await seedFactoryStorageForTests()).workItems;
     await prepare(storage);

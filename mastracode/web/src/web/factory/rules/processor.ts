@@ -157,6 +157,17 @@ function completedToolResults(message: MastraDBMessage): CompletedToolResult[] {
   return completed;
 }
 
+function currentCompletedToolMessage(
+  messages: MastraDBMessage[],
+  toolCallIds: ReadonlySet<string>,
+): MastraDBMessage | undefined {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]!;
+    if (completedToolResults(message).some(result => toolCallIds.has(result.toolCallId))) return message;
+  }
+  return undefined;
+}
+
 function phaseCacheKey(value: Omit<PhaseSnapshotValue, 'status'>, linked: WorkItemRow[]): string {
   return createHash('sha256')
     .update(
@@ -222,8 +233,9 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       removedSignals = true;
     }
     const completedToolCallIds = completedStepToolCallIds(args.steps);
-    if (completedToolCallIds.size > 0) {
-      await this.ingestMessages(binding, args.messages, completedToolCallIds);
+    const completedMessage = currentCompletedToolMessage(args.messages, completedToolCallIds);
+    if (completedMessage) {
+      await this.ingestMessages(binding, [completedMessage], completedToolCallIds);
     }
     return removedSignals ? args.messageList : undefined;
   }
