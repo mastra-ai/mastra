@@ -306,7 +306,7 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
       board: 'work',
       stage: 'execute',
       expectedRevision: item.revision,
-      requestId: 'request-1',
+      requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1',
       cause: 'board_drag',
       ...overrides,
     });
@@ -335,7 +335,7 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
   it('returns typed stale without overwriting the winner', async () => {
     const item = await createItem();
     expect((await transition(item)).status).toBe(200);
-    const stale = await transition(item, { requestId: 'request-2', stage: 'planning' });
+    const stale = await transition(item, { requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2', stage: 'planning' });
     expect(stale.status).toBe(409);
     expect(await stale.json()).toMatchObject({ result: { status: 'rejected', code: 'stale' } });
     expect((await listItems())[0]?.stages).toEqual(['execute']);
@@ -347,6 +347,12 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
     const replay = await transition(item, { stage: 'planning' });
     expect(await replay.json()).toEqual(await first.json());
     expect((await listItems())[0]?.stages).toEqual(['execute']);
+  });
+
+  it('rejects non-UUID human request identities before they can collide across work items', async () => {
+    const item = await createItem();
+    const res = await transition(item, { requestId: 'reused-human-request' });
+    expect(res.status).toBe(400);
   });
 
   it('rejects a work item addressed through the Review board', async () => {
@@ -364,8 +370,9 @@ describe('POST /web/factory/projects/:id/runs/start', () => {
     branch: 'factory/issue-42',
     threadTitle: 'Investigate issue 42',
     threadTags: { role: 'plan' },
-    kickoffKey: 'kickoff-1',
+    kickoffKey: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1',
     kickoffMessage: 'Start',
+    destinationStage: 'planning',
     workItem: {
       id: workItemId,
       role: 'plan',
@@ -406,6 +413,20 @@ describe('POST /web/factory/projects/:id/runs/start', () => {
         metadata: expect.objectContaining({ bindingId: 'binding-1', role: 'plan' }),
       }),
     );
+  });
+
+  it('rejects a non-UUID kickoff identity before coordination', async () => {
+    const prepare = vi.fn();
+    const app = buildApp(orgUser, { prepare });
+
+    const res = await app.request(`/web/factory/projects/${PROJECT_ID}/runs/start`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ...startBody(), kickoffKey: 'reused-kickoff' }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(prepare).not.toHaveBeenCalled();
   });
 
   it('refuses non-Intake creation before the coordinator can bypass transition authority', async () => {
@@ -568,7 +589,7 @@ describe('GET /web/factory/projects/:id/metrics', () => {
       board: 'work',
       stage: 'done',
       expectedRevision: workItem.revision,
-      requestId: 'metrics-complete',
+      requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3',
       cause: 'board_drag',
     });
     await json(
@@ -736,7 +757,7 @@ describe('audit events', () => {
         board: 'work',
         stage: 'done',
         expectedRevision: workItem.revision,
-        requestId: 'audit-failure-transition',
+        requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4',
         cause: 'board_drag',
       },
     );

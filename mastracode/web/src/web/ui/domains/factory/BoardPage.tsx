@@ -725,8 +725,6 @@ function BoardContent({
                       threadTitle: spec.threadTitle,
                       workItem: {
                         id: item.id,
-                        revision: item.revision,
-                        currentStage: item.stages.length === 1 ? item.stages[0] : undefined,
                         // File only the neutral chat role. The title is a
                         // create button only when every existing role ref is
                         // stale (worktree gone); repointing those roles here
@@ -748,8 +746,6 @@ function BoardContent({
                       invocation: action.invocation,
                       workItem: {
                         id: item.id,
-                        revision: item.revision,
-                        currentStage: item.stages.length === 1 ? item.stages[0] : undefined,
                         role: action.role,
                         existingRoles: Object.keys(item.sessions),
                         stages: [action.stage],

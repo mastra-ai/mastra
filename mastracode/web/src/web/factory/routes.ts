@@ -18,8 +18,8 @@ import { getFactoryProjectsStorage, getQueueHealthStorage } from '../storage/dom
 import { clampMetricsWindow, computeFactoryMetrics } from './metrics';
 import type { WorkItemRow } from '../storage/domains/work-items/base';
 import { thresholdsOrDefault } from '../storage/domains/queue-health/base';
-import { FactoryStartCoordinator } from './rules/start-coordinator';
-import type { FactoryStartRequest } from './rules/start-coordinator';
+import { FactoryStartCoordinator, FactoryStartTransitionError } from './rules/start-coordinator';
+import type { FactoryStartPreparedResult, FactoryStartRequest } from './rules/start-coordinator';
 import { FactoryTransitionService } from './rules/transition-service';
 import type { FactoryTransitionRequest } from './rules/transition-service';
 import { FACTORY_RULE_BOARDS, FACTORY_RULE_STAGES } from './rules/types';
@@ -189,6 +189,7 @@ function parseTransitionBody(
     !board ||
     !stage ||
     !requestId ||
+    !UUID_RE.test(requestId) ||
     !cause ||
     !Number.isInteger(body.expectedRevision) ||
     Number(body.expectedRevision) < 1
@@ -216,6 +217,9 @@ function parseStartBody(
   const branch = boundedText(body.branch, 256);
   const threadTitle = boundedText(body.threadTitle, 512);
   const kickoffKey = boundedText(body.kickoffKey, 256);
+  const destinationStage = FACTORY_RULE_STAGES.includes(body.destinationStage as FactoryRuleStage)
+    ? (body.destinationStage as FactoryRuleStage)
+    : undefined;
   const role = boundedText(body.workItem.role, 32);
   const id = body.workItem.id === undefined ? undefined : boundedText(body.workItem.id, 64);
   const kickoffMessage = body.kickoffMessage === null ? null : boundedText(body.kickoffMessage, 16_384);
@@ -226,6 +230,8 @@ function parseStartBody(
     !branch ||
     !threadTitle ||
     !kickoffKey ||
+    !UUID_RE.test(kickoffKey) ||
+    !destinationStage ||
     !role ||
     kickoffMessage === undefined
   ) {
@@ -252,6 +258,7 @@ function parseStartBody(
     threadTags,
     kickoffKey,
     kickoffMessage,
+    destinationStage,
     workItem: { id, role, input },
   };
 }
@@ -431,7 +438,15 @@ export function buildFactoryRoutes({
             409,
           );
         }
-        const prepared = await startCoordinator.prepare(input);
+        let prepared: FactoryStartPreparedResult;
+        try {
+          prepared = await startCoordinator.prepare(input);
+        } catch (error) {
+          if (error instanceof FactoryStartTransitionError) {
+            return c.json({ result: error.result }, error.result.code === 'stale' ? 409 : 422);
+          }
+          throw error;
+        }
         await audit.emit({
           context: loose(c),
           input: {

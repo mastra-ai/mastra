@@ -46,11 +46,7 @@ export function useUpsertWorkItemMutation(factoryProjectId: string | undefined) 
   });
 }
 
-/**
- * Patch a work item (stage moves, session/metadata merges). Stage moves apply
- * optimistically — the card jumps columns immediately and rolls back if the
- * server rejects the patch.
- */
+/** Patch non-stage work-item fields. Stage movement uses the transition authority below. */
 export function useUpdateWorkItemMutation(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
@@ -60,18 +56,10 @@ export function useUpdateWorkItemMutation(factoryProjectId: string | undefined) 
     onMutate: async ({ id, patch }) => {
       await queryClient.cancelQueries({ queryKey: listKey });
       const previous = queryClient.getQueryData<WorkItem[]>(listKey);
-      if (previous && (patch.stages || patch.parentWorkItemId !== undefined)) {
+      if (previous && patch.parentWorkItemId !== undefined) {
         queryClient.setQueryData<WorkItem[]>(
           listKey,
-          previous.map(item =>
-            item.id === id
-              ? {
-                  ...item,
-                  ...(patch.stages ? { stages: patch.stages } : {}),
-                  ...(patch.parentWorkItemId !== undefined ? { parentWorkItemId: patch.parentWorkItemId } : {}),
-                }
-              : item,
-          ),
+          previous.map(item => (item.id === id ? { ...item, parentWorkItemId: patch.parentWorkItemId ?? null } : item)),
         );
       }
       return { previous };
@@ -87,13 +75,13 @@ export function useUpdateWorkItemMutation(factoryProjectId: string | undefined) 
   });
 }
 
-export function useTransitionWorkItemMutation(githubProjectId: string | undefined) {
+export function useTransitionWorkItemMutation(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
-  const listKey = queryKeys.workItems(githubProjectId);
+  const listKey = queryKeys.workItems(factoryProjectId);
   return useMutation({
     mutationFn: ({ item, board, stage }: { item: WorkItem; board: 'work' | 'review'; stage: string }) =>
-      transitionWorkItem(baseUrl, githubProjectId!, item.id, {
+      transitionWorkItem(baseUrl, factoryProjectId!, item.id, {
         board,
         stage: stage as 'intake' | 'triage' | 'planning' | 'execute' | 'review' | 'done',
         expectedRevision: item.revision,

@@ -78,7 +78,6 @@ export interface UpdateWorkItemInput {
   parentWorkItemId?: string | null;
   title?: string;
   url?: string | null;
-  stages?: string[];
   sessions?: Record<string, WorkItemSessionInput>;
   metadata?: Record<string, unknown>;
 }
@@ -161,6 +160,7 @@ export interface StartFactoryRunRequest {
   threadTags?: Record<string, string>;
   kickoffKey: string;
   kickoffMessage: string | null;
+  destinationStage: FactoryStage;
   workItem: {
     id?: string;
     role: string;

@@ -151,14 +151,21 @@ describe('FactoryTransitionService', () => {
       overrides: { work: { execute: { issue: { onEnter: () => lateRule } } } },
     });
 
-    const result = await new FactoryTransitionService({ rules, storage, timeoutMs: 5 }).transition(request(item));
-    expect(result).toMatchObject({ status: 'rejected', code: 'timeout' });
+    vi.useFakeTimers();
+    try {
+      const transition = new FactoryTransitionService({ rules, storage }).transition(request(item));
+      await vi.advanceTimersByTimeAsync(5_000);
+      const result = await transition;
+      expect(result).toMatchObject({ status: 'rejected', code: 'timeout' });
 
-    resolveRule({ type: 'notify', idempotencyKey: 'too-late', title: 'Too late' });
-    await lateRule;
-    await Promise.resolve();
-    expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toEqual([]);
-    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['intake']);
+      resolveRule({ type: 'notify', idempotencyKey: 'too-late', title: 'Too late' });
+      await lateRule;
+      await Promise.resolve();
+      expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toEqual([]);
+      expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['intake']);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('always returns typed stale on CAS loss and never overwrites canonical state', async () => {

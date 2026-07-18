@@ -247,7 +247,7 @@ interface BoardState {
   items: WorkItem[];
   posts: CreateWorkItemInput[];
   patches: Array<{ id: string; stages?: string[] } & UpdateWorkItemInput>;
-  starts: Array<{ kickoffMessage: string | null; workItem: { id: string; role: string } }>;
+  starts: Array<{ kickoffMessage: string | null; destinationStage: string; workItem: { id: string; role: string } }>;
   deletes: string[];
   triageRequests: Array<{ number: number; body: unknown }>;
   issueRequests: Array<string | null>;
@@ -327,9 +327,14 @@ function useBoardHandlers(options: BoardHandlerOptions = {}): BoardState {
         projectPath: string;
         branch: string;
         kickoffMessage: string | null;
+        destinationStage: string;
         workItem: { id: string; role: string };
       };
-      state.starts.push({ kickoffMessage: body.kickoffMessage, workItem: body.workItem });
+      state.starts.push({
+        kickoffMessage: body.kickoffMessage,
+        destinationStage: body.destinationStage,
+        workItem: body.workItem,
+      });
       const existing = state.items.find(item => item.id === body.workItem.id);
       if (!existing) return HttpResponse.json({ error: 'Work item not found' }, { status: 404 });
       const session = {
@@ -341,10 +346,15 @@ function useBoardHandlers(options: BoardHandlerOptions = {}): BoardState {
       const updated = {
         ...existing,
         revision: existing.revision + 1,
+        stages: [body.destinationStage],
         sessions: { ...existing.sessions, [body.workItem.role]: session },
       };
       state.items = state.items.map(item => (item.id === existing.id ? updated : item));
-      state.patches.push({ id: existing.id, sessions: { [body.workItem.role]: session } });
+      state.patches.push({
+        id: existing.id,
+        stages: [body.destinationStage],
+        sessions: { [body.workItem.role]: session },
+      });
       return HttpResponse.json(
         {
           prepared: {
@@ -1385,7 +1395,7 @@ describe('Factory Board — persisted cards', () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
-    await waitFor(() => expect(state.patches).toEqual(expect.arrayContaining([{ id: 'wi-1', stages: ['planning'] }])));
+    expect(captured.starts).toMatchObject([{ destinationStage: 'planning', workItem: { id: 'wi-1' } }]);
   });
 
   it('given a persisted issue card needing approval, when Prepare approval is chosen, then the triage session ref is recorded without leaving Triage', async () => {
@@ -1675,7 +1685,7 @@ describe('Factory Board — persisted cards', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
     await waitFor(() => expect(captured.messages[0]?.message).toContain('Implement a fix for GitHub issue #12'));
-    await waitFor(() => expect(state.patches).toEqual(expect.arrayContaining([{ id: 'wi-1', stages: ['execute'] }])));
+    expect(captured.starts).toMatchObject([{ destinationStage: 'execute', workItem: { id: 'wi-1' } }]);
   });
 
   it('given a card in Intake, when Mark done is chosen from the menu, then the stages PATCH to done and the card moves', async () => {
@@ -1810,7 +1820,11 @@ interface CapturedRun {
   worktree?: Record<string, unknown>;
   threadTitles: string[];
   messages: Record<string, unknown>[];
-  starts: Array<{ workItem: { id: string; role: string }; kickoffMessage: string | null }>;
+  starts: Array<{
+    workItem: { id: string; role: string };
+    kickoffMessage: string | null;
+    destinationStage: string;
+  }>;
   skillInvocations: Record<string, unknown>[];
 }
 
@@ -1848,10 +1862,15 @@ function useFactoryRunHandlers(branchDir: string): CapturedRun {
         branch: string;
         threadTitle: string;
         kickoffMessage: string | null;
+        destinationStage: string;
         workItem: { id: string; role: string };
       };
       captured.threadTitles.push(body.threadTitle);
-      captured.starts.push({ workItem: body.workItem, kickoffMessage: body.kickoffMessage });
+      captured.starts.push({
+        workItem: body.workItem,
+        kickoffMessage: body.kickoffMessage,
+        destinationStage: body.destinationStage,
+      });
       if (body.kickoffMessage !== null) captured.messages.push({ message: body.kickoffMessage });
       return HttpResponse.json(
         {
@@ -1950,17 +1969,10 @@ describe('Factory Board — investigate flow', () => {
       },
     ]);
     expect(JSON.stringify(captured.skillInvocations)).not.toContain('Fix flaky test');
-    // New candidates are materialized in Intake, then moved through the authoritative transition endpoint.
-    await waitFor(() => expect(state.posts).toHaveLength(1));
-    expect(state.posts).toMatchObject([
-      {
-        source: 'github-issue',
-        sourceKey: 'github-issue:12',
-        title: 'Fix flaky test',
-        stages: ['intake'],
-      },
-    ]);
-    expect(state.patches).toEqual(expect.arrayContaining([{ id: 'wi-post-1', stages: ['planning'] }]));
+    // One server-owned start request creates the Intake card, binds it, and requests Planning.
+    expect(state.posts).toEqual([]);
+    expect(state.patches).toEqual([]);
+    expect(captured.starts).toMatchObject([{ destinationStage: 'planning', workItem: { role: 'plan' } }]);
   });
 
   it('given a prepared skill, when Factory starts the run, then the browser navigates only after the server coordinator accepts one kickoff', async () => {
@@ -1975,7 +1987,8 @@ describe('Factory Board — investigate flow', () => {
       projectPath: string;
       branch: string;
       kickoffMessage: string | null;
-      workItem: { id: string };
+      destinationStage: string;
+      workItem: { id?: string };
     }> = [];
     server.use(
       http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/runs/start`, async ({ request }) => {
@@ -2009,8 +2022,12 @@ describe('Factory Board — investigate flow', () => {
     await waitFor(() => expect(startBodies).toHaveLength(1));
     expect(router.state.location.pathname).toBe('/factory/work');
     expect(captured.skillInvocations).toHaveLength(1);
-    expect(startBodies[0]?.kickoffMessage).toContain('<skill name="understand-issue">');
-    expect(state.posts).toHaveLength(1);
+    expect(startBodies[0]).toMatchObject({
+      kickoffMessage: expect.stringContaining('<skill name="understand-issue">'),
+      destinationStage: 'planning',
+      workItem: { role: 'plan', input: { stages: ['intake'] } },
+    });
+    expect(state.posts).toHaveLength(0);
     releaseStart();
     await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
     expect(startBodies).toHaveLength(1);
@@ -2073,22 +2090,15 @@ describe('Factory Board — investigate flow', () => {
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
     expect(captured.skillInvocations).toHaveLength(0);
     expect(captured.messages[0]!.message).toContain('Implement a fix for GitHub issue #12');
-    expect(state.posts).toMatchObject([
-      {
-        source: 'github-issue',
-        sourceKey: 'github-issue:12',
-        stages: ['intake'],
-      },
-    ]);
-    expect(state.patches).toEqual(expect.arrayContaining([{ id: 'wi-post-1', stages: ['execute'] }]));
-    expect(captured.starts).toMatchObject([{ workItem: { id: 'wi-post-1', role: 'work' } }]);
+    expect(state.posts).toEqual([]);
+    expect(captured.starts).toMatchObject([{ destinationStage: 'execute', workItem: { role: 'work' } }]);
   });
 
-  it('given work-item persistence failure, when Investigate is clicked, then no kickoff is bound or dispatched', async () => {
+  it('given server start coordination failure, when Investigate is clicked, then no kickoff is accepted', async () => {
     useBoardHandlers({ issues });
     const captured = useFactoryRunHandlers('factory-issue-12');
     server.use(
-      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/work-items`, () =>
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/runs/start`, () =>
         HttpResponse.json({ error: 'board persistence failed' }, { status: 500 }),
       ),
     );
@@ -2132,17 +2142,8 @@ describe('Factory Board — investigate flow', () => {
       },
     ]);
     expect(JSON.stringify(captured.skillInvocations)).not.toContain('Add factory pages');
-    await waitFor(() =>
-      expect(state.posts).toMatchObject([
-        {
-          source: 'github-pr',
-          sourceKey: 'github-pr:34',
-          stages: ['intake'],
-        },
-      ]),
-    );
-    expect(state.patches).toEqual(expect.arrayContaining([{ id: 'wi-post-1', stages: ['review'] }]));
-    expect(captured.starts).toMatchObject([{ workItem: { id: 'wi-post-1', role: 'review' } }]);
+    expect(state.posts).toEqual([]);
+    expect(captured.starts).toMatchObject([{ destinationStage: 'review', workItem: { role: 'review' } }]);
   });
 
   it('given a Linear candidate, when Investigate is clicked, then the prompt mentions the linear_get_issue tool', async () => {
@@ -2231,9 +2232,8 @@ describe('Factory Board — investigate flow', () => {
       arguments: expect.stringContaining('GitHub issue #12 (https://github.com/mastra-ai/mastra/issues/12)'),
     });
     expect(JSON.stringify(captured.skillInvocations)).not.toContain('Fix flaky test');
-    await waitFor(() => expect(state.patches).toHaveLength(1));
-    expect(state.patches).toMatchObject([{ id: 'wi-1', stages: ['planning'] }]);
-    expect(captured.starts).toMatchObject([{ workItem: { id: 'wi-1', role: 'plan' } }]);
+    expect(state.patches).toEqual([]);
+    expect(captured.starts).toMatchObject([{ destinationStage: 'planning', workItem: { id: 'wi-1', role: 'plan' } }]);
   });
 
   it('given a card with a legacy plan ref, when Build is chosen, then only the exact work role is bound server-side', async () => {
@@ -2268,7 +2268,7 @@ describe('Factory Board — investigate flow', () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
-    await waitFor(() => expect(state.patches).toMatchObject([{ id: 'wi-1', stages: ['execute'] }]));
+    expect(captured.starts).toMatchObject([{ destinationStage: 'execute', workItem: { id: 'wi-1' } }]);
     expect(captured.starts).toMatchObject([{ workItem: { id: 'wi-1', role: 'work' } }]);
   });
 
@@ -2426,17 +2426,10 @@ describe('Factory Board — open session from the card title', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
     expect(captured.messages).toEqual([]);
-    expect(state.posts).toMatchObject([
-      {
-        source: 'github-issue',
-        sourceKey: 'github-issue:12',
-        title: 'Fix flaky test',
-        url: 'https://github.com/mastra-ai/mastra/issues/12',
-        stages: ['intake'],
-        metadata: { number: 12 },
-      },
+    expect(state.posts).toEqual([]);
+    expect(captured.starts).toMatchObject([
+      { destinationStage: 'intake', workItem: { role: 'chat' }, kickoffMessage: null },
     ]);
-    expect(captured.starts).toMatchObject([{ workItem: { id: 'wi-post-1', role: 'chat' }, kickoffMessage: null }]);
   });
 
   it('given a manual card without run metadata, when the title is clicked, then the session opens on an id-derived branch', async () => {

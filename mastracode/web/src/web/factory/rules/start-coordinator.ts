@@ -3,6 +3,8 @@ import type { MastraCodeState } from '@mastra/code-sdk/schema';
 
 import type { CreateWorkItemInput, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import { getFactoryStorage } from '../../runtime-config.js';
+import type { FactoryRuleStage, FactoryTransitionResult } from './types.js';
+import type { FactoryTransitionService } from './transition-service.js';
 
 const MAX_KICKOFF_ERROR_LENGTH = 512;
 
@@ -17,11 +19,22 @@ export interface FactoryStartRequest {
   threadTags?: Record<string, string>;
   kickoffKey: string;
   kickoffMessage: string | null;
+  destinationStage: FactoryRuleStage;
   workItem: {
     id?: string;
     role: string;
     input: CreateWorkItemInput;
   };
+}
+
+export class FactoryStartTransitionError extends Error {
+  readonly result: Extract<FactoryTransitionResult, { status: 'rejected' }>;
+
+  constructor(result: Extract<FactoryTransitionResult, { status: 'rejected' }>) {
+    super(result.reason);
+    this.name = 'FactoryStartTransitionError';
+    this.result = result;
+  }
 }
 
 export interface FactoryStartPreparedResult {
@@ -77,10 +90,16 @@ async function resolveThread(session: ScopedSession, request: FactoryStartReques
 export class FactoryStartCoordinator {
   readonly #controller: FactoryController;
   readonly #storage?: WorkItemsStorage;
+  readonly #transitionService?: Pick<FactoryTransitionService, 'transition'>;
 
-  constructor(controller: FactoryController, storage?: WorkItemsStorage) {
+  constructor(
+    controller: FactoryController,
+    storage?: WorkItemsStorage,
+    transitionService?: Pick<FactoryTransitionService, 'transition'>,
+  ) {
     this.#controller = controller;
     this.#storage = storage;
+    this.#transitionService = transitionService;
   }
 
   async prepare(request: FactoryStartRequest): Promise<FactoryStartPreparedResult> {
@@ -98,6 +117,27 @@ export class FactoryStartCoordinator {
       kickoffKey: request.kickoffKey,
       kickoffMessage: request.kickoffMessage,
     });
+
+    let revision = prepared.item.revision;
+    if (prepared.item.stages.length !== 1 || prepared.item.stages[0] !== request.destinationStage) {
+      if (!this.#transitionService) throw new Error('Factory transition service is unavailable.');
+      const transition = await this.#transitionService.transition({
+        orgId: request.orgId,
+        factoryProjectId: request.factoryProjectId,
+        workItemId: prepared.item.id,
+        board: prepared.item.externalSource?.type === 'pull-request' ? 'review' : 'work',
+        stage: request.destinationStage,
+        expectedRevision: prepared.item.revision,
+        actor: { type: 'human', id: request.userId },
+        ingress: { type: 'human', identity: `start:${request.kickoffKey}:transition` },
+        cause: 'run_start',
+      });
+      if (transition.status === 'rejected') {
+        await storage.markPendingStart(prepared.binding.id, 'failed', transition.reason);
+        throw new FactoryStartTransitionError(transition);
+      }
+      revision = transition.revision;
+    }
 
     if (request.kickoffMessage === null) {
       await storage.markPendingStart(prepared.binding.id, 'sent');
@@ -121,7 +161,7 @@ export class FactoryStartCoordinator {
       resourceId: request.resourceId,
       projectPath: request.projectPath,
       branch: request.branch,
-      revision: prepared.item.revision,
+      revision,
       kickoffStatus: prepared.pendingStart.status,
       replayed: prepared.replayed,
     };

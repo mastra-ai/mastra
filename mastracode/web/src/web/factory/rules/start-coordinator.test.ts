@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { seedFactoryStorageForTests } from '../../storage/test-utils';
+import { defaultFactoryRules } from './defaults';
 import { FactoryStartCoordinator } from './start-coordinator';
+import { FactoryTransitionService } from './transition-service';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 
@@ -46,6 +48,7 @@ function startRequest(
     threadTags: { role: overrides.role ?? 'work' },
     kickoffKey: overrides.kickoffKey ?? 'kickoff-1',
     kickoffMessage: overrides.kickoffMessage === undefined ? 'Start work' : overrides.kickoffMessage,
+    destinationStage: 'intake' as const,
     workItem: {
       id: overrides.id,
       role: overrides.role ?? 'work',
@@ -110,6 +113,37 @@ describe('FactoryStartCoordinator', () => {
     });
   });
 
+  it('binds before requesting the governed run-stage transition', async () => {
+    const storage = (await seedFactoryStorageForTests()).workItems;
+    let bindingsDuringRule = 0;
+    const transitionService = new FactoryTransitionService({
+      storage,
+      rules: defaultFactoryRules({
+        version: 'rules-v1',
+        overrides: {
+          work: {
+            execute: {
+              issue: {
+                onEnter: async () => {
+                  bindingsDuringRule = (await storage.listRunBindings('org-1', PROJECT_ID)).length;
+                },
+              },
+            },
+          },
+        },
+      }),
+    });
+    const { controller, sendMessage } = makeController();
+    const coordinator = new FactoryStartCoordinator(controller as never, storage, transitionService);
+
+    const prepared = await coordinator.prepare({ ...startRequest(), destinationStage: 'execute' });
+
+    expect(prepared.revision).toBe(2);
+    expect((await storage.get({ orgId: 'org-1', id: prepared.workItemId }))?.stages).toEqual(['execute']);
+    expect(bindingsDuringRule).toBe(1);
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+  });
+
   it('reuses the newest server-resolved tagged thread instead of creating one in the browser', async () => {
     const storage = (await seedFactoryStorageForTests()).workItems;
     const { controller, session } = makeController(
@@ -126,6 +160,29 @@ describe('FactoryStartCoordinator', () => {
     expect(prepared.threadId).toBe('thread-new');
     expect(session.thread.switch).toHaveBeenCalledWith({ threadId: 'thread-new' });
     expect(session.thread.create).not.toHaveBeenCalled();
+  });
+
+  it('keeps the bound pending start recoverable and sends nothing when the governed transition rejects', async () => {
+    const storage = (await seedFactoryStorageForTests()).workItems;
+    const transitionService = new FactoryTransitionService({
+      storage,
+      rules: defaultFactoryRules({
+        version: 'rules-v1',
+        overrides: {
+          work: { execute: { issue: { onEnter: () => ({ type: 'reject', code: 'forbidden', reason: 'Blocked' }) } } },
+        },
+      }),
+    });
+    const { controller, sendMessage } = makeController();
+    const coordinator = new FactoryStartCoordinator(controller as never, storage, transitionService);
+
+    await expect(coordinator.prepare({ ...startRequest(), destinationStage: 'execute' })).rejects.toMatchObject({
+      result: { status: 'rejected', code: 'forbidden' },
+    });
+
+    expect(sendMessage).not.toHaveBeenCalled();
+    expect(await storage.listRunBindings('org-1', PROJECT_ID)).toHaveLength(1);
+    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'failed' });
   });
 
   it('never sends a kickoff when the binding transaction fails', async () => {
