@@ -523,6 +523,25 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           runId: runId,
         });
 
+        // The nested workflow needs its OWN resume target (which inner step to
+        // resume and at what path). Normally that comes from the remaining
+        // `resume.steps` (a multi-level id path) and the parent snapshot. But
+        // when the parent only knows the nested workflow's id — `resume.steps`
+        // has a single entry, so `slice(1)` is empty and `steps[1]` is
+        // undefined — we must fall back to the nested snapshot's own
+        // `suspendedPaths`. Without this the nested workflow re-runs from
+        // scratch, the suspended tool never receives `resumeData`, and its
+        // memoized suspended step-update collides on replay. See issue #19699.
+        let nestedSteps = resume.steps.slice(1);
+        let nestedResumePath = resume.steps?.[1] ? (snapshot?.suspendedPaths?.[resume.steps?.[1]] as any) : undefined;
+        if (nestedSteps.length === 0 && snapshot?.status === 'suspended' && snapshot?.suspendedPaths) {
+          const nestedSuspendedStepIds = Object.keys(snapshot.suspendedPaths);
+          if (nestedSuspendedStepIds.length > 0) {
+            nestedSteps = nestedSuspendedStepIds;
+            nestedResumePath = snapshot.suspendedPaths[nestedSuspendedStepIds[0]!] as any;
+          }
+        }
+
         const invokeResp = (await this.inngestStep.invoke(`workflow.${executionContext.workflowId}.step.${step.id}`, {
           function: step.getFunction(),
           data: {
@@ -532,10 +551,10 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             runId: runId,
             resume: {
               runId: runId,
-              steps: resume.steps.slice(1),
+              steps: nestedSteps,
               stepResults: snapshot?.context as any,
               resumePayload: resume.resumePayload,
-              resumePath: resume.steps?.[1] ? (snapshot?.suspendedPaths?.[resume.steps?.[1]] as any) : undefined,
+              resumePath: nestedResumePath,
             },
             outputOptions: { includeState: true },
             perStep,

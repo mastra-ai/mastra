@@ -763,6 +763,15 @@ export async function executeEntry(
     execResults = { ...execResults, status: 'canceled' };
   }
 
+  // On resume, this invocation replays the pre-suspend step log and then
+  // re-emits the terminal `...path.[N].stepUpdate` for the step that was
+  // suspended. In durable engines (Inngest) that operation ID collides with
+  // the memoized suspended write of the same path, tripping
+  // AUTOMATIC_PARALLEL_INDEXING and dropping the resume payload. Tag the
+  // resumed lineage's terminal persist with a `resume` phase so it gets a
+  // distinct operation ID and the resume propagates. See issue #19699.
+  const resumePhase = resume?.steps?.length ? 'resume' : undefined;
+
   await engine.persistStepUpdate({
     workflowId,
     runId,
@@ -772,6 +781,7 @@ export async function executeEntry(
     executionContext,
     workflowStatus: execResults.status === 'success' ? 'running' : execResults.status,
     requestContext,
+    phase: resumePhase,
   });
 
   if (execResults.status === 'canceled') {
