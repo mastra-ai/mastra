@@ -1,7 +1,7 @@
 import { describe, expectTypeOf, it } from 'vitest';
 import { z } from 'zod/v4';
 import type { RequestContext } from '../request-context';
-import { createTool } from './tool';
+import { createTool, Tool } from './tool';
 
 /**
  * Type tests to verify requestContextSchema properly types the execute function's context
@@ -106,6 +106,31 @@ describe('requestContextSchema type inference', () => {
 
         const userId = context.requestContext.get('userId');
         expectTypeOf(userId).toEqualTypeOf<string>();
+
+        return { success: true };
+      },
+    });
+  });
+
+  it('should type requestContext in execute when constructed via new Tool()', () => {
+    new Tool({
+      id: 'typed-class-tool',
+      description: 'A tool constructed directly with a typed request context',
+      requestContextSchema: z.object({
+        userId: z.string(),
+        apiKey: z.string(),
+      }),
+      execute: async (input, context) => {
+        expectTypeOf(context.requestContext).toEqualTypeOf<RequestContext<{ userId: string; apiKey: string }>>();
+
+        const userId = context.requestContext.get('userId');
+        expectTypeOf(userId).toEqualTypeOf<string>();
+
+        const all = context.requestContext.all;
+        expectTypeOf(all).toEqualTypeOf<{ userId: string; apiKey: string }>();
+
+        // @ts-expect-error - key does not exist in the request context schema
+        context.requestContext.get('nonexistentKey');
 
         return { success: true };
       },

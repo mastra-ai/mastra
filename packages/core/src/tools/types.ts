@@ -593,7 +593,10 @@ export interface ToolExecutionContext<
  * `requestContext` (an empty one is created if the caller passed none), so it
  * is non-optional here — like `observe`. No null-checking needed.
  */
-export type ToolExecuteContext<TContext, TRequestContext extends Record<string, any> | unknown = unknown> = TContext & {
+export type ToolExecuteContext<TContext, TRequestContext extends Record<string, any> | unknown = unknown> = Omit<
+  TContext,
+  'requestContext'
+> & {
   requestContext: RequestContext<TRequestContext>;
 };
 
