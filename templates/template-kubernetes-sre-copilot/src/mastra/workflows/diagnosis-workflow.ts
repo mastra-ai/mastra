@@ -148,14 +148,27 @@ const diagnoseOomKilled = createStep({
   },
 });
 
+/** Escapes regex metacharacters so a plain string can be safely embedded in a `new RegExp(...)`. */
+function escapeRegExp(literal: string): string {
+  return literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 /**
  * Pulls a scalar field's value out of MCP tool output text, tolerant of both YAML
  * (`field: value`, no quotes — what kubernetes-mcp-server actually returns by default) and JSON
  * (`"field": "value"`) formatting. A regex that only matched JSON-quoted syntax silently found
  * nothing against real YAML output — this is the fix for that.
+ *
+ * `field` is always a hardcoded literal at every call site today (`'claimName'`,
+ * `'storageClassName'`) — but it's still escaped before being embedded in the `RegExp`
+ * constructor rather than trusted implicitly. Constructing a regex from an unescaped, unvalidated
+ * string is the kind of pattern that's safe until someone routes user/LLM-controlled input through
+ * it in a later change; escaping now means that future change can't silently turn this into a
+ * ReDoS or regex-injection vector.
  */
 function extractField(text: string, field: string): string[] {
-  const pattern = new RegExp(`${field}"?\\s*:\\s*"?([\\w.-]+)"?`, 'g');
+  const safeField = escapeRegExp(field);
+  const pattern = new RegExp(`${safeField}"?\\s*:\\s*"?([\\w.-]+)"?`, 'g');
   return Array.from(text.matchAll(pattern)).map(m => m[1]);
 }
 

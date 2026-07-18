@@ -10,6 +10,14 @@ import { Agent } from '@mastra/core/agent';
  * - The "classify cause" step reads its diagnostic checklist from the matching workspace
  *   SKILL.md file and passes it into the prompt below — swap the SKILL.md, not this file, to
  *   change how a given failure type gets diagnosed.
+ *
+ * Security note: pod logs and Kubernetes event messages are attacker-influenceable — anyone with
+ * permission to create Pods/Events in the cluster controls that text, and it flows into this
+ * agent's prompt as evidence. Having no tools registered is the actual mitigation for that, not
+ * an incidental design choice: a successful prompt injection via poisoned log/event text can at
+ * worst distort this agent's own text output (a misleading rootCause/suggestedFix string), never
+ * escalate to an action, because there's nothing here for it to call. Don't add tools to this
+ * agent without re-reviewing this threat model.
  */
 export const workflowDiagnosisAgent = new Agent({
   id: 'workflow-diagnosis-agent',

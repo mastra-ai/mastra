@@ -34,6 +34,14 @@ export type ActionType = 'read' | 'write';
  * A tool name is classified as a write if it doesn't look like one of the known-safe read verbs.
  * This is intentionally conservative: unknown tool names default to "write" and get rejected,
  * rather than silently allowed through.
+ *
+ * This substring `includes()` check is deliberately loose and is NOT itself a security boundary —
+ * `enforceReadOnly` below only allows a call through when this AND an exact-equality allowlist
+ * check both pass (`action === 'read' && isAllowlisted`). A tool name could theoretically contain
+ * "list" as a substring without being a real read tool, but it would still be rejected unless it
+ * exactly matches one of the small, explicit set of qualified names in the allowlist. Don't loosen
+ * the allowlist check into a substring/prefix/suffix match to "simplify" this function — that's
+ * exactly the mistake this module was fixed for once already (see `../mcp/k8s-mcp-client.ts`).
  */
 const READ_VERBS = ['list', 'get', 'log', 'logs', 'top', 'view', 'describe', 'stats', 'contexts'];
 
@@ -61,10 +69,17 @@ function logAttempt(toolName: string, action: ActionType, allowed: boolean) {
 }
 
 /**
- * Wraps a set of MCP tools so every execution is checked against `allowedNames` (an explicit
- * read-only allowlist — see READ_ONLY_TOOL_NAMES in ../mcp/k8s-mcp-client.ts) and against
+ * Wraps a set of MCP tools so every execution is checked against `allowedNames` and against
  * `classifyAction`. Both checks must pass, or the call is rejected before the underlying tool
  * ever runs. Every attempt, allowed or rejected, is recorded in `policyLog`.
+ *
+ * `allowedNames` must be the exact, fully-qualified tool names (e.g. `"kubernetes_pods_get"`,
+ * as returned by `MCPClient.listTools()` — see `qualifiedAllowlist` in `../mcp/tools.ts`), and
+ * the match below is exact equality only. This was previously an `endsWith` suffix check, which
+ * is a real vulnerability: `"kubernetes_malicious_pods_list".endsWith("pods_list")` is true, so a
+ * compromised or misconfigured MCP server could register a tool under a name crafted to pass the
+ * allowlist while not actually being the allowlisted tool. Exact equality closes that off —
+ * nothing but the precise qualified name this template expects is ever treated as allowlisted.
  */
 export function enforceReadOnly<T extends Record<string, Tool<any, any, any, any>>>(
   tools: T,
@@ -74,7 +89,7 @@ export function enforceReadOnly<T extends Record<string, Tool<any, any, any, any
 
   for (const [key, tool] of Object.entries(tools)) {
     const action = classifyAction(key);
-    const isAllowlisted = allowedNames.some(name => key === name || key.endsWith(`_${name}`) || key.endsWith(name));
+    const isAllowlisted = allowedNames.includes(key);
 
     const originalExecute = tool.execute?.bind(tool);
 

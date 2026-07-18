@@ -88,8 +88,9 @@ npm run dev
 ```
 
 Open [http://localhost:4111](http://localhost:4111) to access Mastra Studio. On first run, the
-server launches `kubernetes-mcp-server` via `npx -y kubernetes-mcp-server@latest --read-only`
-automatically — no separate install step.
+server launches `kubernetes-mcp-server` (installed as a pinned dependency by `npm install` above,
+via `npx kubernetes-mcp-server --read-only`) automatically — no separate install step, and no
+unpinned network fetch on every dev start.
 
 ## Usage
 

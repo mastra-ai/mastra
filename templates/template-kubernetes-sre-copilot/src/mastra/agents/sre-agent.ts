@@ -3,6 +3,17 @@ import { Memory } from '@mastra/memory';
 import { z } from 'zod';
 import { readOnlyTools } from '../mcp/tools';
 
+/**
+ * Security note: pod logs, event messages, and other cluster-sourced text this agent reads via
+ * `readOnlyTools` are attacker-influenceable — anyone with permission to create Pods/Events in
+ * the cluster controls that content, and it flows back into this agent's context on every tool
+ * call. The read-only architecture (see `readOnlyTools` / `../lib/policy.ts`) is what actually
+ * bounds a successful prompt injection here: at worst it can induce additional *read* calls
+ * (there is nothing else registered to call), never a write/restart/scale/delete, because no such
+ * tool exists in this process to invoke regardless of what the model is told to do. Don't treat
+ * "the model would refuse" as the safety boundary — the safety boundary is that the capability
+ * isn't there.
+ */
 export const sreAgent = new Agent({
   id: 'kubernetes-sre-agent',
   name: 'Kubernetes SRE Copilot',
