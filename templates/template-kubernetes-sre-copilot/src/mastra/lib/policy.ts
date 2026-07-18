@@ -1,0 +1,98 @@
+import type { Tool } from '@mastra/core/tools';
+
+/**
+ * Safety/policy gate.
+ *
+ * v1 has no write tools registered anywhere in this template — there is nothing for this module
+ * to "allow." It exists anyway, built and tested now, so that v2's write capability (Phase 4 in
+ * the README roadmap: scale/restart behind mandatory human approval) slots into an existing gate
+ * instead of getting bolted on under time pressure later.
+ *
+ * Every tool call this agent makes flows through `enforceReadOnly` before it reaches the MCP
+ * server:
+ *
+ *   tool call -> classifyAction -> reject anything that isn't a read -> log the attempt
+ *
+ * This is deliberately redundant with `kubernetes-mcp-server --read-only` at the transport layer
+ * (see ../mcp/k8s-mcp-client.ts). Defense in depth: if the MCP server were ever misconfigured
+ * without `--read-only`, this gate still blocks the call before it leaves the process.
+ */
+
+export class PolicyViolationError extends Error {
+  constructor(
+    public readonly toolName: string,
+    public readonly action: ActionType,
+  ) {
+    super(`Policy denied "${toolName}" (classified as "${action}"). v1 permits read-only actions only.`);
+    this.name = 'PolicyViolationError';
+  }
+}
+
+export type ActionType = 'read' | 'write';
+
+/**
+ * A tool name is classified as a write if it doesn't look like one of the known-safe read verbs.
+ * This is intentionally conservative: unknown tool names default to "write" and get rejected,
+ * rather than silently allowed through.
+ */
+const READ_VERBS = ['list', 'get', 'log', 'logs', 'top', 'view', 'describe', 'stats', 'contexts'];
+
+export function classifyAction(toolName: string): ActionType {
+  const normalized = toolName.toLowerCase();
+  return READ_VERBS.some(verb => normalized.includes(verb)) ? 'read' : 'write';
+}
+
+export interface PolicyLogEntry {
+  timestamp: string;
+  toolName: string;
+  action: ActionType;
+  allowed: boolean;
+}
+
+/** In-memory log of every policy decision made this process. Exposed for the agent/UI to inspect. */
+export const policyLog: PolicyLogEntry[] = [];
+
+function logAttempt(toolName: string, action: ActionType, allowed: boolean) {
+  const entry: PolicyLogEntry = { timestamp: new Date().toISOString(), toolName, action, allowed };
+  policyLog.push(entry);
+  if (!allowed) {
+    console.warn(`[policy] rejected non-read tool call: ${toolName}`);
+  }
+}
+
+/**
+ * Wraps a set of MCP tools so every execution is checked against `allowedNames` (an explicit
+ * read-only allowlist — see READ_ONLY_TOOL_NAMES in ../mcp/k8s-mcp-client.ts) and against
+ * `classifyAction`. Both checks must pass, or the call is rejected before the underlying tool
+ * ever runs. Every attempt, allowed or rejected, is recorded in `policyLog`.
+ */
+export function enforceReadOnly<T extends Record<string, Tool<any, any, any, any>>>(
+  tools: T,
+  allowedNames: readonly string[],
+): T {
+  const guarded = {} as T;
+
+  for (const [key, tool] of Object.entries(tools)) {
+    const action = classifyAction(key);
+    const isAllowlisted = allowedNames.some(name => key === name || key.endsWith(`_${name}`) || key.endsWith(name));
+
+    const originalExecute = tool.execute?.bind(tool);
+
+    (guarded as Record<string, Tool<any, any, any, any>>)[key] = Object.assign(Object.create(Object.getPrototypeOf(tool)), tool, {
+      execute: async (inputData: unknown, context: unknown) => {
+        const allowed = action === 'read' && isAllowlisted;
+        logAttempt(key, action, allowed);
+
+        if (!allowed) {
+          throw new PolicyViolationError(key, action);
+        }
+        if (!originalExecute) {
+          throw new Error(`Tool "${key}" has no execute function.`);
+        }
+        return originalExecute(inputData as never, context as never);
+      },
+    });
+  }
+
+  return guarded;
+}
