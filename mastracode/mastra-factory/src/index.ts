@@ -18,7 +18,7 @@ program
   .description('Create a Mastra Software Factory project')
   .version(pkg.version, '-v, --version')
   .argument('[project-name]', 'Directory name of the project')
-  .option('--default', 'Non-interactive: default name, init git')
+  .option('--default', 'Non-interactive: default name')
   .option('--template-ref <ref>', 'Pin a template repo tag/branch')
   .option('--template-dir <dir>', 'Use a local template directory instead of cloning (development)')
   .option('-t, --timeout [ms]', 'Timeout for dependency installation in ms')

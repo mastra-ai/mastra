@@ -6,14 +6,14 @@ Scaffolding CLI for the **Mastra Software Factory** — an open-source, agent-po
 npx mastra-factory
 ```
 
-The CLI is intentionally minimal: it asks for a project name, clones the [softwarefactory-template](https://github.com/mastra-ai/softwarefactory-template), installs dependencies, and offers to initialize git. That's it — run `npm run dev` and finish setup (model providers, integrations, database) from the web UI on first load. An "auth with the Mastra platform" step is planned as a follow-up.
+The CLI is intentionally minimal: it asks for a project name, clones the [softwarefactory-template](https://github.com/mastra-ai/softwarefactory-template), installs dependencies, and initializes git. That's it — run `npm run dev` and finish setup (model providers, integrations, database) from the web UI on first load. An "auth with the Mastra platform" step is planned as a follow-up.
 
 ## Flags
 
 ```text
 npx mastra-factory [project-name] -- [options]
 
-    --default              Non-interactive: default name, init git
+    --default              Non-interactive: default name
     --template-ref <ref>   Pin a template repo tag/branch
     --template-dir <dir>   Use a local template directory (development)
 -t, --timeout [ms]         Timeout for dependency installation

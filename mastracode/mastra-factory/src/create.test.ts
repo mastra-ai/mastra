@@ -9,7 +9,6 @@ const clack = vi.hoisted(() => ({
   note: vi.fn(),
   cancel: vi.fn(),
   text: vi.fn(),
-  confirm: vi.fn(),
   password: vi.fn(),
   select: vi.fn(),
   isCancel: (value: unknown) => value === Symbol.for('clack.cancel'),
@@ -96,7 +95,7 @@ describe('create --default', () => {
       }),
     );
 
-    // Git repo initialized (auto-yes under --default).
+    // Git repo always initialized.
     expect(exec.runInherit).toHaveBeenCalledWith('git', ['init', '-q'], expect.objectContaining({ cwd: projectPath }));
 
     // Success outro shown.

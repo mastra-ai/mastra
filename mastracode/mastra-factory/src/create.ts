@@ -84,20 +84,14 @@ export async function create(args: CreateArgs): Promise<void> {
   }
 
   // ── Git init ─────────────────────────────────────────────────────────────
-  let initGit: boolean | symbol = true;
-  if (!args.useDefaults) {
-    initGit = await p.confirm({ message: 'Initialize a git repository?', initialValue: true });
-  }
-  if (!p.isCancel(initGit) && initGit) {
-    try {
-      await runInherit('git', ['init', '-q'], { cwd: projectPath });
-      await runInherit('git', ['add', '-A'], { cwd: projectPath });
-      await runInherit('git', ['commit', '-q', '-m', 'Initial commit from mastra-factory'], {
-        cwd: projectPath,
-      });
-    } catch {
-      p.log.warn('git init failed — you can initialize the repository yourself later.');
-    }
+  try {
+    await runInherit('git', ['init', '-q'], { cwd: projectPath });
+    await runInherit('git', ['add', '-A'], { cwd: projectPath });
+    await runInherit('git', ['commit', '-q', '-m', 'Initial commit from mastra-factory'], {
+      cwd: projectPath,
+    });
+  } catch {
+    p.log.warn('git init failed — you can initialize the repository yourself later.');
   }
 
   args.analytics.trackEvent('sf_create_completed', {
