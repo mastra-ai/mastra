@@ -366,10 +366,7 @@ export class CoreToolBuilder extends MastraBase {
     return schema;
   };
 
-  /**
-   * Schema used at execute time. Must match the compat-transformed parameters the
-   * LLM saw — not the author's original constraints stripped for provider compat.
-   */
+  /** Execute-time schema — must match compat-transformed LLM parameters, not the author's original constraints. */
   private buildInputValidationSchema(
     originalSchema: unknown,
     schemaCompatLayers: SchemaCompatLayer[],
@@ -383,9 +380,7 @@ export class CoreToolBuilder extends MastraBase {
       schema = schema();
     }
 
-    // Zod v4 implements StandardSchemaWithJSON natively — prefer the Zod compat
-    // path (processZodType) so provider layers like Anthropic Haiku strip
-    // string min/max the same way applyCompatLayer does for LLM parameters.
+    // Zod v4 is Standard Schema too — use processZodType so Haiku string min/max match LLM parameters.
     if (isZodType(schema)) {
       for (const compat of schemaCompatLayers) {
         if (compat.shouldApply()) {
@@ -858,7 +853,6 @@ export class CoreToolBuilder extends MastraBase {
         // and returns early without using the input args.
         const isResuming = !!execOptions?.resumeData;
 
-        // Validate against the same compat-transformed schema the LLM received.
         const parameters = inputValidationSchema ?? this.getParameters();
         let inputValidatedByBuilder = isResuming;
         if (!isResuming) {

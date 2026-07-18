@@ -8,7 +8,7 @@ import { createTool } from '../../tools';
 import { Agent } from '../agent';
 
 const HAIKU_MODEL_ID = 'claude-3.5-haiku-20241022';
-const SHORT_TEXT = 'Short text'; // 10 chars — below author min(20), valid for Haiku LLM schema
+const SHORT_TEXT = 'Short text';
 
 function createHaikuMockModel({ toolName, toolInput }: { toolName: string; toolInput: Record<string, unknown> }) {
   let callCount = 0;
@@ -79,7 +79,7 @@ function createShortTextTool(execute = vi.fn(async ({ text }: { text: string }) 
   });
 }
 
-describe('Agent Haiku schema-compat tool validation (GitHub schema-compat validation fix)', () => {
+describe('Agent Haiku schema-compat tool validation', () => {
   it('convertTools strips minLength for Haiku and execute accepts LLM-sized input', async () => {
     const execute = vi.fn(async ({ text }: { text: string }) => ({ success: true, text }));
     const shortTextTool = createShortTextTool(execute);
