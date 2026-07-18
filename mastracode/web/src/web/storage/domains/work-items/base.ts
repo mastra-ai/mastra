@@ -8,10 +8,27 @@
  * Factory transition path keeps one exclusive current stage per item.
  */
 
+import { createHash } from 'node:crypto';
+
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
 
 export type WorkItemStage = string;
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, entry]) => `${JSON.stringify(key)}:${stableJson(entry)}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'null';
+}
+
+export function factoryDecisionHash(decision: Record<string, unknown>): string {
+  return createHash('sha256').update(stableJson(decision)).digest('hex');
+}
 
 export interface ExternalWorkItemSource {
   integrationId: string;
@@ -45,6 +62,24 @@ export interface FactoryRuleIngressRecord {
   createdAt: Date;
 }
 
+export interface CommitFactoryRuleEvaluationInput {
+  orgId: string;
+  factoryProjectId: string;
+  workItemId: string;
+  ingress: { identity: string; triggerType: string };
+  ruleSetVersion: string;
+  expectedRevision: number;
+  outcome: { status: 'accepted' | 'rejected'; code?: string; reason?: string };
+  decisions: Record<string, unknown>[];
+  causalChain: Array<{ ingressId: string; decisionType: string }>;
+  now: Date;
+}
+
+export type CommitFactoryRuleEvaluationResult =
+  | { status: 'committed'; result: Record<string, unknown> }
+  | { status: 'replayed'; result: Record<string, unknown> }
+  | { status: 'missing' };
+
 export interface FactoryRuleEvaluationRecord {
   id: string;
   ingressId: string;
@@ -57,6 +92,8 @@ export interface FactoryRuleEvaluationRecord {
   createdAt: Date;
 }
 
+export type FactoryDispatchStatus = 'pending' | 'leased' | 'retry' | 'succeeded' | 'failed';
+
 export interface FactoryDeferredDecisionRecord {
   id: string;
   orgId: string;
@@ -64,9 +101,37 @@ export interface FactoryDeferredDecisionRecord {
   evaluationId: string;
   workItemId: string;
   idempotencyKey: string;
+  effectOrdinal: number;
+  effectHash: string;
+  causalChain: Array<{ ingressId: string; decisionType: string }>;
   decision: Record<string, unknown>;
-  status: 'pending';
+  status: FactoryDispatchStatus;
+  attempts: number;
+  availableAt: Date;
+  leaseOwner: string | null;
+  leaseExpiresAt: Date | null;
+  lastError: string | null;
+  completedAt: Date | null;
   createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface FactoryRunBindingSessionAddress {
+  factoryProjectId: string;
+  threadId: string;
+  resourceId: string;
+  projectPath: string;
+}
+
+export interface FactoryRunBindingAddress extends FactoryRunBindingSessionAddress {
+  orgId: string;
+}
+
+export interface RevokeFactoryRunBindingInput {
+  orgId: string;
+  factoryProjectId: string;
+  bindingId: string;
+  revokedAt: Date;
 }
 
 export interface FactoryRunBindingRecord {
@@ -91,10 +156,36 @@ export interface FactoryPendingStartRecord {
   bindingId: string;
   kickoffKey: string;
   message: string | null;
-  status: 'pending' | 'sent' | 'failed';
+  status: 'pending' | 'leased' | 'retry' | 'sent' | 'failed';
+  attempts: number;
+  availableAt: Date;
+  leaseOwner: string | null;
+  leaseExpiresAt: Date | null;
   lastError: string | null;
+  completedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface FactoryLeaseClaimInput {
+  ownerId: string;
+  now: Date;
+  leaseExpiresAt: Date;
+  limit: number;
+}
+
+export interface FactoryLeaseIdentity {
+  id: string;
+  orgId: string;
+  factoryProjectId: string;
+  ownerId: string;
+}
+
+export interface FactoryDispatchFailureInput extends FactoryLeaseIdentity {
+  now: Date;
+  availableAt: Date;
+  lastError: string;
+  terminal: boolean;
 }
 
 export interface CommitFactoryTransitionInput {
@@ -106,6 +197,7 @@ export interface CommitFactoryTransitionInput {
   actorId: string;
   ingress: { identity: string; triggerType: string; transitionId: string };
   ruleSetVersion: string;
+  causalChain: Array<{ ingressId: string; decisionType: string }>;
   evaluation:
     | { outcome: 'accepted'; decisions: Record<string, unknown>[] }
     | { outcome: 'rejected'; code: string; reason: string };
@@ -420,6 +512,7 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       outcome: { type: 'text' },
       code: { type: 'text', nullable: true },
       reason: { type: 'text', nullable: true },
+      causal_chain: { type: 'json' },
       created_at: { type: 'timestamp' },
     },
   },
@@ -432,9 +525,19 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       evaluation_id: { type: 'text' },
       work_item_id: { type: 'text' },
       idempotency_key: { type: 'text' },
+      effect_ordinal: { type: 'integer' },
+      effect_hash: { type: 'text' },
+      causal_chain: { type: 'json' },
       decision: { type: 'json' },
       status: { type: 'text' },
+      attempts: { type: 'integer' },
+      available_at: { type: 'timestamp' },
+      lease_owner: { type: 'text', nullable: true },
+      lease_expires_at: { type: 'timestamp', nullable: true },
+      last_error: { type: 'text', nullable: true },
+      completed_at: { type: 'timestamp', nullable: true },
       created_at: { type: 'timestamp' },
+      updated_at: { type: 'timestamp' },
     },
     uniqueIndexes: [
       {
@@ -470,7 +573,12 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       kickoff_key: { type: 'text' },
       message: { type: 'text', nullable: true },
       status: { type: 'text' },
+      attempts: { type: 'integer' },
+      available_at: { type: 'timestamp' },
+      lease_owner: { type: 'text', nullable: true },
+      lease_expires_at: { type: 'timestamp', nullable: true },
       last_error: { type: 'text', nullable: true },
+      completed_at: { type: 'timestamp', nullable: true },
       created_at: { type: 'timestamp' },
       updated_at: { type: 'timestamp' },
     },
@@ -515,9 +623,19 @@ function toDeferredDecision(row: GovernanceDbRow): FactoryDeferredDecisionRecord
     evaluationId: String(row.evaluation_id),
     workItemId: String(row.work_item_id),
     idempotencyKey: String(row.idempotency_key),
+    effectOrdinal: Number(row.effect_ordinal),
+    effectHash: String(row.effect_hash),
+    causalChain: (row.causal_chain as FactoryDeferredDecisionRecord['causalChain']) ?? [],
     decision: row.decision as Record<string, unknown>,
-    status: 'pending',
+    status: row.status as FactoryDispatchStatus,
+    attempts: Number(row.attempts),
+    availableAt: row.available_at as Date,
+    leaseOwner: (row.lease_owner as string | null) ?? null,
+    leaseExpiresAt: (row.lease_expires_at as Date | null) ?? null,
+    lastError: (row.last_error as string | null) ?? null,
+    completedAt: (row.completed_at as Date | null) ?? null,
     createdAt: row.created_at,
+    updatedAt: row.updated_at as Date,
   };
 }
 function toPendingStart(row: GovernanceDbRow): FactoryPendingStartRecord {
@@ -529,7 +647,12 @@ function toPendingStart(row: GovernanceDbRow): FactoryPendingStartRecord {
     kickoffKey: String(row.kickoff_key),
     message: (row.message as string | null) ?? null,
     status: row.status as FactoryPendingStartRecord['status'],
+    attempts: Number(row.attempts),
+    availableAt: row.available_at as Date,
+    leaseOwner: (row.lease_owner as string | null) ?? null,
+    leaseExpiresAt: (row.lease_expires_at as Date | null) ?? null,
     lastError: (row.last_error as string | null) ?? null,
+    completedAt: (row.completed_at as Date | null) ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at as Date,
   };
@@ -548,8 +671,24 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     await this.ops.deleteMany('work_items', {});
   }
 
+  #leaseQueue: Promise<void> = Promise.resolve();
+
   get #db(): FactoryStorageOps {
     return this.ops;
+  }
+
+  async #withLocalLeaseLock<T>(fn: () => Promise<T>): Promise<T> {
+    const prior = this.#leaseQueue;
+    let release!: () => void;
+    this.#leaseQueue = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    await prior;
+    try {
+      return await fn();
+    } finally {
+      release();
+    }
   }
 
   async #withProjectRelationLock<T>(orgId: string, factoryProjectId: string, fn: () => Promise<T>): Promise<T> {
@@ -559,6 +698,121 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     );
   }
 
+  async #claimLeases<T>(
+    table: 'factory_deferred_decisions' | 'factory_pending_starts',
+    input: FactoryLeaseClaimInput,
+    map: (row: GovernanceDbRow) => T,
+  ): Promise<T[]> {
+    const claim = () =>
+      this.storage.withTransaction(async ops => {
+        const candidates = await ops.findMany<GovernanceDbRow>(table, {}, { orderBy: [['created_at', 'asc']] });
+        const claimed: T[] = [];
+        for (const candidate of candidates) {
+          if (claimed.length >= input.limit) break;
+          const availableAt = new Date(candidate.available_at as Date | string).getTime();
+          const leaseExpiresAt = candidate.lease_expires_at
+            ? new Date(candidate.lease_expires_at as Date | string).getTime()
+            : 0;
+          const claimable =
+            (candidate.status === 'pending' || candidate.status === 'retry') && availableAt <= input.now.getTime();
+          const expired = candidate.status === 'leased' && leaseExpiresAt <= input.now.getTime();
+          if (!claimable && !expired) continue;
+          let didClaim = false;
+          const row = await ops.updateAtomic<GovernanceDbRow>(table, { id: candidate.id }, current => {
+            const currentAvailable = new Date(current.available_at as Date | string).getTime();
+            const currentExpiry = current.lease_expires_at
+              ? new Date(current.lease_expires_at as Date | string).getTime()
+              : 0;
+            const currentClaimable =
+              (current.status === 'pending' || current.status === 'retry') && currentAvailable <= input.now.getTime();
+            const currentExpired = current.status === 'leased' && currentExpiry <= input.now.getTime();
+            if (!currentClaimable && !currentExpired) return null;
+            didClaim = true;
+            return {
+              status: 'leased',
+              attempts: Number(current.attempts) + 1,
+              lease_owner: input.ownerId,
+              lease_expires_at: input.leaseExpiresAt,
+              updated_at: input.now,
+            };
+          });
+          if (didClaim && row) claimed.push(map(row));
+        }
+        return claimed;
+      });
+    return this.storage.withDistributedLock
+      ? this.storage.withDistributedLock(`factory-lease:${table}`, claim)
+      : this.#withLocalLeaseLock(claim);
+  }
+
+  async #renewLease(
+    table: 'factory_deferred_decisions' | 'factory_pending_starts',
+    identity: FactoryLeaseIdentity,
+    leaseExpiresAt: Date,
+  ): Promise<boolean> {
+    let renewed = false;
+    await this.#db.updateAtomic<GovernanceDbRow>(
+      table,
+      { id: identity.id, org_id: identity.orgId, factory_project_id: identity.factoryProjectId },
+      current => {
+        if (current.status !== 'leased' || current.lease_owner !== identity.ownerId) return null;
+        renewed = true;
+        return { lease_expires_at: leaseExpiresAt, updated_at: new Date() };
+      },
+    );
+    return renewed;
+  }
+
+  async #completeLease(
+    table: 'factory_deferred_decisions' | 'factory_pending_starts',
+    identity: FactoryLeaseIdentity,
+    now: Date,
+  ): Promise<GovernanceDbRow | null> {
+    let completed = false;
+    const row = await this.#db.updateAtomic<GovernanceDbRow>(
+      table,
+      { id: identity.id, org_id: identity.orgId, factory_project_id: identity.factoryProjectId },
+      current => {
+        if (current.status !== 'leased' || current.lease_owner !== identity.ownerId) return null;
+        completed = true;
+        return {
+          status: table === 'factory_pending_starts' ? 'sent' : 'succeeded',
+          lease_owner: null,
+          lease_expires_at: null,
+          completed_at: now,
+          updated_at: now,
+        };
+      },
+    );
+    return completed ? row : null;
+  }
+
+  async #failLease(
+    table: 'factory_deferred_decisions' | 'factory_pending_starts',
+    input: FactoryDispatchFailureInput,
+  ): Promise<GovernanceDbRow | null> {
+    let failed = false;
+    const row = await this.#db.updateAtomic<GovernanceDbRow>(
+      table,
+      { id: input.id, org_id: input.orgId, factory_project_id: input.factoryProjectId },
+      current => {
+        if (current.status !== 'leased' || current.lease_owner !== input.ownerId) return null;
+        failed = true;
+        return {
+          status: input.terminal ? 'failed' : 'retry',
+          available_at: input.availableAt,
+          lease_owner: null,
+          lease_expires_at: null,
+          last_error: input.lastError,
+          completed_at: input.terminal ? input.now : null,
+          updated_at: input.now,
+        };
+      },
+    );
+    return failed ? row : null;
+  }
+
+  /** List the org's work items for a project, newest first. */
   async list({ orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }): Promise<WorkItemRow[]> {
     const rows = await this.#db.findMany<WorkItemDbRow>(
       'work_items',
@@ -686,6 +940,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             outcome,
             code,
             reason,
+            causal_chain: input.causalChain,
             created_at: now,
           });
           if (outcome === 'accepted' && input.evaluation.outcome === 'accepted') {
@@ -696,9 +951,19 @@ export class WorkItemsStorage extends FactoryStorageDomain {
                 evaluation_id: evaluation.id,
                 work_item_id: item.id,
                 idempotency_key: String(decision.idempotencyKey),
+                effect_ordinal: index,
+                effect_hash: factoryDecisionHash(decision),
+                causal_chain: input.causalChain,
                 decision,
                 status: 'pending',
+                attempts: 0,
+                available_at: now,
+                lease_owner: null,
+                lease_expires_at: null,
+                last_error: null,
+                completed_at: null,
                 created_at: new Date(now.getTime() + index),
+                updated_at: now,
               });
             }
           }
@@ -721,6 +986,27 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         { orderBy: [['created_at', 'asc']] },
       )
     ).map(toDeferredDecision);
+  }
+
+  async claimDeferredDecisions(input: FactoryLeaseClaimInput): Promise<FactoryDeferredDecisionRecord[]> {
+    return this.#claimLeases('factory_deferred_decisions', input, toDeferredDecision);
+  }
+
+  async renewDeferredDecisionLease(identity: FactoryLeaseIdentity, leaseExpiresAt: Date): Promise<boolean> {
+    return this.#renewLease('factory_deferred_decisions', identity, leaseExpiresAt);
+  }
+
+  async completeDeferredDecision(
+    identity: FactoryLeaseIdentity,
+    now: Date,
+  ): Promise<FactoryDeferredDecisionRecord | null> {
+    const row = await this.#completeLease('factory_deferred_decisions', identity, now);
+    return row ? toDeferredDecision(row) : null;
+  }
+
+  async failDeferredDecision(input: FactoryDispatchFailureInput): Promise<FactoryDeferredDecisionRecord | null> {
+    const row = await this.#failLease('factory_deferred_decisions', input);
+    return row ? toDeferredDecision(row) : null;
   }
 
   async listRunBindings(
@@ -749,6 +1035,24 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         { orderBy: [['created_at', 'asc']] },
       )
     ).map(toPendingStart);
+  }
+
+  async claimPendingStarts(input: FactoryLeaseClaimInput): Promise<FactoryPendingStartRecord[]> {
+    return this.#claimLeases('factory_pending_starts', input, toPendingStart);
+  }
+
+  async renewPendingStartLease(identity: FactoryLeaseIdentity, leaseExpiresAt: Date): Promise<boolean> {
+    return this.#renewLease('factory_pending_starts', identity, leaseExpiresAt);
+  }
+
+  async completePendingStart(identity: FactoryLeaseIdentity, now: Date): Promise<FactoryPendingStartRecord | null> {
+    const row = await this.#completeLease('factory_pending_starts', identity, now);
+    return row ? toPendingStart(row) : null;
+  }
+
+  async failPendingStart(input: FactoryDispatchFailureInput): Promise<FactoryPendingStartRecord | null> {
+    const row = await this.#failLease('factory_pending_starts', input);
+    return row ? toPendingStart(row) : null;
   }
 
   async prepareRunStart(input: PrepareFactoryRunStartInput): Promise<PrepareFactoryRunStartResult> {
@@ -864,7 +1168,12 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           kickoff_key: input.kickoffKey,
           message: input.kickoffMessage,
           status: 'pending',
+          attempts: 0,
+          available_at: now,
+          lease_owner: null,
+          lease_expires_at: null,
           last_error: null,
+          completed_at: null,
           created_at: now,
           updated_at: now,
         });
@@ -917,22 +1226,43 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     userId,
     factoryProjectId,
     input,
+    reuseMode = 'update',
   }: {
     orgId: string;
     userId: string;
     factoryProjectId: string;
     input: CreateWorkItemInput;
+    reuseMode?: 'update' | 'preserve' | 'non-stage';
   }): Promise<UpsertWorkItemResult> {
     const key = sourceKey(input.externalSource);
     const reuse = async (): Promise<UpsertWorkItemResult | null> => {
       if (!key) return null;
+      const existing = await this.#db.findOne<WorkItemDbRow>('work_items', {
+        org_id: orgId,
+        factory_project_id: factoryProjectId,
+        source_key: key,
+      });
+      if (!existing) return null;
+      if (reuseMode === 'preserve') {
+        const item = toWorkItem(existing);
+        return { created: false, item, previous: priorState(existing) };
+      }
+
       let previous = emptyPrior();
       const updated = await this.#db.updateAtomic<WorkItemDbRow>(
         'work_items',
         { org_id: orgId, factory_project_id: factoryProjectId, source_key: key },
         async current => {
           previous = priorState(current);
-          const patch = input.parentWorkItemId === null ? { ...input, parentWorkItemId: undefined } : input;
+          const fullPatch = input.parentWorkItemId === null ? { ...input, parentWorkItemId: undefined } : input;
+          const patch: UpdateWorkItemInput =
+            reuseMode === 'non-stage'
+              ? {
+                  title: input.title,
+                  parentWorkItemId: input.parentWorkItemId ?? undefined,
+                  metadata: input.metadata,
+                }
+              : fullPatch;
           if (patch.parentWorkItemId !== undefined) {
             validateParentRelation(await this.list({ orgId, factoryProjectId }), current.id, patch.parentWorkItemId);
           }
