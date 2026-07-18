@@ -1721,6 +1721,7 @@ const verifyToken = async (token: string) => {
     issuer,
     audience,
     algorithms: ['RS256'],
+    requiredClaims: ['exp'],
   })
 
   if (!payload.sub || typeof payload.email !== 'string') {
