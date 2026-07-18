@@ -106,30 +106,30 @@ import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
 
 const CODE_AGENT_ID = 'code-agent';
 
-// Global retry policy for transient network resets (e.g. provider sockets dropping mid-stream).
+// Global retry policy for transient connection failures (e.g. provider sockets dropping mid-stream).
 // Applied centrally to every model call via StreamErrorRetryProcessor, independent of model-pack
-// settings, so all modes/subagents benefit from a short wait before retrying an ECONNRESET.
+// settings, so all modes/subagents benefit from a short wait before retrying a dropped connection.
 // Delay uses exponential backoff: initialDelay * 2^retryCount, capped at maxDelay.
-const MASTRACODE_ECONNRESET_MAX_RETRIES = 2;
-const MASTRACODE_ECONNRESET_RETRY_INITIAL_DELAY_MS = 1000;
-const MASTRACODE_ECONNRESET_RETRY_MAX_DELAY_MS = 30000;
+const MASTRACODE_TRANSIENT_CONNECTION_MAX_RETRIES = 2;
+const MASTRACODE_TRANSIENT_CONNECTION_RETRY_INITIAL_DELAY_MS = 1000;
+const MASTRACODE_TRANSIENT_CONNECTION_RETRY_MAX_DELAY_MS = 30000;
 
-const ECONNRESET_MESSAGE_PATTERN = /econnreset|socket hang up/i;
+const TRANSIENT_CONNECTION_ERROR_CODES = new Set(['ECONNRESET', 'EPIPE']);
+const TRANSIENT_CONNECTION_MESSAGE_PATTERN = /econnreset|socket hang up|write epipe|other side closed/i;
 
 /**
- * Matcher for transient network-reset failures. Checks the immediate error for
- * an `ECONNRESET` code or a `socket hang up` message. Cause-chain traversal is
- * handled by `StreamErrorRetryProcessor.isRetryableStreamError`, which calls
- * each matcher at every level of the cause chain.
+ * Matcher for transient connection failures. Cause-chain traversal is handled
+ * by `StreamErrorRetryProcessor.isRetryableStreamError`, which calls each
+ * matcher at every level of the cause chain.
  */
-function isECONNRESETError(error: unknown): boolean {
+function isTransientConnectionError(error: unknown): boolean {
   if (!error) return false;
 
   const code = typeof error === 'object' && 'code' in error ? (error as { code?: unknown }).code : undefined;
-  if (typeof code === 'string' && code.toUpperCase() === 'ECONNRESET') return true;
+  if (typeof code === 'string' && TRANSIENT_CONNECTION_ERROR_CODES.has(code.toUpperCase())) return true;
 
   const message = error instanceof Error ? error.message : undefined;
-  if (typeof message === 'string' && ECONNRESET_MESSAGE_PATTERN.test(message)) return true;
+  if (typeof message === 'string' && TRANSIENT_CONNECTION_MESSAGE_PATTERN.test(message)) return true;
 
   return false;
 }
@@ -669,12 +669,12 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         matchers: [
           { match: isBadRequestError, maxRetries: 1, delayMs: 2000 },
           {
-            match: isECONNRESETError,
-            maxRetries: MASTRACODE_ECONNRESET_MAX_RETRIES,
+            match: isTransientConnectionError,
+            maxRetries: MASTRACODE_TRANSIENT_CONNECTION_MAX_RETRIES,
             delayMs: ({ retryCount }) =>
               Math.min(
-                MASTRACODE_ECONNRESET_RETRY_INITIAL_DELAY_MS * Math.pow(2, retryCount),
-                MASTRACODE_ECONNRESET_RETRY_MAX_DELAY_MS,
+                MASTRACODE_TRANSIENT_CONNECTION_RETRY_INITIAL_DELAY_MS * Math.pow(2, retryCount),
+                MASTRACODE_TRANSIENT_CONNECTION_RETRY_MAX_DELAY_MS,
               ),
           },
         ],
