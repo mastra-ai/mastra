@@ -2,4 +2,4 @@
 '@mastra/memory': patch
 ---
 
-fix(memory): stabilize integration tests on Windows by catching EBUSY teardown errors and fix unit test globs
+Fixed Windows integration-test teardown crashes and restored recursive unit-test discovery across platforms.
