@@ -11,9 +11,13 @@ import type { FactoryIntegration, IntegrationContext } from './factory-integrati
 import { getGithubFeatureDiagnostics } from './github/config.js';
 import { getLinearFeatureDiagnostics } from './linear/config.js';
 import { buildFactoryRoutes } from './factory/routes.js';
+import { FactoryStartCoordinator } from './factory/rules/start-coordinator.js';
+import { FactoryTransitionService } from './factory/rules/transition-service.js';
 import { buildFsRoutes } from './fs-routes.js';
 import { buildIntakeRoutes } from './intake/routes.js';
 import { buildOAuthRoutes } from './oauth-routes.js';
+import { getFactoryStorage, getSeededFactoryRules } from './runtime-config.js';
+import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import { registerSandboxReattach } from './sandbox-reattach-registration.js';
 import { buildSkillRoutes } from './skills/routes.js';
 import type { StateSigner } from './state-signing.js';
@@ -200,6 +204,18 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
           ),
         })
       : []),
-    ...(deps.factoryReady ? buildFactoryRoutes({ audit: deps.audit }) : []),
+    ...(deps.factoryReady
+      ? buildFactoryRoutes({
+          audit: deps.audit,
+          transitionService: new FactoryTransitionService({
+            rules: getSeededFactoryRules(),
+            storage: getFactoryStorage().getDomain<WorkItemsStorage>('work-items'),
+          }),
+          startCoordinator: new FactoryStartCoordinator(
+            deps.controller,
+            getFactoryStorage().getDomain<WorkItemsStorage>('work-items'),
+          ),
+        })
+      : []),
   ];
 }

@@ -29,6 +29,7 @@ import { useStartFactoryRun } from '../../../../shared/hooks/useStartFactoryRun'
 import type { FactoryRunInvocation } from '../../../../shared/hooks/useStartFactoryRun';
 import {
   useDeleteWorkItemMutation,
+  useTransitionWorkItemMutation,
   useUpdateWorkItemMutation,
   useUpsertWorkItemMutation,
 } from '../../../../shared/hooks/useWorkItems';
@@ -127,28 +128,6 @@ function itemStageOptions(item: WorkItem): ReadonlyArray<{ id: BoardStageId; lab
 
 function itemStageLabel(item: WorkItem, stage: string): string {
   return itemStageOptions(item).find(candidate => candidate.id === stage)?.label ?? stageLabel(stage);
-}
-
-/**
- * Stage list after moving a card out of `from` into `to`. Other concurrent
- * stages are kept — except `done`, which replaces everything (the item is
- * finished, all open stages exit).
- */
-function stagesAfterMove(stages: string[], from: string | null, to: string): string[] {
-  if (to === 'done') return ['done'];
-  const rest = stages.filter(stage => stage !== from && stage !== to && stage !== 'done');
-  return [...rest, to];
-}
-
-/** Pre-work stages a card exits when a run starts on it. */
-const PRE_RUN_STAGES: string[] = ['intake', 'triage', 'planning'];
-
-function stagesAfterRunStart(stages: string[], to: string): string[] {
-  return stagesAfterMove(
-    stages.filter(stage => !PRE_RUN_STAGES.includes(stage)),
-    null,
-    to,
-  );
 }
 
 /**
@@ -540,6 +519,7 @@ function BoardContent({
   const linearIssues = useLinearIssuesQuery(activeIntakeSource === 'linear');
 
   const upsert = useUpsertWorkItemMutation(factoryProjectId);
+  const transition = useTransitionWorkItemMutation(factoryProjectId);
   const update = useUpdateWorkItemMutation(factoryProjectId);
   const remove = useDeleteWorkItemMutation(factoryProjectId);
   const { start, pendingRuns, enabled: runEnabled } = useStartFactoryRun();
@@ -616,14 +596,10 @@ function BoardContent({
     container.scrollTo?.({ left: Math.max(0, lane.offsetLeft - container.offsetLeft), behavior: 'auto' });
   }, [boardDataPending, boardPositionKey, candidates, stages, workItems]);
 
-  const moveItem = (id: string, fromStage: string | null, toStage: string) => {
+  const moveItem = (id: string, _fromStage: string | null, toStage: string) => {
     const item = workItems.find(i => i.id === id);
-    if (!item) return;
-    const allowedStages = new Set<string>(stages.map(stage => stage.id));
-    const currentStages = item.stages.filter(stage => allowedStages.has(stage));
-    const next = stagesAfterMove(currentStages, fromStage, toStage);
-    if (next.length === item.stages.length && next.every(stage => item.stages.includes(stage))) return;
-    update.mutate({ id, patch: { stages: next } });
+    if (!item || (item.stages.length === 1 && item.stages[0] === toStage)) return;
+    transition.mutate({ item, board: review ? 'review' : 'work', stage: toStage });
   };
 
   const handleDrop = (payload: DragPayload, toStage: BoardStageId) => {
@@ -635,7 +611,18 @@ function BoardContent({
     // Filing a candidate never starts a run — it only creates the card.
     const { source, sourceKey, title, url, metadata } = payload.candidate;
     const parentWorkItemId = source === 'github-pr' ? inferredParentWorkItemId(metadata, allWorkItems) : undefined;
-    upsert.mutate({ source, sourceKey, parentWorkItemId, title, url, stages: [toStage], metadata });
+    void (async () => {
+      const item = await upsert.mutateAsync({
+        source,
+        sourceKey,
+        parentWorkItemId,
+        title,
+        url,
+        stages: ['intake'],
+        metadata,
+      });
+      if (toStage !== 'intake') transition.mutate({ item, board: review ? 'review' : 'work', stage: toStage });
+    })();
   };
 
   if (items.isPending) return <SkeletonRows label="Loading board" rows={4} rowClassName="h-24 w-full" />;
@@ -647,7 +634,9 @@ function BoardContent({
     );
   }
 
-  const mutationError = [start, triage, upsert, update, remove, selectWorkspace].find(m => m.isError)?.error;
+  const mutationError = [start, triage, upsert, transition, update, remove, selectWorkspace].find(
+    m => m.isError,
+  )?.error;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -736,6 +725,8 @@ function BoardContent({
                       threadTitle: spec.threadTitle,
                       workItem: {
                         id: item.id,
+                        revision: item.revision,
+                        currentStage: item.stages.length === 1 ? item.stages[0] : undefined,
                         // File only the neutral chat role. The title is a
                         // create button only when every existing role ref is
                         // stale (worktree gone); repointing those roles here
@@ -757,9 +748,11 @@ function BoardContent({
                       invocation: action.invocation,
                       workItem: {
                         id: item.id,
+                        revision: item.revision,
+                        currentStage: item.stages.length === 1 ? item.stages[0] : undefined,
                         role: action.role,
                         existingRoles: Object.keys(item.sessions),
-                        stages: stagesAfterRunStart(item.stages, action.stage),
+                        stages: [action.stage],
                         source: item.source,
                         sourceKey: item.sourceKey,
                         title: item.title,

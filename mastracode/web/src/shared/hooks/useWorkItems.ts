@@ -6,6 +6,7 @@ import {
   createWorkItem,
   deleteWorkItem,
   listWorkItems,
+  transitionWorkItem,
   updateWorkItem,
 } from '../../web/ui/domains/factory/services/workItems';
 import type {
@@ -82,6 +83,37 @@ export function useUpdateWorkItemMutation(factoryProjectId: string | undefined) 
       queryClient.setQueryData<WorkItem[]>(listKey, existing =>
         (existing ?? []).map(i => (i.id === item.id ? item : i)),
       );
+    },
+  });
+}
+
+export function useTransitionWorkItemMutation(githubProjectId: string | undefined) {
+  const { baseUrl } = useApiConfig();
+  const queryClient = useQueryClient();
+  const listKey = queryKeys.workItems(githubProjectId);
+  return useMutation({
+    mutationFn: ({ item, board, stage }: { item: WorkItem; board: 'work' | 'review'; stage: string }) =>
+      transitionWorkItem(baseUrl, githubProjectId!, item.id, {
+        board,
+        stage: stage as 'intake' | 'triage' | 'planning' | 'execute' | 'review' | 'done',
+        expectedRevision: item.revision,
+        requestId: crypto.randomUUID(),
+        cause: 'board_drag',
+      }),
+    onMutate: async ({ item, stage }) => {
+      await queryClient.cancelQueries({ queryKey: listKey });
+      const previous = queryClient.getQueryData<WorkItem[]>(listKey);
+      queryClient.setQueryData<WorkItem[]>(listKey, existing =>
+        (existing ?? []).map(candidate => (candidate.id === item.id ? { ...candidate, stages: [stage] } : candidate)),
+      );
+      return { previous };
+    },
+    onError: (_error, _variables, context) => {
+      if (context?.previous) queryClient.setQueryData(listKey, context.previous);
+    },
+    onSuccess: (result, _variables, context) => {
+      if (result.status === 'rejected' && context?.previous) queryClient.setQueryData(listKey, context.previous);
+      void queryClient.invalidateQueries({ queryKey: listKey });
     },
   });
 }

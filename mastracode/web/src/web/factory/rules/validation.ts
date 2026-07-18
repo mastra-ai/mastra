@@ -6,8 +6,8 @@ import type {
   FactoryRuleJsonValue,
   FactoryRules,
   FactoryRuleRejectionCode,
+  WorkItemSource,
 } from './types.js';
-import type { WorkItemSource } from '../../storage/domains/work-items/base.js';
 
 export const MAX_FACTORY_RULE_CAUSAL_DEPTH = 8;
 

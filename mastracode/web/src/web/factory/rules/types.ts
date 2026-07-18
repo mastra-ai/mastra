@@ -1,4 +1,4 @@
-import type { WorkItemSource } from '../../storage/domains/work-items/base.js';
+export type WorkItemSource = 'github-issue' | 'github-pr' | 'linear-issue' | 'manual';
 
 export const FACTORY_RULE_STAGES = ['intake', 'triage', 'planning', 'execute', 'review', 'done'] as const;
 export type FactoryRuleStage = (typeof FACTORY_RULE_STAGES)[number];
