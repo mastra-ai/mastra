@@ -4,16 +4,128 @@ import type {
   FactoryBoardRules,
   FactoryGithubRuleLeaf,
   FactoryGithubEventName,
+  FactoryGithubRuleContext,
   FactoryRules,
   FactoryRulesOverrides,
   FactoryRuleSource,
   FactoryRuleStage,
+  FactoryStageRuleContext,
+  FactoryToolResultRuleContext,
   FactoryToolRuleLeaf,
 } from './types.js';
 
 export const DEFAULT_FACTORY_RULE_VERSION = 'factory-default-v1';
 
-const PASS_THROUGH_DEFAULTS: FactoryRulesOverrides = {};
+function trustedGithubActor(context: Pick<FactoryStageRuleContext, 'actor'>): boolean {
+  return context.actor.type === 'github' && (context.actor.trusted || context.actor.factoryAuthored);
+}
+
+function investigateTrustedIssue(context: FactoryStageRuleContext) {
+  if (!trustedGithubActor(context)) return;
+  return {
+    type: 'invokeSkill',
+    idempotencyKey: `${context.ingress.id}:understand-issue`,
+    role: 'triage',
+    skillName: 'understand-issue',
+  } as const;
+}
+
+function reviewTrustedPullRequest(context: FactoryStageRuleContext) {
+  if (!trustedGithubActor(context)) return;
+  return {
+    type: 'invokeSkill',
+    idempotencyKey: `${context.ingress.id}:understand-pr`,
+    role: 'review',
+    skillName: 'understand-pr',
+  } as const;
+}
+
+function resultContent(value: unknown): string | undefined {
+  if (typeof value === 'string') return value;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+  const content = (value as { content?: unknown }).content;
+  return typeof content === 'string' ? content : undefined;
+}
+
+function advanceApprovedPlan(context: FactoryToolResultRuleContext) {
+  if (
+    context.result.status !== 'success' ||
+    context.board !== 'work' ||
+    context.item.stages.length !== 1 ||
+    context.item.stages[0] !== 'planning' ||
+    context.actor.type !== 'agent' ||
+    context.actor.role !== 'plan' ||
+    !resultContent(context.result.value)?.startsWith('Plan approved.')
+  ) {
+    return;
+  }
+  return {
+    type: 'transition',
+    idempotencyKey: `${context.ingress.id}:approved-plan`,
+    board: 'work',
+    stage: 'execute',
+  } as const;
+}
+
+function issueOpened(context: FactoryGithubRuleContext) {
+  if (!context.issue) return;
+  return {
+    type: 'upsertLinkedWorkItem',
+    idempotencyKey: `${context.ingress.id}:issue-intake`,
+    board: 'work',
+    source: 'github-issue',
+    sourceKey: `github:${context.repository.id}:issue:${context.issue.number}`,
+    title: context.issue.title,
+    url: context.issue.url,
+    stage: 'intake',
+    metadata: {
+      githubRepositoryId: context.repository.id,
+      githubIssueNumber: context.issue.number,
+    },
+  } as const;
+}
+
+function pullRequestOpened(context: FactoryGithubRuleContext) {
+  if (!context.pullRequest) return;
+  return {
+    type: 'upsertLinkedWorkItem',
+    idempotencyKey: `${context.ingress.id}:pull-request-intake`,
+    board: 'review',
+    source: 'github-pr',
+    sourceKey: `github:${context.repository.id}:pull-request:${context.pullRequest.number}`,
+    title: context.pullRequest.title,
+    url: context.pullRequest.url,
+    stage: 'intake',
+    metadata: {
+      githubRepositoryId: context.repository.id,
+      githubPullRequestNumber: context.pullRequest.number,
+      factoryAuthored: context.actor.type === 'github' && context.actor.factoryAuthored,
+    },
+  } as const;
+}
+
+function pullRequestMerged(context: FactoryGithubRuleContext) {
+  if (!context.item || !context.pullRequest?.merged) return;
+  return {
+    type: 'sendMessage',
+    idempotencyKey: `${context.ingress.id}:assess-work-completion`,
+    role: 'work',
+    message:
+      `Pull request #${context.pullRequest.number} merged. Assess whether the linked Work item is complete. ` +
+      'Do not mark it Done solely because this PR merged; use factory_transition_work_item only after verifying the work.',
+  } as const;
+}
+
+const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
+  work: { intake: { issue: { onEnter: investigateTrustedIssue } } },
+  review: { intake: { pullRequest: { onEnter: reviewTrustedPullRequest } } },
+  tools: { submit_plan: { onResult: advanceApprovedPlan } },
+  github: {
+    issueOpened: { onEvent: issueOpened },
+    pullRequestOpened: { onEvent: pullRequestOpened },
+    pullRequestMerged: { onEvent: pullRequestMerged },
+  },
+};
 
 function mergeBoardRules(
   base: FactoryBoardRules | undefined,
@@ -96,7 +208,7 @@ export function defaultFactoryRules(input: { version: string; overrides?: Factor
 
   const rules: FactoryRules = {
     version: input.version.trim(),
-    ...mergeFactoryRuleOverrides(PASS_THROUGH_DEFAULTS, input.overrides),
+    ...mergeFactoryRuleOverrides(BUILT_IN_DEFAULTS, input.overrides),
   };
   assertFactoryRules(rules);
   return rules;

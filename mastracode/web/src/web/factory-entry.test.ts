@@ -127,13 +127,14 @@ describe('MastraFactory.prepare', () => {
 
   it('seeds conservative versioned Factory rules when the slot is omitted', async () => {
     await prepareFactory({ storage: fakeStorage() });
-    expect(getSeededFactoryRules()).toEqual({
-      version: DEFAULT_FACTORY_RULE_VERSION,
-      work: {},
-      review: {},
-      tools: {},
-      github: {},
-    });
+    const rules = getSeededFactoryRules();
+    expect(rules?.version).toBe(DEFAULT_FACTORY_RULE_VERSION);
+    expect(rules?.work.intake?.issue?.onEnter).toBeTypeOf('function');
+    expect(rules?.review.intake?.pullRequest?.onEnter).toBeTypeOf('function');
+    expect(rules?.tools.submit_plan?.onResult).toBeTypeOf('function');
+    expect(rules?.github.issueOpened?.onEvent).toBeTypeOf('function');
+    expect(rules?.github.pullRequestOpened?.onEvent).toBeTypeOf('function');
+    expect(rules?.github.pullRequestMerged?.onEvent).toBeTypeOf('function');
   });
 
   it('seeds explicitly configured Factory rules without composing handler leaves', async () => {
