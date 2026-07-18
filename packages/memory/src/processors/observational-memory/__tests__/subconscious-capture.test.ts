@@ -119,6 +119,51 @@ describe('Subconscious capture', () => {
     ).not.toBeNull();
   });
 
+  it('honors model-selected entity scope within the configured ceiling', async () => {
+    const memory = new Memory({ storage: new InMemoryStore() });
+    const extractor = new SubconsciousCaptureExtractor({
+      defaultScope: 'resource',
+      learnedGuidance: false,
+    });
+    const context = createContext(memory, {
+      entities: [{ name: 'Alpha Secret', kind: 'note', scope: 'thread', facts: [] }],
+    });
+
+    await extractor.onExtracted?.({ ...context, extractor });
+
+    const store = (await memory.storage.getStore('knowledge'))!;
+    expect(
+      await store.resolveEntity({ name: 'Alpha Secret', scope: ['org:acme', 'resource:user-42', 'thread:beta'] }),
+    ).toBeNull();
+    expect(
+      await store.resolveEntity({ name: 'Alpha Secret', scope: ['org:acme', 'resource:user-42', 'thread:alpha'] }),
+    ).toMatchObject({ scope: ['org:acme', 'resource:user-42', 'thread:alpha'] });
+  });
+
+  it('publishes bounded activity through the state signal lane after capture', async () => {
+    const memory = new Memory({ storage: new InMemoryStore() });
+    const extractor = new SubconsciousCaptureExtractor({
+      defaultScope: 'resource',
+      learnedGuidance: false,
+      activityRecentUpdates: 2,
+    });
+    const sendStateSignal = vi.fn(async () => ({ skipped: true, reason: 'unchanged' }) as any);
+    const context = createContext(memory, {
+      entities: [{ name: 'Atlas', kind: 'project', facts: [{ text: 'Atlas launches in January.' }] }],
+    });
+
+    await extractor.onExtracted?.({ ...context, extractor, sendStateSignal });
+
+    expect(sendStateSignal).toHaveBeenCalledOnce();
+    expect(sendStateSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'subconscious-activity',
+        mode: 'snapshot',
+        contents: expect.stringContaining('[[Atlas]]'),
+      }),
+    );
+  });
+
   it('fails explicitly when required conversation scope context is unavailable', async () => {
     const memory = new Memory({ storage: new InMemoryStore() });
     const extractor = new SubconsciousCaptureExtractor({

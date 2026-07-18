@@ -25,6 +25,7 @@ export interface ObservationRunOpts {
   reflectionHooks?: Pick<ObserveHooks, 'onReflectionStart' | 'onReflectionEnd'>;
   agent?: ProcessorContext['agent'];
   sendSignal?: ProcessorContext['sendSignal'];
+  sendStateSignal?: ProcessorContext['sendStateSignal'];
   requestContext?: RequestContext;
   currentModel?: ObservationModelContext;
   observabilityContext?: ObservabilityContext;

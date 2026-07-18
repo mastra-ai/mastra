@@ -66,6 +66,9 @@ export class ObservationTurn {
     signal: Parameters<NonNullable<ProcessorContext['sendSignal']>>[0],
   ) => ReturnType<NonNullable<ProcessorContext['sendSignal']>>;
 
+  /** Optional state signal sender for processor-originated snapshots. */
+  sendStateSignal?: ProcessorContext['sendStateSignal'];
+
   /** Current actor model for this step. Updated by the processor before prepare(). */
   actorModelContext?: ObservationModelContext;
 
@@ -79,6 +82,7 @@ export class ObservationTurn {
     messageList: MessageList;
     agent?: ProcessorContext['agent'];
     sendSignal?: ProcessorContext['sendSignal'];
+    sendStateSignal?: ProcessorContext['sendStateSignal'];
     requestContext?: RequestContext;
     observabilityContext?: ObservabilityContext;
     hooks?: ObservationTurnHooks;
@@ -89,6 +93,7 @@ export class ObservationTurn {
     this.messageList = opts.messageList;
     this.agent = opts.agent;
     this.sendSignal = opts.sendSignal;
+    this.sendStateSignal = opts.sendStateSignal;
     this.requestContext = opts.requestContext;
     this.observabilityContext = opts.observabilityContext;
     this.hooks = opts.hooks ?? {};
@@ -214,6 +219,7 @@ export class ObservationTurn {
             writer: this.writer,
             agent: this.agent,
             sendSignal: this.sendSignal,
+            sendStateSignal: this.sendStateSignal,
             requestContext: this.requestContext,
             currentModel: this.actorModelContext,
             observabilityContext: this.observabilityContext,

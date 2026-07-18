@@ -101,6 +101,7 @@ export class Subconscious {
             defaultScope: this.resolved.defaultScope,
             maxScope: this.resolved.maxScope,
             learnedGuidance: this.resolved.learnedGuidance,
+            activityRecentUpdates: this.resolved.activity === false ? undefined : this.resolved.activity.recentUpdates,
           }),
         );
       } else if (!BUILT_IN_OBSERVATION.has(name)) {
@@ -149,6 +150,13 @@ export class Subconscious {
   }
 }
 
+export {
+  buildSubconsciousActivitySnapshot,
+  publishSubconsciousActivity,
+  renderSubconsciousActivity,
+  SUBCONSCIOUS_ACTIVITY_STATE_ID,
+} from './activity';
+export type { SubconsciousActivitySnapshot, SubconsciousActivityUpdate } from './activity';
 export { SubconsciousCaptureExtractor, subconsciousCaptureSchema } from './capture';
 export { KnowledgeSemanticIndexCoordinator, StaleKnowledgeSemanticIndexError } from './semantic-index';
 export type { KnowledgeSemanticIndexCoordinatorConfig } from './semantic-index';
