@@ -12,6 +12,9 @@
  * hides the source entirely regardless of selection.
  */
 
+import { UniqueViolationError } from '@mastra/core/storage';
+import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
+
 import type { FactoryStorageContext, FactoryStorageDomain } from '../../domain';
 
 export interface IntakeConfig {
@@ -33,18 +36,58 @@ export const DEFAULT_INTAKE_CONFIG: IntakeConfig = {
   linear: { enabled: true, projectIds: null },
 };
 
-/**
- * Abstract intake settings storage. Backends own their DDL in `init()`;
- * query methods are the typed surface the intake routes consume.
- */
-export abstract class IntakeStorage implements FactoryStorageDomain {
-  readonly name = 'intake';
+export const INTAKE_SETTINGS_SCHEMA: CollectionSchema = {
+  name: 'intake_settings',
+  columns: {
+    id: { type: 'uuid-pk' },
+    org_id: { type: 'text' },
+    user_id: { type: 'text' },
+    config: { type: 'json' },
+    created_at: { type: 'timestamp' },
+    updated_at: { type: 'timestamp' },
+  },
+  uniqueIndexes: [{ name: 'intake_settings_org_user_unique', columns: ['org_id', 'user_id'] }],
+};
 
-  abstract init(ctx: FactoryStorageContext): Promise<void>;
+/**
+ * Intake settings storage, written once against the generic
+ * `FactoryStorageOps` surface — works on any `FactoryStorage` backend.
+ */
+export class IntakeStorage implements FactoryStorageDomain {
+  readonly name = 'intake';
+  #ops?: FactoryStorageOps;
+
+  async init(ctx: FactoryStorageContext): Promise<void> {
+    await ctx.storage.ensureCollections([INTAKE_SETTINGS_SCHEMA]);
+    this.#ops = ctx.storage.ops;
+  }
+
+  get #db(): FactoryStorageOps {
+    if (!this.#ops) throw new Error('[IntakeStorage] Not initialized — init() has not succeeded.');
+    return this.#ops;
+  }
 
   /** Read the caller's intake config, falling back to {@link DEFAULT_INTAKE_CONFIG}. */
-  abstract getConfig(orgId: string, userId: string): Promise<IntakeConfig>;
+  async getConfig(orgId: string, userId: string): Promise<IntakeConfig> {
+    const row = await this.#db.findOne<{ config: IntakeConfig }>('intake_settings', {
+      org_id: orgId,
+      user_id: userId,
+    });
+    return structuredClone(row?.config ?? DEFAULT_INTAKE_CONFIG);
+  }
 
-  /** Upsert the caller's intake config. */
-  abstract saveConfig(orgId: string, userId: string, config: IntakeConfig): Promise<void>;
+  /** Upsert the caller's intake config (`created_at` is preserved on update). */
+  async saveConfig(orgId: string, userId: string, config: IntakeConfig): Promise<void> {
+    const now = new Date();
+    const where = { org_id: orgId, user_id: userId };
+    const updated = await this.#db.updateMany('intake_settings', where, { config, updated_at: now });
+    if (updated > 0) return;
+    try {
+      await this.#db.insertOne('intake_settings', { ...where, config, created_at: now, updated_at: now });
+    } catch (error) {
+      if (!(error instanceof UniqueViolationError)) throw error;
+      // Lost the insert race — the row exists now; apply as an update.
+      await this.#db.updateMany('intake_settings', where, { config, updated_at: now });
+    }
+  }
 }

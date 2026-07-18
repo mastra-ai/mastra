@@ -5,12 +5,12 @@
  * Validation mirrors `../intake/store` — untrusted route bodies are parsed
  * into bounded, sanitized shapes or rejected wholesale. Persistence is
  * delegated to the `work-items` factory storage domain registered on the
- * seeded {@link FactoryStore} (see `../storage/domains/work-items`); stage
+ * seeded {@link DomainRegistry} (see `../storage/domains/work-items`); stage
  * history is appended exclusively there (server-side) on every stage
  * transition so it can never drift from `stages`.
  */
 
-import { getFactoryStore } from '../runtime-config';
+import { getDomainRegistry } from '../runtime-config';
 import type {
   CreateWorkItemInput,
   UpdateWorkItemInput,
@@ -165,7 +165,7 @@ export function parseUpdateWorkItem(body: unknown): UpdateWorkItemInput | null {
 }
 
 async function workItemsDomain() {
-  const store = getFactoryStore();
+  const store = getDomainRegistry();
   await store.ensureReady('work-items');
   return store.workItems;
 }

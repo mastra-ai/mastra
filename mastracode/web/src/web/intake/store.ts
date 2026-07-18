@@ -3,10 +3,10 @@
  *
  * Validation of untrusted route bodies lives here; persistence is delegated
  * to the `intake` factory storage domain registered on the seeded
- * {@link FactoryStore} (see `../storage/domains/intake`).
+ * {@link DomainRegistry} (see `../storage/domains/intake`).
  */
 
-import { getFactoryStore } from '../runtime-config';
+import { getDomainRegistry } from '../runtime-config';
 import { DEFAULT_INTAKE_CONFIG } from '../storage/domains/intake/base';
 import type { IntakeConfig } from '../storage/domains/intake/base';
 
@@ -47,14 +47,14 @@ export function parseIntakeConfig(body: unknown): IntakeConfig | null {
 
 /** Read the caller's intake config, falling back to the defaults. */
 export async function getIntakeConfig(orgId: string, userId: string): Promise<IntakeConfig> {
-  const store = getFactoryStore();
+  const store = getDomainRegistry();
   await store.ensureReady('intake');
   return store.intake.getConfig(orgId, userId);
 }
 
 /** Upsert the caller's intake config. */
 export async function saveIntakeConfig(orgId: string, userId: string, config: IntakeConfig): Promise<void> {
-  const store = getFactoryStore();
+  const store = getDomainRegistry();
   await store.ensureReady('intake');
   await store.intake.saveConfig(orgId, userId, config);
 }

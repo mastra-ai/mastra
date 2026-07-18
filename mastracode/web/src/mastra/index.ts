@@ -22,9 +22,11 @@ import { join } from 'node:path';
 import { Mastra } from '@mastra/core/mastra';
 import { LocalSandbox } from '@mastra/core/workspace';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
-import { PgVector, PostgresStore } from '@mastra/pg';
+import { LibSQLFactoryStorage } from '@mastra/libsql';
+import { PgVector, PgFactoryStorage } from '@mastra/pg';
 import { RailwaySandbox } from '@mastra/railway';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
+import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
 import { BetterAuthWebAuth } from '../web/auth-better-adapter.js';
 import type { WebAuthAdapter } from '../web/auth-adapter.js';
@@ -71,8 +73,8 @@ if (redisUrl) {
 //   1. WORKOS_API_KEY + WORKOS_CLIENT_ID → WorkOS AuthKit (hosted login). The
 //      WorkOS SDK reads its own credentials; the redirect URI falls back to
 //      `<publicUrl>/auth/callback` inside the adapter's init().
-//   2. BETTER_AUTH_SECRET → self-hosted better-auth (email/password on the app
-//      Postgres — no external identity vendor in the availability path).
+//   2. BETTER_AUTH_SECRET → self-hosted better-auth (email/password on the
+//      configured factory storage — no external identity vendor in the availability path).
 //      MASTRACODE_AUTH_SIGNUP_DISABLED=1 turns off public sign-up.
 //   3. Neither → auth disabled (open server, bare local dev).
 const workosConfigured = Boolean(process.env.WORKOS_API_KEY && process.env.WORKOS_CLIENT_ID);
@@ -221,19 +223,24 @@ const linear = linearEnv
 
 const integrations: FactoryIntegration[] = [github, linear].filter(i => i !== undefined);
 
-// Single app Postgres: one PostgresStore (and one pg pool) powers agent
-// storage, the factory app tables, the distributed project lock, and
-// better-auth. The paired PgVector rides the same database for recall search.
-// Unset (bare local dev) → no instances; the SDK mount falls back to its
-// default local libSQL resolution and app-DB-gated features stay off.
+// One FactoryStorage backend powers agent storage, the factory app tables,
+// the distributed project lock, and better-auth. `APP_DATABASE_URL` set →
+// Postgres (the paired PgVector rides the same database for recall search).
+// Unset (bare local dev) → libSQL on the same local file the SDK's default
+// storage resolution uses, running the FULL app surface (auth, intake,
+// audit, work-items, integrations) — no features silently off.
 const appDatabaseUrl = process.env.APP_DATABASE_URL;
 const storage = appDatabaseUrl
-  ? new PostgresStore({
+  ? new PgFactoryStorage({
       id: 'mastra-code-storage',
       connectionString: appDatabaseUrl,
       retention: DEFAULT_RETENTION,
     })
-  : undefined;
+  : new LibSQLFactoryStorage({
+      id: 'mastra-code-storage',
+      url: `file:${getDatabasePath()}`,
+      retention: DEFAULT_RETENTION,
+    });
 const vector = appDatabaseUrl
   ? new PgVector({ id: 'mastra-code-vectors', connectionString: appDatabaseUrl })
   : undefined;

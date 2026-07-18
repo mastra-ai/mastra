@@ -26,8 +26,8 @@ vi.mock('../audit/store', () => ({
 
 import { GithubStorageInMemory } from '../github/storage/inmemory';
 import { __resetRuntimeConfigForTests } from '../runtime-config';
-import { seedInMemoryFactoryStoreForTests } from '../storage/test-utils';
-import type { InMemoryFactoryStoreSeed } from '../storage/test-utils';
+import { seedFactoryStorageForTests } from '../storage/test-utils';
+import type { FactoryStorageTestSeed } from '../storage/test-utils';
 import { mountApiRoutes } from '../test-utils';
 import { buildFactoryRoutes } from './routes';
 import { parseCreateWorkItem, parseUpdateWorkItem } from './store';
@@ -86,10 +86,10 @@ const createBody = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
-let seed: InMemoryFactoryStoreSeed;
+let seed: FactoryStorageTestSeed;
 
 beforeEach(async () => {
-  seed = await seedInMemoryFactoryStoreForTests();
+  seed = await seedFactoryStorageForTests();
   githubStorage = new GithubStorageInMemory();
   auditRecorded = [];
   auditFailure = undefined;

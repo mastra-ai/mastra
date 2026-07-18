@@ -25,8 +25,8 @@ vi.mock('../audit/store', () => ({
 }));
 
 import { __resetRuntimeConfigForTests } from '../runtime-config';
-import { seedInMemoryFactoryStoreForTests } from '../storage/test-utils';
-import type { InMemoryFactoryStoreSeed } from '../storage/test-utils';
+import { seedFactoryStorageForTests } from '../storage/test-utils';
+import type { FactoryStorageTestSeed } from '../storage/test-utils';
 import { mountApiRoutes } from '../test-utils';
 import { buildIntakeRoutes } from './routes';
 import { DEFAULT_INTAKE_CONFIG, parseIntakeConfig } from './store';
@@ -44,10 +44,10 @@ function buildApp(user: { workosId: string; organizationId?: string } | null) {
 
 const orgUser = { workosId: 'u1', organizationId: 'org1' };
 
-let seed: InMemoryFactoryStoreSeed;
+let seed: FactoryStorageTestSeed;
 
 beforeEach(async () => {
-  seed = await seedInMemoryFactoryStoreForTests();
+  seed = await seedFactoryStorageForTests();
   auditRecorded = [];
   auditFailure = undefined;
 });

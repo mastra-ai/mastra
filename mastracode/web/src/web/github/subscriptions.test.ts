@@ -1,58 +1,57 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import { GithubStorageInMemory } from './storage/inmemory';
-import { GITHUB_DDL } from './storage/pg';
+import { LibSQLFactoryStorage } from '@mastra/libsql';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-const baseInput = {
+import { GithubStorageOps } from './storage/ops';
+import type { SubscribeToPullRequestInput } from './storage/base';
+
+const projectInput = {
   orgId: 'org-a',
+  userId: 'user-a',
   installationId: 17,
-  githubProjectId: '11111111-1111-1111-1111-111111111111',
+  repoFullName: 'octo/hello',
   repoId: 99,
-  pullRequestNumber: 42,
-  sessionId: 'session-a',
-  ownerId: 'user-a',
-  resourceId: 'resource-a',
-  threadId: 'thread-a',
-  sessionScope: '/workspace/a',
-  source: 'explicit-tool' as const,
-  subscribedByUserId: 'user-a',
+  defaultBranch: 'main',
+  sandboxProvider: 'local',
+  sandboxWorkdir: '/workspace/a',
 };
 
 describe('GitHub signal subscription store', () => {
-  let storage: GithubStorageInMemory;
+  let backend: LibSQLFactoryStorage;
+  let storage: GithubStorageOps;
+  let baseInput: SubscribeToPullRequestInput;
 
-  beforeEach(() => {
-    storage = new GithubStorageInMemory();
-    storage.projects.push({
-      id: baseInput.githubProjectId,
-      orgId: baseInput.orgId,
-      userId: 'user-a',
-      installationId: baseInput.installationId,
-      repoId: baseInput.repoId,
-      repoFullName: 'octo/hello',
-      defaultBranch: 'main',
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/workspace/a',
-      setupCommand: null,
-      createdAt: new Date('2026-07-13T00:00:00Z'),
-    });
+  beforeEach(async () => {
+    backend = new LibSQLFactoryStorage({ id: 'github-subscriptions-test', url: ':memory:' });
+    await backend.init();
+    storage = new GithubStorageOps();
+    await storage.init({ storage: backend });
+    const project = await storage.upsertProject(projectInput);
+    baseInput = {
+      orgId: 'org-a',
+      installationId: 17,
+      githubProjectId: project.id,
+      repoId: 99,
+      pullRequestNumber: 42,
+      sessionId: 'session-a',
+      ownerId: 'user-a',
+      resourceId: 'resource-a',
+      threadId: 'thread-a',
+      sessionScope: '/workspace/a',
+      source: 'explicit-tool',
+      subscribedByUserId: 'user-a',
+    };
   });
 
-  it('defines repeatable boot DDL for the table and indexes', () => {
-    expect(GITHUB_DDL).toContain('CREATE TABLE IF NOT EXISTS github_signal_subscriptions');
-    expect(GITHUB_DDL).toContain('CREATE UNIQUE INDEX IF NOT EXISTS github_signal_subscriptions_target_pr_unique');
-    expect(GITHUB_DDL).toContain('CREATE INDEX IF NOT EXISTS github_signal_subscriptions_pr_lookup');
-    expect(GITHUB_DDL).toContain('CREATE INDEX IF NOT EXISTS github_signal_subscriptions_thread_lookup');
+  afterEach(async () => {
+    await backend.close();
   });
 
   it('creates a subscription with project-owned repository metadata', async () => {
     const { subscribeToPullRequest } = await import('./subscriptions');
     const created = await subscribeToPullRequest(baseInput, storage);
 
-    expect(created).toMatchObject({
-      ...baseInput,
-      repoFullName: 'octo/hello',
-    });
-    expect(storage.subscriptions).toHaveLength(1);
+    expect(created).toMatchObject({ ...baseInput, repoFullName: 'octo/hello' });
+    expect(await storage.listPullRequestSubscriptionsForThread(baseInput)).toHaveLength(1);
   });
 
   it('returns the existing row for duplicate subscriptions', async () => {
@@ -61,7 +60,7 @@ describe('GitHub signal subscription store', () => {
     const second = await subscribeToPullRequest(baseInput, storage);
 
     expect(second.id).toBe(first.id);
-    expect(storage.subscriptions).toHaveLength(1);
+    expect(await storage.listPullRequestSubscriptionsForThread(baseInput)).toHaveLength(1);
   });
 
   it('reactivates a retained terminal subscription when subscribing again', async () => {
@@ -73,7 +72,6 @@ describe('GitHub signal subscription store', () => {
 
     expect(reactivated.id).toBe(first.id);
     expect(reactivated.status).toBe('open');
-    expect(storage.subscriptions[0]?.status).toBe('open');
   });
 
   it('unsubscribes idempotently', async () => {
@@ -82,7 +80,7 @@ describe('GitHub signal subscription store', () => {
     await unsubscribeFromPullRequest(baseInput, storage);
     await unsubscribeFromPullRequest(baseInput, storage);
 
-    expect(storage.subscriptions).toHaveLength(0);
+    expect(await storage.listPullRequestSubscriptionsForThread(baseInput)).toEqual([]);
   });
 
   it('supports reverse lookup by pull request and by scoped thread', async () => {
@@ -127,33 +125,19 @@ describe('GitHub signal subscription store', () => {
       storage,
     );
 
-    const matches = await listPullRequestSubscriptionsForWebhook(
-      {
-        installationId: baseInput.installationId,
-        repoId: baseInput.repoId,
-        pullRequestNumber: baseInput.pullRequestNumber,
-      },
-      {},
-      storage,
-    );
-    expect(matches.map(row => row.id)).toEqual([first.id, second.id]);
+    const target = {
+      installationId: baseInput.installationId,
+      repoId: baseInput.repoId,
+      pullRequestNumber: baseInput.pullRequestNumber,
+    };
+    expect((await listPullRequestSubscriptionsForWebhook(target, {}, storage)).map(row => row.id)).toEqual([
+      first.id,
+      second.id,
+    ]);
 
     await retirePullRequestSubscription(first.id, 'merged', storage);
-    expect(storage.subscriptions).toHaveLength(2);
-    expect(storage.subscriptions.find(row => row.id === first.id)?.status).toBe('merged');
-    expect(
-      (
-        await listPullRequestSubscriptionsForWebhook(
-          {
-            installationId: baseInput.installationId,
-            repoId: baseInput.repoId,
-            pullRequestNumber: baseInput.pullRequestNumber,
-          },
-          {},
-          storage,
-        )
-      ).map(row => row.id),
-    ).toEqual([second.id]);
+    expect((await listPullRequestSubscriptionsForWebhook(target, {}, storage)).map(row => row.id)).toEqual([second.id]);
+    expect(await listPullRequestSubscriptionsForWebhook(target, { includeTerminal: true }, storage)).toHaveLength(2);
   });
 
   it('retires all subscriptions for one pull request', async () => {
@@ -162,28 +146,16 @@ describe('GitHub signal subscription store', () => {
     await subscribeToPullRequest(baseInput, storage);
     await subscribeToPullRequest({ ...baseInput, pullRequestNumber: 43 }, storage);
 
-    await retirePullRequestSubscriptions(
-      {
-        orgId: baseInput.orgId,
-        installationId: baseInput.installationId,
-        repoId: baseInput.repoId,
-        pullRequestNumber: baseInput.pullRequestNumber,
-      },
-      storage,
-    );
+    const target = {
+      orgId: baseInput.orgId,
+      installationId: baseInput.installationId,
+      repoId: baseInput.repoId,
+      pullRequestNumber: baseInput.pullRequestNumber,
+    };
+    await retirePullRequestSubscriptions(target, storage);
 
-    expect(
-      await listPullRequestSubscriptions(
-        {
-          orgId: baseInput.orgId,
-          installationId: baseInput.installationId,
-          repoId: baseInput.repoId,
-          pullRequestNumber: baseInput.pullRequestNumber,
-        },
-        storage,
-      ),
-    ).toEqual([]);
-    expect(storage.subscriptions).toHaveLength(1);
+    expect(await listPullRequestSubscriptions(target, storage)).toEqual([]);
+    expect(await listPullRequestSubscriptions({ ...target, pullRequestNumber: 43 }, storage)).toHaveLength(1);
   });
 
   it('rejects cross-org project access and isolates reverse lookups', async () => {

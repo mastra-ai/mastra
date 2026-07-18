@@ -1,6 +1,6 @@
 # mastracode-web
 
-The Mastra Code web surface: API routes (config/fs/GitHub), a deployable Mastra entry (`src/mastra/index.ts`), and the SPA UI. Built on [`@mastra/code-sdk`](../sdk). All agent state (threads, messages, memory, recall vectors) persists in the single app Postgres when `APP_DATABASE_URL` is set.
+The Mastra Code web surface: API routes (config/fs/GitHub/Linear), a deployable Mastra entry (`src/mastra/index.ts`), and the SPA UI. Built on [`@mastra/code-sdk`](../sdk). One factory storage backend persists both agent state (threads, messages, memory, recall vectors) and web app data. The deploy entry uses PostgreSQL when `APP_DATABASE_URL` is set and otherwise reuses the SDK's local LibSQL database.
 
 This is a **standalone pnpm project** (own lockfile, not a monorepo workspace member). For development, the monorepo-provided packages (`@mastra/*`, `mastra`) are consumed via `link:` specs pointing at the monorepo directories, so you always develop against local source. For builds, `scripts/monorepo-deps.mjs` temporarily pins those deps to the exact versions found in the monorepo (see below).
 
@@ -23,7 +23,7 @@ pnpm web:dev
 - API server (`mastra dev`) on **:4111**, env loaded/validated by varlock from `.env` against `.env.schema` (package root).
 - Vite SPA on **:5173**, proxying `/api`, `/web`, and `/auth/` to the API server.
 
-For the GitHub/sandbox features, start the app database first: `pnpm web:dev:github` (Postgres via docker compose on :54329).
+Local development works without PostgreSQL: the full web surface uses the SDK's local LibSQL database. To exercise the PostgreSQL backend and distributed-lock path, run `pnpm web:dev:github` (Docker Compose on port 54329).
 
 ## Build & deploy
 
@@ -69,4 +69,4 @@ Configure the GitHub App webhook URL as `https://your-host/web/github/webhook`, 
 
 ## Environment
 
-See `.env.schema` (package root; varlock validates `.env` against it). Minimum: none (runs auth-less, local-only). Auth needs `WORKOS_*`; GitHub needs `GITHUB_APP_*` + auth + `APP_DATABASE_URL`; Railway sandboxes need `RAILWAY_API_TOKEN`. `MASTRACODE_PUBLIC_URL` controls both the WorkOS (`/auth/callback`) and GitHub App (`/auth/github/callback`) redirect URLs.
+See `.env.schema` (package root; varlock validates `.env` against it). Minimum: none (runs auth-less with local LibSQL storage). Set `APP_DATABASE_URL` to use PostgreSQL instead. Auth needs `WORKOS_*` or `BETTER_AUTH_SECRET`; GitHub needs the complete `GITHUB_APP_*` group plus auth; Linear needs `LINEAR_CLIENT_ID` and `LINEAR_CLIENT_SECRET`; Railway sandboxes need `RAILWAY_API_TOKEN`. `MASTRACODE_PUBLIC_URL` controls the WorkOS (`/auth/callback`), GitHub App (`/auth/github/callback`), and Linear callback URLs.

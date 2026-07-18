@@ -31,7 +31,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../factory-integration.js';
 import { buildGithubRoutes } from './routes.js';
 import { createGithubSubscriptionTools } from './session-subscriptions.js';
-import { GithubStoragePG } from './storage/pg.js';
+import { GithubStorageOps } from './storage/ops.js';
 
 /**
  * Normalize a PEM private key supplied via env. Env tooling tends to mangle
@@ -149,7 +149,7 @@ export class GithubIntegration implements FactoryIntegration {
   readonly #clientSecret: string;
   readonly #slug: string;
   readonly #webhookSecret: string | undefined;
-  readonly storageDomain = new GithubStoragePG();
+  readonly storageDomain = new GithubStorageOps();
 
   constructor(config: GithubIntegrationConfig) {
     const missing = REQUIRED_FIELDS.filter(field => !config[field]);

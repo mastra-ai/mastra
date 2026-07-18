@@ -23,8 +23,9 @@ import { getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './github/co
 import { buildFactoryRoutes } from './factory/routes.js';
 import type { GithubStorage } from './github/storage/base.js';
 import { buildIntakeRoutes } from './intake/routes.js';
-import { getFactoryStore, getSeededStateSigner } from './runtime-config.js';
+import { getDomainRegistry, getSeededStateSigner } from './runtime-config.js';
 import { getLinearFeatureDiagnostics, isLinearFeatureEnabled } from './linear/config.js';
+import type { IntegrationStorage } from './storage/domains/integrations/base.js';
 import { registerSandboxReattach } from './sandbox-reattach-registration.js';
 import { buildSkillRoutes } from './skills/routes.js';
 import type { StateSigner } from './state-signing.js';
@@ -54,6 +55,8 @@ export interface WebApiRoutesDeps {
    * integration via its {@link IntegrationContext}.
    */
   stateSigner?: StateSigner;
+  /** Generic integration persistence handed to each integration route set. */
+  integrationStorage: IntegrationStorage;
   /**
    * Registered integrations with their readiness (resolved ahead of time by
    * the factory so this stays synchronous). Ready → the integration's full
@@ -82,7 +85,7 @@ export interface WebApiRoutesDeps {
 export async function resolveFactoryReady(githubReady: boolean): Promise<boolean> {
   if (!githubReady) return false;
   try {
-    await getFactoryStore().ensureReady('work-items');
+    await getDomainRegistry().ensureReady('work-items');
     return true;
   } catch (err) {
     process.stderr.write(
@@ -102,7 +105,7 @@ export async function resolveFactoryReady(githubReady: boolean): Promise<boolean
 export async function resolveIntakeReady(anySourceReady: boolean): Promise<boolean> {
   if (!anySourceReady) return false;
   try {
-    await getFactoryStore().ensureReady('intake');
+    await getDomainRegistry().ensureReady('intake');
     return true;
   } catch (err) {
     process.stderr.write(
@@ -126,7 +129,7 @@ export async function resolveLinearReady(): Promise<boolean> {
         'MastraCode Web: Linear routes disabled',
         `  WorkOS auth:          ${diag.webAuthEnabled ? 'enabled' : 'disabled'}`,
         `  Linear integration:   ${diag.linearAppConfigured ? 'registered' : 'not registered (LINEAR_CLIENT_ID / LINEAR_CLIENT_SECRET)'}`,
-        `  App DB:               ${diag.appDbConfigured ? 'configured' : 'not configured (no PostgresStore in the factory storage slot)'}`,
+        `  App DB:               ${diag.appDbConfigured ? 'configured' : 'not configured (factory storage unavailable)'}`,
       ].join('\n') + '\n',
     );
     return false;
@@ -146,7 +149,8 @@ export async function resolveLinearReady(): Promise<boolean> {
   }
 
   try {
-    await getFactoryStore().ensureReady('linear');
+    // Linear persists through the built-in generic integration-storage domain.
+    await getDomainRegistry().ensureReady('integrations');
     process.stderr.write('MastraCode Web: Linear routes enabled\n');
     return true;
   } catch (err) {
@@ -180,7 +184,7 @@ export async function resolveGithubReady(): Promise<boolean> {
       'MastraCode Web: GitHub routes disabled',
       `  WorkOS auth:          ${diag.webAuthEnabled ? 'enabled' : 'disabled'}`,
       `  GitHub App config:    ${diag.githubAppConfigured ? 'configured' : `missing ${missing.join(', ')}`}`,
-      `  App DB:               ${diag.appDbConfigured ? 'configured' : 'not configured (no PostgresStore in the factory storage slot)'}`,
+      `  App DB:               ${diag.appDbConfigured ? 'configured' : 'not configured (no GitHub storage domain registered)'}`,
       `  State secret:         ${diag.stateSecretConfigured ? 'configured' : 'random per-process (multi-replica unsafe)'}`,
       `  Sandbox provider:     ${diag.sandboxProvider} (${diag.sandboxEnabled ? 'enabled' : 'disabled'})`,
     ];
@@ -201,7 +205,7 @@ export async function resolveGithubReady(): Promise<boolean> {
   }
 
   try {
-    await getFactoryStore().ensureReady('github');
+    await getDomainRegistry().ensureReady('github');
     process.stderr.write(
       [
         'MastraCode Web: GitHub routes enabled',
@@ -384,6 +388,7 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
         baseUrl: deps.publicOrigin,
         controller: deps.controller,
         stateSigner: deps.stateSigner,
+        storage: deps.integrationStorage,
         hooks: { runIssueTriage: (input: IssueTriageRunInput) => runIssueTriage(deps, input) },
       }
     : undefined;

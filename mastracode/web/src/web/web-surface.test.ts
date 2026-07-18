@@ -4,11 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // import so `resolveLinearReady` can be exercised without external services.
 vi.mock('./sandbox-reattach-registration', () => ({ registerSandboxReattach: () => {} }));
 
-import { PostgresStore } from '@mastra/pg';
 import type { WebAuthAdapter } from './auth-adapter';
-import { LinearStorageInMemory } from './linear/storage/inmemory';
 import { __resetRuntimeConfigForTests, seedRuntimeConfig } from './runtime-config';
-import { FactoryStore } from './storage/factory-store';
+import { seedFactoryStorageForTests } from './storage/test-utils';
 import { createStateSigner } from './state-signing';
 import { buildIssueTriagePrompt, resolveLinearReady } from './web-surface';
 
@@ -21,15 +19,12 @@ import { buildIssueTriagePrompt, resolveLinearReady } from './web-surface';
 let stderrSpy: ReturnType<typeof vi.spyOn>;
 
 async function enableLinearFeature(options?: { stableStateSigner?: boolean }): Promise<void> {
-  const storageDomain = new LinearStorageInMemory();
-  const linearStub = { id: 'linear', listActiveIssues: vi.fn(), storageDomain } as any;
-  const factoryStore = new FactoryStore();
-  factoryStore.register(storageDomain);
-  await factoryStore.init({ pool: {} as never });
+  const linearStub = { id: 'linear', listActiveIssues: vi.fn() } as any;
+  const seed = await seedFactoryStorageForTests();
   seedRuntimeConfig({
-    storage: new PostgresStore({ id: 'web-surface-test', connectionString: 'postgres://localhost/app' }),
+    storage: seed.storage,
     authAdapter: { kind: 'workos' } as WebAuthAdapter,
-    factoryStore,
+    domainRegistry: seed.registry,
     integrations: [linearStub],
     // No explicit secret ⇒ per-process random signer (stable: false).
     stateSigner: createStateSigner(options?.stableStateSigner ? 'explicit-secret' : undefined),

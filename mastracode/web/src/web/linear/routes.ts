@@ -27,6 +27,7 @@ import {
   LinearReauthRequiredError,
   loadLinearConnection as loadConnection,
 } from './connection';
+import { upsertLinearConnection } from './storage';
 
 type RouteContext = Context;
 
@@ -137,7 +138,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
           });
         }
 
-        const connection = await loadConnection(tenant.orgId, linear);
+        const connection = await loadConnection(tenant.orgId);
         return c.json({
           enabled: true,
           connected: Boolean(connection),
@@ -200,7 +201,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
         try {
           const tokens = await linear.exchangeOAuthCode(code, redirectUri);
           const workspace = await linear.fetchWorkspace(tokens.accessToken);
-          await linear.storageDomain.upsertConnection({
+          await upsertLinearConnection({
             orgId,
             userId,
             accessToken: tokens.accessToken,
@@ -231,7 +232,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
         const resolved = await resolveOrgTenant(loose(c));
         if ('response' in resolved) return resolved.response;
 
-        const connection = await loadConnection(resolved.tenant.orgId, linear);
+        const connection = await loadConnection(resolved.tenant.orgId);
         if (!connection) {
           return c.json({ error: 'linear_not_connected', message: 'Connect Linear to list projects.' }, 409);
         }
@@ -261,7 +262,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
         const after = parseAfterCursor(c.req.query('after'));
         if (after === null) return c.json({ error: 'invalid_cursor' }, 400);
 
-        const connection = await loadConnection(resolved.tenant.orgId, linear);
+        const connection = await loadConnection(resolved.tenant.orgId);
         if (!connection) {
           return c.json({ error: 'linear_not_connected', message: 'Connect Linear to see intake issues.' }, 409);
         }

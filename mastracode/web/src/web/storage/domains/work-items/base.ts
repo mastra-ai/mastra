@@ -4,7 +4,7 @@
  *
  * One `work_items` row represents a unit of work (a GitHub issue/PR, a Linear
  * issue, or a manually filed card) as it moves across board stages. Stages are
- * plain strings inside jsonb (`intake` → `execute` → `review` → `done` today),
+ * plain strings inside json (`intake` → `execute` → `review` → `done` today),
  * so evolving the board's columns never needs a schema change. A single item
  * can sit in several stages at once (e.g. `['execute','review']`).
  *
@@ -13,8 +13,14 @@
  * `startedBy` fields record who did what, but never scope reads.
  *
  * Stage history is appended exclusively here (server-side) on every stage
- * transition so it can never drift from `stages`.
+ * transition so it can never drift from `stages`. Concurrent read-modify-
+ * writes of `stageHistory`/`sessions`/`metadata` ride the backend's
+ * `updateAtomic` (pg: `FOR UPDATE` transaction; libsql: serialized writer) so
+ * merges never silently drop each other.
  */
+
+import { UniqueViolationError } from '@mastra/core/storage';
+import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
 
 import type { FactoryStorageContext, FactoryStorageDomain } from '../../domain';
 
@@ -153,9 +159,8 @@ export function stampSessions(
 /**
  * Compute the fields an update patch changes on `existing`: stage changes are
  * diffed into history, sessions and metadata are merged, `updatedAt` is always
- * stamped. Shared by backends so patch semantics can never diverge; each
- * backend is responsible for serializing concurrent read-modify-writes (e.g.
- * `FOR UPDATE` in Postgres).
+ * stamped. Centralized so patch semantics can never diverge between the
+ * upsert-reuse and PATCH paths.
  */
 export function computeWorkItemPatch(
   existing: WorkItemRow,
@@ -183,17 +188,131 @@ export function computeWorkItemPatch(
   return { changes, previous };
 }
 
-/**
- * Abstract work item storage. Backends own their DDL in `init()`; query
- * methods are the typed surface the factory routes consume.
- */
-export abstract class WorkItemsStorage implements FactoryStorageDomain {
-  readonly name = 'work-items';
+export const WORK_ITEMS_SCHEMA: CollectionSchema = {
+  name: 'work_items',
+  columns: {
+    id: { type: 'uuid-pk' },
+    org_id: { type: 'text' },
+    created_by: { type: 'text' },
+    github_project_id: { type: 'text' },
+    source: { type: 'text' },
+    source_key: { type: 'text', nullable: true },
+    title: { type: 'text' },
+    url: { type: 'text', nullable: true },
+    stages: { type: 'json' },
+    stage_history: { type: 'json' },
+    sessions: { type: 'json' },
+    metadata: { type: 'json' },
+    created_at: { type: 'timestamp' },
+    updated_at: { type: 'timestamp' },
+  },
+  uniqueIndexes: [
+    // Acting twice on the same issue must not duplicate the card; manual
+    // cards (NULL source_key) may repeat freely.
+    {
+      name: 'work_items_org_project_source_key_unique',
+      columns: ['org_id', 'github_project_id', 'source_key'],
+      whereNotNull: 'source_key',
+    },
+  ],
+};
 
-  abstract init(ctx: FactoryStorageContext): Promise<void>;
+/** Column shape of one `work_items` row as returned by ops. */
+interface WorkItemDbRow extends Record<string, unknown> {
+  id: string;
+  org_id: string;
+  created_by: string;
+  github_project_id: string;
+  source: WorkItemRow['source'];
+  source_key: string | null;
+  title: string;
+  url: string | null;
+  stages: WorkItemRow['stages'];
+  stage_history: WorkItemRow['stageHistory'];
+  sessions: WorkItemRow['sessions'];
+  metadata: WorkItemRow['metadata'];
+  created_at: Date;
+  updated_at: Date;
+}
+
+function toRow(db: WorkItemDbRow): WorkItemRow {
+  return {
+    id: db.id,
+    orgId: db.org_id,
+    createdBy: db.created_by,
+    githubProjectId: db.github_project_id,
+    source: db.source,
+    sourceKey: db.source_key,
+    title: db.title,
+    url: db.url,
+    stages: db.stages,
+    stageHistory: db.stage_history,
+    sessions: db.sessions,
+    metadata: db.metadata,
+    createdAt: db.created_at,
+    updatedAt: db.updated_at,
+  };
+}
+
+/** Map a computed camelCase patch onto `work_items` column names. */
+function patchColumns(changes: Partial<WorkItemRow>): Partial<WorkItemDbRow> {
+  const set: Partial<WorkItemDbRow> = {};
+  if (changes.updatedAt !== undefined) set.updated_at = changes.updatedAt;
+  if (changes.title !== undefined) set.title = changes.title;
+  if (changes.url !== undefined) set.url = changes.url;
+  if (changes.stages !== undefined) set.stages = changes.stages;
+  if (changes.stageHistory !== undefined) set.stage_history = changes.stageHistory;
+  if (changes.sessions !== undefined) set.sessions = changes.sessions;
+  if (changes.metadata !== undefined) set.metadata = changes.metadata;
+  return set;
+}
+
+/**
+ * Work item storage, written once against the generic `FactoryStorageOps`
+ * surface. Query methods are the typed surface the factory routes consume.
+ */
+export class WorkItemsStorage implements FactoryStorageDomain {
+  readonly name = 'work-items';
+  #ops?: FactoryStorageOps;
+
+  async init(ctx: FactoryStorageContext): Promise<void> {
+    await ctx.storage.ensureCollections([WORK_ITEMS_SCHEMA]);
+    this.#ops = ctx.storage.ops;
+  }
+
+  get #db(): FactoryStorageOps {
+    if (!this.#ops) throw new Error('[WorkItemsStorage] Not initialized — init() has not succeeded.');
+    return this.#ops;
+  }
 
   /** List the org's work items for a project, newest first. */
-  abstract list(orgId: string, githubProjectId: string): Promise<WorkItemRow[]>;
+  async list(orgId: string, githubProjectId: string): Promise<WorkItemRow[]> {
+    const rows = await this.#db.findMany<WorkItemDbRow>(
+      'work_items',
+      { org_id: orgId, github_project_id: githubProjectId },
+      { orderBy: [['updated_at', 'desc']] },
+    );
+    return rows.map(toRow);
+  }
+
+  /**
+   * Atomically patch the row matching `where` via `computeWorkItemPatch`.
+   * Returns `null` when no row matches.
+   */
+  async #applyUpdateAtomic(
+    where: Record<string, string>,
+    patch: UpdateWorkItemInput,
+    userId: string,
+    now: Date,
+  ): Promise<{ item: WorkItemRow; previous: WorkItemPriorState } | null> {
+    let previous: WorkItemPriorState | undefined;
+    const updated = await this.#db.updateAtomic<WorkItemDbRow>('work_items', where, row => {
+      const computed = computeWorkItemPatch(toRow(row), patch, userId, now);
+      previous = computed.previous;
+      return patchColumns(computed.changes);
+    });
+    return updated && previous ? { item: toRow(updated), previous } : null;
+  }
 
   /**
    * Create a work item, reusing the existing record when `sourceKey` already
@@ -203,12 +322,55 @@ export abstract class WorkItemsStorage implements FactoryStorageDomain {
    * result discriminates insert from reuse so callers can audit the actual
    * outcome.
    */
-  abstract upsert(params: {
+  async upsert(params: {
     orgId: string;
     userId: string;
     githubProjectId: string;
     input: CreateWorkItemInput;
-  }): Promise<UpsertWorkItemResult>;
+  }): Promise<UpsertWorkItemResult> {
+    const { orgId, userId, githubProjectId, input } = params;
+    const now = new Date();
+
+    const reuseExisting = async (): Promise<UpsertWorkItemResult | null> => {
+      if (input.sourceKey === null) return null;
+      const updated = await this.#applyUpdateAtomic(
+        { org_id: orgId, github_project_id: githubProjectId, source_key: input.sourceKey },
+        input,
+        userId,
+        now,
+      );
+      return updated ? { created: false, item: updated.item, previous: updated.previous } : null;
+    };
+
+    const reused = await reuseExisting();
+    if (reused) return reused;
+
+    try {
+      const inserted = await this.#db.insertOne<WorkItemDbRow>('work_items', {
+        org_id: orgId,
+        created_by: userId,
+        github_project_id: githubProjectId,
+        source: input.source,
+        source_key: input.sourceKey,
+        title: input.title,
+        url: input.url,
+        stages: input.stages,
+        stage_history: applyStageTransition([], [], input.stages, userId, now),
+        sessions: stampSessions(input.sessions, userId),
+        metadata: input.metadata,
+        created_at: now,
+        updated_at: now,
+      });
+      return { created: true, item: toRow(inserted) };
+    } catch (err) {
+      if (!(err instanceof UniqueViolationError)) throw err;
+      // Concurrent create for the same sourceKey: the unique index won the
+      // race — fall back to updating the row it protected.
+      const fallback = await reuseExisting();
+      if (fallback) return fallback;
+      throw err;
+    }
+  }
 
   /**
    * Patch an org's work item: stage changes are diffed into history, sessions
@@ -216,13 +378,20 @@ export abstract class WorkItemsStorage implements FactoryStorageDomain {
    * and session roles (for audit diffing), or `null` when the item doesn't
    * exist in the caller's org.
    */
-  abstract update(
+  async update(
     orgId: string,
     id: string,
     userId: string,
     patch: UpdateWorkItemInput,
-  ): Promise<{ item: WorkItemRow; previous: WorkItemPriorState } | null>;
+  ): Promise<{ item: WorkItemRow; previous: WorkItemPriorState } | null> {
+    return this.#applyUpdateAtomic({ id, org_id: orgId }, patch, userId, new Date());
+  }
 
   /** Delete an org's work item. Returns the row actually deleted, or `null` when it doesn't exist in the org. */
-  abstract delete(orgId: string, id: string): Promise<WorkItemRow | null>;
+  async delete(orgId: string, id: string): Promise<WorkItemRow | null> {
+    const row = await this.#db.findOne<WorkItemDbRow>('work_items', { id, org_id: orgId });
+    if (!row) return null;
+    const deleted = await this.#db.deleteMany('work_items', { id, org_id: orgId });
+    return deleted > 0 ? toRow(row) : null;
+  }
 }

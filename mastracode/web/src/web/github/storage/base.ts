@@ -5,10 +5,10 @@
  * `github_signal_subscriptions`).
  *
  * The abstract base declares the contract and owns backend-agnostic
- * semantics (owned-project validation, subscription reopen-on-resubscribe);
- * `GithubStoragePG` owns the idempotent DDL and `GithubStorageInMemory`
- * backs tests. The `GithubIntegration` instance constructs the pg domain and
- * hands it to the factory as its `storageDomain` — routes/webhook/tools
+ * semantics (owned-project validation, subscription reopen-on-resubscribe).
+ * `GithubStorageOps` declares portable schemas and performs all persistence
+ * through the injected `FactoryStorage` operations. The `GithubIntegration`
+ * instance hands it to the factory as its `storageDomain` — routes/webhook/tools
  * consume the typed domain, never a raw DB client.
  *
  * The tenancy model is **org-first** (see the table docs below): installations

@@ -5,8 +5,8 @@ import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import type { WebAuthAdapter } from './auth-adapter.js';
 import { buildConfigRoutes, listProviders } from './config-routes.js';
 import { __resetRuntimeConfigForTests, seedRuntimeConfig } from './runtime-config.js';
-import { seedInMemoryFactoryStoreForTests } from './storage/test-utils.js';
-import type { InMemoryFactoryStoreSeed } from './storage/test-utils.js';
+import { seedFactoryStorageForTests } from './storage/test-utils.js';
+import type { FactoryStorageTestSeed } from './storage/test-utils.js';
 import { mountApiRoutes } from './test-utils.js';
 
 function makeAuthStorage(opts: { loggedIn?: string[]; storedKeys?: string[] }): AuthStorage {
@@ -155,7 +155,7 @@ describe('listProviders', () => {
 // ── Scoped API key routes (tenant mode) ─────────────────────────────────
 
 describe('provider key routes with a tenant', () => {
-  let seed: InMemoryFactoryStoreSeed;
+  let seed: FactoryStorageTestSeed;
   const isOrganizationAdmin = vi.fn(async () => true);
   const authAdapter: WebAuthAdapter = {
     kind: 'test',
@@ -184,9 +184,9 @@ describe('provider key routes with a tenant', () => {
   const userB = { workosId: 'user-b', organizationId: 'org1' };
 
   beforeEach(async () => {
-    seed = await seedInMemoryFactoryStoreForTests();
+    seed = await seedFactoryStorageForTests();
     isOrganizationAdmin.mockResolvedValue(true);
-    seedRuntimeConfig({ factoryStore: seed.factoryStore, authAdapter });
+    seedRuntimeConfig({ domainRegistry: seed.registry, authAdapter });
   });
 
   afterEach(() => {

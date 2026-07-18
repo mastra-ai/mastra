@@ -2,9 +2,9 @@
  * Registry of factory app-table storage domains.
  *
  * `MastraFactory.prepare()` registers the built-in domains (intake, audit,
- * work-items) and any integration-provided domains, then calls `init()` once
- * after the injected Mastra storage's own `init()`. Domain init is
- * **fail-soft**: one domain's DDL failure marks that domain not-ready (its
+ * work-items, model-credentials) and any integration-provided domains, then
+ * calls `init()` once after the factory storage's own `init()`. Domain init
+ * is **fail-soft**: one domain's DDL failure marks that domain not-ready (its
  * feature gates off) without aborting boot or the other domains. A failed
  * init is retried on the next `ensureReady()` call, preserving the old
  * `ensureXyzDbReady()` retry-on-request semantics.
@@ -14,9 +14,10 @@ import type { FactoryStorageContext, FactoryStorageDomain } from './domain';
 import type { AuditStorage } from './domains/audit/base';
 import type { ModelCredentialsStorage } from './domains/credentials/base';
 import type { IntakeStorage } from './domains/intake/base';
+import type { IntegrationStorage } from './domains/integrations/base';
 import type { WorkItemsStorage } from './domains/work-items/base';
 
-export class FactoryStore {
+export class DomainRegistry {
   #domains = new Map<string, FactoryStorageDomain>();
   #ctx?: FactoryStorageContext;
   /** Per-domain init latch; cleared on failure so `ensureReady()` retries. */
@@ -32,7 +33,7 @@ export class FactoryStore {
    */
   register(domain: FactoryStorageDomain): void {
     if (this.#domains.has(domain.name)) {
-      throw new Error(`[FactoryStore] Domain '${domain.name}' is already registered.`);
+      throw new Error(`[DomainRegistry] Domain '${domain.name}' is already registered.`);
     }
     this.#domains.set(domain.name, domain);
   }
@@ -44,7 +45,7 @@ export class FactoryStore {
 
   #require(name: string): FactoryStorageDomain {
     const domain = this.#domains.get(name);
-    if (!domain) throw new Error(`[FactoryStore] Domain '${name}' is not registered.`);
+    if (!domain) throw new Error(`[DomainRegistry] Domain '${name}' is not registered.`);
     return domain;
   }
 
@@ -68,13 +69,18 @@ export class FactoryStore {
     return this.#require('model-credentials') as ModelCredentialsStorage;
   }
 
+  /** Generic integration storage domain (built-in). Throws when not registered. */
+  get integrations(): IntegrationStorage {
+    return this.#require('integrations') as IntegrationStorage;
+  }
+
   /** Names of all registered domains, in registration order. */
   names(): string[] {
     return [...this.#domains.keys()];
   }
 
   /**
-   * Initialize every registered domain against the shared connection.
+   * Initialize every registered domain against the shared backend.
    * Fail-soft per domain: failures are recorded (see {@link initError}) and
    * logged, never thrown. Concurrent/repeated calls coalesce per domain;
    * previously failed domains are retried.
@@ -103,19 +109,17 @@ export class FactoryStore {
   /**
    * Ensure the named domain is initialized, retrying a previously failed
    * init. Throws when the domain is unknown, when `init()` has never been
-   * called (no storage was provided to the factory), or when the retry fails.
+   * called (MastraFactory.prepare() has not run), or when the retry fails.
    */
   async ensureReady(name: string): Promise<void> {
     const domain = this.#domains.get(name);
     if (!domain) {
-      throw new Error(`[FactoryStore] Unknown domain '${name}'.`);
+      throw new Error(`[DomainRegistry] Unknown domain '${name}'.`);
     }
     if (this.#ready.has(name)) return;
     const ctx = this.#ctx;
     if (!ctx) {
-      throw new Error(
-        `[FactoryStore] Not initialized — MastraFactory.prepare() has not run or no storage was provided.`,
-      );
+      throw new Error(`[DomainRegistry] Not initialized — MastraFactory.prepare() has not run.`);
     }
     await this.#initDomain(domain, ctx);
   }
@@ -135,7 +139,7 @@ export class FactoryStore {
           this.#inits.delete(domain.name);
           const error = err instanceof Error ? err : new Error(String(err));
           this.#errors.set(domain.name, error);
-          console.warn(`[FactoryStore] Domain '${domain.name}' init failed: ${error.message}`);
+          console.warn(`[DomainRegistry] Domain '${domain.name}' init failed: ${error.message}`);
           throw error;
         },
       );

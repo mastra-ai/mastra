@@ -23,6 +23,7 @@ import type { ApiRoute } from '@mastra/core/server';
 
 import type { StateSigner } from './state-signing.js';
 import type { FactoryStorageDomain } from './storage/domain.js';
+import type { IntegrationStorage } from './storage/domains/integrations/base.js';
 
 /**
  * Input for the system's issue-triage hook: a webhook (or manual Intake
@@ -75,6 +76,14 @@ export interface IntegrationContext {
    * every integration's OAuth flow signs and verifies with the same secret.
    */
   stateSigner: StateSigner;
+  /**
+   * Generic integration persistence (connections / subscriptions / settings).
+   * Call `storage.forIntegration(id)` for a typed handle pre-scoped to this
+   * integration — zero schema, zero DDL, org scoping by construction. Bring a
+   * bespoke {@link FactoryIntegration.storageDomain} only for genuinely
+   * relational models.
+   */
+  storage: IntegrationStorage;
   /** System hooks integrations may invoke. */
   hooks?: IntegrationHooks;
 }
@@ -87,7 +96,7 @@ export interface FactoryIntegration {
   /** Stable identifier: `'github'`, `'linear'`, custom ids for third parties. */
   readonly id: string;
   /**
-   * Storage domain the factory registers into the {@link FactoryStore}
+   * Storage domain the factory registers into the {@link DomainRegistry}
    * alongside the built-ins. Optional: integrations with no persistence omit
    * it. `init()` (DDL) runs through the store's coalesced, retry-safe boot
    * path; a failure marks the integration not-ready without aborting boot.
