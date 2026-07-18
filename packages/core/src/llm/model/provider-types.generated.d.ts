@@ -2321,7 +2321,6 @@ export type ProviderModelsMap = {
   readonly thinkingmachines: readonly ['inkling'];
   readonly nebius: readonly [
     'MiniMaxAI/MiniMax-M2.5',
-    'MiniMaxAI/MiniMax-M3',
     'NousResearch/Hermes-4-405B',
     'NousResearch/Hermes-4-70B',
     'Qwen/Qwen2.5-VL-72B-Instruct',
@@ -2334,7 +2333,6 @@ export type ProviderModelsMap = {
     'deepseek-ai/DeepSeek-V4-Pro',
     'google/gemma-3-27b-it',
     'meta-llama/Llama-3.3-70B-Instruct',
-    'moonshotai/Kimi-K2.7-Code',
     'nvidia/Llama-3_1-Nemotron-Ultra-253B-v1',
     'nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B',
     'nvidia/Nemotron-3-Nano-Omni',

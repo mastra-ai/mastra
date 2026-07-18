@@ -45,6 +45,11 @@ export type ActionType = 'read' | 'write';
  */
 const READ_VERBS = ['list', 'get', 'log', 'logs', 'top', 'view', 'describe', 'stats', 'contexts'];
 
+/**
+ * Classifies a tool name as `'read'` or `'write'` by loose substring match against `READ_VERBS`.
+ * See the module comment above `READ_VERBS` for why this is deliberately loose and only safe when
+ * combined with the exact-equality allowlist check in `enforceReadOnly` below.
+ */
 export function classifyAction(toolName: string): ActionType {
   const normalized = toolName.toLowerCase();
   return READ_VERBS.some(verb => normalized.includes(verb)) ? 'read' : 'write';
@@ -60,6 +65,7 @@ export interface PolicyLogEntry {
 /** In-memory log of every policy decision made this process. Exposed for the agent/UI to inspect. */
 export const policyLog: PolicyLogEntry[] = [];
 
+/** Records one policy decision to `policyLog` and warns on the console if the call was rejected. */
 function logAttempt(toolName: string, action: ActionType, allowed: boolean) {
   const entry: PolicyLogEntry = { timestamp: new Date().toISOString(), toolName, action, allowed };
   policyLog.push(entry);
@@ -93,20 +99,24 @@ export function enforceReadOnly<T extends Record<string, Tool<any, any, any, any
 
     const originalExecute = tool.execute?.bind(tool);
 
-    (guarded as Record<string, Tool<any, any, any, any>>)[key] = Object.assign(Object.create(Object.getPrototypeOf(tool)), tool, {
-      execute: async (inputData: unknown, context: unknown) => {
-        const allowed = action === 'read' && isAllowlisted;
-        logAttempt(key, action, allowed);
+    (guarded as Record<string, Tool<any, any, any, any>>)[key] = Object.assign(
+      Object.create(Object.getPrototypeOf(tool)),
+      tool,
+      {
+        execute: async (inputData: unknown, context: unknown) => {
+          const allowed = action === 'read' && isAllowlisted;
+          logAttempt(key, action, allowed);
 
-        if (!allowed) {
-          throw new PolicyViolationError(key, action);
-        }
-        if (!originalExecute) {
-          throw new Error(`Tool "${key}" has no execute function.`);
-        }
-        return originalExecute(inputData as never, context as never);
+          if (!allowed) {
+            throw new PolicyViolationError(key, action);
+          }
+          if (!originalExecute) {
+            throw new Error(`Tool "${key}" has no execute function.`);
+          }
+          return originalExecute(inputData as never, context as never);
+        },
       },
-    });
+    );
   }
 
   return guarded;

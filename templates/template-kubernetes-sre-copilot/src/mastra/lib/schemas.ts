@@ -40,7 +40,9 @@ export const diagnosisOutputSchema = z.object({
   rootCause: z.string(),
   confidence: z.number().min(0).max(1),
   evidenceChain: z.array(evidenceNodeSchema),
-  suggestedFix: z.string().describe('Text-only recommendation. Never executed by this template — v1 has no write tools.'),
+  suggestedFix: z
+    .string()
+    .describe('Text-only recommendation. Never executed by this template — v1 has no write tools.'),
   riskLevel: z.enum(['low', 'medium', 'high']),
 });
 

@@ -11,7 +11,7 @@ diagnostic process, enforce safety boundaries on writes, or produce evidence you
 they give you a verdict and ask you to trust it. SRE teams don't work that way: they trust a chain
 of evidence, not an assertion.
 
-This template encodes *how experienced SREs actually debug* these four failure patterns as
+This template encodes _how experienced SREs actually debug_ these four failure patterns as
 editable runbooks (`workspace/skills/*/SKILL.md`), runs a fixed diagnostic workflow per failure
 type instead of letting a model free-associate over cluster state, and returns every diagnosis as
 an **evidence graph** — each claim in the output traces back to the specific tool call that

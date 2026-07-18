@@ -101,6 +101,11 @@ export function unqualifyToolName(qualifiedName: string): string {
   return qualifiedName.startsWith(prefix) ? qualifiedName.slice(prefix.length) : qualifiedName;
 }
 
+/**
+ * True if a fully-qualified tool name (as returned by `MCPClient.listTools()`) unqualifies to one
+ * of `READ_ONLY_TOOL_NAMES`. Used to build the allowlist in `../mcp/tools.ts` — every tool this
+ * template ever calls is filtered through this check first.
+ */
 export function isReadOnlyToolName(qualifiedName: string): boolean {
   return (READ_ONLY_TOOL_NAMES as readonly string[]).includes(unqualifyToolName(qualifiedName));
 }

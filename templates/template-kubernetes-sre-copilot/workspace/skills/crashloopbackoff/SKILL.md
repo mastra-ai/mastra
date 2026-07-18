@@ -12,7 +12,7 @@ metadata:
 # CrashLoopBackOff
 
 A container is starting, exiting, and being restarted by the kubelet on an exponential backoff.
-The goal is to find out *why* the container exits, not just confirm that it does.
+The goal is to find out _why_ the container exits, not just confirm that it does.
 
 ## Diagnostic Checklist
 
@@ -35,7 +35,7 @@ The goal is to find out *why* the container exits, not just confirm that it does
    events disambiguate the two), and `FailedMount`/`FailedScheduling` noise that might be a
    red herring.
 4. **Fetch the previous container's logs** (`previous=true`). This is the single most important
-   piece of evidence — the *current* container's logs are usually empty because it just started.
+   piece of evidence — the _current_ container's logs are usually empty because it just started.
    Look for the last few lines before exit: stack traces, "connection refused" to a dependency,
    config/env var errors, missing file errors.
 5. **Cross-check readiness/liveness probes** on the Pod spec. If a probe is too aggressive

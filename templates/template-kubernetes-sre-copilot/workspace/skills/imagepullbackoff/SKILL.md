@@ -30,7 +30,7 @@ The diagnostic job is to figure out which one from the event message text — it
      problem: missing, wrong, or expired `imagePullSecret`.
 3. **Check for an `imagePullSecrets` entry** on the Pod spec (or on the Pod's ServiceAccount, if
    the Pod spec doesn't set one directly — Kubernetes falls back to the ServiceAccount's secrets).
-   Its *absence* combined with an `unauthorized` event message is close to conclusive for a
+   Its _absence_ combined with an `unauthorized` event message is close to conclusive for a
    private registry.
 4. **Sanity-check reachability, if event text points to network.** `resources_list` for the
    node the Pod is scheduled on and check for `NetworkUnavailable`/`Ready` conditions — a

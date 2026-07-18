@@ -11,9 +11,7 @@ const allTools = await k8sMcpClient.listTools();
 // or misconfigured server (e.g. "kubernetes_malicious_pods_list") impersonate an allowlisted one.
 const qualifiedAllowlist = Object.keys(allTools).filter(isReadOnlyToolName);
 
-const allowlisted = Object.fromEntries(
-  Object.entries(allTools).filter(([name]) => qualifiedAllowlist.includes(name)),
-);
+const allowlisted = Object.fromEntries(Object.entries(allTools).filter(([name]) => qualifiedAllowlist.includes(name)));
 
 export const readOnlyTools = enforceReadOnly(allowlisted, qualifiedAllowlist);
 

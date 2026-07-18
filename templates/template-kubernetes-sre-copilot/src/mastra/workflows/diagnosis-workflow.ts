@@ -17,6 +17,7 @@ import type { FailureType } from '../lib/schemas';
 // Step 1: fetch the Pod
 // ---------------------------------------------------------------------------
 
+/** Step 1: fetch the Pod's current status via the read-only `pods_get` tool. */
 const fetchPod = createStep({
   id: 'fetch-pod',
   description: 'Fetch the Pod from the cluster via the read-only kubernetes-mcp-server tools',
@@ -41,7 +42,11 @@ const fetchPod = createStep({
  * which tells the agent to reclassify and hand off when it sees exit code 137).
  */
 const CLASSIFICATION_PATTERNS: Array<{ failureType: FailureType; pattern: RegExp; reason: string }> = [
-  { failureType: 'OOMKilled', pattern: /oomkilled|exit ?code.{0,20}137/i, reason: 'Pod status references OOMKilled / exit code 137' },
+  {
+    failureType: 'OOMKilled',
+    pattern: /oomkilled|exit ?code.{0,20}137/i,
+    reason: 'Pod status references OOMKilled / exit code 137',
+  },
   {
     failureType: 'ImagePullBackOff',
     pattern: /imagepullbackoff|errimagepull/i,
@@ -59,6 +64,7 @@ const CLASSIFICATION_PATTERNS: Array<{ failureType: FailureType; pattern: RegExp
   },
 ];
 
+/** Step 2: match the fetched Pod's raw status text against `CLASSIFICATION_PATTERNS` in order. */
 const classifyFailure = createStep({
   id: 'classify-failure',
   description: 'Classify the Pod status into one of the 4 failure patterns this template covers',
@@ -81,6 +87,12 @@ const classifyFailure = createStep({
 // SKILL.md checklist calls for, then hands it to workflowDiagnosisAgent for structured synthesis.
 // ---------------------------------------------------------------------------
 
+/**
+ * Loads the matching `workspace/skills/<skillName>/SKILL.md` runbook and hands it, along with the
+ * evidence a branch arm already gathered, to `workflow-diagnosis-agent` for structured synthesis.
+ * Falls back to a low-confidence, explicitly-labeled placeholder if the agent doesn't return
+ * structured output, rather than letting the step throw or silently return `undefined`.
+ */
 async function synthesize(mastra: any, failureType: FailureType, skillName: string, evidence: Record<string, unknown>) {
   const checklist = await loadSkill(skillName);
   const agent = mastra.getAgentById('workflow-diagnosis-agent');
@@ -101,6 +113,7 @@ async function synthesize(mastra: any, failureType: FailureType, skillName: stri
   );
 }
 
+/** Branch arm: gathers Events + previous-container logs, then synthesizes via `synthesize`. */
 const diagnoseCrashLoop = createStep({
   id: 'diagnose-crashloopbackoff',
   description: 'CrashLoopBackOff checklist: describe pod -> events -> previous logs -> classify',
@@ -116,6 +129,10 @@ const diagnoseCrashLoop = createStep({
   },
 });
 
+/**
+ * Branch arm: gathers Events only — the image reference and imagePullSecrets presence this
+ * checklist also needs are already present in `podJson` from `fetchPod`, so no extra tool call.
+ */
 const diagnoseImagePull = createStep({
   id: 'diagnose-imagepullbackoff',
   description: 'ImagePullBackOff checklist: image reference -> events -> imagePullSecret presence',
@@ -123,7 +140,11 @@ const diagnoseImagePull = createStep({
   outputSchema: diagnosisOutputSchema,
   execute: async ({ inputData, mastra }) => {
     const { namespace, podName, context, podJson } = inputData;
-    const events = await callTool('events_list', { namespace, fieldSelector: `involvedObject.name=${podName}`, context });
+    const events = await callTool('events_list', {
+      namespace,
+      fieldSelector: `involvedObject.name=${podName}`,
+      context,
+    });
     // The image reference and imagePullSecrets presence are both already in podJson from
     // fetch-pod — no separate tool call needed, the checklist's steps 1 and 3 are read directly
     // off the Pod spec already in hand.
@@ -131,6 +152,11 @@ const diagnoseImagePull = createStep({
   },
 });
 
+/**
+ * Branch arm: gathers Events and current resource usage (`pods_top`). Usage lookups fail softly
+ * (metrics-server is commonly unavailable on minimal clusters) — the failure itself becomes
+ * evidence rather than crashing the step.
+ */
 const diagnoseOomKilled = createStep({
   id: 'diagnose-oomkilled',
   description: 'OOMKilled checklist: exit code 137 check -> events -> memory limit vs usage',
@@ -172,6 +198,11 @@ function extractField(text: string, field: string): string[] {
   return Array.from(text.matchAll(pattern)).map(m => m[1]);
 }
 
+/**
+ * Branch arm: gathers Events, then chases the Pod's referenced PVC(s) -> StorageClass(es) -> Node
+ * list. Every lookup down that chain fails softly (see `extractField`'s doc comment) since a
+ * missing PVC or StorageClass is itself a valid, common diagnosis here, not an error condition.
+ */
 const diagnosePvcPending = createStep({
   id: 'diagnose-pvc-pending',
   description: 'PVC-stuck checklist: describe pod -> PVC status -> StorageClass -> node capacity',
@@ -179,7 +210,11 @@ const diagnosePvcPending = createStep({
   outputSchema: diagnosisOutputSchema,
   execute: async ({ inputData, mastra }) => {
     const { namespace, podName, context, podJson } = inputData;
-    const events = await callTool('events_list', { namespace, fieldSelector: `involvedObject.name=${podName}`, context });
+    const events = await callTool('events_list', {
+      namespace,
+      fieldSelector: `involvedObject.name=${podName}`,
+      context,
+    });
 
     // Pull PVC names referenced by the Pod spec so we know which PVCs/StorageClasses to check.
     const claimNames = extractField(podJson, 'claimName');
@@ -220,6 +255,12 @@ const diagnosePvcPending = createStep({
 // Step 4: normalize the branch's single populated result back into one shape
 // ---------------------------------------------------------------------------
 
+/**
+ * Step 4: `.branch()` only runs one arm, but Mastra's step output shape carries a key per
+ * possible branch. This picks out whichever key is actually populated and re-validates it against
+ * `diagnosisOutputSchema` before returning, so a malformed synthesis result fails loudly here
+ * rather than silently passing through as the workflow's final output.
+ */
 const normalizeReport = createStep({
   id: 'normalize-report',
   description: 'Pick out whichever branch arm actually ran and return it as the final diagnosis',
