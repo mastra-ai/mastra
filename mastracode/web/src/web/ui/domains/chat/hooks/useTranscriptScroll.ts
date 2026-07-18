@@ -20,7 +20,7 @@ function nearBottom(el: HTMLDivElement) {
 export function useTranscriptScroll(transcript: TranscriptState, threadId?: string) {
   const threadRef = useRef<HTMLDivElement>(null);
   const attachedRef = useRef(true);
-  const programmaticScrollRef = useRef(false);
+  const lastScrollTopRef = useRef(0);
   const [showScrollDown, setShowScrollDown] = useState(false);
   const streamingLen = getStreamingLength(transcript);
 
@@ -32,40 +32,24 @@ export function useTranscriptScroll(transcript: TranscriptState, threadId?: stri
   const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
     const el = threadRef.current;
     if (!el) return;
-    programmaticScrollRef.current = behavior === 'smooth' && el.scrollHeight > el.clientHeight;
     setAttached(true);
     el.scrollTo({ top: el.scrollHeight, behavior });
-    if (behavior === 'smooth') requestAnimationFrame(() => (programmaticScrollRef.current = false));
   };
 
-  // Scroll position is DOM state; user-initiated upward scrolls detach follow intent, while
-  // layout growth alone cannot detach an already attached transcript.
+  // Scroll position is DOM state. Only upward movement detaches follow intent; downward
+  // movement may come from smooth scrolling or browser scroll anchoring as content grows.
   useEffect(() => {
     const el = threadRef.current;
     if (!el) return;
-    const markUserScrollIntent = () => {
-      programmaticScrollRef.current = false;
-    };
     const onScroll = () => {
-      if (nearBottom(el)) {
-        programmaticScrollRef.current = false;
-        setAttached(true);
-        return;
-      }
-      if (programmaticScrollRef.current) return;
-      setAttached(false);
+      const scrollTop = el.scrollTop;
+      if (nearBottom(el)) setAttached(true);
+      else if (scrollTop < lastScrollTopRef.current) setAttached(false);
+      lastScrollTopRef.current = scrollTop;
     };
-    el.addEventListener('wheel', markUserScrollIntent, { passive: true });
-    el.addEventListener('touchmove', markUserScrollIntent, { passive: true });
-    el.addEventListener('keydown', markUserScrollIntent);
     el.addEventListener('scroll', onScroll, { passive: true });
     onScroll();
-    return () => {
-      el.removeEventListener('wheel', markUserScrollIntent);
-      el.removeEventListener('touchmove', markUserScrollIntent);
-      el.removeEventListener('keydown', markUserScrollIntent);
-      el.removeEventListener('scroll', onScroll);
-    };
+    return () => el.removeEventListener('scroll', onScroll);
   }, []);
 
   const scrollToBottomOnThreadChange = useEffectEvent(scrollToBottom);
@@ -80,18 +64,42 @@ export function useTranscriptScroll(transcript: TranscriptState, threadId?: stri
     return () => cancelAnimationFrame(raf);
   }, [threadId]);
 
-  // Streaming updates should follow while explicitly attached. Distance-to-bottom can change
-  // because a tool/result expanded; that layout movement is not user intent.
+  // Streaming updates should follow immediately while attached. Repeated smooth-scroll
+  // animations lag behind fast token and tool-output updates.
   useEffect(() => {
-    if (attachedRef.current) scrollToBottom('smooth');
+    if (attachedRef.current) scrollToBottom('auto');
   }, [transcript.entries.length, transcript.pending, streamingLen]);
 
   useEffect(() => {
     const el = threadRef.current;
     if (!el || typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(() => followLayoutChange());
-    observer.observe(el);
-    return () => observer.disconnect();
+
+    const observedChildren = new Set<Element>();
+    const resizeObserver = new ResizeObserver(() => followLayoutChange());
+    const syncObservedChildren = () => {
+      const children = new Set(Array.from(el.children));
+      for (const child of observedChildren) {
+        if (!children.has(child)) {
+          resizeObserver.unobserve(child);
+          observedChildren.delete(child);
+        }
+      }
+      for (const child of children) {
+        if (!observedChildren.has(child)) {
+          resizeObserver.observe(child);
+          observedChildren.add(child);
+        }
+      }
+    };
+    const mutationObserver = new MutationObserver(syncObservedChildren);
+
+    resizeObserver.observe(el);
+    syncObservedChildren();
+    mutationObserver.observe(el, { childList: true });
+    return () => {
+      mutationObserver.disconnect();
+      resizeObserver.disconnect();
+    };
   }, []);
 
   return { threadRef, showScrollDown, scrollToBottom };

@@ -12,6 +12,32 @@ interface HookSnapshot {
   scrollToBottom: (behavior?: ScrollBehavior) => void;
 }
 
+const resizeObservers: TestResizeObserver[] = [];
+
+class TestResizeObserver {
+  readonly observed = new Set<Element>();
+
+  constructor(private readonly callback: ResizeObserverCallback) {
+    resizeObservers.push(this);
+  }
+
+  observe(target: Element) {
+    this.observed.add(target);
+  }
+
+  unobserve(target: Element) {
+    this.observed.delete(target);
+  }
+
+  disconnect() {
+    this.observed.clear();
+  }
+
+  trigger() {
+    this.callback([], this as unknown as ResizeObserver);
+  }
+}
+
 function assistantMessage(id: string, text: string): MastraDBMessage {
   return {
     id,
@@ -53,7 +79,11 @@ function Harness({
     onSnapshot({ showScrollDown: scroll.showScrollDown, scrollToBottom: scroll.scrollToBottom });
   }, [onSnapshot, scroll.showScrollDown, scroll.scrollToBottom]);
 
-  return <div data-testid="thread" ref={scroll.threadRef} />;
+  return (
+    <div data-testid="thread" ref={scroll.threadRef}>
+      <div data-testid="transcript-content" />
+    </div>
+  );
 }
 
 function setScrollMetrics(el: HTMLElement, metrics: { scrollHeight: number; clientHeight: number; scrollTop: number }) {
@@ -78,7 +108,11 @@ function dispatchScroll(el: HTMLElement) {
 }
 
 function dispatchUserScroll(el: HTMLElement) {
+  const targetScrollTop = el.scrollTop;
   act(() => {
+    el.scrollTop = el.scrollHeight - el.clientHeight;
+    el.dispatchEvent(new Event('scroll'));
+    el.scrollTop = targetScrollTop;
     el.dispatchEvent(new WheelEvent('wheel', { deltaY: -120 }));
     el.dispatchEvent(new Event('scroll'));
   });
@@ -91,8 +125,34 @@ function flushAnimationFrame() {
 }
 
 describe('useTranscriptScroll', () => {
-  beforeEach(() => vi.useFakeTimers());
-  afterEach(() => vi.useRealTimers());
+  beforeEach(() => {
+    vi.useFakeTimers();
+    resizeObservers.length = 0;
+    vi.stubGlobal('ResizeObserver', TestResizeObserver);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('keeps following when an existing tool entry grows in place', () => {
+    const snapshots: HookSnapshot[] = [];
+    render(<Harness transcriptState={transcript('hello')} onSnapshot={snapshot => snapshots.push(snapshot)} />);
+    const el = screen.getByTestId('thread');
+    const content = screen.getByTestId('transcript-content');
+
+    setScrollMetrics(el, { scrollHeight: 1000, clientHeight: 400, scrollTop: 600 });
+    dispatchScroll(el);
+    const scrollTo = installScrollTo(el);
+    setScrollMetrics(el, { scrollHeight: 1400, clientHeight: 400, scrollTop: 600 });
+
+    expect(resizeObservers[0]?.observed.has(content)).toBe(true);
+    act(() => resizeObservers[0]?.trigger());
+
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 1400, behavior: 'auto' });
+    expect(snapshots.at(-1)?.showScrollDown).toBe(false);
+  });
+
   it('keeps following when attached content grows without user scroll', () => {
     const snapshots: HookSnapshot[] = [];
     const { rerender } = render(
@@ -113,7 +173,7 @@ describe('useTranscriptScroll', () => {
       />,
     );
 
-    expect(scrollTo).toHaveBeenLastCalledWith({ top: 1300, behavior: 'smooth' });
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 1300, behavior: 'auto' });
     expect(snapshots.at(-1)?.showScrollDown).toBe(false);
   });
 
@@ -160,7 +220,7 @@ describe('useTranscriptScroll', () => {
       />,
     );
 
-    expect(scrollTo).toHaveBeenLastCalledWith({ top: 1000, behavior: 'smooth' });
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 1000, behavior: 'auto' });
     expect(snapshots.at(-1)?.showScrollDown).toBe(false);
   });
 
@@ -180,7 +240,7 @@ describe('useTranscriptScroll', () => {
       <Harness transcriptState={transcript('hello after jump')} onSnapshot={snapshot => snapshots.push(snapshot)} />,
     );
 
-    expect(scrollTo).toHaveBeenLastCalledWith({ top: 1000, behavior: 'smooth' });
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 1000, behavior: 'auto' });
     expect(snapshots.at(-1)?.showScrollDown).toBe(false);
   });
 
