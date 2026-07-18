@@ -23,6 +23,18 @@ import { validateToolInput, validateToolOutput, validateToolSuspendData, validat
  */
 export const MASTRA_TOOL_MARKER = Symbol.for('mastra.core.tool.Tool');
 
+/** @internal Set only by CoreToolBuilder after compat-aware input validation. */
+export const INPUT_VALIDATED_BY_BUILDER = Symbol.for('mastra.core.tool.inputValidatedByBuilder');
+
+/** @internal */
+export function isInputValidatedByBuilder(context: unknown): boolean {
+  return (
+    typeof context === 'object' &&
+    context !== null &&
+    (context as Record<symbol, unknown>)[INPUT_VALIDATED_BY_BUILDER] === true
+  );
+}
+
 /**
  * A type-safe tool that agents and workflows can call to perform specific actions.
  *
@@ -310,7 +322,7 @@ export class Tool<
         const isResuming = !!(context?.resumeData || context?.agent?.resumeData);
 
         let data: any = inputData;
-        if (!isResuming && !context?.inputValidatedByBuilder) {
+        if (!isResuming && !isInputValidatedByBuilder(context)) {
           // Validate input if schema exists
           const validationResult = validateToolInput(this.inputSchema, inputData, this.id);
           if (validationResult.error) {

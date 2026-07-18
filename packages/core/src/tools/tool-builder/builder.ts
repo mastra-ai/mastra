@@ -33,6 +33,7 @@ import { isZodObject, safeExtendZodObject } from '../../utils/zod-utils';
 
 import type { SuspendOptions } from '../../workflows';
 import { ToolStream } from '../stream';
+import { INPUT_VALIDATED_BY_BUILDER } from '../tool';
 import type {
   CoreTool,
   McpMetadata,
@@ -637,7 +638,7 @@ export class CoreToolBuilder extends MastraBase {
             runId: options.runId,
             requestContext: mergeRequestContexts(options.requestContext, execOptions.requestContext),
             actor: execOptions.actor,
-            inputValidatedByBuilder,
+            ...(inputValidatedByBuilder ? { [INPUT_VALIDATED_BY_BUILDER]: true as const } : {}),
             // Workspace for file operations and command execution
             // Execution-time workspace (from prepareStep/processInputStep) takes precedence over build-time workspace
             workspace: execOptions.workspace ?? options.workspace,

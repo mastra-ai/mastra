@@ -557,9 +557,6 @@ export interface ToolExecutionContext<
    */
   browser?: MastraBrowser;
 
-  /** CoreToolBuilder already validated with the compat schema. */
-  inputValidatedByBuilder?: boolean;
-
   // Writer is created by Mastra for ALL contexts (agent, workflow, direct execution)
   // Wraps chunks with metadata (toolCallId, toolName, runId) before passing to underlying stream
   writer?: ToolStream;
