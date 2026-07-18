@@ -56,7 +56,7 @@ export function WorkspacesSection() {
   const deleteWorkspace = useDeleteWorkspaceMutation(activeFactory, session, scope);
   const [confirmDelete, setConfirmDelete] = useState<Worktree | null>(null);
   const workItems = useWorkItemsQuery(
-    activeFactory && isGithubFactory(activeFactory) ? activeFactory.binding.githubProjectId : undefined,
+    activeFactory && isServerFactory(activeFactory) ? activeFactory.binding.factoryProjectId : undefined,
   );
   const worktrees = workspaces.data?.worktrees ?? [];
   const activityOptions = {
@@ -82,17 +82,20 @@ export function WorkspacesSection() {
       Object.values(item.sessions).map(sessionRef => [sessionRef.projectPath, item] as const),
     ),
   );
-  const rows = worktrees.map(worktree => {
+  const rows = worktrees.flatMap(worktree => {
     const item = workItemByPath.get(worktree.worktreePath);
-    return {
-      worktree,
-      label: titleByPath[worktree.worktreePath],
-      active: worktree.worktreePath === selectedPath,
-      running: runningByPath[worktree.worktreePath] === true,
-      attention: attentionByPath[worktree.worktreePath] === true,
-      review: item?.source === 'github-pr',
-      updatedAt: item?.updatedAt ?? '',
-    };
+    if (!item) return [];
+    return [
+      {
+        worktree,
+        label: titleByPath[worktree.worktreePath],
+        active: worktree.worktreePath === selectedPath,
+        running: runningByPath[worktree.worktreePath] === true,
+        attention: attentionByPath[worktree.worktreePath] === true,
+        review: item.source === 'github-pr',
+        updatedAt: item.updatedAt,
+      },
+    ];
   });
   const latestRows = (review: boolean) =>
     rows

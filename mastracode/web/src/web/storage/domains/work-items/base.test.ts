@@ -4,7 +4,7 @@
  */
 
 import { LibSQLFactoryStorage } from '@mastra/libsql';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { WorkItemRelationError, WorkItemsStorage } from './base';
 
@@ -145,5 +145,36 @@ describe('WorkItemsStorage', () => {
 
     const items = await storage.list({ orgId: 'org1', factoryProjectId: 'p1' });
     expect(items.find(item => item.id === child.item.id)?.parentWorkItemId).toBeNull();
+  });
+
+  it('serializes relationship writes and deletion on the project lock', async () => {
+    const backend = new LibSQLFactoryStorage({ id: 'work-items-lock-test', url: ':memory:' });
+    const locks: string[] = [];
+    backend.withDistributedLock = vi.fn(async (key, fn) => {
+      locks.push(key);
+      return fn();
+    });
+    const storage = backend.registerDomain(new WorkItemsStorage());
+    await backend.init();
+
+    const parent = await storage.upsert({ orgId: 'org1', userId: 'u', factoryProjectId: 'p1', input });
+    const child = await storage.upsert({
+      orgId: 'org1',
+      userId: 'u',
+      factoryProjectId: 'p1',
+      input: {
+        ...input,
+        externalSource: { integrationId: 'github', type: 'pull-request', externalId: '42' },
+        parentWorkItemId: parent.item.id,
+      },
+    });
+    await storage.update({ orgId: 'org1', id: child.item.id, userId: 'u', patch: { parentWorkItemId: null } });
+    await storage.delete({ orgId: 'org1', id: parent.item.id });
+
+    expect(locks).toEqual([
+      'work-items:org1:p1',
+      'work-items:org1:p1',
+      'work-items:org1:p1',
+    ]);
   });
 });

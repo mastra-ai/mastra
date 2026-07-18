@@ -15,7 +15,7 @@ function sessionBranches(item: WorkItem): Set<string> {
 function inferredFactoryRelation(first: WorkItem, second: WorkItem): boolean {
   const review = first.source === 'github-pr' ? first : second.source === 'github-pr' ? second : undefined;
   const workItem = review === first ? second : first;
-  if (!review || workItem.source === 'github-pr') return false;
+  if (!review || workItem.source === 'github-pr' || review.parentWorkItemId !== null) return false;
 
   const headBranch = review.metadata.headBranch;
   return typeof headBranch === 'string' && sessionBranches(workItem).has(headBranch);

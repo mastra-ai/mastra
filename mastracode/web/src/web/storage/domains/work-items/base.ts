@@ -270,6 +270,11 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return this.ops;
   }
 
+  async #withProjectRelationLock<T>(orgId: string, factoryProjectId: string, fn: () => Promise<T>): Promise<T> {
+    if (!this.storage.withDistributedLock) return fn();
+    return this.storage.withDistributedLock(`work-items:${orgId}:${factoryProjectId}`, fn);
+  }
+
   async list({ orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }): Promise<WorkItemRow[]> {
     const rows = await this.#db.findMany<WorkItemDbRow>(
       'work_items',
@@ -284,7 +289,19 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return row ? toWorkItem(row) : null;
   }
 
-  async upsert({
+  async upsert(params: {
+    orgId: string;
+    userId: string;
+    factoryProjectId: string;
+    input: CreateWorkItemInput;
+  }): Promise<UpsertWorkItemResult> {
+    const run = () => this.#upsert(params);
+    return params.input.parentWorkItemId
+      ? this.#withProjectRelationLock(params.orgId, params.factoryProjectId, run)
+      : run();
+  }
+
+  async #upsert({
     orgId,
     userId,
     factoryProjectId,
@@ -367,31 +384,43 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     userId: string;
     patch: UpdateWorkItemInput;
   }): Promise<{ item: WorkItemRow; previous: WorkItemPriorState } | null> {
-    let previous = emptyPrior();
-    const row = await this.#db.updateAtomic<WorkItemDbRow>('work_items', { org_id: orgId, id }, async current => {
-      previous = priorState(current);
-      if (patch.parentWorkItemId !== undefined) {
-        validateParentRelation(
-          await this.list({ orgId, factoryProjectId: current.factory_project_id }),
-          current.id,
-          patch.parentWorkItemId,
-        );
-      }
-      return applyUpdate({ current, userId, input: patch });
-    });
-    return row ? { item: toWorkItem(row), previous } : null;
+    const run = async () => {
+      let previous = emptyPrior();
+      const row = await this.#db.updateAtomic<WorkItemDbRow>('work_items', { org_id: orgId, id }, async current => {
+        previous = priorState(current);
+        if (patch.parentWorkItemId !== undefined) {
+          validateParentRelation(
+            await this.list({ orgId, factoryProjectId: current.factory_project_id }),
+            current.id,
+            patch.parentWorkItemId,
+          );
+        }
+        return applyUpdate({ current, userId, input: patch });
+      });
+      return row ? { item: toWorkItem(row), previous } : null;
+    };
+
+    if (patch.parentWorkItemId === undefined) return run();
+    const candidate = await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: orgId, id });
+    if (!candidate) return null;
+    return this.#withProjectRelationLock(orgId, candidate.factory_project_id, run);
   }
 
   async delete({ orgId, id }: { orgId: string; id: string }): Promise<WorkItemRow | null> {
-    const existing = await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: orgId, id });
-    if (!existing) return null;
-    const deleted = await this.#db.deleteMany('work_items', { org_id: orgId, id });
-    if (deleted === 0) return null;
-    await this.#db.updateMany(
-      'work_items',
-      { org_id: orgId, parent_work_item_id: id },
-      { parent_work_item_id: null, updated_at: new Date() },
-    );
-    return toWorkItem(existing);
+    const candidate = await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: orgId, id });
+    if (!candidate) return null;
+
+    return this.#withProjectRelationLock(orgId, candidate.factory_project_id, async () => {
+      const existing = await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: orgId, id });
+      if (!existing) return null;
+      const deleted = await this.#db.deleteMany('work_items', { org_id: orgId, id });
+      if (deleted === 0) return null;
+      await this.#db.updateMany(
+        'work_items',
+        { org_id: orgId, parent_work_item_id: id },
+        { parent_work_item_id: null, updated_at: new Date() },
+      );
+      return toWorkItem(existing);
+    });
   }
 }

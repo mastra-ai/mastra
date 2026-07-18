@@ -50,6 +50,31 @@ describe('Factory work item relationships', () => {
     expect(inferredParentWorkItemId(review.metadata, [review, issue])).toBe(issue.id);
   });
 
+  it('given a review with an explicit parent, when another work item shares its branch, then branch inference does not add a second parent', () => {
+    const explicitParent = workItem({ id: 'issue-24', source: 'github-issue' });
+    const sameBranch = workItem({
+      id: 'issue-25',
+      source: 'github-issue',
+      sessions: {
+        work: {
+          projectPath: '/worktrees/factory-shared',
+          branch: 'factory/shared',
+          threadId: 'thread-shared',
+          startedBy: 'user-1',
+        },
+      },
+    });
+    const review = workItem({
+      id: 'pr-26',
+      source: 'github-pr',
+      parentWorkItemId: explicitParent.id,
+      metadata: { headBranch: 'factory/shared', number: 26 },
+    });
+
+    expect(relatedWorkItems(review, [review, explicitParent, sameBranch])).toEqual([explicitParent]);
+    expect(relatedWorkItems(sameBranch, [review, explicitParent, sameBranch])).toEqual([]);
+  });
+
   it('given an unrelated PR branch, when relationships resolve, then it remains unrelated', () => {
     const issue = workItem({
       id: 'issue-24',

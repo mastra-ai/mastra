@@ -45,6 +45,7 @@ vi.mock('../../../settings/services/doneSound', async importOriginal => ({
 
 const ORIGIN = TEST_BASE_URL;
 const PROJECT_REPOSITORY_ID = 'github-project-1';
+const GITHUB_PROJECT_ID = 'fp-github-project-1';
 const API = `${ORIGIN}/api/agent-controller/code`;
 
 const githubProject: Factory = {
@@ -67,6 +68,7 @@ const githubProject: Factory = {
           { branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' },
           { branch: 'feat-ui', worktreePath: '/sandbox/mastra-worktrees/feat-ui', baseBranch: 'main' },
           { branch: 'feat-api', worktreePath: '/sandbox/mastra-worktrees/feat-api', baseBranch: 'main' },
+          { branch: 'feat-unmatched', worktreePath: '/sandbox/mastra-worktrees/feat-unmatched', baseBranch: 'main' },
           // Personal user session — listed by the User Sessions section instead.
           {
             branch: 'user/alice-notes',
@@ -97,6 +99,7 @@ const relatedWorkItems: WorkItem[] = [
     orgId: 'org-1',
     createdBy: 'user-1',
     githubProjectId: GITHUB_PROJECT_ID,
+    revision: 1,
     source: 'github-issue',
     sourceKey: 'github-issue:24',
     parentWorkItemId: null,
@@ -121,6 +124,7 @@ const relatedWorkItems: WorkItem[] = [
     orgId: 'org-1',
     createdBy: 'user-1',
     githubProjectId: GITHUB_PROJECT_ID,
+    revision: 1,
     source: 'github-pr',
     sourceKey: 'github-pr:25',
     parentWorkItemId: 'work-issue-24',
@@ -157,7 +161,7 @@ function sse(): Response {
 }
 
 /** Registers the full agent-controller handler set. */
-function useAgentControllerHandlers(workItems: WorkItem[] = []) {
+function useAgentControllerHandlers(workItems: WorkItem[] = relatedWorkItems) {
   const sessionState = (resourceId: string) => ({
     controllerId: 'code',
     resourceId,
@@ -187,7 +191,7 @@ function useAgentControllerHandlers(workItems: WorkItem[] = []) {
     ),
     http.get(`${API}/sessions/:resourceId/threads/:threadId/messages`, () => HttpResponse.json({ messages: [] })),
     http.get(`${API}/sessions/:resourceId/stream`, () => sse()),
-    http.get(`${ORIGIN}/web/factory/repositories/:githubProjectId/work-items`, () => HttpResponse.json({ workItems })),
+    http.get(`${ORIGIN}/web/factory/projects/:factoryProjectId/work-items`, () => HttpResponse.json({ workItems })),
   );
 }
 
@@ -222,17 +226,18 @@ function rowContainer(name: string): HTMLElement {
 }
 
 describe('WorkspacesSection', () => {
-  it('lists factory worktrees, hides the repo root and user sessions, and marks the selected one active', async () => {
+  it('lists Factory-backed worktrees, hides unmatched worktrees and user sessions, and marks the selected one active', async () => {
     seedActiveFactory(githubProject);
-    useAgentControllerHandlers();
+    useAgentControllerHandlers(relatedWorkItems);
 
     renderSection();
 
     expect(await screen.findByText('Work Sessions')).toBeInTheDocument();
     expect(screen.getByText('Review Sessions')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'feat-api' })).toHaveAttribute('aria-current', 'true');
-    expect(screen.getByRole('button', { name: 'feat-ui' })).not.toHaveAttribute('aria-current');
+    expect(await screen.findByRole('button', { name: 'feat-api' })).toHaveAttribute('aria-current', 'true');
+    expect(await screen.findByRole('button', { name: 'feat-ui' })).not.toHaveAttribute('aria-current');
     expect(screen.queryByRole('button', { name: 'main' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'feat-unmatched' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'user/alice-notes' })).not.toBeInTheDocument();
   });
 
@@ -267,6 +272,7 @@ describe('WorkspacesSection', () => {
         orgId: 'org-1',
         createdBy: 'user-1',
         githubProjectId: GITHUB_PROJECT_ID,
+        revision: 1,
         source: review ? 'github-pr' : 'github-issue',
         sourceKey: `${review ? 'github-pr' : 'github-issue'}:${index}`,
         parentWorkItemId: null,
@@ -290,9 +296,15 @@ describe('WorkspacesSection', () => {
     seedActiveFactory({
       ...githubProject,
       binding: {
-        ...githubProject.binding,
-        worktrees,
-        selectedWorktreePath: '/sandbox/mastra-worktrees/review-5',
+        kind: 'factory',
+        factoryProjectId: 'fp-github-project-1',
+        repositories: [
+          {
+            ...githubProject.binding.repositories[0],
+            worktrees,
+            selectedWorktreePath: '/sandbox/mastra-worktrees/review-5',
+          },
+        ],
       },
     });
     useAgentControllerHandlers(items);
@@ -650,7 +662,11 @@ describe('WorkspacesSection', () => {
     expect(deletedThreads).toEqual(['thread-doomed']);
     // The user-session worktree survives; the legacy repo-root entry is
     // dropped for good when the worktree list is rewritten.
-    expect(storedRepository().worktrees.map(worktree => worktree.branch)).toEqual(['feat-api', 'user/alice-notes']);
+    expect(storedRepository().worktrees.map(worktree => worktree.branch)).toEqual([
+      'feat-api',
+      'feat-unmatched',
+      'user/alice-notes',
+    ]);
     expect(storedRepository().selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-api');
   });
 
@@ -682,6 +698,7 @@ describe('WorkspacesSection', () => {
     expect(storedRepository().worktrees.map(worktree => worktree.branch)).toEqual([
       'feat-ui',
       'feat-api',
+      'feat-unmatched',
       'user/alice-notes',
     ]);
   });
