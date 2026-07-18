@@ -11,7 +11,11 @@ import { useLocation, useNavigate } from 'react-router';
 import { useApiConfig } from '../../../../../shared/api/config';
 import { queryKeys } from '../../../../../shared/api/keys';
 import { AGENT_CONTROLLER_THREAD_PAGE_SIZE } from '../../../../../shared/hooks/useAgentControllerThreads';
-import { useWorkspaceActivity, useWorkspaceThreadTitles } from '../../../../../shared/hooks/useWorkspaceActivity';
+import {
+  conversationThread,
+  useWorkspaceActivity,
+  useWorkspaceThreadTitles,
+} from '../../../../../shared/hooks/useWorkspaceActivity';
 import { useWorkspaceAttention } from '../../../../../shared/hooks/useWorkspaceAttention';
 import {
   deriveProjectPath,
@@ -76,7 +80,7 @@ export function WorkspacesSection({ defaultOpen = false }: { defaultOpen?: boole
   const pending = selectWorkspace.isPending || deleteWorkspace.isPending;
 
   // Threads are scoped to a worktree, so entering a session lands on its
-  // most recent thread (creating one when it has none) — from anywhere,
+  // conversation thread (creating one when it has none) — from anywhere,
   // including Factory pages: a session row IS its conversation.
   const openWorktreeThread = async (worktreePath: string) => {
     try {
@@ -101,11 +105,10 @@ export function WorkspacesSection({ defaultOpen = false }: { defaultOpen?: boole
             tags: { projectPath: worktreePath },
           }),
       });
-      const latest = [...threads].sort((a, b) => {
-        const ta = a.updatedAt ?? a.createdAt ?? '';
-        const tb = b.updatedAt ?? b.createdAt ?? '';
-        return tb.localeCompare(ta);
-      })[0];
+      // Same selection rule as the row label (latest titled thread first), so
+      // the row can never open a different thread than the one it is named
+      // after — e.g. a newer empty untitled thread seeded by session creation.
+      const latest = conversationThread(threads);
       if (latest) {
         // Warm the message cache first so the thread page renders content
         // instead of a loading skeleton, then jump straight to the target
@@ -186,6 +189,13 @@ export function WorkspacesSection({ defaultOpen = false }: { defaultOpen?: boole
                 disabled={pending}
                 onSelect={() => {
                   clearAttention(worktree.worktreePath);
+                  // The active row is already the selected workspace — skip the
+                  // redundant re-select and jump straight to its conversation
+                  // (the user may be on the board, /new, or another page).
+                  if (active) {
+                    void openWorktreeThread(worktree.worktreePath);
+                    return;
+                  }
                   selectWorkspace.mutate(worktree.worktreePath, {
                     onSuccess: () => void openWorktreeThread(worktree.worktreePath),
                   });

@@ -1,5 +1,42 @@
 # @mastra/core
 
+## 1.52.0-alpha.6
+
+### Patch Changes
+
+- Fixed `new Agent({ durable: true })` to actually use the durable execution path when used standalone (without being registered on a `Mastra` instance). ([#19632](https://github.com/mastra-ai/mastra/pull/19632))
+
+  Previously, `durable: true` only took effect when the agent was attached to a `Mastra`. Constructing an agent with `durable: true` and calling `agent.stream(...)` directly silently ran through the non-durable path.
+
+  Now `stream`, `generate`, `resumeStream`, `resumeGenerate`, `approveToolCall`, `declineToolCall`, `streamUntilIdle`, `resume`, `recover`, `listActiveRuns`, `recoverActiveRuns`, `observe`, and `prepare` all run through the durable execution path on a standalone `new Agent({ durable: true })`.
+
+  ```ts
+  const agent = new Agent({
+    id: 'my-agent',
+    name: 'My Agent',
+    instructions: 'You are a helpful assistant',
+    model,
+    durable: true,
+  });
+
+  // Now runs through the durable execution path.
+  await agent.stream('hi');
+  ```
+
+- Fixed native Agent goals continuing to invoke the judge after an unretried API error. ([#19662](https://github.com/mastra-ai/mastra/pull/19662))
+
+- Fixed dataset item writes to reject circular payloads with a clear validation error before storage, instead of failing with database-specific serialization errors. Silently lossy JSON values (nested `undefined`, functions, symbols, bigints, and non-finite numbers) and non-plain objects (`Date`, `Map`, `Set`, class instances, and custom `toJSON()` objects) are now also rejected with the offending path, so identical `externalId` retries can no longer conflict with the persisted payload. Added a public `safeStringify` utility for serializing values that may contain circular references. ([#19603](https://github.com/mastra-ai/mastra/pull/19603))
+
+  ```ts
+  import { safeStringify, ensureSerializable } from '@mastra/core/utils/safe-stringify';
+
+  const value: Record<string, unknown> = { prompt: 'hello' };
+  value.self = value;
+
+  safeStringify(value); // '{"prompt":"hello","self":"[Circular]"}'
+  ensureSerializable(value); // { prompt: 'hello', self: '[Circular]' }
+  ```
+
 ## 1.52.0-alpha.5
 
 ### Minor Changes
