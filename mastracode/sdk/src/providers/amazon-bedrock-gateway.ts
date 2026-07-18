@@ -50,9 +50,16 @@ export function addBedrockCachePoints(prompt: BedrockPrompt): BedrockPrompt {
     result[lastSystemIndex] = markCachePoint(result[lastSystemIndex]!);
   }
 
-  const lastIndex = result.length - 1;
-  if (lastIndex >= 0 && lastIndex !== lastSystemIndex) {
-    result[lastIndex] = markCachePoint(result[lastIndex]!);
+  let lastNonSystemIndex = -1;
+  for (let index = result.length - 1; index >= 0; index--) {
+    if (result[index]!.role !== 'system') {
+      lastNonSystemIndex = index;
+      break;
+    }
+  }
+
+  if (lastNonSystemIndex >= 0) {
+    result[lastNonSystemIndex] = markCachePoint(result[lastNonSystemIndex]!);
   }
 
   return result;

@@ -50,6 +50,16 @@ describe('addBedrockCachePoints', () => {
     expect(prompt[1]!.providerOptions?.bedrock).toEqual({ cachePoint: { type: 'default' } });
   });
 
+  it('marks the latest non-system message when a system message is last', () => {
+    const prompt = addBedrockCachePoints([
+      { role: 'user', content: [{ type: 'text', text: 'latest message' }] },
+      { role: 'system', content: 'system prompt' },
+    ]);
+
+    expect(prompt[0]!.providerOptions?.bedrock).toEqual({ cachePoint: { type: 'default' } });
+    expect(prompt[1]!.providerOptions?.bedrock).toEqual({ cachePoint: { type: 'default' } });
+  });
+
   it('preserves existing Bedrock and unrelated provider options', () => {
     const prompt = addBedrockCachePoints([
       {
