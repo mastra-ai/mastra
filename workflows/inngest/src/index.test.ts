@@ -18,7 +18,7 @@ import {
   simulateReadableStream,
 } from '@mastra/core/test-utils/llm-mock';
 import { createTool } from '@mastra/core/tools';
-import type { StreamEvent } from '@mastra/core/workflows';
+import type { StreamEvent, Workflow } from '@mastra/core/workflows';
 import { createHonoServer } from '@mastra/deployer/server';
 import { DefaultStorage } from '@mastra/libsql';
 import { Observability } from '@mastra/observability';
@@ -245,9 +245,20 @@ describe('Inngest type regressions', () => {
 
     workflow.then(step1).commit();
 
-    // createRun should return a Run that accepts the CustomContext
-    const runPromise = workflow.createRun();
-    expect(runPromise).toBeDefined();
+    const baseWorkflow: Workflow<any, any, any, any, any, any, any, CustomContext> = workflow;
+
+    const typecheckRunContext = async () => {
+      const run = await baseWorkflow.createRun();
+      const requestContext = new RequestContext<CustomContext>();
+      requestContext.set('userId', 'test-user');
+
+      void run.start({ inputData: {}, requestContext });
+      void run.startAsync({ inputData: {}, requestContext });
+      void run.resume({ requestContext });
+    };
+
+    expect(baseWorkflow).toBe(workflow);
+    void typecheckRunContext;
   });
 });
 
