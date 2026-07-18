@@ -1682,12 +1682,21 @@ import express from 'express'
 import { MCPServer } from '@mastra/mcp'
 import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
+import jwt from 'jsonwebtoken'
 
 const verifyToken = (token: string) => {
-  // TODO: Implement token verification
-  return {
-    userId: '123',
-    email: 'test@test.com',
+  try {
+    // Verify the token using your JWT secret
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as {
+      userId: string;
+      email: string;
+    }
+    return {
+      userId: decoded.userId,
+      email: decoded.email,
+    }
+  } catch (error) {
+    throw new Error('Invalid or expired token')
   }
 }
 
@@ -1723,17 +1732,26 @@ const server = new MCPServer({
 const app = express()
 
 app.use('/mcp', (req, res, next) => {
-  const token = req.headers.authorization?.replace('Bearer ', '')
-  const user = verifyToken(token)
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '')
+    if (!token) {
+      res.status(401).json({ error: 'Authentication required' })
+      return
+    }
+    
+    const user = verifyToken(token)
 
-  // This entire object becomes context.mcp.extra.authInfo
-  // @ts-ignore - req.auth is read by the MCP SDK
-  req.auth = {
-    token,
-    userId: user.userId,
-    email: user.email,
+    // This entire object becomes context.mcp.extra.authInfo
+    // @ts-ignore - req.auth is read by the MCP SDK
+    req.auth = {
+      token,
+      userId: user.userId,
+      email: user.email,
+    }
+    next()
+  } catch (error) {
+    res.status(401).json({ error: error instanceof Error ? error.message : 'Invalid token' })
   }
-  next()
 })
 
 app.all('/mcp', async (req, res) => {
