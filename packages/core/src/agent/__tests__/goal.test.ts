@@ -140,6 +140,7 @@ describe('Agent objective methods', () => {
       resourceId: RESOURCE,
       judgeModelId: 'judge-1',
       maxRuns: 5,
+      activeDurationMs: 1_234,
     });
     const record = await agent.getObjective({ threadId: THREAD });
     expect(record).toMatchObject({
@@ -149,6 +150,7 @@ describe('Agent objective methods', () => {
       runsUsed: 0,
       judgeModelId: 'judge-1',
       maxRuns: 5,
+      activeDurationMs: 1_234,
     });
     // Unprovided optional fields are left unset so they fall back to agent config.
     expect(record?.prompt).toBeUndefined();
@@ -162,18 +164,43 @@ describe('Agent objective methods', () => {
 
     expect(await agent.updateObjectiveOptions({ threadId: THREAD, judgeModelId: 'j' })).toBeUndefined();
 
-    await agent.setObjective('Goal', { threadId: THREAD, resourceId: RESOURCE });
+    const created = await agent.setObjective('Goal', { threadId: THREAD, resourceId: RESOURCE });
+    expect(created?.activeDurationMs).toBe(0);
     const updated = await agent.updateObjectiveOptions({
       threadId: THREAD,
       judgeModelId: 'new-judge',
       maxRuns: 12,
+      activeDurationMs: 2_500,
     });
     expect(updated).toMatchObject({
       judgeModelId: 'new-judge',
       maxRuns: 12,
       objective: 'Goal',
+      activeDurationMs: 2_500,
     });
+
+    const preserved = await agent.updateObjectiveOptions({ threadId: THREAD, prompt: 'Keep going.' });
+    expect(preserved).toMatchObject({ activeDurationMs: 2_500, prompt: 'Keep going.' });
   });
+
+  it.each([-1, Number.NaN, Number.POSITIVE_INFINITY])(
+    'normalizes invalid active duration %s to zero on set and update',
+    async invalidDuration => {
+      const agent = makeAgent();
+
+      const created = await agent.setObjective('Goal', {
+        threadId: THREAD,
+        resourceId: RESOURCE,
+        activeDurationMs: invalidDuration,
+      });
+      expect(created?.activeDurationMs).toBe(0);
+      expect((await agent.getObjective({ threadId: THREAD }))?.activeDurationMs).toBe(0);
+
+      await agent.updateObjectiveOptions({ threadId: THREAD, activeDurationMs: 10 });
+      const updated = await agent.updateObjectiveOptions({ threadId: THREAD, activeDurationMs: invalidDuration });
+      expect(updated?.activeDurationMs).toBe(0);
+    },
+  );
 
   it('no-ops without storage', async () => {
     const agent = new Agent({

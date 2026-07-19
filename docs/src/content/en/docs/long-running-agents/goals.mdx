@@ -113,6 +113,8 @@ await worker.updateObjectiveOptions({ threadId, maxRuns: 100 })
 await worker.clearObjective({ threadId })
 ```
 
+Objective records and the `setObjective` / `updateObjectiveOptions` options include an optional `activeDurationMs` value for user interfaces that track active pursuit time. Mastra stores the supplied value but doesn't advance it automatically. Missing values represent zero, and the duration measures active work rather than the goal's wall-clock age.
+
 Per-objective values written by `setObjective` / `updateObjectiveOptions` take precedence over the agent's `goal` config, and that precedence is remembered in thread state. See the [`GoalEvaluationPayload` in the ChunkType reference](/reference/streaming/ChunkType) for the full goal chunk shape.
 
 ## Related

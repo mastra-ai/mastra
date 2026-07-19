@@ -52,6 +52,10 @@ export interface GoalState {
 export const DEFAULT_MAX_TURNS = 50;
 const THREAD_GOAL_KEY = 'goal';
 
+function normalizeActiveDurationMs(value: number | undefined): number {
+  return value !== undefined && Number.isFinite(value) && value >= 0 ? value : 0;
+}
+
 // =============================================================================
 // GoalManager
 // =============================================================================
@@ -59,7 +63,7 @@ const THREAD_GOAL_KEY = 'goal';
 export class GoalManager {
   /** Synchronous in-memory view of the active objective record (source of truth is ThreadState). */
   private record: (GoalObjectiveRecord & { id: string }) | null = null;
-  /** Display-only active-timer accounting (not persisted to the objective record). */
+  /** In-process timestamp is never persisted, so downtime is excluded from active duration. */
   private activeStartedAt: string | null = null;
   private activeDurationMs = 0;
   private persistGoalOnNextThreadCreate = false;
@@ -146,6 +150,7 @@ export class GoalManager {
         resourceId: state.session.identity.getResourceId(),
         ...(judgeModelId ? { judgeModelId } : {}),
         maxRuns: maxTurns,
+        activeDurationMs: 0,
       });
       this.record = persisted
         ? { ...persisted, id: persisted.id ?? id }
@@ -250,6 +255,7 @@ export class GoalManager {
           const updated = await agent.updateObjectiveOptions({
             threadId,
             status: this.record.status,
+            activeDurationMs: this.activeDurationMs,
             ...(this.record.pausedReason ? { pausedReason: this.record.pausedReason } : {}),
             ...(this.record.judgeModelId ? { judgeModelId: this.record.judgeModelId } : {}),
             ...(this.record.maxRuns !== undefined ? { maxRuns: this.record.maxRuns } : {}),
@@ -264,6 +270,7 @@ export class GoalManager {
               id: this.record.id,
               threadId,
               resourceId: state.session.identity.getResourceId(),
+              activeDurationMs: this.activeDurationMs,
               ...(this.record.judgeModelId ? { judgeModelId: this.record.judgeModelId } : {}),
               ...(this.record.maxRuns !== undefined ? { maxRuns: this.record.maxRuns } : {}),
             });
@@ -302,6 +309,7 @@ export class GoalManager {
         const record = await agent.getObjective({ threadId });
         if (record) {
           this.record = { ...record, id: record.id ?? randomUUID() };
+          this.activeDurationMs = normalizeActiveDurationMs(record.activeDurationMs);
           return;
         }
       } catch {
@@ -331,7 +339,7 @@ export class GoalManager {
         updatedAt: Date.now(),
         id: saved.id ?? randomUUID(),
       };
-      this.activeDurationMs = saved.activeDurationMs ?? 0;
+      this.activeDurationMs = normalizeActiveDurationMs(saved.activeDurationMs);
     } else {
       this.record = null;
     }
@@ -369,6 +377,7 @@ export class GoalManager {
       objective,
       status: 'active',
       runsUsed: 0,
+      activeDurationMs: 0,
       maxRuns: maxTurns,
       ...(judgeModelId ? { judgeModelId } : {}),
       startedAt: now,
