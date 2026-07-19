@@ -108,14 +108,18 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
       const previousItem = context?.previousItem;
       if (!previousItem) return;
       queryClient.setQueryData<WorkItem[]>(listKey, existing =>
-        (existing ?? []).map(item => (item.id === variables.item.id ? previousItem : item)),
+        (existing ?? []).map(item => {
+          if (item.id !== variables.item.id || item.revision !== variables.item.revision) return item;
+          return previousItem;
+        }),
       );
     },
     onSuccess: (result, variables, context) => {
       queryClient.setQueryData<WorkItem[]>(listKey, existing =>
         (existing ?? []).map(item => {
-          if (item.id !== variables.item.id) return item;
+          if (item.id !== variables.item.id || item.revision !== variables.item.revision) return item;
           if (result.status === 'rejected') return context?.previousItem ?? item;
+          if (result.revision <= item.revision) return item;
           return { ...item, stages: [result.stage], revision: result.revision };
         }),
       );

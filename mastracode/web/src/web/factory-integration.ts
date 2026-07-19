@@ -35,7 +35,11 @@ import type { SourceControlStorageHandle } from './storage/domains/source-contro
 export interface IntegrationHooks {
   emitAudit?: AuditEmitter['emit'];
   ingestGithubEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
-  revokeFactoryBindingsForProjectPath?: (input: { factoryProjectId: string; projectPath: string }) => Promise<void>;
+  revokeFactoryBindingsForProjectPath?: (input: {
+    orgId: string;
+    factoryProjectId: string;
+    projectPath: string;
+  }) => Promise<void>;
 }
 
 /**

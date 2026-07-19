@@ -189,6 +189,7 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
           rules: getSeededFactoryRules()!,
         })
       : undefined;
+
   const integrationRoutes = registrations.flatMap(registration => {
     const { integration } = registration;
     if (!deps.stateSigner) return disabledIntegrationStatusRoutes(integration.id);
@@ -199,12 +200,17 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
         ...(githubEventService ? { ingestGithubEvent: event => githubEventService.ingest(event) } : {}),
         ...(workItems
           ? {
-              revokeFactoryBindingsForProjectPath: async (input: { factoryProjectId: string; projectPath: string }) => {
+              revokeFactoryBindingsForProjectPath: async (input: {
+                orgId: string;
+                factoryProjectId: string;
+                projectPath: string;
+              }) => {
                 const bindings = await workItems.listActiveRunBindings();
                 await Promise.all(
                   bindings
                     .filter(
                       binding =>
+                        binding.orgId === input.orgId &&
                         binding.factoryProjectId === input.factoryProjectId &&
                         binding.projectPath === input.projectPath,
                     )

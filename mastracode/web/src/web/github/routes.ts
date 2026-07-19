@@ -101,7 +101,11 @@ export interface MountGithubRoutesOptions {
   /** Authoritative Factory rule ingress for normalized, signature-verified GitHub deliveries. */
   ingestFactoryEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
   /** Revoke Factory agent authority before deleting the worktree that scopes it. */
-  revokeFactoryBindingsForProjectPath?: (input: { factoryProjectId: string; projectPath: string }) => Promise<void>;
+  revokeFactoryBindingsForProjectPath?: (input: {
+    orgId: string;
+    factoryProjectId: string;
+    projectPath: string;
+  }) => Promise<void>;
 }
 
 /**
@@ -1033,7 +1037,11 @@ function buildProjectGitRoutes({
 }: {
   github: GithubIntegration;
   emitAudit?: AuditEmitter['emit'];
-  revokeFactoryBindingsForProjectPath?: (input: { factoryProjectId: string; projectPath: string }) => Promise<void>;
+  revokeFactoryBindingsForProjectPath?: (input: {
+    orgId: string;
+    factoryProjectId: string;
+    projectPath: string;
+  }) => Promise<void>;
 }): ApiRoute[] {
   return [
     // ── Create / reuse a worktree + feature branch ──────────────────────────
@@ -1125,7 +1133,7 @@ function buildProjectGitRoutes({
       handler: async c => {
         const owned = await loadOwnedProject(github, loose(c));
         if ('response' in owned) return owned.response;
-        const { userId, project, sandboxRow } = owned;
+        const { orgId, userId, project, sandboxRow } = owned;
 
         let body: { branch?: unknown };
         try {
@@ -1154,6 +1162,7 @@ function buildProjectGitRoutes({
           return await withProjectLock(`${project.id}:${userId}`, async () => {
             const sandbox = await resolveProjectSandbox(sandboxRow);
             await revokeFactoryBindingsForProjectPath?.({
+              orgId,
               factoryProjectId: project.factoryProjectId,
               projectPath: worktreeRow.worktreePath,
             });
