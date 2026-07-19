@@ -886,7 +886,7 @@ describe('Factory Work and Review intake candidates', () => {
     expect(within(intake).queryByRole('group', { name: 'Intake source' })).not.toBeInTheDocument();
   });
 
-  it('given a work item exists for an issue, when the Board renders, then candidates from both issue feeds are deduped by source key', async () => {
+  it('given a rule-materialized issue exists, when the Board renders, then candidates from both issue feeds are deduped by GitHub identity', async () => {
     useBoardHandlers({
       issues,
       triageIssues: [{ ...issues[0]!, labels: ['auto-triaged'] }],
@@ -895,7 +895,8 @@ describe('Factory Work and Review intake candidates', () => {
           id: 'wi-1',
           title: 'Fix flaky test',
           source: 'github-issue',
-          sourceKey: 'github-issue:12',
+          sourceKey: 'github:1299788251:issue:12',
+          metadata: { githubIssueNumber: 12 },
           stages: ['execute'],
         }),
       ],
@@ -908,6 +909,27 @@ describe('Factory Work and Review intake candidates', () => {
     expect(within(intake).queryByText('Fix flaky test')).not.toBeInTheDocument();
     expect(within(column('triage')).queryByText('Fix flaky test')).not.toBeInTheDocument();
     expect(within(column('execute')).getByText('Fix flaky test')).toBeInTheDocument();
+  });
+
+  it('given a rule-materialized pull request exists, when Review renders, then its live candidate is deduped by GitHub identity', async () => {
+    useBoardHandlers({
+      pullRequests,
+      workItems: [
+        makeWorkItem({
+          id: 'wi-pr',
+          title: 'Add factory pages',
+          source: 'github-pr',
+          sourceKey: 'github:1299788251:pull-request:34',
+          metadata: { githubPullRequestNumber: 34 },
+          stages: ['review'],
+        }),
+      ],
+    });
+    renderAt('/factory/review');
+
+    await screen.findByTestId('board-column-intake');
+    expect(within(column('intake')).queryByText('Add factory pages')).not.toBeInTheDocument();
+    expect(within(column('review')).getByText('Add factory pages')).toBeInTheDocument();
   });
 });
 

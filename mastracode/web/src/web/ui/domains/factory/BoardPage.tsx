@@ -124,6 +124,15 @@ function itemAppearsInStage(item: WorkItem, stage: BoardStageId, stages: Readonl
   return stage === 'intake' && !stages.some(candidate => item.stages.includes(candidate.id));
 }
 
+function candidateSourceKeyForItem(item: WorkItem): string | undefined {
+  const metadataKey = item.source === 'github-issue' ? 'githubIssueNumber' : 'githubPullRequestNumber';
+  const itemNumber = item.metadata[metadataKey] ?? item.metadata.number;
+  if (typeof itemNumber !== 'number' || !Number.isInteger(itemNumber) || itemNumber <= 0) return;
+  if (item.source === 'github-issue') return `github-issue:${itemNumber}`;
+  if (item.source === 'github-pr') return `github-pr:${itemNumber}`;
+  return;
+}
+
 function itemStageOptions(item: WorkItem): ReadonlyArray<{ id: BoardStageId; label: string }> {
   return boardStages(item.source === 'github-pr' ? 'review' : 'work');
 }
@@ -570,7 +579,12 @@ function BoardContent({
 
   // Live candidates minus anything already persisted in either workflow.
   const candidates = useMemo(() => {
-    const known = new Set(allWorkItems.map(item => item.sourceKey).filter(Boolean));
+    const known = new Set<string>();
+    for (const item of allWorkItems) {
+      if (item.sourceKey) known.add(item.sourceKey);
+      const candidateSourceKey = candidateSourceKeyForItem(item);
+      if (candidateSourceKey) known.add(candidateSourceKey);
+    }
     const intakeIssues = (activeIntakeSource === 'github' ? (issues.data ?? []) : []).filter(
       issue => !hasLabel(issue.labels, AUTO_TRIAGED_LABEL),
     );

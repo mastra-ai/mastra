@@ -17,7 +17,7 @@ import type {
 export const DEFAULT_FACTORY_RULE_VERSION = 'factory-default-v1';
 
 function trustedGithubActor(context: Pick<FactoryStageRuleContext, 'actor'>): boolean {
-  return context.actor.type === 'github' && (context.actor.trusted || context.actor.factoryAuthored);
+  return context.actor.type === 'github' && context.actor.trusted;
 }
 
 function invokeIssueInvestigation(context: FactoryStageRuleContext) {
@@ -29,17 +29,11 @@ function invokeIssueInvestigation(context: FactoryStageRuleContext) {
   } as const;
 }
 
-function investigateTrustedIssue(context: FactoryStageRuleContext) {
-  if (!trustedGithubActor(context)) return;
-  return invokeIssueInvestigation(context);
-}
-
 function investigateTriagedIssue(context: FactoryStageRuleContext) {
   return invokeIssueInvestigation(context);
 }
 
-function reviewTrustedPullRequest(context: FactoryStageRuleContext) {
-  if (!trustedGithubActor(context)) return;
+function reviewPullRequest(context: FactoryStageRuleContext) {
   return {
     type: 'invokeSkill',
     idempotencyKey: `${context.ingress.id}:understand-pr`,
@@ -85,7 +79,7 @@ function issueOpened(context: FactoryGithubRuleContext) {
     sourceKey: `github:${context.repository.id}:issue:${context.issue.number}`,
     title: context.issue.title,
     url: context.issue.url,
-    stage: 'intake',
+    stage: trustedGithubActor(context) ? 'triage' : 'intake',
     metadata: {
       githubRepositoryId: context.repository.id,
       githubIssueNumber: context.issue.number,
@@ -103,7 +97,7 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
     sourceKey: `github:${context.repository.id}:pull-request:${context.pullRequest.number}`,
     title: context.pullRequest.title,
     url: context.pullRequest.url,
-    stage: 'intake',
+    stage: trustedGithubActor(context) ? 'review' : 'intake',
     metadata: {
       githubRepositoryId: context.repository.id,
       githubPullRequestNumber: context.pullRequest.number,
@@ -125,11 +119,8 @@ function pullRequestMerged(context: FactoryGithubRuleContext) {
 }
 
 const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
-  work: {
-    intake: { issue: { onEnter: investigateTrustedIssue } },
-    triage: { issue: { onEnter: investigateTriagedIssue } },
-  },
-  review: { intake: { pullRequest: { onEnter: reviewTrustedPullRequest } } },
+  work: { triage: { issue: { onEnter: investigateTriagedIssue } } },
+  review: { review: { pullRequest: { onEnter: reviewPullRequest } } },
   tools: { submit_plan: { onResult: advanceApprovedPlan } },
   github: {
     issueOpened: { onEvent: issueOpened },
