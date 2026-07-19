@@ -99,14 +99,6 @@ function boundedResult(value: unknown): FactoryRuleJsonValue {
   }
 }
 
-function factoryStateSignalId(message: MastraDBMessage): string | undefined {
-  if (message.role !== 'signal') return;
-  const content = message.content as {
-    metadata?: { signal?: { metadata?: { state?: { id?: unknown } } } };
-  };
-  return content.metadata?.signal?.metadata?.state?.id === STATE_ID ? message.id : undefined;
-}
-
 function messageParts(message: MastraDBMessage): unknown[] {
   const content = message.content as { parts?: unknown[]; toolInvocations?: unknown[] } | unknown[] | undefined;
   if (Array.isArray(content)) return content;
@@ -183,8 +175,16 @@ function escapeText(value: string): string {
   return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 }
 
-function priorPhase(args: ComputeStateSignalArgs): PhaseSnapshotValue | undefined {
-  return (args.lastSnapshot?.metadata?.value as { phase?: PhaseSnapshotValue } | undefined)?.phase;
+function phaseFromSignal(signal: { metadata?: Record<string, unknown> } | undefined): PhaseSnapshotValue | undefined {
+  return (signal?.metadata?.value as { phase?: PhaseSnapshotValue } | undefined)?.phase;
+}
+
+function latestPhase(args: ComputeStateSignalArgs): PhaseSnapshotValue | undefined {
+  for (const signal of [...args.activeStateSignals].reverse()) {
+    const phase = phaseFromSignal(signal);
+    if (phase) return phase;
+  }
+  return phaseFromSignal(args.lastSnapshot);
 }
 
 async function withRuleTimeout<T>(operation: Promise<T>): Promise<T> {
@@ -218,38 +218,24 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     const address = getFactorySessionCoordinates(args.requestContext);
     if (!address) return;
     const binding = await this.options.storage.findRunBindingBySession(address);
-    const signalIds = args.messages.map(factoryStateSignalId).filter((id): id is string => Boolean(id));
-    let removedSignals = false;
-    if (!binding) return;
-    if (binding.status !== 'active') {
-      if (signalIds.length > 0) {
-        args.messageList.removeByIds(signalIds);
-        removedSignals = true;
-      }
-      return removedSignals ? args.messageList : undefined;
-    }
-    if (signalIds.length > 1) {
-      args.messageList.removeByIds(signalIds.slice(0, -1));
-      removedSignals = true;
-    }
+    if (!binding || binding.status !== 'active') return;
     const completedToolCallIds = completedStepToolCallIds(args.steps);
     const completedMessage = currentCompletedToolMessage(args.messages, completedToolCallIds);
     if (completedMessage) {
       await this.ingestMessages(binding, [completedMessage], completedToolCallIds);
     }
-    return removedSignals ? args.messageList : undefined;
   }
 
   async computeStateSignal(args: ComputeStateSignalArgs): Promise<ComputeStateSignalResult> {
     const address = getFactorySessionCoordinates(args.requestContext);
     if (!address) return;
     const binding = await this.options.storage.findRunBindingBySession(address);
-    const prior = priorPhase(args);
+    const prior = latestPhase(args);
     const hasBase = Boolean(args.lastSnapshot) && args.contextWindow.hasSnapshot;
 
     if (!binding) return;
     if (binding.status !== 'active') {
-      if (prior?.status !== 'active') return;
+      if (!hasBase || prior?.status !== 'active') return;
       return {
         id: STATE_ID,
         cacheKey: `factory:none:${prior.bindingId ?? 'revoked'}`,
@@ -287,17 +273,20 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     const linkedText = linked.length
       ? `\nLinked items: ${linked.map(candidate => `${workItemSource(candidate)} ${candidate.title}`).join('; ')}`
       : '';
+    const snapshotContents =
+      `Factory ${board} phase: ${PHASE_LABELS[stage as keyof typeof PHASE_LABELS]} (${escapeText(stage)})\n` +
+      `Work item: ${escapeText(item.title)} (${item.id})\n` +
+      `Role: ${escapeText(binding.role)}\nRevision: ${item.revision}\nRules: ${escapeText(this.options.rules.version)}\n` +
+      `Use factory_transition_work_item with expectedRevision ${item.revision} to request a phase change.${escapeText(linkedText)}`;
+    const isDelta = hasBase && Boolean(prior);
     return {
       id: STATE_ID,
       cacheKey,
-      mode: 'snapshot',
+      mode: isDelta ? 'delta' : 'snapshot',
       tagName: 'factory-phase',
-      contents:
-        `Factory ${board} phase: ${PHASE_LABELS[stage as keyof typeof PHASE_LABELS]} (${escapeText(stage)})\n` +
-        `Work item: ${escapeText(item.title)} (${item.id})\n` +
-        `Role: ${escapeText(binding.role)}\nRevision: ${item.revision}\nRules: ${escapeText(this.options.rules.version)}\n` +
-        `Use factory_transition_work_item with expectedRevision ${item.revision} to request a phase change.${escapeText(linkedText)}`,
+      contents: isDelta ? `Factory phase update:\n${snapshotContents}` : snapshotContents,
       value: { phase: value },
+      ...(isDelta ? { delta: { phase: value } } : {}),
       attributes: { status: 'active', board, stage, role: binding.role, revision: item.revision },
       metadata: { value: { phase: value } },
     };

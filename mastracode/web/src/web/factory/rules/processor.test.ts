@@ -156,7 +156,7 @@ describe('FactoryPhaseStateProcessor', () => {
   });
 
   it('binds continuation ingress to the newest assistant message when tool-call IDs repeat', async () => {
-    const storage = new WorkItemsStorageInMemory();
+    const storage = (await seedFactoryStorageForTests()).workItems;
     await prepare(storage);
     const onResult = vi.fn(() => undefined);
     const rules = defaultFactoryRules({ version: 'rules-v1', overrides: { tools: { submit_plan: { onResult } } } });
@@ -316,6 +316,15 @@ describe('FactoryPhaseStateProcessor', () => {
       bindingId: prepared.binding.id,
       revokedAt: new Date(),
     });
+    await expect(
+      processor.computeStateSignal(
+        stateArgs(context, {
+          contextWindow: { hasSnapshot: false },
+          lastSnapshot,
+          tracking: { currentCacheKey: first?.cacheKey },
+        }),
+      ),
+    ).resolves.toBeUndefined();
     const retraction = await processor.computeStateSignal(
       stateArgs(context, {
         contextWindow: { hasSnapshot: true },
@@ -333,7 +342,7 @@ describe('FactoryPhaseStateProcessor', () => {
     expect(JSON.stringify(retraction)).not.toContain('Improve the settings UI');
   });
 
-  it('removes the revoked phase from the final serialized model prompt', async () => {
+  it('preserves the cacheable phase history and appends an empty snapshot on revocation', async () => {
     const storage = (await seedFactoryStorageForTests()).workItems;
     const prepared = await prepare(storage);
     const rules = defaultFactoryRules({ version: 'rules-v1' });
@@ -365,19 +374,25 @@ describe('FactoryPhaseStateProcessor', () => {
       revokedAt: new Date(),
     });
 
-    await processor.processInputStep({
-      ...(inputArgs(context, []) as unknown as Record<string, unknown>),
-      messages: messageList.get.all.db(),
-      messageList,
-      steps: [],
-    } as never);
+    await expect(
+      processor.processInputStep({
+        ...(inputArgs(context, []) as unknown as Record<string, unknown>),
+        messages: messageList.get.all.db(),
+        messageList,
+        steps: [],
+      } as never),
+    ).resolves.toBeUndefined();
+    expect(messageList.get.all.db().map(message => message.id)).toContain('active-factory-phase');
+
     const retraction = await processor.computeStateSignal(
       stateArgs(context, {
-        contextWindow: { hasSnapshot: false },
+        activeStateSignals: [activeSignal],
+        contextWindow: { hasSnapshot: true },
         lastSnapshot: activeSignal,
         tracking: { currentCacheKey: active?.cacheKey },
       }),
     );
+    expect(retraction).toMatchObject({ mode: 'snapshot', attributes: { status: 'none' } });
     messageList.addSignal(
       createSignal({
         id: 'empty-factory-phase',
@@ -398,8 +413,12 @@ describe('FactoryPhaseStateProcessor', () => {
     );
 
     const prompt = JSON.stringify(messageList.get.all.aiV5.prompt());
-    expect(prompt).not.toContain('Improve the settings UI');
-    expect(prompt).not.toContain('Factory work phase');
+    expect(prompt).toContain('Improve the settings UI');
+    expect(prompt).toContain('Factory work phase');
+    expect(messageList.get.all.db().map(message => message.id)).toEqual([
+      'active-factory-phase',
+      'empty-factory-phase',
+    ]);
   });
 
   it('re-emits when the exact bound role changes', async () => {
@@ -443,7 +462,11 @@ describe('FactoryPhaseStateProcessor', () => {
         tracking: { currentCacheKey: first?.cacheKey },
       }),
     );
-    expect(changed).toMatchObject({ attributes: { role: 'plan' } });
+    expect(changed).toMatchObject({
+      mode: 'delta',
+      attributes: { role: 'plan' },
+      delta: { phase: { role: 'plan' } },
+    });
     expect(changed?.cacheKey).not.toBe(first?.cacheKey);
   });
 

@@ -1159,9 +1159,13 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       resource_id: address.resourceId,
       project_path: address.projectPath,
     });
-    const activeRows = rows.filter(row => row.status === 'active');
-    if (activeRows.length === 1) return toBinding(activeRows[0]!);
-    return activeRows.length === 0 && rows.length === 1 ? toBinding(rows[0]!) : null;
+    if (new Set(rows.map(row => row.org_id)).size !== 1) return null;
+    const row = rows.sort((left, right) => {
+      if (left.status === 'active' && right.status !== 'active') return -1;
+      if (right.status === 'active' && left.status !== 'active') return 1;
+      return right.created_at.getTime() - left.created_at.getTime();
+    })[0];
+    return row ? toBinding(row) : null;
   }
 
   /** Revoke one exact tenant-scoped binding. */
