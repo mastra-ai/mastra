@@ -1126,6 +1126,7 @@
         "moonshot/kimi-k2.5",
         "moonshot/kimi-k2.6",
         "moonshot/kimi-k2.7-code",
+        "moonshot/kimi-k3",
         "openai/gpt-4o-mini",
         "openai/gpt-5.4",
         "openai/gpt-5.4-mini",
@@ -2772,6 +2773,9 @@
         "gpt-5": {
           "npm": "@ai-sdk/openai"
         },
+        "grok-4.5": {
+          "npm": "@ai-sdk/openai"
+        },
         "gpt-5.1": {
           "npm": "@ai-sdk/openai"
         },
@@ -3466,6 +3470,9 @@
       "docUrl": "https://opencode.ai/docs/zen",
       "gateway": "models.dev",
       "modelOverrides": {
+        "grok-4.5": {
+          "npm": "@ai-sdk/openai"
+        },
         "qwen3.7-plus": {
           "npm": "@ai-sdk/anthropic"
         },
@@ -5318,14 +5325,11 @@
         "MiniMaxAI/MiniMax-M2.7",
         "MiniMaxAI/MiniMax-M3",
         "Qwen/Qwen2.5-7B-Instruct-Turbo",
-        "Qwen/Qwen3-235B-A22B-Instruct-2507-tput",
-        "Qwen/Qwen3.5-397B-A17B",
         "Qwen/Qwen3.5-9B",
         "Qwen/Qwen3.6-Plus",
         "Qwen/Qwen3.7-Max",
         "deepcogito/cogito-v2-1-671b",
         "deepseek-ai/DeepSeek-V4-Pro",
-        "essentialai/Rnj-1-Instruct",
         "google/gemma-3n-E4B-it",
         "google/gemma-4-31B-it",
         "meta-llama/Llama-3.3-70B-Instruct-Turbo",
@@ -5337,8 +5341,6 @@
         "openai/gpt-oss-20b",
         "pearl-ai/gemma-4-31b-it",
         "thinkingmachines/Inkling",
-        "zai-org/GLM-5",
-        "zai-org/GLM-5.1",
         "zai-org/GLM-5.2"
       ],
       "docUrl": "https://docs.together.ai/docs/serverless-models",
@@ -5484,10 +5486,6 @@
         "kwaipilot/kat-coder-pro-v2.5",
         "meta/llama-3.1-70b",
         "meta/llama-3.1-8b",
-        "meta/llama-3.2-11b",
-        "meta/llama-3.2-1b",
-        "meta/llama-3.2-3b",
-        "meta/llama-3.2-90b",
         "meta/llama-3.3-70b",
         "meta/llama-4-maverick",
         "meta/llama-4-scout",
@@ -7679,6 +7677,7 @@
       "moonshot/kimi-k2.5",
       "moonshot/kimi-k2.6",
       "moonshot/kimi-k2.7-code",
+      "moonshot/kimi-k3",
       "openai/gpt-4o-mini",
       "openai/gpt-5.4",
       "openai/gpt-5.4-mini",
@@ -10636,14 +10635,11 @@
       "MiniMaxAI/MiniMax-M2.7",
       "MiniMaxAI/MiniMax-M3",
       "Qwen/Qwen2.5-7B-Instruct-Turbo",
-      "Qwen/Qwen3-235B-A22B-Instruct-2507-tput",
-      "Qwen/Qwen3.5-397B-A17B",
       "Qwen/Qwen3.5-9B",
       "Qwen/Qwen3.6-Plus",
       "Qwen/Qwen3.7-Max",
       "deepcogito/cogito-v2-1-671b",
       "deepseek-ai/DeepSeek-V4-Pro",
-      "essentialai/Rnj-1-Instruct",
       "google/gemma-3n-E4B-it",
       "google/gemma-4-31B-it",
       "meta-llama/Llama-3.3-70B-Instruct-Turbo",
@@ -10655,8 +10651,6 @@
       "openai/gpt-oss-20b",
       "pearl-ai/gemma-4-31b-it",
       "thinkingmachines/Inkling",
-      "zai-org/GLM-5",
-      "zai-org/GLM-5.1",
       "zai-org/GLM-5.2"
     ],
     "vercel": [
@@ -10795,10 +10789,6 @@
       "kwaipilot/kat-coder-pro-v2.5",
       "meta/llama-3.1-70b",
       "meta/llama-3.1-8b",
-      "meta/llama-3.2-11b",
-      "meta/llama-3.2-1b",
-      "meta/llama-3.2-3b",
-      "meta/llama-3.2-90b",
       "meta/llama-3.3-70b",
       "meta/llama-4-maverick",
       "meta/llama-4-scout",
