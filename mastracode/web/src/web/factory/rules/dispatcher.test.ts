@@ -485,6 +485,68 @@ describe('FactoryDecisionDispatcher', () => {
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
   });
 
+  it('removes a newly materialized linked item when its initial Intake entry is rejected', async () => {
+    const { workItems: storage } = await seedFactoryStorageForTests();
+    const parent = await createItem(storage);
+    const rules = defaultFactoryRules({
+      version: 'rules-v1',
+      overrides: {
+        work: {
+          execute: {
+            issue: {
+              onEnter: () => ({
+                type: 'upsertLinkedWorkItem',
+                idempotencyKey: 'linked-rejected',
+                board: 'work',
+                source: 'github-issue',
+                sourceKey: 'github-issue:2',
+                title: 'Rejected linked issue',
+                url: null,
+                stage: 'intake',
+              }),
+            },
+          },
+          intake: {
+            issue: {
+              onEnter: () => ({ type: 'reject', code: 'forbidden', reason: 'Intake is closed.' }),
+            },
+          },
+        },
+      },
+    });
+    const transitionService = new FactoryTransitionService({ storage, rules });
+    await transitionService.transition({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: parent.id,
+      board: 'work',
+      stage: 'execute',
+      expectedRevision: parent.revision,
+      actor: { type: 'human', id: 'user-1' },
+      ingress: { type: 'human', identity: 'move-linked-rejected' },
+      cause: 'test',
+    });
+    const { controller } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(
+      (await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).find(
+        item => item.externalSource?.externalId === 'github-issue:2',
+      ),
+    ).toBeUndefined();
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+      status: 'retry',
+      lastError: 'forbidden: Intake is closed.',
+    });
+  });
+
   it('does not replay Intake onEnter when a linked upsert reuses an independently-created item', async () => {
     const storage = (await seedFactoryStorageForTests()).workItems;
     const parent = await createItem(storage);

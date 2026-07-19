@@ -323,7 +323,10 @@ export class FactoryDecisionDispatcher {
         causalChain,
         initialEntry: true,
       });
-      if (initial.status === 'rejected') throw new Error(`${initial.code}: ${initial.reason}`);
+      if (initial.status === 'rejected') {
+        if (result.created) await this.#storage.delete({ orgId: record.orgId, id: result.item.id });
+        throw new Error(`${initial.code}: ${initial.reason}`);
+      }
       expectedRevision = initial.revision;
     }
     if (decision.stage === 'intake') return;

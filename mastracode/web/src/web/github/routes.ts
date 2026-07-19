@@ -278,6 +278,80 @@ async function resolveProjectRepository(args: {
   };
 }
 
+function polledIssueEvent(
+  project: ResolvedProjectRepository,
+  issue: {
+    number: number;
+    title: string;
+    url: string;
+    author: string | null;
+    labels: string[];
+    createdAt: string;
+  },
+): ParsedGithubWebhook {
+  const repositoryId = Number(project.repository.externalId);
+  return {
+    event: 'issues',
+    deliveryId: `poll:${repositoryId}:issue:${issue.number}:${issue.createdAt}`,
+    payload: {
+      action: 'opened',
+      installation: { id: Number(project.installation.externalId) },
+      repository: { id: repositoryId, full_name: project.repository.slug },
+      sender: { login: issue.author ?? '__unknown__' },
+      issue: {
+        number: issue.number,
+        title: issue.title,
+        html_url: issue.url,
+        labels: issue.labels.map(name => ({ name })),
+      },
+    },
+  };
+}
+
+function polledPullRequestEvent(
+  project: ResolvedProjectRepository,
+  pullRequest: {
+    number: number;
+    title: string;
+    url: string;
+    author: string | null;
+    headBranch: string;
+    baseBranch: string;
+    createdAt: string;
+  },
+): ParsedGithubWebhook {
+  const repositoryId = Number(project.repository.externalId);
+  return {
+    event: 'pull_request',
+    deliveryId: `poll:${repositoryId}:pull-request:${pullRequest.number}:${pullRequest.createdAt}`,
+    payload: {
+      action: 'opened',
+      installation: { id: Number(project.installation.externalId) },
+      repository: { id: repositoryId, full_name: project.repository.slug },
+      sender: { login: pullRequest.author ?? '__unknown__' },
+      pull_request: {
+        number: pullRequest.number,
+        title: pullRequest.title,
+        html_url: pullRequest.url,
+        state: 'open',
+        merged: false,
+        head: { ref: pullRequest.headBranch },
+        base: { ref: pullRequest.baseBranch },
+      },
+    },
+  };
+}
+
+async function ingestPolledEvents(
+  events: ParsedGithubWebhook[],
+  ingestFactoryEvent: MountGithubRoutesOptions['ingestFactoryEvent'],
+): Promise<void> {
+  if (!ingestFactoryEvent) return;
+  const results = await Promise.allSettled(events.map(event => ingestFactoryEvent(event)));
+  const rejected = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+  if (rejected) throw rejected.reason;
+}
+
 /**
  * Build the GitHub routes as Mastra `apiRoutes`. When the feature is disabled,
  * returns only the `status` route so the SPA can detect the disabled state.
@@ -660,17 +734,22 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
             labels: label ? [label] : undefined,
             cursor: String(page),
           });
+          const responseIssues = issues.map(issue => ({
+            number: Number(issue.id),
+            title: issue.title,
+            url: issue.url,
+            author: issue.author,
+            labels: issue.labels,
+            comments: issue.commentCount ?? 0,
+            createdAt: issue.createdAt,
+            updatedAt: issue.updatedAt,
+          }));
+          await ingestPolledEvents(
+            responseIssues.map(issue => polledIssueEvent(loaded.project, issue)),
+            options.ingestFactoryEvent,
+          );
           return c.json({
-            issues: issues.map(issue => ({
-              number: Number(issue.id),
-              title: issue.title,
-              url: issue.url,
-              author: issue.author,
-              labels: issue.labels,
-              comments: issue.commentCount ?? 0,
-              createdAt: issue.createdAt,
-              updatedAt: issue.updatedAt,
-            })),
+            issues: responseIssues,
             nextPage: nextCursor === null ? null : Number(nextCursor),
           });
         } catch (err) {
@@ -774,17 +853,22 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
             includeDrafts: false,
             cursor: String(page),
           });
+          const responsePullRequests = pullRequests.map(pr => ({
+            number: Number(pr.id),
+            title: pr.title,
+            url: pr.url,
+            author: pr.author,
+            baseBranch: pr.baseBranch,
+            headBranch: pr.headBranch,
+            createdAt: pr.createdAt,
+            updatedAt: pr.updatedAt,
+          }));
+          await ingestPolledEvents(
+            responsePullRequests.map(pullRequest => polledPullRequestEvent(loaded.project, pullRequest)),
+            options.ingestFactoryEvent,
+          );
           return c.json({
-            pullRequests: pullRequests.map(pr => ({
-              number: Number(pr.id),
-              title: pr.title,
-              url: pr.url,
-              author: pr.author,
-              baseBranch: pr.baseBranch,
-              headBranch: pr.headBranch,
-              createdAt: pr.createdAt,
-              updatedAt: pr.updatedAt,
-            })),
+            pullRequests: responsePullRequests,
             nextPage: nextCursor === null ? null : Number(nextCursor),
           });
         } catch (err) {

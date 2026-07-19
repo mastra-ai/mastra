@@ -223,7 +223,7 @@ const listRepoOpenIssues = vi.fn(
         number: 12,
         title: 'Fix flaky test',
         url: 'https://github.com/octo/hello/issues/12',
-        author: 'ada',
+        author: 'ada' as string | null,
         labels: ['bug'],
         comments: 3,
         createdAt: '2026-07-01T00:00:00Z',
@@ -1298,6 +1298,62 @@ describe('issues route', () => {
     expect(listRepoOpenIssues).toHaveBeenCalledWith(7, 'octo/hello', 1, { label: undefined });
   });
 
+  it('reconciles polled issues through Factory ingress without a webhook', async () => {
+    seedMaterializedProject();
+    const ingestFactoryEvent = vi.fn(async () => undefined);
+
+    const res = await buildApp({ workosId: 'u1' }, { ingestFactoryEvent }).request(
+      '/web/github/projects/p1/issues',
+    );
+
+    expect(res.status).toBe(200);
+    expect(ingestFactoryEvent).toHaveBeenCalledWith({
+      event: 'issues',
+      deliveryId: 'poll:99:issue:12:2026-07-01T00:00:00Z',
+      payload: {
+        action: 'opened',
+        installation: { id: 7 },
+        repository: { id: 99, full_name: 'octo/hello' },
+        sender: { login: 'ada' },
+        issue: {
+          number: 12,
+          title: 'Fix flaky test',
+          html_url: 'https://github.com/octo/hello/issues/12',
+          labels: [{ name: 'bug' }],
+        },
+      },
+    });
+  });
+
+  it('governs polled issues whose GitHub author was deleted as untrusted', async () => {
+    seedMaterializedProject();
+    listRepoOpenIssues.mockResolvedValueOnce({
+      issues: [
+        {
+          number: 12,
+          title: 'Fix flaky test',
+          url: 'https://github.com/octo/hello/issues/12',
+          author: null,
+          labels: ['bug'],
+          comments: 3,
+          createdAt: '2026-07-01T00:00:00Z',
+          updatedAt: '2026-07-02T00:00:00Z',
+        },
+      ],
+      nextPage: null,
+    });
+    const ingestFactoryEvent = vi.fn(async () => undefined);
+
+    const res = await buildApp({ workosId: 'u1' }, { ingestFactoryEvent }).request(
+      '/web/github/projects/p1/issues',
+    );
+
+    expect(res.status).toBe(200);
+    expect(ingestFactoryEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ payload: expect.objectContaining({ sender: { login: '__unknown__' } }) }),
+    );
+  });
+
   it('forwards the requested page and echoes the next page', async () => {
     seedMaterializedProject();
     listRepoOpenIssues.mockResolvedValueOnce({ issues: [], nextPage: 3 });
@@ -1454,6 +1510,34 @@ describe('prs route', () => {
     expect(json.pullRequests[0]).toMatchObject({ number: 34, title: 'Add factory pages', headBranch: 'feat/factory' });
     expect(json.nextPage).toBeNull();
     expect(listRepoOpenPullRequests).toHaveBeenCalledWith(7, 'octo/hello', 1);
+  });
+
+  it('reconciles polled pull requests through Factory ingress without a webhook', async () => {
+    seedMaterializedProject();
+    const ingestFactoryEvent = vi.fn(async () => undefined);
+
+    const res = await buildApp({ workosId: 'u1' }, { ingestFactoryEvent }).request('/web/github/projects/p1/prs');
+
+    expect(res.status).toBe(200);
+    expect(ingestFactoryEvent).toHaveBeenCalledWith({
+      event: 'pull_request',
+      deliveryId: 'poll:99:pull-request:34:2026-07-03T00:00:00Z',
+      payload: {
+        action: 'opened',
+        installation: { id: 7 },
+        repository: { id: 99, full_name: 'octo/hello' },
+        sender: { login: 'grace' },
+        pull_request: {
+          number: 34,
+          title: 'Add factory pages',
+          html_url: 'https://github.com/octo/hello/pull/34',
+          state: 'open',
+          merged: false,
+          head: { ref: 'feat/factory' },
+          base: { ref: 'main' },
+        },
+      },
+    });
   });
 
   it('forwards the requested page and echoes the next page', async () => {

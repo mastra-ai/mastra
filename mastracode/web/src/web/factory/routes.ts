@@ -34,6 +34,7 @@ import type { FactoryRuleBoard, FactoryRuleStage } from './rules/types';
 import type { WorkItemPriorState } from './store';
 import {
   deleteWorkItem,
+  getWorkItem,
   listWorkItems,
   parseCreateWorkItem,
   parseUpdateWorkItem,
@@ -456,8 +457,31 @@ export function buildFactoryRoutes({
             input,
             reuseMode: 'non-stage',
           });
-          const item = result.item;
+          let item = result.item;
           if (result.created) {
+            const service = transitionService ?? new FactoryTransitionService();
+            const entered = await service.transition({
+              orgId: resolved.orgId,
+              factoryProjectId: resolved.factoryProjectId,
+              workItemId: item.id,
+              board: item.externalSource?.type === 'pull-request' ? 'review' : 'work',
+              stage: 'intake',
+              expectedRevision: item.revision,
+              actor: { type: 'human', id: resolved.userId },
+              ingress: { type: 'human', identity: `work-item:${item.id}:initial-entry` },
+              cause: 'work_item_created',
+              initialEntry: true,
+            });
+            if (entered.status === 'rejected') {
+              await deleteWorkItem({ orgId: resolved.orgId, id: item.id });
+              return c.json({ status: 'rejected', code: entered.code, reason: entered.reason }, 422);
+            }
+            item =
+              (await getWorkItem({
+                orgId: resolved.orgId,
+                factoryProjectId: resolved.factoryProjectId,
+                id: item.id,
+              })) ?? item;
             await audit.emit({
               context: loose(c),
               input: {

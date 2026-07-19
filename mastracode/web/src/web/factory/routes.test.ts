@@ -44,6 +44,7 @@ import { parseCreateWorkItem, parseUpdateWorkItem } from './store';
 function buildApp(
   user: { workosId: string; organizationId?: string } | null,
   startCoordinator?: { prepare: (input: any) => Promise<any> },
+  transitionService: any = new FactoryTransitionService({ rules: builtInFactoryRules(), storage: seed.workItems }),
 ) {
   const app = new Hono();
   app.use('*', async (c, next) => {
@@ -54,7 +55,7 @@ function buildApp(
     app as any,
     buildFactoryRoutes({
       audit,
-      transitionService: new FactoryTransitionService({ rules: builtInFactoryRules(), storage: seed.workItems }),
+      transitionService,
       startCoordinator,
       decisionStorage: seed.workItems,
     }),
@@ -168,6 +169,57 @@ describe('POST /web/factory/projects/:id/work-items', () => {
     expect(workItem.stageHistory[0]).toMatchObject({ stage: 'intake', by: 'u1' });
     expect(workItem.stageHistory[0].enteredAt).toBeTruthy();
     expect(workItem.stageHistory[0].exitedAt).toBeUndefined();
+  });
+
+  it('evaluates Intake onEnter when a work item is created manually', async () => {
+    const transition = vi.fn(async (request: any) => ({
+      status: 'accepted' as const,
+      transitionId: 'transition-1',
+      itemId: request.workItemId,
+      board: request.board,
+      stage: request.stage,
+      revision: 2,
+    }));
+
+    const res = await buildApp(orgUser, undefined, { transition } as never).request(
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(createBody()),
+      },
+    );
+
+    expect(res.status).toBe(200);
+    expect(transition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        board: 'work',
+        stage: 'intake',
+        actor: { type: 'human', id: 'u1' },
+        initialEntry: true,
+      }),
+    );
+  });
+
+  it('removes a newly created work item when its initial Intake entry is rejected', async () => {
+    const transition = vi.fn(async () => ({
+      status: 'rejected' as const,
+      code: 'forbidden',
+      reason: 'Intake is closed.',
+    }));
+
+    const res = await buildApp(orgUser, undefined, { transition } as never).request(
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(createBody({ externalSource: null })),
+      },
+    );
+
+    expect(res.status).toBe(422);
+    expect(await res.json()).toEqual({ status: 'rejected', code: 'forbidden', reason: 'Intake is closed.' });
+    expect(await listItems()).toEqual([]);
   });
 
   it('rejects an external-source upsert that tries to bypass governed stage transition', async () => {
