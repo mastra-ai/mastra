@@ -193,10 +193,33 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
     const { integration } = registration;
     if (!deps.stateSigner) return disabledIntegrationStatusRoutes(integration.id);
     const context = buildIntegrationContext({ ...deps, stateSigner: deps.stateSigner, emitAudit }, integration.id);
-    if (integration.id === 'github' && githubEventService) {
+    if (integration.id === 'github') {
       context.hooks = {
         ...context.hooks,
-        ingestGithubEvent: event => githubEventService.ingest(event),
+        ...(githubEventService ? { ingestGithubEvent: event => githubEventService.ingest(event) } : {}),
+        ...(workItems
+          ? {
+              revokeFactoryBindingsForProjectPath: async (input: { factoryProjectId: string; projectPath: string }) => {
+                const bindings = await workItems.listActiveRunBindings();
+                await Promise.all(
+                  bindings
+                    .filter(
+                      binding =>
+                        binding.factoryProjectId === input.factoryProjectId &&
+                        binding.projectPath === input.projectPath,
+                    )
+                    .map(binding =>
+                      workItems.revokeRunBinding({
+                        orgId: binding.orgId,
+                        factoryProjectId: binding.factoryProjectId,
+                        bindingId: binding.id,
+                        revokedAt: new Date(),
+                      }),
+                    ),
+                );
+              },
+            }
+          : {}),
       };
     }
     return guardIntegrationRoutes({ ...registration, routes: integration.routes(context) });

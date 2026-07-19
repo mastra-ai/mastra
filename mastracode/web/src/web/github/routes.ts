@@ -100,6 +100,8 @@ export interface MountGithubRoutesOptions {
   emitAudit?: AuditEmitter['emit'];
   /** Authoritative Factory rule ingress for normalized, signature-verified GitHub deliveries. */
   ingestFactoryEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
+  /** Revoke Factory agent authority before deleting the worktree that scopes it. */
+  revokeFactoryBindingsForProjectPath?: (input: { factoryProjectId: string; projectPath: string }) => Promise<void>;
 }
 
 /**
@@ -848,7 +850,13 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
   );
 
   // ── Worktree / branch / commit / push / PR ──────────────────────────────
-  routes.push(...buildProjectGitRoutes({ github, emitAudit }));
+  routes.push(
+    ...buildProjectGitRoutes({
+      github,
+      emitAudit,
+      revokeFactoryBindingsForProjectPath: options.revokeFactoryBindingsForProjectPath,
+    }),
+  );
 
   return routes;
 }
@@ -1021,9 +1029,11 @@ async function loadOwnedProject(
 function buildProjectGitRoutes({
   github,
   emitAudit,
+  revokeFactoryBindingsForProjectPath,
 }: {
   github: GithubIntegration;
   emitAudit?: AuditEmitter['emit'];
+  revokeFactoryBindingsForProjectPath?: (input: { factoryProjectId: string; projectPath: string }) => Promise<void>;
 }): ApiRoute[] {
   return [
     // ── Create / reuse a worktree + feature branch ──────────────────────────
@@ -1143,6 +1153,10 @@ function buildProjectGitRoutes({
         try {
           return await withProjectLock(`${project.id}:${userId}`, async () => {
             const sandbox = await resolveProjectSandbox(sandboxRow);
+            await revokeFactoryBindingsForProjectPath?.({
+              factoryProjectId: project.factoryProjectId,
+              projectPath: worktreeRow.worktreePath,
+            });
             await removeWorktree(sandbox, sandboxRow.sandboxWorkdir, {
               branch,
               worktreePath: worktreeRow.worktreePath,
