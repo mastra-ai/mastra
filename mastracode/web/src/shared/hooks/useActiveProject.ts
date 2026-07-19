@@ -21,11 +21,11 @@ export function useActiveProject() {
   const sessionEnabled = !!activeProject?.resourceId;
 
   // Persisting to localStorage is external-system sync; keep as an effect.
-  // Do not clear a backend project selection while the first server load is pending.
+  // Only clear a missing backend selection after a settled, successful project load.
   useEffect(() => {
-    if (projectsPending && selectedProjectId && !activeProjectId) return;
+    if (selectedProjectId && !activeProjectId && (!projectsQuery.isSuccess || projectsQuery.isFetching)) return;
     saveActiveProjectId(activeProjectId);
-  }, [activeProjectId, projectsPending, selectedProjectId]);
+  }, [activeProjectId, projectsQuery.isFetching, projectsQuery.isSuccess, selectedProjectId]);
 
   const selectProject = async (project: Project | null) => {
     if (!project) {

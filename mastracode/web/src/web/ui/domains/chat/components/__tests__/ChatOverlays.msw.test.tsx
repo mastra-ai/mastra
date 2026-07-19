@@ -7,6 +7,7 @@ import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import { useOverlays } from '../../../../lib/overlays';
 import type { Project } from '../../../workspaces';
+import { loadProjects } from '../../../workspaces';
 import { ChatOverlays } from '../ChatOverlays';
 import { OverlayTestProviders, useOverlayControllerHandlers } from './overlay-test-utils';
 
@@ -80,8 +81,8 @@ describe('ChatOverlays', () => {
 
     renderOverlays();
 
+    await waitFor(() => expect(loadProjects().map(project => project.id)).toContain('github-project'));
     expect(screen.queryByRole('dialog', { name: 'Open a project' })).not.toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Open a project' })).not.toBeInTheDocument());
   });
 
   it('offers GitHub when first-run setup has no projects', async () => {

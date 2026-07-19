@@ -74,11 +74,38 @@ describe('projects query hooks', () => {
     expect(loadProjects().map(project => project.id)).toEqual(['github-project']);
   });
 
+  it('drops a cached worktree selection when the backend no longer returns that worktree', async () => {
+    saveProjects([
+      {
+        ...githubProject,
+        selectedWorktreePath: '/workspace/worktrees/stale',
+        worktrees: [
+          {
+            branch: 'feature/stale',
+            baseBranch: 'main',
+            worktreePath: '/workspace/worktrees/stale',
+            threadId: 'thread-stale',
+          },
+        ],
+      },
+    ]);
+    server.use(
+      http.get(`${ORIGIN}/web/github/projects`, () => HttpResponse.json([{ ...githubProject, worktrees: [] }])),
+    );
+
+    const { result } = renderHookWithProviders(() => useProjectsQuery(), { client: createQueryClient() });
+
+    await waitFor(() => expect(result.current.data).toHaveLength(1));
+    expect(result.current.data[0]?.selectedWorktreePath).toBeUndefined();
+    expect(loadProjects()[0]?.selectedWorktreePath).toBeUndefined();
+  });
+
   it('deletes GitHub projects from the backend before removing them locally', async () => {
     let deleted = false;
     server.use(
       http.get(`${ORIGIN}/web/github/projects`, () => HttpResponse.json(deleted ? [] : [githubProject])),
       http.delete(`${ORIGIN}/web/github/projects/github-project`, () => {
+        expect(loadProjects().map(project => project.id)).toContain('github-project');
         deleted = true;
         return HttpResponse.json({ ok: true });
       }),
@@ -247,6 +274,23 @@ describe('projects query hooks', () => {
 
     await waitFor(() => expect(stale.result.current.activeProject).toBeNull());
     await waitFor(() => expect(loadActiveProjectId()).toBeNull());
+  });
+
+  it('preserves a backend active project id when project hydration fails', async () => {
+    let projectRequests = 0;
+    saveProjects([githubProject]);
+    saveActiveProjectId(githubProject.id);
+    server.use(
+      http.get(`${ORIGIN}/web/github/projects`, () => {
+        projectRequests += 1;
+        return HttpResponse.json({ error: 'unavailable' }, { status: 503 });
+      }),
+    );
+
+    renderHookWithProviders(() => useActiveProject());
+
+    await waitFor(() => expect(projectRequests).toBe(1));
+    await waitFor(() => expect(loadActiveProjectId()).toBe(githubProject.id));
   });
 
   it('selects a legacy project after resolving its resource id through the project query cache', async () => {

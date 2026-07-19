@@ -179,11 +179,17 @@ export async function loadProjectsWithResolvedIds(baseUrl: string): Promise<Proj
   const hydratedGithubProjects = githubProjects.map(project => {
     const cached = cachedGithubProjects.get(project.githubProjectId);
     if (!cached) return project;
+    const backendWorktrees = projectWorktrees(project);
     const cachedWorktrees = new Map(projectWorktrees(cached).map(worktree => [worktree.branch, worktree]));
+    const selectedWorktreePath = backendWorktrees.some(
+      worktree => worktree.worktreePath === cached.selectedWorktreePath,
+    )
+      ? cached.selectedWorktreePath
+      : undefined;
     return {
       ...project,
-      selectedWorktreePath: cached.selectedWorktreePath,
-      worktrees: projectWorktrees(project).map(worktree => ({
+      selectedWorktreePath,
+      worktrees: backendWorktrees.map(worktree => ({
         ...worktree,
         threadId: cachedWorktrees.get(worktree.branch)?.threadId,
       })),
