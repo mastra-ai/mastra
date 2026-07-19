@@ -57,6 +57,7 @@
     "@mastra/core": "workspace:*",
     "@mastra/deployer": "workspace:*",
     "@mastra/libsql": "workspace:*",
+    "@mastra/memory": "workspace:*",
     "@mastra/observability": "workspace:*",
     "@types/express": "^5.0.6",
     "@types/koa": "^3.0.1",
@@ -77,8 +78,7 @@
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:",
-    "zod": "catalog:",
-    "@mastra/memory": "workspace:*"
+    "zod": "catalog:"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.13.2-0 <2.0.0-0",
