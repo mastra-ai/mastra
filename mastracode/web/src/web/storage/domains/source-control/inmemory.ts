@@ -107,6 +107,8 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
   };
 
   readonly sandboxes = {
+    list: async (projectId: string): Promise<SourceControlProjectSandbox[]> =>
+      this.sandboxesRows.filter(row => row.projectId === projectId),
     get: async (projectId: string, userId: string): Promise<SourceControlProjectSandbox | null> =>
       this.sandboxesRows.find(row => row.projectId === projectId && row.userId === userId) ?? null,
     getOrCreate: async (

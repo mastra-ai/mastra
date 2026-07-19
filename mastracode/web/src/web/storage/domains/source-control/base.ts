@@ -204,6 +204,7 @@ export interface SourceControlStorageHandle {
     delete(orgId: string, projectId: string): Promise<void>;
   };
   readonly sandboxes: {
+    list(projectId: string): Promise<SourceControlProjectSandbox[]>;
     get(projectId: string, userId: string): Promise<SourceControlProjectSandbox | null>;
     getOrCreate(project: { id: string; sandboxWorkdir: string }, userId: string): Promise<SourceControlProjectSandbox>;
     getById(id: string): Promise<SourceControlProjectSandbox | null>;
@@ -486,6 +487,10 @@ export class SourceControlStorage extends FactoryStorageDomain {
         },
       },
       sandboxes: {
+        list: async projectId => {
+          if (!(await getProject(projectId))) return [];
+          return (await db().findMany<SandboxDbRow>(SANDBOXES, { project_id: projectId })).map(toSandbox);
+        },
         get: async (projectId, userId) => {
           if (!(await getProject(projectId))) return null;
           const row = await db().findOne<SandboxDbRow>(SANDBOXES, { project_id: projectId, user_id: userId });

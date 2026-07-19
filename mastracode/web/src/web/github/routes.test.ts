@@ -289,6 +289,11 @@ const materializeRepo = vi.fn(async (..._args: any[]) => {
   onProgress?.({ phase: 'cloning', message: 'Cloning octo/hello…' });
 });
 const reattachSandbox = vi.fn(async (_id: string) => ({ id: 'sb' }));
+const teardownProjectSandbox = vi.fn(
+  async (row: any, storage: SourceControlStorageInMemory['sandboxes'], _sandbox: any) => {
+    await storage.clearBinding(row.id);
+  },
+);
 const ensureWorktree = vi.fn(async (_sb: any, _workdir: string, opts: { branch: string; baseBranch: string }) => ({
   worktreePath: `/workspace/hello/../worktrees/${opts.branch}`,
   branch: opts.branch,
@@ -337,6 +342,8 @@ vi.mock('./sandbox', () => {
       `${repoWorkdir.replace(/\/+$/, '').split('/').slice(0, -1).join('/')}/worktrees/${branch.replace('/', '-')}-aeab418d`,
     ensureProjectSandbox: (row: any, storage: SourceControlStorageInMemory['sandboxes'], onProgress?: any) =>
       ensureProjectSandbox(row, storage, onProgress),
+    teardownProjectSandbox: (row: any, storage: SourceControlStorageInMemory['sandboxes'], sandbox: any) =>
+      teardownProjectSandbox({ ...row }, storage, sandbox),
     materializeRepo: (...args: any[]) => materializeRepo(...(args as [])),
     ensureWorktree: (sb: any, workdir: string, opts: any) => ensureWorktree(sb, workdir, opts),
     removeWorktree: (sb: any, workdir: string, opts: any) => removeWorktree(sb, workdir, opts),
@@ -531,6 +538,7 @@ beforeEach(() => {
   // No Postgres in these unit tests: keep the project lock purely in-process.
   process.env.MASTRACODE_DISTRIBUTED_LOCK = '0';
   ensureProjectSandbox.mockClear();
+  teardownProjectSandbox.mockClear();
   materializeRepo.mockClear();
   reattachSandbox.mockClear();
   ensureWorktree.mockClear();
@@ -1087,12 +1095,23 @@ describe('projects', () => {
         sandboxWorkdir: '/workspace/hello',
       }),
     );
-    tables.sandboxes.push(sandboxRow({ id: 'sandbox-row', projectId: 'p1', userId: 'u1' }));
+    tables.sandboxes.push(
+      sandboxRow({
+        id: 'sandbox-row',
+        projectId: 'p1',
+        userId: 'u1',
+        sandboxId: 'sandbox-1',
+        sandboxWorkdir: '/workspace/hello',
+        materializedAt: new Date(),
+      }),
+    );
     tables.worktrees.push(worktreeRow({ id: 'worktree-row', projectId: 'p1', orgId: 'org1', userId: 'u1' }));
 
     const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1', { method: 'DELETE' });
 
     expect(res.status).toBe(200);
+    expect(reattachSandbox).toHaveBeenCalledWith('sandbox-1');
+    expect(teardownProjectSandbox).toHaveBeenCalledOnce();
     expect(tables.projects).toEqual([]);
     expect(tables.sandboxes).toEqual([]);
     expect(tables.worktrees).toEqual([]);
@@ -1258,6 +1277,12 @@ describe('ensure (materialize)', () => {
     const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', { method: 'POST' });
 
     expect(res.status).toBe(200);
+    expect(reattachSandbox).toHaveBeenCalledWith('railway-sandbox');
+    expect(teardownProjectSandbox).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'binding-1', sandboxId: 'railway-sandbox' }),
+      sourceControlStorage.sandboxes,
+      { id: 'sb' },
+    );
     expect(tables.projects[0]).toMatchObject({
       sandboxProvider: 'local',
       sandboxWorkdir: '/tmp/mastracode-sandboxes/hello',

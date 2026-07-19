@@ -620,7 +620,20 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         const { orgId } = resolved.tenant;
         const projectId = c.req.param('id');
         if (!projectId) return c.json({ error: 'Project not found' }, 404);
-        await github.sourceControlStorage.projects.delete(orgId, projectId);
+
+        const project = await github.sourceControlStorage.projects.getOrg(orgId, projectId);
+        if (!project) return c.json({ error: 'Project not found' }, 404);
+
+        const sandboxRows = await github.sourceControlStorage.sandboxes.list(project.id);
+        for (const sandboxRow of sandboxRows) {
+          await withProjectLock(`${project.id}:${sandboxRow.userId}`, async () => {
+            if (!sandboxRow.sandboxId) return;
+            const sandbox = await reattachSandbox(sandboxRow.sandboxId);
+            await teardownProjectSandbox(sandboxRow, github.sourceControlStorage.sandboxes, sandbox);
+          });
+        }
+
+        await github.sourceControlStorage.projects.delete(orgId, project.id);
         return c.json({ ok: true });
       },
     }),
@@ -957,13 +970,17 @@ async function prepareProject(
   userId: string,
   onProgress?: ProgressFn,
 ): Promise<EnsureResult> {
+  const existingSandboxRow = await github.sourceControlStorage.sandboxes.get(project.id, userId);
+  const previousSandboxWorkdir = project.sandboxWorkdir;
   const runtime = await reconcileProjectSandboxRuntime(github, project);
   project = runtime.project;
-  let sandboxRow = await loadOrCreateSandboxRow(github, project, userId);
-  if (runtime.providerChanged && sandboxRow.sandboxId) {
-    await github.sourceControlStorage.sandboxes.clearBinding(sandboxRow.id);
-    sandboxRow = (await github.sourceControlStorage.sandboxes.getById(sandboxRow.id)) ?? sandboxRow;
+
+  if (existingSandboxRow?.sandboxId && (runtime.providerChanged || previousSandboxWorkdir !== project.sandboxWorkdir)) {
+    const existingSandbox = await reattachSandbox(existingSandboxRow.sandboxId);
+    await teardownProjectSandbox(existingSandboxRow, github.sourceControlStorage.sandboxes, existingSandbox);
   }
+
+  const sandboxRow = await loadOrCreateSandboxRow(github, project, userId);
   const sandbox = await ensureProjectSandbox(sandboxRow, github.sourceControlStorage.sandboxes, onProgress);
   // Re-read the sandbox binding so we have the freshly persisted sandboxId.
   const fresh = await github.sourceControlStorage.sandboxes.getById(sandboxRow.id);
