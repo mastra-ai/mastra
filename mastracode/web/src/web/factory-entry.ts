@@ -133,9 +133,10 @@ export interface MastraFactorySandboxConfig {
    */
   machine: WorkspaceSandbox;
   /**
-   * In-sandbox base directory repos check out under (nested `owner/name` per
-   * repo). Default: the machine's own `workingDirectory` when it exposes one
-   * (core `LocalSandbox` does), else `/workspace`.
+   * Base directory repos check out under (nested `owner/name` per repo).
+   * Remote sandboxes use this override or default to `/workspace`. A
+   * `LocalSandbox` always uses its host `workingDirectory`, because an
+   * in-sandbox path such as `/workspace` is not a host filesystem mount.
    */
   workdir?: string;
   /**
@@ -156,6 +157,12 @@ const CONTROLLER_ID = 'code';
 function templateWorkingDirectory(sandbox: WorkspaceSandbox): string | undefined {
   const wd = (sandbox as { workingDirectory?: unknown }).workingDirectory;
   return typeof wd === 'string' && wd.length > 0 ? wd : undefined;
+}
+
+function sandboxWorkdirBase(sandbox: WorkspaceSandbox, configuredWorkdir?: string): string {
+  const templateWorkdir = templateWorkingDirectory(sandbox);
+  const workdir = sandbox.provider === 'local' ? templateWorkdir : (configuredWorkdir ?? templateWorkdir);
+  return (workdir ?? '/workspace').replace(/\/+$/, '');
 }
 
 export class MastraFactory {
@@ -267,10 +274,7 @@ export class MastraFactory {
       sandbox: machine
         ? {
             machine,
-            workdirBase: (sandboxConfig?.workdir ?? templateWorkingDirectory(machine) ?? '/workspace').replace(
-              /\/+$/,
-              '',
-            ),
+            workdirBase: sandboxWorkdirBase(machine, sandboxConfig?.workdir),
             maxSandboxes: sandboxConfig?.maxSandboxes,
           }
         : undefined,

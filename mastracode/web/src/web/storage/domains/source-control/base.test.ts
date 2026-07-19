@@ -123,6 +123,18 @@ describe('SourceControlStorage', () => {
     await github.sandboxes.markMaterialized(first.id);
     expect(await github.sandboxes.getById(first.id)).toMatchObject({ sandboxId: 'sandbox-1' });
 
+    const movedProject = await github.projects.upsert({
+      ...githubProject,
+      sandboxWorkdir: '/tmp/mastracode/sandboxes/mastra-ai/mastra',
+    });
+    const moved = await github.sandboxes.getOrCreate(movedProject, 'user-1');
+    expect(moved).toMatchObject({
+      id: first.id,
+      sandboxId: null,
+      sandboxWorkdir: '/tmp/mastracode/sandboxes/mastra-ai/mastra',
+      materializedAt: null,
+    });
+
     await github.sandboxes.clearBinding(first.id);
     expect(await github.sandboxes.getById(first.id)).toMatchObject({ sandboxId: null, materializedAt: null });
   });

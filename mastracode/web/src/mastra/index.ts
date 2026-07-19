@@ -253,8 +253,8 @@ export const factory = new MastraFactory({
   auth,
   sandbox: {
     machine: sandbox,
-    // Checkout base inside sandboxes (nested `owner/name` per repo). Unset →
-    // the machine's own workingDirectory (local) or `/workspace` (cloud).
+    // Remote checkout base (nested `owner/name` per repo). LocalSandbox ignores
+    // this in-sandbox path and uses its host workingDirectory instead.
     workdir: process.env.MASTRACODE_SANDBOX_WORKDIR,
     // Per-replica cap on concurrently provisioned sandboxes. Unset → unlimited.
     maxSandboxes: positiveInt(process.env.MASTRACODE_MAX_SANDBOXES),
