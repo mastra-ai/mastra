@@ -55,7 +55,7 @@ function requestContextFor(resourceId: string | undefined): RequestContext {
   return ctx;
 }
 
-function seedProject(): void {
+function seedFactory(): void {
   githubStorage.projects.push({
     id: PROJECT_ID,
     orgId: ORG_ID,
@@ -120,7 +120,7 @@ beforeEach(() => {
 
 describe('buildLinearAgentTools — exposure gating', () => {
   it('exposes the Linear tools when the project org has a Linear connection', async () => {
-    seedProject();
+    seedFactory();
     seedConnection();
     const tools = await buildLinearAgentTools({ linear: linearStub, requestContext: requestContextFor(PROJECT_ID) });
     expect(tools).toHaveProperty('linear_get_issue');
@@ -128,7 +128,7 @@ describe('buildLinearAgentTools — exposure gating', () => {
   });
 
   it('withholds linear_create_comment when the connection scope is read-only', async () => {
-    seedProject();
+    seedFactory();
     seedConnection({ scope: 'read' });
     const tools = await buildLinearAgentTools({ linear: linearStub, requestContext: requestContextFor(PROJECT_ID) });
     expect(tools).toHaveProperty('linear_get_issue');
@@ -136,7 +136,7 @@ describe('buildLinearAgentTools — exposure gating', () => {
   });
 
   it('treats legacy connections without a recorded scope as read-only', async () => {
-    seedProject();
+    seedFactory();
     seedConnection({ scope: null });
     const tools = await buildLinearAgentTools({ linear: linearStub, requestContext: requestContextFor(PROJECT_ID) });
     expect(tools).toHaveProperty('linear_get_issue');
@@ -144,14 +144,14 @@ describe('buildLinearAgentTools — exposure gating', () => {
   });
 
   it('exposes nothing when the org has not connected Linear', async () => {
-    seedProject();
+    seedFactory();
     const tools = await buildLinearAgentTools({ linear: linearStub, requestContext: requestContextFor(PROJECT_ID) });
     expect(tools).toEqual({});
   });
 
   it('exposes nothing when the feature is disabled', async () => {
     featureEnabled = false;
-    seedProject();
+    seedFactory();
     seedConnection();
     const tools = await buildLinearAgentTools({ linear: linearStub, requestContext: requestContextFor(PROJECT_ID) });
     expect(tools).toEqual({});
@@ -172,7 +172,7 @@ describe('buildLinearAgentTools — exposure gating', () => {
   });
 
   it('does not cache a transient database failure as "not a project"', async () => {
-    seedProject();
+    seedFactory();
     seedConnection();
 
     githubStorage.shouldFail = true;
@@ -187,7 +187,7 @@ describe('buildLinearAgentTools — exposure gating', () => {
   });
 
   it('sees a fresh connection immediately after cache invalidation', async () => {
-    seedProject();
+    seedFactory();
     expect(await buildLinearAgentTools({ linear: linearStub, requestContext: requestContextFor(PROJECT_ID) })).toEqual(
       {},
     );
@@ -202,7 +202,7 @@ describe('buildLinearAgentTools — exposure gating', () => {
 
 describe('linear_get_issue — execute', () => {
   async function getTool() {
-    seedProject();
+    seedFactory();
     seedConnection();
     const tools = await buildLinearAgentTools({ linear: linearStub, requestContext: requestContextFor(PROJECT_ID) });
     return tools.linear_get_issue!;
@@ -225,7 +225,7 @@ describe('linear_get_issue — execute', () => {
 
   it('refreshes an expired token before fetching', async () => {
     linearStorage.connections.length = 0;
-    seedProject();
+    seedFactory();
     seedConnection({ expiresAt: new Date(Date.now() - 1000) });
     refreshLinearAccessToken.mockResolvedValue({
       accessToken: 'linear-token-2',
@@ -244,7 +244,7 @@ describe('linear_get_issue — execute', () => {
 
   it('surfaces reauth-required as a tool error instead of throwing', async () => {
     linearStorage.connections.length = 0;
-    seedProject();
+    seedFactory();
     seedConnection({ expiresAt: new Date(Date.now() - 1000), refreshToken: null });
 
     const tools = await buildLinearAgentTools({ linear: linearStub, requestContext: requestContextFor(PROJECT_ID) });
@@ -265,7 +265,7 @@ describe('linear_get_issue — execute', () => {
 
 describe('linear_create_comment — execute', () => {
   async function getTool() {
-    seedProject();
+    seedFactory();
     seedConnection();
     const tools = await buildLinearAgentTools({ linear: linearStub, requestContext: requestContextFor(PROJECT_ID) });
     return tools.linear_create_comment!;
@@ -291,7 +291,7 @@ describe('linear_create_comment — execute', () => {
 
   it('surfaces reauth-required as a tool error instead of throwing', async () => {
     linearStorage.connections.length = 0;
-    seedProject();
+    seedFactory();
     seedConnection({ expiresAt: new Date(Date.now() - 1000), refreshToken: null });
 
     const tools = await buildLinearAgentTools({ linear: linearStub, requestContext: requestContextFor(PROJECT_ID) });

@@ -49,11 +49,11 @@ async function resolveTenant(c: Context): Promise<{ orgId: string; userId: strin
 }
 
 /**
- * Resolve the tenant AND the org-owned project from the `:id` param. Work
- * items hang off a project, so listing/creating requires the project to exist
+ * Resolve the tenant AND the org-owned connected repository from the `:id` param.
+ * Work items hang off a repository, so listing/creating requires the repository to exist
  * in the caller's org.
  */
-async function resolveProject(
+async function resolveGithubRepository(
   c: Context,
   storage?: GithubStorage,
 ): Promise<{ orgId: string; userId: string; projectId: string } | { response: Response }> {
@@ -67,11 +67,11 @@ async function resolveProject(
   }
   const projectId = c.req.param('id');
   if (!projectId || !UUID_RE.test(projectId)) {
-    return { response: c.json({ error: 'Project not found' }, 404) };
+    return { response: c.json({ error: 'Repository not found' }, 404) };
   }
   const project = await storage.getOrgProject(tenant.orgId, projectId);
   if (!project) {
-    return { response: c.json({ error: 'Project not found' }, 404) };
+    return { response: c.json({ error: 'Repository not found' }, 404) };
   }
   return { ...tenant, projectId };
 }
@@ -140,24 +140,24 @@ async function auditWorkItemPatch(
 /** Build the Factory work-item routes as Mastra `apiRoutes`. */
 export function buildFactoryRoutes(storage?: GithubStorage): ApiRoute[] {
   return [
-    // ── List the org's work items for a project ─────────────────────────────
-    registerApiRoute('/web/factory/projects/:id/work-items', {
+    // ── List the org's work items for a repository ─────────────────────────
+    registerApiRoute('/web/factory/repositories/:id/work-items', {
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
-        const resolved = await resolveProject(loose(c), storage);
+        const resolved = await resolveGithubRepository(loose(c), storage);
         if ('response' in resolved) return resolved.response;
         const items = await listWorkItems(resolved.orgId, resolved.projectId);
         return c.json({ workItems: items });
       },
     }),
 
-    // ── Flow metrics aggregated over the project's work items ───────────────
-    registerApiRoute('/web/factory/projects/:id/metrics', {
+    // ── Flow metrics aggregated over the repository's work items ─────────────
+    registerApiRoute('/web/factory/repositories/:id/metrics', {
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
-        const resolved = await resolveProject(loose(c), storage);
+        const resolved = await resolveGithubRepository(loose(c), storage);
         if ('response' in resolved) return resolved.response;
         const days = clampMetricsWindow(loose(c).req.query('days'));
         const items = await listWorkItems(resolved.orgId, resolved.projectId);
@@ -166,11 +166,11 @@ export function buildFactoryRoutes(storage?: GithubStorage): ApiRoute[] {
     }),
 
     // ── Create (upsert on sourceKey) a work item ─────────────────────────────
-    registerApiRoute('/web/factory/projects/:id/work-items', {
+    registerApiRoute('/web/factory/repositories/:id/work-items', {
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
-        const resolved = await resolveProject(loose(c), storage);
+        const resolved = await resolveGithubRepository(loose(c), storage);
         if ('response' in resolved) return resolved.response;
 
         const body = await readJson(loose(c));
