@@ -835,7 +835,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               controller.terminate();
               return;
             case 'finish':
-              if (self.#status !== 'failed' && self.#status !== 'suspended') {
+              if (self.#status !== 'failed' && self.#status !== 'suspended' && self.#status !== 'canceled') {
                 self.#status = 'success';
               }
               if (chunk.payload.stepResult.reason) {
@@ -938,7 +938,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     steps: [...self.#bufferedSteps] as LLMStepResult[],
                   };
 
-                  if (self.#status !== 'failed') {
+                  if (self.#status !== 'failed' && self.#status !== 'canceled') {
                     self.messageList = await self.processorRunner.runOutputProcessors(
                       self.messageList,
                       resolveObservabilityContext(options),
