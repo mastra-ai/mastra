@@ -5,8 +5,21 @@
 
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
+import type { LanguageModelV4 } from '@ai-sdk/provider-v7';
 import type { StreamTransport } from '../../../stream/types';
 import type { OpenAITransport, ResponsesWebSocketOptions } from '../provider-options.js';
+
+/**
+ * Per-model provider override sourced from a models.dev model's `provider` block.
+ * Lets a single provider serve individual models over a different endpoint / request
+ * shape / SDK than the provider default (e.g. a model served over the OpenAI
+ * Responses API while the provider default is chat-completions).
+ */
+export interface ModelProviderOverride {
+  api?: string; // Base API URL for this model (may contain ${ENV} templates)
+  shape?: 'responses' | 'completions'; // Request shape to use for this model
+  npm?: string; // SDK package to use for this model
+}
 
 export interface ProviderConfig {
   url?: string;
@@ -17,19 +30,24 @@ export interface ProviderConfig {
   docUrl?: string; // Optional documentation URL
   gateway: string;
   npm?: string; // NPM package name from models.dev (e.g., "@ai-sdk/anthropic")
+  // Per-model overrides (endpoint/shape/SDK) keyed by model id, when a provider
+  // serves some models differently than its default (models.dev model `provider`).
+  modelOverrides?: Record<string, ModelProviderOverride>;
 }
 
 /**
  * Compact capability data collected from gateways during generation.
- * Each provider maps to a list of model IDs that support attachments.
+ * Each provider maps to a list of model IDs that support a capability.
  */
 export type AttachmentCapabilities = Record<string, string[]>;
+export type TemperatureCapabilities = Record<string, string[]>;
+export type StructuredOutputCapabilities = Record<string, string[]>;
 
 /**
  * Union type for language models that can be returned by gateways.
- * Supports both AI SDK v5 (LanguageModelV2) and v6 (LanguageModelV3).
+ * Supports AI SDK v5 (LanguageModelV2), v6 (LanguageModelV3), and v7 (LanguageModelV4).
  */
-export type GatewayLanguageModel = LanguageModelV2 | LanguageModelV3;
+export type GatewayLanguageModel = LanguageModelV2 | LanguageModelV3 | LanguageModelV4;
 export type GatewayStreamTransportHandle = Pick<StreamTransport, 'type' | 'close'>;
 
 /** @internal Stream transport handle attached by gateways that own custom streaming transports. */
@@ -83,6 +101,15 @@ export interface MastraModelGatewayInterface {
   shouldEnable?(): boolean;
 
   /**
+   * Whether this gateway claims the given model/router id even when the id is
+   * not prefixed with the gateway's own id (e.g. a bare `anthropic/...` id that
+   * this gateway can authenticate via OAuth/stored credentials).
+   * Checked after exact prefix matching but before the models.dev registry
+   * fallback. Optional; defaults to `false`.
+   */
+  handlesModel?(modelId: string): boolean;
+
+  /**
    * Fetch provider configurations from the gateway.
    * Should return providers in the standard format.
    */
@@ -105,7 +132,7 @@ export interface MastraModelGatewayInterface {
 
   /**
    * Resolve a language model from the gateway.
-   * Supports returning either LanguageModelV2 (AI SDK v5) or LanguageModelV3 (AI SDK v6).
+   * Supports returning LanguageModelV2 (AI SDK v5), LanguageModelV3 (AI SDK v6), or LanguageModelV4 (AI SDK v7).
    */
   resolveLanguageModel(args: {
     modelId: string;
@@ -135,6 +162,10 @@ export abstract class MastraModelGateway implements MastraModelGatewayInterface 
 
   shouldEnable(): boolean {
     return true;
+  }
+
+  handlesModel(_modelId: string): boolean {
+    return false;
   }
 
   abstract fetchProviders(): Promise<Record<string, ProviderConfig>>;

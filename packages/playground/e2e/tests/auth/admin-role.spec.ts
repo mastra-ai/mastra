@@ -21,7 +21,7 @@ test.describe('Admin Role', () => {
     await resetStorage();
   });
 
-  test.describe('Navigation Access', () => {
+  test.describe('when an admin user navigates the studio', () => {
     test('admin sees all navigation items', async ({ page }) => {
       await setupAdminAuth(page);
       await page.goto('/agents');
@@ -54,7 +54,7 @@ test.describe('Admin Role', () => {
     });
   });
 
-  test.describe('Agents Access', () => {
+  test.describe('when an admin user accesses agents', () => {
     test('admin can view agents list', async ({ page }) => {
       await setupAdminAuth(page);
       await page.goto('/agents');
@@ -94,17 +94,24 @@ test.describe('Admin Role', () => {
 
     test('admin can view agent tools', async ({ page }) => {
       await setupAdminAuth(page);
-      await page.goto('/agents/weather-agent/chat');
+      await page.goto('/agents/weather-agent/settings');
 
-      // The agent has tools - admin should be able to see them
-      // Check if there's a tools tab or section
-      const toolsSection = page.getByText(/weatherInfo|simpleMcpTool/i);
-      // Weather agent has tools configured
-      await expect(toolsSection.first()).toBeVisible();
+      // The agent has tools - admin should be able to see them in the settings overview.
+      await expect(page.getByTestId('agent-settings-view')).toBeVisible({ timeout: 10000 });
+      await expect(page.getByRole('tab', { name: 'General' })).toHaveAttribute('aria-selected', 'true');
+      await expect(page.getByRole('heading', { name: 'Tools' })).toBeVisible({ timeout: 10000 });
+      await expect(page.getByRole('link', { name: 'weatherInfo' })).toHaveAttribute(
+        'href',
+        /\/agents\/weather-agent\/tools\/weatherInfo$/,
+      );
+      await expect(page.getByRole('link', { name: 'simpleMcpTool' })).toHaveAttribute(
+        'href',
+        /\/agents\/weather-agent\/tools\/simpleMcpTool$/,
+      );
     });
   });
 
-  test.describe('Workflows Access', () => {
+  test.describe('when an admin user accesses workflows', () => {
     test('admin can view workflows list', async ({ page }) => {
       await setupAdminAuth(page);
       await page.goto('/workflows');
@@ -159,7 +166,7 @@ test.describe('Admin Role', () => {
     });
   });
 
-  test.describe('Tools Access', () => {
+  test.describe('when an admin user accesses tools', () => {
     test('admin can view tools list', async ({ page }) => {
       await setupAdminAuth(page);
       await page.goto('/tools');
@@ -191,9 +198,7 @@ test.describe('Admin Role', () => {
       await page.goto('/tools/weatherInfo');
 
       // Should see the tool execution form/panel
-      // Look for input fields or execute button
-      const locationInput = page.getByLabel(/location/i).or(page.locator('input[name="location"]'));
-      await expect(locationInput.first()).toBeVisible();
+      await expect(page.locator('[name="location"]')).toBeVisible();
     });
 
     test('admin does not see permission denied for tool execution', async ({ page }) => {
@@ -206,7 +211,7 @@ test.describe('Admin Role', () => {
     });
   });
 
-  test.describe('MCP Servers Access', () => {
+  test.describe('when an admin user accesses MCP servers', () => {
     test('admin can view MCP servers list', async ({ page }) => {
       await setupAdminAuth(page);
       await page.goto('/mcps');
@@ -226,7 +231,7 @@ test.describe('Admin Role', () => {
     });
   });
 
-  test.describe('Full Permission Verification', () => {
+  test.describe('when verifying the admin permission set', () => {
     test('admin has wildcard permission', async ({ page }) => {
       // Set up admin with explicit wildcard permission check
       await setupMockAuth(page, {
@@ -271,7 +276,7 @@ test.describe('Admin Role', () => {
     });
   });
 
-  test.describe('Admin vs Other Roles Comparison', () => {
+  test.describe('when comparing the admin role to other roles', () => {
     test('admin has more permissions than member', async ({ page }) => {
       // First, verify admin can access a page
       await setupAdminAuth(page);

@@ -122,7 +122,7 @@ Internally, `streamUntilIdle()`:
 
 1. Runs the initial turn via `agent.stream(...)` and pipes its `fullStream` into the outer stream.
 1. Subscribes to background-task completion events for the resolved memory scope.
-1. Queues each terminal event (`background-task-completed`, `background-task-failed`, `background-task-cancelled`) and, when the outer wrapper is idle between turns, re-invokes `agent.stream([], ...)` with a directive listing the just-completed `toolCallId`s. The continuation turn flows into the same outer stream.
+1. Queues each terminal event (`background-task-completed`, `background-task-failed`, `background-task-cancelled`) and, when the outer wrapper is idle between turns, re-invokes `agent.stream([], ...)` with a directive listing the completed `toolCallId`s. The continuation turn flows into the same outer stream.
 1. Closes the outer stream once no tasks are running and no completions are queued.
 
 ## Extended usage example
@@ -159,7 +159,7 @@ for await (const chunk of stream.fullStream) {
 
 ## Related
 
-- [Background tasks](/docs/agents/background-tasks)
+- [Background tasks](/docs/long-running-agents/background-tasks)
 - [`Agent.stream()` reference](./stream)
 - [backgroundTasks configuration reference](/reference/configuration#backgroundtasks)
 - [Stream chunk types](/reference/streaming/ChunkType)

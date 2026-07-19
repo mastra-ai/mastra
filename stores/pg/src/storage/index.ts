@@ -12,8 +12,9 @@ import {
   isPoolConfig,
 } from '../shared/config';
 import type { PostgresStoreConfig } from '../shared/config';
-import { PoolAdapter } from './client';
-import type { DbClient } from './client';
+import { buildConnectionStringPoolConfig } from '../shared/pool-config';
+import { PinnedClientAdapter, PoolAdapter, RoutingDbClient } from './client';
+import type { DbClient, PoolClient } from './client';
 import type { PgDomainClientConfig } from './db';
 import { getSchemaName } from './db';
 import { AgentsPG } from './domains/agents';
@@ -38,7 +39,6 @@ import { SkillsPG } from './domains/skills';
 import { ToolProviderConnectionsPG } from './domains/tool-provider-connections';
 import { WorkflowsPG } from './domains/workflows';
 import { WorkspacesPG } from './domains/workspaces';
-import { buildConnectionStringPoolConfig } from './pool-config';
 
 /** Default maximum number of connections in the pool */
 const DEFAULT_MAX_CONNECTIONS = 20;
@@ -186,18 +186,23 @@ export type { PgDomainConfig, PgDomainClientConfig, PgDomainPoolConfig, PgDomain
  */
 export class PostgresStore extends MastraCompositeStore {
   #pool: Pool;
-  #db: DbClient;
+  // Narrowed to RoutingDbClient so init()'s pin/unpin path is type-checked.
+  // The public `db` getter still exposes it as DbClient.
+  #db: RoutingDbClient;
   #ownsPool: boolean;
   #poolClosed: boolean = false;
   private schema: string;
   private isInitialized: boolean = false;
+  // Caches the in-flight init() so concurrent callers share one initialization
+  // instead of each acquiring + pinning a client. See init() / issue #18282.
+  #initPromise: Promise<void> | null = null;
 
   stores: StorageDomains;
 
   constructor(config: PostgresStoreConfig) {
     try {
       validateConfig('PostgresStore', config);
-      super({ id: config.id, name: 'PostgresStore', disableInit: config.disableInit });
+      super({ id: config.id, name: 'PostgresStore', disableInit: config.disableInit, retention: config.retention });
       // Validate schema name to prevent SQL injection
       this.schema = parseSqlIdentifier(config.schemaName || 'public', 'schema name');
 
@@ -209,7 +214,9 @@ export class PostgresStore extends MastraCompositeStore {
         this.#ownsPool = true;
       }
 
-      this.#db = new PoolAdapter(this.#pool);
+      // Wrap the pool adapter in a routing client so init() can temporarily
+      // pin all DDL traffic to a single PoolClient. See PostgresStore.init().
+      this.#db = new RoutingDbClient(new PoolAdapter(this.#pool));
 
       const domainConfig: PgDomainClientConfig = {
         client: this.#db,
@@ -253,6 +260,27 @@ export class PostgresStore extends MastraCompositeStore {
   }
 
   private createPool(config: PostgresStoreConfig): Pool {
+    const pool = this.#buildPool(config);
+
+    // pg emits 'error' on the pool when an idle client's connection drops
+    // (backend restart, network partition, cloud proxies reaping idle
+    // sockets). Without a listener Node escalates the event to an
+    // uncaughtException and crashes the process. Only pools this store
+    // creates get the listener — a user-provided pool keeps the user's own
+    // listeners, mirroring close().
+    pool.on('error', err => {
+      this.logger?.warn?.(
+        'PostgresStore: idle pool client error (pool discards the client and reconnects on next checkout)',
+        {
+          err: err instanceof Error ? err.message : err,
+        },
+      );
+    });
+
+    return pool;
+  }
+
+  #buildPool(config: PostgresStoreConfig): Pool {
     if (isConnectionStringConfig(config)) {
       return createConnectionStringPool(config);
     }
@@ -269,15 +297,54 @@ export class PostgresStore extends MastraCompositeStore {
   }
 
   async init(): Promise<void> {
+    // Skip the pinned-init path entirely when initialization is disabled. The
+    // caller manages schema/migrations externally, so init() must not connect,
+    // pin, or run DDL. This also keeps the call-site contract in @mastra/core
+    // (which calls storage.init() directly and assumes it is "a no-op when
+    // disabled") true for Postgres. See issue #18282.
+    if (this.disableInit || process.env.MASTRA_DISABLE_STORAGE_INIT === 'true') {
+      return;
+    }
+
     if (this.isInitialized) {
       return;
     }
 
+    // Coalesce concurrent init() calls into a single in-flight promise. A
+    // PostgresStore shared across request-scoped Mastra instances can have
+    // init() invoked from several callers at once; without this guard both
+    // race past the `isInitialized` check and pin the RoutingDbClient twice,
+    // throwing "RoutingDbClient already has a pinned client" (issue #18282).
+    this.#initPromise ??= this.#runPinnedInit();
+    await this.#initPromise;
+  }
+
+  async #runPinnedInit(): Promise<void> {
+    // Acquire a single backend connection and pin every domain's DDL to it
+    // for the duration of init(). This avoids:
+    //   - per-statement pool.connect() RTT on remote/managed Postgres
+    //   - transaction-pooler budget exhaustion under concurrent DDL fan-out
+    //   - inter-statement lock contention across domains (issue #17679)
+    // Runtime queries continue to use the pool normally once init completes.
+    // connect() runs inside the try so a failing connection (e.g. a network
+    // blip during boot) is caught below and resets #initPromise, keeping
+    // init() retryable instead of permanently rejecting.
+    let pinnedClient: PoolClient | undefined;
+
     try {
-      this.isInitialized = true;
+      pinnedClient = await this.#pool.connect();
+      const pinned = new PinnedClientAdapter(this.#pool, pinnedClient);
+      this.#db.pin(pinned);
       await super.init();
+      // Only mark initialized after schema creation actually finishes so a
+      // racing second init() caller can't return early and issue runtime
+      // queries against tables that aren't yet created.
+      this.isInitialized = true;
     } catch (error) {
-      this.isInitialized = false;
+      // Drop the cached promise so a transient failure (e.g. a network blip
+      // during boot) can be retried by a later init() call instead of
+      // permanently rejecting. Mirrors storageWithInit's cacheInit behavior.
+      this.#initPromise = null;
       // Rethrow MastraError directly to preserve structured error IDs (e.g., MIGRATION_REQUIRED::DUPLICATE_SPANS)
       if (error instanceof MastraError) {
         throw error;
@@ -290,6 +357,13 @@ export class PostgresStore extends MastraCompositeStore {
         },
         error,
       );
+    } finally {
+      // Only unpin/release when connect() actually handed us a client; on a
+      // failed connect() pinnedClient is undefined and pin() never ran.
+      if (pinnedClient) {
+        this.#db.unpin();
+        pinnedClient.release();
+      }
     }
   }
 
@@ -456,6 +530,20 @@ export class PostgresStoreVNext extends PostgresStore {
     const observabilityClient = built.client;
     this.#observabilityPool = built.pool;
     this.#ownsObservabilityPool = built.owned;
+
+    // Same crash-prevention as the primary pool in createPool(): without an
+    // 'error' listener, an idle client dropped by the backend escalates to an
+    // uncaughtException. Only for pools this store created.
+    if (built.owned) {
+      built.pool.on('error', err => {
+        this.logger?.warn?.(
+          'PostgresStoreVNext: idle observability pool client error (pool discards the client and reconnects on next checkout)',
+          {
+            err: err instanceof Error ? err.message : err,
+          },
+        );
+      });
+    }
 
     // NOTE: `skipDefaultIndexes` / `indexes` from the primary config are
     // intentionally NOT forwarded. The vNext observability domain manages

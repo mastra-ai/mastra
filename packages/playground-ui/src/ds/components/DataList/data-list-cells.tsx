@@ -1,10 +1,13 @@
 import { format, isToday } from 'date-fns';
+import { Children, cloneElement, isValidElement } from 'react';
 import type { ComponentPropsWithoutRef, ElementType, ReactNode } from 'react';
+import { dataListStickyStartStyles } from './shared';
+import type { DataListSticky } from './shared';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { cn } from '@/lib/utils';
 
 export type DataListCellProps = {
-  children: ReactNode;
+  children?: ReactNode;
   className?: string;
   height?: 'default' | 'compact';
   /**
@@ -13,15 +16,21 @@ export type DataListCellProps = {
    * area acts as the click/hover target.
    */
   as?: ElementType;
+  /**
+   * Pins the cell to the horizontal start edge of the list while the list
+   * scrolls sideways.
+   */
+  sticky?: DataListSticky;
 } & Omit<ComponentPropsWithoutRef<'div'>, 'children' | 'className'>;
 
-export function DataListCell({ children, className, height = 'default', as, ...rest }: DataListCellProps) {
+export function DataListCell({ children, className, height = 'default', as, sticky, ...rest }: DataListCellProps) {
   const Component = as || 'span';
   return (
     <Component
       className={cn(
-        'relative grid items-center text-ui-md whitespace-nowrap text-neutral3',
-        height === 'compact' ? 'py-2' : 'py-3',
+        'relative grid max-w-full min-w-0 items-center overflow-hidden text-ui-md whitespace-nowrap text-neutral3 empty:before:text-neutral2 empty:before:content-["—"]',
+        height === 'compact' ? 'py-1.5' : 'py-2.5',
+        sticky === 'start' && dataListStickyStartStyles,
         className,
       )}
       {...rest}
@@ -31,14 +40,53 @@ export function DataListCell({ children, className, height = 'default', as, ...r
   );
 }
 
-export function DataListTextCell({ children, className }: DataListCellProps) {
-  return <DataListCell className={className}>{children}</DataListCell>;
+const dataListTruncateContentStyles =
+  'block min-w-0 max-w-full truncate empty:before:content-["—"] empty:before:text-neutral2 [&>*]:min-w-0 [&>*]:max-w-full [&>*]:overflow-hidden [&>*]:text-ellipsis [&>*]:whitespace-nowrap';
+const dataListInlineTextTruncateStyles = 'min-w-0 flex-1 truncate';
+
+function DataListInlineText({ children }: { children: string | number }) {
+  return <span className={dataListInlineTextTruncateStyles}>{children}</span>;
+}
+
+function DataListTruncatedTextNodes({ children }: { children: ReactNode }) {
+  return Children.map(children, child => {
+    if (typeof child === 'string' || typeof child === 'number') {
+      return <DataListInlineText>{child}</DataListInlineText>;
+    }
+
+    return child;
+  });
+}
+
+function DataListTruncatedCellContent({ children }: { children: ReactNode }) {
+  return Children.map(children, child => {
+    if (!isValidElement<{ children?: ReactNode; className?: string }>(child) || typeof child.type !== 'string') {
+      return child;
+    }
+
+    return cloneElement(child, {
+      className: cn('max-w-full min-w-0 overflow-hidden', child.props.className),
+      children: <DataListTruncatedTextNodes>{child.props.children}</DataListTruncatedTextNodes>,
+    });
+  });
+}
+
+export function DataListTextCell({ children, className, ...rest }: DataListCellProps) {
+  return (
+    <DataListCell className={className} {...rest}>
+      <span className={dataListTruncateContentStyles}>
+        <DataListTruncatedCellContent>{children}</DataListTruncatedCellContent>
+      </span>
+    </DataListCell>
+  );
 }
 
 export function DataListNameCell({ children, className }: DataListCellProps) {
   return (
     <DataListCell className={cn('text-left text-neutral4', className)}>
-      <span className="truncate">{children}</span>
+      <span className={dataListTruncateContentStyles}>
+        <DataListTruncatedCellContent>{children}</DataListTruncatedCellContent>
+      </span>
     </DataListCell>
   );
 }
@@ -46,7 +94,63 @@ export function DataListNameCell({ children, className }: DataListCellProps) {
 export function DataListDescriptionCell({ children, className }: DataListCellProps) {
   return (
     <DataListCell className={cn('text-neutral2', className)}>
-      <span className="truncate">{children}</span>
+      <span className={dataListTruncateContentStyles}>
+        <DataListTruncatedCellContent>{children}</DataListTruncatedCellContent>
+      </span>
+    </DataListCell>
+  );
+}
+
+export type DataListRowHeaderCellProps = Omit<DataListCellProps, 'sticky'>;
+
+export function DataListRowHeaderCell({ children, className, ...rest }: DataListRowHeaderCellProps) {
+  return (
+    <DataListCell
+      sticky="start"
+      className={cn(
+        'data-list-row-header -mr-4 -ml-5 w-auto max-w-none rounded-l-md pr-4 pl-5 text-left text-ui-sm font-semibold tracking-tight text-neutral2',
+        className,
+      )}
+      {...rest}
+    >
+      <span className={cn(dataListTruncateContentStyles, 'relative z-10 w-full')}>
+        <DataListTruncatedCellContent>{children}</DataListTruncatedCellContent>
+      </span>
+    </DataListCell>
+  );
+}
+
+export type DataListNumberCellProps = DataListCellProps & {
+  /**
+   * Emphasizes the value with a brighter tone and semibold weight — use for the
+   * primary metric in a row (e.g. a total or headline number).
+   */
+  highlight?: boolean;
+};
+
+/**
+ * Right-aligned numeric cell with tabular figures, for metric and summary
+ * tables. Defaults to `compact` height to match those layouts; pass `highlight`
+ * for the emphasized column.
+ */
+export function DataListNumberCell({
+  children,
+  className,
+  highlight,
+  height = 'compact',
+  ...rest
+}: DataListNumberCellProps) {
+  return (
+    <DataListCell
+      height={height}
+      className={cn(
+        'justify-items-end text-right text-ui-sm tabular-nums',
+        highlight ? 'font-semibold text-neutral4' : 'text-neutral3',
+        className,
+      )}
+      {...rest}
+    >
+      {children}
     </DataListCell>
   );
 }
@@ -62,7 +166,7 @@ export interface DataListIdCellProps {
 
 export function DataListIdCell({ id }: DataListIdCellProps) {
   return (
-    <DataListCell height="compact" className="text-ui-smd font-mono text-neutral3">
+    <DataListCell height="compact" className="font-mono text-ui-smd text-neutral3">
       {getShortId(id)}
     </DataListCell>
   );
@@ -84,7 +188,7 @@ export function DataListSelectCell({ checked, onToggle, ...rest }: DataListSelec
     <DataListCell
       as="label"
       height="compact"
-      className="cursor-pointer justify-items-center rounded-lg transition-colors duration-200 hover:bg-surface4 px-4"
+      className="size-8 cursor-pointer justify-items-center self-center overflow-visible px-0 py-0!"
       onClick={e => e.stopPropagation()}
     >
       <Checkbox
@@ -114,8 +218,15 @@ export interface DataListMonoCellProps {
  */
 export function DataListMonoCell({ children, className, height = 'compact' }: DataListMonoCellProps) {
   return (
-    <DataListCell height={height} className="min-w-0">
-      <span className={cn('block text-ui-smd font-mono text-neutral3 truncate', className)}>{children}</span>
+    <DataListCell height={height}>
+      <span
+        className={cn(
+          'block max-w-full min-w-0 truncate font-mono text-ui-smd text-neutral3 empty:before:content-["—"]',
+          className,
+        )}
+      >
+        {children}
+      </span>
     </DataListCell>
   );
 }
@@ -134,7 +245,7 @@ export function DataListDateCell({ timestamp }: DataListDateCellProps) {
   const date = toDate(timestamp);
   return (
     <DataListCell height="compact" className="text-ui-smd text-neutral2">
-      {date ? (isToday(date) ? 'Today' : format(date, 'MMM dd')) : '-'}
+      {date ? (isToday(date) ? 'Today' : format(date, 'MMM dd')) : null}
     </DataListCell>
   );
 }
@@ -147,15 +258,13 @@ export interface DataListTimeCellProps {
 export function DataListTimeCell({ timestamp }: DataListTimeCellProps) {
   const date = toDate(timestamp);
   return (
-    <DataListCell height="compact" className="text-ui-smd font-mono text-neutral3 flex">
+    <DataListCell height="compact" className="flex font-mono text-ui-smd text-neutral3">
       {date ? (
         <>
           {format(date, 'HH:mm:ss')}
           <span className="text-neutral2">.{String(date.getMilliseconds()).padStart(3, '0')}</span>
         </>
-      ) : (
-        '-'
-      )}
+      ) : null}
     </DataListCell>
   );
 }

@@ -1,7 +1,7 @@
 import type { ISessionProvider } from '@mastra/core/auth';
 import type { IRBACProvider, EEUser } from '@mastra/core/auth/ee';
 import type { Mastra } from '@mastra/core/mastra';
-import type { ApiRoute, MastraAuthConfig, MastraAuthProvider, MastraAuthRequest } from '@mastra/core/server';
+import type { ApiRoute, IMastraAuthProvider, MastraAuthConfig, MastraAuthRequest } from '@mastra/core/server';
 
 import {
   MASTRA_RESOURCE_ID_KEY,
@@ -9,6 +9,7 @@ import {
   MASTRA_USER_PERMISSIONS_KEY,
   MASTRA_USER_ROLES_KEY,
   MASTRA_AUTH_TOKEN_KEY,
+  MASTRA_AUTH_MODE_KEY,
 } from '../constants';
 import { defaultAuthConfig } from './defaults';
 import { parse } from './path-pattern';
@@ -329,8 +330,8 @@ export const getAuthenticatedUser = async <TUser = unknown>({
  * Returns true if the auth provider implements the necessary ISessionProvider methods.
  */
 export function supportsSessionRefresh(
-  authConfig: MastraAuthConfig | MastraAuthProvider,
-): authConfig is (MastraAuthConfig | MastraAuthProvider) &
+  authConfig: MastraAuthConfig | IMastraAuthProvider,
+): authConfig is (MastraAuthConfig | IMastraAuthProvider) &
   Pick<ISessionProvider, 'refreshSession' | 'getSessionIdFromRequest' | 'getSessionHeaders'> {
   return (
     typeof (authConfig as any).getSessionIdFromRequest === 'function' &&
@@ -485,8 +486,14 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
     }
 
     try {
+      // Determine which RBAC provider to use based on auth mode
+      const authMode = requestContext.get(MASTRA_AUTH_MODE_KEY);
       const serverConfig = mastra.getServer();
-      const rbacProvider = serverConfig?.rbac as IRBACProvider<EEUser> | undefined;
+      const studioConfig = mastra.getStudio?.();
+      // Use studio RBAC if this is a studio request, otherwise use server RBAC
+      const rbacProvider = (authMode === 'studio' ? (studioConfig?.rbac ?? serverConfig?.rbac) : serverConfig?.rbac) as
+        | IRBACProvider<EEUser>
+        | undefined;
 
       if (rbacProvider) {
         if (!user || typeof user !== 'object' || !('id' in user)) {

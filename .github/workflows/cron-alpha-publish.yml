@@ -1,7 +1,7 @@
 name: Cron Alpha Version
 
 permissions:
-  contents: write
+  contents: read
 
 on:
   schedule:
@@ -15,10 +15,10 @@ concurrency:
 jobs:
   alpha-version:
     if: ${{ github.repository == 'mastra-ai/mastra' && github.ref == 'refs/heads/main' }}
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     steps:
       - name: Initial checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           fetch-depth: 1
           persist-credentials: false
@@ -29,9 +29,11 @@ jobs:
         with:
           client-id: ${{ vars.DANE_CLIENT_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
 
       - name: Re-checkout with app token
-        uses: actions/checkout@v5
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           token: ${{ steps.app-auth.outputs.token }}
           fetch-depth: 0
@@ -86,7 +88,7 @@ jobs:
         if: steps.ensure-prerelease.outputs.restored != 'true' && steps.check-changes.outputs.has_changes == 'true'
         run: |
           cd packages/mcp-docs-server
-          pnpm version prerelease --preid alpha --no-git-tag-version
+          pnpm version prerelease --preid alpha --no-git-checks --no-git-tag-version
           cd ../..
 
       - name: Commit and push version changes

@@ -45,18 +45,19 @@
  *
  * @example Custom cache backend (e.g., Redis)
  * ```typescript
- * import { RedisServerCache } from '@mastra/redis'; // hypothetical
+ * import { RedisServerCache } from '@mastra/redis';
+ * import Redis from 'ioredis';
  *
  * const durableAgent = createDurableAgent({
  *   agent,
- *   cache: new RedisServerCache({ url: 'redis://...' }),
+ *   cache: new RedisServerCache({ client: new Redis('redis://...') }),
  * });
  * ```
  *
  * @example Cache inheritance from Mastra
  * ```typescript
  * const mastra = new Mastra({
- *   cache: new RedisServerCache({ url: 'redis://...' }),
+ *   cache: new RedisServerCache({ client: new Redis('redis://...') }),
  *   agents: {
  *     myAgent: createDurableAgent({ agent }), // Inherits Redis cache from Mastra
  *   },
@@ -88,13 +89,17 @@ export { EventedAgent, isEventedAgentClass, type EventedAgentConfig } from './ev
 export { createEventedAgent, isEventedAgent, type CreateEventedAgentOptions } from './create-evented-agent';
 
 // Stream until idle (durable variant)
-export { runDurableStreamUntilIdle, type DurableStreamUntilIdleDeps } from './durable-stream-until-idle';
+export {
+  runDurableStreamUntilIdle,
+  runResumeDurableStreamUntilIdle,
+  type DurableStreamUntilIdleDeps,
+} from './durable-stream-until-idle';
 
 // Preparation utilities
 export { prepareForDurableExecution, type PreparationOptions, type PreparationResult } from './preparation';
 
 // Run registry for non-serializable state
-export { RunRegistry, ExtendedRunRegistry, type ExtendedRunRegistryEntry } from './run-registry';
+export { RunRegistry, ExtendedRunRegistry, globalRunRegistry, type ExtendedRunRegistryEntry } from './run-registry';
 
 // Stream adapter for pubsub-based streaming
 export {
@@ -119,6 +124,7 @@ export type {
   SerializableModelConfig,
   SerializableDurableState,
   SerializableDurableOptions,
+  SerializableModelSettings,
   DurableAgenticWorkflowInput,
   // Step I/O types
   DurableLLMStepOutput,
@@ -151,12 +157,14 @@ export {
 // Utility functions for runtime resolution
 export {
   resolveRuntimeDependencies,
+  rebuildRunToolsFromMastra,
   resolveModel,
   resolveInternalState,
   resolveTool,
   toolRequiresApproval,
   type ResolvedRuntimeDependencies,
   type ResolveRuntimeOptions,
+  type RebuiltRunTools,
 } from './utils/resolve-runtime';
 
 // Workflow creation
@@ -182,6 +190,7 @@ export {
   calculateAccumulatedUsage,
   buildStepRecord,
   createBaseIterationStateUpdate,
+  resolveDurableToolCallConcurrency,
 } from './workflows/shared';
 export type {
   ToolExecutionContext,

@@ -1,5 +1,3 @@
-// @vitest-environment jsdom
-
 import { render, screen, waitFor } from '@testing-library/react';
 import { createMemoryRouter, Outlet, RouterProvider } from 'react-router';
 import type { RouteObject } from 'react-router';

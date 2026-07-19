@@ -5,6 +5,7 @@ import type { Pool, PoolConnection, RowDataPacket } from 'mysql2/promise';
 import {
   formatTableName,
   prepareDeleteStatement,
+  prepareInsertOnlyStatement,
   prepareStatement,
   prepareUpdateStatement,
   prepareWhereClause,
@@ -152,6 +153,18 @@ export class StoreOperationsMySQL extends StoreOperations {
         .map(col => quoteIdentifier(col, 'primary key column'))
         .join(', ');
       extraConstraints.push(`PRIMARY KEY (${pkColumns})`);
+    }
+
+    // Hard-coded constraints for tables that rely on upsert behavior
+    if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
+      extraConstraints.push(
+        `PRIMARY KEY (${quoteIdentifier('workflow_name', 'column name')}, ${quoteIdentifier('run_id', 'column name')})`,
+      );
+    }
+    if (tableName === TABLE_SPANS) {
+      extraConstraints.push(
+        `PRIMARY KEY (${quoteIdentifier('traceId', 'column name')}, ${quoteIdentifier('spanId', 'column name')})`,
+      );
     }
 
     return `CREATE TABLE IF NOT EXISTS ${tableIdent} (${[...columns, ...extraConstraints].filter(Boolean).join(', ')}) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`;
@@ -335,6 +348,23 @@ export class StoreOperationsMySQL extends StoreOperations {
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
     try {
       const statement = prepareStatement({ tableName, record, database: this.database });
+      await this.pool.execute(statement.sql, statement.args);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MYSQL_STORE_INSERT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName },
+        },
+        error,
+      );
+    }
+  }
+
+  async insertOnly({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
+    try {
+      const statement = prepareInsertOnlyStatement({ tableName, record, database: this.database });
       await this.pool.execute(statement.sql, statement.args);
     } catch (error) {
       throw new MastraError(

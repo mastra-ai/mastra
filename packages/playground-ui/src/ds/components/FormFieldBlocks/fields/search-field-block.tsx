@@ -50,6 +50,7 @@ export function SearchFieldBlock({
   onMinimizedChange,
 }: SearchFieldBlockProps) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const buttonSize = size === 'default' ? 'lg' : size;
 
   useEffect(() => {
     if (isMinimized === false) {
@@ -62,7 +63,7 @@ export function SearchFieldBlock({
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
-            size={size || 'sm'}
+            size={buttonSize || 'sm'}
             aria-label={label || 'Search'}
             disabled={disabled}
             onClick={() => onMinimizedChange?.(false)}
@@ -90,7 +91,7 @@ export function SearchFieldBlock({
             {label}
           </FieldBlock.Label>
         ) : null}
-        <div className="relative group">
+        <div className="group relative">
           <Input
             ref={inputRef}
             name={name}
@@ -101,26 +102,26 @@ export function SearchFieldBlock({
             size={size}
             variant={variant}
             className={cn(
-              size === 'sm' && 'pl-8 pr-8',
-              size === 'md' && 'pl-9 pr-9',
-              (!size || size === 'default') && 'pl-10 pr-10',
-              size === 'lg' && 'pl-11 pr-11',
+              size === 'sm' && 'px-8',
+              size === 'md' && 'px-9',
+              (!size || size === 'default') && 'px-10',
+              size === 'lg' && 'px-11',
             )}
           />
           <SearchIcon
             aria-hidden="true"
             className={cn(
-              'text-neutral4 opacity-50 group-has-focus:opacity-100 absolute left-3 top-1/2 -translate-y-1/2',
-              size === 'sm' && 'w-3.5 h-3.5',
-              size === 'md' && 'w-4 h-4',
-              (!size || size === 'default') && 'w-[1.125rem] h-[1.125rem]',
-              size === 'lg' && 'w-5 h-5',
+              'absolute top-1/2 left-3 -translate-y-1/2 text-neutral4 opacity-50 group-has-focus:opacity-100',
+              size === 'sm' && 'size-3.5',
+              size === 'md' && 'size-4',
+              (!size || size === 'default') && 'size-[1.125rem]',
+              size === 'lg' && 'size-5',
             )}
           />
           {onReset && (value || isMinimized === false) && (
             <Button
               variant="ghost"
-              size={size || 'default'}
+              size={buttonSize || 'lg'}
               aria-label="Clear search"
               onClick={() => {
                 if (value) {

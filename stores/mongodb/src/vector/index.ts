@@ -28,6 +28,27 @@ export interface MongoDBUpsertVectorParams extends UpsertVectorParams {
 
 export interface MongoDBQueryVectorParams extends QueryVectorParams<MongoDBVectorFilter> {
   documentFilter?: MongoDBVectorFilter;
+  /**
+   * Number of candidates the HNSW graph considers before selecting the
+   * top-K results. Higher values improve recall at the cost of latency.
+   * Must be >= topK. Defaults to 20 * topK, capped at 10000.
+   * See: https://www.mongodb.com/docs/atlas/atlas-vector-search/vector-search-stage/
+   */
+  numCandidates?: number;
+}
+
+export interface MongoDBCreateIndexParams extends CreateIndexParams {
+  /**
+   * Metadata field names to declare as filter fields in the Atlas vectorSearch
+   * index (registered as `metadata.<field>`). Queries whose metadata filter
+   * only touches declared fields — using operators `$vectorSearch.filter`
+   * supports — are passed directly to `$vectorSearch` instead of pre-filtering
+   * candidate `_id`s, avoiding the 16 MB BSON limit on large result sets.
+   * Filters that reference an undeclared field, or use an unsupported
+   * operator, automatically fall back to the pre-filter.
+   * @see https://www.mongodb.com/docs/atlas/atlas-vector-search/vector-search-type/
+   */
+  filterFields?: string[];
 }
 
 export interface MongoDBVectorConfig {
@@ -69,7 +90,31 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
   private readonly embeddingFieldName: string;
   private readonly metadataFieldName = 'metadata';
   private readonly documentFieldName = 'document';
-  private collectionForValidation: Collection<MongoDBDocument> | null = null;
+  /**
+   * Per-index cache of the filter paths declared in the Atlas vectorSearch index
+   * (e.g. `document`, `metadata.category`). Populated when an index is created in
+   * this process and lazily hydrated from the live index definition otherwise.
+   * `_id` is excluded because it is materialised separately by the fallback path.
+   */
+  private declaredFilterPaths: Map<string, Set<string>> = new Map();
+  /**
+   * MongoDB query operators supported inside `$vectorSearch.filter`. Intentionally
+   * conservative: filters using any operator outside this set fall back to the
+   * `$match` pre-filter, which supports the full query language. Widening this set
+   * is safe only for operators Atlas Vector Search actually accepts in `filter`.
+   */
+  private static readonly PUSHDOWN_OPERATORS = new Set([
+    '$and',
+    '$or',
+    '$eq',
+    '$ne',
+    '$gt',
+    '$gte',
+    '$lt',
+    '$lte',
+    '$in',
+    '$nin',
+  ]);
   private mongoMetricMap: { [key: string]: string } = {
     cosine: 'cosine',
     euclidean: 'euclidean',
@@ -127,7 +172,23 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     }
   }
 
-  async createIndex({ indexName, dimension, metric = 'cosine' }: CreateIndexParams): Promise<void> {
+  /**
+   * Creates a MongoDB collection and the Atlas Search indexes that back a
+   * Mastra index with the given name.
+   *
+   * **Async index lifecycle:** Atlas Search indexes transition through
+   * PENDING → BUILDING → READY after this method returns. If you need to
+   * `upsert` or `query` immediately after calling `createIndex`, call
+   * `waitForIndexReady({ indexName })` first to block until the index is
+   * queryable. Skipping that step on a real Atlas cluster may cause
+   * "index not found" or "index not ready" errors on subsequent operations.
+   */
+  async createIndex({
+    indexName,
+    dimension,
+    metric = 'cosine',
+    filterFields,
+  }: MongoDBCreateIndexParams): Promise<void> {
     let mongoMetric;
     try {
       if (!Number.isInteger(dimension) || dimension <= 0) {
@@ -168,26 +229,55 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       const embeddingField = this.embeddingFieldName;
       const numDimensions = dimension;
 
-      // Create search indexes
-      await collection.createSearchIndex({
-        definition: {
-          fields: [
-            {
-              type: 'vector',
-              path: embeddingField,
-              numDimensions: numDimensions,
-              similarity: mongoMetric,
-            },
-            {
-              type: 'filter',
-              path: '_id',
-            },
-          ],
+      // Create search indexes.
+      // Note that fast filtering can be done during vector search, but only if
+      // we know the fields when the index is created.
+      // '_id' and 'document' are always declared as filter fields. 'document'
+      // lets documentFilter queries be passed directly to $vectorSearch without
+      // materialising candidate IDs.
+      // Metadata fields are arbitrary and unknown at index-creation time, so by
+      // default they are not declared. Callers can declare the metadata fields
+      // they intend to filter on via `filterFields`; those are registered as
+      // `metadata.<field>` filter fields so filtered queries skip the $match /
+      // $in pre-filter. See https://github.com/mastra-ai/mastra/issues/18587.
+      const declaredMetadataPaths = this.buildDeclaredMetadataPaths(filterFields);
+      const fields: Document[] = [
+        {
+          type: 'vector',
+          path: embeddingField,
+          numDimensions: numDimensions,
+          similarity: mongoMetric,
         },
+        {
+          type: 'filter',
+          path: '_id',
+        },
+        {
+          type: 'filter',
+          path: this.documentFieldName,
+        },
+        ...declaredMetadataPaths.map(path => ({ type: 'filter', path })),
+      ];
+
+      // Each creation treats IndexAlreadyExists as a no-op independently. A
+      // shared catch would let an existing vector index skip creation of the
+      // companion full-text index entirely (e.g. after a previously
+      // interrupted createIndex), leaving the pair in a partial state.
+      const vectorIndexCreated = await this.createSearchIndexIgnoringExisting(collection, {
+        definition: { fields },
         name: indexNameInternal,
         type: 'vectorSearch',
       });
-      await collection.createSearchIndex({
+
+      // Cache the declared filter paths only when this call actually created
+      // the index. An index that already existed may carry a different
+      // declaration; queries hydrate the real one lazily via
+      // getDeclaredFilterPaths().
+      if (vectorIndexCreated) {
+        this.declaredFilterPaths.set(indexName, new Set([this.documentFieldName, ...declaredMetadataPaths]));
+      }
+
+      await this.createSearchIndexIgnoringExisting(collection, {
         definition: {
           mappings: {
             dynamic: true,
@@ -197,33 +287,34 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         type: 'search',
       });
     } catch (error: any) {
-      if (error.codeName !== 'IndexAlreadyExists') {
-        throw new MastraError(
-          {
-            id: createVectorErrorId('MONGODB', 'CREATE_INDEX', 'FAILED'),
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.THIRD_PARTY,
-          },
-          error,
-        );
-      }
-    }
-
-    try {
-      // Store the dimension and metric in a special metadata document
-      await collection?.updateOne({ _id: '__index_metadata__' }, { $set: { dimension, metric } }, { upsert: true });
-    } catch (error) {
       throw new MastraError(
         {
-          id: createVectorErrorId('MONGODB', 'CREATE_INDEX', 'STORE_METADATA_FAILED'),
+          id: createVectorErrorId('MONGODB', 'CREATE_INDEX', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: {
-            indexName,
-          },
         },
         error,
       );
+    }
+  }
+
+  /**
+   * Creates an Atlas Search index, treating IndexAlreadyExists as a no-op so
+   * `createIndex` stays idempotent per index. Returns true when the index was
+   * actually created by this call.
+   */
+  private async createSearchIndexIgnoringExisting(
+    collection: Collection<MongoDBDocument>,
+    description: { definition: Document; name: string; type: 'vectorSearch' | 'search' },
+  ): Promise<boolean> {
+    try {
+      await collection.createSearchIndex(description);
+      return true;
+    } catch (error: any) {
+      if (error?.codeName === 'IndexAlreadyExists') {
+        return false;
+      }
+      throw error;
     }
   }
 
@@ -256,6 +347,20 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     throw new Error(`Index "${indexNameInternal}" did not become ready within timeout`);
   }
 
+  /**
+   * Inserts or updates vectors in the specified index.
+   *
+   * @param indexName - Name of the index (MongoDB collection) to write into.
+   * @param vectors - Array of embedding vectors. Each must have the same
+   *   dimension as declared when the index was created.
+   * @param metadata - Optional array of metadata objects, one per vector,
+   *   stored in a nested `metadata` field alongside the embedding.
+   * @param ids - Optional string IDs for each vector, used as the MongoDB
+   *   document `_id`. Auto-generated UUIDs are used when omitted.
+   * @param documents - Optional text strings associated with each vector,
+   *   stored in a `document` field.
+   * @returns The IDs of the upserted vectors in input order.
+   */
   async upsert({ indexName, vectors, metadata, ids, documents }: MongoDBUpsertVectorParams): Promise<string[]> {
     // Validate input parameters
     validateUpsertInput('MONGODB', vectors, metadata, ids);
@@ -263,8 +368,6 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
 
     try {
       const collection = await this.getCollection(indexName);
-
-      this.collectionForValidation = collection;
 
       // Get index stats to check dimension
       const stats = await this.describeIndex({ indexName });
@@ -323,6 +426,22 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       );
     }
   }
+  /**
+   * Runs an approximate nearest-neighbor search against the specified index.
+   *
+   * @param indexName - Name of the index (MongoDB collection) to search.
+   * @param queryVector - The query embedding. Must match the index dimension.
+   * @param topK - Maximum number of results to return (default: 10).
+   * @param filter - Optional metadata filter. Fields are matched against the
+   *   nested `metadata` subdocument; no `metadata.` prefix is needed.
+   * @param includeVector - When true, each result includes the stored embedding
+   *   in a `vector` field (default: false).
+   * @param documentFilter - Optional filter applied to the `document` text
+   *   field, independent of `filter`.
+   * @param numCandidates - HNSW candidate pool size. Higher values improve
+   *   recall at the cost of latency. Defaults to 20 * topK, capped at 10000.
+   * @returns Array of results ordered by descending similarity score.
+   */
   async query({
     indexName,
     queryVector,
@@ -330,6 +449,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     filter,
     includeVector = false,
     documentFilter,
+    numCandidates,
   }: MongoDBQueryVectorParams): Promise<QueryResult[]> {
     if (!queryVector) {
       throw new MastraError({
@@ -345,52 +465,57 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       const collection = await this.getCollection(indexName, true);
       const indexNameInternal = `${indexName}_vector_index`;
 
-      // Transform the filters using MongoDBFilterTranslator
-      const mongoFilter = this.transformFilter(filter);
-      const documentMongoFilter = documentFilter ? { [this.documentFieldName]: documentFilter } : {};
-
-      // Transform metadata field filters to use dot notation
-      const transformedMongoFilter = this.transformMetadataFilter(mongoFilter);
-
-      // Combine the filters
-      let combinedFilter: any = {};
-      if (Object.keys(transformedMongoFilter).length > 0 && Object.keys(documentMongoFilter).length > 0) {
-        combinedFilter = { $and: [transformedMongoFilter, documentMongoFilter] };
-      } else if (Object.keys(transformedMongoFilter).length > 0) {
-        combinedFilter = transformedMongoFilter;
-      } else if (Object.keys(documentMongoFilter).length > 0) {
-        combinedFilter = documentMongoFilter;
-      }
+      // Metadata filter: translate then add 'metadata.' prefix to user-facing field names.
+      const metadataFilter = this.transformMetadataFilter(this.transformFilter(filter));
+      const hasMetadataFilter = Object.keys(metadataFilter).length > 0;
 
       const vectorSearch: Document = {
         index: indexNameInternal,
         queryVector: queryVector,
         path: this.embeddingFieldName,
-        numCandidates: Math.min(10000, Math.max(100, topK)),
+        numCandidates: Math.min(10000, Math.max(topK, numCandidates ?? topK * 20)),
         limit: Math.min(10000, topK),
       };
 
-      if (Object.keys(combinedFilter).length > 0) {
-        // Exclude the special metadata document
-        const filterWithExclusion = {
-          $and: [{ _id: { $ne: '__index_metadata__' } }, combinedFilter],
-        };
-
-        // pre-filter for candidate document IDs
-        const candidateIds = await collection
-          .aggregate([{ $match: filterWithExclusion }, { $project: { _id: 1 } }])
-          .map(doc => doc._id)
-          .toArray();
-
-        if (candidateIds.length > 0) {
-          vectorSearch.filter = { _id: { $in: candidateIds } };
-        } else {
-          // No documents match the filter, return empty results
-          return [];
+      if (hasMetadataFilter) {
+        // Fast path: if every field the filter touches was declared via
+        // `filterFields` at index creation, and every operator is one Atlas
+        // Vector Search accepts inside `filter`, pass the metadata filter
+        // straight to $vectorSearch — no $match, no _id materialisation, no
+        // 16 MB BSON ceiling. See https://github.com/mastra-ai/mastra/issues/18587
+        let declaredPaths: Set<string>;
+        try {
+          declaredPaths = await this.getDeclaredFilterPaths(indexName);
+        } catch {
+          // If the declaration can't be read, assume nothing is declared and
+          // use the always-correct pre-filter below.
+          declaredPaths = new Set();
         }
-      } else {
-        // Even with no filter, exclude the metadata document
-        vectorSearch.filter = { _id: { $ne: '__index_metadata__' } };
+
+        if (this.canPushDownFilter(metadataFilter, declaredPaths)) {
+          vectorSearch.filter = documentFilter
+            ? { $and: [metadataFilter, { [this.documentFieldName]: documentFilter }] }
+            : metadataFilter;
+        } else {
+          // Fallback: metadata fields are not (all) declared as filter fields, or
+          // the filter uses an operator $vectorSearch doesn't support. Materialise
+          // matching _ids via $match first, then filter by _id inside $vectorSearch.
+          const candidateIds = await collection
+            .aggregate([{ $match: metadataFilter }, { $project: { _id: 1 } }])
+            .map(doc => doc._id)
+            .toArray();
+
+          if (candidateIds.length === 0) return [];
+
+          // 'document' is a declared filter field — combine directly when present.
+          vectorSearch.filter = documentFilter
+            ? { $and: [{ _id: { $in: candidateIds } }, { [this.documentFieldName]: documentFilter }] }
+            : { _id: { $in: candidateIds } };
+        }
+      } else if (documentFilter) {
+        // 'document' is a declared filter field in the index — pass directly,
+        // no candidate materialisation needed.
+        vectorSearch.filter = { [this.documentFieldName]: documentFilter };
       }
 
       // Build the aggregation pipeline
@@ -462,28 +587,49 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     try {
       const collection = await this.getCollection(indexName, true);
 
-      // Get the count of documents, excluding the metadata document
-      const count = await collection.countDocuments({ _id: { $ne: '__index_metadata__' } });
+      const count = await collection.countDocuments({ _id: { $ne: '__index_metadata__' as any } });
 
-      // Retrieve the dimension and metric from the metadata document
-      const metadataDoc = await collection.findOne({ _id: '__index_metadata__' });
-      const dimension = metadataDoc?.dimension || 0;
-      const metric = metadataDoc?.metric || 'cosine';
+      const indexNameInternal = `${indexName}_vector_index`;
+      const indexInfo: any[] = await (collection as any).listSearchIndexes().toArray();
+      const indexData = indexInfo.find((idx: any) => idx.name === indexNameInternal);
 
-      return {
-        dimension,
-        count,
-        metric: metric as 'cosine' | 'euclidean' | 'dotproduct',
+      if (!indexData) {
+        throw new MastraError({
+          id: createVectorErrorId('MONGODB', 'DESCRIBE_INDEX', 'NOT_FOUND'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName },
+          text: `Atlas Search index "${indexNameInternal}" does not exist on collection "${indexName}". The collection may predate Mastra or the index may have been dropped externally.`,
+        });
+      }
+
+      const vectorField = indexData.latestDefinition?.fields?.find((f: any) => f.type === 'vector');
+      if (!vectorField) {
+        throw new MastraError({
+          id: createVectorErrorId('MONGODB', 'DESCRIBE_INDEX', 'INVALID'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName },
+          text: `Atlas Search index "${indexNameInternal}" exists but has no vector field. The index may have been created outside of Mastra or without vector configuration.`,
+        });
+      }
+      const dimension = vectorField.numDimensions;
+      const reverseMetricMap: Record<string, 'cosine' | 'euclidean' | 'dotproduct'> = {
+        cosine: 'cosine',
+        euclidean: 'euclidean',
+        dotProduct: 'dotproduct',
       };
+      const metric = reverseMetricMap[vectorField.similarity] ?? 'cosine';
+
+      return { dimension, count, metric };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createVectorErrorId('MONGODB', 'DESCRIBE_INDEX', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: {
-            indexName,
-          },
+          details: { indexName },
         },
         error,
       );
@@ -496,6 +642,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       if (collection) {
         await collection.drop();
         this.collections.delete(indexName);
+        this.declaredFilterPaths.delete(indexName);
       } else {
         // Optionally, you can log or handle the case where the collection doesn't exist
         throw new Error(`Index (Collection) "${indexName}" does not exist`);
@@ -731,12 +878,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           });
         }
 
-        // Exclude the special metadata document and combine with user filter
-        const finalFilter = {
-          $and: [{ _id: { $ne: '__index_metadata__' } }, transformedFilter],
-        };
-
-        await collection.deleteMany(finalFilter);
+        await collection.deleteMany(transformedFilter);
       }
     } catch (error) {
       // If it's already a MastraError, rethrow it
@@ -760,7 +902,26 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     }
   }
 
-  // Private methods
+  /**
+   * Returns the MongoDB Collection that backs the given Mastra index.
+   *
+   * **Index vs. collection:** In this driver, each Mastra index is stored as a
+   * MongoDB collection whose name equals the index name. The Atlas Vector Search
+   * index (named `${indexName}_vector_index`) lives on that collection. The two
+   * terms are distinct: "index" is the Mastra concept; "collection" is the
+   * MongoDB storage primitive that implements it.
+   *
+   * **Caching:** Collection handles are cached on first successful lookup to
+   * avoid redundant `listCollections` round-trips. Only handles for collections
+   * that actually exist are cached; a handle for a missing collection is returned
+   * without being cached so the next call re-checks existence rather than
+   * returning a stale phantom.
+   *
+   * @param indexName - Mastra index name, which is also the MongoDB collection name.
+   * @param throwIfNotExists - When `true` (default), throws if no MongoDB
+   *   collection exists for this index name. Pass `false` when absence is not an
+   *   error (e.g., inside `deleteIndex`).
+   */
   private async getCollection(
     indexName: string,
     throwIfNotExists: boolean = true,
@@ -771,13 +932,17 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
 
     const collection = this.db.collection<MongoDBDocument>(indexName);
 
-    // Check if collection exists
     const collectionExists = await this.db.listCollections({ name: indexName }).hasNext();
     if (!collectionExists && throwIfNotExists) {
-      throw new Error(`Index (Collection) "${indexName}" does not exist`);
+      throw new Error(
+        `Mastra index "${indexName}" has no backing MongoDB collection. ` +
+          `Call createIndex first, or verify the collection was not dropped externally.`,
+      );
     }
 
-    this.collections.set(indexName, collection);
+    if (collectionExists) {
+      this.collections.set(indexName, collection);
+    }
     return collection;
   }
 
@@ -787,9 +952,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     }
 
     if (dimension === 0) {
-      // If dimension is not set, retrieve and set it from the vectors
       dimension = vectors[0] ? vectors[0].length : 0;
-      await this.setIndexDimension(dimension);
     }
 
     for (let i = 0; i < vectors.length; i++) {
@@ -800,10 +963,82 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     }
   }
 
-  private async setIndexDimension(dimension: number): Promise<void> {
-    // Store the dimension in a special metadata document
-    const collection = this.collectionForValidation!; // 'collectionForValidation' is set in 'upsert' method
-    await collection.updateOne({ _id: '__index_metadata__' }, { $set: { dimension } }, { upsert: true });
+  /**
+   * Maps user-facing `filterFields` (bare metadata field names) to the fully
+   * qualified filter paths stored in the index, e.g. `category` → `metadata.category`.
+   * Blank entries are dropped and duplicates collapsed. A name already carrying the
+   * `metadata.` prefix is left untouched so callers can pass either form.
+   */
+  private buildDeclaredMetadataPaths(filterFields?: string[]): string[] {
+    if (!filterFields?.length) return [];
+    const paths = new Set<string>();
+    for (const field of filterFields) {
+      const trimmed = field?.trim();
+      if (!trimmed) continue;
+      paths.add(trimmed.startsWith(`${this.metadataFieldName}.`) ? trimmed : `${this.metadataFieldName}.${trimmed}`);
+    }
+    return [...paths];
+  }
+
+  /**
+   * Returns the set of filter paths declared in the vectorSearch index (e.g.
+   * `document`, `metadata.category`), excluding `_id`. Reads the live index
+   * definition once per index and caches the result. Used to decide whether a
+   * metadata filter can be pushed down into `$vectorSearch.filter`.
+   */
+  private async getDeclaredFilterPaths(indexName: string): Promise<Set<string>> {
+    const cached = this.declaredFilterPaths.get(indexName);
+    if (cached) return cached;
+
+    const collection = await this.getCollection(indexName, true);
+    const indexNameInternal = `${indexName}_vector_index`;
+    const indexInfo: any[] = await (collection as any).listSearchIndexes().toArray();
+    const indexData = indexInfo.find((idx: any) => idx.name === indexNameInternal);
+
+    const paths = new Set<string>();
+
+    // `latestDefinition` is the most recently *requested* definition, not
+    // necessarily the one serving queries: while an index update is building,
+    // Atlas keeps answering queries with the previous definition. Trusting a
+    // staged definition could push a filter down onto an active index that
+    // does not support it yet, so the definition is only read — and cached —
+    // once the index reports READY. Until then (missing, PENDING, BUILDING,
+    // or a transient read miss) return the empty set uncached: queries take
+    // the always-correct pre-filter fallback and a later call re-reads the
+    // definition instead of pushdown being permanently disabled.
+    if (indexData?.status !== 'READY') {
+      return paths;
+    }
+
+    for (const field of indexData.latestDefinition?.fields ?? []) {
+      if (field?.type === 'filter' && typeof field.path === 'string' && field.path !== '_id') {
+        paths.add(field.path);
+      }
+    }
+
+    this.declaredFilterPaths.set(indexName, paths);
+    return paths;
+  }
+
+  /**
+   * True when `filter` can be passed directly to `$vectorSearch.filter`: every
+   * field path it references is a declared filter field and every operator is in
+   * {@link MongoDBVector.PUSHDOWN_OPERATORS}. Conservative by design — anything it
+   * can't prove safe returns false so the caller uses the `$match` pre-filter.
+   */
+  private canPushDownFilter(filter: any, declaredPaths: Set<string>): boolean {
+    if (filter === null || typeof filter !== 'object') return true;
+    if (Array.isArray(filter)) return filter.every(item => this.canPushDownFilter(item, declaredPaths));
+
+    for (const [key, value] of Object.entries(filter)) {
+      if (key.startsWith('$')) {
+        if (!MongoDBVector.PUSHDOWN_OPERATORS.has(key)) return false;
+      } else if (!declaredPaths.has(key)) {
+        return false;
+      }
+      if (!this.canPushDownFilter(value, declaredPaths)) return false;
+    }
+    return true;
   }
 
   private transformFilter(filter?: MongoDBVectorFilter) {
@@ -844,13 +1079,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       }
       // Check if the key already has 'metadata.' prefix
       else if (key.startsWith('metadata.')) {
-        // Already prefixed, keep as is but recursively transform the value if it's an object with operators
-        if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-          const hasOperator = Object.keys(value).some(k => k.startsWith('$'));
-          transformed[key] = hasOperator ? value : value;
-        } else {
-          transformed[key] = value;
-        }
+        // Already prefixed — keep as-is.
+        transformed[key] = value;
       }
       // Check if this is a known metadata field that needs prefixing
       else if (this.isMetadataField(key)) {

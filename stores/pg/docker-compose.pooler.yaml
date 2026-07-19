@@ -1,0 +1,74 @@
+services:
+  db:
+    image: pgvector/pgvector:0.8.4-pg16
+    container_name: 'pg-pooler-test-db'
+    ports:
+      # Direct port (bypassing pgBouncer) so cleanup/teardown can run
+      # single-session DDL without competing for pooler slots.
+      - '5437:5432'
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+    # Match Supabase's per-statement budget that triggered #17679 in the
+    # field: aggressive statement_timeout + a backend cap. PgBouncer queues
+    # transactions on top of this, amplifying any DDL fan-out into a real
+    # "canceling statement due to statement timeout" error.
+    command:
+      - 'postgres'
+      - '-c'
+      # Aggressive statement_timeout to amplify even small queue waits
+      # into the user-reported failure mode. Real Supabase deployments
+      # see this from the combination of round-trip latency + pooler
+      # queueing; we shrink the budget locally to compensate for the
+      # near-zero local latency.
+      - 'statement_timeout=500'
+      - '-c'
+      - 'max_connections=25'
+      - '-c'
+      # Add lock_timeout so any cross-statement AccessExclusiveLock wait
+      # surfaces as a deterministic failure instead of an arbitrary hang.
+      - 'lock_timeout=500'
+
+  # Toxiproxy sits between pgBouncer and Postgres and adds a fixed
+  # per-query latency. This is the missing ingredient: locally Postgres
+  # answers in < 1ms so the statement_timeout never elapses even under
+  # heavy fan-out. Supabase users see 10–50ms round-trip per statement,
+  # which is what amplifies the parallel-DDL burst into the reported
+  # statement_timeout error. We simulate that here.
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.12.0
+    container_name: 'pg-pooler-test-toxiproxy'
+    depends_on:
+      - db
+    ports:
+      - '8475:8474' # admin API for the test setup hook
+
+  pgbouncer:
+    image: edoburu/pgbouncer:v1.25.2-p0
+    container_name: 'pg-pooler-test-bouncer'
+    depends_on:
+      - toxiproxy
+    ports:
+      # The pooler listens on 6433 so it can run alongside the regular
+      # test container (port 5434) without collision.
+      - '6433:5432'
+    environment:
+      DB_HOST: toxiproxy
+      DB_PORT: '5432'
+      DB_USER: ${POSTGRES_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      DB_NAME: ${POSTGRES_DB:-postgres}
+      # Transaction pooling is the Supabase default and is the mode under
+      # which #17679 reproduces: every statement is a separate "transaction"
+      # to the pooler and competes for one of the upstream backends.
+      POOL_MODE: transaction
+      # Pool size deliberately smaller than max_connections so DDL fan-out
+      # from PostgresStore.init() (~200 statements) saturates the pool and
+      # forces queueing — the production failure mode.
+      # Very small pool size relative to the ~200 statement burst forces
+      # heavy queueing on the pooler side, which is what amplifies the
+      # tight statement_timeout into the user-reported failure.
+      DEFAULT_POOL_SIZE: '3'
+      MAX_CLIENT_CONN: '100'
+      AUTH_TYPE: 'scram-sha-256'

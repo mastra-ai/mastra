@@ -1,5 +1,5 @@
 import { ReadableStream } from 'node:stream/web';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { MessageList } from '../../agent/message-list';
 import type { Processor, ProcessorStreamWriter } from '../../processors';
 import { ChunkFrom } from '../types';
@@ -77,6 +77,66 @@ function createFinishChunk(
       providerMetadata,
       messages: { nonUser: [], all: [] },
     },
+  } as ChunkType;
+}
+
+function createTextDeltaChunk(runId: string, text: string): ChunkType {
+  return {
+    type: 'text-delta',
+    runId,
+    from: ChunkFrom.AGENT,
+    payload: { id: 'text-1', text },
+  } as ChunkType;
+}
+
+/**
+ * Minimal goal evaluation chunk. `pending: true` marks an in-progress judge
+ * update. `shouldContinue` mirrors the goal gate's continuation decision:
+ * `true` on evaluations that loop into another judged iteration, `false` on
+ * terminal evaluations.
+ */
+function createGoalChunk(
+  runId: string,
+  { pending, shouldContinue }: { pending?: boolean; shouldContinue?: boolean } = {},
+): ChunkType {
+  return {
+    type: 'goal',
+    runId,
+    from: ChunkFrom.AGENT,
+    payload: {
+      objective: 'test objective',
+      iteration: 1,
+      maxRuns: 5,
+      passed: shouldContinue === false,
+      status: shouldContinue === false ? 'done' : 'active',
+      results: [],
+      duration: 0,
+      timedOut: false,
+      maxRunsReached: false,
+      suppressFeedback: false,
+      ...(shouldContinue !== undefined ? { shouldContinue } : {}),
+      ...(pending ? { pending: true } : {}),
+    },
+  } as ChunkType;
+}
+
+/** Tool-call chunk for a completed (non-streaming) tool invocation. */
+function createToolCallChunk(runId: string, toolCallId: string): ChunkType {
+  return {
+    type: 'tool-call',
+    runId,
+    from: ChunkFrom.AGENT,
+    payload: { toolCallId, toolName: 'searchTool', args: { q: 'x' } },
+  } as ChunkType;
+}
+
+/** Tool-result chunk matching a prior tool-call. */
+function createToolResultChunk(runId: string, toolCallId: string): ChunkType {
+  return {
+    type: 'tool-result',
+    runId,
+    from: ChunkFrom.AGENT,
+    payload: { toolCallId, toolName: 'searchTool', result: { hits: 3 } },
   } as ChunkType;
 }
 
@@ -314,6 +374,107 @@ describe('MastraModelOutput', () => {
       expect(await output.providerMetadata).toEqual(providerMetadata);
       expect((await output.steps).at(-1)?.providerMetadata).toEqual(providerMetadata);
       expect(onFinishPayload?.providerMetadata).toEqual(providerMetadata);
+    });
+
+    it('exposes the step providerMetadata via _getImmediateProviderMetadata for output-step processors', async () => {
+      const runId = 'test-run';
+      const providerMetadata = {
+        anthropic: { cacheReadInputTokens: 12 },
+      };
+      const messageList = new MessageList({ threadId: 'test-thread' });
+
+      const stream = createChunkStream([createStepFinishChunk(runId), createFinishChunk(runId, providerMetadata)]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      await output.consumeStream();
+
+      expect(output._getImmediateProviderMetadata()).toEqual(providerMetadata);
+    });
+
+    it('surfaces guardrail providerMetadata on a content-filter block where steps is empty', async () => {
+      // The RFC scenario: a Bedrock guardrail intervenes, the step finishes with
+      // reason "content-filter", the completed-steps array is empty, and the
+      // guardrail trace is only reachable through providerMetadata.
+      const runId = 'test-run';
+      const guardrailTrace = {
+        bedrock: {
+          trace: {
+            guardrail: {
+              actionReason: 'Guardrail blocked.',
+              inputAssessment: {
+                'guardrail-1': {
+                  contentPolicy: { filters: [{ type: 'PROMPT_ATTACK', action: 'BLOCKED', confidence: 'HIGH' }] },
+                },
+              },
+            },
+          },
+        },
+      };
+      const messageList = new MessageList({ threadId: 'test-thread' });
+
+      const contentFilterFinish = {
+        type: 'finish',
+        runId,
+        from: ChunkFrom.AGENT,
+        payload: {
+          id: 'finish-1',
+          output: {
+            steps: [],
+            usage: { inputTokens: 10, outputTokens: 0, totalTokens: 10 },
+          },
+          stepResult: {
+            reason: 'content-filter',
+            warnings: [],
+            isContinued: false,
+          },
+          metadata: {},
+          providerMetadata: guardrailTrace,
+          messages: { nonUser: [], all: [] },
+        },
+      } as ChunkType;
+
+      const stream = createChunkStream([contentFilterFinish]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      await output.consumeStream();
+
+      // No completed step recorded, but the guardrail trace is still surfaced.
+      expect(await output.steps).toHaveLength(0);
+      expect(output._getImmediateFinishReason()).toBe('content-filter');
+      expect(output._getImmediateProviderMetadata()).toEqual(guardrailTrace);
+    });
+
+    it('leaves _getImmediateProviderMetadata undefined when the step has no providerMetadata', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+
+      const stream = createChunkStream([createStepFinishChunk(runId), createFinishChunk(runId)]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      await output.consumeStream();
+
+      expect(output._getImmediateProviderMetadata()).toBeUndefined();
     });
 
     it('should merge args from real tool-call into synthetic tool-call when synthetic args are empty', async () => {
@@ -841,6 +1002,312 @@ describe('MastraModelOutput', () => {
 
       expect(result.toolCalls).toHaveLength(1);
       expect(result.toolCalls[0]?.payload.observability).toEqual(observability);
+    });
+  });
+
+  describe('consumeStream onError fan-out', () => {
+    it('invokes every callers onError when the shared drain errors', async () => {
+      const drainError = new Error('drain boom');
+      const stream = new ReadableStream<ChunkType>({
+        pull(controller) {
+          controller.error(drainError);
+        },
+      });
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId: 'test-run' },
+      });
+
+      const firstErrors: unknown[] = [];
+      const secondErrors: unknown[] = [];
+
+      // First caller starts the drain; second caller shares the same drain promise.
+      await Promise.all([
+        output.consumeStream({ onError: e => firstErrors.push(e) }),
+        output.consumeStream({ onError: e => secondErrors.push(e) }),
+      ]);
+
+      expect(firstErrors).toEqual([drainError]);
+      expect(secondErrors).toEqual([drainError]);
+    });
+
+    it('does not call onError when the drain succeeds', async () => {
+      const runId = 'test-run';
+      const stream = createChunkStream([createStepFinishChunk(runId), createFinishChunk(runId)]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      const onError = vi.fn();
+      await output.consumeStream({ onError });
+      await output.consumeStream({ onError });
+
+      expect(onError).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('consumeStream completion sharing', () => {
+    it('resolves every caller only after the stream actually finishes', async () => {
+      const runId = 'test-run';
+
+      // A stream we hold open until release() is called, so we can assert that
+      // no consumeStream() caller resolves before the stream is truly done.
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      const stream = new ReadableStream<ChunkType>({
+        async pull(controller) {
+          controller.enqueue(createStepFinishChunk(runId));
+          await gate;
+          controller.enqueue(createFinishChunk(runId));
+          controller.close();
+        },
+      });
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      let firstResolved = false;
+      let lateResolved = false;
+
+      // First caller starts the drain.
+      const first = output.consumeStream().then(() => {
+        firstResolved = true;
+      });
+
+      // Let the drain begin and buffer the first chunk while the gate is closed.
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      // A caller that arrives AFTER consumption already started must still wait
+      // for the stream to finish (this is the early-return bug Fix 2 closed).
+      const late = output.consumeStream().then(() => {
+        lateResolved = true;
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 10));
+      expect(firstResolved).toBe(false);
+      expect(lateResolved).toBe(false);
+
+      release();
+      await Promise.all([first, late]);
+
+      expect(firstResolved).toBe(true);
+      expect(lateResolved).toBe(true);
+    });
+  });
+
+  describe('goal evaluation run-buffer truncation', () => {
+    /**
+     * The normal terminal goal-loop sequence in durable-engine chunk order:
+     * each judged turn ends with a step-finish followed by a goal evaluation,
+     * and the LAST evaluation is terminal (`shouldContinue: false`) — the
+     * final turn's chunks arrive BEFORE it, never after. (In-process engines
+     * emit the goal chunk before the judged turn's step-finish; covered
+     * separately below.)
+     */
+    function createGoalLoopChunks(runId: string): ChunkType[] {
+      return [
+        // Turn 1: text + a tool call/result → continuing evaluation.
+        createTextDeltaChunk(runId, 'turn one'),
+        createToolCallChunk(runId, 'tc-1'),
+        createToolResultChunk(runId, 'tc-1'),
+        createStepFinishChunk(runId),
+        createGoalChunk(runId, { shouldContinue: true }),
+        // Turn 2: another tool turn → continuing evaluation.
+        createTextDeltaChunk(runId, 'turn two'),
+        createToolCallChunk(runId, 'tc-2'),
+        createToolResultChunk(runId, 'tc-2'),
+        createStepFinishChunk(runId),
+        createGoalChunk(runId, { shouldContinue: true }),
+        // Terminal turn: the answer, then the terminal evaluation.
+        createTextDeltaChunk(runId, 'final answer'),
+        createStepFinishChunk(runId),
+        createGoalChunk(runId, { shouldContinue: false }),
+        createFinishChunk(runId),
+      ];
+    }
+
+    it('bounds buffering across continuing evaluations but preserves the terminal turn in getFullOutput()', async () => {
+      const runId = 'test-run';
+      const stream = createChunkStream(createGoalLoopChunks(runId));
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      const fullOutput = await output.getFullOutput();
+
+      // Run-end results cover the segment after the last CONTINUING
+      // evaluation — the terminal turn survives because the terminal
+      // evaluation does not truncate.
+      expect(fullOutput.steps).toHaveLength(1);
+      expect(fullOutput.text).toBe('final answer');
+      // Earlier turns' tool data was dropped at the continuing boundaries.
+      expect(fullOutput.toolCalls).toHaveLength(0);
+      expect(fullOutput.toolResults).toHaveLength(0);
+
+      // Token usage still spans the whole run (10/20/30 per step-finish, x3).
+      expect(fullOutput.totalUsage).toMatchObject({ inputTokens: 30, outputTokens: 60, totalTokens: 90 });
+    });
+
+    it('clears buffered chunks on continuing evaluations so late streams replay from the last iteration boundary', async () => {
+      const runId = 'test-run';
+      const stream = createChunkStream(createGoalLoopChunks(runId));
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      await output.consumeStream();
+
+      // A stream attached after consumption replays from the last continuing
+      // evaluation onward: the boundary goal chunk, the terminal turn, the
+      // terminal evaluation, and the finish.
+      const replayed: ChunkType[] = [];
+      for await (const chunk of output.fullStream) {
+        replayed.push(chunk);
+      }
+
+      expect(replayed.map(c => c.type)).toEqual(['goal', 'text-delta', 'step-finish', 'goal', 'finish']);
+    });
+
+    it('drops the judged turn arriving as a step-finish AFTER a continuing evaluation (in-process chunk order)', async () => {
+      const runId = 'test-run';
+      // In-process engines run the goal gate before emitting the turn's
+      // step-finish (the gate decides `isContinued` first), so the judged
+      // turn's step-finish lands after the continuing evaluation.
+      const stream = createChunkStream([
+        createTextDeltaChunk(runId, 'turn one'),
+        createToolCallChunk(runId, 'tc-1'),
+        createToolResultChunk(runId, 'tc-1'),
+        createGoalChunk(runId, { shouldContinue: true }),
+        createStepFinishChunk(runId),
+        createTextDeltaChunk(runId, 'final answer'),
+        createGoalChunk(runId, { shouldContinue: false }),
+        createStepFinishChunk(runId),
+        createFinishChunk(runId),
+      ]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      const fullOutput = await output.getFullOutput();
+
+      // The judged turn's late step-finish was dropped at the boundary; the
+      // terminal turn (whose evaluation was terminal) is preserved.
+      expect(fullOutput.steps).toHaveLength(1);
+      expect(fullOutput.text).toBe('final answer');
+      expect(fullOutput.toolCalls).toHaveLength(0);
+      expect(fullOutput.toolResults).toHaveLength(0);
+      expect(fullOutput.totalUsage).toMatchObject({ inputTokens: 20, outputTokens: 40, totalTokens: 60 });
+    });
+
+    it('does not truncate on a terminal evaluation without a prior continuing one', async () => {
+      const runId = 'test-run';
+      // A goal satisfied on the first judged turn: no continuing boundary ever
+      // occurs, so the whole (single-turn) run is preserved.
+      const stream = createChunkStream([
+        createTextDeltaChunk(runId, 'only turn'),
+        createStepFinishChunk(runId),
+        createGoalChunk(runId, { shouldContinue: false }),
+        createFinishChunk(runId),
+      ]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      const fullOutput = await output.getFullOutput();
+
+      expect(fullOutput.text).toBe('only turn');
+      expect(fullOutput.steps).toHaveLength(1);
+    });
+
+    it('does not clear buffered chunks on pending goal chunks', async () => {
+      const runId = 'test-run';
+      const stream = createChunkStream([
+        createTextDeltaChunk(runId, 'before pending'),
+        createGoalChunk(runId, { pending: true }),
+        createStepFinishChunk(runId),
+        createFinishChunk(runId),
+      ]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      await output.consumeStream();
+
+      const replayed: ChunkType[] = [];
+      for await (const chunk of output.fullStream) {
+        replayed.push(chunk);
+      }
+
+      expect(replayed.map(c => c.type)).toEqual(['text-delta', 'goal', 'step-finish', 'finish']);
+    });
+
+    it('still delivers all chunks live to streams attached before the goal evaluation', async () => {
+      const runId = 'test-run';
+      const stream = createChunkStream([
+        createTextDeltaChunk(runId, 'before '),
+        createGoalChunk(runId, { shouldContinue: true }),
+        createTextDeltaChunk(runId, 'after'),
+        createStepFinishChunk(runId),
+        createFinishChunk(runId),
+      ]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      // Attach BEFORE consumption starts — this consumer drives the stream and
+      // must see every chunk regardless of replay-buffer truncation.
+      const live: ChunkType[] = [];
+      for await (const chunk of output.fullStream) {
+        live.push(chunk);
+      }
+
+      expect(live.map(c => c.type)).toEqual(['text-delta', 'goal', 'text-delta', 'step-finish', 'finish']);
     });
   });
 });

@@ -1,4 +1,5 @@
-import { test, expect, Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { buildAuthCapabilities, buildCurrentUserResponse } from '../__utils__/auth';
 import type { MockAuthConfig } from '../__utils__/auth';
 import { resetStorage } from '../__utils__/reset-storage';
@@ -72,43 +73,45 @@ test.describe('Studio Layout - Cold-Load Stability', () => {
     await resetStorage();
   });
 
-  test('gate holds the layout behind a spinner until auth resolves (no cold-load layout jump)', async ({ page }) => {
-    // ARRANGE: Stall the auth routes so the page renders its first paint with auth
-    // still in flight. Auth disabled so the gate resolves to children without an
-    // RBAC permission-patterns request.
-    const releaseAuth = await gateAuth(page, { enabled: false });
-    await page.goto('/agents');
+  test.describe('when auth is still in flight on cold load', () => {
+    test('holds the layout behind a spinner until auth resolves (no cold-load layout jump)', async ({ page }) => {
+      // ARRANGE: Stall the auth routes so the page renders its first paint with auth
+      // still in flight. Auth disabled so the gate resolves to children without an
+      // RBAC permission-patterns request.
+      const releaseAuth = await gateAuth(page, { enabled: false });
+      await page.goto('/agents');
 
-    const sidebar = page.locator('.sidebar-layout').first();
+      const sidebar = page.locator('.sidebar-layout').first();
 
-    // ASSERT 1 (pre-resolution): The gate is showing its spinner and the sidebar
-    // has NOT been mounted yet. This is the boundary that prevents a half-resolved
-    // layout from painting and then snapping.
-    await expect(page.getByRole('status', { name: 'Loading' })).toBeVisible({ timeout: 5000 });
-    await expect(sidebar).toHaveCount(0);
+      // ASSERT 1 (pre-resolution): The gate is showing its spinner and the sidebar
+      // has NOT been mounted yet. This is the boundary that prevents a half-resolved
+      // layout from painting and then snapping.
+      await expect(page.getByRole('status', { name: 'Loading' })).toBeVisible({ timeout: 5000 });
+      await expect(sidebar).toHaveCount(0);
 
-    // ACT: Release the auth response. Register the waiter BEFORE calling release()
-    // so the response cannot be flushed before we are listening for it.
-    const responsePromise = page.waitForResponse('**/api/auth/capabilities');
-    releaseAuth();
-    await responsePromise;
+      // ACT: Release the auth response. Register the waiter BEFORE calling release()
+      // so the response cannot be flushed before we are listening for it.
+      const responsePromise = page.waitForResponse('**/api/auth/capabilities');
+      releaseAuth();
+      await responsePromise;
 
-    // ASSERT 2 (post-resolution): The sidebar now mounts at a real width.
-    // MainSidebarProvider hydrates width synchronously from localStorage (default
-    // 240px); anything smaller would mean the sidebar collapsed or was unmounted.
-    await expect(sidebar).toBeVisible({ timeout: 5000 });
-    const boxBefore = await sidebar.boundingBox();
-    expect(boxBefore).not.toBeNull();
-    expect(boxBefore!.width).toBeGreaterThan(100);
+      // ASSERT 2 (post-resolution): The sidebar now mounts at a real width.
+      // MainSidebarProvider hydrates width synchronously from localStorage (default
+      // 240px); anything smaller would mean the sidebar collapsed or was unmounted.
+      await expect(sidebar).toBeVisible({ timeout: 5000 });
+      const boxBefore = await sidebar.boundingBox();
+      expect(boxBefore).not.toBeNull();
+      expect(boxBefore!.width).toBeGreaterThan(100);
 
-    // Flush one frame so any subsequent React commit has been painted before we
-    // re-measure, then prove the sidebar position/width is unchanged within
-    // sub-pixel tolerance — i.e. it mounted once, in its final position.
-    await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => resolve())));
+      // Flush one frame so any subsequent React commit has been painted before we
+      // re-measure, then prove the sidebar position/width is unchanged within
+      // sub-pixel tolerance — i.e. it mounted once, in its final position.
+      await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => resolve())));
 
-    const boxAfter = await sidebar.boundingBox();
-    expect(boxAfter).not.toBeNull();
-    expect(Math.abs(boxAfter!.x - boxBefore!.x)).toBeLessThanOrEqual(LAYOUT_TOLERANCE_PX);
-    expect(Math.abs(boxAfter!.width - boxBefore!.width)).toBeLessThanOrEqual(LAYOUT_TOLERANCE_PX);
+      const boxAfter = await sidebar.boundingBox();
+      expect(boxAfter).not.toBeNull();
+      expect(Math.abs(boxAfter!.x - boxBefore!.x)).toBeLessThanOrEqual(LAYOUT_TOLERANCE_PX);
+      expect(Math.abs(boxAfter!.width - boxBefore!.width)).toBeLessThanOrEqual(LAYOUT_TOLERANCE_PX);
+    });
   });
 });

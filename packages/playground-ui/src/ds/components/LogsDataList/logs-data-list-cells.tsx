@@ -1,3 +1,4 @@
+import { EntityType } from '@mastra/core/observability';
 import { DataListCell, DataListMonoCell } from '../DataList/data-list-cells';
 type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'fatal';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
@@ -26,7 +27,7 @@ export function LogsDataListLevelCell({ level }: LogsDataListLevelCellProps) {
 
   return (
     <DataListCell height="compact">
-      <span className="uppercase text-ui-sm font-semibold" style={{ color: config.color }}>
+      <span className="text-ui-sm font-semibold uppercase" style={{ color: config.color }}>
         {config.label}
       </span>
     </DataListCell>
@@ -39,12 +40,15 @@ export function LogsDataListLevelCell({ level }: LogsDataListLevelCellProps) {
 
 function EntityTypeIcon({ entityType, className }: { entityType: string; className?: string }) {
   const iconClass = cn('size-3.5 shrink-0 text-neutral2', className);
-  switch (entityType) {
-    case 'AGENT':
+  const normalizedEntityType = entityType.toLowerCase();
+
+  switch (normalizedEntityType) {
+    case EntityType.AGENT:
       return <AgentIcon className={iconClass} aria-hidden />;
-    case 'WORKFLOW':
+    case 'workflow':
+    case EntityType.WORKFLOW_RUN:
       return <WorkflowIcon className={iconClass} aria-hidden />;
-    case 'TOOL':
+    case EntityType.TOOL:
       return <ToolsIcon className={iconClass} aria-hidden />;
     default:
       return null;
@@ -62,7 +66,7 @@ export function LogsDataListEntityCell({ entityType, entityName }: LogsDataListE
   return (
     <DataListCell height="compact" className="flex min-w-0 items-center gap-2">
       <EntityTypeIcon entityType={type} />
-      {entityName ? <span className="min-w-0 text-ui-smd truncate">{entityName}</span> : '-'}
+      {entityName ? <span className="min-w-0 truncate text-ui-smd">{entityName}</span> : '-'}
     </DataListCell>
   );
 }
@@ -77,7 +81,7 @@ export interface LogsDataListMessageCellProps {
 
 export function LogsDataListMessageCell({ message }: LogsDataListMessageCellProps) {
   return (
-    <DataListCell height="compact" className="text-neutral4 text-ui-smd min-w-0 truncate font-mono">
+    <DataListCell height="compact" className="min-w-0 truncate font-mono text-ui-smd text-neutral4">
       {message}
     </DataListCell>
   );

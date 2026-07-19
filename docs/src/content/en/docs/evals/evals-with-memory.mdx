@@ -21,10 +21,10 @@ This page covers the three working patterns for running Mastra evals against mem
 | Goal | Approach |
 | - | - |
 | One shared conversation across every item | [`runEvals` with global `targetOptions.memory`](#shared-thread-with-runevals) |
-| One independent thread per item, simple CI loop | [`runEvals` per item](#per-item-threads-with-runevals) |
+| One independent thread per item, focused CI loop | [`runEvals` per item](#per-item-threads-with-runevals) |
 | Per-item threads driven by a stored `Dataset` | [`dataset.startExperiment` with an inline task](#dataset-experiments-with-an-inline-task) |
 
-Pre-seeding `RequestContext` with `MastraMemory` is **not** a supported way to drive memory into an agent. Thread resolution reads `args.memory.thread` — `RequestContext.MastraMemory` is populated by `prepare-memory-step` after the agent has already resolved its thread.
+Pre-seeding `RequestContext` with `MastraMemory` **isn't** a supported way to drive memory into an agent. Thread resolution reads `args.memory.thread` — `RequestContext.MastraMemory` is populated by `prepare-memory-step` after the agent has already resolved its thread.
 
 ## Shared thread with `runEvals`
 
@@ -51,7 +51,7 @@ const result = await runEvals({
 })
 ```
 
-`targetOptions` is **global per call**. There is no per-item override on `RunEvalsDataItem` today.
+`targetOptions` is **global per call**. No per-item override on `RunEvalsDataItem` is available today.
 
 ## Per-item threads with `runEvals`
 
@@ -96,7 +96,7 @@ Create the thread before running the eval. Observational memory in `thread` scop
 
 ## Dataset experiments with an inline task
 
-`dataset.startExperiment({ target: agent })` does **not** forward a `memory` option to the agent — only `requestContext`. To run a stored dataset against a memory-enabled agent, use an inline `task` function and stash `{ threadId, resourceId }` in each item's `metadata`. The scorer pipeline still runs as normal.
+`dataset.startExperiment({ target: agent })` **doesn't** forward a `memory` option to the agent — only `requestContext`. To run a stored dataset against a memory-enabled agent, use an inline `task` function and stash `{ threadId, resourceId }` in each item's `metadata`. The scorer pipeline still runs as normal.
 
 ```typescript title="src/mastra/evals/dataset-experiment.ts"
 import { randomUUID } from 'node:crypto'
@@ -144,11 +144,7 @@ const summary = await dataset.startExperiment({
 })
 ```
 
-The inline `task` receives the item's `metadata`, so each row can drive its own thread without changing the agent or any scorer.
-
-:::note
-Visit [runEvals reference](/reference/evals/run-evals) and [Dataset reference](/reference/datasets/dataset) for full configuration.
-:::
+The inline `task` receives the item's `metadata`, so each row can drive its own thread without changing the agent or any scorer. Visit [runEvals reference](/reference/evals/run-evals) and [Dataset reference](/reference/datasets/dataset) for full configuration.
 
 ## Related
 

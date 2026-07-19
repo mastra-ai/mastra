@@ -26,7 +26,7 @@ const meta: Meta<typeof Button> = {
     },
     size: {
       control: { type: 'select' },
-      options: ['sm', 'md', 'default', 'lg', 'icon-sm', 'icon-md', 'icon-lg'],
+      options: ['xs', 'sm', 'md', 'lg', 'icon-xs', 'icon-sm', 'icon-md', 'icon-lg'],
     },
     disabled: {
       control: { type: 'boolean' },
@@ -40,6 +40,7 @@ type Story = StoryObj<typeof Button>;
 export const Default: Story = {
   args: {
     children: 'Button',
+    size: 'md',
   },
 };
 
@@ -58,9 +59,9 @@ export const Variants: Story = {
 export const Sizes: Story = {
   render: () => (
     <div className="flex items-center gap-4">
+      <Button size="xs">Extra Small</Button>
       <Button size="sm">Small</Button>
       <Button size="md">Medium</Button>
-      <Button size="default">Default</Button>
       <Button size="lg">Large</Button>
     </div>
   ),
@@ -99,7 +100,7 @@ export const WithTooltip: Story = {
 export const IconAutoDetect: Story = {
   render: () => (
     <div className="flex items-center gap-4">
-      {(['sm', 'md', 'default', 'lg'] as const).map(size => (
+      {(['xs', 'sm', 'md', 'lg'] as const).map(size => (
         <Button key={size} size={size}>
           <Settings />
         </Button>
@@ -132,6 +133,9 @@ export const IconButtonVariants: Story = {
 export const IconButtonSizes: Story = {
   render: () => (
     <div className="flex items-center gap-2">
+      <Button size="icon-xs" tooltip="Extra Small">
+        <Settings />
+      </Button>
       <Button size="icon-sm" tooltip="Small">
         <Settings />
       </Button>
@@ -159,20 +163,20 @@ export const VariantSizeMatrix: Story = {
     <div className="flex flex-col gap-3">
       {ALL_VARIANTS.map(variant => (
         <div key={variant} className="flex flex-wrap items-center gap-3">
-          <span className="text-ui-sm text-neutral3 w-24">{variant}</span>
+          <span className="w-24 text-ui-sm text-neutral3">{variant}</span>
+          <Button variant={variant} size="xs">
+            xs
+          </Button>
           <Button variant={variant} size="sm">
             sm
           </Button>
           <Button variant={variant} size="md">
             md
           </Button>
-          <Button variant={variant} size="default">
-            default
-          </Button>
           <Button variant={variant} size="lg">
             lg
           </Button>
-          <Button variant={variant} size="default">
+          <Button variant={variant} size="lg">
             <Trash />
             with icon
           </Button>

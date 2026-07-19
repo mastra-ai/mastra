@@ -10,10 +10,24 @@ import {
   calculatePagination,
   normalizePerPage,
 } from '@mastra/core/storage';
-import type { StoragePagination } from '@mastra/core/storage';
+import type { StoragePagination, ScoreTenancyFilters } from '@mastra/core/storage';
 import { LanceDB, resolveLanceConfig } from '../../db';
 import type { LanceDomainConfig } from '../../db';
 import { getTableSchema, processResultWithTypeConversion } from '../../db/utils';
+
+/** Escapes a value for safe inclusion in a single-quoted Lance SQL string literal. */
+function lanceStringLiteral(value: string): string {
+  return `'${value.replaceAll("'", "''")}'`;
+}
+
+/** Builds a trailing SQL AND clause for the multi-tenant scope filters (empty when none). */
+function tenancyClause(filters?: ScoreTenancyFilters): string {
+  const parts: string[] = [];
+  if (filters?.organizationId !== undefined)
+    parts.push(`\`organizationId\` = ${lanceStringLiteral(filters.organizationId)}`);
+  if (filters?.projectId !== undefined) parts.push(`\`projectId\` = ${lanceStringLiteral(filters.projectId)}`);
+  return parts.length ? ` AND ${parts.join(' AND ')}` : '';
+}
 
 export class StoreScoresLance extends ScoresStorage {
   private client: Connection;
@@ -31,7 +45,7 @@ export class StoreScoresLance extends ScoresStorage {
     await this.#db.alterTable({
       tableName: TABLE_SCORERS,
       schema: SCORERS_SCHEMA,
-      ifNotExists: ['spanId', 'requestContext'],
+      ifNotExists: ['spanId', 'requestContext', 'organizationId', 'projectId', 'batchId', 'datasetId', 'datasetItemId'],
     });
   }
 
@@ -111,7 +125,10 @@ export class StoreScoresLance extends ScoresStorage {
     try {
       const table = await this.client.openTable(TABLE_SCORERS);
 
-      const query = table.query().where(`id = '${id}'`).limit(1);
+      const query = table
+        .query()
+        .where(`id = ${lanceStringLiteral(id)}`)
+        .limit(1);
 
       const records = await query.toArray();
 
@@ -154,12 +171,14 @@ export class StoreScoresLance extends ScoresStorage {
     entityId,
     entityType,
     source,
+    filters,
   }: {
     scorerId: string;
     pagination: StoragePagination;
     entityId?: string;
     entityType?: string;
     source?: ScoringSource;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
     try {
       const { page, perPage: perPageInput } = pagination;
@@ -168,30 +187,28 @@ export class StoreScoresLance extends ScoresStorage {
 
       const table = await this.client.openTable(TABLE_SCORERS);
 
-      let query = table.query().where(`\`scorerId\` = '${scorerId}'`);
-
+      const conditions = [`\`scorerId\` = ${lanceStringLiteral(scorerId)}`];
       if (source) {
-        query = query.where(`\`source\` = '${source}'`);
+        conditions.push(`\`source\` = ${lanceStringLiteral(source)}`);
       }
-
       if (entityId) {
-        query = query.where(`\`entityId\` = '${entityId}'`);
+        conditions.push(`\`entityId\` = ${lanceStringLiteral(entityId)}`);
       }
       if (entityType) {
-        query = query.where(`\`entityType\` = '${entityType}'`);
+        conditions.push(`\`entityType\` = ${lanceStringLiteral(entityType)}`);
       }
+      if (filters?.organizationId !== undefined) {
+        conditions.push(`\`organizationId\` = ${lanceStringLiteral(filters.organizationId)}`);
+      }
+      if (filters?.projectId !== undefined) {
+        conditions.push(`\`projectId\` = ${lanceStringLiteral(filters.projectId)}`);
+      }
+      const whereClause = conditions.join(' AND ');
+
+      let query = table.query().where(whereClause);
 
       // Get total count first
-      let totalQuery = table.query().where(`\`scorerId\` = '${scorerId}'`);
-      if (source) {
-        totalQuery = totalQuery.where(`\`source\` = '${source}'`);
-      }
-      if (entityId) {
-        totalQuery = totalQuery.where(`\`entityId\` = '${entityId}'`);
-      }
-      if (entityType) {
-        totalQuery = totalQuery.where(`\`entityType\` = '${entityType}'`);
-      }
+      const totalQuery = table.query().where(whereClause);
       const allRecords = await totalQuery.toArray();
       const total = allRecords.length;
 
@@ -232,9 +249,11 @@ export class StoreScoresLance extends ScoresStorage {
   async listScoresByRunId({
     runId,
     pagination,
+    filters,
   }: {
     runId: string;
     pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
     try {
       const { page, perPage: perPageInput } = pagination;
@@ -244,13 +263,16 @@ export class StoreScoresLance extends ScoresStorage {
       const table = await this.client.openTable(TABLE_SCORERS);
 
       // Get total count for pagination
-      const allRecords = await table.query().where(`\`runId\` = '${runId}'`).toArray();
+      const allRecords = await table
+        .query()
+        .where(`\`runId\` = ${lanceStringLiteral(runId)}${tenancyClause(filters)}`)
+        .toArray();
       const total = allRecords.length;
 
       const end = perPageInput === false ? total : start + perPage;
 
       // Query for scores with the given runId
-      let query = table.query().where(`\`runId\` = '${runId}'`);
+      let query = table.query().where(`\`runId\` = ${lanceStringLiteral(runId)}${tenancyClause(filters)}`);
 
       // For perPage: false, don't use limit/offset
       if (perPageInput !== false) {
@@ -283,15 +305,16 @@ export class StoreScoresLance extends ScoresStorage {
       );
     }
   }
-
   async listScoresByEntityId({
     entityId,
     entityType,
     pagination,
+    filters,
   }: {
     pagination: StoragePagination;
     entityId: string;
     entityType: string;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
     try {
       const { page, perPage: perPageInput } = pagination;
@@ -303,14 +326,20 @@ export class StoreScoresLance extends ScoresStorage {
       // Get total count for pagination
       const allRecords = await table
         .query()
-        .where(`\`entityId\` = '${entityId}' AND \`entityType\` = '${entityType}'`)
+        .where(
+          `\`entityId\` = ${lanceStringLiteral(entityId)} AND \`entityType\` = ${lanceStringLiteral(entityType)}${tenancyClause(filters)}`,
+        )
         .toArray();
       const total = allRecords.length;
 
       const end = perPageInput === false ? total : start + perPage;
 
       // Query for scores with the given entityId and entityType
-      let query = table.query().where(`\`entityId\` = '${entityId}' AND \`entityType\` = '${entityType}'`);
+      let query = table
+        .query()
+        .where(
+          `\`entityId\` = ${lanceStringLiteral(entityId)} AND \`entityType\` = ${lanceStringLiteral(entityType)}${tenancyClause(filters)}`,
+        );
 
       // For perPage: false, don't use limit/offset
       if (perPageInput !== false) {
@@ -348,10 +377,12 @@ export class StoreScoresLance extends ScoresStorage {
     traceId,
     spanId,
     pagination,
+    filters,
   }: {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
     try {
       const { page, perPage: perPageInput } = pagination;
@@ -361,13 +392,22 @@ export class StoreScoresLance extends ScoresStorage {
       const table = await this.client.openTable(TABLE_SCORERS);
 
       // Get total count for pagination
-      const allRecords = await table.query().where(`\`traceId\` = '${traceId}' AND \`spanId\` = '${spanId}'`).toArray();
+      const allRecords = await table
+        .query()
+        .where(
+          `\`traceId\` = ${lanceStringLiteral(traceId)} AND \`spanId\` = ${lanceStringLiteral(spanId)}${tenancyClause(filters)}`,
+        )
+        .toArray();
       const total = allRecords.length;
 
       const end = perPageInput === false ? total : start + perPage;
 
       // Query for scores with the given traceId and spanId
-      let query = table.query().where(`\`traceId\` = '${traceId}' AND \`spanId\` = '${spanId}'`);
+      let query = table
+        .query()
+        .where(
+          `\`traceId\` = ${lanceStringLiteral(traceId)} AND \`spanId\` = ${lanceStringLiteral(spanId)}${tenancyClause(filters)}`,
+        );
 
       // For perPage: false, don't use limit/offset
       if (perPageInput !== false) {

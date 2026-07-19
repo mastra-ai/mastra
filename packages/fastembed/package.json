@@ -1,6 +1,6 @@
 {
   "name": "@mastra/fastembed",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -51,7 +51,7 @@
     "@internal/ai-v6": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
-    "@types/node": "22.19.15",
+    "@types/node": "22.20.1",
     "@types/progress": "^2.0.7",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",

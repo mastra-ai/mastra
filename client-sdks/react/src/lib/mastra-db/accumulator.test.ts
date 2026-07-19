@@ -1,4 +1,5 @@
 import type { MastraDBMessage, MastraToolInvocationPart } from '@mastra/core/agent/message-list';
+import { MessageList } from '@mastra/core/agent/message-list';
 import type { ChunkType } from '@mastra/core/stream';
 import { describe, expect, it } from 'vitest';
 import { accumulateChunk, finishStreamingAssistantMessage } from './accumulator';
@@ -298,6 +299,14 @@ const fileChunkPlain = (mimeType: string, data: string): ChunkType =>
     payload: { mimeType, data, base64: false },
   }) as unknown as ChunkType;
 
+const fileChunkBinary = (mimeType: string, data: Uint8Array): ChunkType =>
+  ({
+    type: 'file',
+    runId: RUN_ID,
+    from: 'AGENT',
+    payload: { mimeType, data },
+  }) as unknown as ChunkType;
+
 const isTaskCompleteChunk = (passed: boolean, suppressFeedback = false): ChunkType =>
   ({
     type: 'is-task-complete',
@@ -311,6 +320,26 @@ const isTaskCompleteChunk = (passed: boolean, suppressFeedback = false): ChunkTy
       timedOut: false,
       reason: 'done',
       maxIterationReached: false,
+    },
+  }) as unknown as ChunkType;
+
+const goalChunk = (passed: boolean): ChunkType =>
+  ({
+    type: 'goal',
+    runId: RUN_ID,
+    from: 'AGENT',
+    payload: {
+      objective: 'Ship the feature',
+      iteration: 1,
+      maxRuns: 50,
+      passed,
+      status: passed ? 'done' : 'active',
+      results: [],
+      reason: passed ? 'Goal achieved' : 'Not yet',
+      duration: 5,
+      timedOut: false,
+      maxRunsReached: false,
+      suppressFeedback: false,
     },
   }) as unknown as ChunkType;
 
@@ -873,18 +902,35 @@ describe('accumulateChunk - content', () => {
 
   it('file with base64 string data produces a base64 data URL', () => {
     const out = reduce([startChunk(), fileChunkBase64('image/png', 'aGVsbG8=')]);
-    const filePart = out[0].content.parts.find(p => p.type === 'file') as unknown as {
-      url: string;
-      mediaType: string;
-    };
-    expect(filePart.mediaType).toBe('image/png');
-    expect(filePart.url).toBe('data:image/png;base64,aGVsbG8=');
+    const filePart = out[0].content.parts.find(p => p.type === 'file');
+    expect(filePart).toMatchObject({
+      type: 'file',
+      mimeType: 'image/png',
+      data: 'data:image/png;base64,aGVsbG8=',
+    });
   });
 
   it('file with plain string data percent-encodes into a data URL', () => {
     const out = reduce([startChunk(), fileChunkPlain('text/plain', 'hello world')]);
-    const filePart = out[0].content.parts.find(p => p.type === 'file') as unknown as { url: string };
-    expect(filePart.url).toBe('data:text/plain,hello%20world');
+    const filePart = out[0].content.parts.find(p => p.type === 'file');
+    expect(filePart).toMatchObject({
+      type: 'file',
+      mimeType: 'text/plain',
+      data: 'data:text/plain,hello%20world',
+    });
+  });
+
+  it('file with large Uint8Array binary data does not overflow the call stack', () => {
+    const bytes = new Uint8Array(200_000);
+    bytes.fill(0x41);
+    const out = reduce([startChunk(), fileChunkBinary('application/octet-stream', bytes)]);
+    const filePart = out[0].content.parts.find(p => p.type === 'file');
+    const expectedBase64 = Buffer.from(bytes).toString('base64');
+    expect(filePart).toMatchObject({
+      type: 'file',
+      mimeType: 'application/octet-stream',
+      data: `data:application/octet-stream;base64,${expectedBase64}`,
+    });
   });
 
   it('is-task-complete emits an assistant feedback message with completionResult', () => {
@@ -899,6 +945,15 @@ describe('accumulateChunk - content', () => {
     const initial = reduce([startChunk()]);
     const out = reduce([isTaskCompleteChunk(true, true)], streamMeta(), initial);
     expect(out).toEqual(initial);
+  });
+
+  // The goal chunk is a consumer-only signal: the core goal step already injects
+  // its feedback into the message history, so the accumulator must NOT surface it
+  // as its own DB message (unlike is-task-complete).
+  it('goal chunk returns the conversation unchanged (no DB message)', () => {
+    const initial = reduce([startChunk()]);
+    expect(reduce([goalChunk(false)], streamMeta(), initial)).toEqual(initial);
+    expect(reduce([goalChunk(true)], streamMeta(), initial)).toEqual(initial);
   });
 });
 
@@ -945,6 +1000,15 @@ describe('accumulateChunk - signal echo (data-user-message)', () => {
     expect(user.content.parts[0]).toEqual({ type: 'text', text: 'hello back' });
   });
 
+  it('drops an empty trailing assistant before appending the echoed user message', () => {
+    const out = reduce([startChunk('asst-1'), dataUserMessageChunk('sig-1', 'hello back')]);
+
+    expect(out).toHaveLength(1);
+    expect(out[0].role).toBe('user');
+    expect(out[0].id).toBe('sig-1');
+    expect(out[0].content.parts[0]).toEqual({ type: 'text', text: 'hello back' });
+  });
+
   it('dedupes by signalId', () => {
     const out = reduce([
       startChunk('asst-1'),
@@ -972,7 +1036,80 @@ describe('accumulateChunk - signal echo (data-user-message)', () => {
     expect(userMessages).toHaveLength(1);
     expect(userMessages[0].id).toBe('server-1');
     expect(userMessages[0].content.metadata?.status).toBeUndefined();
-    expect(userMessages[0].content.metadata?.[CLIENT_MESSAGE_ID_KEY]).toBeUndefined();
+    // The correlation key is retained through reconciliation so the rendered row
+    // key stays stable across the id swap (no unmount/remount). It is stripped
+    // only later, on reload, by `resolveInitialMessages`.
+    expect(userMessages[0].content.metadata?.[CLIENT_MESSAGE_ID_KEY]).toBe('corr-1');
+  });
+
+  it('drops the empty assistant shell when reconciling a pending user echo', () => {
+    const pending = pendingUserMessage('client-1', 'weather in paris', 'corr-1');
+    const out = reduce(
+      [startChunk('asst-1'), dataUserMessageChunk('server-1', 'weather in paris', 'user', 'corr-1')],
+      streamMeta(),
+      [pending],
+    );
+
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({
+      id: 'server-1',
+      role: 'user',
+      content: {
+        parts: [{ type: 'text', text: 'weather in paris' }],
+      },
+    });
+  });
+
+  it('reconciled pending bubble keeps echoed binary attachment data', () => {
+    const pending: MastraDBMessage = {
+      id: 'client-1',
+      role: 'user',
+      createdAt: new Date(),
+      content: {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'see this' },
+          // Optimistic bubble may start with empty file data before echoed contents merge in.
+          { type: 'file', mimeType: 'image/png', data: '' },
+        ],
+        metadata: { mode: 'stream', status: 'pending', [CLIENT_MESSAGE_ID_KEY]: 'corr-1' },
+      },
+    };
+
+    const out = reduce(
+      [
+        dataUserMessageChunk(
+          'server-1',
+          [
+            { type: 'text', text: 'see this' },
+            { type: 'file', data: 'data:image/png;base64,abc123', mediaType: 'image/png' },
+          ],
+          'user',
+          'corr-1',
+        ),
+      ],
+      streamMeta(),
+      [pending],
+    );
+
+    const user = out.find(m => m.role === 'user');
+    expect(user?.content.parts).toEqual([
+      { type: 'text', text: 'see this' },
+      { type: 'file', mimeType: 'image/png', data: 'data:image/png;base64,abc123' },
+    ]);
+  });
+
+  it('keeps the correlation key but adopts the server id and clears pending on reconciliation', () => {
+    // Regression guard for the streaming layout shift: the rendered row key
+    // prefers `clientMessageId`, so it must survive the id swap unchanged while
+    // the transient pending status is cleared and the server id is adopted.
+    const pending = pendingUserMessage('client-1', 'hello', 'corr-1');
+    const out = reduce([dataUserMessageChunk('server-1', 'hello', 'user', 'corr-1')], streamMeta(), [pending]);
+
+    const user = out.find(m => m.role === 'user');
+    expect(user?.id).toBe('server-1');
+    expect(user?.content.metadata?.status).toBeUndefined();
+    expect(user?.content.metadata?.[CLIENT_MESSAGE_ID_KEY]).toBe('corr-1');
   });
 
   it('only resolves the optimistic message whose clientMessageId matches the echo', () => {
@@ -986,7 +1123,8 @@ describe('accumulateChunk - signal echo (data-user-message)', () => {
     const resolved = out.find(m => m.id === 'server-2');
     const stillPending = out.find(m => m.id === 'client-1');
     expect(resolved?.content.metadata?.status).toBeUndefined();
-    expect(resolved?.content.metadata?.[CLIENT_MESSAGE_ID_KEY]).toBeUndefined();
+    // Resolved bubble keeps its correlation key for a stable render key.
+    expect(resolved?.content.metadata?.[CLIENT_MESSAGE_ID_KEY]).toBe('corr-2');
     expect(stillPending?.content.metadata?.status).toBe('pending');
     expect(out.filter(m => m.role === 'user')).toHaveLength(2);
   });
@@ -1028,7 +1166,28 @@ describe('accumulateChunk - signal echo (data-user-message)', () => {
     expect(user?.id).toBe('sig-1');
     expect(user?.content.parts).toEqual([
       { type: 'text', text: 'see this' },
-      { type: 'file', mediaType: 'image/png', url: 'data:image/png;base64,abc123', filename: 'image.png' },
+      { type: 'file', mimeType: 'image/png', data: 'data:image/png;base64,abc123', filename: 'image.png' },
+    ]);
+  });
+
+  it('signal file parts convert to AI SDK UI messages without crashing', () => {
+    const out = reduce([
+      startChunk('asst-1'),
+      dataUserMessageChunk('sig-1', [
+        { type: 'text', text: 'have a look at this' },
+        { type: 'file', data: 'https://example.com/shot.png', mediaType: 'image/png' },
+      ]),
+    ]);
+
+    const user = out.find(m => m.role === 'user');
+    expect(user).toBeDefined();
+
+    const uiMessages = new MessageList().add([user!], 'memory').get.all.aiV6.ui();
+    expect(uiMessages).toHaveLength(1);
+    // Issue #19356 expected behavior: the attachment survives conversion as a
+    // usable AI SDK UI file part, with the original URL and media type intact.
+    expect(uiMessages[0]?.parts.filter(part => part.type === 'file')).toEqual([
+      { type: 'file', url: 'https://example.com/shot.png', mediaType: 'image/png' },
     ]);
   });
 });
@@ -1156,6 +1315,11 @@ describe('finishStreamingAssistantMessage', () => {
       },
     ];
     expect(finishStreamingAssistantMessage(userOnly)).toBe(userOnly);
+  });
+
+  it('drops an empty trailing assistant message', () => {
+    const out = reduce([startChunk('asst-1')]);
+    expect(finishStreamingAssistantMessage(out)).toEqual([]);
   });
 });
 

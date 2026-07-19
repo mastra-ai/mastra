@@ -8,6 +8,7 @@ import type { InMemoryTaskStore } from '../../a2a/store';
 import type { OpenAPIRoute } from '../openapi-utils';
 import { A2A_ROUTES } from './a2a';
 import { AGENT_BUILDER_ROUTES } from './agent-builder';
+import { AGENT_CONTROLLER_ROUTES } from './agent-controller';
 import { AGENTS_ROUTES } from './agents';
 import type { AgentRoutes } from './agents';
 import { AUTH_ROUTES } from './auth';
@@ -54,6 +55,8 @@ export type ServerContext = {
   abortSignal: AbortSignal;
   /** The route prefix configured for the server (e.g., '/api') */
   routePrefix?: string;
+  /** The web-standard Request object for accessing headers, cookies, etc. */
+  request?: Request;
 };
 
 /**
@@ -190,6 +193,7 @@ export const SERVER_ROUTES: readonly ServerRoute[] = [
   ...AGENT_BUILDER_ROUTES,
   ...SCHEDULES_ROUTES,
   ...CHANNELS_ROUTES,
+  ...AGENT_CONTROLLER_ROUTES,
 ];
 
 /**

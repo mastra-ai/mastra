@@ -25,6 +25,9 @@ import type {
   MountManager,
   CommandResult,
   ExecuteCommandOptions,
+  SandboxNetworking,
+  SandboxFileInput,
+  SandboxCloneOptions,
 } from '@mastra/core/workspace';
 import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 
@@ -205,6 +208,30 @@ export class DaytonaSandbox extends MastraSandbox {
 
   declare readonly mounts: MountManager; // Non-optional (initialized by base class when mount() exists)
 
+  /**
+   * Networking capability: public HTTPS URLs for sandbox ports.
+   * Daytona exposes ports through preview links (`getPreviewLink(port)`) —
+   * if the port is closed it is opened automatically. Private sandboxes
+   * require the preview token; pass `public: true` for tokenless URLs
+   * (required for sandbox deploys).
+   *
+   * When not attached in this process, the sandbox is looked up by identity
+   * (`daytona.get()` does not start it), so other processes can resolve
+   * deployments without waking a stopped sandbox.
+   */
+  readonly networking: SandboxNetworking = {
+    getPortUrl: async (port: number): Promise<string | null> => {
+      try {
+        const sandbox = this._sandbox ?? (await this.lookupDetachedSandbox());
+        if (!sandbox) return null;
+        const preview = await sandbox.getPreviewLink(port);
+        return preview?.url ?? null;
+      } catch {
+        return null;
+      }
+    },
+  };
+
   status: ProviderStatus = 'pending';
 
   private _daytona: Daytona | null = null;
@@ -232,6 +259,7 @@ export class DaytonaSandbox extends MastraSandbox {
   private readonly networkBlockAll?: boolean;
   private readonly networkAllowList?: string;
   private readonly connectionOpts: { apiKey?: string; apiUrl?: string; target?: string };
+  private readonly _constructorOptions: DaytonaSandboxOptions;
 
   constructor(options: DaytonaSandboxOptions = {}) {
     super({
@@ -267,10 +295,35 @@ export class DaytonaSandbox extends MastraSandbox {
       ...(options.apiUrl !== undefined && { apiUrl: options.apiUrl }),
       ...(options.target !== undefined && { target: options.target }),
     };
+    this._constructorOptions = { ...options };
   }
 
   private generateId(): string {
     return `daytona-sandbox-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  /**
+   * Construct a sibling `DaytonaSandbox` that inherits this sandbox's
+   * configuration (credentials, snapshot/image, resources, network policy)
+   * with per-instance overrides.
+   *
+   * Performs no I/O — the sandbox clone provisions (or reconnects to an
+   * existing Daytona sandbox with the same logical `id`) on its own `start()`.
+   * Use it when one configured sandbox acts as the template for a fleet of
+   * independent sandboxes (e.g. one per project).
+   *
+   * `options.idleTimeoutMinutes` maps to Daytona's `autoStopInterval`
+   * (minutes); `options.sandboxId` is ignored because Daytona reconnects by
+   * logical `id`.
+   */
+  clone(options: SandboxCloneOptions = {}): DaytonaSandbox {
+    const { id: _id, name: _name, ...base } = this._constructorOptions;
+    return new DaytonaSandbox({
+      ...base,
+      ...(options.id !== undefined && { id: options.id }),
+      ...(options.env !== undefined && { env: options.env }),
+      ...(options.idleTimeoutMinutes !== undefined && { autoStopInterval: options.idleTimeoutMinutes }),
+    });
   }
 
   /**
@@ -385,6 +438,19 @@ export class DaytonaSandbox extends MastraSandbox {
    * Unmounts all filesystems, then stops the sandbox.
    */
   async stop(): Promise<void> {
+    if (!this._sandbox) {
+      // Not attached in this process — stop by identity without starting it.
+      try {
+        const existing = await this.lookupDetachedSandbox();
+        if (existing && existing.state === SandboxState.STARTED) {
+          await this._daytona!.stop(existing);
+        }
+      } catch {
+        // Best-effort stop; sandbox may not exist or may already be stopped
+      }
+      return;
+    }
+
     for (const mountPath of [...this.mounts.entries.keys()]) {
       try {
         await this.unmount(mountPath);
@@ -393,7 +459,7 @@ export class DaytonaSandbox extends MastraSandbox {
       }
     }
 
-    if (this._sandbox && this._daytona) {
+    if (this._daytona) {
       try {
         await this._daytona.stop(this._sandbox);
       } catch {
@@ -414,18 +480,17 @@ export class DaytonaSandbox extends MastraSandbox {
       } catch {
         // Ignore errors during cleanup
       }
-    } else if (!this._sandbox && this._daytona) {
-      // Orphan cleanup: _start() may have failed after the SDK created
+    } else if (!this._sandbox) {
+      // Not attached in this process — delete by identity without starting it.
+      // Also covers orphan cleanup when _start() failed after the SDK created
       // a server-side sandbox (e.g. bad image → BUILD_FAILED).
-      // Try to find and delete it so it doesn't leak.
-      const lookupKey = this._daytonaSandboxId ?? this.sandboxName;
-      if (lookupKey) {
-        try {
-          const orphan = await this._daytona.get(lookupKey);
-          await this._daytona.delete(orphan);
-        } catch {
-          // Best-effort — orphan may not exist or may already be gone
+      try {
+        const orphan = await this.lookupDetachedSandbox();
+        if (orphan) {
+          await this._daytona!.delete(orphan);
         }
+      } catch {
+        // Best-effort — orphan may not exist or may already be gone
       }
     }
 
@@ -522,6 +587,19 @@ export class DaytonaSandbox extends MastraSandbox {
     const handle = await this.processes!.spawn(fullCommand, options);
     const result = await handle.wait();
     return { ...result, command, args };
+  }
+
+  /**
+   * Bulk-write files into the sandbox filesystem via the SDK's native upload.
+   */
+  async writeFiles(files: SandboxFileInput[]): Promise<void> {
+    await this.ensureRunning();
+    await this.daytona.fs.uploadFiles(
+      files.map(file => ({
+        source: Buffer.isBuffer(file.content) ? file.content : Buffer.from(file.content),
+        destination: file.path,
+      })),
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -944,6 +1022,29 @@ export class DaytonaSandbox extends MastraSandbox {
       }
     } catch {
       this.logger.debug(`${LOG_PREFIX} Could not detect working directory, will omit from instructions`);
+    }
+  }
+
+  /**
+   * Look up the existing Daytona sandbox by identity WITHOUT starting it.
+   * Used for detached (cross-process) networking/stop/destroy so those
+   * operations never wake a stopped sandbox. Returns null when not found.
+   */
+  private async lookupDetachedSandbox(): Promise<Sandbox | null> {
+    const lookupKey = this._daytonaSandboxId ?? this.sandboxName;
+    if (!lookupKey) {
+      return null;
+    }
+    if (!this._daytona) {
+      this._daytona = new Daytona(this.connectionOpts);
+    }
+    try {
+      return await this._daytona.get(lookupKey);
+    } catch (error) {
+      if (error instanceof DaytonaNotFoundError) {
+        return null;
+      }
+      throw error;
     }
   }
 

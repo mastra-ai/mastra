@@ -177,6 +177,6 @@ export const CustomClassName: Story = {
 
 export const SingleItem: Story = {
   args: {
-    data: [sampleData[0]],
+    data: sampleData.slice(0, 1),
   },
 };

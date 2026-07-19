@@ -1,9 +1,11 @@
 packages:
-  - mastracode
+  - mastracode/sdk
+  - mastracode/tui
   - docs
   - packages/_vendored/*
   - packages/_internals/*
   - packages/*
+  - embedders/*
   - agent-sdks/*
   - deployers/*
   - stores/*
@@ -32,25 +34,36 @@ enableGlobalVirtualStore: true
 
 catalog:
   '@microsoft/api-extractor': ^7.57.7
-  '@vitest/coverage-v8': 4.1.5
-  '@vitest/ui': 4.1.5
-  date-fns: 4.1.0
+  '@vitest/coverage-v8': 4.1.10
+  '@vitest/ui': 4.1.10
+  date-fns: 4.4.0
   react: ^19.2.5
   react-dom: ^19.2.5
   typescript: ^6.0.3
-  vitest: 4.1.5
+  vitest: 4.1.10
   zod: ^4.4.3
   tsx: ^4.22.4
 
 patchedDependencies:
   '@changesets/get-dependents-graph@2.1.4': patches/@changesets__get-dependents-graph@2.1.4.patch
+  '@earendil-works/pi-tui@0.80.6': patches/@earendil-works__pi-tui@0.80.6.patch
   tsup@8.5.1: patches/tsup@8.5.1.patch
 
 packageExtensions:
   '@ai-sdk/provider-utils@3.0.25':
     dependencies:
       msw: ^2.12.11
-      vitest: 4.1.5
+      # Must track the catalog `vitest` version (above). The published
+      # `@ai-sdk/provider-utils/test` entrypoint loads vitest's snapshot
+      # client; if this resolves to a different vitest than the workspace,
+      # a second SnapshotClient is created and every toMatchSnapshot() in
+      # tests that import from that entrypoint fails. Keep these in sync.
+      vitest: 4.1.8
+  '@ai-sdk/provider-utils@3.0.28':
+    dependencies:
+      msw: ^2.12.11
+      # See the note on the 3.0.25 entry — must track the catalog `vitest`.
+      vitest: 4.1.10
   '@uiw/codemirror-theme-dracula@*':
     dependencies:
       '@babel/runtime': ^7.29.2
@@ -58,6 +71,18 @@ packageExtensions:
   '@arcadeai/arcadejs@^2.3.0':
     dependencies:
       zod: ^3.0.0
+  # transformers.js imports onnxruntime-common without declaring it; with the
+  # global virtual store there is no fallback hoist, so the import fails at
+  # runtime (hit via @livekit/agents-plugin-livekit's turn detector).
+  '@huggingface/transformers@*':
+    dependencies:
+      onnxruntime-common: '*'
+  # @daytonaio/sdk requires tslib at runtime without declaring it; with the
+  # global virtual store there is no fallback hoist, so importing the SDK
+  # fails with "Cannot find module 'tslib'".
+  '@daytonaio/sdk@*':
+    dependencies:
+      tslib: '*'
 
 blockExoticSubdeps: true
 trustPolicy: no-downgrade
@@ -72,6 +97,23 @@ minimumReleaseAgeExclude:
   - 'mastra'
   - 'create-mastra'
   - 'mastracode'
+  - '@earendil-works/pi-tui'
+  - railway@3.3.1
+  # Turso-recommended busy_timeout fix (libsql-client-ts#288/#345). Adopted
+  # immediately on their guidance; pinned so the release-age gate still applies
+  # to any later @libsql/client versions.
+  - '@libsql/client@0.17.4'
+  - '@libsql/core@0.17.4'
+  # AI SDK v7 (LanguageModelV4) support. These were adopted on release day, so
+  # they are pinned to exact versions to clear the release-age gate while still
+  # applying it to any later AI SDK v7 releases.
+  - 'ai@7.0.0'
+  - '@ai-sdk/provider@4.0.0'
+  - '@ai-sdk/provider-utils@5.0.0'
+  - '@ai-sdk/gateway@4.0.0'
+  - '@ai-sdk/openai@4.0.0'
+  - '@ai-sdk/anthropic@4.0.0'
+  - '@ai-sdk/google@4.0.0'
 trustPolicyExclude:
   # Security fix for GHSA middleware-based route protection bypass (CVE).
   # 3.47.4 is published with provenance attestation rather than trusted publisher,
@@ -83,37 +125,188 @@ trustPolicyExclude:
   - 'tinyexec@1.2.2'
   # 0.7.4 is published with provenance attestation rather than trusted publisher.
   - 'prettier-plugin-tailwindcss@0.7.4'
+  # Required for the Mesa workspace filesystem provider. 0.38.0 is published
+  # without the trusted-publisher evidence that older @mesadev/sdk versions had.
+  - '@mesadev/sdk@0.38.0'
 overrides:
   typescript: ^6.0.3
   '@types/node': 22.19.15
-  cookie: '>=1.1.1'
-  tmp: '>=0.2.5'
+  # Capped below 2: cookie@2 renamed parse/serialize to parseCookie/stringifyCookie,
+  # which breaks react-router's build when renovate's pnpm dedupe floats it up.
+  cookie: '>=1.1.1 <2'
+  tmp: '>=0.2.6'
   jsondiffpatch: '>=0.7.3'
   ssri: '>=6.0.2'
   jws: ^4.0.1
   client-js-e2e-tests-zod-v3>zod: ^3.24.0
   client-js-e2e-tests-zod-v4>zod: ^4.3.6
-  better-auth: ^1.4.18
-  js-yaml: ^3.14.2
+  # >=1.6.13 fixes stored XSS via javascript: redirect_uri in oidc-provider/mcp
+  # (GHSA Dependabot alert #2266).
+  better-auth: ^1.6.13
+  js-yaml: ^3.15.0
   glob@<=10.5.0: 10.5.0
+  # image-size 2.x (incl. 2.0.2 latest) has unpatched DoS infinite-loop flaws
+  # (CVE-2025-71330 / GHSA-w3rx-r6r6-pgpr). No fixed 2.x exists, so pin to the
+  # maintained legacy 1.2.1 release, which predates the vulnerable code paths
+  # and is API-compatible (default imageSize(buffer) usage). See issue #17975.
+  # Scoped to @mastra/memory only — a global override breaks the docs build,
+  # which relies on the `image-size/fromFile` subpath export added in 2.x.
+  '@mastra/memory>image-size': 1.2.1
   body-parser@<=2.2.1: 2.2.2
   inngest: ^4.2.2
   fast-xml-parser@<5.5.7: ^5.7.1
-  langsmith@<0.5.19: ^0.5.19
+  langsmith@<0.6.0: ^0.6.0
   lodash@<=4.17.23: ^4.18.0
   prismjs@<1.30.0: ^1.30.0
   serialize-javascript@<7.0.5: ^7.0.5
+  # Security floors for Dependabot alerts (transitive deps; patched versions
+  # are within the parents' declared ranges).
+  simple-git@<3.36.0: 3.36.0
+  axios@>=1.0.0 <1.16.0: 1.16.0
+  protobufjs@>=7.0.0 <7.6.3: 7.6.3
+  protobufjs@>=8.0.0 <8.6.0: 8.6.0
+  minimatch@>=5.0.0 <5.1.8: 5.1.8
+  minimatch@>=9.0.0 <9.0.7: 9.0.7
+  ws@>=8.0.0 <8.21.0: 8.21.0
+  webpack-dev-server@<5.2.5: 5.2.5
+  qs@>=6.7.0 <6.15.2: 6.15.2
+  fast-uri@<3.1.2: 3.1.2
+  form-data@<2.5.6: 2.5.6
+  form-data@>=4.0.0 <4.0.6: 4.0.6
+  brace-expansion@<1.1.13: 1.1.13
+  brace-expansion@>=2.0.0 <2.0.3: 2.0.3
+  '@clerk/shared@>=3.0.0 <3.47.5': 3.47.7
+  js-cookie@>=3.0.0 <3.0.7: 3.0.7
+  path-to-regexp@<0.1.13: 0.1.13
+  joi@>=17.0.0 <17.13.4: 17.13.4
+  svgo@>=3.0.0 <3.3.3: 3.3.3
+  # undici 5.x has no patched release (fixes land in 6.23+); the only 5.x
+  # consumer is @connectrpc/connect-node@1.7.0 (via @cursor/sdk), which is
+  # compatible with the undici 6 Client/Pool APIs.
+  undici@<6.0.0: 6.27.0
+  undici@>=6.0.0 <6.27.0: 6.27.0
+  undici@>=7.0.0 <7.28.0: 7.28.0
+  multer@<2.2.0: 2.2.0
+  '@hey-api/openapi-ts@<0.97.3': 0.97.3
+  '@opentelemetry/core@>=2.0.0 <2.8.0': 2.8.0
+  '@opentelemetry/sdk-node@<0.217.0': 0.217.0
+  '@opentelemetry/exporter-prometheus@<0.217.0': 0.217.0
+  uuid@>=13.0.0 <13.0.1: 13.0.1
+  # uuid <11.1.1 and tar <7.5.16 are pinned by transitive parents on old
+  # majors (msal-node/google-gax/etc. declare uuid ^8-^10; the sqlite3
+  # install chain declares tar ^6). Both keep the APIs those parents use.
+  uuid@<11.1.1: 11.1.1
+  tar@<7.5.16: 7.5.16
+  http-proxy-middleware@>=0.16.0 <2.0.10: 2.0.10
+  launch-editor@<2.14.1: 2.14.1
+  mdast-util-to-hast@>=13.0.0 <13.2.1: 13.2.1
+  websocket-driver@<0.7.5: 0.7.5
+  '@babel/core@>=7.0.0 <7.29.6': 7.29.7
+  '@babel/plugin-transform-modules-systemjs@>=7.12.0 <7.29.4': 7.29.7
+  dompurify@>=3.0.0 <3.4.11: 3.4.11
   '@tootallnate/once@<3.0.1': ^3.0.1
   '@codemirror/lang-jinja': ^6.0.1
+  'aggregate-error': 'npm:@socketregistry/aggregate-error@^1'
+  'array-buffer-byte-length': 'npm:@socketregistry/array-buffer-byte-length@^1'
+  'array-flatten': 'npm:@socketregistry/array-flatten@^1'
+  'array-includes': 'npm:@socketregistry/array-includes@^1'
+  'array.prototype.findlast': 'npm:@socketregistry/array.prototype.findlast@^1'
+  'array.prototype.flat': 'npm:@socketregistry/array.prototype.flat@^1'
+  'array.prototype.flatmap': 'npm:@socketregistry/array.prototype.flatmap@^1'
+  'array.prototype.tosorted': 'npm:@socketregistry/array.prototype.tosorted@^1'
+  'arraybuffer.prototype.slice': 'npm:@socketregistry/arraybuffer.prototype.slice@^1'
+  'available-typed-arrays': 'npm:@socketregistry/available-typed-arrays@^1'
+  'deep-equal': 'npm:@socketregistry/deep-equal@^1'
+  'define-properties': 'npm:@socketregistry/define-properties@^1'
+  'es-define-property': 'npm:@socketregistry/es-define-property@^1'
+  'es-iterator-helpers': 'npm:@socketregistry/es-iterator-helpers@^1'
+  'es-set-tostringtag': 'npm:@socketregistry/es-set-tostringtag@^1'
+  'for-each': 'npm:@socketregistry/for-each@^1'
+  'function-bind': 'npm:@socketregistry/function-bind@^1'
+  'function.prototype.name': 'npm:@socketregistry/function.prototype.name@^1'
+  'functions-have-names': 'npm:@socketregistry/functions-have-names@^1'
+  'get-symbol-description': 'npm:@socketregistry/get-symbol-description@^1'
+  'globalthis': 'npm:@socketregistry/globalthis@^1'
+  'gopd': 'npm:@socketregistry/gopd@^1'
+  'has-property-descriptors': 'npm:@socketregistry/has-property-descriptors@^1'
+  'has-proto': 'npm:@socketregistry/has-proto@^1'
+  'has-symbols': 'npm:@socketregistry/has-symbols@^1'
+  'has-tostringtag': 'npm:@socketregistry/has-tostringtag@^1'
+  'hasown': 'npm:@socketregistry/hasown@^1'
+  'indent-string': 'npm:@socketregistry/indent-string@^1'
+  'internal-slot': 'npm:@socketregistry/internal-slot@^1'
+  'is-array-buffer': 'npm:@socketregistry/is-array-buffer@^1'
+  'is-bigint': 'npm:@socketregistry/is-bigint@^1'
+  'is-boolean-object': 'npm:@socketregistry/is-boolean-object@^1'
+  'is-core-module': 'npm:@socketregistry/is-core-module@^1'
+  'is-date-object': 'npm:@socketregistry/is-date-object@^1'
+  'is-generator-function': 'npm:@socketregistry/is-generator-function@^1'
+  'is-interactive': 'npm:@socketregistry/is-interactive@^1'
+  'is-map': 'npm:@socketregistry/is-map@^1'
+  'is-negative-zero': 'npm:@socketregistry/is-negative-zero@^1'
+  'is-number-object': 'npm:@socketregistry/is-number-object@^1'
+  'is-regex': 'npm:@socketregistry/is-regex@^1'
+  'is-set': 'npm:@socketregistry/is-set@^1'
+  'is-shared-array-buffer': 'npm:@socketregistry/is-shared-array-buffer@^1'
+  'is-string': 'npm:@socketregistry/is-string@^1'
+  'is-symbol': 'npm:@socketregistry/is-symbol@^1'
+  'is-typed-array': 'npm:@socketregistry/is-typed-array@^1'
+  'is-unicode-supported': 'npm:@socketregistry/is-unicode-supported@^1'
+  'is-weakmap': 'npm:@socketregistry/is-weakmap@^1'
+  'is-weakref': 'npm:@socketregistry/is-weakref@^1'
+  'is-weakset': 'npm:@socketregistry/is-weakset@^1'
+  'isarray': 'npm:@socketregistry/isarray@^1'
+  'iterator.prototype': 'npm:@socketregistry/iterator.prototype@^1'
+  'object-assign': 'npm:@socketregistry/object-assign@^1'
+  'object-keys': 'npm:@socketregistry/object-keys@^1'
+  'object.assign': 'npm:@socketregistry/object.assign@^1'
+  'object.entries': 'npm:@socketregistry/object.entries@^1'
+  'object.fromentries': 'npm:@socketregistry/object.fromentries@^1'
+  'object.values': 'npm:@socketregistry/object.values@^1'
+  'path-parse': 'npm:@socketregistry/path-parse@^1'
+  'querystringify': 'npm:@socketregistry/querystringify@^1'
+  'reflect.getprototypeof': 'npm:@socketregistry/reflect.getprototypeof@^1'
+  'regexp.prototype.flags': 'npm:@socketregistry/regexp.prototype.flags@^1'
+  'safe-array-concat': 'npm:@socketregistry/safe-array-concat@^1'
+  'safe-buffer': 'npm:@socketregistry/safe-buffer@^1'
+  'safe-regex-test': 'npm:@socketregistry/safe-regex-test@^1'
+  'safer-buffer': 'npm:@socketregistry/safer-buffer@^1'
+  'set-function-length': 'npm:@socketregistry/set-function-length@^1'
+  'shell-quote': 'npm:shell-quote@^1'
+  'side-channel': 'npm:@socketregistry/side-channel@^1'
+  'string.prototype.matchall': 'npm:@socketregistry/string.prototype.matchall@^1'
+  'string.prototype.repeat': 'npm:@socketregistry/string.prototype.repeat@^1'
+  'string.prototype.trim': 'npm:@socketregistry/string.prototype.trim@^1'
+  'string.prototype.trimend': 'npm:@socketregistry/string.prototype.trimend@^1'
+  'string.prototype.trimstart': 'npm:@socketregistry/string.prototype.trimstart@^1'
+  'typed-array-buffer': 'npm:@socketregistry/typed-array-buffer@^1'
+  'typed-array-byte-length': 'npm:@socketregistry/typed-array-byte-length@^1'
+  'typed-array-byte-offset': 'npm:@socketregistry/typed-array-byte-offset@^1'
+  'typed-array-length': 'npm:@socketregistry/typed-array-length@^1'
+  'typedarray': 'npm:@socketregistry/typedarray@^1'
+  'unbox-primitive': 'npm:@socketregistry/unbox-primitive@^1'
+  'which-boxed-primitive': 'npm:@socketregistry/which-boxed-primitive@^1'
+  'which-collection': 'npm:@socketregistry/which-collection@^1'
+  'which-typed-array': 'npm:@socketregistry/which-typed-array@^1'
+  'yocto-spinner': 'npm:@socketregistry/yocto-spinner@^1'
 allowBuilds:
   '@clerk/shared': false
   '@datadog/native-appsec': false
   '@datadog/native-iast-taint-tracking': false
   '@datadog/native-metrics': false
   '@datadog/pprof': false
+  '@ffmpeg-installer/darwin-arm64': false
+  '@ffmpeg-installer/darwin-x64': false
+  '@ffmpeg-installer/linux-arm': false
+  '@ffmpeg-installer/linux-arm64': false
+  '@ffmpeg-installer/linux-ia32': false
+  '@ffmpeg-installer/linux-x64': false
+  '@ffmpeg-installer/win32-ia32': false
+  '@ffmpeg-installer/win32-x64': false
   '@fingerprintjs/fingerprintjs-pro-react': false
   '@firebase/util': false
   '@google/genai': false
+  '@livekit/local-inference': false
   '@nestjs/core': false
   '@parcel/watcher': false
   '@scarf/scarf': false
@@ -133,10 +326,14 @@ allowBuilds:
   koffi: false
   msgpackr-extract: false
   msw: false
+  node-pty: true
   onnxruntime-node: false
   protobufjs: false
   sharp: false
   sqlite3: false
   ssh2: false
   unrs-resolver: false
+  '@mongodb-js/zstd': false
+  node-liblzma: false
   workerd: false
+  braintrust: false

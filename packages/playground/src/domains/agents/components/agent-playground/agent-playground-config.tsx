@@ -1,18 +1,15 @@
-import {
-  Badge,
-  CopyButton,
-  HoverPopover,
-  PopoverTrigger,
-  PopoverContent,
-  ScrollArea,
-  Spinner,
-  Txt,
-  Icon,
-  cn,
-} from '@mastra/playground-ui';
-import type { JsonSchema, JsonSchemaProperty } from '@mastra/playground-ui';
-import { Braces, ChevronDown, ChevronRight, Wrench, Cpu, Eye, Pencil } from 'lucide-react';
-import { useState, useMemo } from 'react';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import type { JsonSchema, JsonSchemaProperty } from '@mastra/playground-ui/utils/json-schema';
+import { Braces, Wrench, Cpu } from 'lucide-react';
+import { useMemo } from 'react';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { useCompareAgentVersions } from '../../hooks/use-agent-versions';
@@ -20,70 +17,19 @@ import { InstructionBlocksPage } from '../agent-cms-pages/instruction-blocks-pag
 import { ToolsPage } from '../agent-cms-pages/tools-page';
 import { useStoredPromptBlock } from '@/domains/prompt-blocks';
 
-// ---------------------------------------------------------------------------
-// Collapsible section
-// ---------------------------------------------------------------------------
+type AgentConfigTab = 'variables' | 'instructions' | 'tools';
 
-interface CollapsibleSectionProps {
-  title: string;
-  icon: React.ReactNode;
-  badge?: React.ReactNode;
-  headerAction?: React.ReactNode;
-  defaultOpen?: boolean;
-  compact?: boolean;
-  children: React.ReactNode;
-}
-
-function CollapsibleSection({
-  title,
-  icon,
-  badge,
-  headerAction,
-  defaultOpen = false,
-  compact = false,
-  children,
-}: CollapsibleSectionProps) {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
-
+function ConfigTabLabel({ title, icon, badge }: { title: string; icon: React.ReactNode; badge?: React.ReactNode }) {
   return (
-    <div className="border-b border-border1">
-      <div
-        className={cn(
-          'group flex items-center gap-2 px-4 hover:bg-surface3 transition-colors',
-          compact ? 'py-2' : 'py-3',
-          isOpen && 'bg-surface3',
-        )}
-      >
-        <button
-          type="button"
-          className="flex min-w-0 flex-1 items-center gap-2 text-left"
-          aria-expanded={isOpen}
-          onClick={() => setIsOpen(!isOpen)}
-        >
-          <Icon size="sm" className="text-neutral3">
-            {isOpen ? <ChevronDown /> : <ChevronRight />}
-          </Icon>
-          <Icon size="sm" className="text-neutral3">
-            {icon}
-          </Icon>
-          <Txt
-            as="span"
-            variant="ui-sm"
-            className={cn(
-              'font-normal text-neutral3 transition-colors group-hover:text-neutral5',
-              isOpen && 'text-neutral5',
-            )}
-          >
-            {title}
-          </Txt>
-        </button>
-        <span className="ml-auto flex items-center gap-2">
-          {headerAction}
-          {badge}
-        </span>
-      </div>
-      {isOpen && <div className="px-4 pb-4">{children}</div>}
-    </div>
+    <>
+      <Icon size="sm" className="text-inherit">
+        {icon}
+      </Icon>
+      <Txt as="span" variant="ui-sm" className="text-inherit">
+        {title}
+      </Txt>
+      {badge}
+    </>
   );
 }
 
@@ -631,13 +577,23 @@ function ReadOnlyConfigWithDiff({
   const toolsDiff = diffMap.get('tools');
   const variablesDiff = diffMap.get('requestContextSchema');
 
-  const instructionsBadge = instructionsDiff ? <Badge variant="warning">modified</Badge> : null;
-  const toolsBadge = toolsDiff ? (
-    <Badge variant="warning">modified</Badge>
-  ) : toolCount > 0 ? (
-    <Badge variant="default">{`${toolCount}`}</Badge>
+  const instructionsBadge = instructionsDiff ? (
+    <Badge variant="warning" size="sm">
+      modified
+    </Badge>
   ) : null;
-  const variablesBadge = variablesDiff ? <Badge variant="warning">modified</Badge> : null;
+  const toolsBadge = toolsDiff ? (
+    <Badge variant="warning" size="sm">
+      modified
+    </Badge>
+  ) : toolCount > 0 ? (
+    <Badge variant="default" size="sm">{`${toolCount}`}</Badge>
+  ) : null;
+  const variablesBadge = variablesDiff ? (
+    <Badge variant="warning" size="sm">
+      modified
+    </Badge>
+  ) : null;
 
   if (isLoadingCompare) {
     return (
@@ -648,8 +604,20 @@ function ReadOnlyConfigWithDiff({
   }
 
   return (
-    <>
-      <CollapsibleSection title="Variables" icon={<Braces />} badge={variablesBadge}>
+    <Tabs<AgentConfigTab> defaultTab="variables" className="flex min-h-full flex-col overflow-visible">
+      <TabList variant="pill-ghost" className="shrink-0">
+        <Tab value="variables">
+          <ConfigTabLabel title="Variables" icon={<Braces />} badge={variablesBadge} />
+        </Tab>
+        <Tab value="instructions">
+          <ConfigTabLabel title="System Prompt" icon={<Cpu />} badge={instructionsBadge} />
+        </Tab>
+        <Tab value="tools">
+          <ConfigTabLabel title="Tools" icon={<Wrench />} badge={toolsBadge} />
+        </Tab>
+      </TabList>
+
+      <TabContent value="variables" className="px-4 py-4">
         {variablesDiff ? (
           <VariablesDiffView
             previousVars={variablesDiff.previousValue as Record<string, unknown> | undefined}
@@ -658,9 +626,9 @@ function ReadOnlyConfigWithDiff({
         ) : (
           <ReadOnlyVariables variables={variables as Record<string, unknown> | undefined} />
         )}
-      </CollapsibleSection>
+      </TabContent>
 
-      <CollapsibleSection title="System Prompt" icon={<Cpu />} badge={instructionsBadge}>
+      <TabContent value="instructions" className="px-4 py-4">
         {instructionsDiff ? (
           <InstructionsDiffView
             previousBlocks={instructionsDiff.previousValue}
@@ -669,9 +637,9 @@ function ReadOnlyConfigWithDiff({
         ) : (
           <ReadOnlyInstructions blocks={instructionBlocks} />
         )}
-      </CollapsibleSection>
+      </TabContent>
 
-      <CollapsibleSection title="Tools" icon={<Wrench />} badge={toolsBadge}>
+      <TabContent value="tools" className="px-4 py-4">
         {toolsDiff ? (
           <ToolsDiffView
             previousTools={toolsDiff.previousValue as Record<string, unknown> | undefined}
@@ -680,8 +648,8 @@ function ReadOnlyConfigWithDiff({
         ) : (
           <ReadOnlyTools tools={tools as Record<string, unknown> | undefined} />
         )}
-      </CollapsibleSection>
-    </>
+      </TabContent>
+    </Tabs>
   );
 }
 
@@ -701,7 +669,6 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
   const instructionBlocks = form.watch('instructionBlocks');
   const variables = form.watch('variables') as JsonSchema | undefined;
   const toolCount = tools ? Object.keys(tools).length : 0;
-  const [showPreview, setShowPreview] = useState(false);
 
   const variableEntries = useMemo(() => Object.entries(variables?.properties ?? {}), [variables]);
 
@@ -719,9 +686,25 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
             latestVersionId={latestVersionId}
           />
         ) : (
-          <>
-            <CollapsibleSection title="Variables" icon={<Braces />} compact>
-              <div className="flex flex-col gap-1 px-4 pt-2 pb-3">
+          <Tabs<AgentConfigTab> defaultTab="variables" className="flex min-h-full flex-col overflow-visible">
+            <TabList variant="pill-ghost" className="shrink-0">
+              <Tab value="variables">
+                <ConfigTabLabel title="Variables" icon={<Braces />} />
+              </Tab>
+              <Tab value="instructions">
+                <ConfigTabLabel title="System Prompt" icon={<Cpu />} />
+              </Tab>
+              <Tab value="tools">
+                <ConfigTabLabel
+                  title="Tools"
+                  icon={<Wrench />}
+                  badge={toolCount > 0 ? <Badge variant="default" size="sm">{`${toolCount}`}</Badge> : undefined}
+                />
+              </Tab>
+            </TabList>
+
+            <TabContent value="variables" className="py-0">
+              <div className="flex flex-col gap-1 px-4 py-4">
                 {variableEntries.length > 0 ? (
                   <div className="flex flex-col">
                     {variableEntries.map(([name, prop]) => (
@@ -735,60 +718,34 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
                     : 'No variables defined. Add a requestContextSchema to your agent to define variables.'}
                 </Txt>
               </div>
-            </CollapsibleSection>
+            </TabContent>
 
-            <CollapsibleSection title="System Prompt" icon={<Cpu />}>
-              <div className="flex flex-col gap-3 pt-4 px-4 pb-2">
+            <TabContent value="instructions" className="px-4 py-0 pb-4">
+              <div className="flex flex-col gap-3 pt-4 pb-2">
                 <Txt variant="ui-sm" className="font-normal text-neutral3">
                   Add instruction blocks to your agent. Blocks are combined in order to form the system prompt. You can{' '}
-                  <HoverPopover>
-                    <PopoverTrigger asChild>
-                      <button
-                        type="button"
-                        className="text-neutral3 underline decoration-dotted hover:text-neutral5 cursor-pointer inline"
-                      >
-                        use variables
-                      </button>
-                    </PopoverTrigger>{' '}
-                    as part of your instruction blocks.
-                    <PopoverContent side="bottom" align="start">
-                      <p className="text-ui-sm text-neutral5">
+                  <Tooltip>
+                    <TooltipTrigger className="text-neutral3 underline decoration-dotted hover:text-neutral5 cursor-pointer inline">
+                      use variables
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" align="start" className="max-w-72">
+                      <span>
                         Use <code className="text-accent1 font-medium">{'{{variableName}}'}</code> syntax to insert
                         dynamic values into your instruction blocks.
-                      </p>
-                    </PopoverContent>
-                  </HoverPopover>
+                      </span>
+                    </TooltipContent>
+                  </Tooltip>{' '}
+                  as part of your instruction blocks.
                 </Txt>
-
-                {!readOnly && (
-                  <div className="flex items-center justify-between">
-                    <button
-                      type="button"
-                      onClick={() => setShowPreview(prev => !prev)}
-                      className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors text-neutral3 hover:text-neutral5 hover:bg-surface3"
-                    >
-                      <Icon size="sm">{showPreview ? <Pencil /> : <Eye />}</Icon>
-                      {showPreview ? 'Edit' : 'Preview'}
-                    </button>
-                  </div>
-                )}
               </div>
 
-              {readOnly || showPreview ? (
-                <ReadOnlyInstructions blocks={instructionBlocks} />
-              ) : (
-                <InstructionBlocksPage />
-              )}
-            </CollapsibleSection>
+              {readOnly ? <ReadOnlyInstructions blocks={instructionBlocks} /> : <InstructionBlocksPage />}
+            </TabContent>
 
-            <CollapsibleSection
-              title="Tools"
-              icon={<Wrench />}
-              badge={toolCount > 0 ? <Badge variant="default">{`${toolCount}`}</Badge> : undefined}
-            >
+            <TabContent value="tools" className="px-4 py-0 pb-4">
               <ToolsPage />
-            </CollapsibleSection>
-          </>
+            </TabContent>
+          </Tabs>
         )}
       </ScrollArea>
     </div>

@@ -8,6 +8,7 @@ import type {
   UpdateDatasetInput,
   AddDatasetItemInput,
   UpdateDatasetItemInput,
+  DeleteDatasetItemInput,
   ListDatasetsInput,
   ListDatasetsOutput,
   ListDatasetItemsInput,
@@ -16,9 +17,21 @@ import type {
   ListDatasetVersionsOutput,
   BatchInsertItemsInput,
   BatchDeleteItemsInput,
+  DatasetTenancyFilters,
 } from '../../types';
+
+function matchesTenancy(
+  record: { organizationId?: string | null; projectId?: string | null },
+  filters: DatasetTenancyFilters | undefined,
+): boolean {
+  if (!filters) return true;
+  if (filters.organizationId !== undefined && record.organizationId !== filters.organizationId) return false;
+  if (filters.projectId !== undefined && record.projectId !== filters.projectId) return false;
+  return true;
+}
 import type { InMemoryDB } from '../inmemory-db';
 import { DatasetsStorage } from './base';
+import { createDatasetItemIdentityConflictError, datasetItemPayloadsEqual } from './identity';
 
 /** Convert a storage row to the public DatasetItem type (strips validTo/isDeleted) */
 function toDatasetItem(row: DatasetItemRow): DatasetItem {
@@ -26,9 +39,13 @@ function toDatasetItem(row: DatasetItemRow): DatasetItem {
     id: row.id,
     datasetId: row.datasetId,
     datasetVersion: row.datasetVersion,
+    externalId: row.externalId,
+    organizationId: row.organizationId,
+    projectId: row.projectId,
     input: row.input,
     groundTruth: row.groundTruth,
     expectedTrajectory: row.expectedTrajectory,
+    toolMocks: row.toolMocks,
     requestContext: row.requestContext,
     metadata: row.metadata,
     source: row.source,
@@ -70,7 +87,15 @@ export class DatasetsInMemory extends DatasetsStorage {
 
   // Dataset CRUD
   async createDataset(input: CreateDatasetInput): Promise<DatasetRecord> {
-    const id = crypto.randomUUID();
+    const id = input.id ?? crypto.randomUUID();
+    if (input.id !== undefined) {
+      this.validateCallerDefinedDatasetId(input.id);
+      const existing = this.db.datasets.get(input.id);
+      if (existing) {
+        return this.resolveExistingDataset(toDatasetRecord(existing), { ...input, id: input.id });
+      }
+    }
+
     const now = new Date();
     const dataset = {
       id,
@@ -83,6 +108,10 @@ export class DatasetsInMemory extends DatasetsStorage {
       targetType: input.targetType,
       targetIds: input.targetIds,
       scorerIds: input.scorerIds ?? null,
+      organizationId: input.organizationId ?? null,
+      projectId: input.projectId ?? null,
+      candidateKey: input.candidateKey ?? null,
+      candidateId: input.candidateId ?? null,
       version: 0,
       createdAt: now,
       updatedAt: now,
@@ -91,9 +120,17 @@ export class DatasetsInMemory extends DatasetsStorage {
     return toDatasetRecord(dataset);
   }
 
-  async getDatasetById({ id }: { id: string }): Promise<DatasetRecord | null> {
+  async getDatasetById({
+    id,
+    filters,
+  }: {
+    id: string;
+    filters?: DatasetTenancyFilters;
+  }): Promise<DatasetRecord | null> {
     const record = this.db.datasets.get(id);
-    return record ? toDatasetRecord(record) : null;
+    if (!record) return null;
+    if (!matchesTenancy(record, filters)) return null;
+    return toDatasetRecord(record);
   }
 
   protected async _doUpdateDataset(args: UpdateDatasetInput): Promise<DatasetRecord> {
@@ -115,13 +152,18 @@ export class DatasetsInMemory extends DatasetsStorage {
       targetType: args.targetType !== undefined ? args.targetType : existing.targetType,
       targetIds: args.targetIds !== undefined ? args.targetIds : existing.targetIds,
       scorerIds: args.scorerIds !== undefined ? args.scorerIds : existing.scorerIds,
+      // Tenancy and candidate identity are immutable after creation.
       updatedAt: new Date(),
     } as DatasetRecord;
     this.db.datasets.set(args.id, updated);
     return toDatasetRecord(updated);
   }
 
-  async deleteDataset({ id }: { id: string }): Promise<void> {
+  async deleteDataset({ id, filters }: { id: string; filters?: DatasetTenancyFilters }): Promise<void> {
+    const existing = this.db.datasets.get(id);
+    if (!existing) return;
+    if (!matchesTenancy(existing, filters)) return;
+
     // Cascade: delete items and versions
     for (const [itemId, rows] of this.db.datasetItems) {
       if (rows.length > 0 && rows[0]!.datasetId === id) {
@@ -145,7 +187,26 @@ export class DatasetsInMemory extends DatasetsStorage {
   }
 
   async listDatasets(args: ListDatasetsInput): Promise<ListDatasetsOutput> {
-    const datasets = Array.from(this.db.datasets.values());
+    let datasets = Array.from(this.db.datasets.values());
+
+    if (args.filters) {
+      const { organizationId, projectId, candidateKey, candidateId, targetType, targetIds, name } = args.filters;
+      const nameLower = name?.toLowerCase();
+      const targetIdsSet = targetIds && targetIds.length > 0 ? new Set(targetIds) : undefined;
+      datasets = datasets.filter(d => {
+        if (organizationId !== undefined && d.organizationId !== organizationId) return false;
+        if (projectId !== undefined && d.projectId !== projectId) return false;
+        if (candidateKey !== undefined && d.candidateKey !== candidateKey) return false;
+        if (candidateId !== undefined && d.candidateId !== candidateId) return false;
+        if (targetType !== undefined && d.targetType !== targetType) return false;
+        if (targetIdsSet) {
+          if (!d.targetIds || !d.targetIds.some(id => targetIdsSet.has(id))) return false;
+        }
+        if (nameLower !== undefined && !d.name.toLowerCase().includes(nameLower)) return false;
+        return true;
+      });
+    }
+
     // Sort by createdAt descending (newest first)
     datasets.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
@@ -183,11 +244,16 @@ export class DatasetsInMemory extends DatasetsStorage {
       id,
       datasetId: args.datasetId,
       datasetVersion: newVersion,
+      externalId: args.externalId ?? null,
+      // Tenancy inherited from parent dataset (Option B — never settable per item)
+      organizationId: dataset.organizationId ?? null,
+      projectId: dataset.projectId ?? null,
       validTo: null,
       isDeleted: false,
       input: args.input,
       groundTruth: args.groundTruth,
       expectedTrajectory: args.expectedTrajectory,
+      toolMocks: args.toolMocks,
       requestContext: args.requestContext,
       metadata: args.metadata,
       source: args.source,
@@ -235,12 +301,17 @@ export class DatasetsInMemory extends DatasetsStorage {
       id: args.id,
       datasetId: args.datasetId,
       datasetVersion: newVersion,
+      externalId: currentRow.externalId ?? null,
+      // Re-inherit tenancy from parent dataset (handles dataset-level retroactive tenancy backfill)
+      organizationId: dataset.organizationId ?? null,
+      projectId: dataset.projectId ?? null,
       validTo: null,
       isDeleted: false,
       input: args.input !== undefined ? args.input : currentRow.input,
       groundTruth: args.groundTruth !== undefined ? args.groundTruth : currentRow.groundTruth,
       expectedTrajectory:
         args.expectedTrajectory !== undefined ? args.expectedTrajectory : currentRow.expectedTrajectory,
+      toolMocks: args.toolMocks !== undefined ? args.toolMocks : currentRow.toolMocks,
       requestContext: args.requestContext !== undefined ? args.requestContext : currentRow.requestContext,
       metadata: args.metadata !== undefined ? args.metadata : currentRow.metadata,
       source: args.source !== undefined ? args.source : currentRow.source,
@@ -255,7 +326,7 @@ export class DatasetsInMemory extends DatasetsStorage {
     return toDatasetItem(newRow);
   }
 
-  protected async _doDeleteItem({ id, datasetId }: { id: string; datasetId: string }): Promise<void> {
+  protected async _doDeleteItem({ id, datasetId }: DeleteDatasetItemInput): Promise<void> {
     const rows = this.db.datasetItems.get(id);
     if (!rows || rows.length === 0) {
       return; // no-op if item doesn't exist
@@ -281,18 +352,31 @@ export class DatasetsInMemory extends DatasetsStorage {
     // T3.9 — close old row
     currentRow.validTo = newVersion;
 
-    // T3.9 — insert tombstone
+    // T3.9 — insert tombstone.
+    // Tenancy is read from the prior current row rather than re-fetched from
+    // the parent dataset (the pattern used by every DB adapter). This is
+    // deliberate and safe: tenancy is immutable post-create on both datasets
+    // and items (see CreateDatasetInput / UpdateDatasetInput in ../../types.ts),
+    // so currentRow.organizationId / currentRow.projectId are guaranteed to
+    // equal dataset.organizationId / dataset.projectId. Keep this branch in
+    // sync with the DB adapters if that invariant ever changes.
     const now = new Date();
     rows.push({
       id,
       datasetId,
       datasetVersion: newVersion,
+      externalId: currentRow.externalId ?? null,
+      organizationId: currentRow.organizationId ?? null,
+      projectId: currentRow.projectId ?? null,
       validTo: null,
       isDeleted: true,
       input: currentRow.input,
       groundTruth: currentRow.groundTruth,
+      expectedTrajectory: currentRow.expectedTrajectory,
+      toolMocks: currentRow.toolMocks,
       requestContext: currentRow.requestContext,
       metadata: currentRow.metadata,
+      source: currentRow.source,
       createdAt: currentRow.createdAt,
       updatedAt: now,
     });
@@ -362,6 +446,15 @@ export class DatasetsInMemory extends DatasetsStorage {
           items.push(toDatasetItem(current));
         }
       }
+    }
+
+    if (args.filters) {
+      const { organizationId, projectId } = args.filters;
+      items = items.filter(item => {
+        if (organizationId !== undefined && item.organizationId !== organizationId) return false;
+        if (projectId !== undefined && item.projectId !== projectId) return false;
+        return true;
+      });
     }
 
     // Filter by search term if specified (case-insensitive partial match on input/groundTruth)
@@ -443,39 +536,133 @@ export class DatasetsInMemory extends DatasetsStorage {
     if (!dataset) {
       throw new Error(`Dataset not found: ${input.datasetId}`);
     }
+    if (input.items.length === 0) return [];
 
-    // T3.19 — single version increment for all items
+    const acceptedByExternalId = new Map<string, { first: DatasetItemRow; current: DatasetItemRow | null }>();
+    for (const rows of this.db.datasetItems.values()) {
+      const first = rows[0];
+      if (!first || first.datasetId !== input.datasetId || !first.externalId) continue;
+      const existing = acceptedByExternalId.get(first.externalId);
+      if (existing && existing.first.id !== first.id) {
+        throw new Error(`Dataset item identity history is corrupt for externalId: ${first.externalId}`);
+      }
+      acceptedByExternalId.set(first.externalId, {
+        first,
+        current: rows.find(row => row.validTo === null && !row.isDeleted) ?? null,
+      });
+    }
+
+    const conflicts = [];
+    const planned = new Map<string, { id: string; item: (typeof input.items)[number] }>();
+    const plannedByExternalId = new Map<string, { id: string; item: (typeof input.items)[number] }>();
+    const resolvedIds: string[] = [];
+
+    for (const [index, item] of input.items.entries()) {
+      if (!item.externalId) {
+        const id = crypto.randomUUID();
+        planned.set(id, { id, item });
+        resolvedIds.push(id);
+        continue;
+      }
+
+      const accepted = acceptedByExternalId.get(item.externalId);
+      if (accepted) {
+        if (!accepted.current) {
+          conflicts.push({
+            index,
+            externalId: item.externalId,
+            existingItemId: accepted.first.id,
+            reason: 'deleted' as const,
+          });
+        } else if (!datasetItemPayloadsEqual(item, accepted.first)) {
+          conflicts.push({
+            index,
+            externalId: item.externalId,
+            existingItemId: accepted.first.id,
+            reason: 'payload_mismatch' as const,
+          });
+        }
+        resolvedIds.push(accepted.first.id);
+        continue;
+      }
+
+      const requestLocal = plannedByExternalId.get(item.externalId);
+      if (requestLocal) {
+        if (
+          !datasetItemPayloadsEqual(item, {
+            ...requestLocal.item,
+            id: requestLocal.id,
+            datasetId: input.datasetId,
+            datasetVersion: 0,
+            validTo: null,
+            isDeleted: false,
+            createdAt: new Date(0),
+            updatedAt: new Date(0),
+          })
+        ) {
+          conflicts.push({
+            index,
+            externalId: item.externalId,
+            existingItemId: requestLocal.id,
+            reason: 'payload_mismatch' as const,
+          });
+        }
+        resolvedIds.push(requestLocal.id);
+        continue;
+      }
+
+      const id = crypto.randomUUID();
+      const plannedEntry = { id, item };
+      planned.set(id, plannedEntry);
+      plannedByExternalId.set(item.externalId, plannedEntry);
+      resolvedIds.push(id);
+    }
+
+    if (conflicts.length > 0) throw createDatasetItemIdentityConflictError(conflicts);
+    if (planned.size === 0) {
+      return resolvedIds.map(id => {
+        const rows = this.db.datasetItems.get(id)!;
+        return toDatasetItem(rows.find(row => row.validTo === null && !row.isDeleted)!);
+      });
+    }
+
     const newVersion = dataset.version + 1;
     this.db.datasets.set(input.datasetId, { ...dataset, version: newVersion });
-
     const now = new Date();
-    const items: DatasetItem[] = [];
+    const inserted = new Map<string, DatasetItem>();
 
-    for (const itemInput of input.items) {
-      const id = crypto.randomUUID();
+    for (const { id, item } of planned.values()) {
       const row: DatasetItemRow = {
         id,
         datasetId: input.datasetId,
         datasetVersion: newVersion,
+        externalId: item.externalId ?? null,
+        organizationId: dataset.organizationId ?? null,
+        projectId: dataset.projectId ?? null,
         validTo: null,
         isDeleted: false,
-        input: itemInput.input,
-        groundTruth: itemInput.groundTruth,
-        expectedTrajectory: itemInput.expectedTrajectory,
-        requestContext: itemInput.requestContext,
-        metadata: itemInput.metadata,
-        source: itemInput.source,
+        input: item.input,
+        groundTruth: item.groundTruth,
+        expectedTrajectory: item.expectedTrajectory,
+        toolMocks: item.toolMocks,
+        requestContext: item.requestContext,
+        metadata: item.metadata,
+        source: item.source,
         createdAt: now,
         updatedAt: now,
       };
       this.db.datasetItems.set(id, [row]);
-      items.push(toDatasetItem(row));
+      inserted.set(id, toDatasetItem(row));
     }
 
-    // T3.11 — single dataset version for the bulk operation
     await this.createDatasetVersion(input.datasetId, newVersion);
 
-    return items;
+    return resolvedIds.map(id => {
+      const newItem = inserted.get(id);
+      if (newItem) return newItem;
+      const rows = this.db.datasetItems.get(id)!;
+      return toDatasetItem(rows.find(row => row.validTo === null && !row.isDeleted)!);
+    });
   }
 
   protected async _doBatchDeleteItems(input: BatchDeleteItemsInput): Promise<void> {
@@ -500,17 +687,25 @@ export class DatasetsInMemory extends DatasetsStorage {
       // Close old row
       currentRow.validTo = newVersion;
 
-      // Insert tombstone
+      // Insert tombstone. See _doDeleteItem above for why it's safe to read
+      // tenancy from the prior current row rather than re-fetching from the
+      // parent dataset (tenancy is immutable post-create on both sides).
       rows.push({
         id: itemId,
         datasetId: input.datasetId,
         datasetVersion: newVersion,
+        externalId: currentRow.externalId ?? null,
+        organizationId: currentRow.organizationId ?? null,
+        projectId: currentRow.projectId ?? null,
         validTo: null,
         isDeleted: true,
         input: currentRow.input,
         groundTruth: currentRow.groundTruth,
+        expectedTrajectory: currentRow.expectedTrajectory,
+        toolMocks: currentRow.toolMocks,
         requestContext: currentRow.requestContext,
         metadata: currentRow.metadata,
+        source: currentRow.source,
         createdAt: currentRow.createdAt,
         updatedAt: now,
       });

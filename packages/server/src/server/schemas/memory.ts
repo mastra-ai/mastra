@@ -176,7 +176,7 @@ const threadSchema = z.object({
  * Message structure for storage
  * Extends coreMessageSchema with storage-specific fields
  */
-const messageSchema = z.any();
+const messageSchema = z.unknown();
 // const messageSchema = coreMessageSchema.extend({
 //   id: z.string(),
 //   createdAt: z.coerce.date(),
@@ -226,7 +226,7 @@ const listThreadsQueryInnerSchema = createPagePaginationSchema(100).extend({
         }
         return val;
       },
-      z.record(z.string(), z.any()),
+      z.record(z.string(), z.unknown()),
     )
     .optional(),
   orderBy: storageOrderBySchema,
@@ -355,7 +355,7 @@ export const listThreadsNetworkQuerySchema = createPagePaginationSchema(100).ext
         }
         return val;
       },
-      z.record(z.string(), z.any()),
+      z.record(z.string(), z.unknown()),
     )
     .optional(),
   orderBy: storageOrderBySchema,
@@ -468,8 +468,17 @@ export const memoryConfigResponseSchema = z.object({
   config: z
     .object({
       lastMessages: z.union([z.number(), z.literal(false)]).optional(),
-      semanticRecall: z.union([z.boolean(), z.any()]).optional(),
-      workingMemory: z.any().optional(),
+      semanticRecall: z.union([z.boolean(), z.unknown()]).optional(),
+      workingMemory: z
+        .object({
+          enabled: z.boolean().optional(),
+          scope: z.enum(['thread', 'resource']).optional(),
+          template: z.string().optional(),
+          schema: z.unknown().optional(),
+          version: z.enum(['stable', 'vnext']).optional(),
+        })
+        .passthrough() // WorkingMemory has additional experimental fields (useStateSignals, agentManaged)
+        .optional(),
       observationalMemory: observationalMemoryConfigSchema.optional(),
     })
     .nullable(),
@@ -492,7 +501,7 @@ export const getThreadByIdResponseSchema = threadSchema;
  */
 export const listMessagesResponseSchema = z.object({
   messages: z.array(messageSchema),
-  uiMessages: z.array(z.any()).nullable(), // Converted messages in UI format
+  uiMessages: z.array(z.unknown()).nullable(), // Converted messages in UI format
 });
 
 /**
@@ -645,6 +654,22 @@ export const getObservationalMemoryQuerySchema = z.object({
  * Observational Memory record schema for API responses
  * Matches the ObservationalMemoryRecord type from @mastra/core/storage
  */
+const bufferedObservationChunkSchema = z.object({
+  id: z.string().optional(),
+  cycleId: z.string(),
+  observations: z.string(),
+  tokenCount: z.number(),
+  messageIds: z.array(z.string()).optional(),
+  messageTokens: z.number(),
+  lastObservedAt: z.date().optional(),
+  createdAt: z.date().optional(),
+  suggestedContinuation: z.string().optional(),
+  currentTask: z.string().optional(),
+  threadTitle: z.string().optional(),
+  extractedValues: z.record(z.string(), z.unknown()).optional(),
+  extractionFailures: z.array(z.object({ slug: z.string(), error: z.string() })).optional(),
+});
+
 const observationalMemoryRecordSchema = z.object({
   id: z.string(),
   scope: z.enum(['thread', 'resource']),
@@ -652,6 +677,7 @@ const observationalMemoryRecordSchema = z.object({
   threadId: z.string().nullable(),
   activeObservations: z.string(),
   bufferedObservations: z.string().optional(),
+  bufferedObservationChunks: z.array(bufferedObservationChunkSchema).optional(),
   bufferedReflection: z.string().optional(),
   originType: z.enum(['initial', 'observation', 'reflection']),
   generationCount: z.number(),

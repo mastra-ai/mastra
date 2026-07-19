@@ -9,9 +9,9 @@ packages:
 
 `CachingPubSub` wraps any [`PubSub`](/reference/pubsub/base) implementation and adds event caching and replay. It records every published event per topic in a cache, so a subscriber that connects late or reconnects after a disconnect can replay the events it missed before continuing with live events.
 
-Use it to build resumable streams on top of a transport that does not keep history, such as [`EventEmitterPubSub`](/reference/pubsub/event-emitter). Transports that already persist events, such as [`RedisStreamsPubSub`](/reference/pubsub/redis-streams), do not need this wrapper.
+Use it to build resumable streams on top of a transport that doesn't keep history, such as [`EventEmitterPubSub`](/reference/pubsub/event-emitter). Transports that already persist events, such as [`RedisStreamsPubSub`](/reference/pubsub/redis-streams), don't need this wrapper.
 
-`CachingPubSub` is transparent to batching: `subscribe()` forwards `options.batch` to the inner pub/sub, and `supportsNativeBatching` mirrors the inner's value. Wrapping an inner that does not support batching results in unbatched delivery even when `options.batch` is passed.
+`CachingPubSub` is transparent to batching: `subscribe()` forwards `options.batch` to the inner pub/sub, and `supportsNativeBatching` mirrors the inner's value. Wrapping an inner that doesn't support batching results in unbatched delivery even when `options.batch` is passed.
 
 ## Usage example
 
@@ -137,6 +137,14 @@ const events = await pubsub.getHistory('my-topic', 0)
 ```
 
 Returns: `Promise<Event[]>`
+
+### `clearTopic(topic)`
+
+Removes the topic's cached events and offset counter, and forwards the call to the inner pub/sub so persistent transports (such as [`RedisStreamsPubSub`](/reference/pubsub/redis-streams)) can delete their retained state too. Mastra's run lifecycles call this automatically when a run finishes.
+
+```typescript
+await pubsub.clearTopic('my-topic')
+```
 
 ## Functions
 

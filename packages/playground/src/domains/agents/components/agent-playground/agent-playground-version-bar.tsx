@@ -1,18 +1,9 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import { Combobox } from '@mastra/playground-ui/components/Combobox';
+import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import {
-  Badge,
-  Button,
-  ButtonsGroup,
-  Combobox,
-  CopyButton,
-  DropdownMenu,
-  Input,
-  Label,
-  HoverPopover,
-  PopoverTrigger,
-  PopoverContent,
-  Spinner,
-  Txt,
-  Icon,
   Dialog,
   DialogContent,
   DialogHeader,
@@ -20,8 +11,15 @@ import {
   DialogDescription,
   DialogBody,
   DialogFooter,
-} from '@mastra/playground-ui';
-import { Check, ChevronDown, Clock, Download, GitPullRequest, Info, MessageSquare, Save } from 'lucide-react';
+} from '@mastra/playground-ui/components/Dialog';
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Label } from '@mastra/playground-ui/components/Label';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { Check, ChevronDown, Download, GitPullRequest, Info, MessageSquare, Save } from 'lucide-react';
 import { useMemo, useState, useCallback } from 'react';
 
 import { useAgentVersions } from '../../hooks/use-agent-versions';
@@ -133,10 +131,6 @@ export function AgentPlaygroundVersionBar({
   return {
     versionSelector: (
       <div className="flex items-center gap-2 px-4 py-3 border-b border-border1 bg-surface3">
-        <Icon size="sm" className="text-neutral3 shrink-0">
-          <Clock />
-        </Icon>
-
         {versions.length > 0 ? (
           <Combobox
             options={versionOptions}
@@ -154,24 +148,19 @@ export function AgentPlaygroundVersionBar({
 
         {currentValue && <CopyButton content={currentValue} tooltip="Copy version ID" size="sm" />}
 
-        <HoverPopover>
-          <PopoverTrigger asChild>
-            <button
-              type="button"
-              aria-label="Version information"
-              className="text-neutral3 hover:text-neutral5 transition-colors shrink-0 rounded-sm focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-white/30"
-            >
-              <Icon size="sm">
-                <Info />
-              </Icon>
-            </button>
-          </PopoverTrigger>
-          <PopoverContent align="start" className="w-56">
-            <Txt variant="ui-sm" className="text-neutral3">
-              {versionInfoText}
-            </Txt>
-          </PopoverContent>
-        </HoverPopover>
+        <Tooltip>
+          <TooltipTrigger
+            aria-label="Version information"
+            className="text-neutral3 hover:text-neutral5 transition-colors shrink-0 rounded-sm focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-white/30"
+          >
+            <Icon size="sm">
+              <Info />
+            </Icon>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" align="start" className="max-w-56">
+            {versionInfoText}
+          </TooltipContent>
+        </Tooltip>
 
         <div className="flex items-center gap-2 ml-auto shrink-0">
           {readOnly && <Badge variant="warning">Read-only</Badge>}

@@ -11,7 +11,7 @@ The `MastraPlatformExporter` sends traces, logs, metrics, scores, and feedback t
 
 :::note
 
-`MastraPlatformExporter` was previously called `CloudExporter`. The original `CloudExporter` class is still exported from `@mastra/observability` for backward compatibility, but it is deprecated. New code should use `MastraPlatformExporter`.
+`MastraPlatformExporter` was previously called `CloudExporter`. The original `CloudExporter` class is still exported from `@mastra/observability` for backward compatibility, but it's deprecated. New code should use `MastraPlatformExporter`.
 
 :::
 
@@ -139,13 +139,7 @@ If you prefer, rely entirely on environment variables:
 new MastraPlatformExporter()
 ```
 
-With `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` set, `MastraPlatformExporter` sends data to the Mastra platform project you configured. If you also set `MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT`, it sends data to that collector instead.
-
-:::note
-
-Visit [MastraPlatformExporter reference](/reference/observability/tracing/exporters/mastra-platform-exporter) for the full list of configuration options.
-
-:::
+With `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` set, `MastraPlatformExporter` sends data to the Mastra platform project you configured. If you also set `MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT`, it sends data to that collector instead. Visit [MastraPlatformExporter reference](/reference/observability/tracing/exporters/mastra-platform-exporter) for the full list of configuration options.
 
 ## Recommended configuration
 

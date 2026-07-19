@@ -1,4 +1,8 @@
-import { DataList as EntityList, DataListSkeleton as EntityListSkeleton, truncateString } from '@mastra/playground-ui';
+import {
+  DataList as EntityList,
+  DataListSkeleton as EntityListSkeleton,
+} from '@mastra/playground-ui/components/DataList';
+import { truncateString } from '@mastra/playground-ui/utils/truncate-string';
 import { CheckIcon, FileInput, FileOutput } from 'lucide-react';
 import { useMemo } from 'react';
 import type { ProcessorInfo, ProcessorPhase } from '../../hooks/use-processors';
@@ -30,7 +34,7 @@ export function ProcessorsList({ processors, isLoading, search = '' }: Processor
   }
 
   return (
-    <EntityList columns="auto 1fr auto auto auto auto auto auto">
+    <EntityList columns="auto 1fr auto auto auto auto auto auto" variant="striped">
       <EntityList.Top>
         <EntityList.TopCell>Name</EntityList.TopCell>
         <EntityList.TopCell>Description</EntityList.TopCell>

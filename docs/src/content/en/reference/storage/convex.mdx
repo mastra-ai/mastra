@@ -16,7 +16,7 @@ Convex storage **doesn't support the observability domain**. Traces from the `Ma
 :::
 
 :::warning[Record Size Limit]
-Convex enforces a **1 MiB maximum record size**. This limit can be exceeded when storing messages with base64-encoded attachments such as images. See [Handling large attachments](/docs/memory/storage#handling-large-attachments) for workarounds including uploading attachments to external storage like S3, Cloudflare R2, or [Convex file storage](https://docs.convex.dev/file-storage).
+Convex enforces a **1 MiB maximum record size**. This limit can be exceeded when storing messages with base64-encoded attachments such as images. See [Handling large attachments](/docs/memory/memory-processors#handling-large-attachments) for workarounds including uploading attachments to external storage like S3, Cloudflare R2, or [Convex file storage](https://docs.convex.dev/file-storage).
 :::
 
 ## Installation
@@ -42,6 +42,7 @@ import {
   mastraResourcesTable,
   mastraWorkflowSnapshotsTable,
   mastraScoresTable,
+  mastraObservationalMemoryTable,
   mastraVectorIndexesTable,
   mastraVectorsTable,
   mastraCacheTable,
@@ -55,6 +56,7 @@ export default defineSchema({
   mastra_resources: mastraResourcesTable,
   mastra_workflow_snapshots: mastraWorkflowSnapshotsTable,
   mastra_scorers: mastraScoresTable,
+  mastra_observational_memory: mastraObservationalMemoryTable,
   mastra_vector_indexes: mastraVectorIndexesTable,
   mastra_vectors: mastraVectorsTable,
   mastra_cache: mastraCacheTable,
@@ -223,13 +225,13 @@ For very large cache namespaces, clear incrementally or use narrower prefixes to
 
 During batched cleanup, cache metadata can temporarily use an internal `deleted` state. The next cleanup pass removes those rows. Avoid writing new values with the same prefix until `clear()` finishes.
 
-`clear()` only removes rows whose stored `keyPrefix` exactly matches the configured `keyPrefix`. It does not clear nested prefixes by string prefix matching. Each `listPush()` refreshes the list TTL using the cache's configured `ttlMs`.
+`clear()` only removes rows whose stored `keyPrefix` exactly matches the configured `keyPrefix`. It doesn't clear nested prefixes by string prefix matching. Each `listPush()` refreshes the list TTL using the cache's configured `ttlMs`.
 
 Use a non-empty `keyPrefix` unless you intentionally want `clear()` to remove every cache key in the deployment. Expired list rows are reclaimed incrementally during reads and writes; `clear()` removes all rows for the prefix.
 
 `ConvexServerCache` works best for durable replay of moderate-frequency events. For high-frequency token streams, prefer batching events or using a lower-latency cache backend.
 
-`ConvexServerCache` does not replace a distributed pub/sub transport. If your app needs live cross-process event delivery, configure a production pub/sub backend separately.
+`ConvexServerCache` doesn't replace a distributed pub/sub transport. If your app needs live cross-process event delivery, configure a production pub/sub backend separately.
 
 ## Additional notes
 
@@ -242,11 +244,16 @@ The storage implementation uses typed Convex tables for each Mastra domain:
 | Threads | `mastra_threads` | Conversation threads |
 | Messages | `mastra_messages` | Chat messages |
 | Resources | `mastra_resources` | User working memory |
+| Observational Memory | `mastra_observational_memory` | Observational memory generations |
 | Workflows | `mastra_workflow_snapshots` | Workflow state |
 | Scorers | `mastra_scorers` | Evaluation data |
 | Cache | `mastra_cache` | Cache values, counters, and list metadata |
 | Cache Items | `mastra_cache_list_items` | Cache list entries |
 | Fallback | `mastra_documents` | Unknown tables |
+
+### Observational memory
+
+`ConvexStore` supports [observational memory](/docs/memory/observational-memory). Add `mastraObservationalMemoryTable` to your Convex schema and redeploy with `npx convex deploy` to enable it. Existing deployments created before this table was added need the same schema update.
 
 ### Architecture
 

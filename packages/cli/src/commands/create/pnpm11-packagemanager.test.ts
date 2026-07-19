@@ -149,6 +149,15 @@ describe('pnpm v11 packageManager normalization', () => {
     // because corepack ≤0.35.0 rejects ranges in both fields
     expect(written.packageManager).toBeUndefined();
     expect(written.devEngines).toBeUndefined();
+
+    // Verify that the pnpm-workspace.yaml configuration is correctly generated and includes excludes
+    const workspaceWrite = writeFileCalls.find(
+      (call: any[]) => typeof call[0] === 'string' && call[0] === 'pnpm-workspace.yaml',
+    );
+    expect(workspaceWrite).toBeDefined();
+    expect(workspaceWrite![1]).toContain('minimumReleaseAgeExclude:');
+    expect(workspaceWrite![1]).toContain('- mastra');
+    expect(workspaceWrite![1]).toContain('- "@mastra/*"');
   });
 
   it('should remove legacy packageManager field with range', async () => {

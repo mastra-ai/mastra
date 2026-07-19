@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mongodb",
-  "version": "1.9.1",
+  "version": "1.14.0-alpha.0",
   "description": "MongoDB provider for Mastra - includes vector store capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -22,7 +22,7 @@
     "build:lib": "tsup --silent --config tsup.config.ts",
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
-    "pretest": "docker compose up -d --wait",
+    "pretest": "docker compose up -d --wait || (echo '--- docker compose up failed; dumping diagnostics ---' && docker compose ps -a && docker compose logs && df -h && exit 1)",
     "test": "vitest run",
     "posttest": "docker compose down -v",
     "pretest:watch": "docker compose up -d",
@@ -33,14 +33,14 @@
   "dependencies": {
     "@lukeed/uuid": "^2.0.1",
     "cloudflare": "^5.2.0",
-    "mongodb": "^7.1.0"
+    "mongodb": "^7.2.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.19.15",
+    "@types/node": "22.20.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^10.4.1",
@@ -50,7 +50,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.34.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.51.0-0 <2.0.0-0"
   },
   "files": [
     "dist",

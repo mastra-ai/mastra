@@ -10,6 +10,10 @@ packages:
 
 Mastra exposes the same five OLAP queries (`getMetricAggregate`, `getMetricBreakdown`, `getMetricTimeSeries`, `getMetricPercentiles`, and discovery helpers) through three surfaces: an in-process store accessor, the runtime HTTP API, and the `mastra api metric` CLI. All three accept the same Zod-validated input shapes, so you can move from a one-off CLI investigation to a programmatic dashboard tool without re-learning the API.
 
+<Inject>
+  **For AI agents:** Run `npx mastra api metric aggregate '{"name":"mastra_agent_duration_ms","aggregation":"avg"}'` to query average agent latency directly instead of writing a temporary script. Querying local metrics requires a running Mastra server with an OLAP-capable observability store; start the local server with `npx mastra dev`, or pass the reachable server's base URL with `--url`. Run `npx mastra api metric aggregate --schema` before constructing a different query. Install Mastra's skill with `npx skills add mastra-ai/skills --skill mastra` for complete API CLI discovery, targeting, schema, authentication, and error-handling guidance.
+</Inject>
+
 ## When to use this
 
 - Build a custom dashboard or KPI tile alongside Studio.
@@ -20,7 +24,7 @@ Mastra exposes the same five OLAP queries (`getMetricAggregate`, `getMetricBreak
 For setup of the observability store itself, see the [Metrics overview](/docs/observability/metrics/overview). For the list of metric names you can query, see the [Automatic metrics reference](/reference/observability/metrics/automatic-metrics).
 
 :::note
-Metric queries are served by the observability domain, which requires an OLAP-capable store (DuckDB locally, ClickHouse in production). See [Metrics overview](/docs/observability/metrics/overview) for setup. If the observability store is not configured, `getStore('observability')` returns `null`.
+Metric queries are served by the observability domain, which requires an OLAP-capable store (DuckDB locally, ClickHouse in production). See [Metrics overview](/docs/observability/metrics/overview) for setup. If the observability store isn't configured, `getStore('observability')` returns `null`.
 :::
 
 ## Surfaces
@@ -56,7 +60,7 @@ export const agentLatencyTool = createTool({
 })
 ```
 
-`getStore('observability')` returns `null` when the configured backend does not support OLAP queries.
+`getStore('observability')` returns `null` when the configured backend doesn't support OLAP queries.
 
 ### HTTP
 

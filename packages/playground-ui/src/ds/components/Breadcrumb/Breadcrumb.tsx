@@ -15,7 +15,7 @@ export interface BreadcrumbProps {
 export const Breadcrumb = ({ children, label, className, listClassName }: BreadcrumbProps) => {
   return (
     <nav aria-label={label} className={className}>
-      <ol className={cn('gap-0.5 flex items-center', listClassName)}>{children}</ol>
+      <ol className={cn('flex items-center gap-0.5', listClassName)}>{children}</ol>
     </nav>
   );
 };
@@ -28,6 +28,7 @@ export interface CrumbProps {
   prefetch?: boolean | null;
   children: React.ReactNode;
   action?: React.ReactNode;
+  'data-testid'?: string;
 }
 
 export const Crumb = ({ className, as, isCurrent, action, ...props }: CrumbProps) => {
@@ -39,9 +40,9 @@ export const Crumb = ({ className, as, isCurrent, action, ...props }: CrumbProps
         <Root
           aria-current={isCurrent ? 'page' : undefined}
           className={cn(
-            'text-ui-md leading-ui-md flex min-w-0 items-center gap-2 truncate',
+            'flex min-w-0 items-center gap-2 truncate text-ui-md leading-ui-md',
             transitions.colors,
-            isCurrent ? 'text-neutral6 font-medium' : 'text-neutral3 hover:text-neutral5',
+            isCurrent ? 'font-medium text-neutral6' : 'text-neutral3 hover:text-neutral5',
             className,
           )}
           {...props}

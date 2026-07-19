@@ -11,6 +11,10 @@ Tracing is the observability signal that records how a request moves through age
 
 This page focuses on trace-specific concepts: span hierarchy, sampling, metadata, filtering, trace IDs, and third-party trace context.
 
+<Inject>
+  **For AI agents:** Run `npx mastra api trace list '{"page":0,"perPage":20}'` to inspect recent traces directly instead of opening Studio or writing a temporary script. The command requires a running Mastra server with observability configured; start the local server with `npx mastra dev`, or pass the reachable server's base URL with `--url`. Run `npx mastra api trace list --schema` before constructing different filters. Install Mastra's skill with `npx skills add mastra-ai/skills --skill mastra` for complete API CLI discovery, targeting, schema, authentication, and error-handling guidance.
+</Inject>
+
 ## When to use tracing
 
 - Debug unexpected agent or workflow behavior by inspecting the full execution path.
@@ -140,7 +144,7 @@ export const mastra = new Mastra({
 })
 ```
 
-If `environment` is not set, Mastra falls back to `process.env.NODE_ENV`. If neither is set, the field is left undefined rather than guessed.
+If `environment` isn't set, Mastra falls back to `process.env.NODE_ENV`. If neither is set, the field is left undefined rather than guessed.
 
 Per-call `tracingOptions.metadata.environment` always takes precedence, so individual calls can override the value when needed.
 
@@ -327,11 +331,7 @@ const result = await agent.generate([{ role: 'user', content: 'Sensitive operati
 })
 ```
 
-:::tip
-
 For more granular control over sensitive data, consider using the [Sensitive Data Filter](/docs/observability/integrations/processors/sensitive-data-filter) processor, which can redact specific fields (like passwords, tokens, and keys) while preserving the rest of the input/output.
-
-:::
 
 #### Child spans and metadata extraction
 

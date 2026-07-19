@@ -65,7 +65,7 @@ const makeSpyRenderers = () => {
     },
     Reasoning: part => {
       calls.Reasoning(part);
-      return <div data-testid="reasoning">{part.reasoning}</div>;
+      return <div data-testid="reasoning">{part.state ? `${part.reasoning}:${part.state}` : part.reasoning}</div>;
     },
     File: part => {
       calls.File(part);
@@ -108,7 +108,8 @@ const makeSpyRenderers = () => {
 const asPart = (part: unknown): AccumulatorPart => part as AccumulatorPart;
 
 const textPart = (text: string, textId?: string): AccumulatorPart => ({ type: 'text', text, textId });
-const reasoningPart = (reasoning: string): AccumulatorPart => asPart({ type: 'reasoning', reasoning });
+const reasoningPart = (reasoning: string, state?: 'streaming' | 'done'): AccumulatorPart =>
+  asPart({ type: 'reasoning', reasoning, state });
 const filePart = (): AccumulatorPart => asPart({ type: 'file', mimeType: 'image/png', data: 'AAAA' });
 const stepStartPart = (): AccumulatorPart => asPart({ type: 'step-start' });
 const toolInvocationPart = (toolCallId: string, toolName: string): AccumulatorPart =>
@@ -151,6 +152,14 @@ describe('MessageFactory', () => {
     expect(calls.Text).not.toHaveBeenCalled();
   });
 
+  it('passes streaming state to the Reasoning renderer', () => {
+    const { calls, renderers } = makeSpyRenderers();
+    render(<MessageFactory message={makeMessage([reasoningPart('thinking', 'streaming')])} {...renderers} />);
+
+    expect(screen.getByTestId('reasoning').textContent).toBe('thinking:streaming');
+    expect(calls.Reasoning).toHaveBeenCalledWith(expect.objectContaining({ state: 'streaming' }));
+  });
+
   it('renders file only via the File renderer', () => {
     const { calls, renderers } = makeSpyRenderers();
     render(<MessageFactory message={makeMessage([filePart()])} {...renderers} />);
@@ -165,6 +174,21 @@ describe('MessageFactory', () => {
 
     expect(screen.getByTestId('step-start')).toBeTruthy();
     expect(calls.StepStart).toHaveBeenCalledTimes(1);
+  });
+
+  it('when no StepStart renderer is supplied, step-start renders nothing and never calls fallback', () => {
+    const { calls, renderers } = makeSpyRenderers();
+    const { StepStart: _omitted, ...withoutStepStart } = renderers;
+    const fallback = vi.fn((part: AccumulatorPart) => <div data-testid="fallback">{part.type}</div>);
+
+    const { container } = render(
+      <MessageFactory message={makeMessage([stepStartPart()])} {...withoutStepStart} fallback={fallback} />,
+    );
+
+    expect(screen.queryByTestId('fallback')).toBeNull();
+    expect(fallback).not.toHaveBeenCalled();
+    expect(calls.StepStart).not.toHaveBeenCalled();
+    expect(container.textContent).toBe('');
   });
 
   it('renders tool-invocation via ToolInvocation, never DynamicTool', () => {

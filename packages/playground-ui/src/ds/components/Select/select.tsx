@@ -1,10 +1,11 @@
 import { Select as SelectPrimitive } from '@base-ui/react/select';
+import type { SelectPopupProps, SelectPositionerProps } from '@base-ui/react/select';
 import { Check, ChevronDown } from 'lucide-react';
 import * as React from 'react';
 
-import type { ButtonProps } from '../Button';
-import { formElementSizes } from '@/ds/primitives/form-element';
-import type { FormElementSize } from '@/ds/primitives/form-element';
+import { buttonVariants } from '../Button/Button';
+import type { TextButtonSize } from '../Button/Button';
+import { controlTriggerOpenState } from '@/ds/primitives/control-size';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -98,37 +99,66 @@ const SelectValue = React.forwardRef<HTMLSpanElement, SelectValueProps>(({ class
 ));
 SelectValue.displayName = 'SelectValue';
 
+/**
+ * A select is a form field, so it reuses the same button looks consumers see
+ * everywhere: `default` (the Button's filled default surface — the default
+ * here too), `outline` (bordered, transparent) and `ghost` (borderless, for
+ * dense toolbars/inline pickers). The high-emphasis `primary` look is the only
+ * one intentionally NOT offered (a field is not a call-to-action).
+ */
+export type SelectTriggerVariant = 'default' | 'outline' | 'ghost';
+type SelectTriggerLegacyVariant = 'primary';
+
 export type SelectTriggerProps = Omit<SelectPrimitive.Trigger.Props, 'className'> & {
   className?: string;
-  size?: FormElementSize;
-  /** Kept for API compatibility; styling is now intrinsic to the trigger. */
-  variant?: ButtonProps['variant'];
+  size?: TextButtonSize;
+  variant?: SelectTriggerVariant | SelectTriggerLegacyVariant;
 };
 
+function normalizeSelectTriggerVariant(
+  variant: SelectTriggerVariant | SelectTriggerLegacyVariant,
+): SelectTriggerVariant {
+  return variant === 'primary' ? 'default' : variant;
+}
+
 const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
-  ({ className, children, size = 'default', variant: _variant, ...props }, ref) => {
+  ({ className, children, size = 'md', variant = 'default', ...props }, ref) => {
+    const visualVariant = normalizeSelectTriggerVariant(variant);
+
     return (
       <SelectPrimitive.Trigger
         ref={ref}
         data-slot="select-trigger"
+        // A select = a button + a trailing chevron: reuse the Button recipe
+        // (variant colors, size = height/text/padding/radius, unified border
+        // focus, disabled) and layer only the select-specific extras.
         className={cn(
-          'inline-flex w-full cursor-pointer select-none items-center justify-between gap-1.5 whitespace-nowrap',
-          formElementSizes[size],
-          'rounded-lg border border-border1 bg-transparent px-2.5 text-ui-smd leading-ui-sm text-neutral4',
-          'outline-none transition-colors duration-normal ease-out-custom',
-          'hover:bg-surface3 hover:text-neutral6 hover:border-border2 active:bg-surface4',
-          'focus:outline-none focus-visible:outline-none focus-visible:border-border2',
-          'data-[popup-open]:bg-surface3 data-[popup-open]:text-neutral6 data-[popup-open]:border-border2',
+          buttonVariants({ variant: visualVariant, size }),
+          // Fill the field and push the value left / chevron right (Button's
+          // base centers its content with `justify-center`).
+          'w-full justify-between',
+          // Read as "active" while the menu is open, per variant (see map above).
+          controlTriggerOpenState[visualVariant],
           'data-[placeholder]:text-neutral3',
-          'disabled:cursor-not-allowed disabled:opacity-50',
           '[&>span]:truncate',
           className,
         )}
         {...props}
       >
         {children}
+        {/* `SelectPrimitive.Icon` renders the provided element in place of its
+            default `<span>`, so the chevron would land as a *direct* `<svg>`
+            child of the trigger — where Button's `TEXT_MODE_ADORNMENTS`
+            `[&>svg]` rules (negative `mx`, forced 50% opacity, 1.1em sizing)
+            would distort and mis-position it. Wrapping it in a `<span>` keeps
+            the svg one level deep so those rules can't reach it, leaving the
+            chevron pinned at the right edge at its intended size and opacity. */}
         <SelectPrimitive.Icon
-          render={<ChevronDown className={cn('h-4 w-4 shrink-0 text-neutral3 opacity-70', transitions.colors)} />}
+          render={
+            <span className="flex shrink-0 items-center">
+              <ChevronDown className={cn('size-4 opacity-60', transitions.colors)} />
+            </span>
+          }
         />
       </SelectPrimitive.Trigger>
     );
@@ -136,43 +166,72 @@ const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
 );
 SelectTrigger.displayName = 'SelectTrigger';
 
-export type SelectContentProps = Omit<SelectPrimitive.Popup.Props, 'className'> & {
-  className?: string;
-  /**
-   * Kept for API compatibility with the previous Radix API. Radix supported
-   * `position="popper" | "item-aligned"`; Base UI always uses popper-style
-   * positioning so this prop is accepted but has no effect.
-   */
-  position?: 'popper' | 'item-aligned';
-  /** Optional portal container, forwarded to `Select.Portal`. */
-  container?: HTMLElement | null;
-  side?: SelectPrimitive.Positioner.Props['side'];
-  align?: SelectPrimitive.Positioner.Props['align'];
-  sideOffset?: SelectPrimitive.Positioner.Props['sideOffset'];
-};
+type SelectContentPositionerProps = Omit<SelectPositionerProps, keyof SelectPopupProps>;
+
+export type SelectContentProps = Omit<SelectPopupProps, 'className'> &
+  SelectContentPositionerProps & {
+    className?: string;
+    /**
+     * Kept for API compatibility with the previous Radix API. Radix supported
+     * `position="popper" | "item-aligned"`; Base UI always uses popper-style
+     * positioning so this prop is accepted but has no effect.
+     */
+    position?: 'popper' | 'item-aligned';
+    /** Optional portal container, forwarded to `Select.Portal`. */
+    container?: HTMLElement | null;
+  };
 
 const SelectContent = React.forwardRef<HTMLDivElement, SelectContentProps>(
   (
-    { className, children, position: _position, container, side = 'bottom', align = 'start', sideOffset = 4, ...props },
+    {
+      className,
+      children,
+      position: _position,
+      container,
+      side = 'bottom',
+      align = 'start',
+      sideOffset = 4,
+      alignItemWithTrigger = false,
+      anchor,
+      positionMethod,
+      alignOffset,
+      collisionBoundary,
+      collisionPadding,
+      sticky,
+      arrowPadding,
+      disableAnchorTracking,
+      collisionAvoidance,
+      ...props
+    },
     ref,
   ) => {
     // Default to the nearest SideDialog/Drawer popup so the dropdown stays
     // interactive inside a modal drawer; an explicit `container` still wins.
     const resolvedContainer = usePortalContainer(container);
+    const positionerProps: SelectContentPositionerProps = {
+      side,
+      align,
+      sideOffset,
+      alignItemWithTrigger,
+      anchor,
+      positionMethod,
+      alignOffset,
+      collisionBoundary,
+      collisionPadding,
+      sticky,
+      arrowPadding,
+      disableAnchorTracking,
+      collisionAvoidance,
+    };
+
     return (
       <SelectPrimitive.Portal container={resolvedContainer}>
-        <SelectPrimitive.Positioner
-          className="z-50 outline-none"
-          side={side}
-          align={align}
-          sideOffset={sideOffset}
-          alignItemWithTrigger={false}
-        >
+        <SelectPrimitive.Positioner className="z-50 outline-none" {...positionerProps}>
           <SelectPrimitive.Popup
             ref={ref}
             className={cn(
-              'relative z-50 min-w-32 min-w-[var(--anchor-width)] max-h-dropdown-max-height max-h-[var(--available-height)] overflow-y-auto overflow-x-hidden rounded-xl border border-border1 bg-surface3 p-1 text-neutral4 shadow-dialog origin-[var(--transform-origin)]',
-              'data-[open]:animate-in data-[closed]:animate-out data-[closed]:fade-out-0 data-[open]:fade-in-0 data-[closed]:zoom-out-95 data-[open]:zoom-in-95',
+              'relative z-50 max-h-[min(var(--max-height-dropdown-max-height),var(--available-height))] min-w-[max(8rem,var(--anchor-width))] origin-[var(--transform-origin)] overflow-x-hidden overflow-y-auto rounded-xl border border-border1 bg-surface3 p-1 text-neutral4 shadow-dialog',
+              'data-[closed]:animate-out data-[closed]:fade-out-0 data-[closed]:zoom-out-95 data-[open]:animate-in data-[open]:fade-in-0 data-[open]:zoom-in-95',
               'data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1',
               className,
             )}
@@ -195,7 +254,7 @@ const SelectItem = React.forwardRef<HTMLDivElement, SelectItemProps>(({ classNam
   <SelectPrimitive.Item
     ref={ref}
     className={cn(
-      'relative flex w-full cursor-pointer select-none items-center gap-2.5 rounded-lg py-1.5 pl-2 pr-8 text-neutral4 text-ui-smd leading-ui-sm',
+      'relative flex w-full cursor-pointer items-center gap-2.5 rounded-lg py-1.5 pr-8 pl-2 text-ui-smd leading-ui-sm text-neutral4 select-none',
       'outline-none focus:outline-none focus-visible:outline-none',
       transitions.colors,
       'hover:bg-surface4 hover:text-neutral6',
@@ -207,9 +266,9 @@ const SelectItem = React.forwardRef<HTMLDivElement, SelectItemProps>(({ classNam
     )}
     {...props}
   >
-    <span className="absolute right-2 flex h-3.5 w-3.5 items-center justify-center">
+    <span className="absolute right-2 flex size-3.5 items-center justify-center">
       <SelectPrimitive.ItemIndicator>
-        <Check className="h-4 w-4 text-neutral6" />
+        <Check className="size-4 text-neutral6" />
       </SelectPrimitive.ItemIndicator>
     </span>
     <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>

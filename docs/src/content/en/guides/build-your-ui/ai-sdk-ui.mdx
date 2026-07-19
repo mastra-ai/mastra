@@ -103,7 +103,7 @@ You can use [`chatRoute()`](/reference/ai-sdk/chat-route), [`workflowRoute()`](/
 
     When a workflow step pipes an agent's stream to the workflow writer (e.g., `await response.fullStream.pipeTo(writer)`), the agent's text chunks and tool calls are forwarded to the UI stream in real time, even when the agent runs inside workflow steps.
 
-    See [Workflow Streaming](/docs/streaming/workflow-streaming) for more details.
+    See [Workflow Streaming](/docs/workflows/overview#inspecting-workflow-stream-payloads) for more details.
 
     :::
   </TabItem>
@@ -407,7 +407,7 @@ Mastra streams data to the frontend as "parts" within messages. Each part has a 
 | - | - | - |
 | `tool-{toolKey}` | AI SDK built-in | Tool invocation with states: `input-available`, `output-available`, `output-error` |
 | `data-workflow` | `workflowRoute()` | Workflow execution state snapshots with step status and final outputs |
-| `data-workflow-step` | `workflowRoute()` | Workflow step delta with the full payload for the step that just changed |
+| `data-workflow-step` | `workflowRoute()` | Workflow step delta with the full payload for the changed step |
 | `data-network` | `networkRoute()` | Agent network execution with ordered steps and outputs |
 | `data-tool-agent` | Nested agent in tool | Agent output streamed from within a tool's `execute()` |
 | `data-tool-workflow` | Nested workflow in tool | Workflow output streamed from within a tool's `execute()` |
@@ -526,7 +526,7 @@ The tool part type follows the pattern `tool-{toolKey}`, where `toolKey` is the 
 
 ### Rendering workflow data
 
-When using `workflowRoute()` or `handleWorkflowStream()`, Mastra emits `data-workflow` parts for workflow state snapshots and `data-workflow-step` parts for the full payload of the step that just changed. This keeps long-running workflows from repeating every completed step output in every intermediate snapshot.
+When using `workflowRoute()` or `handleWorkflowStream()`, Mastra emits `data-workflow` parts for workflow state snapshots and `data-workflow-step` parts for the full payload of the changed step. This keeps long-running workflows from repeating every completed step output in every intermediate snapshot.
 
 <Tabs>
   <TabItem value="backend" label="Backend">
@@ -696,7 +696,7 @@ When using `workflowRoute()` or `handleWorkflowStream()`, Mastra emits `data-wor
   </TabItem>
 </Tabs>
 
-For more details on workflow streaming, see [Workflow Streaming](/docs/streaming/workflow-streaming).
+For more details on workflow streaming, see [Workflow Streaming](/docs/workflows/overview#inspecting-workflow-stream-payloads).
 
 ### Rendering network data
 
@@ -934,7 +934,7 @@ You must `await` the `writer.custom()` call, otherwise you may encounter a `Writ
 
 ### Tool streaming
 
-Tools can also stream data using `context.writer.write()` for lower-level control, or pipe an agent's stream directly to the tool's writer. For more details, see [Tool Streaming](/docs/streaming/tool-streaming).
+Tools can also stream data using `context.writer.write()` for lower-level control, or pipe an agent's stream directly to the tool's writer. For more details, see [Tool Streaming](/docs/agents/using-tools#streaming).
 
 ### Examples
 
@@ -1166,6 +1166,7 @@ The workflow uses:
     export const mastra = new Mastra({
       workflows: { approvalWorkflow },
       storage: new LibSQLStore({
+        id: 'mastra-storage',
         url: 'file:../mastra.db',
       }),
       server: {

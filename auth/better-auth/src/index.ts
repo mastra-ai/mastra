@@ -1,9 +1,10 @@
-import type { IUserProvider, ICredentialsProvider, CredentialsResult } from '@mastra/core/auth';
-import type { EEUser } from '@mastra/core/auth/ee';
-import type { MastraAuthProviderOptions } from '@mastra/core/server';
-import { MastraAuthProvider } from '@mastra/core/server';
+import type { IUserProvider, ICredentialsProvider, CredentialsResult } from '@internal/auth';
+import type { EEUser } from '@internal/auth/ee';
+import type { MastraAuthProviderOptions } from '@internal/auth/provider';
+import { MastraAuthProvider } from '@internal/auth/provider';
 
 import type { Auth, Session, User } from 'better-auth';
+import { makeSignature } from 'better-auth/crypto';
 
 type HonoRequestLike = {
   raw?: Request;
@@ -12,6 +13,16 @@ type HonoRequestLike = {
 };
 
 type MastraAuthRequest = Request | HonoRequestLike;
+
+type BetterAuthContext = Awaited<Auth['$context']>;
+
+function tryDecode(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
 
 function getRequestHeader(request: MastraAuthRequest, name: string): string | null {
   if (request instanceof Request) {
@@ -144,13 +155,25 @@ export class MastraAuthBetterAuth
    * Get current user from request.
    * Implements IUserProvider for EE user awareness in Studio.
    *
+   * Supports both cookie-based sessions and `Authorization: Bearer <token>`
+   * requests (e.g. API clients using the token returned by `signIn`).
+   *
    * @param request - Incoming HTTP request
    * @returns EE User object or null if not authenticated
    */
   async getCurrentUser(request: Request): Promise<EEUser | null> {
     try {
+      const headers = new Headers(request.headers);
+
+      // If the request authenticates via Bearer token instead of cookies,
+      // convert the token to a signed session cookie so getSession accepts it.
+      const authHeader = headers.get('Authorization');
+      const bearerToken =
+        authHeader && authHeader.slice(0, 7).toLowerCase() === 'bearer ' ? authHeader.slice(7).trim() : undefined;
+      await this.ensureSessionCookie(headers, bearerToken);
+
       const result = await this.auth.api.getSession({
-        headers: request.headers,
+        headers,
       });
 
       if (!result?.user) return null;
@@ -164,22 +187,34 @@ export class MastraAuthBetterAuth
    * Get user by ID.
    * Implements IUserProvider for EE user awareness.
    *
-   * Note: Better Auth doesn't expose a direct getUser API.
-   * For full functionality, you may need to implement this using
-   * direct database access in a subclass.
+   * Uses Better Auth's internal adapter to look up the user record,
+   * so it works with whichever database Better Auth is configured with.
    *
    * @param userId - User identifier
    * @returns EE User object or null if not found
    */
-  async getUser(_userId: string): Promise<EEUser | null> {
-    // Better Auth doesn't have a direct getUser API
-    // Users can override this method with their own implementation
-    // that queries the database directly
-    console.warn(
-      '[MastraAuthBetterAuth] getUser() requires direct database access. ' +
-        'Override this method in a subclass for full user lookup support.',
-    );
-    return null;
+  async getUser(userId: string): Promise<EEUser | null> {
+    try {
+      const ctx = await this.getAuthContext();
+      if (!ctx) return null;
+
+      const user = await ctx.internalAdapter.findUserById(userId);
+      if (!user) return null;
+      return mapBetterAuthUserToEEUser(user);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Get multiple users by ID.
+   * Optional IUserProvider method used for batch author enrichment.
+   *
+   * @param userIds - User identifiers
+   * @returns EE User objects (null for missing users, order preserved)
+   */
+  async getUsers(userIds: string[]): Promise<Array<EEUser | null>> {
+    return Promise.all(userIds.map(userId => this.getUser(userId)));
   }
 
   /**
@@ -191,10 +226,57 @@ export class MastraAuthBetterAuth
   }
 
   /**
+   * Get the resolved Better Auth context, or null when unavailable
+   * (e.g. a partial mock without `$context`).
+   */
+  private async getAuthContext(): Promise<BetterAuthContext | null> {
+    try {
+      return (await Promise.resolve(this.auth.$context)) ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Ensure the Cookie header on `headers` carries a Better Auth session cookie
+   * for the given token.
+   *
+   * Better Auth's `getSession` reads the session from a *signed* cookie
+   * (`<token>.<HMAC-SHA256 signature>`), while `signIn`/`signUp` return the
+   * raw unsigned token. Mirroring Better Auth's bearer plugin, unsigned tokens
+   * are signed with the instance secret before being set as the session cookie.
+   */
+  private async ensureSessionCookie(headers: Headers, token: string | undefined): Promise<void> {
+    if (!token) return;
+
+    const ctx = await this.getAuthContext();
+    const cookieName = ctx?.authCookies.sessionToken.name ?? this.sessionCookieName;
+    const secret = ctx?.secret;
+
+    const cookieHeader = headers.get('Cookie');
+    const hasSessionCookie = !!cookieHeader?.split(';').some(pair => {
+      const [key] = pair.trim().split('=');
+      return key?.trim() === cookieName;
+    });
+    if (hasSessionCookie) return;
+
+    // Tokens containing "." are already signed (and may be URI-encoded).
+    let cookieValue = token.includes('.') ? (token.includes('%') ? tryDecode(token) : token) : token;
+    if (!token.includes('.') && secret) {
+      cookieValue = `${token}.${await makeSignature(token, secret)}`;
+    }
+
+    const existingCookies = cookieHeader ? `${cookieHeader}; ` : '';
+    headers.set('Cookie', `${existingCookies}${cookieName}=${encodeURIComponent(cookieValue)}`);
+  }
+
+  /**
    * Authenticate a bearer token by verifying the session with Better Auth.
    *
    * This method extracts the session from the request headers using
-   * Better Auth's `api.getSession()` endpoint.
+   * Better Auth's `api.getSession()` endpoint. Raw (unsigned) session tokens —
+   * as returned by `signIn`/`signUp` — are signed before being passed to
+   * Better Auth as a session cookie, matching the bearer plugin's semantics.
    *
    * @param token - The bearer token (session token) to authenticate
    * @param request - The request containing headers
@@ -210,16 +292,9 @@ export class MastraAuthBetterAuth
         headers.set('Cookie', cookieHeader);
       }
 
-      // Convert Bearer token to a session cookie if not already present.
+      // Convert Bearer token to a signed session cookie if not already present.
       // better-auth ignores the Authorization header — it only reads from Cookie.
-      const hasSessionCookie = !!cookieHeader?.split(';').some(pair => {
-        const [key] = pair.trim().split('=');
-        return key?.trim() === this.sessionCookieName;
-      });
-      if (token && !hasSessionCookie) {
-        const existingCookies = cookieHeader ? `${cookieHeader}; ` : '';
-        headers.set('Cookie', `${existingCookies}${this.sessionCookieName}=${token}`);
-      }
+      await this.ensureSessionCookie(headers, token);
 
       const result = await this.auth.api.getSession({
         headers,

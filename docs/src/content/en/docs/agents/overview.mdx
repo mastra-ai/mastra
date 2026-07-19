@@ -7,18 +7,23 @@ packages:
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
+import AgentQuickstart from "@site/src/content/en/docs/getting-started/_partial-agent-quickstart.mdx";
 
 # Agents overview
 
 Agents use LLMs and tools to solve open-ended tasks. They reason about goals, decide which tools to use, retain conversation memory, and iterate internally until the model emits a final answer or an optional stop condition is met. Agents produce structured responses you can render in your UI or process programmatically. Use agents directly or compose them into workflows or multi-agent systems.
 
+<Inject>
+  <AgentQuickstart />
+</Inject>
+
 ## When to use agents
 
 Use agents when the task is open-ended and the steps aren't known in advance. An agent decides which tools to call, how many times to loop, and when to stop. You provide the goal and constraints instead of defining each step. For predetermined, multi-step processes with explicit control flow, use [workflows](/docs/workflows/overview) instead.
 
-:::tip
+:::tip[📹 Watch]
 
-Watch an introduction to agents, and how they compare to workflows on [YouTube (7 minutes)](https://youtu.be/0jg2g3sNvgw).
+Watch [Mastra agent quickstart](https://www.youtube.com/watch?v=G8tXjcseNjg) for a short walkthrough of creating and testing a Mastra agent.
 
 :::
 
@@ -52,15 +57,11 @@ export const mastra = new Mastra({
 
 Once registered, it can be called from workflows, tools, or other agents, and has access to shared resources such as memory, logging, and observability features.
 
+Visit the [agent reference](/reference/agents/agent) for more information on available properties and configurations.
+
 :::tip
 
 Use [Studio](/docs/studio/overview) to test your agent with different messages, inspect tool calls and responses, and debug agent behavior.
-
-:::
-
-:::note
-
-Visit the [agent reference](/reference/agents/agent) for more information on available properties and configurations.
 
 :::
 
@@ -113,9 +114,10 @@ Once your agent is running, use this table to find the right page for what you w
 | Register subagents | [Tools](/docs/agents/using-tools#agents-as-tools) |
 | Intercept or transform messages before and after generation | [Processors](/docs/agents/processors) |
 | Keep your agent safe | [Guardrails](/docs/agents/guardrails) |
+| Build agents that correct their work | [Rubric scorer](/docs/agents/supervisor-agents#rubric-scorer) |
 | Swap instructions or models based on request context | [Dynamic configuration](/docs/server/request-context) |
-| Add speech-to-text or text-to-speech | [Voice](/docs/agents/adding-voice) |
-| Connect to Slack, Discord, or Telegram | [Channels](/docs/agents/channels) |
+| Add speech-to-text or text-to-speech | [Voice](/docs/voice/overview) |
+| Connect to Slack, Discord, or Telegram | [Channels](/docs/capabilities/channels/overview) |
 
 ## Multi-agent systems
 

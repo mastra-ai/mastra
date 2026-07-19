@@ -6,11 +6,12 @@ import type {
   AgentSignalInput,
   DurableAgentLike,
 } from '@mastra/core/agent';
-import { AGENT_STREAM_TOPIC } from '@mastra/core/agent/durable';
+import { AGENT_STREAM_TOPIC, DurableStepIds } from '@mastra/core/agent/durable';
+import type { AIV5Type } from '@mastra/core/agent/message-list';
 import type { VersionOverrides } from '@mastra/core/di';
 import { mergeVersionOverrides, MASTRA_VERSIONS_KEY } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { PROVIDER_REGISTRY, parseModelString } from '@mastra/core/llm';
+import { PROVIDER_REGISTRY, parseModelString, defaultGateways } from '@mastra/core/llm';
 import type { ProviderConfig, SystemMessage } from '@mastra/core/llm';
 import type {
   InputProcessor,
@@ -46,6 +47,8 @@ import {
   toolCallResponseSchema,
   sendToolApprovalBodySchema,
   sendToolApprovalResponseSchema,
+  listSuspendedRunsQuerySchema,
+  listSuspendedRunsResponseSchema,
   updateAgentModelBodySchema,
   reorderAgentModelListBodySchema,
   updateAgentModelInModelListBodySchema,
@@ -66,6 +69,7 @@ import {
   streamUntilIdleBodySchema,
   resumeStreamBodySchema,
   resumeStreamUntilIdleBodySchema,
+  recoverBodySchema,
 } from '../schemas/agents';
 import type { ProviderListItem } from '../schemas/agents';
 import { createStoredAgentResponseSchema } from '../schemas/stored-agents';
@@ -81,6 +85,7 @@ import {
   sanitizeBody,
   validateBody,
   getEffectiveResourceId,
+  requireEffectiveResourceId,
   getEffectiveThreadId,
   enforceThreadAccess,
   validateThreadOwnership,
@@ -277,7 +282,7 @@ export interface SerializedAgent {
   /** Serialized JSON schema for request context validation */
   requestContextSchema?: string;
 
-  source?: 'code' | 'stored';
+  source?: 'code' | 'stored' | 'fs';
   status?: 'draft' | 'published' | 'archived';
   activeVersionId?: string;
   hasDraft?: boolean;
@@ -355,20 +360,15 @@ export function getSerializedProcessors(
 }
 
 /**
- * Extract skills from agent's workspace.
- * Uses agent.getWorkspace() to get the workspace and then workspace.skills.list().
+ * Extract skills from an agent (both inline and workspace skills).
+ * Uses agent.listSkills() which merges agent-level and workspace-level skills.
  */
 export async function getSerializedSkillsFromAgent(
   agent: Agent,
   requestContext?: RequestContext,
 ): Promise<SerializedSkill[]> {
   try {
-    const workspace = await agent.getWorkspace({ requestContext });
-    if (!workspace?.skills) {
-      return [];
-    }
-
-    const skillsList = await workspace.skills.list();
+    const skillsList = await agent.listSkills({ requestContext });
     return skillsList.map(skill => ({
       name: skill.name,
       description: skill.description,
@@ -1272,6 +1272,7 @@ export const GENERATE_AGENT_ROUTE = createRoute({
         const clientThreadId = typeof memoryOption.thread === 'string' ? memoryOption.thread : memoryOption.thread?.id;
 
         const effectiveResourceId = getEffectiveResourceId(serverRequestContext, memoryOption.resource);
+        requireEffectiveResourceId(effectiveResourceId);
         const effectiveThreadId = getEffectiveThreadId(serverRequestContext, clientThreadId);
 
         // Validate thread ownership if accessing an existing thread
@@ -1304,6 +1305,8 @@ export const GENERATE_AGENT_ROUTE = createRoute({
 
       const options = {
         ...restOptions,
+        // Schema validates context permissively; runtime values are ModelMessages.
+        context: restOptions.context as AIV5Type.ModelMessage[] | undefined,
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
         abortSignal,
@@ -1459,7 +1462,14 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
       // and setting it explicitly causes duplicate headers which break HTTP protocol.
       const streamResponse = rest.output
         ? streamResult.toTextStreamResponse()
-        : streamResult.toDataStreamResponse({
+        : // Without `output`, streamLegacy returns a StreamTextResult which has
+          // toDataStreamResponse; TS resolves the object-stream overload because
+          // `output` is optionally typed on the body schema.
+          (
+            streamResult as unknown as {
+              toDataStreamResponse: (options: Record<string, unknown>) => Response;
+            }
+          ).toDataStreamResponse({
             sendUsage: true,
             sendReasoning: true,
             getErrorMessage: (error: any) => {
@@ -1500,8 +1510,19 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
 export async function buildProvidersList(mastra: Context['mastra']): Promise<ProviderListItem[]> {
   const allProviders: Record<string, ProviderConfig> = {};
 
-  for (const [id, provider] of Object.entries(PROVIDER_REGISTRY)) {
-    allProviders[id] = provider as ProviderConfig;
+  // When AUTO_BLOCK_EXTERNAL_PROVIDERS is set, surface only providers from
+  // user-registered custom gateways. The static registry (OpenAI, Anthropic,
+  // Gemini, etc.) and the built-in default gateways (models.dev, netlify,
+  // mastra) are all treated as "external" and hidden — useful for enterprise
+  // deployments that route exclusively through their own gateway.
+  const blockExternalProviders =
+    process.env.AUTO_BLOCK_EXTERNAL_PROVIDERS === 'true' || process.env.AUTO_BLOCK_EXTERNAL_PROVIDERS === '1';
+  const defaultGatewayIds = new Set<string>(defaultGateways.map(gateway => gateway.id));
+
+  if (!blockExternalProviders) {
+    for (const [id, provider] of Object.entries(PROVIDER_REGISTRY)) {
+      allProviders[id] = provider as ProviderConfig;
+    }
   }
 
   // Include gateway providers (defaults + user-registered)
@@ -1511,6 +1532,9 @@ export async function buildProvidersList(mastra: Context['mastra']): Promise<Pro
       for (const gateway of Object.values(allGateways)) {
         // Skip models.dev gateway (already covered by PROVIDER_REGISTRY)
         if (gateway.id === 'models.dev') continue;
+        // When blocking external providers, skip the built-in default gateways
+        // so only user-registered custom gateways remain.
+        if (blockExternalProviders && defaultGatewayIds.has(gateway.id)) continue;
         try {
           const gatewayProviders = await gateway.fetchProviders();
           for (const [providerId, config] of Object.entries(gatewayProviders)) {
@@ -1631,6 +1655,7 @@ export const STREAM_GENERATE_ROUTE = createRoute({
         const clientThreadId = typeof memoryOption.thread === 'string' ? memoryOption.thread : memoryOption.thread?.id;
 
         const effectiveResourceId = getEffectiveResourceId(serverRequestContext, memoryOption.resource);
+        requireEffectiveResourceId(effectiveResourceId);
         const effectiveThreadId = getEffectiveThreadId(serverRequestContext, clientThreadId);
 
         // Validate thread ownership if accessing an existing thread
@@ -1688,8 +1713,30 @@ export const STREAM_GENERATE_ROUTE = createRoute({
 const sendAgentSignalResponseSchema: z.ZodType<{ accepted: true; runId: string; signal?: unknown }> = z.object({
   accepted: z.literal(true),
   runId: z.string(),
-  signal: z.any().optional(),
+  signal: z.unknown().optional(),
 });
+
+/**
+ * Maps a rejected `result.accepted` (signal/message routing) to an HTTP error.
+ *
+ * `accepted` only rejects on a setup/misconfig failure surfaced before the run
+ * starts (e.g. no model selected, request-context validation, FGA denied) — these
+ * are tagged `ErrorCategory.USER` and are the caller's fault, so they map to 400.
+ * Anything else falls through to `handleError` (500 by default, or the error's own
+ * status). Run/generation errors never reject `accepted`; they surface on the
+ * `wake` output stream instead.
+ */
+function handleSignalRoutingError(error: unknown, defaultMessage: string): never {
+  if (
+    error instanceof MastraError &&
+    error.category === ErrorCategory.USER &&
+    !(error as { status?: unknown }).status &&
+    !(error as { details?: { status?: unknown } }).details?.status
+  ) {
+    throw new HTTPException(400, { message: error.message, cause: error });
+  }
+  return handleError(error, defaultMessage);
+}
 
 const sendAgentMessageResponseSchema = sendAgentSignalResponseSchema;
 
@@ -1774,9 +1821,16 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
           ...(effectiveThreadId ? { threadId: effectiveThreadId } : {}),
           ...(ifActive ? { ifActive } : {}),
         });
+        // `accepted` resolves once the runtime decides how to route the signal; it only
+        // rejects on a setup/misconfig failure (e.g. no model), which `handleError` maps
+        // below. `runId` is present on `wake`/`deliver` (a run exists); `persist`/`discard`
+        // never start a run, so we fall back to the caller's `runId` to keep the wire
+        // contract (`runId: string`) stable.
+        const settled = await result.accepted;
+        const settledRunId = 'runId' in settled ? settled.runId : runId;
         return result.signal === undefined
-          ? { accepted: result.accepted, runId: result.runId }
-          : { accepted: result.accepted, runId: result.runId, signal: result.signal };
+          ? { accepted: true as const, runId: settledRunId }
+          : { accepted: true as const, runId: settledRunId, signal: result.signal };
       }
 
       if (!effectiveResourceId || !effectiveThreadId) {
@@ -1789,11 +1843,16 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
         ...(ifActive ? { ifActive } : {}),
         ...ifIdleWithContext,
       });
+      // `accepted` carries the authoritative `runId` for `wake`/`deliver` (a run exists).
+      // `persist`/`discard` never start a run; the stored-message id (`result.signal.id`)
+      // is the correlatable id for those, keeping the wire contract (`runId: string`) stable.
+      const settled = await result.accepted;
+      const settledRunId = 'runId' in settled ? settled.runId : result.signal?.id;
       return result.signal === undefined
-        ? { accepted: result.accepted, runId: result.runId }
-        : { accepted: result.accepted, runId: result.runId, signal: result.signal };
+        ? { accepted: true as const, runId: settledRunId }
+        : { accepted: true as const, runId: settledRunId, signal: result.signal };
     } catch (error) {
-      return handleError(error, 'error sending agent signal');
+      return handleSignalRoutingError(error, 'error sending agent signal');
     }
   },
 });
@@ -1864,9 +1923,11 @@ async function handleAgentMessageRoute({
       ...(effectiveThreadId ? { threadId: effectiveThreadId } : {}),
       ...(ifActive ? { ifActive } : {}),
     } as any);
+    const settled = await result.accepted;
+    const settledRunId: string = settled && 'runId' in settled ? settled.runId : runId;
     return result.signal === undefined
-      ? { accepted: result.accepted, runId: result.runId }
-      : { accepted: result.accepted, runId: result.runId, signal: result.signal };
+      ? { accepted: true as const, runId: settledRunId }
+      : { accepted: true as const, runId: settledRunId, signal: result.signal };
   }
 
   if (!effectiveResourceId || !effectiveThreadId) {
@@ -1879,9 +1940,11 @@ async function handleAgentMessageRoute({
     ...(ifActive ? { ifActive } : {}),
     ...ifIdleWithContext,
   } as any);
+  const settled = await result.accepted;
+  const settledRunId: string = settled && 'runId' in settled ? settled.runId : result.signal?.id;
   return result.signal === undefined
-    ? { accepted: result.accepted, runId: result.runId }
-    : { accepted: result.accepted, runId: result.runId, signal: result.signal };
+    ? { accepted: true as const, runId: settledRunId }
+    : { accepted: true as const, runId: settledRunId, signal: result.signal };
 }
 
 export const SEND_AGENT_MESSAGE_ROUTE = createRoute({
@@ -1900,7 +1963,7 @@ export const SEND_AGENT_MESSAGE_ROUTE = createRoute({
     try {
       return await handleAgentMessageRoute({ ...params, methodName: 'sendMessage' });
     } catch (error) {
-      return handleError(error, 'error sending agent message');
+      return handleSignalRoutingError(error, 'error sending agent message');
     }
   },
 });
@@ -1922,7 +1985,7 @@ export const QUEUE_AGENT_MESSAGE_ROUTE = createRoute({
     try {
       return await handleAgentMessageRoute({ ...params, methodName: 'queueMessage' });
     } catch (error) {
-      return handleError(error, 'error queueing agent message');
+      return handleSignalRoutingError(error, 'error queueing agent message');
     }
   },
 });
@@ -2122,6 +2185,7 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
         const clientThreadId = typeof memoryOption.thread === 'string' ? memoryOption.thread : memoryOption.thread?.id;
 
         const effectiveResourceId = getEffectiveResourceId(serverRequestContext, memoryOption.resource);
+        requireEffectiveResourceId(effectiveResourceId);
         const effectiveThreadId = getEffectiveThreadId(serverRequestContext, clientThreadId);
 
         // Validate thread ownership if accessing an existing thread
@@ -2145,6 +2209,8 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
 
       const options = {
         ...restOptions,
+        // Schema validates context permissively; runtime values are ModelMessages.
+        context: restOptions.context as AIV5Type.ModelMessage[] | undefined,
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
         abortSignal,
@@ -2414,6 +2480,70 @@ export const SEND_TOOL_APPROVAL_ROUTE = createRoute({
   },
 });
 
+export const LIST_SUSPENDED_RUNS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/agents/:agentId/suspended-runs',
+  responseType: 'json' as const,
+  pathParamSchema: agentIdPathParams,
+  queryParamSchema: listSuspendedRunsQuerySchema,
+  responseSchema: listSuspendedRunsResponseSchema,
+  summary: 'List suspended runs',
+  description:
+    'Lists suspended agent runs from storage — runs waiting on a tool-call approval or on a tool that suspended. Works after a server restart and across instances.',
+  tags: ['Agents', 'Tools'],
+  requiresAuth: true,
+  handler: async ({ mastra, agentId, requestContext, ...query }) => {
+    try {
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(requestContext),
+      });
+
+      // Honor server-enforced thread/resource scoping from the request context
+      // so clients cannot list suspended runs outside their own scope.
+      const effectiveResourceId = getEffectiveResourceId(requestContext, query.resourceId);
+      const effectiveThreadId = getEffectiveThreadId(requestContext, query.threadId);
+
+      // Validate ownership/FGA before honoring a thread filter — without this a
+      // caller could probe another user's suspended approvals (including
+      // tool-call args) by guessing a threadId. Reject when ownership cannot be
+      // verified (no memory configured, or the thread does not exist) so a
+      // thread-scoped query is never honored unchecked.
+      if (effectiveThreadId) {
+        const memory = await agent.getMemory({ requestContext });
+        if (!memory) {
+          throw new HTTPException(403, {
+            message: 'Access denied: agent has no memory configured to validate thread ownership',
+          });
+        }
+        const thread = await memory.getThreadById({ threadId: effectiveThreadId });
+        if (!thread) {
+          throw new HTTPException(403, { message: 'Access denied: thread not found' });
+        }
+        await enforceThreadAccess({
+          mastra,
+          requestContext,
+          threadId: effectiveThreadId,
+          thread,
+          effectiveResourceId,
+        });
+      }
+
+      return await agent.listSuspendedRuns({
+        threadId: effectiveThreadId,
+        resourceId: effectiveResourceId,
+        fromDate: query.fromDate,
+        toDate: query.toDate,
+        perPage: query.perPage,
+        page: query.page,
+      });
+    } catch (error) {
+      return handleError(error, 'error listing suspended runs');
+    }
+  },
+});
+
 export const DECLINE_TOOL_CALL_ROUTE = createRoute({
   method: 'POST',
   path: '/agents/:agentId/decline-tool-call',
@@ -2509,6 +2639,9 @@ export const RESUME_STREAM_ROUTE = createRoute({
       let authorizedMemoryOption = memoryOption;
       const clientThreadId = typeof memoryOption?.thread === 'string' ? memoryOption.thread : memoryOption?.thread?.id;
       const effectiveResourceId = getEffectiveResourceId(serverRequestContext, memoryOption?.resource);
+      if (memoryOption) {
+        requireEffectiveResourceId(effectiveResourceId);
+      }
       const effectiveThreadId = getEffectiveThreadId(serverRequestContext, clientThreadId);
 
       if (effectiveThreadId) {
@@ -2564,6 +2697,80 @@ export const RESUME_STREAM_ROUTE = createRoute({
       return streamResult.fullStream;
     } catch (error) {
       return handleError(error, 'error resuming agent stream');
+    }
+  },
+});
+
+export const RECOVER_ROUTE = createRoute({
+  method: 'POST',
+  path: '/agents/:agentId/recover',
+  responseType: 'stream' as const,
+  streamFormat: 'sse' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: recoverBodySchema,
+  responseSchema: streamResponseSchema,
+  summary: 'Recover an orphaned durable agent run',
+  description:
+    'Re-drives an orphaned RUNNING durable-agent run after a process restart. Only supported on durable agents (createDurableAgent). Returns a stream that replays past chunks and continues the loop to completion.',
+  tags: ['Agents'],
+  requiresAuth: true,
+  requiresPermission: MastraFGAPermissions.AGENTS_EXECUTE,
+  handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
+    try {
+      if (!params.runId) {
+        throw new HTTPException(400, { message: 'Run id is required' });
+      }
+
+      const { runId, versions } = params;
+      const bodyRequestContext = (params as { requestContext?: Record<string, unknown> }).requestContext;
+
+      const versionOptions = extractVersionOptions(
+        serverRequestContext,
+        bodyRequestContext as Record<string, unknown> | undefined,
+      );
+
+      // Merge body-scoped context and apply version overrides BEFORE
+      // resolving the agent, so that `getAgentFromSystem` picks the
+      // correct draft/published version and any downstream agent lookups
+      // (memory, tools) see the same stashed overrides. Mirrors the order
+      // used by other execute-style routes that predate this one but
+      // needed the same fix.
+      mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
+      stashVersionOverrides(serverRequestContext, versions);
+      ensureDefaultVersionStatus(serverRequestContext, versionOptions);
+
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions,
+      });
+
+      // Durable-agent check via duck-typing to avoid a hard runtime dep on the
+      // DurableAgent class inside @mastra/core (mirrors the pattern used by
+      // Mastra.recoverAllDurableAgents()).
+      if (!isDurableAgentLike(agent)) {
+        throw new HTTPException(400, {
+          message: 'Agent does not support recover. Only durable agents (createDurableAgent) can recover runs.',
+        });
+      }
+
+      const workflowsStore = await mastra.getStorage()?.getStore('workflows');
+      const workflowRun = await workflowsStore?.getWorkflowRunById({
+        workflowName: DurableStepIds.AGENTIC_LOOP,
+        runId,
+      });
+      await validateRunOwnership(workflowRun, getEffectiveResourceId(serverRequestContext, undefined));
+
+      // NOTE: DurableAgent.recover() reads the workflow's requestContext from
+      // the persisted snapshot. serverRequestContext is only used above for
+      // ownership checks and version resolution.
+      const streamResult = await (agent as any).recover(runId, {
+        abortSignal,
+      });
+
+      return streamResult.fullStream;
+    } catch (error) {
+      return handleError(error, 'error recovering agent run');
     }
   },
 });
@@ -2628,6 +2835,9 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
       let authorizedMemoryOption = memoryOption;
       const clientThreadId = typeof memoryOption?.thread === 'string' ? memoryOption.thread : memoryOption?.thread?.id;
       const effectiveResourceId = getEffectiveResourceId(serverRequestContext, memoryOption?.resource);
+      if (memoryOption) {
+        requireEffectiveResourceId(effectiveResourceId);
+      }
       const effectiveThreadId = getEffectiveThreadId(serverRequestContext, clientThreadId);
 
       // Use the same FGA-aware ownership gate as RESUME_STREAM_ROUTE — the
@@ -2668,6 +2878,8 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
         runId,
         toolCallId,
         ...restOptions,
+        // Schema validates context permissively; runtime values are ModelMessages.
+        context: restOptions.context as AIV5Type.ModelMessage[] | undefined,
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
         abortSignal,
@@ -2798,8 +3010,17 @@ export const STREAM_NETWORK_ROUTE = createRoute({
 
       validateBody({ messages });
 
+      // Authorization: context values take precedence over client-provided values
+      let authorizedMemoryOption = params.memory;
+      if (params.memory) {
+        const effectiveResourceId = getEffectiveResourceId(requestContext, params.memory.resource);
+        requireEffectiveResourceId(effectiveResourceId);
+        authorizedMemoryOption = { ...params.memory, resource: effectiveResourceId };
+      }
+
       const streamResult = await agent.network(messages, {
         ...params,
+        memory: authorizedMemoryOption,
       });
 
       return streamResult;
@@ -3210,7 +3431,7 @@ export const GET_AGENT_SKILL_ROUTE = createRoute({
   queryParamSchema: skillDisambiguationQuerySchema,
   responseSchema: getAgentSkillResponseSchema,
   summary: 'Get agent skill',
-  description: 'Returns details for a specific skill available to the agent via its workspace',
+  description: 'Returns details for a specific skill available to the agent (inline or workspace)',
   tags: ['Agents', 'Skills'],
   handler: async ({ mastra, agentId, skillName, path, requestContext }) => {
     try {
@@ -3219,17 +3440,11 @@ export const GET_AGENT_SKILL_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Agent not found' });
       }
 
-      // Get the agent's workspace
-      const workspace = await agent.getWorkspace({ requestContext });
-      if (!workspace?.skills) {
-        throw new HTTPException(404, { message: 'Agent does not have skills configured' });
-      }
-
       // Use the optional ?path= query param for disambiguation, otherwise fall back to name
       const identifier = path ? decodeURIComponent(path) : skillName;
 
-      // Get the skill from the workspace
-      const skill = await workspace.skills.get(identifier);
+      // Get the skill from the agent (searches both inline and workspace skills)
+      const skill = await agent.getSkill(identifier, { requestContext });
       if (!skill) {
         throw new HTTPException(404, { message: `Skill "${identifier}" not found` });
       }

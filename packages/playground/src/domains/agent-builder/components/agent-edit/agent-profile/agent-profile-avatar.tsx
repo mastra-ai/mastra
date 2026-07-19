@@ -1,4 +1,5 @@
-import { Avatar, toast } from '@mastra/playground-ui';
+import { Avatar } from '@mastra/playground-ui/components/Avatar';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { Plus } from 'lucide-react';
 import { useRef } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
@@ -37,7 +38,7 @@ export const AgentProfileAvatar = ({ disabled = false }: AgentProfileAvatarProps
   };
 
   return (
-    <div className="rounded-full bg-surface3 p-1 scale-125" style={{ viewTransitionName: 'agent-avatar' }}>
+    <div className="rounded-full bg-surface3 p-1 scale-[1.65]" style={{ viewTransitionName: 'agent-avatar' }}>
       {interactive ? (
         <>
           <button

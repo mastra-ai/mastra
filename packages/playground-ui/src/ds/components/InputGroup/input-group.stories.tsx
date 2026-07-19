@@ -40,7 +40,7 @@ export const Default: Story = {
 
 export const Variants: Story = {
   render: () => (
-    <div className="flex flex-col gap-3 w-80">
+    <div className="flex w-80 flex-col gap-3">
       <InputGroup variant="default">
         <InputGroupAddon>
           <SearchIcon />
@@ -171,7 +171,13 @@ export const BlockEndAddon: Story = {
 
 export const Sizes: Story = {
   render: () => (
-    <div className="flex flex-col gap-3 w-80">
+    <div className="flex w-80 flex-col gap-3">
+      <InputGroup size="xs">
+        <InputGroupAddon>
+          <SearchIcon />
+        </InputGroupAddon>
+        <InputGroupInput placeholder="Extra Small" />
+      </InputGroup>
       <InputGroup size="sm">
         <InputGroupAddon>
           <SearchIcon />
@@ -268,8 +274,8 @@ export const NumberWithStepper: Story = {
 
 export const OnDifferentSurfaces: Story = {
   render: () => (
-    <div className="flex flex-col gap-4 w-96">
-      <div className="bg-surface1 p-4 rounded-lg border border-border1">
+    <div className="flex w-96 flex-col gap-4">
+      <div className="rounded-lg border border-border1 bg-surface1 p-4">
         <InputGroup>
           <InputGroupAddon>
             <SearchIcon />
@@ -277,7 +283,7 @@ export const OnDifferentSurfaces: Story = {
           <InputGroupInput placeholder="On bg-surface1" />
         </InputGroup>
       </div>
-      <div className="bg-surface2 p-4 rounded-lg border border-border1">
+      <div className="rounded-lg border border-border1 bg-surface2 p-4">
         <InputGroup>
           <InputGroupAddon>
             <SearchIcon />
@@ -285,7 +291,7 @@ export const OnDifferentSurfaces: Story = {
           <InputGroupInput placeholder="On bg-surface2" />
         </InputGroup>
       </div>
-      <div className="bg-surface3 p-4 rounded-lg border border-border1">
+      <div className="rounded-lg border border-border1 bg-surface3 p-4">
         <InputGroup>
           <InputGroupAddon>
             <SearchIcon />
@@ -293,7 +299,7 @@ export const OnDifferentSurfaces: Story = {
           <InputGroupInput placeholder="On bg-surface3" />
         </InputGroup>
       </div>
-      <div className="bg-surface4 p-4 rounded-lg border border-border1">
+      <div className="rounded-lg border border-border1 bg-surface4 p-4">
         <InputGroup>
           <InputGroupAddon>
             <SearchIcon />

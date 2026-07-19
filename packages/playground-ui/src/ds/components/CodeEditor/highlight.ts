@@ -22,6 +22,8 @@ const langAliases: Record<string, string> = {
   json5: 'json',
   md: 'markdown',
   markdown: 'markdown',
+  py: 'python',
+  python: 'python',
   sh: 'bash',
   bash: 'bash',
   shell: 'bash',
@@ -48,6 +50,7 @@ function getHighlighter(): Promise<HighlighterCore> {
           import('shiki/langs/json.mjs'),
           import('shiki/langs/bash.mjs'),
           import('shiki/langs/markdown.mjs'),
+          import('shiki/langs/python.mjs'),
         ],
         engine: createJavaScriptRegexEngine(),
       });

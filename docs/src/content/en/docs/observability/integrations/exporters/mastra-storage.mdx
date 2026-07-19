@@ -11,7 +11,7 @@ The `MastraStorageExporter` persists traces to your configured storage backend, 
 
 :::note
 
-`MastraStorageExporter` was previously called `DefaultExporter`. The original `DefaultExporter` class is still exported from `@mastra/observability` for backward compatibility, but it is deprecated. New code should use `MastraStorageExporter`.
+`MastraStorageExporter` was previously called `DefaultExporter`. The original `DefaultExporter` class is still exported from `@mastra/observability` for backward compatibility, but it's deprecated. New code should use `MastraStorageExporter`.
 
 :::
 
@@ -191,11 +191,11 @@ The MastraStorageExporter includes robust error handling for production use:
 
 ## Dropped observability events
 
-`DefaultExporter` emits structured drop events when it cannot persist observability data. Register an exporter or bridge with `onDroppedEvent` to forward these drops to alerting or monitoring.
+`DefaultExporter` emits structured drop events when it can't persist observability data. Register an exporter or bridge with `onDroppedEvent` to forward these drops to alerting or monitoring.
 
-There are two drop reasons:
+For two reasons events are dropped:
 
-- `unsupported-storage`: The storage provider does not implement the signal type.
+- `unsupported-storage`: The storage provider doesn't implement the signal type.
 - `retry-exhausted`: The exporter retried a batch up to `maxRetries` times and then dropped it.
 
 The following example demonstrates forwarding drop details to a monitoring endpoint:
@@ -254,4 +254,4 @@ new MastraStorageExporter({
 - [Tracing Overview](/docs/observability/tracing/overview)
 - [MastraPlatformExporter](/docs/observability/integrations/exporters/mastra-platform)
 - [Composite Storage](/reference/storage/composite): Combine multiple storage providers
-- [Storage Configuration](/docs/memory/storage)
+- [Storage Configuration](/docs/storage/overview)

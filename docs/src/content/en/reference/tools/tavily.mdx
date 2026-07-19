@@ -1,5 +1,5 @@
 ---
-title: "Reference: Tavily tools | Tools & MCP"
+title: "Reference: Tavily tools | Tools and MCP"
 description: "API reference for @mastra/tavily, which provides web search, extract, crawl, and map tools for Mastra agents."
 packages:
   - "@mastra/tavily"
@@ -51,9 +51,9 @@ All factory functions accept `TavilyClientOptions` from `@tavily/core`:
     isOptional: true,
   },
   {
-    name: 'clientSource',
+    name: 'clientName',
     type: 'string',
-    description: 'Attribution string sent with each request.',
+    description: 'Attribution string sent with each request in the `X-Client-Name` header.',
     isOptional: true,
     defaultValue: "'mastra'",
   },
@@ -560,7 +560,7 @@ const agent = new Agent({
 
 | Variable | Description |
 | - | - |
-| `TAVILY_API_KEY` | Your Tavily API key. Used as the default when `apiKey` is not passed to a factory function. |
+| `TAVILY_API_KEY` | Your Tavily API key. Used as the default when `apiKey` isn't passed to a factory function. |
 
 ## Related
 

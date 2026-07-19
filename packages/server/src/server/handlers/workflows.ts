@@ -346,6 +346,10 @@ export const CREATE_WORKFLOW_RUN_ROUTE = createRoute({
   description: 'Creates a new workflow execution instance with an optional custom run ID',
   tags: ['Workflows'],
   requiresAuth: true,
+  // Creating a run is part of the execute flow (Studio/UI calls this before
+  // starting/streaming a workflow), so allow either permission. `write` is kept
+  // for back-compat with roles that already grant it.
+  requiresPermission: ['workflows:write', 'workflows:execute'],
   handler: async ({ mastra, workflowId, runId, resourceId, disableScorers, requestContext }) => {
     try {
       // Use effective resourceId (context key takes precedence over client-provided value)
@@ -1261,11 +1265,11 @@ export const OBSERVE_STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
 const stepExecutionBodySchema = z.object({
   stepId: z.string(),
   executionPath: z.array(z.number().int().nonnegative()),
-  stepResults: z.record(z.string(), z.any()),
-  state: z.record(z.string(), z.any()),
-  requestContext: z.record(z.string(), z.any()),
-  input: z.any().optional(),
-  resumeData: z.any().optional(),
+  stepResults: z.record(z.string(), z.unknown()),
+  state: z.record(z.string(), z.unknown()),
+  requestContext: z.record(z.string(), z.unknown()),
+  input: z.unknown().optional(),
+  resumeData: z.unknown().optional(),
   retryCount: z.number().int().nonnegative().optional(),
   foreachIdx: z.number().int().nonnegative().optional(),
   format: z.enum(['legacy', 'vnext']).optional(),
@@ -1303,8 +1307,8 @@ async function getStepStrategy(mastra: Mastra): Promise<StepStrategy> {
 }
 
 // Step execution returns the worker's StepResult. Its shape is dynamic
-// (depends on the step's output schema), so we use a permissive z.any().
-const stepExecutionResponseSchema = z.any();
+// and depends on the step's output schema.
+const stepExecutionResponseSchema = z.unknown();
 
 export const EXECUTE_WORKFLOW_STEP_ROUTE = createRoute({
   method: 'POST',
@@ -1407,6 +1411,10 @@ export const RECEIVE_WORKFLOW_EVENT_ROUTE = createRoute({
     'Push-mode entry point for workflow events. Brokers (GCP Pub/Sub push, SNS, EventBridge) POST each event here; Mastra processes it through the same pipeline as pull-mode workers.',
   tags: ['Workflows', 'Worker'],
   requiresAuth: true,
+  // Broker push endpoint: it advances runtime state rather than editing
+  // definitions, so `workflows:execute` is the more accurate fit. `write` is
+  // kept for back-compat with service principals that already grant it.
+  requiresPermission: ['workflows:write', 'workflows:execute'],
   handler: (async ({ mastra, event }: ReceiveWorkflowEventHandlerArgs) => {
     try {
       // The wire schema carries `createdAt` as a string; coerce to Date here

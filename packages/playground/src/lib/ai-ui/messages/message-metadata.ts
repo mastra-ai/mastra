@@ -39,6 +39,14 @@ export interface MessageMetadata {
   mode?: MessageMode;
   status?: 'warning' | 'error' | 'tripwire' | 'pending';
   tripwire?: TripwireMetadata;
+  custom?: {
+    modelMetadata?: {
+      modelId?: string;
+      modelProvider?: string;
+      [key: string]: unknown;
+    };
+    [key: string]: unknown;
+  };
   selectionReason?: string;
   agentInput?: unknown;
   hasMoreMessages?: boolean;

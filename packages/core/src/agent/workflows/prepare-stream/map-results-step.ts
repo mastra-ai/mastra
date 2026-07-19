@@ -15,6 +15,13 @@ import { getModelOutputForTripwire } from '../../trip-wire';
 import type { AgentMethodType } from '../../types';
 import { isSupportedLanguageModel } from '../../utils';
 import type { PrepareStreamRunScope } from './run-scope';
+import {
+  CONVERTED_TOOLS_KEY,
+  INITIAL_SIGNAL_ECHOES_KEY,
+  LOOP_OPTIONS_KEY,
+  MESSAGE_LIST_KEY,
+  PROCESSOR_STATES_KEY,
+} from './run-scope-keys';
 import type { AgentCapabilities, PrepareMemoryStepOutput, PrepareToolsStepOutput } from './schema';
 
 interface MapResultsStepOptions<OUTPUT = undefined> {
@@ -61,8 +68,8 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
     // Class instances written to runScope by upstream steps. These never travel
     // through inputData because the evented engine JSON-serializes step outputs.
-    const messageList = runScope.messageList!;
-    const convertedTools = runScope.convertedTools;
+    const messageList = runScope.getOrThrow(MESSAGE_LIST_KEY);
+    const convertedTools = runScope.get(CONVERTED_TOOLS_KEY);
 
     let threadCreatedByStep = false;
 
@@ -224,6 +231,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
       methodType: modelMethodType,
       agentId,
       requestContext: result.requestContext!,
+      actor: options.actor,
       ...createObservabilityContext({ currentSpan: agentSpan }),
       runId,
       toolChoice: result.toolChoice,
@@ -334,6 +342,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
                 threadExists: memoryData.threadExists,
                 structuredOutput: !!options.structuredOutput?.schema,
                 overrideScorers: options.scorers,
+                onTitleGenerated: options.memory?.onTitleGenerated,
               });
             } catch (e) {
               capabilities.logger.error('Error saving memory on finish', {
@@ -384,19 +393,22 @@ export function createMapResultsStep<OUTPUT = undefined>({
         ...(options.modelSettings || {}),
       },
       messageList,
-      initialSignalEchoes: runScope.initialSignalEchoes,
+      initialSignalEchoes: runScope.get(INITIAL_SIGNAL_ECHOES_KEY),
       maxProcessorRetries: options.maxProcessorRetries,
       // IsTaskComplete scoring for supervisor patterns
       isTaskComplete: options.isTaskComplete,
+      // Native goal config (agent-level): the in-loop goal step judges the
+      // thread's active objective each qualifying iteration.
+      goal: capabilities.agent.__getGoalConfig(),
       // Iteration hook for supervisor patterns
       onIterationComplete: options.onIterationComplete,
-      processorStates: runScope.processorStates,
+      processorStates: runScope.get(PROCESSOR_STATES_KEY),
     };
 
     // Park the assembled (class-instance- and closure-laden) options on the
     // factory closure's runScope. stream-step reads from here; the workflow
     // engine never sees these non-JSON-safe refs in step inputs/outputs.
-    runScope.loopOptions = loopOptions;
+    runScope.set(LOOP_OPTIONS_KEY, loopOptions as ModelLoopStreamArgs<any, unknown>);
 
     return loopOptions;
   };

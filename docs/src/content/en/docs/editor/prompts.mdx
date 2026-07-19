@@ -18,7 +18,7 @@ Prompt blocks are reusable instruction templates that you compose into an agent'
 1. Open an agent's **Instructions** section and select **Add block**.
 1. Pick the saved prompt block from the block picker dialog.
 
-The block appears as a reference in the agent's instruction list. Changes to the original prompt block update every agent that references it.
+The block is added as a reference in the agent's instruction list. Changes to the original prompt block update every agent that references it.
 
 ## Block types
 
@@ -52,7 +52,7 @@ Variables are passed through the agent's `variables` configuration or through [r
 
 Each block can have a **display condition**. A rule group that controls whether the block is included in the final prompt. Conditions are evaluated at runtime against the agent's variables and request context.
 
-A rule group uses **AND** or **OR** logic with one or more conditions. Each condition checks a context field against a value using an operator:
+A rule group uses `AND` or `OR` logic with one or more conditions. Each condition checks a context field against a value using an operator:
 
 | Operator | Description |
 | - | - |
@@ -63,7 +63,7 @@ A rule group uses **AND** or **OR** logic with one or more conditions. Each cond
 | `in` / `not_in` | Checks if a value is in an array. |
 | `exists` / `not_exists` | Checks if the field is present. |
 
-Rule groups can be nested, so you can combine AND and OR conditions for complex logic.
+Rule groups can be nested, so you can combine `AND` and `OR` conditions for complex logic.
 
 In the Studio, open a block's **Display conditions** panel to set up rules visually. You can also configure conditions programmatically through the API. Blocks without conditions are always included.
 
@@ -128,11 +128,7 @@ await editor.agent.update({
 })
 ```
 
-:::note
-
 See the [MastraEditor reference](/reference/editor/mastra-editor#namespaces) for the full `editor.prompt` API.
-
-:::
 
 ## Versioning
 

@@ -5,6 +5,7 @@ packages:
   - "@mastra/clickhouse"
   - "@mastra/core"
   - "@mastra/libsql"
+  - "@mastra/mongodb"
   - "@mastra/pg"
 ---
 
@@ -23,7 +24,7 @@ npm install @mastra/core@latest
 You'll also need to install the storage providers you want to compose:
 
 ```bash npm2yarn
-npm install @mastra/pg@latest @mastra/libsql@latest
+npm install @mastra/pg@latest @mastra/libsql@latest @mastra/mongodb@latest
 ```
 
 ## Storage domains
@@ -96,6 +97,64 @@ export const mastra = new Mastra({
 })
 ```
 
+### Mixed backends
+
+Use domain classes from each storage package to route different domains to different backends. The following example stores memory and workflow state in MongoDB, then routes observability to ClickHouse:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraCompositeStore } from '@mastra/core/storage'
+import { ObservabilityStorageClickhouse } from '@mastra/clickhouse'
+import { MemoryStorageMongoDB, WorkflowsStorageMongoDB } from '@mastra/mongodb'
+
+export const mastra = new Mastra({
+  storage: new MastraCompositeStore({
+    id: 'composite',
+    domains: {
+      memory: new MemoryStorageMongoDB({
+        uri: process.env.MONGODB_URI,
+        dbName: 'mastra_memory',
+      }),
+      workflows: new WorkflowsStorageMongoDB({
+        uri: process.env.MONGODB_URI,
+        dbName: 'mastra_workflows',
+      }),
+      observability: new ObservabilityStorageClickhouse({
+        url: process.env.CLICKHOUSE_URL,
+        username: process.env.CLICKHOUSE_USERNAME,
+        password: process.env.CLICKHOUSE_PASSWORD,
+      }),
+    },
+  }),
+})
+```
+
+### Disabling a domain
+
+Set a domain to `false` to disable it. A disabled domain doesn't fall back to `default`, so data for that domain isn't persisted:
+
+```typescript title="src/mastra/index.ts"
+import { MastraCompositeStore } from '@mastra/core/storage'
+import { PostgresStore } from '@mastra/pg'
+import { Mastra } from '@mastra/core'
+
+const pgStore = new PostgresStore({
+  id: 'pg',
+  connectionString: process.env.DATABASE_URL,
+})
+
+export const mastra = new Mastra({
+  storage: new MastraCompositeStore({
+    id: 'composite',
+    default: pgStore,
+    domains: {
+      // don't persist traces and spans
+      observability: false,
+    },
+  }),
+})
+```
+
 ## Options
 
 <PropertiesTable
@@ -123,7 +182,7 @@ export const mastra = new Mastra({
     name: 'domains',
     type: 'object',
     description:
-      'Individual domain overrides. Each domain can come from a different storage adapter. These take precedence over both `editor` and `default` storage.',
+      'Individual domain overrides. Each domain can come from a different storage adapter. These take precedence over both `editor` and `default` storage. Set a domain to `false` to disable it entirely; a disabled domain does not fall back to `editor` or `default`.',
     isOptional: true,
     properties: [
       {
@@ -274,9 +333,41 @@ const storage = new MastraCompositeStore({
 
 :::note
 
-`ObservabilityStorageClickhouseVNext` is the current observability domain implementation. The legacy `ObservabilityStorageClickhouse` class is also exported and remains supported for projects that have not migrated. See the [ClickHouse storage reference](/reference/storage/clickhouse) for details.
+`ObservabilityStorageClickhouseVNext` is the current observability domain implementation. The legacy `ObservabilityStorageClickhouse` class is also exported and remains supported for projects that haven't migrated. See the [ClickHouse storage reference](/reference/storage/clickhouse) for details.
 
 :::
+
+### Replicated ClickHouse for multi-replica clusters
+
+For self-managed ClickHouse clusters with multiple replicas, set `replication` so Mastra emits `ReplicatedMergeTree` engines and applies `ON CLUSTER` to its DDL:
+
+```typescript
+import { MastraCompositeStore } from '@mastra/core/storage'
+import { MemoryPG, WorkflowsPG, ScoresPG } from '@mastra/pg'
+import { ObservabilityStorageClickhouseVNext } from '@mastra/clickhouse'
+
+const storage = new MastraCompositeStore({
+  id: 'composite',
+  domains: {
+    memory: new MemoryPG({ connectionString: process.env.DATABASE_URL }),
+    workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
+    scores: new ScoresPG({ connectionString: process.env.DATABASE_URL }),
+    observability: new ObservabilityStorageClickhouseVNext({
+      url: process.env.CLICKHOUSE_URL,
+      username: process.env.CLICKHOUSE_USERNAME,
+      password: process.env.CLICKHOUSE_PASSWORD,
+      replication: {
+        cluster: 'production_cluster',
+        // Optional (defaults shown):
+        // zookeeperPath: '/clickhouse/tables/{shard}/{database}/{table}',
+        // replicaName: '{replica}',
+      },
+    }),
+  },
+})
+```
+
+Don't set `replication` on ClickHouse Cloud. Cloud rewrites `MergeTree` to `SharedMergeTree` server-side. See the [ClickHouse storage reference](/reference/storage/clickhouse) for the full config shape and operator notes.
 
 :::info
 

@@ -1,15 +1,16 @@
-import * as React from 'react';
-import type { ThemedToken } from 'shiki';
-
-import { highlight } from '../CodeEditor';
-import { CopyButton } from '../CopyButton';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../Select';
-import { Tab, TabList, Tabs } from '../Tabs';
-import { useTheme } from '../ThemeProvider';
+import type { ReactNode } from 'react';
+import { Code } from '../Code/code';
+import { CopyButton } from '../CopyButton/copy-button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../Select/select';
+import { TabList } from '../Tabs/tabs-list';
+import { Tabs } from '../Tabs/tabs-root';
+import { Tab } from '../Tabs/tabs-tab';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 export type CodeBlockSelector = 'select' | 'tabs';
+
+export type CodeBlockOverflow = 'wrap' | 'scroll';
 
 export interface CodeBlockOption {
   label: string;
@@ -24,8 +25,12 @@ export interface CodeBlockProps {
   selector?: CodeBlockSelector;
   fileName?: string;
   lang?: string;
+  /** `wrap` (default) breaks long lines — best for commands and snippets.
+   *  `scroll` preserves columns behind a horizontal scroll — best for source code. */
+  overflow?: CodeBlockOverflow;
   copyMessage?: string;
   copyTooltip?: string;
+  actions?: ReactNode;
   className?: string;
 }
 
@@ -37,14 +42,17 @@ export function CodeBlock({
   selector = 'select',
   fileName,
   lang,
+  overflow = 'wrap',
   copyMessage,
   copyTooltip,
+  actions,
   className,
 }: CodeBlockProps) {
   const hasOptions = options && options.length > 0;
   const useTabs = hasOptions && selector === 'tabs';
   const useSelect = hasOptions && selector === 'select';
-  const activeValue = value ?? options?.[0]?.value;
+  const firstOption = options?.[0];
+  const activeValue = value ?? firstOption?.value;
 
   return (
     <figure
@@ -53,15 +61,20 @@ export function CodeBlock({
         className,
       )}
     >
-      {useTabs && options && (
-        <Tabs defaultTab={options[0].value} value={activeValue} onValueChange={onValueChange ?? (() => {})}>
-          <TabList>
-            {options.map(opt => (
-              <Tab key={opt.value} value={opt.value}>
-                {opt.label}
-              </Tab>
-            ))}
-          </TabList>
+      {useTabs && firstOption && (
+        <Tabs defaultTab={firstOption.value} value={activeValue} onValueChange={onValueChange ?? (() => {})}>
+          <div className="flex items-stretch">
+            <div className="min-w-0 flex-1">
+              <TabList>
+                {options.map(opt => (
+                  <Tab key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </Tab>
+                ))}
+              </TabList>
+            </div>
+            {actions && <div className="flex shrink-0 items-center border-b border-border1 pr-2 pl-3">{actions}</div>}
+          </div>
         </Tabs>
       )}
 
@@ -79,102 +92,41 @@ export function CodeBlock({
               ))}
             </SelectContent>
           </Select>
+          {actions && <div className="ml-auto flex items-center">{actions}</div>}
         </div>
       )}
 
       {!hasOptions && fileName && (
         <div className="flex items-center border-b border-border2/40 px-4 py-2">
           <figcaption className="font-mono text-ui-sm text-neutral4">{fileName}</figcaption>
+          {actions && <div className="ml-auto flex items-center">{actions}</div>}
         </div>
       )}
 
+      {!hasOptions && !fileName && actions && (
+        <div className="flex items-center justify-end border-b border-border2/40 px-2 py-1.5">{actions}</div>
+      )}
+
       <div className="relative">
-        <HighlightedCode code={code} lang={lang} />
+        <Code
+          code={code}
+          lang={lang}
+          className={cn(
+            'px-4 py-3 font-mono text-ui-sm text-neutral5',
+            overflow === 'scroll' ? 'overflow-x-auto whitespace-pre' : 'break-all whitespace-pre-wrap',
+          )}
+        />
         <CopyButton
           content={code}
           copyMessage={copyMessage}
           tooltip={copyTooltip}
           size="sm"
           className={cn(
-            'absolute top-2 right-2 opacity-100 pointer-fine:opacity-0 group-hover:opacity-100 group-focus-within:opacity-100',
+            'absolute top-2 right-2 opacity-100 group-focus-within:opacity-100 group-hover:opacity-100 pointer-fine:opacity-0',
             transitions.opacity,
           )}
         />
       </div>
     </figure>
-  );
-}
-
-interface HighlightedCodeProps {
-  code: string;
-  lang?: string;
-}
-
-// Shiki runs with dual themes (`defaultColor: false`), so each token's colors
-// arrive as `--shiki-light` / `--shiki-dark` CSS variables on `htmlStyle` rather
-// than as a concrete `color`. Nothing in the app reads those variables, so we
-// resolve them into a real `color`/`backgroundColor` here, picking the variant
-// that matches the active theme. We deliberately do not spread `htmlStyle` (which
-// would inline both variables and pin one theme regardless of the app's toggle).
-function tokenStyle(token: ThemedToken, isDark: boolean): React.CSSProperties | undefined {
-  if (token.htmlStyle && typeof token.htmlStyle === 'object') {
-    const vars = token.htmlStyle as Record<string, string>;
-    const color = isDark ? vars['--shiki-dark'] : vars['--shiki-light'];
-    const background = isDark ? vars['--shiki-dark-bg'] : vars['--shiki-light-bg'];
-    const style: React.CSSProperties = {};
-    if (color) style.color = color;
-    if (background) style.backgroundColor = background;
-    return Object.keys(style).length ? style : undefined;
-  }
-  // Single-theme fallback: Shiki put the color directly on the token.
-  return token.color ? { color: token.color } : undefined;
-}
-
-function HighlightedCode({ code, lang }: HighlightedCodeProps) {
-  const [tokens, setTokens] = React.useState<ThemedToken[][] | null>(null);
-  const isDark = useTheme().resolvedTheme === 'dark';
-
-  React.useEffect(() => {
-    if (!lang) {
-      setTokens(null);
-      return;
-    }
-    setTokens(null);
-    let cancelled = false;
-    void highlight(code, lang)
-      .then(result => {
-        if (!cancelled && result) setTokens(result);
-      })
-      .catch(() => {
-        // Highlighting failed — plain-text fallback remains visible.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [code, lang]);
-
-  const preClass = 'px-4 py-3 font-mono text-ui-sm text-neutral5 whitespace-pre-wrap break-all';
-
-  if (!lang || !tokens) {
-    return <pre className={preClass}>{code}</pre>;
-  }
-
-  return (
-    <pre className={preClass}>
-      <code>
-        {tokens.map((line, lineIndex) => (
-          <React.Fragment key={lineIndex}>
-            <span>
-              {line.map((token, tokenIndex) => (
-                <span key={tokenIndex} style={tokenStyle(token, isDark)}>
-                  {token.content}
-                </span>
-              ))}
-            </span>
-            {lineIndex !== tokens.length - 1 && '\n'}
-          </React.Fragment>
-        ))}
-      </code>
-    </pre>
   );
 }

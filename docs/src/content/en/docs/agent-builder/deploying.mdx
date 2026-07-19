@@ -15,16 +15,16 @@ packages:
 The Agent Builder is part of the Mastra Enterprise Edition. Production deployments require a valid EE license. [Contact sales](https://mastra.ai/contact) for more information.
 :::
 
-Production deployments swap the local primitives in the Quickstart for cloud-backed equivalents. The shape of the `Mastra` and `MastraEditor` config doesn't change — only the providers behind it.
+Production deployments swap the local primitives in the Quickstart for cloud-backed equivalents. The shape of the `Mastra` and `MastraEditor` config doesn't change, only the providers behind it.
 
 ## What a production deployment needs
 
-1. **EE license** — a valid `MASTRA_EE_LICENSE` so the server will start with the Builder enabled.
-1. **Hosted storage** — a shared store for agents, skills, runs, and memory.
-1. **Shared workspace filesystem** — survives across instances; `local` is single-node only.
-1. **Cloud sandbox** — runs agent commands safely; `local` is unsafe in shared environments.
-1. **Auth and RBAC** — gates the Builder UI and `/agent-builder/*` routes.
-1. **Public base URL for channels** — Slack and other channel providers need a reachable URL.
+1. **EE license**: A valid `MASTRA_EE_LICENSE` so the server will start with the Builder enabled.
+1. **Hosted storage**: A shared store for agents, skills, runs, and memory.
+1. **Shared workspace filesystem**: Survives across instances; `local` is single-node only.
+1. **Cloud sandbox**: Runs agent commands safely; `local` is unsafe in shared environments.
+1. **Auth and RBAC**: Gates the Builder UI and `/agent-builder/*` routes.
+1. **Public base URL for channels**: Slack and other channel providers need a reachable URL.
 
 ## EE license
 
@@ -40,6 +40,7 @@ import { LibSQLStore } from '@mastra/libsql'
 
 new Mastra({
   storage: new LibSQLStore({
+    id: 'mastra-storage',
     url: process.env.DATABASE_URL!,
     authToken: process.env.DATABASE_AUTH_TOKEN,
   }),
@@ -94,7 +95,7 @@ new Mastra({
 
 `S3Filesystem` uses the default AWS credential chain (environment variables, `~/.aws` config, IAM roles, EC2 instance profile). For long-running deployments, use a credential provider function so credentials refresh automatically.
 
-`DockerSandbox` and `VercelSandbox` are alternative cloud sandbox providers — pick whichever matches your runtime.
+`DockerSandbox`, `VercelSandbox`, and `VercelServerlessSandbox` are alternative cloud sandbox providers. Pick whichever matches your runtime.
 
 :::warning
 
@@ -114,5 +115,5 @@ Slack needs to reach your server through a public URL. Pass `baseUrl` to `SlackP
 
 ## Related
 
-- [Access control](/docs/agent-builder/access-control) — auth and RBAC setup.
-- [Channels](/docs/agent-builder/channels) — Slack `baseUrl` and channel-specific setup.
+- [Access control](/docs/agent-builder/access-control): Auth and RBAC setup.
+- [Channels](/docs/agent-builder/channels): Slack `baseUrl` and channel-specific setup.

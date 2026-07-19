@@ -1,6 +1,6 @@
 {
   "name": "@mastra/claude",
-  "version": "0.1.1-alpha.0",
+  "version": "0.3.0",
   "description": "Claude SDK package for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -34,11 +34,11 @@
   "author": "",
   "license": "Apache-2.0",
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.3.159",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.207",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.19.15",
+    "@types/node": "22.20.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^10.4.1",

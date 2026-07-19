@@ -64,10 +64,12 @@ export const TreeInput = React.forwardRef<HTMLLIElement, TreeInputProps>(
       <li
         ref={ref}
         role="treeitem"
+        aria-level={depth + 1}
+        data-tree-item-kind="input"
         className={cn(
           'group flex h-7 min-w-0 items-center gap-1.5 rounded-sm px-1',
           transitions.colors,
-          'focus-within:outline-hidden focus-within:ring-1 focus-within:ring-accent1 focus-within:shadow-focus-ring',
+          'focus-within:bg-surface4 focus-within:text-neutral6 focus-within:outline-hidden',
           className,
         )}
         style={{ paddingLeft: depth * 12 + 18 }}

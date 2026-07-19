@@ -289,6 +289,35 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
   }
 
   /**
+   * Custom span serialization to prevent leaking internal state (like auth
+   * tokens stored in the private `registry` Map) into observability spans.
+   *
+   * `deepClean` in `@mastra/observability` calls this method before falling
+   * back to `Object.keys()` — which would walk the runtime-enumerable
+   * `registry` field and serialize its raw Map entries (including any
+   * bearer tokens) into exported spans.
+   */
+  serializeForSpan(): Record<string, unknown> {
+    const safe: Record<string, unknown> = {};
+    for (const [key, value] of this.registry.entries()) {
+      if (key === MASTRA_AUTH_TOKEN_KEY) {
+        safe[key] = '[REDACTED]';
+      } else if (
+        value === null ||
+        value === undefined ||
+        typeof value === 'string' ||
+        typeof value === 'number' ||
+        typeof value === 'boolean'
+      ) {
+        safe[key] = value;
+      } else {
+        safe[key] = `[${typeof value}]`;
+      }
+    }
+    return safe;
+  }
+
+  /**
    * Get all values as a typed object for destructuring.
    * Returns Record<string, any> when untyped, or the Values type when typed.
    *

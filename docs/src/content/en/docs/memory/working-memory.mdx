@@ -10,8 +10,6 @@ packages:
   - "@mastra/upstash"
 ---
 
-import YouTube from "@site/src/components/YouTube-player";
-
 # Working Memory
 
 While [message history](/docs/memory/message-history) and [semantic recall](./semantic-recall) help agents remember conversations, working memory allows them to maintain persistent information about users across interactions.
@@ -19,6 +17,14 @@ While [message history](/docs/memory/message-history) and [semantic recall](./se
 Think of it as the agent's active thoughts or scratchpad – the key information they keep available about the user or task. It's similar to how a person would naturally remember someone's name, preferences, or important details during a conversation.
 
 This is useful for maintaining ongoing state that's always relevant and should always be available to the agent.
+
+If you use [Observational Memory](/docs/memory/observational-memory), `observationalMemory.observation.manageWorkingMemory` lets OM update working memory for the agent.
+
+:::tip[📹 Watch]
+
+Watch [Mastra working memory](https://www.youtube.com/watch?v=UMy_JHLf1n8\&pp=ygUVbWFzdHJhIHdvcmtpbmcgbWVtb3J5) to see how agents keep persistent user context available across interactions.
+
+:::
 
 Working memory can persist at two different scopes:
 
@@ -53,9 +59,7 @@ const agent = new Agent({
 
 ## How it works
 
-Working memory is a block of Markdown text that the agent is able to update over time to store continuously relevant information:
-
-<YouTube id="UMy_JHLf1n8" />
+Working memory is a block of Markdown text that the agent is able to update over time to store continuously relevant information.
 
 ## Memory persistence scopes
 
@@ -418,11 +422,11 @@ const response = await agent.generate('What do you know about me?', {
 
 ## Opt in to state signals (experimental)
 
-By default, working memory reaches the model as part of the system message. You can opt into delivering it as a [state signal](/docs/agents/signals) instead by setting `useStateSignals: true`:
+By default, working memory reaches the model as part of the system message. You can opt into delivering it as a [state signal](/docs/long-running-agents/signals) instead by setting `useStateSignals: true`:
 
 ```typescript
 const memory = new Memory({
-  storage: new LibSQLStore({ url: 'file:./mastra.db' }),
+  storage: new LibSQLStore({ id: 'mastra-storage', url: 'file:./mastra.db' }),
   options: {
     workingMemory: {
       enabled: true,
@@ -436,12 +440,12 @@ const memory = new Memory({
 What changes:
 
 - **Storage is identical.** The same resource/thread `workingMemory` field is read and written.
-- **The tool is the same shape, exposed under a new name.** Writes still flow through the same underlying tool; on this path it is registered as `setWorkingMemory` (instead of `updateWorkingMemory`). The rename keeps legacy strip filters from removing tool-call parts so they persist as a normal audit trail and the next model step picks the new value up automatically.
+- **The tool is the same shape, exposed under a new name.** Writes still flow through the same underlying tool; on this path it's registered as `setWorkingMemory` (instead of `updateWorkingMemory`). The rename keeps legacy strip filters from removing tool-call parts so they persist as a normal audit trail and the next model step picks the new value up automatically.
 - **Delivery only.** Instead of folding into the system prompt, `Memory` auto-attaches a `WorkingMemoryStateProcessor` that emits the current working memory as a `state` signal with `stateId: 'working-memory'`.
 
 You inherit the standard state-signal benefits: thread-scoped tracking metadata, `cacheKey` dedup so identical snapshots are only emitted once, and `contextWindow.hasSnapshot` re-injection when an older snapshot rolls out of the window.
 
-The default (`useStateSignals: false`) keeps the existing system-message behavior unchanged. `useStateSignals` is not supported with template working memory `version: 'vnext'`.
+The default (`useStateSignals: false`) keeps the existing system-message behavior unchanged. `useStateSignals` isn't supported with template working memory `version: 'vnext'`.
 
 ## Examples
 

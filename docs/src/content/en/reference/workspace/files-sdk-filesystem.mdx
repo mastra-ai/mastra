@@ -7,13 +7,7 @@ packages:
 
 # FilesSDKFilesystem
 
-Stores files in any storage backend supported by [FilesSDK](https://files-sdk.dev) — a unified abstraction over S3, Cloudflare R2, Google Cloud Storage, Azure Blob, Vercel Blob, MinIO, the local filesystem, and more.
-
-:::info
-
-For interface details, see [WorkspaceFilesystem Interface](/reference/workspace/filesystem).
-
-:::
+Stores files in any storage backend supported by [FilesSDK](https://files-sdk.dev) — a unified abstraction over S3, Cloudflare R2, Google Cloud Storage, Azure Blob, Vercel Blob, MinIO, the local filesystem, and more. For interface details, see [WorkspaceFilesystem Interface](/reference/workspace/filesystem).
 
 Use `FilesSDKFilesystem` when you want a single adapter that can target multiple storage backends with the same code. Swap the underlying driver without changing the workspace setup. If you only target one backend and want first-class options for that backend, prefer the dedicated provider (for example [`S3Filesystem`](/reference/workspace/s3-filesystem) or [`GCSFilesystem`](/reference/workspace/gcs-filesystem)).
 
@@ -48,6 +42,7 @@ const workspace = new Workspace({
 })
 
 const agent = new Agent({
+  id: 'file-agent',
   name: 'file-agent',
   model: '__GATEWAY_ANTHROPIC_MODEL_OPUS__',
   workspace,
@@ -208,10 +203,10 @@ const url = await filesystem.files.url('reports/q3.pdf')
 `FilesSDKFilesystem` treats the configured backend as an object store, even when the underlying adapter is hierarchical (such as `fs`). This keeps behavior consistent across adapters:
 
 - **`mkdir`** is a no-op. Directories exist implicitly when keys with that prefix exist.
-- **`exists`** returns `true` only when an exact key is present as a file, or when the path is a prefix that contains at least one child key. Empty leftover directories on hierarchical adapters do not count.
-- **`deleteFile`** throws `FileNotFoundError` when the key does not exist, unless `{ force: true }` is passed.
+- **`exists`** returns `true` only when an exact key is present as a file, or when the path is a prefix that contains at least one child key. Empty leftover directories on hierarchical adapters don't count.
+- **`deleteFile`** throws `FileNotFoundError` when the key doesn't exist, unless `{ force: true }` is passed.
 - **`deleteFile`** on a directory delegates to `rmdir({ recursive: true })`, matching the [`S3Filesystem`](/reference/workspace/s3-filesystem) and [`GCSFilesystem`](/reference/workspace/gcs-filesystem) behavior.
-- **`moveFile`** is implemented as `copyFile` followed by `deleteFile`. It is **not atomic** — if the source delete fails after a successful copy, the destination remains and the source is not removed.
+- **`moveFile`** is implemented as `copyFile` followed by `deleteFile`. it's **not atomic** — if the source delete fails after a successful copy, the destination remains and the source isn't removed.
 - **`appendFile`** is a read-modify-write operation. Concurrent appends to the same key may overwrite each other; this is inherent to object storage and not specific to FilesSDK.
 - **`readdir({ recursive: true })`** emits intermediate directory entries (for example, `a/b` is emitted alongside `a/b/c.txt`).
 

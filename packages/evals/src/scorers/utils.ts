@@ -81,7 +81,7 @@ const isRecord = (value: unknown): value is Record<string, any> => {
 };
 
 const getTextFromValue = (value: unknown): string | undefined => {
-  if (typeof value === 'string') return value;
+  if (typeof value === 'string') return value === '' ? undefined : value;
   if (Array.isArray(value)) {
     const textParts = value
       .filter(part => isRecord(part) && part.type === 'text' && typeof part.text === 'string')
@@ -90,10 +90,13 @@ const getTextFromValue = (value: unknown): string | undefined => {
   }
   if (!isRecord(value)) return undefined;
 
+  const fromParts = Array.isArray(value.parts) ? getTextFromValue(value.parts) : undefined;
+
   return (
     getTextFromValue(value.content) ??
-    (typeof value.text === 'string' ? value.text : undefined) ??
-    (typeof value.body === 'string' ? value.body : undefined)
+    (typeof value.text === 'string' && value.text !== '' ? value.text : undefined) ??
+    (typeof value.body === 'string' && value.body !== '' ? value.body : undefined) ??
+    fromParts
   );
 };
 
@@ -121,10 +124,31 @@ export const isScorerRunOutputForAgent = (output: unknown): output is ScorerRunO
   return Array.isArray(output) && output.every(isMastraDBMessageLike);
 };
 
+/**
+ * Resolves the effective role of a message, accounting for agent signal messages.
+ *
+ * Messages delivered through the agent subscription / signal API are persisted with
+ * `role: 'signal'` and carry their semantic role (e.g. `user`) on `type` and on
+ * `content.metadata.signal.{type,tagName}`. Treat those as their underlying role so
+ * helpers like `getUserMessageFromRunInput` can find them.
+ */
+const getEffectiveMessageRole = (message: Record<string, any>): string | undefined => {
+  if (message.role !== 'signal') return typeof message.role === 'string' ? message.role : undefined;
+
+  const signalMeta =
+    isRecord(message.content) && isRecord(message.content.metadata) ? message.content.metadata.signal : undefined;
+
+  const tagName = isRecord(signalMeta) && typeof signalMeta.tagName === 'string' ? signalMeta.tagName : undefined;
+  const signalType = isRecord(signalMeta) && typeof signalMeta.type === 'string' ? signalMeta.type : undefined;
+  const topLevelType = typeof message.type === 'string' ? message.type : undefined;
+
+  return tagName ?? signalType ?? topLevelType;
+};
+
 const getTextFromMessages = (messages: unknown, role: string): string | undefined => {
   if (!Array.isArray(messages)) return undefined;
 
-  const message = messages.find(message => isRecord(message) && message.role === role);
+  const message = messages.find(message => isRecord(message) && getEffectiveMessageRole(message) === role);
   return message ? getTextFromValue(message) : undefined;
 };
 

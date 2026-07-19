@@ -1,4 +1,4 @@
-import { cn } from '@mastra/playground-ui';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { useFormContext, useWatch } from 'react-hook-form';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
 
@@ -30,7 +30,7 @@ export const AgentProfileDetails = ({ disabled = false, className, mode = 'defau
   return (
     <div
       className={cn(
-        'flex w-full flex-col items-start gap-0.5 max-w-[60ch]',
+        'flex w-full flex-col items-start gap-0.5 max-w-[44ch]',
         isHighlighted && HIGHLIGHTED_CLASSNAME,
         className,
       )}

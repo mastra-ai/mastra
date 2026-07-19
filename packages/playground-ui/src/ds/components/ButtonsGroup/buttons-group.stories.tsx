@@ -174,7 +174,7 @@ export const WithText: Story = {
 };
 
 /**
- * Searchbar + dropdown fused into a single pill — the recommended composition. The search
+ * Search input + dropdown fused into a single pill — the recommended composition. The search
  * segment is an `InputGroup` (icon + input in one bordered box) nested inside the
  * `ButtonsGroup` merger; an interactive clear button would go in an `InputGroupAddon`
  * (`align="inline-end"`) with an `InputGroupButton`.
@@ -193,7 +193,7 @@ export const SearchWithDropdown: Story = {
     const [search, setSearch] = useState('');
     const [sort, setSort] = useState('recent');
     return (
-      <ButtonsGroup spacing="close" className="w-[420px]">
+      <ButtonsGroup spacing="close" className="w-105">
         <InputGroup variant="outline" size="default">
           <InputGroupAddon align="inline-start">
             <SearchIcon />
@@ -207,7 +207,7 @@ export const SearchWithDropdown: Story = {
           />
         </InputGroup>
         <Select value={sort} onValueChange={setSort}>
-          <SelectTrigger aria-label="Sort by" className="rounded-full">
+          <SelectTrigger aria-label="Sort by" size="lg" className="rounded-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent align="end">

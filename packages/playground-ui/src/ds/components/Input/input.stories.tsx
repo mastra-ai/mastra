@@ -16,7 +16,7 @@ const meta: Meta<typeof Input> = {
     },
     size: {
       control: { type: 'select' },
-      options: ['sm', 'md', 'lg'],
+      options: ['xs', 'sm', 'md', 'default', 'lg'],
     },
     disabled: {
       control: { type: 'boolean' },
@@ -40,7 +40,7 @@ export const Default: Story = {
 
 export const Variants: Story = {
   render: () => (
-    <div className="flex flex-col gap-3 w-64">
+    <div className="flex w-64 flex-col gap-3">
       <Input variant="default" placeholder="Default" />
       <Input variant="filled" placeholder="Filled" />
       <Input variant="outline" placeholder="Outline" />
@@ -51,7 +51,8 @@ export const Variants: Story = {
 
 export const Sizes: Story = {
   render: () => (
-    <div className="flex flex-col gap-3 w-64">
+    <div className="flex w-64 flex-col gap-3">
+      <Input size="xs" placeholder="Extra Small" />
       <Input size="sm" placeholder="Small" />
       <Input size="md" placeholder="Medium" />
       <Input size="default" placeholder="Default" />
@@ -132,11 +133,11 @@ export const Number: Story = {
 
 export const SizesWithButton: Story = {
   render: () => (
-    <div className="grid grid-cols-[200px_auto] gap-3 items-center">
-      {(['sm', 'md', 'default', 'lg'] as const).map(size => (
+    <div className="grid grid-cols-[200px_auto] items-center gap-3">
+      {(['xs', 'sm', 'md', 'default', 'lg'] as const).map(size => (
         <Fragment key={size}>
           <Input size={size} placeholder={size} />
-          <Button size={size} className="justify-self-start">
+          <Button size={size === 'default' ? 'lg' : size} className="justify-self-start">
             Button
           </Button>
         </Fragment>
@@ -155,17 +156,17 @@ export const Error: Story = {
 
 export const OnDifferentSurfaces: Story = {
   render: () => (
-    <div className="flex flex-col gap-4 w-96">
-      <div className="bg-surface1 p-4 rounded-lg border border-border1">
+    <div className="flex w-96 flex-col gap-4">
+      <div className="rounded-lg border border-border1 bg-surface1 p-4">
         <Input placeholder="On bg-surface1 (darkest in dark mode)" />
       </div>
-      <div className="bg-surface2 p-4 rounded-lg border border-border1">
+      <div className="rounded-lg border border-border1 bg-surface2 p-4">
         <Input placeholder="On bg-surface2" />
       </div>
-      <div className="bg-surface3 p-4 rounded-lg border border-border1">
+      <div className="rounded-lg border border-border1 bg-surface3 p-4">
         <Input placeholder="On bg-surface3" />
       </div>
-      <div className="bg-surface4 p-4 rounded-lg border border-border1">
+      <div className="rounded-lg border border-border1 bg-surface4 p-4">
         <Input placeholder="On bg-surface4 (lightest)" />
       </div>
     </div>

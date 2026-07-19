@@ -407,6 +407,11 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
     this.#registry.clear();
   }
 
+  /** Flush all registered instances without shutting down. */
+  async flush(): Promise<void> {
+    await this.#registry.flush();
+  }
+
   /** Shut down all registered instances, flushing any pending data. */
   async shutdown(): Promise<void> {
     await this.#registry.shutdown();

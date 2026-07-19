@@ -10,7 +10,7 @@
  */
 
 import { createRequire } from 'node:module';
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL, fileURLToPath } from 'node:url';
 
 import type { ProcessHandle, SandboxProcessManager } from '../sandbox/process-manager';
 import type { LSPServerDef } from './types';
@@ -101,6 +101,31 @@ function toFileUri(fsPath: string): string {
   return pathToFileURL(fsPath).toString();
 }
 
+/**
+ * Normalize a file:// URI to a canonical fs-path-based key for diagnostics
+ * map storage/lookup. On Windows, different LSP servers emit different
+ * canonical forms for the same path (e.g. `file:///C:/...` vs
+ * `file:///c%3A/...`), so we convert back to an OS path and compare those
+ * instead of comparing URI strings directly.
+ */
+export function diagnosticsKey(uriOrPath: string): string {
+  let fsPath: string;
+  try {
+    fsPath = uriOrPath.startsWith('file:') ? fileURLToPath(uriOrPath) : uriOrPath;
+  } catch {
+    return uriOrPath;
+  }
+  // Normalize Windows drive-letter paths so they compare equal regardless of
+  // drive-letter casing or whether fileURLToPath produced a leading slash
+  // (e.g. '/C:/Users/...' vs 'C:/Users/...' vs 'c:\\Users\\...'), independent
+  // of the OS this code happens to run on.
+  const driveMatch = fsPath.match(/^[\\/]?([a-zA-Z]):([\\/].*)$/);
+  if (driveMatch) {
+    return `${driveMatch[1]!.toLowerCase()}:${driveMatch[2]}`;
+  }
+  return fsPath;
+}
+
 // =============================================================================
 // Timeout Helper
 // =============================================================================
@@ -131,6 +156,7 @@ export class LSPClient {
   private processManager: SandboxProcessManager;
   private diagnostics: Map<string, any[]> = new Map();
   private initializationOptions: Record<string, unknown> | null = null;
+  private supportsPullDiagnostics: boolean = false;
 
   constructor(serverDef: LSPServerDef, workspaceRoot: string, processManager: SandboxProcessManager) {
     this.serverDef = serverDef;
@@ -168,6 +194,16 @@ export class LSPClient {
 
     const reader = new StreamMessageReader(this.handle.reader);
     const writer = new StreamMessageWriter(this.handle.writer);
+    // vscode-jsonrpc's Connection.sendRequest re-throws stream write errors inside
+    // an `async` promise executor. That throw rejects the executor's own implicit
+    // promise (which nothing awaits) instead of the request promise, so when the
+    // server process dies mid-write (e.g. EPIPE), it surfaces as an unhandled
+    // rejection and crashes the host process. Swallow write rejections here: the
+    // error still reaches the connection's error handler via the writer's
+    // handleError, and every request we send is wrapped in a timeout, so callers
+    // get a clean timeout error instead of a fatal crash.
+    const originalWrite = writer.write.bind(writer);
+    writer.write = (msg: unknown) => originalWrite(msg).catch(() => {});
     this.connection = createMessageConnection(reader, writer);
 
     // Silently ignore stream destroyed errors during shutdown
@@ -175,7 +211,7 @@ export class LSPClient {
 
     // Listen for published diagnostics
     this.connection.onNotification('textDocument/publishDiagnostics', (params: any) => {
-      this.diagnostics.set(params.uri, params.diagnostics);
+      this.diagnostics.set(diagnosticsKey(params.uri), params.diagnostics);
     });
 
     this.connection.listen();
@@ -257,13 +293,21 @@ export class LSPClient {
     // Handle window/workDoneProgress/create requests
     this.connection.onRequest('window/workDoneProgress/create', () => null);
 
+    // Handle client/registerCapability requests (TS 7+ sends these during init)
+    this.connection.onRequest('client/registerCapability', () => null);
+
     let initTimer: ReturnType<typeof setTimeout>;
-    await Promise.race([
+    const initResult: any = await Promise.race([
       this.connection.sendRequest('initialize', initParams),
       new Promise((_, reject) => {
         initTimer = setTimeout(() => reject(new Error('LSP initialize request timed out')), initTimeout);
       }),
     ]).finally(() => clearTimeout(initTimer!));
+
+    // Detect pull diagnostics support (TS 7+ native LSP uses this instead of push)
+    if (initResult?.capabilities?.diagnosticProvider) {
+      this.supportsPullDiagnostics = true;
+    }
 
     // Send initialized notification
     this.connection.sendNotification('initialized', {});
@@ -280,7 +324,7 @@ export class LSPClient {
   notifyOpen(filePath: string, content: string, languageId: string): void {
     if (!this.connection) return;
     const uri = toFileUri(filePath);
-    this.diagnostics.delete(uri);
+    this.diagnostics.delete(diagnosticsKey(uri));
     this.connection.sendNotification('textDocument/didOpen', {
       textDocument: { uri, languageId, version: 0, text: content },
     });
@@ -300,12 +344,16 @@ export class LSPClient {
   /**
    * Wait for diagnostics to arrive for a file.
    *
-   * When `waitForChange` is false (default), returns as soon as diagnostics
-   * are available. To avoid returning a premature empty array (servers may
-   * publish `[]` first while still analysing), empty results trigger a short
-   * settle window: polling continues for up to `settleMs` (default 500ms)
-   * to see if non-empty diagnostics arrive. Non-empty results are returned
-   * immediately.
+   * For servers that support pull diagnostics (e.g. TypeScript 7+ native LSP),
+   * sends a `textDocument/diagnostic` request directly instead of waiting for
+   * push notifications.
+   *
+   * For push-based servers (e.g. TypeScript ≤6 via typescript-language-server),
+   * returns as soon as diagnostics are available. To avoid returning a premature
+   * empty array (servers may publish `[]` first while still analysing), empty
+   * results trigger a short settle window: polling continues for up to `settleMs`
+   * (default 500ms) to see if non-empty diagnostics arrive. Non-empty results
+   * are returned immediately.
    */
   async waitForDiagnostics(
     filePath: string,
@@ -314,7 +362,29 @@ export class LSPClient {
     settleMs: number = 500,
   ): Promise<any[]> {
     if (!this.connection) return [];
-    const uri = toFileUri(filePath);
+
+    // Pull diagnostics: request directly from the server
+    if (this.supportsPullDiagnostics) {
+      try {
+        const result: any = await withTimeout(
+          this.connection.sendRequest('textDocument/diagnostic', {
+            textDocument: { uri: toFileUri(filePath) },
+          }),
+          timeoutMs,
+          'Pull diagnostics request timed out',
+        );
+        const items = result?.items ?? [];
+        // Mirror into the diagnostics map so later lookups see the same
+        // data regardless of whether the server pushes or pulls.
+        this.diagnostics.set(diagnosticsKey(toFileUri(filePath)), items);
+        return items;
+      } catch {
+        return [];
+      }
+    }
+
+    // Push diagnostics: poll the diagnostics map populated by publishDiagnostics
+    const uri = diagnosticsKey(toFileUri(filePath));
     const startTime = Date.now();
     const initialDiagnostics = this.diagnostics.get(uri);
     let emptyReceivedAt: number | undefined;
@@ -350,7 +420,7 @@ export class LSPClient {
   notifyClose(filePath: string): void {
     if (!this.connection) return;
     const uri = toFileUri(filePath);
-    this.diagnostics.delete(uri);
+    this.diagnostics.delete(diagnosticsKey(uri));
     this.connection.sendNotification('textDocument/didClose', {
       textDocument: { uri },
     });

@@ -106,6 +106,102 @@ describe('MastraCompositeStore — default delegation (issue #16782)', () => {
   });
 });
 
+describe('MastraCompositeStore — disabled domains (`false` override)', () => {
+  it('resolves a `false` domain to undefined instead of falling through to default', async () => {
+    const inner = new InMemoryStore({ id: 'inner' });
+
+    const composite = new MastraCompositeStore({
+      id: 'outer',
+      default: inner,
+      domains: { observability: false },
+    });
+
+    expect(await composite.getStore('observability')).toBeUndefined();
+    // Other domains still fall through to the default store.
+    expect(await composite.getStore('memory')).toBe(inner.stores?.memory);
+  });
+
+  it('resolves a `false` domain to undefined instead of falling through to editor', async () => {
+    const editor = new InMemoryStore({ id: 'editor-inner' });
+
+    const composite = new MastraCompositeStore({
+      id: 'outer',
+      editor,
+      domains: { agents: false },
+    });
+
+    expect(await composite.getStore('agents')).toBeUndefined();
+    expect(await composite.getStore('skills')).toBe(editor.stores?.skills);
+  });
+
+  it('disables threadState via `false` instead of falling back to the in-memory store', async () => {
+    const inner = new InMemoryStore({ id: 'inner' });
+
+    const composite = new MastraCompositeStore({
+      id: 'outer',
+      default: inner,
+      domains: { threadState: false },
+    });
+
+    expect(await composite.getStore('threadState')).toBeUndefined();
+  });
+
+  it('wires the in-memory threadState store when the domain is left unset', async () => {
+    const inner = new InMemoryStore({ id: 'inner' });
+
+    const composite = new MastraCompositeStore({
+      id: 'outer',
+      default: inner,
+    });
+
+    expect(await composite.getStore('threadState')).toBeDefined();
+  });
+
+  it('does not count `false` overrides as a storage source', () => {
+    expect(
+      () =>
+        new MastraCompositeStore({
+          id: 'outer',
+          domains: { observability: false },
+        }),
+    ).toThrow(/requires at least one storage source/);
+  });
+});
+
+describe('MastraCompositeStore init caching', () => {
+  it('retries init after a rejected attempt', async () => {
+    const inner = new InMemoryStore({ id: 'retry-inner' });
+    const innerInitSpy = vi
+      .spyOn(inner, 'init')
+      .mockRejectedValueOnce(new Error('transient init failure'))
+      .mockResolvedValueOnce(undefined);
+    const composite = new MastraCompositeStore({ id: 'retry-outer', default: inner });
+
+    await expect(composite.init()).rejects.toThrow('transient init failure');
+    await composite.init();
+    await composite.init();
+
+    expect(innerInitSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('coalesces concurrent failed attempts before allowing a retry', async () => {
+    const inner = new InMemoryStore({ id: 'concurrent-retry-inner' });
+    const innerInitSpy = vi
+      .spyOn(inner, 'init')
+      .mockRejectedValueOnce(new Error('shared init failure'))
+      .mockResolvedValueOnce(undefined);
+    const composite = new MastraCompositeStore({ id: 'concurrent-retry-outer', default: inner });
+
+    const results = await Promise.allSettled([composite.init(), composite.init(), composite.init()]);
+
+    expect(results.every(result => result.status === 'rejected')).toBe(true);
+    expect(innerInitSpy).toHaveBeenCalledTimes(1);
+
+    await composite.init();
+    expect(innerInitSpy).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe('MastraCompositeStore.__registerMastra', () => {
   const mastra: StorageMastraRef = { getAgentById: () => undefined };
 

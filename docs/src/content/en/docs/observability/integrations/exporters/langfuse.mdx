@@ -177,9 +177,34 @@ To scope an evaluator to a specific agent, configure either filter in Langfuse:
 - **Trace name**: equals the agent name (for example, `weather-agent`).
 - **Metadata**: `agentId` equals the agent id.
 
-The trace name dropdown in Langfuse evaluator filters lists every distinct value seen, so each agent appears as its own entry once it has produced at least one trace.
+The trace name dropdown in Langfuse evaluator filters lists every distinct value seen, so each agent is shown as its own entry once it has produced at least one trace.
 
 If you set a custom `traceName` via `mastra.metadata.traceName`, your value takes precedence over the default agent name.
+
+## Custom trace metadata
+
+Langfuse filters and groups traces by top-level metadata only. Nested metadata keys can't be used for filtering or grouping.
+
+To add your own top-level metadata, set keys under `langfuse` in your span metadata. The exporter forwards each key to `langfuse.trace.metadata.<key>`, where it becomes filterable in Langfuse:
+
+```typescript
+const tracingOptions = {
+  metadata: {
+    langfuse: {
+      customerId: 'cust_123',
+      tier: 'enterprise',
+    },
+  },
+}
+```
+
+This example produces `langfuse.trace.metadata.customerId` and `langfuse.trace.metadata.tier`.
+
+Notes:
+
+- The reserved `prompt` key is used for [prompt linking](#prompt-linking) and isn't forwarded as trace metadata.
+- The reserved identity keys `agentId`, `agentName`, `workflowId`, and `workflowName` are set from the root span and take precedence over custom values with the same name.
+- Values are sent as strings, because Langfuse maps trace metadata attributes as strings. Numbers, booleans, and objects are serialized with JSON. Langfuse Cloud restores them to their original types on ingestion.
 
 ## Prompt linking
 
@@ -200,6 +225,7 @@ const exporter = new LangfuseExporter()
 const prompt = await exporter.client.prompt.get('customer-support', { type: 'text' })
 
 export const supportAgent = new Agent({
+  id: 'support-agent',
   name: 'support-agent',
   instructions: prompt.compile(), // Use the prompt text from Langfuse
   model: '__GATEWAY_OPENAI_MODEL__',

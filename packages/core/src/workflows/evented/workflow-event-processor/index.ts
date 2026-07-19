@@ -84,11 +84,132 @@ export class WorkflowEventProcessor extends EventProcessor {
   // Map of child runId -> parent runId for tracking nested workflows
   private parentChildRelationships: Map<string, string> = new Map();
   private runFormats: Map<string, 'legacy' | 'vnext' | undefined> = new Map();
+  // Map of event.id -> number of times we've returned { retry: true } for it.
+  // Used to cap transport-level redelivery so a poisoned event (e.g. sustained
+  // SQLITE_BUSY) eventually surfaces as a terminal workflow.fail rather than
+  // silently hanging agent.generate().
+  private deliveryAttempts: Map<string, number> = new Map();
+  // Maximum number of times handle() will ask the transport to redeliver the
+  // same event before declaring it terminally failed. The underlying storage
+  // layer already retries lock errors internally (~5 attempts with backoff)
+  // so 3 transport-level redeliveries is enough headroom for transient
+  // failures without keeping a poisoned event in flight for minutes.
+  private static readonly MAX_DELIVERY_ATTEMPTS = 3;
+  // Sentinel value stored in deliveryAttempts to mark an event whose terminal
+  // workflow.fail has already been published. Any subsequent redelivery of
+  // the same logical event short-circuits as terminal and does NOT re-run
+  // errorWorkflow or reset the per-event budget.
+  private static readonly TERMINAL_SENTINEL = Number.POSITIVE_INFINITY;
+  // Upper bound on entries kept in deliveryAttempts so a long-lived processor
+  // can't grow the map without limit. When the map exceeds this size we evict
+  // the oldest entries in insertion order (Map preserves insertion order). The
+  // cap is high enough that a realistic burst of concurrent runs never trims
+  // an entry mid-retry, but low enough to bound memory.
+  private static readonly DELIVERY_ATTEMPTS_MAX_ENTRIES = 1024;
 
-  constructor({ mastra, stepExecutionStrategy }: { mastra: Mastra; stepExecutionStrategy?: StepExecutionStrategy }) {
+  // How long after a run reaches a terminal state before its
+  // `workflow.events.v2.<runId>` topic is cleared from the pubsub. The
+  // terminal `workflow-finish` watch event is published to that same topic,
+  // so deletion must lag long enough for attached watchers/streams to drain
+  // it. Mirrors DurableAgent's cleanupTimeoutMs default. 0 disables cleanup.
+  private readonly topicCleanupDelayMs: number;
+  private static readonly DEFAULT_TOPIC_CLEANUP_DELAY_MS = 30_000;
+
+  // Pending per-run topic cleanup timers, so a run restarted in this process
+  // (timeTravel/restart reuse the runId) cancels its own pending deletion.
+  private readonly pendingTopicCleanups = new Map<string, ReturnType<typeof setTimeout>>();
+
+  // Statuses under which a run is still (or again) writing to its watch
+  // topic. If the run was restarted via timeTravel/restart after its terminal
+  // end, deletion must be skipped — the new execution reschedules cleanup
+  // when it reaches its own terminal state.
+  private static readonly ACTIVE_RUN_STATUSES: ReadonlySet<string> = new Set([
+    'running',
+    'pending',
+    'waiting',
+    'suspended',
+    'paused',
+  ]);
+
+  constructor({
+    mastra,
+    stepExecutionStrategy,
+    topicCleanupDelayMs,
+  }: {
+    mastra: Mastra;
+    stepExecutionStrategy?: StepExecutionStrategy;
+    topicCleanupDelayMs?: number;
+  }) {
     super({ mastra });
     this.stepExecutor = new StepExecutor({ mastra });
     this.stepExecutionStrategy = stepExecutionStrategy;
+    this.topicCleanupDelayMs = topicCleanupDelayMs ?? WorkflowEventProcessor.DEFAULT_TOPIC_CLEANUP_DELAY_MS;
+  }
+
+  /**
+   * Schedule deletion of a finished run's `workflow.events.v2.<runId>` topic.
+   *
+   * Per-run watch topics are written by every step of a run; on transports
+   * that retain messages (e.g. Redis Streams) they would otherwise live
+   * forever once the run ends. Deletion is delayed so subscribers still
+   * draining the terminal `workflow-finish` event aren't cut off, and
+   * fire-and-forget because topic cleanup must never affect run completion.
+   *
+   * Best-effort by design: if the process exits before the timer fires, the
+   * transport-level idle TTL (e.g. `streamIdleTtlMs`) is the backstop.
+   *
+   * A finished run can be re-executed under the same runId (`timeTravel`,
+   * `restart`), so deletion is double-guarded: a restart processed by this
+   * process cancels the pending timer directly, and when the timer fires we
+   * re-check the run's persisted status — a restart may have been picked up
+   * by a different worker process — and skip deletion while the run is
+   * active again.
+   */
+  private scheduleRunTopicCleanup(workflowId: string, runId: string): void {
+    if (this.topicCleanupDelayMs <= 0) return;
+    this.cancelRunTopicCleanup(runId);
+    const timer = setTimeout(() => {
+      this.pendingTopicCleanups.delete(runId);
+      void this.clearRunTopicUnlessActive(workflowId, runId);
+    }, this.topicCleanupDelayMs);
+    // Don't let a pending cleanup timer keep a short-lived process alive.
+    timer.unref?.();
+    this.pendingTopicCleanups.set(runId, timer);
+  }
+
+  private cancelRunTopicCleanup(runId: string): void {
+    const timer = this.pendingTopicCleanups.get(runId);
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      this.pendingTopicCleanups.delete(runId);
+    }
+  }
+
+  private async clearRunTopicUnlessActive(workflowId: string, runId: string): Promise<void> {
+    try {
+      // Without a storage backend there is no way to observe a cross-process
+      // restart, so we delete unconditionally — the in-process timer
+      // cancellation in processWorkflowStart still covers same-process
+      // restarts. The status check below is also not atomic with the delete:
+      // a restart persisting `running` between the read and the DEL can still
+      // lose its topic. That window is milliseconds (vs. the full cleanup
+      // delay without this guard) and self-heals — persistent transports
+      // recover subscribers on the next publish (e.g. Redis NOGROUP
+      // recreation). Closing it fully would require distributed locking,
+      // which best-effort topic cleanup does not justify.
+      const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
+      if (workflowsStore) {
+        const snapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: workflowId, runId });
+        const status = typeof snapshot === 'string' ? undefined : snapshot?.status;
+        // Run was restarted (possibly by another worker process) after the
+        // terminal end that scheduled this cleanup: it is writing to its
+        // topic again, and its own terminal end will reschedule deletion.
+        if (status && WorkflowEventProcessor.ACTIVE_RUN_STATUSES.has(status)) return;
+      }
+      await this.mastra.pubsub.clearTopic(`workflow.events.v2.${runId}`);
+    } catch (err) {
+      this.mastra.getLogger()?.warn('Failed to clear workflow events topic', { workflowId, runId, error: err });
+    }
   }
 
   /**
@@ -172,6 +293,45 @@ export class WorkflowEventProcessor extends EventProcessor {
       | undefined;
     if (!span) return undefined;
     return { traceId: span.traceId, spanId: span.id, parentSpanId: span.getParentSpanId?.() };
+  }
+
+  /**
+   * Applies the workflow's `pruneSnapshot` option to an already-persisted snapshot.
+   *
+   * The evented engine persists suspensions via merge operations
+   * (`updateWorkflowResults` + `updateWorkflowState`) rather than writing a full
+   * snapshot object, so the prune hook can't intercept the write itself. Instead,
+   * after the merge completes, we load the merged snapshot, prune it, and
+   * re-persist the full row. No-op when the workflow has no `pruneSnapshot` option.
+   */
+  private async pruneAndRepersistSnapshot({
+    workflow,
+    workflowId,
+    runId,
+  }: {
+    workflow: Workflow | undefined;
+    workflowId: string;
+    runId: string;
+  }): Promise<void> {
+    const pruneSnapshot = workflow?.options?.pruneSnapshot;
+    if (!pruneSnapshot) return;
+    try {
+      const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
+      if (!workflowsStore) return;
+      const run = await workflowsStore.getWorkflowRunById({ runId, workflowName: workflowId });
+      const snapshot = run?.snapshot;
+      if (!snapshot || typeof snapshot === 'string') return;
+      const pruned = pruneSnapshot({ snapshot, workflowStatus: snapshot.status });
+      await workflowsStore.persistWorkflowSnapshot({
+        workflowName: workflowId,
+        runId,
+        resourceId: run?.resourceId,
+        snapshot: pruned,
+      });
+    } catch (error) {
+      // Pruning is a size optimization — never fail the suspension over it.
+      this.mastra.getLogger()?.warn?.(`Failed to prune workflow snapshot for run ${runId}: ${error}`);
+    }
   }
 
   __registerMastra(mastra: Mastra) {
@@ -274,6 +434,10 @@ export class WorkflowEventProcessor extends EventProcessor {
     const initialState = (arguments[0] as any).initialState ?? state ?? {};
     const resolvedFormat = format ?? this.runFormats.get(runId);
     this.runFormats.set(runId, resolvedFormat);
+    // The run is starting (or restarting via timeTravel/restart under the
+    // same runId): any topic cleanup pending from a previous terminal end
+    // must not fire while the run is writing to its topic again.
+    this.cancelRunTopicCleanup(runId);
     // Create abort controller for this workflow run
     this.getOrCreateAbortController(runId);
 
@@ -296,28 +460,31 @@ export class WorkflowEventProcessor extends EventProcessor {
       }) ?? true;
 
     if (shouldPersist) {
+      const runningSnapshot: WorkflowRunState = {
+        activePaths: [],
+        suspendedPaths: {},
+        resumeLabels: {},
+        waitingPaths: {},
+        activeStepsPath: {},
+        serializedStepGraph: workflow.serializedStepGraph,
+        timestamp: Date.now(),
+        runId,
+        context: {
+          ...(stepResults ?? {
+            input: prevResult?.status === 'success' ? prevResult.output : undefined,
+          }),
+          __state: initialState,
+        } as WorkflowRunState['context'],
+        status: 'running',
+        value: initialState,
+      };
       await workflowsStore?.persistWorkflowSnapshot({
         workflowName: workflow.id,
         runId,
         resourceId,
-        snapshot: {
-          activePaths: [],
-          suspendedPaths: {},
-          resumeLabels: {},
-          waitingPaths: {},
-          activeStepsPath: {},
-          serializedStepGraph: workflow.serializedStepGraph,
-          timestamp: Date.now(),
-          runId,
-          context: {
-            ...(stepResults ?? {
-              input: prevResult?.status === 'success' ? prevResult.output : undefined,
-            }),
-            __state: initialState,
-          },
-          status: 'running',
-          value: initialState,
-        },
+        snapshot: workflow?.options?.pruneSnapshot
+          ? workflow.options.pruneSnapshot({ snapshot: runningSnapshot, workflowStatus: 'running' })
+          : runningSnapshot,
       });
 
       if (parentWorkflow) {
@@ -372,8 +539,19 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   protected async endWorkflow(args: ProcessorArgs, status: 'success' | 'failed' | 'canceled' | 'paused' = 'success') {
-    const { workflowId, runId, prevResult, perStep, workflow, stepResults, activeStepsPath, executionPath } = args;
+    const {
+      workflowId,
+      runId,
+      prevResult,
+      perStep,
+      workflow,
+      stepResults,
+      activeStepsPath,
+      executionPath,
+      parentWorkflow,
+    } = args;
     const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
+    const normalizedPrevResult = prevResult ?? ({ status } as StepResult<any, any, any, any>);
 
     // Check shouldPersistSnapshot option - default to true if not specified
     const finalStatus = perStep && status === 'success' ? 'paused' : status;
@@ -389,11 +567,24 @@ export class WorkflowEventProcessor extends EventProcessor {
         runId,
         opts: {
           status: finalStatus,
-          result: prevResult,
+          result: normalizedPrevResult,
           activePaths: executionPath,
           activeStepsPath: activeStepsPath,
         },
       });
+    } else if (parentWorkflow && finalStatus !== 'paused') {
+      // The nested run reached a terminal state its workflow opted not to
+      // persist (e.g. the internal `executionWorkflow` inside `agentic-loop`).
+      // A row may still exist from an earlier persisted phase — 'pending' at
+      // nested-run start or 'suspended' before a resume — and without the
+      // terminal update it would leak as a stale, resumable-looking record.
+      // Terminal runs can't be resumed, so drop the row entirely. Best-effort:
+      // a storage failure here must not abort run completion.
+      try {
+        await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: workflowId });
+      } catch (e) {
+        this.mastra.getLogger()?.warn('Failed to clean up nested workflow snapshot', { workflowId, runId, error: e });
+      }
     }
 
     if (perStep) {
@@ -421,7 +612,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     await this.mastra.pubsub.publish('workflows', {
       type: 'workflow.end',
       runId,
-      data: { ...args, workflow: undefined },
+      data: { ...args, prevResult: normalizedPrevResult, workflow: undefined },
     });
   }
 
@@ -438,7 +629,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       perStep,
       stepResults,
       state,
-      workflowId: _workflowId,
+      workflowId,
     } = args;
 
     // Extract final state from stepResults or args
@@ -446,6 +637,13 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     // Clean up abort controller and parent-child tracking
     this.cleanupRun(runId);
+
+    // A per-step run publishes `workflow.end` while merely paused — it will
+    // keep writing to its watch topic when the next step executes, so only
+    // truly terminal runs get their topic cleared.
+    if (!perStep) {
+      this.scheduleRunTopicCleanup(workflowId, runId);
+    }
 
     // handle nested workflow
     if (parentWorkflow) {
@@ -505,6 +703,12 @@ export class WorkflowEventProcessor extends EventProcessor {
       runId,
       data: { ...args, workflow: undefined, state: finalState },
     });
+
+    // Clean up run-scoped internal workflow registrations (e.g. execution-workflow)
+    // now that all events for this run have been processed.
+    if (this.mastra.__hasInternalWorkflow(args.workflowId, runId)) {
+      this.mastra.__unregisterInternalWorkflow(args.workflowId, runId);
+    }
   }
 
   protected async processWorkflowSuspend(args: ProcessorArgs) {
@@ -594,6 +798,12 @@ export class WorkflowEventProcessor extends EventProcessor {
       runId,
       data: { ...args, workflow: undefined, state: finalState },
     });
+
+    // Clean up run-scoped internal workflow registrations (e.g. execution-workflow)
+    // now that all events for this run have been processed.
+    if (this.mastra.__hasInternalWorkflow(args.workflowId, runId)) {
+      this.mastra.__unregisterInternalWorkflow(args.workflowId, runId);
+    }
   }
 
   protected async processWorkflowFail(args: ProcessorArgs) {
@@ -621,6 +831,9 @@ export class WorkflowEventProcessor extends EventProcessor {
     // Clean up abort controller and parent-child tracking
     this.cleanupRun(runId);
 
+    // 'failed' is terminal: the run stops writing to its watch topic.
+    this.scheduleRunTopicCleanup(workflowId, runId);
+
     const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
 
     // Check shouldPersistSnapshot option - default to true if not specified
@@ -641,6 +854,16 @@ export class WorkflowEventProcessor extends EventProcessor {
           activeStepsPath: activeStepsPath,
         },
       });
+    } else if (parentWorkflow) {
+      // Mirrors endWorkflow: a nested run whose workflow opted out of
+      // persisting the terminal 'failed' status would otherwise leak its
+      // earlier-phase ('pending'/'suspended') snapshot row forever.
+      // Best-effort: a storage failure here must not abort run completion.
+      try {
+        await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: workflowId });
+      } catch (e) {
+        this.mastra.getLogger()?.warn('Failed to clean up nested workflow snapshot', { workflowId, runId, error: e });
+      }
     }
 
     // handle nested workflow
@@ -674,6 +897,12 @@ export class WorkflowEventProcessor extends EventProcessor {
       runId,
       data: { ...args, workflow: undefined, state: finalState },
     });
+
+    // Clean up run-scoped internal workflow registrations (e.g. execution-workflow)
+    // now that all events for this run have been processed.
+    if (this.mastra.__hasInternalWorkflow(args.workflowId, runId)) {
+      this.mastra.__unregisterInternalWorkflow(args.workflowId, runId);
+    }
   }
 
   protected async processWorkflowStepRun({
@@ -1221,25 +1450,28 @@ export class WorkflowEventProcessor extends EventProcessor {
 
         //create nested workflow run snapshot in storage. use parent workflow resource id in nested workflow
         if (shouldPersist) {
+          const pendingSnapshot: WorkflowRunState = {
+            runId: nestedRunId,
+            status: 'pending',
+            value: {},
+            context: {} as WorkflowRunState['context'],
+            activePaths: [],
+            serializedStepGraph: nestedWorkflow.serializedStepGraph,
+            activeStepsPath: {},
+            suspendedPaths: {},
+            resumeLabels: {},
+            waitingPaths: {},
+            result: undefined,
+            error: undefined,
+            timestamp: Date.now(),
+          };
           await workflowsStore?.persistWorkflowSnapshot({
             workflowName: nestedWorkflow.id,
             runId: nestedRunId,
             resourceId: parentRun?.resourceId,
-            snapshot: {
-              runId: nestedRunId,
-              status: 'pending',
-              value: {},
-              context: {},
-              activePaths: [],
-              serializedStepGraph: nestedWorkflow.serializedStepGraph,
-              activeStepsPath: {},
-              suspendedPaths: {},
-              resumeLabels: {},
-              waitingPaths: {},
-              result: undefined,
-              error: undefined,
-              timestamp: Date.now(),
-            },
+            snapshot: nestedWorkflow?.options?.pruneSnapshot
+              ? nestedWorkflow.options.pruneSnapshot({ snapshot: pendingSnapshot, workflowStatus: 'pending' })
+              : pendingSnapshot,
           });
         }
 
@@ -1431,7 +1663,7 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     if (stepResult.status === 'failed') {
       const retries = step.step.retries ?? workflow.retryConfig.attempts ?? 0;
-      if (retryCount >= retries) {
+      if (retryCount >= retries || stepResult.nonRetryable) {
         await this.mastra.pubsub.publish('workflows', {
           type: 'workflow.step.end',
           runId,
@@ -1686,6 +1918,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             ...(suspendTracingContext ? { tracingContext: suspendTracingContext } : {}),
           },
         });
+        await this.pruneAndRepersistSnapshot({ workflow, workflowId, runId });
       }
       await this.mastra.pubsub.publish('workflows', {
         type: 'workflow.suspend',
@@ -2070,6 +2303,7 @@ export class WorkflowEventProcessor extends EventProcessor {
                 ...(suspendTracingContext ? { tracingContext: suspendTracingContext } : {}),
               },
             });
+            await this.pruneAndRepersistSnapshot({ workflow, workflowId, runId });
           }
 
           await this.mastra.pubsub.publish('workflows', {
@@ -2272,6 +2506,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             ...(suspendTracingContext ? { tracingContext: suspendTracingContext } : {}),
           },
         });
+        await this.pruneAndRepersistSnapshot({ workflow, workflowId, runId });
       }
 
       await this.mastra.pubsub.publish('workflows', {
@@ -2463,16 +2698,102 @@ export class WorkflowEventProcessor extends EventProcessor {
    *   should drop the event (or return 4xx for HTTP push).
    */
   async handle(event: Event): Promise<{ ok: true } | { ok: false; retry: boolean }> {
+    // Build a stable retry key once per call. If event.id is missing we fall
+    // back to a deterministic composite of type/runId/workflowId/executionPath
+    // so the same logical event lands in the same bucket on each redelivery
+    // and eventually reaches MAX_DELIVERY_ATTEMPTS. Never include a timestamp
+    // (or any monotonically-changing token) here — that resets the counter
+    // every attempt and reopens the infinite-retry path this guards against.
+    const baseWorkflowData = event.data as Partial<Pick<ProcessorArgs, 'workflowId' | 'executionPath'>>;
+    const eventKey =
+      event.id ??
+      JSON.stringify({
+        type: event.type,
+        runId: event.runId,
+        workflowId: baseWorkflowData?.workflowId,
+        executionPath: baseWorkflowData?.executionPath,
+      });
+
+    // If we've already declared this event terminal, stay terminal. A buggy
+    // transport that re-delivers a poisoned event must not rerun
+    // errorWorkflow on every redelivery or reset the per-event budget.
+    if (this.deliveryAttempts.get(eventKey) === WorkflowEventProcessor.TERMINAL_SENTINEL) {
+      return { ok: false, retry: false };
+    }
+
     try {
       await this.#dispatch(event);
+      this.deliveryAttempts.delete(eventKey);
       return { ok: true };
     } catch (err) {
+      const attempts = (this.deliveryAttempts.get(eventKey) ?? 0) + 1;
+      this.#setDeliveryAttempts(eventKey, attempts);
+      const exhausted = attempts >= WorkflowEventProcessor.MAX_DELIVERY_ATTEMPTS;
+
       this.mastra.getLogger()?.error('WorkflowEventProcessor.handle: error processing event', {
         type: event.type,
         runId: event.runId,
+        attempts,
+        maxAttempts: WorkflowEventProcessor.MAX_DELIVERY_ATTEMPTS,
+        terminal: exhausted,
         error: err,
       });
-      return { ok: false, retry: true };
+
+      if (!exhausted) {
+        return { ok: false, retry: true };
+      }
+
+      // Transport-level retries are exhausted. Surface as a terminal workflow
+      // failure so any caller awaiting workflows-finish (e.g. agent.generate())
+      // sees an error instead of hanging forever. Replace the counter with a
+      // TERMINAL sentinel so any later redelivery of the same logical event
+      // short-circuits at the top of handle() instead of rerunning
+      // errorWorkflow or resetting the budget.
+      this.#setDeliveryAttempts(eventKey, WorkflowEventProcessor.TERMINAL_SENTINEL);
+      try {
+        const failWorkflowData = event.data as Omit<ProcessorArgs, 'workflow'>;
+        // Never republish workflow.fail for an event that IS workflow.fail.
+        // Each publish gets a fresh event id (fresh retry bucket), so with a
+        // persistently-broken dependency (e.g. missing workflows table) the
+        // fail event would exhaust its own budget and publish another
+        // workflow.fail forever.
+        if (
+          event.type !== 'workflow.fail' &&
+          failWorkflowData &&
+          failWorkflowData.workflowId &&
+          failWorkflowData.runId
+        ) {
+          await this.errorWorkflow(failWorkflowData, getErrorFromUnknown(err));
+        }
+      } catch (failErr) {
+        this.mastra
+          .getLogger()
+          ?.error('WorkflowEventProcessor.handle: failed to publish workflow.fail after retry exhaustion', {
+            type: event.type,
+            runId: event.runId,
+            error: failErr,
+          });
+      }
+      return { ok: false, retry: false };
+    }
+  }
+
+  /**
+   * Set a deliveryAttempts entry and evict the oldest entries (FIFO via Map's
+   * insertion-order iteration) if we've exceeded DELIVERY_ATTEMPTS_MAX_ENTRIES.
+   * Re-setting an existing key first deletes then re-inserts so that the entry
+   * moves to the tail of the iteration order; this keeps actively-retrying
+   * events from being evicted while idle TERMINAL_SENTINEL entries age out.
+   */
+  #setDeliveryAttempts(eventKey: string, value: number): void {
+    if (this.deliveryAttempts.has(eventKey)) {
+      this.deliveryAttempts.delete(eventKey);
+    }
+    this.deliveryAttempts.set(eventKey, value);
+    while (this.deliveryAttempts.size > WorkflowEventProcessor.DELIVERY_ATTEMPTS_MAX_ENTRIES) {
+      const oldestKey = this.deliveryAttempts.keys().next().value;
+      if (oldestKey === undefined) break;
+      this.deliveryAttempts.delete(oldestKey);
     }
   }
 

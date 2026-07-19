@@ -19,7 +19,7 @@ Several built-in systems publish and subscribe to events through the same pub/su
 
 - **Workflow execution**: The scheduler publishes a `workflow.start` event, and a long-lived worker consumes it to run the workflow. Step and lifecycle events flow over pub/sub during execution.
 - **Scheduled workflows**: The scheduler dispatches due runs by publishing to the workflow topic. See [Scheduled workflows](/docs/workflows/scheduled-workflows).
-- **Background tasks**: A task manager dispatches work to a worker group and fans task lifecycle updates out to subscribers, which is how background task streams stay live. See [Background task streaming](/docs/streaming/background-task-streaming).
+- **Background tasks**: A task manager dispatches work to a worker group and fans task lifecycle updates out to subscribers, which is how background task streams stay live. See [Background task streaming](/docs/long-running-agents/background-tasks#subscribe-to-all-task-events).
 - **Agent signals**: Sending a signal to an active agent run publishes an event on a thread topic, so a run executing in another process receives the signal.
 - **Resumable streams**: Stream chunks are published per run, so a client that reconnects can replay what it missed.
 
@@ -36,7 +36,7 @@ Subscribers can also opt into work distribution. A group of subscribers that sha
 
 ## Default backend
 
-When you do not set the `pubsub` option, Mastra uses [`EventEmitterPubSub`](/reference/pubsub/event-emitter). It delivers events in process using a Node.js [`EventEmitter`](https://nodejs.org/api/events.html#class-eventemitter), so it works without any external service.
+When you don't set the `pubsub` option, Mastra uses [`EventEmitterPubSub`](/reference/pubsub/event-emitter). It delivers events in process using a Node.js [`EventEmitter`](https://nodejs.org/api/events.html#class-eventemitter), so it works without any external service.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -45,11 +45,11 @@ import { Mastra } from '@mastra/core'
 export const mastra = new Mastra({})
 ```
 
-Because it runs in process, events are not persisted and do not reach other processes. The default suits a single instance, which covers most applications.
+Because it runs in process, events aren't persisted and don't reach other processes. The default suits a single instance, which covers most applications.
 
 ## Choosing a backend
 
-Set the `pubsub` option on the `Mastra` instance to choose a backend. Each backend implements the same [`PubSub`](/reference/pubsub/base) contract, so the rest of your application does not change.
+Set the `pubsub` option on the `Mastra` instance to choose a backend. Each backend implements the same [`PubSub`](/reference/pubsub/base) contract, so the rest of your application doesn't change.
 
 The deciding question is where the subscriber runs.
 
@@ -109,7 +109,7 @@ export const mastra = new Mastra({
 
 Resumable streams let a client reconnect and replay events it missed, which requires the backend to keep recent history. Distributed backends such as [`RedisStreamsPubSub`](/reference/pubsub/redis-streams) persist events, so they support replay on their own.
 
-In-process delivery does not keep history. To add replay on top of [`EventEmitterPubSub`](/reference/pubsub/event-emitter), wrap it in [`CachingPubSub`](/reference/pubsub/caching-pubsub), which records published events per topic so a late or reconnecting subscriber can catch up before continuing with live events.
+In-process delivery doesn't keep history. To add replay on top of [`EventEmitterPubSub`](/reference/pubsub/event-emitter), wrap it in [`CachingPubSub`](/reference/pubsub/caching-pubsub), which records published events per topic so a late or reconnecting subscriber can catch up before continuing with live events.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -123,15 +123,11 @@ export const mastra = new Mastra({
 })
 ```
 
-:::note
-
 Visit the [PubSub reference](/reference/pubsub/base) for the full delivery contract and the configuration options for each backend.
-
-:::
 
 ## Related
 
 - [PubSub reference](/reference/pubsub/base)
 - [Mastra class](/reference/core/mastra-class)
-- [Background task streaming](/docs/streaming/background-task-streaming)
+- [Background task streaming](/docs/long-running-agents/background-tasks#subscribe-to-all-task-events)
 - [Scheduled workflows](/docs/workflows/scheduled-workflows)

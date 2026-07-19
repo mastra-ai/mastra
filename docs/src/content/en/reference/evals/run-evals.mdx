@@ -36,6 +36,47 @@ console.log(`Average scores:`, result.scores)
 console.log(`Processed ${result.summary.totalItems} items`)
 ```
 
+### Multi-turn evaluation
+
+```typescript
+import { runEvals } from '@mastra/core/evals'
+import { checks } from '@mastra/evals/checks'
+import { weatherAgent } from './agents/weather-agent'
+
+const result = await runEvals({
+  target: weatherAgent,
+  data: [
+    {
+      inputs: [
+        'What is the weather in Brooklyn?',
+        'What about tomorrow?',
+        'Compare the two forecasts.',
+      ],
+    },
+  ],
+  scorers: [checks.calledTool('get_weather', { times: 2 }), checks.includes('Brooklyn')],
+})
+```
+
+### With gates and thresholds
+
+```typescript
+import { runEvals } from '@mastra/core/evals'
+import { checks } from '@mastra/evals/checks'
+import { faithfulnessScorer } from './scorers'
+
+const result = await runEvals({
+  target: myAgent,
+  data: [{ input: 'What is the weather in Brooklyn?' }],
+  gates: [checks.calledTool('get_weather'), checks.noToolErrors()],
+  scorers: [{ scorer: faithfulnessScorer, threshold: 0.7 }, checks.includes('Brooklyn')],
+})
+
+result.verdict // 'passed' | 'scored' | 'failed'
+result.gateResults // [{ id, passed, score }]
+result.thresholdResults // [{ id, passed, averageScore, threshold }]
+```
+
 ## Parameters
 
 <PropertiesTable
@@ -54,16 +95,23 @@ console.log(`Processed ${result.summary.totalItems} items`)
   },
   {
     name: 'scorers',
-    type: 'MastraScorer[] | AgentScorerConfig | WorkflowScorerConfig',
+    type: 'ScorerEntry[] | AgentScorerConfig | WorkflowScorerConfig',
     description:
-      'Scorers to use. A flat array applies all scorers to the raw output. For agents, an `AgentScorerConfig` object separates agent-level and trajectory scorers. For workflows, a `WorkflowScorerConfig` object specifies scorers for the workflow, individual steps, and trajectory.',
-    isOptional: false,
+      'Scorers to use. Each entry is either a bare `MastraScorer` or `{ scorer, threshold }` for threshold tracking. An `AgentScorerConfig` object separates agent-level and trajectory scorers. A `WorkflowScorerConfig` object specifies scorers for the workflow, individual steps, and trajectory. Optional when at least one gate is provided (gate-only runs).',
+    isOptional: true,
+  },
+  {
+    name: 'gates',
+    type: 'MastraScorer[]',
+    description:
+      'Scorers that must score 1.0 for the run to pass. If any gate averages below 1.0 across data items, the verdict is `failed`. Gates run before regular scorers on each data item. When provided, `scorers` may be omitted.',
+    isOptional: true,
   },
   {
     name: 'targetOptions',
     type: 'AgentExecutionOptions | WorkflowRunOptions',
     description:
-      'Options forwarded to the target during execution. For agents: options passed to agent.generate() (e.g. maxSteps, modelSettings, instructions). For workflows: options passed to run.start() (e.g. perStep, outputOptions, initialState).',
+      'Options forwarded to the target during execution. For agents: options passed to agent.generate() (e.g. maxSteps, modelSettings, instructions). For workflows: options passed to run.start() (e.g. perStep, outputOptions, initialState). For multi-turn agent runs (`inputs`/`turns`), `runEvals` generates and injects the shared thread and a resource, so `memory.thread` is optional; provide `memory.resource` to reuse a specific resource.',
     isOptional: true,
   },
   {
@@ -90,8 +138,23 @@ console.log(`Processed ${result.summary.totalItems} items`)
   {
     name: 'input',
     type: 'string | string[] | CoreMessage[] | any',
-    description: 'Input data for the target. For agents: messages or strings. For workflows: workflow input data.',
-    isOptional: false,
+    description:
+      'Input data for the target. For agents: messages or strings. For workflows: workflow input data. Optional when `inputs` is provided.',
+    isOptional: true,
+  },
+  {
+    name: 'inputs',
+    type: '(string | string[] | CoreMessage[] | any)[]',
+    description:
+      'Multi-turn inputs. Each entry is one turn (same shape as `input`) sent sequentially to the agent on the same thread. Scorers see the accumulated output from all turns. Only supported for Agent targets. When provided, `input` can be omitted. Mutually exclusive with `turns`.',
+    isOptional: true,
+  },
+  {
+    name: 'turns',
+    type: 'EvalTurn[]',
+    description:
+      "Multi-turn conversation with per-turn assertions. Each turn is an object `{ input, gates?, scorers? }` sent sequentially on the same thread; its `gates`/`scorers` evaluate only that turn's input and output. Per-turn outcomes are reported in `turnResults` and folded into the overall `verdict`. Only supported for Agent targets. Mutually exclusive with `input` and `inputs`.",
+    isOptional: true,
   },
   {
     name: 'groundTruth',
@@ -198,10 +261,118 @@ For workflows, use `WorkflowScorerConfig` to specify scorers at different levels
     type: 'number',
     description: 'Total number of test cases processed.',
   },
+  {
+    name: 'verdict',
+    type: "'passed' | 'scored' | 'failed'",
+    description:
+      'Present when `gates` or threshold-bearing scorers are provided. `passed` = all gates and thresholds met. `scored` = gates passed but a threshold was missed. `failed` = at least one gate did not score 1.0.',
+    isOptional: true,
+  },
+  {
+    name: 'gateResults',
+    type: 'GateResult[]',
+    description:
+      'Per-gate results averaged across all data items. Each entry has `id`, `passed` (boolean), and `score` (0–1).',
+    isOptional: true,
+  },
+  {
+    name: 'thresholdResults',
+    type: 'ThresholdResult[]',
+    description:
+      'Per-threshold-scorer results averaged across all data items. Each entry has `id`, `passed`, `averageScore`, and `threshold`.',
+    isOptional: true,
+  },
+  {
+    name: 'turnResults',
+    type: 'TurnResult[]',
+    description:
+      'Present when any data item uses `turns`. Each entry has `index` (zero-based turn), optional `gateResults`, `thresholdResults`, and `scores` (bare-scorer averages keyed by scorer id), aggregated by turn index across data items.',
+    isOptional: true,
+  },
+]}
+/>
+
+## EvalTurn
+
+A single turn in a `turns` array. Its `gates`/`scorers` evaluate only that turn's input and output:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'input',
+    type: 'string | string[] | CoreMessage[] | any',
+    description: 'The input sent to the agent for this turn.',
+  },
+  {
+    name: 'gates',
+    type: 'MastraScorer[]',
+    description: 'Gates that must score 1.0 for this turn. A failing turn gate makes the overall verdict `failed`.',
+    isOptional: true,
+  },
+  {
+    name: 'scorers',
+    type: 'ScorerEntry[]',
+    description:
+      'Scorers (optionally with thresholds) evaluated against this turn only. A missed per-turn threshold (with gates passing) makes the verdict `scored`.',
+    isOptional: true,
+  },
+]}
+/>
+
+## ScorerEntry
+
+A scorer entry in the `scorers` array can be either a bare scorer or a scorer with a threshold:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'scorer',
+    type: 'MastraScorer',
+    description: 'The scorer instance.',
+  },
+  {
+    name: 'threshold',
+    type: 'number | { min?: number; max?: number }',
+    description:
+      'A number implies minimum threshold (score at or above passes). Use `{ min, max }` for range-based checks — e.g. `{ max: 0.3 }` for scorers like hallucination where a high score is bad. Both `min` and `max` must be between 0 and 1.',
+  },
 ]}
 />
 
 ## Examples
+
+### Gates and verdict
+
+Use `gates` for hard pass/fail requirements and `{ scorer, threshold }` for tracked quality metrics:
+
+```typescript
+import { runEvals } from '@mastra/core/evals'
+import { checks } from '@mastra/evals/checks'
+
+const result = await runEvals({
+  target: weatherAgent,
+  data: [{ input: 'What is the weather in Brooklyn?' }],
+  gates: [checks.calledTool('get_weather'), checks.noToolErrors()],
+  scorers: [
+    { scorer: faithfulnessScorer, threshold: 0.7 }, // min threshold (number shorthand)
+    { scorer: hallucinationScorer, threshold: { max: 0.3 } }, // max threshold (high = bad)
+    { scorer: toneScorer, threshold: { min: 0.5, max: 0.9 } }, // range threshold
+    checks.includes('Brooklyn'), // bare scorer, no threshold
+  ],
+})
+
+if (result.verdict === 'failed') {
+  console.log(
+    'Gate failures:',
+    result.gateResults?.filter(g => !g.passed),
+  )
+} else if (result.verdict === 'scored') {
+  console.log(
+    'Threshold misses:',
+    result.thresholdResults?.filter(t => !t.passed),
+  )
+}
+```
 
 ### Agent Evaluation
 
@@ -362,8 +533,64 @@ const result = await runEvals({
 })
 ```
 
+### Multi-turn conversation evaluation
+
+Use `inputs` to send sequential turns on a shared thread. Scorers see the accumulated output from all turns:
+
+```typescript
+const result = await runEvals({
+  target: chatAgent,
+  data: [
+    {
+      inputs: ['My favorite city is Brooklyn.', 'What is the weather in my favorite city?'],
+    },
+  ],
+  gates: [checks.calledTool('get_weather')],
+  scorers: [{ scorer: checks.similarity('Brooklyn weather forecast'), threshold: 0.5 }],
+})
+
+// result.verdict: 'passed' | 'scored' | 'failed'
+```
+
+Each turn runs `agent.generate()` with the same `threadId`, so the agent sees the full conversation history. `runEvals` also injects a `resourceId` (Mastra memory scopes messages by resource + thread), defaulting it to the generated thread; pass `targetOptions.memory.resource` to pin a specific one. Cross-turn recall requires the agent to have a memory store configured; otherwise turns run in isolation. Mix single-turn (`input`) and multi-turn (`inputs`) items in the same `data` array. When using `inputs`, `input` can be omitted.
+
+Scoring uses the accumulated output from all turns as `run.output`, but only the first turn as `run.input`. Prefer output-based scorers (`checks.includes`, `checks.calledTool`, `checks.similarity`) for multi-turn; input-relative scorers (e.g. faithfulness) only see the first turn's input. Trajectory scorers that read from the trace (`AgentScorerConfig.trajectory`) resolve against the last turn's span; tool-call checks that read `run.output` (like `checks.calledTool`) still see every turn.
+
+### Per-turn assertions
+
+Use `turns` to attach `gates`/`scorers` to individual turns. Each per-turn assertion sees only that turn's input and output, so a later-turn regression can't be hidden by an earlier turn:
+
+```typescript
+const result = await runEvals({
+  target: chatAgent,
+  data: [
+    {
+      turns: [
+        {
+          input: 'What is the weather in Brooklyn?',
+          gates: [checks.calledTool('get_weather')],
+        },
+        {
+          input: 'What about tomorrow?',
+          gates: [checks.calledTool('get_weather')], // must call again this turn
+          scorers: [{ scorer: checks.similarity('tomorrow forecast'), threshold: 0.5 }],
+        },
+      ],
+    },
+  ],
+})
+
+result.verdict // folds in per-turn gate/threshold outcomes
+result.turnResults // [{ index, gateResults, thresholdResults, scores }]
+```
+
+Per-turn gates/scorers evaluate only that turn (`run.input`/`run.output` are that turn's). A failing turn gate makes the verdict `failed`; a missed turn threshold (gates passing) makes it `scored`. Top-level `scorers`/`gates` still score the accumulated conversation holistically. `turns` is Agent-only and cannot be combined with `input` or `inputs`.
+
 ## Related
 
+- [Multi-turn evals](/docs/evals/multi-turn): Conceptual guide to multi-turn evaluation
+- [Gates and Verdicts](/docs/evals/gates-and-verdicts): Conceptual guide to severity semantics
+- [Quick Checks](/reference/evals/checks): Zero-LLM composable micro-scorers
 - [createScorer()](/reference/evals/create-scorer): Create custom scorers for experiments
 - [MastraScorer](/reference/evals/mastra-scorer): Learn about scorer structure and methods
 - [Trajectory Accuracy](/reference/evals/trajectory-accuracy): Built-in trajectory evaluation scorers

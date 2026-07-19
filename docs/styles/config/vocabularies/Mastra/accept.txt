@@ -111,7 +111,7 @@ SQL
 SSE
 STS
 STT
-Supabase
+(?i)Supabase
 Svelte
 SvelteKit
 Swagger
@@ -130,8 +130,8 @@ Vercel
 Visual Studio Code
 Vectorize
 (?i)Vitest
-VNext
+(?i)VNext
 WebSocket
 WhatsApp
 (?i)WorkOS
-Zod
+(?i)Zod

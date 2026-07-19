@@ -20,6 +20,26 @@ function splitDataUrl(dataUrl: string): {
   }
 }
 
+/**
+ * Flat generated-file data is `string | Uint8Array`, where strings normally
+ * hold base64. URL-backed V4 generated files flatten to http(s) URL strings
+ * (matching AI SDK v7's own conversion), so consumers that interpret string
+ * data as base64 must use this check to tell the two apart. Base64 content
+ * never parses as an http(s) URL, making the check unambiguous.
+ */
+export function isUrlString(data: string): boolean {
+  if (!data.startsWith('http://') && !data.startsWith('https://')) {
+    return false;
+  }
+
+  try {
+    new URL(data);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function convertToDataContent(content: DataContent | URL): {
   data: LanguageModelV2DataContent;
   mediaType: string | undefined;
