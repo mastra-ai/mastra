@@ -85,6 +85,11 @@ export const goalDurationToolApprovalScenario: McE2eScenario = {
     terminal.submit('/goal status');
     await runtime.waitForScreenText(new RegExp(OBJECTIVE, 'i'), terminal, 8_000);
     const finalGoal = readGoal(dbPath);
+    if (finalGoal.activeDurationMs <= beforeSecond.activeDurationMs) {
+      throw new Error(
+        `Active execution after the second approval was not checkpointed: before=${beforeSecond.activeDurationMs} final=${finalGoal.activeDurationMs}`,
+      );
+    }
     process.stdout.write(
       `GOAL_DURATION_APPROVAL_CHECKPOINT before1=${beforeFirst.activeDurationMs} afterWait1=${afterFirstWait.activeDurationMs} before2=${beforeSecond.activeDurationMs} afterWait2=${afterSecondWait.activeDurationMs} final=${finalGoal.activeDurationMs}\n`,
     );

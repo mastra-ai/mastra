@@ -69,7 +69,7 @@ A goal step runs inside the agentic execution loop, right after `isTaskComplete`
 
 - **Not satisfied, budget remaining** → the loop continues; per-evaluation feedback is injected so the agent iterates.
 - **Satisfied** → the loop stops and the objective is marked `done`.
-- **Budget exhausted** (`runsUsed >= maxRuns`) → the loop stops but the objective stays `active`, so raising `maxRuns` later can resume it.
+- **Budget exhausted** (`runsUsed >= maxRuns`) → the loop stops and the objective is marked `paused`. Raise `maxRuns`, then resume the objective to continue.
 
 The step is a no-op for background-task, mid-tool-loop, and working-memory-only iterations — the same gating as `isTaskComplete`.
 

@@ -13,11 +13,12 @@ const THREAD = 'thread-1';
 
 // A model that always answers in a single step (so the loop reaches a candidate
 // final answer and the goal step scores it).
-function singleStepModel(text = 'Working on it.') {
+function singleStepModel(text = 'Working on it.', delayMs = 0) {
   let call = 0;
   return new MockLanguageModelV2({
     doStream: async () => {
       call++;
+      if (delayMs > 0) await new Promise(resolve => setTimeout(resolve, delayMs));
       return {
         rawCall: { rawPrompt: null, rawSettings: {} },
         warnings: [],
@@ -61,12 +62,12 @@ function goalJudgeModel(
   });
 }
 
-function makeAgent(goal?: GoalConfig) {
+function makeAgent(goal?: GoalConfig, model = singleStepModel()) {
   const agent = new Agent({
     id: 'goal-agent',
     name: 'goal-agent',
     instructions: 'You work toward goals.',
-    model: singleStepModel(),
+    model,
     memory: new MockMemory(),
     ...(goal ? { goal } : {}),
   });
@@ -199,6 +200,21 @@ describe('Agent objective methods', () => {
       expect((await agent.getObjective({ threadId: THREAD }))?.activeDurationMs).toBe(0);
     },
   );
+
+  it('checkpoints active duration when a raw Agent stream completes', async () => {
+    const agent = makeAgent(undefined, singleStepModel('Finished.', 20));
+    await agent.setObjective('Finish the task', { threadId: THREAD, resourceId: RESOURCE });
+
+    const stream = await agent.stream('go', {
+      memory: { resource: RESOURCE, thread: { id: THREAD } },
+      maxSteps: 1,
+    });
+    for await (const _chunk of stream.fullStream) {
+      // Drain the stream through its terminal lifecycle boundary.
+    }
+
+    expect((await agent.getObjective({ threadId: THREAD }))?.activeDurationMs).toBeGreaterThan(0);
+  });
 
   it('no-ops without storage', async () => {
     const agent = new Agent({
