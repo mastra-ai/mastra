@@ -217,6 +217,12 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             args: transformedArgs,
             type,
             runId: suspendedToolRunId ?? runId, // Store the runId so we can resume after page refresh
+            // Sub-agent suspensions store the nested run in `runId`. Resume APIs
+            // (approveToolCall/declineToolCall) must be called on the delegating
+            // agent with ITS run, so also store the parent run for consumers that
+            // recover purely from persisted metadata (e.g. channel approval
+            // clicks after a restart).
+            ...(suspendedToolRunId && suspendedToolRunId !== runId ? { parentRunId: runId } : {}),
             ...(type === 'suspension' ? { suspendPayload: transformedSuspendPayload } : {}),
             resumeSchema,
             ...(toolStateTransformMetadata ? { metadata: toolStateTransformMetadata } : {}),

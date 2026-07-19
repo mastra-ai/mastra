@@ -484,6 +484,96 @@ describe('createToolCallStep tool approval workflow', () => {
   });
 });
 
+describe('createToolCallStep delegated agent tool approvals', () => {
+  let controller: { enqueue: Mock };
+  let suspend: Mock;
+  let streamState: { serialize: Mock };
+  let assistantMessage: { role: string; content: { metadata: Record<string, any> } };
+  let messageList: MessageList;
+
+  beforeEach(() => {
+    controller = { enqueue: vi.fn() };
+    suspend = vi.fn().mockReturnValue(new Promise(() => {}));
+    streamState = { serialize: vi.fn().mockReturnValue('serialized-state') };
+    assistantMessage = {
+      role: 'assistant',
+      content: { metadata: {} },
+    };
+    messageList = {
+      get: {
+        input: { aiV5: { model: () => [] } },
+        response: { db: () => [assistantMessage] },
+        all: { db: () => [assistantMessage], aiV5: { model: () => [] } },
+      },
+    } as unknown as MessageList;
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
+  });
+
+  const runDelegatedApproval = async (subAgentRunId: string) => {
+    const tools = {
+      'agent-subAgent': {
+        execute: vi.fn(async (_args: unknown, opts: MastraToolInvocationOptions) => {
+          await opts.suspend?.({}, { requireToolApproval: true, runId: subAgentRunId });
+          return { text: 'done' };
+        }),
+      },
+    } as unknown as ToolSet;
+
+    const toolCallStep = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      runId: 'parent-run-id',
+      streamState,
+    });
+
+    const inputData = {
+      toolCallId: 'parent-tool-call-id',
+      toolName: 'agent-subAgent',
+      args: { prompt: 'do thing' },
+    };
+
+    const executePromise = toolCallStep.execute({
+      ...makeBaseExecuteParams(suspend),
+      writer: new ToolStream({
+        prefix: 'tool',
+        callId: inputData.toolCallId,
+        name: inputData.toolName,
+        runId: 'parent-run-id',
+      }),
+      inputData,
+    });
+    await new Promise(resolve => setImmediate(resolve));
+    await expect(Promise.race([executePromise, Promise.resolve('suspended')])).resolves.toBe('suspended');
+
+    return assistantMessage.content.metadata.pendingToolApprovals?.['parent-tool-call-id'];
+  };
+
+  it('stores parentRunId when the suspended run belongs to a nested agent', async () => {
+    const pending = await runDelegatedApproval('sub-agent-run-id');
+
+    expect(pending).toMatchObject({
+      toolCallId: 'parent-tool-call-id',
+      runId: 'sub-agent-run-id',
+      parentRunId: 'parent-run-id',
+    });
+  });
+
+  it('omits parentRunId when the suspended run is the current run', async () => {
+    const pending = await runDelegatedApproval('parent-run-id');
+
+    expect(pending).toMatchObject({
+      toolCallId: 'parent-tool-call-id',
+      runId: 'parent-run-id',
+    });
+    expect(pending).not.toHaveProperty('parentRunId');
+  });
+});
+
 describe('createToolCallStep needsApprovalFn enriched context', () => {
   let controller: { enqueue: Mock };
   let suspend: Mock;

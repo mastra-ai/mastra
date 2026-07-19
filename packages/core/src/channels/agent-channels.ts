@@ -326,12 +326,9 @@ export class AgentChannels {
           });
 
           // Look up the runId for this toolCallId. Prefer the in-memory
-          // `pendingApprovalCards` map (set when the approval card was posted)
-          // because it's keyed by toolCallId and survives parallel same-tool
-          // approvals. Fall back to the persisted `pendingToolApprovals`
-          // metadata for cases where the bot restarted between card post and
-          // click (the metadata path is lossy for parallel same-tool calls
-          // since core keys those by toolName — only the latest survives).
+          // `pendingApprovalCards` map (set when the approval card was posted).
+          // Fall back to the persisted `pendingToolApprovals` metadata for
+          // cases where the bot restarted between card post and click.
           let runId: string | undefined;
           let toolName: string | undefined;
           let toolArgs: Record<string, unknown> | undefined;
@@ -356,12 +353,24 @@ export class AgentChannels {
 
             for (const msg of messages) {
               const pending = msg.content?.metadata?.pendingToolApprovals as
-                | Record<string, { toolCallId: string; runId: string; toolName: string; args: Record<string, unknown> }>
+                | Record<
+                    string,
+                    {
+                      toolCallId: string;
+                      runId: string;
+                      parentRunId?: string;
+                      toolName: string;
+                      args: Record<string, unknown>;
+                    }
+                  >
                 | undefined;
               if (pending) {
                 for (const toolData of Object.values(pending)) {
                   if (toolData.toolCallId === toolCallId) {
-                    runId = toolData.runId;
+                    // Sub-agent approvals store the nested run in `runId` and the
+                    // channel-owning parent run in `parentRunId`. Resume APIs must
+                    // be called on this channel's agent with its own run.
+                    runId = toolData.parentRunId ?? toolData.runId;
                     toolName = toolData.toolName;
                     toolArgs = toolData.args;
                     break;
