@@ -67,6 +67,7 @@
     "@mastra/stagehand": "workspace:*",
     "@mastra/tavily": "workspace:*",
     "ai": "^6.0.225",
+    "aws4fetch": "^1.0.20",
     "execa": "^9.6.1",
     "libsql": "^0.5.29",
     "posthog-node": "^5.37.0",

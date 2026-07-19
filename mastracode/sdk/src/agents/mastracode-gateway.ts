@@ -1,6 +1,7 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+import { fromNodeProviderChain } from '@aws-sdk/credential-providers';
 import type { CustomAvailableModel, CustomModelCatalogProvider } from '@mastra/core/agent-controller';
 import {
   GATEWAY_AUTH_HEADER,
@@ -17,6 +18,8 @@ import type {
   ProviderConfig,
 } from '@mastra/core/llm';
 import { wrapLanguageModel } from 'ai';
+import type { LanguageModelMiddleware } from 'ai';
+import { AwsClient } from 'aws4fetch';
 import { AuthStorage } from '../auth/storage.js';
 import type { CredentialStore } from '../auth/types.js';
 import { getCustomProviderId, loadSettings, MASTRA_GATEWAY_PROVIDER } from '../onboarding/settings.js';
@@ -51,7 +54,15 @@ const CODEX_OPENAI_MODEL_REMAPS: Record<string, string> = {
 
 type ModelRequestHeaders = Record<string, string>;
 
-export type MastraCodeCustomProvider = { name: string; url: string; apiKey?: string; models?: string[] };
+export type MastraCodeCustomProvider = {
+  name: string;
+  url: string;
+  apiKey?: string;
+  models?: string[];
+  auth?: 'bearer' | 'aws-sigv4';
+  api?: 'chat' | 'responses';
+  store?: boolean;
+};
 
 export type MastraCodeGatewayOptions = {
   mastraGatewayBaseUrl: string;
@@ -77,6 +88,68 @@ export function reloadAuthStorage() {
 export function stripMastraGatewayPrefix(modelId: string): string {
   return modelId.startsWith(MASTRA_GATEWAY_PREFIX) ? modelId.substring(MASTRA_GATEWAY_PREFIX.length) : modelId;
 }
+
+/** True when a custom provider authenticates with AWS SigV4 rather than a key. */
+function isSigV4Provider(provider: MastraCodeCustomProvider): boolean {
+  return provider.auth === 'aws-sigv4';
+}
+
+/**
+ * Region for signing an AWS-hosted endpoint. Parsed from the host
+ * (`bedrock-mantle.<region>.api.aws`), falling back to AWS_REGION then us-east-1
+ * (the AWS SDK default).
+ */
+function regionForUrl(url: string): string {
+  const host = (() => {
+    try {
+      return new URL(url).host;
+    } catch {
+      return '';
+    }
+  })();
+  const match = host.match(/\.([a-z]{2}-[a-z]+-\d+)\./);
+  return match?.[1] ?? process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION ?? 'us-east-1';
+}
+
+/**
+ * A `fetch` that signs each request with AWS SigV4 (service `bedrock`) using the
+ * standard AWS credential chain — env vars, shared `~/.aws` config/SSO profiles,
+ * and container/instance roles. Used for custom providers with `auth: 'aws-sigv4'`
+ * (e.g. Bedrock's OpenAI-compatible endpoint, which signs rather than using a key).
+ */
+function createSigV4Fetch(region: string): typeof fetch {
+  const credentials = fromNodeProviderChain();
+  return (async (url: string | URL | Request, init?: Parameters<typeof fetch>[1]) => {
+    const c = await credentials();
+    const aws = new AwsClient({
+      accessKeyId: c.accessKeyId,
+      secretAccessKey: c.secretAccessKey,
+      sessionToken: c.sessionToken,
+      service: 'bedrock',
+      region,
+    });
+    return aws.fetch(url as any, init as any);
+  }) as typeof fetch;
+}
+
+/**
+ * Middleware forcing `store: false` for `/responses` requests. The OpenAI
+ * `/responses` SDK defaults to `store: true` and replays prior turns as
+ * `item_reference` items pointing at server-side state. Endpoints with short
+ * retention (e.g. Bedrock) then reject a resumed thread or expired item with
+ * `Invalid 'input': value did not match any expected variant`. Forcing
+ * `store: false` sends self-contained history instead.
+ */
+const storeFalseMiddleware: LanguageModelMiddleware = {
+  specificationVersion: 'v3',
+  transformParams: async ({ params }) => ({
+    ...params,
+    providerOptions: {
+      ...params.providerOptions,
+      openai: { ...params.providerOptions?.openai, store: false },
+    },
+  }),
+};
 
 function normalizeAnthropicModelId(modelId: string): string {
   return modelId.replace(/\.(?=\d)/g, '-');
@@ -420,6 +493,12 @@ export class MastraCodeGateway extends MastraModelGateway {
     if (customProvider?.apiKey) {
       return { apiKey: customProvider.apiKey, source: 'gateway' };
     }
+    // SigV4 custom providers have no API key — auth is the AWS credential chain,
+    // signed per-request. Report a synthetic credential so the model catalog
+    // marks them usable (otherwise `--mode`/`--model` validation rejects them).
+    if (customProvider && isSigV4Provider(customProvider)) {
+      return { apiKey: 'aws-credential-chain', source: 'gateway' };
+    }
 
     return MastraCodeGateway.resolveProviderAuth(request, undefined, this.#credentials);
   }
@@ -436,13 +515,7 @@ export class MastraCodeGateway extends MastraModelGateway {
       provider => args.providerId === getCustomProviderId(provider.name),
     );
     if (customProvider) {
-      const provider = createOpenAICompatible({
-        name: args.providerId,
-        baseURL: customProvider.url,
-        apiKey: args.apiKey,
-        headers: args.headers,
-      });
-      return provider.chatModel(args.modelId) as unknown as GatewayLanguageModel;
+      return this.#resolveCustomProviderModel(customProvider, args);
     }
 
     if (args.providerId === 'github-copilot') {
@@ -493,6 +566,57 @@ export class MastraCodeGateway extends MastraModelGateway {
       id: `${args.providerId}/${args.modelId}` as `${string}/${string}`,
       headers: args.headers,
     }) as unknown as GatewayLanguageModel;
+  }
+
+  /**
+   * Resolve a model served by a user-configured custom provider.
+   *
+   * Defaults preserve the original behavior: a bearer-key OpenAI-compatible
+   * `/chat/completions` provider. Opt-in fields extend it for AWS-hosted
+   * OpenAI-compatible endpoints (e.g. Bedrock):
+   * - `auth: 'aws-sigv4'` signs requests with the AWS credential chain.
+   * - `api: 'responses'` uses the `/responses` API (required by some models).
+   * - `store: false` sends self-contained history (see storeFalseMiddleware).
+   */
+  #resolveCustomProviderModel(
+    provider: MastraCodeCustomProvider,
+    args: { modelId: string; providerId: string; apiKey: string; headers?: Record<string, string> },
+  ): GatewayLanguageModel {
+    const useResponses = provider.api === 'responses';
+    const sigv4 = isSigV4Provider(provider);
+
+    // Bearer + chat: the original path, unchanged for existing providers.
+    if (!useResponses && !sigv4) {
+      const openaiCompatible = createOpenAICompatible({
+        name: args.providerId,
+        baseURL: provider.url,
+        apiKey: args.apiKey,
+        headers: args.headers,
+      });
+      return openaiCompatible.chatModel(args.modelId) as unknown as GatewayLanguageModel;
+    }
+
+    const openai = createOpenAI({
+      name: args.providerId,
+      baseURL: provider.url,
+      // SigV4 endpoints sign per-request via `fetch`; the key is unused but the
+      // SDK requires a non-empty value.
+      apiKey: sigv4 ? 'aws-sigv4' : args.apiKey,
+      headers: args.headers,
+      ...(sigv4 ? { fetch: createSigV4Fetch(regionForUrl(provider.url)) } : {}),
+    });
+
+    if (!useResponses) {
+      return openai.chat(args.modelId) as unknown as GatewayLanguageModel;
+    }
+
+    const model = openai.responses(args.modelId);
+    // Default store:false for SigV4 endpoints (short server-side retention);
+    // otherwise honor an explicit `store` and leave the SDK default when unset.
+    const forceStoreFalse = provider.store === false || (sigv4 && provider.store === undefined);
+    return (forceStoreFalse
+      ? wrapLanguageModel({ model, middleware: [storeFalseMiddleware] })
+      : model) as unknown as GatewayLanguageModel;
   }
 
   #resolveAnthropicModel(args: {

@@ -661,6 +661,43 @@ describe('resolveModel', () => {
         'x-resource-id': 'resource-456',
       });
     });
+
+    it('strips a legacy mastracode/amazon-bedrock/ prefix and resolves through the Bedrock gateway', () => {
+      const result = resolveModel(`mastracode/${MODEL_TOKENS.__GATEWAY_BEDROCK_MODEL_OPUS__}`) as Record<
+        string,
+        unknown
+      >;
+
+      expect(result.__provider).toBe('amazon-bedrock');
+      expect(result.modelId).toBe(MODEL_TOKENS.__BEDROCK_MODEL_OPUS_BARE__);
+    });
+  });
+
+  describe('custom provider model ids (mastracode/ prefix)', () => {
+    beforeEach(() => {
+      mockLoadSettings.mockReturnValue({
+        customProviders: [{ name: 'bedrock-mantle', url: 'https://bedrock-mantle.us-east-1.api.aws/openai/v1' }],
+        memoryGateway: {},
+      });
+    });
+
+    // Regression for defect 5: the catalog produces `mastracode/<custom>/<model>`
+    // ids, but resolveModel only stripped the `mastracode/` prefix for the legacy
+    // amazon-bedrock case, so a custom-provider id mis-parsed as provider
+    // "mastracode" and failed with "Could not find config for provider mastracode".
+    it('strips the mastracode/ prefix so a custom-provider id parses to <provider>/<model>', () => {
+      const result = resolveModel('mastracode/bedrock-mantle/some-model') as Record<string, unknown>;
+
+      expect(result.__provider).toBe('custom-openai-compatible');
+      expect(result.modelId).toBe('some-model');
+    });
+
+    it('resolves a bare custom-provider id (no prefix) unchanged', () => {
+      const result = resolveModel('bedrock-mantle/some-model') as Record<string, unknown>;
+
+      expect(result.__provider).toBe('custom-openai-compatible');
+      expect(result.modelId).toBe('some-model');
+    });
   });
 
   describe('mastra gateway enabled (gateway API key stored)', () => {

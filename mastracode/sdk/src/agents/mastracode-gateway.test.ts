@@ -21,6 +21,27 @@ const { appDataDir } = vi.hoisted(() => {
   return { appDataDir: dir };
 });
 
+// Spy on the AI SDK factories so custom-provider routing (chat vs responses,
+// bearer vs SigV4) is observable without live network calls. Each returns a
+// tagged object identifying which factory/method produced the model.
+const { createOpenAIMock, createOpenAICompatibleMock } = vi.hoisted(() => {
+  const createOpenAIMock = vi.fn((opts: Record<string, unknown>) => ({
+    responses: (modelId: string) => ({ __kind: 'openai.responses', modelId, opts }),
+    chat: (modelId: string) => ({ __kind: 'openai.chat', modelId, opts }),
+  }));
+  const createOpenAICompatibleMock = vi.fn((opts: Record<string, unknown>) => ({
+    chatModel: (modelId: string) => ({ __kind: 'compatible.chatModel', modelId, opts }),
+  }));
+  return { createOpenAIMock, createOpenAICompatibleMock };
+});
+
+vi.mock('@ai-sdk/openai', () => ({ createOpenAI: createOpenAIMock }));
+vi.mock('@ai-sdk/openai-compatible', () => ({ createOpenAICompatible: createOpenAICompatibleMock }));
+vi.mock('@aws-sdk/credential-providers', () => ({
+  fromNodeProviderChain: () => async () => ({ accessKeyId: 'AKIA', secretAccessKey: 'secret', sessionToken: 'token' }),
+}));
+
+import type { MastraCodeCustomProvider } from './mastracode-gateway.js';
 import { MastraCodeGateway, reloadAuthStorage } from './mastracode-gateway.js';
 
 mkdirSync(appDataDir, { recursive: true });
@@ -30,12 +51,22 @@ function writeAuthJson(data: Record<string, unknown>): void {
   reloadAuthStorage();
 }
 
-function createGateway(): MastraCodeGateway {
+function createGateway(customProviders: MastraCodeCustomProvider[] = []): MastraCodeGateway {
   return new MastraCodeGateway({
     mastraGatewayBaseUrl: 'https://gateway.example.com',
     routeThroughMastraGateway: false,
-    customProviders: [],
+    customProviders,
     settingsPath: join(tmpdir(), 'nonexistent-settings.json'),
+  });
+}
+
+const BEDROCK_URL = 'https://bedrock-mantle.us-east-1.api.aws/openai/v1';
+
+function resolveCustomModel(provider: MastraCodeCustomProvider, modelId: string, apiKey = ''): any {
+  return createGateway([provider]).resolveLanguageModel({
+    providerId: 'bedrock-mantle',
+    modelId,
+    apiKey,
   });
 }
 
@@ -147,6 +178,72 @@ describe('MastraCodeGateway', () => {
 
       const getMemoryGatewayApiKey = MastraCodeGateway.getMemoryGatewayApiKey;
       expect(getMemoryGatewayApiKey()).toBe('msk-test');
+    });
+  });
+
+  describe('custom provider resolveAuth', () => {
+    it('reports a synthetic AWS credential for a SigV4 provider (so the catalog marks it usable)', () => {
+      const auth = createGateway([{ name: 'bedrock-mantle', url: BEDROCK_URL, auth: 'aws-sigv4' }]).resolveAuth({
+        gatewayId: 'mastracode',
+        providerId: 'bedrock-mantle',
+        modelId: 'openai.gpt-5.6-terra',
+        routerId: 'mastracode/bedrock-mantle/openai.gpt-5.6-terra',
+      });
+      expect(auth).toEqual({ apiKey: 'aws-credential-chain', source: 'gateway' });
+    });
+
+    it('returns the configured bearer key for a non-SigV4 provider', () => {
+      const auth = createGateway([{ name: 'my-llm', url: 'https://api.example.com/v1', apiKey: 'sk-abc' }]).resolveAuth(
+        {
+          gatewayId: 'mastracode',
+          providerId: 'my-llm',
+          modelId: 'some-model',
+          routerId: 'mastracode/my-llm/some-model',
+        },
+      );
+      expect(auth).toEqual({ apiKey: 'sk-abc', source: 'gateway' });
+    });
+  });
+
+  describe('custom provider resolveLanguageModel', () => {
+    beforeEach(() => {
+      createOpenAIMock.mockClear();
+      createOpenAICompatibleMock.mockClear();
+    });
+
+    it('uses createOpenAICompatible().chatModel for a default (bearer + chat) provider', () => {
+      const model = resolveCustomModel(
+        { name: 'bedrock-mantle', url: 'https://api.example.com/v1' },
+        'some-model',
+        'sk',
+      );
+      expect(model.__kind).toBe('compatible.chatModel');
+      expect(createOpenAICompatibleMock).toHaveBeenCalledTimes(1);
+      expect(createOpenAIMock).not.toHaveBeenCalled();
+    });
+
+    it('uses openai.responses with a SigV4 fetch for auth:aws-sigv4 + api:responses', () => {
+      const model = resolveCustomModel(
+        { name: 'bedrock-mantle', url: BEDROCK_URL, auth: 'aws-sigv4', api: 'responses' },
+        'openai.gpt-5.6-terra',
+      );
+      // wrapped by store:false middleware, so unwrap to find the tagged model.
+      expect(createOpenAIMock).toHaveBeenCalledTimes(1);
+      const opts = createOpenAIMock.mock.calls[0]![0] as Record<string, unknown>;
+      expect(opts.baseURL).toBe(BEDROCK_URL);
+      expect(typeof opts.fetch).toBe('function');
+      expect(createOpenAICompatibleMock).not.toHaveBeenCalled();
+      expect(model).toBeDefined();
+    });
+
+    it('does not pass a fetch for a bearer + responses provider', () => {
+      resolveCustomModel(
+        { name: 'bedrock-mantle', url: 'https://api.example.com/v1', api: 'responses', store: false },
+        'some-model',
+        'sk',
+      );
+      const opts = createOpenAIMock.mock.calls[0]![0] as Record<string, unknown>;
+      expect(opts.fetch).toBeUndefined();
     });
   });
 });
