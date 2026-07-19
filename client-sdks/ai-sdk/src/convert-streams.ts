@@ -12,6 +12,8 @@ import type { MastraModelOutput, ChunkType, MastraAgentNetworkStream, WorkflowRu
 import type { MastraWorkflowStream, Step, WorkflowResult } from '@mastra/core/workflows';
 import type { ZodObject, ZodType } from 'zod/v4';
 import type { V6UIMessageStream } from './public-types';
+import { applyMastraStreamTransforms } from './smooth-stream';
+import type { MastraStreamTransformOptions } from './smooth-stream';
 import {
   AgentNetworkToAISDKTransformer,
   AgentStreamToAISDKTransformer,
@@ -55,6 +57,8 @@ type AgentStreamOptionsBase = {
   sendFinish?: boolean;
   sendReasoning?: boolean;
   sendSources?: boolean;
+  /** Experimental transforms applied to Mastra chunks before AI SDK UI conversion. */
+  experimentalTransform?: MastraStreamTransformOptions<any>;
 };
 
 type AgentStreamOptionsV5 = AgentStreamOptionsBase & {
@@ -137,7 +141,7 @@ export function toAISdkV5Stream(
 
   const agentReadable: ReadableStream<ChunkType<any>> =
     'fullStream' in stream ? (stream as MastraModelOutput<any>).fullStream : (stream as ReadableStream<ChunkType<any>>);
-  return agentReadable.pipeThrough(
+  return applyMastraStreamTransforms(agentReadable, options.experimentalTransform).pipeThrough(
     AgentStreamToAISDKTransformer<any>({
       lastMessageId: options.lastMessageId,
       sendStart: options.sendStart,
@@ -238,7 +242,7 @@ export function toAISdkStream(
       'fullStream' in stream
         ? (stream as MastraModelOutput<any>).fullStream
         : (stream as ReadableStream<ChunkType<any>>);
-    return agentReadable.pipeThrough(
+    return applyMastraStreamTransforms(agentReadable, options.experimentalTransform).pipeThrough(
       AgentStreamToAISDKV6Transformer<any>({
         lastMessageId: options.lastMessageId,
         sendStart: options.sendStart,
@@ -277,7 +281,7 @@ export function toAISdkStream(
 
   const agentReadable: ReadableStream<ChunkType<any>> =
     'fullStream' in stream ? (stream as MastraModelOutput<any>).fullStream : (stream as ReadableStream<ChunkType<any>>);
-  return agentReadable.pipeThrough(
+  return applyMastraStreamTransforms(agentReadable, options.experimentalTransform).pipeThrough(
     AgentStreamToAISDKTransformer<any>({
       lastMessageId: options.lastMessageId,
       sendStart: options.sendStart,

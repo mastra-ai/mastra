@@ -45,6 +45,8 @@ export type {
   // Callback Types
   MastraOnFinishCallback,
   MastraOnFinishCallbackArgs,
+  MastraStreamTransform,
+  MastraStreamTransformOptions,
 
   // JSON & Data Types
   JSONArray,

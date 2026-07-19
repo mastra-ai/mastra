@@ -8,7 +8,7 @@ import type { Mastra } from '../../mastra';
 import { createObservabilityContext, getOrCreateSpan, SpanType, EntityType } from '../../observability';
 import { RequestContext } from '../../request-context';
 import type { FullOutput, MastraModelOutput } from '../../stream/base/output';
-import type { ChunkType, MastraOnFinishCallback } from '../../stream/types';
+import type { ChunkType, MastraOnFinishCallback, MastraStreamTransformOptions } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
 import type { WorkflowRunState, WorkflowRunStatus } from '../../workflows/types';
 import { Agent } from '../agent';
@@ -78,6 +78,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   toolCallConcurrency?: number;
   /** Whether to include raw chunks in the stream output */
   includeRawChunks?: boolean;
+  /** Experimental transforms applied whenever `fullStream` is consumed. */
+  experimentalTransform?: MastraStreamTransformOptions<OUTPUT>;
   /** Maximum processor retries */
   maxProcessorRetries?: number;
   /** Structured output configuration */
@@ -386,6 +388,8 @@ export interface DurableAgentRecoverActiveRunsResult {
 export interface DurableAgentRecoverOptions<OUTPUT = undefined> {
   /** Callback when chunk is received */
   onChunk?: (chunk: ChunkType<OUTPUT>) => void | Promise<void>;
+  /** Experimental transforms applied whenever `fullStream` is consumed. */
+  experimentalTransform?: MastraStreamTransformOptions<OUTPUT>;
   /** Callback when a step finishes */
   onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
   /** Callback when the recovered run finishes */
@@ -1089,6 +1093,7 @@ export class DurableAgent<
       threadId,
       resourceId,
       onChunk: options?.onChunk,
+      experimentalTransform: options?.experimentalTransform,
       onStepFinish: options?.onStepFinish,
       onFinish: options?.onFinish,
       onStreamFinished: scheduleAutoCleanup,
@@ -1342,6 +1347,7 @@ export class DurableAgent<
       resourceId: memoryInfo?.resourceId,
       offset: resumeOffset,
       onChunk: options?.onChunk,
+      experimentalTransform: options?.experimentalTransform,
       onStepFinish: options?.onStepFinish,
       onFinish: options?.onFinish,
       onStreamFinished: scheduleAutoCleanup,
@@ -1799,6 +1805,7 @@ export class DurableAgent<
       resourceId,
       offset: recoverOffset,
       onChunk: options?.onChunk,
+      experimentalTransform: options?.experimentalTransform,
       onStepFinish: options?.onStepFinish,
       onFinish: options?.onFinish,
       onStreamFinished: scheduleAutoCleanup,
@@ -2039,6 +2046,7 @@ export class DurableAgent<
       threadId,
       resourceId,
       onChunk: options?.onChunk,
+      experimentalTransform: options?.experimentalTransform,
       onStepFinish: options?.onStepFinish,
       onFinish: options?.onFinish,
       onStreamFinished: scheduleAutoCleanup,
@@ -2393,6 +2401,7 @@ export class DurableAgent<
     options?: {
       offset?: number;
       onChunk?: (chunk: ChunkType<TOutput>) => void | Promise<void>;
+      experimentalTransform?: MastraStreamTransformOptions<TOutput>;
       onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
       onFinish?: MastraOnFinishCallback<TOutput>;
       onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
@@ -2434,6 +2443,7 @@ export class DurableAgent<
       resourceId: memoryInfo?.resourceId,
       offset: options?.offset,
       onChunk: options?.onChunk,
+      experimentalTransform: options?.experimentalTransform,
       onStepFinish: options?.onStepFinish,
       onFinish: options?.onFinish,
       onStreamFinished: scheduleAutoCleanup,

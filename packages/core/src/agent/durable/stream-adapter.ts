@@ -9,6 +9,7 @@ import type {
   ChunkType,
   MastraOnFinishCallback,
   MastraOnStepFinishCallback,
+  MastraStreamTransformOptions,
   LanguageModelUsage,
 } from '../../stream/types';
 import { MessageList } from '../message-list';
@@ -98,6 +99,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   structuredOutput?: StructuredOutputOptions<OUTPUT>;
   /** Output processors to run in MastraModelOutput's stream pipeline */
   outputProcessors?: OutputProcessorOrWorkflow[];
+  /** Experimental transforms applied whenever the returned full stream is consumed. */
+  experimentalTransform?: MastraStreamTransformOptions<OUTPUT>;
   /**
    * Optional external MessageList to use instead of creating a fresh empty one.
    * When provided (e.g. the registry's live MessageList), MastraModelOutput can
@@ -148,6 +151,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     closeOnSuspend = false,
     structuredOutput,
     outputProcessors,
+    experimentalTransform,
     messageList: externalMessageList,
   } = options;
 
@@ -468,6 +472,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       isLLMExecutionStep: true,
       resolveFinalPromises: true,
       outputProcessors,
+      experimentalTransform,
     },
   });
 

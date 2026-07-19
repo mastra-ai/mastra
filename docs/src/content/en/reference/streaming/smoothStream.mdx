@@ -3,6 +3,7 @@ title: "Reference: smoothStream() | Streaming"
 description: "API reference for smoothStream(), which buffers text and reasoning deltas and emits them in consistent chunks."
 packages:
   - "@mastra/core"
+  - "@mastra/ai-sdk"
 ---
 
 # `smoothStream()`
@@ -35,6 +36,47 @@ for await (const chunk of stream) {
 ```
 
 The transform changes only the piped stream. Promise properties and callbacks on the original `MastraModelOutput`, such as `result.text` and `onChunk`, keep the model's original chunk timing.
+
+## AI SDK routes
+
+Import `smoothStream()` from `@mastra/ai-sdk` to smooth an agent before `handleChatStream()` converts its output to AI SDK UI chunks:
+
+```typescript title="app/api/chat/route.ts"
+import { handleChatStream, smoothStream } from '@mastra/ai-sdk'
+import { createUIMessageStreamResponse } from 'ai'
+import { mastra } from '@/src/mastra'
+
+export async function POST(req: Request) {
+  const params = await req.json()
+  const stream = await handleChatStream({
+    mastra,
+    agentId: 'weatherAgent',
+    params,
+    experimentalTransform: smoothStream({
+      delayInMs: 20,
+      chunking: 'word',
+    }),
+  })
+
+  return createUIMessageStreamResponse({ stream })
+}
+```
+
+The `@mastra/ai-sdk` export returns a reusable transform factory so route configuration creates a fresh `TransformStream` for every request. The `@mastra/core/stream` export returns a `TransformStream` for direct use with `pipeThrough()`.
+
+The reusable factory can also be passed to `Agent.stream()`:
+
+```typescript
+import { smoothStream } from '@mastra/ai-sdk'
+
+const result = await agent.stream('Explain how rainbows form', {
+  experimentalTransform: smoothStream({ delayInMs: 20 }),
+})
+
+for await (const chunk of result.fullStream) {
+  // Consume the transformed Mastra chunks.
+}
+```
 
 ## Parameters
 

@@ -36,6 +36,7 @@ import type {
   ChunkType,
   MastraOnFinishCallback,
   MastraOnStepFinishCallback,
+  MastraStreamTransformOptions,
   ModelManagerModelConfig,
   StreamChunkType,
   StreamTransportRef,
@@ -181,6 +182,7 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
   toolCallStreaming?: boolean;
   messageList: MessageList;
   includeRawChunks?: boolean;
+  experimentalTransform?: MastraStreamTransformOptions<OUTPUT>;
   modelSettings?: Omit<CallSettings, 'abortSignal'> & {
     /**
      * Reasoning effort level for the model. Controls how much reasoning
