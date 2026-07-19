@@ -286,10 +286,12 @@ export class MastraFactory {
     // registered app domains initialize fail-soft inside FactoryStorage.
     await storage.init();
 
-    // Per-tenant model credentials: once the credentials domain is up, model
-    // resolution goes through the caller's own store and the SDK stops
-    // mirroring stored API keys into process.env.
-    registerTenantCredentialResolver();
+    // Authenticated requests may resolve tenant credentials, so auth makes the
+    // credentials domain a hard dependency even though other app domains remain
+    // fail-soft. Auth-less mode keeps the SDK's environment-backed fallback when
+    // the domain is unavailable.
+    if (auth) await storage.ensureDomainReady('model-credentials');
+    if (storage.isDomainReady('model-credentials')) registerTenantCredentialResolver();
 
     // GitHub App + cloud-sandbox readiness, resolved BEFORE constructing the
     // Mastra args so the github routes are simply omitted from `apiRoutes`
@@ -317,7 +319,10 @@ export class MastraFactory {
     const readyIntegrations = integrations.map(integration => ({
       integration,
       ready: integrationReady.get(integration.id) ?? false,
-      ensureReady: () => storage.ensureDomainReady(integration.id === 'github' ? 'source-control' : 'integrations'),
+      ensureReady: async () => {
+        await storage.ensureDomainReady('integrations');
+        if (integration.id === 'github') await storage.ensureDomainReady('source-control');
+      },
     }));
 
     // Boot assertion: an active integration that signs OAuth `state` needs a

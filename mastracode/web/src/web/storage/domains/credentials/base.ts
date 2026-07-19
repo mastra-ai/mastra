@@ -206,24 +206,36 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
   /** Upsert the tenant's credential (`created_at` is preserved on update). */
   async setCredential(tenant: CredentialTenant, provider: string, credential: AuthCredential): Promise<void> {
     assertCredentialScope(tenant, credential);
-    const now = new Date();
     const where = tenantWhere(tenant, provider);
-    const set = { type: credential.type, data: credential, updated_at: now };
-    const updated = await this.#db.updateMany('model_provider_credentials', where, set);
-    if (updated > 0) return;
-    try {
-      await this.#db.insertOne('model_provider_credentials', {
-        org_id: tenant.orgId,
-        user_id: tenant.userId ?? null,
-        provider,
-        ...set,
-        created_at: now,
+    const update = async () =>
+      this.#db.updateMany('model_provider_credentials', where, {
+        type: credential.type,
+        data: credential,
+        updated_at: new Date(),
       });
-    } catch (error) {
-      if (!(error instanceof UniqueViolationError)) throw error;
-      // Lost the insert race — the row exists now; apply as an update.
-      await this.#db.updateMany('model_provider_credentials', where, set);
+
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if ((await update()) > 0) return;
+
+      const now = new Date();
+      try {
+        await this.#db.insertOne<CredentialDbRow>('model_provider_credentials', {
+          org_id: tenant.orgId,
+          user_id: tenant.userId ?? null,
+          provider,
+          type: credential.type,
+          data: credential,
+          created_at: now,
+          updated_at: now,
+        });
+        return;
+      } catch (error) {
+        if (!(error instanceof UniqueViolationError)) throw error;
+        lastError = error;
+      }
     }
+    throw lastError;
   }
 
   /** Delete the tenant's credential at exactly that scope. True when a row was removed. */

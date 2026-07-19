@@ -13,4 +13,16 @@ import { setupServer } from 'msw/node';
  * the fixed local resourceId. Tests that exercise authenticated flows override
  * it with `server.use(...)`.
  */
-export const server = setupServer(http.get('*/auth/me', () => HttpResponse.json(null, { status: 404 })));
+export const server = setupServer(
+  http.get('*/auth/me', () => HttpResponse.json(null, { status: 404 })),
+  http.get('*/web/github/projects', () => {
+    const raw = globalThis.localStorage?.getItem('mastracode-projects');
+    if (!raw) return HttpResponse.json([]);
+    try {
+      const projects = JSON.parse(raw) as Array<{ source?: string }>;
+      return HttpResponse.json(projects.filter(project => project.source === 'github'));
+    } catch {
+      return HttpResponse.json([]);
+    }
+  }),
+);

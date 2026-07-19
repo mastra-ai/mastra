@@ -243,6 +243,22 @@ export function describeFactoryStorageContract(
         const all = await storage.ops.findMany(CONTRACT_ITEMS.name, { org_id: 'org-1', name: 'settings' });
         expect(all).toHaveLength(1);
       });
+
+      it('rejects conflict keys that are incomplete, non-unique, or inapplicable to a partial index', async () => {
+        await expect(
+          storage.ops.upsertOne(CONTRACT_ITEMS.name, ['org_id'], baseItem({ name: 'not-unique' })),
+        ).rejects.toThrow(/primary key or unique index/);
+        await expect(
+          storage.ops.upsertOne(CONTRACT_ITEMS.name, ['org_id', 'name'], { org_id: 'org-1' }),
+        ).rejects.toThrow(/present in the row/);
+        await expect(
+          storage.ops.upsertOne(
+            CONTRACT_ITEMS.name,
+            ['org_id', 'source_key'],
+            baseItem({ name: 'partial-miss', source_key: null }),
+          ),
+        ).rejects.toThrow(/primary key or unique index/);
+      });
     });
 
     describe('find', () => {
@@ -283,6 +299,13 @@ export function describeFactoryStorageContract(
           { orderBy: [['count', 'asc']] },
         );
         expect(filtered.map(r => r.name)).toEqual(['c', 'a']);
+
+        const nullable = await storage.ops.findMany<ContractItemRow>(
+          CONTRACT_ITEMS.name,
+          { org_id: 'org-1', source_key: { in: [null, 'missing'] } },
+          { orderBy: [['count', 'asc']] },
+        );
+        expect(nullable.map(r => r.name)).toEqual(['b', 'c', 'a', 'd']);
 
         const limited = await storage.ops.findMany<ContractItemRow>(
           CONTRACT_ITEMS.name,

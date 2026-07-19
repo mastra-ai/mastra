@@ -1,3 +1,4 @@
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
@@ -6,8 +7,12 @@ import { useOverlays } from '../../../lib/overlays';
 import { useActiveProjectContext } from '../context/ActiveProjectProvider';
 import { DirectoryBrowser } from './DirectoryPicker';
 
+interface ProjectsModalProps {
+  onOpenGithub?: () => void;
+}
+
 /** Dedicated local-folder picker. Project selection and removal live elsewhere. */
-export function ProjectsModal() {
+export function ProjectsModal({ onOpenGithub }: ProjectsModalProps) {
   const { close } = useOverlays();
   const { selectProject } = useActiveProjectContext();
   const addProject = useAddProjectMutation();
@@ -35,6 +40,11 @@ export function ProjectsModal() {
             Choose a folder on this machine. Its threads, memory, and workspace stay scoped to that directory — and are
             shared with the terminal.
           </Txt>
+          {onOpenGithub ? (
+            <Button type="button" variant="outline" size="sm" onClick={onOpenGithub}>
+              Open from GitHub
+            </Button>
+          ) : null}
           <DirectoryBrowser
             onPick={(path, name) => void handlePick(path, name)}
             onCancel={() => close('projects')}

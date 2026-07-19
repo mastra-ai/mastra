@@ -5,9 +5,9 @@ import { queryKeys } from '../api/keys';
 import { createProjectFromRepo } from '../../web/ui/domains/workspaces/services/github';
 import type { GithubRepo } from '../../web/ui/domains/workspaces/services/github';
 import {
-  addGithubProject,
   addProject,
   ensureResourceId,
+  loadLocalProjects,
   loadProjects,
   loadProjectsWithResolvedIds,
   removeProject,
@@ -23,7 +23,8 @@ export function useProjectsQuery() {
   return useQuery({
     queryKey: queryKeys.projects(),
     queryFn: () => loadProjectsWithResolvedIds(baseUrl),
-    initialData: loadProjects,
+    initialData: loadLocalProjects,
+    initialDataUpdatedAt: 0,
   });
 }
 
@@ -37,11 +38,10 @@ export function useAddProjectMutation() {
 }
 
 export function useRemoveProjectMutation() {
+  const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
-      removeProject(id);
-    },
+    mutationFn: (id: string) => removeProject(baseUrl, id),
     onSuccess: () => {
       queryClient.setQueryData(queryKeys.projects(), loadProjects());
       invalidateProjects(queryClient);
@@ -62,7 +62,7 @@ export function useCreateGithubProjectMutation() {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (repo: GithubRepo) => addGithubProject(await createProjectFromRepo(baseUrl, repo)),
+    mutationFn: (repo: GithubRepo) => createProjectFromRepo(baseUrl, repo),
     onSuccess: () => invalidateProjects(queryClient),
   });
 }

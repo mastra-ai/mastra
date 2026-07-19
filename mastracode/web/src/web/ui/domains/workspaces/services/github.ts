@@ -118,6 +118,25 @@ export async function listGithubRepos(baseUrl: string, query?: string): Promise<
  * Create a project from a repo. The server persists a `source_control_projects`
  * row (no sandbox, no clone yet) and returns a `Project` payload of `source: github`.
  */
+export async function listGithubProjects(baseUrl: string): Promise<Project[]> {
+  const res = await fetch(`${baseUrl}/web/github/projects`, {
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
+  });
+  if (res.status === 404) return [];
+  if (!res.ok) throw new Error(`Failed to list projects (${res.status})`);
+  return (await res.json()) as Project[];
+}
+
+export async function deleteGithubProject(baseUrl: string, projectId: string): Promise<void> {
+  const res = await fetch(`${baseUrl}/web/github/projects/${encodeURIComponent(projectId)}`, {
+    method: 'DELETE',
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
+  });
+  if (!res.ok) throw new Error(`Failed to delete project (${res.status})`);
+}
+
 export async function createProjectFromRepo(baseUrl: string, repo: GithubRepo): Promise<Project> {
   const res = await fetch(`${baseUrl}/web/github/projects`, {
     method: 'POST',

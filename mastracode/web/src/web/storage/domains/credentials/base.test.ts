@@ -6,7 +6,7 @@
  */
 
 import { LibSQLFactoryStorage } from '@mastra/libsql';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { ModelCredentialsStorage } from './base';
 
@@ -21,6 +21,7 @@ async function makeStore(): Promise<ModelCredentialsStorage> {
   const backend = new LibSQLFactoryStorage({ id: 'credentials-test', url: ':memory:' });
   const domain = backend.registerDomain(new ModelCredentialsStorage());
   await backend.init();
+  onTestFinished(() => backend.close());
   return domain;
 }
 

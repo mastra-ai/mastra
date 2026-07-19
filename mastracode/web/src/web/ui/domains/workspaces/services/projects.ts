@@ -12,7 +12,7 @@
  * workspace factory reads it to resolve the working directory.
  */
 
-import type { MaterializeResult } from './github';
+import { deleteGithubProject, listGithubProjects } from './github';
 
 const STORAGE_KEY = 'mastracode-projects';
 const ACTIVE_KEY = 'mastracode-active-project';
@@ -152,25 +152,46 @@ export function saveProjects(projects: Project[]): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
 }
 
+export function loadLocalProjects(): Project[] {
+  return loadProjects().filter(project => project.source !== 'github');
+}
+
 export async function loadProjectsWithResolvedIds(baseUrl: string): Promise<Project[]> {
-  const projects = loadProjects();
-  const resolvedProjects = await Promise.all(
-    projects.map(async project => {
-      if (project.resourceId || !project.path) return project;
-      try {
-        const resolved = await resolveProjectPath(baseUrl, project.path);
-        return { ...project, resourceId: resolved.resourceId, gitBranch: resolved.gitBranch };
-      } catch {
-        return project;
-      }
-    }),
+  const cachedProjects = loadProjects();
+  const localProjects = cachedProjects.filter(project => project.source !== 'github');
+  const cachedGithubProjects = new Map(
+    cachedProjects.filter(project => project.source === 'github').map(project => [project.githubProjectId, project]),
   );
-
-  if (resolvedProjects.some((project, index) => project !== projects[index])) {
-    saveProjects(resolvedProjects);
-  }
-
-  return resolvedProjects;
+  const [resolvedLocalProjects, githubProjects] = await Promise.all([
+    Promise.all(
+      localProjects.map(async project => {
+        if (project.resourceId || !project.path) return project;
+        try {
+          const resolved = await resolveProjectPath(baseUrl, project.path);
+          return { ...project, resourceId: resolved.resourceId, gitBranch: resolved.gitBranch };
+        } catch {
+          return project;
+        }
+      }),
+    ),
+    listGithubProjects(baseUrl),
+  ]);
+  const hydratedGithubProjects = githubProjects.map(project => {
+    const cached = cachedGithubProjects.get(project.githubProjectId);
+    if (!cached) return project;
+    const cachedWorktrees = new Map(projectWorktrees(cached).map(worktree => [worktree.branch, worktree]));
+    return {
+      ...project,
+      selectedWorktreePath: cached.selectedWorktreePath,
+      worktrees: projectWorktrees(project).map(worktree => ({
+        ...worktree,
+        threadId: cachedWorktrees.get(worktree.branch)?.threadId,
+      })),
+    };
+  });
+  const projects = [...resolvedLocalProjects, ...hydratedGithubProjects];
+  saveProjects(projects);
+  return projects;
 }
 
 /**
@@ -194,46 +215,10 @@ export async function addProject(baseUrl: string, name: string, path: string): P
   return project;
 }
 
-/**
- * Persist a project created from a GitHub repo. The server already created the
- * `source_control_projects` row and returned a `Project`-shaped payload; we just store
- * it locally (de-duped by `githubProjectId`) so it shows up in the project list.
- * The `resourceId` is filled in later, on open, by `ensureRepoMaterialized`.
- */
-export function addGithubProject(project: Project): Project {
-  const projects = loadProjects();
-  const existing = projects.find(p => p.githubProjectId && p.githubProjectId === project.githubProjectId);
-  if (existing) return existing;
-  const stored: Project = { ...project, source: 'github', createdAt: project.createdAt ?? Date.now() };
-  projects.push(stored);
-  saveProjects(projects);
-  return stored;
-}
-
-/**
- * Replace a stored project in place (by id) and persist. Used to record the
- * server-resolved `resourceId` for a GitHub project once it's materialized.
- */
+/** Replace a stored project in place (by id) and persist it. */
 export function updateProject(project: Project): void {
   const projects = loadProjects().map(p => (p.id === project.id ? project : p));
   saveProjects(projects);
-}
-
-/**
- * Merge a server `MaterializeResult` (from the `/ensure` route) into a stored
- * GitHub project and persist it: records the session `resourceId` plus the
- * sandbox binding. The repo-root checkout is not a workspace, so no worktree
- * is seeded — workspaces only exist once created explicitly.
- */
-export function applyMaterializeResult(project: Project, result: MaterializeResult): Project {
-  const updated: Project = {
-    ...project,
-    resourceId: result.resourceId,
-    sandboxId: result.sandboxId,
-    sandboxWorkdir: result.sandboxWorkdir,
-  };
-  updateProject(updated);
-  return updated;
 }
 
 /**
@@ -355,8 +340,10 @@ export async function ensureResourceId(baseUrl: string, project: Project): Promi
   return updated;
 }
 
-export function removeProject(id: string): void {
-  const projects = loadProjects().filter(p => p.id !== id);
+export async function removeProject(baseUrl: string, id: string): Promise<void> {
+  const project = loadProjects().find(candidate => candidate.id === id);
+  if (project?.source === 'github') await deleteGithubProject(baseUrl, project.githubProjectId ?? project.id);
+  const projects = loadProjects().filter(candidate => candidate.id !== id);
   saveProjects(projects);
   if (loadActiveProjectId() === id) clearActiveProjectId();
 }

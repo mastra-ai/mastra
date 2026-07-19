@@ -113,21 +113,25 @@ describe('GithubConnectModal', () => {
     expect(await screen.findByText('Failed to list repos (500)')).toBeInTheDocument();
   });
 
-  it('creates a GitHub project, persists it, notifies the caller, and refreshes projects query consumers', async () => {
+  it('creates a GitHub project, notifies the caller, and refreshes projects from the backend', async () => {
     saveProjects([]);
+    let backendProjects: Project[] = [];
     server.use(
       http.get(`${ORIGIN}/web/github/repos`, () => HttpResponse.json({ repos: [repo] })),
-      http.post(`${ORIGIN}/web/github/projects`, () => HttpResponse.json({ project: createdProject })),
+      http.get(`${ORIGIN}/web/github/projects`, () => HttpResponse.json(backendProjects)),
+      http.post(`${ORIGIN}/web/github/projects`, () => {
+        backendProjects = [createdProject];
+        return HttpResponse.json({ project: createdProject });
+      }),
     );
     const projectsHook = renderHookWithProviders(() => useProjectsQuery());
     const { onProjectCreated } = renderModal(undefined, projectsHook.client);
 
     await userEvent.click(await screen.findByRole('button', { name: /mastra-ai\/mastra/i }));
 
-    await waitFor(() => expect(loadProjects()).toHaveLength(1));
-    expect(loadProjects()[0]).toMatchObject({ id: createdProject.id, source: 'github' });
     expect(onProjectCreated).toHaveBeenCalledWith(expect.objectContaining({ id: createdProject.id }));
-    await waitFor(() => expect(projectsHook.result.current.data).toHaveLength(1));
+    await waitFor(() => expect(projectsHook.result.current.data).toEqual([createdProject]));
+    expect(loadProjects()).toEqual([createdProject]);
   });
 
   it('shows create errors and does not persist the repo', async () => {

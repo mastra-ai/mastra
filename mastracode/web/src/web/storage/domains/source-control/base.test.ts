@@ -67,10 +67,19 @@ describe('SourceControlStorage', () => {
     expect(gitlabCreated.id).not.toBe(githubCreated.id);
     expect(await github.projects.getById(gitlabCreated.id)).toBeNull();
     expect(await gitlab.projects.getById(githubCreated.id)).toBeNull();
-    expect(await github.projects.findByRepository('installation-12', 'mastra-ai/mastra')).toMatchObject({
+    const otherOrgCreated = await github.projects.upsert({
+      ...githubProject,
+      orgId: 'org-2',
+      createdByUserId: 'user-2',
+    });
+    expect(await github.projects.findByRepository('org-1', 'installation-12', 'mastra-ai/mastra')).toMatchObject({
       id: githubCreated.id,
       repositoryExternalId: 'repository-34',
     });
+    expect(await github.projects.findByRepository('org-2', 'installation-12', 'mastra-ai/mastra')).toMatchObject({
+      id: otherOrgCreated.id,
+    });
+    expect(await github.projects.listByRepository('installation-12', 'mastra-ai/mastra')).toHaveLength(2);
   });
 
   it('refreshes project metadata without clearing its setup command', async () => {
@@ -91,7 +100,14 @@ describe('SourceControlStorage', () => {
       setupCommand: 'pnpm install',
       providerMetadata: { visibility: 'private' },
     });
+    expect(await github.projects.list('org-1')).toEqual([updated]);
+    expect(await github.projects.list('org-2')).toEqual([]);
     expect(await github.projects.getOrg('org-2', created.id)).toBeNull();
+
+    await github.projects.delete('org-2', created.id);
+    expect(await github.projects.getById(created.id)).not.toBeNull();
+    await github.projects.delete('org-1', created.id);
+    expect(await github.projects.getById(created.id)).toBeNull();
   });
 
   it('converges concurrent sandbox creation and keeps bindings provider-scoped', async () => {

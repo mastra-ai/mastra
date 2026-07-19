@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../e2e/web-ui/msw-server';
 import { renderHookWithProviders, waitForMutationsIdle, TEST_BASE_URL } from '../../../../e2e/web-ui/render';
+import { createQueryClient } from '../../query-client';
 import type { Project } from '../../../web/ui/domains/workspaces/services/projects';
 import {
   loadActiveProjectId,
@@ -37,18 +38,67 @@ const legacyProject: Project = {
   createdAt: 2,
 };
 
+const githubProject: Project = {
+  id: 'github-project',
+  name: 'mastra-ai/mastra',
+  source: 'github',
+  githubProjectId: 'github-project',
+  resourceId: 'github-project',
+  sandboxWorkdir: '/workspace/mastra',
+  createdAt: 3,
+};
+
 beforeEach(() => {
   localStorage.clear();
+  server.use(http.get(`${ORIGIN}/web/github/projects`, () => HttpResponse.json([])));
 });
 
 describe('projects query hooks', () => {
-  it('reads persisted projects through React Query', async () => {
+  it('reads persisted local projects through React Query', async () => {
     saveProjects([localProject]);
 
     const { result } = renderHookWithProviders(() => useProjectsQuery());
 
     await waitFor(() => expect(result.current.data).toHaveLength(1));
     expect(result.current.data[0]).toMatchObject({ id: 'project-local', name: 'Mastra' });
+  });
+
+  it('uses the backend as the source of truth for GitHub projects', async () => {
+    saveProjects([{ ...githubProject, id: 'stale-project', githubProjectId: 'stale-project' }]);
+    server.use(http.get(`${ORIGIN}/web/github/projects`, () => HttpResponse.json([githubProject])));
+
+    const { result } = renderHookWithProviders(() => useProjectsQuery(), { client: createQueryClient() });
+
+    expect(result.current.data).toEqual([]);
+    await waitFor(() => expect(result.current.data.map(project => project.id)).toEqual(['github-project']));
+    expect(loadProjects().map(project => project.id)).toEqual(['github-project']);
+  });
+
+  it('deletes GitHub projects from the backend before removing them locally', async () => {
+    let deleted = false;
+    server.use(
+      http.get(`${ORIGIN}/web/github/projects`, () => HttpResponse.json(deleted ? [] : [githubProject])),
+      http.delete(`${ORIGIN}/web/github/projects/github-project`, () => {
+        deleted = true;
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+
+    const { result, client } = renderHookWithProviders(() => {
+      const projects = useProjectsQuery();
+      const removeProject = useRemoveProjectMutation();
+      return { projects, removeProject };
+    });
+
+    await waitFor(() => expect(result.current.projects.data).toHaveLength(1));
+    await act(async () => {
+      await result.current.removeProject.mutateAsync('github-project');
+    });
+    await waitForMutationsIdle(client);
+
+    expect(deleted).toBe(true);
+    await waitFor(() => expect(result.current.projects.data).toEqual([]));
+    expect(loadProjects()).toEqual([]);
   });
 
   it('adds a project, persists it, and refreshes project query consumers', async () => {

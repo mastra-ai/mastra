@@ -69,11 +69,13 @@ function SignInGate() {
 }
 
 function RootLanding() {
-  const { activeProject } = useActiveProject();
+  const { activeProject, projectsPending } = useActiveProject();
   const githubProjectId = activeProject?.source === 'github' ? activeProject.githubProjectId : undefined;
   const workItems = useWorkItemsQuery(githubProjectId);
 
-  if (githubProjectId && workItems.isPending) return <AuthPendingSkeleton label="Loading Factory board" />;
+  if (projectsPending || (githubProjectId && workItems.isPending)) {
+    return <AuthPendingSkeleton label="Loading Factory board" />;
+  }
   if (githubProjectId && workItems.isError) {
     return (
       <div className="flex h-dvh w-full items-center justify-center bg-surface1 p-4">

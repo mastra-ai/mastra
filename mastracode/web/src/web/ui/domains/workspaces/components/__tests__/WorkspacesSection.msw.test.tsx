@@ -507,7 +507,6 @@ describe('WorkspacesSection', () => {
     expect(deleteCalled).toBe(false);
     expect(screen.getByRole('button', { name: 'feat-ui' })).toBeInTheDocument();
     expect(loadProjects()[0]?.worktrees?.map(worktree => worktree.branch)).toEqual([
-      'main',
       'feat-ui',
       'feat-api',
       'user/alice-notes',

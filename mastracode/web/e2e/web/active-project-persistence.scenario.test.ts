@@ -48,7 +48,7 @@ describe('active project persistence', () => {
       { id: 'proj-2', name: 'B', path: '/b', resourceId: 'mastra-bbb', createdAt: 2 },
     ]);
     saveActiveProjectId('proj-1');
-    removeProject('proj-1');
+    await removeProject('', 'proj-1');
     expect(loadActiveProjectId()).toBeNull();
   });
 
@@ -60,7 +60,7 @@ describe('active project persistence', () => {
       { id: 'proj-2', name: 'B', path: '/b', resourceId: 'mastra-bbb', createdAt: 2 },
     ]);
     saveActiveProjectId('proj-1');
-    removeProject('proj-2');
+    await removeProject('', 'proj-2');
     expect(loadActiveProjectId()).toBe('proj-1');
   });
 });

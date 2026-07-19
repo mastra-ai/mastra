@@ -15,6 +15,7 @@ import type { MountedMastraCode } from '@mastra/code-sdk';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
+import { streamSSE } from 'hono/streaming';
 
 /**
  * Loose Hono context accepted by the shared GitHub route helpers. The
@@ -29,7 +30,7 @@ type RouteContext = Context;
 function loose(c: unknown): RouteContext {
   return c as RouteContext;
 }
-import { streamSSE } from 'hono/streaming';
+
 import { emitAudit } from '../audit/audit';
 import { ensureWebAuthUser, getWebAuthUser, webAuthTenant } from '../auth';
 import type { WebAuthTenant } from '../auth';
@@ -292,20 +293,25 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
   const runBoardIssueTriage = runIssueTriage
     ? async (input: GithubIssueTriageRunInput): Promise<GithubIssueTriageRunResult> => {
         const branch = `factory/issue-${input.issueNumber}`;
-        const project = await github.sourceControlStorage.projects.findByRepository(
+        const projects = await github.sourceControlStorage.projects.listByRepository(
           input.installationId.toString(),
           input.repository,
         );
-        if (!project) throw new Error(`GitHub project not found for ${input.repository}`);
-        const projectPath = input.projectPath ?? computeWorktreePath(project.sandboxWorkdir, branch);
+        if (projects.length === 0) throw new Error(`GitHub project not found for ${input.repository}`);
         await github.addIssueLabels(input.installationId, input.repository, input.issueNumber, ['auto-triaged']);
-        return runIssueTriage({
-          ...input,
-          resourceId: project.id,
-          projectPath,
-          branch,
-          labels: input.labels.includes('auto-triaged') ? input.labels : [...input.labels, 'auto-triaged'],
-        });
+        const [result] = await Promise.all(
+          projects.map(project =>
+            runIssueTriage({
+              ...input,
+              resourceId: project.id,
+              projectPath: input.projectPath ?? computeWorktreePath(project.sandboxWorkdir, branch),
+              branch,
+              labels: input.labels.includes('auto-triaged') ? input.labels : [...input.labels, 'auto-triaged'],
+            }),
+          ),
+        );
+        if (!result) throw new Error(`GitHub project not found for ${input.repository}`);
+        return result;
       }
     : undefined;
 
@@ -515,6 +521,41 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
   // ── Create a project from a repo (no sandbox, no clone yet) ──────────────
   routes.push(
     registerApiRoute('/web/github/projects', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c));
+        if ('response' in resolved) return resolved.response;
+        const { orgId, userId } = resolved.tenant;
+        const projects = await github.sourceControlStorage.projects.list(orgId);
+        return c.json(
+          await Promise.all(
+            projects.map(async project => {
+              const [sandbox, worktrees] = await Promise.all([
+                github.sourceControlStorage.sandboxes.get(project.id, userId),
+                github.sourceControlStorage.worktrees.list(project.id, userId),
+              ]);
+              return {
+                id: project.id,
+                name: project.repositorySlug.split('/').at(-1) ?? project.repositorySlug,
+                source: 'github' as const,
+                githubProjectId: project.id,
+                sandboxId: sandbox?.sandboxId ?? undefined,
+                sandboxWorkdir: sandbox?.sandboxWorkdir ?? project.sandboxWorkdir,
+                resourceId: project.id,
+                worktrees: worktrees.map(worktree => ({
+                  branch: worktree.branch,
+                  baseBranch: worktree.baseBranch,
+                  worktreePath: worktree.worktreePath,
+                })),
+                createdAt: project.createdAt.getTime(),
+              };
+            }),
+          ),
+        );
+      },
+    }),
+    registerApiRoute('/web/github/projects', {
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
@@ -569,6 +610,22 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
     }),
   );
 
+  routes.push(
+    registerApiRoute('/web/github/projects/:id', {
+      method: 'DELETE',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c));
+        if ('response' in resolved) return resolved.response;
+        const { orgId } = resolved.tenant;
+        const projectId = c.req.param('id');
+        if (!projectId) return c.json({ error: 'Project not found' }, 404);
+        await github.sourceControlStorage.projects.delete(orgId, projectId);
+        return c.json({ ok: true });
+      },
+    }),
+  );
+
   // ── Materialize a project into the caller's per-user sandbox ─────────────
   routes.push(
     registerApiRoute('/web/github/projects/:id/ensure', {
@@ -584,7 +641,9 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         }
 
         const projectId = c.req.param('id');
-        if (!projectId) return c.json({ error: 'Project not found' }, 404);
+        if (!projectId) {
+          return c.json({ error: 'Project not found' }, 404);
+        }
         const project = await github.sourceControlStorage.projects.getOrg(orgId, projectId);
         if (!project) {
           return c.json({ error: 'Project not found' }, 404);
@@ -832,14 +891,10 @@ function identityFromUser(user: { name?: string; email?: string } | undefined): 
   return { name: user?.name ?? null, email: user?.email ?? null };
 }
 
-/**
- * Resolve a live, started sandbox for the caller's per-user sandbox binding. The
- * sandbox must already have been provisioned (`sandboxId` set) — the git write
- * routes never clone, they operate on the existing checkout.
- */
+/** Resolve a live, started sandbox for an already materialized binding. */
 async function resolveProjectSandbox(sandboxRow: SourceControlProjectSandbox): Promise<MaterializationSandbox> {
   if (!sandboxRow.sandboxId) {
-    throw new MaterializeError('Project sandbox is not provisioned. Open the project first.', 'clone-failed');
+    throw new MaterializeError('Project sandbox is not provisioned.', 'clone-failed');
   }
   return reattachSandbox(sandboxRow.sandboxId);
 }
@@ -847,7 +902,7 @@ async function resolveProjectSandbox(sandboxRow: SourceControlProjectSandbox): P
 /**
  * Load (or create) the caller's per-(project,user) sandbox binding row. The
  * binding inherits its workdir from the org-owned project, but `sandboxId` /
- * `materializedAt` stay null until the user first opens the project.
+ * `materializedAt` stay null until the user starts the first worktree session.
  */
 async function loadOrCreateSandboxRow(
   github: GithubIntegration,
@@ -855,6 +910,32 @@ async function loadOrCreateSandboxRow(
   userId: string,
 ): Promise<SourceControlProjectSandbox> {
   return github.sourceControlStorage.sandboxes.getOrCreate(project, userId);
+}
+
+async function reconcileProjectSandboxRuntime(
+  github: GithubIntegration,
+  project: SourceControlProject,
+): Promise<{ project: SourceControlProject; providerChanged: boolean }> {
+  const sandboxProvider = getSandboxProvider();
+  const sandboxWorkdir = computeSandboxWorkdir(project.repositorySlug);
+  const providerChanged = project.sandboxProvider !== sandboxProvider;
+  if (!providerChanged && project.sandboxWorkdir === sandboxWorkdir) {
+    return { project, providerChanged: false };
+  }
+  return {
+    project: await github.sourceControlStorage.projects.upsert({
+      orgId: project.orgId,
+      createdByUserId: project.createdByUserId,
+      installationExternalId: project.installationExternalId,
+      repositoryExternalId: project.repositoryExternalId,
+      repositorySlug: project.repositorySlug,
+      defaultBranch: project.defaultBranch,
+      sandboxProvider,
+      sandboxWorkdir,
+      providerMetadata: project.providerMetadata,
+    }),
+    providerChanged,
+  };
 }
 
 interface EnsureResult {
@@ -876,7 +957,13 @@ async function prepareProject(
   userId: string,
   onProgress?: ProgressFn,
 ): Promise<EnsureResult> {
-  const sandboxRow = await loadOrCreateSandboxRow(github, project, userId);
+  const runtime = await reconcileProjectSandboxRuntime(github, project);
+  project = runtime.project;
+  let sandboxRow = await loadOrCreateSandboxRow(github, project, userId);
+  if (runtime.providerChanged && sandboxRow.sandboxId) {
+    await github.sourceControlStorage.sandboxes.clearBinding(sandboxRow.id);
+    sandboxRow = (await github.sourceControlStorage.sandboxes.getById(sandboxRow.id)) ?? sandboxRow;
+  }
   const sandbox = await ensureProjectSandbox(sandboxRow, github.sourceControlStorage.sandboxes, onProgress);
   // Re-read the sandbox binding so we have the freshly persisted sandboxId.
   const fresh = await github.sourceControlStorage.sandboxes.getById(sandboxRow.id);
@@ -993,9 +1080,16 @@ function buildProjectGitRoutes(github: GithubIntegration): ApiRoute[] {
 
         try {
           return await withProjectLock(`${project.id}:${userId}`, async () => {
-            const sandbox = await resolveProjectSandbox(sandboxRow);
+            let activeSandboxRow = sandboxRow;
+            if (!activeSandboxRow.sandboxId || !activeSandboxRow.materializedAt) {
+              await prepareProject(github, project, userId);
+              activeSandboxRow =
+                (await github.sourceControlStorage.sandboxes.getById(activeSandboxRow.id)) ?? activeSandboxRow;
+            }
+
+            const sandbox = await resolveProjectSandbox(activeSandboxRow);
             const token = await github.mintInstallationToken(Number(project.installationExternalId));
-            const result = await ensureWorktree(sandbox, sandboxRow.sandboxWorkdir, {
+            const result = await ensureWorktree(sandbox, activeSandboxRow.sandboxWorkdir, {
               branch,
               baseBranch,
               token,

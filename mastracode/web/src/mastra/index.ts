@@ -230,6 +230,10 @@ const integrations: FactoryIntegration[] = [github, linear].filter(i => i !== un
 // storage resolution uses, running the FULL app surface (auth, intake,
 // audit, work-items, integrations) — no features silently off.
 const appDatabaseUrl = process.env.APP_DATABASE_URL;
+const localDevelopmentMode = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
+if (!appDatabaseUrl && !localDevelopmentMode) {
+  throw new Error('APP_DATABASE_URL is required outside local development and tests.');
+}
 const storage = appDatabaseUrl
   ? new PgFactoryStorage({
       id: 'mastra-code-storage',

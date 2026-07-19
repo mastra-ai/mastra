@@ -79,16 +79,18 @@ export class IntakeStorage extends FactoryStorageDomain {
 
   /** Upsert the caller's intake config (`created_at` is preserved on update). */
   async saveConfig(orgId: string, userId: string, config: IntakeConfig): Promise<void> {
-    const now = new Date();
     const where = { org_id: orgId, user_id: userId };
-    const updated = await this.#db.updateMany('intake_settings', where, { config, updated_at: now });
-    if (updated > 0) return;
+    const updateExisting = () =>
+      this.#db.updateAtomic('intake_settings', where, () => ({ config, updated_at: new Date() }));
+    if (await updateExisting()) return;
+
+    const now = new Date();
     try {
       await this.#db.insertOne('intake_settings', { ...where, config, created_at: now, updated_at: now });
     } catch (error) {
       if (!(error instanceof UniqueViolationError)) throw error;
-      // Lost the insert race — the row exists now; apply as an update.
-      await this.#db.updateMany('intake_settings', where, { config, updated_at: now });
+      // Lost the insert race — update the winning row under the backend's serialized write primitive.
+      if (!(await updateExisting())) throw error;
     }
   }
 }

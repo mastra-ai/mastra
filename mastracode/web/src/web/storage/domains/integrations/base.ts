@@ -104,7 +104,7 @@ export interface IntegrationSubscription<TData> {
   updatedAt: Date;
 }
 
-export interface CreateIntegrationSubscriptionInput<TData> {
+export type CreateIntegrationSubscriptionInput<TData> = {
   orgId: string;
   targetKey: string;
   sessionId?: string | null;
@@ -113,8 +113,7 @@ export interface CreateIntegrationSubscriptionInput<TData> {
   sessionScope?: string | null;
   /** Defaults to `'active'`. */
   status?: string;
-  data?: TData;
-}
+} & ({} extends TData ? { data?: TData } : { data: TData });
 
 /**
  * Typed query surface pre-scoped to one `integration_id`. Every read and
@@ -258,23 +257,36 @@ export class IntegrationStorage extends FactoryStorageDomain {
           return row ? mapConnection(row) : null;
         },
         upsert: async (orgId, input) => {
-          const now = new Date();
           const where = { ...scoped, org_id: orgId };
-          const set = {
-            user_id: input.userId ?? null,
-            data: input.data,
-            metadata: input.metadata ?? {},
-            updated_at: now,
-          };
-          const updated = await db().updateMany('integration_connections', where, set);
-          if (updated > 0) return;
-          try {
-            await db().insertOne<ConnectionRow>('integration_connections', { ...where, ...set, created_at: now });
-          } catch (error) {
-            if (!(error instanceof UniqueViolationError)) throw error;
-            // Lost the insert race — the row exists now; apply as an update.
-            await db().updateMany('integration_connections', where, set);
+          const update = async () =>
+            db().updateMany('integration_connections', where, {
+              user_id: input.userId ?? null,
+              data: input.data,
+              metadata: input.metadata ?? {},
+              updated_at: new Date(),
+            });
+
+          let lastError: unknown;
+          for (let attempt = 0; attempt < 2; attempt++) {
+            if ((await update()) > 0) return;
+
+            const now = new Date();
+            try {
+              await db().insertOne<ConnectionRow>('integration_connections', {
+                ...where,
+                user_id: input.userId ?? null,
+                data: input.data,
+                metadata: input.metadata ?? {},
+                created_at: now,
+                updated_at: now,
+              });
+              return;
+            } catch (error) {
+              if (!(error instanceof UniqueViolationError)) throw error;
+              lastError = error;
+            }
           }
+          throw lastError;
         },
         update: async (orgId, fn) => {
           const row = await db().updateAtomic<ConnectionRow>(
@@ -357,16 +369,32 @@ export class IntegrationStorage extends FactoryStorageDomain {
           return row ? structuredClone(row.config) : null;
         },
         save: async (orgId, userId, config) => {
-          const now = new Date();
           const where = { ...scoped, org_id: orgId, user_id: userId };
-          const updated = await db().updateMany('integration_settings', where, { config, updated_at: now });
-          if (updated > 0) return;
-          try {
-            await db().insertOne('integration_settings', { ...where, config, created_at: now, updated_at: now });
-          } catch (error) {
-            if (!(error instanceof UniqueViolationError)) throw error;
-            await db().updateMany('integration_settings', where, { config, updated_at: now });
+          const update = async () =>
+            db().updateMany('integration_settings', where, {
+              config,
+              updated_at: new Date(),
+            });
+
+          let lastError: unknown;
+          for (let attempt = 0; attempt < 2; attempt++) {
+            if ((await update()) > 0) return;
+
+            const now = new Date();
+            try {
+              await db().insertOne('integration_settings', {
+                ...where,
+                config,
+                created_at: now,
+                updated_at: now,
+              });
+              return;
+            } catch (error) {
+              if (!(error instanceof UniqueViolationError)) throw error;
+              lastError = error;
+            }
           }
+          throw lastError;
         },
       },
     };

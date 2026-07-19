@@ -8,8 +8,7 @@ import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../../e2e/web-ui/render';
 import { ActiveProjectProvider, useActiveProjectContext } from '../../context/ActiveProjectProvider';
 import { commitChanges, createWorktree, openPullRequest, pushBranch } from '../../services/github';
-import type { GithubStatus, GitOpError, MaterializeResult } from '../../services/github';
-import { loadProjects } from '../../services/projects';
+import type { GithubStatus, GitOpError } from '../../services/github';
 import type { Project } from '../../services/projects';
 import { GithubConnectModal } from '../GithubConnectModal';
 
@@ -117,9 +116,8 @@ describe('github git-op helpers', () => {
 
 /**
  * Cross-flow journey: pick a repo in the GitHub modal → the project is created
- * server-side and stored locally → selecting it materializes the repo into its
- * sandbox (`/ensure`) and activates the project with the server's resourceId.
- * This is the same wiring `ChatOverlays` composes in the app.
+ * server-side and selected without cloning it. Session-start materialization is
+ * covered by the active-project and composer tests.
  */
 describe('github open-repo journey', () => {
   const connectedStatus: GithubStatus = {
@@ -148,25 +146,17 @@ describe('github open-repo journey', () => {
     createdAt: 10,
   };
 
-  const materialized: MaterializeResult = {
-    resourceId: 'resource-gh',
-    githubProjectId: 'ghp_1',
-    sandboxId: 'sbx_1',
-    sandboxWorkdir: '/workspace/hello',
-  };
-
   afterEach(() => {
     localStorage.clear();
   });
 
   function Journey() {
-    const { activeProject, resourceId, selectProject, preparing } = useActiveProjectContext();
+    const { activeProject, resourceId, selectProject } = useActiveProjectContext();
     const [open, setOpen] = useState(true);
     return (
       <div>
         <span data-testid="active">{activeProject?.name ?? '(none)'}</span>
         <span data-testid="resource-id">{resourceId}</span>
-        <span data-testid="preparing">{preparing?.message ?? '(idle)'}</span>
         {open && (
           <GithubConnectModal
             status={connectedStatus}
@@ -178,11 +168,20 @@ describe('github open-repo journey', () => {
     );
   }
 
-  it('given a connected user, when they pick a repo, then the project is created, materialized, and activated', async () => {
+  it('given a connected user, when they pick a repo, then the project is created and activated without materialization', async () => {
+    let backendProject: Project | undefined;
+    let ensureCalls = 0;
     server.use(
       http.get(`${ORIGIN}/web/github/repos`, () => HttpResponse.json({ repos: [repo] })),
-      http.post(`${ORIGIN}/web/github/projects`, () => HttpResponse.json({ project: createdProject })),
-      http.post(`${ORIGIN}/web/github/projects/ghp_1/ensure`, () => HttpResponse.json(materialized)),
+      http.get(`${ORIGIN}/web/github/projects`, () => HttpResponse.json(backendProject ? [backendProject] : [])),
+      http.post(`${ORIGIN}/web/github/projects`, () => {
+        backendProject = createdProject;
+        return HttpResponse.json({ project: createdProject });
+      }),
+      http.post(`${ORIGIN}/web/github/projects/ghp_1/ensure`, () => {
+        ensureCalls += 1;
+        return HttpResponse.error();
+      }),
     );
     const user = userEvent.setup();
 
@@ -195,11 +194,8 @@ describe('github open-repo journey', () => {
     await user.click(await screen.findByRole('button', { name: /octo\/hello/ }));
 
     await waitFor(() => expect(screen.getByTestId('active')).toHaveTextContent('octo/hello'));
-    expect(screen.getByTestId('resource-id')).toHaveTextContent('resource-gh');
-    expect(loadProjects().find(p => p.githubProjectId === 'ghp_1')).toMatchObject({
-      resourceId: 'resource-gh',
-      sandboxId: 'sbx_1',
-      sandboxWorkdir: '/workspace/hello',
-    });
+    expect(screen.getByTestId('resource-id')).toHaveTextContent('web-demo-user');
+    expect(backendProject).toEqual(createdProject);
+    expect(ensureCalls).toBe(0);
   });
 });
