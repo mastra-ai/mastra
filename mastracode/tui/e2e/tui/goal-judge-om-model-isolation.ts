@@ -8,6 +8,8 @@ const OBJECTIVE_PREFIX = 'Prepare the goal judge OM isolation result, then stop 
 const OBJECTIVE = `${OBJECTIVE_PREFIX}${' goal judge context retention marker'.repeat(900)}`;
 const FOLLOW_UP = 'I approve the goal judge OM isolation result.';
 const WAITING_REASON = 'Waiting for explicit user approval before completing the objective.';
+const DONE_REASON = 'The user approved the result and the objective is complete.';
+const OBSERVATION_RESPONSE = 'Long goal run checkpoint observed.';
 const FIRST_RESPONSE = 'Initial goal work is ready for the first judge pass.';
 const INITIAL_RESPONSE = 'The goal judge OM isolation result is ready. Waiting for explicit user approval.';
 const FOLLOW_UP_RESPONSE = 'Follow-up main response received; the approved goal is complete.';
@@ -17,6 +19,8 @@ const RAW_REQUEST_CAPTURE_PATH = join(process.cwd(), '.tmp-mc-e2e', 'goal-judge-
 let observedMarkerCount: number | undefined;
 let reachedWaiting = false;
 let reachedFollowUp = false;
+let reachedDone = false;
+let completedObservationCycle = false;
 
 type AimockRequest = {
   body?: { model?: string; [key: string]: unknown };
@@ -52,6 +56,8 @@ export const goalJudgeOmModelIsolationScenario = {
     observedMarkerCount = undefined;
     reachedWaiting = false;
     reachedFollowUp = false;
+    reachedDone = false;
+    completedObservationCycle = false;
     rmSync(RAW_REQUEST_CAPTURE_PATH, { force: true });
     const settingsPath = join(appDataDir, 'settings.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as Record<string, unknown>;
@@ -95,11 +101,17 @@ export const goalJudgeOmModelIsolationScenario = {
     terminal.submit(FOLLOW_UP);
     await runtime.waitForScreenText(new RegExp(FOLLOW_UP_RESPONSE, 'i'), terminal, 30_000);
     reachedFollowUp = true;
+    await runtime.waitForScreenText(/Goal\s+.*done\s+.*\(3\/3\)/i, terminal, 30_000);
+    reachedDone = true;
 
     await terminal.flushInput?.();
     const history = stripAnsi(
       (terminal as unknown as { serializeHistory(): { output: string } }).serializeHistory().output,
     );
+    completedObservationCycle = /Buffered observation/i.test(history) && /Activated observations/i.test(history);
+    if (!completedObservationCycle) {
+      throw new Error('Expected the TUI history to show both buffered and activated observational-memory markers');
+    }
     const markerCount = history.split(PROVIDER_CHANGE_MARKER).length - 1;
     observedMarkerCount = markerCount;
     if (markerCount !== 0) {
@@ -117,6 +129,9 @@ export const goalJudgeOmModelIsolationScenario = {
       );
     }
 
+    const observerRequests = typedRequests.filter(request =>
+      matchesFixture(request, 'gpt-5.4-mini', '## New Message History to Observe', OBSERVATION_RESPONSE),
+    );
     const initialMain = typedRequests.filter(request =>
       matchesFixture(request, 'gpt-5.4-mini', OBJECTIVE, FIRST_RESPONSE),
     );
@@ -131,12 +146,18 @@ export const goalJudgeOmModelIsolationScenario = {
     const waitingJudge = typedRequests.filter(request =>
       matchesFixture(request, 'gpt-5.5', `Goal: ${OBJECTIVE}`, WAITING_REASON),
     );
+    const doneJudge = typedRequests.filter(request =>
+      matchesFixture(request, 'gpt-5.5', `Goal: ${OBJECTIVE}`, DONE_REASON),
+    );
     const followUpMain = typedRequests.filter(
       request =>
         matchesFixture(request, 'gpt-5.4-mini', OBJECTIVE, FOLLOW_UP_RESPONSE) &&
         JSON.stringify(request.body).includes(FOLLOW_UP),
     );
 
+    if (observerRequests.length < 1) {
+      throw new Error('Expected at least one matched observational-memory request');
+    }
     if (initialMain.length < 1) {
       throw new Error(
         `Expected a matched initial main-agent chat request: ${JSON.stringify(typedRequests.map(request => request.response?.fixture))}`,
@@ -147,6 +168,9 @@ export const goalJudgeOmModelIsolationScenario = {
     }
     if (waitingJudge.length !== 1) {
       throw new Error(`Expected exactly one matched waiting judge request, received ${waitingJudge.length}`);
+    }
+    if (doneJudge.length !== 1) {
+      throw new Error(`Expected exactly one matched done judge request, received ${doneJudge.length}`);
     }
     if (followUpMain.length !== 1) {
       throw new Error(`Expected exactly one matched follow-up main-agent response, received ${followUpMain.length}`);
@@ -165,8 +189,8 @@ export const goalJudgeOmModelIsolationScenario = {
       `[goal-judge-om-model-isolation] models=openai/gpt-5.4-mini,openai/gpt-5.5 request-counts=${JSON.stringify(modelCounts)}`,
     );
     console.info(
-      `[goal-judge-om-model-isolation] waiting=${reachedWaiting} follow-up=${reachedFollowUp} provider-change marker count=${observedMarkerCount}`,
+      `[goal-judge-om-model-isolation] observation=${completedObservationCycle} waiting=${reachedWaiting} follow-up=${reachedFollowUp} done=${reachedDone} provider-change marker count=${observedMarkerCount}`,
     );
-    console.info('[goal-judge-om-model-isolation] matched waiting decision and follow-up main response');
+    console.info('[goal-judge-om-model-isolation] matched observer, waiting, follow-up, and done responses');
   },
 } satisfies McE2eScenario;
