@@ -141,7 +141,7 @@ export abstract class ObservationStrategy {
         await this.persistMarkerToStorage(failedMarkerForStorage, threadId, this.opts.resourceId).catch(() => {});
         if (abortSignal?.aborted) throw error;
         omError('[OM] Observation failed', error);
-        return { observed: false };
+        return { observed: false, error: error instanceof Error ? error : new Error(String(error)) };
       }
 
       // Sync + resource-scoped: same contract as pre-#14453 — rethrow after failed markers.

@@ -952,6 +952,27 @@ export interface ObservationalMemoryConfig {
    */
   onDebugEvent?: (event: ObservationDebugEvent) => void;
 
+  /**
+   * Lifecycle hooks fired for every observation/reflection cycle: the manual
+   * APIs (`observe()` / `reflect()`), turn-engine sync observation, and
+   * fire-and-forget async buffering — the automatic paths that per-call
+   * `observe()` hooks never see. Callbacks receive `threadId` / `resourceId`
+   * / `trigger` context, plus `usage` and `providerMetadata` on cycle end,
+   * so consumers can account for OM model economics without wrapping the
+   * observer/reflector models in middleware.
+   *
+   * Semantics worth knowing:
+   * - Failed async-buffer cycles never throw (fire-and-forget), so the
+   *   failure is reported via the end hook's `error` field instead.
+   * - An end hook may fire with neither `usage` nor `error` when a cycle
+   *   concludes without a model call (e.g. a concurrent-observation
+   *   stale-record check skips the work).
+   * - Errors thrown (or promise rejections returned) by these hooks are
+   *   caught and logged at OM debug level (`OM_DEBUG`); they never fail the
+   *   cycle.
+   */
+  hooks?: ObserveHooks;
+
   obscureThreadIds?: boolean;
 
   /**
@@ -1067,24 +1088,54 @@ export interface ObserveHookUsage {
   totalTokens?: number;
 }
 
+/**
+ * Which pipeline path INITIATED the observation/reflection cycle a hook fires
+ * for — not whether the cycle itself ran synchronously:
+ * - 'manual': direct API calls (`observe()`, `reflect()`).
+ * - 'turn-sync': the observation turn engine's synchronous lane, including
+ *   reflections it initiates (even when those buffer asynchronously).
+ * - 'async-buffer': the buffered-observation lane (`buffer()` /
+ *   `triggerAsyncBuffering`), whether awaited or fire-and-forget.
+ */
+export type ObserveTrigger = 'manual' | 'turn-sync' | 'async-buffer';
+
+/**
+ * Call context passed to config-level `ObserveHooks` callbacks. Config-level
+ * hooks are shared across all threads/resources of an ObservationalMemory
+ * instance, so every invocation carries the identifiers of the cycle it fires
+ * for. Per-call `observe()` hooks do not receive these fields — the caller
+ * already knows its own thread.
+ */
+export interface ObserveHookContext {
+  threadId?: string;
+  resourceId?: string;
+  trigger?: ObserveTrigger;
+}
+
 export interface ObserveHooks {
-  onObservationStart?: () => void;
+  onObservationStart?: (info?: ObserveHookContext) => void;
   /**
    * Fires when an observation cycle ends. `providerMetadata` carries the OM
    * observer model call's full provider metadata (e.g. AI Gateway cost and
    * generation id under `providerMetadata.gateway`); it is undefined when the
    * provider emits none. For batched resource-scoped observations it reflects
    * the last batch that emitted provider metadata (per-call values are not
-   * summed/merged).
+   * summed/merged). The `ObserveHookContext` fields are populated for
+   * config-level hooks only.
    */
-  onObservationEnd?: (result: { usage?: ObserveHookUsage; error?: Error; providerMetadata?: ProviderMetadata }) => void;
-  onReflectionStart?: () => void;
+  onObservationEnd?: (
+    result: { usage?: ObserveHookUsage; error?: Error; providerMetadata?: ProviderMetadata } & ObserveHookContext,
+  ) => void;
+  onReflectionStart?: (info?: ObserveHookContext) => void;
   /**
    * Fires when a reflection cycle ends. `providerMetadata` carries the OM
    * reflector model call's full provider metadata; it is undefined when the
    * provider emits none. Across retry attempts `usage` is summed but
    * `providerMetadata` reflects the last attempt that emitted it (per-call
-   * values are not merged).
+   * values are not merged). The `ObserveHookContext` fields are populated for
+   * config-level hooks only.
    */
-  onReflectionEnd?: (result: { usage?: ObserveHookUsage; error?: Error; providerMetadata?: ProviderMetadata }) => void;
+  onReflectionEnd?: (
+    result: { usage?: ObserveHookUsage; error?: Error; providerMetadata?: ProviderMetadata } & ObserveHookContext,
+  ) => void;
 }
