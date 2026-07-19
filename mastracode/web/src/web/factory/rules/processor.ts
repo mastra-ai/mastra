@@ -278,7 +278,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       `Work item: ${escapeText(item.title)} (${item.id})\n` +
       `Role: ${escapeText(binding.role)}\nRevision: ${item.revision}\nRules: ${escapeText(this.options.rules.version)}\n` +
       `Use factory_transition_work_item with expectedRevision ${item.revision} to request a phase change.${escapeText(linkedText)}`;
-    const isDelta = hasBase && Boolean(prior);
+    const isDelta = hasBase && prior?.status === 'active';
     return {
       id: STATE_ID,
       cacheKey,

@@ -421,6 +421,25 @@ describe('FactoryPhaseStateProcessor', () => {
     ]);
   });
 
+  it('emits a full snapshot when an active binding follows an in-window empty snapshot', async () => {
+    const storage = (await seedFactoryStorageForTests()).workItems;
+    await prepare(storage);
+    const rules = defaultFactoryRules({ version: 'rules-v1' });
+    const processor = new FactoryPhaseStateProcessor({ rules, storage });
+    const emptySnapshot = { metadata: { value: { phase: { status: 'none' } } } };
+
+    const signal = await processor.computeStateSignal(
+      stateArgs(requestContext(), {
+        activeStateSignals: [emptySnapshot],
+        contextWindow: { hasSnapshot: true },
+        lastSnapshot: emptySnapshot,
+        tracking: { currentCacheKey: 'factory:none:revoked' },
+      }),
+    );
+
+    expect(signal).toMatchObject({ mode: 'snapshot', attributes: { status: 'active' } });
+  });
+
   it('re-emits when the exact bound role changes', async () => {
     const storage = (await seedFactoryStorageForTests()).workItems;
     const prepared = await prepare(storage);
