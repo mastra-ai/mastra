@@ -102,6 +102,102 @@ describe('FactoryGithubEventService', () => {
     expect(decisions[0]?.decision).toMatchObject({ type: 'upsertLinkedWorkItem', source: 'github-issue' });
   });
 
+  it('prefers canonical board identities over legacy GitHub rows during ingress', async () => {
+    const { github, sourceControl, integrationStorage, workItems, project } = await setup('write');
+    const issue = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github-issue:42',
+          url: 'https://github.com/acme/repo/issues/42',
+        },
+        title: 'Issue 42',
+        stages: ['intake'],
+        sessions: {},
+        metadata: { number: 42 },
+      },
+    });
+    const review = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github-pr:17',
+          url: 'https://github.com/acme/repo/pull/17',
+        },
+        title: 'PR 17',
+        stages: ['intake'],
+        sessions: {},
+        metadata: { number: 17 },
+      },
+    });
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github:10:issue:42',
+          url: 'https://github.com/acme/repo/issues/42',
+        },
+        title: 'Legacy issue 42',
+        stages: ['intake'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github:10:pull-request:17',
+          url: 'https://github.com/acme/repo/pull/17',
+        },
+        title: 'Legacy PR 17',
+        stages: ['intake'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    const service = new FactoryGithubEventService({
+      github,
+      sourceControl,
+      integrationStorage,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await service.ingest(issueOpened('delivery-canonical-issue'));
+    await service.ingest(pullRequest('opened', 'delivery-canonical-pr'));
+
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          workItemId: issue.item.id,
+          decision: expect.objectContaining({ source: 'github-issue' }),
+        }),
+        expect.objectContaining({
+          workItemId: review.item.id,
+          decision: expect.objectContaining({ source: 'github-pr' }),
+        }),
+      ]),
+    );
+  });
+
   it.each(['maintain', 'triage', 'read', undefined])('fails closed for GitHub permission %s', async permission => {
     const { github, sourceControl, integrationStorage, workItems, project } = await setup(permission);
     const seen = vi.fn(() => undefined);

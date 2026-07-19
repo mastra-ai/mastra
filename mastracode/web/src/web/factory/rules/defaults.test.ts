@@ -185,15 +185,15 @@ describe('defaultFactoryRules', () => {
     },
   );
 
-  it('materializes stable issue and pull-request source keys', async () => {
+  it('uses the same issue and pull-request identities as board Intake', async () => {
     const rules = defaultFactoryRules({ version: 'deployment-7' });
     expect(await rules.github.issueOpened?.onEvent?.(githubContext('issueOpened'))).toMatchObject({
       source: 'github-issue',
-      sourceKey: 'github:10:issue:42',
+      sourceKey: 'github-issue:42',
     });
     expect(await rules.github.pullRequestOpened?.onEvent?.(githubContext('pullRequestOpened'))).toMatchObject({
       source: 'github-pr',
-      sourceKey: 'github:10:pull-request:17',
+      sourceKey: 'github-pr:17',
     });
   });
 
