@@ -186,6 +186,25 @@ export async function executeParallel(
       // Apply context changes from parallel step execution
       engine.applyMutableContext(executionContext, stepExecResult.mutableContext);
       Object.assign(stepResults, stepExecResult.stepResults);
+
+      // Publish this branch's outcome now rather than waiting on the join below.
+      // `executeEntry` only persists once every branch has settled, so without
+      // this a finished child stays `running` in the snapshot — and in the
+      // Studio graph — for as long as its slowest sibling takes. The `phase`
+      // keeps the durable operation id unique per branch so replay engines
+      // don't collapse these into a single memoized write.
+      await engine.persistStepUpdate({
+        workflowId,
+        runId,
+        resourceId,
+        serializedStepGraph,
+        stepResults,
+        executionContext,
+        workflowStatus: 'running',
+        requestContext,
+        phase: `parallel.${i}.end`,
+      });
+
       return stepExecResult.result;
     }),
   );
