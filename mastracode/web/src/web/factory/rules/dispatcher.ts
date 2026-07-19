@@ -8,6 +8,7 @@ import type {
   FactoryDeferredDecisionRecord,
   FactoryPendingStartRecord,
   FactoryRunBindingRecord,
+  WorkItemRow,
   WorkItemsStorage,
 } from '../../storage/domains/work-items/base.js';
 import { getWorkItemsStorage } from '../../storage/domains.js';
@@ -29,12 +30,19 @@ interface DispatcherSession extends SkillSession {
 
 type FactoryController = Pick<AgentController<MastraCodeState>, 'getSessionByResource'>;
 
+export interface FactoryBindingPreparationInput {
+  record: FactoryDeferredDecisionRecord;
+  item: WorkItemRow;
+  role: string;
+}
+
 export interface FactoryDecisionDispatcherOptions {
   controller: FactoryController;
   transitionService: Pick<FactoryTransitionService, 'transition'>;
   storage?: WorkItemsStorage;
   ownerId?: string;
   reconcileToolResults?: () => Promise<void>;
+  prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
 }
 
 function sanitizeDispatchError(error: unknown): string {
@@ -101,6 +109,7 @@ export class FactoryDecisionDispatcher {
   readonly #storage: WorkItemsStorage;
   readonly #ownerId: string;
   readonly #reconcileToolResults?: () => Promise<void>;
+  readonly #prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   #timer?: ReturnType<typeof setInterval>;
   #activeRun?: Promise<void>;
 
@@ -110,6 +119,7 @@ export class FactoryDecisionDispatcher {
     this.#storage = options.storage ?? getWorkItemsStorage();
     this.#ownerId = options.ownerId ?? `factory-dispatcher:${randomUUID()}`;
     this.#reconcileToolResults = options.reconcileToolResults;
+    this.#prepareBinding = options.prepareBinding;
   }
 
   start(): void {
@@ -213,7 +223,7 @@ export class FactoryDecisionDispatcher {
         return;
       }
       case 'invokeSkill': {
-        const binding = await this.#requireBinding(record, decision.role);
+        const binding = await this.#requireOrPrepareBinding(record, decision.role);
         const resolved = await resolveSkillInvocation(this.#controller, {
           resourceId: binding.resourceId,
           scope: binding.projectPath,
@@ -335,18 +345,31 @@ export class FactoryDecisionDispatcher {
     return item;
   }
 
-  async #requireBinding(record: FactoryDeferredDecisionRecord, role?: string): Promise<FactoryRunBindingRecord> {
+  async #findBinding(record: FactoryDeferredDecisionRecord, role?: string): Promise<FactoryRunBindingRecord | undefined> {
     if (!record.workItemId) throw new Error('Factory decision is not linked to a work item.');
     const bindings = await this.#storage.listRunBindings(record.orgId, record.factoryProjectId, record.workItemId);
-    const binding = bindings
+    return bindings
       .filter(candidate => candidate.status === 'active' && (role === undefined || candidate.role === role))
       .sort((left, right) => {
         if (role === undefined && left.role === 'work' && right.role !== 'work') return -1;
         if (role === undefined && right.role === 'work' && left.role !== 'work') return 1;
         return right.createdAt.getTime() - left.createdAt.getTime() || left.id.localeCompare(right.id);
       })[0];
+  }
+
+  async #requireBinding(record: FactoryDeferredDecisionRecord, role?: string): Promise<FactoryRunBindingRecord> {
+    const binding = await this.#findBinding(record, role);
     if (!binding) throw new Error(role ? `No active Factory binding for role ${role}.` : 'No active Factory binding.');
     return binding;
+  }
+
+  async #requireOrPrepareBinding(record: FactoryDeferredDecisionRecord, role: string): Promise<FactoryRunBindingRecord> {
+    const binding = await this.#findBinding(record, role);
+    if (binding) return binding;
+    if (!this.#prepareBinding) throw new Error(`No active Factory binding for role ${role}.`);
+    const item = await this.#requireItem(record);
+    await this.#prepareBinding({ record, item, role });
+    return this.#requireBinding(record, role);
   }
 
   async #requireSession(binding: FactoryRunBindingRecord): Promise<DispatcherSession> {

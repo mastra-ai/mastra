@@ -20,14 +20,22 @@ function trustedGithubActor(context: Pick<FactoryStageRuleContext, 'actor'>): bo
   return context.actor.type === 'github' && (context.actor.trusted || context.actor.factoryAuthored);
 }
 
-function investigateTrustedIssue(context: FactoryStageRuleContext) {
-  if (!trustedGithubActor(context)) return;
+function invokeIssueInvestigation(context: FactoryStageRuleContext) {
   return {
     type: 'invokeSkill',
     idempotencyKey: `${context.ingress.id}:understand-issue`,
     role: 'triage',
     skillName: 'understand-issue',
   } as const;
+}
+
+function investigateTrustedIssue(context: FactoryStageRuleContext) {
+  if (!trustedGithubActor(context)) return;
+  return invokeIssueInvestigation(context);
+}
+
+function investigateTriagedIssue(context: FactoryStageRuleContext) {
+  return invokeIssueInvestigation(context);
 }
 
 function reviewTrustedPullRequest(context: FactoryStageRuleContext) {
@@ -117,7 +125,10 @@ function pullRequestMerged(context: FactoryGithubRuleContext) {
 }
 
 const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
-  work: { intake: { issue: { onEnter: investigateTrustedIssue } } },
+  work: {
+    intake: { issue: { onEnter: investigateTrustedIssue } },
+    triage: { issue: { onEnter: investigateTriagedIssue } },
+  },
   review: { intake: { pullRequest: { onEnter: reviewTrustedPullRequest } } },
   tools: { submit_plan: { onResult: advanceApprovedPlan } },
   github: {

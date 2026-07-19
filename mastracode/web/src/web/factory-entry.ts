@@ -575,12 +575,13 @@ export class MastraFactory {
           intakeReady,
           factoryReady,
           factoryTransitionService: transitionService,
-          onFactoryRuntime: ({ transitionService: runtimeTransitionService }) => {
+          onFactoryRuntime: ({ transitionService: runtimeTransitionService, prepareBinding }) => {
             this.#dispatcher ??= new FactoryDecisionDispatcher({
               controller,
               transitionService: runtimeTransitionService,
               storage: getFactoryStorage().getDomain<WorkItemsStorage>('work-items'),
               reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
+              prepareBinding,
             });
           },
         }),

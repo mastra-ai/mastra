@@ -91,6 +91,7 @@ describe('defaultFactoryRules', () => {
     const rules = defaultFactoryRules({ version: 'deployment-7' });
     expect(rules.version).toBe('deployment-7');
     expect(rules.work.intake?.issue?.onEnter).toBeTypeOf('function');
+    expect(rules.work.triage?.issue?.onEnter).toBeTypeOf('function');
     expect(rules.review.intake?.pullRequest?.onEnter).toBeTypeOf('function');
     expect(rules.tools.submit_plan?.onResult).toBeTypeOf('function');
     expect(rules.github.issueOpened?.onEvent).toBeTypeOf('function');
@@ -109,6 +110,21 @@ describe('defaultFactoryRules', () => {
     const decision = await rule?.(stageContext(actor, 'work'));
     expect(decision?.type === 'invokeSkill').toBe(expected);
     if (decision?.type === 'invokeSkill') expect(decision.skillName).toBe('understand-issue');
+  });
+
+  it('starts the same investigation when a human moves an issue into Triage', async () => {
+    const rule = defaultFactoryRules({ version: 'deployment-7' }).work.triage?.issue?.onEnter;
+    const context = {
+      ...stageContext({ type: 'human', id: 'user-1' }, 'work'),
+      stage: 'triage',
+      fromStage: 'intake',
+      toStage: 'triage',
+    } as FactoryStageRuleContext;
+    expect(await rule?.(context)).toMatchObject({
+      type: 'invokeSkill',
+      role: 'triage',
+      skillName: 'understand-issue',
+    });
   });
 
   it('reviews trusted or explicitly Factory-authored pull requests without heuristics', async () => {

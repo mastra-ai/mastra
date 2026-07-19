@@ -321,6 +321,56 @@ describe('FactoryDecisionDispatcher', () => {
     );
   });
 
+  it('prepares a missing binding before dispatching a rule-driven skill', async () => {
+    const storage = (await seedFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'triage',
+      skillName: 'understand-issue',
+      idempotencyKey: 'skill-auto-start',
+    });
+    const { controller, sendNotificationSignal } = createSession();
+    const prepareBinding = vi.fn(async () => {
+      await storage.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        workItem: {
+          id: item.id,
+          input: {
+            externalSource: item.externalSource,
+            title: item.title,
+            stages: ['intake'],
+            sessions: {},
+            metadata: item.metadata,
+          },
+        },
+        role: 'triage',
+        session: { projectPath: '/worktree', branch: 'factory/issue-1', threadId: 'thread-1' },
+        resourceId: PROJECT_ID,
+        kickoffKey: 'skill-auto-start',
+        kickoffMessage: null,
+      });
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      prepareBinding,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(prepareBinding).toHaveBeenCalledWith(
+      expect.objectContaining({ item: expect.objectContaining({ id: item.id }), role: 'triage' }),
+    );
+    expect(sendNotificationSignal).toHaveBeenCalledWith(
+      expect.objectContaining({ dedupeKey: 'skill-auto-start' }),
+      { ifActive: { behavior: 'deliver' }, ifIdle: { behavior: 'wake' } },
+    );
+  });
+
   it('retries after post-delivery completion ambiguity without delivering the notification twice', async () => {
     const storage = (await seedFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {
