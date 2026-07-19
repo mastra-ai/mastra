@@ -16,7 +16,6 @@ import type { EventHandlerContext } from './types.js';
 
 export function handleAgentStart(ctx: EventHandlerContext): void {
   const { state } = ctx;
-  state.goalManager.startActiveTimer();
 
   // Refresh git branch async to avoid blocking the event loop
   getCurrentGitBranchAsync(state.projectInfo.rootPath).then(freshBranch => {
@@ -35,12 +34,8 @@ export function handleAgentStart(ctx: EventHandlerContext): void {
   state.gradientAnimator.start();
 }
 
-export async function handleAgentEnd(ctx: EventHandlerContext): Promise<void> {
+export function handleAgentEnd(ctx: EventHandlerContext): void {
   const { state } = ctx;
-  // Stop the goal active-timer on normal completion too (not just abort/error),
-  // otherwise the elapsed-time display keeps counting while idle between turns.
-  state.goalManager.stopActiveTimer();
-  await state.goalManager.saveToThread(state);
   if (state.gradientAnimator) {
     state.gradientAnimator.fadeOut();
   }
@@ -141,10 +136,8 @@ function drainQueuedAction(ctx: EventHandlerContext): boolean {
   return true;
 }
 
-export async function handleAgentAborted(ctx: EventHandlerContext): Promise<void> {
+export function handleAgentAborted(ctx: EventHandlerContext): void {
   const { state } = ctx;
-  state.goalManager.stopActiveTimer();
-  await state.goalManager.saveToThread(state);
   if (state.gradientAnimator) {
     state.gradientAnimator.fadeOut();
   }
@@ -187,10 +180,8 @@ export async function handleAgentAborted(ctx: EventHandlerContext): Promise<void
   flushRender(state);
 }
 
-export async function handleAgentError(ctx: EventHandlerContext): Promise<void> {
+export function handleAgentError(ctx: EventHandlerContext): void {
   const { state } = ctx;
-  state.goalManager.stopActiveTimer();
-  await state.goalManager.saveToThread(state);
   if (state.gradientAnimator) {
     state.gradientAnimator.fadeOut();
   }

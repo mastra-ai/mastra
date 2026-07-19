@@ -140,7 +140,6 @@ describe('Agent objective methods', () => {
       resourceId: RESOURCE,
       judgeModelId: 'judge-1',
       maxRuns: 5,
-      activeDurationMs: 1_234,
     });
     const record = await agent.getObjective({ threadId: THREAD });
     expect(record).toMatchObject({
@@ -150,7 +149,7 @@ describe('Agent objective methods', () => {
       runsUsed: 0,
       judgeModelId: 'judge-1',
       maxRuns: 5,
-      activeDurationMs: 1_234,
+      activeDurationMs: 0,
     });
     // Unprovided optional fields are left unset so they fall back to agent config.
     expect(record?.prompt).toBeUndefined();
@@ -164,13 +163,16 @@ describe('Agent objective methods', () => {
 
     expect(await agent.updateObjectiveOptions({ threadId: THREAD, judgeModelId: 'j' })).toBeUndefined();
 
-    const created = await agent.setObjective('Goal', { threadId: THREAD, resourceId: RESOURCE });
-    expect(created?.activeDurationMs).toBe(0);
+    const created = await agent.setObjective('Goal', {
+      threadId: THREAD,
+      resourceId: RESOURCE,
+      activeDurationMs: 2_500,
+    });
+    expect(created?.activeDurationMs).toBe(2_500);
     const updated = await agent.updateObjectiveOptions({
       threadId: THREAD,
       judgeModelId: 'new-judge',
       maxRuns: 12,
-      activeDurationMs: 2_500,
     });
     expect(updated).toMatchObject({
       judgeModelId: 'new-judge',
@@ -184,7 +186,7 @@ describe('Agent objective methods', () => {
   });
 
   it.each([-1, Number.NaN, Number.POSITIVE_INFINITY])(
-    'normalizes invalid active duration %s to zero on set and update',
+    'normalizes invalid initial active duration %s to zero',
     async invalidDuration => {
       const agent = makeAgent();
 
@@ -195,10 +197,6 @@ describe('Agent objective methods', () => {
       });
       expect(created?.activeDurationMs).toBe(0);
       expect((await agent.getObjective({ threadId: THREAD }))?.activeDurationMs).toBe(0);
-
-      await agent.updateObjectiveOptions({ threadId: THREAD, activeDurationMs: 10 });
-      const updated = await agent.updateObjectiveOptions({ threadId: THREAD, activeDurationMs: invalidDuration });
-      expect(updated?.activeDurationMs).toBe(0);
     },
   );
 

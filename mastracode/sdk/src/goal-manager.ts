@@ -12,6 +12,7 @@
  * chunks.
  */
 import { randomUUID } from 'node:crypto';
+import { getGoalActivityDurationMs } from '@mastra/core/agent';
 import type { Agent } from '@mastra/core/agent';
 import type { AgentController, Session } from '@mastra/core/agent-controller';
 import type { GoalObjectiveRecord } from '@mastra/core/storage';
@@ -63,9 +64,8 @@ function normalizeActiveDurationMs(value: number | undefined): number {
 export class GoalManager {
   /** Synchronous in-memory view of the active objective record (source of truth is ThreadState). */
   private record: (GoalObjectiveRecord & { id: string }) | null = null;
-  /** In-process timestamp is never persisted, so downtime is excluded from active duration. */
-  private activeStartedAt: string | null = null;
-  private activeDurationMs = 0;
+  private threadId: string | undefined;
+  private agentId: string | undefined;
   private persistGoalOnNextThreadCreate = false;
 
   // ---------------------------------------------------------------------------
@@ -83,8 +83,15 @@ export class GoalManager {
       maxTurns,
       judgeModelId,
       startedAt: new Date(this.record.startedAt).toISOString(),
-      activeStartedAt: this.activeStartedAt ?? undefined,
-      activeDurationMs: this.activeDurationMs,
+      activeDurationMs:
+        this.agentId && this.threadId
+          ? getGoalActivityDurationMs({
+              agentId: this.agentId,
+              threadId: this.threadId,
+              objectiveId: this.record.id,
+              activeDurationMs: this.record.activeDurationMs,
+            })
+          : normalizeActiveDurationMs(this.record.activeDurationMs),
     };
   }
 
@@ -100,27 +107,6 @@ export class GoalManager {
     if (!this.persistGoalOnNextThreadCreate) return false;
     this.persistGoalOnNextThreadCreate = false;
     return true;
-  }
-
-  startActiveTimer(): void {
-    if (this.record?.status === 'active' && !this.activeStartedAt) {
-      this.activeStartedAt = new Date().toISOString();
-    }
-  }
-
-  stopActiveTimer(): void {
-    if (!this.activeStartedAt) return;
-    const startedMs = Date.parse(this.activeStartedAt);
-    if (Number.isFinite(startedMs)) {
-      this.activeDurationMs += Math.max(0, Date.now() - startedMs);
-    }
-    this.activeStartedAt = null;
-  }
-
-  /** Reset active-timer accounting to zero (e.g. for an untriggered plan goal). */
-  resetActiveTimer(): void {
-    this.activeStartedAt = null;
-    this.activeDurationMs = 0;
   }
 
   // ---------------------------------------------------------------------------
@@ -142,6 +128,8 @@ export class GoalManager {
     const agent = this.getAgent(state);
     const now = Date.now();
     const id = randomUUID();
+    this.threadId = threadId ?? undefined;
+    this.agentId = agent?.id;
 
     if (agent && threadId) {
       const persisted = await agent.setObjective(objective, {
@@ -150,7 +138,6 @@ export class GoalManager {
         resourceId: state.session.identity.getResourceId(),
         ...(judgeModelId ? { judgeModelId } : {}),
         maxRuns: maxTurns,
-        activeDurationMs: 0,
       });
       this.record = persisted
         ? { ...persisted, id: persisted.id ?? id }
@@ -159,8 +146,6 @@ export class GoalManager {
       this.record = this.localRecord(objective, judgeModelId, maxTurns, now, id);
     }
 
-    this.activeStartedAt = new Date(now).toISOString();
-    this.activeDurationMs = 0;
     return this.getGoal();
   }
 
@@ -196,7 +181,6 @@ export class GoalManager {
 
   pause(reason?: string): GoalState | null {
     if (this.record && this.record.status === 'active') {
-      this.stopActiveTimer();
       this.record = { ...this.record, status: 'paused', pausedReason: reason, updatedAt: Date.now() };
     }
     return this.getGoal();
@@ -205,22 +189,20 @@ export class GoalManager {
   resume(): GoalState | null {
     if (this.record && this.record.status === 'paused') {
       this.record = { ...this.record, status: 'active', pausedReason: undefined, updatedAt: Date.now() };
-      this.startActiveTimer();
     }
     return this.getGoal();
   }
 
   markDone(): void {
     if (this.record) {
-      this.stopActiveTimer();
       this.record = { ...this.record, status: 'done', updatedAt: Date.now() };
     }
   }
 
   clear(): void {
     this.record = null;
-    this.activeStartedAt = null;
-    this.activeDurationMs = 0;
+    this.threadId = undefined;
+    this.agentId = undefined;
     this.persistGoalOnNextThreadCreate = false;
   }
 
@@ -231,7 +213,6 @@ export class GoalManager {
   applyEvaluation(update: { runsUsed: number; status: GoalStatus }): GoalState | null {
     if (!this.record) return null;
     this.record = { ...this.record, runsUsed: update.runsUsed, status: update.status, updatedAt: Date.now() };
-    if (update.status !== 'active') this.stopActiveTimer();
     return this.getGoal();
   }
 
@@ -255,7 +236,6 @@ export class GoalManager {
           const updated = await agent.updateObjectiveOptions({
             threadId,
             status: this.record.status,
-            activeDurationMs: this.activeDurationMs,
             ...(this.record.pausedReason ? { pausedReason: this.record.pausedReason } : {}),
             ...(this.record.judgeModelId ? { judgeModelId: this.record.judgeModelId } : {}),
             ...(this.record.maxRuns !== undefined ? { maxRuns: this.record.maxRuns } : {}),
@@ -270,7 +250,7 @@ export class GoalManager {
               id: this.record.id,
               threadId,
               resourceId: state.session.identity.getResourceId(),
-              activeDurationMs: this.activeDurationMs,
+              activeDurationMs: normalizeActiveDurationMs(this.record.activeDurationMs),
               ...(this.record.judgeModelId ? { judgeModelId: this.record.judgeModelId } : {}),
               ...(this.record.maxRuns !== undefined ? { maxRuns: this.record.maxRuns } : {}),
             });
@@ -299,17 +279,20 @@ export class GoalManager {
    */
   async loadFromThread(state: GoalManagerState): Promise<void> {
     this.persistGoalOnNextThreadCreate = false;
-    this.activeStartedAt = null;
-    this.activeDurationMs = 0;
 
     const threadId = state.session.thread.getId();
     const agent = this.getAgent(state);
+    this.threadId = threadId ?? undefined;
+    this.agentId = agent?.id;
     if (agent && threadId) {
       try {
         const record = await agent.getObjective({ threadId });
         if (record) {
-          this.record = { ...record, id: record.id ?? randomUUID() };
-          this.activeDurationMs = normalizeActiveDurationMs(record.activeDurationMs);
+          this.record = {
+            ...record,
+            id: record.id ?? randomUUID(),
+            activeDurationMs: normalizeActiveDurationMs(record.activeDurationMs),
+          };
           return;
         }
       } catch {
@@ -326,20 +309,20 @@ export class GoalManager {
   loadFromThreadMetadata(metadata: Record<string, unknown> | undefined): void {
     const saved = metadata?.[THREAD_GOAL_KEY] as Partial<GoalState> | undefined;
     this.persistGoalOnNextThreadCreate = false;
-    this.activeStartedAt = null;
-    this.activeDurationMs = 0;
+    this.threadId = undefined;
+    this.agentId = undefined;
     if (saved && saved.objective && saved.status) {
       this.record = {
         objective: saved.objective,
         status: saved.status,
         runsUsed: saved.turnsUsed ?? 0,
+        activeDurationMs: normalizeActiveDurationMs(saved.activeDurationMs),
         maxRuns: saved.maxTurns ?? DEFAULT_MAX_TURNS,
         judgeModelId: saved.judgeModelId ?? '',
         startedAt: saved.startedAt ? Date.parse(saved.startedAt) || Date.now() : Date.now(),
         updatedAt: Date.now(),
         id: saved.id ?? randomUUID(),
       };
-      this.activeDurationMs = normalizeActiveDurationMs(saved.activeDurationMs);
     } else {
       this.record = null;
     }

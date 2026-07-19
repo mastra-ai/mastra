@@ -79,9 +79,9 @@ describe('GoalManager adapter', () => {
         resourceId: 'resource-1',
         judgeModelId: '__GATEWAY_OPENAI_MODEL__',
         maxRuns: 25,
-        activeDurationMs: 0,
       }),
     );
+    expect(agent.setObjective.mock.calls[0]?.[1]).not.toHaveProperty('activeDurationMs');
     expect(goal).toMatchObject({ objective: 'finish the task', status: 'active', turnsUsed: 0, maxTurns: 25 });
     expect(manager.isActive()).toBe(true);
   });
@@ -95,24 +95,18 @@ describe('GoalManager adapter', () => {
     expect(goal).toMatchObject({ objective: 'offline goal', status: 'active', maxTurns: DEFAULT_MAX_TURNS });
   });
 
-  it('pauses and resumes without losing turn count or active duration', async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-05-15T10:00:00.000Z'));
+  it('pauses and resumes without mutating core-owned active duration', async () => {
+    const agent = createAgent();
+    agent.setObjective.mockResolvedValue(makeRecord({ activeDurationMs: 7 * 60_000 }));
     const manager = new GoalManager();
-    await manager.setGoal(createState(createAgent()), 'finish the task', '__GATEWAY_OPENAI_MODEL__');
+    await manager.setGoal(createState(agent), 'finish the task', '__GATEWAY_OPENAI_MODEL__');
     manager.applyEvaluation({ runsUsed: 3, status: 'active' });
 
-    vi.setSystemTime(new Date('2026-05-15T10:05:00.000Z'));
     manager.pause();
-    expect(manager.getGoal()).toMatchObject({ status: 'paused', turnsUsed: 3 });
+    expect(manager.getGoal()).toMatchObject({ status: 'paused', turnsUsed: 3, activeDurationMs: 7 * 60_000 });
 
-    vi.setSystemTime(new Date('2026-05-15T12:00:00.000Z'));
     manager.resume();
-    vi.setSystemTime(new Date('2026-05-15T12:02:00.000Z'));
-    manager.stopActiveTimer();
-
     expect(manager.getGoal()).toMatchObject({ status: 'active', turnsUsed: 3, activeDurationMs: 7 * 60_000 });
-    vi.useRealTimers();
   });
 
   it('updates judge defaults on the active goal, persisting via the agent', async () => {
@@ -168,7 +162,6 @@ describe('GoalManager adapter', () => {
       turnsUsed: 4,
       status: 'paused',
       activeDurationMs: 60_000,
-      activeStartedAt: undefined,
     });
     expect(agent.setObjective).not.toHaveBeenCalled();
     expect(agent.updateObjectiveOptions).not.toHaveBeenCalled();
@@ -183,7 +176,7 @@ describe('GoalManager adapter', () => {
 
     await manager.loadFromThread(createState(agent));
 
-    expect(manager.getGoal()).toMatchObject({ activeDurationMs: 0, activeStartedAt: undefined });
+    expect(manager.getGoal()).toMatchObject({ activeDurationMs: 0 });
     expect(agent.setObjective).not.toHaveBeenCalled();
     expect(agent.updateObjectiveOptions).not.toHaveBeenCalled();
   });
@@ -197,7 +190,7 @@ describe('GoalManager adapter', () => {
 
       await manager.loadFromThread(createState(agent));
 
-      expect(manager.getGoal()).toMatchObject({ activeDurationMs: 0, activeStartedAt: undefined });
+      expect(manager.getGoal()).toMatchObject({ activeDurationMs: 0 });
       expect(agent.setObjective).not.toHaveBeenCalled();
       expect(agent.updateObjectiveOptions).not.toHaveBeenCalled();
     },
@@ -237,7 +230,6 @@ describe('GoalManager adapter', () => {
       turnsUsed: 1,
       maxTurns: 20,
       activeDurationMs: 10 * 60_000,
-      activeStartedAt: undefined,
     });
     vi.useRealTimers();
   });
@@ -255,7 +247,7 @@ describe('GoalManager adapter', () => {
         },
       });
 
-      expect(manager.getGoal()).toMatchObject({ activeDurationMs: 0, activeStartedAt: undefined });
+      expect(manager.getGoal()).toMatchObject({ activeDurationMs: 0 });
     },
   );
 
@@ -278,40 +270,33 @@ describe('GoalManager adapter', () => {
     expect(manager.consumePersistOnNextThreadCreate()).toBe(false);
   });
 
-  it('saveToThread flushes stopped duration through the existing record', async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-05-15T10:00:00.000Z'));
+  it('saveToThread preserves core-owned duration when updating status', async () => {
     const agent = createAgent();
     const state = createState(agent);
     const manager = new GoalManager();
     await manager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__');
-    vi.setSystemTime(new Date('2026-05-15T10:05:00.000Z'));
     manager.pause('Judge evaluation was interrupted.');
 
     await manager.saveToThread(state);
 
-    expect(agent.updateObjectiveOptions).toHaveBeenCalledWith(
-      expect.objectContaining({
-        threadId: 'parent-thread',
-        status: 'paused',
-        pausedReason: 'Judge evaluation was interrupted.',
-        activeDurationMs: 5 * 60_000,
-      }),
-    );
+    expect(agent.updateObjectiveOptions).toHaveBeenCalledWith({
+      threadId: 'parent-thread',
+      status: 'paused',
+      pausedReason: 'Judge evaluation was interrupted.',
+      judgeModelId: '__GATEWAY_OPENAI_MODEL__',
+      maxRuns: 50,
+    });
     expect(state.session.thread.setSetting).toHaveBeenCalledWith({ key: 'goal', value: undefined });
   });
 
-  it('saveToThread flushes stopped duration through the create fallback', async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-05-15T10:00:00.000Z'));
+  it('saveToThread carries the record duration through the create fallback', async () => {
     const agent = createAgent();
+    agent.setObjective.mockResolvedValue(makeRecord({ activeDurationMs: 2 * 60_000 }));
     const state = createState(agent);
     const manager = new GoalManager();
     await manager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__');
     agent.setObjective.mockClear();
     agent.updateObjectiveOptions.mockResolvedValueOnce(undefined);
-    vi.setSystemTime(new Date('2026-05-15T10:02:00.000Z'));
-    manager.stopActiveTimer();
 
     await manager.saveToThread(state);
 

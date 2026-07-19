@@ -1026,19 +1026,11 @@ export class Agent<
     maxRuns?: number;
     prompt?: string;
     status?: GoalObjectiveRecord['status'];
-    activeDurationMs?: number;
   }): Promise<GoalObjectiveRecord | undefined> {
     const store = await resolveGoalStore(this.#mastra as MastraUnion | undefined);
     const existing = await readObjective(store, options.threadId);
     if (!store || !existing) return undefined;
 
-    const suppliedActiveDurationMs = options.activeDurationMs;
-    const activeDurationMs =
-      suppliedActiveDurationMs !== undefined &&
-      Number.isFinite(suppliedActiveDurationMs) &&
-      suppliedActiveDurationMs >= 0
-        ? suppliedActiveDurationMs
-        : 0;
     const updated: GoalObjectiveRecord = {
       ...existing,
       updatedAt: Date.now(),
@@ -1046,7 +1038,6 @@ export class Agent<
       ...(options.maxRuns !== undefined && options.maxRuns > 0 ? { maxRuns: options.maxRuns } : {}),
       ...(options.prompt !== undefined ? { prompt: options.prompt } : {}),
       ...(options.status !== undefined ? { status: options.status } : {}),
-      ...(suppliedActiveDurationMs !== undefined ? { activeDurationMs } : {}),
     };
     await writeObjective(store, options.threadId, updated);
     return updated;

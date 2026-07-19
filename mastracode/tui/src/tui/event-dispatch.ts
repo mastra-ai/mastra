@@ -98,12 +98,12 @@ export async function dispatchEvent(
       ectx.updateStatusLine();
       if (event.reason === 'aborted') {
         clearPendingShellOutputs();
-        await handleAgentAborted(ectx);
+        handleAgentAborted(ectx);
       } else if (event.reason === 'error') {
         clearPendingShellOutputs();
-        await handleAgentError(ectx);
+        handleAgentError(ectx);
       } else {
-        await handleAgentEnd(ectx);
+        handleAgentEnd(ectx);
       }
       break;
 
@@ -142,7 +142,7 @@ export async function dispatchEvent(
         threadId: state.session.thread.getId(),
         resourceId: state.session.identity.getResourceId(),
       });
-      await handleToolApprovalRequired(ectx, event.toolCallId, event.toolName, event.args);
+      handleToolApprovalRequired(ectx, event.toolCallId, event.toolName, event.args);
       break;
 
     case 'tool_update':

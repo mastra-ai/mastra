@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed durable goal objectives so active-duration accounting can be preserved.
+Fixed durable goal objectives so active execution time is preserved across runs and excludes tool approval waits.
