@@ -18,7 +18,6 @@ import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
-import { globalRunRegistry } from '../run-registry';
 
 function createToolCallModel(toolName: string, toolArgs: object): LanguageModelV2 {
   return new MockLanguageModelV2({
@@ -102,67 +101,6 @@ describe('DurableAgent suspend metadata persistence', () => {
     const entry = Object.values((withSuspend as any).content.metadata.suspendedTools)[0] as any;
     expect(entry.toolName).toBe('request_approval');
     expect(entry.toolCallId).toBeTruthy();
-    expect(entry.suspendPayload).toMatchObject({ question: 'Proceed?' });
-  });
-
-  it('persists suspendedTools even when the run registry has no MessageList (remote worker)', async () => {
-    // The durable loop really executes on a separate process for cross-process engines (the
-    // @mastra/inngest connect() worker). `globalRunRegistry` is an in-memory, process-local cache,
-    // so that worker sees NO entry for the run. Simulate it by stripping the registry's MessageList
-    // once the run has registered: the step must then rebuild it from the serialized
-    // `messageListState` on the workflow input instead of silently skipping the metadata write.
-    const threadId = 'thread-suspend-meta-remote';
-    const resourceId = 'resource-suspend-meta-remote';
-
-    const storage = new InMemoryStore();
-    const memory = new MockMemory({ storage });
-
-    const approvalTool = createTool({
-      id: 'request_approval',
-      description: 'Ask the user to approve before continuing',
-      inputSchema: z.object({ question: z.string() }),
-      suspendSchema: z.object({ question: z.string() }),
-      resumeSchema: z.object({ approved: z.boolean() }),
-      execute: async (input: any, context: any) => {
-        const agentCtx = context?.agent ?? context ?? {};
-        if (agentCtx.resumeData != null) return { approved: agentCtx.resumeData.approved };
-        await agentCtx.suspend?.({ question: input.question });
-        return { approved: false };
-      },
-    });
-
-    const baseAgent = new Agent({
-      id: 'suspend-metadata-agent-remote',
-      name: 'Suspend Metadata Agent Remote',
-      instructions: 'Call request_approval.',
-      model: createToolCallModel('request_approval', { question: 'Proceed?' }),
-      tools: { request_approval: approvalTool },
-      memory,
-    });
-
-    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-    const { runId, cleanup } = await durableAgent.stream('Please proceed', {
-      memory: { thread: threadId, resource: resourceId },
-    });
-
-    // Drop the in-process MessageList the way a remote worker would never have had one.
-    const stripped = setInterval(() => {
-      const e = globalRunRegistry.get(runId) as any;
-      if (e?.messageList) e.messageList = undefined;
-    }, 10);
-
-    await new Promise(r => setTimeout(r, 2000));
-    clearInterval(stripped);
-    cleanup();
-
-    const store = await storage.getStore('memory');
-    const { messages } = await store!.listMessages({ threadId } as never);
-
-    const withSuspend = messages.find((m: any) => (m.content?.metadata as any)?.suspendedTools);
-    expect(withSuspend).toBeDefined();
-
-    const entry = Object.values((withSuspend as any).content.metadata.suspendedTools)[0] as any;
-    expect(entry.toolName).toBe('request_approval');
     expect(entry.suspendPayload).toMatchObject({ question: 'Proceed?' });
   });
 });

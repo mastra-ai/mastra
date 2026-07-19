@@ -354,7 +354,13 @@ export function createDurableToolCallStep() {
       // `addToolMetadata()` is never persisted — a reloading client then sees no pending approval
       // even though the run is parked. So rebuild when the save queue is missing too, not just
       // when the tool is.
-      if ((!tool || !registryEntry?.saveQueueManager) && mastra) {
+      //
+      // Gated on `state?.threadId`: an agent without memory legitimately has no SaveQueueManager
+      // (see preparation.ts — it is only built when `memory` is set), and the flush requires a
+      // threadId regardless. Without this guard every tool call on a memoryless durable run would
+      // pay for a full rebuild to obtain something that can neither exist nor be used.
+      const needsSaveQueueForFlush = !registryEntry?.saveQueueManager && !!state?.threadId;
+      if ((!tool || needsSaveQueueForFlush) && mastra) {
         const rebuilt = await rebuildRunToolsFromMastra({
           mastra: mastra as Mastra,
           runId,
