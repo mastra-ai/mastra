@@ -19,7 +19,7 @@ import type { TUIState } from '../state.js';
 
 function createState(overrides: Partial<TUIState> = {}): TUIState {
   return {
-    goalManager: { stopActiveTimer: vi.fn() },
+    goalManager: { stopActiveTimer: vi.fn(), saveToThread: vi.fn().mockResolvedValue(undefined) },
     gradientAnimator: { fadeOut: vi.fn() },
     projectInfo: { rootPath: '.', gitBranch: 'main' },
     streamingComponent: undefined,
@@ -43,15 +43,19 @@ function createContext(state: TUIState): EventHandlerContext {
 }
 
 describe('agent lifecycle goal timing', () => {
-  it('stops active goal timing when an agent abort ends the turn', () => {
+  it('stops and persists active goal timing when an agent abort ends the turn', async () => {
     const state = createState();
 
-    handleAgentAborted(createContext(state));
+    await handleAgentAborted(createContext(state));
 
     expect(state.goalManager.stopActiveTimer).toHaveBeenCalled();
+    expect(state.goalManager.saveToThread).toHaveBeenCalledWith(state);
+    expect(vi.mocked(state.goalManager.stopActiveTimer).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(state.goalManager.saveToThread).mock.invocationCallOrder[0]!,
+    );
   });
 
-  it('does not render redundant interrupted errors for user aborts', () => {
+  it('does not render redundant interrupted errors for user aborts', async () => {
     const updateContent = vi.fn();
     const streamingMessage = { id: 'msg-1' } as any;
     const state = createState({
@@ -60,7 +64,7 @@ describe('agent lifecycle goal timing', () => {
       streamingMessage,
     });
 
-    handleAgentAborted(createContext(state));
+    await handleAgentAborted(createContext(state));
 
     expect(updateContent).not.toHaveBeenCalled();
     expect(streamingMessage.errorMessage).toBeUndefined();
@@ -68,15 +72,19 @@ describe('agent lifecycle goal timing', () => {
     expect(state.streamingMessage).toBeUndefined();
   });
 
-  it('stops active goal timing when an agent error ends the turn', () => {
+  it('stops and persists active goal timing when an agent error ends the turn', async () => {
     const state = createState();
 
-    handleAgentError(createContext(state));
+    await handleAgentError(createContext(state));
 
     expect(state.goalManager.stopActiveTimer).toHaveBeenCalled();
+    expect(state.goalManager.saveToThread).toHaveBeenCalledWith(state);
+    expect(vi.mocked(state.goalManager.stopActiveTimer).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(state.goalManager.saveToThread).mock.invocationCallOrder[0]!,
+    );
   });
 
-  it('stops active goal timing when an agent completes normally', () => {
+  it('stops and persists active goal timing when an agent completes normally', async () => {
     const state = createState({
       pendingTaskToolIds: new Set(),
       session: { followUps: { count: vi.fn(() => 0) } },
@@ -88,8 +96,12 @@ describe('agent lifecycle goal timing', () => {
       notify: vi.fn(),
     } as unknown as EventHandlerContext;
 
-    handleAgentEnd(ctx);
+    await handleAgentEnd(ctx);
 
     expect(state.goalManager.stopActiveTimer).toHaveBeenCalled();
+    expect(state.goalManager.saveToThread).toHaveBeenCalledWith(state);
+    expect(vi.mocked(state.goalManager.stopActiveTimer).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(state.goalManager.saveToThread).mock.invocationCallOrder[0]!,
+    );
   });
 });

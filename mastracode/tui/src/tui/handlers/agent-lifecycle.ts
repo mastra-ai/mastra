@@ -35,11 +35,12 @@ export function handleAgentStart(ctx: EventHandlerContext): void {
   state.gradientAnimator.start();
 }
 
-export function handleAgentEnd(ctx: EventHandlerContext): void {
+export async function handleAgentEnd(ctx: EventHandlerContext): Promise<void> {
   const { state } = ctx;
   // Stop the goal active-timer on normal completion too (not just abort/error),
   // otherwise the elapsed-time display keeps counting while idle between turns.
   state.goalManager.stopActiveTimer();
+  await state.goalManager.saveToThread(state);
   if (state.gradientAnimator) {
     state.gradientAnimator.fadeOut();
   }
@@ -140,9 +141,10 @@ function drainQueuedAction(ctx: EventHandlerContext): boolean {
   return true;
 }
 
-export function handleAgentAborted(ctx: EventHandlerContext): void {
+export async function handleAgentAborted(ctx: EventHandlerContext): Promise<void> {
   const { state } = ctx;
   state.goalManager.stopActiveTimer();
+  await state.goalManager.saveToThread(state);
   if (state.gradientAnimator) {
     state.gradientAnimator.fadeOut();
   }
@@ -185,9 +187,10 @@ export function handleAgentAborted(ctx: EventHandlerContext): void {
   flushRender(state);
 }
 
-export function handleAgentError(ctx: EventHandlerContext): void {
+export async function handleAgentError(ctx: EventHandlerContext): Promise<void> {
   const { state } = ctx;
   state.goalManager.stopActiveTimer();
+  await state.goalManager.saveToThread(state);
   if (state.gradientAnimator) {
     state.gradientAnimator.fadeOut();
   }
