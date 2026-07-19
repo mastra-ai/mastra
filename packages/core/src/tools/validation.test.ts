@@ -2213,6 +2213,26 @@ describe('prompt alias normalization (GitHub #14154)', () => {
     threadId: z.string().optional(),
   });
 
+  it('should handle Zod v4 compatibility schemas without native JSON Schema during alias retry', () => {
+    const compatSchema = z.object({
+      prompt: z.string(),
+      threadId: z.string().optional(),
+    });
+    delete (compatSchema as any)['~standard'].jsonSchema;
+
+    const result = validateToolInput(compatSchema, { query: 'give me insights into target USA' });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ prompt: 'give me insights into target USA' });
+  });
+
+  it('should handle nullish input for Zod v4 compatibility schemas without native JSON Schema', () => {
+    const compatSchema = z.object({ prompt: z.string() });
+    delete (compatSchema as any)['~standard'].jsonSchema;
+
+    const result = validateToolInput(compatSchema, undefined);
+    expect(result.error).toBeDefined();
+  });
+
   it('should normalize "query" to "prompt" when prompt is missing', () => {
     const result = validateToolInput(promptSchema, { query: 'give me insights into target USA' });
     expect(result.error).toBeUndefined();
