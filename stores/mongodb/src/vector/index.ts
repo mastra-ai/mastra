@@ -114,8 +114,14 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * `_id` is excluded because it is materialised separately by the fallback path.
    */
   private declaredFilterPaths: Map<string, Set<string>> = new Map();
-  /** Per-index target: where the data lives and what the Atlas index is called. */
-  private indexTargets: Map<string, { collectionName: string; searchIndexName: string }> = new Map();
+  /**
+   * Per-index target: where the data lives, what the Atlas index is called, and whether
+   * the collection is caller-owned (bring-your-own). `isByo` is captured at createIndex
+   * time — it cannot be reliably re-derived from names later (a BYO index may legitimately
+   * reuse its indexName as the collectionName), and misclassifying it risks dropping a
+   * caller's operational collection in deleteIndex.
+   */
+  private indexTargets: Map<string, { collectionName: string; searchIndexName: string; isByo: boolean }> = new Map();
   /**
    * MongoDB query operators supported inside `$vectorSearch.filter`. Intentionally
    * conservative: filters using any operator outside this set fall back to the
@@ -161,11 +167,12 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
   }
 
   /** Resolve the collection + vector-index names for an index, honoring BYO overrides. */
-  private resolveIndexTarget(indexName: string): { collectionName: string; searchIndexName: string } {
+  private resolveIndexTarget(indexName: string): { collectionName: string; searchIndexName: string; isByo: boolean } {
     return (
       this.indexTargets.get(indexName) ?? {
         collectionName: indexName,
         searchIndexName: `${indexName}_vector_index`,
+        isByo: false,
       }
     );
   }
@@ -318,7 +325,11 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       // getDeclaredFilterPaths().
       if (vectorIndexCreated) {
         this.declaredFilterPaths.set(indexName, new Set([this.documentFieldName, ...declaredMetadataPaths]));
-        this.indexTargets.set(indexName, { collectionName: targetCollection, searchIndexName: targetSearchIndex });
+        this.indexTargets.set(indexName, {
+          collectionName: targetCollection,
+          searchIndexName: targetSearchIndex,
+          isByo,
+        });
       }
 
       await this.createSearchIndexIgnoringExisting(collection, {
@@ -690,11 +701,11 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
   }
 
   async deleteIndex({ indexName }: DeleteIndexParams): Promise<void> {
-    const { collectionName, searchIndexName } = this.resolveIndexTarget(indexName);
-    // BYO = the vectors live on a caller-owned collection whose name differs from the
-    // logical index name. Managed indexes (collectionName === indexName) drop the collection;
-    // BYO indexes drop only the search index so the operational collection/data is preserved.
-    const isByo = collectionName !== indexName;
+    // `isByo` is read from the registry (captured at createIndex time), NOT inferred from
+    // names: a BYO index may reuse its indexName as the collectionName, so name equality
+    // cannot distinguish managed from BYO. Managed indexes drop the collection; BYO indexes
+    // drop only the search index so the caller's operational collection/data is preserved.
+    const { collectionName, searchIndexName, isByo } = this.resolveIndexTarget(indexName);
     const collection = await this.getCollection(collectionName, false);
     try {
       if (collection) {
