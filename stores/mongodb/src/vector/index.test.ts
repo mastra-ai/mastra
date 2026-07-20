@@ -757,5 +757,22 @@ describe('MongoDBVector filterFields (#18587)', () => {
       const managedExists = await vectorDB['db'].listCollections({ name: idxName }).hasNext();
       expect(managedExists).toBe(false);
     });
+
+    it('queries the operational collection and returns full docs as metadata in document mode', async () => {
+      const res = await vectorDB.query({
+        indexName: idxName,
+        queryVector: [0.9, 0.9, 0.9, 0.9],
+        topK: 1,
+        metadataMode: 'document',
+      });
+      expect(res).toHaveLength(1);
+      expect(res[0].id).toBe('b');
+      expect(res[0].metadata).toMatchObject({ amount: 5000, lane: 'fraud' });
+    });
+
+    it('describeIndex reports dimension/metric for a BYO index', async () => {
+      const stats = await vectorDB.describeIndex({ indexName: idxName });
+      expect(stats.dimension).toBe(4);
+    });
   });
 });

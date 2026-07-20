@@ -375,8 +375,9 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     timeoutMs = 60000,
     checkIntervalMs = 2000,
   }: MongoDBIndexReadyParams): Promise<void> {
-    const collection = await this.getCollection(indexName, true);
-    const indexNameInternal = `${indexName}_vector_index`;
+    const { collectionName, searchIndexName } = this.resolveIndexTarget(indexName);
+    const collection = await this.getCollection(collectionName, true);
+    const indexNameInternal = searchIndexName;
 
     const startTime = Date.now();
     while (Date.now() - startTime < timeoutMs) {
@@ -411,7 +412,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     validateVectorValues('MONGODB', vectors);
 
     try {
-      const collection = await this.getCollection(indexName);
+      const { collectionName } = this.resolveIndexTarget(indexName);
+      const collection = await this.getCollection(collectionName);
 
       // Get index stats to check dimension
       const stats = await this.describeIndex({ indexName });
@@ -494,6 +496,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     includeVector = false,
     documentFilter,
     numCandidates,
+    metadataMode = 'field',
   }: MongoDBQueryVectorParams): Promise<QueryResult[]> {
     if (!queryVector) {
       throw new MastraError({
@@ -506,8 +509,9 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     }
 
     try {
-      const collection = await this.getCollection(indexName, true);
-      const indexNameInternal = `${indexName}_vector_index`;
+      const { collectionName, searchIndexName } = this.resolveIndexTarget(indexName);
+      const collection = await this.getCollection(collectionName, true);
+      const indexNameInternal = searchIndexName;
 
       // Metadata filter: translate then add 'metadata.' prefix to user-facing field names.
       const metadataFilter = this.transformMetadataFilter(this.transformFilter(filter));
@@ -563,6 +567,16 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       }
 
       // Build the aggregation pipeline
+      const project: Document =
+        metadataMode === 'document'
+          ? { _id: 1, score: 1, metadata: '$$ROOT', ...(includeVector && { vector: `$${this.embeddingFieldName}` }) }
+          : {
+              _id: 1,
+              score: 1,
+              metadata: `$${this.metadataFieldName}`,
+              document: `$${this.documentFieldName}`,
+              ...(includeVector && { vector: `$${this.embeddingFieldName}` }),
+            };
       const pipeline = [
         {
           $vectorSearch: vectorSearch,
@@ -571,13 +585,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           $set: { score: { $meta: 'vectorSearchScore' } },
         },
         {
-          $project: {
-            _id: 1,
-            score: 1,
-            metadata: `$${this.metadataFieldName}`,
-            document: `$${this.documentFieldName}`,
-            ...(includeVector && { vector: `$${this.embeddingFieldName}` }),
-          },
+          $project: project,
         },
       ];
 
@@ -629,11 +637,12 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    */
   async describeIndex({ indexName }: DescribeIndexParams): Promise<IndexStats> {
     try {
-      const collection = await this.getCollection(indexName, true);
+      const { collectionName, searchIndexName } = this.resolveIndexTarget(indexName);
+      const collection = await this.getCollection(collectionName, true);
 
       const count = await collection.countDocuments({ _id: { $ne: '__index_metadata__' as any } });
 
-      const indexNameInternal = `${indexName}_vector_index`;
+      const indexNameInternal = searchIndexName;
       const indexInfo: any[] = await (collection as any).listSearchIndexes().toArray();
       const indexData = indexInfo.find((idx: any) => idx.name === indexNameInternal);
 
@@ -681,12 +690,14 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
   }
 
   async deleteIndex({ indexName }: DeleteIndexParams): Promise<void> {
-    const collection = await this.getCollection(indexName, false); // Do not throw error if collection doesn't exist
+    const { collectionName } = this.resolveIndexTarget(indexName);
+    const collection = await this.getCollection(collectionName, false); // Do not throw error if collection doesn't exist
     try {
       if (collection) {
         await collection.drop();
-        this.collections.delete(indexName);
+        this.collections.delete(collectionName);
         this.declaredFilterPaths.delete(indexName);
+        this.indexTargets.delete(indexName);
       } else {
         // Optionally, you can log or handle the case where the collection doesn't exist
         throw new Error(`Index (Collection) "${indexName}" does not exist`);
@@ -746,7 +757,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         throw new Error('No updates provided');
       }
 
-      const collection = await this.getCollection(indexName, true);
+      const { collectionName } = this.resolveIndexTarget(indexName);
+      const collection = await this.getCollection(collectionName, true);
       const updateDoc: Record<string, any> = {};
 
       if (update.vector) {
@@ -840,7 +852,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    */
   async deleteVector({ indexName, id }: DeleteVectorParams): Promise<void> {
     try {
-      const collection = await this.getCollection(indexName, true);
+      const { collectionName } = this.resolveIndexTarget(indexName);
+      const collection = await this.getCollection(collectionName, true);
       await collection.deleteOne({ _id: id });
     } catch (error: any) {
       throw new MastraError(
@@ -881,7 +894,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     }
 
     try {
-      const collection = await this.getCollection(indexName, true);
+      const { collectionName } = this.resolveIndexTarget(indexName);
+      const collection = await this.getCollection(collectionName, true);
 
       if (ids) {
         // Delete by IDs
@@ -1034,8 +1048,9 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     const cached = this.declaredFilterPaths.get(indexName);
     if (cached) return cached;
 
-    const collection = await this.getCollection(indexName, true);
-    const indexNameInternal = `${indexName}_vector_index`;
+    const { collectionName, searchIndexName } = this.resolveIndexTarget(indexName);
+    const collection = await this.getCollection(collectionName, true);
+    const indexNameInternal = searchIndexName;
     const indexInfo: any[] = await (collection as any).listSearchIndexes().toArray();
     const indexData = indexInfo.find((idx: any) => idx.name === indexNameInternal);
 
