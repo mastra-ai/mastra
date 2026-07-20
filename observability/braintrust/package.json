@@ -35,7 +35,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@mastra/observability": "workspace:*",
-    "braintrust": "^3.22.0"
+    "braintrust": "^3.23.1"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
