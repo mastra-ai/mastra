@@ -774,5 +774,47 @@ describe('MongoDBVector filterFields (#18587)', () => {
       const stats = await vectorDB.describeIndex({ indexName: idxName });
       expect(stats.dimension).toBe(4);
     });
+
+    it('deleteIndex drops only the search index, not the BYO collection or its documents', async () => {
+      // Verify collection and documents exist before deletion
+      const col = vectorDB['db'].collection(opsCol);
+      const docCountBefore = await col.countDocuments();
+      expect(docCountBefore).toBe(2);
+
+      // Verify the search index exists
+      const idxsBefore = await col.listSearchIndexes().toArray();
+      expect(idxsBefore.some((i: any) => i.name === searchIdx)).toBe(true);
+
+      // Delete the index
+      await vectorDB.deleteIndex({ indexName: idxName });
+
+      // CRITICAL: The BYO collection must still exist with all its documents
+      const docCountAfter = await col.countDocuments();
+      expect(docCountAfter).toBe(2);
+
+      // Verify the documents are intact
+      const docs = await col.find().toArray();
+      expect(docs).toHaveLength(2);
+      expect(docs.some((d: any) => d._id === 'a' && d.amount === 100)).toBe(true);
+      expect(docs.some((d: any) => d._id === 'b' && d.amount === 5000)).toBe(true);
+
+      // Wait for the search index to be dropped (async operation)
+      // Poll until the index is gone or timeout
+      const maxWait = 30000;
+      const pollInterval = 500;
+      const startTime = Date.now();
+      let indexGone = false;
+
+      while (Date.now() - startTime < maxWait) {
+        const idxsAfter = await col.listSearchIndexes().toArray();
+        if (!idxsAfter.some((i: any) => i.name === searchIdx)) {
+          indexGone = true;
+          break;
+        }
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+      }
+
+      expect(indexGone).toBe(true);
+    });
   });
 });
