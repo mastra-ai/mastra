@@ -1,12 +1,11 @@
 import type { GetAgentResponse } from '@mastra/client-js';
 import { CardContent, CardDescription, CardLink, CardTitle } from '@mastra/playground-ui/components/Card';
-import { TextAndIcon } from '@mastra/playground-ui/components/Text';
-import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
-import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
-import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { useId } from 'react';
 import { extractPrompt } from '../../utils/extractPrompt';
-import { ProviderLogo } from '../agent-metadata/provider-logo';
+import { AgentProviderDetails } from './agent-provider-details';
+import { AgentSubagentDetails } from './agent-subagent-details';
+import { AgentToolsDetails } from './agent-tools-details';
+import { AgentWorkflowDetails } from './agent-workflow-details';
 import { useLinkComponent } from '@/lib/framework';
 
 export interface AgentCompactCardProps {
@@ -55,15 +54,19 @@ export function AgentCompactCard({ agent }: AgentCompactCardProps) {
   const capabilitiesCount = agentsCount + toolsCount + workflowsCount;
 
   return (
-    <CardLink
-      LinkComponent={Link}
-      href={paths.agentLink(agent.id)}
-      appearance="surface"
-      aria-label={`Open ${agent.name}`}
-      aria-describedby={`${accessibleId}-instructions ${accessibleId}-metadata`}
-      className="group/agent flex h-full min-w-0 flex-col"
-    >
-      <CardContent density="compact" className="grid h-full min-w-0 gap-2">
+    <div className="group/agent relative h-full min-w-0">
+      <CardLink
+        LinkComponent={Link}
+        href={paths.agentLink(agent.id)}
+        appearance="surface"
+        aria-label={`Open ${agent.name}`}
+        aria-describedby={`${accessibleId}-instructions ${accessibleId}-metadata`}
+        className="absolute inset-0 group-focus-within/agent:bg-surface4 group-hover/agent:bg-surface4"
+      >
+        <span className="sr-only">Open {agent.name}</span>
+      </CardLink>
+
+      <CardContent density="compact" className="pointer-events-none relative grid h-full min-w-0 gap-2">
         <CardTitle title={agent.name} className="max-w-full min-w-0 overflow-clip text-ellipsis whitespace-nowrap">
           {agent.name}
         </CardTitle>
@@ -82,75 +85,19 @@ export function AgentCompactCard({ agent }: AgentCompactCardProps) {
           {formatCount(toolsCount, 'tool')}.
         </span>
 
-        <div aria-hidden="true" className="grid min-w-0">
-          <div className="col-start-1 row-start-1 grid min-w-0 translate-y-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-4 opacity-100 motion-safe:transition-[opacity,translate] motion-safe:duration-normal motion-safe:ease-out-custom motion-safe:group-focus-visible/agent:-translate-y-1 motion-safe:group-hover/agent:-translate-y-1 group-focus-visible/agent:opacity-0 group-hover/agent:opacity-0">
-            <CardDescription className="min-w-0">
-              {agent.provider ? (
-                <TextAndIcon>
-                  <ProviderLogo providerId={agent.provider} className="dark:invert" />
-                </TextAndIcon>
-              ) : (
-                '—'
-              )}
-            </CardDescription>
+        <div className="flex min-w-0 items-center justify-between gap-4">
+          <CardDescription className="min-w-0">
+            <AgentProviderDetails agentName={agent.name} provider={agent.provider} modelId={agent.modelId} />
+          </CardDescription>
 
-            <CardDescription className="flex items-center justify-end gap-2 whitespace-nowrap">
-              {workflowsCount > 0 ? (
-                <TextAndIcon>
-                  <WorkflowIcon />
-                  <span>{workflowsCount}</span>
-                </TextAndIcon>
-              ) : null}
-              {agentsCount > 0 ? (
-                <TextAndIcon>
-                  <AgentIcon />
-                  <span>{agentsCount}</span>
-                </TextAndIcon>
-              ) : null}
-              {toolsCount > 0 ? (
-                <TextAndIcon>
-                  <ToolsIcon />
-                  <span>{toolsCount}</span>
-                </TextAndIcon>
-              ) : null}
-              {capabilitiesCount === 0 ? <span>—</span> : null}
-            </CardDescription>
-          </div>
-
-          <div className="pointer-events-none col-start-1 row-start-1 grid min-w-0 translate-y-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-4 opacity-0 motion-safe:translate-y-1 motion-safe:transition-[opacity,translate] motion-safe:duration-normal motion-safe:ease-out-custom motion-safe:group-focus-visible/agent:translate-y-0 motion-safe:group-hover/agent:translate-y-0 group-focus-visible/agent:opacity-100 group-hover/agent:opacity-100">
-            <CardDescription className="min-w-0">
-              <TextAndIcon className="min-w-0">
-                {agent.provider ? <ProviderLogo providerId={agent.provider} className="dark:invert" /> : null}
-                <span className="min-w-0 overflow-clip text-ellipsis whitespace-nowrap">
-                  {agent.provider || 'No provider'}
-                </span>
-              </TextAndIcon>
-            </CardDescription>
-
-            <CardDescription className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-              {workflowsCount > 0 ? (
-                <TextAndIcon>
-                  <WorkflowIcon />
-                  <span>{formatCount(workflowsCount, 'workflow')}</span>
-                </TextAndIcon>
-              ) : null}
-              {agentsCount > 0 ? (
-                <TextAndIcon>
-                  <AgentIcon />
-                  <span>{formatCount(agentsCount, 'agent')}</span>
-                </TextAndIcon>
-              ) : null}
-              {toolsCount > 0 ? (
-                <TextAndIcon>
-                  <ToolsIcon />
-                  <span>{formatCount(toolsCount, 'tool')}</span>
-                </TextAndIcon>
-              ) : null}
-              {capabilitiesCount === 0 ? <span>No capabilities</span> : null}
-            </CardDescription>
-          </div>
+          <CardDescription className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+            <AgentWorkflowDetails agentName={agent.name} workflows={agent.workflows} />
+            <AgentSubagentDetails agentName={agent.name} agents={agent.agents} />
+            <AgentToolsDetails agentName={agent.name} tools={agent.tools} />
+            {capabilitiesCount === 0 ? <span>—</span> : null}
+          </CardDescription>
         </div>
       </CardContent>
-    </CardLink>
+    </div>
   );
 }

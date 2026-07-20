@@ -9,6 +9,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import AgentsPage from '..';
 import {
   agentsList,
+  agentsListWithSubagent,
+  agentsListWithWorkflow,
   agentsListWithLongInstructions,
   agentsListWithLongName,
   agentsListWithoutConfiguration,
@@ -114,49 +116,77 @@ describe('Agents page', () => {
       expect(await screen.findByText('Find reliable sources and summarize the evidence.')).not.toBeNull();
     });
 
-    it('shows the provider identity without the model ID', async () => {
+    it('shows model details when the provider is hovered', async () => {
       useAgentsResponse();
       renderPage();
 
-      fireEvent.click(await screen.findByRole('button', { name: 'List view' }));
-
-      expect(await screen.findByText('Provider')).not.toBeNull();
-      expect(await screen.findByRole('img', { name: 'openai provider' })).not.toBeNull();
+      const providerButton = await screen.findByRole('button', {
+        name: 'Show model details for Research Agent',
+      });
       expect(screen.queryByText('gpt-4o-mini')).toBeNull();
+
+      fireEvent.mouseEnter(providerButton);
+
+      const modelDetails = await screen.findByRole('dialog', { name: 'Model details' });
+      expect(within(modelDetails).getByText('openai')).not.toBeNull();
+      expect(within(modelDetails).getByText('gpt-4o-mini')).not.toBeNull();
     });
 
-    it('keeps the model ID in the agent preview', async () => {
+    it('shows configured tools when the tool count is hovered', async () => {
       useAgentsResponse();
       renderPage();
 
-      fireEvent.click(await screen.findByRole('button', { name: 'List view' }));
+      const toolsButton = await screen.findByRole('button', {
+        name: 'Show 1 tool for Research Agent',
+      });
+      expect(screen.queryByText('Search the web')).toBeNull();
 
-      const previewButton = await screen.findByRole('button', { name: 'Preview Research Agent' });
-      expect(screen.queryByText('gpt-4o-mini')).toBeNull();
+      fireEvent.mouseEnter(toolsButton);
 
-      fireEvent.click(previewButton);
-
-      const preview = await screen.findByRole('dialog', { name: 'Research Agent' });
-      expect(within(preview).getByText('gpt-4o-mini')).not.toBeNull();
-      expect(within(preview).getByRole('img', { name: 'openai provider' })).not.toBeNull();
+      const toolsDetails = await screen.findByRole('dialog', { name: 'Tools for Research Agent' });
+      expect(within(toolsDetails).getByText('search')).not.toBeNull();
+      expect(within(toolsDetails).getByText('Search the web')).not.toBeNull();
     });
 
-    it('shows accessible fallbacks when preview configuration is absent', async () => {
+    it('shows configured workflows when the workflow count is hovered', async () => {
+      useAgentsResponse(agentsListWithWorkflow);
+      renderPage();
+
+      const workflowsButton = await screen.findByRole('button', {
+        name: 'Show 2 workflows for Research Agent',
+      });
+
+      fireEvent.mouseEnter(workflowsButton);
+
+      const workflowsDetails = await screen.findByRole('dialog', { name: 'Workflows for Research Agent' });
+      expect(within(workflowsDetails).getByText('Research workflow')).not.toBeNull();
+      expect(within(workflowsDetails).getByText('Summarize the collected research')).not.toBeNull();
+      expect(within(workflowsDetails).queryByText('No description provided.')).toBeNull();
+    });
+
+    it('shows configured agents when the agent count is hovered', async () => {
+      useAgentsResponse(agentsListWithSubagent);
+      renderPage();
+
+      const agentsButton = await screen.findByRole('button', {
+        name: 'Show 1 agent for Research Agent',
+      });
+
+      fireEvent.mouseEnter(agentsButton);
+
+      const agentsDetails = await screen.findByRole('dialog', { name: 'Agents for Research Agent' });
+      expect(within(agentsDetails).getByText('Analysis Agent')).not.toBeNull();
+    });
+
+    it('does not show metadata controls when configuration is absent', async () => {
       useAgentsResponse(agentsListWithoutConfiguration);
       renderPage();
 
-      fireEvent.click(await screen.findByRole('button', { name: 'Preview Research Agent' }));
+      await screen.findByText('Research Agent');
 
-      const preview = await screen.findByRole('dialog', { name: 'Research Agent' });
-      const instructions = within(preview).getByLabelText('Research Agent instructions');
-      instructions.focus();
-
-      expect(within(preview).getByText('No model configured')).not.toBeNull();
-      expect(instructions.textContent).toBe('No instructions provided.');
-      expect(document.activeElement).toBe(instructions);
-      expect(within(preview).getByText('0 workflows')).not.toBeNull();
-      expect(within(preview).getByText('0 agents')).not.toBeNull();
-      expect(within(preview).getByText('0 tools')).not.toBeNull();
+      expect(screen.queryByRole('button', { name: 'Show model details for Research Agent' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Show 0 tools for Research Agent' })).toBeNull();
+      expect(screen.queryByText('No instructions provided.')).not.toBeNull();
     });
   });
 
@@ -222,6 +252,75 @@ describe('Agents page', () => {
       expect(metadata?.textContent).toBe('openai provider. 0 workflows, 0 agents, 1 tool.');
       expect(within(link).queryByText('gpt-4o-mini')).toBeNull();
     });
+    it('shows model details from a compact card provider', async () => {
+      useAgentsResponse();
+      renderPage();
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Compact view' }));
+      const providerButton = await screen.findByRole('button', {
+        name: 'Show model details for Research Agent',
+      });
+
+      fireEvent.mouseEnter(providerButton);
+
+      const modelDetails = await screen.findByRole('dialog', { name: 'Model details' });
+      expect(within(modelDetails).getByText('gpt-4o-mini')).not.toBeNull();
+    });
+
+    it('shows configured tools from a compact card tool count', async () => {
+      useAgentsResponse();
+      renderPage();
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Compact view' }));
+      const toolsButton = await screen.findByRole('button', {
+        name: 'Show 1 tool for Research Agent',
+      });
+
+      fireEvent.mouseEnter(toolsButton);
+
+      const toolsDetails = await screen.findByRole('dialog', { name: 'Tools for Research Agent' });
+      expect(within(toolsDetails).getByText('Search the web')).not.toBeNull();
+    });
+
+    it('does not open metadata hover cards from the full compact card', async () => {
+      useAgentsResponse();
+      renderPage();
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Compact view' }));
+      fireEvent.mouseEnter(await screen.findByRole('link', { name: 'Open Research Agent' }));
+
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+
+    it('shows configured workflows from a compact card workflow count', async () => {
+      useAgentsResponse(agentsListWithWorkflow);
+      renderPage();
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Compact view' }));
+      const workflowsButton = await screen.findByRole('button', {
+        name: 'Show 2 workflows for Research Agent',
+      });
+
+      fireEvent.mouseEnter(workflowsButton);
+
+      const workflowsDetails = await screen.findByRole('dialog', { name: 'Workflows for Research Agent' });
+      expect(within(workflowsDetails).getByText('Research workflow')).not.toBeNull();
+    });
+
+    it('shows configured agents from a compact card agent count', async () => {
+      useAgentsResponse(agentsListWithSubagent);
+      renderPage();
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Compact view' }));
+      const agentsButton = await screen.findByRole('button', {
+        name: 'Show 1 agent for Research Agent',
+      });
+
+      fireEvent.mouseEnter(agentsButton);
+
+      const agentsDetails = await screen.findByRole('dialog', { name: 'Agents for Research Agent' });
+      expect(within(agentsDetails).getByText('Analysis Agent')).not.toBeNull();
+    });
   });
 
   describe('when a compact card has a long agent name', () => {
@@ -244,9 +343,7 @@ describe('Agents page', () => {
 
       fireEvent.click(await screen.findByRole('button', { name: 'Compact view' }));
 
-      const link = await screen.findByRole('link', { name: 'Open Research Agent' });
-
-      expect(within(link).getByText('No instructions provided.')).not.toBeNull();
+      expect(await screen.findByText('No instructions provided.')).not.toBeNull();
     });
   });
 

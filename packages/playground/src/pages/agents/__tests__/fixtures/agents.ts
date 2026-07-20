@@ -40,6 +40,44 @@ export const agentsList: Record<string, GetAgentResponse> = {
   },
 };
 
+export const agentsListWithWorkflow: Record<string, GetAgentResponse> = {
+  researcher: {
+    ...agentsList.researcher,
+    workflows: {
+      research: {
+        name: 'Research workflow',
+        steps: {},
+        allSteps: {},
+        stepGraph: [],
+        inputSchema: '{}',
+        outputSchema: '{}',
+        stateSchema: '{}',
+      },
+      summarize: {
+        name: 'Summary workflow',
+        description: 'Summarize the collected research',
+        steps: {},
+        allSteps: {},
+        stepGraph: [],
+        inputSchema: '{}',
+        outputSchema: '{}',
+        stateSchema: '{}',
+      },
+    },
+  },
+};
+
+export const agentsListWithSubagent: Record<string, GetAgentResponse> = {
+  researcher: {
+    ...agentsList.researcher,
+    agents: {
+      analyst: {
+        id: 'analyst',
+        name: 'Analysis Agent',
+      },
+    },
+  },
+};
 export const builderDisabled = {
   enabled: false,
 } satisfies BuilderSettingsResponse;
