@@ -108,8 +108,7 @@ export interface WorkItemPriorState {
 
 /** Discriminated result of `upsert`: fresh insert vs source-key reuse. */
 export type UpsertWorkItemResult =
-  | { created: true; item: WorkItemRow }
-  | { created: false; item: WorkItemRow; previous: WorkItemPriorState };
+  { created: true; item: WorkItemRow } | { created: false; item: WorkItemRow; previous: WorkItemPriorState };
 
 /**
  * Diff `oldStages` → `newStages` and return the updated history: exited stages

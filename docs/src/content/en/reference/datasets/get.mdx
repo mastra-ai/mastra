@@ -16,9 +16,7 @@ Retrieves an existing dataset by ID. Throws a `MastraError` if the dataset doesn
 ```typescript
 import { Mastra } from '@mastra/core'
 
-const mastra = new Mastra({
-  /* storage config */
-})
+const mastra = new Mastra({/* storage config */})
 
 const dataset = await mastra.datasets.get({ id: 'dataset-id' })
 
