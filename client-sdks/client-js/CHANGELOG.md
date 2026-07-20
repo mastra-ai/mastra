@@ -2454,9 +2454,7 @@
   await client.storedAgents.unfavorite(agent.id);
 
   // Versioning + publish
-  const draft = await client.storedSkills.create({
-    /* ... */
-  });
+  const draft = await client.storedSkills.create({/* ... */});
   const published = await client.storedSkills.publish(draft.id);
   await client.storedSkills.restore(draft.id, { version: 1 });
   ```
@@ -2628,9 +2626,7 @@
   await client.storedAgents.unfavorite(agent.id);
 
   // Versioning + publish
-  const draft = await client.storedSkills.create({
-    /* ... */
-  });
+  const draft = await client.storedSkills.create({/* ... */});
   const published = await client.storedSkills.publish(draft.id);
   await client.storedSkills.restore(draft.id, { version: 1 });
   ```

@@ -34,13 +34,11 @@ export const useAgentExperiments = (agentId: string, attachedScorerIds: string[]
                   (exp.targetType === 'agent' && exp.targetId === agentId) ||
                   (exp.targetType === 'scorer' && scorerIdSet.has(exp.targetId)),
               )
-              .map(
-                (exp): AgentExperiment => ({
-                  ...exp,
-                  datasetId: dataset.id,
-                  datasetName: dataset.name,
-                }),
-              );
+              .map((exp): AgentExperiment => ({
+                ...exp,
+                datasetId: dataset.id,
+                datasetName: dataset.name,
+              }));
           } catch {
             return [];
           }
