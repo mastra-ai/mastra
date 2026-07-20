@@ -1,6 +1,71 @@
 import { z } from 'zod/v4';
 
 // ============================================================================
+// Serialized graph — discriminated union mirroring core's SerializedStepFlowEntry.
+// Duplicated locally rather than imported from @mastra/core/workflows because
+// this file's peer-dependency floor predates that export. Structurally
+// compatible with `Mastra.addStoredWorkflow`'s input; the handler casts to
+// bridge the Zod-inferred optional-vs-required drift on `foreach.opts`.
+// ============================================================================
+
+const stepOptionsSchema = z
+  .object({
+    retries: z.number().int().nonnegative().optional(),
+    metadata: z.record(z.string(), z.any()).optional(),
+  })
+  .optional();
+
+const agentEntrySchema = z.object({
+  type: z.literal('agent'),
+  id: z.string(),
+  agentId: z.string(),
+  outputSchema: z.any().optional(),
+  options: stepOptionsSchema,
+});
+
+const toolEntrySchema = z.object({
+  type: z.literal('tool'),
+  id: z.string(),
+  toolId: z.string(),
+  options: stepOptionsSchema,
+});
+
+const mappingEntrySchema = z.object({
+  type: z.literal('mapping'),
+  id: z.string(),
+  mapConfig: z.string(),
+});
+
+const singleStepEntrySchema = z.discriminatedUnion('type', [agentEntrySchema, toolEntrySchema, mappingEntrySchema]);
+
+const foreachInnerStepSchema = z.discriminatedUnion('type', [agentEntrySchema, toolEntrySchema]);
+
+const graphEntrySchema = z.discriminatedUnion('type', [
+  agentEntrySchema,
+  toolEntrySchema,
+  mappingEntrySchema,
+  z.object({
+    type: z.literal('parallel'),
+    steps: z.array(singleStepEntrySchema),
+  }),
+  z.object({
+    type: z.literal('foreach'),
+    step: foreachInnerStepSchema,
+    opts: z.object({ concurrency: z.number().int().positive() }).optional(),
+  }),
+  z.object({
+    type: z.literal('sleep'),
+    id: z.string(),
+    duration: z.number(),
+  }),
+  z.object({
+    type: z.literal('sleepUntil'),
+    id: z.string(),
+    date: z.string(),
+  }),
+]);
+
+// ============================================================================
 // Path params
 // ============================================================================
 
@@ -38,7 +103,9 @@ export const upsertStoredWorkflowBodySchema = z.object({
   outputSchema: z.any().describe('JSON Schema (Draft 2020-12) for the workflow output'),
   stateSchema: z.any().optional(),
   requestContextSchema: z.any().optional(),
-  graph: z.array(z.any()).describe('Static workflow graph — SerializedStepFlowEntry[] with all refs as ids'),
+  graph: z
+    .array(graphEntrySchema)
+    .describe('Static workflow graph — ordered array of serialized step entries with all refs as ids.'),
 });
 
 // ============================================================================

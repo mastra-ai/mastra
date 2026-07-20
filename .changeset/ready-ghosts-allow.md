@@ -54,6 +54,8 @@ workflow
 
 **New `Mastra.removeWorkflow(keyOrId)` public API** mirroring `removeAgent` / `removeTool`. `Mastra.addStoredWorkflow(def)` now unregisters any existing live workflow with the same id before rehydrating and re-registering, so re-saving a stored workflow surfaces the new graph immediately instead of being silently no-op'd by `addWorkflow`'s first-write-wins guard. Fixes the stale-workflow bug where `deleteWorkflow` + `addStoredWorkflow` served the previous graph until the process restarted.
 
+**`Mastra.addStoredWorkflow` now performs a registry pre-flight before rehydrating.** Every `agentId` in the graph must resolve via `listAgents()` (and must not collide with a tool id), and every `toolId` must resolve via `listTools()` (and must not collide with an agent id). Previously, invalid or mis-classified ids failed deep inside `rehydrateWorkflow` with a less-actionable error (`Tool with name X not found`, or a silent lookup of an agent id in the tool registry). The check produces the same error messages the `mastracode` `save-workflow` tool used to emit locally, so HTTP callers, the SDK tool, and direct `addStoredWorkflow` consumers now share one contract.
+
 **Breaking-ish generic-signature change on `createWorkflow`.** Its generic parameters are now schema types (`TInputSchema`, `TOutputSchema`, `TStateSchema`) rather than raw runtime types. Existing usage that infers types from the passed schemas is unaffected. Any code that explicitly parameterized `createWorkflow<TInput, TOutput>(...)` needs to pass the schemas instead — or drop the explicit generics and let inference handle it.
 
 ---
@@ -61,6 +63,16 @@ workflow
 ## `@mastra/react` — renderer slots for the new step types
 
 `WorkflowStepFactory` now exposes dedicated renderer slots: `AgentStep`, `ToolStep`, and `MapStep`. Consumers that render workflow graphs and want native rendering for the new entries should provide renderers for these slots; graphs produced by older builders continue to render through the existing `step` slot.
+
+---
+
+## `@mastra/server` — stored-workflow HTTP endpoints hardened
+
+**`DELETE /stored/workflows/:storedWorkflowId` now unregisters the live workflow instance** in addition to removing the stored row. Previously the handler only called `store.delete(id)`, leaving the rehydrated `Workflow` on `Mastra` until the process restarted — the same stale-registration bug that was fixed for the `mastracode` `deleteWorkflow` service. The handler now calls `mastra.removeWorkflow(id)` after `store.delete`. Idempotent on missing ids.
+
+**`POST /stored/workflows` body schema is now a typed discriminated union.** The `graph` field was previously typed as `z.array(z.any())` and would only surface malformed entries deep inside `rehydrateWorkflow`. It is now a discriminated union over `type: 'step' | 'agent' | 'tool' | 'mapping' | 'parallel' | 'foreach' | 'sleep' | 'sleepUntil'`, matching the shape the `save-workflow` tool emits. Combined with the new `Mastra.addStoredWorkflow` pre-flight, invalid ids and mis-classified refs are rejected at the HTTP boundary with actionable errors before rehydration runs. `inputSchema` / `outputSchema` / `stateSchema` / `requestContextSchema` remain `z.any()` — they're JSON Schema Draft 2020-12 blobs, validated downstream when the workflow is rehydrated.
+
+**New HTTP-layer test coverage in `packages/server/src/server/handlers/stored-workflows.test.ts`.** End-to-end coverage for list / get / upsert / delete, including agent `outputSchema` round-trip, `foreach(agent)` rehydration, scalar `${stepResults.<id>}` templating, registry pre-flight rejecting unregistered / mis-classified refs, replace-on-re-upsert, and DELETE removing both the stored row and the live registration.
 
 ---
 
@@ -89,6 +101,8 @@ Anti-patterns and worked examples were updated to match, and a new `foreach → 
 **`workflowBuilderAgent` now has a clearer rule for adding a bridge agent before `foreach`.** When the upstream step's top-level output is not already an array (typical for string-returning workspace tools like `find_files`), the previous guidance said to "ask for a tool that returns the array or fall back to a single code-agent that iterates internally" — which the builder correctly followed by opting out of `foreach`. The updated prompt promotes the bridge pattern instead: insert an `agent` step between the string/object-returning upstream and the `foreach`, with `outputSchema` set to an array (typically `Array<{ prompt: string }>` when the inner foreach step is an agent). A new anti-pattern calls out refusing `foreach` in this situation.
 
 **`workflowBuilderAgent` now knows to thread `${initData.*}` into bridge mappings when the upstream tool strips context.** Tools like `find_files` return bare basenames — no path prefix — so a downstream agent asked to "read and summarize each file" has no way to reconstruct absolute paths from just the tool output. The builder was writing mappings that piped only `${stepResults.list-files}` into the bridge agent, and the resulting workflow failed at the per-file summariser step ("file not found"). The prompt now includes: (a) an anti-pattern calling out this exact failure mode, (b) a "combining upstream output with workflow input" worked example that shows a mapping referencing BOTH `${initData.path}` and `${stepResults.<upstream>}` in the same template, and (c) updated foreach worked examples where the bridge mapping threads `${initData.path}` and the bridge agent's `outputSchema` prompts embed the absolute path per iteration.
+
+**`save-workflow` now defers registry validation to `Mastra.addStoredWorkflow`.** The tool used to walk the graph itself and pre-check every `agentId` / `toolId` before calling `addStoredWorkflow`. That check now lives on `Mastra`, so the tool is a thin passthrough — HTTP callers and the SDK tool share one contract, and the identical error messages surface to the sub-agent unchanged.
 
 **`create-workflow` no longer silently returns a fake success when the sub-agent gives up.** The parent-mode `create-workflow` tool used to return `{ summary, workflowId }` regardless of whether the workflow-builder sub-agent actually called `save-workflow` or whether `save-workflow` threw. The sub-agent's natural-language summary would happily say "workflow created!" while nothing was persisted, and the caller had no signal — `list-workflows` would come back empty. `create-workflow.execute` now watches the sub-agent's full tool stream and throws when: (a) `save-workflow` was never called (sub-agent hallucinated success), (b) `save-workflow` emitted a `tool-error` chunk, or (c) `save-workflow` was called but no result with `{ ok: true, id }` came back. The thrown error includes every `tool-error` the sub-agent produced (not just the save error) plus the sub-agent's own summary. Six new unit tests in `mastracode/sdk/src/tools/workflows/__tests__/create-workflow.test.ts` cover each failure mode.
 

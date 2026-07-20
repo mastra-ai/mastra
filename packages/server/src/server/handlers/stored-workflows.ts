@@ -98,10 +98,12 @@ export const UPSERT_STORED_WORKFLOW_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, ...def }) => {
     try {
-      // Cast because the route-builder types `mastra` as `any`; the body schema
-      // is intentionally loose (the graph is agent-constructed JSON) and
-      // `Mastra.addStoredWorkflow` types the definition precisely.
-      await (mastra as Mastra).addStoredWorkflow(def);
+      // The Zod schema output is structurally compatible with
+      // StoredWorkflowGraph but TS can't prove it — `foreach.opts` is optional
+      // in the discriminated-union schema but required (with optional inner
+      // fields) on SerializedStepFlowEntry. `addStoredWorkflow` runs a full
+      // registry pre-flight before rehydration; the cast documents the boundary.
+      await (mastra as Mastra).addStoredWorkflow(def as Parameters<Mastra['addStoredWorkflow']>[0]);
       return { ok: true as const, id: def.id };
     } catch (error) {
       return handleError(error, 'Error upserting stored workflow');
@@ -112,10 +114,8 @@ export const UPSERT_STORED_WORKFLOW_ROUTE = createRoute({
 /**
  * DELETE /stored/workflows/:storedWorkflowId — delete a stored workflow.
  *
- * Removes the row from storage. The live-registered Workflow instance stays
- * registered until the next process restart — explicit unregistration is a
- * follow-up; deleting the row is enough to keep the boot-time loader from
- * re-registering it.
+ * Removes the row from storage AND un-registers the live Workflow instance so
+ * a subsequent POST with the same id starts from a clean slate. Idempotent.
  */
 export const DELETE_STORED_WORKFLOW_ROUTE = createRoute({
   method: 'DELETE',
@@ -124,7 +124,7 @@ export const DELETE_STORED_WORKFLOW_ROUTE = createRoute({
   pathParamSchema: storedWorkflowIdPathParams,
   responseSchema: deleteStoredWorkflowResponseSchema,
   summary: 'Delete a stored workflow definition',
-  description: 'Removes a stored workflow definition. Idempotent.',
+  description: 'Removes a stored workflow definition and unregisters the live workflow instance. Idempotent.',
   tags: ['Stored Workflows'],
   requiresAuth: true,
   handler: async ({ mastra, storedWorkflowId }) => {
@@ -136,6 +136,7 @@ export const DELETE_STORED_WORKFLOW_ROUTE = createRoute({
       if (!store) throw new HTTPException(500, { message: 'workflowDefinitions storage domain is not available' });
 
       await store.delete(storedWorkflowId);
+      (mastra as Mastra).removeWorkflow(storedWorkflowId);
       return { success: true as const, message: `Workflow ${storedWorkflowId} deleted` };
     } catch (error) {
       return handleError(error, 'Error deleting stored workflow');

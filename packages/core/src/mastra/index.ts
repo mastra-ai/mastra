@@ -4437,6 +4437,13 @@ export class Mastra<
    * ```
    */
   public async addStoredWorkflow(def: StoredWorkflowGraph): Promise<void> {
+    // Pre-flight: verify every agentId / toolId in the graph exists in the
+    // correct registry. Without this, a mis-classified entry (e.g. `{ type:
+    // 'tool', toolId: 'x' }` where `x` is really an agent) reaches rehydration
+    // and surfaces as an opaque `Tool with name x not found`. Catch the
+    // mistake here and return a targeted error naming the wrong id and the
+    // shape it should have.
+    this.#validateStoredWorkflowRefs(def);
     const { workflow } = await rehydrateWorkflow(def, this);
     // Stored workflows are the source of truth for this id — replace any
     // existing live registration so re-saves surface immediately instead of
@@ -4456,6 +4463,81 @@ export class Mastra<
         requestContextSchema: def.requestContextSchema,
         graph: def.graph,
       });
+    }
+  }
+
+  /**
+   * Walk a stored workflow graph and verify every referenced agent/tool id
+   * exists in the correct registry. Throws with an actionable message listing
+   * every offending id when references are unregistered or mis-classified.
+   * @internal
+   */
+  #validateStoredWorkflowRefs(def: StoredWorkflowGraph): void {
+    type RefEntry =
+      | { type: 'agent'; id: string; agentId: string }
+      | { type: 'tool'; id: string; toolId: string }
+      | { type: 'parallel'; steps: readonly unknown[] }
+      | { type: 'foreach'; step: unknown };
+
+    const agents: Array<{ stepId: string; agentId: string }> = [];
+    const tools: Array<{ stepId: string; toolId: string }> = [];
+    const visit = (entry: unknown): void => {
+      if (!entry || typeof entry !== 'object') return;
+      const e = entry as Partial<RefEntry> & { type?: unknown };
+      switch (e.type) {
+        case 'agent': {
+          const a = e as Extract<RefEntry, { type: 'agent' }>;
+          agents.push({ stepId: a.id, agentId: a.agentId });
+          return;
+        }
+        case 'tool': {
+          const t = e as Extract<RefEntry, { type: 'tool' }>;
+          tools.push({ stepId: t.id, toolId: t.toolId });
+          return;
+        }
+        case 'parallel': {
+          const p = e as Extract<RefEntry, { type: 'parallel' }>;
+          p.steps.forEach(visit);
+          return;
+        }
+        case 'foreach': {
+          const f = e as Extract<RefEntry, { type: 'foreach' }>;
+          visit(f.step);
+          return;
+        }
+        default:
+          return;
+      }
+    };
+    def.graph.forEach(visit);
+
+    const registeredAgents = new Set(Object.keys(this.listAgents() ?? {}));
+    const registeredTools = new Set(Object.keys(this.listTools() ?? {}));
+    const errors: string[] = [];
+    for (const ref of agents) {
+      if (registeredAgents.has(ref.agentId)) continue;
+      if (registeredTools.has(ref.agentId)) {
+        errors.push(
+          `Step "${ref.stepId}" declares { type: "agent", agentId: "${ref.agentId}" } but "${ref.agentId}" is a registered TOOL, not an agent. Change this entry to { type: "tool", toolId: "${ref.agentId}" }.`,
+        );
+      } else {
+        errors.push(`Step "${ref.stepId}" declares agentId "${ref.agentId}" which is not a registered agent.`);
+      }
+    }
+    for (const ref of tools) {
+      if (registeredTools.has(ref.toolId)) continue;
+      if (registeredAgents.has(ref.toolId)) {
+        errors.push(
+          `Step "${ref.stepId}" declares { type: "tool", toolId: "${ref.toolId}" } but "${ref.toolId}" is a registered AGENT, not a tool. Change this entry to { type: "agent", agentId: "${ref.toolId}" }.`,
+        );
+      } else {
+        errors.push(`Step "${ref.stepId}" declares toolId "${ref.toolId}" which is not a registered tool.`);
+      }
+    }
+    if (errors.length > 0) {
+      throw new Error(
+        `addStoredWorkflow refused: ${errors.length} unresolved reference(s) in the graph.\n- ${errors.join('\n- ')}`,
+      );
     }
   }
 
