@@ -38,7 +38,7 @@ describe('OMSection', () => {
 
       renderWithProviders(<OMSection models={models} />);
 
-      expect(await screen.findByText(/Open a project to view/)).toBeInTheDocument();
+      expect(await screen.findByText(/Open a factory to view/)).toBeInTheDocument();
       expect(hit).toBe(false);
     });
   });

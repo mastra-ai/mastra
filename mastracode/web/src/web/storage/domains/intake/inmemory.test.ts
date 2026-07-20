@@ -15,4 +15,17 @@ describe('IntakeStorageInMemory', () => {
     expect(second).not.toBe(DEFAULT_INTAKE_CONFIG);
     expect(second.github).not.toBe(DEFAULT_INTAKE_CONFIG.github);
   });
+
+  it('returns defaults for a prerelease github.projectIds row without emitting the old key', async () => {
+    const storage = new IntakeStorageInMemory();
+    storage.seedRawConfig('org1', 'user1', {
+      github: { enabled: false, projectIds: ['legacy-repo'] },
+      linear: { enabled: true, projectIds: ['lp-1'] },
+    });
+
+    const config = await storage.getConfig('org1', 'user1');
+    expect(config).toEqual(DEFAULT_INTAKE_CONFIG);
+    expect(config.github).toEqual({ enabled: true, repositoryIds: null });
+    expect(config.github).not.toHaveProperty('projectIds');
+  });
 });

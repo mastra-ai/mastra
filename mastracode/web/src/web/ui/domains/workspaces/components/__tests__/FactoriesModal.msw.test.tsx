@@ -10,8 +10,8 @@ import {
   useOverlayControllerHandlers,
 } from '../../../chat/components/__tests__/overlay-test-utils';
 import type { DirectoryListing } from '../../../../../../shared/api/types';
-import { ProjectsModal } from '../../index';
-import { loadProjects } from '../../services/projects';
+import { FactoriesModal } from '../../index';
+import { loadFactories } from '../../services/factories';
 
 const FS_URL = `${TEST_BASE_URL}/web/fs/list`;
 
@@ -25,7 +25,7 @@ const rootListing: DirectoryListing = {
 function renderProjects() {
   return renderWithProviders(
     <OverlayTestProviders>
-      <ProjectsModal />
+      <FactoriesModal />
     </OverlayTestProviders>,
   );
 }
@@ -35,7 +35,7 @@ beforeEach(() => {
   useOverlayControllerHandlers();
   server.use(
     http.get(FS_URL, () => HttpResponse.json(rootListing)),
-    http.get(`${TEST_BASE_URL}/web/project/resolve`, ({ request }) => {
+    http.get(`${TEST_BASE_URL}/web/codebase/resolve`, ({ request }) => {
       expect(new URL(request.url).searchParams.get('path')).toBe('/projects');
       return HttpResponse.json({
         resourceId: 'resource-projects',
@@ -48,7 +48,7 @@ beforeEach(() => {
 
 afterEach(() => localStorage.clear());
 
-describe('ProjectsModal', () => {
+describe('FactoriesModal', () => {
   it('opens directly into local directory browsing', async () => {
     renderProjects();
 
@@ -63,10 +63,14 @@ describe('ProjectsModal', () => {
     await user.click(await screen.findByRole('button', { name: 'Use this folder' }));
 
     await waitFor(() => {
-      expect(loadProjects()).toEqual([
-        expect.objectContaining({ name: 'projects', path: '/projects', resourceId: expect.any(String) }),
+      expect(loadFactories()).toEqual([
+        expect.objectContaining({
+          name: 'projects',
+          resourceId: expect.any(String),
+          binding: expect.objectContaining({ kind: 'local', path: '/projects' }),
+        }),
       ]);
     });
-    expect(localStorage.getItem('mastracode-active-project')).toBe(loadProjects()[0]?.id);
+    expect(localStorage.getItem('mastracode-active-factory')).toBe(loadFactories()[0]?.id);
   });
 });

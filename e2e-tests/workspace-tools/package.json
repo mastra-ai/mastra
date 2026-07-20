@@ -16,6 +16,6 @@
     "verdaccio": "^6.7.4",
     "verdaccio-auth-memory": "^13.0.3",
     "vitest": "4.1.10",
-    "typescript": "^6.0.3"
+    "typescript": "^7.0.2"
   }
 }
