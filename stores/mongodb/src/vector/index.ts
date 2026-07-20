@@ -177,6 +177,21 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     );
   }
 
+  /** $rankFusion requires MongoDB >= 8.1. Throws a clear error otherwise. */
+  private async assertRankFusionSupported(): Promise<void> {
+    const info = (await this.db.admin().buildInfo()) as { version?: string };
+    const [maj = 0, min = 0] = (info.version ?? '0.0').split('.').map(Number);
+    const ok = maj > 8 || (maj === 8 && min >= 1);
+    if (!ok) {
+      throw new MastraError({
+        id: createVectorErrorId('MONGODB', 'HYBRID_QUERY', 'UNSUPPORTED'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: `hybridQuery uses $rankFusion, which requires MongoDB >= 8.1 (found ${info.version ?? 'unknown'}). Use an Atlas cluster or self-hosted MongoDB >= 8.1, or call query()/textQuery() separately.`,
+      });
+    }
+  }
+
   // Public methods
   async connect(): Promise<void> {
     try {
