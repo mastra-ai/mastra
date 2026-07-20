@@ -143,6 +143,44 @@ describe('SankeyChart', () => {
     expect(container.querySelector('svg text[font-size="9.5"]')).not.toBeNull();
   });
 
+  describe('when a node name is wider than the space between its columns', () => {
+    it('truncates the label with an ellipsis and keeps the full name in a title', async () => {
+      const longName = 'Repeated Command Calls Without Confirmation';
+      const longData = [
+        { goal: longName, outcome: 'EU', behavior: 'A', sentiment: 'Calm' },
+        { goal: longName, outcome: 'US', behavior: 'B', sentiment: 'Calm' },
+      ];
+      const longColumns = [
+        { id: 'goal', label: 'Goal' },
+        { id: 'outcome', label: 'Outcome' },
+        { id: 'behavior', label: 'Behavior' },
+        { id: 'sentiment', label: 'Sentiment' },
+      ];
+
+      const { container } = render(
+        <Sankey data={longData} columns={longColumns}>
+          <SankeyChart />
+        </Sankey>,
+      );
+
+      await screen.findByText('EU');
+      const truncated = await waitFor(() => {
+        const match = [...container.querySelectorAll('svg text')].find(label => label.textContent?.includes('…'));
+        if (!match) throw new Error('Expected a truncated label');
+        return match;
+      });
+
+      const visibleText = [...truncated.childNodes]
+        .filter(node => node.nodeType === Node.TEXT_NODE)
+        .map(node => node.textContent)
+        .join('');
+      expect(visibleText.endsWith('…')).toBe(true);
+      expect(visibleText).not.toBe(longName);
+      expect(visibleText.length).toBeLessThan(longName.length);
+      expect(truncated.querySelector('title')?.textContent).toBe(longName);
+    });
+  });
+
   it('shows each node count with its percentage of the column total', async () => {
     render(<Example />);
 
