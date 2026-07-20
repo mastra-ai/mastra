@@ -1051,9 +1051,7 @@ export class PgDB extends MastraBase {
       if (isDuplicateRelationError(error)) {
         const confirmed = await this.spansPrimaryKeyExists();
         if (confirmed) {
-          this.logger?.debug?.(
-            `PRIMARY KEY constraint ${constraintName} was created by another process`,
-          );
+          this.logger?.debug?.(`PRIMARY KEY constraint ${constraintName} was created by another process`);
           return;
         }
       }
