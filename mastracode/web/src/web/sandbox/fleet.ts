@@ -166,7 +166,7 @@ export class SandboxBudgetError extends Error {
   constructor(readonly max: number) {
     super(
       `Sandbox budget exceeded: this server already has ${max} active sandbox(es), ` +
-        `the configured per-replica maximum. Close an existing project's sandbox and try again.`,
+        `the configured per-replica maximum. Close an existing repository's sandbox and try again.`,
     );
     this.name = 'SandboxBudgetError';
   }

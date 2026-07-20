@@ -1,4 +1,4 @@
-export function ProjectMetadata({ label, value }: { label: string; value: string | undefined }) {
+export function FactoryMetadata({ label, value }: { label: string; value: string | undefined }) {
   return (
     <div className="flex gap-2">
       <dt className="min-w-24 text-icon2">{label}</dt>
