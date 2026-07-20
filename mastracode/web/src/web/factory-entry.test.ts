@@ -1,14 +1,35 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { LocalSandbox } from '@mastra/core/workspace';
+import type { WorkspaceSandbox } from '@mastra/core/workspace';
+import { PostgresStore, PgVector } from '@mastra/pg';
 import type { WebAuthAdapter, WebAuthAdapterInitContext } from './auth-adapter.js';
 import { MastraFactory } from './factory-entry.js';
+import { getFactoryWorkspace } from './factory/workspace.js';
+import type { FactoryIntegration, IntegrationContext } from './factory-integration.js';
 import {
   __resetRuntimeConfigForTests,
-  getAppDatabaseUrl,
+  getFactoryStore,
   getSeededAuthAdapter,
-  getSeededSandboxProvider,
+  getSeededIntegration,
+  getSeededSandbox,
+  getSeededStateSigner,
+  getSeededStorage,
+  getSharedAppPool,
 } from './runtime-config.js';
-import { LocalSandboxProvider } from './sandbox-local-provider.js';
+import { FactoryStore } from './storage/factory-store.js';
+
+/**
+ * A PostgresStore whose init is stubbed — prepare() must call it (single init
+ * path) but these wiring tests never reach a real database. FactoryStore.init
+ * is stubbed at the prototype for the same reason (its per-domain DDL is
+ * covered by the pg domain suites).
+ */
+function fakePgStorage(): PostgresStore {
+  const storage = new PostgresStore({ id: 'factory-test-storage', connectionString: 'postgres://cfg/app' });
+  vi.spyOn(storage, 'init').mockResolvedValue(undefined);
+  return storage;
+}
 
 /**
  * `MastraFactory.prepare()` wiring: explicit config flows through to the SDK
@@ -49,6 +70,8 @@ async function prepareFactory(config: ConstructorParameters<typeof MastraFactory
 beforeEach(() => {
   vi.clearAllMocks();
   __resetRuntimeConfigForTests();
+  // Domain DDL never runs in these wiring tests (covered by the pg domain suites).
+  vi.spyOn(FactoryStore.prototype, 'init').mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -76,26 +99,83 @@ describe('MastraFactory.prepare', () => {
 
   it('seeds the runtime-config registry with the explicit config', async () => {
     const auth = fakeAdapter();
-    const sandbox = new LocalSandboxProvider({ root: '/tmp/mc-factory-test' });
-    await prepareFactory({ database: 'postgres://cfg/app', auth, sandbox });
-    expect(getAppDatabaseUrl()).toBe('postgres://cfg/app');
+    const sandbox = new LocalSandbox({ workingDirectory: '/tmp/mc-factory-test' });
+    const storage = fakePgStorage();
+    await prepareFactory({ storage, auth, sandbox: { machine: sandbox } });
+    expect(getSeededStorage()).toBe(storage);
+    expect(getSharedAppPool()).toBe(storage.pool);
     expect(getSeededAuthAdapter()).toBe(auth);
-    expect(getSeededSandboxProvider()).toBe(sandbox);
+    expect(getSeededSandbox()?.machine).toBe(sandbox);
   });
 
-  it('leaves the sandbox provider unset when the slot is omitted', async () => {
+  it('runs the single init path: storage.init() then the factory domains', async () => {
+    const storage = fakePgStorage();
+    await prepareFactory({ storage });
+    expect(storage.init).toHaveBeenCalledOnce();
+    expect(FactoryStore.prototype.init).toHaveBeenCalledExactlyOnceWith({ pool: storage.pool });
+  });
+
+  it('leaves the sandbox runtime unset when the slot is omitted', async () => {
     await prepareFactory({});
-    expect(getSeededSandboxProvider()).toBeUndefined();
+    expect(getSeededSandbox()).toBeUndefined();
   });
 
-  it('maps database onto the pg storage config for the SDK mount', async () => {
-    const config = await prepareFactory({ database: 'postgres://cfg/app' });
-    expect(config.storage).toEqual({ backend: 'pg', connectionString: 'postgres://cfg/app' });
+  it('rejects a sandbox that does not implement clone()', async () => {
+    const uncloneable = {
+      id: 'sb-1',
+      name: 'Uncloneable',
+      provider: 'custom',
+    } as unknown as WorkspaceSandbox;
+    const factory = new MastraFactory({ sandbox: { machine: uncloneable } });
+    await expect(factory.prepare()).rejects.toThrow(/does not implement clone\(\)/);
   });
 
-  it('omits storage when no database is configured', async () => {
+  it("defaults the workdir base to the machine's workingDirectory, else /workspace", async () => {
+    await prepareFactory({ sandbox: { machine: new LocalSandbox({ workingDirectory: '/srv/checkouts/' }) } });
+    expect(getSeededSandbox()?.workdirBase).toBe('/srv/checkouts');
+
+    prepareMock.mockClear();
+    __resetRuntimeConfigForTests();
+
+    const remote = {
+      id: 'sb-2',
+      name: 'Remote',
+      provider: 'railway',
+      clone: () => remote,
+    } as unknown as WorkspaceSandbox;
+    await prepareFactory({ sandbox: { machine: remote } });
+    expect(getSeededSandbox()?.workdirBase).toBe('/workspace');
+  });
+
+  it('honors an explicit workdir override and passes maxSandboxes through', async () => {
+    await prepareFactory({
+      sandbox: {
+        machine: new LocalSandbox({ workingDirectory: '/tmp/mc-factory-test' }),
+        workdir: '/custom/base/',
+        maxSandboxes: 5,
+      },
+    });
+    expect(getSeededSandbox()?.workdirBase).toBe('/custom/base');
+    expect(getSeededSandbox()?.maxSandboxes).toBe(5);
+  });
+
+  it('forwards the storage and vector instances to the SDK mount', async () => {
+    const storage = fakePgStorage();
+    const vector = new PgVector({ id: 'factory-test-vectors', connectionString: 'postgres://cfg/app' });
+    const config = await prepareFactory({ storage, vector });
+    expect(config.storage).toBe(storage);
+    expect(config.vector).toBe(vector);
+  });
+
+  it('installs the Web Factory workspace resolver instead of changing the SDK default', async () => {
+    const config = await prepareFactory({});
+    expect(config.workspace).toBe(getFactoryWorkspace);
+  });
+
+  it('omits storage when no instance is configured', async () => {
     const config = await prepareFactory({});
     expect(config).not.toHaveProperty('storage');
+    expect(config).not.toHaveProperty('vector');
   });
 
   it('passes the pubsub instance through with cross-process leases enabled', async () => {
@@ -107,14 +187,15 @@ describe('MastraFactory.prepare', () => {
 
   it('calls adapter.init once with the factory context', async () => {
     const auth = fakeAdapter();
+    const storage = fakePgStorage();
     await prepareFactory({
       auth,
-      database: 'postgres://cfg/app',
+      storage,
       publicUrl: 'https://factory.acme.com/',
       allowedOrigins: ['https://app.acme.com/'],
     });
     expect(auth.init).toHaveBeenCalledExactlyOnceWith({
-      databaseUrl: 'postgres://cfg/app',
+      storage,
       publicUrl: 'https://factory.acme.com',
       allowedOrigins: ['https://app.acme.com'],
     } satisfies WebAuthAdapterInitContext);
@@ -141,9 +222,9 @@ describe('MastraFactory.prepare', () => {
     expect(paths.some(p => p.startsWith('/auth/'))).toBe(false);
   });
 
-  it('installs exactly one extra middleware (the auth gate) when auth is configured', async () => {
+  it('installs the auth gate and tenant credential primer when auth is configured', async () => {
     // The SPA static middleware is environment-dependent (present when ui/dist
-    // exists), so assert the delta: configuring auth prepends exactly one gate.
+    // exists), so assert the delta from the two auth-specific middleware.
     const openConfig = await prepareFactory({});
     const openMiddleware = (openConfig.buildServerConfig as () => { middleware?: unknown[] })().middleware ?? [];
 
@@ -152,7 +233,153 @@ describe('MastraFactory.prepare', () => {
 
     const gatedConfig = await prepareFactory({ auth: fakeAdapter() });
     const gatedMiddleware = (gatedConfig.buildServerConfig as () => { middleware?: unknown[] })().middleware ?? [];
-    expect(gatedMiddleware).toHaveLength(openMiddleware.length + 1);
+    expect(gatedMiddleware).toHaveLength(openMiddleware.length + 2);
+  });
+});
+
+function fakeIntegration(overrides: Partial<FactoryIntegration> & { id: string }): FactoryIntegration {
+  return {
+    routes: vi.fn((_ctx: IntegrationContext) => []),
+    diagnostics: () => ({}),
+    ...overrides,
+  };
+}
+
+describe('MastraFactory.prepare integrations', () => {
+  it('rejects duplicate integration ids', async () => {
+    const factory = new MastraFactory({
+      integrations: [fakeIntegration({ id: 'custom' }), fakeIntegration({ id: 'custom' })],
+    });
+    await expect(factory.prepare()).rejects.toThrow(/duplicate integration id 'custom'/);
+  });
+
+  it('seeds integrations into the runtime-config registry', async () => {
+    const custom = fakeIntegration({ id: 'custom' });
+    await prepareFactory({ integrations: [custom] });
+    expect(getSeededIntegration('custom')).toBe(custom);
+    expect(getSeededIntegration('missing')).toBeUndefined();
+  });
+
+  it('registers an integration-provided storage domain into the FactoryStore', async () => {
+    const domain = { name: 'custom-domain', init: vi.fn(async () => {}) };
+    const custom = fakeIntegration({ id: 'custom', storageDomain: domain });
+    await prepareFactory({ storage: fakePgStorage(), integrations: [custom] });
+    expect(getFactoryStore().get('custom-domain')).toBe(domain);
+  });
+
+  it("folds a ready integration's routes into buildApiRoutes", async () => {
+    const routes = vi.fn((_ctx: IntegrationContext) => [
+      { path: '/web/custom/status', method: 'GET' as const, handler: () => new Response() },
+    ]);
+    const config = await prepareFactory({ integrations: [fakeIntegration({ id: 'custom', routes })] });
+    const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
+    const paths = buildApiRoutes({ controller: {}, authStorage: {} }).map(r => r.path);
+    expect(paths).toContain('/web/custom/status');
+    const ctx = routes.mock.calls[0]![0];
+    expect(ctx.stateSigner).toBe(getSeededStateSigner());
+    expect(typeof ctx.hooks?.runIssueTriage).toBe('function');
+  });
+
+  it('retries a failed integration domain before serving its routes', async () => {
+    const ensureReady = vi.spyOn(FactoryStore.prototype, 'ensureReady').mockResolvedValue(undefined);
+    const domain = { name: 'retryable-domain', init: vi.fn(async () => {}) };
+    const handler = vi.fn(async () => new Response('ready'));
+    const custom = fakeIntegration({
+      id: 'retryable',
+      storageDomain: domain,
+      routes: vi.fn(() => [{ path: '/web/retryable', method: 'GET' as const, handler }]),
+    });
+    const config = await prepareFactory({ storage: fakePgStorage(), integrations: [custom] });
+    const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{
+      path: string;
+      handler?: (c: unknown, next: () => Promise<void>) => Promise<Response>;
+    }>;
+    const route = buildApiRoutes({ controller: {}, authStorage: {} }).find(r => r.path === '/web/retryable');
+    expect(route?.handler).toBeTypeOf('function');
+    const response = await route!.handler!({} as never, async () => {});
+    expect(response.status).toBe(200);
+    expect(ensureReady).toHaveBeenCalledWith('retryable-domain');
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it('mounts disabled-status stubs for the known ids when no integrations are registered', async () => {
+    const config = await prepareFactory({});
+    const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
+    const paths = buildApiRoutes({ controller: {}, authStorage: {} }).map(r => r.path);
+    expect(paths).toContain('/web/github/status');
+    expect(paths).toContain('/web/linear/status');
+  });
+
+  it('merges agentTools and sessionTools from ready integrations into extraTools', async () => {
+    const agentTool = { description: 'agent' };
+    const sessionTool = { description: 'session' };
+    const custom = fakeIntegration({
+      id: 'custom',
+      agentTools: vi.fn(async () => ({ customAgentTool: agentTool }) as never),
+      sessionTools: vi.fn(() => ({ customSessionTool: sessionTool }) as never),
+    });
+    const config = await prepareFactory({ integrations: [custom] });
+    const extraTools = config.extraTools as (args: { requestContext: object }) => Promise<Record<string, unknown>>;
+    const tools = await extraTools({ requestContext: {} });
+    expect(tools.customAgentTool).toBe(agentTool);
+    expect(tools.customSessionTool).toBe(sessionTool);
+  });
+
+  it('retries a failed integration domain before resolving its tools', async () => {
+    const ensureReady = vi.spyOn(FactoryStore.prototype, 'ensureReady').mockResolvedValue(undefined);
+    const customTool = { description: 'recovered' };
+    const custom = fakeIntegration({
+      id: 'retryable-tools',
+      storageDomain: { name: 'retryable-tools-domain', init: vi.fn(async () => {}) },
+      agentTools: vi.fn(async () => ({ customTool }) as never),
+    });
+    const config = await prepareFactory({ storage: fakePgStorage(), integrations: [custom] });
+    const extraTools = config.extraTools as (args: { requestContext: object }) => Promise<Record<string, unknown>>;
+    await expect(extraTools({ requestContext: {} })).resolves.toEqual({ customTool });
+    expect(ensureReady).toHaveBeenCalledWith('retryable-tools-domain');
+  });
+
+  it('rejects duplicate tool keys from integrations', async () => {
+    const first = fakeIntegration({
+      id: 'first',
+      agentTools: vi.fn(async () => ({ sharedTool: { description: 'first' } }) as never),
+    });
+    const second = fakeIntegration({
+      id: 'second',
+      sessionTools: vi.fn(() => ({ sharedTool: { description: 'second' } }) as never),
+    });
+    const config = await prepareFactory({ integrations: [first, second] });
+    const extraTools = config.extraTools as (args: { requestContext: object }) => Promise<Record<string, unknown>>;
+    await expect(extraTools({ requestContext: {} })).rejects.toThrow(
+      "integration tool 'sharedTool' from 'second' conflicts with 'first'",
+    );
+  });
+
+  it('omits extraTools when no integration contributes tools', async () => {
+    const config = await prepareFactory({ integrations: [fakeIntegration({ id: 'custom' })] });
+    expect(config).not.toHaveProperty('extraTools');
+  });
+
+  it('fails loud when a ready integration requires a stable signer but none is configured', async () => {
+    const factory = new MastraFactory({
+      integrations: [fakeIntegration({ id: 'custom', requiresStableStateSigner: true })],
+    });
+    await expect(factory.prepare()).rejects.toThrow(/replica-stable state secret/);
+  });
+
+  it('accepts a stability-requiring integration when stateSecret is configured', async () => {
+    await prepareFactory({
+      stateSecret: 'deployment-stable-secret',
+      integrations: [fakeIntegration({ id: 'custom', requiresStableStateSigner: true })],
+    });
+    expect(getSeededStateSigner()?.stable).toBe(true);
+  });
+
+  it("falls back to a github integration's webhook secret for the state signer", async () => {
+    const github = fakeIntegration({ id: 'github' }) as FactoryIntegration & { webhookSecret?: string };
+    github.webhookSecret = 'hook-secret';
+    await prepareFactory({ integrations: [github] });
+    expect(getSeededStateSigner()?.stable).toBe(true);
   });
 });
 

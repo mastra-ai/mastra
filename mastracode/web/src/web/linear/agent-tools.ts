@@ -16,13 +16,11 @@
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
-import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 
-import { getAppDb } from '../github/db';
-import { githubProjects } from '../github/schema';
-import { createLinearIssueComment, fetchLinearIssueDetail } from './client';
+import { getSeededGithubIntegration } from '../runtime-config';
 import { isLinearFeatureEnabled } from './config';
+import type { LinearIntegration } from './integration';
 import {
   canPostLinearComments,
   getFreshLinearAccessToken,
@@ -58,26 +56,24 @@ async function resolveOrgId(resourceId: string): Promise<string | null> {
     orgIdByResourceId.set(resourceId, null);
     return null;
   }
-  let row: { orgId: string } | undefined;
+  let orgId: string | null;
   try {
-    [row] = await getAppDb()
-      .select({ orgId: githubProjects.orgId })
-      .from(githubProjects)
-      .where(eq(githubProjects.id, resourceId));
+    const github = getSeededGithubIntegration();
+    const project = github ? await github.storageDomain.getProjectById(resourceId) : null;
+    orgId = project?.orgId ?? null;
   } catch {
     // Transient database failure: skip the tools for this request but don't
     // cache the miss, so the next request retries the lookup.
     return null;
   }
-  const orgId = row?.orgId ?? null;
   orgIdByResourceId.set(resourceId, orgId);
   return orgId;
 }
 
-async function checkLinearConnection(orgId: string): Promise<ConnectionCheck> {
+async function checkLinearConnection(orgId: string, linear: LinearIntegration): Promise<ConnectionCheck> {
   const cached = connectionCheckByOrg.get(orgId);
   if (cached && Date.now() - cached.checkedAt < CONNECTION_TTL_MS) return cached;
-  const connection = await loadLinearConnection(orgId);
+  const connection = await loadLinearConnection(orgId, linear);
   const check: ConnectionCheck = {
     connected: connection !== null,
     canComment: connection !== null && canPostLinearComments(connection),
@@ -102,7 +98,7 @@ export function invalidateLinearConnectionCache(orgId: string): void {
   connectionCheckByOrg.delete(orgId);
 }
 
-function createLinearGetIssueTool(orgId: string) {
+function createLinearGetIssueTool(linear: LinearIntegration, orgId: string) {
   return createTool({
     id: 'linear_get_issue',
     description:
@@ -111,13 +107,13 @@ function createLinearGetIssueTool(orgId: string) {
       issue: z.string().min(1).describe('The Linear issue identifier (e.g. "ENG-123") or issue UUID.'),
     }),
     execute: async ({ issue }: { issue: string }) => {
-      const connection = await loadLinearConnection(orgId);
+      const connection = await loadLinearConnection(orgId, linear);
       if (!connection) {
-        return { error: 'Linear is not connected for this project. Connect Linear in Settings to fetch issues.' };
+        return { error: 'Linear is not connected for this repository. Connect Linear in Settings to fetch issues.' };
       }
       try {
-        const accessToken = await getFreshLinearAccessToken(connection);
-        const detail = await fetchLinearIssueDetail(accessToken, issue.trim());
+        const accessToken = await getFreshLinearAccessToken(linear, connection);
+        const detail = await linear.fetchIssueDetail(accessToken, issue.trim());
         if (!detail) {
           return { error: `Linear issue "${issue}" was not found in this workspace.` };
         }
@@ -132,7 +128,7 @@ function createLinearGetIssueTool(orgId: string) {
   });
 }
 
-function createLinearCommentTool(orgId: string) {
+function createLinearCommentTool(linear: LinearIntegration, orgId: string) {
   return createTool({
     id: 'linear_create_comment',
     description:
@@ -142,9 +138,9 @@ function createLinearCommentTool(orgId: string) {
       body: z.string().min(1).describe('The comment body, as Linear-flavored markdown.'),
     }),
     execute: async ({ issue, body }: { issue: string; body: string }) => {
-      const connection = await loadLinearConnection(orgId);
+      const connection = await loadLinearConnection(orgId, linear);
       if (!connection) {
-        return { error: 'Linear is not connected for this project. Connect Linear in Settings to post comments.' };
+        return { error: 'Linear is not connected for this repository. Connect Linear in Settings to post comments.' };
       }
       if (!canPostLinearComments(connection)) {
         return {
@@ -152,8 +148,8 @@ function createLinearCommentTool(orgId: string) {
         };
       }
       try {
-        const accessToken = await getFreshLinearAccessToken(connection);
-        const comment = await createLinearIssueComment(accessToken, issue.trim(), body);
+        const accessToken = await getFreshLinearAccessToken(linear, connection);
+        const comment = await linear.createIssueComment(accessToken, issue.trim(), body);
         if (!comment) {
           return { error: `Linear issue "${issue}" was not found in this workspace.` };
         }
@@ -174,8 +170,11 @@ function createLinearCommentTool(orgId: string) {
  */
 export async function buildLinearAgentTools({
   requestContext,
+  linear,
 }: {
   requestContext: RequestContext;
+  /** The integration instance providing the Linear API client. */
+  linear: LinearIntegration;
 }): Promise<Record<string, ReturnType<typeof createLinearGetIssueTool> | ReturnType<typeof createLinearCommentTool>>> {
   if (!isLinearFeatureEnabled()) return {};
 
@@ -185,14 +184,14 @@ export async function buildLinearAgentTools({
 
   const orgId = await resolveOrgId(resourceId);
   if (!orgId) return {};
-  const check = await checkLinearConnection(orgId);
+  const check = await checkLinearConnection(orgId, linear);
   if (!check.connected) return {};
 
   return {
-    linear_get_issue: createLinearGetIssueTool(orgId),
+    linear_get_issue: createLinearGetIssueTool(linear, orgId),
     // Only offered when the granted OAuth scope allows posting comments —
     // connections made before `comments:create` was requested are read-only
     // until the org reconnects Linear.
-    ...(check.canComment ? { linear_create_comment: createLinearCommentTool(orgId) } : {}),
+    ...(check.canComment ? { linear_create_comment: createLinearCommentTool(linear, orgId) } : {}),
   };
 }

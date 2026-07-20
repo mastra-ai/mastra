@@ -1,4 +1,4 @@
-import type { MastraDBMessage } from '@mastra/client-js';
+import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import type { ReactNode } from 'react';
 import { useReducer } from 'react';
 
@@ -67,7 +67,7 @@ function ChatTranscriptValueProvider({
   transcriptApi: ReturnType<typeof useAgentControllerTranscript>;
 }) {
   const connection = useChatConnection();
-  const { transcript, reset, localUser, resolvePrompt, pushNotice } = transcriptApi;
+  const { transcript, reset, localUser, resolvePrompt, clearPending, pushNotice } = transcriptApi;
 
   const effectiveTranscript: TranscriptState = {
     ...transcript,
@@ -85,6 +85,7 @@ function ChatTranscriptValueProvider({
     localUser,
     reset,
     resolvePrompt,
+    clearPending,
     pushNotice,
   };
 

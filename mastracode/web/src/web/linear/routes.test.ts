@@ -2,70 +2,16 @@ import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as AuthModule from '../auth';
 
-// ── Mocks ────────────────────────────────────────────────────────────────
-vi.mock('drizzle-orm', () => ({
-  eq: (column: any, value: any) => ({ kind: 'eq', column: column?.name, value }),
-  and: (...conds: any[]) => ({ kind: 'and', conds: conds.filter(Boolean) }),
-}));
-
 // In-memory linear_connections table.
 let connections: Array<Record<string, any>> = [];
 
-function matches(table: any, row: any, cond: any): boolean {
-  if (!cond) return true;
-  if (cond.kind === 'and') return cond.conds.every((c: any) => matches(table, row, c));
-  if (cond.kind === 'eq') {
-    for (const [jsKey, col] of Object.entries(table)) {
-      if ((col as any)?.name === cond.column) return row[jsKey] === cond.value;
-    }
-    return false;
-  }
-  return true;
-}
-
-vi.mock('../github/db', () => ({
-  getAppDb: () => ({
-    select: () => ({
-      from: (table: any) => ({
-        where: async (cond: any) => connections.filter(row => matches(table, row, cond)),
-      }),
-    }),
-    insert: () => ({
-      values: (vals: any) => ({
-        onConflictDoUpdate: (opts: any) => {
-          const existing = connections.find(row => row.orgId === vals.orgId);
-          if (existing) Object.assign(existing, opts?.set ?? {});
-          else connections.push({ id: `id-${connections.length + 1}`, ...vals });
-          return Promise.resolve();
-        },
-      }),
-    }),
-    update: (table: any) => ({
-      set: (vals: any) => ({
-        where: async (cond: any) => {
-          for (const row of connections) {
-            if (matches(table, row, cond)) Object.assign(row, vals);
-          }
-        },
-      }),
-    }),
-  }),
-}));
+import { LinearStorageInMemory } from './storage/inmemory';
+const linearStorage = new LinearStorageInMemory();
 
 let featureEnabled = true;
 vi.mock('./config', () => ({
   isLinearFeatureEnabled: () => featureEnabled,
   getLinearFeatureDiagnostics: () => ({}),
-}));
-
-vi.mock('../github/config', () => ({
-  signState: (orgId: string, userId: string) => `state.${orgId}.${userId}`,
-  verifyState: (state: string | undefined) => {
-    if (!state?.startsWith('state.')) return null;
-    const [orgId, userId] = state.slice('state.'.length).split('.');
-    if (!orgId || !userId) return null;
-    return { orgId, userId };
-  },
 }));
 
 const exchangeLinearOAuthCode = vi.fn(async () => ({
@@ -102,19 +48,36 @@ const listActiveLinearIssues = vi.fn(async (_token: string, _after?: string, _pr
   nextCursor: 'cursor-2',
 }));
 
-vi.mock('./client', () => ({
-  buildLinearAuthorizeUrl: (state: string, redirectUri: string) =>
+// Stub integration instance: real DI through `MountLinearRoutesOptions.linear`
+// instead of module mocking — mirrors how the factory hands the instance to
+// `buildLinearRoutes` in production.
+const linearStub = {
+  id: 'linear',
+  storageDomain: linearStorage,
+  buildAuthorizeUrl: (state: string, redirectUri: string) =>
     `https://linear.app/oauth/authorize?state=${state}&redirect_uri=${encodeURIComponent(redirectUri)}`,
-  exchangeLinearOAuthCode: (...args: any[]) => exchangeLinearOAuthCode(...(args as [])),
-  refreshLinearAccessToken: (...args: any[]) => refreshLinearAccessToken(...(args as [])),
-  fetchLinearWorkspace: (...args: any[]) => fetchLinearWorkspace(...(args as [])),
-  listLinearProjects: (...args: any[]) => listLinearProjects(...(args as [])),
-  listActiveLinearIssues: (token: string, after?: string, projectIds?: string[]) =>
+  exchangeOAuthCode: (...args: any[]) => exchangeLinearOAuthCode(...(args as [])),
+  refreshAccessToken: (...args: any[]) => refreshLinearAccessToken(...(args as [])),
+  fetchWorkspace: (...args: any[]) => fetchLinearWorkspace(...(args as [])),
+  listProjects: (...args: any[]) => listLinearProjects(...(args as [])),
+  listActiveIssues: (token: string, after?: string, projectIds?: string[]) =>
     listActiveLinearIssues(token, after, projectIds),
-}));
+} as unknown as import('./integration').LinearIntegration;
+
+// Deterministic state signer injected the same way the factory does it.
+const stateSigner: import('../state-signing').StateSigner = {
+  stable: true,
+  sign: (orgId: string, userId: string) => `state.${orgId}.${userId}`,
+  verify: (state: string | undefined) => {
+    if (!state?.startsWith('state.')) return null;
+    const [orgId, userId] = state.slice('state.'.length).split('.');
+    if (!orgId || !userId) return null;
+    return { orgId, userId };
+  },
+};
 
 const getIntakeConfig = vi.fn(async () => ({
-  github: { enabled: true, projectIds: null as string[] | null },
+  github: { enabled: true, repositoryIds: null as string[] | null },
   linear: { enabled: true, projectIds: null as string[] | null },
 }));
 vi.mock('../intake/store', () => ({
@@ -144,7 +107,10 @@ import { mountApiRoutes } from '../test-utils';
 import { buildLinearRoutes } from './routes';
 
 // ── Test harness ─────────────────────────────────────────────────────────
-function buildApp(user: { workosId: string; organizationId?: string | null } | null) {
+function buildApp(
+  user: { workosId: string; organizationId?: string | null } | null,
+  signer: import('../state-signing').StateSigner | null = stateSigner,
+) {
   const app = new Hono();
   app.use('*', async (c, next) => {
     if (user) {
@@ -153,7 +119,10 @@ function buildApp(user: { workosId: string; organizationId?: string | null } | n
     }
     await next();
   });
-  mountApiRoutes(app as any, buildLinearRoutes({ baseUrl: 'http://localhost:4111' }));
+  mountApiRoutes(
+    app as any,
+    buildLinearRoutes({ baseUrl: 'http://localhost:4111', linear: linearStub, stateSigner: signer ?? undefined }),
+  );
   return app;
 }
 
@@ -173,11 +142,12 @@ const connect = (overrides: Record<string, any> = {}) =>
 
 beforeEach(() => {
   connections = [];
+  linearStorage.connections = connections as any;
   featureEnabled = true;
   cookieUser = null;
   getIntakeConfig.mockClear();
   getIntakeConfig.mockResolvedValue({
-    github: { enabled: true, projectIds: null },
+    github: { enabled: true, repositoryIds: null },
     linear: { enabled: true, projectIds: ['proj-1'] },
   });
   listActiveLinearIssues.mockClear();
@@ -195,6 +165,11 @@ describe('status route', () => {
   it('reports disabled without the feature', async () => {
     featureEnabled = false;
     const res = await buildApp({ workosId: 'u1' }).request('/web/linear/status');
+    expect(await res.json()).toMatchObject({ enabled: false, connected: false, reason: 'missing_config' });
+  });
+
+  it('reports disabled without a state signer', async () => {
+    const res = await buildApp({ workosId: 'u1' }, null).request('/web/linear/status');
     expect(await res.json()).toMatchObject({ enabled: false, connected: false, reason: 'missing_config' });
   });
 
@@ -328,7 +303,7 @@ describe('issues route', () => {
   it('applies the intake config project selection', async () => {
     connect();
     getIntakeConfig.mockResolvedValueOnce({
-      github: { enabled: true, projectIds: null },
+      github: { enabled: true, repositoryIds: null },
       linear: { enabled: true, projectIds: ['proj-1'] },
     });
     await buildApp({ workosId: 'u1' }).request('/web/linear/issues');
@@ -338,7 +313,7 @@ describe('issues route', () => {
   it('returns an empty page without calling Linear when no projects are selected', async () => {
     connect();
     getIntakeConfig.mockResolvedValueOnce({
-      github: { enabled: true, projectIds: null },
+      github: { enabled: true, repositoryIds: null },
       linear: { enabled: true, projectIds: null },
     });
     const res = await buildApp({ workosId: 'u1' }).request('/web/linear/issues');
@@ -349,7 +324,7 @@ describe('issues route', () => {
   it('404s when Linear intake is disabled in settings', async () => {
     connect();
     getIntakeConfig.mockResolvedValueOnce({
-      github: { enabled: true, projectIds: null },
+      github: { enabled: true, repositoryIds: null },
       linear: { enabled: false, projectIds: null },
     });
     const res = await buildApp({ workosId: 'u1' }).request('/web/linear/issues');

@@ -88,7 +88,7 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
 /** List the org's work items for a project. */
 export async function listWorkItems(baseUrl: string, githubProjectId: string): Promise<WorkItem[]> {
   const data = await requestJson<{ workItems: WorkItem[] }>(
-    `${baseUrl}/web/factory/projects/${encodeURIComponent(githubProjectId)}/work-items`,
+    `${baseUrl}/web/factory/repositories/${encodeURIComponent(githubProjectId)}/work-items`,
   );
   return data.workItems;
 }
@@ -100,7 +100,7 @@ export async function createWorkItem(
   input: CreateWorkItemInput,
 ): Promise<WorkItem> {
   const data = await requestJson<{ workItem: WorkItem }>(
-    `${baseUrl}/web/factory/projects/${encodeURIComponent(githubProjectId)}/work-items`,
+    `${baseUrl}/web/factory/repositories/${encodeURIComponent(githubProjectId)}/work-items`,
     { method: 'POST', body: JSON.stringify(input) },
   );
   return data.workItem;

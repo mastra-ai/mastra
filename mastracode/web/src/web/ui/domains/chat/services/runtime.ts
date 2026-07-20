@@ -1,9 +1,4 @@
-import type {
-  AgentControllerEvent,
-  AgentControllerMessage,
-  AgentControllerOMProgress,
-  KnownAgentControllerEvent,
-} from '@mastra/client-js';
+import type { AgentControllerEvent, AgentControllerOMProgress, KnownAgentControllerEvent } from '@mastra/client-js';
 
 export interface UsageSnapshot {
   promptTokens?: number;
@@ -58,14 +53,12 @@ export function runtimeReducer(state: ChatRuntimeState, event: AgentControllerEv
       const stepTokens = (usage.completionTokens ?? 0) + (usage.reasoningTokens ?? 0);
       let tokensPerSec = state.tokensPerSec;
       if (state._decodeStartedAt > 0 && stepTokens > 0) {
-        const decodeSeconds = (Date.now() - state._decodeStartedAt) / 1000;
-        if (decodeSeconds > 0) {
-          const instantaneous = stepTokens / decodeSeconds;
-          tokensPerSec =
-            state.tokensPerSec > 0
-              ? Math.round(0.3 * instantaneous + 0.7 * state.tokensPerSec)
-              : Math.round(instantaneous);
-        }
+        const decodeSeconds = Math.max((Date.now() - state._decodeStartedAt) / 1000, 0.001);
+        const instantaneous = stepTokens / decodeSeconds;
+        tokensPerSec =
+          state.tokensPerSec > 0
+            ? Math.round(0.3 * instantaneous + 0.7 * state.tokensPerSec)
+            : Math.round(instantaneous);
       }
       return { ...state, usage, tokensPerSec, _decodeStartedAt: 0 };
     }
@@ -109,6 +102,17 @@ export function runtimeReducer(state: ChatRuntimeState, event: AgentControllerEv
   }
 }
 
-function hasAssistantText(message: AgentControllerMessage) {
-  return message.role === 'assistant' && message.content.some(part => part.type === 'text' && part.text?.trim());
+interface RuntimeMessagePart {
+  type: string;
+  text?: string;
+}
+
+interface RuntimeMessage {
+  role: string;
+  content: RuntimeMessagePart[] | { parts: RuntimeMessagePart[] };
+}
+
+function hasAssistantText(message: RuntimeMessage) {
+  const parts = Array.isArray(message.content) ? message.content : message.content.parts;
+  return message.role === 'assistant' && parts.some(part => part.type === 'text' && part.text?.trim());
 }

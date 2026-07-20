@@ -7,6 +7,7 @@ import type {
   DurableAgentLike,
 } from '@mastra/core/agent';
 import { AGENT_STREAM_TOPIC, DurableStepIds } from '@mastra/core/agent/durable';
+import type { AIV5Type } from '@mastra/core/agent/message-list';
 import type { VersionOverrides } from '@mastra/core/di';
 import { mergeVersionOverrides, MASTRA_VERSIONS_KEY } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -1304,6 +1305,8 @@ export const GENERATE_AGENT_ROUTE = createRoute({
 
       const options = {
         ...restOptions,
+        // Schema validates context permissively; runtime values are ModelMessages.
+        context: restOptions.context as AIV5Type.ModelMessage[] | undefined,
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
         abortSignal,
@@ -1459,7 +1462,14 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
       // and setting it explicitly causes duplicate headers which break HTTP protocol.
       const streamResponse = rest.output
         ? streamResult.toTextStreamResponse()
-        : streamResult.toDataStreamResponse({
+        : // Without `output`, streamLegacy returns a StreamTextResult which has
+          // toDataStreamResponse; TS resolves the object-stream overload because
+          // `output` is optionally typed on the body schema.
+          (
+            streamResult as unknown as {
+              toDataStreamResponse: (options: Record<string, unknown>) => Response;
+            }
+          ).toDataStreamResponse({
             sendUsage: true,
             sendReasoning: true,
             getErrorMessage: (error: any) => {
@@ -1703,7 +1713,7 @@ export const STREAM_GENERATE_ROUTE = createRoute({
 const sendAgentSignalResponseSchema: z.ZodType<{ accepted: true; runId: string; signal?: unknown }> = z.object({
   accepted: z.literal(true),
   runId: z.string(),
-  signal: z.any().optional(),
+  signal: z.unknown().optional(),
 });
 
 /**
@@ -2199,6 +2209,8 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
 
       const options = {
         ...restOptions,
+        // Schema validates context permissively; runtime values are ModelMessages.
+        context: restOptions.context as AIV5Type.ModelMessage[] | undefined,
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
         abortSignal,
@@ -2736,7 +2748,7 @@ export const RECOVER_ROUTE = createRoute({
       // Durable-agent check via duck-typing to avoid a hard runtime dep on the
       // DurableAgent class inside @mastra/core (mirrors the pattern used by
       // Mastra.recoverAllDurableAgents()).
-      if (typeof (agent as any).recover !== 'function') {
+      if (!isDurableAgentLike(agent)) {
         throw new HTTPException(400, {
           message: 'Agent does not support recover. Only durable agents (createDurableAgent) can recover runs.',
         });
@@ -2866,6 +2878,8 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
         runId,
         toolCallId,
         ...restOptions,
+        // Schema validates context permissively; runtime values are ModelMessages.
+        context: restOptions.context as AIV5Type.ModelMessage[] | undefined,
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
         abortSignal,

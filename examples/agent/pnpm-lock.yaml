@@ -101,7 +101,7 @@ importers:
         version: 4.3.19(react@19.2.7)(zod@4.4.3)
       ai-v5:
         specifier: npm:ai@^5.0.93
-        version: ai@5.0.210(zod@4.4.3)
+        version: ai@5.0.216(zod@4.4.3)
       better-auth:
         specifier: ^1.2.8
         version: 1.6.23(@opentelemetry/api@1.9.0)(react@19.2.7)
@@ -130,8 +130,8 @@ importers:
 
 packages:
 
-  '@ai-sdk/gateway@2.0.109':
-    resolution: {integrity: sha512-jvTQnfmcKD/bc8fbp2bbaO8QvqSPaj7lv5rj9kj/GLHUfTGpjQV3pH7GdO4fDi1SX2PdHpPQY0y6rxJ05Xo5cg==}
+  '@ai-sdk/gateway@2.0.115':
+    resolution: {integrity: sha512-BLN5eLjzg6mKkbxAf6oP8Z7mEyRihrDzBJr7QlNPZTFvgZJ15peoflUJuskTCZFaisqelj1P4Se1pHY8QBBgBA==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -148,8 +148,8 @@ packages:
     peerDependencies:
       zod: ^3.23.8
 
-  '@ai-sdk/provider-utils@3.0.28':
-    resolution: {integrity: sha512-bXlX1WX7E50a2N+AJW+1a/x63m52aPhm+6xYe5THxWrx9vW9NR7E2Ay+1G1ndlCdMdYKo2Fnsd7kBhuyQPaphw==}
+  '@ai-sdk/provider-utils@3.0.30':
+    resolution: {integrity: sha512-NCJ9JKow5ENAgEZxzvEvF20thwDiH+hutvzmrUDbloRX0azpJHNst8+7pZIVryYhLM9wgpT5/ShTSjPTFhkxEQ==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -529,8 +529,8 @@ packages:
       react:
         optional: true
 
-  ai@5.0.210:
-    resolution: {integrity: sha512-HAYfzP0vMU3/1GzjQkpJT7/x7BqacIYimAMgm6wXZKjZfOHGv1458hLDqYcC7o9BuAr23sFijvL41MSx9KEnEQ==}
+  ai@5.0.216:
+    resolution: {integrity: sha512-W1QgTQS/2itHasAjqx0CVWfRojmnu1V4tJbqaHJf5hXckAZa9IrPDS9VNWBSgZjBhBE9//5M+D4FKdvAGcQBEw==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -773,8 +773,8 @@ packages:
     resolution: {integrity: sha512-CRT1WTyuQoD771GW56XEZFQ/ZoSfWid1alKGDYMmkt2yl8UXrVR4pspqWNEcqKvVIzg6PAltWjxcSSPrboA4iA==}
     engines: {node: '>=18.0.0'}
 
-  express-rate-limit@8.5.2:
-    resolution: {integrity: sha512-5Kb34ipNX694DH48vN9irak1Qx30nb0PLYHXfJgw4YEjiC3ZEmZJhwOp+VfiCYwFzvFTdB9QkArYS5kXa2cx2A==}
+  express-rate-limit@8.6.0:
+    resolution: {integrity: sha512-XKJXDsASUOo0LLtFwW5hCcQGH0N4WQc/Rn8/Pvoia+TJFOkkFPvrtW9lZOeeNcxQJspvOIERMwiRLsVFlhHEkA==}
     engines: {node: '>= 16'}
     peerDependencies:
       express: '>= 4.11'
@@ -1131,11 +1131,11 @@ packages:
     resolution: {integrity: sha512-nt6AMGKW1p/70DF/hGBdJB57B8Tspmbp5gfJ8ilhLnt7kkr2ye7hzD6NVG8GGErk2HWF34igrL2CXmNIkzKqKw==}
     engines: {node: '>=18'}
 
-  tldts-core@7.4.8:
-    resolution: {integrity: sha512-c1P7u0EhACHj7lPy4MJm8iTFEU8+nB0LCtddH0fhP7noaVoXAqafMtOOeX+ulpuPBqnrRgRhw494RICT3mbhnw==}
+  tldts-core@7.4.9:
+    resolution: {integrity: sha512-DxKfPBI52p2msTEu7MPhdpdDTBhhVQg1a/8PjQckeyAvO13eMYElX545grIp6nnTGIMZlRvFZPvFhvI/WIz2Vg==}
 
-  tldts@7.4.8:
-    resolution: {integrity: sha512-htwgN/8KRB3z3vnC0BOETVh2m499g5GmyTK9Wq5JBLX3FNz6tSBveAd+fQhzy9hkjif8vy2jwDMR1sGhLtZl2A==}
+  tldts@7.4.9:
+    resolution: {integrity: sha512-3kZ8wQQ/k5DrChD4X4FVvr2D7E5uoRgAqkPyLpSCGUvqOvqu+JEdr3mwMUaVWb+vMHZaKhF5fp2PBigKsui7hA==}
     hasBin: true
 
   toidentifier@1.0.1:
@@ -1228,10 +1228,10 @@ packages:
 
 snapshots:
 
-  '@ai-sdk/gateway@2.0.109(zod@4.4.3)':
+  '@ai-sdk/gateway@2.0.115(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider': 2.0.3
-      '@ai-sdk/provider-utils': 3.0.28(zod@4.4.3)
+      '@ai-sdk/provider-utils': 3.0.30(zod@4.4.3)
       '@vercel/oidc': 3.1.0
       zod: 4.4.3
 
@@ -1248,7 +1248,7 @@ snapshots:
       secure-json-parse: 2.7.0
       zod: 4.4.3
 
-  '@ai-sdk/provider-utils@3.0.28(zod@4.4.3)':
+  '@ai-sdk/provider-utils@3.0.30(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider': 2.0.3
       '@standard-schema/spec': 1.1.0
@@ -1453,7 +1453,7 @@ snapshots:
       eventsource: 3.0.7
       eventsource-parser: 3.1.0
       express: 5.2.1
-      express-rate-limit: 8.5.2(express@5.2.1)
+      express-rate-limit: 8.6.0(express@5.2.1)
       hono: 4.12.30
       jose: 6.2.3
       json-schema-typed: 8.0.2
@@ -1525,11 +1525,11 @@ snapshots:
     optionalDependencies:
       react: 19.2.7
 
-  ai@5.0.210(zod@4.4.3):
+  ai@5.0.216(zod@4.4.3):
     dependencies:
-      '@ai-sdk/gateway': 2.0.109(zod@4.4.3)
+      '@ai-sdk/gateway': 2.0.115(zod@4.4.3)
       '@ai-sdk/provider': 2.0.3
-      '@ai-sdk/provider-utils': 3.0.28(zod@4.4.3)
+      '@ai-sdk/provider-utils': 3.0.30(zod@4.4.3)
       '@opentelemetry/api': 1.9.0
       zod: 4.4.3
 
@@ -1736,10 +1736,13 @@ snapshots:
     dependencies:
       eventsource-parser: 3.1.0
 
-  express-rate-limit@8.5.2(express@5.2.1):
+  express-rate-limit@8.6.0(express@5.2.1):
     dependencies:
+      debug: 4.4.3
       express: 5.2.1
       ip-address: 10.2.0
+    transitivePeerDependencies:
+      - supports-color
 
   express@5.2.1:
     dependencies:
@@ -2110,17 +2113,17 @@ snapshots:
 
   throttleit@2.1.0: {}
 
-  tldts-core@7.4.8: {}
+  tldts-core@7.4.9: {}
 
-  tldts@7.4.8:
+  tldts@7.4.9:
     dependencies:
-      tldts-core: 7.4.8
+      tldts-core: 7.4.9
 
   toidentifier@1.0.1: {}
 
   tough-cookie@6.0.2:
     dependencies:
-      tldts: 7.4.8
+      tldts: 7.4.9
 
   tree-kill@1.2.2: {}
 

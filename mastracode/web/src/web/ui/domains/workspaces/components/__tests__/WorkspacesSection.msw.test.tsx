@@ -1,7 +1,7 @@
 /**
  * BDD coverage for the propless `WorkspacesSection` (factory Sessions).
  *
- * The section reads the active project from `useActiveProjectContext` and the
+ * The section reads the active factory from `useActiveFactoryContext` and the
  * agent session from focused chat hooks, so the spec renders it inside the real
  * provider stack and asserts worktree selection through the MSW-captured
  * session-state requests instead of a session spy.
@@ -20,12 +20,18 @@ import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import { queryKeys } from '../../../../../../shared/api/keys';
 import { ToastProvider } from '../../../../ui';
-import { ChatSessionProvider } from '../../../chat/context/ChatSessionProvider';
-import { ActiveProjectProvider } from '../../context/ActiveProjectProvider';
-import type { Project } from '../../services/projects';
+import { ChatSessionConfigProvider } from '../../../chat/context/ChatSessionProvider';
+import { ActiveFactoryProvider } from '../../context/ActiveFactoryProvider';
+import type { Factory, GithubFactory } from '../../services/factories';
+import { isGithubFactory, loadFactories, saveFactories } from '../../services/factories';
 import { playDoneSound } from '../../../settings/services/doneSound';
-import { loadProjects, saveProjects } from '../../services/projects';
 import { WorkspacesSection } from '../WorkspacesSection';
+
+function storedGithubFactory(): GithubFactory {
+  const factory = loadFactories()[0];
+  if (!factory || !isGithubFactory(factory)) throw new Error('expected github factory');
+  return factory;
+}
 
 // The completion sound synthesizes audio via AudioContext, which jsdom
 // doesn't provide; mock playback so specs can assert the notification fired.
@@ -38,37 +44,42 @@ const ORIGIN = TEST_BASE_URL;
 const GITHUB_PROJECT_ID = 'github-project-1';
 const API = `${ORIGIN}/api/agent-controller/code`;
 
-const githubProject: Project = {
+const githubProject: Factory = {
   id: 'project-gh',
   name: 'Mastra',
-  source: 'github',
-  githubProjectId: GITHUB_PROJECT_ID,
-  sandboxWorkdir: '/sandbox/mastra',
   resourceId: 'resource-gh',
-  gitBranch: 'main',
-  worktrees: [
-    // Legacy repo-root entry persisted by older builds — never a workspace.
-    { branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' },
-    { branch: 'feat-ui', worktreePath: '/sandbox/mastra-worktrees/feat-ui', baseBranch: 'main' },
-    { branch: 'feat-api', worktreePath: '/sandbox/mastra-worktrees/feat-api', baseBranch: 'main' },
-    // Personal user session — listed by the User Sessions section instead.
-    {
-      branch: 'user/alice-notes',
-      worktreePath: '/sandbox/mastra-worktrees/user-alice-notes',
-      baseBranch: 'main',
-      threadId: 'thread-user',
-    },
-  ],
-  selectedWorktreePath: '/sandbox/mastra-worktrees/feat-api',
   createdAt: 1,
+  binding: {
+    kind: 'github',
+    githubProjectId: GITHUB_PROJECT_ID,
+    gitBranch: 'main',
+    sandboxWorkdir: '/sandbox/mastra',
+    selectedWorktreePath: '/sandbox/mastra-worktrees/feat-api',
+    worktrees: [
+      // Legacy repo-root entry persisted by older builds — never a workspace.
+      { branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' },
+      { branch: 'feat-ui', worktreePath: '/sandbox/mastra-worktrees/feat-ui', baseBranch: 'main' },
+      { branch: 'feat-api', worktreePath: '/sandbox/mastra-worktrees/feat-api', baseBranch: 'main' },
+      // Personal user session — listed by the User Sessions section instead.
+      {
+        branch: 'user/alice-notes',
+        worktreePath: '/sandbox/mastra-worktrees/user-alice-notes',
+        baseBranch: 'main',
+        threadId: 'thread-user',
+      },
+    ],
+  },
 };
 
-const localProject: Project = {
+const localProject: Factory = {
   id: 'project-local',
   name: 'Local',
-  path: '/projects/local',
   resourceId: 'resource-local',
   createdAt: 1,
+  binding: {
+    kind: 'local',
+    path: '/projects/local',
+  },
 };
 
 afterEach(() => {
@@ -85,9 +96,8 @@ function sse(): Response {
   );
 }
 
-/** Registers the full agent-controller handler set and captures session-state writes. */
-function useAgentControllerHandlers(): { stateUpdates: Array<Record<string, unknown>> } {
-  const stateUpdates: Array<Record<string, unknown>> = [];
+/** Registers the full agent-controller handler set. */
+function useAgentControllerHandlers() {
   const sessionState = (resourceId: string) => ({
     controllerId: 'code',
     resourceId,
@@ -104,10 +114,9 @@ function useAgentControllerHandlers(): { stateUpdates: Array<Record<string, unkn
     http.get(`${API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', label: 'Build' }] })),
     http.get(`${API}/models`, () => HttpResponse.json({ models: [] })),
     http.get(`${API}/sessions/:resourceId`, ({ params }) => HttpResponse.json(sessionState(String(params.resourceId)))),
-    http.put(`${API}/sessions/:resourceId/state`, async ({ params, request }) => {
-      stateUpdates.push((await request.json()) as Record<string, unknown>);
-      return HttpResponse.json(sessionState(String(params.resourceId)));
-    }),
+    http.put(`${API}/sessions/:resourceId/state`, ({ params }) =>
+      HttpResponse.json(sessionState(String(params.resourceId))),
+    ),
     http.get(`${API}/sessions/:resourceId/permissions`, () => HttpResponse.json({ categories: {}, tools: {} })),
     http.get(`${API}/sessions/:resourceId/threads`, () => HttpResponse.json({ threads: [] })),
     // Entering an empty worktree creates a thread; handle it here so tests
@@ -119,13 +128,11 @@ function useAgentControllerHandlers(): { stateUpdates: Array<Record<string, unkn
     http.get(`${API}/sessions/:resourceId/threads/:threadId/messages`, () => HttpResponse.json({ messages: [] })),
     http.get(`${API}/sessions/:resourceId/stream`, () => sse()),
   );
-
-  return { stateUpdates };
 }
 
-function seedActiveProject(project: Project) {
-  saveProjects([project]);
-  localStorage.setItem('mastracode-active-project', project.id);
+function seedActiveFactory(project: Factory) {
+  saveFactories([project]);
+  localStorage.setItem('mastracode-active-factory', project.id);
 }
 
 function LocationProbe() {
@@ -137,12 +144,12 @@ function renderSection(initialPath = '/') {
   return renderWithProviders(
     <MemoryRouter initialEntries={[initialPath]}>
       <ToastProvider>
-        <ActiveProjectProvider>
-          <ChatSessionProvider>
-            <WorkspacesSection />
+        <ActiveFactoryProvider>
+          <ChatSessionConfigProvider>
+            <WorkspacesSection defaultOpen />
             <LocationProbe />
-          </ChatSessionProvider>
-        </ActiveProjectProvider>
+          </ChatSessionConfigProvider>
+        </ActiveFactoryProvider>
       </ToastProvider>
     </MemoryRouter>,
   );
@@ -155,7 +162,7 @@ function rowContainer(name: string): HTMLElement {
 
 describe('WorkspacesSection', () => {
   it('lists factory worktrees, hides the repo root and user sessions, and marks the selected one active', async () => {
-    seedActiveProject(githubProject);
+    seedActiveFactory(githubProject);
     useAgentControllerHandlers();
 
     renderSection();
@@ -167,8 +174,27 @@ describe('WorkspacesSection', () => {
     expect(screen.queryByRole('button', { name: 'user/alice-notes' })).not.toBeInTheDocument();
   });
 
+  it('persists the collapsed state across remounts', async () => {
+    seedActiveFactory(githubProject);
+    useAgentControllerHandlers();
+
+    const rendered = renderSection();
+    const trigger = await screen.findByRole('button', { name: 'Sessions' });
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+
+    await userEvent.click(trigger);
+
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(localStorage.getItem('mastracode-factory-sessions-collapsed')).toBe('true');
+
+    rendered.unmount();
+    renderSection();
+
+    expect(await screen.findByRole('button', { name: 'Sessions' })).toHaveAttribute('aria-expanded', 'false');
+  });
+
   it('does not render for local projects', async () => {
-    seedActiveProject(localProject);
+    seedActiveFactory(localProject);
     useAgentControllerHandlers();
 
     renderSection();
@@ -177,7 +203,7 @@ describe('WorkspacesSection', () => {
   });
 
   it('shows an activity indicator on workspaces with an active thread', async () => {
-    seedActiveProject(githubProject);
+    seedActiveFactory(githubProject);
     useAgentControllerHandlers();
     // One thread listing covers every worktree: each thread carries its
     // worktree's projectPath tag and a server-annotated run state.
@@ -210,7 +236,7 @@ describe('WorkspacesSection', () => {
   });
 
   it('labels rows with their thread title and falls back to the branch when there is none', async () => {
-    seedActiveProject(githubProject);
+    seedActiveFactory(githubProject);
     useAgentControllerHandlers();
     server.use(
       http.get(`${API}/sessions/:resourceId/threads`, () =>
@@ -238,7 +264,7 @@ describe('WorkspacesSection', () => {
   });
 
   it('given a run that finishes, then the dot turns solid and chimes, and opening the workspace dismisses it', async () => {
-    seedActiveProject(githubProject);
+    seedActiveFactory(githubProject);
     useAgentControllerHandlers();
     vi.mocked(playDoneSound).mockClear();
     let featState: 'active' | 'idle' = 'active';
@@ -279,7 +305,7 @@ describe('WorkspacesSection', () => {
   });
 
   it('given workspaces that are idle from the start, then no done indicator or chime fires', async () => {
-    seedActiveProject(githubProject);
+    seedActiveFactory(githubProject);
     useAgentControllerHandlers();
     vi.mocked(playDoneSound).mockClear();
     server.use(
@@ -304,25 +330,22 @@ describe('WorkspacesSection', () => {
     expect(playDoneSound).not.toHaveBeenCalled();
   });
 
-  it('selects a workspace row and rebinds the session to its worktree path', async () => {
-    seedActiveProject(githubProject);
-    const { stateUpdates } = useAgentControllerHandlers();
+  it('selects a workspace row and persists its worktree path', async () => {
+    seedActiveFactory(githubProject);
+    useAgentControllerHandlers();
     renderSection();
 
     await userEvent.click(await screen.findByRole('button', { name: 'feat-ui' }));
 
     await waitFor(() =>
-      expect(stateUpdates).toContainEqual({
-        state: { projectPath: '/sandbox/mastra-worktrees/feat-ui' },
-      }),
+      expect(storedGithubFactory().binding.selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-ui'),
     );
-    await waitFor(() => expect(loadProjects()[0]?.selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-ui'));
     // Let the open-thread flow settle so its requests can't leak into later tests.
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-generic'));
   });
 
   it('opens the most recent thread of the new worktree when switching workspaces', async () => {
-    seedActiveProject(githubProject);
+    seedActiveFactory(githubProject);
     useAgentControllerHandlers();
     server.use(
       http.get(`${API}/sessions/:resourceId/threads`, () =>
@@ -342,7 +365,7 @@ describe('WorkspacesSection', () => {
   });
 
   it('opens the most recent thread of the new worktree when switching from /new', async () => {
-    seedActiveProject(githubProject);
+    seedActiveFactory(githubProject);
     useAgentControllerHandlers();
     server.use(
       http.get(`${API}/sessions/:resourceId/threads`, () =>
@@ -361,7 +384,7 @@ describe('WorkspacesSection', () => {
   });
 
   it('creates and opens a thread when the new worktree has none', async () => {
-    seedActiveProject(githubProject);
+    seedActiveFactory(githubProject);
     useAgentControllerHandlers();
     let created = 0;
     server.use(
@@ -378,8 +401,8 @@ describe('WorkspacesSection', () => {
     expect(created).toBe(1);
   });
 
-  it('opens the session thread when switching workspaces from a Factory page', async () => {
-    seedActiveProject(githubProject);
+  it('opens the active session thread when clicked from a Factory page', async () => {
+    seedActiveFactory(githubProject);
     useAgentControllerHandlers();
     server.use(
       http.get(`${API}/sessions/:resourceId/threads`, () =>
@@ -392,15 +415,62 @@ describe('WorkspacesSection', () => {
     );
     renderSection('/factory/board');
 
-    await userEvent.click(await screen.findByRole('button', { name: 'feat-ui' }));
+    const activeSession = await screen.findByRole('button', { name: 'feat-api' });
+    expect(activeSession).toHaveAttribute('aria-current', 'true');
+    await userEvent.click(activeSession);
 
     // A session row IS its conversation — clicking it opens the thread even
     // from worktree-independent pages like the board.
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-latest'));
   });
 
+  it('opens the titled conversation thread, not a newer empty untitled one', async () => {
+    seedActiveFactory(githubProject);
+    useAgentControllerHandlers();
+    server.use(
+      http.get(`${API}/sessions/:resourceId/threads`, () =>
+        HttpResponse.json({
+          threads: [
+            // The real conversation…
+            {
+              id: 'thread-convo',
+              title: 'Real work',
+              resourceId: 'resource-gh',
+              updatedAt: '2026-06-01T00:00:00.000Z',
+            },
+            // …and a newer untitled thread seeded by session creation, whose
+            // updatedAt sorts first. The row must still open the conversation
+            // it is labeled after.
+            { id: 'thread-seeded', title: '', resourceId: 'resource-gh', updatedAt: '2026-06-09T00:00:00.000Z' },
+          ],
+        }),
+      ),
+    );
+    renderSection('/factory/board');
+
+    await userEvent.click(await screen.findByRole('button', { name: 'feat-ui' }));
+
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-convo'));
+  });
+
+  it('opens the already-selected workspace’s thread when its row is clicked from another page', async () => {
+    seedActiveFactory(githubProject);
+    useAgentControllerHandlers();
+    renderSection('/factory/board');
+
+    // feat-api is the selected workspace; its row must still lead to its
+    // conversation when the user is elsewhere (board, /new, …).
+    const row = await screen.findByRole('button', { name: 'feat-api' });
+    expect(row).toHaveAttribute('aria-current', 'true');
+    await userEvent.click(row);
+
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-generic'));
+    // No re-select happened — the workspace selection is unchanged.
+    expect(storedGithubFactory().binding.selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-api');
+  });
+
   it('offers no ad-hoc workspace creation — factory sessions come from board runs', async () => {
-    seedActiveProject(githubProject);
+    seedActiveFactory(githubProject);
     useAgentControllerHandlers();
     renderSection();
 
@@ -410,7 +480,7 @@ describe('WorkspacesSection', () => {
   });
 
   it('offers a delete action on every factory worktree', async () => {
-    seedActiveProject(githubProject);
+    seedActiveFactory(githubProject);
     useAgentControllerHandlers();
     renderSection();
 
@@ -420,7 +490,7 @@ describe('WorkspacesSection', () => {
   });
 
   it('deletes a worktree after confirmation, cascading its threads', async () => {
-    seedActiveProject(githubProject);
+    seedActiveFactory(githubProject);
     useAgentControllerHandlers();
     let deletedBranch: unknown;
     const deletedThreads: string[] = [];
@@ -442,7 +512,7 @@ describe('WorkspacesSection', () => {
         deletedThreads.push(String(params.threadId));
         return HttpResponse.json({ ok: true });
       }),
-      http.post(`${ORIGIN}/web/github/projects/${GITHUB_PROJECT_ID}/worktree/delete`, async ({ request }) => {
+      http.post(`${ORIGIN}/web/github/repositories/${GITHUB_PROJECT_ID}/worktree/delete`, async ({ request }) => {
         deletedBranch = ((await request.json()) as { branch: string }).branch;
         return HttpResponse.json({
           removed: true,
@@ -465,16 +535,19 @@ describe('WorkspacesSection', () => {
     expect(deletedThreads).toEqual(['thread-doomed']);
     // The user-session worktree survives; the legacy repo-root entry is
     // dropped for good when the worktree list is rewritten.
-    expect(loadProjects()[0]?.worktrees?.map(worktree => worktree.branch)).toEqual(['feat-api', 'user/alice-notes']);
-    expect(loadProjects()[0]?.selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-api');
+    expect(storedGithubFactory().binding.worktrees.map(worktree => worktree.branch)).toEqual([
+      'feat-api',
+      'user/alice-notes',
+    ]);
+    expect(storedGithubFactory().binding.selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-api');
   });
 
   it('keeps the worktree when the delete confirmation is cancelled', async () => {
-    seedActiveProject(githubProject);
+    seedActiveFactory(githubProject);
     useAgentControllerHandlers();
     let deleteCalled = false;
     server.use(
-      http.post(`${ORIGIN}/web/github/projects/${GITHUB_PROJECT_ID}/worktree/delete`, () => {
+      http.post(`${ORIGIN}/web/github/repositories/${GITHUB_PROJECT_ID}/worktree/delete`, () => {
         deleteCalled = true;
         return HttpResponse.json({
           removed: true,
@@ -494,7 +567,7 @@ describe('WorkspacesSection', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Delete workspace?' })).not.toBeInTheDocument());
     expect(deleteCalled).toBe(false);
     expect(screen.getByRole('button', { name: 'feat-ui' })).toBeInTheDocument();
-    expect(loadProjects()[0]?.worktrees?.map(worktree => worktree.branch)).toEqual([
+    expect(storedGithubFactory().binding.worktrees.map(worktree => worktree.branch)).toEqual([
       'main',
       'feat-ui',
       'feat-api',

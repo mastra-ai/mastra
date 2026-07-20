@@ -13,7 +13,7 @@ import { describe, expect, it } from 'vitest';
 import { OverlaysProvider, useOverlays } from '../overlays';
 import type { OverlayName } from '../overlays';
 
-const OVERLAY_NAMES: OverlayName[] = ['sidebar', 'settings', 'shortcuts', 'projects'];
+const OVERLAY_NAMES: OverlayName[] = ['sidebar', 'settings', 'shortcuts', 'factories'];
 
 function Probe() {
   const overlays = useOverlays();
@@ -89,7 +89,7 @@ describe('OverlaysProvider', () => {
     renderProbe();
 
     await userEvent.click(screen.getByRole('button', { name: 'open settings' }));
-    await userEvent.click(screen.getByRole('button', { name: 'open projects' }));
+    await userEvent.click(screen.getByRole('button', { name: 'open factories' }));
     await userEvent.click(screen.getByRole('button', { name: 'close all' }));
 
     for (const name of OVERLAY_NAMES) {

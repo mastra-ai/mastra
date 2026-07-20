@@ -75,28 +75,13 @@ export function GeneralTab({ theme, onThemeChange }: GeneralTabProps) {
 }
 
 interface ModelTabProps {
-  models: AgentControllerAvailableModel[];
-  currentModelId: string | null;
   settings: AgentControllerSessionSettings | null;
-  onModelChange: (modelId: string) => void;
   onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => void;
 }
 
-export function ModelTab({ models, currentModelId, settings, onModelChange, onBehaviorChange }: ModelTabProps) {
+export function ModelTab({ settings, onBehaviorChange }: ModelTabProps) {
   return (
     <>
-      <div className="flex flex-col gap-2 py-3 border-b border-border1/40">
-        <div className="flex flex-col gap-0.5">
-          <Txt variant="ui-md" className="text-icon5">
-            Model
-          </Txt>
-          <Txt variant="ui-sm" className="text-icon3">
-            Default model for this session
-          </Txt>
-        </div>
-        <ModelPicker models={models} currentModelId={currentModelId} onModelChange={onModelChange} />
-      </div>
-
       <FieldRow label="Thinking level" hint="Extended-reasoning budget for the agent">
         <Segmented
           ariaLabel="Thinking level"

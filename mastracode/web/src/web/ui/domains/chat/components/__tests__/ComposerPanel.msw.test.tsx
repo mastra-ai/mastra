@@ -9,12 +9,12 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { ChatSessionTestProvider as ChatSessionProvider } from '../../context/ChatSessionTestProvider';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
-import type { Project } from '../../../workspaces';
-import { ActiveProjectProvider } from '../../../workspaces';
+import type { Factory } from '../../../workspaces';
+import { ActiveFactoryProvider } from '../../../workspaces';
 import { ChatCommandsProvider } from '../../context/ChatCommandsProvider';
-import { ChatSessionProvider } from '../../context/ChatSessionProvider';
 import { ComposerPanel } from '../ComposerPanel';
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
@@ -26,17 +26,20 @@ afterEach(() => {
   localStorage.clear();
 });
 
-function seedProject() {
-  const project: Project = {
+function seedFactory() {
+  const project: Factory = {
     id: 'project-test',
     name: 'MastraCode Test',
-    path: '/tmp/mastracode-test',
     resourceId: RESOURCE_ID,
-    gitBranch: 'main',
     createdAt: 1,
+    binding: {
+      kind: 'local',
+      path: '/tmp/mastracode-test',
+      gitBranch: 'main',
+    },
   };
-  localStorage.setItem('mastracode-projects', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-project', project.id);
+  localStorage.setItem('mastracode-factories', JSON.stringify([project]));
+  localStorage.setItem('mastracode-active-factory', project.id);
 }
 
 function sessionState(): AgentControllerSessionState {
@@ -79,13 +82,13 @@ function renderComposerPanel(composerVariant: 'inline' | 'textarea' = 'inline') 
         <Route
           path="/threads/:threadId"
           element={
-            <ActiveProjectProvider>
+            <ActiveFactoryProvider>
               <ChatSessionProvider>
                 <ChatCommandsProvider>
                   <ComposerPanel composerVariant={composerVariant} />
                 </ChatCommandsProvider>
               </ChatSessionProvider>
-            </ActiveProjectProvider>
+            </ActiveFactoryProvider>
           }
         />
       </Routes>
@@ -95,7 +98,7 @@ function renderComposerPanel(composerVariant: 'inline' | 'textarea' = 'inline') 
 
 describe('ComposerPanel', () => {
   it('renders the textarea composer and preserves its draft', async () => {
-    seedProject();
+    seedFactory();
     useAgentControllerHandlers();
     const user = userEvent.setup();
     renderComposerPanel('textarea');
@@ -108,7 +111,7 @@ describe('ComposerPanel', () => {
   });
 
   it('renders the session mode and model status alongside the composer', async () => {
-    seedProject();
+    seedFactory();
     useAgentControllerHandlers();
     renderComposerPanel();
 

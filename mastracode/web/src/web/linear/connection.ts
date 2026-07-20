@@ -7,18 +7,12 @@
  * semantics, so the logic lives here rather than in either consumer.
  */
 
-import { eq } from 'drizzle-orm';
-
-import { getAppDb } from '../github/db';
-import { refreshLinearAccessToken } from './client';
-import type { LinearTokenSet } from './client';
-import { linearConnections } from './schema';
-import type { LinearConnectionRow } from './schema';
+import type { LinearIntegration, LinearTokenSet } from './integration';
+import type { LinearConnectionRow } from './storage/base';
 
 /** Load the org's Linear connection, or `null` when not connected. */
-export async function loadLinearConnection(orgId: string): Promise<LinearConnectionRow | null> {
-  const [row] = await getAppDb().select().from(linearConnections).where(eq(linearConnections.orgId, orgId));
-  return row ?? null;
+export function loadLinearConnection(orgId: string, linear: LinearIntegration): Promise<LinearConnectionRow | null> {
+  return linear.storageDomain.getConnection(orgId);
 }
 
 /** Refresh this many ms before the recorded expiry to absorb clock skew. */
@@ -39,18 +33,8 @@ export class LinearReauthRequiredError extends Error {
 }
 
 /** Persist a rotated token set on the org's connection row. */
-export async function persistLinearTokens(orgId: string, tokens: LinearTokenSet): Promise<void> {
-  await getAppDb()
-    .update(linearConnections)
-    .set({
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
-      expiresAt: tokens.expiresAt,
-      // Refresh responses may omit scope; keep the recorded grant in that case.
-      ...(tokens.scope !== null ? { scope: tokens.scope } : {}),
-      updatedAt: new Date(),
-    })
-    .where(eq(linearConnections.orgId, orgId));
+export function persistLinearTokens(orgId: string, tokens: LinearTokenSet, linear: LinearIntegration): Promise<void> {
+  return linear.storageDomain.updateTokens(orgId, tokens);
 }
 
 /**
@@ -65,11 +49,14 @@ export function canPostLinearComments(connection: LinearConnectionRow): boolean 
 
 /**
  * Return a usable access token for the connection, proactively refreshing it
- * when the recorded expiry is past (or imminent). Throws
- * `LinearReauthRequiredError` when the token is expired and cannot be
- * refreshed — the org has to go through the OAuth flow again.
+ * (through the integration's OAuth client) when the recorded expiry is past
+ * (or imminent). Throws `LinearReauthRequiredError` when the token is expired
+ * and cannot be refreshed — the org has to go through the OAuth flow again.
  */
-export async function getFreshLinearAccessToken(connection: LinearConnectionRow): Promise<string> {
+export async function getFreshLinearAccessToken(
+  linear: LinearIntegration,
+  connection: LinearConnectionRow,
+): Promise<string> {
   const expired = connection.expiresAt !== null && connection.expiresAt.getTime() - TOKEN_REFRESH_SKEW_MS <= Date.now();
   if (!expired) return connection.accessToken;
 
@@ -84,7 +71,7 @@ export async function getFreshLinearAccessToken(connection: LinearConnectionRow)
   // The caller may hold a stale row: another request could have refreshed and
   // rotated the refresh token since this row was loaded. Reload before
   // refreshing so we don't burn the rotated token and force a false reauth.
-  const latest = await loadLinearConnection(connection.orgId);
+  const latest = await loadLinearConnection(connection.orgId, linear);
   if (!latest) throw new LinearReauthRequiredError();
 
   const concurrent = inflightRefreshes.get(connection.orgId);
@@ -97,8 +84,8 @@ export async function getFreshLinearAccessToken(connection: LinearConnectionRow)
   const refreshToken = latest.refreshToken;
   const refresh = (async () => {
     try {
-      const tokens = await refreshLinearAccessToken(refreshToken);
-      await persistLinearTokens(connection.orgId, tokens);
+      const tokens = await linear.refreshAccessToken(refreshToken);
+      await persistLinearTokens(connection.orgId, tokens, linear);
       return tokens.accessToken;
     } catch (err) {
       const status = (err as { status?: number }).status;
