@@ -21,7 +21,11 @@ export interface GithubInstallation {
 
 /** Reason the GitHub feature is in its current state, returned by the server. */
 export type GithubStatusReason =
-  'missing_config' | 'auth_required' | 'organization_required' | 'not_connected' | 'ready';
+  | 'missing_config'
+  | 'auth_required'
+  | 'organization_required'
+  | 'not_connected'
+  | 'ready';
 
 /** Non-secret diagnostic snapshot of every GitHub feature gate. */
 export interface GithubFeatureDiagnostics {
@@ -513,6 +517,23 @@ export interface WorktreeResult {
   branch: string;
   baseBranch: string;
   resourceId: string;
+}
+
+export interface PersistedWorktree {
+  worktreePath: string;
+  branch: string;
+  baseBranch: string;
+}
+
+/** List the signed-in user's server-persisted worktrees for a project repository. */
+export async function listWorktrees(baseUrl: string, projectRepositoryId: string): Promise<PersistedWorktree[]> {
+  const res = await fetch(`${baseUrl}/web/github/projects/${encodeURIComponent(projectRepositoryId)}/worktrees`, {
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
+  });
+  if (!res.ok) throw new Error(`Failed to list worktrees (${res.status})`);
+  const body = (await res.json()) as { worktrees: PersistedWorktree[] };
+  return body.worktrees;
 }
 
 /**
