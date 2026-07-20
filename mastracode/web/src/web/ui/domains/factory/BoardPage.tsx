@@ -582,32 +582,67 @@ function BoardContent({
     navigate(`/threads/${session.threadId}`);
   };
 
-  const openOrCreateSession = async (
-    item: WorkItem,
-    spec: { branch: string; threadTitle: string },
-    destinationStage: string,
-  ) => {
-    const refreshed = await workspaces.refetch();
-    if (!refreshed.isSuccess) return;
-    const refreshedPaths = new Set(refreshed.data.worktrees.map(worktree => worktree.worktreePath));
+  const refreshItemAndWorktrees = async (itemId: string) => {
+    const [refreshedWorkspaces, refreshedItems] = await Promise.all([workspaces.refetch(), items.refetch()]);
+    if (!refreshedWorkspaces.isSuccess || !refreshedItems.isSuccess) return;
+    const item = refreshedItems.data.find(candidate => candidate.id === itemId);
+    if (!item) return;
+    return {
+      item,
+      paths: new Set(refreshedWorkspaces.data.worktrees.map(worktree => worktree.worktreePath)),
+    };
+  };
+
+  const openOrCreateSession = async (item: WorkItem, destinationStage: string) => {
+    const refreshed = await refreshItemAndWorktrees(item.id);
+    if (!refreshed) return;
     const liveSessions = Object.fromEntries(
-      Object.entries(item.sessions).filter(([, session]) => refreshedPaths.has(session.projectPath)),
+      Object.entries(refreshed.item.sessions).filter(([, session]) => refreshed.paths.has(session.projectPath)),
     );
     const existingSession = itemThreadSession(liveSessions);
     if (existingSession) {
       await openThread(existingSession);
       return;
     }
+    const spec = itemSessionSpec(refreshed.item);
     start.mutate({
       branch: spec.branch,
       threadTitle: spec.threadTitle,
       workItem: {
-        id: item.id,
+        id: refreshed.item.id,
         role: 'chat',
         stages: [destinationStage],
-        source: item.source,
-        sourceKey: item.sourceKey,
-        title: item.title,
+        source: refreshed.item.source,
+        sourceKey: refreshed.item.sourceKey,
+        title: refreshed.item.title,
+      },
+    });
+  };
+
+  const openOrStartRun = async (item: WorkItem, role: RunAction['role']) => {
+    const refreshed = await refreshItemAndWorktrees(item.id);
+    if (!refreshed) return;
+    const existingSession = refreshed.item.sessions[role];
+    if (existingSession && refreshed.paths.has(existingSession.projectPath)) {
+      await openThread(existingSession);
+      return;
+    }
+    const spec = itemRunSpec(refreshed.item);
+    const action = spec?.actions.find(candidate => candidate.role === role);
+    if (!spec || !action) return;
+    start.mutate({
+      branch: spec.branch,
+      threadTitle: spec.threadTitle,
+      threadTags: action.threadTags,
+      invocation: action.invocation,
+      workItem: {
+        id: refreshed.item.id,
+        role: action.role,
+        existingRoles: Object.keys(refreshed.item.sessions),
+        stages: [action.stage],
+        source: refreshed.item.source,
+        sourceKey: refreshed.item.sourceKey,
+        title: refreshed.item.title,
       },
     });
   };
@@ -813,24 +848,8 @@ function BoardContent({
                   onRetryDecision={decisionId => retryDecision.mutate(decisionId)}
                   pendingRunRoles={new Set(pendingRuns.filter(run => run.id === item.id).map(run => run.role))}
                   onOpenThread={session => void openThread(session)}
-                  onCreateSession={spec => void openOrCreateSession(item, spec, stage.id)}
-                  onStartRun={(spec, action) =>
-                    start.mutate({
-                      branch: spec.branch,
-                      threadTitle: spec.threadTitle,
-                      threadTags: action.threadTags,
-                      invocation: action.invocation,
-                      workItem: {
-                        id: item.id,
-                        role: action.role,
-                        existingRoles: Object.keys(item.sessions),
-                        stages: [action.stage],
-                        source: item.source,
-                        sourceKey: item.sourceKey,
-                        title: item.title,
-                      },
-                    })
-                  }
+                  onCreateSession={() => void openOrCreateSession(item, stage.id)}
+                  onStartRun={(_spec, action) => void openOrStartRun(item, action.role)}
                   onMove={toStage => moveItem(item.id, stage.id, toStage)}
                   onRemove={() => remove.mutate(item.id)}
                 />

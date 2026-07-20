@@ -1150,7 +1150,7 @@ describe('Factory Board — persisted cards', () => {
           sourceKey: 'github-issue:45',
           metadata: { githubIssueNumber: 45 },
           stages: ['triage'],
-          sessions: { triage: issueWorkSession },
+          sessions: {},
         }),
       ],
     });
@@ -1159,8 +1159,48 @@ describe('Factory Board — persisted cards', () => {
 
     const card = within(await screen.findByTestId('board-column-triage')).getByTestId('work-item-card');
     const title = await within(card).findByRole('button', { name: 'Issue: Racing server investigation' });
-    worktrees.push({ branch: 'factory/issue-12', worktreePath: issueWorktreePath, baseBranch: 'main' });
+    const refreshedItem = state.items[0];
+    if (!refreshedItem) throw new Error('Expected the server-created work item fixture.');
+    const projectPath = '/sandbox/mastra/worktrees/factory-issue-45';
+    state.items[0] = {
+      ...refreshedItem,
+      sessions: { triage: { ...issueWorkSession, branch: 'factory/issue-45', projectPath } },
+    };
+    worktrees.push({ branch: 'factory/issue-45', worktreePath: projectPath, baseBranch: 'main' });
     await userEvent.click(title);
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-work'));
+    expect(state.starts).toEqual([]);
+  });
+
+  it('given a run action races a server-created same-role session, when the action is chosen, then the live thread opens without replacing it', async () => {
+    const state = useBoardHandlers({
+      workItems: [
+        makeWorkItem({
+          id: 'wi-run-race',
+          title: 'Approval race',
+          source: 'github-issue',
+          sourceKey: 'github-issue:45',
+          metadata: { githubIssueNumber: 45, labels: ['needs-approval'] },
+          stages: ['triage'],
+          sessions: {},
+        }),
+      ],
+    });
+    const worktrees: NonNullable<Project['worktrees']> = [];
+    const { router } = renderAt('/factory/work', githubProject, connectedStatus, { worktrees });
+
+    const card = within(await screen.findByTestId('board-column-triage')).getByTestId('work-item-card');
+    await userEvent.click(within(card).getByRole('button', { name: 'Actions for Approval race' }));
+    const refreshedItem = state.items[0];
+    if (!refreshedItem) throw new Error('Expected the server-created work item fixture.');
+    const projectPath = '/sandbox/mastra/worktrees/factory-issue-45';
+    state.items[0] = {
+      ...refreshedItem,
+      sessions: { triage: { ...issueWorkSession, branch: 'factory/issue-45', projectPath } },
+    };
+    worktrees.push({ branch: 'factory/issue-45', worktreePath: projectPath, baseBranch: 'main' });
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Prepare approval' }));
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-work'));
     expect(state.starts).toEqual([]);
