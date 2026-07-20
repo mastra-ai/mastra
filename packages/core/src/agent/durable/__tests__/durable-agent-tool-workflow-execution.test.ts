@@ -14,7 +14,7 @@ import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
 import { MockStore } from '../../../storage/mock';
-import { createTool } from '../../../tools';
+import { askUserTool, createTool } from '../../../tools';
 import { delay } from '../../../utils';
 import { Agent } from '../../agent';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '../constants';
@@ -504,6 +504,55 @@ describe('DurableAgent in-execution tool suspension', () => {
     );
 
     // Wait for completion
+    await delay(500);
+
+    expect(finishData).not.toBeNull();
+    resumeResult.cleanup();
+    cleanup();
+  });
+
+  it('should resume the native ask_user tool with string resume data', async () => {
+    const mockModel = createToolCallThenTextModel(
+      'ask_user',
+      {
+        question: 'Choose one',
+        options: [{ label: 'Yes' }, { label: 'No' }],
+      },
+      'Thanks',
+    );
+
+    const baseAgent = new Agent({
+      id: 'resume-ask-user-agent',
+      name: 'Resume Ask User Agent',
+      instructions: 'Ask the user a question',
+      model: mockModel as LanguageModelV2,
+      tools: { ask_user: askUserTool },
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      agents: { 'resume-ask-user-agent': durableAgent as any },
+    });
+
+    let suspendedData: any = null;
+    const { runId, cleanup } = await durableAgent.stream('Ask me a question', {
+      onSuspended: data => {
+        suspendedData = data;
+      },
+    });
+
+    await delay(500);
+    expect(suspendedData).not.toBeNull();
+
+    let finishData: any = null;
+    const resumeResult = await durableAgent.resume(runId, 'Yes', {
+      onFinish: data => {
+        finishData = data;
+      },
+    });
+
     await delay(500);
 
     expect(finishData).not.toBeNull();

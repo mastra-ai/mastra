@@ -644,10 +644,10 @@ export function createDurableToolCallStep() {
       // `approved` field, so the tool executes fresh (not as a "from-suspension"
       // resume).  For non-approval tools, ANY resume data is forwarded.
       const isResumingFromSuspension =
-        resumeData &&
-        typeof resumeData === 'object' &&
-        resumeData !== null &&
-        (requiresApproval ? !('approved' in resumeData) : true);
+        resumeData !== undefined &&
+        (requiresApproval
+          ? typeof resumeData === 'object' && resumeData !== null && !('approved' in resumeData)
+          : true);
 
       // Remove suspension metadata when resuming from an in-execution (non-approval-decision) suspension.
       // `isResumingFromSuspension` already excludes the approval-decision case above.
