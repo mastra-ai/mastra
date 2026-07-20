@@ -523,6 +523,15 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           runId: runId,
         });
 
+        const nestedResumeSteps = resume.steps.slice(1);
+        if (nestedResumeSteps.length === 0) {
+          const suspendedStepId = Object.keys(snapshot?.suspendedPaths ?? {})[0];
+          if (suspendedStepId) {
+            nestedResumeSteps.push(suspendedStepId);
+          }
+        }
+        const nestedResumeStepId = nestedResumeSteps[0];
+
         const invokeResp = (await this.inngestStep.invoke(`workflow.${executionContext.workflowId}.step.${step.id}`, {
           function: step.getFunction(),
           data: {
@@ -532,10 +541,10 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             runId: runId,
             resume: {
               runId: runId,
-              steps: resume.steps.slice(1),
+              steps: nestedResumeSteps,
               stepResults: snapshot?.context as any,
               resumePayload: resume.resumePayload,
-              resumePath: resume.steps?.[1] ? (snapshot?.suspendedPaths?.[resume.steps?.[1]] as any) : undefined,
+              resumePath: nestedResumeStepId ? (snapshot?.suspendedPaths?.[nestedResumeStepId] as any) : undefined,
             },
             outputOptions: { includeState: true },
             perStep,
