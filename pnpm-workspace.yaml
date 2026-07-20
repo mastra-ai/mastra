@@ -118,6 +118,8 @@ minimumReleaseAgeExclude:
   - shell-quote@1.10.0
   # Renovate security update: tmp@0.2.7
   - tmp@0.2.7
+  # Renovate security update: axios@1.18.0
+  - axios@1.18.0
 trustPolicyExclude:
   # Security fix for GHSA middleware-based route protection bypass (CVE).
   # 3.47.4 is published with provenance attestation rather than trusted publisher,
@@ -166,7 +168,7 @@ overrides:
   # Security floors for Dependabot alerts (transitive deps; patched versions
   # are within the parents' declared ranges).
   simple-git@<3.36.0: 3.36.0
-  axios@>=1.0.0 <1.16.0: 1.16.0
+  axios@>=1.0.0 <1.16.0: 1.18.0
   protobufjs@>=7.0.0 <7.6.3: 7.6.3
   protobufjs@>=8.0.0 <8.6.0: 8.6.0
   minimatch@>=5.0.0 <5.1.8: 5.1.8
