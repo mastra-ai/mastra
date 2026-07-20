@@ -22,8 +22,7 @@ export type FactoryOnboardingOpen = {
  * mount neither (no local flash, no first-run before hydration).
  */
 export function deriveFactoryOnboardingOpen(input: FactoryOnboardingOpenInput): FactoryOnboardingOpen {
-  const { empty, factoriesSettled, explicitFactories, explicitGithub, status, statusSettled, githubAvailable } =
-    input;
+  const { empty, factoriesSettled, explicitFactories, explicitGithub, status, statusSettled, githubAvailable } = input;
 
   if (explicitGithub) return { local: false, github: true };
   if (explicitFactories) return { local: true, github: false };
