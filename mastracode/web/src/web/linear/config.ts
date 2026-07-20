@@ -12,7 +12,7 @@
  */
 
 import { isWebAuthEnabled } from '../auth';
-import { getSeededLinearIntegration } from '../runtime-config';
+import { getSeededLinearIntegration, getSeededStorage } from '../runtime-config';
 
 /** True when a Linear integration instance is registered with the factory. */
 export function isLinearAppConfigured(): boolean {
@@ -39,6 +39,9 @@ export function getLinearFeatureDiagnostics(): LinearFeatureDiagnostics {
   return {
     linearAppConfigured: linear !== undefined,
     webAuthEnabled: isWebAuthEnabled(),
-    appDbConfigured: linear?.storageDomain !== undefined,
+    // Storage is a required factory slot, so app persistence is configured
+    // whenever the factory booted. Connections live in the generic
+    // integration-storage domain.
+    appDbConfigured: getSeededStorage() !== undefined,
   };
 }

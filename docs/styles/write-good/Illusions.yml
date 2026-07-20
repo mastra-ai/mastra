@@ -6,6 +6,6 @@ action:
   name: edit
   params:
     - truncate
-    - " "
+    - ' '
 tokens:
   - '[^\s]+'

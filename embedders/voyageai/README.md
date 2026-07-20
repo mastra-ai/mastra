@@ -347,12 +347,7 @@ type VoyageOutputDimension = 256 | 512 | 1024 | 2048;
 type VoyageOutputDtype = 'float' | 'int8' | 'uint8' | 'binary' | 'ubinary';
 
 type VoyageRerankerModel =
-  | 'rerank-2.5'
-  | 'rerank-2.5-lite'
-  | 'rerank-2'
-  | 'rerank-2-lite'
-  | 'rerank-1'
-  | 'rerank-lite-1';
+  'rerank-2.5' | 'rerank-2.5-lite' | 'rerank-2' | 'rerank-2-lite' | 'rerank-1' | 'rerank-lite-1';
 
 interface VoyageRerankerConfig {
   model: VoyageRerankerModel;

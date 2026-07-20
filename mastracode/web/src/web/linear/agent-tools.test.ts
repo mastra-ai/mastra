@@ -2,32 +2,34 @@ import { RequestContext } from '@mastra/core/request-context';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { seedRuntimeConfig } from '../runtime-config';
-import { GithubStorageInMemory } from '../github/storage/inmemory';
-import { LinearStorageInMemory } from './storage/inmemory';
+import { SourceControlStorageInMemory } from '../storage/domains/source-control/inmemory';
+import { seedFactoryStorageForTests } from '../storage/test-utils';
+import { upsertLinearConnection, type UpsertLinearConnectionInput } from './storage';
 
 let featureEnabled = true;
 vi.mock('./config', () => ({
   isLinearFeatureEnabled: () => featureEnabled,
 }));
 
-class FailableGithubStorage extends GithubStorageInMemory {
-  shouldFail = false;
-
-  override async getProjectById(projectId: string) {
-    if (this.shouldFail) throw new Error('connection refused');
-    return super.getProjectById(projectId);
-  }
-}
-
-const githubStorage = new FailableGithubStorage();
-const linearStorage = new LinearStorageInMemory();
+const sourceControlStorage = new SourceControlStorageInMemory();
+let projectLookupShouldFail = false;
+const sourceControlStorageHandle = {
+  ...sourceControlStorage,
+  projects: {
+    ...sourceControlStorage.projects,
+    getById: async (projectId: string) => {
+      if (projectLookupShouldFail) throw new Error('connection refused');
+      return sourceControlStorage.projects.getById(projectId);
+    },
+  },
+};
 const fetchLinearIssueDetail = vi.fn();
 const createLinearIssueComment = vi.fn();
 const refreshLinearAccessToken = vi.fn();
 
 const githubStub = {
   id: 'github',
-  storageDomain: githubStorage,
+  sourceControlStorage: sourceControlStorageHandle,
   getInstallationOctokit: vi.fn(),
 } as unknown as import('../github/integration').GithubIntegration;
 
@@ -36,7 +38,6 @@ const githubStub = {
 // the instance to the extraTools provider in production.
 const linearStub = {
   id: 'linear',
-  storageDomain: linearStorage,
   fetchIssueDetail: (...args: any[]) => fetchLinearIssueDetail(...(args as [])),
   createIssueComment: (...args: any[]) => createLinearIssueComment(...(args as [])),
   refreshAccessToken: (...args: any[]) => refreshLinearAccessToken(...(args as [])),
@@ -55,26 +56,26 @@ function requestContextFor(resourceId: string | undefined): RequestContext {
   return ctx;
 }
 
-function seedFactory(): void {
-  githubStorage.projects.push({
+function seedProject(): void {
+  sourceControlStorage.projectsRows.push({
     id: PROJECT_ID,
     orgId: ORG_ID,
-    userId: 'user-1',
-    installationId: 123,
-    repoFullName: 'acme/app',
-    repoId: 456,
+    integrationId: 'github',
+    createdByUserId: 'user-1',
+    installationExternalId: '123',
+    repositorySlug: 'acme/app',
+    repositoryExternalId: '456',
     defaultBranch: 'main',
     sandboxProvider: 'local',
     sandboxWorkdir: '/workspace/acme-app',
     setupCommand: null,
+    providerMetadata: {},
     createdAt: new Date(),
   });
 }
 
-function seedConnection(overrides: Partial<(typeof linearStorage.connections)[number]> = {}): void {
-  const now = new Date();
-  linearStorage.connections.push({
-    id: 'connection-1',
+function seedConnection(overrides: Partial<UpsertLinearConnectionInput> = {}): Promise<void> {
+  return upsertLinearConnection({
     orgId: ORG_ID,
     userId: 'user-1',
     accessToken: 'linear-token',
@@ -83,8 +84,6 @@ function seedConnection(overrides: Partial<(typeof linearStorage.connections)[nu
     scope: 'read,comments:create',
     workspaceName: 'Acme',
     workspaceUrlKey: 'acme',
-    createdAt: now,
-    updatedAt: now,
     ...overrides,
   });
 }
@@ -106,12 +105,15 @@ const issueDetail = {
   comments: [{ author: 'grace', body: 'Repro attached.', createdAt: '2026-07-01T12:00:00Z' }],
 };
 
-beforeEach(() => {
-  githubStorage.projects = [];
-  linearStorage.connections = [];
-  githubStorage.shouldFail = false;
+beforeEach(async () => {
+  sourceControlStorage.projectsRows = [];
+  projectLookupShouldFail = false;
   featureEnabled = true;
-  seedRuntimeConfig({ integrations: [githubStub, linearStub] });
+  const seed = await seedFactoryStorageForTests();
+  seedRuntimeConfig({
+    storage: seed.storage,
+    integrations: [githubStub, linearStub],
+  });
   clearLinearAgentToolCaches();
   fetchLinearIssueDetail.mockReset();
   createLinearIssueComment.mockReset();
@@ -120,45 +122,45 @@ beforeEach(() => {
 
 describe('buildLinearAgentTools — exposure gating', () => {
   it('exposes the Linear tools when the project org has a Linear connection', async () => {
-    seedFactory();
-    seedConnection();
+    seedProject();
+    await seedConnection();
     const tools = await buildLinearAgentTools({ linear: linearStub, requestContext: requestContextFor(PROJECT_ID) });
     expect(tools).toHaveProperty('linear_get_issue');
     expect(tools).toHaveProperty('linear_create_comment');
   });
 
   it('withholds linear_create_comment when the connection scope is read-only', async () => {
-    seedFactory();
-    seedConnection({ scope: 'read' });
+    seedProject();
+    await seedConnection({ scope: 'read' });
     const tools = await buildLinearAgentTools({ linear: linearStub, requestContext: requestContextFor(PROJECT_ID) });
     expect(tools).toHaveProperty('linear_get_issue');
     expect(tools).not.toHaveProperty('linear_create_comment');
   });
 
   it('treats legacy connections without a recorded scope as read-only', async () => {
-    seedFactory();
-    seedConnection({ scope: null });
+    seedProject();
+    await seedConnection({ scope: null });
     const tools = await buildLinearAgentTools({ linear: linearStub, requestContext: requestContextFor(PROJECT_ID) });
     expect(tools).toHaveProperty('linear_get_issue');
     expect(tools).not.toHaveProperty('linear_create_comment');
   });
 
   it('exposes nothing when the org has not connected Linear', async () => {
-    seedFactory();
+    seedProject();
     const tools = await buildLinearAgentTools({ linear: linearStub, requestContext: requestContextFor(PROJECT_ID) });
     expect(tools).toEqual({});
   });
 
   it('exposes nothing when the feature is disabled', async () => {
     featureEnabled = false;
-    seedFactory();
-    seedConnection();
+    seedProject();
+    await seedConnection();
     const tools = await buildLinearAgentTools({ linear: linearStub, requestContext: requestContextFor(PROJECT_ID) });
     expect(tools).toEqual({});
   });
 
   it('exposes nothing for resources that are not GitHub projects', async () => {
-    seedConnection();
+    await seedConnection();
     const tools = await buildLinearAgentTools({
       linear: linearStub,
       requestContext: requestContextFor('local-default'),
@@ -172,28 +174,28 @@ describe('buildLinearAgentTools — exposure gating', () => {
   });
 
   it('does not cache a transient database failure as "not a project"', async () => {
-    seedFactory();
-    seedConnection();
+    seedProject();
+    await seedConnection();
 
-    githubStorage.shouldFail = true;
+    projectLookupShouldFail = true;
     expect(await buildLinearAgentTools({ linear: linearStub, requestContext: requestContextFor(PROJECT_ID) })).toEqual(
       {},
     );
 
     // Database recovers: the next request must retry the lookup and get tools.
-    githubStorage.shouldFail = false;
+    projectLookupShouldFail = false;
     const tools = await buildLinearAgentTools({ linear: linearStub, requestContext: requestContextFor(PROJECT_ID) });
     expect(tools).toHaveProperty('linear_get_issue');
   });
 
   it('sees a fresh connection immediately after cache invalidation', async () => {
-    seedFactory();
+    seedProject();
     expect(await buildLinearAgentTools({ linear: linearStub, requestContext: requestContextFor(PROJECT_ID) })).toEqual(
       {},
     );
 
     // Org connects Linear (OAuth callback invalidates the cached check).
-    seedConnection();
+    await seedConnection();
     invalidateLinearConnectionCache(ORG_ID);
     const tools = await buildLinearAgentTools({ linear: linearStub, requestContext: requestContextFor(PROJECT_ID) });
     expect(tools).toHaveProperty('linear_get_issue');
@@ -202,8 +204,8 @@ describe('buildLinearAgentTools — exposure gating', () => {
 
 describe('linear_get_issue — execute', () => {
   async function getTool() {
-    seedFactory();
-    seedConnection();
+    seedProject();
+    await seedConnection();
     const tools = await buildLinearAgentTools({ linear: linearStub, requestContext: requestContextFor(PROJECT_ID) });
     return tools.linear_get_issue!;
   }
@@ -224,9 +226,8 @@ describe('linear_get_issue — execute', () => {
   });
 
   it('refreshes an expired token before fetching', async () => {
-    linearStorage.connections.length = 0;
-    seedFactory();
-    seedConnection({ expiresAt: new Date(Date.now() - 1000) });
+    seedProject();
+    await seedConnection({ expiresAt: new Date(Date.now() - 1000) });
     refreshLinearAccessToken.mockResolvedValue({
       accessToken: 'linear-token-2',
       refreshToken: 'linear-refresh-2',
@@ -243,9 +244,8 @@ describe('linear_get_issue — execute', () => {
   });
 
   it('surfaces reauth-required as a tool error instead of throwing', async () => {
-    linearStorage.connections.length = 0;
-    seedFactory();
-    seedConnection({ expiresAt: new Date(Date.now() - 1000), refreshToken: null });
+    seedProject();
+    await seedConnection({ expiresAt: new Date(Date.now() - 1000), refreshToken: null });
 
     const tools = await buildLinearAgentTools({ linear: linearStub, requestContext: requestContextFor(PROJECT_ID) });
     const result = await (tools.linear_get_issue!.execute as any)({ issue: 'ENG-42' });
@@ -265,8 +265,8 @@ describe('linear_get_issue — execute', () => {
 
 describe('linear_create_comment — execute', () => {
   async function getTool() {
-    seedFactory();
-    seedConnection();
+    seedProject();
+    await seedConnection();
     const tools = await buildLinearAgentTools({ linear: linearStub, requestContext: requestContextFor(PROJECT_ID) });
     return tools.linear_create_comment!;
   }
@@ -290,9 +290,8 @@ describe('linear_create_comment — execute', () => {
   });
 
   it('surfaces reauth-required as a tool error instead of throwing', async () => {
-    linearStorage.connections.length = 0;
-    seedFactory();
-    seedConnection({ expiresAt: new Date(Date.now() - 1000), refreshToken: null });
+    seedProject();
+    await seedConnection({ expiresAt: new Date(Date.now() - 1000), refreshToken: null });
 
     const tools = await buildLinearAgentTools({ linear: linearStub, requestContext: requestContextFor(PROJECT_ID) });
     const result = await (tools.linear_create_comment!.execute as any)({ issue: 'ENG-42', body: 'Hello' });

@@ -61,7 +61,7 @@ describe('active factory persistence', () => {
       await import('../../src/web/ui/domains/workspaces/services/factories.js');
     saveFactories([factoryA, factoryB]);
     saveActiveFactoryId('factory-1');
-    removeFactory('factory-1');
+    await removeFactory('', 'factory-1');
     expect(loadActiveFactoryId()).toBeNull();
   });
 
@@ -70,7 +70,7 @@ describe('active factory persistence', () => {
       await import('../../src/web/ui/domains/workspaces/services/factories.js');
     saveFactories([factoryA, factoryB]);
     saveActiveFactoryId('factory-1');
-    removeFactory('factory-2');
+    await removeFactory('', 'factory-2');
     expect(loadActiveFactoryId()).toBe('factory-1');
   });
 

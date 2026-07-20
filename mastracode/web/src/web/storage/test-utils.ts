@@ -1,47 +1,49 @@
 /**
  * Test seams for suites exercising the app-table wrapper modules
  * (intake/audit/work-items stores) without a real Postgres: registers the
- * in-memory domain implementations on a fresh `FactoryStore` and seeds it
+ * built-in domains on a fresh libsql `:memory:` `FactoryStorage` and seeds it
  * into the runtime-config registry the wrappers consult.
  */
 
-import { seedRuntimeConfig } from '../runtime-config';
-import type { FactoryStorageContext } from './domain';
-import { AuditStorageInMemory } from './domains/audit/inmemory';
-import { ModelCredentialsStorageInMemory } from './domains/credentials/inmemory';
-import { IntakeStorageInMemory } from './domains/intake/inmemory';
-import { QueueHealthStorageInMemory } from './domains/queue-health/inmemory';
-import { WorkItemsStorageInMemory } from './domains/work-items/inmemory';
-import { FactoryStore } from './factory-store';
+import { LibSQLFactoryStorage } from '@mastra/libsql';
+import { onTestFinished } from 'vitest';
 
-export interface InMemoryFactoryStoreSeed {
-  factoryStore: FactoryStore;
-  intake: IntakeStorageInMemory;
-  audit: AuditStorageInMemory;
-  workItems: WorkItemsStorageInMemory;
-  credentials: ModelCredentialsStorageInMemory;
-  queueHealth: QueueHealthStorageInMemory;
+import { seedRuntimeConfig } from '../runtime-config';
+import { AuditStorage } from './domains/audit/base';
+import { ModelCredentialsStorage } from './domains/credentials/base';
+import { IntakeStorage } from './domains/intake/base';
+import { IntegrationStorage } from './domains/integrations/base';
+import { QueueHealthStorage } from './domains/queue-health/base';
+import { SourceControlStorage } from './domains/source-control/base';
+import { WorkItemsStorage } from './domains/work-items/base';
+
+export interface FactoryStorageTestSeed {
+  storage: LibSQLFactoryStorage;
+  intake: IntakeStorage;
+  audit: AuditStorage;
+  workItems: WorkItemsStorage;
+  credentials: ModelCredentialsStorage;
+  integrations: IntegrationStorage;
+  sourceControl: SourceControlStorage;
+  queueHealth: QueueHealthStorage;
 }
 
 /**
- * Seed the runtime config with a `FactoryStore` backed by in-memory domains.
- * Call in `beforeEach` (state is per-instance) and pair with
- * `__resetRuntimeConfigForTests()` in cleanup.
+ * Seed runtime config with a fresh libsql `:memory:` database. Call in
+ * `beforeEach` (state is per-instance). The backend closes automatically when
+ * the current test finishes; callers should still reset runtime config.
  */
-export async function seedInMemoryFactoryStoreForTests(): Promise<InMemoryFactoryStoreSeed> {
-  const factoryStore = new FactoryStore();
-  const intake = new IntakeStorageInMemory();
-  const audit = new AuditStorageInMemory();
-  const workItems = new WorkItemsStorageInMemory();
-  const credentials = new ModelCredentialsStorageInMemory();
-  const queueHealth = new QueueHealthStorageInMemory();
-  factoryStore.register(intake);
-  factoryStore.register(audit);
-  factoryStore.register(workItems);
-  factoryStore.register(credentials);
-  factoryStore.register(queueHealth);
-  // In-memory domains never touch the connection handle.
-  await factoryStore.init({} as FactoryStorageContext);
-  seedRuntimeConfig({ factoryStore });
-  return { factoryStore, intake, audit, workItems, credentials, queueHealth };
+export async function seedFactoryStorageForTests(): Promise<FactoryStorageTestSeed> {
+  const storage = new LibSQLFactoryStorage({ id: 'factory-test', url: ':memory:' });
+  const intake = storage.registerDomain(new IntakeStorage());
+  const audit = storage.registerDomain(new AuditStorage());
+  const workItems = storage.registerDomain(new WorkItemsStorage());
+  const credentials = storage.registerDomain(new ModelCredentialsStorage());
+  const integrations = storage.registerDomain(new IntegrationStorage());
+  const sourceControl = storage.registerDomain(new SourceControlStorage());
+  const queueHealth = storage.registerDomain(new QueueHealthStorage());
+  await storage.init();
+  onTestFinished(() => storage.close());
+  seedRuntimeConfig({ storage });
+  return { storage, intake, audit, workItems, credentials, integrations, sourceControl, queueHealth };
 }

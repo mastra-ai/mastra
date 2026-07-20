@@ -171,8 +171,7 @@ function extractReminderMarkup(messageList: TestMessageList): string[] {
   return messageList.get.all.db().flatMap(message => {
     if (message.role === 'signal') {
       const signalMetadata = message.content.metadata?.signal as
-        | { attributes?: { type?: string }; metadata?: { path?: unknown } }
-        | undefined;
+        { attributes?: { type?: string }; metadata?: { path?: unknown } } | undefined;
       if (signalMetadata?.attributes?.type === 'dynamic-agents-md') {
         const path = signalMetadata.metadata?.path;
         return typeof path === 'string'

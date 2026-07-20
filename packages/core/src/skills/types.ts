@@ -94,7 +94,6 @@ export interface AgentSkillsContext<TRequestContext extends Record<string, any> 
  * ```
  */
 export type AgentSkillsInput<TRequestContext extends Record<string, any> | unknown = unknown> =
-  | SkillInput[]
-  | ((context: AgentSkillsContext<TRequestContext>) => SkillInput[] | Promise<SkillInput[]>);
+  SkillInput[] | ((context: AgentSkillsContext<TRequestContext>) => SkillInput[] | Promise<SkillInput[]>);
 
 export type { Skill, SkillMetadata, SkillFormat, WorkspaceSkills };

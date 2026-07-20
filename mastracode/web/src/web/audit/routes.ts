@@ -18,7 +18,7 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
 import { ensureWebAuthUser, getWorkOSProvider, isWorkOSAuth, webAuthTenant } from '../auth';
-import type { GithubStorage } from '../github/storage/base';
+import type { SourceControlStorageHandle } from '../storage/domains/source-control/base';
 import { listAuditEvents } from './store';
 
 function loose(c: unknown): Context {
@@ -48,7 +48,7 @@ async function resolveTenant(c: Context): Promise<{ orgId: string; userId: strin
 /** Resolve the tenant AND the org-owned project from the `:id` param. */
 async function resolveGithubRepository(
   c: Context,
-  storage?: GithubStorage,
+  storage?: SourceControlStorageHandle,
 ): Promise<{ orgId: string; userId: string; projectId: string } | { response: Response }> {
   const tenant = await resolveTenant(c);
   if ('response' in tenant) return tenant;
@@ -62,7 +62,7 @@ async function resolveGithubRepository(
   if (!projectId || !UUID_RE.test(projectId)) {
     return { response: c.json({ error: 'Repository not found' }, 404) };
   }
-  const project = await storage.getOrgProject(tenant.orgId, projectId);
+  const project = await storage.projects.getOrg(tenant.orgId, projectId);
   if (!project) {
     return { response: c.json({ error: 'Repository not found' }, 404) };
   }
@@ -90,7 +90,7 @@ function parseLimitParam(raw: string | undefined): number | undefined {
 export interface AuditRoutesDeps {
   /** Public origin used as the Admin Portal return URL base. */
   baseUrl: string;
-  githubStorage?: GithubStorage;
+  githubStorage?: SourceControlStorageHandle;
 }
 
 export function buildAuditRoutes(deps: AuditRoutesDeps): ApiRoute[] {
