@@ -285,6 +285,81 @@ describe('DurableAgent tool approval workflow execution', () => {
     cleanup();
   });
 
+  it('should forward string resume data when an approval-gated tool suspends during execution', async () => {
+    const mockModel = createToolCallThenTextModel('interactiveApprovalTool', { input: 'test' }, 'All done');
+    const receivedResumeData: unknown[] = [];
+
+    const interactiveApprovalTool = createTool({
+      id: 'interactiveApprovalTool',
+      description: 'An approval-gated tool that also asks for input',
+      inputSchema: z.object({ input: z.string() }),
+      requireApproval: true,
+      execute: async (_inputData: { input: string }, context?: any) => {
+        const suspend = context?.agent?.suspend || context?.suspend;
+        const resumeData = context?.agent?.resumeData ?? context?.resumeData;
+        receivedResumeData.push(resumeData);
+        if (suspend && resumeData === undefined) {
+          await suspend({ reason: 'Waiting for user input' });
+        }
+        return { result: `completed with ${String(resumeData)}` };
+      },
+    });
+
+    const baseAgent = new Agent({
+      id: 'approval-then-suspension-agent',
+      name: 'Approval Then Suspension Agent',
+      instructions: 'Use the interactive approval tool',
+      model: mockModel as LanguageModelV2,
+      tools: { interactiveApprovalTool },
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      agents: { 'approval-then-suspension-agent': durableAgent as any },
+    });
+
+    let approvalData: any = null;
+    const { runId, cleanup } = await durableAgent.stream('Use the interactive approval tool', {
+      onSuspended: data => {
+        approvalData = data;
+      },
+    });
+
+    await delay(500);
+    expect(approvalData?.type).toBe('approval');
+
+    let suspensionData: any = null;
+    const approvalResult = await durableAgent.resume(
+      runId,
+      { approved: true },
+      {
+        onSuspended: data => {
+          suspensionData = data;
+        },
+      },
+    );
+
+    await delay(500);
+    expect(suspensionData?.type).toBe('suspension');
+
+    let finishData: any = null;
+    const resumeResult = await durableAgent.resume(runId, 'Yes', {
+      onFinish: data => {
+        finishData = data;
+      },
+    });
+
+    await delay(500);
+
+    expect(receivedResumeData).toEqual([undefined, 'Yes']);
+    expect(finishData).not.toBeNull();
+    resumeResult.cleanup();
+    approvalResult.cleanup();
+    cleanup();
+  });
+
   it('should return not-approved result when tool approval is denied', async () => {
     const mockModel = createToolCallThenTextModel('searchTool', { query: 'test' }, 'Done');
 
