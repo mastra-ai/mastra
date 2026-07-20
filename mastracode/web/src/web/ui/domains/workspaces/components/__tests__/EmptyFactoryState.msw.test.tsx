@@ -8,14 +8,22 @@ import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web
 import { EmptyFactoryState } from '../EmptyFactoryState';
 
 function stubGithubStatus(body: Record<string, unknown>, options?: { neverResolve?: boolean }) {
+  let markStarted: (() => void) | undefined;
+  const started = new Promise<void>(resolve => {
+    markStarted = resolve;
+  });
+
   server.use(
     http.get(`${TEST_BASE_URL}/web/github/status`, async () => {
+      markStarted?.();
       if (options?.neverResolve) {
         await delay('infinite');
       }
       return HttpResponse.json(body);
     }),
   );
+
+  return { started };
 }
 
 describe('EmptyFactoryState', () => {
@@ -47,9 +55,13 @@ describe('EmptyFactoryState', () => {
   });
 
   it('while status is pending, does not flash a local-only primary', async () => {
-    stubGithubStatus({ enabled: true, connected: false, installations: [] }, { neverResolve: true });
+    const { started } = stubGithubStatus(
+      { enabled: true, connected: false, installations: [] },
+      { neverResolve: true },
+    );
     renderWithProviders(<EmptyFactoryState onConnectGithub={vi.fn()} onOpenLocal={vi.fn()} />);
 
+    await started;
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: 'Connect GitHub' })).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Create factory from local folder' })).not.toBeInTheDocument();

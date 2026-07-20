@@ -42,14 +42,22 @@ function renderOverlays() {
 }
 
 function stubGithubStatus(body: Record<string, unknown>, options?: { neverResolve?: boolean }) {
+  let markStarted: (() => void) | undefined;
+  const started = new Promise<void>(resolve => {
+    markStarted = resolve;
+  });
+
   server.use(
     http.get(`${TEST_BASE_URL}/web/github/status`, async () => {
+      markStarted?.();
       if (options?.neverResolve) {
         await delay('infinite');
       }
       return HttpResponse.json(body);
     }),
   );
+
+  return { started };
 }
 
 beforeEach(useOverlayControllerHandlers);
@@ -98,9 +106,13 @@ describe('ChatOverlays', () => {
   });
 
   it('first-run while GitHub status is pending mounts neither forced dialog', async () => {
-    stubGithubStatus({ enabled: true, connected: false, installations: [] }, { neverResolve: true });
+    const { started } = stubGithubStatus(
+      { enabled: true, connected: false, installations: [] },
+      { neverResolve: true },
+    );
     renderOverlays();
 
+    await started;
     await waitFor(() => {
       expect(screen.queryByRole('dialog', { name: 'Connect GitHub' })).not.toBeInTheDocument();
       expect(screen.queryByRole('dialog', { name: 'Create factory' })).not.toBeInTheDocument();
