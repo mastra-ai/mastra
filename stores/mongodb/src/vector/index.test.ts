@@ -840,6 +840,109 @@ describe('MongoDBVector filterFields (#18587)', () => {
     });
   });
 
+  describe('text and hybrid search', () => {
+    const searchCol = 'fraud_reports';
+    const idxName = 'fraud_precedents';
+    const searchIdx = 'fraud_vec_idx';
+    let searchVector: MongoDBVector;
+
+    beforeAll(async () => {
+      searchVector = new MongoDBVector({ uri, dbName, id: 'mongodb-search-test' });
+      await searchVector.connect();
+      const col = searchVector['db'].collection(searchCol);
+      await col.deleteMany({});
+      // Non-collinear vectors: avoid ties under cosine similarity
+      await col.insertMany([
+        { _id: 'a', embedding: [1, 0, 0, 0], amount: 100, note: 'wire transfer to shell company' },
+        { _id: 'b', embedding: [0, 1, 0, 0], amount: 5000, note: 'invoice from offshore entity shell company' },
+        { _id: 'c', embedding: [0, 0, 1, 0], amount: 200, note: 'legitimate payment to vendor' },
+      ]);
+      await searchVector.createIndex({
+        indexName: idxName,
+        dimension: 4,
+        collectionName: searchCol,
+        searchIndexName: searchIdx,
+      });
+      await searchVector.waitForIndexReady({ indexName: idxName, timeoutMs: 60000 });
+    });
+
+    afterAll(async () => {
+      await searchVector['db']
+        .collection(searchCol)
+        .drop()
+        .catch(() => {});
+      await searchVector.disconnect();
+    });
+
+    it('createSearchIndex provisions an Atlas Search index on the collection', async () => {
+      await searchVector.createSearchIndex({ indexName: idxName, fields: ['note'] });
+      // Wait for the search index to be created
+      const col = searchVector['db'].collection(searchCol);
+      const maxWait = 60000;
+      const pollInterval = 1000;
+      const startTime = Date.now();
+      let indexCreated = false;
+
+      while (Date.now() - startTime < maxWait) {
+        const idxs = await col.listSearchIndexes().toArray();
+        const searchIndex = idxs.find((i: any) => i.name === `${searchCol}_search_index`);
+        if (searchIndex && searchIndex.status === 'READY') {
+          indexCreated = true;
+          break;
+        }
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+      }
+
+      expect(indexCreated).toBe(true);
+    });
+
+    it('textQuery returns BM25 matches from the search index', async () => {
+      // Poll until the search index has indexed the documents
+      const queryText = () =>
+        searchVector.textQuery({
+          indexName: idxName,
+          query: 'shell company',
+          paths: ['note'],
+          topK: 5,
+          metadataMode: 'document',
+        });
+
+      await waitForSync(searchVector, idxName, async () => {
+        const r = await queryText();
+        return r.length > 0;
+      });
+
+      const res = await queryText();
+      expect(res.length).toBeGreaterThan(0);
+      // Both 'a' and 'b' contain "shell company" in their notes
+      expect(res.some(h => h.metadata?.note?.includes('shell company'))).toBe(true);
+    });
+
+    it('hybridQuery fuses vector and text results via $rankFusion', async () => {
+      // Query vector closest to 'b' [0,1,0,0], text query matches 'a' and 'b'
+      const queryHybrid = () =>
+        searchVector.hybridQuery({
+          indexName: idxName,
+          queryVector: [0, 1, 0, 0],
+          query: 'offshore entity',
+          paths: ['note'],
+          topK: 2,
+          metadataMode: 'document',
+        });
+
+      await waitForSync(searchVector, idxName, async () => {
+        const r = await queryHybrid();
+        return r.length > 0;
+      });
+
+      const res = await queryHybrid();
+      expect(res.length).toBeGreaterThan(0);
+      // 'b' matches both vector (exact match to [0,1,0,0]) and text (contains "offshore entity")
+      expect(res[0].id).toBe('b');
+      expect(res[0].score).toBeGreaterThan(0);
+    });
+  });
+
   describe('deleteIndex BYO classification (unit)', () => {
     const makeVector = () => new MongoDBVector({ id: 'test', uri: 'mongodb://localhost:27017', dbName: 'test_db' });
 

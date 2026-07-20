@@ -192,6 +192,22 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     }
   }
 
+  /**
+   * Builds a $project stage for query results based on metadata mode and whether to include vectors.
+   * Shared across query, textQuery, and hybridQuery to keep projection logic DRY.
+   */
+  private buildProjection(metadataMode: 'field' | 'document', includeVector: boolean): Document {
+    return metadataMode === 'document'
+      ? { _id: 1, score: 1, metadata: '$$ROOT', ...(includeVector && { vector: `$${this.embeddingFieldName}` }) }
+      : {
+          _id: 1,
+          score: 1,
+          metadata: `$${this.metadataFieldName}`,
+          document: `$${this.documentFieldName}`,
+          ...(includeVector && { vector: `$${this.embeddingFieldName}` }),
+        };
+  }
+
   // Public methods
   async connect(): Promise<void> {
     try {
@@ -385,6 +401,164 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         return false;
       }
       throw error;
+    }
+  }
+
+  /**
+   * Provision an Atlas Search (BM25/full-text) index on the index's collection.
+   * `fields` restricts the mapping to specific paths; omit for dynamic mapping.
+   */
+  async createSearchIndex(params: { indexName: string; fields?: string[]; searchIndexName?: string }): Promise<void> {
+    const { indexName, fields, searchIndexName } = params;
+    const { collectionName } = this.resolveIndexTarget(indexName);
+    const name = searchIndexName ?? `${collectionName}_search_index`;
+    try {
+      const collection = await this.getCollection(collectionName);
+      const definition = fields?.length
+        ? {
+            mappings: {
+              dynamic: false,
+              fields: Object.fromEntries(fields.map(f => [f, [{ type: 'string' }]])),
+            },
+          }
+        : { mappings: { dynamic: true } };
+      await this.createSearchIndexIgnoringExisting(collection, { definition, name, type: 'search' });
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: createVectorErrorId('MONGODB', 'CREATE_SEARCH_INDEX', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Run a full-text (BM25) search against an Atlas Search index on the collection.
+   * The search index is named `${collectionName}_search_index` by default.
+   */
+  async textQuery(params: {
+    indexName: string;
+    query: string;
+    paths: string[];
+    topK?: number;
+    filter?: MongoDBVectorFilter;
+    metadataMode?: 'field' | 'document';
+  }): Promise<QueryResult[]> {
+    const { indexName, query, paths, topK = 10, filter, metadataMode = 'field' } = params;
+    const { collectionName } = this.resolveIndexTarget(indexName);
+    // Note: searchIndexName from resolveIndexTarget is the *vector* search index name.
+    // The full-text search index is separately derived from the collection name.
+    const textIndex = `${collectionName}_search_index`;
+    try {
+      const collection = await this.getCollection(collectionName, true);
+      const metadataFilter = this.transformMetadataFilter(this.transformFilter(filter));
+      const pipeline: Document[] = [
+        { $search: { index: textIndex, text: { query, path: paths } } },
+        ...(Object.keys(metadataFilter).length ? [{ $match: metadataFilter }] : []),
+        { $limit: Math.min(10000, topK) },
+        { $set: { score: { $meta: 'searchScore' } } },
+        { $project: this.buildProjection(metadataMode, false) },
+      ];
+      const rows = await collection.aggregate(pipeline).toArray();
+      return rows.map((r: any) => ({
+        id: r._id,
+        score: r.score,
+        metadata: r.metadata,
+        document: r.document,
+      }));
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: createVectorErrorId('MONGODB', 'TEXT_QUERY', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Run a hybrid search that fuses vector similarity and full-text (BM25) results
+   * using MongoDB's server-side $rankFusion aggregation stage (requires MongoDB >= 8.1).
+   */
+  async hybridQuery(params: {
+    indexName: string;
+    queryVector: number[];
+    query: string;
+    paths: string[];
+    topK?: number;
+    filter?: MongoDBVectorFilter;
+    weights?: { vector?: number; text?: number };
+    numCandidates?: number;
+    metadataMode?: 'field' | 'document';
+  }): Promise<QueryResult[]> {
+    const {
+      indexName,
+      queryVector,
+      query,
+      paths,
+      topK = 10,
+      filter,
+      weights,
+      numCandidates,
+      metadataMode = 'field',
+    } = params;
+    await this.assertRankFusionSupported();
+    const { collectionName, searchIndexName } = this.resolveIndexTarget(indexName);
+    const textIndex = `${collectionName}_search_index`;
+    try {
+      const collection = await this.getCollection(collectionName, true);
+      const metadataFilter = this.transformMetadataFilter(this.transformFilter(filter));
+      const perBranch = Math.max(topK * 4, 20);
+      const candidates = Math.min(10000, Math.max(topK, numCandidates ?? topK * 20));
+
+      const vectorSearch: Document = {
+        index: searchIndexName,
+        path: this.embeddingFieldName,
+        queryVector,
+        numCandidates: candidates,
+        limit: perBranch,
+      };
+      if (Object.keys(metadataFilter).length) vectorSearch.filter = metadataFilter;
+
+      const textPipeline: Document[] = [
+        { $search: { index: textIndex, text: { query, path: paths } } },
+        ...(Object.keys(metadataFilter).length ? [{ $match: metadataFilter }] : []),
+        { $limit: perBranch },
+      ];
+
+      const combination = weights ? { weights: { vector: weights.vector ?? 1, text: weights.text ?? 1 } } : undefined;
+      const pipeline: Document[] = [
+        {
+          $rankFusion: {
+            input: { pipelines: { vector: [{ $vectorSearch: vectorSearch }], text: textPipeline } },
+            ...(combination ? { combination } : {}),
+          },
+        },
+        { $limit: Math.min(10000, topK) },
+        { $set: { score: { $meta: 'searchScore' } } },
+        { $project: this.buildProjection(metadataMode, false) },
+      ];
+      const rows = await collection.aggregate(pipeline).toArray();
+      return rows.map((r: any) => ({
+        id: r._id,
+        score: typeof r.score === 'number' ? r.score : 0,
+        metadata: r.metadata,
+        document: r.document,
+      }));
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: createVectorErrorId('MONGODB', 'HYBRID_QUERY', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -593,16 +767,6 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       }
 
       // Build the aggregation pipeline
-      const project: Document =
-        metadataMode === 'document'
-          ? { _id: 1, score: 1, metadata: '$$ROOT', ...(includeVector && { vector: `$${this.embeddingFieldName}` }) }
-          : {
-              _id: 1,
-              score: 1,
-              metadata: `$${this.metadataFieldName}`,
-              document: `$${this.documentFieldName}`,
-              ...(includeVector && { vector: `$${this.embeddingFieldName}` }),
-            };
       const pipeline = [
         {
           $vectorSearch: vectorSearch,
@@ -611,7 +775,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           $set: { score: { $meta: 'vectorSearchScore' } },
         },
         {
-          $project: project,
+          $project: this.buildProjection(metadataMode, includeVector),
         },
       ];
 
