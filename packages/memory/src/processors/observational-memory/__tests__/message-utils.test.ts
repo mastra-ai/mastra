@@ -1,5 +1,44 @@
+import type { MastraDBMessage } from '@mastra/core/agent';
+import { MessageList } from '@mastra/core/agent';
 import { describe, it, expect } from 'vitest';
-import { stripThreadTags } from '../message-utils';
+import { getObservableMessages, stripThreadTags } from '../message-utils';
+
+const THREAD_ID = 'thread-1';
+const RESOURCE_ID = 'resource-1';
+
+function createMessage(id: string, text: string, role: 'user' | 'assistant' = 'user'): MastraDBMessage {
+  return {
+    id,
+    role,
+    content: { format: 2, parts: [{ type: 'text', text }] },
+    type: 'text',
+    createdAt: new Date('2026-07-20T00:00:00.000Z'),
+    threadId: THREAD_ID,
+    resourceId: RESOURCE_ID,
+  } as MastraDBMessage;
+}
+
+describe('getObservableMessages', () => {
+  it('excludes context-sourced messages from the OM window', () => {
+    const messageList = new MessageList({ threadId: THREAD_ID, resourceId: RESOURCE_ID });
+    messageList.add(createMessage('input-1', 'Suggest a collar'), 'input');
+    messageList.add(createMessage('context-1', '<client-context>{"page":"/products"}</client-context>'), 'context');
+    messageList.add(createMessage('response-1', 'Here are some collars', 'assistant'), 'response');
+
+    // The raw list still contains the context message — the prompt needs it.
+    expect(messageList.get.all.db().map(m => m.id)).toContain('context-1');
+
+    expect(getObservableMessages(messageList).map(m => m.id)).toEqual(['input-1', 'response-1']);
+  });
+
+  it('returns the full list when there are no context messages', () => {
+    const messageList = new MessageList({ threadId: THREAD_ID, resourceId: RESOURCE_ID });
+    messageList.add(createMessage('input-1', 'hello'), 'input');
+    messageList.add(createMessage('response-1', 'hi', 'assistant'), 'response');
+
+    expect(getObservableMessages(messageList).map(m => m.id)).toEqual(messageList.get.all.db().map(m => m.id));
+  });
+});
 
 describe('stripThreadTags', () => {
   it('removes <thread> open tags with attributes', () => {

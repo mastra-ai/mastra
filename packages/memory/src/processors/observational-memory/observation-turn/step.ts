@@ -1,7 +1,7 @@
 import { getThreadOMMetadata } from '@mastra/core/memory';
 
 import { omDebug } from '../debug';
-import { filterObservedMessages } from '../message-utils';
+import { filterObservedMessages, getObservableMessages } from '../message-utils';
 import { getLastActivityFromMessages, getLatestStepParts } from '../observational-memory';
 import { resolveRetentionFloor } from '../thresholds';
 
@@ -70,7 +70,7 @@ export class ObservationStep {
 
     // ── Step 0: Activate buffered chunks ──────────────────────
     if (this.stepNumber === 0) {
-      const step0Messages = messageList.get.all.db();
+      const step0Messages = getObservableMessages(messageList);
       const activation = await om.activate({
         threadId,
         resourceId,
@@ -109,7 +109,7 @@ export class ObservationStep {
         currentModel: this.turn.actorModelContext,
         requestContext: this.turn.requestContext,
         observabilityContext: this.turn.observabilityContext,
-        lastActivityAt: getLastActivityFromMessages(messageList.get.all.db()),
+        lastActivityAt: getLastActivityFromMessages(getObservableMessages(messageList)),
       });
       await this.turn.refreshRecord();
       if (this.turn.record.generationCount > preReflectGeneration) {
@@ -120,7 +120,7 @@ export class ObservationStep {
     // ── Check for incomplete tool calls ────────────────────────
     // Provider-executed tools (e.g. Anthropic web_search) may still be in state:'call'
     // while the agent loop continues. We must not observe/buffer until they complete.
-    const allMsgsForToolCheck = messageList.get.all.db();
+    const allMsgsForToolCheck = getObservableMessages(messageList);
     const lastMessage = allMsgsForToolCheck[allMsgsForToolCheck.length - 1];
     const pendingStepMessages = [...messageList.get.input.db(), ...messageList.get.response.db()];
     const latestStepParts = [
@@ -138,12 +138,12 @@ export class ObservationStep {
     let statusSnapshot = await om.getStatus({
       threadId,
       resourceId,
-      messages: messageList.get.all.db(),
+      messages: getObservableMessages(messageList),
     });
 
     // Trigger buffering if interval boundary crossed (fire-and-forget, all steps)
     if (statusSnapshot.shouldBuffer && !hasIncompleteToolCalls) {
-      const allMessages = messageList.get.all.db();
+      const allMessages = getObservableMessages(messageList);
       const unobservedMessages = om.getUnobservedMessages(allMessages, statusSnapshot.record);
 
       // Seal, rotate, and persist candidates SYNCHRONOUSLY before the fire-and-forget
@@ -254,7 +254,7 @@ export class ObservationStep {
       statusSnapshot = await om.getStatus({
         threadId,
         resourceId,
-        messages: messageList.get.all.db(),
+        messages: getObservableMessages(messageList),
       });
     }
 
@@ -330,7 +330,7 @@ export class ObservationStep {
     const freshStatus = await om.getStatus({
       threadId,
       resourceId,
-      messages: messageList.get.all.db(),
+      messages: getObservableMessages(messageList),
     });
 
     if (!freshStatus.shouldObserve) {
@@ -342,7 +342,7 @@ export class ObservationStep {
       const activation = await om.activate({
         threadId,
         resourceId,
-        messages: messageList.get.all.db(),
+        messages: getObservableMessages(messageList),
         currentModel: this.turn.actorModelContext,
         writer: this.turn.writer,
         messageList,
@@ -362,7 +362,7 @@ export class ObservationStep {
           currentModel: this.turn.actorModelContext,
           requestContext: this.turn.requestContext,
           observabilityContext: this.turn.observabilityContext,
-          lastActivityAt: getLastActivityFromMessages(messageList.get.all.db()),
+          lastActivityAt: getLastActivityFromMessages(getObservableMessages(messageList)),
         });
 
         return {
@@ -378,7 +378,7 @@ export class ObservationStep {
     const obsResult = await om.observe({
       threadId,
       resourceId,
-      messages: messageList.get.all.db(),
+      messages: getObservableMessages(messageList),
       requestContext: this.turn.requestContext,
       writer: this.turn.writer,
       observabilityContext: this.turn.observabilityContext,
@@ -386,7 +386,7 @@ export class ObservationStep {
 
     if (obsResult.observed) {
       const observedMessageIds = new Set(obsResult.record.observedMessageIds ?? []);
-      const liveMessages = messageList.get.all.db();
+      const liveMessages = getObservableMessages(messageList);
       let latestObservedIndex = -1;
 
       for (let i = liveMessages.length - 1; i >= 0; i--) {

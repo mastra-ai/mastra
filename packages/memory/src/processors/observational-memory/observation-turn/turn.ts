@@ -5,6 +5,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
 import { omDebug } from '../debug';
+import { getObservableMessages } from '../message-utils';
 import type { ObservationalMemory } from '../observational-memory';
 import type { MemoryContextProvider } from '../processor';
 import type { ObservationModelContext } from '../types';
@@ -201,7 +202,7 @@ export class ObservationTurn {
     const asyncObservationEnabled = this.om.buffering.isAsyncObservationEnabled();
     const bufferOnIdle = this.om.getObservationConfig().bufferOnIdle;
     if (asyncObservationEnabled && bufferOnIdle) {
-      const allMessages = this.messageList.get.all.db();
+      const allMessages = getObservableMessages(this.messageList);
       const record = this._record!;
       const unobservedMessages = this.om.getUnobservedMessages(allMessages, record);
       if (unobservedMessages.length > 0) {

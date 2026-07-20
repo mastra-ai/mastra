@@ -6,6 +6,7 @@ import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
 import { OBSERVATION_CONTINUATION_HINT } from './constants';
 import { omDebug } from './debug';
+import { getObservableMessages } from './message-utils';
 import type { ObservationTurn } from './observation-turn/index';
 import { loadMemoryContextMessages } from './observation-turn/load-memory-context';
 import type { ObservationalMemory } from './observational-memory';
@@ -322,7 +323,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         });
 
         // ── Token persistence (processor-specific) ──────────
-        const allDbMsgs = messageList.get.all.db();
+        const allDbMsgs = getObservableMessages(messageList);
         const tokenCounter = this.engine.getTokenCounter();
         const contextTokens = await tokenCounter.countMessagesAsync(allDbMsgs);
         const otherThreadsContext = this.turn.context.otherThreadsContext;
