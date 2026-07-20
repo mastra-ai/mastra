@@ -35,6 +35,7 @@ function makeMastra(
     agentThrows?: boolean;
     hooks?: any;
     scheduleGet?: ReturnType<typeof vi.fn>;
+    editorGetById?: ReturnType<typeof vi.fn>;
   } = {},
 ) {
   const storage = opts.storage ?? makeStorage();
@@ -49,6 +50,7 @@ function makeMastra(
     getLogger: () => ({ debug: vi.fn(), error: vi.fn(), warn: vi.fn(), info: vi.fn() }),
     ...(opts.hooks ? { __getScheduleHooks: () => opts.hooks } : {}),
     ...(opts.scheduleGet ? { schedules: { get: opts.scheduleGet } } : {}),
+    ...(opts.editorGetById ? { getEditor: () => ({ agent: { getById: opts.editorGetById } }) } : {}),
   } as unknown as Mastra;
 }
 
@@ -70,6 +72,53 @@ describe('AgentScheduleWorker — executeAgentSchedule', () => {
 
     expect(result.status).toBe('agent-missing');
     expect(storage.deleteSchedule).toHaveBeenCalledWith('agent_a1');
+  });
+
+  it('falls back to the editor for stored agents not yet hydrated into the registry', async () => {
+    const storage = makeStorage();
+    const storedAgent = {
+      sendSignal: vi.fn(),
+      generate: vi.fn(async () => ({ text: 'ok' })),
+      getMemory: vi.fn(),
+    };
+    const editorGetById = vi.fn(async () => storedAgent);
+    const mastra = makeMastra({ agentThrows: true, storage, editorGetById });
+
+    const result = await executeAgentSchedule(mastra, 'agent_a1', makeTarget());
+
+    expect(editorGetById).toHaveBeenCalledWith('a1');
+    expect(storedAgent.generate).toHaveBeenCalled();
+    expect(result).toMatchObject({ status: 'fired', outcome: 'succeeded' });
+    expect(storage.deleteSchedule).not.toHaveBeenCalled();
+  });
+
+  it('returns agent-missing and self-cleans when both registry and editor miss', async () => {
+    const storage = makeStorage();
+    const editorGetById = vi.fn(async () => null);
+    const mastra = makeMastra({ agentThrows: true, storage, editorGetById });
+
+    const result = await executeAgentSchedule(mastra, 'agent_a1', makeTarget());
+
+    expect(editorGetById).toHaveBeenCalledWith('a1');
+    expect(result.status).toBe('agent-missing');
+    expect(storage.deleteSchedule).toHaveBeenCalledWith('agent_a1');
+  });
+
+  it('preserves the schedule when the editor lookup throws', async () => {
+    const storage = makeStorage();
+    const editorGetById = vi.fn(async () => {
+      throw new Error('storage down');
+    });
+    const mastra = makeMastra({ agentThrows: true, storage, editorGetById });
+
+    const result = await executeAgentSchedule(mastra, 'agent_a1', makeTarget());
+
+    expect(result).toMatchObject({
+      status: 'agent-missing',
+      outcome: 'failed',
+      reason: 'failed to resolve agent "a1"',
+    });
+    expect(storage.deleteSchedule).not.toHaveBeenCalled();
   });
 
   it('returns thread-missing and self-cleans when the thread is not found', async () => {
