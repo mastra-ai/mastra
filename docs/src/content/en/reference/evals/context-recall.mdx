@@ -93,11 +93,12 @@ Use when running evaluations against curated test sets:
 
 ### Claim attribution
 
-Context Recall uses a two-step LLM evaluation:
+Context Recall uses a two-step LLM evaluation followed by a deterministic score calculation:
 
 1. **Claim extraction**: The ground-truth answer is decomposed into atomic claims
 1. **Attribution check**: Each claim is checked against the retrieval context for support
-1. **Score calculation**: Ratio of attributed claims to total claims, multiplied by scale
+
+The score is then calculated as the ratio of attributed claims to total claims, multiplied by scale.
 
 ### Scoring formula
 

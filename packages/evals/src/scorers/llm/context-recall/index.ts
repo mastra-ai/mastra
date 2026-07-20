@@ -112,7 +112,7 @@ export function createContextRecallScorer({
 
       const verdicts = results.analyzeStepResult?.verdicts || [];
       const attributedClaims = verdicts.filter(v => v.verdict.toLowerCase().trim() === 'yes').length;
-      const score = (attributedClaims / totalClaims) * (options.scale || 1);
+      const score = Math.min(1, attributedClaims / totalClaims) * (options.scale || 1);
 
       return roundToTwoDecimals(score);
     })
