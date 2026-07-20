@@ -22,6 +22,22 @@ import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 import { createEventedAgent } from '../create-evented-agent';
 
+function createErrorModel() {
+  return new MockLanguageModelV2({
+    doStream: async () => ({
+      stream: convertArrayToReadableStream([
+        { type: 'stream-start', warnings: [] },
+        { type: 'response-metadata', id: 'id-error', modelId: 'mock-model-id', timestamp: new Date(0) },
+        { type: 'text-start', id: 'text-error' },
+        { type: 'text-delta', id: 'text-error', delta: 'Partial work before failure.' },
+        { type: 'error', error: new Error('Terminal provider failure') },
+      ]),
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+    }),
+  });
+}
+
 function createTextModel(text: string) {
   return new MockLanguageModelV2({
     doStream: async () => ({
@@ -290,6 +306,59 @@ describe('DurableAgent goal step', () => {
     const record = await durableAgent.getObjective({ threadId: THREAD });
     expect(record?.status).toBe('done');
     expect(record?.runsUsed).toBe(1);
+  });
+
+  it('preserves a terminal primary-agent error without judging or emitting goal progress', async () => {
+    const scorerRun = vi.fn().mockResolvedValue({ score: 1, reason: 'Goal achieved' });
+    const memory = new MockMemory();
+    const THREAD = 'goal-error-thread';
+    const RESOURCE = 'user-1';
+
+    const baseAgent = new Agent({
+      id: 'goal-error-agent',
+      name: 'Goal Error Agent',
+      instructions: 'You are a helpful agent.',
+      model: createErrorModel() as LanguageModelV2,
+      memory,
+      goal: {
+        judge: 'mock-judge',
+        maxRuns: 5,
+        scorer: { id: 'goal-scorer', name: 'Goal Scorer', run: scorerRun } as any,
+      },
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+    new Mastra({
+      agents: { 'goal-error-agent': durableAgent as any },
+      logger: false,
+      storage: new InMemoryStore(),
+      pubsub,
+    });
+
+    const initialObjective = await durableAgent.setObjective('Preserve this active objective', {
+      threadId: THREAD,
+      resourceId: RESOURCE,
+    });
+    const result = await durableAgent.stream('Fail this primary turn', {
+      maxSteps: 3,
+      memory: { thread: THREAD, resource: RESOURCE },
+    });
+    const chunks = await drain(result.fullStream);
+
+    expect(scorerRun).not.toHaveBeenCalled();
+    expect(chunks.filter((chunk: any) => chunk.type === 'goal')).toEqual([]);
+    const finishChunk = chunks.findLast((chunk: any) => chunk.type === 'step-finish');
+    expect(finishChunk?.payload?.stepResult).toMatchObject({ reason: 'error', isContinued: false });
+
+    const objective = await durableAgent.getObjective({ threadId: THREAD });
+    expect(objective).toEqual(initialObjective);
+    expect(objective).toMatchObject({ status: 'active', runsUsed: 0 });
+
+    const { messages } = await memory.recall({ threadId: THREAD, resourceId: RESOURCE });
+    const goalSignals = messages.filter(
+      (message: any) =>
+        message.role === 'signal' && message.content?.metadata?.signal?.attributes?.type === 'goal-judge',
+    );
+    expect(goalSignals).toEqual([]);
   });
 
   it('no-ops when no goal is configured', async () => {

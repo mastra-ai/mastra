@@ -16,10 +16,7 @@ import { decodePrintableShortcut } from '../key-input.js';
 import { theme } from '../theme.js';
 
 export type ApprovalAction =
-  | { type: 'approve' }
-  | { type: 'decline' }
-  | { type: 'always_allow_category' }
-  | { type: 'yolo' };
+  { type: 'approve' } | { type: 'decline' } | { type: 'always_allow_category' } | { type: 'yolo' };
 
 export interface ToolApprovalDialogOptions {
   toolCallId: string;

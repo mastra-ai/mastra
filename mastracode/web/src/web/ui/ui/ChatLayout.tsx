@@ -68,14 +68,13 @@ export function ChatLayout({
         {!rightPanel && rightPanelAvailable ? (
           <button
             type="button"
-            className="absolute right-2 top-2 hidden items-center gap-1 text-icon6 lg:inline-flex"
+            className="absolute right-2 top-2 hidden items-center text-icon6 lg:inline-flex"
             onClick={onRightPanelOpen}
             aria-label="Open workspace files"
           >
             <span className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border2 bg-surface1 shadow-sm hover:bg-surface2">
               <FilledArrowLeft />
             </span>
-            <span className="text-xs text-icon3">Files</span>
           </button>
         ) : null}
       </div>

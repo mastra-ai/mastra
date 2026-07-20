@@ -5,7 +5,7 @@ import { createWorktree, pushBranch } from '../../web/ui/domains/workspaces/serv
 
 /**
  * Mutation hooks for the per-project git write operations
- * (`/web/github/projects/:id/{worktree,commit,push,pr}`).
+ * (`/web/github/repositories/:id/{worktree,commit,push,pr}`).
  *
  * Thin wrappers over the services: callers get `isPending`/`error` for UI
  * state, and failures surface as `GitOpError` (with `code`, `status`, and

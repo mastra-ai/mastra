@@ -125,6 +125,7 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'browser/agent-browser', label: 'AgentBrowser' },
         { type: 'doc', id: 'browser/browser-viewer', label: 'BrowserViewer' },
+        { type: 'doc', id: 'browser/firecrawl-browser', label: 'FirecrawlBrowser' },
         { type: 'doc', id: 'browser/mastra-browser', label: 'MastraBrowser Class' },
         { type: 'doc', id: 'browser/stagehand-browser', label: 'StagehandBrowser' },
       ],
@@ -311,6 +312,7 @@ const sidebars = {
             { type: 'doc', id: 'evals/completeness', label: 'Completeness' },
             { type: 'doc', id: 'evals/content-similarity', label: 'Content Similarity Scorer' },
             { type: 'doc', id: 'evals/context-precision', label: 'Context Precision Scorer' },
+            { type: 'doc', id: 'evals/context-recall', label: 'Context Recall Scorer' },
             { type: 'doc', id: 'evals/context-relevance', label: 'Context Relevance Scorer' },
             { type: 'doc', id: 'evals/faithfulness', label: 'Faithfulness' },
             { type: 'doc', id: 'evals/hallucination', label: 'Hallucination' },

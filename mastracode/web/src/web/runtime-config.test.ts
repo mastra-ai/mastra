@@ -1,13 +1,12 @@
-import { PostgresStore } from '@mastra/pg';
+import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { WebAuthAdapter } from './auth-adapter';
 import {
   __resetRuntimeConfigForTests,
+  getFactoryStorage,
   getPublicUrl,
   getSeededAuthAdapter,
   getSeededStorage,
-  getSharedAppPool,
   isRuntimeConfigSeeded,
   seedRuntimeConfig,
 } from './runtime-config';
@@ -22,8 +21,8 @@ describe('runtime-config', () => {
   });
 
   describe('storage slot', () => {
-    it('returns the seeded storage instance', () => {
-      const storage = new PostgresStore({ id: 'test-storage', connectionString: 'postgres://seeded/app' });
+    it('returns the seeded storage backend', () => {
+      const storage = new LibSQLFactoryStorage({ id: 'test-storage', url: ':memory:' });
       seedRuntimeConfig({ storage });
       expect(getSeededStorage()).toBe(storage);
     });
@@ -34,21 +33,15 @@ describe('runtime-config', () => {
     });
   });
 
-  describe('getSharedAppPool', () => {
-    it('exposes the PostgresStore pool for app-table consumers', () => {
-      const storage = new PostgresStore({ id: 'test-storage', connectionString: 'postgres://seeded/app' });
+  describe('getFactoryStorage', () => {
+    it('exposes the factory storage backend for app-table consumers', () => {
+      const storage = new LibSQLFactoryStorage({ id: 'test-storage', url: ':memory:' });
       seedRuntimeConfig({ storage });
-      expect(getSharedAppPool()).toBe(storage.pool);
+      expect(getFactoryStorage()).toBe(storage);
     });
 
-    it('returns undefined for a non-Postgres storage instance', () => {
-      const storage = { init: async () => {} } as unknown as MastraCompositeStore;
-      seedRuntimeConfig({ storage });
-      expect(getSharedAppPool()).toBeUndefined();
-    });
-
-    it('returns undefined before seeding (no env fallback — factory config is authoritative)', () => {
-      expect(getSharedAppPool()).toBeUndefined();
+    it('throws before seeding (no env fallback — factory config is authoritative)', () => {
+      expect(() => getFactoryStorage()).toThrow(/MastraFactory\.prepare\(\) has not run/);
     });
   });
 
@@ -85,11 +78,11 @@ describe('runtime-config', () => {
   });
 
   it('__resetRuntimeConfigForTests clears the seeded config', () => {
-    const storage = new PostgresStore({ id: 'test-storage', connectionString: 'postgres://seeded/app' });
+    const storage = new LibSQLFactoryStorage({ id: 'test-storage', url: ':memory:' });
     seedRuntimeConfig({ storage, publicUrl: 'https://factory.acme.com' });
     __resetRuntimeConfigForTests();
     expect(getPublicUrl()).toBeUndefined();
     expect(getSeededStorage()).toBeUndefined();
-    expect(getSharedAppPool()).toBeUndefined();
+    expect(() => getFactoryStorage()).toThrow(/MastraFactory\.prepare\(\) has not run/);
   });
 });

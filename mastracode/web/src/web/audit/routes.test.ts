@@ -49,16 +49,19 @@ vi.mock('@mastra/auth-workos', () => ({
   },
 }));
 
-import { GithubStorageInMemory } from '../github/storage/inmemory';
+import type { SourceControlStorageHandle } from '../storage/domains/source-control/base';
+import { seedFactoryStorageForTests } from '../storage/test-utils';
+import type { FactoryStorageTestSeed } from '../storage/test-utils';
 import { mountApiRoutes } from '../test-utils';
 import { buildAuditRoutes } from './routes';
 
 // ── Test harness ─────────────────────────────────────────────────────────
-let githubStorage!: GithubStorageInMemory;
+let seed!: FactoryStorageTestSeed;
+let githubStorage!: SourceControlStorageHandle;
 
 function buildApp(
   user: { workosId: string; organizationId?: string } | null,
-  storage: GithubStorageInMemory | null = githubStorage,
+  storage: SourceControlStorageHandle | null = githubStorage,
 ) {
   const app = new Hono();
   app.use('*', async (c, next) => {
@@ -73,27 +76,28 @@ function buildApp(
 }
 
 const orgUser = { workosId: 'u1', organizationId: 'org1' };
-const PROJECT_ID = '11111111-1111-4111-8111-111111111111';
+const UNKNOWN_PROJECT_ID = '11111111-1111-4111-8111-111111111111';
+let PROJECT_ID = UNKNOWN_PROJECT_ID;
 
-function seedProject(overrides: Record<string, any> = {}) {
-  githubStorage.projects.push({
-    id: PROJECT_ID,
+async function seedProject(overrides: Record<string, any> = {}) {
+  const project = await githubStorage.projects.upsert({
     orgId: 'org1',
-    userId: 'u1',
-    installationId: 1,
-    repoFullName: 'acme/repo',
-    repoId: 1,
+    createdByUserId: 'u1',
+    installationExternalId: '1',
+    repositorySlug: 'acme/repo',
+    repositoryExternalId: '1',
     defaultBranch: 'main',
     sandboxProvider: 'local',
     sandboxWorkdir: '/tmp/acme-repo',
-    setupCommand: null,
-    createdAt: new Date(),
     ...overrides,
   });
+  PROJECT_ID = project.id;
 }
 
-beforeEach(() => {
-  githubStorage = new GithubStorageInMemory();
+beforeEach(async () => {
+  seed = await seedFactoryStorageForTests();
+  githubStorage = seed.sourceControl.forIntegration('github');
+  PROJECT_ID = UNKNOWN_PROJECT_ID;
   listCalls = [];
   listResult = { events: [] };
   workosAuthActive = false;
@@ -101,44 +105,44 @@ beforeEach(() => {
   portalFailure = undefined;
 });
 
-// ── GET /web/factory/projects/:id/audit ─────────────────────────────────
-describe('GET /web/factory/projects/:id/audit', () => {
+// ── GET /web/factory/repositories/:id/audit ─────────────────────────────────
+describe('GET /web/factory/repositories/:id/audit', () => {
   it('401s when unauthenticated', async () => {
-    const res = await buildApp(null).request(`/web/factory/projects/${PROJECT_ID}/audit`);
+    const res = await buildApp(null).request(`/web/factory/repositories/${PROJECT_ID}/audit`);
     expect(res.status).toBe(401);
     expect(listCalls).toHaveLength(0);
   });
 
   it('403s for personal (no-org) accounts', async () => {
-    const res = await buildApp({ workosId: 'u1' }).request(`/web/factory/projects/${PROJECT_ID}/audit`);
+    const res = await buildApp({ workosId: 'u1' }).request(`/web/factory/repositories/${PROJECT_ID}/audit`);
     expect(res.status).toBe(403);
   });
 
   it("404s when the project isn't in the caller's org", async () => {
-    seedProject({ orgId: 'other-org' });
-    const res = await buildApp(orgUser).request(`/web/factory/projects/${PROJECT_ID}/audit`);
+    await seedProject({ orgId: 'other-org' });
+    const res = await buildApp(orgUser).request(`/web/factory/repositories/${PROJECT_ID}/audit`);
     expect(res.status).toBe(404);
     expect(listCalls).toHaveLength(0);
   });
 
   it('503s when GitHub storage is unavailable', async () => {
-    const res = await buildApp(orgUser, null).request(`/web/factory/projects/${PROJECT_ID}/audit`);
+    const res = await buildApp(orgUser, null).request(`/web/factory/repositories/${PROJECT_ID}/audit`);
     expect(res.status).toBe(503);
     expect(listCalls).toHaveLength(0);
   });
 
   it('404s on a non-uuid project id', async () => {
-    const res = await buildApp(orgUser).request('/web/factory/projects/not-a-uuid/audit');
+    const res = await buildApp(orgUser).request('/web/factory/repositories/not-a-uuid/audit');
     expect(res.status).toBe(404);
   });
 
   it('returns the event page scoped to the org and project', async () => {
-    seedProject();
+    await seedProject();
     listResult = {
       events: [{ id: 'e1', action: 'factory.work_item.created' }],
       nextCursor: '2026-07-15T00:00:00.000Z_e1',
     };
-    const res = await buildApp(orgUser).request(`/web/factory/projects/${PROJECT_ID}/audit`);
+    const res = await buildApp(orgUser).request(`/web/factory/repositories/${PROJECT_ID}/audit`);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual(listResult);
     expect(listCalls).toEqual([
@@ -154,14 +158,14 @@ describe('GET /web/factory/projects/:id/audit', () => {
   });
 
   it('passes actions/actor/before/limit filters through to the store', async () => {
-    seedProject();
+    await seedProject();
     const query = new URLSearchParams({
       actions: 'factory.work_item.created, factory.git.push,',
       actor: 'u2',
       before: '2026-07-15T00:00:00.000Z_e9',
       limit: '25',
     });
-    const res = await buildApp(orgUser).request(`/web/factory/projects/${PROJECT_ID}/audit?${query}`);
+    const res = await buildApp(orgUser).request(`/web/factory/repositories/${PROJECT_ID}/audit?${query}`);
     expect(res.status).toBe(200);
     expect(listCalls).toEqual([
       {
@@ -176,8 +180,8 @@ describe('GET /web/factory/projects/:id/audit', () => {
   });
 
   it('ignores an unparseable limit', async () => {
-    seedProject();
-    await buildApp(orgUser).request(`/web/factory/projects/${PROJECT_ID}/audit?limit=lots`);
+    await seedProject();
+    await buildApp(orgUser).request(`/web/factory/repositories/${PROJECT_ID}/audit?limit=lots`);
     expect(listCalls[0]?.limit).toBeUndefined();
   });
 });

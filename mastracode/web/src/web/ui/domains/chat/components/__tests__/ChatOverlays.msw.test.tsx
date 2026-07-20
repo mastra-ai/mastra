@@ -1,19 +1,24 @@
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { renderWithProviders } from '../../../../../../../e2e/web-ui/render';
+import { server } from '../../../../../../../e2e/web-ui/msw-server';
+import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import { useOverlays } from '../../../../lib/overlays';
-import type { Project } from '../../../workspaces';
+import type { Factory } from '../../../workspaces';
 import { ChatOverlays } from '../ChatOverlays';
 import { OverlayTestProviders, useOverlayControllerHandlers } from './overlay-test-utils';
 
-const project: Project = {
+const project: Factory = {
   id: 'project-test',
   name: 'Test',
-  path: '/tmp/test',
   resourceId: 'resource-test',
   createdAt: 1,
+  binding: {
+    kind: 'local',
+    path: '/tmp/test',
+  },
 };
 
 function OverlayLauncher() {
@@ -22,7 +27,7 @@ function OverlayLauncher() {
     <>
       <button onClick={() => open('settings')}>Settings</button>
       <button onClick={() => open('shortcuts')}>Shortcuts</button>
-      <button onClick={() => open('projects')}>Projects</button>
+      <button onClick={() => open('factories')}>Factories</button>
       <ChatOverlays />
     </>
   );
@@ -41,8 +46,8 @@ afterEach(() => localStorage.clear());
 
 describe('ChatOverlays', () => {
   it('given a project, when contextual overlays are opened, then it mounts settings, shortcuts, and projects', async () => {
-    localStorage.setItem('mastracode-projects', JSON.stringify([project]));
-    localStorage.setItem('mastracode-active-project', project.id);
+    localStorage.setItem('mastracode-factories', JSON.stringify([project]));
+    localStorage.setItem('mastracode-active-factory', project.id);
     const user = userEvent.setup();
     renderOverlays();
 
@@ -52,12 +57,37 @@ describe('ChatOverlays', () => {
     await user.click(screen.getByRole('button', { name: 'Shortcuts' }));
     expect(await screen.findByRole('dialog', { name: 'Keyboard shortcuts' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Close' }));
-    await user.click(screen.getByRole('button', { name: 'Projects' }));
-    expect(await screen.findByRole('dialog', { name: 'Open a project' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Factories' }));
+    expect(await screen.findByRole('dialog', { name: 'Create factory' })).toBeInTheDocument();
   });
 
-  it('forces first-run project setup when no project is active', () => {
+  it('forces first-run factory setup after backend hydration confirms there are no factories', async () => {
     renderOverlays();
-    expect(screen.getByRole('dialog', { name: 'Open a project' })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: 'Create factory' })).toBeInTheDocument();
+  });
+
+  it('hydrates a source-control repository before deciding whether to show first-run setup', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/repositories`, () =>
+        HttpResponse.json([
+          {
+            id: 'github-project-1',
+            name: 'mastra',
+            source: 'github',
+            githubProjectId: 'github-project-1',
+            resourceId: 'github-project-1',
+            gitBranch: 'main',
+            sandboxWorkdir: '/workspace/acme/mastra',
+            worktrees: [],
+            createdAt: 1,
+          },
+        ]),
+      ),
+    );
+
+    renderOverlays();
+
+    await waitFor(() => expect(localStorage.getItem('mastracode-factories')).toContain('github-project-1'));
+    expect(screen.queryByRole('dialog', { name: 'Create factory' })).not.toBeInTheDocument();
   });
 });

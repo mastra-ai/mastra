@@ -304,18 +304,8 @@ function ToolCard({
       role="group"
       aria-label={`Tool: ${tool.toolName}`}
     >
-      {/*
-        Wrap the trigger content in a span so no icon is a *direct* child of
-        CollapsibleTrigger. The DS trigger rotates every direct-child <svg> via
-        `[&>svg]:rotate-90` on open — which would spin the tool icon (e.g. the
-        eye). Nesting keeps only the chevron animating, controlled here.
-      */}
       <CollapsibleTrigger className="w-full text-left">
         <span className="flex w-full items-center gap-2 px-2 py-1.5">
-          <ChevronDown
-            size={13}
-            className={`shrink-0 text-icon3 transition-transform duration-150 ${expanded ? 'rotate-0' : '-rotate-90'}`}
-          />
           <ToolIcon name={tool.toolName} className="shrink-0 text-icon3" />
           <Txt as="span" variant="ui-sm" font="mono" className="text-icon5">
             {tool.toolName}
@@ -330,9 +320,11 @@ function ToolCard({
               {truncate(argsPreview, 72)}
             </Txt>
           )}
-          <Badge variant={STATUS_VARIANT[tool.status]} size="xs" className="ml-auto">
-            {STATUS_LABEL[tool.status]}
-          </Badge>
+          {tool.status !== 'done' && (
+            <Badge variant={STATUS_VARIANT[tool.status]} size="xs" className="ml-auto">
+              {STATUS_LABEL[tool.status]}
+            </Badge>
+          )}
         </span>
       </CollapsibleTrigger>
       <CollapsibleContent className="flex min-w-0 max-w-full flex-col gap-2 px-2 pb-2">
@@ -702,6 +694,24 @@ export function Transcript() {
   return <TranscriptEntries entries={transcript.entries} onApprove={onApprove} onRespond={onRespond} />;
 }
 
+function followsToolEntry(entries: TimelineEntry[], index: number): boolean {
+  const current = entries[index];
+  if (current?.kind !== 'message' || current.message.role !== 'assistant') return false;
+
+  for (let previousIndex = index - 1; previousIndex >= 0; previousIndex--) {
+    const previous = entries[previousIndex];
+    if (previous.kind !== 'message') return false;
+    if (previous.message.role === 'user') return false;
+    if (previous.message.role === 'signal') continue;
+
+    const parts = previous.message.content.parts;
+    if (parts.some(part => part.type === 'text' && part.text.trim().length > 0)) return false;
+    if (parts.some(part => part.type === 'tool-invocation')) return true;
+  }
+
+  return false;
+}
+
 export function TranscriptEntries({
   entries,
   onApprove,
@@ -713,10 +723,10 @@ export function TranscriptEntries({
 }) {
   return (
     <>
-      {entries.map(entry => {
+      {entries.map((entry, index) => {
         switch (entry.kind) {
           case 'message':
-            return <MessageBubble key={entry.id} entry={entry} />;
+            return <MessageBubble key={entry.id} entry={entry} followsToolEntry={followsToolEntry(entries, index)} />;
           case 'notice':
             return <NoticeCard key={entry.id} entry={entry} />;
           case 'approval':
@@ -737,7 +747,7 @@ export function TranscriptEntries({
   );
 }
 
-function MessageBubble({ entry }: { entry: MessageEntry }) {
+function MessageBubble({ entry, followsToolEntry }: { entry: MessageEntry; followsToolEntry: boolean }) {
   // null = no group override; true/false = expand/collapse all in this bubble.
   const [allExpanded, setAllExpanded] = useState<boolean | undefined>(undefined);
   const parts = entry.message.content.parts ?? [];
@@ -804,6 +814,10 @@ function MessageBubble({ entry }: { entry: MessageEntry }) {
 
   const renderers = {
     Text: (part: TextPart) => {
+      const renderedPart: unknown = part;
+      const partIndex = parts.findIndex(candidate => candidate === renderedPart);
+      const followsTool = partIndex > 0 && parts[partIndex - 1]?.type === 'tool-invocation';
+
       if (entry.message.role === 'user') {
         const activation = parseSkillActivation(part.text);
         return activation ? (
@@ -816,7 +830,7 @@ function MessageBubble({ entry }: { entry: MessageEntry }) {
       }
 
       return (
-        <div className="prose">
+        <div className={`prose ${followsToolEntry ? 'mt-4' : followsTool ? 'mt-3' : ''}`}>
           <Markdown>{part.text}</Markdown>
           {entry.streaming && part === lastTextPart && (
             <span className="ml-0.5 inline-block h-[1em] w-0.5 animate-pulse bg-accent1 align-text-bottom" />
@@ -860,7 +874,7 @@ function MessageBubble({ entry }: { entry: MessageEntry }) {
   // Some harness status parts (e.g. om_* markers) carry no text. Ignore the
   // marker while preserving any ordinary assistant content in the message.
   if (status?.text.trim()) return <StatusMetadataCard status={status} />;
-  if (entry.message.role === 'assistant' && !hasRenderablePart) return null;
+  if (!hasRenderablePart) return null;
 
   return <MessageFactory message={entry.message} roles={roles} {...renderers} fallback={() => null} />;
 }

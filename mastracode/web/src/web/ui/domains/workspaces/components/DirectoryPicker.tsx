@@ -14,7 +14,7 @@ import { SkeletonRows } from '../../../ui/SkeletonRows';
  * picks one — yielding a real absolute path with no typing.
  *
  * This is a *body* component with no backdrop of its own: it's embedded inside
- * a host modal (see ProjectsModal) so project selection is a first-class,
+ * a host modal (see FactoriesModal) so project selection is a first-class,
  * centered flow rather than a sidebar popover.
  */
 

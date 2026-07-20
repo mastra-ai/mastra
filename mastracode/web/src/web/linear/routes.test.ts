@@ -2,12 +2,6 @@ import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as AuthModule from '../auth';
 
-// In-memory linear_connections table.
-let connections: Array<Record<string, any>> = [];
-
-import { LinearStorageInMemory } from './storage/inmemory';
-const linearStorage = new LinearStorageInMemory();
-
 let featureEnabled = true;
 vi.mock('./config', () => ({
   isLinearFeatureEnabled: () => featureEnabled,
@@ -53,7 +47,6 @@ const listActiveLinearIssues = vi.fn(async (_token: string, _after?: string, _pr
 // `buildLinearRoutes` in production.
 const linearStub = {
   id: 'linear',
-  storageDomain: linearStorage,
   buildAuthorizeUrl: (state: string, redirectUri: string) =>
     `https://linear.app/oauth/authorize?state=${state}&redirect_uri=${encodeURIComponent(redirectUri)}`,
   exchangeOAuthCode: (...args: any[]) => exchangeLinearOAuthCode(...(args as [])),
@@ -77,7 +70,7 @@ const stateSigner: import('../state-signing').StateSigner = {
 };
 
 const getIntakeConfig = vi.fn(async () => ({
-  github: { enabled: true, projectIds: null as string[] | null },
+  github: { enabled: true, repositoryIds: null as string[] | null },
   linear: { enabled: true, projectIds: null as string[] | null },
 }));
 vi.mock('../intake/store', () => ({
@@ -104,7 +97,10 @@ vi.mock('../auth', async () => {
 });
 
 import { mountApiRoutes } from '../test-utils';
+import { __resetRuntimeConfigForTests } from '../runtime-config';
+import { seedFactoryStorageForTests } from '../storage/test-utils';
 import { buildLinearRoutes } from './routes';
+import { getLinearConnection, upsertLinearConnection } from './storage';
 
 // ── Test harness ─────────────────────────────────────────────────────────
 function buildApp(
@@ -127,27 +123,26 @@ function buildApp(
 }
 
 const connect = (overrides: Record<string, any> = {}) =>
-  connections.push({
-    id: 'conn-1',
+  upsertLinearConnection({
     orgId: 'org1',
     userId: 'u1',
     accessToken: 'linear-token',
     refreshToken: 'linear-refresh',
     // Unexpired by default; tests override to simulate expiry.
     expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    scope: null,
     workspaceName: 'Acme',
     workspaceUrlKey: 'acme',
     ...overrides,
   });
 
-beforeEach(() => {
-  connections = [];
-  linearStorage.connections = connections as any;
+beforeEach(async () => {
+  await seedFactoryStorageForTests();
   featureEnabled = true;
   cookieUser = null;
   getIntakeConfig.mockClear();
   getIntakeConfig.mockResolvedValue({
-    github: { enabled: true, projectIds: null },
+    github: { enabled: true, repositoryIds: null },
     linear: { enabled: true, projectIds: ['proj-1'] },
   });
   listActiveLinearIssues.mockClear();
@@ -158,6 +153,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  __resetRuntimeConfigForTests();
   vi.clearAllMocks();
 });
 
@@ -179,7 +175,7 @@ describe('status route', () => {
   });
 
   it('reports the connected workspace for the org', async () => {
-    connect();
+    await connect();
     const res = await buildApp({ workosId: 'u1' }).request('/web/linear/status');
     expect(await res.json()).toMatchObject({
       enabled: true,
@@ -218,7 +214,7 @@ describe('callback route', () => {
     expect(res.status).toBe(302);
     expect(res.headers.get('location')).toBe('/?linear=connected');
     expect(exchangeLinearOAuthCode).toHaveBeenCalledWith('abc', 'http://localhost:4111/auth/linear/callback');
-    expect(connections[0]).toMatchObject({
+    expect(await getLinearConnection('org1')).toMatchObject({
       orgId: 'org1',
       accessToken: 'linear-token',
       refreshToken: 'linear-refresh',
@@ -228,19 +224,19 @@ describe('callback route', () => {
   });
 
   it('replaces an existing connection for the org', async () => {
-    connect();
+    await connect();
     fetchLinearWorkspace.mockResolvedValueOnce({ name: 'Other', urlKey: 'other' });
     cookieUser = { workosId: 'u1' };
     await buildApp(null).request('/auth/linear/callback?code=abc&state=state.org1.u1');
-    expect(connections).toHaveLength(1);
-    expect(connections[0]).toMatchObject({ workspaceName: 'Other' });
+    expect(await getLinearConnection('org1')).toMatchObject({ workspaceName: 'Other' });
   });
 
   it('rejects a state minted for another tenant', async () => {
     cookieUser = { workosId: 'u1' };
     const res = await buildApp(null).request('/auth/linear/callback?code=abc&state=state.org2.u9');
     expect(res.headers.get('location')).toBe('/?linear=error');
-    expect(connections).toHaveLength(0);
+    expect(await getLinearConnection('org1')).toBeNull();
+    expect(await getLinearConnection('org2')).toBeNull();
   });
 
   it('redirects to the error page when consent is denied (no code)', async () => {
@@ -257,7 +253,7 @@ describe('projects route', () => {
   });
 
   it('lists the workspace projects', async () => {
-    connect();
+    await connect();
     const res = await buildApp({ workosId: 'u1' }).request('/web/linear/projects');
     expect(await res.json()).toEqual({
       projects: [
@@ -279,7 +275,7 @@ describe('issues route', () => {
   });
 
   it('returns a page of issues with the next cursor', async () => {
-    connect();
+    await connect();
     const res = await buildApp({ workosId: 'u1' }).request('/web/linear/issues');
     const json = await res.json();
     expect(json.issues[0]).toMatchObject({ identifier: 'ENG-42', title: 'Fix intake sync' });
@@ -288,22 +284,22 @@ describe('issues route', () => {
   });
 
   it('forwards the pagination cursor', async () => {
-    connect();
+    await connect();
     await buildApp({ workosId: 'u1' }).request('/web/linear/issues?after=cursor-2');
     expect(listActiveLinearIssues).toHaveBeenCalledWith('linear-token', 'cursor-2', ['proj-1']);
   });
 
   it('rejects malformed cursors', async () => {
-    connect();
+    await connect();
     const res = await buildApp({ workosId: 'u1' }).request('/web/linear/issues?after=bad%20cursor%22');
     expect(res.status).toBe(400);
     expect(listActiveLinearIssues).not.toHaveBeenCalled();
   });
 
   it('applies the intake config project selection', async () => {
-    connect();
+    await connect();
     getIntakeConfig.mockResolvedValueOnce({
-      github: { enabled: true, projectIds: null },
+      github: { enabled: true, repositoryIds: null },
       linear: { enabled: true, projectIds: ['proj-1'] },
     });
     await buildApp({ workosId: 'u1' }).request('/web/linear/issues');
@@ -311,9 +307,9 @@ describe('issues route', () => {
   });
 
   it('returns an empty page without calling Linear when no projects are selected', async () => {
-    connect();
+    await connect();
     getIntakeConfig.mockResolvedValueOnce({
-      github: { enabled: true, projectIds: null },
+      github: { enabled: true, repositoryIds: null },
       linear: { enabled: true, projectIds: null },
     });
     const res = await buildApp({ workosId: 'u1' }).request('/web/linear/issues');
@@ -322,9 +318,9 @@ describe('issues route', () => {
   });
 
   it('404s when Linear intake is disabled in settings', async () => {
-    connect();
+    await connect();
     getIntakeConfig.mockResolvedValueOnce({
-      github: { enabled: true, projectIds: null },
+      github: { enabled: true, repositoryIds: null },
       linear: { enabled: false, projectIds: null },
     });
     const res = await buildApp({ workosId: 'u1' }).request('/web/linear/issues');
@@ -333,12 +329,12 @@ describe('issues route', () => {
   });
 
   it('refreshes an expired access token and persists the rotated token set', async () => {
-    connect({ expiresAt: new Date(Date.now() - 1000) });
+    await connect({ expiresAt: new Date(Date.now() - 1000) });
     const res = await buildApp({ workosId: 'u1' }).request('/web/linear/issues');
     expect(res.status).toBe(200);
     expect(refreshLinearAccessToken).toHaveBeenCalledWith('linear-refresh');
     expect(listActiveLinearIssues).toHaveBeenCalledWith('linear-token-2', undefined, ['proj-1']);
-    expect(connections[0]).toMatchObject({
+    expect(await getLinearConnection('org1')).toMatchObject({
       accessToken: 'linear-token-2',
       refreshToken: 'linear-refresh-2',
       expiresAt: new Date('2026-07-15T00:00:00Z'),
@@ -346,14 +342,14 @@ describe('issues route', () => {
   });
 
   it('does not refresh an unexpired token', async () => {
-    connect();
+    await connect();
     await buildApp({ workosId: 'u1' }).request('/web/linear/issues');
     expect(refreshLinearAccessToken).not.toHaveBeenCalled();
     expect(listActiveLinearIssues).toHaveBeenCalledWith('linear-token', undefined, ['proj-1']);
   });
 
   it('409s with linear_reauth_required when the token is expired and has no refresh token', async () => {
-    connect({ expiresAt: new Date(Date.now() - 1000), refreshToken: null });
+    await connect({ expiresAt: new Date(Date.now() - 1000), refreshToken: null });
     const res = await buildApp({ workosId: 'u1' }).request('/web/linear/issues');
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({ error: 'linear_reauth_required' });
@@ -361,7 +357,7 @@ describe('issues route', () => {
   });
 
   it('409s with linear_reauth_required when the refresh grant is rejected', async () => {
-    connect({ expiresAt: new Date(Date.now() - 1000) });
+    await connect({ expiresAt: new Date(Date.now() - 1000) });
     const err = new Error('Linear token refresh failed (400)');
     (err as any).status = 400;
     refreshLinearAccessToken.mockRejectedValueOnce(err);
@@ -371,7 +367,7 @@ describe('issues route', () => {
   });
 
   it('409s with linear_reauth_required when Linear rejects the access token', async () => {
-    connect();
+    await connect();
     const err = new Error('Linear API request failed (401)');
     (err as any).status = 401;
     listActiveLinearIssues.mockRejectedValueOnce(err);
@@ -381,7 +377,7 @@ describe('issues route', () => {
   });
 
   it('502s when the Linear API fails', async () => {
-    connect();
+    await connect();
     listActiveLinearIssues.mockRejectedValueOnce(new Error('Linear API request failed (500)'));
     const res = await buildApp({ workosId: 'u1' }).request('/web/linear/issues');
     expect(res.status).toBe(502);

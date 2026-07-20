@@ -63,9 +63,7 @@ export interface ToolMockReport {
 
 /** Result of attempting to resolve a single tool call against the item's mocks. */
 export type ToolMockResolution =
-  | { kind: 'serve'; output: unknown }
-  | { kind: 'live' }
-  | { kind: 'fail'; code: ToolMockFailureCode };
+  { kind: 'serve'; output: unknown } | { kind: 'live' } | { kind: 'fail'; code: ToolMockFailureCode };
 
 interface MockEntry {
   mockIndex: number;
