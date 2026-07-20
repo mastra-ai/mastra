@@ -38,6 +38,7 @@ import { ModelCredentialsStorage } from './storage/domains/credentials/base.js';
 import { createTenantCredentialPrimer, registerTenantCredentialResolver } from './tenant-credentials.js';
 import { IntakeStorage } from './storage/domains/intake/base.js';
 import { IntegrationStorage } from './storage/domains/integrations/base.js';
+import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
 import { SourceControlStorage } from './storage/domains/source-control/base.js';
 import { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import { handleServerError } from './server-error.js';
@@ -218,6 +219,7 @@ export class MastraFactory {
     storage.registerDomain(new AuditStorage());
     storage.registerDomain(new WorkItemsStorage());
     storage.registerDomain(new ModelCredentialsStorage());
+    storage.registerDomain(new QueueHealthStorage());
     // Generic integration storage (connections/subscriptions/settings) — the
     // default persistence surface for integrations without a bespoke domain.
     const integrationStorage = storage.registerDomain(new IntegrationStorage());
