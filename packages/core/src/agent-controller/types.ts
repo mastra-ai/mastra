@@ -769,7 +769,15 @@ export type AgentControllerEvent =
   | { type: 'shell_output'; toolCallId: string; output: string; stream: 'stdout' | 'stderr' }
   | { type: 'usage_update'; usage: TokenUsage }
   | { type: 'info'; message: string }
-  | { type: 'error'; error: Error; errorType?: string; retryable?: boolean; retryDelay?: number }
+  | {
+      type: 'error';
+      error: Error;
+      errorType?: string;
+      retryable?: boolean;
+      retryDelay?: number;
+      retryAttempt?: number;
+      maxRetries?: number;
+    }
   | { type: 'follow_up_queued'; count: number; runId?: string }
   | { type: 'workspace_status_changed'; status: WorkspaceStatus; error?: Error }
   | { type: 'workspace_ready'; workspaceId: string; workspaceName: string }

@@ -785,7 +785,7 @@ describe('createMastraCode', () => {
 
     expect(streamErrorRetryProcessorConstructorMock).toHaveBeenCalledTimes(1);
     const options = streamErrorRetryProcessorConstructorMock.mock.calls[0]?.[0] as
-      | { matchers?: Array<{ match?: unknown; maxRetries?: number; delayMs?: unknown }> }
+      | { matchers?: Array<{ match?: unknown; maxRetries?: number; delayMs?: unknown; onRetry?: unknown }> }
       | undefined;
     expect(options?.matchers).toHaveLength(2);
 
@@ -795,20 +795,44 @@ describe('createMastraCode', () => {
     expect(badRequestPolicy.maxRetries).toBe(1);
     expect(badRequestPolicy.delayMs).toBe(2000);
 
-    // Second matcher: transient connection failures with maxRetries 2 and exponential backoff.
+    // Second matcher: transient connection failures with maxRetries 10, visible status, and exponential backoff.
     const transientConnectionPolicy = options!.matchers![1] as {
       match?: (error: unknown) => boolean;
       maxRetries?: number;
-      delayMs?: (args: { retryCount: number }) => number;
+      delayMs?: (args: { error?: unknown; retryCount: number }) => number;
+      onRetry?: (args: {
+        error: Error;
+        retryCount: number;
+        requestContext?: { get: (key: string) => unknown };
+        delayMs: number;
+      }) => void | Promise<void>;
     };
     expect(typeof transientConnectionPolicy.match).toBe('function');
     expect(transientConnectionPolicy.match!(Object.assign(new Error('write EPIPE'), { code: 'EPIPE' }))).toBe(true);
     expect(transientConnectionPolicy.match!(new Error('Cannot connect to API: other side closed'))).toBe(true);
-    expect(transientConnectionPolicy.maxRetries).toBe(2);
+    expect(transientConnectionPolicy.maxRetries).toBe(10);
     expect(typeof transientConnectionPolicy.delayMs).toBe('function');
-    expect(transientConnectionPolicy.delayMs!({ retryCount: 0 })).toBe(1000);
-    expect(transientConnectionPolicy.delayMs!({ retryCount: 1 })).toBe(2000);
-    expect(transientConnectionPolicy.delayMs!({ retryCount: 2 })).toBe(4000);
+
+    const emitEvent = vi.fn();
+    const error = Object.assign(new Error('write EPIPE'), { code: 'EPIPE' });
+    const delayMs = transientConnectionPolicy.delayMs!({ error, retryCount: 0 });
+    expect(delayMs).toBe(500);
+    await transientConnectionPolicy.onRetry!({
+      error,
+      retryCount: 0,
+      requestContext: { get: () => ({ emitEvent }) },
+      delayMs,
+    });
+    expect(emitEvent).toHaveBeenCalledWith({
+      type: 'error',
+      error,
+      retryable: true,
+      retryDelay: 500,
+      retryAttempt: 1,
+      maxRetries: 10,
+    });
+    expect(transientConnectionPolicy.delayMs!({ retryCount: 1 })).toBe(1000);
+    expect(transientConnectionPolicy.delayMs!({ retryCount: 2 })).toBe(2000);
     // High retry counts are capped at the max delay (30000ms).
     expect(transientConnectionPolicy.delayMs!({ retryCount: 10 })).toBe(30000);
   });

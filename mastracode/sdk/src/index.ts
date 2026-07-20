@@ -110,8 +110,8 @@ const CODE_AGENT_ID = 'code-agent';
 // Applied centrally to every model call via StreamErrorRetryProcessor, independent of model-pack
 // settings, so all modes/subagents benefit from a short wait before retrying a dropped connection.
 // Delay uses exponential backoff: initialDelay * 2^retryCount, capped at maxDelay.
-const MASTRACODE_TRANSIENT_CONNECTION_MAX_RETRIES = 2;
-const MASTRACODE_TRANSIENT_CONNECTION_RETRY_INITIAL_DELAY_MS = 1000;
+const MASTRACODE_TRANSIENT_CONNECTION_MAX_RETRIES = 10;
+const MASTRACODE_TRANSIENT_CONNECTION_RETRY_INITIAL_DELAY_MS = 500;
 const MASTRACODE_TRANSIENT_CONNECTION_RETRY_MAX_DELAY_MS = 30000;
 
 const TRANSIENT_CONNECTION_ERROR_CODES = new Set(['ECONNRESET', 'EPIPE']);
@@ -132,6 +132,23 @@ function isTransientConnectionError(error: unknown): boolean {
   if (typeof message === 'string' && TRANSIENT_CONNECTION_MESSAGE_PATTERN.test(message)) return true;
 
   return false;
+}
+
+function emitTransientConnectionRetry(
+  error: unknown,
+  retryCount: number,
+  delayMs: number,
+  requestContext?: RequestContext,
+): void {
+  const controllerContext = requestContext?.get('controller') as AgentControllerRequestContext | undefined;
+  controllerContext?.emitEvent?.({
+    type: 'error',
+    error: error instanceof Error ? error : new Error(String(error)),
+    retryable: true,
+    retryDelay: delayMs,
+    retryAttempt: retryCount + 1,
+    maxRetries: MASTRACODE_TRANSIENT_CONNECTION_MAX_RETRIES,
+  });
 }
 
 /** Short deterministic hash (sha256, first 12 hex chars) matching project.ts shortHash style. */
@@ -676,6 +693,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
                 MASTRACODE_TRANSIENT_CONNECTION_RETRY_INITIAL_DELAY_MS * Math.pow(2, retryCount),
                 MASTRACODE_TRANSIENT_CONNECTION_RETRY_MAX_DELAY_MS,
               ),
+            onRetry: ({ error, retryCount, delayMs, requestContext }) =>
+              emitTransientConnectionRetry(error, retryCount, delayMs, requestContext),
           },
         ],
       }),
