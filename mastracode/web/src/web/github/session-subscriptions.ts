@@ -52,21 +52,21 @@ async function resolveSessionTarget(requestContext: RequestContext, github: Gith
   const userId = getWebAuthUserId(user);
   const githubProjectId = context?.getState().githubProjectId;
   if (!context || !context.threadId || !githubProjectId || !orgId || !userId) {
-    throw new Error('GitHub subscriptions require an authenticated GitHub-project session with an active thread.');
+    throw new Error('GitHub subscriptions require an authenticated GitHub repository session with an active thread.');
   }
 
   const project = await github.sourceControlStorage.projects.getOrg(orgId, githubProjectId);
-  if (!project) throw new Error('GitHub project not found for this organization.');
+  if (!project) throw new Error('Connected GitHub repository not found for this organization.');
   return { context, project, orgId, userId };
 }
 
 async function verifyPullRequest(target: SessionTarget, pullRequest: number, github: GithubIntegration) {
   const [owner, repo] = target.project.repositorySlug.split('/');
-  if (!owner || !repo) throw new Error('GitHub project repository is invalid.');
+  if (!owner || !repo) throw new Error('Connected GitHub repository name is invalid.');
   const octokit = github.getInstallationOctokit(Number(target.project.installationExternalId));
   const { data } = await octokit.pulls.get({ owner, repo, pull_number: pullRequest });
   if (String(data.base.repo.id) !== target.project.repositoryExternalId)
-    throw new Error('Pull request repository does not match the active project.');
+    throw new Error('Pull request repository does not match the active connected repository.');
 }
 
 async function subscriptionInput(target: SessionTarget, pullRequestNumber: number) {
@@ -125,7 +125,7 @@ export function createGithubSubscriptionTools(requestContext: RequestContext, gi
     github_subscribe_pr: createTool({
       id: 'github_subscribe_pr',
       description:
-        'Subscribe this thread to GitHub pull request activity. You usually do not need this tool: successful gh pr create commands subscribe automatically. Use it for an existing PR or to recover when automatic subscription did not occur. Closed or merged PRs are unsubscribed automatically. Accepts a PR number or canonical URL for the active project.',
+        'Subscribe this thread to GitHub pull request activity. You usually do not need this tool: successful gh pr create commands subscribe automatically. Use it for an existing PR or to recover when automatic subscription did not occur. Closed or merged PRs are unsubscribed automatically. Accepts a PR number or canonical URL for the active factory.',
       inputSchema: pullRequestInputSchema,
       execute: async ({ pullRequest }) => {
         const number = await subscribeCurrentSessionToPullRequest(requestContext, pullRequest, 'explicit-tool', github);
@@ -135,7 +135,7 @@ export function createGithubSubscriptionTools(requestContext: RequestContext, gi
     github_unsubscribe_pr: createTool({
       id: 'github_unsubscribe_pr',
       description:
-        'Manually unsubscribe this thread from GitHub pull request activity. You usually do not need this tool because closed or merged PRs are unsubscribed automatically. Use it to stop notifications before then. Accepts a PR number or canonical URL for the active project.',
+        'Manually unsubscribe this thread from GitHub pull request activity. You usually do not need this tool because closed or merged PRs are unsubscribed automatically. Use it to stop notifications before then. Accepts a PR number or canonical URL for the active factory.',
       inputSchema: pullRequestInputSchema,
       execute: async ({ pullRequest }) => {
         const number = await unsubscribeCurrentSessionFromPullRequest(requestContext, pullRequest, github);

@@ -3,13 +3,8 @@
  * page.
  *
  * Stored per `(org, user)` — each user picks their own intake sources within
- * the org's connected integrations:
- *  - GitHub: which of the org's projects (repos) contribute issues.
- *  - Linear: which projects contribute issues.
- *
- * `projectIds` of `null` mean "nothing selected" — the source syncs nothing
- * until the user explicitly picks projects. An `enabled` flag of `false`
- * hides the source entirely regardless of selection.
+ * the org's connected integrations. GitHub uses connected repository ids;
+ * Linear keeps provider-native project ids.
  */
 
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
@@ -18,8 +13,8 @@ import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
 export interface IntakeConfig {
   github: {
     enabled: boolean;
-    /** GitHub project ids (app DB uuids) to sync; `null` = nothing selected. */
-    projectIds: string[] | null;
+    /** Connected GitHub repository ids (app DB uuids) to sync; `null` = nothing selected. */
+    repositoryIds: string[] | null;
   };
   linear: {
     enabled: boolean;
@@ -28,11 +23,39 @@ export interface IntakeConfig {
   };
 }
 
-/** Default: both sources on, but nothing synced until projects are picked. */
+/** Default: both sources on, but nothing synced until repositories/projects are picked. */
 export const DEFAULT_INTAKE_CONFIG: IntakeConfig = {
-  github: { enabled: true, projectIds: null },
+  github: { enabled: true, repositoryIds: null },
   linear: { enabled: true, projectIds: null },
 };
+
+function sanitizeIdList(value: unknown): string[] | null | undefined {
+  if (value === null) return null;
+  if (!Array.isArray(value) || value.length > 200) return undefined;
+  const ids = value.filter((v): v is string => typeof v === 'string' && v.length > 0 && v.length <= 128);
+  return ids.length === value.length ? ids : undefined;
+}
+
+/** Validate an untrusted route body or stored JSON object. */
+export function parseIntakeConfig(body: unknown): IntakeConfig | null {
+  if (typeof body !== 'object' || body === null) return null;
+  const { github, linear } = body as { github?: unknown; linear?: unknown };
+  if (typeof github !== 'object' || github === null || typeof linear !== 'object' || linear === null) return null;
+
+  const githubSection = github as { enabled?: unknown; repositoryIds?: unknown; projectIds?: unknown };
+  const linearSection = linear as { enabled?: unknown; projectIds?: unknown };
+  if (typeof githubSection.enabled !== 'boolean' || typeof linearSection.enabled !== 'boolean') return null;
+  if (Object.prototype.hasOwnProperty.call(githubSection, 'projectIds')) return null;
+
+  const githubRepositoryIds = sanitizeIdList(githubSection.repositoryIds ?? null);
+  const linearProjectIds = sanitizeIdList(linearSection.projectIds ?? null);
+  if (githubRepositoryIds === undefined || linearProjectIds === undefined) return null;
+
+  return {
+    github: { enabled: githubSection.enabled, repositoryIds: githubRepositoryIds },
+    linear: { enabled: linearSection.enabled, projectIds: linearProjectIds },
+  };
+}
 
 export const INTAKE_SETTINGS_SCHEMA: CollectionSchema = {
   name: 'intake_settings',
@@ -47,10 +70,7 @@ export const INTAKE_SETTINGS_SCHEMA: CollectionSchema = {
   uniqueIndexes: [{ name: 'intake_settings_org_user_unique', columns: ['org_id', 'user_id'] }],
 };
 
-/**
- * Intake settings storage, written once against the generic
- * `FactoryStorageOps` surface — works on any `FactoryStorage` backend.
- */
+/** Intake settings storage implemented against the generic FactoryStorageOps surface. */
 export class IntakeStorage extends FactoryStorageDomain {
   constructor() {
     super('intake');
@@ -68,16 +88,14 @@ export class IntakeStorage extends FactoryStorageDomain {
     return this.ops;
   }
 
-  /** Read the caller's intake config, falling back to {@link DEFAULT_INTAKE_CONFIG}. */
   async getConfig(orgId: string, userId: string): Promise<IntakeConfig> {
-    const row = await this.#db.findOne<{ config: IntakeConfig }>('intake_settings', {
+    const row = await this.#db.findOne<{ config: unknown }>('intake_settings', {
       org_id: orgId,
       user_id: userId,
     });
-    return structuredClone(row?.config ?? DEFAULT_INTAKE_CONFIG);
+    return structuredClone(parseIntakeConfig(row?.config) ?? DEFAULT_INTAKE_CONFIG);
   }
 
-  /** Upsert the caller's intake config (`created_at` is preserved on update). */
   async saveConfig(orgId: string, userId: string, config: IntakeConfig): Promise<void> {
     const now = new Date();
     const where = { org_id: orgId, user_id: userId };
@@ -87,7 +105,6 @@ export class IntakeStorage extends FactoryStorageDomain {
       await this.#db.insertOne('intake_settings', { ...where, config, created_at: now, updated_at: now });
     } catch (error) {
       if (!(error instanceof UniqueViolationError)) throw error;
-      // Lost the insert race — the row exists now; apply as an update.
       await this.#db.updateMany('intake_settings', where, { config, updated_at: now });
     }
   }

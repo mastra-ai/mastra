@@ -50,6 +50,24 @@ describe('PlatformSandbox', () => {
     expect(body.template).toBeUndefined();
   });
 
+  it('sends the caller id on the create wire body so the platform can key recovery on it', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi.fn().mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
+
+    const sandbox = new PlatformSandbox({
+      id: 'mc-project-42',
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+    });
+
+    await sandbox._start();
+
+    const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
+    expect(body.id).toBe('mc-project-42');
+  });
+
   it('reattaches when constructed with a sandbox id', async () => {
     const fetchMock = vi.fn().mockResolvedValue(json({ exitCode: 0, stdout: 'ok', stderr: '' }));
     const sandbox = new PlatformSandbox({
@@ -133,5 +151,109 @@ describe('PlatformSandbox', () => {
 
     const handle = await sandbox.processes.spawn('sleep 10');
     await expect(handle.kill()).rejects.toThrow(/does not support killing/);
+  });
+
+  describe('clone', () => {
+    it('constructs an unstarted sibling without any I/O', () => {
+      const fetchMock = vi.fn();
+      const template = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+      });
+
+      const child = template.clone({ id: 'mc-project-1' });
+
+      expect(child).toBeInstanceOf(PlatformSandbox);
+      expect(child).not.toBe(template);
+      expect(child.id).toBe('mc-project-1');
+      expect(child.status).toBe('pending');
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('does not require the template to be started', () => {
+      const template = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: vi.fn(),
+      });
+      expect(() => template.clone()).not.toThrow();
+    });
+
+    it('inherits credentials and applies env + idle timeout overrides on start', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi.fn().mockResolvedValueOnce(json({ id: 'sbx_child', createdAt: '2026-06-26T00:00:00.000Z' }));
+      const template = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        idleTimeoutMinutes: 30,
+        networkIsolation: 'PRIVATE',
+        env: { BASE: '1' },
+        fetch: fetchMock,
+      });
+
+      const child = template.clone({
+        env: { GITHUB_TOKEN: 'ghs_abc' },
+        idleTimeoutMinutes: 15,
+      });
+      await child._start();
+
+      expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox');
+      const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
+      expect(body).toMatchObject({
+        environmentId: 'env_123',
+        idleTimeoutMinutes: 15,
+        networkIsolation: 'PRIVATE',
+        env: { GITHUB_TOKEN: 'ghs_abc' },
+      });
+    });
+
+    it('reattaches to a provider sandbox when sandboxId is passed', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(json({ exitCode: 0, stdout: 'ok', stderr: '' }));
+      const template = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+      });
+
+      const child = template.clone({ sandboxId: 'sbx_existing' });
+      await child._start();
+      await child.executeCommand!('echo hello');
+
+      // First (and only) fetch call should be exec — no create POST.
+      expect(String(fetchMock.mock.calls[0]![0])).toContain('/sandbox/sbx_existing/exec');
+      const createCalls = fetchMock.mock.calls.filter(call => {
+        const url = String(call[0]);
+        return url.endsWith('/sandbox') && (call[1] as RequestInit | undefined)?.method === 'POST';
+      });
+      expect(createCalls).toHaveLength(0);
+    });
+
+    it('inherits template defaults when no overrides are passed', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi.fn().mockResolvedValueOnce(json({ id: 'sbx_child', createdAt: '2026-06-26T00:00:00.000Z' }));
+      const template = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        idleTimeoutMinutes: 45,
+        env: { BASE: '1' },
+        fetch: fetchMock,
+      });
+
+      const child = template.clone();
+      await child._start();
+
+      const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
+      expect(body).toMatchObject({
+        environmentId: 'env_123',
+        idleTimeoutMinutes: 45,
+        env: { BASE: '1' },
+      });
+    });
   });
 });

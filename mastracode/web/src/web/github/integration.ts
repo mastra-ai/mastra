@@ -157,7 +157,7 @@ export class GithubIntegration implements FactoryIntegration {
       throw new Error(
         `GithubIntegration: missing required config field(s): ${missing.join(', ')}. ` +
           `Provide the full GitHub App credentials (appId, privateKey, clientId, clientSecret, slug) ` +
-          `or omit the integration to disable GitHub-backed projects.`,
+          `or omit the integration to disable GitHub-backed repositories.`,
       );
     }
     this.#appId = config.appId;

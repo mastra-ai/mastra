@@ -75,7 +75,7 @@ describe('GET /web/intake/config', () => {
 
   it('returns the saved config for the caller', async () => {
     await seed.intake.saveConfig('org1', 'u1', {
-      github: { enabled: false, projectIds: null },
+      github: { enabled: false, repositoryIds: null },
       linear: { enabled: true, projectIds: ['lp-1'] },
     });
     const res = await buildApp(orgUser).request('/web/intake/config');
@@ -86,7 +86,7 @@ describe('GET /web/intake/config', () => {
 
   it('scopes the config per user', async () => {
     await seed.intake.saveConfig('org1', 'other-user', {
-      github: { enabled: false, projectIds: null },
+      github: { enabled: false, repositoryIds: null },
       linear: { enabled: false, projectIds: null },
     });
     const res = await buildApp(orgUser).request('/web/intake/config');
@@ -104,7 +104,7 @@ describe('PUT /web/intake/config', () => {
 
   it('saves a valid config and echoes it back', async () => {
     const config = {
-      github: { enabled: true, projectIds: ['gp-1'] },
+      github: { enabled: true, repositoryIds: ['gp-1'] },
       linear: { enabled: false, projectIds: null },
     };
     const res = await put(config);
@@ -113,8 +113,8 @@ describe('PUT /web/intake/config', () => {
   });
 
   it('upserts over an existing config', async () => {
-    await put({ github: { enabled: true, projectIds: null }, linear: { enabled: true, projectIds: null } });
-    await put({ github: { enabled: false, projectIds: null }, linear: { enabled: true, projectIds: ['lp-9'] } });
+    await put({ github: { enabled: true, repositoryIds: null }, linear: { enabled: true, projectIds: null } });
+    await put({ github: { enabled: false, repositoryIds: null }, linear: { enabled: true, projectIds: ['lp-9'] } });
     const saved = await seed.intake.getConfig('org1', 'u1');
     expect(saved.github.enabled).toBe(false);
     expect(saved.linear.projectIds).toEqual(['lp-9']);
@@ -137,7 +137,7 @@ describe('PUT /web/intake/config', () => {
 
   it('records intake.config_updated with a bounded source summary', async () => {
     await put({
-      github: { enabled: true, projectIds: ['gp-1', 'gp-2'] },
+      github: { enabled: true, repositoryIds: ['gp-1', 'gp-2'] },
       linear: { enabled: false, projectIds: null },
     });
     expect(auditRecorded).toHaveLength(1);
@@ -147,7 +147,7 @@ describe('PUT /web/intake/config', () => {
       action: 'factory.intake.config_updated',
       targets: [{ type: 'intake_config', id: 'org1' }],
       metadata: {
-        github: { enabled: true, projects: 2 },
+        github: { enabled: true, repositories: 2 },
         linear: { enabled: false, projects: null },
       },
     });
@@ -161,7 +161,7 @@ describe('PUT /web/intake/config', () => {
   it('still saves the config when the audit insert throws', async () => {
     auditFailure = new Error('audit db down');
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const config = { github: { enabled: true, projectIds: null }, linear: { enabled: false, projectIds: null } };
+    const config = { github: { enabled: true, repositoryIds: null }, linear: { enabled: false, projectIds: null } };
     const res = await put(config);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ config });
@@ -174,19 +174,19 @@ describe('PUT /web/intake/config', () => {
 describe('parseIntakeConfig', () => {
   it('accepts explicit selections', () => {
     expect(
-      parseIntakeConfig({ github: { enabled: true, projectIds: ['a'] }, linear: { enabled: true, projectIds: [] } }),
-    ).toEqual({ github: { enabled: true, projectIds: ['a'] }, linear: { enabled: true, projectIds: [] } });
+      parseIntakeConfig({ github: { enabled: true, repositoryIds: ['a'] }, linear: { enabled: true, projectIds: [] } }),
+    ).toEqual({ github: { enabled: true, repositoryIds: ['a'] }, linear: { enabled: true, projectIds: [] } });
   });
 
   it('treats missing id lists as null (default selection)', () => {
     expect(parseIntakeConfig({ github: { enabled: true }, linear: { enabled: false } })).toEqual({
-      github: { enabled: true, projectIds: null },
+      github: { enabled: true, repositoryIds: null },
       linear: { enabled: false, projectIds: null },
     });
   });
 
   it('rejects non-string ids and oversized lists', () => {
-    expect(parseIntakeConfig({ github: { enabled: true, projectIds: [1] }, linear: { enabled: true } })).toBeNull();
+    expect(parseIntakeConfig({ github: { enabled: true, repositoryIds: [1] }, linear: { enabled: true } })).toBeNull();
     expect(
       parseIntakeConfig({
         github: { enabled: true },
@@ -198,5 +198,34 @@ describe('parseIntakeConfig', () => {
   it('rejects missing sections', () => {
     expect(parseIntakeConfig({ github: { enabled: true } })).toBeNull();
     expect(parseIntakeConfig(null)).toBeNull();
+  });
+
+  it('rejects the prerelease github.projectIds key without translating it', () => {
+    expect(
+      parseIntakeConfig({
+        github: { enabled: true, projectIds: ['old-1'] },
+        linear: { enabled: true, projectIds: null },
+      }),
+    ).toBeNull();
+  });
+});
+
+describe('GET /web/intake/config with prerelease storage rows', () => {
+  it('returns defaults when a stored row still uses github.projectIds', async () => {
+    // Seed through the in-memory raw path so the typed save path cannot rewrite it.
+    (seed.intake as { seedRawConfig: (orgId: string, userId: string, raw: unknown) => void }).seedRawConfig(
+      'org1',
+      'u1',
+      {
+        github: { enabled: false, projectIds: ['old-gp'] },
+        linear: { enabled: true, projectIds: ['lp-legacy'] },
+      },
+    );
+    const res = await buildApp(orgUser).request('/web/intake/config');
+    const json = await res.json();
+    expect(json).toEqual({ config: DEFAULT_INTAKE_CONFIG });
+    expect(JSON.stringify(json)).not.toContain('projectIds":["old-gp"]');
+    expect(json.config.github).not.toHaveProperty('projectIds');
+    expect(json.config.github).toHaveProperty('repositoryIds');
   });
 });
