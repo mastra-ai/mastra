@@ -2,4 +2,4 @@
 "@mastra/core": patch
 ---
 
-Fix a per-subscriber `cancel()` on `WorkflowRunOutput.fullStream` and `MastraModelOutput`'s evented stream calling `removeAllListeners()` on the shared event emitter, which silently killed every other concurrent consumer of the same run (e.g. two `/stream` requests, or `/stream` + `/observe`, on the same runId). One subscriber disconnecting now only removes its own listeners; other subscribers keep receiving chunks and close normally.
+Fixed a bug where disconnecting one consumer of a workflow's `fullStream` (or a model's evented stream) would silently stop every other concurrent consumer of the same run from receiving further chunks. This affected cases like two `/stream` requests for the same `runId`, or `/stream` combined with `/observe` — one client disconnecting no longer breaks the others, which now keep receiving chunks and close normally.
