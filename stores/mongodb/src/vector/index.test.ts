@@ -735,49 +735,68 @@ describe('MongoDBVector filterFields (#18587)', () => {
     const opsCol = 'ops_txns';
     const idxName = 'txn_precedent';
     const searchIdx = 'txn_vec_idx';
+    // This block needs a live, connected store. The enclosing filterFields suite
+    // only builds mocked, unconnected instances, so own the lifecycle here.
+    let byoVector: MongoDBVector;
 
     beforeAll(async () => {
-      const col = vectorDB['db'].collection(opsCol);
+      byoVector = new MongoDBVector({ uri, dbName, id: 'mongodb-byo-test' });
+      await byoVector.connect();
+      const col = byoVector['db'].collection(opsCol);
+      await col.deleteMany({});
       await col.insertMany([
         { _id: 'a', embedding: [0.1, 0.1, 0.1, 0.1], amount: 100, lane: 'clean' },
         { _id: 'b', embedding: [0.9, 0.9, 0.9, 0.9], amount: 5000, lane: 'fraud' },
       ]);
-      await vectorDB.createIndex({
+      await byoVector.createIndex({
         indexName: idxName,
         dimension: 4,
         collectionName: opsCol,
         searchIndexName: searchIdx,
       });
-      await vectorDB.waitForIndexReady({ indexName: idxName, timeoutMs: 60000 });
+      await byoVector.waitForIndexReady({ indexName: idxName, timeoutMs: 60000 });
+    });
+
+    afterAll(async () => {
+      // Drop the operational collection we created, then disconnect.
+      await byoVector['db']
+        .collection(opsCol)
+        .drop()
+        .catch(() => {});
+      await byoVector.disconnect();
     });
 
     it('creates the vector index on the operational collection, not a managed one', async () => {
-      const idxs = await vectorDB['db'].collection(opsCol).listSearchIndexes().toArray();
+      const idxs = await byoVector['db'].collection(opsCol).listSearchIndexes().toArray();
       expect(idxs.some((i: any) => i.name === searchIdx)).toBe(true);
-      const managedExists = await vectorDB['db'].listCollections({ name: idxName }).hasNext();
+      const managedExists = await byoVector['db'].listCollections({ name: idxName }).hasNext();
       expect(managedExists).toBe(false);
     });
 
     it('queries the operational collection and returns full docs as metadata in document mode', async () => {
-      const res = await vectorDB.query({
-        indexName: idxName,
-        queryVector: [0.9, 0.9, 0.9, 0.9],
-        topK: 1,
-        metadataMode: 'document',
+      // $vectorSearch becomes queryable slightly after the index reports READY, so poll
+      // until the just-inserted docs are indexed and 'b' (the exact-match vector) ranks first.
+      const queryDocMode = () =>
+        byoVector.query({ indexName: idxName, queryVector: [0.9, 0.9, 0.9, 0.9], topK: 1, metadataMode: 'document' });
+      await waitForSync(byoVector, idxName, async () => {
+        const r = await queryDocMode();
+        return r.length === 1 && r[0].id === 'b';
       });
+
+      const res = await queryDocMode();
       expect(res).toHaveLength(1);
       expect(res[0].id).toBe('b');
       expect(res[0].metadata).toMatchObject({ amount: 5000, lane: 'fraud' });
     });
 
     it('describeIndex reports dimension/metric for a BYO index', async () => {
-      const stats = await vectorDB.describeIndex({ indexName: idxName });
+      const stats = await byoVector.describeIndex({ indexName: idxName });
       expect(stats.dimension).toBe(4);
     });
 
     it('deleteIndex drops only the search index, not the BYO collection or its documents', async () => {
       // Verify collection and documents exist before deletion
-      const col = vectorDB['db'].collection(opsCol);
+      const col = byoVector['db'].collection(opsCol);
       const docCountBefore = await col.countDocuments();
       expect(docCountBefore).toBe(2);
 
@@ -786,7 +805,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
       expect(idxsBefore.some((i: any) => i.name === searchIdx)).toBe(true);
 
       // Delete the index
-      await vectorDB.deleteIndex({ indexName: idxName });
+      await byoVector.deleteIndex({ indexName: idxName });
 
       // CRITICAL: The BYO collection must still exist with all its documents
       const docCountAfter = await col.countDocuments();

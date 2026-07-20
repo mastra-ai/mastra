@@ -690,24 +690,23 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
   }
 
   async deleteIndex({ indexName }: DeleteIndexParams): Promise<void> {
-    const isByo = this.indexTargets.has(indexName);
     const { collectionName, searchIndexName } = this.resolveIndexTarget(indexName);
-    const collection = await this.getCollection(collectionName, false); // Do not throw error if collection doesn't exist
+    // BYO = the vectors live on a caller-owned collection whose name differs from the
+    // logical index name. Managed indexes (collectionName === indexName) drop the collection;
+    // BYO indexes drop only the search index so the operational collection/data is preserved.
+    const isByo = collectionName !== indexName;
+    const collection = await this.getCollection(collectionName, false);
     try {
       if (collection) {
         if (isByo) {
-          // For BYO collections: drop only the search index, never the collection
           await collection.dropSearchIndex(searchIndexName);
         } else {
-          // For managed collections: drop the entire collection
           await collection.drop();
           this.collections.delete(collectionName);
         }
-        // Clean up registries in both cases
         this.declaredFilterPaths.delete(indexName);
         this.indexTargets.delete(indexName);
       } else {
-        // Optionally, you can log or handle the case where the collection doesn't exist
         throw new Error(`Index (Collection) "${indexName}" does not exist`);
       }
     } catch (error) {
