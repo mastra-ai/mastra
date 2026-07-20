@@ -33,6 +33,13 @@ export class LinearReauthRequiredError extends Error {
   }
 }
 
+/** Distinguishes an external token-refresh failure from internal connection storage failures. */
+export class LinearProviderUnavailableError extends Error {
+  constructor(cause: unknown) {
+    super(cause instanceof Error ? cause.message : 'Linear token refresh failed.', { cause });
+  }
+}
+
 /** Persist a rotated token set on the org's connection row. */
 export function persistLinearTokens(orgId: string, tokens: LinearTokenSet): Promise<void> {
   return updateLinearTokens(orgId, {
@@ -90,15 +97,18 @@ export async function getFreshLinearAccessToken(
   const refreshToken = latest.refreshToken;
   const refresh = (async () => {
     try {
-      const tokens = await linear.refreshAccessToken(refreshToken);
+      let tokens: LinearTokenSet;
+      try {
+        tokens = await linear.refreshAccessToken(refreshToken);
+      } catch (err) {
+        const status = (err as { status?: number }).status;
+        // invalid_grant surfaces as 400/401: the refresh token was revoked or
+        // already rotated away. Terminal for this connection.
+        if (status === 400 || status === 401) throw new LinearReauthRequiredError();
+        throw new LinearProviderUnavailableError(err);
+      }
       await persistLinearTokens(connection.orgId, tokens);
       return tokens.accessToken;
-    } catch (err) {
-      const status = (err as { status?: number }).status;
-      // invalid_grant surfaces as 400/401: the refresh token was revoked or
-      // already rotated away. Terminal for this connection.
-      if (status === 400 || status === 401) throw new LinearReauthRequiredError();
-      throw err;
     } finally {
       inflightRefreshes.delete(connection.orgId);
     }

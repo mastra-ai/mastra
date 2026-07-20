@@ -1,5 +1,10 @@
 import type { GithubIntegration, GithubTaskDetail } from '../github/integration.js';
-import { getFreshLinearAccessToken, LinearReauthRequiredError, loadLinearConnection } from '../linear/connection.js';
+import {
+  getFreshLinearAccessToken,
+  LinearProviderUnavailableError,
+  LinearReauthRequiredError,
+  loadLinearConnection,
+} from '../linear/connection.js';
 import type { LinearIntegration, LinearIssueContext } from '../linear/integration.js';
 import type { SourceControlProject } from '../storage/domains/source-control/base.js';
 import type { WorkItemRow, WorkItemSource } from './store.js';
@@ -194,13 +199,26 @@ export async function loadFactoryThreadTaskContext(
   if (!linear) return storedContext(workItem, 'provider-unavailable');
   const connection = await loadLinearConnection(deps.orgId);
   if (!connection) return storedContext(workItem, 'not-connected');
-  let detail: LinearIssueContext | null;
+
   try {
     await deps.ensureLinearReady?.();
-    const accessToken = await getFreshLinearAccessToken(linear, connection);
-    detail = await linear.fetchIssueContext(accessToken, parsed.identifier);
+  } catch {
+    return storedContext(workItem, 'provider-unavailable');
+  }
+
+  let accessToken: string;
+  try {
+    accessToken = await getFreshLinearAccessToken(linear, connection);
   } catch (error) {
     if (error instanceof LinearReauthRequiredError) return storedContext(workItem, 'reauth-required');
+    if (error instanceof LinearProviderUnavailableError) return storedContext(workItem, 'provider-unavailable');
+    throw error;
+  }
+
+  let detail: LinearIssueContext | null;
+  try {
+    detail = await linear.fetchIssueContext(accessToken, parsed.identifier);
+  } catch {
     return storedContext(workItem, 'provider-unavailable');
   }
   return detail ? liveLinearContext(workItem, parsed, detail) : storedContext(workItem, 'not-found');

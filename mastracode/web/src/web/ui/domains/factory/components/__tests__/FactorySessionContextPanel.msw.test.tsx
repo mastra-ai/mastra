@@ -295,6 +295,33 @@ describe('FactorySessionContextPanel', () => {
     expect(screen.getByRole('tab', { name: 'Files' })).toHaveAttribute('aria-selected', 'true');
   });
 
+  it('given Task is loading, when the panel is closed, then the request is aborted and stays disabled', async () => {
+    const started = deferred();
+    const aborted = deferred();
+    let requestCount = 0;
+    server.use(
+      http.get(CONTEXT_URL, async ({ request }) => {
+        requestCount += 1;
+        request.signal.addEventListener('abort', () => aborted.resolve(), { once: true });
+        started.resolve();
+        await aborted.promise;
+        return HttpResponse.json({ context: liveContext() });
+      }),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<PanelHarness />);
+    await started.promise;
+
+    await user.click(screen.getByRole('button', { name: 'Close task and workspace context' }));
+
+    await expect(aborted.promise).resolves.toBeUndefined();
+    expect(screen.getByRole('button', { name: 'Open context' })).toBeInTheDocument();
+    window.dispatchEvent(new Event('focus'));
+    window.dispatchEvent(new Event('online'));
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(requestCount).toBe(1);
+  });
+
   it('given Task is active, when the tab list is used from the keyboard, then Files becomes active', async () => {
     installContext(liveContext());
     installWorkspace();
