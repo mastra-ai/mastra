@@ -132,6 +132,29 @@ describe.skipIf(!process.env.REDIS_URL && !process.env.CI && process.env.SKIP_RE
       await flushRedis(REDIS_URL).catch(() => {});
     });
 
+    it('converts persisted-signal finish chunks across processes', async () => {
+      const resourceId = `persisted-${Date.now()}`;
+      const threadId = `thread-${Date.now()}`;
+      const env = { RESOURCE_ID: resourceId, THREAD_ID: threadId };
+      const subscriber = spawnWorker('persisted-subscriber', env);
+      const producer = spawnWorker('persisted-producer', env);
+      workers = [subscriber, producer];
+
+      await Promise.all([waitForLine(subscriber, '"type":"ready"'), waitForLine(producer, '"type":"ready"')]);
+      subscriber.send({ cmd: 'collect-default' });
+      producer.send({ cmd: 'persist', text: 'persist without waking' });
+
+      await waitFor(
+        async () =>
+          eventsByType(subscriber, 'subscription-result').length + eventsByType(subscriber, 'command-error').length > 0,
+        5_000,
+      );
+      expect(eventsByType(subscriber, 'command-error')).toHaveLength(0);
+      const parts = eventsByType(subscriber, 'subscription-result')[0]?.parts as any[];
+      expect(parts.map(part => part?.type)).toEqual(['start', 'data-user-message', 'finish']);
+      expect(parts.at(-1)?.totalUsage).toEqual({ inputTokens: 0, outputTokens: 0, totalTokens: 0 });
+    }, 15_000);
+
     it('serializes rapid-fire signals through one lease winner with no dropped signals', async () => {
       const resourceId = `rapid-${Date.now()}`;
       const threadId = `thread-${Date.now()}`;

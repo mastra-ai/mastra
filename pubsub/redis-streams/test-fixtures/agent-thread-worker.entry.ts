@@ -21,8 +21,9 @@ import { randomUUID } from 'node:crypto';
 import { createInterface } from 'node:readline';
 
 import type { Agent } from '@mastra/core/agent';
-// AgentThreadStreamRuntime isn't part of the public surface yet; we reach into
-// the source directly via the workspace path. This worker is test infra only.
+// These helpers aren't part of the public test surface; this fixture reaches
+// into workspace source so the child process exercises the real implementations.
+import { convertMastraChunkToAISDKBase } from '../../../client-sdks/ai-sdk/src/helpers';
 import { AgentThreadStreamRuntime } from '../../../packages/core/src/agent/thread-stream-runtime';
 
 import { RedisStreamsPubSub } from '../src/index';
@@ -47,6 +48,7 @@ function makeStubAgent(runMs: number, runtime: AgentThreadStreamRuntime, pubsub:
   const agent: any = {
     id: `${WORKER_ID}-agent`,
     name: `${WORKER_ID} Stub Agent`,
+    getMemory: async () => ({ saveMessages: async () => {} }),
     stream: async (input: any, options: any) => {
       // The signal carrying the user message exposes its sigId as contents.
       const sigId: string = typeof input === 'string' ? input : (input?.contents ?? input?.text ?? '');
@@ -97,6 +99,25 @@ function makeStubAgent(runMs: number, runtime: AgentThreadStreamRuntime, pubsub:
   return agent as Agent;
 }
 
+async function collectConvertedRun(subscription: any) {
+  const parts: unknown[] = [];
+  const iterator = subscription.stream[Symbol.asyncIterator]();
+  while (true) {
+    const next = await iterator.next();
+    if (next.done) throw new Error('subscription ended before a terminal part');
+    const part = next.value as any;
+    parts.push(
+      convertMastraChunkToAISDKBase({
+        chunk: part,
+        normalizeWarnings: warnings => warnings ?? [],
+        normalizeUsage: usage => usage,
+        normalizeFinishReason: reason => reason,
+      }),
+    );
+    if (part.type === 'finish' || part.type === 'error' || part.type === 'abort') return parts;
+  }
+}
+
 async function main() {
   const pubsub = new RedisStreamsPubSub({ url: REDIS_URL });
   const runtime = new AgentThreadStreamRuntime();
@@ -107,7 +128,11 @@ async function main() {
 
   // Keep a thread subscription open so this worker receives signal-enqueued
   // events from other workers and updates its local activeThreadRunIds map.
-  await runtime.subscribeToThread(agent as any, { resourceId: RESOURCE_ID, threadId: THREAD_ID }, pubsub);
+  const defaultSubscription = await runtime.subscribeToThread(
+    agent as any,
+    { resourceId: RESOURCE_ID, threadId: THREAD_ID },
+    pubsub,
+  );
 
   emit({ type: 'ready' });
 
@@ -159,10 +184,43 @@ async function main() {
     }
 
     if (cmd.cmd === 'exit') {
+      defaultSubscription.unsubscribe();
       try {
         await pubsub.close();
       } catch {}
       process.exit(0);
+    }
+
+    if (cmd.cmd === 'persist') {
+      try {
+        const result = runtime.sendSignal(
+          agent as any,
+          { type: 'user-message', contents: cmd.text ?? 'persisted signal' },
+          {
+            resourceId: RESOURCE_ID,
+            threadId: THREAD_ID,
+            ifIdle: { behavior: 'persist' as const },
+          },
+          pubsub,
+        );
+        const accepted = await result.accepted;
+        await result.persisted;
+        await pubsub.flush();
+        emit({ type: 'persisted', runId: 'runId' in accepted ? accepted.runId : undefined });
+      } catch (err) {
+        emit({ type: 'command-error', cmd: cmd.cmd, error: String(err) });
+      }
+      return;
+    }
+
+    if (cmd.cmd === 'collect-default') {
+      try {
+        const parts = await collectConvertedRun(defaultSubscription);
+        emit({ type: 'subscription-result', parts });
+      } catch (err) {
+        emit({ type: 'command-error', cmd: cmd.cmd, error: String(err) });
+      }
+      return;
     }
 
     if (cmd.cmd === 'send' || cmd.cmd === 'send-and-exit') {

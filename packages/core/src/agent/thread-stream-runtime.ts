@@ -749,7 +749,9 @@ export class AgentThreadStreamRuntime {
         runId,
         payload: {
           stepResult: { reason: 'stop' },
-          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+          output: {
+            usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+          },
         },
       },
     ];

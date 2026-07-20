@@ -2652,6 +2652,14 @@ describe('Agent signals', () => {
           }),
         ]),
       );
+      expect(subscribedRun.value.part).toMatchObject({
+        type: 'finish',
+        payload: {
+          stepResult: { reason: 'stop' },
+          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+        },
+      });
+      expect(subscribedRun.value.part.payload).not.toHaveProperty('usage');
 
       const recalled = await memory.recall({ threadId: 'idle-persist-thread', resourceId: 'idle-persist-user' });
       expect(streamCount).toBe(0);
