@@ -384,9 +384,7 @@ This is useful for connecting external MCP servers that implement the MCP Apps e
 The `MCPClient` instance has a `resources` property that provides access to resource-related operations.
 
 ```typescript
-const mcpClient = new MCPClient({
-  /* ...servers configuration... */
-})
+const mcpClient = new MCPClient({/* ...servers configuration... */})
 
 // Access resource methods via mcpClient.resources
 const allResourcesByServer = await mcpClient.resources.list()
@@ -515,9 +513,7 @@ mcpClient.resources.onListChanged('myWeatherServer', () => {
 The `MCPClient` instance has an `elicitation` property that provides access to elicitation-related operations. Elicitation allows MCP servers to request structured information from users.
 
 ```typescript
-const mcpClient = new MCPClient({
-  /* ...servers configuration... */
-})
+const mcpClient = new MCPClient({/* ...servers configuration... */})
 
 // Set up elicitation handler
 mcpClient.elicitation.onRequest('serverName', async request => {
@@ -656,9 +652,7 @@ await mcpClient.elicitation.onRequest('interactiveServer', async request => {
 The `MCPClient` instance has a `prompts` property that provides access to prompt-related operations.
 
 ```typescript
-const mcpClient = new MCPClient({
-  /* ...servers configuration... */
-})
+const mcpClient = new MCPClient({/* ...servers configuration... */})
 
 // Access prompt methods via mcpClient.prompts
 const allPromptsByServer = await mcpClient.prompts.list()
@@ -1083,9 +1077,7 @@ class DatabaseOAuthStorage implements OAuthStorage {
 
 const provider = new MCPOAuthClientProvider({
   redirectUrl: 'http://localhost:3000/callback',
-  clientMetadata: {
-    /* ... */
-  },
+  clientMetadata: {/* ... */},
   storage: new DatabaseOAuthStorage(db, 'user-123'),
 })
 ```
@@ -1220,33 +1212,25 @@ For example, if you try to create multiple instances with the same configuration
 ```typescript
 // First instance - OK
 const mcp1 = new MCPClient({
-  servers: {
-    /* ... */
-  },
+  servers: {/* ... */},
 })
 
 // Second instance with same config - Will throw an error
 const mcp2 = new MCPClient({
-  servers: {
-    /* ... */
-  },
+  servers: {/* ... */},
 })
 
 // To fix, either:
 // 1. Add unique IDs
 const mcp3 = new MCPClient({
   id: 'instance-1',
-  servers: {
-    /* ... */
-  },
+  servers: {/* ... */},
 })
 
 // 2. Or disconnect before recreating
 await mcp1.disconnect()
 const mcp4 = new MCPClient({
-  servers: {
-    /* ... */
-  },
+  servers: {/* ... */},
 })
 ```
 
