@@ -77,7 +77,7 @@ Returns: [`InngestAgent`](#inngestagent-interface)
     type: 'Agent',
     isOptional: false,
     description:
-      'The Agent to wrap with Inngest durable execution. Agent methods (e.g., `generate()`, `listTools()`, `getMemory()`) delegate to this agent via a Proxy.',
+      'The Agent to wrap with Inngest durable execution. Methods not implemented by `InngestAgent` (e.g., `listTools()` and `getMemory()`) delegate to this agent via a Proxy.',
   },
   {
     name: 'inngest',
@@ -126,7 +126,7 @@ Returns: [`InngestAgent`](#inngestagent-interface)
 
 ## `InngestAgent` interface
 
-The object returned by `createInngestAgent()`. It implements the full `Agent` interface via a Proxy: any property or method not explicitly defined (e.g., `generate()`, `listTools()`, `getMemory()`) is forwarded to the underlying agent.
+The object returned by `createInngestAgent()`. It provides the durable execution methods below. Any property or method not explicitly defined (e.g., `listTools()` and `getMemory()`) is forwarded to the underlying agent via a Proxy.
 
 ### Properties
 
@@ -252,6 +252,32 @@ The third argument accepts `threadId` and `resourceId` in addition to the lifecy
 />
 
 Returns: [`Promise<InngestAgentStreamResult>`](#inngestagentstreamresult)
+
+#### `generate(messages, options?)`
+
+Runs a response on Inngest's durable execution engine and resolves with a single `FullOutput`. If the run suspends, `generate()` resolves with `finishReason: 'suspended'`. Continue the run with [`resumeGenerate()`](#resumegeneraterunid-resumedata-options). Use [`stream()`](#streammessages-options) with `onSuspended` when the caller needs a suspension callback.
+
+```typescript
+const runId = crypto.randomUUID()
+const result = await durableAgent.generate('Delete the old records', {
+  runId,
+  requireToolApproval: true,
+})
+
+result.finishReason // 'suspended' when approval is required
+```
+
+Returns: `Promise<FullOutput<TOutput>>`
+
+#### `resumeGenerate(runId, resumeData, options?)`
+
+Resumes a suspended `generate()` run and resolves with a single `FullOutput`.
+
+```typescript
+const result = await durableAgent.resumeGenerate(runId, { approved: true })
+```
+
+Returns: `Promise<FullOutput<TOutput>>`
 
 #### `observe(runId, options?)`
 
