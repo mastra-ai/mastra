@@ -6,7 +6,7 @@ import { SidebarPanel } from './sidebar-panel';
 export function AgentViewLoadingSkeleton({ agentId, view }: { agentId: string; view: 'chat' | 'settings' }) {
   return (
     <AgentLayout agentId={agentId} leftDrawerLabel="Open threads and memory" leftSlot={<AgentSidebarLoadingSkeleton />}>
-      <div className="grid grid-rows-[auto_1fr] h-full min-h-0" data-testid="agent-route-skeleton" aria-busy="true">
+      <div className="grid h-full min-h-0 grid-rows-[auto_1fr]" data-testid="agent-route-skeleton" aria-busy="true">
         <AgentViewHeaderLoadingSkeleton />
         <div className="min-h-0 overflow-hidden">
           {view === 'settings' ? <AgentSettingsLoadingSkeleton /> : <AgentChatLoadingSkeleton />}
@@ -19,7 +19,7 @@ export function AgentViewLoadingSkeleton({ agentId, view }: { agentId: string; v
 function AgentViewHeaderLoadingSkeleton() {
   return (
     <div className="flex items-center justify-between gap-2 pr-3 max-lg:py-2">
-      <div className="flex-1 min-w-0 max-lg:hidden">
+      <div className="min-w-0 flex-1 max-lg:hidden">
         <div className="flex min-w-0 items-center gap-2 p-3">
           <Skeleton className="size-7 shrink-0 rounded-full" />
           <Skeleton className="h-4 w-36" />
@@ -42,7 +42,7 @@ export function AgentSidebarLoadingSkeleton() {
             <Skeleton className="h-4 w-4 shrink-0 rounded" />
             <Skeleton className="h-3 w-16" />
           </SidebarLoadingRow>
-          <hr aria-hidden="true" className="-mx-1 my-1 h-px border-0 bg-border1/40" />
+          <hr aria-hidden="true" className="bg-border1/40 -mx-1 my-1 h-px border-0" />
           <div className="flex flex-col gap-px">
             <SidebarLoadingRow>
               <Skeleton className="h-3 w-32" />
@@ -60,7 +60,7 @@ export function AgentSidebarLoadingSkeleton() {
         </div>
       </div>
 
-      <div className="m-2 rounded-studio-panel border border-border1/40 bg-surface4 px-3 py-2.5">
+      <div className="rounded-studio-panel border-border1/40 bg-surface4 m-2 border px-3 py-2.5">
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-1.5">
             <Skeleton className="h-4 w-4 shrink-0 rounded" />
@@ -101,7 +101,7 @@ export function AgentChatLoadingSkeleton() {
           </div>
         </div>
 
-        <div className="rounded-3xl border border-border1 bg-surface2 px-3 py-2.5">
+        <div className="border-border1 bg-surface2 rounded-3xl border px-3 py-2.5">
           <Skeleton className="h-5 w-1/2 rounded-full" />
           <div className="mt-4 flex items-center justify-between">
             <Skeleton className="h-8 w-24 rounded-full" />

@@ -36,25 +36,25 @@ export function AgentPlaygroundDatasets({ agentId }: AgentPlaygroundDatasetsProp
   }, [experiments]);
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="px-4 py-3 border-b border-border1 flex items-center justify-between">
+    <div className="flex h-full flex-col">
+      <div className="border-border1 flex items-center justify-between border-b px-4 py-3">
         <Txt variant="ui-sm" className="text-neutral3">
           Manage test datasets for this agent. Create datasets, generate seed data, and run experiments.
         </Txt>
         <Button variant="primary" size="sm" onClick={() => setShowCreateDialog(true)}>
-          <Plus className="h-3.5 w-3.5 mr-1" />
+          <Plus className="mr-1 h-3.5 w-3.5" />
           Create
         </Button>
       </div>
 
       <ScrollArea className="flex-1">
-        <div className="p-4 space-y-2">
+        <div className="space-y-2 p-4">
           {isDatasetsLoading ? (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-5 w-5 animate-spin text-neutral3" />
+              <Loader2 className="text-neutral3 h-5 w-5 animate-spin" />
             </div>
           ) : datasets.length === 0 ? (
-            <div className="text-center py-12 space-y-3">
+            <div className="space-y-3 py-12 text-center">
               <Icon size="lg" className="text-neutral3 mx-auto">
                 <Database />
               </Icon>
@@ -119,11 +119,11 @@ function DatasetCard({
     : null;
 
   return (
-    <div className="border border-border1 rounded-lg p-3 hover:bg-surface2 transition-colors">
+    <div className="border-border1 hover:bg-surface2 rounded-lg border p-3 transition-colors">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <Txt variant="ui-sm" className="text-neutral5 font-medium truncate">
+            <Txt variant="ui-sm" className="text-neutral5 truncate font-medium">
               {name}
             </Txt>
             <Txt variant="ui-xs" className="text-neutral3">
@@ -137,7 +137,7 @@ function DatasetCard({
           )}
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex shrink-0 items-center gap-1.5">
           {latestExperiment && <ExperimentBadge status={latestExperiment.status} passRate={passRate} />}
           <Button variant="ghost" size="sm" onClick={onGenerate} title="Generate test data with AI">
             <Sparkles className="h-3.5 w-3.5" />

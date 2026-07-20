@@ -1667,7 +1667,8 @@ export class ObservationalMemory {
   ): { threadId: string; resourceId?: string } | null {
     // First try RequestContext (set by Memory)
     const memoryContext = requestContext?.get('MastraMemory') as
-      { thread?: { id: string }; resourceId?: string } | undefined;
+      | { thread?: { id: string }; resourceId?: string }
+      | undefined;
 
     if (memoryContext?.thread?.id) {
       return {

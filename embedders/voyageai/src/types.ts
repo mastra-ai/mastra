@@ -119,7 +119,10 @@ export interface VoyageVideoUrlContent {
  * All multimodal content types
  */
 export type VoyageMultimodalContent =
-  VoyageTextContent | VoyageImageUrlContent | VoyageImageBase64Content | VoyageVideoUrlContent;
+  | VoyageTextContent
+  | VoyageImageUrlContent
+  | VoyageImageBase64Content
+  | VoyageVideoUrlContent;
 
 /**
  * Single multimodal input - an array of interleaved content
@@ -370,7 +373,12 @@ export interface VoyageContextualizedEmbeddingResponse {
  * VoyageAI reranking models
  */
 export type VoyageRerankerModel =
-  'rerank-2.5' | 'rerank-2.5-lite' | 'rerank-2' | 'rerank-2-lite' | 'rerank-1' | 'rerank-lite-1';
+  | 'rerank-2.5'
+  | 'rerank-2.5-lite'
+  | 'rerank-2'
+  | 'rerank-2-lite'
+  | 'rerank-1'
+  | 'rerank-lite-1';
 
 /**
  * Configuration for VoyageAI reranker

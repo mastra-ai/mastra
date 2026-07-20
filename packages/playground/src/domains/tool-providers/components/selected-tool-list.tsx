@@ -64,7 +64,7 @@ export function SelectedToolList({ providerId, selectedTools, onToggle }: Select
               </div>
             )}
 
-            <div className="flex flex-col gap-1 min-w-0">
+            <div className="flex min-w-0 flex-col gap-1">
               <Txt variant="ui-sm" className="text-neutral6 font-medium">
                 {tool.slug}
               </Txt>

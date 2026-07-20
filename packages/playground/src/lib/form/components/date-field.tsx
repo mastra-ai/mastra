@@ -51,7 +51,7 @@ export const DateField: React.FC<AutoFormFieldProps> = ({ inputProps, field, err
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-0 bg-surface4" align="start">
+      <PopoverContent className="bg-surface4 w-auto p-0" align="start">
         <DatePicker mode="single" selected={value} onSelect={handleSelect} month={value} onMonthChange={setValue} />
         {value && (
           <div className="p-3 pt-0">

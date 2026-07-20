@@ -5,9 +5,9 @@ export interface MCPClientEditLayoutProps {
 
 export const MCPClientEditLayout = ({ children, leftSlot }: MCPClientEditLayoutProps) => {
   return (
-    <div className="grid overflow-hidden h-full bg-surface1 grid-cols-[1fr_2fr]">
-      <div className="overflow-hidden h-full border-r border-border1 bg-surface2">{leftSlot}</div>
-      <div className="overflow-y-auto h-full py-4">{children}</div>
+    <div className="bg-surface1 grid h-full grid-cols-[1fr_2fr] overflow-hidden">
+      <div className="border-border1 bg-surface2 h-full overflow-hidden border-r">{leftSlot}</div>
+      <div className="h-full overflow-y-auto py-4">{children}</div>
     </div>
   );
 };

@@ -156,16 +156,16 @@ function AuditEventRow({ event }: { event: AuditEvent }) {
   const hasMetadata = Object.keys(event.metadata).length > 0;
 
   return (
-    <li className="rounded-lg border border-border1 bg-surface2 px-3 py-2">
+    <li className="border-border1 bg-surface2 rounded-lg border px-3 py-2">
       <div className="grid grid-cols-[4rem_10rem_1fr] items-baseline gap-3">
         <Txt as="span" variant="ui-xs" className="text-icon3" title={event.occurredAt}>
           {relativeTime(event.occurredAt)}
         </Txt>
-        <span className="inline-flex w-fit rounded-md bg-surface4 px-1.5 py-0.5 text-ui-xs text-icon5">
+        <span className="bg-surface4 text-ui-xs text-icon5 inline-flex w-fit rounded-md px-1.5 py-0.5">
           {actionLabel(event.action)}
         </span>
         <div className="flex min-w-0 flex-col gap-0.5">
-          <Txt as="span" variant="ui-sm" className="truncate text-icon6">
+          <Txt as="span" variant="ui-sm" className="text-icon6 truncate">
             {target?.name ?? target?.id ?? '—'}
           </Txt>
           <Txt as="span" variant="ui-xs" className="text-icon3">
@@ -177,8 +177,8 @@ function AuditEventRow({ event }: { event: AuditEvent }) {
       </div>
       {hasMetadata ? (
         <details className="mt-1">
-          <summary className="cursor-pointer text-ui-xs text-icon3">Details</summary>
-          <pre className="m-0 mt-1 overflow-x-auto rounded-md bg-surface1 p-2 text-ui-xs text-icon4">
+          <summary className="text-ui-xs text-icon3 cursor-pointer">Details</summary>
+          <pre className="bg-surface1 text-ui-xs text-icon4 m-0 mt-1 overflow-x-auto rounded-md p-2">
             {JSON.stringify(event.metadata, null, 2)}
           </pre>
         </details>

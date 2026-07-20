@@ -27,7 +27,7 @@ export function RequestContextLabel({ as = 'span', children, tooltip }: RequestC
               <button
                 type="button"
                 aria-label={ariaLabel}
-                className="rounded-sm text-neutral3 transition-colors hover:text-neutral6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border2"
+                className="text-neutral3 hover:text-neutral6 focus-visible:ring-border2 rounded-sm transition-colors focus-visible:ring-2 focus-visible:outline-none"
               >
                 <Icon size="sm">
                   <Info />

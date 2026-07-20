@@ -69,7 +69,7 @@ export function TraceTimeline({
               {usedSpanTypes.map(type => {
                 const spanUI = getSpanTypeUi(type);
                 return (
-                  <div key={type} className="flex items-center gap-1 text-ui-sm text-neutral3">
+                  <div key={type} className="text-ui-sm text-neutral3 flex items-center gap-1">
                     <span
                       className="inline-block size-1.5 shrink-0 rounded-full"
                       style={{ backgroundColor: spanUI?.color }}

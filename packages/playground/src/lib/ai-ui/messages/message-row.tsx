@@ -159,9 +159,9 @@ const AssistantActionBar = ({
   onReadAloud?: (text: string) => void;
   onStopSpeaking?: () => void;
 }) => (
-  <div className="flex gap-1 items-center transition-all relative">
+  <div className="relative flex items-center gap-1 transition-all">
     {modelMetadata && (
-      <div className="flex items-center gap-1 pr-2 text-icon5 text-ui-xs leading-ui-xs">
+      <div className="text-icon5 text-ui-xs leading-ui-xs flex items-center gap-1 pr-2">
         <ProviderLogo providerId={modelMetadata.modelProvider} size={14} />
         <span>
           {modelMetadata.modelProvider}/{modelMetadata.modelId}
@@ -258,7 +258,7 @@ export const MessageRow = forwardRef<HTMLDivElement, MessageRowProps>(
           <MessageFactory message={dbMessage} {...assistantRenderers} status={messageStatusRenderers} />
         </div>
         {showActionBar && (
-          <div className="h-6 pt-4 flex gap-2 items-center">
+          <div className="flex h-6 items-center gap-2 pt-4">
             <AssistantActionBar
               text={getTextFromParts(message)}
               modelMetadata={modelMetadata}

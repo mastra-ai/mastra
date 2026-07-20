@@ -114,7 +114,8 @@ function summarizePart(part: unknown): string {
           providerOptions?: Record<string, unknown>;
         };
         const mastraMeta = (toolResult.providerMetadata?.mastra ?? toolResult.providerOptions?.mastra) as
-          Record<string, unknown> | undefined;
+          | Record<string, unknown>
+          | undefined;
         const toolName = formatPreviewLabel((part as { toolName?: unknown }).toolName, 'unknown');
         if (mastraMeta?.modelOutput !== undefined) {
           return formatToolResultPreviewValue(mastraMeta.modelOutput);

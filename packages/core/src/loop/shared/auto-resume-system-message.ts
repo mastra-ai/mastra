@@ -29,7 +29,8 @@ export function extractSuspendedToolsFromMessages(
   const assistantMessages = [...messages].reverse().filter(message => message.role === 'assistant');
   const suspendedToolsMessage = assistantMessages.find(message => {
     const metadata = message.content.metadata as
-      { suspendedTools?: Record<string, unknown>; pendingToolApprovals?: Record<string, unknown> } | undefined;
+      | { suspendedTools?: Record<string, unknown>; pendingToolApprovals?: Record<string, unknown> }
+      | undefined;
     if (
       (metadata?.suspendedTools && Object.keys(metadata.suspendedTools).length > 0) ||
       (metadata?.pendingToolApprovals && Object.keys(metadata.pendingToolApprovals).length > 0)
@@ -47,7 +48,8 @@ export function extractSuspendedToolsFromMessages(
   if (!suspendedToolsMessage) return [];
 
   const metadata = suspendedToolsMessage.content.metadata as
-    { suspendedTools?: Record<string, unknown>; pendingToolApprovals?: Record<string, unknown> } | undefined;
+    | { suspendedTools?: Record<string, unknown>; pendingToolApprovals?: Record<string, unknown> }
+    | undefined;
   // Merge both metadata buckets — the same assistant turn can declare both
   // a suspended tool and a pending approval, and we should not lose one when
   // the other exists.

@@ -186,7 +186,7 @@ export function PropertyFilterCreator({
               <button
                 type="button"
                 aria-label="Back to properties"
-                className="text-neutral3 transition-colors hover:text-neutral6"
+                className="text-neutral3 hover:text-neutral6 transition-colors"
                 onClick={() => {
                   setFieldId(undefined);
                   setTextValue('');
@@ -196,7 +196,7 @@ export function PropertyFilterCreator({
               >
                 <ArrowLeftIcon className="size-4" />
               </button>
-              <FilterIcon className="size-4 shrink-0 text-neutral3" />
+              <FilterIcon className="text-neutral3 size-4 shrink-0" />
               <span className="text-ui-sm text-neutral3">{`${selectedField.label} · is`}</span>
             </div>
           )}
@@ -266,15 +266,15 @@ export function PropertyFilterCreator({
                     >
                       <span className="truncate">{f.label}</span>
                       {used ? (
-                        <span className="ml-auto text-neutral3">In use</span>
+                        <span className="text-neutral3 ml-auto">In use</span>
                       ) : (
-                        <PlusIcon className="ml-auto size-4 text-neutral3 opacity-0 transition-opacity group-hover:opacity-100 group-focus:opacity-100" />
+                        <PlusIcon className="text-neutral3 ml-auto size-4 opacity-0 transition-opacity group-hover:opacity-100 group-focus:opacity-100" />
                       )}
                     </button>
                   );
                 })
               ) : (
-                <div className="px-2 py-1.5 text-ui-sm text-neutral3">No matching property.</div>
+                <div className="text-ui-sm text-neutral3 px-2 py-1.5">No matching property.</div>
               )}
             </div>
           )}
@@ -382,9 +382,9 @@ function PickMultiMenuItem({ field, tokens, onChange, open, onToggle, onClose }:
             });
           }}
         >
-          {open && <ChevronRightIcon className="size-4 shrink-0 text-neutral3" />}
+          {open && <ChevronRightIcon className="text-neutral3 size-4 shrink-0" />}
           <span className="truncate">{field.label}</span>
-          {!open && <ChevronRightIcon className="ml-auto size-4 shrink-0 text-neutral3" />}
+          {!open && <ChevronRightIcon className="text-neutral3 ml-auto size-4 shrink-0" />}
         </button>
       </PopoverTrigger>
       <PopoverContent

@@ -85,12 +85,12 @@ export function BrowserToolCallItem({ entry }: BrowserToolCallItemProps) {
   };
 
   return (
-    <div className="border-b border-border1 last:border-b-0">
+    <div className="border-border1 border-b last:border-b-0">
       <button
         type="button"
         onClick={() => setIsExpanded(prev => !prev)}
         aria-expanded={isExpanded}
-        className="flex items-center gap-2 w-full px-3 py-0.5 text-left hover:bg-surface3 transition-colors"
+        className="hover:bg-surface3 flex w-full items-center gap-2 px-3 py-0.5 text-left transition-colors"
       >
         <ChevronRight
           className={cn('h-3 w-3 text-neutral3 transition-transform shrink-0', isExpanded && 'rotate-90')}
@@ -98,23 +98,23 @@ export function BrowserToolCallItem({ entry }: BrowserToolCallItemProps) {
 
         <StatusDot status={entry.status} />
 
-        <span className="text-xs font-medium text-neutral6 shrink-0">{displayName}</span>
+        <span className="text-neutral6 shrink-0 text-xs font-medium">{displayName}</span>
 
-        {keyArg && <span className="text-xs text-neutral3 truncate">{keyArg}</span>}
+        {keyArg && <span className="text-neutral3 truncate text-xs">{keyArg}</span>}
       </button>
 
       {isExpanded && (
-        <div className="px-3 pb-2 space-y-2">
+        <div className="space-y-2 px-3 pb-2">
           <div>
-            <p className="text-xs font-medium text-neutral4 pb-1">Arguments</p>
+            <p className="text-neutral4 pb-1 text-xs font-medium">Arguments</p>
             <CodeEditor data={displayArgs} data-testid="browser-tool-args" />
           </div>
 
           {entry.result !== undefined && entry.result !== null && (
             <div>
-              <p className="text-xs font-medium text-neutral4 pb-1">Result</p>
+              <p className="text-neutral4 pb-1 text-xs font-medium">Result</p>
               {typeof entry.result === 'string' ? (
-                <pre className="whitespace-pre text-xs bg-surface4 p-2 rounded-md overflow-x-auto max-h-40 overflow-y-auto">
+                <pre className="bg-surface4 max-h-40 overflow-x-auto overflow-y-auto rounded-md p-2 text-xs whitespace-pre">
                   {entry.result}
                 </pre>
               ) : (
@@ -134,10 +134,10 @@ export function BrowserToolCallItem({ entry }: BrowserToolCallItemProps) {
 function StatusDot({ status }: { status: BrowserToolCallEntry['status'] }) {
   switch (status) {
     case 'pending':
-      return <Loader2 className="h-3 w-3 text-neutral4 animate-spin shrink-0" />;
+      return <Loader2 className="text-neutral4 h-3 w-3 shrink-0 animate-spin" />;
     case 'complete':
-      return <Check className="h-3 w-3 text-green-500 shrink-0" />;
+      return <Check className="h-3 w-3 shrink-0 text-green-500" />;
     case 'error':
-      return <X className="h-3 w-3 text-red-500 shrink-0" />;
+      return <X className="h-3 w-3 shrink-0 text-red-500" />;
   }
 }

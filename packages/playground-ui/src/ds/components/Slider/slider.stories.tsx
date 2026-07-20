@@ -78,10 +78,10 @@ export const WithLabel: Story = {
   render: () => {
     const [value, setValue] = useState<number[]>([50]);
     return (
-      <div className="w-70 flex flex-col gap-2">
+      <div className="flex w-70 flex-col gap-2">
         <div className="flex justify-between">
-          <span className="text-sm text-neutral5">Volume</span>
-          <span className="text-sm text-neutral3 tabular-nums">{value[0]}%</span>
+          <span className="text-neutral5 text-sm">Volume</span>
+          <span className="text-neutral3 text-sm tabular-nums">{value[0]}%</span>
         </div>
         <Slider value={value} max={100} step={1} onValueChange={setValue} />
       </div>
@@ -93,10 +93,10 @@ export const PriceRange: Story = {
   render: () => {
     const [value, setValue] = useState<number[]>([200, 800]);
     return (
-      <div className="w-70 flex flex-col gap-2">
+      <div className="flex w-70 flex-col gap-2">
         <div className="flex justify-between">
-          <span className="text-sm text-neutral5">Price range</span>
-          <span className="text-sm text-neutral3 tabular-nums">
+          <span className="text-neutral5 text-sm">Price range</span>
+          <span className="text-neutral3 text-sm tabular-nums">
             ${value[0]} – ${value[1]}
           </span>
         </div>
@@ -118,21 +118,21 @@ export const Vertical: Story = {
 
 export const States: Story = {
   render: () => (
-    <div className="w-70 flex flex-col gap-6">
+    <div className="flex w-70 flex-col gap-6">
       <div className="flex flex-col gap-2">
-        <span className="text-sm text-neutral5">Default</span>
+        <span className="text-neutral5 text-sm">Default</span>
         <Slider defaultValue={[40]} max={100} step={1} />
       </div>
       <div className="flex flex-col gap-2">
-        <span className="text-sm text-neutral5">Range</span>
+        <span className="text-neutral5 text-sm">Range</span>
         <Slider defaultValue={[20, 80]} max={100} step={1} />
       </div>
       <div className="flex flex-col gap-2">
-        <span className="text-sm text-neutral5">Disabled</span>
+        <span className="text-neutral5 text-sm">Disabled</span>
         <Slider defaultValue={[50]} max={100} step={1} disabled />
       </div>
       <div className="flex flex-col gap-2">
-        <span className="text-sm text-neutral5">Disabled range</span>
+        <span className="text-neutral5 text-sm">Disabled range</span>
         <Slider defaultValue={[20, 80]} max={100} step={1} disabled />
       </div>
     </div>

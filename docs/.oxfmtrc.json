@@ -1,0 +1,24 @@
+{
+  "$schema": "../node_modules/oxfmt/configuration_schema.json",
+  "endOfLine": "lf",
+  "semi": false,
+  "singleQuote": true,
+  "tabWidth": 2,
+  "useTabs": false,
+  "trailingComma": "all",
+  "bracketSpacing": true,
+  "printWidth": 120,
+  "arrowParens": "avoid",
+  "sortPackageJson": false,
+  "sortTailwindcss": true,
+  "ignorePatterns": [
+    "**/*.mdx",
+    ".turbo/**",
+    ".docusaurus/**",
+    "build/**",
+    "node_modules/**",
+    "static/**",
+    "src/content/ja/**",
+    "styles/**"
+  ]
+}

@@ -282,7 +282,7 @@ export const WithTrailingCell: Story = {
       ].map(item => (
         <DataList.RowWrapper key={item.path}>
           <DataList.RowButton flushLeft flushRight colEnd={-2} onClick={() => {}}>
-            <DataList.Cell className="font-medium text-neutral6">{item.name}</DataList.Cell>
+            <DataList.Cell className="text-neutral6 font-medium">{item.name}</DataList.Cell>
             <DataList.MonoCell height="default">{item.path}</DataList.MonoCell>
             <DataList.Cell className="min-w-0">
               <span className="block truncate">{item.description}</span>
@@ -640,7 +640,7 @@ export const ScoresTable: Story = {
     }, []);
 
     return (
-      <div className="h-120 flex min-h-0 flex-col gap-0">
+      <div className="flex h-120 min-h-0 flex-col gap-0">
         <div className="flex shrink-0 items-center justify-end pb-2">
           <DropdownMenu>
             <DropdownMenu.Trigger asChild>

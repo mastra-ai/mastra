@@ -96,7 +96,7 @@ export function Markdown({ children, className }: MarkdownProps) {
 
   return (
     <div
-      className={`break-words font-sans text-[13.5px] leading-[1.7] [&_a:hover]:underline [&_a]:text-accent1 [&_blockquote]:my-2 [&_blockquote]:border-l-3 [&_blockquote]:border-border1 [&_blockquote]:py-1 [&_blockquote]:pl-3 [&_blockquote]:text-icon3 [&_em]:italic [&_h1]:my-3 [&_h1]:text-[1.3em] [&_h2]:my-3 [&_h2]:text-[1.15em] [&_h3]:my-3 [&_h3]:text-[1.05em] [&_h4]:my-3 [&_h4]:text-[1em] [&_h1]:font-bold [&_h2]:font-bold [&_h3]:font-bold [&_h4]:font-bold [&_h1]:leading-tight [&_h2]:leading-tight [&_h3]:leading-tight [&_h4]:leading-tight [&_hr]:my-3 [&_hr]:border-0 [&_hr]:border-t [&_hr]:border-border1 [&_li]:my-0.5 [&_ol]:my-2 [&_ol]:pl-6 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_p]:my-[0.4em] [&_strong]:font-bold [&_ul]:my-2 [&_ul]:pl-6 ${className ?? ''}`}
+      className={`[&_a]:text-accent1 [&_blockquote]:border-border1 [&_blockquote]:text-icon3 [&_hr]:border-border1 font-sans text-[13.5px] leading-[1.7] break-words [&_a:hover]:underline [&_blockquote]:my-2 [&_blockquote]:border-l-3 [&_blockquote]:py-1 [&_blockquote]:pl-3 [&_em]:italic [&_h1]:my-3 [&_h1]:text-[1.3em] [&_h1]:leading-tight [&_h1]:font-bold [&_h2]:my-3 [&_h2]:text-[1.15em] [&_h2]:leading-tight [&_h2]:font-bold [&_h3]:my-3 [&_h3]:text-[1.05em] [&_h3]:leading-tight [&_h3]:font-bold [&_h4]:my-3 [&_h4]:text-[1em] [&_h4]:leading-tight [&_h4]:font-bold [&_hr]:my-3 [&_hr]:border-0 [&_hr]:border-t [&_li]:my-0.5 [&_ol]:my-2 [&_ol]:pl-6 [&_p]:my-[0.4em] [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_strong]:font-bold [&_ul]:my-2 [&_ul]:pl-6 ${className ?? ''}`}
       dangerouslySetInnerHTML={{ __html: html }}
     />
   );

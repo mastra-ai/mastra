@@ -50,13 +50,13 @@ export function BulkTagPicker({
             }
           }}
           placeholder="Search or create tag..."
-          className="h-7 text-xs mb-1"
+          className="mb-1 h-7 text-xs"
           autoFocus
         />
-        <div className="max-h-40 overflow-y-auto space-y-0.5">
+        <div className="max-h-40 space-y-0.5 overflow-y-auto">
           {filtered.map(tag => (
-            <div key={tag} className="flex items-center justify-between px-2 py-1 text-xs rounded hover:bg-surface3">
-              <button type="button" onClick={() => onApplyTag(tag)} className="text-left flex-1 text-neutral4">
+            <div key={tag} className="hover:bg-surface3 flex items-center justify-between rounded px-2 py-1 text-xs">
+              <button type="button" onClick={() => onApplyTag(tag)} className="text-neutral4 flex-1 text-left">
                 {tag}
               </button>
               <button
@@ -64,7 +64,7 @@ export function BulkTagPicker({
                 onClick={() => onRemoveTag(tag)}
                 className="text-neutral2 hover:text-negative1 ml-2"
               >
-                <X className="w-3 h-3" />
+                <X className="h-3 w-3" />
               </button>
             </div>
           ))}
@@ -75,7 +75,7 @@ export function BulkTagPicker({
                 onNewTag(search.trim());
                 setSearch('');
               }}
-              className="w-full text-left px-2 py-1 text-xs rounded hover:bg-surface3 text-accent1"
+              className="hover:bg-surface3 text-accent1 w-full rounded px-2 py-1 text-left text-xs"
             >
               Create &amp; apply &quot;{search.trim()}&quot;
             </button>

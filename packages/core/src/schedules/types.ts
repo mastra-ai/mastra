@@ -61,7 +61,12 @@ export const WORKFLOW_SCHEDULE_PREFIX = 'schedule_';
  * dispatch results); this describes what the agent-schedule tick itself did.
  */
 export type ScheduleRunStatus =
-  'fired' | 'signal-accepted' | 'skipped-thread-blocked' | 'thread-missing' | 'agent-missing' | 'invalid-input';
+  | 'fired'
+  | 'signal-accepted'
+  | 'skipped-thread-blocked'
+  | 'thread-missing'
+  | 'agent-missing'
+  | 'invalid-input';
 
 /** Shared zod for {@link AgentSignalAttributes} (XML tag attribute values). */
 const ScheduleAttributesSchema = z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()]));

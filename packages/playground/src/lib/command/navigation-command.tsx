@@ -71,7 +71,7 @@ const resultIconClassName =
   'mt-0.5 flex size-4 min-w-4 max-w-4 basis-4 shrink-0 items-center justify-center text-neutral3 transition-colors duration-150 ease-out group-data-[selected=true]:text-neutral6 [&>svg]:!size-4 [&>svg]:shrink-0';
 
 const CommandPath = ({ children }: { children: React.ReactNode }) => (
-  <span className="max-w-[13rem] truncate rounded-md border border-border1 bg-surface4/70 px-1.5 py-0.5 font-mono text-[10px] leading-none text-neutral3">
+  <span className="border-border1 bg-surface4/70 text-neutral3 max-w-[13rem] truncate rounded-md border px-1.5 py-0.5 font-mono text-[10px] leading-none">
     {children}
   </span>
 );
@@ -98,15 +98,15 @@ const NavigationCommandItem = ({
       <span className={resultIconClassName}>{icon}</span>
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="flex min-w-0 items-center gap-2">
-          <span className="truncate text-ui-smd font-medium leading-ui-sm text-neutral6">{title}</span>
+          <span className="text-ui-smd leading-ui-sm text-neutral6 truncate font-medium">{title}</span>
           {badge && (
-            <span className="shrink-0 rounded-md border border-border1 bg-surface4/60 px-1.5 py-0.5 text-[10px] font-medium uppercase leading-none text-neutral3">
+            <span className="border-border1 bg-surface4/60 text-neutral3 shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] leading-none font-medium uppercase">
               {badge}
             </span>
           )}
         </span>
         {(subtitle || path) && (
-          <span className="flex min-w-0 items-center gap-2 text-ui-xs leading-ui-xs text-neutral3">
+          <span className="text-ui-xs leading-ui-xs text-neutral3 flex min-w-0 items-center gap-2">
             {subtitle && <span className="truncate">{subtitle}</span>}
             {path && <CommandPath>{path}</CommandPath>}
           </span>
@@ -129,7 +129,7 @@ const ScopeButton = ({
   <button type="button" className={scopeButtonClassName} data-active={activeScope === option.id} onClick={onSelect}>
     <span className="flex size-4 shrink-0 items-center justify-center [&>svg]:size-4">{option.icon}</span>
     <span className="min-w-0 flex-1 truncate">{option.label}</span>
-    <span className="rounded-md border border-border1 bg-surface4/70 px-1.5 py-0.5 text-[10px] leading-none text-neutral3">
+    <span className="border-border1 bg-surface4/70 text-neutral3 rounded-md border px-1.5 py-0.5 text-[10px] leading-none">
       {option.count}
     </span>
   </button>
@@ -190,7 +190,7 @@ const CommandRail = ({
   activeScope: CommandScope;
   onScopeChange: (scope: CommandScope) => void;
 }) => (
-  <aside className="navigation-command-surface navigation-command-surface-rail flex min-h-0 max-h-[min(14rem,32dvh)] flex-col overflow-hidden rounded-2xl border border-border1 bg-surface2 p-3 shadow-[0_8px_24px_-20px_rgb(0_0_0_/_0.55)] md:h-full md:max-h-none">
+  <aside className="navigation-command-surface navigation-command-surface-rail border-border1 bg-surface2 flex max-h-[min(14rem,32dvh)] min-h-0 flex-col overflow-hidden rounded-2xl border p-3 shadow-[0_8px_24px_-20px_rgb(0_0_0_/_0.55)] md:h-full md:max-h-none">
     <ScrollArea className="-m-1 min-h-0 flex-1 p-1" viewPortClassName="pr-1">
       <div className="flex flex-col gap-1">
         {scopeOptions.map(option => (
@@ -557,7 +557,7 @@ const EvaluationResults = ({
 };
 
 const CommandFooter = () => (
-  <div className="navigation-command-footer pointer-events-none absolute inset-x-0 bottom-0 z-20 flex items-end justify-between gap-3 px-4 pb-2 pt-5 text-ui-xs text-neutral3">
+  <div className="navigation-command-footer text-ui-xs text-neutral3 pointer-events-none absolute inset-x-0 bottom-0 z-20 flex items-end justify-between gap-3 px-4 pt-5 pb-2">
     <span className="truncate">Studio search</span>
     <span className="flex shrink-0 items-center gap-1.5">
       <Kbd className="min-w-5 px-1 text-[10px]">↑</Kbd>
@@ -711,7 +711,7 @@ export const NavigationCommand = () => {
         <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-2 md:grid-cols-[13rem_minmax(0,1fr)] md:grid-rows-none">
           <CommandRail scopeOptions={scopeOptions} activeScope={activeScope} onScopeChange={setActiveScope} />
 
-          <div className="navigation-command-surface navigation-command-surface-results navigation-command-results-panel relative flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-border1 bg-surface2 shadow-[0_10px_28px_-22px_rgb(0_0_0_/_0.6)]">
+          <div className="navigation-command-surface navigation-command-surface-results navigation-command-results-panel border-border1 bg-surface2 relative flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border shadow-[0_10px_28px_-22px_rgb(0_0_0_/_0.6)]">
             <CommandList
               scrollArea
               scrollAreaClassName="min-h-0 flex-1 rounded-none"

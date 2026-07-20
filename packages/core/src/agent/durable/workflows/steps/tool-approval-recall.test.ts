@@ -130,7 +130,8 @@ async function runMappingStep(toolResults: unknown[]) {
     .db()
     .flatMap((m: MastraDBMessage) => m.content.parts ?? [])
     .find((p: any) => p.type === 'tool-invocation' && p.toolInvocation?.toolCallId === TOOL_CALL_ID)?.toolInvocation as
-    Record<string, any> | undefined;
+    | Record<string, any>
+    | undefined;
 
   const v6 = recalled.get.all.aiV6
     .ui()
