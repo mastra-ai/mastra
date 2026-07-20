@@ -212,13 +212,7 @@ export type AgentControllerStateSchema<T> = T;
  * Identifiers for the built-in controller tools that can be selectively disabled.
  */
 export type BuiltinToolId =
-  | 'ask_user'
-  | 'submit_plan'
-  | 'task_write'
-  | 'task_update'
-  | 'task_complete'
-  | 'task_check'
-  | 'subagent';
+  'ask_user' | 'submit_plan' | 'task_write' | 'task_update' | 'task_complete' | 'task_check' | 'subagent';
 
 export interface AgentControllerConfig<TState = {}> {
   /** Unique identifier for this controller instance */

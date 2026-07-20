@@ -103,8 +103,7 @@ export async function observeAgentGitAction(toolContext: ToolObserverContext): P
     const command = stripHeredocBodies(rawCommand);
 
     const controller = toolContext.context.get('controller') as
-      | AgentControllerRequestContext<GithubSessionState>
-      | undefined;
+      AgentControllerRequestContext<GithubSessionState> | undefined;
     const worktreePath = controller?.scope;
 
     if (GIT_COMMIT_RE.test(command)) {

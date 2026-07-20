@@ -245,9 +245,7 @@ The following options are available in the standard `.stream()` and `generate()`
   const result = await agent.stream(messages, {
     prepareStep: ({ step, state }) => {
       console.log('About to execute step:', step)
-      return {
-        /* modified state */
-      }
+      return {/* modified state */}
     },
   })
   ```

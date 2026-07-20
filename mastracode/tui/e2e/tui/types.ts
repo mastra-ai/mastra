@@ -49,6 +49,7 @@ export type ScenarioName =
   | 'github-signals-polling-inbox'
   | 'github-signals-unsubscribe-reload'
   | 'goal-api-error-stops-loop'
+  | 'goal-judge-om-model-isolation'
   | 'goal-judge-single-render'
   | 'controller-api-config'
   | 'headless-mcp-tool-availability'
