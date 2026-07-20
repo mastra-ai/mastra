@@ -1310,4 +1310,50 @@ describe('MastraModelOutput', () => {
       expect(live.map(c => c.type)).toEqual(['text-delta', 'goal', 'text-delta', 'step-finish', 'finish']);
     });
   });
+
+  describe('multi-consumer fullStream cancellation (#19743)', () => {
+    it('does not stop other fullStream subscribers when one subscriber cancels', async () => {
+      let enqueue: (chunk: ChunkType) => void = () => {};
+      let closeSource: () => void = () => {};
+      const source = new ReadableStream<ChunkType>({
+        start(controller) {
+          enqueue = chunk => controller.enqueue(chunk);
+          closeSource = () => controller.close();
+        },
+      });
+      const runId = 'test-run';
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream: source,
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+      });
+      const receivedByA: ChunkType[] = [];
+      let aClosed = false;
+      const consumeA = (async () => {
+        for await (const chunk of output.fullStream) {
+          receivedByA.push(chunk);
+        }
+        aClosed = true;
+      })();
+      // Let consumer A's start() register its listeners before anything is enqueued.
+      await Promise.resolve();
+      await Promise.resolve();
+      // Consumer B attaches, reads one chunk, then cancels — simulating a client
+      // disconnect on a second concurrent stream of the same output.
+      const readerB = output.fullStream.getReader();
+      enqueue(createTextDeltaChunk(runId, 'before '));
+      await readerB.read();
+      await readerB.cancel();
+      // More chunks arrive after B has cancelled — A must still receive them.
+      enqueue(createTextDeltaChunk(runId, 'after'));
+      enqueue(createStepFinishChunk(runId));
+      enqueue(createFinishChunk(runId));
+      closeSource();
+      await consumeA;
+      expect(aClosed).toBe(true);
+      expect(receivedByA.map(c => c.type)).toEqual(['text-delta', 'text-delta', 'step-finish', 'finish']);
+    }, 5000);
+  });
 });
