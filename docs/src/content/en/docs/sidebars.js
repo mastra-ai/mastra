@@ -388,6 +388,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'browser/firecrawl',
+              label: 'Firecrawl',
+            },
+            {
+              type: 'doc',
               id: 'browser/recording',
               label: 'Recording',
               customProps: {
@@ -922,6 +927,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'evals/multi-turn',
+              label: 'Multi-turn Evals',
+            },
+            {
+              type: 'doc',
               id: 'evals/custom-scorers',
               label: 'Custom Scorers',
             },
@@ -979,6 +989,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'deployment/sandbox',
+              label: 'Sandbox',
+            },
+            {
+              type: 'doc',
               id: 'deployment/web-framework',
               label: 'Web Framework',
             },
@@ -1014,6 +1029,14 @@ const sidebars = {
           type: 'doc',
           id: 'mastra-platform/environments',
           label: 'Environments',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/regions',
+          label: 'Regions',
           customProps: {
             tags: ['new'],
           },

@@ -39,7 +39,8 @@ export class InngestRun<
   TState = unknown,
   TInput = unknown,
   TOutput = unknown,
-> extends Run<TEngineType, TSteps, TState, TInput, TOutput> {
+  TRequestContext = unknown,
+> extends Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext> {
   private inngest: Inngest;
   serializedStepGraph: SerializedStepFlowEntry[];
   #mastra: Mastra;
@@ -286,7 +287,7 @@ export class InngestRun<
         : {
             initialState: TState;
           }) & {
-        requestContext?: RequestContext;
+        requestContext?: RequestContext<TRequestContext>;
         actor?: ActorSignal;
         outputWriter?: OutputWriter;
         tracingContext?: TracingContext;
@@ -322,7 +323,7 @@ export class InngestRun<
         : {
             initialState: TState;
           }) & {
-        requestContext?: RequestContext;
+        requestContext?: RequestContext<TRequestContext>;
         actor?: ActorSignal;
         tracingOptions?: TracingOptions;
         outputOptions?: {
@@ -392,7 +393,7 @@ export class InngestRun<
     perStep,
   }: {
     inputData?: TInput;
-    requestContext?: RequestContext;
+    requestContext?: RequestContext<TRequestContext>;
     actor?: ActorSignal;
     initialState?: TState;
     tracingOptions?: TracingOptions;
@@ -472,7 +473,7 @@ export class InngestRun<
       | string
       | string[];
     label?: string;
-    requestContext?: RequestContext;
+    requestContext?: RequestContext<TRequestContext>;
     actor?: ActorSignal;
     perStep?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
@@ -504,7 +505,7 @@ export class InngestRun<
       | string
       | string[];
     label?: string;
-    requestContext?: RequestContext;
+    requestContext?: RequestContext<TRequestContext>;
     actor?: ActorSignal;
     perStep?: boolean;
   }): Promise<{ eventId: string }> {
@@ -613,7 +614,7 @@ export class InngestRun<
       | string
       | string[];
     label?: string;
-    requestContext?: RequestContext;
+    requestContext?: RequestContext<TRequestContext>;
     actor?: ActorSignal;
     perStep?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
@@ -647,7 +648,7 @@ export class InngestRun<
       | string
       | string[];
     label?: string;
-    requestContext?: RequestContext;
+    requestContext?: RequestContext<TRequestContext>;
     actor?: ActorSignal;
     perStep?: boolean;
   }): Promise<{ runId: string }> {
@@ -667,7 +668,7 @@ export class InngestRun<
       | string[];
     context?: TimeTravelContext<any, any, any, any>;
     nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
-    requestContext?: RequestContext;
+    requestContext?: RequestContext<TRequestContext>;
     actor?: ActorSignal;
     tracingOptions?: TracingOptions;
     outputOptions?: {
@@ -699,7 +700,7 @@ export class InngestRun<
       | string[];
     context?: TimeTravelContext<any, any, any, any>;
     nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
-    requestContext?: RequestContext;
+    requestContext?: RequestContext<TRequestContext>;
     actor?: ActorSignal;
     tracingOptions?: TracingOptions;
     outputOptions?: {
@@ -888,7 +889,7 @@ export class InngestRun<
     inputData,
     requestContext,
     actor,
-  }: { inputData?: TInput; requestContext?: RequestContext; actor?: ActorSignal } = {}): {
+  }: { inputData?: TInput; requestContext?: RequestContext<TRequestContext>; actor?: ActorSignal } = {}): {
     stream: ReadableStream<StreamEvent>;
     getWorkflowState: () => Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>;
   } {
@@ -959,7 +960,7 @@ export class InngestRun<
     perStep,
   }: {
     inputData?: TInput;
-    requestContext?: RequestContext;
+    requestContext?: RequestContext<TRequestContext>;
     actor?: ActorSignal;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
@@ -980,8 +981,8 @@ export class InngestRun<
     const self = this;
     const stream = new ReadableStream<WorkflowStreamEvent>({
       async start(controller) {
-        // TODO: fix this, watch doesn't have a type
-        const unwatch = self.watch(async ({ type, from = ChunkFrom.WORKFLOW, payload }) => {
+        const unwatch = self.watch(async (event: WorkflowStreamEvent) => {
+          const { type, from = ChunkFrom.WORKFLOW, payload } = event;
           controller.enqueue({
             type,
             runId: self.runId,
@@ -1070,7 +1071,7 @@ export class InngestRun<
       | string[];
     context?: TimeTravelContext<any, any, any, any>;
     nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
-    requestContext?: RequestContext;
+    requestContext?: RequestContext<TRequestContext>;
     actor?: ActorSignal;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
@@ -1085,8 +1086,8 @@ export class InngestRun<
     const self = this;
     const stream = new ReadableStream<WorkflowStreamEvent>({
       async start(controller) {
-        // TODO: fix this, watch doesn't have a type
-        const unwatch = self.watch(async ({ type, from = ChunkFrom.WORKFLOW, payload }) => {
+        const unwatch = self.watch(async (event: WorkflowStreamEvent) => {
+          const { type, from = ChunkFrom.WORKFLOW, payload } = event;
           controller.enqueue({
             type,
             runId: self.runId,

@@ -99,6 +99,37 @@ describe('fromCoreUserMessageToMastraDBMessage', () => {
     ]);
   });
 
+  it('encodes Uint8Array file payloads for optimistic render', () => {
+    const bytes = new Uint8Array([72, 101, 108, 108, 111]);
+    const input: CoreUserMessage = {
+      role: 'user',
+      content: [{ type: 'file', data: bytes, mimeType: 'text/plain', filename: 'hello.txt' }],
+    };
+    const out = fromCoreUserMessageToMastraDBMessage(input);
+
+    expect(out.content.parts[0]).toMatchObject({
+      type: 'file',
+      mimeType: 'text/plain',
+      data: 'data:text/plain;base64,SGVsbG8=',
+      filename: 'hello.txt',
+    });
+  });
+
+  it('encodes Uint8Array image payloads for optimistic render', () => {
+    const bytes = new Uint8Array([137, 80, 78, 71]);
+    const input: CoreUserMessage = {
+      role: 'user',
+      content: [{ type: 'image', image: bytes, mimeType: 'image/png' }],
+    };
+    const out = fromCoreUserMessageToMastraDBMessage(input);
+
+    expect(out.content.parts[0]).toMatchObject({
+      type: 'file',
+      mimeType: 'image/png',
+      data: 'data:image/png;base64,iVBORw==',
+    });
+  });
+
   it('serializes URL file payloads to strings', () => {
     const input: CoreUserMessage = {
       role: 'user',

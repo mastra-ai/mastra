@@ -999,6 +999,16 @@
       "source": "/docs/scorers/creating-custom-scorers",
       "destination": "/docs/evals/custom-scorers",
       "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/agents",
+      "destination": "/docs/agents/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/guide/tools",
+      "destination": "/docs/agents/using-tools",
+      "permanent": true
     }
   ]
 }

@@ -470,5 +470,12 @@
     "~google/gemini-flash-latest",
     "~google/gemini-pro-latest",
     "~moonshotai/kimi-latest"
+  ],
+  "structuredOutput": [
+    "microsoft/phi-4-mini-instruct",
+    "mistralai/mistral-medium-3-5",
+    "moonshotai/kimi-k2.6",
+    "openai/gpt-chat-latest",
+    "openrouter/owl-alpha"
   ]
 }

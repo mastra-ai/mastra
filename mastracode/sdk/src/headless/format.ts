@@ -3,13 +3,21 @@
  * an event (or a final result) and return strings / plain objects. They never
  * touch `process.*`; the CLI adapter owns the sinks.
  */
-import type { AgentControllerEvent } from '@mastra/core/agent-controller';
+import type { AgentControllerEvent, MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
 
 import type { RunMCResult } from './types.js';
 
 /** Truncate a string to `max` characters, appending "..." if truncated. */
 export function truncate(s: string, max: number): string {
   return s.length > max ? s.slice(0, max) + '...' : s;
+}
+
+/** Concatenate the text of an assistant message's nested content parts. */
+function messageText(message: MastraDBMessage): string {
+  return message.content.parts
+    .filter((p): p is MastraMessagePart & { text: string } => p.type === 'text' && typeof p.text === 'string')
+    .map(p => p.text)
+    .join('');
 }
 
 /** Mutable per-stream cursor used by {@link formatHuman} to stream assistant text. */
@@ -39,10 +47,7 @@ export function formatHuman(event: AgentControllerEvent, state: HumanFormatState
       state.lastTextLength = 0;
       return {};
     case 'message_update': {
-      const fullText = event.message.content
-        .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
-        .map(p => p.text)
-        .join('');
+      const fullText = messageText(event.message);
       if (fullText.length > state.lastTextLength) {
         const delta = fullText.slice(state.lastTextLength);
         state.lastTextLength = fullText.length;
@@ -58,10 +63,7 @@ export function formatHuman(event: AgentControllerEvent, state: HumanFormatState
       // Emit any assistant text the message_update stream didn't already cover
       // (e.g. a run that only delivered the final text on message_end), then
       // terminate the line.
-      const fullText = event.message.content
-        .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
-        .map(p => p.text)
-        .join('');
+      const fullText = messageText(event.message);
       const delta = fullText.length > state.lastTextLength ? fullText.slice(state.lastTextLength) : '';
       state.lastTextLength = 0;
       return { stdout: delta + '\n' };

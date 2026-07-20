@@ -1,6 +1,6 @@
 {
   "name": "mastracode",
-  "version": "0.31.0-alpha.11",
+  "version": "0.31.1-alpha.7",
   "description": "",
   "type": "module",
   "files": [
@@ -116,7 +116,7 @@
     "@mastra/tavily": "workspace:*",
     "@mastra/voice-deepgram": "workspace:*",
     "@mastra/voice-openai": "workspace:*",
-    "ai": "^6.0.224",
+    "ai": "^6.0.225",
     "chalk": "^5.5.0",
     "cli-highlight": "^2.1.11",
     "execa": "^9.6.1",
@@ -134,7 +134,7 @@
     "@copilotkit/aimock": "^1.29.0",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
-    "@types/node": "22.19.21",
+    "@types/node": "22.20.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "@xterm/headless": "6.0.0",

@@ -44,7 +44,7 @@ const pinger = new Agent({
 
 const mastra = new Mastra({
   agents: { pinger },
-  storage: new LibSQLStore({ url: 'file:./mastra.db' }),
+  storage: new LibSQLStore({ id: 'mastra-storage', url: 'file:./mastra.db' }),
 })
 
 await mastra.schedules.create({
@@ -178,7 +178,7 @@ Hooks let you run code at key points in an agent schedule's lifecycle, for examp
 ```typescript title="src/mastra/index.ts"
 const mastra = new Mastra({
   agents: { pinger },
-  storage: new LibSQLStore({ url: 'file:./mastra.db' }),
+  storage: new LibSQLStore({ id: 'mastra-storage', url: 'file:./mastra.db' }),
   schedules: {
     prepare: async ({ agentId, schedule, trigger }) => {
       // Return overrides, null to skip this fire, or undefined for defaults

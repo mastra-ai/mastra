@@ -3,14 +3,13 @@
     "name": "test-50da5a32",
     "testFile": "src/agent/agent-gemini.e2e.test.ts",
     "testName": "Gemini Model Compatibility Tests > Agent network() method > should handle network with workflow execution",
-    "createdAt": "2026-05-18T10:51:18.686Z",
-    "updatedAt": "2026-05-28T17:34:22.356Z"
+    "createdAt": "2026-07-14T17:16:10.721Z"
   },
   "recordings": [
     {
-      "hash": "daa8fcc706074249",
+      "hash": "9a4a6b956eb39ebf",
       "request": {
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
         "method": "POST",
         "body": {
           "generationConfig": {
@@ -65,7 +64,7 @@
             ]
           }
         },
-        "timestamp": 1779989657500
+        "timestamp": 1784049365872
       },
       "response": {
         "status": 200,
@@ -73,9 +72,9 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-type": "application/json; charset=UTF-8",
-          "date": "Thu, 28 May 2026 17:34:18 GMT",
+          "date": "Tue, 14 Jul 2026 17:16:06 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=1157",
+          "server-timing": "gfet4t7; dur=1094",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
@@ -88,43 +87,37 @@
               "content": {
                 "parts": [
                   {
-                    "text": "{\n  \"primitiveId\": \"researchWorkflow\",\n  \"primitiveType\": \"workflow\",\n  \"prompt\": \"{\\\"topic\\\": \\\"machine learning\\\"}\",\n  \"selectionReason\": \"The user wants to execute the research workflow on machine learning. This is the direct way to fulfill the user's request.\"\n}"
+                    "text": "{\n  \"primitiveId\": \"researchWorkflow\",\n  \"primitiveType\": \"workflow\",\n  \"prompt\": \"{\\\"topic\\\":\\\"machine learning\\\"}\",\n  \"selectionReason\": \"The user explicitly asked to execute the 'research-workflow' on 'machine learning'. The 'researchWorkflow' is the only available workflow that matches this request. The prompt is a JSON string conforming to the workflow's input schema.\"\n}"
                   }
                 ],
                 "role": "model"
               },
               "finishReason": "STOP",
-              "avgLogprobs": -0.1332413449006922
+              "index": 0
             }
           ],
           "usageMetadata": {
-            "promptTokenCount": 889,
-            "candidatesTokenCount": 68,
-            "totalTokenCount": 957,
+            "promptTokenCount": 834,
+            "candidatesTokenCount": 89,
+            "totalTokenCount": 923,
             "promptTokensDetails": [
               {
                 "modality": "TEXT",
-                "tokenCount": 889
-              }
-            ],
-            "candidatesTokensDetails": [
-              {
-                "modality": "TEXT",
-                "tokenCount": 68
+                "tokenCount": 834
               }
             ],
             "serviceTier": "standard"
           },
-          "modelVersion": "gemini-2.0-flash",
-          "responseId": "mnwYao20A8aV-sAPu_WRyAQ"
+          "modelVersion": "gemini-2.5-flash",
+          "responseId": "1W5WapTGOPOYkdUP6sCX4Aw"
         },
         "isStreaming": false
       }
     },
     {
-      "hash": "877ba788592c5f66",
+      "hash": "a6118533d707d8ae",
       "request": {
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
         "method": "POST",
         "body": {
           "generationConfig": {
@@ -157,7 +150,7 @@
             ]
           }
         },
-        "timestamp": 1779989658774
+        "timestamp": 1784049366989
       },
       "response": {
         "status": 200,
@@ -165,9 +158,9 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-type": "application/json; charset=UTF-8",
-          "date": "Thu, 28 May 2026 17:34:20 GMT",
+          "date": "Tue, 14 Jul 2026 17:16:08 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=1261",
+          "server-timing": "gfet4t7; dur=1660",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
@@ -180,43 +173,38 @@
               "content": {
                 "parts": [
                   {
-                    "text": "{\n  \"summary\": \"Machine learning (ML) is a field of artificial intelligence (AI) that focuses on enabling computer systems to learn from data without being explicitly programmed. ML algorithms use statistical techniques to identify patterns, make predictions, and improve their performance over time with experience. Common types of ML include supervised learning (where algorithms learn from labeled data), unsupervised learning (where algorithms learn from unlabeled data), and reinforcement learning (where algorithms learn through trial and error). ML is used in a wide range of applications, including image recognition, natural language processing, fraud detection, and recommendation systems.\"\n}"
+                    "text": "{\"summary\": \"Machine learning is a subset of artificial intelligence that enables systems to learn from data, identify patterns, and make decisions or predictions with minimal human intervention. It uses algorithms to analyze large datasets, build models, and improve their performance over time through experience, without being explicitly programmed for every task. Common applications include image recognition, natural language processing, recommendation systems, and predictive analytics.\"}"
                   }
                 ],
                 "role": "model"
               },
               "finishReason": "STOP",
-              "avgLogprobs": -0.09808929695570764
+              "index": 0
             }
           ],
           "usageMetadata": {
-            "promptTokenCount": 16,
-            "candidatesTokenCount": 121,
-            "totalTokenCount": 137,
+            "promptTokenCount": 13,
+            "candidatesTokenCount": 79,
+            "totalTokenCount": 246,
             "promptTokensDetails": [
               {
                 "modality": "TEXT",
-                "tokenCount": 16
+                "tokenCount": 13
               }
             ],
-            "candidatesTokensDetails": [
-              {
-                "modality": "TEXT",
-                "tokenCount": 121
-              }
-            ],
+            "thoughtsTokenCount": 154,
             "serviceTier": "standard"
           },
-          "modelVersion": "gemini-2.0-flash",
-          "responseId": "m3wYatrQBIyljMcP746osAc"
+          "modelVersion": "gemini-2.5-flash",
+          "responseId": "125WavGMA5vxnsEP6fyZiQ0"
         },
         "isStreaming": false
       }
     },
     {
-      "hash": "0b26f662da902b2b",
+      "hash": "156402036956f9eb",
       "request": {
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse",
         "method": "POST",
         "body": {
           "generationConfig": {
@@ -245,7 +233,7 @@
               "role": "user",
               "parts": [
                 {
-                  "text": "\n    The workflow researchWorkflow has contributed to the task.\n    This is the result: \"{\\\"isNetwork\\\":true,\\\"primitiveType\\\":\\\"workflow\\\",\\\"primitiveId\\\":\\\"researchWorkflow\\\",\\\"selectionReason\\\":\\\"The user wants to execute the research workflow on machine learning. This is the direct way to fulfill the user's request.\\\",\\\"input\\\":{\\\"topic\\\":\\\"machine learning\\\"},\\\"finalResult\\\":{\\\"runId\\\":\\\"00000000-0000-4000-8000-000000000001\\\",\\\"runResult\\\":{\\\"status\\\":\\\"success\\\",\\\"steps\\\":{\\\"input\\\":{\\\"topic\\\":\\\"machine learning\\\"},\\\"research-step\\\":{\\\"startedAt\\\":1779989658772,\\\"status\\\":\\\"success\\\",\\\"output\\\":{\\\"summary\\\":\\\"Machine learning (ML) is a field of artificial intelligence (AI) that focuses on enabling computer systems to learn from data without being explicitly programmed. ML algorithms use statistical techniques to identify patterns, make predictions, and improve their performance over time with experience. Common types of ML include supervised learning (where algorithms learn from labeled data), unsupervised learning (where algorithms learn from unlabeled data), and reinforcement learning (where algorithms learn through trial and error). ML is used in a wide range of applications, including image recognition, natural language processing, fraud detection, and recommendation systems.\\\"},\\\"endedAt\\\":1779989660150}},\\\"input\\\":{\\\"topic\\\":\\\"machine learning\\\"},\\\"stepExecutionPath\\\":[\\\"research-step\\\"],\\\"result\\\":{\\\"summary\\\":\\\"Machine learning (ML) is a field of artificial intelligence (AI) that focuses on enabling computer systems to learn from data without being explicitly programmed. ML algorithms use statistical techniques to identify patterns, make predictions, and improve their performance over time with experience. Common types of ML include supervised learning (where algorithms learn from labeled data), unsupervised learning (where algorithms learn from unlabeled data), and reinforcement learning (where algorithms learn through trial and error). ML is used in a wide range of applications, including image recognition, natural language processing, fraud detection, and recommendation systems.\\\"}},\\\"chunks\\\":[{\\\"type\\\":\\\"workflow-start\\\",\\\"runId\\\":\\\"00000000-0000-4000-8000-000000000001\\\",\\\"from\\\":\\\"WORKFLOW\\\",\\\"payload\\\":{\\\"workflowId\\\":\\\"research-workflow\\\"}},{\\\"type\\\":\\\"workflow-step-start\\\",\\\"runId\\\":\\\"00000000-0000-4000-8000-000000000001\\\",\\\"from\\\":\\\"WORKFLOW\\\",\\\"payload\\\":{\\\"stepName\\\":\\\"research-step\\\",\\\"id\\\":\\\"research-step\\\",\\\"stepCallId\\\":\\\"00000000-0000-4000-8000-0000000000a3\\\",\\\"payload\\\":{\\\"topic\\\":\\\"machine learning\\\"},\\\"startedAt\\\":1779989658772,\\\"status\\\":\\\"running\\\"}},{\\\"type\\\":\\\"workflow-step-result\\\",\\\"runId\\\":\\\"00000000-0000-4000-8000-000000000001\\\",\\\"from\\\":\\\"WORKFLOW\\\",\\\"payload\\\":{\\\"stepName\\\":\\\"research-step\\\",\\\"id\\\":\\\"research-step\\\",\\\"stepCallId\\\":\\\"00000000-0000-4000-8000-0000000000a3\\\",\\\"payload\\\":{\\\"topic\\\":\\\"machine learning\\\"},\\\"startedAt\\\":1779989658772,\\\"status\\\":\\\"success\\\",\\\"output\\\":{\\\"summary\\\":\\\"Machine learning (ML) is a field of artificial intelligence (AI) that focuses on enabling computer systems to learn from data without being explicitly programmed. ML algorithms use statistical techniques to identify patterns, make predictions, and improve their performance over time with experience. Common types of ML include supervised learning (where algorithms learn from labeled data), unsupervised learning (where algorithms learn from unlabeled data), and reinforcement learning (where algorithms learn through trial and error). ML is used in a wide range of applications, including image recognition, natural language processing, fraud detection, and recommendation systems.\\\"},\\\"endedAt\\\":1779989660150}},{\\\"type\\\":\\\"workflow-finish\\\",\\\"runId\\\":\\\"00000000-0000-4000-8000-000000000001\\\",\\\"from\\\":\\\"WORKFLOW\\\",\\\"payload\\\":{\\\"workflowStatus\\\":\\\"success\\\",\\\"metadata\\\":{},\\\"output\\\":{\\\"usage\\\":{\\\"inputTokens\\\":0,\\\"outputTokens\\\":0,\\\"totalTokens\\\":0,\\\"cachedInputTokens\\\":0,\\\"cacheCreationInputTokens\\\":0,\\\"reasoningTokens\\\":0}}}}],\\\"runSuccess\\\":true}}\"\n    \n    \n\nPrimitives already executed: workflow \"researchWorkflow\"\n\n    You need to evaluate if the task is complete. Pay very close attention to the SYSTEM INSTRUCTIONS for when the task is considered complete. \n    Only return true if the task is complete according to the system instructions.\n    Original task: Execute research-workflow on machine learning\n\n    If no primitive (type = 'none'), the task is complete because we can't run any primitive to further task completion.\n\n    Also, if the workflow researchWorkflow has declined the tool call in its response, then the task is complete as the primitive tool-call was declined by the user.\n\n    IMPORTANT: If the above result is from an AGENT PRIMITIVE and it is a suitable final result itself considering the original task, then finalResult should be an empty string or undefined.\n    \n    If the task is complete and the result is not from an AGENT PRIMITIVE, always generate a finalResult.\n    IF the task is complete and the result is from an AGENT PRIMITIVE, but the AGENT PRIMITIVE response is not comprehensive enough to accomplish the user's original task, then generate a finalResult.\n\n    IMPORTANT: The generated finalResult should not be the exact primitive result. You should craft a comprehensive response based on the message history.\n    The finalResult field should be written in natural language.\n\n    You must return this JSON shape:\n    {\n      \"isComplete\": boolean,\n      \"completionReason\": string,\n      \"finalResult\": string,\n    }\n  "
+                  "text": "\n    The workflow researchWorkflow has contributed to the task.\n    This is the result: \"{\\\"isNetwork\\\":true,\\\"primitiveType\\\":\\\"workflow\\\",\\\"primitiveId\\\":\\\"researchWorkflow\\\",\\\"selectionReason\\\":\\\"The user explicitly asked to execute the 'research-workflow' on 'machine learning'. The 'researchWorkflow' is the only available workflow that matches this request. The prompt is a JSON string conforming to the workflow's input schema.\\\",\\\"input\\\":{\\\"topic\\\":\\\"machine learning\\\"},\\\"finalResult\\\":{\\\"runId\\\":\\\"00000000-0000-4000-8000-000000000001\\\",\\\"runResult\\\":{\\\"status\\\":\\\"success\\\",\\\"steps\\\":{\\\"input\\\":{\\\"topic\\\":\\\"machine learning\\\"},\\\"research-step\\\":{\\\"startedAt\\\":1784049366987,\\\"status\\\":\\\"success\\\",\\\"output\\\":{\\\"summary\\\":\\\"Machine learning is a subset of artificial intelligence that enables systems to learn from data, identify patterns, and make decisions or predictions with minimal human intervention. It uses algorithms to analyze large datasets, build models, and improve their performance over time through experience, without being explicitly programmed for every task. Common applications include image recognition, natural language processing, recommendation systems, and predictive analytics.\\\"},\\\"endedAt\\\":1784049368664}},\\\"input\\\":{\\\"topic\\\":\\\"machine learning\\\"},\\\"stepExecutionPath\\\":[\\\"research-step\\\"],\\\"result\\\":{\\\"summary\\\":\\\"Machine learning is a subset of artificial intelligence that enables systems to learn from data, identify patterns, and make decisions or predictions with minimal human intervention. It uses algorithms to analyze large datasets, build models, and improve their performance over time through experience, without being explicitly programmed for every task. Common applications include image recognition, natural language processing, recommendation systems, and predictive analytics.\\\"}},\\\"chunks\\\":[{\\\"type\\\":\\\"workflow-start\\\",\\\"runId\\\":\\\"00000000-0000-4000-8000-000000000001\\\",\\\"from\\\":\\\"WORKFLOW\\\",\\\"payload\\\":{\\\"workflowId\\\":\\\"research-workflow\\\"}},{\\\"type\\\":\\\"workflow-step-start\\\",\\\"runId\\\":\\\"00000000-0000-4000-8000-000000000001\\\",\\\"from\\\":\\\"WORKFLOW\\\",\\\"payload\\\":{\\\"stepName\\\":\\\"research-step\\\",\\\"id\\\":\\\"research-step\\\",\\\"stepCallId\\\":\\\"00000000-0000-4000-8000-0000000000b4\\\",\\\"payload\\\":{\\\"topic\\\":\\\"machine learning\\\"},\\\"startedAt\\\":1784049366987,\\\"status\\\":\\\"running\\\"}},{\\\"type\\\":\\\"workflow-step-result\\\",\\\"runId\\\":\\\"00000000-0000-4000-8000-000000000001\\\",\\\"from\\\":\\\"WORKFLOW\\\",\\\"payload\\\":{\\\"stepName\\\":\\\"research-step\\\",\\\"id\\\":\\\"research-step\\\",\\\"stepCallId\\\":\\\"00000000-0000-4000-8000-0000000000b4\\\",\\\"payload\\\":{\\\"topic\\\":\\\"machine learning\\\"},\\\"startedAt\\\":1784049366987,\\\"status\\\":\\\"success\\\",\\\"output\\\":{\\\"summary\\\":\\\"Machine learning is a subset of artificial intelligence that enables systems to learn from data, identify patterns, and make decisions or predictions with minimal human intervention. It uses algorithms to analyze large datasets, build models, and improve their performance over time through experience, without being explicitly programmed for every task. Common applications include image recognition, natural language processing, recommendation systems, and predictive analytics.\\\"},\\\"endedAt\\\":1784049368664}},{\\\"type\\\":\\\"workflow-finish\\\",\\\"runId\\\":\\\"00000000-0000-4000-8000-000000000001\\\",\\\"from\\\":\\\"WORKFLOW\\\",\\\"payload\\\":{\\\"workflowStatus\\\":\\\"success\\\",\\\"metadata\\\":{},\\\"output\\\":{\\\"usage\\\":{\\\"inputTokens\\\":0,\\\"outputTokens\\\":0,\\\"totalTokens\\\":0,\\\"cachedInputTokens\\\":0,\\\"cacheCreationInputTokens\\\":0,\\\"reasoningTokens\\\":0}}}}],\\\"runSuccess\\\":true}}\"\n    \n    \n\nPrimitives already executed: workflow \"researchWorkflow\"\n\n    You need to evaluate if the task is complete. Pay very close attention to the SYSTEM INSTRUCTIONS for when the task is considered complete. \n    Only return true if the task is complete according to the system instructions.\n    Original task: Execute research-workflow on machine learning\n\n    If no primitive (type = 'none'), the task is complete because we can't run any primitive to further task completion.\n\n    Also, if the workflow researchWorkflow has declined the tool call in its response, then the task is complete as the primitive tool-call was declined by the user.\n\n    IMPORTANT: If the above result is from an AGENT PRIMITIVE and it is a suitable final result itself considering the original task, then finalResult should be an empty string or undefined.\n    \n    If the task is complete and the result is not from an AGENT PRIMITIVE, always generate a finalResult.\n    IF the task is complete and the result is from an AGENT PRIMITIVE, but the AGENT PRIMITIVE response is not comprehensive enough to accomplish the user's original task, then generate a finalResult.\n\n    IMPORTANT: The generated finalResult should not be the exact primitive result. You should craft a comprehensive response based on the message history.\n    The finalResult field should be written in natural language.\n\n    You must return this JSON shape:\n    {\n      \"isComplete\": boolean,\n      \"completionReason\": string,\n      \"finalResult\": string,\n    }\n  "
                 }
               ]
             }
@@ -258,7 +246,7 @@
             ]
           }
         },
-        "timestamp": 1779989660156
+        "timestamp": 1784049368667
       },
       "response": {
         "status": 200,
@@ -267,24 +255,21 @@
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-disposition": "attachment",
           "content-type": "text/event-stream",
-          "date": "Thu, 28 May 2026 17:34:20 GMT",
+          "date": "Tue, 14 Jul 2026 17:16:09 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=446",
+          "server-timing": "gfet4t7; dur=1210",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
           "x-xss-protection": "0"
         },
         "chunks": [
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"{\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 1821,\"totalTokenCount\": 1821,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 1821}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"nHwYavv9Hfvh1dkPwMaM4Q0\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\\n  \\\"\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 1821,\"totalTokenCount\": 1821,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 1821}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"nHwYavv9Hfvh1dkPwMaM4Q0\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"isComplete\\\": true,\\n  \\\"completionReason\\\": \\\"The research workflow has provided\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 1821,\"totalTokenCount\": 1821,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 1821}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"nHwYavv9Hfvh1dkPwMaM4Q0\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" a summary of machine learning, fulfilling the user's request.\\\",\\n  \\\"finalResult\\\":\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 1821,\"totalTokenCount\": 1821,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 1821}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"nHwYavv9Hfvh1dkPwMaM4Q0\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" \\\"Machine learning (ML) is a field of artificial intelligence (AI) focused on enabling computer systems to learn from data without explicit programming. It uses statistical techniques to\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 1821,\"totalTokenCount\": 1821,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 1821}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"nHwYavv9Hfvh1dkPwMaM4Q0\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" identify patterns, make predictions, and improve performance over time. Common types include supervised, unsupervised, and reinforcement learning. ML is applied in image recognition, natural language processing,\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 1821,\"totalTokenCount\": 1821,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 1821}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"nHwYavv9Hfvh1dkPwMaM4Q0\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" fraud detection, and recommendation systems.\\\"\\n}\"}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 1865,\"candidatesTokenCount\": 116,\"totalTokenCount\": 1981,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 1865}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 116}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"nHwYavv9Hfvh1dkPwMaM4Q0\"}\r\n\r\n"
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"{\\\"\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 1729,\"candidatesTokenCount\": 1,\"totalTokenCount\": 1831,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 1729}],\"thoughtsTokenCount\": 101,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"2G5WaqeaLo7SnsEPzcy-kQ0\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"isComplete\\\":true,\\\"completionReason\\\":\\\"The research workflow on 'machine learning' has been successfully executed and provided a summary.\\\",\\\"finalResult\\\":\\\"The research on machine learning has been completed. Machine learning is a subset of artificial intelligence that enables systems\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 1729,\"candidatesTokenCount\": 50,\"totalTokenCount\": 1880,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 1729}],\"thoughtsTokenCount\": 101,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"2G5WaqeaLo7SnsEPzcy-kQ0\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" to learn from data, identify patterns, and make decisions or predictions with minimal human intervention. It uses algorithms to analyze large datasets, build models, and improve their performance over time through experience, without being explicitly programmed for every task. Common applications\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 1729,\"candidatesTokenCount\": 98,\"totalTokenCount\": 1928,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 1729}],\"thoughtsTokenCount\": 101,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"2G5WaqeaLo7SnsEPzcy-kQ0\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" include image recognition, natural language processing, recommendation systems, and predictive analytics.\\\"}\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 1729,\"candidatesTokenCount\": 114,\"totalTokenCount\": 1944,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 1729}],\"thoughtsTokenCount\": 101,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"2G5WaqeaLo7SnsEPzcy-kQ0\"}\r\n\r\n"
         ],
-        "chunkTimings": [1, 0, 109, 120, 220, 249, 92],
+        "chunkTimings": [0, 139, 178, 87],
         "isStreaming": true
       }
     }

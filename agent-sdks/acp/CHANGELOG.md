@@ -1,5 +1,43 @@
 # @mastra/acp
 
+## 0.4.0-alpha.0
+
+### Minor Changes
+
+- Added a `createClient` option to `createACPTool()` and `AcpAgent` for customizing the ACP client, and fixed a crash when the ACP agent command fails to start. ([#19559](https://github.com/mastra-ai/mastra/pull/19559))
+
+  **Custom ACP client (`createClient`)**
+
+  Some ACP agents call custom extension methods (`extMethod` / `extNotification`) on the client. The built-in client rejected these with a "Method not found" error and could not be replaced, so those agents were unusable without reimplementing the whole connection. The new `createClient` option receives the default client and returns the client used for the connection:
+
+  ```ts
+  import { createACPTool } from '@mastra/acp';
+
+  const tool = createACPTool({
+    id: 'grok',
+    description: 'Dispatch tasks to Grok',
+    command: 'grok',
+    createClient: defaultClient =>
+      Object.assign(defaultClient, {
+        extMethod: async (method, params) => ({}),
+        extNotification: async (method, params) => {},
+      }),
+  });
+  ```
+
+  The `Client` type is now re-exported from `@mastra/acp` for fully custom implementations.
+
+  **Spawn failure handling**
+
+  If the configured `command` could not be started (for example the executable does not exist), the child process 'error' event was unhandled and crashed the host process. Tool execution now rejects with the spawn error instead.
+
+  Fixes #19109
+
+### Patch Changes
+
+- Updated dependencies [[`1426af2`](https://github.com/mastra-ai/mastra/commit/1426af24975879c000d13ac75673f630fcc970c1), [`975295d`](https://github.com/mastra-ai/mastra/commit/975295d418552f0d46a59edfef4c3ee555f9930a), [`85e4fb5`](https://github.com/mastra-ai/mastra/commit/85e4fb50087a81c74df3a762f53b56373db0b912), [`ef03c0c`](https://github.com/mastra-ai/mastra/commit/ef03c0cfc62367a458e4cc56462e2148b35681c5), [`4fb4d88`](https://github.com/mastra-ai/mastra/commit/4fb4d881bc107acee13890ad4d78661016c510ed), [`4eba27a`](https://github.com/mastra-ai/mastra/commit/4eba27adcf60f991df0e62f94b3e75b4e67f3b4b), [`c701be3`](https://github.com/mastra-ai/mastra/commit/c701be32d7d9aa94a66da8c6cc38dcac6856f464)]:
+  - @mastra/core@1.52.0-alpha.3
+
 ## 0.3.0
 
 ### Minor Changes

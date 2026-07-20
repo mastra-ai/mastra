@@ -3,19 +3,18 @@ import { useEffect } from 'react';
 import { useOverlays } from '../../../lib/overlays';
 import { useToast } from '../../../ui';
 import { SettingsPanel } from '../../settings';
-import { GithubConnectModal, ProjectsModal, useActiveProjectContext, useGithubStatusQuery } from '../../workspaces';
-import { CommandPalette } from './CommandPalette';
+import { FactoriesModal, GithubConnectModal, useActiveFactoryContext, useGithubStatusQuery } from '../../workspaces';
 import { ShortcutsOverlay } from './ShortcutsOverlay';
 
 /** Mounts the active chat overlays. Each overlay owns its provider-backed behavior. */
 export function ChatOverlays() {
   const overlays = useOverlays();
-  const { activeProject, projects, selectProject, preparing, prepareError } = useActiveProjectContext();
+  const { factories, selectFactory, preparing, prepareError } = useActiveFactoryContext();
   const { toast } = useToast();
   const githubStatus = useGithubStatusQuery().data;
 
-  // The GitHub repo picker replaces the projects modal while open.
-  const projectsOpen = (overlays.isOpen('projects') || projects.length === 0) && !overlays.isOpen('github');
+  // The GitHub repo picker replaces the factories modal while open.
+  const factoriesOpen = (overlays.isOpen('factories') || factories.length === 0) && !overlays.isOpen('github');
 
   // Materialization failures surface as a toast; selection already stays put.
   // Keyed on the error identity only — `toast` is not referentially stable, and
@@ -27,15 +26,14 @@ export function ChatOverlays() {
 
   return (
     <>
-      {overlays.isOpen('palette') && activeProject && <CommandPalette />}
       {overlays.isOpen('settings') && <SettingsPanel onClose={() => overlays.close('settings')} />}
       {overlays.isOpen('shortcuts') && <ShortcutsOverlay />}
-      {projectsOpen && <ProjectsModal />}
+      {factoriesOpen && <FactoriesModal />}
 
       {overlays.isOpen('github') && githubStatus && (
         <GithubConnectModal
           status={githubStatus}
-          onProjectCreated={project => void selectProject(project)}
+          onFactoryCreated={factory => void selectFactory(factory)}
           onClose={() => overlays.close('github')}
         />
       )}

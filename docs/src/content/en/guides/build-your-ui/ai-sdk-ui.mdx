@@ -1166,6 +1166,7 @@ The workflow uses:
     export const mastra = new Mastra({
       workflows: { approvalWorkflow },
       storage: new LibSQLStore({
+        id: 'mastra-storage',
         url: 'file:../mastra.db',
       }),
       server: {

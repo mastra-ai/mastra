@@ -1,14 +1,14 @@
 import { useKeyDown } from '../../../lib/hooks';
 import { useOverlays } from '../../../lib/overlays';
-import { useActiveProjectContext } from '../../workspaces';
+import { useActiveFactoryContext } from '../../workspaces';
 import { useChatTranscript } from '../context/useChatTranscript';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { useAbortAgentControllerMutation } from './useAgentControllerRunMutations';
+import { useAbortAgentControllerMutation } from '../../../../../shared/hooks/useAgentControllerRunMutations';
 
 export function useGlobalShortcuts() {
   const overlays = useOverlays();
-  const { projects } = useActiveProjectContext();
+  const { factories } = useActiveFactoryContext();
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { busy } = useChatTranscript();
   const abortMutation = useAbortAgentControllerMutation({
@@ -20,10 +20,6 @@ export function useGlobalShortcuts() {
   });
 
   useKeyDown({
-    'mod+k': e => {
-      e.preventDefault();
-      overlays.toggle('palette');
-    },
     '?': e => {
       const target = e.target as HTMLElement | null;
       const typing = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable;
@@ -32,18 +28,14 @@ export function useGlobalShortcuts() {
       overlays.toggle('shortcuts');
     },
     escape: () => {
-      const projectsForcedOpen = overlays.isOpen('projects') || projects.length === 0;
-      if (projectsForcedOpen) return;
+      const factoriesForcedOpen = overlays.isOpen('factories') || factories.length === 0;
+      if (factoriesForcedOpen) return;
       if (overlays.isOpen('shortcuts')) {
         overlays.close('shortcuts');
         return;
       }
       if (overlays.isOpen('settings')) {
         overlays.close('settings');
-        return;
-      }
-      if (overlays.isOpen('palette')) {
-        overlays.close('palette');
         return;
       }
       if (overlays.isOpen('sidebar')) {

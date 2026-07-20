@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "41.0.0-alpha.10",
+  "version": "42.0.0-alpha.7",
   "description": "Mastra Playground components",
   "sideEffects": [
     "**/*.css"
@@ -180,7 +180,7 @@
     "@tanstack/react-query": "^5.90.21",
     "@testing-library/react": "^16.3.2",
     "@types/json-schema": "^7.0.15",
-    "@types/node": "22.19.21",
+    "@types/node": "22.20.1",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.2.0",

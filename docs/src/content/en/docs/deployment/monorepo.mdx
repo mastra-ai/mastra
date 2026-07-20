@@ -107,6 +107,8 @@ export const mastra = new Mastra({
 })
 ```
 
+Keep `bundler` as a direct property in the object passed to `new Mastra()`. See [build-time configuration](/docs/deployment/mastra-server#build-time-configuration) for the supported entry-file shape.
+
 ## Environment variables
 
 Store `.env` files in the Mastra application directory (e.g., `apps/api/.env`), not the monorepo root.
