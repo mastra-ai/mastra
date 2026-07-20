@@ -1064,8 +1064,8 @@ importers:
   channels/slack:
     dependencies:
       '@chat-adapter/slack':
-        specifier: ^4.29.0
-        version: 4.29.0(ai@6.0.230(zod@4.4.3))(bufferutil@4.1.0)(zod@4.4.3)
+        specifier: ^4.34.0
+        version: 4.34.0(ai@7.0.31(zod@4.4.3))(bufferutil@4.1.0)(zod@4.4.3)
     devDependencies:
       '@mastra/core':
         specifier: workspace:*
@@ -4210,8 +4210,8 @@ importers:
         specifier: ^8.20.0
         version: 8.20.0
       chat:
-        specifier: ^4.29.0
-        version: 4.29.0(ai@6.0.230(zod@4.4.3))(zod@4.4.3)
+        specifier: ^4.34.0
+        version: 4.34.0(ai@7.0.31(zod@4.4.3))(zod@4.4.3)
       croner:
         specifier: ^10.0.1
         version: 10.0.1
@@ -11586,12 +11586,12 @@ packages:
   '@changesets/write@0.4.0':
     resolution: {integrity: sha512-CdTLvIOPiCNuH71pyDu3rA+Q0n65cmAbXnwWH84rKGiFumFzkmHNT8KHTMEchcxN+Kl8I54xGUhJ7l3E7X396Q==}
 
-  '@chat-adapter/shared@4.29.0':
-    resolution: {integrity: sha512-ARqTDoHJHKN9rpytbFPJbNmqqx3fOg5xwsTZdlingQPAssOSeHDBdqrFJkgDhyCRGbmDtG09cuS0FkVzeoh2qg==}
+  '@chat-adapter/shared@4.34.0':
+    resolution: {integrity: sha512-3j1LIWNLp91du8y78FEUNATOEnXyVGrY3JcTNmO5/KARwHTAa17LMVMuWusj0WQj2KsKW4w/K9wytaOj7ToppA==}
     engines: {node: '>=20'}
 
-  '@chat-adapter/slack@4.29.0':
-    resolution: {integrity: sha512-s2DXAwkTpmiIKSATXgrO879s1pqFwS70Y0JPd+TRGRzDeh6nfqt5dnKt5Bug0P1zwkB6DoPurhnYS9nqhSmD/w==}
+  '@chat-adapter/slack@4.34.0':
+    resolution: {integrity: sha512-l+hHljueSiw/74CZKhjXpmreVlgfUaLcn9+Oh/xzwjbozrqlw3h7+c7PixiHLeuu2vc22uA2GQoFopDdjmXQQw==}
     engines: {node: '>=20'}
 
   '@chevrotain/types@11.1.2':
@@ -17996,8 +17996,8 @@ packages:
     resolution: {integrity: sha512-I8vmSjNYWsaxuWPx6dz4yeh0h7vRBWbgAMK14LEmblbZ404BtrPbXs6jDPx4cYgGf8msDGF4A9opLZBu21FViQ==}
     engines: {node: '>= 12.13.0', npm: '>= 6.12.0'}
 
-  '@slack/web-api@7.15.2':
-    resolution: {integrity: sha512-/m9qVFkiq85Oa/FSQwYIRDa/AO4qNYkDh4sRBK1WqEc2+RyG7w4tbU6rBIwUOcc/TmWOIr24Nraquxg7um5mYw==}
+  '@slack/web-api@7.19.0':
+    resolution: {integrity: sha512-ItjyjEZml+LDH8CjcCLRLJHh7VZtevPKExrRN3l5KWyBliyDnGAeoO4Y+K+fFBmRpKLYVPgqWMX4THldv2HVtA==}
     engines: {node: '>= 18', npm: '>= 8.6.0'}
 
   '@slorber/react-helmet-async@1.3.0':
@@ -21289,11 +21289,11 @@ packages:
   chardet@2.1.1:
     resolution: {integrity: sha512-PsezH1rqdV9VvyNhxxOW32/d75r01NY7TQCmOqomRo15ZSOKbpTFVsfjghxo6JloQUCGnH4k1LGu0R4yCLlWQQ==}
 
-  chat@4.29.0:
-    resolution: {integrity: sha512-KdPfzaie5ivYytyRICTERg5xT+LeCbYefokvNAqTHe92eqkFaoTMXXkSitikxJVWhZIb2YoXF1b9UZHyzSzKzw==}
+  chat@4.34.0:
+    resolution: {integrity: sha512-g3c9ANavtCX7BwHcB5c3lWKIUm+8Oo7qlbgQ7/ni1rmVLLeCQa7FiMfeIyEyTAd/4HlRQu5jcS4EPdb0VyhUDQ==}
     engines: {node: '>=20'}
     peerDependencies:
-      ai: ^6.0.182
+      ai: ^6.0.182 || ^7.0.0
       zod: ^3.0.0 || ^4.0.0
     peerDependenciesMeta:
       ai:
@@ -30683,6 +30683,14 @@ snapshots:
       '@vercel/oidc': 3.2.0
       zod: 3.25.76
 
+  '@ai-sdk/gateway@4.0.23(zod@4.4.3)':
+    dependencies:
+      '@ai-sdk/provider': 4.0.3
+      '@ai-sdk/provider-utils': 5.0.11(zod@4.4.3)
+      '@vercel/oidc': 3.2.0
+      zod: 4.4.3
+    optional: true
+
   '@ai-sdk/google-vertex@3.0.137(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.10)(@vitest/ui@4.1.10)(jsdom@27.4.0(@noble/hashes@2.2.0)(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.23.1)(yaml@2.9.0))(zod@4.4.3)':
     dependencies:
       '@ai-sdk/anthropic': 2.0.79(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.10)(@vitest/ui@4.1.10)(jsdom@27.4.0(@noble/hashes@2.2.0)(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.23.1)(yaml@2.9.0))(zod@4.4.3)
@@ -33531,20 +33539,20 @@ snapshots:
       human-id: 4.1.2
       prettier: 2.8.8
 
-  '@chat-adapter/shared@4.29.0(ai@6.0.230(zod@4.4.3))(zod@4.4.3)':
+  '@chat-adapter/shared@4.34.0(ai@7.0.31(zod@4.4.3))(zod@4.4.3)':
     dependencies:
-      chat: 4.29.0(ai@6.0.230(zod@4.4.3))(zod@4.4.3)
+      chat: 4.34.0(ai@7.0.31(zod@4.4.3))(zod@4.4.3)
     transitivePeerDependencies:
       - ai
       - supports-color
       - zod
 
-  '@chat-adapter/slack@4.29.0(ai@6.0.230(zod@4.4.3))(bufferutil@4.1.0)(zod@4.4.3)':
+  '@chat-adapter/slack@4.34.0(ai@7.0.31(zod@4.4.3))(bufferutil@4.1.0)(zod@4.4.3)':
     dependencies:
-      '@chat-adapter/shared': 4.29.0(ai@6.0.230(zod@4.4.3))(zod@4.4.3)
+      '@chat-adapter/shared': 4.34.0(ai@7.0.31(zod@4.4.3))(zod@4.4.3)
       '@slack/socket-mode': 2.0.7(bufferutil@4.1.0)
-      '@slack/web-api': 7.15.2
-      chat: 4.29.0(ai@6.0.230(zod@4.4.3))(zod@4.4.3)
+      '@slack/web-api': 7.19.0
+      chat: 4.34.0(ai@7.0.31(zod@4.4.3))(zod@4.4.3)
     transitivePeerDependencies:
       - ai
       - bufferutil
@@ -40931,7 +40939,7 @@ snapshots:
   '@slack/socket-mode@2.0.7(bufferutil@4.1.0)':
     dependencies:
       '@slack/logger': 4.0.1
-      '@slack/web-api': 7.15.2
+      '@slack/web-api': 7.19.0
       '@types/node': 22.19.15
       '@types/ws': 8.18.1
       eventemitter3: 5.0.1
@@ -40944,7 +40952,7 @@ snapshots:
 
   '@slack/types@2.21.1': {}
 
-  '@slack/web-api@7.15.2':
+  '@slack/web-api@7.19.0':
     dependencies:
       '@slack/logger': 4.0.1
       '@slack/types': 2.21.1
@@ -43783,6 +43791,14 @@ snapshots:
       '@ai-sdk/provider-utils': 5.0.11(zod@3.25.76)
       zod: 3.25.76
 
+  ai@7.0.31(zod@4.4.3):
+    dependencies:
+      '@ai-sdk/gateway': 4.0.23(zod@4.4.3)
+      '@ai-sdk/provider': 4.0.3
+      '@ai-sdk/provider-utils': 5.0.11(zod@4.4.3)
+      zod: 4.4.3
+    optional: true
+
   ajv-draft-04@1.0.0(ajv@8.20.0):
     optionalDependencies:
       ajv: 8.20.0
@@ -44630,7 +44646,7 @@ snapshots:
 
   chardet@2.1.1: {}
 
-  chat@4.29.0(ai@6.0.230(zod@4.4.3))(zod@4.4.3):
+  chat@4.34.0(ai@7.0.31(zod@4.4.3))(zod@4.4.3):
     dependencies:
       '@workflow/serde': 4.1.0-beta.2
       mdast-util-to-string: 4.0.0
@@ -44640,7 +44656,7 @@ snapshots:
       remend: 1.3.0
       unified: 11.0.5
     optionalDependencies:
-      ai: 6.0.230(zod@4.4.3)
+      ai: 7.0.31(zod@4.4.3)
       zod: 4.4.3
     transitivePeerDependencies:
       - supports-color
