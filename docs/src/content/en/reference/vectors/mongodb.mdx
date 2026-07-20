@@ -122,6 +122,20 @@ Creates a new vector index (collection) in MongoDB.
     description:
       'Metadata field names to declare as filter fields in the Atlas vectorSearch index (registered as `metadata.<field>`). Queries that filter only on declared fields are pushed directly into `$vectorSearch` instead of pre-filtering candidate `_id`s, avoiding the 16 MB BSON limit on large result sets. Filters that reference an undeclared field, or use an operator `$vectorSearch` does not support, fall back to the pre-filter automatically.',
   },
+  {
+    name: 'collectionName',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Store the vectors on an existing (operational) collection instead of a managed collection named after the index. The collection is never created or dropped by this store when set. Defaults to `indexName`.',
+  },
+  {
+    name: 'searchIndexName',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Name for the Atlas vectorSearch index created on the collection. Defaults to `${indexName}_vector_index`.',
+  },
 ]}
 />
 
@@ -239,6 +253,14 @@ Searches for similar vectors with optional metadata filtering.
     defaultValue: '20 * topK (capped at 10000)',
     description:
       'Number of candidates the HNSW graph considers before selecting top-K results. Higher values improve recall at the cost of latency. See: https://www.mongodb.com/docs/atlas/atlas-vector-search/vector-search-stage/',
+  },
+  {
+    name: 'metadataMode',
+    type: "'field' | 'document'",
+    isOptional: true,
+    defaultValue: 'field',
+    description:
+      "`'field'` (default) projects the managed `metadata`/`document` fields. `'document'` returns the full source document as `metadata` — use for bring-your-own operational collections whose documents have their own shape. Note: `'document'` mode includes the full document (including the embedding) in `metadata`.",
   },
 ]}
 />
@@ -416,11 +438,55 @@ try {
 }
 ```
 
+## Indexing an existing collection
+
+You can create a vector index on an existing operational collection instead of using a managed collection. This is useful when you want to add vector search capabilities to documents that already exist in your MongoDB database.
+
+```typescript
+import { MongoDBVector } from '@mastra/mongodb'
+
+const store = new MongoDBVector({
+  id: 'mongodb-vector',
+  uri: process.env.MONGODB_URI,
+  dbName: process.env.MONGODB_DB_NAME,
+})
+
+// Create a vector index on an existing 'transactions' collection
+await store.createIndex({
+  indexName: 'precedents',
+  dimension: 1024,
+  collectionName: 'transactions', // Use existing collection
+  searchIndexName: 'txn_vec_idx', // Custom search index name
+})
+
+// Wait for the index to be ready
+await store.waitForIndexReady({ indexName: 'precedents' })
+
+// Query using document mode to get full source documents
+const hits = await store.query({
+  indexName: 'precedents',
+  queryVector: embeddings,
+  topK: 5,
+  metadataMode: 'document', // Returns full document as metadata
+})
+
+// hits[0].metadata now contains all fields from the source document
+console.log(hits[0].metadata.amount, hits[0].metadata.customField)
+```
+
+**Important notes:**
+
+- The collection must already exist and contain documents with an `embedding` field (or the custom `embeddingFieldPath` you configured)
+- The collection is never created or dropped when using `collectionName`
+- Use `metadataMode: 'document'` when querying to retrieve the full source document as `metadata`
+- The full document, including the embedding vector, is returned in `metadata` when using `'document'` mode
+
 ## Best practices
 
 - Index metadata fields used in filters for optimal query performance.
 - Use consistent field naming in metadata to avoid unexpected query results.
 - Regularly monitor index and collection statistics to ensure efficient search.
+- When indexing existing collections, ensure all documents have the required `embedding` field.
 
 ## Usage example
 
