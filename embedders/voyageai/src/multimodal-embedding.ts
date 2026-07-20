@@ -94,7 +94,7 @@ export class VoyageMultimodalEmbeddingModel {
       );
     }
 
-    this.client = new VoyageAIClient({ apiKey });
+    this.client = new VoyageAIClient({ apiKey, ...(config.baseUrl ? { baseUrl: config.baseUrl } : {}) });
   }
 
   /**

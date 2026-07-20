@@ -44,4 +44,18 @@ describe('VoyageMultimodalEmbeddingModel', () => {
     expect(typeof firstContent).toBe('object');
     expect(firstContent).toMatchObject({ type: 'text', text: 'hello' });
   });
+
+  it('passes baseUrl through to the VoyageAIClient when provided', () => {
+    new VoyageMultimodalEmbeddingModel({
+      model: 'voyage-multimodal-3.5',
+      apiKey: 'custom-key',
+      baseUrl: 'https://ai.mongodb.com/v1',
+    });
+    expect(mockConstructor).toHaveBeenCalledWith({ apiKey: 'custom-key', baseUrl: 'https://ai.mongodb.com/v1' });
+  });
+
+  it('omits baseUrl from client options when not provided', () => {
+    new VoyageMultimodalEmbeddingModel({ model: 'voyage-multimodal-3.5', apiKey: 'custom-key' });
+    expect(mockConstructor).toHaveBeenCalledWith({ apiKey: 'custom-key' });
+  });
 });
