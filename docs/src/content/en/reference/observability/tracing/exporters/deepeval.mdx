@@ -1,0 +1,184 @@
+---
+title: "Reference: DeepEvalExporter | Observability"
+description: DeepEval exporter for Tracing
+packages:
+  - "@mastra/deepeval"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# DeepEvalExporter
+
+Sends Tracing data to DeepEval and Confident AI for evaluation and observability.
+
+## Constructor
+
+```typescript prettier:false
+new DeepEvalExporter(config?: DeepEvalExporterConfig)
+```
+
+## `DeepEvalExporterConfig`
+
+```typescript
+interface DeepEvalExporterConfig extends BaseExporterConfig {
+  apiKey?: string
+  environment?: string
+  name?: string
+  tags?: string[]
+  metadata?: Record<string, any>
+  threadId?: string
+  userId?: string
+  testCaseId?: string
+  turnId?: string
+  metricCollection?: string
+  traceMetricCollection?: string
+  llmMetricCollection?: string
+  agentMetricCollection?: string
+  toolMetricCollectionMap?: Record<string, string>
+  prompt?: Prompt
+  debug?: boolean
+  traceCaptureSink?: (trace: Trace) => void
+}
+```
+
+Extends `BaseExporterConfig`, which includes:
+
+- `logger?: IMastraLogger` - Logger instance
+- `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - Log level (default: INFO)
+
+<PropertiesTable
+  props={[
+  {
+    name: 'apiKey',
+    type: 'string',
+    description: 'Confident AI API key. Falls back to the CONFIDENT_API_KEY env var. The exporter disables itself when no key is found.',
+    required: false,
+  },
+  {
+    name: 'environment',
+    type: 'string',
+    description: "Trace environment. Falls back to CONFIDENT_TRACE_ENVIRONMENT, then 'development'.",
+    required: false,
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Trace name applied to every trace. Defaults to the Mastra serviceName.',
+    required: false,
+  },
+  {
+    name: 'tags',
+    type: 'string[]',
+    description: 'Tags applied to every trace.',
+    required: false,
+  },
+  {
+    name: 'metadata',
+    type: 'Record<string, any>',
+    description: 'Metadata applied to every trace.',
+    required: false,
+  },
+  {
+    name: 'metricCollection',
+    type: 'string',
+    description: 'Trace-level metric collection.',
+    required: false,
+  },
+  {
+    name: 'llmMetricCollection',
+    type: 'string',
+    description: 'Metric collection applied to LLM spans.',
+    required: false,
+  },
+  {
+    name: 'agentMetricCollection',
+    type: 'string',
+    description: 'Metric collection applied to agent spans.',
+    required: false,
+  },
+  {
+    name: 'toolMetricCollectionMap',
+    type: 'Record<string, string>',
+    description: 'Metric collection applied per tool name.',
+    required: false,
+  },
+  {
+    name: 'prompt',
+    type: 'Prompt',
+    description: 'DeepEval prompt linkage attached to LLM spans.',
+    required: false,
+  },
+  {
+    name: 'traceCaptureSink',
+    type: '(trace: Trace) => void',
+    description: 'Receives completed traces locally instead of posting them to Confident AI. Use for offline evaluation.',
+    required: false,
+  },
+  {
+    name: 'logLevel',
+    type: "'debug' | 'info' | 'warn' | 'error'",
+    description: "Logger level (default: 'info')",
+    required: false,
+  },
+]}
+/>
+
+## Methods
+
+### `exportTracingEvent`
+
+```typescript prettier:false
+async exportTracingEvent(event: TracingEvent): Promise<void>
+```
+
+Exports a tracing event to DeepEval. Builds the DeepEval trace tree from the Mastra span stream and posts the trace when the root span ends.
+
+### `flush`
+
+```typescript prettier:false
+async flush(): Promise<void>
+```
+
+Waits for any in-flight trace posts to settle without shutting down the exporter.
+
+### `shutdown`
+
+```typescript prettier:false
+async shutdown(): Promise<void>
+```
+
+Finalizes any open traces and flushes pending posts.
+
+## Usage
+
+### Zero-Config (using environment variables)
+
+```typescript
+import { DeepEvalExporter } from '@mastra/deepeval'
+
+// Reads from CONFIDENT_API_KEY, CONFIDENT_TRACE_ENVIRONMENT
+const exporter = new DeepEvalExporter()
+```
+
+### Explicit Configuration
+
+```typescript
+import { DeepEvalExporter } from '@mastra/deepeval'
+
+const exporter = new DeepEvalExporter({
+  apiKey: process.env.CONFIDENT_API_KEY,
+  environment: 'production',
+})
+```
+
+## Span type mapping
+
+| Mastra span type                                                       | DeepEval span type |
+| ---------------------------------------------------------------------- | ------------------ |
+| `AGENT_RUN`, `WORKFLOW_RUN`                                            | `AGENT`            |
+| `MODEL_GENERATION`                                                     | `LLM`              |
+| `TOOL_CALL`, `MCP_TOOL_CALL`, `PROVIDER_TOOL_CALL`, `CLIENT_TOOL_CALL` | `TOOL`             |
+| `RAG_EMBEDDING`, `RAG_VECTOR_OPERATION`                                | `RETRIEVER`        |
+| All others                                                             | `CUSTOM`           |
+
+Event spans (for example `MODEL_CHUNK`) are dropped.

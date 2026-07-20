@@ -1,0 +1,124 @@
+---
+title: "DeepEval exporter | Integrations | Observability"
+description: "Send traces to DeepEval and Confident AI for evaluation and monitoring"
+packages:
+  - "@mastra/deepeval"
+  - "@mastra/observability"
+---
+
+# DeepEval exporter
+
+[DeepEval](https://www.confident-ai.com/) (Confident AI) is an evaluation and monitoring platform for LLM applications. The DeepEval exporter sends your traces to Confident AI, where you can run metrics, review traces, and track quality over time.
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/deepeval@latest
+```
+
+## Configuration
+
+### Prerequisites
+
+1. **Confident AI account**: Sign up at [confident-ai.com](https://www.confident-ai.com/)
+1. **API key**: Generate one in your Confident AI project settings
+1. **Environment variables**: Set your credentials:
+
+```bash title=".env"
+CONFIDENT_API_KEY=confident_proj_xxxxxxxxxxxxx
+
+# Optional
+CONFIDENT_TRACE_ENVIRONMENT=production  # Defaults to "development"
+```
+
+### Zero-Config Setup
+
+With environment variables set, use the exporter with no configuration:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+import { DeepEvalExporter } from '@mastra/deepeval'
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      deepeval: {
+        serviceName: 'my-service',
+        exporters: [new DeepEvalExporter()],
+      },
+    },
+  }),
+})
+```
+
+### Explicit Configuration
+
+You can also pass credentials directly (takes precedence over environment variables):
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+import { DeepEvalExporter } from '@mastra/deepeval'
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      deepeval: {
+        serviceName: 'my-service',
+        exporters: [
+          new DeepEvalExporter({
+            apiKey: process.env.CONFIDENT_API_KEY,
+            environment: 'production',
+          }),
+        ],
+      },
+    },
+  }),
+})
+```
+
+### Metric collections
+
+Attach DeepEval metric collections at the trace level or per span type. Trace-level metrics run against the whole trace, and per-type metrics run against matching spans.
+
+```typescript title="src/mastra/index.ts"
+new DeepEvalExporter({
+  metricCollection: 'trace-metrics',      // trace-level
+  llmMetricCollection: 'llm-metrics',     // applied to LLM spans
+  agentMetricCollection: 'agent-metrics', // applied to agent spans
+  toolMetricCollectionMap: {
+    search: 'search-tool-metrics',        // applied to the "search" tool
+  },
+})
+```
+
+### Complete Configuration
+
+```typescript
+new DeepEvalExporter({
+  apiKey: process.env.CONFIDENT_API_KEY,
+  environment: 'production', // Default: "development"
+  name: 'my-trace',          // Default: the Mastra serviceName
+  tags: ['production'],
+  metadata: { team: 'growth' },
+})
+```
+
+## Span type mapping
+
+Mastra spans map to DeepEval's span types:
+
+| Mastra span type                                                       | DeepEval span type |
+| ---------------------------------------------------------------------- | ------------------ |
+| `AGENT_RUN`, `WORKFLOW_RUN`                                            | `AGENT`            |
+| `MODEL_GENERATION`                                                     | `LLM`              |
+| `TOOL_CALL`, `MCP_TOOL_CALL`, `PROVIDER_TOOL_CALL`, `CLIENT_TOOL_CALL` | `TOOL`             |
+| `RAG_EMBEDDING`, `RAG_VECTOR_OPERATION`                                | `RETRIEVER`        |
+| All others                                                             | `CUSTOM`           |
+
+
+## Related
+
+- [Tracing Overview](/docs/observability/tracing/overview)
+- [DeepEval Documentation](https://www.confident-ai.com/docs)

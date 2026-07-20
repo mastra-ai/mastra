@@ -477,6 +477,7 @@ const sidebars = {
                   label: 'Console',
                 },
                 { type: 'doc', id: 'observability/tracing/exporters/datadog', label: 'Datadog' },
+                { type: 'doc', id: 'observability/tracing/exporters/deepeval', label: 'DeepEval' },
                 {
                   type: 'doc',
                   id: 'observability/tracing/exporters/default-exporter',

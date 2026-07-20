@@ -856,6 +856,11 @@ const sidebars = {
                     },
                     {
                       type: 'doc',
+                      id: 'observability/integrations/exporters/deepeval',
+                      label: 'DeepEval',
+                    },
+                    {
+                      type: 'doc',
                       id: 'observability/integrations/exporters/laminar',
                       label: 'Laminar',
                     },
