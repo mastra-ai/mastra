@@ -53,6 +53,14 @@ describe('agent-controller routes', () => {
     ({ mastra } = makeMastra());
   });
 
+  async function getRouteSession(resourceId: string) {
+    const controller = mastra.getAgentController('code')!;
+    await controller.init();
+    // Same get-or-create call the route handlers make, so this returns the
+    // exact session instance the handler will operate on.
+    return controller.createSession({ resourceId, id: resourceId, ownerId: controller.id });
+  }
+
   describe('LIST_AGENT_CONTROLLERS_ROUTE', () => {
     it('lists registered agent controllers by id', async () => {
       const res = await LIST_AGENT_CONTROLLERS_ROUTE.handler({ mastra } as any);
@@ -218,6 +226,30 @@ describe('agent-controller routes', () => {
       } as any);
       expect(res).toEqual({ ok: true });
     });
+
+    it('logs a rejected background send instead of leaving an unhandled rejection', async () => {
+      const resourceId = 'user-rejected-send';
+      const session = await getRouteSession(resourceId);
+      const error = new Error('signal submission failed');
+      const loggerError = vi.spyOn(mastra.getLogger(), 'error').mockImplementation(() => {});
+      vi.spyOn(session, 'sendMessage').mockRejectedValue(error);
+
+      const res = await SEND_AGENT_CONTROLLER_MESSAGE_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId,
+        message: 'hello',
+      } as any);
+
+      expect(res).toEqual({ ok: true });
+      await vi.waitFor(() => {
+        expect(loggerError).toHaveBeenCalledWith('Failed to send Agent Controller message', {
+          controllerId: 'code',
+          resourceId,
+          error,
+        });
+      });
+    });
   });
 
   describe('requestContext forwarding', () => {
@@ -225,14 +257,6 @@ describe('agent-controller routes', () => {
     // `requestContext`; the session-write routes must thread it through to the
     // session methods (which pass it to the run engine) or dynamic
     // instructions/tools see an empty context (see mastra-ai/mastra#18916).
-    async function getRouteSession(resourceId: string) {
-      const controller = mastra.getAgentController('code')!;
-      await controller.init();
-      // Same get-or-create call the route handlers make, so this returns the
-      // exact session instance the handler will operate on.
-      return controller.createSession({ resourceId, id: resourceId, ownerId: controller.id });
-    }
-
     function makeRequestContext() {
       const requestContext = new RequestContext();
       requestContext.set('tenantId', 'acme');
@@ -302,6 +326,30 @@ describe('agent-controller routes', () => {
       expect(spy).toHaveBeenCalledWith({ content: 'change course', requestContext });
     });
 
+    it('logs a rejected background steer instead of leaving an unhandled rejection', async () => {
+      const resourceId = 'user-rejected-steer';
+      const session = await getRouteSession(resourceId);
+      const error = new Error('steer failed');
+      const loggerError = vi.spyOn(mastra.getLogger(), 'error').mockImplementation(() => {});
+      vi.spyOn(session, 'steer').mockRejectedValue(error);
+
+      const res = await STEER_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId,
+        message: 'change course',
+      } as any);
+
+      expect(res).toEqual({ ok: true });
+      await vi.waitFor(() => {
+        expect(loggerError).toHaveBeenCalledWith('Failed to steer Agent Controller session', {
+          controllerId: 'code',
+          resourceId,
+          error,
+        });
+      });
+    });
+
     it('forwards requestContext to session.followUp', async () => {
       const session = await getRouteSession('user-rc');
       const spy = vi.spyOn(session, 'followUp').mockResolvedValue(undefined);
@@ -316,6 +364,30 @@ describe('agent-controller routes', () => {
       } as any);
 
       expect(spy).toHaveBeenCalledWith({ content: 'and another thing', requestContext });
+    });
+
+    it('logs a rejected background follow-up instead of leaving an unhandled rejection', async () => {
+      const resourceId = 'user-rejected-follow-up';
+      const session = await getRouteSession(resourceId);
+      const error = new Error('follow-up failed');
+      const loggerError = vi.spyOn(mastra.getLogger(), 'error').mockImplementation(() => {});
+      vi.spyOn(session, 'followUp').mockRejectedValue(error);
+
+      const res = await FOLLOW_UP_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId,
+        message: 'and another thing',
+      } as any);
+
+      expect(res).toEqual({ ok: true });
+      await vi.waitFor(() => {
+        expect(loggerError).toHaveBeenCalledWith('Failed to queue Agent Controller follow-up', {
+          controllerId: 'code',
+          resourceId,
+          error,
+        });
+      });
     });
 
     it('forwards requestContext to session.respondToToolApproval', async () => {

@@ -497,7 +497,9 @@ export const SEND_AGENT_CONTROLLER_MESSAGE_ROUTE = createRoute({
       // Forward the server middleware's requestContext so identity injected in
       // `server.middleware` reaches dynamic instructions and tools (same as the
       // plain agent message route).
-      void session.sendMessage({ content: message, files, requestContext });
+      void session.sendMessage({ content: message, files, requestContext }).catch(error => {
+        mastra.getLogger().error('Failed to send Agent Controller message', { controllerId, resourceId, error });
+      });
       return { ok: true };
     } catch (error) {
       return handleError(error, 'error sending controller message');
@@ -602,7 +604,9 @@ export const STEER_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope });
-      void session.steer({ content: message, requestContext });
+      void session.steer({ content: message, requestContext }).catch(error => {
+        mastra.getLogger().error('Failed to steer Agent Controller session', { controllerId, resourceId, error });
+      });
       return { ok: true };
     } catch (error) {
       return handleError(error, 'error steering controller session');
@@ -1076,7 +1080,9 @@ export const FOLLOW_UP_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope });
-      void session.followUp({ content: message, requestContext });
+      void session.followUp({ content: message, requestContext }).catch(error => {
+        mastra.getLogger().error('Failed to queue Agent Controller follow-up', { controllerId, resourceId, error });
+      });
       return { ok: true };
     } catch (error) {
       return handleError(error, 'error queuing controller follow-up');
