@@ -1,11 +1,13 @@
 import type { Mastra } from '@mastra/core';
 import { RequestContext } from '@mastra/core/request-context';
+import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_USER_PERMISSIONS_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 import { createStoredAgentBodySchema, updateStoredAgentBodySchema } from '../schemas/stored-agents';
 import type { ServerContext } from '../server-adapter';
+import { ACTIVATE_AGENT_VERSION_ROUTE, GET_AGENT_VERSION_ROUTE } from './agent-versions';
 import {
   LIST_STORED_AGENTS_ROUTE,
   GET_STORED_AGENT_ROUTE,
@@ -19,6 +21,7 @@ import {
 } from './stored-agents';
 
 // Mock handleAutoVersioning to prevent version creation in tests
+import { handleAutoVersioning } from './version-helpers';
 import type * as VersionHelpers from './version-helpers';
 
 vi.mock('./version-helpers', async importOriginal => {
@@ -232,6 +235,7 @@ interface MockEditor {
   prompt: {
     preview: ReturnType<typeof vi.fn>;
   };
+  getSource?: ReturnType<typeof vi.fn>;
   getSourceControlProvider?: ReturnType<typeof vi.fn>;
 }
 
@@ -298,6 +302,11 @@ function createAuthenticatedContext(mastra: MockMastra, userId: string, permissi
     ctx.requestContext.set(MASTRA_USER_PERMISSIONS_KEY, permissions);
   }
   return ctx;
+}
+
+async function useRealAutoVersioningOnce() {
+  const actual = await vi.importActual<typeof VersionHelpers>('./version-helpers');
+  vi.mocked(handleAutoVersioning).mockImplementationOnce(actual.handleAutoVersioning);
 }
 
 // =============================================================================
@@ -1224,42 +1233,150 @@ describe('Stored Agents Handlers', () => {
       }
     });
 
-    it('should auto-publish by updating activeVersionId when a new version is created', async () => {
-      const newVersionId = 'v-autopub-2';
-      mockAgentsData.set('autopub-test', {
-        id: 'autopub-test',
-        name: 'Original Name',
-        instructions: 'Original instructions',
-        model: { name: 'gpt-4', provider: 'openai' },
-        activeVersionId: 'v-autopub-1',
+    describe('version publication lifecycle', () => {
+      const setupPublishedAgent = async (agentId: string, source?: 'code') => {
+        const storage = new InMemoryStore();
+        const editor = createMockEditor();
+        if (source) {
+          editor.getSource = vi.fn().mockReturnValue(source);
+        }
+        const lifecycleMastra = createMockMastra({
+          storage: storage as unknown as MockStorage,
+          editor,
+        });
+        const agentsStore = await storage.getStore('agents');
+        await agentsStore.create({
+          agent: {
+            id: agentId,
+            name: 'Lifecycle Agent',
+            instructions: 'Published instructions',
+            model: { name: 'gpt-4', provider: 'openai' },
+          },
+        });
+        const publishedVersion = await agentsStore.getLatestVersion(agentId);
+        if (!publishedVersion) {
+          throw new Error('Expected initial agent version');
+        }
+        await agentsStore.update({
+          id: agentId,
+          activeVersionId: publishedVersion.id,
+          status: 'published',
+        });
+
+        return { agentsStore, lifecycleMastra, publishedVersion };
+      };
+
+      it('keeps a PATCH-created version as a draft until it is activated', async () => {
+        const agentId = 'draft-lifecycle-test';
+        const { agentsStore, lifecycleMastra, publishedVersion } = await setupPublishedAgent(agentId);
+        await useRealAutoVersioningOnce();
+
+        const updated = await UPDATE_STORED_AGENT_ROUTE.handler({
+          ...createTestContext(lifecycleMastra),
+          storedAgentId: agentId,
+          instructions: 'Draft instructions',
+        });
+        const draftVersion = await agentsStore.getLatestVersion(agentId);
+        if (!draftVersion) {
+          throw new Error('Expected draft agent version');
+        }
+
+        expect(updated.instructions).toBe('Draft instructions');
+        expect(draftVersion.id).not.toBe(publishedVersion.id);
+        expect((await agentsStore.getById(agentId))?.activeVersionId).toBe(publishedVersion.id);
+
+        const published = await GET_STORED_AGENT_ROUTE.handler({
+          ...createTestContext(lifecycleMastra),
+          storedAgentId: agentId,
+        });
+        const draft = await GET_STORED_AGENT_ROUTE.handler({
+          ...createTestContext(lifecycleMastra),
+          storedAgentId: agentId,
+          status: 'draft',
+        });
+        const specificDraft = await GET_AGENT_VERSION_ROUTE.handler({
+          ...createTestContext(lifecycleMastra),
+          agentId,
+          versionId: draftVersion.id,
+        });
+
+        expect(published.instructions).toBe('Published instructions');
+        expect(draft.instructions).toBe('Draft instructions');
+        expect(specificDraft.instructions).toBe('Draft instructions');
+
+        await ACTIVATE_AGENT_VERSION_ROUTE.handler({
+          ...createTestContext(lifecycleMastra),
+          agentId,
+          versionId: draftVersion.id,
+        });
+        const publishedAfterActivation = await GET_STORED_AGENT_ROUTE.handler({
+          ...createTestContext(lifecycleMastra),
+          storedAgentId: agentId,
+        });
+
+        expect(publishedAfterActivation.instructions).toBe('Draft instructions');
       });
 
-      // Override the global mock for this test to simulate a new version being created.
-      // The auto-publish branch only runs when versionCreated is true.
-      const { handleAutoVersioning } = await import('./version-helpers');
-      vi.mocked(handleAutoVersioning).mockImplementationOnce(async (_store, _id, _existing, updatedAgent) => ({
-        agent: updatedAgent as any,
-        versionCreated: true,
-      }));
+      it('auto-publishes a PATCH-created version when requested', async () => {
+        const agentId = 'auto-publish-lifecycle-test';
+        const { agentsStore, lifecycleMastra, publishedVersion } = await setupPublishedAgent(agentId);
+        await useRealAutoVersioningOnce();
+        const updateInput = {
+          ...createTestContext(lifecycleMastra),
+          storedAgentId: agentId,
+          instructions: 'Auto-published instructions',
+          autoPublish: true,
+        };
 
-      // listVersions is called multiple times: once by enforceRetentionLimit
-      // inside handleAutoVersioning, then again by the auto-publish code.
-      // Return the new version each time so auto-publish can activate it.
-      mockAgentsStore.listVersions.mockResolvedValue({
-        versions: [{ id: newVersionId, versionNumber: 2 }],
-        total: 2,
+        await UPDATE_STORED_AGENT_ROUTE.handler(updateInput);
+        const latestVersion = await agentsStore.getLatestVersion(agentId);
+        if (!latestVersion) {
+          throw new Error('Expected updated agent version');
+        }
+        const published = await GET_STORED_AGENT_ROUTE.handler({
+          ...createTestContext(lifecycleMastra),
+          storedAgentId: agentId,
+        });
+
+        expect(latestVersion.id).not.toBe(publishedVersion.id);
+        expect((await agentsStore.getById(agentId))?.activeVersionId).toBe(latestVersion.id);
+        expect(published.instructions).toBe('Auto-published instructions');
       });
 
-      await UPDATE_STORED_AGENT_ROUTE.handler({
-        ...createTestContext(mockMastra),
-        storedAgentId: 'autopub-test',
-        name: 'Updated Name',
-        instructions: 'Updated instructions',
-      });
+      it('preserves the active code-source version while replacing an unpublished rolling draft', async () => {
+        const agentId = 'code-source-draft-test';
+        const { agentsStore, lifecycleMastra, publishedVersion } = await setupPublishedAgent(agentId, 'code');
+        await useRealAutoVersioningOnce();
 
-      // Verify activeVersionId was updated to the latest version
-      const stored = mockAgentsData.get('autopub-test');
-      expect(stored?.activeVersionId).toBe(newVersionId);
+        await UPDATE_STORED_AGENT_ROUTE.handler({
+          ...createTestContext(lifecycleMastra),
+          storedAgentId: agentId,
+          instructions: 'First rolling draft',
+        });
+        const firstDraft = await agentsStore.getLatestVersion(agentId);
+        if (!firstDraft) {
+          throw new Error('Expected first rolling draft');
+        }
+
+        expect(await agentsStore.getVersion(publishedVersion.id)).not.toBeNull();
+        expect((await agentsStore.getById(agentId))?.activeVersionId).toBe(publishedVersion.id);
+
+        await useRealAutoVersioningOnce();
+        await UPDATE_STORED_AGENT_ROUTE.handler({
+          ...createTestContext(lifecycleMastra),
+          storedAgentId: agentId,
+          instructions: 'Second rolling draft',
+        });
+        const secondDraft = await agentsStore.getLatestVersion(agentId);
+        if (!secondDraft) {
+          throw new Error('Expected second rolling draft');
+        }
+
+        expect(secondDraft.id).not.toBe(firstDraft.id);
+        expect(await agentsStore.getVersion(firstDraft.id)).toBeNull();
+        expect(await agentsStore.getVersion(publishedVersion.id)).not.toBeNull();
+        expect((await agentsStore.getById(agentId))?.activeVersionId).toBe(publishedVersion.id);
+      });
     });
 
     it('threads toolProviders into the auto-versioning snapshot config', async () => {
