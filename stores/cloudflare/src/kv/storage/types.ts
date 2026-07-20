@@ -194,9 +194,7 @@ export type ListOptions = {
  * 2. Config to create a new client internally
  */
 export type CloudflareDomainConfig =
-  | CloudflareDomainClientConfig
-  | CloudflareDomainBindingsConfig
-  | CloudflareDomainRestConfig;
+  CloudflareDomainClientConfig | CloudflareDomainBindingsConfig | CloudflareDomainRestConfig;
 
 /**
  * Pass an existing Cloudflare SDK client (REST API)

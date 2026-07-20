@@ -40,11 +40,7 @@ export function toAISDKFinishReason(reason: MastraFinishReason): FinishReason {
 }
 
 export type OutputChunkType<OUTPUT = undefined> =
-  | TextStreamPart<ToolSet>
-  | ObjectStreamPart<Partial<OUTPUT>>
-  | ToolApprovalRequest
-  | DataChunkType
-  | undefined;
+  TextStreamPart<ToolSet> | ObjectStreamPart<Partial<OUTPUT>> | ToolApprovalRequest | DataChunkType | undefined;
 
 export type ToolAgentChunkType = { type: 'tool-agent'; toolCallId: string; payload: any };
 export type ToolWorkflowChunkType = { type: 'tool-workflow'; toolCallId: string; payload: any };
@@ -61,12 +57,7 @@ type ConvertMastraChunkToAISDKOptions<OUTPUT> = {
 
 type ToolPayloadTransformTarget = 'display' | 'transcript';
 type ToolPayloadTransformPhase =
-  | 'input-delta'
-  | 'input-available'
-  | 'output-available'
-  | 'error'
-  | 'approval'
-  | 'suspend';
+  'input-delta' | 'input-available' | 'output-available' | 'error' | 'approval' | 'suspend';
 
 type TransformedToolPayloadState = {
   transformed?: unknown;

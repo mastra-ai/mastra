@@ -325,8 +325,7 @@ export function createDurableGoalStep() {
           const goalTools: ToolsInput | undefined =
             typeof goalConfig.tools === 'function'
               ? ((await (goalConfig.tools as (args: any) => unknown)({ requestContext, mastra })) as
-                  | ToolsInput
-                  | undefined)
+                  ToolsInput | undefined)
               : goalConfig.tools;
 
           scorer = createGoalScorer({
