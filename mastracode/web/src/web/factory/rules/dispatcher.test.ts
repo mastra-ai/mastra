@@ -57,7 +57,7 @@ function createSession(accepted: Promise<unknown> = Promise.resolve({ action: 'w
       },
     }),
     sendMessage: vi.fn(async () => {}),
-    sendSignal: vi.fn((input: { id: string }) => {
+    sendSignal: vi.fn((input: { id: string }, _options: { requestContext: { get(key: string): unknown } }) => {
       deliveredSignals.add(input.id);
       return { accepted: Promise.resolve({ accepted: true }) };
     }),
@@ -65,7 +65,7 @@ function createSession(accepted: Promise<unknown> = Promise.resolve({ action: 'w
   };
   const controller = {
     createSession: vi.fn(async () => session),
-    getSessionByResource: vi.fn(async () => session),
+    getSessionByResource: vi.fn(async (): Promise<typeof session | undefined> => session),
   };
   return { controller, session, delivered, sendNotificationSignal };
 }
@@ -307,21 +307,29 @@ describe('FactoryDecisionDispatcher', () => {
       kickoffKey: 'kickoff-null',
       kickoffMessage: null,
     });
+    const primeCredentials = vi.fn(async () => {});
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
       transitionService,
       storage,
       ownerId: 'worker-1',
+      primeCredentials,
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
-    expect(session.sendSignal).toHaveBeenCalledWith({
-      id: expect.any(String),
-      type: 'user',
-      tagName: 'user',
-      contents: expect.stringMatching(/<skill name="understand-issue">[\s\S]*ARGUMENTS: Issue 42[\s\S]*<\/skill>/),
-    });
+    expect(primeCredentials).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
+    expect(session.sendSignal).toHaveBeenCalledWith(
+      {
+        id: expect.any(String),
+        type: 'user',
+        tagName: 'user',
+        contents: expect.stringMatching(/<skill name="understand-issue">[\s\S]*ARGUMENTS: Issue 42[\s\S]*<\/skill>/),
+      },
+      { requestContext: expect.anything() },
+    );
+    const requestContext = session.sendSignal.mock.calls[0]?.[1]?.requestContext;
+    expect(requestContext?.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
   });
 
   it('prepares a missing binding before dispatching a rule-driven skill', async () => {
@@ -370,6 +378,7 @@ describe('FactoryDecisionDispatcher', () => {
     );
     expect(session.sendSignal).toHaveBeenCalledWith(
       expect.objectContaining({ contents: expect.stringContaining('<skill name="understand-issue">') }),
+      { requestContext: expect.anything() },
     );
   });
 
@@ -441,6 +450,7 @@ describe('FactoryDecisionDispatcher', () => {
     expect(session.thread.switch).toHaveBeenCalledWith({ threadId: 'thread-2' });
     expect(session.sendSignal).toHaveBeenCalledWith(
       expect.objectContaining({ contents: expect.stringContaining('<skill name="understand-issue">') }),
+      { requestContext: expect.anything() },
     );
   });
 
@@ -487,7 +497,9 @@ describe('FactoryDecisionDispatcher', () => {
     await dispatcher.runOnce(new Date(first.getTime() + 2_000));
 
     expect(session.sendSignal).toHaveBeenCalledTimes(1);
-    expect(session.sendSignal).toHaveBeenCalledWith(expect.objectContaining({ id: decision?.id }));
+    expect(session.sendSignal).toHaveBeenCalledWith(expect.objectContaining({ id: decision?.id }), {
+      requestContext: expect.anything(),
+    });
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
   });
 

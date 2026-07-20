@@ -124,10 +124,16 @@ function itemAppearsInStage(item: WorkItem, stage: BoardStageId, stages: Readonl
   return stage === 'intake' && !stages.some(candidate => item.stages.includes(candidate.id));
 }
 
-function candidateSourceKeyForItem(item: WorkItem): string | undefined {
+function githubNumberForItem(item: WorkItem): number | undefined {
   const metadataKey = item.source === 'github-issue' ? 'githubIssueNumber' : 'githubPullRequestNumber';
   const itemNumber = item.metadata[metadataKey] ?? item.metadata.number;
   if (typeof itemNumber !== 'number' || !Number.isInteger(itemNumber) || itemNumber <= 0) return;
+  return itemNumber;
+}
+
+function candidateSourceKeyForItem(item: WorkItem): string | undefined {
+  const itemNumber = githubNumberForItem(item);
+  if (itemNumber === undefined) return;
   if (item.source === 'github-issue') return `github-issue:${itemNumber}`;
   if (item.source === 'github-pr') return `github-pr:${itemNumber}`;
   return;
@@ -326,13 +332,14 @@ interface ItemRunSpec {
  */
 function itemRunSpec(item: WorkItem): ItemRunSpec | null {
   const meta = item.metadata;
-  if (item.source === 'github-issue' && typeof meta.number === 'number') {
+  const githubNumber = githubNumberForItem(item);
+  if (item.source === 'github-issue' && githubNumber !== undefined) {
     const labels = metadataLabels(meta);
     const needsApproval = hasLabel(labels, NEEDS_APPROVAL_LABEL);
-    const ref = `GitHub issue #${meta.number}${item.url ? ` (${item.url})` : ''}`;
+    const ref = `GitHub issue #${githubNumber}${item.url ? ` (${item.url})` : ''}`;
     return {
-      branch: `factory/issue-${meta.number}`,
-      threadTitle: needsApproval ? `Triage #${meta.number}: ${item.title}` : `Issue #${meta.number}: ${item.title}`,
+      branch: `factory/issue-${githubNumber}`,
+      threadTitle: needsApproval ? `Triage #${githubNumber}: ${item.title}` : `Issue #${githubNumber}: ${item.title}`,
       actions: needsApproval
         ? [
             {
@@ -343,7 +350,7 @@ function itemRunSpec(item: WorkItem): ItemRunSpec | null {
                 type: 'prompt',
                 prompt: `Prepare approval for ${ref}. Review the existing triage comment and summarize the decision needed before implementation or closure.`,
               },
-              threadTags: issueTriageThreadTags(meta.number),
+              threadTags: issueTriageThreadTags(githubNumber),
             },
           ]
         : issueRunActions(ref),
@@ -358,12 +365,13 @@ function itemRunSpec(item: WorkItem): ItemRunSpec | null {
       actions: issueRunActions(ref, { context: fetchHint }),
     };
   }
-  if (item.source === 'github-pr' && typeof meta.number === 'number' && typeof meta.headBranch === 'string') {
-    const ref = `GitHub pull request #${meta.number}${item.url ? ` (${item.url})` : ''}`;
-    const checkout = `Check out the PR in this worktree first with \`gh pr checkout ${meta.number}\`. Expected head branch: ${meta.headBranch}.`;
+  if (item.source === 'github-pr' && githubNumber !== undefined) {
+    const ref = `GitHub pull request #${githubNumber}${item.url ? ` (${item.url})` : ''}`;
+    const checkout = `Check out the PR in this worktree first with \`gh pr checkout ${githubNumber}\`.`;
+    const headBranch = typeof meta.headBranch === 'string' ? ` Expected head branch: ${meta.headBranch}.` : '';
     return {
-      branch: `factory/pr-${meta.number}`,
-      threadTitle: `PR #${meta.number}: ${item.title}`,
+      branch: `factory/pr-${githubNumber}`,
+      threadTitle: `PR #${githubNumber}: ${item.title}`,
       actions: [
         {
           label: 'Review',
@@ -372,7 +380,7 @@ function itemRunSpec(item: WorkItem): ItemRunSpec | null {
           invocation: {
             type: 'skill',
             skillName: 'understand-pr',
-            arguments: `${ref}\n\n${checkout}`,
+            arguments: `${ref}\n\n${checkout}${headBranch}`,
           },
         },
       ],
@@ -572,6 +580,36 @@ function BoardContent({
   const openThread = async (session: WorkItemSessionRef) => {
     await selectWorkspace.mutateAsync(session.projectPath);
     navigate(`/threads/${session.threadId}`);
+  };
+
+  const openOrCreateSession = async (
+    item: WorkItem,
+    spec: { branch: string; threadTitle: string },
+    destinationStage: string,
+  ) => {
+    const refreshed = await workspaces.refetch();
+    if (!refreshed.isSuccess) return;
+    const refreshedPaths = new Set(refreshed.data.worktrees.map(worktree => worktree.worktreePath));
+    const liveSessions = Object.fromEntries(
+      Object.entries(item.sessions).filter(([, session]) => refreshedPaths.has(session.projectPath)),
+    );
+    const existingSession = itemThreadSession(liveSessions);
+    if (existingSession) {
+      await openThread(existingSession);
+      return;
+    }
+    start.mutate({
+      branch: spec.branch,
+      threadTitle: spec.threadTitle,
+      workItem: {
+        id: item.id,
+        role: 'chat',
+        stages: [destinationStage],
+        source: item.source,
+        sourceKey: item.sourceKey,
+        title: item.title,
+      },
+    });
   };
 
   const allWorkItems = useMemo(() => items.data ?? [], [items.data]);
@@ -775,25 +813,7 @@ function BoardContent({
                   onRetryDecision={decisionId => retryDecision.mutate(decisionId)}
                   pendingRunRoles={new Set(pendingRuns.filter(run => run.id === item.id).map(run => run.role))}
                   onOpenThread={session => void openThread(session)}
-                  onCreateSession={spec =>
-                    start.mutate({
-                      branch: spec.branch,
-                      threadTitle: spec.threadTitle,
-                      workItem: {
-                        id: item.id,
-                        // File only the neutral chat role. The title is a
-                        // create button only when every existing role ref is
-                        // stale (worktree gone); repointing those roles here
-                        // would make them look live again and hide the card's
-                        // run actions even though no run happened.
-                        role: 'chat',
-                        stages: [stage.id],
-                        source: item.source,
-                        sourceKey: item.sourceKey,
-                        title: item.title,
-                      },
-                    })
-                  }
+                  onCreateSession={spec => void openOrCreateSession(item, spec, stage.id)}
                   onStartRun={(spec, action) =>
                     start.mutate({
                       branch: spec.branch,

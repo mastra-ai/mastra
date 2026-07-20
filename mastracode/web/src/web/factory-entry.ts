@@ -47,7 +47,11 @@ import { getFactoryStorage, seedRuntimeConfig } from './runtime-config.js';
 import { AuditStorage } from './storage/domains/audit/base.js';
 import { ModelCredentialsStorage } from './storage/domains/credentials/base.js';
 import { ModelPacksStorage } from './storage/domains/model-packs/base.js';
-import { createTenantCredentialPrimer, registerTenantCredentialResolver } from './tenant-credentials.js';
+import {
+  createTenantCredentialPrimer,
+  primeTenantCredentials,
+  registerTenantCredentialResolver,
+} from './tenant-credentials.js';
 import { IntakeStorage } from './storage/domains/intake/base.js';
 import { IntegrationStorage } from './storage/domains/integrations/base.js';
 import { FactoryProjectsStorage } from './storage/domains/projects/base.js';
@@ -427,7 +431,8 @@ export class MastraFactory {
       integrations.some(integration => integration.intake !== undefined) && storage.isDomainReady('intake');
     const factoryReady = storage.isDomainReady('projects') && storage.isDomainReady('work-items');
     const githubIntegration = integrations.find(integration => integration.id === 'github') as
-      GithubIntegration | undefined;
+      | GithubIntegration
+      | undefined;
     const workItemsStorage = storage.isDomainReady('work-items')
       ? storage.getDomain<WorkItemsStorage>('work-items')
       : undefined;
@@ -582,6 +587,7 @@ export class MastraFactory {
               storage: getFactoryStorage().getDomain<WorkItemsStorage>('work-items'),
               reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
               prepareBinding,
+              primeCredentials: primeTenantCredentials,
             });
           },
         }),

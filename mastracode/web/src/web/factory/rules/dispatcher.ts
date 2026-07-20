@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import type { AgentController } from '@mastra/core/agent-controller';
+import { RequestContext } from '@mastra/core/request-context';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 
 import { resolveSkillInvocation, type SkillSession } from '../../skills/service.js';
@@ -29,7 +30,10 @@ interface DispatcherSession extends SkillSession {
     switch(input: { threadId: string }): Promise<unknown>;
     listActiveMessages(): Promise<Array<{ id: string }>>;
   };
-  sendSignal(input: { id: string; type: 'user'; tagName: 'user'; contents: string }): { accepted: Promise<unknown> };
+  sendSignal(
+    input: { id: string; type: 'user'; tagName: 'user'; contents: string },
+    options: { requestContext: RequestContext },
+  ): { accepted: Promise<unknown> };
 }
 
 type FactoryController = Pick<AgentController<MastraCodeState>, 'getSessionByResource'>;
@@ -47,6 +51,7 @@ export interface FactoryDecisionDispatcherOptions {
   ownerId?: string;
   reconcileToolResults?: () => Promise<void>;
   prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
+  primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
 }
 
 function sanitizeDispatchError(error: unknown): string {
@@ -114,6 +119,7 @@ export class FactoryDecisionDispatcher {
   readonly #ownerId: string;
   readonly #reconcileToolResults?: () => Promise<void>;
   readonly #prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
+  readonly #primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
   #timer?: ReturnType<typeof setInterval>;
   #activeRun?: Promise<void>;
 
@@ -124,6 +130,7 @@ export class FactoryDecisionDispatcher {
     this.#ownerId = options.ownerId ?? `factory-dispatcher:${randomUUID()}`;
     this.#reconcileToolResults = options.reconcileToolResults;
     this.#prepareBinding = options.prepareBinding;
+    this.#primeCredentials = options.primeCredentials;
   }
 
   start(): void {
@@ -228,6 +235,12 @@ export class FactoryDecisionDispatcher {
       }
       case 'invokeSkill': {
         const binding = await this.#requireOrPrepareBinding(record, decision.role);
+        const item = record.workItemId ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId }) : null;
+        const startedBy = item?.sessions[binding.role]?.startedBy;
+        if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
+        await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
+        const requestContext = new RequestContext();
+        requestContext.set('user', { workosId: startedBy, organizationId: record.orgId });
         const resolved = await resolveSkillInvocation(this.#controller, {
           resourceId: binding.resourceId,
           scope: binding.projectPath,
@@ -238,12 +251,15 @@ export class FactoryDecisionDispatcher {
         await this.#switchThread(session, binding);
         const delivered = await session.thread.listActiveMessages();
         if (delivered.some(message => message.id === record.id)) return;
-        const result = session.sendSignal({
-          id: record.id,
-          type: 'user',
-          tagName: 'user',
-          contents: resolved.message,
-        });
+        const result = session.sendSignal(
+          {
+            id: record.id,
+            type: 'user',
+            tagName: 'user',
+            contents: resolved.message,
+          },
+          { requestContext },
+        );
         await result.accepted;
         return;
       }
@@ -392,7 +408,8 @@ export class FactoryDecisionDispatcher {
 
   async #requireSession(binding: FactoryRunBindingRecord): Promise<DispatcherSession> {
     const session = (await this.#controller.getSessionByResource(binding.resourceId, binding.projectPath)) as
-      DispatcherSession | undefined;
+      | DispatcherSession
+      | undefined;
     if (!session) throw new Error('Bound Factory session not found.');
     await this.#switchThread(session, binding);
     return session;

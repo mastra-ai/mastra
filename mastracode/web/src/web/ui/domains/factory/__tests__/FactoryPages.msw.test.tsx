@@ -923,7 +923,7 @@ describe('Factory Work and Review intake candidates', () => {
     expect(within(column('execute')).getByText('Fix flaky test')).toBeInTheDocument();
   });
 
-  it('given a rule-materialized pull request exists, when Review renders, then its live candidate is deduped by GitHub identity', async () => {
+  it('given a rule-materialized pull request exists, when Review renders and its card is opened, then it uses the canonical PR session', async () => {
     useBoardHandlers({
       pullRequests,
       workItems: [
@@ -937,11 +937,16 @@ describe('Factory Work and Review intake candidates', () => {
         }),
       ],
     });
+    const captured = useFactoryRunHandlers('factory-pr-34');
     renderAt('/factory/review');
 
     await screen.findByTestId('board-column-intake');
     expect(within(column('intake')).queryByText('Add factory pages')).not.toBeInTheDocument();
-    expect(within(column('review')).getByText('Add factory pages')).toBeInTheDocument();
+    const reviewCard = within(column('review')).getByTestId('work-item-card');
+    await userEvent.click(within(reviewCard).getByRole('button', { name: /PR Review.*Add factory pages/ }));
+
+    await waitFor(() => expect(captured.worktree).toMatchObject({ branch: 'factory/pr-34' }));
+    expect(captured.starts).toMatchObject([{ workItem: { id: 'wi-pr', role: 'chat' }, destinationStage: 'review' }]);
   });
 });
 
@@ -1133,6 +1138,32 @@ describe('Factory Board — persisted cards', () => {
       'href',
       '/threads/thread-work',
     );
+  });
+
+  it('given the first worktree read races a server-created session, when its card is clicked, then the live thread opens without creating a second session', async () => {
+    const state = useBoardHandlers({
+      workItems: [
+        makeWorkItem({
+          id: 'wi-server-race',
+          title: 'Racing server investigation',
+          source: 'github-issue',
+          sourceKey: 'github-issue:45',
+          metadata: { githubIssueNumber: 45 },
+          stages: ['triage'],
+          sessions: { triage: issueWorkSession },
+        }),
+      ],
+    });
+    const worktrees: Worktree[] = [];
+    const { router } = renderAt('/factory/work', githubProject, connectedStatus, { worktrees });
+
+    const card = within(await screen.findByTestId('board-column-triage')).getByTestId('work-item-card');
+    const title = await within(card).findByRole('button', { name: 'Issue: Racing server investigation' });
+    worktrees.push({ branch: 'factory/issue-12', worktreePath: issueWorktreePath, baseBranch: 'main' });
+    await userEvent.click(title);
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-work'));
+    expect(state.starts).toEqual([]);
   });
 
   it('given only stale local worktree state, the server result keeps the card session inactive', async () => {

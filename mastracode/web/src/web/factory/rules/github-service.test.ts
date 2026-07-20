@@ -106,11 +106,17 @@ describe('FactoryGithubEventService', () => {
   });
 
   it('moves a trusted issue to Triage, persists its session, and starts the investigation agent', async () => {
-    const { github, workItems, project } = await setup('write');
+    const { github, sourceControl, integrationStorage, workItems, project } = await setup('write');
     const rules = builtInFactoryRules();
     const transitionService = new FactoryTransitionService({ storage: workItems, rules });
-    const service = new FactoryGithubEventService({ github, storage: workItems, rules });
-    const deliveredSignals: Array<{ id: string; contents: string; threadId: string }> = [];
+    const service = new FactoryGithubEventService({
+      github,
+      sourceControl,
+      integrationStorage,
+      storage: workItems,
+      rules,
+    });
+    const deliveredSignals: Array<{ id: string; contents: string; threadId: string; user: unknown }> = [];
     const sessions = new Map<string, ReturnType<typeof makeSession>>();
 
     function makeSession(scope: string) {
@@ -138,11 +144,13 @@ describe('FactoryGithubEventService', () => {
             get: vi.fn(async (name: string) => ({ name, instructions: 'Investigate the issue.' })),
           },
         }),
-        sendSignal: vi.fn((input: { id: string; contents: string }) => {
-          if (!threadId) throw new Error('Signal delivered before thread persistence.');
-          deliveredSignals.push({ ...input, threadId });
-          return { accepted: Promise.resolve({ accepted: true }) };
-        }),
+        sendSignal: vi.fn(
+          (input: { id: string; contents: string }, options: { requestContext: { get(key: string): unknown } }) => {
+            if (!threadId) throw new Error('Signal delivered before thread persistence.');
+            deliveredSignals.push({ ...input, threadId, user: options.requestContext.get('user') });
+            return { accepted: Promise.resolve({ accepted: true }) };
+          },
+        ),
         sendMessage: vi.fn(async () => {}),
         sendNotificationSignal: vi.fn(async () => ({ persisted: Promise.resolve(), accepted: Promise.resolve() })),
       };
@@ -155,16 +163,18 @@ describe('FactoryGithubEventService', () => {
       getSessionByResource: vi.fn(async (_resourceId: string, scope: string) => sessions.get(scope)),
     };
     const coordinator = new FactoryStartCoordinator(controller as never, workItems, transitionService);
+    const primeCredentials = vi.fn(async () => {});
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
       transitionService,
       storage: workItems,
       ownerId: 'worker-1',
+      primeCredentials,
       prepareBinding: async ({ record, item, role }) => {
         await coordinator.prepare({
           orgId: record.orgId,
           userId: 'user-1',
-          githubProjectId: record.githubProjectId,
+          factoryProjectId: record.factoryProjectId,
           resourceId: project.id,
           projectPath: '/workspace/factory-issue-42',
           branch: 'factory/issue-42',
@@ -181,9 +191,9 @@ describe('FactoryGithubEventService', () => {
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
     await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
 
-    const [item] = await workItems.list('org-1', project.id);
+    const [item] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
     expect(item).toMatchObject({
-      sourceKey: 'github-issue:42',
+      externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:42' },
       stages: ['triage'],
       sessions: {
         triage: {
@@ -193,10 +203,12 @@ describe('FactoryGithubEventService', () => {
         },
       },
     });
+    expect(primeCredentials).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
     expect(deliveredSignals).toEqual([
       expect.objectContaining({
         threadId: 'thread-issue-42',
         contents: expect.stringContaining('<skill name="understand-issue">'),
+        user: { workosId: 'user-1', organizationId: 'org-1' },
       }),
     ]);
     expect((await workItems.listDeferredDecisions('org-1', project.id)).map(decision => decision.status)).toEqual([
