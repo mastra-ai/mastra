@@ -132,6 +132,7 @@ trustPolicyExclude:
   # Required for the Mesa workspace filesystem provider. 0.38.0 is published
   # without the trusted-publisher evidence that older @mesadev/sdk versions had.
   - '@mesadev/sdk@0.38.0'
+  - 'modal@0.9.0'
 overrides:
   typescript: ^6.0.3
   '@types/node': 22.19.15
