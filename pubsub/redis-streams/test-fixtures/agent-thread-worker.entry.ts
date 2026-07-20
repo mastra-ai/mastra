@@ -32,6 +32,12 @@ const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6381';
 const RESOURCE_ID = process.env.RESOURCE_ID ?? 'rapid-fire-resource';
 const THREAD_ID = process.env.THREAD_ID ?? 'rapid-fire-thread';
 const WORKER_ID = process.env.WORKER_ID ?? 'worker';
+const AGENT_THREAD_KEY_SEPARATOR = '\u0000';
+
+function threadTopic() {
+  const key = `${RESOURCE_ID}${AGENT_THREAD_KEY_SEPARATOR}${THREAD_ID}`;
+  return `agent.thread-stream.${encodeURIComponent(key)}`;
+}
 
 function emit(event: Record<string, unknown>) {
   process.stdout.write(`${JSON.stringify(event)}\n`);
@@ -80,18 +86,28 @@ function makeStubAgent(runMs: number, runtime: AgentThreadStreamRuntime, pubsub:
         _waitUntilFinished: () => finished,
       };
 
-      // Real Agent.stream registers the run with the runtime so completion
-      // watchers fire and pending signals drain. The stub mirrors that.
-      void runtime.registerRun(
-        agent as any,
-        output as any,
+      // Real Agent.stream prepares the abort controller before registering the
+      // run. Mirror that boundary so follower abort requests reach a real owner.
+      const preparedOptions = runtime.prepareRunOptions(
         {
+          ...(options ?? {}),
           runId,
           memory: { resource: RESOURCE_ID, thread: THREAD_ID },
-          ...(options ?? {}),
         } as any,
         pubsub,
       );
+      preparedOptions.abortSignal?.addEventListener(
+        'abort',
+        () => {
+          emit({ type: 'owner-abort-fired', sigId, runId });
+          runEnds.get(sigId)?.();
+        },
+        { once: true },
+      );
+
+      // Real Agent.stream registers the run with the runtime so completion
+      // watchers fire and pending signals drain. The stub mirrors that.
+      void runtime.registerRun(agent as any, output as any, preparedOptions as any, pubsub);
 
       return output;
     },
@@ -229,6 +245,45 @@ async function main() {
       } finally {
         if (fresh) subscription.unsubscribe();
       }
+      return;
+    }
+
+    if (cmd.cmd === 'publish-ghost') {
+      const runId = cmd.runId ?? 'ghost-run';
+      const streamId = cmd.streamId ?? 'ghost-stream';
+      await pubsub.publish(threadTopic(), {
+        type: 'run-registered',
+        runId,
+        data: { type: 'run-registered', runId, streamId, streamSeq: 1 },
+      });
+      await pubsub.flush();
+      emit({ type: 'ghost-published', runId, streamId });
+      return;
+    }
+
+    if (cmd.cmd === 'send-after-thread-wait') {
+      try {
+        await runtime.waitForCrossAgentThreadRun(
+          agent as any,
+          { memory: { resource: RESOURCE_ID, thread: THREAD_ID } },
+          pubsub,
+        );
+        emit({ type: 'thread-wait-resolved' });
+        await fireSignal(cmd.sigId);
+      } catch (err) {
+        emit({ type: 'command-error', cmd: cmd.cmd, error: String(err) });
+      }
+      return;
+    }
+
+    if (cmd.cmd === 'abort-active') {
+      const runId = defaultSubscription.activeRunId();
+      emit({ type: 'abort-result', runId, aborted: defaultSubscription.abort() });
+      return;
+    }
+
+    if (cmd.cmd === 'active-run') {
+      emit({ type: 'active-run', runId: defaultSubscription.activeRunId() });
       return;
     }
 

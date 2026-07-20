@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { PubSub } from '../../events/pubsub';
+import type { LeaseProvider } from '../../events/pubsub';
 import type { EventCallback } from '../../events/types';
 import { UnixSocketPubSub } from '../../events/unix-socket-pubsub';
 import { Mastra } from '../../mastra';
@@ -128,6 +129,54 @@ class RetainedAsyncCallbackPubSub extends PubSub {
 
   async flush(): Promise<void> {
     await Promise.all([...this.#pending]);
+  }
+}
+
+class ControlledLeasePubSub extends RetainedAsyncCallbackPubSub implements LeaseProvider {
+  owners = new Map<string, string>();
+  publishedData: any[] = [];
+  ownerReadDelayMs = 0;
+  ownerReadFailures = 0;
+  unsubscribeCount = 0;
+
+  override async publish(topic: string, event: any): Promise<void> {
+    this.publishedData.push(event.data);
+    await super.publish(topic, event);
+  }
+
+  async acquireLease(key: string, owner: string): Promise<{ acquired: boolean; owner?: string }> {
+    const current = this.owners.get(key);
+    if (current && current !== owner) return { acquired: false, owner: current };
+    this.owners.set(key, owner);
+    return { acquired: true, owner };
+  }
+
+  async getLeaseOwner(key: string): Promise<string | undefined> {
+    if (this.ownerReadDelayMs) await new Promise(resolve => setTimeout(resolve, this.ownerReadDelayMs));
+    if (this.ownerReadFailures > 0) {
+      this.ownerReadFailures -= 1;
+      throw new Error('transient owner read failure');
+    }
+    return this.owners.get(key);
+  }
+
+  async releaseLease(key: string, owner: string): Promise<void> {
+    if (this.owners.get(key) === owner) this.owners.delete(key);
+  }
+
+  async renewLease(key: string, owner: string): Promise<boolean> {
+    return this.owners.get(key) === owner;
+  }
+
+  async transferLease(key: string, fromOwner: string, toOwner: string): Promise<boolean> {
+    if (this.owners.get(key) !== fromOwner) return false;
+    this.owners.set(key, toOwner);
+    return true;
+  }
+
+  override async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
+    this.unsubscribeCount += 1;
+    await super.unsubscribe(topic, cb);
   }
 }
 
@@ -2840,6 +2889,247 @@ describe('Agent signals', () => {
     await expect(stream.text).resolves.toBe('first response');
     expect(streamCount).toBe(1);
     expect(JSON.stringify(prompts)).not.toContain('discard while running');
+  });
+
+  it('uses lease ownership as the authority for remote active thread state', async () => {
+    const agent = { id: 'lease-authority-agent' } as Agent<any, any, any, any>;
+    const key = 'lease-authority-resource\u0000lease-authority-thread';
+    const topic = `agent.thread-stream.${encodeURIComponent(key)}`;
+
+    const fallbackPubSub = new RetainedAsyncCallbackPubSub();
+    const fallbackRuntime = new AgentThreadStreamRuntime();
+    const fallbackSubscription = await fallbackRuntime.subscribeToThread(
+      agent,
+      { resourceId: 'lease-authority-resource', threadId: 'lease-authority-thread' },
+      fallbackPubSub,
+    );
+    await fallbackPubSub.publish(topic, {
+      type: 'run-registered',
+      runId: 'fallback-run',
+      data: { type: 'run-registered', runId: 'fallback-run', streamId: 'fallback-stream', streamSeq: 1 },
+    });
+    await fallbackPubSub.flush();
+    await waitForCondition(() => fallbackSubscription.activeRunId() === 'fallback-run');
+    fallbackSubscription.unsubscribe();
+
+    const stalePubSub = new ControlledLeasePubSub();
+    const staleRuntime = new AgentThreadStreamRuntime();
+    const staleSubscription = await staleRuntime.subscribeToThread(
+      agent,
+      { resourceId: 'lease-authority-resource', threadId: 'lease-authority-thread' },
+      stalePubSub,
+    );
+    await stalePubSub.publish(topic, {
+      type: 'run-registered',
+      runId: 'stale-run',
+      data: { type: 'run-registered', runId: 'stale-run', streamId: 'stale-stream', streamSeq: 1 },
+    });
+    await stalePubSub.flush();
+    await nextTick();
+    expect(staleSubscription.activeRunId()).toBeNull();
+    staleSubscription.unsubscribe();
+
+    const livePubSub = new ControlledLeasePubSub();
+    livePubSub.owners.set(key, 'live-run');
+    livePubSub.ownerReadFailures = 1;
+    const liveRuntime = new AgentThreadStreamRuntime();
+    const liveSubscription = await liveRuntime.subscribeToThread(
+      agent,
+      { resourceId: 'lease-authority-resource', threadId: 'lease-authority-thread' },
+      livePubSub,
+    );
+    await livePubSub.publish(topic, {
+      type: 'run-registered',
+      runId: 'live-run',
+      data: { type: 'run-registered', runId: 'live-run', streamId: 'live-stream', streamSeq: 1 },
+    });
+    await livePubSub.publish(topic, {
+      type: 'stream-part',
+      runId: 'live-run',
+      data: {
+        type: 'stream-part',
+        runId: 'live-run',
+        streamId: 'live-stream',
+        sourceId: 'peer-runtime',
+        part: { type: 'start', runId: 'live-run' },
+      },
+    });
+    await livePubSub.flush();
+    await waitForCondition(() => liveSubscription.activeRunId() === 'live-run');
+    liveSubscription.unsubscribe();
+  });
+
+  it('orders delayed lease validation and ignores stale stream terminal events', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const runtime = new AgentThreadStreamRuntime();
+    const key = 'ordered-resource\u0000ordered-thread';
+    const topic = `agent.thread-stream.${encodeURIComponent(key)}`;
+    const runId = 'ordered-run';
+    pubsub.owners.set(key, runId);
+    pubsub.ownerReadDelayMs = 10;
+    const subscription = await runtime.subscribeToThread(
+      { id: 'ordered-agent' } as Agent<any, any, any, any>,
+      { resourceId: 'ordered-resource', threadId: 'ordered-thread' },
+      pubsub,
+    );
+
+    for (const data of [
+      { type: 'run-registered', runId, streamId: 'ordered-stream-1', streamSeq: 1 },
+      { type: 'run-registered', runId, streamId: 'ordered-stream-2', streamSeq: 2 },
+      { type: 'run-completed', runId, streamId: 'ordered-stream-1' },
+    ]) {
+      await pubsub.publish(topic, { type: data.type, runId, data });
+    }
+    await pubsub.flush();
+    await waitForCondition(() => subscription.activeRunId() === runId);
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(subscription.abort()).toBe(true);
+    await pubsub.flush();
+    await waitForCondition(() =>
+      pubsub.publishedData.some(data => data?.type === 'run-abort-requested' && data.streamId === 'ordered-stream-2'),
+    );
+    subscription.unsubscribe();
+  });
+
+  it('bounds remote waits by renewed lease ownership and unsubscribes on exit', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const runtime = new AgentThreadStreamRuntime();
+    const key = 'bounded-resource\u0000bounded-thread';
+    const topic = `agent.thread-stream.${encodeURIComponent(key)}`;
+    const runId = 'bounded-run';
+    pubsub.owners.set(key, runId);
+    const subscription = await runtime.subscribeToThread(
+      { id: 'bounded-owner-agent' } as Agent<any, any, any, any>,
+      { resourceId: 'bounded-resource', threadId: 'bounded-thread' },
+      pubsub,
+    );
+    await pubsub.publish(topic, {
+      type: 'run-registered',
+      runId,
+      data: { type: 'run-registered', runId, streamId: 'bounded-stream', streamSeq: 1 },
+    });
+    await pubsub.flush();
+    await waitForCondition(() => subscription.activeRunId() === runId);
+
+    vi.useFakeTimers();
+    try {
+      let resolved = false;
+      const wait = runtime
+        .waitForCrossAgentThreadRun(
+          { id: 'bounded-other-agent' } as Agent<any, any, any, any>,
+          { memory: { resource: 'bounded-resource', thread: 'bounded-thread' } },
+          pubsub,
+        )
+        .then(() => {
+          resolved = true;
+        });
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(resolved).toBe(false);
+      pubsub.owners.delete(key);
+      await vi.advanceTimersByTimeAsync(15_000);
+      await wait;
+      expect(resolved).toBe(true);
+      expect(pubsub.unsubscribeCount).toBeGreaterThanOrEqual(1);
+      expect(subscription.activeRunId()).toBeNull();
+    } finally {
+      vi.useRealTimers();
+      subscription.unsubscribe();
+    }
+  });
+
+  it('ends a remote wait on a terminal event before the lease deadline', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const runtime = new AgentThreadStreamRuntime();
+    const key = 'terminal-wait-resource\u0000terminal-wait-thread';
+    const topic = `agent.thread-stream.${encodeURIComponent(key)}`;
+    const runId = 'terminal-wait-run';
+    pubsub.owners.set(key, runId);
+    const subscription = await runtime.subscribeToThread(
+      { id: 'terminal-wait-owner' } as Agent<any, any, any, any>,
+      { resourceId: 'terminal-wait-resource', threadId: 'terminal-wait-thread' },
+      pubsub,
+    );
+    await pubsub.publish(topic, {
+      type: 'run-registered',
+      runId,
+      data: { type: 'run-registered', runId, streamId: 'terminal-wait-stream', streamSeq: 1 },
+    });
+    await pubsub.flush();
+    await waitForCondition(() => subscription.activeRunId() === runId);
+
+    const wait = runtime.waitForCrossAgentThreadRun(
+      { id: 'terminal-wait-other' } as Agent<any, any, any, any>,
+      { memory: { resource: 'terminal-wait-resource', thread: 'terminal-wait-thread' } },
+      pubsub,
+    );
+    await pubsub.publish(topic, {
+      type: 'run-completed',
+      runId,
+      data: { type: 'run-completed', runId, streamId: 'terminal-wait-stream' },
+    });
+    await pubsub.flush();
+    await expect(wait).resolves.toBeUndefined();
+    expect(pubsub.unsubscribeCount).toBeGreaterThanOrEqual(1);
+    subscription.unsubscribe();
+  });
+
+  it('routes remote abort requests to only the live lease owner', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const ownerRuntime = new AgentThreadStreamRuntime();
+    const followerRuntime = new AgentThreadStreamRuntime();
+    const key = 'remote-abort-resource\u0000remote-abort-thread';
+    const runId = 'remote-abort-run';
+    pubsub.owners.set(key, runId);
+    const ownerSubscription = await ownerRuntime.subscribeToThread(
+      { id: 'remote-abort-agent' } as Agent<any, any, any, any>,
+      { resourceId: 'remote-abort-resource', threadId: 'remote-abort-thread' },
+      pubsub,
+    );
+    const followerSubscription = await followerRuntime.subscribeToThread(
+      { id: 'remote-abort-agent' } as Agent<any, any, any, any>,
+      { resourceId: 'remote-abort-resource', threadId: 'remote-abort-thread' },
+      pubsub,
+    );
+    expect(followerSubscription.abort()).toBe(false);
+
+    const options = ownerRuntime.prepareRunOptions(
+      { runId, memory: { resource: 'remote-abort-resource', thread: 'remote-abort-thread' } } as any,
+      pubsub,
+    );
+    ownerRuntime.registerRun(
+      { id: 'remote-abort-agent' } as Agent<any, any, any, any>,
+      {
+        runId,
+        status: 'running',
+        fullStream: (async function* () {})(),
+        _waitUntilFinished: () => new Promise<void>(() => {}),
+      } as any,
+      options,
+      pubsub,
+    );
+    await pubsub.flush();
+    await waitForCondition(() => followerSubscription.activeRunId() === runId);
+    expect(followerSubscription.abort()).toBe(true);
+    expect(options.abortSignal?.aborted).toBe(false);
+    await pubsub.flush();
+    await waitForCondition(() => options.abortSignal?.aborted === true);
+    const requestIndex = pubsub.publishedData.findIndex(data => data?.type === 'run-abort-requested');
+    const terminalIndex = pubsub.publishedData.findIndex(data => data?.type === 'run-aborted');
+    expect(requestIndex).toBeGreaterThanOrEqual(0);
+    expect(terminalIndex).toBeGreaterThan(requestIndex);
+    expect(pubsub.owners.get(key)).toBeUndefined();
+
+    const terminalCount = pubsub.publishedData.filter(data => data?.type === 'run-aborted').length;
+    await pubsub.publish(`agent.thread-stream.${encodeURIComponent(key)}`, {
+      type: 'run-abort-requested',
+      runId,
+      data: { type: 'run-abort-requested', runId, streamId: 'stale-stream' },
+    });
+    await pubsub.flush();
+    await nextTick();
+    expect(pubsub.publishedData.filter(data => data?.type === 'run-aborted')).toHaveLength(terminalCount);
+    ownerSubscription.unsubscribe();
+    followerSubscription.unsubscribe();
   });
 
   it('routes active-run signals across runtime instances through PubSub', async () => {
