@@ -12,7 +12,7 @@ import { useSelectWorkspaceMutation, useWorkspacesQuery } from '../../../../shar
 import { relativeTime } from '../../../../shared/lib/date';
 import { SkeletonRows } from '../../ui';
 import { AGENT_CONTROLLER_ID } from '../chat/services/constants';
-import type { Project } from '../workspaces/services/projects';
+import type { GithubFactory } from '../workspaces/services/factories';
 import { FactoryItemActions } from './components/FactoryItemActions';
 import { FactoryPageShell } from './components/FactoryPageShell';
 import { LoadMoreSentinel } from './components/LoadMoreSentinel';
@@ -387,7 +387,7 @@ function readDragPayload(event: DragEvent): DragPayload | null {
 // ── Page ────────────────────────────────────────────────────────────────────
 
 /**
- * Factory › Board: an org-wide kanban over the project's work items. The
+ * Factory › Board: an org-wide kanban over the repository's work items. The
  * Intake column merges persisted `intake` cards with live GitHub/Linear
  * candidates (issues and PRs that have no record yet — records are
  * materialized only when someone acts on them). Everything enters through
@@ -398,13 +398,13 @@ function readDragPayload(event: DragEvent): DragPayload | null {
 export function BoardPage() {
   return (
     <FactoryPageShell title="Board" description="Issues and pull requests across intake, work, review, and done.">
-      {project => <Board project={project} />}
+      {factory => <Board factory={factory} />}
     </FactoryPageShell>
   );
 }
 
-function Board({ project }: { project: Project & { githubProjectId: string } }) {
-  const githubProjectId = project.githubProjectId;
+function Board({ factory }: { factory: GithubFactory }) {
+  const githubProjectId = factory.binding.githubProjectId;
   const items = useWorkItemsQuery(githubProjectId);
   const configQuery = useIntakeConfigQuery();
   const linearStatusQuery = useLinearStatusQuery();
@@ -414,7 +414,7 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
   // in Intake and only move once the Factory acts on them.
   const config = configQuery.data;
   const githubEnabled = config?.github.enabled ?? true;
-  const githubSelected = config ? (config.github.projectIds?.includes(githubProjectId) ?? false) : true;
+  const githubSelected = config ? (config.github.repositoryIds?.includes(githubProjectId) ?? false) : true;
   const linearFeature = linearStatusQuery.data?.enabled ?? false;
   const linearConnected = Boolean(linearFeature && linearStatusQuery.data?.connected);
   const linearReady =
@@ -428,7 +428,7 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
     'github-prs' as const,
     ...(linearReady ? (['linear'] as const) : []),
   ];
-  const newIssueUrl = config && githubIntakeActive ? githubNewIssueUrl(project.name) : undefined;
+  const newIssueUrl = config && githubIntakeActive ? githubNewIssueUrl(factory.name) : undefined;
   const [intakeSource, setIntakeSource] = useState<IntakeSource>('github');
   const showIntakeSourceSwitch = availableIntakeSources.length > 1;
   const activeIntakeSource: IntakeSource | null = availableIntakeSources.includes(intakeSource)
@@ -449,13 +449,13 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
   const navigate = useNavigate();
   const boardContainerRef = useRef<HTMLDivElement>(null);
   const laneRefs = useRef(new Map<BoardStageId, HTMLElement>());
-  const autoPositionedProjectRef = useRef<string | undefined>(undefined);
-  const userPositionedProjectRef = useRef<string | undefined>(undefined);
+  const autoPositionedFactoryRef = useRef<string | undefined>(undefined);
+  const userPositionedFactoryRef = useRef<string | undefined>(undefined);
 
   // Worktrees that still exist. A card's session ref whose worktree was
   // deleted is stale: its thread is gone (worktree deletion cascades onto its
   // threads), so it neither renders a Thread link nor blocks re-running.
-  const workspaces = useWorkspacesQuery(project);
+  const workspaces = useWorkspacesQuery(factory);
   const liveWorktreePaths = useMemo(
     () => new Set((workspaces.data?.worktrees ?? []).map(worktree => worktree.worktreePath)),
     [workspaces.data],
@@ -464,9 +464,9 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
   // Threads are scoped per worktree, so opening a card's thread first makes
   // its worktree the active workspace — otherwise the thread page can't
   // resolve the thread in the active scope and bounces away.
-  const selectWorkspace = useSelectWorkspaceMutation(project, {
+  const selectWorkspace = useSelectWorkspaceMutation(factory, {
     agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId: project.resourceId,
+    resourceId: factory.resourceId,
   });
   const openThread = async (session: WorkItemSessionRef) => {
     await selectWorkspace.mutateAsync(session.projectPath);
@@ -500,9 +500,9 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
     (activeIntakeSource === 'linear' && linearIssues.isPending);
 
   useEffect(() => {
-    if (boardDataPending || autoPositionedProjectRef.current === project.id) return;
-    autoPositionedProjectRef.current = project.id;
-    if (userPositionedProjectRef.current === project.id) return;
+    if (boardDataPending || autoPositionedFactoryRef.current === factory.id) return;
+    autoPositionedFactoryRef.current = factory.id;
+    if (userPositionedFactoryRef.current === factory.id) return;
 
     const firstPopulatedStage = BOARD_STAGES.find(
       stage =>
@@ -513,7 +513,7 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
     const lane = firstPopulatedStage ? laneRefs.current.get(firstPopulatedStage.id) : undefined;
     if (!container || !lane) return;
     container.scrollTo?.({ left: Math.max(0, lane.offsetLeft - container.offsetLeft), behavior: 'auto' });
-  }, [boardDataPending, candidates, project.id, workItems]);
+  }, [boardDataPending, candidates, factory.id, workItems]);
 
   const moveItem = (id: string, fromStage: string | null, toStage: string) => {
     const item = workItems.find(i => i.id === id);
@@ -557,14 +557,14 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
         className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-2"
         aria-label="Board columns"
         onPointerDown={() => {
-          userPositionedProjectRef.current = project.id;
+          userPositionedFactoryRef.current = factory.id;
         }}
         onWheel={() => {
-          userPositionedProjectRef.current = project.id;
+          userPositionedFactoryRef.current = factory.id;
         }}
         onScroll={() => {
           // Ignore the scroll event emitted by our own initial scrollTo call.
-          if (autoPositionedProjectRef.current !== project.id) userPositionedProjectRef.current = project.id;
+          if (autoPositionedFactoryRef.current !== factory.id) userPositionedFactoryRef.current = factory.id;
         }}
       >
         {BOARD_STAGES.map(stage => (

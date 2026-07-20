@@ -59,7 +59,7 @@ export async function fetchAuditEvents(
   if (options.before) query.set('before', options.before);
   if (options.limit) query.set('limit', String(options.limit));
   const qs = query.size > 0 ? `?${query}` : '';
-  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(githubProjectId)}/audit${qs}`, {
+  const res = await fetch(`${baseUrl}/web/factory/repositories/${encodeURIComponent(githubProjectId)}/audit${qs}`, {
     headers: { Accept: 'application/json' },
     credentials: 'include',
   });

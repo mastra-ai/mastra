@@ -6,8 +6,8 @@ import type { ActivateModelPackResponse, ModelPacksResponse, OkResponse, SaveMod
 
 /**
  * Model packs (mirrors the TUI `/models-pack` command). Listing + custom-pack
- * CRUD are global; activation is session-scoped and needs the active project's
- * `resourceId`. The list is keyed by `resourceId` so switching projects yields a
+ * CRUD are global; activation is session-scoped and needs the active factory's
+ * `resourceId`. The list is keyed by `resourceId` so switching factories yields a
  * distinct cache entry (active-pack state differs per session). The query stays
  * enabled without a `resourceId` — it just returns packs with no active flag,
  * matching the current component which loads the catalog either way.

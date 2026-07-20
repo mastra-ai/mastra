@@ -120,7 +120,7 @@ export function getSeededAuthAdapter(): WebAuthAdapter | undefined {
 
 /**
  * Sandbox runtime seeded by the factory. `undefined` when the factory was
- * configured without a `sandbox` slot (or never ran) — GitHub-backed projects
+ * configured without a `sandbox` slot (or never ran) — GitHub-backed repositories
  * stay off in that case.
  */
 export function getSeededSandbox(): WebSandboxRuntime | undefined {
@@ -152,7 +152,7 @@ export function getSeededIntegration(id: string): FactoryIntegration | undefined
  * GitHub App integration seeded by the factory. Typed convenience over
  * {@link getSeededIntegration} for the sandbox fleet + session tooling, which
  * need GitHub-typed API methods. `undefined` when no GitHub integration was
- * registered (or the factory never ran) — GitHub-backed projects stay off in
+ * registered (or the factory never ran) — GitHub-backed repositories stay off in
  * that case.
  */
 export function getSeededGithubIntegration(): GithubIntegration | undefined {

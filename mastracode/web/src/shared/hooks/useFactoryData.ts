@@ -3,9 +3,9 @@ import { useInfiniteQuery, useMutation, useMutationState, useQueryClient } from 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import {
-  listProjectIssues,
-  listProjectPullRequests,
-  startProjectIssueTriage,
+  listRepositoryIssues,
+  listRepositoryPullRequests,
+  startRepositoryIssueTriage,
 } from '../../web/ui/domains/factory/services/factory';
 import type { GithubIssue } from '../../web/ui/domains/factory/services/factory';
 
@@ -17,7 +17,7 @@ export function useProjectIssuesQuery(githubProjectId: string | undefined, label
   const { baseUrl } = useApiConfig();
   return useInfiniteQuery({
     queryKey: queryKeys.githubIssues(githubProjectId, label),
-    queryFn: ({ pageParam }) => listProjectIssues(baseUrl, githubProjectId!, pageParam, label),
+    queryFn: ({ pageParam }) => listRepositoryIssues(baseUrl, githubProjectId!, pageParam, label),
     initialPageParam: 1,
     getNextPageParam: lastPage => lastPage.nextPage,
     enabled: Boolean(githubProjectId),
@@ -31,7 +31,7 @@ export function useStartIssueTriageMutation(githubProjectId: string | undefined)
   const mutationKey = ['factory', 'triage-issue', githubProjectId] as const;
   const mutation = useMutation({
     mutationKey,
-    mutationFn: (issue: GithubIssue) => startProjectIssueTriage(baseUrl, githubProjectId!, issue),
+    mutationFn: (issue: GithubIssue) => startRepositoryIssueTriage(baseUrl, githubProjectId!, issue),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.githubIssues(githubProjectId) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.githubIssues(githubProjectId, 'auto-triaged') });
@@ -58,7 +58,7 @@ export function useProjectPullRequestsQuery(githubProjectId: string | undefined)
   const { baseUrl } = useApiConfig();
   return useInfiniteQuery({
     queryKey: queryKeys.githubPulls(githubProjectId),
-    queryFn: ({ pageParam }) => listProjectPullRequests(baseUrl, githubProjectId!, pageParam),
+    queryFn: ({ pageParam }) => listRepositoryPullRequests(baseUrl, githubProjectId!, pageParam),
     initialPageParam: 1,
     getNextPageParam: lastPage => lastPage.nextPage,
     enabled: Boolean(githubProjectId),

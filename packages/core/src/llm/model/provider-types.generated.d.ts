@@ -988,7 +988,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-5.1',
     'zai-org/GLM-5.2',
   ];
-  readonly 'kimi-for-coding': readonly ['k2p7', 'k3', 'kimi-for-coding-highspeed'];
+  readonly 'kimi-for-coding': readonly ['k3', 'kimi-for-coding', 'kimi-for-coding-highspeed'];
   readonly crossmodel: readonly [
     'anthropic/claude-fable-5',
     'anthropic/claude-haiku-4-5',
@@ -3233,7 +3233,6 @@ export type ProviderModelsMap = {
     'bytedance-seed/seed-2.0-mini',
     'bytedance/ui-tars-1.5-7b',
     'cognitivecomputations/dolphin-mistral-24b-venice-edition',
-    'cognitivecomputations/dolphin-mistral-24b-venice-edition:free',
     'cohere/command-a',
     'cohere/command-r-08-2024',
     'cohere/command-r-plus-08-2024',
@@ -3296,9 +3295,7 @@ export type ProviderModelsMap = {
     'meta-llama/llama-3.1-8b-instruct',
     'meta-llama/llama-3.2-1b-instruct',
     'meta-llama/llama-3.2-3b-instruct',
-    'meta-llama/llama-3.2-3b-instruct:free',
     'meta-llama/llama-3.3-70b-instruct',
-    'meta-llama/llama-3.3-70b-instruct:free',
     'meta-llama/llama-4-maverick',
     'meta-llama/llama-4-scout',
     'meta-llama/llama-guard-4-12b',
@@ -3343,7 +3340,6 @@ export type ProviderModelsMap = {
     'nex-agi/nex-n2-mini',
     'nex-agi/nex-n2-pro',
     'nousresearch/hermes-3-llama-3.1-405b',
-    'nousresearch/hermes-3-llama-3.1-405b:free',
     'nousresearch/hermes-3-llama-3.1-70b',
     'nousresearch/hermes-4-405b',
     'nousresearch/hermes-4-70b',
@@ -3460,11 +3456,9 @@ export type ProviderModelsMap = {
     'qwen/qwen3-coder-flash',
     'qwen/qwen3-coder-next',
     'qwen/qwen3-coder-plus',
-    'qwen/qwen3-coder:free',
     'qwen/qwen3-max',
     'qwen/qwen3-max-thinking',
     'qwen/qwen3-next-80b-a3b-instruct',
-    'qwen/qwen3-next-80b-a3b-instruct:free',
     'qwen/qwen3-next-80b-a3b-thinking',
     'qwen/qwen3-vl-235b-a22b-instruct',
     'qwen/qwen3-vl-235b-a22b-thinking',
