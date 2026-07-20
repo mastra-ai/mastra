@@ -215,7 +215,7 @@ export function createDurableToolCallStep() {
     inputSchema: durableToolCallInputSchema,
     outputSchema: durableToolCallOutputSchema,
     execute: async params => {
-      const { inputData, mastra, suspend, resumeData: workflowResumeData, requestContext, getInitData } = params;
+      const { inputData, mastra, suspend, resumeData: workflowResumeData, requestContext, actor, getInitData } = params;
 
       // Access pubsub via symbol
       const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
@@ -715,9 +715,11 @@ export function createDurableToolCallStep() {
         workspace,
         requestContext,
         tracingContext: toolTracingContext,
-        // Forward per-call ActorSignal so FGA checks inside tool execution
-        // see the same actor as the non-durable Agent path.
-        actor: agentOptions?.actor,
+        // Forward the actor for the current workflow segment. On resume this
+        // must come from resume(), not the serialized options from the initial
+        // run, so a new actor wins and an omitted actor does not reuse stale
+        // trusted state.
+        actor,
         resumeData: isResumingFromSuspension ? resumeData : undefined,
         ...(toolAbortSignal ? { abortSignal: toolAbortSignal } : {}),
         // Provide outputWriter so context.writer.write() / context.writer.custom()
