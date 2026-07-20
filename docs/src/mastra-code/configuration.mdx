@@ -275,7 +275,7 @@ Use `clientId` and `clientSecret` when the MCP server requires a pre-registered 
 
 Do not commit real `clientSecret` values to a repository. Prefer a project-local or global config file that is not shared.
 
-Use `callbackPort` as a shorthand for the redirect URL. It synthesizes `http://localhost:<callbackPort>/callback` — the convention Claude Code and Codex use — so configs written for those clients (such as the one in Slack's official MCP server docs) work verbatim:
+Use `callbackPort` as a shorthand for the redirect URL. It synthesizes `http://localhost:<callbackPort>/callback`, the convention Claude Code and Codex use, so configs written for those clients (such as the one in Slack's official MCP server docs) work verbatim:
 
 ```json title=".mastracode/mcp.json"
 {
@@ -291,7 +291,7 @@ Use `callbackPort` as a shorthand for the redirect URL. It synthesizes `http://l
 }
 ```
 
-`callbackPort` and `redirectUrl` are mutually exclusive — setting both is a configuration error. Pick a port that is normally free on your machine: when the preferred port is busy, the callback server falls back to the next sequential port, and a provider that only registered the original redirect URL will reject the fallback.
+`callbackPort` and `redirectUrl` are mutually exclusive. Setting both is a configuration error. Pick a port that is normally free on your machine. When the preferred port is busy, the callback server falls back to the next sequential port, and a provider that only registered the original redirect URL will reject the fallback.
 
 #### Startup behavior
 

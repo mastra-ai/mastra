@@ -19,8 +19,8 @@ The server manager gains `authenticateServer(name)` and
 `needsAuth` flag, and the OAuth `redirectUrl` in MCP server config is now
 optional (it defaults to a stable loopback URL). The config also accepts
 `callbackPort` as a shorthand that synthesizes
-`http://localhost:<callbackPort>/callback` — the Claude Code / Codex
-convention — so configs written for those clients (like Slack's official MCP
+`http://localhost:<callbackPort>/callback`, the Claude Code / Codex
+convention, so configs written for those clients (like Slack's official MCP
 plugin config) work verbatim. `callbackPort` and `redirectUrl` are mutually
 exclusive.
 
