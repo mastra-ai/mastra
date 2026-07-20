@@ -1,6 +1,6 @@
 /**
  * Persistence wrappers for Factory audit events, delegating to the `audit`
- * factory storage domain registered on the seeded {@link FactoryStore} (see
+ * factory storage domain registered on the seeded `FactoryStorage` (see
  * `../storage/domains/audit`).
  *
  * `recordAuditEvent` is deliberately swallow-on-failure: auditing must never
@@ -8,7 +8,8 @@
  * `[Audit]` prefix and dropped. Reads are cursor-paginated newest-first.
  */
 
-import { getFactoryStore } from '../runtime-config';
+import { getFactoryStorage } from '../runtime-config';
+import { getAuditStorage } from '../storage/domains';
 import type {
   AuditEventPage,
   AuditEventRow,
@@ -24,9 +25,9 @@ export type { AuditEventPage, AuditEventRow, ListAuditEventsInput, RecordAuditEv
  */
 export async function recordAuditEvent(input: RecordAuditEventInput): Promise<AuditEventRow | null> {
   try {
-    const store = getFactoryStore();
-    await store.ensureReady('audit');
-    return await store.audit.record(input);
+    const storage = getFactoryStorage();
+    await storage.ensureDomainReady('audit');
+    return await getAuditStorage().record(input);
   } catch (err) {
     console.warn('[Audit] Failed to record audit event', {
       action: input.action,
@@ -38,7 +39,7 @@ export async function recordAuditEvent(input: RecordAuditEventInput): Promise<Au
 
 /** List an org's audit events newest-first with keyset pagination. */
 export async function listAuditEvents(input: ListAuditEventsInput): Promise<AuditEventPage> {
-  const store = getFactoryStore();
-  await store.ensureReady('audit');
-  return store.audit.list(input);
+  const storage = getFactoryStorage();
+  await storage.ensureDomainReady('audit');
+  return getAuditStorage().list(input);
 }

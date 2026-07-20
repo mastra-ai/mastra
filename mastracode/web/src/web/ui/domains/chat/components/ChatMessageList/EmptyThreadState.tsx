@@ -1,21 +1,23 @@
 import { Wordmark } from '../../../../ui';
-import { useActiveProjectContext } from '../../../workspaces';
-import { ProjectMetadata } from './ProjectMetadata';
+import { deriveProjectPath } from '../../../../../../shared/hooks/useWorkspaces';
+import { useActiveFactoryContext } from '../../../workspaces';
+import { FactoryMetadata } from './FactoryMetadata';
 
 const emptyThreadClass = 'w-full max-w-[80ch] px-7 text-left font-mono text-sm leading-relaxed text-icon3';
 
 export function EmptyThreadState() {
-  const { activeProject } = useActiveProjectContext();
-  if (!activeProject) return null;
+  const { activeFactory } = useActiveFactoryContext();
+  if (!activeFactory) return null;
+  const workspace = deriveProjectPath(activeFactory);
 
   return (
     <div className={emptyThreadClass}>
       <Wordmark className="mb-6" />
       <dl className="mb-4 mt-0 grid gap-0.5">
-        <ProjectMetadata label="Project" value={activeProject.name} />
-        {activeProject.resourceId && <ProjectMetadata label="Resource ID" value={activeProject.resourceId} />}
-        {activeProject.gitBranch && <ProjectMetadata label="Branch" value={activeProject.gitBranch} />}
-        <ProjectMetadata label="Workspace" value={activeProject.path} />
+        <FactoryMetadata label="Factory" value={activeFactory.name} />
+        {activeFactory.resourceId && <FactoryMetadata label="Resource ID" value={activeFactory.resourceId} />}
+        {activeFactory.binding.gitBranch && <FactoryMetadata label="Branch" value={activeFactory.binding.gitBranch} />}
+        {workspace && <FactoryMetadata label="Workspace" value={workspace} />}
       </dl>
       <p className="mb-6 mt-0 text-icon3">Ready for new conversation</p>
     </div>

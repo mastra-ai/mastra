@@ -278,8 +278,7 @@ export type SendAgentStateSignalOptions<OUTPUT = unknown> = SendAgentSignalOptio
  * @experimental Agent state signal APIs are experimental and may change in a future release.
  */
 export type SendAgentStateSignalResult<OUTPUT = unknown> =
-  | (SendAgentSignalResult<OUTPUT> & { skipped?: false })
-  | { skipped: true; reason: 'unchanged'; signal?: undefined };
+  (SendAgentSignalResult<OUTPUT> & { skipped?: false }) | { skipped: true; reason: 'unchanged'; signal?: undefined };
 
 /**
  * @experimental Agent notification signal APIs are experimental and may change in a future release.
@@ -357,8 +356,7 @@ export interface AgentThreadSubscription<OUTPUT = unknown> {
 export type ToolsetsInput = Record<string, ToolsInput>;
 
 type FallbackFields<OUTPUT = undefined> =
-  | { errorStrategy?: 'strict' | 'warn'; fallbackValue?: never }
-  | { errorStrategy: 'fallback'; fallbackValue: OUTPUT };
+  { errorStrategy?: 'strict' | 'warn'; fallbackValue?: never } | { errorStrategy: 'fallback'; fallbackValue: OUTPUT };
 
 export type StructuredOutputOptionsBase<OUTPUT = {}> = {
   /** Model to use for the internal structuring agent. If not provided, falls back to the agent's model */

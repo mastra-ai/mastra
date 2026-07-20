@@ -5,7 +5,7 @@
  * and only when the Factory feature is ready (audit events hang off factory
  * mutations). Two endpoints:
  *
- *   - `GET /web/factory/projects/:id/audit` — org+project-scoped event list
+ *   - `GET /web/factory/repositories/:id/audit` — org+repository-scoped event list
  *     with keyset pagination (same tenant guards as the work-item routes).
  *   - `GET /web/audit/portal-link` — one-time WorkOS Admin Portal URL opening
  *     the `audit_logs` viewer; 404 when WorkOS auth isn't configured so the
@@ -18,7 +18,7 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
 import { ensureWebAuthUser, getWorkOSProvider, isWorkOSAuth, webAuthTenant } from '../auth';
-import type { GithubStorage } from '../github/storage/base';
+import type { SourceControlStorageHandle } from '../storage/domains/source-control/base';
 import { listAuditEvents } from './store';
 
 function loose(c: unknown): Context {
@@ -46,9 +46,9 @@ async function resolveTenant(c: Context): Promise<{ orgId: string; userId: strin
 }
 
 /** Resolve the tenant AND the org-owned project from the `:id` param. */
-async function resolveProject(
+async function resolveGithubRepository(
   c: Context,
-  storage?: GithubStorage,
+  storage?: SourceControlStorageHandle,
 ): Promise<{ orgId: string; userId: string; projectId: string } | { response: Response }> {
   const tenant = await resolveTenant(c);
   if ('response' in tenant) return tenant;
@@ -60,11 +60,11 @@ async function resolveProject(
   }
   const projectId = c.req.param('id');
   if (!projectId || !UUID_RE.test(projectId)) {
-    return { response: c.json({ error: 'Project not found' }, 404) };
+    return { response: c.json({ error: 'Repository not found' }, 404) };
   }
-  const project = await storage.getOrgProject(tenant.orgId, projectId);
+  const project = await storage.projects.getOrg(tenant.orgId, projectId);
   if (!project) {
-    return { response: c.json({ error: 'Project not found' }, 404) };
+    return { response: c.json({ error: 'Repository not found' }, 404) };
   }
   return { ...tenant, projectId };
 }
@@ -90,17 +90,17 @@ function parseLimitParam(raw: string | undefined): number | undefined {
 export interface AuditRoutesDeps {
   /** Public origin used as the Admin Portal return URL base. */
   baseUrl: string;
-  githubStorage?: GithubStorage;
+  githubStorage?: SourceControlStorageHandle;
 }
 
 export function buildAuditRoutes(deps: AuditRoutesDeps): ApiRoute[] {
   const githubStorage = deps.githubStorage;
   return [
-    registerApiRoute('/web/factory/projects/:id/audit', {
+    registerApiRoute('/web/factory/repositories/:id/audit', {
       method: 'GET',
       handler: async cc => {
         const c = loose(cc);
-        const scope = await resolveProject(c, githubStorage);
+        const scope = await resolveGithubRepository(c, githubStorage);
         if ('response' in scope) return scope.response;
 
         const page = await listAuditEvents({

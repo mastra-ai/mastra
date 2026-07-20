@@ -22,8 +22,8 @@ vi.mock('@mastra/code-sdk/auth/storage', () => ({
 import { resolveCredentialStore, setCredentialStoreProvider } from '@mastra/code-sdk/agents/credential-resolver';
 import { RequestContext } from '@mastra/core/request-context';
 import { __resetRuntimeConfigForTests } from './runtime-config';
-import { seedInMemoryFactoryStoreForTests } from './storage/test-utils';
-import type { InMemoryFactoryStoreSeed } from './storage/test-utils';
+import { seedFactoryStorageForTests } from './storage/test-utils';
+import type { FactoryStorageTestSeed } from './storage/test-utils';
 import {
   TenantCredentialStore,
   createTenantCredentialPrimer,
@@ -31,7 +31,7 @@ import {
   resetTenantCredentialResolverForTests,
 } from './tenant-credentials';
 
-let seed: InMemoryFactoryStoreSeed;
+let seed: FactoryStorageTestSeed;
 
 const ORG = 'org1';
 const USER = 'user-a';
@@ -42,7 +42,7 @@ const FRESH_OAUTH = { type: 'oauth', refresh: 'r-1', access: 'a-1', expires: Dat
 const EXPIRED_OAUTH = { type: 'oauth', refresh: 'r-old', access: 'a-old', expires: Date.now() - 1000 } as const;
 
 beforeEach(async () => {
-  seed = await seedInMemoryFactoryStoreForTests();
+  seed = await seedFactoryStorageForTests();
   getApiKeyFromCreds.mockImplementation(creds => (creds as { access: string }).access);
 });
 

@@ -462,8 +462,7 @@ describe('ChatProvider', () => {
     const omPart = latestMessages
       .flatMap(message => (Array.isArray(message.content?.parts) ? message.content.parts : []))
       .find(part => (part as { toolCallId?: string }).toolCallId === 'om-buffering-cycle-reload') as
-      | { state?: string; output?: { omData?: Record<string, unknown> } }
-      | undefined;
+      { state?: string; output?: { omData?: Record<string, unknown> } } | undefined;
 
     expect(omPart?.state).toBe('output-available');
     expect(omPart?.output?.omData?.observations).toEqual(['remembered after reload']);

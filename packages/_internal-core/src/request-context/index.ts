@@ -137,7 +137,7 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
   /**
    * set a value with strict typing if `Values` is a Record and the key exists in it.
    */
-  public set<K extends Values extends Record<string, any> ? keyof Values : string>(
+  public set<K extends (Values extends Record<string, any> ? keyof Values : string)>(
     key: K,
     value: Values extends Record<string, any> ? (K extends keyof Values ? Values[K] : never) : unknown,
   ): void {
@@ -149,7 +149,7 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
    * Get a value with its type
    */
   public get<
-    K extends Values extends Record<string, any> ? keyof Values : string,
+    K extends (Values extends Record<string, any> ? keyof Values : string),
     R = Values extends Record<string, any> ? (K extends keyof Values ? Values[K] : never) : unknown,
   >(key: K): R {
     return this.registry.get(key as string) as R;
@@ -158,14 +158,14 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
   /**
    * Check if a key exists in the container
    */
-  public has<K extends Values extends Record<string, any> ? keyof Values : string>(key: K): boolean {
+  public has<K extends (Values extends Record<string, any> ? keyof Values : string)>(key: K): boolean {
     return this.registry.has(key);
   }
 
   /**
    * Delete a value by key
    */
-  public delete<K extends Values extends Record<string, any> ? keyof Values : string>(key: K): boolean {
+  public delete<K extends (Values extends Record<string, any> ? keyof Values : string)>(key: K): boolean {
     return this.registry.delete(key);
   }
 
@@ -215,7 +215,7 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
    * Execute a function for each entry in the container.
    * The callback receives properly typed key-value pairs.
    */
-  public forEach<K extends Values extends Record<string, any> ? keyof Values : string>(
+  public forEach<K extends (Values extends Record<string, any> ? keyof Values : string)>(
     callbackfn: (
       value: Values extends Record<string, any> ? (K extends keyof Values ? Values[K] : unknown) : unknown,
       key: K,

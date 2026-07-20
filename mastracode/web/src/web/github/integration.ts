@@ -31,7 +31,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../factory-integration.js';
 import { buildGithubRoutes } from './routes.js';
 import { createGithubSubscriptionTools } from './session-subscriptions.js';
-import { GithubStoragePG } from './storage/pg.js';
+import type { GithubSubscriptionStorage } from './subscriptions.js';
 
 /**
  * Normalize a PEM private key supplied via env. Env tooling tends to mangle
@@ -149,7 +149,7 @@ export class GithubIntegration implements FactoryIntegration {
   readonly #clientSecret: string;
   readonly #slug: string;
   readonly #webhookSecret: string | undefined;
-  readonly storageDomain = new GithubStoragePG();
+  #storage: IntegrationContext['storage'] | undefined;
 
   constructor(config: GithubIntegrationConfig) {
     const missing = REQUIRED_FIELDS.filter(field => !config[field]);
@@ -157,7 +157,7 @@ export class GithubIntegration implements FactoryIntegration {
       throw new Error(
         `GithubIntegration: missing required config field(s): ${missing.join(', ')}. ` +
           `Provide the full GitHub App credentials (appId, privateKey, clientId, clientSecret, slug) ` +
-          `or omit the integration to disable GitHub-backed projects.`,
+          `or omit the integration to disable GitHub-backed repositories.`,
       );
     }
     this.#appId = config.appId;
@@ -171,6 +171,21 @@ export class GithubIntegration implements FactoryIntegration {
   /** App slug — the URL name used to build the install URL. */
   get slug(): string {
     return this.#slug;
+  }
+
+  get genericStorage(): IntegrationContext['storage']['generic'] {
+    if (!this.#storage) throw new Error('GithubIntegration storage has not been initialized.');
+    return this.#storage.generic;
+  }
+
+  get sourceControlStorage(): IntegrationContext['storage']['sourceControl'] {
+    if (!this.#storage) throw new Error('GithubIntegration storage has not been initialized.');
+    return this.#storage.sourceControl;
+  }
+
+  get integrationStorage(): GithubSubscriptionStorage {
+    if (!this.#storage) throw new Error('GithubIntegration storage has not been initialized.');
+    return this.#storage.generic as unknown as GithubSubscriptionStorage;
   }
 
   /** Secret GitHub uses to sign webhook deliveries, when configured. */
@@ -444,6 +459,7 @@ export class GithubIntegration implements FactoryIntegration {
    * `apiRoutes` when the feature is ready. Handlers operate on this instance.
    */
   routes(ctx: IntegrationContext): ApiRoute[] {
+    this.#storage = ctx.storage;
     return buildGithubRoutes({
       github: this,
       stateSigner: ctx.stateSigner,

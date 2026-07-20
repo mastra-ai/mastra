@@ -1,6 +1,10 @@
-import babel from '@babel/core';
+import * as babel from '@babel/core';
 
-export function removeDeployer() {
+interface RemoveDeployerState extends babel.PluginPass {
+  hasReplaced?: boolean;
+}
+
+export function removeDeployer(): babel.PluginObject<RemoveDeployerState> {
   const t = babel.types;
 
   // Helper to remove deployer property from an object and clean up its binding
@@ -30,7 +34,7 @@ export function removeDeployer() {
   return {
     name: 'remove-deployer',
     visitor: {
-      NewExpression(path, state) {
+      NewExpression(path, state: RemoveDeployerState) {
         // is a variable declaration
         const varDeclaratorPath = path.findParent(path => t.isVariableDeclarator(path.node));
         if (!varDeclaratorPath) {
@@ -79,5 +83,5 @@ export function removeDeployer() {
         }
       },
     },
-  } as babel.PluginObj;
+  } as babel.PluginObject;
 }
