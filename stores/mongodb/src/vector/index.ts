@@ -177,7 +177,11 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     );
   }
 
-  /** $rankFusion requires MongoDB >= 8.1. Throws a clear error otherwise. */
+  /**
+   * $rankFusion is generally available in MongoDB >= 8.1. It technically exists in 8.0.x, but
+   * only behind a MongoDB support case and with the caveat that queries may need to pause on
+   * upgrade (see the $rankFusion docs), so we require >= 8.1 for a supported, stable path.
+   */
   private async assertRankFusionSupported(): Promise<void> {
     const info = (await this.db.admin().buildInfo()) as { version?: string };
     const [maj = 0, min = 0] = (info.version ?? '0.0').split('.').map(Number);
@@ -187,7 +191,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         id: createVectorErrorId('MONGODB', 'HYBRID_QUERY', 'UNSUPPORTED'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
-        text: `hybridQuery uses $rankFusion, which requires MongoDB >= 8.1 (found ${info.version ?? 'unknown'}). Use an Atlas cluster or self-hosted MongoDB >= 8.1, or call query()/textQuery() separately.`,
+        text: `hybridQuery uses $rankFusion, which requires MongoDB >= 8.1 (found ${info.version ?? 'unknown'}). On 8.0.x it needs a MongoDB support case; upgrade to >= 8.1, or run query() and textQuery() separately and fuse client-side.`,
       });
     }
   }
@@ -540,7 +544,9 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           },
         },
         { $limit: Math.min(10000, topK) },
-        { $set: { score: { $meta: 'searchScore' } } },
+        // $rankFusion places its Reciprocal Rank Fusion score in the `score` metadata field
+        // (NOT `searchScore`, which is the text-branch score and is absent on vector-only hits).
+        { $set: { score: { $meta: 'score' } } },
         { $project: this.buildProjection(metadataMode, false) },
       ];
       const rows = await collection.aggregate(pipeline).toArray();

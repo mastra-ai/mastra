@@ -939,7 +939,12 @@ describe('MongoDBVector filterFields (#18587)', () => {
       expect(res.length).toBeGreaterThan(0);
       // 'b' matches both vector (exact match to [0,1,0,0]) and text (contains "offshore entity")
       expect(res[0].id).toBe('b');
-      expect(res[0].score).toBeGreaterThan(0);
+      // Every fused hit must carry a positive RRF score. This guards the $rankFusion score
+      // source: using $meta:'searchScore' (the text-branch score) leaves vector-only hits
+      // with no score, which this assertion would catch; $meta:'score' scores every hit.
+      expect(res.every(r => typeof r.score === 'number' && r.score > 0)).toBe(true);
+      // RRF scores are rank-based reciprocals, so distinct-rank hits get distinct scores.
+      if (res.length > 1) expect(res[0].score).toBeGreaterThan(res[1].score);
     });
   });
 
