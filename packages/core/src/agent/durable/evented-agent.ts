@@ -93,6 +93,7 @@ export class EventedAgent<
       await run.startAsync({
         inputData: workflowInput,
         requestContext: entry?.requestContext,
+        actor: workflowInput.options?.actor,
         ...createObservabilityContext({ currentSpan: entry?.agentSpan }),
       });
     } catch (error) {

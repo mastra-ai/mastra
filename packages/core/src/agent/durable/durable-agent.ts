@@ -913,6 +913,7 @@ export class DurableAgent<
     const result = await run.start({
       inputData: workflowInput,
       requestContext,
+      actor: workflowInput.options?.actor,
       ...createObservabilityContext({ currentSpan: entry?.agentSpan }),
     });
     if (result?.status === 'failed') {
@@ -1435,6 +1436,9 @@ export class DurableAgent<
         const result = await run.resume({
           resumeData,
           requestContext,
+          // Actor is a per-resume trust signal. Do not fall back to the
+          // initial workflow input or run registry when the caller omits it.
+          actor: options?.actor,
           ...createObservabilityContext({ currentSpan: entry.resumeAgentSpan ?? entry.agentSpan }),
         });
         if (result?.status === 'failed') {
