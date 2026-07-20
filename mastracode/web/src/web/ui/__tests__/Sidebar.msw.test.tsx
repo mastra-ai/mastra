@@ -1,7 +1,7 @@
 /**
  * BDD coverage for the propless `Sidebar`.
  *
- * The sidebar consumes the domain contexts directly (`useActiveProjectContext`,
+ * The sidebar consumes the domain contexts directly (`useActiveFactoryContext`,
  * focused chat hooks, `useOverlays`, `useToast`, `useWebAuth`) instead of a
  * drilled prop bag, so the spec drives it end-to-end: real fetch transport,
  * MSW at the network boundary, assertions on the requests the thread actions
@@ -20,8 +20,8 @@ import { server } from '../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/web-ui/render';
 import { redirectToLogout } from '../domains/auth';
 import type * as AuthService from '../domains/auth/services/auth';
-import type { Project } from '../domains/workspaces';
-import { ActiveProjectProvider } from '../domains/workspaces';
+import type { Factory } from '../domains/workspaces';
+import { ActiveFactoryProvider } from '../domains/workspaces';
 import { OverlaysProvider } from '../lib/overlays';
 import { Sidebar } from '../Sidebar';
 import { ToastProvider } from '../ui';
@@ -37,36 +37,44 @@ const RESOURCE_ID = 'res-alpha';
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
 const SESSION = `${API}/sessions/${RESOURCE_ID}`;
 
-const project: Project = {
+const project: Factory = {
   id: 'p-alpha',
   name: 'Alpha',
-  path: '/projects/alpha',
   resourceId: RESOURCE_ID,
   createdAt: 1,
+  binding: {
+    kind: 'local',
+    path: '/projects/alpha',
+  },
 };
 
-const secondLocalProject: Project = {
+const secondLocalProject: Factory = {
   id: 'p-beta',
   name: 'Beta',
-  path: '/projects/beta',
   resourceId: 'res-beta',
   createdAt: 2,
+  binding: {
+    kind: 'local',
+    path: '/projects/beta',
+  },
 };
 
-const githubProject: Project = {
+const githubProject: Factory = {
   id: 'p-github',
   name: 'Mastra',
-  source: 'github',
-  githubProjectId: 'gh-project-1',
-  sandboxWorkdir: '/sandbox/mastra',
   resourceId: RESOURCE_ID,
-  gitBranch: 'main',
-  worktrees: [
-    { branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' },
-    { branch: 'feat-ui', worktreePath: '/sandbox/mastra-worktrees/feat-ui', baseBranch: 'main' },
-  ],
-  selectedWorktreePath: '/sandbox/mastra',
   createdAt: 1,
+  binding: {
+    kind: 'github',
+    githubProjectId: 'gh-project-1',
+    gitBranch: 'main',
+    sandboxWorkdir: '/sandbox/mastra',
+    selectedWorktreePath: '/sandbox/mastra',
+    worktrees: [
+      { branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' },
+      { branch: 'feat-ui', worktreePath: '/sandbox/mastra-worktrees/feat-ui', baseBranch: 'main' },
+    ],
+  },
 };
 
 const threadOne: AgentControllerThreadInfo = {
@@ -90,9 +98,9 @@ afterEach(() => {
   vi.mocked(redirectToLogout).mockClear();
 });
 
-function seedProject(active: Project = project, projects: Project[] = [active]) {
-  localStorage.setItem('mastracode-projects', JSON.stringify(projects));
-  localStorage.setItem('mastracode-active-project', active.id);
+function seedFactory(active: Factory = project, projects: Factory[] = [active]) {
+  localStorage.setItem('mastracode-factories', JSON.stringify(projects));
+  localStorage.setItem('mastracode-active-factory', active.id);
 }
 
 function useGithubStatusHandler() {
@@ -200,14 +208,14 @@ function renderSidebar() {
     <MemoryRouter initialEntries={['/chat']}>
       <MainSidebarProvider storageKey="sidebar-test" mobileBreakpoint={0}>
         <ToastProvider>
-          <ActiveProjectProvider>
+          <ActiveFactoryProvider>
             <ChatSessionProvider>
               <OverlaysProvider>
                 <Sidebar />
                 <LocationProbe />
               </OverlaysProvider>
             </ChatSessionProvider>
-          </ActiveProjectProvider>
+          </ActiveFactoryProvider>
         </ToastProvider>
       </MainSidebarProvider>
     </MemoryRouter>,
@@ -222,7 +230,7 @@ async function openThreadActions(title: string) {
 describe('Sidebar', () => {
   describe('when a project with threads is active', () => {
     it('lists each thread by title', async () => {
-      seedProject();
+      seedFactory();
       useAuthHandler();
       useAgentControllerHandlers();
       renderSidebar();
@@ -232,16 +240,16 @@ describe('Sidebar', () => {
     });
 
     it('keeps project, navigation, and account sections in order', async () => {
-      seedProject();
+      seedFactory();
       useAuthHandler({ authenticated: true, user: { name: 'Ada Lovelace' } });
       useAgentControllerHandlers();
       renderSidebar();
 
-      const projectSwitcher = await screen.findByRole('region', { name: 'Project switcher' });
+      const projectSwitcher = await screen.findByRole('region', { name: 'Factory switcher' });
       const navigation = screen.getByRole('region', { name: 'Navigation' });
       const account = screen.getByRole('region', { name: 'Account and settings' });
 
-      expect(within(projectSwitcher).getByRole('button', { name: 'Select project' })).toBeInTheDocument();
+      expect(within(projectSwitcher).getByRole('button', { name: 'Select factory' })).toBeInTheDocument();
       expect(await within(navigation).findByText('First thread')).toBeInTheDocument();
       const footerNavigation = within(account).getByRole('list');
       expect(within(footerNavigation).getByRole('button', { name: 'Sign out' })).toHaveTextContent('Ada Lovelace');
@@ -251,7 +259,7 @@ describe('Sidebar', () => {
     });
 
     it('navigates to the thread page when a thread is clicked', async () => {
-      seedProject();
+      seedFactory();
       useAuthHandler();
       useAgentControllerHandlers();
       renderSidebar();
@@ -262,7 +270,7 @@ describe('Sidebar', () => {
     });
 
     it('opens the /new draft page without persisting a thread when the new-thread control is clicked', async () => {
-      seedProject();
+      seedFactory();
       useAuthHandler();
       const captured = useAgentControllerHandlers();
       renderSidebar();
@@ -275,29 +283,29 @@ describe('Sidebar', () => {
     });
 
     it('switches projects inline and keeps destructive actions out of the menu', async () => {
-      seedProject(project, [project, secondLocalProject, githubProject]);
+      seedFactory(project, [project, secondLocalProject, githubProject]);
       useAuthHandler();
       useGithubStatusHandler();
       useAgentControllerHandlers();
       renderSidebar();
 
-      await userEvent.click(await screen.findByRole('button', { name: 'Select project' }));
+      await userEvent.click(await screen.findByRole('button', { name: 'Select factory' }));
 
       expect(await screen.findByRole('menuitem', { name: 'Mastra' })).toBeInTheDocument();
-      expect(screen.getByRole('menuitem', { name: 'Open local project' })).toBeInTheDocument();
-      expect(screen.getByRole('menuitem', { name: 'Open from GitHub' })).toBeInTheDocument();
+      expect(screen.getByRole('menuitem', { name: 'Create factory from local folder' })).toBeInTheDocument();
+      expect(screen.getByRole('menuitem', { name: 'Create/connect factory from GitHub' })).toBeInTheDocument();
       expect(screen.queryByRole('menuitem', { name: /remove/i })).not.toBeInTheDocument();
 
       await userEvent.click(screen.getByRole('menuitem', { name: 'Beta' }));
 
-      await waitFor(() => expect(localStorage.getItem('mastracode-active-project')).toBe(secondLocalProject.id));
+      await waitFor(() => expect(localStorage.getItem('mastracode-active-factory')).toBe(secondLocalProject.id));
       expect(await screen.findByText('Beta')).toBeInTheDocument();
     });
   });
 
-  describe('when a GitHub project is active', () => {
+  describe('when a GitHub factory is active', () => {
     it('expands factory Sessions as a navigation item without showing the repo root', async () => {
-      seedProject(githubProject);
+      seedFactory(githubProject);
       useAuthHandler();
       useGithubStatusHandler();
       useAgentControllerHandlers();
@@ -317,7 +325,10 @@ describe('Sidebar', () => {
     });
 
     it('explains how factory Sessions are created when none exist', async () => {
-      seedProject({ ...githubProject, worktrees: [githubProject.worktrees![0]!] });
+      seedFactory({
+        ...githubProject,
+        binding: { ...githubProject.binding, worktrees: [githubProject.binding.worktrees[0]!] },
+      });
       useAuthHandler();
       useGithubStatusHandler();
       useAgentControllerHandlers();
@@ -330,7 +341,7 @@ describe('Sidebar', () => {
     });
 
     it('renders the User Sessions section and no thread list', async () => {
-      seedProject(githubProject);
+      seedFactory(githubProject);
       useAuthHandler();
       useGithubStatusHandler();
       useAgentControllerHandlers();
@@ -347,7 +358,7 @@ describe('Sidebar', () => {
 
   describe('when opening a thread action menu', () => {
     it('clones the thread', async () => {
-      seedProject();
+      seedFactory();
       useAuthHandler();
       const captured = useAgentControllerHandlers();
       renderSidebar();
@@ -359,7 +370,7 @@ describe('Sidebar', () => {
     });
 
     it('deletes the thread', async () => {
-      seedProject();
+      seedFactory();
       useAuthHandler();
       const captured = useAgentControllerHandlers();
       renderSidebar();
@@ -371,7 +382,7 @@ describe('Sidebar', () => {
     });
 
     it('renames the thread on Enter', async () => {
-      seedProject();
+      seedFactory();
       useAuthHandler();
       const captured = useAgentControllerHandlers();
       renderSidebar();
@@ -391,14 +402,14 @@ describe('Sidebar', () => {
       useAuthHandler();
       renderSidebar();
 
-      expect(await screen.findByText('Select a project…')).toBeInTheDocument();
+      expect(await screen.findByText('Select a factory…')).toBeInTheDocument();
       expect(screen.queryByText('First thread')).not.toBeInTheDocument();
     });
   });
 
   describe('while the sign-in check is pending', () => {
     it('renders a skeleton placeholder, then the identity row', async () => {
-      seedProject();
+      seedFactory();
       server.use(
         http.get(`${TEST_BASE_URL}/auth/me`, async () => {
           await delay(150);
@@ -418,7 +429,7 @@ describe('Sidebar', () => {
 
   describe('when the server reports a signed-in user', () => {
     it('shows the identity and signs out via the auth service', async () => {
-      seedProject();
+      seedFactory();
       useAuthHandler({ authenticated: true, user: { name: 'Ada Lovelace', email: 'ada@example.com' } });
       useAgentControllerHandlers();
       renderSidebar();

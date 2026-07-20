@@ -33,7 +33,7 @@ export async function fetchFactoryMetrics(
   days: number,
 ): Promise<FactoryMetrics> {
   const res = await fetch(
-    `${baseUrl}/web/factory/projects/${encodeURIComponent(githubProjectId)}/metrics?days=${days}`,
+    `${baseUrl}/web/factory/repositories/${encodeURIComponent(githubProjectId)}/metrics?days=${days}`,
     { headers: { Accept: 'application/json' }, credentials: 'include' },
   );
   if (!res.ok) {

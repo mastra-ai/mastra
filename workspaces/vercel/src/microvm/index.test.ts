@@ -491,11 +491,11 @@ describe('VercelSandbox', () => {
   });
 });
 
-describe('VercelSandbox.derive', () => {
+describe('VercelSandbox.clone', () => {
   it('constructs an unstarted sibling without any I/O', () => {
     const template = new VercelSandbox({ token: 'vc-tok', teamId: 'team-1', projectId: 'proj-1' });
 
-    const child = template.derive({ id: 'mc-project-1' });
+    const child = template.clone({ id: 'mc-project-1' });
 
     expect(child).toBeInstanceOf(VercelSandbox);
     expect(child).not.toBe(template);
@@ -512,7 +512,7 @@ describe('VercelSandbox.derive', () => {
       env: { BASE: '1' },
     });
 
-    const child = template.derive({ env: { GITHUB_TOKEN: 'ghs_abc' } });
+    const child = template.clone({ env: { GITHUB_TOKEN: 'ghs_abc' } });
 
     expect(child['_constructorOptions']).toMatchObject({
       token: 'vc-tok',
@@ -526,7 +526,7 @@ describe('VercelSandbox.derive', () => {
   it('maps idleTimeoutMinutes to the Vercel timeout in milliseconds', () => {
     const template = new VercelSandbox({ token: 'vc-tok', teamId: 'team-1', projectId: 'proj-1', timeout: 120_000 });
 
-    const child = template.derive({ idleTimeoutMinutes: 15 });
+    const child = template.clone({ idleTimeoutMinutes: 15 });
 
     expect(child['_constructorOptions']).toMatchObject({ timeout: 900_000 });
   });
@@ -534,7 +534,7 @@ describe('VercelSandbox.derive', () => {
   it('inherits template defaults when no overrides are passed', () => {
     const template = new VercelSandbox({ token: 'vc-tok', timeout: 120_000, env: { BASE: '1' } });
 
-    const child = template.derive();
+    const child = template.clone();
 
     expect(child.id).not.toBe(template.id);
     expect(child['_constructorOptions']).toMatchObject({ token: 'vc-tok', timeout: 120_000, env: { BASE: '1' } });

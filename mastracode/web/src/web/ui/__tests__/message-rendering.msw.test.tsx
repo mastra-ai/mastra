@@ -14,7 +14,7 @@ import { loginUrl, logoutUrl } from '../domains/auth';
 import Chat from '../domains/chat/Chat';
 import { NewPage } from '../domains/chat/NewPage';
 import { ThreadPage } from '../domains/chat/ThreadPage';
-import type { Project } from '../domains/workspaces';
+import type { Factory } from '../domains/workspaces';
 
 /**
  * Renders <Chat /> inside a memory router mirroring the app's pathless chat
@@ -58,16 +58,16 @@ describe('web UI stylesheet entry', () => {
   });
 });
 
-function seedProject() {
-  const project: Project = {
+function seedFactory() {
+  const factory: Factory = {
     id: 'project-test',
     name: 'MastraCode Test',
-    path: PROJECT_PATH,
     resourceId: RESOURCE_ID,
+    binding: { kind: 'local', path: PROJECT_PATH },
     createdAt: 1,
   };
-  localStorage.setItem('mastracode-projects', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-project', project.id);
+  localStorage.setItem('mastracode-factories', JSON.stringify([factory]));
+  localStorage.setItem('mastracode-active-factory', factory.id);
 }
 
 function sessionState(): AgentControllerSessionState {
@@ -210,7 +210,7 @@ function useAuthMe(state: { authenticated?: boolean; user?: { name?: string; ema
 function renderSeededApp(
   authState: { authenticated?: boolean; user?: { name?: string; email?: string } | null } | null = null,
 ) {
-  seedProject();
+  seedFactory();
   useAgentControllerHandlers();
   if (authState) window.__MASTRACODE_CONFIG__ = { authEnabled: true };
   useAuthMe(authState);
@@ -290,7 +290,7 @@ describe('MastraCode empty thread state', () => {
 
 describe('MastraCode message rendering', () => {
   it('renders hydrated persisted text, thinking, and tool content through Mastra message parts', async () => {
-    seedProject();
+    seedFactory();
     useAgentControllerHandlers({
       messages: [
         dbMessage('assistant-1', 'assistant', [
@@ -323,7 +323,7 @@ describe('MastraCode message rendering', () => {
   });
 
   it('renders an answered ask_user result from its content instead of coercing the result object', async () => {
-    seedProject();
+    seedFactory();
     useAgentControllerHandlers({
       messages: [
         dbMessage('assistant-ask-user', 'assistant', [
@@ -350,7 +350,7 @@ describe('MastraCode message rendering', () => {
   });
 
   it('composes consecutive tool cards into a single bordered container', async () => {
-    seedProject();
+    seedFactory();
     useAgentControllerHandlers({
       messages: [
         dbMessage('assistant-tools', 'assistant', [
@@ -398,7 +398,7 @@ describe('MastraCode message rendering', () => {
   });
 
   it('renders the latest active task snapshot in the dock', async () => {
-    seedProject();
+    seedFactory();
     useAgentControllerHandlers({
       messages: [
         dbMessage('assistant-tasks', 'assistant', [
@@ -448,7 +448,7 @@ describe('MastraCode message rendering', () => {
   });
 
   it('updates one docked task list from live events and clears it', async () => {
-    seedProject();
+    seedFactory();
     const stream = controlledSse();
     useAgentControllerHandlers();
     server.use(http.get(`${SESSION}/stream`, () => stream.response()));
@@ -479,7 +479,7 @@ describe('MastraCode message rendering', () => {
   });
 
   it('hides the dock for a completed-only latest task snapshot', async () => {
-    seedProject();
+    seedFactory();
     useAgentControllerHandlers({
       messages: [
         dbMessage('assistant-tasks-complete', 'assistant', [
@@ -508,7 +508,7 @@ describe('MastraCode message rendering', () => {
   });
 
   it('falls back to the generic tool card for unknown tools', async () => {
-    seedProject();
+    seedFactory();
     useAgentControllerHandlers({
       messages: [
         dbMessage('assistant-unknown-tool', 'assistant', [
@@ -533,7 +533,7 @@ describe('MastraCode message rendering', () => {
   });
 
   it('renders assistant text when SSE message updates arrive after subscription', async () => {
-    seedProject();
+    seedFactory();
     const stream = delayedSse({
       type: 'message_update',
       message: dbMessage('assistant-stream', 'assistant', [{ type: 'text', text: 'Streaming now' }]),
@@ -551,7 +551,7 @@ describe('MastraCode message rendering', () => {
   });
 
   it('does not synthesize a message from tool lifecycle events and renders the later canonical tool part once', async () => {
-    seedProject();
+    seedFactory();
     useAgentControllerHandlers({
       events: [
         { type: 'tool_input_start', toolCallId: 'tool-live', toolName: 'execute_command' },
@@ -596,7 +596,7 @@ describe('MastraCode message rendering', () => {
   });
 
   it('renders status metadata as status UI instead of raw JSON', async () => {
-    seedProject();
+    seedFactory();
     useAgentControllerHandlers({
       messages: [
         {
@@ -622,7 +622,7 @@ describe('MastraCode message rendering', () => {
 
   describe('when a tool has JSON arguments', () => {
     it('shows the argument values when the card is expanded', async () => {
-      seedProject();
+      seedFactory();
       useAgentControllerHandlers({
         messages: [
           dbMessage('assistant-args', 'assistant', [
@@ -651,7 +651,7 @@ describe('MastraCode message rendering', () => {
 
   describe('when a tool approval is required', () => {
     it('renders an approval prompt with approve and decline controls', async () => {
-      seedProject();
+      seedFactory();
       useAgentControllerHandlers({
         events: [
           { type: 'tool_approval_required', toolCallId: 'tool-1', toolName: 'edit', args: { path: 'src/index.ts' } },
@@ -668,7 +668,7 @@ describe('MastraCode message rendering', () => {
 
   describe('when a plan approval is suspended', () => {
     it('renders the plan file and markdown with approve and reject controls', async () => {
-      seedProject();
+      seedFactory();
       useAgentControllerHandlers({
         events: [
           {
@@ -700,7 +700,7 @@ describe('MastraCode message rendering', () => {
     });
 
     it('submits approval and rejection through the suspension endpoint', async () => {
-      seedProject();
+      seedFactory();
       const suspensions: unknown[] = [];
       useAgentControllerHandlers({
         events: [
@@ -732,7 +732,7 @@ describe('MastraCode message rendering', () => {
 
   describe('when an access request is suspended', () => {
     it('renders allow and deny controls for the requested path', async () => {
-      seedProject();
+      seedFactory();
       useAgentControllerHandlers({
         events: [
           {
@@ -755,7 +755,7 @@ describe('MastraCode message rendering', () => {
 
   describe('when the agent asks the user a question', () => {
     it('submits a selected answer through the suspension endpoint', async () => {
-      seedProject();
+      seedFactory();
       const suspensions: unknown[] = [];
       useAgentControllerHandlers({
         events: [
@@ -793,7 +793,7 @@ describe('MastraCode message rendering', () => {
     });
 
     it('submits a trimmed free-text answer through the suspension endpoint', async () => {
-      seedProject();
+      seedFactory();
       const suspensions: unknown[] = [];
       useAgentControllerHandlers({
         events: [
@@ -827,7 +827,7 @@ describe('MastraCode message rendering', () => {
 
   describe('when a subagent is delegated work', () => {
     it('renders a subagent entry with its task', async () => {
-      seedProject();
+      seedFactory();
       useAgentControllerHandlers({
         events: [
           {
@@ -848,7 +848,7 @@ describe('MastraCode message rendering', () => {
 
   describe('when a notice contains markdown', () => {
     it('renders the notice text as formatted markdown instead of raw syntax', async () => {
-      seedProject();
+      seedFactory();
       useAgentControllerHandlers({
         events: [{ type: 'info', message: "I'm in **plan mode** — run `/mode build`" }],
       });
@@ -865,7 +865,7 @@ describe('MastraCode message rendering', () => {
     });
 
     it('renders fenced code blocks through Shiki while keeping raw HTML escaped', async () => {
-      seedProject();
+      seedFactory();
       useAgentControllerHandlers({
         events: [
           {
@@ -892,7 +892,7 @@ describe('MastraCode message rendering', () => {
   });
 
   it('renders edit diffs without highlight.js classes', async () => {
-    seedProject();
+    seedFactory();
     useAgentControllerHandlers({
       messages: [
         dbMessage('assistant-edit', 'assistant', [
@@ -928,7 +928,7 @@ describe('MastraCode message rendering', () => {
 describe('App mode + theme controls', () => {
   describe('when a project with multiple modes is active', () => {
     function seedMultiMode() {
-      seedProject();
+      seedFactory();
       const handlers = useAgentControllerHandlers();
       server.use(
         http.get(`${API}/modes`, () =>
@@ -975,7 +975,7 @@ describe('App mode + theme controls', () => {
       expect(screen.queryByLabelText('Toggle theme')).not.toBeInTheDocument();
     });
 
-    it('does not render a project switcher in the header', async () => {
+    it('does not render a factory switcher in the header', async () => {
       seedMultiMode();
 
       renderChat();
@@ -985,11 +985,11 @@ describe('App mode + theme controls', () => {
       const header = document.querySelector('header');
       expect(header).not.toBeNull();
 
-      // The header must not contain any project switcher.
-      expect(within(header as HTMLElement).queryByRole('button', { name: 'Select project' })).not.toBeInTheDocument();
+      // The header must not contain any factory switcher.
+      expect(within(header as HTMLElement).queryByRole('button', { name: 'Select factory' })).not.toBeInTheDocument();
 
-      // The sidebar remains the single source of the project switcher.
-      const switcher = screen.getByRole('button', { name: 'Select project' });
+      // The sidebar remains the single source of the factory switcher.
+      const switcher = screen.getByRole('button', { name: 'Select factory' });
       expect(switcher).toHaveTextContent('MastraCode Test');
       expect(header).not.toContainElement(switcher);
     });

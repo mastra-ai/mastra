@@ -2,7 +2,7 @@
  * @see https://modal.com/docs/reference/modal.Sandbox
  */
 
-import type { MastraSandboxOptions, ProviderStatus, SandboxDeriveOptions, SandboxInfo } from '@mastra/core/workspace';
+import type { MastraSandboxOptions, ProviderStatus, SandboxCloneOptions, SandboxInfo } from '@mastra/core/workspace';
 import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 import { ClientClosedError, ModalClient, NotFoundError } from 'modal';
 import type { App, Image, Sandbox } from 'modal';
@@ -122,7 +122,7 @@ export class ModalSandbox extends MastraSandbox {
    * configuration (credentials, app, base image, workdir, instructions) with
    * per-instance overrides.
    *
-   * Performs no I/O — the derived sandbox provisions (or reconnects to a
+   * Performs no I/O — the sandbox clone provisions (or reconnects to a
    * running Modal sandbox with the same logical `id`) on its own `start()`.
    * Use it when one configured sandbox acts as the template for a fleet of
    * independent sandboxes (e.g. one per project).
@@ -131,7 +131,7 @@ export class ModalSandbox extends MastraSandbox {
    * lifetime); `options.sandboxId` is ignored because Modal reconnects by
    * logical `id`.
    */
-  derive(options: SandboxDeriveOptions = {}): ModalSandbox {
+  clone(options: SandboxCloneOptions = {}): ModalSandbox {
     const { id: _id, ...base } = this._constructorOptions;
     return new ModalSandbox({
       ...base,

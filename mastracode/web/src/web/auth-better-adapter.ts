@@ -47,6 +47,7 @@ function personalOrgName(user: WebAuthUser, userId: string): string {
 /** Loose row shapes read back from better-auth's internal DB adapter. */
 interface MemberRow {
   organizationId?: string;
+  role?: string;
 }
 interface OrganizationRow {
   id: string;
@@ -208,6 +209,26 @@ export class BetterAuthWebAuth implements WebAuthAdapter {
    * recover via the unique slug instead of creating duplicates. Best-effort:
    * any failure is swallowed and leaves the user no-org (same as WorkOS).
    */
+  async isOrganizationAdmin(user: WebAuthUser, organizationId: string): Promise<boolean> {
+    const userId = user.id ?? user.workosId;
+    if (!userId || user.organizationId !== organizationId) return false;
+
+    try {
+      await this.#ensureDbReady();
+      const ctx = await this.instance.$context;
+      const membership = (await ctx.adapter.findOne({
+        model: 'member',
+        where: [
+          { field: 'organizationId', value: organizationId },
+          { field: 'userId', value: userId },
+        ],
+      })) as MemberRow | null;
+      return membership?.role === 'owner' || membership?.role === 'admin';
+    } catch {
+      return false;
+    }
+  }
+
   async ensureOrg(user: WebAuthUser): Promise<string | undefined> {
     if (user.organizationId) return user.organizationId;
     const userId = user.id ?? user.workosId;

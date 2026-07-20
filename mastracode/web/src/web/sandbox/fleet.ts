@@ -2,7 +2,7 @@
  * Project sandbox fleet: provisioning, reattach, teardown, and budgeting.
  *
  * Server-hosted projects never run on the web host itself. Each project gets
- * its own isolated sandbox (a `WorkspaceSandbox`, e.g. a Railway VM) `derive()`d
+ * its own isolated sandbox (a `WorkspaceSandbox`, e.g. a Railway VM) `clone()`d
  * from the machine the factory was configured with (`sandbox.machine` slot,
  * seeded into the runtime-config registry). This module owns everything about
  * that fleet — which provider is active, where checkouts live inside a sandbox,
@@ -91,7 +91,7 @@ export function getSandboxProvider(): string {
 
 /**
  * True when a sandbox machine was configured. The factory validates the
- * machine implements `derive()` at boot, so a seeded runtime is usable —
+ * machine implements `clone()` at boot, so a seeded runtime is usable —
  * sandbox-backed projects stay off only when the slot was omitted.
  */
 export function isSandboxEnabled(): boolean {
@@ -123,7 +123,7 @@ function sanitizeSegment(segment: string): string {
  * Idle teardown window for provisioned sandboxes, in minutes; defaults to 30.
  * Read back from the machine's own config when it exposes one
  * (Railway's `idleTimeoutMinutes`) — the knob lives on the sandbox, this
- * module only needs it to schedule GC and stamp derived sandboxes. Advisory:
+ * module only needs it to schedule GC and stamp sandbox clones. Advisory:
  * providers without idle GC ignore it, and a re-open detects a torn-down VM
  * and re-provisions cleanly.
  */
@@ -166,14 +166,14 @@ export class SandboxBudgetError extends Error {
   constructor(readonly max: number) {
     super(
       `Sandbox budget exceeded: this server already has ${max} active sandbox(es), ` +
-        `the configured per-replica maximum. Close an existing project's sandbox and try again.`,
+        `the configured per-replica maximum. Close an existing repository's sandbox and try again.`,
     );
     this.name = 'SandboxBudgetError';
   }
 }
 
 /**
- * Adapt a derived `WorkspaceSandbox` to the minimal surface this module needs.
+ * Adapt a cloned `WorkspaceSandbox` to the minimal surface this module needs.
  * Lifecycle goes through the `_`-prefixed wrappers when present (they add
  * status tracking and concurrency safety on `MastraSandbox` subclasses),
  * falling back to the plain methods for interface-only implementations.
@@ -199,7 +199,7 @@ function toMaterializationSandbox(sandbox: WorkspaceSandbox): MaterializationSan
 }
 
 /**
- * Default factory: derive a per-project sibling from the machine the
+ * Default factory: clone a per-project sibling from the machine the
  * factory was configured with. Resolved per call so seeding order doesn't
  * matter at import time. The stored id is passed both as the logical `id`
  * (providers that reattach by construction id, e.g. local) and as the
@@ -209,12 +209,12 @@ function toMaterializationSandbox(sandbox: WorkspaceSandbox): MaterializationSan
 const defaultFactory: SandboxFactory = opts => {
   const seeded = getSeededSandbox();
   if (!seeded) throw new Error('No sandbox configured');
-  const derived = seeded.machine.derive!({
+  const clone = seeded.machine.clone!({
     ...(opts.providerSandboxId ? { id: opts.providerSandboxId, sandboxId: opts.providerSandboxId } : {}),
     ...(opts.env ? { env: opts.env } : {}),
     ...(opts.idleTimeoutMinutes !== undefined ? { idleTimeoutMinutes: opts.idleTimeoutMinutes } : {}),
   });
-  return toMaterializationSandbox(derived);
+  return toMaterializationSandbox(clone);
 };
 
 let sandboxFactory: SandboxFactory = defaultFactory;

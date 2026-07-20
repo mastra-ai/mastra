@@ -40,7 +40,7 @@ describe('agent-controller read hooks', () => {
     expect(onReadModels).toHaveBeenCalledTimes(1);
   });
 
-  it('scopes the thread list request to the active project path and sidebar page size', async () => {
+  it('scopes the thread list request to the active factory path and sidebar page size', async () => {
     const onReadThreads = vi.fn();
 
     server.use(

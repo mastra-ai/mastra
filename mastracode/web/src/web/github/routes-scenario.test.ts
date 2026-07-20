@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { GithubStorageInMemory } from './storage/inmemory';
 
 // ── Scenario tests (S1, S2) ──────────────────────────────────────────────
 // These exercise the *composition* of the real Phase 4 git route handlers
@@ -26,6 +27,7 @@ interface Tables {
   worktrees: Array<Record<string, any>>;
 }
 const tables: Tables = { installations: [], projects: [], sandboxes: [], worktrees: [] };
+const githubStorage = new GithubStorageInMemory();
 
 vi.mock('./db', () => {
   const makeDb = () => ({
@@ -59,7 +61,10 @@ vi.mock('./db', () => {
   return { getAppDb: () => makeDb() };
 });
 
-vi.mock('./client', () => ({
+// Stub integration instance: routes consume the injected `github` instance —
+// real DI instead of module mocking (client.ts no longer exists).
+const githubStub = {
+  storageDomain: githubStorage,
   buildInstallUrl: (state: string) => `https://github.com/apps/test/installations/new?state=${state}`,
   buildOAuthIdentifyUrl: (state: string) => `https://github.com/login/oauth/authorize?state=${state}`,
   exchangeOAuthCode: vi.fn(async () => 'user-token'),
@@ -90,16 +95,32 @@ vi.mock('./client', () => ({
   ),
   // A fresh token string per call so the scenario can prove per-op minting.
   mintInstallationToken: vi.fn(async () => `install-token-${++mintCount}`),
-}));
+};
+
+// Deterministic state signer stub (replaces the old signState/verifyState mocks).
+const stateSigner = {
+  stable: true,
+  sign: (orgId: string, userId: string) => `state.${orgId}.${userId}`,
+  verify: (state: string | undefined) => {
+    if (!state?.startsWith('state.')) return null;
+    const [orgId, userId] = state.slice('state.'.length).split('.');
+    if (!orgId || !userId) return null;
+    return { orgId, userId };
+  },
+};
 
 let mintCount = 0;
 
 const subscribeToPullRequest = vi.fn(async (_input: unknown) => ({ created: true }));
+vi.spyOn(githubStorage, 'subscribeToPullRequest').mockImplementation(subscribeToPullRequest as any);
 vi.mock('./subscriptions', () => ({
   subscribeToPullRequest: (input: unknown) => subscribeToPullRequest(input),
 }));
 
-const ensureProjectSandbox = vi.fn(async (_row: any) => ({ id: 'sb' }));
+const ensureProjectSandbox = vi.fn(async (row: any, storage: GithubStorageInMemory) => {
+  await storage.setSandboxId(row.id, 'sb');
+  return { id: 'sb' };
+});
 const materializeRepo = vi.fn(async () => {});
 const reattachSandbox = vi.fn(async (_id: string) => ({ id: 'sb' }));
 const ensureWorktree = vi.fn(async (_sb: any, _workdir: string, opts: { branch: string; baseBranch: string }) => ({
@@ -144,7 +165,7 @@ vi.mock('./sandbox', () => {
     }
   }
   return {
-    ensureProjectSandbox: (row: any) => ensureProjectSandbox(row),
+    ensureProjectSandbox: (row: any, storage: GithubStorageInMemory) => ensureProjectSandbox(row, storage),
     materializeRepo: (...args: any[]) => materializeRepo(...(args as [])),
     ensureWorktree: (sb: any, workdir: string, opts: any) => ensureWorktree(sb, workdir, opts),
     commitAll: (...args: any[]) => commitAll(...(args as [])),
@@ -160,13 +181,7 @@ vi.mock('./sandbox', () => {
 let featureEnabled = true;
 vi.mock('./config', () => ({
   isGithubFeatureEnabled: () => featureEnabled,
-  signState: (orgId: string, userId: string) => `state.${orgId}.${userId}`,
-  verifyState: (state: string | undefined) => {
-    if (!state?.startsWith('state.')) return null;
-    const [orgId, userId] = state.slice('state.'.length).split('.');
-    if (!orgId || !userId) return null;
-    return { orgId, userId };
-  },
+  getGithubFeatureDiagnostics: () => ({}),
 }));
 
 import { mountApiRoutes } from '../test-utils';
@@ -233,7 +248,9 @@ function updateRows(table: any, vals: any, cond?: any): void {
   }
 }
 
-import { githubInstallations, githubProjectSandboxes, githubWorktrees } from './schema';
+const githubInstallations = {};
+const githubProjectSandboxes = {};
+const githubWorktrees = {};
 installationsRef = githubInstallations;
 worktreesRef = githubWorktrees;
 sandboxesRef = githubProjectSandboxes;
@@ -255,7 +272,10 @@ function buildApp(user: { workosId: string; organizationId?: string } | null) {
     if (user) c.set('webAuthUser' as never, user as never);
     await next();
   });
-  mountApiRoutes(app as any, buildGithubRoutes({ baseUrl: 'http://localhost:4111' }));
+  mountApiRoutes(
+    app as any,
+    buildGithubRoutes({ baseUrl: 'http://localhost:4111', github: githubStub as any, stateSigner }),
+  );
   return app;
 }
 
@@ -272,6 +292,11 @@ beforeEach(() => {
   tables.projects = [];
   tables.sandboxes = [];
   tables.worktrees = [];
+  githubStorage.installations = tables.installations as any;
+  githubStorage.projects = tables.projects as any;
+  githubStorage.sandboxes = tables.sandboxes as any;
+  githubStorage.worktrees = tables.worktrees as any;
+  githubStorage.subscriptions = [];
   featureEnabled = true;
   sandboxEnabled = true;
   // No Postgres in these scenario tests: keep the project lock in-process.
@@ -297,10 +322,7 @@ afterEach(() => {
 // ── S1: full write-back journey ──────────────────────────────────────────
 describe('S1: full write-back journey through the real route handlers', () => {
   it('drives create → ensure → worktree → commit → push → pr for one user', async () => {
-    const mintModule = (await import('./client')) as unknown as {
-      mintInstallationToken: ReturnType<typeof vi.fn>;
-    };
-    const mint = mintModule.mintInstallationToken;
+    const mint = githubStub.mintInstallationToken;
     tables.installations.push({
       orgId: 'org1',
       userId: 'u1',
@@ -311,12 +333,12 @@ describe('S1: full write-back journey through the real route handlers', () => {
     const app = buildApp({ workosId: 'u1', organizationId: 'org1' });
 
     // 1. Create the project from an owned installation.
-    const createRes = await postJson(app, '/web/github/projects', {
+    const createRes = await postJson(app, '/web/github/repositories', {
       repoFullName: 'octo/hello',
       installationId: 7,
     });
     expect(createRes.status).toBe(200);
-    const projectId = (await createRes.json()).project.id as string;
+    const projectId = (await createRes.json()).repository.id as string;
     expect(tables.projects).toHaveLength(1);
     expect(projectId).toBeTruthy();
 
@@ -332,13 +354,13 @@ describe('S1: full write-back journey through the real route handlers', () => {
     });
 
     // 2. Ensure → provisions the sandbox + materialises the repo.
-    const ensureRes = await postJson(app, `/web/github/projects/${projectId}/ensure`, {});
+    const ensureRes = await postJson(app, `/web/github/repositories/${projectId}/ensure`, {});
     expect(ensureRes.status).toBe(200);
     expect(ensureProjectSandbox).toHaveBeenCalledOnce();
     expect(materializeRepo).toHaveBeenCalledOnce();
 
     // 3. Worktree → persists a github_worktrees row for feat/x.
-    const wtRes = await postJson(app, `/web/github/projects/${projectId}/worktree`, { branch: 'feat/x' });
+    const wtRes = await postJson(app, `/web/github/repositories/${projectId}/worktree`, { branch: 'feat/x' });
     expect(wtRes.status).toBe(200);
     const wtJson = await wtRes.json();
     expect(wtJson.branch).toBe('feat/x');
@@ -355,7 +377,7 @@ describe('S1: full write-back journey through the real route handlers', () => {
     // 4. Commit in that exact worktree path → the round-trip is honoured:
     // a path that only exists because step 3 persisted it now passes
     // resolveWorktreePath (no client-path injection possible).
-    const commitRes = await postJson(app, `/web/github/projects/${projectId}/commit`, {
+    const commitRes = await postJson(app, `/web/github/repositories/${projectId}/commit`, {
       message: 'wip',
       worktreePath: persistedWorktreePath,
     });
@@ -365,7 +387,7 @@ describe('S1: full write-back journey through the real route handlers', () => {
 
     // 5. Push that worktree → a fresh token is minted for *this* op.
     const mintBeforePush = mint.mock.calls.length;
-    const pushRes = await postJson(app, `/web/github/projects/${projectId}/push`, {
+    const pushRes = await postJson(app, `/web/github/repositories/${projectId}/push`, {
       branch: 'feat/x',
       worktreePath: persistedWorktreePath,
     });
@@ -381,7 +403,7 @@ describe('S1: full write-back journey through the real route handlers', () => {
 
     // 6. Open a PR → another fresh token is minted (per-op, not reused).
     const mintBeforePr = mint.mock.calls.length;
-    const prRes = await postJson(app, `/web/github/projects/${projectId}/pr`, {
+    const prRes = await postJson(app, `/web/github/repositories/${projectId}/pr`, {
       branch: 'feat/x',
       title: 'My PR',
       body: 'Adds a thing',
@@ -431,7 +453,7 @@ describe('S1: full write-back journey through the real route handlers', () => {
       materializedAt: new Date(),
     });
 
-    const response = await postJson(app, `/web/github/projects/${projectId}/pr`, {
+    const response = await postJson(app, `/web/github/repositories/${projectId}/pr`, {
       branch: 'feat/x',
       title: 'My PR',
     });
@@ -483,8 +505,8 @@ describe('S2: per-project mutex serialises concurrent pushes', () => {
       order.push('end');
     };
 
-    const first = postJson(app, '/web/github/projects/p1/push', { branch: 'feat/a' });
-    const second = postJson(app, '/web/github/projects/p1/push', { branch: 'feat/b' });
+    const first = postJson(app, '/web/github/repositories/p1/push', { branch: 'feat/a' });
+    const second = postJson(app, '/web/github/repositories/p1/push', { branch: 'feat/b' });
 
     // Let microtasks flush; only the first push body should have begun.
     await new Promise(r => setTimeout(r, 10));
@@ -517,8 +539,8 @@ describe('S2: per-project mutex serialises concurrent pushes', () => {
       active--;
     };
 
-    const first = postJson(app, '/web/github/projects/p1/push', { branch: 'feat/a' });
-    const second = postJson(app, '/web/github/projects/p2/push', { branch: 'feat/b' });
+    const first = postJson(app, '/web/github/repositories/p1/push', { branch: 'feat/a' });
+    const second = postJson(app, '/web/github/repositories/p2/push', { branch: 'feat/b' });
 
     await new Promise(r => setTimeout(r, 10));
     // Distinct project ids → distinct locks → both bodies run concurrently.

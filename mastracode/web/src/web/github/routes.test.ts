@@ -29,6 +29,9 @@ interface Tables {
 }
 const tables: Tables = { installations: [], projects: [], sandboxes: [], worktrees: [], subscriptions: [] };
 
+import { GithubStorageInMemory } from './storage/inmemory';
+const githubStorage = new GithubStorageInMemory();
+
 // Capture audit events at the store boundary so the real `emitAudit` path
 // (actor resolution, request context, never-throws) is exercised end to end.
 let auditRecorded: Array<Record<string, any>> = [];
@@ -122,13 +125,17 @@ const listRepoOpenPullRequests = vi.fn(async (_installationId: number, _repoFull
   nextPage: null as number | null,
 }));
 
-vi.mock('./client', () => ({
+// Stub GithubIntegration instance injected into `buildGithubRoutes` — real DI
+// instead of module mocking (github/client.ts no longer exists).
+const githubStub = {
+  storageDomain: githubStorage,
+  webhookSecret: undefined as string | undefined,
   buildInstallUrl: (state: string) => `https://github.com/apps/test/installations/new?state=${state}`,
   buildOAuthIdentifyUrl: (state: string) => `https://github.com/login/oauth/authorize?state=${state}`,
   exchangeOAuthCode: vi.fn(async () => 'user-token'),
   getRepositoryCollaboratorPermission: vi.fn(async () => 'write'),
   listUserInstallations: vi.fn(async () => [{ installationId: 7, accountLogin: 'octo', accountType: 'User' }]),
-  listInstallationRepos: vi.fn(async () => [
+  listInstallationRepos: vi.fn(async (_installationId: number) => [
     {
       id: 99,
       fullName: 'octo/hello',
@@ -159,14 +166,27 @@ vi.mock('./client', () => ({
     listRepoOpenIssues(installationId, repoFullName, page, options),
   listRepoOpenPullRequests: (installationId: number, repoFullName: string, page: number) =>
     listRepoOpenPullRequests(installationId, repoFullName, page),
-}));
+};
 
-const ensureProjectSandbox = vi.fn(async (_row: any, onProgress?: (e: any) => void) => {
+// Deterministic state signer stub (replaces the old signState/verifyState mocks).
+const stateSigner = {
+  stable: true,
+  sign: (orgId: string, userId: string) => `state.${orgId}.${userId}`,
+  verify: (state: string | undefined) => {
+    if (!state?.startsWith('state.')) return null;
+    const [orgId, userId] = state.slice('state.'.length).split('.');
+    if (!orgId || !userId) return null;
+    return { orgId, userId };
+  },
+};
+
+const ensureProjectSandbox = vi.fn(async (row: any, storage: GithubStorageInMemory, onProgress?: (e: any) => void) => {
+  await storage.setSandboxId(row.id, 'sb');
   onProgress?.({ phase: 'provisioning', message: 'Provisioning a new sandbox…' });
   return { id: 'sb' };
 });
 const materializeRepo = vi.fn(async (..._args: any[]) => {
-  const onProgress = _args[4] as ((e: any) => void) | undefined;
+  const onProgress = _args[5] as ((e: any) => void) | undefined;
   onProgress?.({ phase: 'cloning', message: 'Cloning octo/hello…' });
 });
 const reattachSandbox = vi.fn(async (_id: string) => ({ id: 'sb' }));
@@ -214,7 +234,8 @@ vi.mock('./sandbox', () => {
   return {
     computeWorktreePath: (repoWorkdir: string, branch: string) =>
       `${repoWorkdir.replace(/\/+$/, '').split('/').slice(0, -1).join('/')}/worktrees/${branch.replace('/', '-')}-aeab418d`,
-    ensureProjectSandbox: (row: any, onProgress?: any) => ensureProjectSandbox(row, onProgress),
+    ensureProjectSandbox: (row: any, storage: GithubStorageInMemory, onProgress?: any) =>
+      ensureProjectSandbox(row, storage, onProgress),
     materializeRepo: (...args: any[]) => materializeRepo(...(args as [])),
     ensureWorktree: (sb: any, workdir: string, opts: any) => ensureWorktree(sb, workdir, opts),
     removeWorktree: (sb: any, workdir: string, opts: any) => removeWorktree(sb, workdir, opts),
@@ -234,14 +255,6 @@ let featureEnabled = true;
 vi.mock('./config', () => ({
   isGithubFeatureEnabled: () => featureEnabled,
   getGithubFeatureDiagnostics: () => ({}),
-  getGithubWebhookSecret: () => process.env.GITHUB_APP_WEBHOOK_SECRET || undefined,
-  signState: (orgId: string, userId: string) => `state.${orgId}.${userId}`,
-  verifyState: (state: string | undefined) => {
-    if (!state?.startsWith('state.')) return null;
-    const [orgId, userId] = state.slice('state.'.length).split('.');
-    if (!orgId || !userId) return null;
-    return { orgId, userId };
-  },
 }));
 
 // Partially mock `../auth`: keep all real helpers (getWebAuthUser/webAuthTenant)
@@ -351,9 +364,12 @@ function deleteRows(table: any, cond?: any): void {
   tables[kind] = tables[kind].filter(row => !matches(table, row, cond)) as any;
 }
 
-// Resolve schema refs after import.
-import { listInstallationRepos, listUserInstallations } from './client';
-import { githubInstallations, githubProjectSandboxes, githubSignalSubscriptions, githubWorktrees } from './schema';
+const githubInstallations = {};
+const githubProjectSandboxes = {};
+const githubSignalSubscriptions = {};
+const githubWorktrees = {};
+
+const { listInstallationRepos, listUserInstallations } = githubStub;
 installationsRef = githubInstallations;
 worktreesRef = githubWorktrees;
 sandboxesRef = githubProjectSandboxes;
@@ -365,6 +381,7 @@ function buildApp(
   options: {
     controller?: NonNullable<Parameters<typeof buildGithubRoutes>[0]>['controller'];
     runIssueTriage?: (input: any) => Promise<{ threadId?: string; projectPath?: string; branch?: string }>;
+    stateSigner?: typeof stateSigner | null;
   } = {},
 ) {
   const app = new Hono();
@@ -377,7 +394,16 @@ function buildApp(
     }
     await next();
   });
-  mountApiRoutes(app as any, buildGithubRoutes({ baseUrl: 'http://localhost:4111', ...options }));
+  const { stateSigner: signerOverride, ...routeOptions } = options;
+  mountApiRoutes(
+    app as any,
+    buildGithubRoutes({
+      baseUrl: 'http://localhost:4111',
+      github: githubStub as any,
+      stateSigner: signerOverride === null ? undefined : (signerOverride ?? stateSigner),
+      ...routeOptions,
+    }),
+  );
   return app;
 }
 
@@ -387,12 +413,19 @@ beforeEach(() => {
   tables.sandboxes = [];
   tables.worktrees = [];
   tables.subscriptions = [];
+  githubStorage.installations = tables.installations as any;
+  githubStorage.projects = tables.projects as any;
+  githubStorage.sandboxes = tables.sandboxes as any;
+  githubStorage.worktrees = tables.worktrees as any;
+  githubStorage.subscriptions = tables.subscriptions as any;
   featureEnabled = true;
   sandboxEnabled = true;
   cookieUser = null;
   auditRecorded = [];
   auditFailure = undefined;
   process.env.GITHUB_APP_WEBHOOK_SECRET = 'test-webhook-secret';
+  // The webhook route verifies deliveries against the injected instance's secret.
+  githubStub.webhookSecret = 'test-webhook-secret';
   // No Postgres in these unit tests: keep the project lock purely in-process.
   process.env.MASTRACODE_DISTRIBUTED_LOCK = '0';
   ensureProjectSandbox.mockClear();
@@ -619,6 +652,11 @@ describe('status route', () => {
     featureEnabled = false;
     const res = await buildApp({ workosId: 'u1' }).request('/web/github/status');
     expect(await res.json()).toMatchObject({ enabled: false, connected: false });
+  });
+
+  it('reports disabled without a state signer', async () => {
+    const res = await buildApp({ workosId: 'u1' }, { stateSigner: null }).request('/web/github/status');
+    expect(await res.json()).toMatchObject({ enabled: false, connected: false, reason: 'missing_config' });
   });
 
   it('reports connected installations for the user', async () => {
@@ -872,15 +910,15 @@ describe('create project', () => {
       accountLogin: 'octo',
       accountType: 'User',
     });
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects', {
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repositories', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ repoFullName: 'octo/hello', repoId: 99, installationId: 7 }),
     });
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json.project.source).toBe('github');
-    expect(json.project.name).toBe('octo/hello');
+    expect(json.repository.source).toBe('github');
+    expect(json.repository.name).toBe('octo/hello');
     expect(tables.projects).toHaveLength(1);
   });
 
@@ -892,7 +930,7 @@ describe('create project', () => {
       accountLogin: 'octo',
       accountType: 'User',
     });
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects', {
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repositories', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ repoFullName: 'not-a-repo', repoId: 99, installationId: 7 }),
@@ -908,7 +946,7 @@ describe('create project', () => {
       accountLogin: 'octo',
       accountType: 'User',
     });
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects', {
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repositories', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ repoFullName: 'octo/other-repo', installationId: 7 }),
@@ -924,7 +962,7 @@ describe('create project', () => {
       accountLogin: 'octo',
       accountType: 'User',
     });
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects', {
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repositories', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -938,7 +976,7 @@ describe('create project', () => {
   });
 
   it('404s when the installation is not owned by the user', async () => {
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects', {
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repositories', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ repoFullName: 'octo/hello', repoId: 99, installationId: 7 }),
@@ -958,7 +996,7 @@ describe('ensure (materialize)', () => {
       repoFullName: 'octo/hello',
       sandboxWorkdir: '/workspace/hello',
     });
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', { method: 'POST' });
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repositories/p1/ensure', { method: 'POST' });
     expect(res.status).toBe(503);
     expect((await res.json()).error).toBe('sandbox_not_configured');
   });
@@ -973,7 +1011,7 @@ describe('ensure (materialize)', () => {
       defaultBranch: 'main',
       sandboxWorkdir: '/workspace/hello',
     });
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', { method: 'POST' });
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repositories/p1/ensure', { method: 'POST' });
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ resourceId: 'p1', githubProjectId: 'p1' });
     expect(ensureProjectSandbox).toHaveBeenCalledOnce();
@@ -984,7 +1022,7 @@ describe('ensure (materialize)', () => {
   });
 
   it('404s for a project the user does not own', async () => {
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/missing/ensure', {
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repositories/missing/ensure', {
       method: 'POST',
     });
     expect(res.status).toBe(404);
@@ -1000,7 +1038,7 @@ describe('ensure (materialize)', () => {
       defaultBranch: 'main',
       sandboxWorkdir: '/workspace/hello',
     });
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', {
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repositories/p1/ensure', {
       method: 'POST',
       headers: { Accept: 'text/event-stream' },
     });
@@ -1052,28 +1090,30 @@ function postJson(app: ReturnType<typeof buildApp>, path: string, body: unknown)
 describe('issues route', () => {
   it('401s without an authenticated user', async () => {
     seedMaterializedProject();
-    const res = await buildApp(null).request('/web/github/projects/p1/issues');
+    const res = await buildApp(null).request('/web/github/repositories/p1/issues');
     expect(res.status).toBe(401);
     expect(listRepoOpenIssues).not.toHaveBeenCalled();
   });
 
   it('403s for a personal (no-org) account', async () => {
     seedMaterializedProject();
-    const res = await buildApp({ workosId: 'u1', organizationId: undefined }).request('/web/github/projects/p1/issues');
+    const res = await buildApp({ workosId: 'u1', organizationId: undefined }).request(
+      '/web/github/repositories/p1/issues',
+    );
     expect(res.status).toBe(403);
     expect(listRepoOpenIssues).not.toHaveBeenCalled();
   });
 
   it('404s for a project owned by another org', async () => {
     seedMaterializedProject({ orgId: 'other-org' });
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues');
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repositories/p1/issues');
     expect(res.status).toBe(404);
     expect(listRepoOpenIssues).not.toHaveBeenCalled();
   });
 
   it('lists open issues for the project repo', async () => {
     seedMaterializedProject();
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues');
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repositories/p1/issues');
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.issues).toHaveLength(1);
@@ -1085,7 +1125,7 @@ describe('issues route', () => {
   it('forwards the requested page and echoes the next page', async () => {
     seedMaterializedProject();
     listRepoOpenIssues.mockResolvedValueOnce({ issues: [], nextPage: 3 });
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues?page=2');
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repositories/p1/issues?page=2');
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ issues: [], nextPage: 3 });
     expect(listRepoOpenIssues).toHaveBeenCalledWith(7, 'octo/hello', 2, { label: undefined });
@@ -1093,21 +1133,21 @@ describe('issues route', () => {
 
   it('forwards the auto-triaged label filter', async () => {
     seedMaterializedProject();
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues?label=auto-triaged');
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repositories/p1/issues?label=auto-triaged');
     expect(res.status).toBe(200);
     expect(listRepoOpenIssues).toHaveBeenCalledWith(7, 'octo/hello', 1, { label: 'auto-triaged' });
   });
 
   it('forwards the needs-approval label filter', async () => {
     seedMaterializedProject();
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues?label=needs-approval');
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repositories/p1/issues?label=needs-approval');
     expect(res.status).toBe(200);
     expect(listRepoOpenIssues).toHaveBeenCalledWith(7, 'octo/hello', 1, { label: 'needs-approval' });
   });
 
   it('400s on an unsupported label filter', async () => {
     seedMaterializedProject();
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues?label=status%3Ablocked');
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repositories/p1/issues?label=status%3Ablocked');
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: 'invalid_label' });
     expect(listRepoOpenIssues).not.toHaveBeenCalled();
@@ -1115,7 +1155,7 @@ describe('issues route', () => {
 
   it('400s on a malformed page param', async () => {
     seedMaterializedProject();
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues?page=zero');
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repositories/p1/issues?page=zero');
     expect(res.status).toBe(400);
     expect(listRepoOpenIssues).not.toHaveBeenCalled();
   });
@@ -1123,7 +1163,7 @@ describe('issues route', () => {
   it('502s when GitHub is unavailable', async () => {
     seedMaterializedProject();
     listRepoOpenIssues.mockRejectedValueOnce(new Error('GitHub unavailable'));
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues');
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repositories/p1/issues');
     expect(res.status).toBe(502);
     expect(await res.json()).toMatchObject({ error: 'github_fetch_failed', message: 'GitHub unavailable' });
   });
@@ -1132,7 +1172,7 @@ describe('issues route', () => {
     seedMaterializedProject();
     const runIssueTriage = vi.fn(async () => ({ threadId: 'thread-triage' }));
     const res = await buildApp({ workosId: 'u1' }, { runIssueTriage }).request(
-      '/web/github/projects/p1/issues/12/triage',
+      '/web/github/repositories/p1/issues/12/triage',
       {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -1168,7 +1208,7 @@ describe('issues route', () => {
     seedMaterializedProject();
     const runIssueTriage = vi.fn(async () => ({ threadId: 'thread-triage' }));
     const res = await buildApp({ workosId: 'u1' }, { runIssueTriage }).request(
-      '/web/github/projects/p1/issues/12/triage',
+      '/web/github/repositories/p1/issues/12/triage',
       {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -1189,7 +1229,7 @@ describe('issues route', () => {
     seedMaterializedProject();
     const runIssueTriage = vi.fn(async () => ({ threadId: 'thread-triage' }));
     const res = await buildApp({ workosId: 'u1' }, { runIssueTriage }).request(
-      '/web/github/projects/p1/issues/12/triage',
+      '/web/github/repositories/p1/issues/12/triage',
       {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -1204,7 +1244,7 @@ describe('issues route', () => {
 
   it('returns 503 when issue triage is unavailable', async () => {
     seedMaterializedProject();
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues/12/triage', {
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repositories/p1/issues/12/triage', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ title: 'Fix flaky test', url: 'https://github.com/octo/hello/issues/12', labels: [] }),
@@ -1217,21 +1257,21 @@ describe('issues route', () => {
 describe('prs route', () => {
   it('401s without an authenticated user', async () => {
     seedMaterializedProject();
-    const res = await buildApp(null).request('/web/github/projects/p1/prs');
+    const res = await buildApp(null).request('/web/github/repositories/p1/prs');
     expect(res.status).toBe(401);
     expect(listRepoOpenPullRequests).not.toHaveBeenCalled();
   });
 
   it('404s for a project owned by another org', async () => {
     seedMaterializedProject({ orgId: 'other-org' });
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/prs');
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repositories/p1/prs');
     expect(res.status).toBe(404);
     expect(listRepoOpenPullRequests).not.toHaveBeenCalled();
   });
 
   it('lists open pull requests for the project repo', async () => {
     seedMaterializedProject();
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/prs');
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repositories/p1/prs');
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.pullRequests).toHaveLength(1);
@@ -1243,7 +1283,7 @@ describe('prs route', () => {
   it('forwards the requested page and echoes the next page', async () => {
     seedMaterializedProject();
     listRepoOpenPullRequests.mockResolvedValueOnce({ pullRequests: [], nextPage: 4 });
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/prs?page=3');
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repositories/p1/prs?page=3');
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ pullRequests: [], nextPage: 4 });
     expect(listRepoOpenPullRequests).toHaveBeenCalledWith(7, 'octo/hello', 3);
@@ -1252,7 +1292,7 @@ describe('prs route', () => {
   it('502s when GitHub is unavailable', async () => {
     seedMaterializedProject();
     listRepoOpenPullRequests.mockRejectedValueOnce(new Error('GitHub unavailable'));
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/prs');
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repositories/p1/prs');
     expect(res.status).toBe(502);
     expect(await res.json()).toMatchObject({ error: 'github_fetch_failed' });
   });
@@ -1261,26 +1301,26 @@ describe('prs route', () => {
 describe('project settings routes', () => {
   it('401s without an authenticated user', async () => {
     seedMaterializedProject();
-    const res = await buildApp(null).request('/web/github/projects/p1/settings');
+    const res = await buildApp(null).request('/web/github/repositories/p1/settings');
     expect(res.status).toBe(401);
   });
 
   it('404s for a project owned by another org', async () => {
     seedMaterializedProject({ orgId: 'other-org' });
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/settings');
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repositories/p1/settings');
     expect(res.status).toBe(404);
   });
 
   it('returns the stored setup command', async () => {
     seedMaterializedProject({ setupCommand: 'pnpm i && pnpm build' });
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/settings');
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repositories/p1/settings');
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ setupCommand: 'pnpm i && pnpm build' });
   });
 
   it('persists a trimmed setup command', async () => {
     seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/settings', {
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/repositories/p1/settings', {
       setupCommand: '  pnpm i && pnpm build  ',
     });
     expect(res.status).toBe(200);
@@ -1291,19 +1331,19 @@ describe('project settings routes', () => {
   it('clears the setup command with an empty string or null', async () => {
     seedMaterializedProject({ setupCommand: 'pnpm i' });
     const app = buildApp({ workosId: 'u1' });
-    const res = await postJson(app, '/web/github/projects/p1/settings', { setupCommand: '   ' });
+    const res = await postJson(app, '/web/github/repositories/p1/settings', { setupCommand: '   ' });
     expect(await res.json()).toEqual({ setupCommand: null });
     expect(tables.projects[0].setupCommand).toBeNull();
 
     tables.projects[0].setupCommand = 'pnpm i';
-    const res2 = await postJson(app, '/web/github/projects/p1/settings', { setupCommand: null });
+    const res2 = await postJson(app, '/web/github/repositories/p1/settings', { setupCommand: null });
     expect(await res2.json()).toEqual({ setupCommand: null });
     expect(tables.projects[0].setupCommand).toBeNull();
   });
 
   it('400s on a non-string setup command', async () => {
     seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/settings', {
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/repositories/p1/settings', {
       setupCommand: 42,
     });
     expect(res.status).toBe(400);
@@ -1311,7 +1351,7 @@ describe('project settings routes', () => {
 
   it('400s on an oversized setup command', async () => {
     seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/settings', {
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/repositories/p1/settings', {
       setupCommand: 'x'.repeat(2001),
     });
     expect(res.status).toBe(400);
@@ -1320,14 +1360,14 @@ describe('project settings routes', () => {
   it('400s on a setup command containing control characters', async () => {
     seedMaterializedProject();
     const app = buildApp({ workosId: 'u1' });
-    const res = await postJson(app, '/web/github/projects/p1/settings', {
+    const res = await postJson(app, '/web/github/repositories/p1/settings', {
       setupCommand: 'pnpm i \x1b[31m&& rm -rf /',
     });
     expect(res.status).toBe(400);
     expect(tables.projects[0].setupCommand).toBeNull();
 
     // Newlines and tabs are legitimate in multi-line setup scripts.
-    const res2 = await postJson(app, '/web/github/projects/p1/settings', {
+    const res2 = await postJson(app, '/web/github/repositories/p1/settings', {
       setupCommand: 'pnpm i\npnpm build\t--force',
     });
     expect(res2.status).toBe(200);
@@ -1337,14 +1377,14 @@ describe('project settings routes', () => {
 describe('worktree route', () => {
   it('401s without an authenticated user', async () => {
     seedMaterializedProject();
-    const res = await postJson(buildApp(null), '/web/github/projects/p1/worktree', { branch: 'feat/x' });
+    const res = await postJson(buildApp(null), '/web/github/repositories/p1/worktree', { branch: 'feat/x' });
     expect(res.status).toBe(401);
   });
 
   it('503s when the sandbox is not configured', async () => {
     sandboxEnabled = false;
     seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree', {
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/repositories/p1/worktree', {
       branch: 'feat/x',
     });
     expect(res.status).toBe(503);
@@ -1352,7 +1392,7 @@ describe('worktree route', () => {
 
   it('404s for a project owned by another org', async () => {
     seedMaterializedProject({ orgId: 'other-org' });
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree', {
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/repositories/p1/worktree', {
       branch: 'feat/x',
     });
     expect(res.status).toBe(404);
@@ -1361,7 +1401,7 @@ describe('worktree route', () => {
 
   it('400s on an invalid branch name', async () => {
     seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree', {
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/repositories/p1/worktree', {
       branch: 'bad branch!',
     });
     expect(res.status).toBe(400);
@@ -1370,7 +1410,7 @@ describe('worktree route', () => {
 
   it('creates a worktree, persists a row, and returns the path', async () => {
     seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree', {
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/repositories/p1/worktree', {
       branch: 'feat/x',
     });
     expect(res.status).toBe(200);
@@ -1395,14 +1435,14 @@ describe('worktree route', () => {
   it('upserts the worktree row on conflict instead of duplicating', async () => {
     seedMaterializedProject();
     const app = buildApp({ workosId: 'u1' });
-    await postJson(app, '/web/github/projects/p1/worktree', { branch: 'feat/x' });
-    await postJson(app, '/web/github/projects/p1/worktree', { branch: 'feat/x' });
+    await postJson(app, '/web/github/repositories/p1/worktree', { branch: 'feat/x' });
+    await postJson(app, '/web/github/repositories/p1/worktree', { branch: 'feat/x' });
     expect(tables.worktrees).toHaveLength(1);
   });
 
   it('runs the configured setup command in the fresh worktree', async () => {
     seedMaterializedProject({ setupCommand: 'pnpm i && pnpm build' });
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree', {
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/repositories/p1/worktree', {
       branch: 'feat/x',
     });
     expect(res.status).toBe(200);
@@ -1416,7 +1456,7 @@ describe('worktree route', () => {
 
   it('skips the setup command when no command is configured', async () => {
     seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree', {
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/repositories/p1/worktree', {
       branch: 'feat/x',
     });
     expect(res.status).toBe(200);
@@ -1431,7 +1471,7 @@ describe('worktree route', () => {
       baseBranch: 'main',
       reused: true,
     } as any);
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree', {
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/repositories/p1/worktree', {
       branch: 'feat/x',
     });
     expect(res.status).toBe(200);
@@ -1441,7 +1481,7 @@ describe('worktree route', () => {
   it('surfaces a setup failure and does not persist the worktree row', async () => {
     seedMaterializedProject({ setupCommand: 'pnpm i' });
     runWorktreeSetup.mockRejectedValueOnce(new MockedWorktreeError('Setup command failed (exit 1)', 'setup-failed'));
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree', {
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/repositories/p1/worktree', {
       branch: 'feat/x',
     });
     expect(res.status).toBe(502);
@@ -1453,13 +1493,13 @@ describe('worktree route', () => {
 describe('worktree delete route', () => {
   it('401s without an authenticated user', async () => {
     seedMaterializedProject();
-    const res = await postJson(buildApp(null), '/web/github/projects/p1/worktree/delete', { branch: 'feat/x' });
+    const res = await postJson(buildApp(null), '/web/github/repositories/p1/worktree/delete', { branch: 'feat/x' });
     expect(res.status).toBe(401);
   });
 
   it('400s on an invalid branch name', async () => {
     seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree/delete', {
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/repositories/p1/worktree/delete', {
       branch: 'bad branch!',
     });
     expect(res.status).toBe(400);
@@ -1468,7 +1508,7 @@ describe('worktree delete route', () => {
 
   it('404s for a worktree that was never created', async () => {
     seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree/delete', {
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/repositories/p1/worktree/delete', {
       branch: 'feat/unknown',
     });
     expect(res.status).toBe(404);
@@ -1478,8 +1518,8 @@ describe('worktree delete route', () => {
   it("404s for another user's worktree", async () => {
     seedMaterializedProject();
     const app = buildApp({ workosId: 'u1' });
-    await postJson(app, '/web/github/projects/p1/worktree', { branch: 'feat/x' });
-    const res = await postJson(buildApp({ workosId: 'u2' }), '/web/github/projects/p1/worktree/delete', {
+    await postJson(app, '/web/github/repositories/p1/worktree', { branch: 'feat/x' });
+    const res = await postJson(buildApp({ workosId: 'u2' }), '/web/github/repositories/p1/worktree/delete', {
       branch: 'feat/x',
     });
     expect(res.status).toBe(404);
@@ -1498,7 +1538,7 @@ describe('worktree delete route', () => {
       baseBranch: 'main',
       worktreePath: '/workspace/hello',
     });
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree/delete', {
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/repositories/p1/worktree/delete', {
       branch: 'main',
     });
     expect(res.status).toBe(400);
@@ -1508,10 +1548,10 @@ describe('worktree delete route', () => {
   it('removes the checkout, deletes the row, and returns the path', async () => {
     seedMaterializedProject();
     const app = buildApp({ workosId: 'u1' });
-    await postJson(app, '/web/github/projects/p1/worktree', { branch: 'feat/x' });
+    await postJson(app, '/web/github/repositories/p1/worktree', { branch: 'feat/x' });
     expect(tables.worktrees).toHaveLength(1);
 
-    const res = await postJson(app, '/web/github/projects/p1/worktree/delete', { branch: 'feat/x' });
+    const res = await postJson(app, '/web/github/repositories/p1/worktree/delete', { branch: 'feat/x' });
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json).toMatchObject({
@@ -1530,12 +1570,12 @@ describe('worktree delete route', () => {
   it('keeps the row when the sandbox removal fails', async () => {
     seedMaterializedProject();
     const app = buildApp({ workosId: 'u1' });
-    await postJson(app, '/web/github/projects/p1/worktree', { branch: 'feat/x' });
+    await postJson(app, '/web/github/repositories/p1/worktree', { branch: 'feat/x' });
     removeWorktree.mockRejectedValueOnce(
       Object.assign(new Error('git worktree remove failed'), { name: 'WorktreeError', code: 'worktree-failed' }),
     );
 
-    const res = await postJson(app, '/web/github/projects/p1/worktree/delete', { branch: 'feat/x' });
+    const res = await postJson(app, '/web/github/repositories/p1/worktree/delete', { branch: 'feat/x' });
     expect(res.status).toBeGreaterThanOrEqual(400);
     expect(tables.worktrees).toHaveLength(1);
   });
@@ -1544,7 +1584,7 @@ describe('worktree delete route', () => {
 describe('commit route', () => {
   it('400s on an empty message', async () => {
     seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/commit', {
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/repositories/p1/commit', {
       message: '   ',
     });
     expect(res.status).toBe(400);
@@ -1553,7 +1593,7 @@ describe('commit route', () => {
 
   it('400s on an unknown worktreePath', async () => {
     seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/commit', {
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/repositories/p1/commit', {
       message: 'wip',
       worktreePath: '/etc/passwd',
     });
@@ -1563,7 +1603,7 @@ describe('commit route', () => {
 
   it('commits on the base checkout when no worktreePath is given', async () => {
     seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/commit', {
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/repositories/p1/commit', {
       message: 'wip',
     });
     expect(res.status).toBe(200);
@@ -1583,7 +1623,7 @@ describe('commit route', () => {
       baseBranch: 'main',
       worktreePath: '/workspace/worktrees/feat-x',
     });
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/commit', {
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/repositories/p1/commit', {
       message: 'wip',
       worktreePath: '/workspace/worktrees/feat-x',
     });
@@ -1595,7 +1635,7 @@ describe('commit route', () => {
 describe('push route', () => {
   it('400s on an invalid branch', async () => {
     seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/push', {
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/repositories/p1/push', {
       branch: 'bad branch',
     });
     expect(res.status).toBe(400);
@@ -1604,7 +1644,7 @@ describe('push route', () => {
 
   it('mints a token and pushes the branch', async () => {
     seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/push', {
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/repositories/p1/push', {
       branch: 'feat/x',
     });
     expect(res.status).toBe(200);
@@ -1621,7 +1661,7 @@ describe('push route', () => {
 describe('pr route', () => {
   it('400s on a missing title', async () => {
     seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/pr', {
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/repositories/p1/pr', {
       branch: 'feat/x',
     });
     expect(res.status).toBe(400);
@@ -1630,7 +1670,7 @@ describe('pr route', () => {
 
   it('400s on an invalid base branch', async () => {
     seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/pr', {
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/repositories/p1/pr', {
       branch: 'feat/x',
       base: 'bad base',
       title: 'My PR',
@@ -1641,7 +1681,7 @@ describe('pr route', () => {
 
   it('opens a PR and returns its URL', async () => {
     seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/pr', {
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/repositories/p1/pr', {
       branch: 'feat/x',
       title: 'My PR',
       body: 'Adds a thing',
@@ -1658,7 +1698,7 @@ describe('pr route', () => {
 describe('audit events', () => {
   it('records worktree.created with actor, project, and branch metadata', async () => {
     seedMaterializedProject();
-    await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree', { branch: 'feat/x' });
+    await postJson(buildApp({ workosId: 'u1' }), '/web/github/repositories/p1/worktree', { branch: 'feat/x' });
     expect(auditRecorded).toHaveLength(1);
     expect(auditRecorded[0]).toMatchObject({
       orgId: 'org1',
@@ -1678,17 +1718,17 @@ describe('audit events', () => {
       baseBranch: 'main',
       reused: true,
     } as any);
-    await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree', { branch: 'feat/x' });
+    await postJson(buildApp({ workosId: 'u1' }), '/web/github/repositories/p1/worktree', { branch: 'feat/x' });
     expect(auditRecorded).toHaveLength(0);
   });
 
   it('records worktree.deleted when a worktree is removed', async () => {
     seedMaterializedProject();
     const app = buildApp({ workosId: 'u1' });
-    await postJson(app, '/web/github/projects/p1/worktree', { branch: 'feat/x' });
+    await postJson(app, '/web/github/repositories/p1/worktree', { branch: 'feat/x' });
     auditRecorded = [];
 
-    await postJson(app, '/web/github/projects/p1/worktree/delete', { branch: 'feat/x' });
+    await postJson(app, '/web/github/repositories/p1/worktree/delete', { branch: 'feat/x' });
     expect(auditRecorded).toHaveLength(1);
     expect(auditRecorded[0]).toMatchObject({
       action: 'factory.worktree.deleted',
@@ -1701,7 +1741,7 @@ describe('audit events', () => {
   it('records triage.started with the issue number and title', async () => {
     seedMaterializedProject();
     const runIssueTriage = vi.fn(async () => ({ threadId: 'thread-triage' }));
-    await buildApp({ workosId: 'u1' }, { runIssueTriage }).request('/web/github/projects/p1/issues/12/triage', {
+    await buildApp({ workosId: 'u1' }, { runIssueTriage }).request('/web/github/repositories/p1/issues/12/triage', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ title: 'Fix flaky test', url: 'https://github.com/octo/hello/issues/12', labels: [] }),
@@ -1719,18 +1759,18 @@ describe('audit events', () => {
   it('records git.commit only when a commit was actually created', async () => {
     seedMaterializedProject();
     const app = buildApp({ workosId: 'u1' });
-    await postJson(app, '/web/github/projects/p1/commit', { message: 'wip' });
+    await postJson(app, '/web/github/repositories/p1/commit', { message: 'wip' });
     expect(auditRecorded.map(e => e.action)).toEqual(['factory.git.commit']);
 
     auditRecorded = [];
     commitAll.mockResolvedValueOnce({ committed: false } as any);
-    await postJson(app, '/web/github/projects/p1/commit', { message: 'nothing to do' });
+    await postJson(app, '/web/github/repositories/p1/commit', { message: 'nothing to do' });
     expect(auditRecorded).toHaveLength(0);
   });
 
   it('records git.push with the branch target', async () => {
     seedMaterializedProject();
-    await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/push', { branch: 'feat/x' });
+    await postJson(buildApp({ workosId: 'u1' }), '/web/github/repositories/p1/push', { branch: 'feat/x' });
     expect(auditRecorded).toHaveLength(1);
     expect(auditRecorded[0]).toMatchObject({
       action: 'factory.git.push',
@@ -1742,7 +1782,7 @@ describe('audit events', () => {
 
   it('records git.pr_opened with the PR url and title', async () => {
     seedMaterializedProject();
-    await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/pr', {
+    await postJson(buildApp({ workosId: 'u1' }), '/web/github/repositories/p1/pr', {
       branch: 'feat/x',
       title: 'My PR',
     });
@@ -1757,7 +1797,7 @@ describe('audit events', () => {
 
   it('does not record audit events for rejected mutations', async () => {
     seedMaterializedProject();
-    await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/push', { branch: 'bad branch' });
+    await postJson(buildApp({ workosId: 'u1' }), '/web/github/repositories/p1/push', { branch: 'bad branch' });
     expect(auditRecorded).toHaveLength(0);
   });
 
@@ -1765,7 +1805,7 @@ describe('audit events', () => {
     seedMaterializedProject();
     auditFailure = new Error('audit db down');
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/push', { branch: 'feat/x' });
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/repositories/p1/push', { branch: 'feat/x' });
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ pushed: true, branch: 'feat/x' });
     expect(warnSpy).toHaveBeenCalledWith('[Audit] Failed to emit audit event', expect.anything());

@@ -707,6 +707,7 @@ export function TranscriptEntries({
             steer: message.content.metadata?.delivery === 'while-active',
           }}
           suspendedToolCallIds={suspendedToolCallIds}
+          followsToolEntry={index > 0 && message.role === 'assistant' && messageEndsWithTool(messages[index - 1])}
         />
       ))}
       {notices.map(entry => <NoticeCard key={entry.id} entry={{ ...entry, kind: 'notice' }} />)}
@@ -726,6 +727,12 @@ export function TranscriptEntries({
   );
 }
 
+function messageEndsWithTool(message: MastraDBMessage | undefined): boolean {
+  if (!message || message.role !== 'assistant') return false;
+  const parts = message.content.parts ?? [];
+  return parts.length > 0 && parts[parts.length - 1]?.type === 'tool-invocation';
+}
+
 function isUserSignalMessage(message: MastraDBMessage): boolean {
   if (message.role !== 'signal') return false;
   const metadata = message.content.metadata;
@@ -737,9 +744,11 @@ function isUserSignalMessage(message: MastraDBMessage): boolean {
 function MessageBubble({
   entry,
   suspendedToolCallIds,
+  followsToolEntry,
 }: {
   entry: MessageEntry;
   suspendedToolCallIds: ReadonlySet<string>;
+  followsToolEntry: boolean;
 }) {
   // null = no group override; true/false = expand/collapse all in this bubble.
   const [allExpanded, setAllExpanded] = useState<boolean | undefined>(undefined);
@@ -826,6 +835,10 @@ function MessageBubble({
 
   const renderers = {
     Text: (part: TextPart) => {
+      const renderedPart: unknown = part;
+      const partIndex = parts.findIndex(candidate => candidate === renderedPart);
+      const followsTool = partIndex > 0 && parts[partIndex - 1]?.type === 'tool-invocation';
+
       if (isUserMessage) {
         const activation = parseSkillActivation(part.text);
         return activation ? (
@@ -838,7 +851,7 @@ function MessageBubble({
       }
 
       return (
-        <div className="prose">
+        <div className={`prose ${followsToolEntry ? 'mt-4' : followsTool ? 'mt-3' : ''}`}>
           <Markdown>{part.text}</Markdown>
           {entry.streaming && part === lastTextPart && (
             <span className="ml-0.5 inline-block h-[1em] w-0.5 animate-pulse bg-accent1 align-text-bottom" />

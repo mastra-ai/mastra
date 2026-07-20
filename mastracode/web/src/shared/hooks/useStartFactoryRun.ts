@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useMutationState, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 
 import { useApiConfig } from '../api/config';
@@ -15,9 +15,10 @@ import {
   ThreadPageKickoffTimeoutError,
 } from '../../web/ui/domains/chat/services/threadPageReadiness';
 // Deep imports (not the workspaces barrel) to avoid provider/component cycles.
-import { useActiveProjectContext } from '../../web/ui/domains/workspaces/context/ActiveProjectProvider';
+import { useActiveFactoryContext } from '../../web/ui/domains/workspaces/context/ActiveFactoryProvider';
 import { deriveProjectPath, useCreateWorkspaceMutation } from './useWorkspaces';
-import type { Project } from '../../web/ui/domains/workspaces/services/projects';
+import type { Factory } from '../../web/ui/domains/workspaces/services/factories';
+import { isGithubFactory } from '../../web/ui/domains/workspaces/services/factories';
 import { createWorkItem, updateWorkItem } from '../../web/ui/domains/factory/services/workItems';
 import type { WorkItemSource } from '../../web/ui/domains/factory/services/workItems';
 
@@ -50,6 +51,28 @@ export type FactoryRunInvocation =
   | { type: 'prompt'; prompt: string }
   | { type: 'skill'; skillName: string; arguments: string };
 
+const factoryRunMutationKey = (resourceId: string, projectId: string | undefined) =>
+  ['factory', 'start-run', resourceId, projectId] as const;
+
+export interface PendingFactoryRun {
+  id?: string;
+  sourceKey: string | null;
+  role: string;
+}
+
+function toPendingFactoryRun(value: unknown): PendingFactoryRun | undefined {
+  if (!isRecord(value) || !isRecord(value.workItem)) return undefined;
+  const { id, sourceKey, role } = value.workItem;
+  if (id !== undefined && typeof id !== 'string') return undefined;
+  if (sourceKey !== null && typeof sourceKey !== 'string') return undefined;
+  if (typeof role !== 'string') return undefined;
+  return { id, sourceKey, role };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 export interface StartFactoryRunInput {
   /** Feature branch for the new worktree (e.g. `factory/issue-12`). */
   branch: string;
@@ -57,8 +80,8 @@ export interface StartFactoryRunInput {
   threadTitle: string;
   /** Existing thread tags to prefer before falling back to the session thread. */
   threadTags?: Record<string, string>;
-  /** First user action dispatched to the agent. */
-  invocation: FactoryRunInvocation;
+  /** First user action dispatched to the agent. Omit to open the session without starting a run. */
+  invocation?: FactoryRunInvocation;
   /** Board card to file for this run (kanban record; optional). */
   workItem?: StartFactoryRunWorkItem;
 }
@@ -66,7 +89,9 @@ export interface StartFactoryRunInput {
 /**
  * Start an agent run for a Factory item: create (or reuse) a worktree for the
  * item's branch, create a fresh thread in that workspace, send the kickoff
- * prompt, and navigate to the new thread.
+ * prompt, and navigate to the new thread. Without an `invocation` it opens an
+ * empty session instead: same worktree/thread/card filing, but no message is
+ * sent — the user lands on the thread and types the first message.
  *
  * Sessions are scoped per worktree, so the run targets the NEW worktree's own
  * session (created here with its `projectPath` tag) instead of repointing the
@@ -74,23 +99,24 @@ export interface StartFactoryRunInput {
  * independent and never abort each other.
  */
 export function useStartFactoryRun() {
-  const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
+  const { activeFactory, resourceId, sessionEnabled } = useActiveFactoryContext();
   const { baseUrl } = useApiConfig();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const createWorkspace = useCreateWorkspaceMutation(activeProject, {
+  const createWorkspace = useCreateWorkspaceMutation(activeFactory, {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
   });
 
   const mutation = useMutation({
+    mutationKey: factoryRunMutationKey(resourceId, activeFactory?.id),
     mutationFn: async ({ branch, threadTitle, threadTags, invocation, workItem }: StartFactoryRunInput) => {
-      const updatedProject = await createWorkspace.mutateAsync(branch);
-      queryClient.setQueryData(queryKeys.projects(), (projects: Project[] | undefined) =>
-        projects?.map(project => (project.id === updatedProject.id ? updatedProject : project)),
+      const updatedFactory = await createWorkspace.mutateAsync(branch);
+      queryClient.setQueryData(queryKeys.factories(), (factories: Factory[] | undefined) =>
+        factories?.map(factory => (factory.id === updatedFactory.id ? updatedFactory : factory)),
       );
-      const projectPath = deriveProjectPath(updatedProject);
+      const projectPath = deriveProjectPath(updatedFactory);
       if (!projectPath) throw new Error('Could not resolve the new worktree path');
 
       // Address the new worktree's own session; create it up front so a
@@ -114,8 +140,8 @@ export function useStartFactoryRun() {
       // the same item, reuse that thread: the prompt lands as a follow-up
       // message instead of leaving a stray second thread in the worktree.
       const threadId = await resolveRunThread(scopedSession, created.threadId, threadTitle, projectPath, threadTags);
-      let kickoffMessage: string;
-      if (invocation.type === 'skill') {
+      let kickoffMessage: string | undefined;
+      if (invocation?.type === 'skill') {
         const skillArguments = `${invocation.arguments.trim()}\n\nPrepared workspace context:\n- Worktree: ${projectPath}\n- Branch: ${branch}`;
         const prepared = await prepareWorkspaceSkill({
           agentControllerId: AGENT_CONTROLLER_ID,
@@ -126,7 +152,7 @@ export function useStartFactoryRun() {
           baseUrl,
         });
         kickoffMessage = prepared.message;
-      } else {
+      } else if (invocation) {
         kickoffMessage = invocation.prompt;
       }
 
@@ -138,16 +164,22 @@ export function useStartFactoryRun() {
 
       // Queue the kickoff before navigating so the destination page can claim it
       // exactly once. Wait for that page's composer path to finish dispatching
-      // before filing the board card as an active run.
-      const kickoffCompleted = queueThreadPageKickoff({ resourceId, projectPath, threadId }, kickoffMessage);
-      void navigate(`/threads/${threadId}`);
-      try {
-        await kickoffCompleted;
-      } catch (error) {
-        if (error instanceof ThreadPageKickoffTimeoutError) {
-          void navigate('/new', { replace: true, state: { routeErrorNotice: error.message } });
+      // before filing the board card as an active run. Without an invocation
+      // (opening an empty session) there is nothing to dispatch — navigate and
+      // let the user type the first message.
+      if (kickoffMessage !== undefined) {
+        const kickoffCompleted = queueThreadPageKickoff({ resourceId, projectPath, threadId }, kickoffMessage);
+        void navigate(`/threads/${threadId}`);
+        try {
+          await kickoffCompleted;
+        } catch (error) {
+          if (error instanceof ThreadPageKickoffTimeoutError) {
+            void navigate('/new', { replace: true, state: { routeErrorNotice: error.message } });
+          }
+          throw error;
         }
-        throw error;
+      } else {
+        void navigate(`/threads/${threadId}`);
       }
 
       // File the board card now that the run is underway, hanging the run's
@@ -155,7 +187,8 @@ export function useStartFactoryRun() {
       // (worktree + session + thread + prompt) already succeeded, so a filing
       // failure must not reject the mutation and strand the user off the
       // thread that is actively running.
-      const githubProjectId = activeProject?.githubProjectId;
+      const githubProjectId =
+        activeFactory && isGithubFactory(activeFactory) ? activeFactory.binding.githubProjectId : undefined;
       if (workItem && githubProjectId) {
         try {
           // One thread per item: stamp the run's ref onto every role the card
@@ -184,7 +217,12 @@ export function useStartFactoryRun() {
     },
   });
 
-  return { start: mutation, enabled: sessionEnabled };
+  const pendingRuns = useMutationState({
+    filters: { mutationKey: factoryRunMutationKey(resourceId, activeFactory?.id), status: 'pending' },
+    select: pending => toPendingFactoryRun(pending.state.variables),
+  }).filter(run => run !== undefined);
+
+  return { start: mutation, pendingRuns, enabled: sessionEnabled };
 }
 
 /**

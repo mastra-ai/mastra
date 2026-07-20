@@ -2,36 +2,6 @@ import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ── Mocks ────────────────────────────────────────────────────────────────
-vi.mock('drizzle-orm', async () => {
-  const actual = (await vi.importActual('drizzle-orm')) as Record<string, unknown>;
-  return {
-    ...actual,
-    eq: (column: any, value: any) => ({ kind: 'eq', column: column?.name, value }),
-    and: (...conds: any[]) => ({ kind: 'and', conds: conds.filter(Boolean) }),
-  };
-});
-
-// In-memory github_projects rows served by the getAppDb mock — the routes
-// still resolve project ownership through the (temporary) app-DB bridge;
-// work items themselves go through the in-memory factory storage domain.
-let projects: Array<Record<string, any>> = [];
-
-function columnJsKey(table: any, columnName: string): string | undefined {
-  for (const [jsKey, col] of Object.entries(table)) {
-    if ((col as any)?.name === columnName) return jsKey;
-  }
-  return undefined;
-}
-
-function matches(table: any, row: any, cond: any): boolean {
-  if (!cond) return true;
-  if (cond.kind === 'and') return cond.conds.every((c: any) => matches(table, row, c));
-  if (cond.kind === 'eq') {
-    const jsKey = columnJsKey(table, cond.column);
-    return jsKey !== undefined && row[jsKey] === cond.value;
-  }
-  return true;
-}
 
 // Capture audit events at the store boundary so the real `emitAudit` path
 // (actor resolution, request context, never-throws) is exercised end to end.
@@ -54,16 +24,7 @@ vi.mock('../audit/store', () => ({
   listAuditEvents: async () => ({ events: [] }),
 }));
 
-vi.mock('../github/db', () => ({
-  getAppDb: () => ({
-    select: () => ({
-      from: (table: any) => ({
-        where: async (cond: any) => projects.filter(row => matches(table, row, cond)),
-      }),
-    }),
-  }),
-}));
-
+import { GithubStorageInMemory } from '../github/storage/inmemory';
 import { __resetRuntimeConfigForTests } from '../runtime-config';
 import { seedInMemoryFactoryStoreForTests } from '../storage/test-utils';
 import type { InMemoryFactoryStoreSeed } from '../storage/test-utils';
@@ -72,21 +33,38 @@ import { buildFactoryRoutes } from './routes';
 import { parseCreateWorkItem, parseUpdateWorkItem } from './store';
 
 // ── Test harness ─────────────────────────────────────────────────────────
-function buildApp(user: { workosId: string; organizationId?: string } | null) {
+let githubStorage!: GithubStorageInMemory;
+
+function buildApp(
+  user: { workosId: string; organizationId?: string } | null,
+  storage: GithubStorageInMemory | null = githubStorage,
+) {
   const app = new Hono();
   app.use('*', async (c, next) => {
     if (user) c.set('webAuthUser' as never, user as never);
     await next();
   });
-  mountApiRoutes(app as any, buildFactoryRoutes());
+  mountApiRoutes(app as any, buildFactoryRoutes(storage ?? undefined));
   return app;
 }
 
 const orgUser = { workosId: 'u1', organizationId: 'org1' };
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 
-function seedProject(orgId = 'org1', id = PROJECT_ID) {
-  projects.push({ id, orgId, repoFullName: 'acme/app' });
+function seedFactory(orgId = 'org1', id = PROJECT_ID) {
+  githubStorage.projects.push({
+    id,
+    orgId,
+    userId: 'u1',
+    installationId: 1,
+    repoFullName: 'acme/app',
+    repoId: 1,
+    defaultBranch: 'main',
+    sandboxProvider: 'local',
+    sandboxWorkdir: '/tmp/acme-app',
+    setupCommand: null,
+    createdAt: new Date(),
+  });
 }
 
 const listItems = () => seed.workItems.list('org1', PROJECT_ID);
@@ -112,10 +90,10 @@ let seed: InMemoryFactoryStoreSeed;
 
 beforeEach(async () => {
   seed = await seedInMemoryFactoryStoreForTests();
-  projects = [];
+  githubStorage = new GithubStorageInMemory();
   auditRecorded = [];
   auditFailure = undefined;
-  seedProject();
+  seedFactory();
 });
 
 afterEach(() => {
@@ -126,31 +104,36 @@ afterEach(() => {
 // ── Auth / scoping ───────────────────────────────────────────────────────
 describe('auth and scoping', () => {
   it('401s without a user', async () => {
-    const res = await json('GET', `/web/factory/projects/${PROJECT_ID}/work-items`, undefined, null);
+    const res = await json('GET', `/web/factory/repositories/${PROJECT_ID}/work-items`, undefined, null);
     expect(res.status).toBe(401);
   });
 
   it('403s without an organization', async () => {
-    const res = await buildApp({ workosId: 'u1' }).request(`/web/factory/projects/${PROJECT_ID}/work-items`);
+    const res = await buildApp({ workosId: 'u1' }).request(`/web/factory/repositories/${PROJECT_ID}/work-items`);
     expect(res.status).toBe(403);
   });
 
   it('404s when the project belongs to another org', async () => {
-    projects = [];
-    seedProject('other-org');
-    const res = await json('GET', `/web/factory/projects/${PROJECT_ID}/work-items`);
+    githubStorage.projects = [];
+    seedFactory('other-org');
+    const res = await json('GET', `/web/factory/repositories/${PROJECT_ID}/work-items`);
     expect(res.status).toBe(404);
   });
 
+  it('503s when GitHub storage is unavailable', async () => {
+    const res = await buildApp(orgUser, null).request(`/web/factory/repositories/${PROJECT_ID}/work-items`);
+    expect(res.status).toBe(503);
+  });
+
   it('404s on a non-uuid project id', async () => {
-    const res = await json('GET', `/web/factory/projects/not-a-uuid/work-items`);
+    const res = await json('GET', `/web/factory/repositories/not-a-uuid/work-items`);
     expect(res.status).toBe(404);
   });
 
   it('is org-wide: another member of the same org sees the item', async () => {
-    await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
+    await json('POST', `/web/factory/repositories/${PROJECT_ID}/work-items`, createBody());
     const res = await buildApp({ workosId: 'u2', organizationId: 'org1' }).request(
-      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      `/web/factory/repositories/${PROJECT_ID}/work-items`,
     );
     const body = await res.json();
     expect(body.workItems).toHaveLength(1);
@@ -159,9 +142,9 @@ describe('auth and scoping', () => {
 });
 
 // ── Create / upsert ──────────────────────────────────────────────────────
-describe('POST /web/factory/projects/:id/work-items', () => {
+describe('POST /web/factory/repositories/:id/work-items', () => {
   it('creates a work item with server-stamped history', async () => {
-    const res = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
+    const res = await json('POST', `/web/factory/repositories/${PROJECT_ID}/work-items`, createBody());
     expect(res.status).toBe(200);
     const { workItem } = await res.json();
     expect(workItem).toMatchObject({
@@ -181,10 +164,10 @@ describe('POST /web/factory/projects/:id/work-items', () => {
   });
 
   it('upserts on sourceKey instead of duplicating', async () => {
-    await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
+    await json('POST', `/web/factory/repositories/${PROJECT_ID}/work-items`, createBody());
     const res = await json(
       'POST',
-      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      `/web/factory/repositories/${PROJECT_ID}/work-items`,
       createBody({
         stages: ['execute'],
         sessions: { work: { projectPath: '/sb/wt/issue-42', branch: 'factory/issue-42', threadId: 't-1' } },
@@ -210,21 +193,25 @@ describe('POST /web/factory/projects/:id/work-items', () => {
   it('never dedupes manual cards (null sourceKey)', async () => {
     await json(
       'POST',
-      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      `/web/factory/repositories/${PROJECT_ID}/work-items`,
       createBody({ source: 'manual', sourceKey: null }),
     );
     await json(
       'POST',
-      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      `/web/factory/repositories/${PROJECT_ID}/work-items`,
       createBody({ source: 'manual', sourceKey: null }),
     );
     expect(await listItems()).toHaveLength(2);
   });
 
   it('400s on an invalid body', async () => {
-    const res = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody({ stages: [] }));
+    const res = await json('POST', `/web/factory/repositories/${PROJECT_ID}/work-items`, createBody({ stages: [] }));
     expect(res.status).toBe(400);
-    const bad = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody({ source: 'jira' }));
+    const bad = await json(
+      'POST',
+      `/web/factory/repositories/${PROJECT_ID}/work-items`,
+      createBody({ source: 'jira' }),
+    );
     expect(bad.status).toBe(400);
   });
 });
@@ -232,7 +219,7 @@ describe('POST /web/factory/projects/:id/work-items', () => {
 // ── Patch ────────────────────────────────────────────────────────────────
 describe('PATCH /web/factory/work-items/:id', () => {
   async function createItem(overrides: Record<string, unknown> = {}) {
-    const res = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody(overrides));
+    const res = await json('POST', `/web/factory/repositories/${PROJECT_ID}/work-items`, createBody(overrides));
     return (await res.json()).workItem;
   }
 
@@ -294,7 +281,7 @@ describe('PATCH /web/factory/work-items/:id', () => {
     expect(workRes.status).toBe(200);
     expect(reviewRes.status).toBe(200);
 
-    const list = await json('GET', `/web/factory/projects/${PROJECT_ID}/work-items`);
+    const list = await json('GET', `/web/factory/repositories/${PROJECT_ID}/work-items`);
     const [workItem] = (await list.json()).workItems;
     expect(Object.keys(workItem.sessions).sort()).toEqual(['review', 'work']);
   });
@@ -322,7 +309,7 @@ describe('PATCH /web/factory/work-items/:id', () => {
 // ── Delete ───────────────────────────────────────────────────────────────
 describe('DELETE /web/factory/work-items/:id', () => {
   it('removes the item for the org', async () => {
-    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
+    const created = await json('POST', `/web/factory/repositories/${PROJECT_ID}/work-items`, createBody());
     const { workItem } = await created.json();
     const res = await json('DELETE', `/web/factory/work-items/${workItem.id}`);
     expect((await res.json()).ok).toBe(true);
@@ -335,18 +322,18 @@ describe('DELETE /web/factory/work-items/:id', () => {
 });
 
 // ── Metrics ──────────────────────────────────────────────────────────────
-describe('GET /web/factory/projects/:id/metrics', () => {
+describe('GET /web/factory/repositories/:id/metrics', () => {
   it('401s without a user and 404s for projects outside the org', async () => {
-    expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/metrics`, undefined, null)).status).toBe(401);
+    expect((await json('GET', `/web/factory/repositories/${PROJECT_ID}/metrics`, undefined, null)).status).toBe(401);
 
-    projects = [];
-    seedProject('other-org');
-    expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/metrics`)).status).toBe(404);
+    githubStorage.projects = [];
+    seedFactory('other-org');
+    expect((await json('GET', `/web/factory/repositories/${PROJECT_ID}/metrics`)).status).toBe(404);
   });
 
   it('clamps the days param to a supported window', async () => {
     const bodyFor = async (query: string) =>
-      (await (await json('GET', `/web/factory/projects/${PROJECT_ID}/metrics${query}`)).json()).metrics;
+      (await (await json('GET', `/web/factory/repositories/${PROJECT_ID}/metrics${query}`)).json()).metrics;
 
     expect((await bodyFor('')).windowDays).toBe(30);
     expect((await bodyFor('?days=7')).windowDays).toBe(7);
@@ -357,16 +344,16 @@ describe('GET /web/factory/projects/:id/metrics', () => {
 
   it('aggregates the project board: throughput, WIP, transitions, and source mix', async () => {
     // One card completed today (intake → done), one still in intake.
-    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
+    const created = await json('POST', `/web/factory/repositories/${PROJECT_ID}/work-items`, createBody());
     const { workItem } = await created.json();
     await json('PATCH', `/web/factory/work-items/${workItem.id}`, { stages: ['done'] });
     await json(
       'POST',
-      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      `/web/factory/repositories/${PROJECT_ID}/work-items`,
       createBody({ source: 'manual', sourceKey: null, title: 'Manual card' }),
     );
 
-    const res = await json('GET', `/web/factory/projects/${PROJECT_ID}/metrics?days=7`);
+    const res = await json('GET', `/web/factory/repositories/${PROJECT_ID}/metrics?days=7`);
     expect(res.status).toBe(200);
     const { metrics } = await res.json();
 
@@ -389,7 +376,7 @@ describe('GET /web/factory/projects/:id/metrics', () => {
   });
 
   it('returns zeroed metrics for an empty board', async () => {
-    const res = await json('GET', `/web/factory/projects/${PROJECT_ID}/metrics`);
+    const res = await json('GET', `/web/factory/repositories/${PROJECT_ID}/metrics`);
     const { metrics } = await res.json();
     expect(metrics.throughput).toHaveLength(30);
     expect(metrics.cycleTime).toEqual({ medianMs: null, p90Ms: null, samples: 0 });
@@ -401,7 +388,7 @@ describe('GET /web/factory/projects/:id/metrics', () => {
 // ── Audit events ─────────────────────────────────────────────────────────
 describe('audit events', () => {
   async function createItem(overrides: Record<string, unknown> = {}) {
-    const res = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody(overrides));
+    const res = await json('POST', `/web/factory/repositories/${PROJECT_ID}/work-items`, createBody(overrides));
     return (await res.json()).workItem;
   }
 
@@ -425,7 +412,7 @@ describe('audit events', () => {
     const session = { projectPath: '/sb/wt/issue-42', branch: 'factory/issue-42', threadId: 't-1' };
     await json(
       'POST',
-      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      `/web/factory/repositories/${PROJECT_ID}/work-items`,
       createBody({ stages: ['execute'], sessions: { work: session } }),
     );
     expect(auditRecorded.map(e => e.action)).toEqual([
@@ -500,7 +487,7 @@ describe('audit events', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     auditFailure = new Error('audit db down');
 
-    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
+    const created = await json('POST', `/web/factory/repositories/${PROJECT_ID}/work-items`, createBody());
     expect(created.status).toBe(200);
     const { workItem } = await created.json();
 

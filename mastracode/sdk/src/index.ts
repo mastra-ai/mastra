@@ -42,7 +42,9 @@ import {
   MastraPlatformExporter,
   SensitiveDataFilter,
 } from '@mastra/observability';
+import { PostgresStore } from '@mastra/pg';
 
+import { hasCredentialStoreProvider } from './agents/credential-resolver.js';
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory } from './agents/memory.js';
 import { createMastraCodeGateway, getDynamicModel, getGoalJudgeModel, resolveModel } from './agents/model.js';
@@ -81,6 +83,7 @@ import { createAmazonBedrockGateway } from './providers/amazon-bedrock-gateway.j
 import { setAuthStorage } from './providers/claude-max.js';
 import { setAuthStorage as setGitHubCopilotAuthStorage } from './providers/github-copilot.js';
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
+import { setAuthStorage as setXAIAuthStorage } from './providers/xai.js';
 
 import { stateSchema } from './schema.js';
 import type { MastraCodeState } from './schema.js';
@@ -103,30 +106,30 @@ import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
 
 const CODE_AGENT_ID = 'code-agent';
 
-// Global retry policy for transient network resets (e.g. provider sockets dropping mid-stream).
+// Global retry policy for transient connection failures (e.g. provider sockets dropping mid-stream).
 // Applied centrally to every model call via StreamErrorRetryProcessor, independent of model-pack
-// settings, so all modes/subagents benefit from a short wait before retrying an ECONNRESET.
+// settings, so all modes/subagents benefit from a short wait before retrying a dropped connection.
 // Delay uses exponential backoff: initialDelay * 2^retryCount, capped at maxDelay.
-const MASTRACODE_ECONNRESET_MAX_RETRIES = 2;
-const MASTRACODE_ECONNRESET_RETRY_INITIAL_DELAY_MS = 1000;
-const MASTRACODE_ECONNRESET_RETRY_MAX_DELAY_MS = 30000;
+const MASTRACODE_TRANSIENT_CONNECTION_MAX_RETRIES = 2;
+const MASTRACODE_TRANSIENT_CONNECTION_RETRY_INITIAL_DELAY_MS = 1000;
+const MASTRACODE_TRANSIENT_CONNECTION_RETRY_MAX_DELAY_MS = 30000;
 
-const ECONNRESET_MESSAGE_PATTERN = /econnreset|socket hang up/i;
+const TRANSIENT_CONNECTION_ERROR_CODES = new Set(['ECONNRESET', 'EPIPE']);
+const TRANSIENT_CONNECTION_MESSAGE_PATTERN = /econnreset|socket hang up|write epipe|other side closed/i;
 
 /**
- * Matcher for transient network-reset failures. Checks the immediate error for
- * an `ECONNRESET` code or a `socket hang up` message. Cause-chain traversal is
- * handled by `StreamErrorRetryProcessor.isRetryableStreamError`, which calls
- * each matcher at every level of the cause chain.
+ * Matcher for transient connection failures. Cause-chain traversal is handled
+ * by `StreamErrorRetryProcessor.isRetryableStreamError`, which calls each
+ * matcher at every level of the cause chain.
  */
-function isECONNRESETError(error: unknown): boolean {
+function isTransientConnectionError(error: unknown): boolean {
   if (!error) return false;
 
   const code = typeof error === 'object' && 'code' in error ? (error as { code?: unknown }).code : undefined;
-  if (typeof code === 'string' && code.toUpperCase() === 'ECONNRESET') return true;
+  if (typeof code === 'string' && TRANSIENT_CONNECTION_ERROR_CODES.has(code.toUpperCase())) return true;
 
   const message = error instanceof Error ? error.message : undefined;
-  if (typeof message === 'string' && ECONNRESET_MESSAGE_PATTERN.test(message)) return true;
+  if (typeof message === 'string' && TRANSIENT_CONNECTION_MESSAGE_PATTERN.test(message)) return true;
 
   return false;
 }
@@ -191,8 +194,10 @@ export interface MastraCodeConfig {
    * LibSQL fallback — if the injected store fails, that's a hard error.
    */
   storage?: StorageConfig | MastraCompositeStore;
+  /** Backend for an injected custom storage instance. Inferred for LibSQLStore and PostgresStore. */
+  storageBackend?: 'libsql' | 'pg';
   /** Pre-built vector store instance for recall search. Skips the default vector store creation. */
-  vectorStore?: MastraVector;
+  vector?: MastraVector;
   /** Observational memory scope. Default: auto-detected from env/config files, falls back to 'thread' */
   omScope?: 'thread' | 'resource';
   /** Path to a custom settings.json file. Default: global settings */
@@ -221,7 +226,7 @@ export interface MastraCodeConfig {
   pluginManager?: PluginManager;
   /**
    * Override the memory instance (or dynamic factory) passed to the AgentController.
-   * When provided, this replaces the default `getDynamicMemory(storage, vectorStore)` which
+   * When provided, this replaces the default `getDynamicMemory(storage, vector)` which
    * uses mastracode's built-in model gateway (Anthropic OAuth, OpenAI Codex,
    * custom providers, and models.dev fallback).
    *
@@ -243,6 +248,7 @@ export function createAuthStorage() {
   setAuthStorage(authStorage);
   setOpenAIAuthStorage(authStorage);
   setGitHubCopilotAuthStorage(authStorage);
+  setXAIAuthStorage(authStorage);
   return authStorage;
 }
 
@@ -277,6 +283,16 @@ function resolveCloudObservabilityConfig(
  *
  * See {@link bootLocalAgentController} (Case 3) and `mountAgentControllerOnMastra` (Cases 1 & 2).
  */
+function resolveInjectedStorageBackend(
+  storage: MastraCompositeStore,
+  configuredBackend?: 'libsql' | 'pg',
+): 'libsql' | 'pg' {
+  if (configuredBackend) return configuredBackend;
+  if (storage instanceof LibSQLStore) return 'libsql';
+  if (storage instanceof PostgresStore) return 'pg';
+  throw new Error('storageBackend is required when injecting a custom storage instance.');
+}
+
 export async function createMastraCodeAgentController(config?: MastraCodeConfig) {
   const cwd = config?.cwd ?? process.cwd();
   const homeDir = config?.homeDir ?? config?.initialState?.homeDir;
@@ -311,26 +327,31 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   }
 
   // Load user-entered API keys from auth.json into process.env
-  // (only sets env vars that aren't already present — env vars take precedence)
-  try {
-    const registry = PROVIDER_REGISTRY as Record<string, ProviderConfig>;
-    const providerEnvVars: Record<string, string | undefined> = {};
-    for (const [provider, cfg] of Object.entries(registry)) {
-      const envVars = cfg?.apiKeyEnvVar;
-      providerEnvVars[provider] = Array.isArray(envVars) ? envVars[0] : envVars;
+  // (only sets env vars that aren't already present — env vars take precedence).
+  // Skipped in deployed multi-tenant mode: when a per-tenant credential store
+  // provider is registered, provider keys are resolved per request and must
+  // never leak into process-global env vars.
+  if (!hasCredentialStoreProvider()) {
+    try {
+      const registry = PROVIDER_REGISTRY as Record<string, ProviderConfig>;
+      const providerEnvVars: Record<string, string | undefined> = {};
+      for (const [provider, cfg] of Object.entries(registry)) {
+        const envVars = cfg?.apiKeyEnvVar;
+        providerEnvVars[provider] = Array.isArray(envVars) ? envVars[0] : envVars;
+      }
+      providerEnvVars[MASTRA_GATEWAY_PROVIDER] ??= 'MASTRA_GATEWAY_API_KEY';
+      authStorage.loadStoredApiKeysIntoEnv(providerEnvVars);
+    } catch {
+      // Registry unavailable — load well-known provider keys so non-gateway flows still work
+      authStorage.loadStoredApiKeysIntoEnv({
+        [MASTRA_GATEWAY_PROVIDER]: 'MASTRA_GATEWAY_API_KEY',
+        anthropic: 'ANTHROPIC_API_KEY',
+        openai: 'OPENAI_API_KEY',
+        google: 'GOOGLE_GENERATIVE_AI_API_KEY',
+        cerebras: 'CEREBRAS_API_KEY',
+        deepseek: 'DEEPSEEK_API_KEY',
+      });
     }
-    providerEnvVars[MASTRA_GATEWAY_PROVIDER] ??= 'MASTRA_GATEWAY_API_KEY';
-    authStorage.loadStoredApiKeysIntoEnv(providerEnvVars);
-  } catch {
-    // Registry unavailable — load well-known provider keys so non-gateway flows still work
-    authStorage.loadStoredApiKeysIntoEnv({
-      [MASTRA_GATEWAY_PROVIDER]: 'MASTRA_GATEWAY_API_KEY',
-      anthropic: 'ANTHROPIC_API_KEY',
-      openai: 'OPENAI_API_KEY',
-      google: 'GOOGLE_GENERATIVE_AI_API_KEY',
-      cerebras: 'CEREBRAS_API_KEY',
-      deepseek: 'DEEPSEEK_API_KEY',
-    });
   }
 
   const mgApiKey = process.env['MASTRA_GATEWAY_API_KEY'] ?? storedGatewayKey;
@@ -381,7 +402,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     : ((config?.storage as StorageConfig | undefined) ??
       getStorageConfig(project.rootPath, globalSettings.storage, configDir));
   const storageResult: StorageResult = injectedStorage
-    ? { storage: injectedStorage, backend: injectedStorage instanceof LibSQLStore ? 'libsql' : 'pg' }
+    ? { storage: injectedStorage, backend: resolveInjectedStorageBackend(injectedStorage, config?.storageBackend) }
     : await createStorage(storageConfig!);
   const storageWarning = storageResult.warning;
 
@@ -483,9 +504,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
 
   // Vector store for recall search (separate DB file to avoid bloating main
   // storage). An injected instance is used as-is; with an injected storage
-  // instance and no injected vector store, recall search stays vector-less.
-  const vectorStore =
-    config?.vectorStore ?? (storageConfig ? await createVectorStore(storageConfig, storageResult.backend) : undefined);
+  // instance and no injected vector, recall search stays vector-less.
+  const vector =
+    config?.vector ?? (storageConfig ? await createVectorStore(storageConfig, storageResult.backend) : undefined);
 
   // Maintenance handle for /prune: prunes via the inner store (whose retention
   // config covers every domain, including legacy libsql observability spans)
@@ -497,10 +518,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     backend: storageResult.backend,
     retention: DEFAULT_RETENTION,
     localDbFiles: storageConfig ? resolveLocalDbFiles(storageConfig, storageResult.backend) : [],
-    closeVector: vectorStore instanceof LibSQLVector ? () => vectorStore.close() : undefined,
+    closeVector: vector instanceof LibSQLVector ? () => vector.close() : undefined,
   });
 
-  const memory = config?.memory === false ? undefined : (config?.memory ?? getDynamicMemory(storage, vectorStore));
+  const memory = config?.memory === false ? undefined : (config?.memory ?? getDynamicMemory(storage, vector));
 
   // MCP
   const mcpManager = config?.disableMcp ? undefined : createMcpManager(project.rootPath, configDir, config?.mcpServers);
@@ -648,12 +669,12 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         matchers: [
           { match: isBadRequestError, maxRetries: 1, delayMs: 2000 },
           {
-            match: isECONNRESETError,
-            maxRetries: MASTRACODE_ECONNRESET_MAX_RETRIES,
+            match: isTransientConnectionError,
+            maxRetries: MASTRACODE_TRANSIENT_CONNECTION_MAX_RETRIES,
             delayMs: ({ retryCount }) =>
               Math.min(
-                MASTRACODE_ECONNRESET_RETRY_INITIAL_DELAY_MS * Math.pow(2, retryCount),
-                MASTRACODE_ECONNRESET_RETRY_MAX_DELAY_MS,
+                MASTRACODE_TRANSIENT_CONNECTION_RETRY_INITIAL_DELAY_MS * Math.pow(2, retryCount),
+                MASTRACODE_TRANSIENT_CONNECTION_RETRY_MAX_DELAY_MS,
               ),
           },
         ],
