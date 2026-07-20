@@ -260,7 +260,7 @@ Searches for similar vectors with optional metadata filtering.
     isOptional: true,
     defaultValue: 'field',
     description:
-      "`'field'` (default) projects the managed `metadata`/`document` fields. `'document'` returns the full source document as `metadata` — use for bring-your-own operational collections whose documents have their own shape. Note: `'document'` mode includes the full document (including the embedding) in `metadata`.",
+      "`'field'` (default) projects the managed `metadata`/`document` fields. `'document'` returns the full source document as `metadata` — use for bring-your-own operational collections whose documents have their own shape. The embedding field is omitted from `metadata` by default (to avoid payload bloat); set `includeVector: true` to retain it in `metadata` and also expose it as a top-level `vector`.",
   },
 ]}
 />
@@ -269,9 +269,14 @@ Searches for similar vectors with optional metadata filtering.
 
 Provisions an Atlas Search (BM25/full-text) index on the collection backing an index and records it as the text-search index that `textQuery()` and `hybridQuery()` will target.
 
-**Relationship with the auto-created dynamic index:** `createIndex()` already provisions a _dynamic_ full-text index named `${collectionName}_search_index` (covering all string fields). `createSearchIndex()` is therefore only needed when you want a **field-restricted** mapping or a **custom index name**:
+**Managed vs. bring-your-own collections:**
 
-- When `fields` is provided **without** an explicit `searchIndexName`, the field-mapped index is created under a **distinct** default name (`${collectionName}_search_fields_index`) so it does not collide with — and get silently ignored by — the auto-created dynamic index. This distinct index is persisted as the text-search index, so `textQuery()`/`hybridQuery()` use the restricted mapping automatically.
+- For a **managed** index (created without `collectionName`), `createIndex()` already provisions a _dynamic_ full-text index named `${collectionName}_search_index` (covering all string fields). `createSearchIndex()` is therefore only needed when you want a **field-restricted** mapping or a **custom index name**.
+- For a **bring-your-own** index (created with `collectionName`), `createIndex()` does **not** auto-create any full-text index — enabling `textQuery()`/`hybridQuery()` on a caller-owned operational collection is **opt-in**. Call `createSearchIndex()` explicitly to provision the (billable) text index; until you do, `textQuery()`/`hybridQuery()` throw a clear error rather than querying a non-existent index.
+
+Naming:
+
+- When `fields` is provided **without** an explicit `searchIndexName`, the field-mapped index is created under a **distinct** default name (`${collectionName}_search_fields_index`) so it does not collide with — and get silently ignored by — a managed collection's auto-created dynamic index. This distinct index is persisted as the text-search index, so `textQuery()`/`hybridQuery()` use the restricted mapping automatically.
 - When `searchIndexName` is provided, that exact name is used and persisted. `textQuery()`/`hybridQuery()` resolve the persisted name automatically; you can also override the name per call via their `searchIndexName` / `textSearchIndexName` parameters.
 
 <PropertiesTable
@@ -370,7 +375,7 @@ const results = await store.textQuery({
 
 ### `hybridQuery()`
 
-Runs a hybrid search that fuses vector similarity and full-text results using MongoDB's server-side `$rankFusion` (requires MongoDB >= 8.1). The search index must be created with `createSearchIndex()` first.
+Runs a hybrid search that fuses vector similarity and full-text results using MongoDB's server-side `$rankFusion` (requires MongoDB >= 8.1). A full-text search index must exist: it is auto-created for managed indexes, but for a bring-your-own collection you must call `createSearchIndex()` first (opt-in).
 
 <PropertiesTable
   content={[
@@ -480,7 +485,7 @@ interface IndexStats {
 Deletes a vector index. Behavior depends on how the index was created:
 
 - **Managed index** (created without `collectionName`): drops the entire collection and all its data.
-- **Bring-your-own index** (created with `collectionName`): drops only the Atlas vectorSearch index. The caller's operational collection and its documents are **preserved** — this store never drops a collection it did not create.
+- **Bring-your-own index** (created with `collectionName`): drops the Atlas vectorSearch index **and**, if one was provisioned via `createSearchIndex()`, the companion full-text search index. The caller's operational collection and its documents are **preserved** — this store never drops a collection it did not create.
 
 The BYO classification is recorded durably when the index is created, so it is applied correctly even by a different process (e.g. an index created by a setup job and later deleted by a long-lived service). Always pass the **logical index name** (the `indexName` used at `createIndex`), not the physical collection name.
 
@@ -663,6 +668,9 @@ const hits = await store.query({
 
 // hits[0].metadata now contains all fields from the source document
 console.log(hits[0].metadata.amount, hits[0].metadata.customField)
+
+// Full-text / hybrid search on a BYO collection is opt-in: provision the text index first.
+await store.createSearchIndex({ indexName: 'precedents', fields: ['note'] })
 ```
 
 **Important notes:**
@@ -670,7 +678,9 @@ console.log(hits[0].metadata.amount, hits[0].metadata.customField)
 - The collection must already exist and contain documents with an `embedding` field (or the custom `embeddingFieldPath` you configured)
 - The collection is never created or dropped when using `collectionName`
 - Use `metadataMode: 'document'` when querying to retrieve the full source document as `metadata`
-- The full document, including the embedding vector, is returned in `metadata` when using `'document'` mode
+- In `'document'` mode the embedding is omitted from `metadata` by default; pass `includeVector: true` to retain it (and also expose it as a top-level `vector`)
+- Full-text and hybrid search on a BYO collection are **opt-in**: no full-text index is auto-created, so call `createSearchIndex()` before `textQuery()`/`hybridQuery()`
+- `deleteIndex()` on a BYO index drops the vector index (and the text index if one was created) but **preserves** the collection and its documents
 
 ## Best practices
 

@@ -6,6 +6,14 @@ MongoDBVector now supports full-text and hybrid retrieval. `createSearchIndex` p
 
 A custom or field-restricted text-search index name is now persisted and resolved automatically by `textQuery`/`hybridQuery` (with a per-call override), so a `searchIndexName` passed to `createSearchIndex` is reachable; when `fields` is supplied without an explicit name, the field-mapped index is created under a distinct name so its mapping is not shadowed by the auto-created dynamic index. `hybridQuery`'s vector branch now reuses the same pushdown-vs-fallback filter logic as `query`, so metadata filters on undeclared fields no longer hard-error on bring-your-own collections.
 
+Hardening for bring-your-own (BYO) operational collections:
+
+- Full-text/hybrid search on a BYO collection is now **opt-in**: `createIndex` no longer auto-creates a billable dynamic full-text index on a caller-owned collection. Call `createSearchIndex` to enable `textQuery`/`hybridQuery` (which otherwise throw a clear error); managed collections keep auto-creating it for back-compat.
+- `deleteIndex` on a BYO index now also drops the companion full-text search index (when one was provisioned), not just the vector index, so it no longer leaks an untracked index onto the caller's collection. The collection and its documents are still preserved.
+- `createIndex` now throws a clear error when a logical index is retargeted to a different collection than the one already registered, instead of silently orphaning the previous collection's index; idempotent re-creation against the same collection still succeeds.
+- `metadataMode: 'document'` now omits the (large) embedding field from `metadata` by default; set `includeVector: true` to retain it and also expose it as a top-level `vector`. A real source field named `score` is still preserved.
+- The `$rankFusion` support probe (`buildInfo`) is memoized per instance, and `textQuery` guards its score consistently with `hybridQuery`.
+
 **Example**
 ```ts
 await store.createSearchIndex({ indexName: 'precedents', fields: ['note'] });
