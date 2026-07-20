@@ -34,7 +34,7 @@ const SELECT_CLASS =
  * Model packs. Mirrors the TUI's `/models-pack` command: a pack assigns a model
  * to each mode (build / plan / fast). Built-in packs are gated by provider
  * access; custom packs are user-defined. Activating a pack seeds the current
- * session's per-mode models — so it needs the active project's resourceId.
+ * session's per-mode models — so it needs the active factory's resourceId.
  */
 export function ModelPacksSection({
   resourceId,
@@ -59,7 +59,7 @@ export function ModelPacksSection({
 
   const activate = async (id: string) => {
     if (!resourceId) {
-      setDraftError('Open a project first to activate a pack.');
+      setDraftError('Open a factory first to activate a pack.');
       return;
     }
     setDraftError(null);
@@ -124,7 +124,7 @@ export function ModelPacksSection({
 
       {!resourceId && (
         <Txt as="p" variant="ui-sm" className="text-icon3">
-          Open a project to activate a pack on its session.
+          Open a factory to activate a pack on its session.
         </Txt>
       )}
       {error && (

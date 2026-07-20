@@ -1,5 +1,72 @@
 # @mastra/core
 
+## 1.52.0-alpha.7
+
+### Patch Changes
+
+- Ensured that canceled workflow results correctly format and deduplicate their payloads before returning. ([#19225](https://github.com/mastra-ai/mastra/pull/19225))
+
+- Fixed unbounded memory growth during long goal runs. A goal run chains many agent turns inside one stream, and the stream previously kept every chunk, step, tool result, and text delta of the entire run in memory (and in suspend snapshots). Goal evaluations now carry the goal gate's explicit `shouldContinue` decision, and the stream clears its run-lifetime buffers at each continuing evaluation — the judged turn's messages are already persisted by then. Terminal evaluations (completion, waiting for user, judge failure, budget exhaustion) do not truncate, so the final turn is preserved. ([#19663](https://github.com/mastra-ai/mastra/pull/19663))
+
+  **Behavior change for goal runs:** run-end results now cover the final iteration of the run (everything after the last continuing evaluation) instead of every turn. Streamed chunks, token usage totals, and persisted messages are unaffected — only the aggregates resolved at the end of the run change. Agents without a `goal` config are unaffected.
+
+  ```ts
+  const agent = new Agent({
+    name: 'coder',
+    model: 'openai/gpt-5.5',
+    goal: { judge: 'openai/gpt-5-mini' },
+  });
+
+  const stream = await agent.stream('Implement feature X');
+  const output = await stream.getFullOutput();
+
+  // Before: output.text, output.steps, output.toolCalls, and output.toolResults
+  // aggregated every turn of the goal run (e.g. 50 turns concatenated).
+
+  // After: they cover the final iteration — the turn(s) judged by the terminal
+  // evaluation, i.e. the goal's final answer. Use output.messages (or memory)
+  // for the full conversation; output.totalUsage still spans the entire run.
+  ```
+
+- Fixed composite storage initialization so transient failures can retry without restarting the process. ([#19697](https://github.com/mastra-ai/mastra/pull/19697))
+
+## 1.52.0-alpha.6
+
+### Patch Changes
+
+- Fixed `new Agent({ durable: true })` to actually use the durable execution path when used standalone (without being registered on a `Mastra` instance). ([#19632](https://github.com/mastra-ai/mastra/pull/19632))
+
+  Previously, `durable: true` only took effect when the agent was attached to a `Mastra`. Constructing an agent with `durable: true` and calling `agent.stream(...)` directly silently ran through the non-durable path.
+
+  Now `stream`, `generate`, `resumeStream`, `resumeGenerate`, `approveToolCall`, `declineToolCall`, `streamUntilIdle`, `resume`, `recover`, `listActiveRuns`, `recoverActiveRuns`, `observe`, and `prepare` all run through the durable execution path on a standalone `new Agent({ durable: true })`.
+
+  ```ts
+  const agent = new Agent({
+    id: 'my-agent',
+    name: 'My Agent',
+    instructions: 'You are a helpful assistant',
+    model,
+    durable: true,
+  });
+
+  // Now runs through the durable execution path.
+  await agent.stream('hi');
+  ```
+
+- Fixed native Agent goals continuing to invoke the judge after an unretried API error. ([#19662](https://github.com/mastra-ai/mastra/pull/19662))
+
+- Fixed dataset item writes to reject circular payloads with a clear validation error before storage, instead of failing with database-specific serialization errors. Silently lossy JSON values (nested `undefined`, functions, symbols, bigints, and non-finite numbers) and non-plain objects (`Date`, `Map`, `Set`, class instances, and custom `toJSON()` objects) are now also rejected with the offending path, so identical `externalId` retries can no longer conflict with the persisted payload. Added a public `safeStringify` utility for serializing values that may contain circular references. ([#19603](https://github.com/mastra-ai/mastra/pull/19603))
+
+  ```ts
+  import { safeStringify, ensureSerializable } from '@mastra/core/utils/safe-stringify';
+
+  const value: Record<string, unknown> = { prompt: 'hello' };
+  value.self = value;
+
+  safeStringify(value); // '{"prompt":"hello","self":"[Circular]"}'
+  ensureSerializable(value); // { prompt: 'hello', self: '[Circular]' }
+  ```
+
 ## 1.52.0-alpha.5
 
 ### Minor Changes
@@ -1519,9 +1586,7 @@
       memory: { messages: { maxAge: '30d' }, threads: { maxAge: '90d' } },
       observability: { spans: { maxAge: '7d' } },
     },
-    domains: {
-      /* ... */
-    },
+    domains: {/* ... */},
   });
 
   // Wire this to your own cron — Mastra never runs it for you.
@@ -2150,9 +2215,7 @@
       memory: { messages: { maxAge: '30d' }, threads: { maxAge: '90d' } },
       observability: { spans: { maxAge: '7d' } },
     },
-    domains: {
-      /* ... */
-    },
+    domains: {/* ... */},
   });
 
   // Wire this to your own cron — Mastra never runs it for you.
@@ -18784,9 +18847,7 @@ Bearer <token>` header. The token comes from the new
   ```ts
   import { Mastra } from '@mastra/core';
 
-  const mastra = new Mastra({
-    /* ... */
-  });
+  const mastra = new Mastra({/* ... */});
 
   const dataset = await mastra.datasets.create({ name: 'my-eval-set' });
   await dataset.addItems([{ input: { query: 'What is 2+2?' }, groundTruth: { answer: '4' } }]);
@@ -19015,9 +19076,7 @@ Bearer <token>` header. The token comes from the new
   ```ts
   import { Mastra } from '@mastra/core';
 
-  const mastra = new Mastra({
-    /* ... */
-  });
+  const mastra = new Mastra({/* ... */});
 
   const dataset = await mastra.datasets.create({ name: 'my-eval-set' });
   await dataset.addItems([{ input: { query: 'What is 2+2?' }, groundTruth: { answer: '4' } }]);
@@ -19982,9 +20041,7 @@ Bearer <token>` header. The token comes from the new
   const agent = new Agent({
     name: 'my-agent',
     inputProcessors: [toolSearch],
-    tools: {
-      /* always-available tools */
-    },
+    tools: {/* always-available tools */},
   });
   ```
 
@@ -20214,9 +20271,7 @@ Bearer <token>` header. The token comes from the new
   const agent = new Agent({
     name: 'my-agent',
     inputProcessors: [toolSearch],
-    tools: {
-      /* always-available tools */
-    },
+    tools: {/* always-available tools */},
   });
   ```
 

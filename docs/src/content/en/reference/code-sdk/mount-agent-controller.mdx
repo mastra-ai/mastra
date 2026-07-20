@@ -36,9 +36,7 @@ Pass an existing `mastra` to mount the controller onto a Mastra instance that al
 import { Mastra } from '@mastra/core/mastra'
 import { mountAgentControllerOnMastra } from '@mastra/code-sdk'
 
-const mastra = new Mastra({
-  /* ... */
-})
+const mastra = new Mastra({/* ... */})
 
 const { controller } = await mountAgentControllerOnMastra({ mastra })
 ```

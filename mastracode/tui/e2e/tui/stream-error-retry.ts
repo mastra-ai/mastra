@@ -27,10 +27,7 @@ export const streamErrorRetryScenario = {
     patches.setProperty(globalThis, 'fetch', async (input, init) => {
       if (!failedOnce && requestUrl(input).includes('/chat/completions')) {
         failedOnce = true;
-        return new Response(
-          'data: {"type":"error","sequence_number":1,"error":{"type":"server_error","code":"internal_error","message":"An internal error occurred."}}\n\n',
-          { status: 200, headers: { 'content-type': 'text/event-stream' } },
-        );
+        throw Object.assign(new Error('Cannot connect to API: write EPIPE'), { code: 'EPIPE' });
       }
       return originalFetch(input, init);
     });

@@ -22,7 +22,7 @@ import {
   WorktreeError,
 } from './sandbox';
 import type { RepoMaterializeInfo } from './sandbox';
-import type { GithubProjectSandboxRow, GithubStorage } from './storage/base';
+import type { SourceControlProjectSandbox, SourceControlStorageHandle } from '../storage/domains/source-control/base';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { __resetRuntimeConfigForTests, seedRuntimeConfig } from '../runtime-config';
 
@@ -80,10 +80,10 @@ class FakeSandbox implements MaterializationSandbox {
   }
 }
 
-function makeRow(overrides: Partial<GithubProjectSandboxRow> = {}): GithubProjectSandboxRow {
+function makeRow(overrides: Partial<SourceControlProjectSandbox> = {}): SourceControlProjectSandbox {
   return {
     id: 'sbrow-1',
-    githubProjectId: 'proj-1',
+    projectId: 'proj-1',
     userId: 'user-1',
     sandboxId: null,
     sandboxWorkdir: '/workspace/hello',
@@ -101,23 +101,23 @@ const storage = {
   setSandboxId: vi.fn(async (_id: string, sandboxId: string) => {
     dbUpdates.push({ sandboxId });
   }),
-  clearSandboxBinding: vi.fn(async () => {
+  clearBinding: vi.fn(async () => {
     dbUpdates.push({ sandboxId: null });
   }),
-  markSandboxMaterialized: vi.fn(async () => {
+  markMaterialized: vi.fn(async () => {
     dbUpdates.push({ materializedAt: new Date() });
   }),
-} as unknown as GithubStorage;
+} as unknown as SourceControlStorageHandle['sandboxes'];
 
 function ensureProjectSandbox(
-  row: GithubProjectSandboxRow,
+  row: SourceControlProjectSandbox,
   onProgress?: Parameters<typeof ensureProjectSandboxWithStorage>[2],
 ) {
   return ensureProjectSandboxWithStorage(row, storage, onProgress);
 }
 
 function materializeRepo(
-  row: GithubProjectSandboxRow,
+  row: SourceControlProjectSandbox,
   repoInfo: RepoMaterializeInfo,
   sandbox: MaterializationSandbox,
   token: string,

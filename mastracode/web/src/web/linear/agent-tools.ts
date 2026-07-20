@@ -59,7 +59,7 @@ async function resolveOrgId(resourceId: string): Promise<string | null> {
   let orgId: string | null;
   try {
     const github = getSeededGithubIntegration();
-    const project = github ? await github.storageDomain.getProjectById(resourceId) : null;
+    const project = github ? await github.sourceControlStorage.projects.getById(resourceId) : null;
     orgId = project?.orgId ?? null;
   } catch {
     // Transient database failure: skip the tools for this request but don't
@@ -70,10 +70,10 @@ async function resolveOrgId(resourceId: string): Promise<string | null> {
   return orgId;
 }
 
-async function checkLinearConnection(orgId: string, linear: LinearIntegration): Promise<ConnectionCheck> {
+async function checkLinearConnection(orgId: string): Promise<ConnectionCheck> {
   const cached = connectionCheckByOrg.get(orgId);
   if (cached && Date.now() - cached.checkedAt < CONNECTION_TTL_MS) return cached;
-  const connection = await loadLinearConnection(orgId, linear);
+  const connection = await loadLinearConnection(orgId);
   const check: ConnectionCheck = {
     connected: connection !== null,
     canComment: connection !== null && canPostLinearComments(connection),
@@ -107,9 +107,9 @@ function createLinearGetIssueTool(linear: LinearIntegration, orgId: string) {
       issue: z.string().min(1).describe('The Linear issue identifier (e.g. "ENG-123") or issue UUID.'),
     }),
     execute: async ({ issue }: { issue: string }) => {
-      const connection = await loadLinearConnection(orgId, linear);
+      const connection = await loadLinearConnection(orgId);
       if (!connection) {
-        return { error: 'Linear is not connected for this project. Connect Linear in Settings to fetch issues.' };
+        return { error: 'Linear is not connected for this repository. Connect Linear in Settings to fetch issues.' };
       }
       try {
         const accessToken = await getFreshLinearAccessToken(linear, connection);
@@ -138,9 +138,9 @@ function createLinearCommentTool(linear: LinearIntegration, orgId: string) {
       body: z.string().min(1).describe('The comment body, as Linear-flavored markdown.'),
     }),
     execute: async ({ issue, body }: { issue: string; body: string }) => {
-      const connection = await loadLinearConnection(orgId, linear);
+      const connection = await loadLinearConnection(orgId);
       if (!connection) {
-        return { error: 'Linear is not connected for this project. Connect Linear in Settings to post comments.' };
+        return { error: 'Linear is not connected for this repository. Connect Linear in Settings to post comments.' };
       }
       if (!canPostLinearComments(connection)) {
         return {
@@ -184,7 +184,7 @@ export async function buildLinearAgentTools({
 
   const orgId = await resolveOrgId(resourceId);
   if (!orgId) return {};
-  const check = await checkLinearConnection(orgId, linear);
+  const check = await checkLinearConnection(orgId);
   if (!check.connected) return {};
 
   return {

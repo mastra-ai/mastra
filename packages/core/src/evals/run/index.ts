@@ -49,28 +49,27 @@ export type EvalTurn = {
 };
 
 type RunEvalsDataItem<TTarget = unknown> = TTarget extends Agent
-  ?
-      | (RunEvalsDataItemBase & { input: AgentInputType; inputs?: never; turns?: never })
-      | (RunEvalsDataItemBase & {
-          input?: AgentInputType;
-          /**
-           * Multi-turn inputs. When provided, each entry is sent sequentially to the agent
-           * on the same thread. Scorers see the accumulated output from all turns.
-           * Only supported for Agent targets (not Workflows).
-           */
-          inputs: AgentInputType[];
-          turns?: never;
-        })
-      | (RunEvalsDataItemBase & {
-          input?: never;
-          inputs?: never;
-          /**
-           * Multi-turn conversation with per-turn assertions. Each turn is sent sequentially
-           * on the same thread; its `gates`/`scorers` evaluate only that turn's output.
-           * Only supported for Agent targets (not Workflows).
-           */
-          turns: EvalTurn[];
-        })
+  ? | (RunEvalsDataItemBase & { input: AgentInputType; inputs?: never; turns?: never })
+    | (RunEvalsDataItemBase & {
+        input?: AgentInputType;
+        /**
+         * Multi-turn inputs. When provided, each entry is sent sequentially to the agent
+         * on the same thread. Scorers see the accumulated output from all turns.
+         * Only supported for Agent targets (not Workflows).
+         */
+        inputs: AgentInputType[];
+        turns?: never;
+      })
+    | (RunEvalsDataItemBase & {
+        input?: never;
+        inputs?: never;
+        /**
+         * Multi-turn conversation with per-turn assertions. Each turn is sent sequentially
+         * on the same thread; its `gates`/`scorers` evaluate only that turn's output.
+         * Only supported for Agent targets (not Workflows).
+         */
+        turns: EvalTurn[];
+      })
   : TTarget extends Workflow<any, any>
     ? RunEvalsDataItemBase & { input: any; inputs?: never; turns?: never }
     : RunEvalsDataItemBase & { input: unknown; inputs?: never; turns?: never };

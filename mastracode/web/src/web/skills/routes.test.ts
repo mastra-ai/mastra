@@ -9,7 +9,7 @@ vi.mock('../auth', () => ({
 }));
 
 import { webAuthTenant } from '../auth';
-import { GithubStorageInMemory } from '../github/storage/inmemory';
+import { SourceControlStorageInMemory } from '../storage/domains/source-control/inmemory';
 import { mountApiRoutes } from '../test-utils';
 import { buildSkillRoutes } from './routes';
 
@@ -289,7 +289,7 @@ describe('workspace skill invocation route', () => {
 
   it('enforces authenticated tenant worktree ownership before session lookup', async () => {
     vi.mocked(webAuthTenant).mockReturnValue({ userId: 'user-1', orgId: 'org-1' });
-    const githubStorage = new GithubStorageInMemory();
+    const sourceControlStorage = new SourceControlStorageInMemory();
     const sendMessage = vi.fn(async () => {});
     const getSessionByResource = vi.fn(async () => ({
       getWorkspace: () => ({
@@ -303,7 +303,7 @@ describe('workspace skill invocation route', () => {
       buildSkillRoutes({
         controllerId: 'code',
         controller: { getSessionByResource } as never,
-        githubStorage,
+        sourceControlStorage,
       }),
     );
 
@@ -317,7 +317,7 @@ describe('workspace skill invocation route', () => {
       error: 'invalid_request',
       message: 'Invalid skill invocation request.',
     });
-    expect(githubStorage.worktrees).toHaveLength(0);
+    expect(sourceControlStorage.worktreesRows).toHaveLength(0);
 
     const projectId = '00000000-0000-4000-8000-000000000001';
     const denied = await invoke(app, {
@@ -332,11 +332,11 @@ describe('workspace skill invocation route', () => {
     });
     expect(getSessionByResource).not.toHaveBeenCalled();
 
-    githubStorage.worktrees.push({
+    sourceControlStorage.worktreesRows.push({
       id: 'worktree-1',
       orgId: 'org-1',
       userId: 'user-1',
-      githubProjectId: projectId,
+      projectId,
       branch: 'review-42',
       baseBranch: 'main',
       worktreePath: '/worktrees/review-42',

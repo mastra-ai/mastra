@@ -22,7 +22,8 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 
 import type { StateSigner } from './state-signing.js';
-import type { FactoryStorageDomain } from './storage/domain.js';
+import type { IntegrationStorageHandle } from './storage/domains/integrations/base.js';
+import type { SourceControlStorageHandle } from './storage/domains/source-control/base.js';
 
 /**
  * Input for the system's issue-triage hook: a webhook (or manual Intake
@@ -37,7 +38,7 @@ export interface IssueTriageRunInput {
   labels: string[];
   sender?: string;
   installationId: number;
-  /** Active project resource id used by chat thread queries; projectPath remains the worktree scope. */
+  /** Active Factory resource id used by chat thread queries; projectPath remains the worktree scope. */
   resourceId?: string;
   projectPath?: string;
   branch?: string;
@@ -75,6 +76,11 @@ export interface IntegrationContext {
    * every integration's OAuth flow signs and verifies with the same secret.
    */
   stateSigner: StateSigner;
+  /** Persistence handles pre-scoped to this integration's stable id. */
+  storage: {
+    generic: IntegrationStorageHandle;
+    sourceControl: SourceControlStorageHandle;
+  };
   /** System hooks integrations may invoke. */
   hooks?: IntegrationHooks;
 }
@@ -86,13 +92,6 @@ export interface IntegrationContext {
 export interface FactoryIntegration {
   /** Stable identifier: `'github'`, `'linear'`, custom ids for third parties. */
   readonly id: string;
-  /**
-   * Storage domain the factory registers into the {@link FactoryStore}
-   * alongside the built-ins. Optional: integrations with no persistence omit
-   * it. `init()` (DDL) runs through the store's coalesced, retry-safe boot
-   * path; a failure marks the integration not-ready without aborting boot.
-   */
-  readonly storageDomain?: FactoryStorageDomain;
   /**
    * The integration's full HTTP surface (status, OAuth, webhooks, feature
    * routes), as Mastra `apiRoutes`. Called once at boot; the factory folds

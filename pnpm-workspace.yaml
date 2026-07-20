@@ -114,6 +114,10 @@ minimumReleaseAgeExclude:
   - '@ai-sdk/openai@4.0.0'
   - '@ai-sdk/anthropic@4.0.0'
   - '@ai-sdk/google@4.0.0'
+  # Renovate security update: shell-quote@1.10.0
+  - shell-quote@1.10.0
+  # Renovate security update: tmp@0.2.7
+  - tmp@0.2.7
 trustPolicyExclude:
   # Security fix for GHSA middleware-based route protection bypass (CVE).
   # 3.47.4 is published with provenance attestation rather than trusted publisher,
@@ -134,7 +138,7 @@ overrides:
   # Capped below 2: cookie@2 renamed parse/serialize to parseCookie/stringifyCookie,
   # which breaks react-router's build when renovate's pnpm dedupe floats it up.
   cookie: '>=1.1.1 <2'
-  tmp: '>=0.2.6'
+  tmp: '>=0.2.7'
   jsondiffpatch: '>=0.7.3'
   ssri: '>=6.0.2'
   jws: ^4.0.1
@@ -201,8 +205,8 @@ overrides:
   launch-editor@<2.14.1: 2.14.1
   mdast-util-to-hast@>=13.0.0 <13.2.1: 13.2.1
   websocket-driver@<0.7.5: 0.7.5
-  '@babel/core@>=7.0.0 <7.29.6': 7.29.7
-  '@babel/plugin-transform-modules-systemjs@>=7.12.0 <7.29.4': 7.29.7
+  '@babel/core@>=7.0.0 <7.29.6': 8.0.1
+  '@babel/plugin-transform-modules-systemjs@>=7.12.0 <7.29.4': 8.0.1
   dompurify@>=3.0.0 <3.4.11: 3.4.11
   '@tootallnate/once@<3.0.1': ^3.0.1
   '@codemirror/lang-jinja': ^6.0.1
@@ -272,7 +276,7 @@ overrides:
   'safe-regex-test': 'npm:@socketregistry/safe-regex-test@^1'
   'safer-buffer': 'npm:@socketregistry/safer-buffer@^1'
   'set-function-length': 'npm:@socketregistry/set-function-length@^1'
-  'shell-quote': 'npm:shell-quote@^1'
+  'shell-quote': 'npm:shell-quote@^1.10.0'
   'side-channel': 'npm:@socketregistry/side-channel@^1'
   'string.prototype.matchall': 'npm:@socketregistry/string.prototype.matchall@^1'
   'string.prototype.repeat': 'npm:@socketregistry/string.prototype.repeat@^1'
