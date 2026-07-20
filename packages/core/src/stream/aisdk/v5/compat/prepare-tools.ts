@@ -14,7 +14,7 @@ import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '../../../.
 import { isProviderDefinedTool } from '../../../../tools/toolchecks';
 
 /** Model specification version for tool type conversion */
-export type ModelSpecVersion = 'v2' | 'v3';
+export type ModelSpecVersion = 'v2' | 'v3' | 'v4';
 
 /** Combined tool types for both V2 and V3 */
 type PreparedTool =
@@ -78,7 +78,7 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
   tools: TOOLS | undefined;
   toolChoice: ToolChoice<TOOLS> | undefined;
   activeTools: Array<keyof TOOLS> | undefined;
-  /** Target model version: 'v2' for AI SDK v5, 'v3' for AI SDK v6. Defaults to 'v2'. */
+  /** Target model version: 'v2' for AI SDK v5, 'v3' for AI SDK v6, 'v4' for AI SDK v7. Defaults to 'v2'. */
   targetVersion?: ModelSpecVersion;
 }): {
   tools: PreparedTool[] | undefined;
@@ -108,8 +108,8 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
 
   // Provider tool type differs between versions:
   // - V2 (AI SDK v5): 'provider-defined'
-  // - V3 (AI SDK v6): 'provider'
-  const providerToolType = targetVersion === 'v3' ? 'provider' : 'provider-defined';
+  // - V3/V4 (AI SDK v6/v7): 'provider'
+  const providerToolType = targetVersion === 'v2' ? 'provider-defined' : 'provider';
 
   return {
     tools: filteredTools

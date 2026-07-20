@@ -287,29 +287,18 @@ export function aiV5ModelMessageToV2PromptMessage(modelMessage: AIV5Type.ModelMe
 }
 
 /**
- * Convert a V2 (AI SDK v5 / spec `v2`) prompt into the shape AI SDK v6
- * (spec `v3`) providers expect, by translating tool-result `media` parts into
- * the `image-data`/`file-data` content parts that v6 providers consume.
- *
- * This is a single-responsibility conversion meant to be chained after the
- * base v5 prompt build: `aiV6.llmPrompt()` = `aiV5.llmPrompt()` -> this.
+ * Convert tool-result `media` parts in a V2 (AI SDK v5 / spec `v2`) prompt
+ * using a caller-provided target content-part shape.
  *
  * Mastra's `toModelOutput` and the vendored AI SDK v5 use `{ type: 'media' }`
- * as the authored multimodal tool-result content type. AI SDK v6 added a
- * `mapToolResultOutput` step that converts `media` -> `image-data` (for
- * `image/*` media types) or `file-data` (everything else) before the prompt
- * reaches the provider, and v6 providers (e.g. `@ai-sdk/anthropic@3`) only
- * recognize `image-data`/`file-data` — they have no `media` case. The vendored
- * v5 converter does not run that translation, so a v5-built prompt handed to a
- * v6 provider drops the raw `media` part (image tool results arrive empty).
- *
- * This MUST only run for v6 (`v3`) providers: v5 providers (spec `v2`) accept
- * `media` and have no `image-data`/`file-data` case, so translating for them
- * would re-break v5.
- *
- * See: https://github.com/mastra-ai/mastra/issues/17876
+ * as the authored multimodal tool-result content type. Newer AI SDK provider
+ * specs use different content-part shapes, so callers provide the target
+ * conversion for their provider spec.
  */
-export function aiV5PromptToAIV6Prompt(prompt: LanguageModelV2Prompt): LanguageModelV2Prompt {
+function convertToolResultContent(
+  prompt: LanguageModelV2Prompt,
+  convertMediaPart: (contentPart: Record<string, unknown>, mediaType: string) => unknown,
+): LanguageModelV2Prompt {
   return prompt.map(message => {
     if (message.role !== `tool`) return message;
 
@@ -326,9 +315,7 @@ export function aiV5PromptToAIV6Prompt(prompt: LanguageModelV2Prompt): LanguageM
         if (contentPart.type !== `media` || typeof contentPart.data !== `string`) return item;
         outputModified = true;
         const mediaType = typeof contentPart.mediaType === `string` ? contentPart.mediaType : ``;
-        return mediaType.startsWith(`image/`)
-          ? { type: `image-data`, data: contentPart.data, mediaType }
-          : { type: `file-data`, data: contentPart.data, mediaType };
+        return convertMediaPart(contentPart, mediaType);
       });
 
       if (!outputModified) return part;
@@ -338,4 +325,27 @@ export function aiV5PromptToAIV6Prompt(prompt: LanguageModelV2Prompt): LanguageM
 
     return messageModified ? { ...message, content } : message;
   }) as LanguageModelV2Prompt;
+}
+
+/**
+ * Convert v5-authored media tool results to the `image-data`/`file-data` shape
+ * expected only by AI SDK v6 (`v3`) providers. V5 providers accept `media`, and
+ * V7 providers expect `file` parts with tagged data instead.
+ *
+ * See: https://github.com/mastra-ai/mastra/issues/17876
+ */
+export function aiV5PromptToAIV6Prompt(prompt: LanguageModelV2Prompt): LanguageModelV2Prompt {
+  return convertToolResultContent(prompt, (contentPart, mediaType) =>
+    mediaType.startsWith(`image/`)
+      ? { type: `image-data`, data: contentPart.data, mediaType }
+      : { type: `file-data`, data: contentPart.data, mediaType },
+  );
+}
+
+export function aiV5PromptToAIV7Prompt(prompt: LanguageModelV2Prompt): LanguageModelV2Prompt {
+  return convertToolResultContent(prompt, (contentPart, mediaType) => ({
+    type: `file`,
+    data: { type: `data`, data: contentPart.data },
+    mediaType,
+  }));
 }
