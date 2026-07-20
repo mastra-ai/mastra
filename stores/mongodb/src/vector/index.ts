@@ -419,6 +419,33 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       collection = await this.getCollection(targetCollection);
 
       const indexNameInternal = targetSearchIndex;
+      const defaultTextSearchIndex = `${targetCollection}_search_index`;
+
+      // Persist the logical-index → target mapping BEFORE provisioning any search
+      // index. The registry entry is the durable record that classifies this index
+      // as bring-your-own; if provisioning fails after this point, a later
+      // fresh-process deleteIndex still sees isByo:true and preserves the caller's
+      // collection (dropping only the search index). Persisting AFTER provisioning
+      // would leave a window where a created search index has no registry entry, so
+      // deleteIndex would misclassify a BYO index as managed and drop the collection.
+      // Preserve any custom textSearchIndexName already recorded by a prior
+      // createSearchIndex call; only set the default when none exists yet.
+      const existingEntry = await this.readRegistryEntry(indexName);
+      const textSearchIndexName = existingEntry?.textSearchIndexName ?? defaultTextSearchIndex;
+      await this.writeRegistryEntry(indexName, {
+        collectionName: targetCollection,
+        searchIndexName: targetSearchIndex,
+        isByo,
+        textSearchIndexName,
+        dimension,
+        metric,
+      });
+      this.indexTargets.set(indexName, {
+        collectionName: targetCollection,
+        searchIndexName: targetSearchIndex,
+        isByo,
+        textSearchIndexName,
+      });
 
       const embeddingField = this.embeddingFieldName;
       const numDimensions = dimension;
@@ -471,15 +498,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         this.declaredFilterPaths.set(indexName, new Set([this.documentFieldName, ...declaredMetadataPaths]));
       }
 
-      const target: IndexTarget = {
-        collectionName: targetCollection,
-        searchIndexName: targetSearchIndex,
-        isByo,
-      };
-      this.indexTargets.set(indexName, target);
-
-      const defaultTextSearchIndex = `${targetCollection}_search_index`;
-
+      // Companion full-text index (dynamic mapping). The registry entry above
+      // already records its name, so BYO safety does not depend on this succeeding.
       await this.createSearchIndexIgnoringExisting(collection, {
         definition: {
           mappings: {
@@ -488,25 +508,6 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         },
         name: defaultTextSearchIndex,
         type: 'search',
-      });
-
-      // Persist the logical-index → target mapping durably so BYO classification,
-      // collection routing, and the text-search-index name survive a process restart.
-      // Upsert makes an idempotent createIndex refresh (not duplicate) the entry.
-      // Preserve any custom textSearchIndexName already recorded by a prior
-      // createSearchIndex call; only set the default when none exists yet.
-      const existing = await this.readRegistryEntry(indexName);
-      await this.writeRegistryEntry(indexName, {
-        collectionName: targetCollection,
-        searchIndexName: targetSearchIndex,
-        isByo,
-        textSearchIndexName: existing?.textSearchIndexName ?? defaultTextSearchIndex,
-        dimension,
-        metric,
-      });
-      this.indexTargets.set(indexName, {
-        ...target,
-        textSearchIndexName: existing?.textSearchIndexName ?? defaultTextSearchIndex,
       });
     } catch (error: any) {
       throw new MastraError(
