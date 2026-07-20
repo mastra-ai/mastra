@@ -24,7 +24,7 @@ import { z } from 'zod/v4';
 // Type definitions for the workflow data
 export interface LLMIterationStepResult {
   /** Includes 'tripwire' and 'retry' for processor scenarios */
-  reason: LanguageModelV2FinishReason | 'tripwire' | 'retry';
+  reason: LanguageModelV2FinishReason | 'tripwire' | 'retry' | 'abort';
   warnings: LanguageModelV2CallWarning[];
   isContinued: boolean;
   logprobs?: LanguageModelV1LogProbs;

@@ -91,8 +91,8 @@
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
-    "@types/node": "22.19.21",
-    "eslint": "^10.4.1",
+    "@types/node": "22.20.1",
+    "eslint": "^10.7.0",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "zod": "catalog:"

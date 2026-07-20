@@ -1,0 +1,21 @@
+# Marks mastracode/web as its own pnpm root so `pnpm install` here produces a
+# standalone lockfile and the project never joins the monorepo workspace.
+# Monorepo packages are consumed through `link:` dependencies, which resolve to
+# workspace directories — run `pnpm install` at the monorepo root and build
+# @mastra/code-sdk (`pnpm --filter ./mastracode/sdk build:lib`) first.
+packages:
+  - '.'
+# Share pnpm's machine-global virtual store (same setting as the monorepo
+# root). With identical versions this makes react/react-dom resolve to the
+# exact same physical module as the `link:`ed monorepo packages use, so the
+# UI never ends up with two React instances.
+enableGlobalVirtualStore: true
+# Mirrors the monorepo root policy: postinstall build scripts for these deps
+# are unnecessary (esbuild works without its install script under pnpm's
+# fallback; msw's script is telemetry/init only; onnxruntime-node's native
+# build is not needed at runtime for @mastra/fastembed text embedding).
+# Listing them here (even as false) also prevents pnpm v10 from exiting with
+# ERR_PNPM_IGNORED_BUILDS when the deployer copies this file to .mastra/output.
+allowBuilds:
+  esbuild: false
+  msw: false

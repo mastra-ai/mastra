@@ -42,17 +42,116 @@ const embedder = new ModelRouterEmbeddingModel("openai/text-embedding-3-small");
 const embedder = new ModelRouterEmbeddingModel("google/gemini-embedding-001");
 ```
 
+### VoyageAI
+
+VoyageAI provides specialized embedding models optimized for retrieval tasks. These models are available as standalone packages:
+
+```bash npm2yarn
+npm install @mastra/voyageai
+```
+
+**Available models:**
+
+- `voyage-4-large` - 1024 dimensions (default), supports 256-2048 dimensions, best general-purpose and multilingual retrieval quality (120k max tokens per batch)
+- `voyage-4` - 1024 dimensions (default), supports 256-2048 dimensions, optimized for general-purpose and multilingual retrieval (320k max tokens per batch)
+- `voyage-4-lite` - 1024 dimensions (default), supports 256-2048 dimensions, optimized for latency and cost (1M max tokens per batch)
+- `voyage-code-3` - 1024 dimensions (default), supports 256-2048 dimensions, optimized for code retrieval
+- `voyage-finance-2` - 1024 dimensions, optimized for finance retrieval and RAG
+- `voyage-law-2` - 1024 dimensions, optimized for legal retrieval and RAG (16k context)
+- `voyage-3-large` - 1024 dimensions (default), supports 256-2048 dimensions (previous generation)
+- `voyage-3.5` - 1024 dimensions (default), supports 256-2048 dimensions (previous generation)
+- `voyage-3.5-lite` - 1024 dimensions (default), supports 256-2048 dimensions, optimized for latency and cost (previous generation)
+- `voyage-multimodal-3.5` - 1024 dimensions, supports text + images
+
+```typescript
+import { voyage, voyageEmbedding } from "@mastra/voyageai";
+
+// Use default model (voyage-3.5)
+const { embeddings } = await voyage.doEmbed({
+  values: ["Hello world"],
+});
+
+// Use specific model (voyage-3-large)
+const largeEmbeddings = await voyage.large.doEmbed({
+  values: ["More complex content"],
+});
+
+// Custom configuration
+const customModel = voyageEmbedding({
+  model: "voyage-3.5",
+  inputType: "query", // or 'document'
+  outputDimension: 512, // 256, 512, 1024, or 2048
+});
+
+const { embeddings: customEmbeddings } = await customModel.doEmbed({
+  values: ["Custom configuration example"],
+});
+```
+
+**VoyageAI with MongoDB:**
+
+VoyageAI works seamlessly with MongoDB Atlas Vector Search:
+
+```typescript
+import { voyage } from "@mastra/voyageai";
+import { MongoDBVector } from "@mastra/mongodb";
+
+const mongoVector = new MongoDBVector({
+  id: "mongodb-vector",
+  uri: process.env.MONGODB_URI,
+  dbName: process.env.MONGODB_DB_NAME,
+});
+
+// Create index matching VoyageAI dimensions
+await mongoVector.createIndex({
+  indexName: "documents",
+  dimension: 1024, // voyage-3.5 default
+});
+
+// Generate and store embeddings
+const { embeddings } = await voyage.doEmbed({
+  values: chunks.map((chunk) => chunk.text),
+});
+
+await mongoVector.upsert({
+  indexName: "documents",
+  vectors: embeddings,
+  metadata: chunks.map((chunk) => ({ text: chunk.text })),
+});
+```
+
+**Multimodal embeddings (text + images):**
+
+```typescript
+import { voyage } from "@mastra/voyageai";
+
+const { embeddings } = await voyage.multimodal.doEmbed({
+  values: [
+    {
+      content: [
+        { type: "text", text: "Product description" },
+        { type: "image_url", image_url: "https://example.com/image.jpg" },
+      ],
+    },
+  ],
+});
+```
+
+For more details, see the [MongoDB + VoyageAI integration guide](/reference/vectors/mongodb#vector-embeddings-with-voyageai).
+
 ## Authentication
 
 The model router automatically detects API keys from environment variables:
 
 - **OpenAI**: `OPENAI_API_KEY`
 - **Google**: `GOOGLE_API_KEY` (falls back to `GOOGLE_GENERATIVE_AI_API_KEY`)
+- **VoyageAI**: `VOYAGE_API_KEY`
 
 ```bash
 # .env
 OPENAI_API_KEY=sk-...
 GOOGLE_API_KEY=...
+VOYAGE_API_KEY=pa-...
 ```
 
 ## Custom Providers

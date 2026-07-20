@@ -1,5 +1,100 @@
 # @mastra/daytona
 
+## 0.6.0-alpha.0
+
+### Minor Changes
+
+- Added networking and bulk file upload support to `DaytonaSandbox`: ([#19577](https://github.com/mastra-ai/mastra/pull/19577))
+  - **Public port URLs**: `sandbox.networking.getPortUrl(port)` returns the preview URL for a port, enabling preview URLs and deploys with the new `@mastra/deployer-sandbox` package. Pass `public: true` for tokenless URLs.
+  - **Bulk file upload**: `sandbox.writeFiles(files)` uploads multiple files in one call via the SDK's native `fs.uploadFiles()`.
+  - **Detached lifecycle**: `getPortUrl()`, `stop()`, and `destroy()` now work from a fresh process by looking up the existing sandbox by its `id`, without starting a stopped sandbox first.
+
+  ```typescript
+  import { DaytonaSandbox } from '@mastra/daytona';
+
+  const sandbox = new DaytonaSandbox({ id: 'my-preview', public: true });
+  await sandbox.start();
+  const url = await sandbox.networking.getPortUrl(4111);
+  ```
+
+- Added `clone()` support to the sandbox providers. `clone()` constructs an unstarted sibling sandbox that inherits the template's configuration (credentials, image, resources) with per-instance overrides for `id` and `env`, so one configured sandbox can act as a template for a fleet of sandbox clones (for example, one per project). ([#19616](https://github.com/mastra-ai/mastra/pull/19616))
+
+  ```ts
+  const template = new E2BSandbox({ apiKey, template: 'base' });
+
+  const projectSandbox = template.clone({
+    id: 'mc-project-42',
+    env: { GITHUB_TOKEN: token },
+    idleTimeoutMinutes: 30,
+  });
+  await projectSandbox.start();
+  ```
+
+  `idleTimeoutMinutes` is a best-effort hint that maps to each provider's native lifetime knob (Railway `idleTimeoutMinutes`, E2B/Modal/Vercel timeout in milliseconds, Daytona `autoStopInterval`, Blaxel TTL duration). Docker and Apple Container ignore it since they have no provider-side idle teardown.
+
+### Patch Changes
+
+- Updated dependencies [[`ec857fc`](https://github.com/mastra-ai/mastra/commit/ec857fc79c264b53b38e16478c789b7177f2ad59), [`e1f2fae`](https://github.com/mastra-ai/mastra/commit/e1f2faebaf048c3d4c2e2c01d293767c195d5794), [`63aa799`](https://github.com/mastra-ai/mastra/commit/63aa799c6b44eacc7806cda6846b7c5bbee06b37), [`73db8db`](https://github.com/mastra-ai/mastra/commit/73db8db90d69ab6153c7942749f624db0d96952d), [`73db8db`](https://github.com/mastra-ai/mastra/commit/73db8db90d69ab6153c7942749f624db0d96952d), [`76b7181`](https://github.com/mastra-ai/mastra/commit/76b71810366e6d90b9d3973149d1c7ba3659ffb9), [`0c0e8d7`](https://github.com/mastra-ai/mastra/commit/0c0e8d7becd4d1445c656b78d5d845f606c1ff9d), [`9f7c67a`](https://github.com/mastra-ai/mastra/commit/9f7c67abeeb52c41c51a9b5edee60b62afe7cd8d), [`3b65e68`](https://github.com/mastra-ai/mastra/commit/3b65e68d7f1c771c7a70eea42d83fefdd28cad88), [`e3868e2`](https://github.com/mastra-ai/mastra/commit/e3868e22babfffd0133771669ca724501c2dd58e)]:
+  - @mastra/core@1.52.0-alpha.5
+
+## 0.5.2
+
+### Patch Changes
+
+- Pass `--implicit-dirs` to gcsfuse in Daytona GCS mounts. Without it, objects written directly to the bucket via the GCS API (no placeholder "directory" object) are unreachable in the mount — not listed and not readable by full path. This is common when the mount reads bucket contents produced by another process (SDK uploads, other services, gsutil). ([#19003](https://github.com/mastra-ai/mastra/pull/19003))
+
+- Fixed Daytona GCS mounts ignoring the `prefix` option. Mounting a bucket with a prefix now scopes the mount to that subdirectory via gcsfuse `--only-dir`, so writes land under the prefix and sandboxes mounting the same bucket with different prefixes are isolated from each other. ([#18963](https://github.com/mastra-ai/mastra/pull/18963))
+
+  Before, every GCS mount used the bucket root regardless of prefix:
+
+  ```ts
+  await sandbox.mount(new GCSFilesystem({ bucket: 'my-bucket', prefix: 'a/b/threadA', credentials }), '/gcs-data');
+  await sandbox.executeCommand('bash', ['-lc', 'echo hi > /gcs-data/probe.txt']);
+  // Before: object lands at gs://my-bucket/probe.txt
+  // After:  object lands at gs://my-bucket/a/b/threadA/probe.txt
+  ```
+
+- Updated dependencies [[`e900f25`](https://github.com/mastra-ai/mastra/commit/e900f25dfe2c9237f15b26cb109ac55aa9de3000), [`e8eaf3a`](https://github.com/mastra-ai/mastra/commit/e8eaf3aea09d51c131b5d369aee459442f416efc), [`d1c930f`](https://github.com/mastra-ai/mastra/commit/d1c930f713d1de09d5f3cd665cb79a8b7ebd7ec7), [`02634f7`](https://github.com/mastra-ai/mastra/commit/02634f700051e014a125d0d10165e3c9b8414e95), [`a940148`](https://github.com/mastra-ai/mastra/commit/a9401483e1bfe85c18a6e73d33c5949239d65a92)]:
+  - @mastra/core@1.50.1
+
+## 0.5.2-alpha.0
+
+### Patch Changes
+
+- Pass `--implicit-dirs` to gcsfuse in Daytona GCS mounts. Without it, objects written directly to the bucket via the GCS API (no placeholder "directory" object) are unreachable in the mount — not listed and not readable by full path. This is common when the mount reads bucket contents produced by another process (SDK uploads, other services, gsutil). ([#19003](https://github.com/mastra-ai/mastra/pull/19003))
+
+- Fixed Daytona GCS mounts ignoring the `prefix` option. Mounting a bucket with a prefix now scopes the mount to that subdirectory via gcsfuse `--only-dir`, so writes land under the prefix and sandboxes mounting the same bucket with different prefixes are isolated from each other. ([#18963](https://github.com/mastra-ai/mastra/pull/18963))
+
+  Before, every GCS mount used the bucket root regardless of prefix:
+
+  ```ts
+  await sandbox.mount(new GCSFilesystem({ bucket: 'my-bucket', prefix: 'a/b/threadA', credentials }), '/gcs-data');
+  await sandbox.executeCommand('bash', ['-lc', 'echo hi > /gcs-data/probe.txt']);
+  // Before: object lands at gs://my-bucket/probe.txt
+  // After:  object lands at gs://my-bucket/a/b/threadA/probe.txt
+  ```
+
+- Updated dependencies [[`a940148`](https://github.com/mastra-ai/mastra/commit/a9401483e1bfe85c18a6e73d33c5949239d65a92)]:
+  - @mastra/core@1.50.1-alpha.2
+
+## 0.5.1
+
+### Patch Changes
+
+- Fixed relative paths in executeCommand missing FUSE mounts when cwd is omitted. Commands now default to the first mount path, so relative-path writes land in cloud storage instead of silently going to /home/daytona. ([#18984](https://github.com/mastra-ai/mastra/pull/18984))
+
+- Updated dependencies [[`b291760`](https://github.com/mastra-ai/mastra/commit/b291760df9d6c7e4fc72606c8f0a4af2cf6e946c), [`3ffb8b7`](https://github.com/mastra-ai/mastra/commit/3ffb8b720e90f5e6977129ec1f6707d43c2bebe0), [`6ef59fe`](https://github.com/mastra-ai/mastra/commit/6ef59fef1da52ed8da5fbb2a892c71cf4fb6c739), [`4039488`](https://github.com/mastra-ai/mastra/commit/403948898af7293198d9e8b3e7fb47f623c78b94), [`29b7ea6`](https://github.com/mastra-ai/mastra/commit/29b7ea64e72b5523d5bdcbd34ee03d2b854d54e1), [`b2c9d70`](https://github.com/mastra-ai/mastra/commit/b2c9d70757207fb01a9069549e69b6f0d73a6636), [`a51c63d`](https://github.com/mastra-ai/mastra/commit/a51c63d8ee639e4daeba2a0be093efa6a1b5e52f), [`252f63d`](https://github.com/mastra-ai/mastra/commit/252f63d8fec723955adb2202be2f01a75ad0e69c), [`5ea76a7`](https://github.com/mastra-ai/mastra/commit/5ea76a723d966c72da9aa3ab30ae20276e049765), [`6445560`](https://github.com/mastra-ai/mastra/commit/6445560327045d20b239585fc63fed72e9ce36ec), [`e2b9f33`](https://github.com/mastra-ai/mastra/commit/e2b9f33456fd638eca555f9466c6519d8d049666), [`10959d5`](https://github.com/mastra-ai/mastra/commit/10959d509d824f682d40ff96e05ee044aec3b0e5), [`c547a77`](https://github.com/mastra-ai/mastra/commit/c547a7729bdf64dfc2df29c965046c0712a18f10), [`a0085fa`](https://github.com/mastra-ai/mastra/commit/a0085fa0934e52c37c8c8b3d75a6bb5cd199af36), [`a2ba369`](https://github.com/mastra-ai/mastra/commit/a2ba369e796dfab610f41c6875965b488272fa55), [`ffc3c17`](https://github.com/mastra-ai/mastra/commit/ffc3c17274ea17c11aa6f73d3140649cd7fc8abc), [`81542c1`](https://github.com/mastra-ai/mastra/commit/81542c1835c35bc32f2ce4fa9136ee11993cd299), [`3908e53`](https://github.com/mastra-ai/mastra/commit/3908e53ce04bbea04f5e0c097d7aa298c35fabee), [`cb24ce7`](https://github.com/mastra-ai/mastra/commit/cb24ce76bd16ca88eb6a963f6277f8780e703029), [`02705fd`](https://github.com/mastra-ai/mastra/commit/02705fd2f5a9062210d64ea061adeeb10dc9452e), [`ae51e81`](https://github.com/mastra-ai/mastra/commit/ae51e818825582d42500338dfc1929a082eff0ba), [`6f304ef`](https://github.com/mastra-ai/mastra/commit/6f304ef319e99725e884bdb8d3193c001b6e5964), [`5f9858f`](https://github.com/mastra-ai/mastra/commit/5f9858f791f1137ca7d52d23559fb4568f7a9026)]:
+  - @mastra/core@1.50.0
+
+## 0.5.1-alpha.0
+
+### Patch Changes
+
+- Fixed relative paths in executeCommand missing FUSE mounts when cwd is omitted. Commands now default to the first mount path, so relative-path writes land in cloud storage instead of silently going to /home/daytona. ([#18984](https://github.com/mastra-ai/mastra/pull/18984))
+
+- Updated dependencies [[`b291760`](https://github.com/mastra-ai/mastra/commit/b291760df9d6c7e4fc72606c8f0a4af2cf6e946c), [`29b7ea6`](https://github.com/mastra-ai/mastra/commit/29b7ea64e72b5523d5bdcbd34ee03d2b854d54e1), [`10959d5`](https://github.com/mastra-ai/mastra/commit/10959d509d824f682d40ff96e05ee044aec3b0e5), [`ffc3c17`](https://github.com/mastra-ai/mastra/commit/ffc3c17274ea17c11aa6f73d3140649cd7fc8abc), [`3908e53`](https://github.com/mastra-ai/mastra/commit/3908e53ce04bbea04f5e0c097d7aa298c35fabee)]:
+  - @mastra/core@1.50.0-alpha.3
+
 ## 0.5.0
 
 ### Minor Changes

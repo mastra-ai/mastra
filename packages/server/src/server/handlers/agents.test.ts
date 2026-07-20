@@ -1,4 +1,6 @@
 import { Agent } from '@mastra/core/agent';
+import { createDurableAgent } from '@mastra/core/agent/durable';
+import type { DurableAgent } from '@mastra/core/agent/durable';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
@@ -14,6 +16,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { HTTPException } from '../http-exception';
 import {
   abortAgentThreadBodySchema,
+  agentExecutionBodySchema,
   approveToolCallBodySchema,
   declineToolCallBodySchema,
   queueAgentMessageBodySchema,
@@ -30,6 +33,7 @@ import {
   LIST_AGENTS_ROUTE,
   STREAM_GENERATE_ROUTE,
   RESUME_STREAM_ROUTE,
+  RECOVER_ROUTE,
   SEND_TOOL_APPROVAL_ROUTE,
   LIST_SUSPENDED_RUNS_ROUTE,
   QUEUE_AGENT_MESSAGE_ROUTE,
@@ -573,6 +577,7 @@ describe('Agent Routes Authorization', () => {
   let storage: InMemoryStore;
   let mockMemory: MockMemory;
   let mockAgent: Agent;
+  let mockDurableAgent: DurableAgent;
   let mastra: Mastra;
 
   beforeEach(() => {
@@ -753,6 +758,49 @@ describe('Agent Routes Authorization', () => {
         } as any),
       ).resolves.toBeDefined();
     });
+
+    it('should accept memory without resource when context provides one (mapUserToResourceId)', async () => {
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+
+      let capturedMemoryOption: any;
+      vi.spyOn(mockAgent, 'generate').mockImplementation(async (_messages, options) => {
+        capturedMemoryOption = options?.memory;
+        return { text: 'mocked response' } as any;
+      });
+
+      await GENERATE_AGENT_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        messages: [{ role: 'user', content: 'test' }],
+        memory: {
+          thread: 'new-thread',
+          // no resource — server derives it from the request context
+        },
+      } as any);
+
+      expect(capturedMemoryOption.resource).toBe('user-a');
+    });
+
+    it('should return 400 when memory is provided but no resource can be resolved', async () => {
+      await expect(
+        GENERATE_AGENT_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: new RequestContext(),
+          abortSignal: new AbortController().signal,
+          messages: [{ role: 'user', content: 'test' }],
+          memory: {
+            thread: 'new-thread',
+          },
+        } as any),
+      ).rejects.toThrow(
+        expect.objectContaining({
+          status: 400,
+        }),
+      );
+    });
   });
 
   describe('STREAM_GENERATE_ROUTE', () => {
@@ -814,6 +862,78 @@ describe('Agent Routes Authorization', () => {
       // The resource should be overridden to user-a (from context)
       expect(capturedMemoryOption.resource).toBe('user-a');
     });
+
+    it('should accept memory without resource when context provides one (mapUserToResourceId)', async () => {
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+
+      let capturedMemoryOption: any;
+      vi.spyOn(mockAgent, 'stream').mockImplementation(async (_messages, options) => {
+        capturedMemoryOption = options?.memory;
+        return { fullStream: new ReadableStream() } as any;
+      });
+
+      await STREAM_GENERATE_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        messages: [{ role: 'user', content: 'test' }],
+        memory: {
+          thread: 'new-stream-thread',
+          // no resource — server derives it from the request context
+        },
+      } as any);
+
+      expect(capturedMemoryOption.resource).toBe('user-a');
+    });
+
+    it('should return 400 when memory is provided but no resource can be resolved', async () => {
+      await expect(
+        STREAM_GENERATE_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: new RequestContext(),
+          abortSignal: new AbortController().signal,
+          messages: [{ role: 'user', content: 'test' }],
+          memory: {
+            thread: 'new-stream-thread',
+          },
+        } as any),
+      ).rejects.toThrow(
+        expect.objectContaining({
+          status: 400,
+        }),
+      );
+    });
+  });
+
+  describe('agentExecutionBodySchema memory option', () => {
+    it('accepts a memory option without resource', () => {
+      const result = agentExecutionBodySchema.safeParse({
+        messages: ['what was my last message?'],
+        memory: { thread: 'test-thread' },
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('still accepts a memory option with resource', () => {
+      const result = agentExecutionBodySchema.safeParse({
+        messages: ['hi'],
+        memory: { thread: 'test-thread', resource: 'user-1' },
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('still requires thread when memory is provided', () => {
+      const result = agentExecutionBodySchema.safeParse({
+        messages: ['hi'],
+        memory: { resource: 'user-1' },
+      });
+
+      expect(result.success).toBe(false);
+    });
   });
 
   describe('requestContext passthrough', () => {
@@ -869,7 +989,7 @@ describe('Agent Routes Authorization', () => {
   describe('RESUME_STREAM_ROUTE', () => {
     async function persistAgenticLoopRun({ runId, resourceId }: { runId: string; resourceId?: string }) {
       const workflowsStore = await storage.getStore('workflows');
-      await workflowsStore.persistWorkflowSnapshot({
+      await workflowsStore?.persistWorkflowSnapshot({
         workflowName: 'agentic-loop',
         runId,
         resourceId,
@@ -884,6 +1004,7 @@ describe('Agent Routes Authorization', () => {
           suspendedPaths: {},
           resumeLabels: {},
           waitingPaths: {},
+          timestamp: Date.now(),
         },
       });
     }
@@ -1156,6 +1277,180 @@ describe('Agent Routes Authorization', () => {
       } as any);
 
       expect(result).toBe(expectedStream);
+    });
+  });
+
+  describe('RECOVER_ROUTE', () => {
+    beforeEach(() => {
+      mockAgent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'test-instructions',
+        // Use a shape that satisfies `isSupportedLanguageModel` so background
+        // durable-workflow initialization does not trigger an unhandled
+        // `AGENT_GET_MODEL_MISSING_MODEL_INSTANCE` rejection from
+        // `resolveModelConfig`.
+        model: { specificationVersion: 'v2' } as any,
+        memory: mockMemory,
+      });
+      mockDurableAgent = createDurableAgent({
+        agent: mockAgent,
+        id: 'test-durable-agent',
+        name: 'test-durable-agent',
+      });
+
+      mastra = new Mastra({
+        agents: {
+          'test-agent': mockAgent,
+          'test-durable-agent': mockDurableAgent,
+        },
+        storage,
+        logger: false,
+      });
+    });
+
+    async function persistDurableAgenticLoopRun({
+      runId,
+      resourceId,
+      status = 'running',
+    }: {
+      runId: string;
+      resourceId?: string;
+      status?: 'running' | 'suspended' | 'pending';
+    }) {
+      const workflowsStore = await storage.getStore('workflows');
+      await workflowsStore?.persistWorkflowSnapshot({
+        workflowName: 'durable-agentic-loop',
+        runId,
+        resourceId,
+        snapshot: {
+          runId,
+          status,
+          value: {},
+          context: {
+            input: {
+              agentId: 'test-durable-agent',
+              __workflowKind: 'durable-agent',
+            },
+          } as any,
+          activePaths: [],
+          activeStepsPath: {},
+          serializedStepGraph: [],
+          suspendedPaths: {},
+          resumeLabels: {},
+          waitingPaths: {},
+          timestamp: Date.now(),
+        },
+      });
+    }
+
+    it('should return 400 when runId is missing', async () => {
+      const requestContext = createContextWithReservedKeys({});
+
+      await expect(
+        RECOVER_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext,
+          abortSignal: new AbortController().signal,
+        } as any),
+      ).rejects.toThrow(new HTTPException(400, { message: 'Run id is required' }));
+    });
+
+    it('should return 400 when the target agent is not a durable agent', async () => {
+      const requestContext = createContextWithReservedKeys({});
+
+      await expect(
+        RECOVER_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext,
+          abortSignal: new AbortController().signal,
+          runId: 'test-run-id',
+        } as any),
+      ).rejects.toThrow(
+        new HTTPException(400, {
+          message: 'Agent does not support recover. Only durable agents (createDurableAgent) can recover runs.',
+        }),
+      );
+    });
+
+    it('should return 403 when runId belongs to a different resource', async () => {
+      // Add a recover method to make the agent look durable.
+      (mockAgent as any).recover = vi.fn();
+
+      await persistDurableAgenticLoopRun({ runId: 'recover-run-owned-by-b', resourceId: 'user-b' });
+
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+
+      await expect(
+        RECOVER_ROUTE.handler({
+          mastra,
+          agentId: 'test-durable-agent',
+          requestContext,
+          abortSignal: new AbortController().signal,
+          runId: 'recover-run-owned-by-b',
+        } as any),
+      ).rejects.toThrow(
+        new HTTPException(403, { message: 'Access denied: workflow run belongs to a different resource' }),
+      );
+
+      delete (mockAgent as any).recover;
+    });
+
+    it('should call agent.recover(runId, { abortSignal }) and return fullStream', async () => {
+      const expectedStream = new ReadableStream();
+      const recoverMock = vi.fn().mockResolvedValue({ fullStream: expectedStream });
+      (mockDurableAgent as any).recover = recoverMock;
+
+      await persistDurableAgenticLoopRun({ runId: 'recover-run-1' });
+
+      const requestContext = createContextWithReservedKeys({});
+      const abortController = new AbortController();
+
+      const result = await RECOVER_ROUTE.handler({
+        mastra,
+        agentId: 'test-durable-agent',
+        requestContext,
+        abortSignal: abortController.signal,
+        runId: 'recover-run-1',
+      } as any);
+
+      expect(recoverMock).toHaveBeenCalledWith('recover-run-1', { abortSignal: abortController.signal });
+      expect(result).toBe(expectedStream);
+
+      delete (mockAgent as any).recover;
+    });
+
+    it('should stash version overrides on requestContext before calling agent.recover()', async () => {
+      const recoverMock = vi.fn().mockResolvedValue({ fullStream: new ReadableStream() });
+      (mockAgent as any).recover = recoverMock;
+
+      await persistDurableAgenticLoopRun({ runId: 'recover-run-versions' });
+
+      const requestContext = createContextWithReservedKeys({});
+
+      await RECOVER_ROUTE.handler({
+        mastra,
+        agentId: 'test-durable-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        runId: 'recover-run-versions',
+        versions: {
+          agents: {
+            'sub-agent': { versionId: 'version-1' },
+          },
+        },
+      } as any);
+
+      expect(requestContext.get(MASTRA_VERSIONS_KEY)).toEqual({
+        agents: {
+          'sub-agent': { versionId: 'version-1' },
+        },
+        defaultStatus: 'published',
+      });
+
+      delete (mockAgent as any).recover;
     });
   });
 

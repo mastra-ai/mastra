@@ -144,6 +144,20 @@ describe('MastraAuthWorkos', () => {
           }),
       ).toThrow('WorkOS redirect URI is required');
     });
+
+    it('should wire mapUserToResourceId from options', () => {
+      const auth = new MastraAuthWorkos({
+        apiKey: mockApiKey,
+        clientId: mockClientId,
+        redirectUri: mockRedirectUri,
+        session: { cookiePassword: mockCookiePassword },
+        mapUserToResourceId: user => `tenant:${user.id}`,
+      });
+
+      expect(auth.mapUserToResourceId?.({ id: 'user-1', workosId: 'wos_1', email: 'a@b.com' } as any)).toBe(
+        'tenant:user-1',
+      );
+    });
   });
 
   describe('authenticateToken', () => {

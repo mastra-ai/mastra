@@ -3,7 +3,6 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import process from 'node:process';
 import devcert from '@expo/devcert';
-import { FileService } from '@mastra/deployer';
 import {
   getServerOptions,
   normalizeStudioBase,
@@ -18,6 +17,7 @@ import { getAnalytics } from '../../analytics/index.js';
 import { checkMastraPeerDeps, getUpdateCommand, logPeerDepWarnings } from '../../utils/check-peer-deps.js';
 import type { PeerDepMismatch } from '../../utils/check-peer-deps.js';
 import { devLogger } from '../../utils/dev-logger.js';
+import { findMastraEntryFile } from '../../utils/find-mastra-entry.js';
 import { createLogger } from '../../utils/logger.js';
 import type { MastraPackageInfo } from '../../utils/mastra-packages.js';
 import { getMastraPackages } from '../../utils/mastra-packages.js';
@@ -442,8 +442,9 @@ export async function dev({
   await mkdir(dotMastraPath, { recursive: true });
   await acquireDevLock(dotMastraPath);
 
-  const fileService = new FileService();
-  const userEntryFile = fileService.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
+  // Look for the user's mastra entry file. When it doesn't exist (fully
+  // file-based project), prepareFsAgentsEntry auto-constructs a Mastra instance.
+  const userEntryFile = findMastraEntryFile(mastraDir);
 
   const bundler = new DevBundler(env);
   bundler.__setLogger(createLogger(debug)); // Keep Pino logger for internal bundler operations
@@ -482,7 +483,7 @@ export async function dev({
     }
   }
 
-  const serverOptions = await getServerOptions(userEntryFile, join(dotMastraPath, 'output'));
+  const serverOptions = userEntryFile ? await getServerOptions(userEntryFile, join(dotMastraPath, 'output')) : null;
   let portToUse = serverOptions?.port ?? process.env.PORT;
   let hostToUse = serverOptions?.host ?? process.env.HOST ?? 'localhost';
   const studioBasePathToUse = normalizeStudioBase(serverOptions?.studioBase ?? '/');
@@ -548,7 +549,12 @@ export async function dev({
     await mirrorFsAgentWorkspaces(mastraDir, join(dotMastraPath, 'output'));
   }
 
-  const watcher = await bundler.watch(entryFile, dotMastraPath, discoveredTools);
+  const watcher = await bundler.watch(entryFile, dotMastraPath, discoveredTools, {
+    mastraDir,
+    userEntryFile,
+    outputDirectory: dotMastraPath,
+    preparedEntry: fsAgents,
+  });
 
   await startServer(
     join(dotMastraPath, 'output'),

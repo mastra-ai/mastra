@@ -9,16 +9,14 @@ packages:
 
 **Added in:** `@mastra/core@1.4.0`
 
-Lists items in the dataset. When a `version` is specified, returns all items at that version. Otherwise, returns paginated items from the latest version.
+Lists items in the dataset. When only `version` is provided, returns a bare `DatasetItem[]` snapshot of every item at that version. In all other cases — no arguments, or `search` / `page` / `perPage` provided with or without `version` — returns a paginated `{ items, pagination }` shape.
 
 ## Usage example
 
 ```typescript
 import { Mastra } from '@mastra/core'
 
-const mastra = new Mastra({
-  /* storage config */
-})
+const mastra = new Mastra({/* storage config */})
 
 const dataset = await mastra.datasets.get({ id: 'dataset-id' })
 
@@ -28,7 +26,11 @@ const result = await dataset.listItems()
 // List with search
 const filtered = await dataset.listItems({ search: 'TypeScript', page: 0, perPage: 10 })
 
-// List all items at a specific version
+// Paginated list scoped to a specific version
+const versionedPage = await dataset.listItems({ version: 2, page: 0, perPage: 20 })
+
+// Version-only snapshot returns a bare DatasetItem[] (deprecated form —
+// prefer passing page/perPage to receive the paginated shape).
 const versionedItems = await dataset.listItems({ version: 2 })
 ```
 
@@ -40,7 +42,8 @@ const versionedItems = await dataset.listItems({ version: 2 })
     name: 'version',
     type: 'number',
     isOptional: true,
-    description: 'Dataset version to list items at. When set, returns all items at that version (no pagination).',
+    description:
+      'Dataset version to list items at. When passed on its own, returns every item at that version as a bare `DatasetItem[]` snapshot. Passing `search` / `page` / `perPage` alongside `version` switches to the paginated shape.',
   },
   {
     name: 'page',
@@ -65,21 +68,22 @@ const versionedItems = await dataset.listItems({ version: 2 })
 
 ## Returns
 
-When `version` is specified:
+When only `version` is provided (no `search`, `page`, or `perPage`):
 
 <PropertiesTable
   content={[
   {
     name: 'result',
     type: 'Promise<DatasetItem[]>',
-    description: 'Array of all items at the specified dataset version.',
+    description:
+      'Bare array of every item at the specified dataset version. This shape is retained for backwards compatibility and is deprecated — pass `page` / `perPage` (or `search`) to always receive the paginated shape below.',
   },
 ]}
 />
 
 <br />
 
-When `version` isn't specified:
+In all other cases (no arguments, or `search` / `page` / `perPage` provided with or without `version`):
 
 <PropertiesTable
   content={[

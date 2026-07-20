@@ -58,8 +58,7 @@ export type WorkflowScheduleConfig<TInput = unknown, TState = unknown, TRequestC
  * When using the array form, every entry must specify a unique `id`.
  */
 export type WorkflowScheduleInput<TInput = unknown, TState = unknown, TRequestContext = unknown> =
-  | WorkflowScheduleConfig<TInput, TState, TRequestContext>
-  | WorkflowScheduleConfig<TInput, TState, TRequestContext>[];
+  WorkflowScheduleConfig<TInput, TState, TRequestContext> | WorkflowScheduleConfig<TInput, TState, TRequestContext>[];
 
 /**
  * Configuration for the `Scheduler` component owned by Mastra.
@@ -85,7 +84,7 @@ export type SchedulerConfig = {
   /**
    * Predicate used to check whether a schedule's target is currently
    * registered with the host Mastra instance. For workflow targets the
-   * predicate should resolve the workflow id; for heartbeat targets it
+   * predicate should resolve the workflow id; for agent targets it
    * should resolve the agent id. When provided, the scheduler refuses to
    * fire schedules whose target is unknown and deletes the row after a
    * small number of consecutive misses (see `missesBeforeDelete`).
@@ -106,7 +105,7 @@ export type SchedulerConfig = {
 
 /**
  * @deprecated Renamed to {@link SchedulerConfig}. The scheduler now drives both
- * workflow and heartbeat schedules, so the `Workflow`-prefixed name is no longer
+ * workflow and agent schedules, so the `Workflow`-prefixed name is no longer
  * accurate. This alias will be removed in a future major release.
  */
 export type WorkflowSchedulerConfig = SchedulerConfig;

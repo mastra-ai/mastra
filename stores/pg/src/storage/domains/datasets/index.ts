@@ -16,6 +16,7 @@ import {
   normalizePerPage,
   safelyParseJSON,
   ensureDate,
+  hasErrorCode,
 } from '@mastra/core/storage';
 import type {
   DatasetRecord,
@@ -26,6 +27,7 @@ import type {
   UpdateDatasetInput,
   AddDatasetItemInput,
   UpdateDatasetItemInput,
+  DeleteDatasetItemInput,
   ListDatasetsInput,
   ListDatasetsOutput,
   ListDatasetItemsInput,
@@ -36,10 +38,11 @@ import type {
   BatchDeleteItemsInput,
   CreateIndexOptions,
   TargetType,
+  DatasetTenancyFilters,
 } from '@mastra/core/storage';
 import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
-import { getTableName, getSchemaName } from '../utils';
+import { getTableName, getSchemaName, tenancyWhere } from '../utils';
 
 /** Serialize a value for a jsonb column. Returns null for null/undefined. */
 function jsonbArg(value: unknown): string | null {
@@ -104,6 +107,7 @@ export class DatasetsPG extends DatasetsStorage {
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'organizationId', 'TEXT');
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'projectId', 'TEXT');
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'toolMocks', 'JSONB');
+    await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'externalId', 'TEXT');
 
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -124,6 +128,11 @@ export class DatasetsPG extends DatasetsStorage {
         name: 'idx_dataset_items_dataset_version',
         table: TABLE_DATASET_ITEMS,
         columns: ['datasetId', 'datasetVersion'],
+      },
+      {
+        name: 'idx_dataset_items_external_id_history',
+        table: TABLE_DATASET_ITEMS,
+        columns: ['datasetId', 'externalId', 'datasetVersion'],
       },
       {
         name: 'idx_dataset_items_dataset_validto_deleted',
@@ -212,6 +221,7 @@ export class DatasetsPG extends DatasetsStorage {
       id: row.id as string,
       datasetId: row.datasetId as string,
       datasetVersion: row.datasetVersion as number,
+      externalId: (row.externalId as string | null) ?? null,
       organizationId: (row.organizationId as string | null) ?? null,
       projectId: (row.projectId as string | null) ?? null,
       input: safelyParseJSON(row.input),
@@ -231,6 +241,7 @@ export class DatasetsPG extends DatasetsStorage {
       id: row.id as string,
       datasetId: row.datasetId as string,
       datasetVersion: row.datasetVersion as number,
+      externalId: (row.externalId as string | null) ?? null,
       organizationId: (row.organizationId as string | null) ?? null,
       projectId: (row.projectId as string | null) ?? null,
       validTo: row.validTo as number | null,
@@ -260,7 +271,8 @@ export class DatasetsPG extends DatasetsStorage {
 
   async createDataset(input: CreateDatasetInput): Promise<DatasetRecord> {
     try {
-      const id = crypto.randomUUID();
+      const id = input.id ?? crypto.randomUUID();
+      if (input.id !== undefined) this.validateCallerDefinedDatasetId(input.id);
       const now = new Date();
       const nowIso = now.toISOString();
 
@@ -275,8 +287,8 @@ export class DatasetsPG extends DatasetsStorage {
           groundTruthSchema: input.groundTruthSchema ?? null,
           requestContextSchema: input.requestContextSchema ?? null,
           targetType: input.targetType ?? null,
-          targetIds: input.targetIds !== undefined ? JSON.stringify(input.targetIds) : null,
-          scorerIds: input.scorerIds ? JSON.stringify(input.scorerIds) : null,
+          targetIds: input.targetIds ?? null,
+          scorerIds: input.scorerIds ?? null,
           organizationId: input.organizationId ?? null,
           projectId: input.projectId ?? null,
           candidateKey: input.candidateKey ?? null,
@@ -307,6 +319,11 @@ export class DatasetsPG extends DatasetsStorage {
         updatedAt: now,
       };
     } catch (error) {
+      if (input.id !== undefined && hasErrorCode(error, new Set(['23505']))) {
+        const existing = await this.getDatasetById({ id: input.id });
+        if (existing) return this.resolveExistingDataset(existing, { ...input, id: input.id });
+      }
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'CREATE_DATASET', 'FAILED'),
@@ -318,10 +335,18 @@ export class DatasetsPG extends DatasetsStorage {
     }
   }
 
-  async getDatasetById({ id }: { id: string }): Promise<DatasetRecord | null> {
+  async getDatasetById({
+    id,
+    filters,
+  }: {
+    id: string;
+    filters?: DatasetTenancyFilters;
+  }): Promise<DatasetRecord | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_DATASETS, schemaName: getSchemaName(this.#schema) });
-      const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE "id" = $1`, [id]);
+      const { conditions, params } = tenancyWhere(filters, 2);
+      const whereSql = ['"id" = $1', ...conditions].join(' AND ');
+      const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE ${whereSql}`, [id, ...params]);
       return result ? this.transformDatasetRow(result) : null;
     } catch (error) {
       throw new MastraError(
@@ -337,7 +362,7 @@ export class DatasetsPG extends DatasetsStorage {
 
   protected async _doUpdateDataset(args: UpdateDatasetInput): Promise<DatasetRecord> {
     try {
-      const existing = await this.getDatasetById({ id: args.id });
+      const existing = await this.getDatasetById({ id: args.id, filters: args.filters });
       if (!existing) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'UPDATE_DATASET', 'NOT_FOUND'),
@@ -436,7 +461,7 @@ export class DatasetsPG extends DatasetsStorage {
     }
   }
 
-  async deleteDataset({ id }: { id: string }): Promise<void> {
+  async deleteDataset({ id, filters }: { id: string; filters?: DatasetTenancyFilters }): Promise<void> {
     try {
       const datasetsTable = getTableName({ indexName: TABLE_DATASETS, schemaName: getSchemaName(this.#schema) });
       const itemsTable = getTableName({ indexName: TABLE_DATASET_ITEMS, schemaName: getSchemaName(this.#schema) });
@@ -450,29 +475,43 @@ export class DatasetsPG extends DatasetsStorage {
         schemaName: getSchemaName(this.#schema),
       });
 
-      // Detach experiments — each wrapped in try/catch because experiment tables may not exist yet
-      try {
-        await this.#db.client.none(
-          `DELETE FROM ${experimentResultsTable} WHERE "experimentId" IN (SELECT "id" FROM ${experimentsTable} WHERE "datasetId" = $1)`,
-          [id],
-        );
-      } catch {
-        /* table may not exist */
-      }
-      try {
-        await this.#db.client.none(
-          `UPDATE ${experimentsTable} SET "datasetId" = NULL, "datasetVersion" = NULL WHERE "datasetId" = $1`,
-          [id],
-        );
-      } catch {
-        /* table may not exist */
-      }
+      // Atomic gate + cascade under a single transaction; the tenancy predicate
+      // is folded into a SELECT ... FOR UPDATE lock and the parent DELETE, so
+      // a concurrent delete/recreate under a different tenant cannot let a
+      // scoped delete hit another tenant's row. Silent no-op on mismatch.
+      const { conditions, params } = tenancyWhere(filters, 2);
+      const scopedWhere = ['"id" = $1', ...conditions].join(' AND ');
 
-      // Cascade delete — atomic transaction
       await this.#db.client.tx(async t => {
+        const locked = await t.oneOrNone(`SELECT "id" FROM ${datasetsTable} WHERE ${scopedWhere} FOR UPDATE`, [
+          id,
+          ...params,
+        ]);
+        if (!locked) return;
+
+        // Detach experiments only if their tables exist. We probe with
+        // to_regclass instead of try/catch inside the transaction, because a
+        // failed DML in Postgres puts the connection into an aborted state
+        // (SQLSTATE 25P02), which would cause every subsequent DELETE below
+        // to fail and roll back the whole transaction.
+        const experimentTablesExist = await t.oneOrNone<{ exists: boolean }>(
+          `SELECT to_regclass($1) IS NOT NULL AND to_regclass($2) IS NOT NULL AS exists`,
+          [experimentResultsTable, experimentsTable],
+        );
+        if (experimentTablesExist?.exists) {
+          await t.none(
+            `DELETE FROM ${experimentResultsTable} WHERE "experimentId" IN (SELECT "id" FROM ${experimentsTable} WHERE "datasetId" = $1)`,
+            [id],
+          );
+          await t.none(
+            `UPDATE ${experimentsTable} SET "datasetId" = NULL, "datasetVersion" = NULL WHERE "datasetId" = $1`,
+            [id],
+          );
+        }
+
         await t.none(`DELETE FROM ${versionsTable} WHERE "datasetId" = $1`, [id]);
         await t.none(`DELETE FROM ${itemsTable} WHERE "datasetId" = $1`, [id]);
-        await t.none(`DELETE FROM ${datasetsTable} WHERE "id" = $1`, [id]);
+        await t.none(`DELETE FROM ${datasetsTable} WHERE ${scopedWhere}`, [id, ...params]);
       });
     } catch (error) {
       if (error instanceof MastraError) throw error;
@@ -497,7 +536,7 @@ export class DatasetsPG extends DatasetsStorage {
       let paramIndex = 1;
 
       if (args.filters) {
-        const { organizationId, projectId, candidateKey, candidateId } = args.filters;
+        const { organizationId, projectId, candidateKey, candidateId, targetType, targetIds, name } = args.filters;
         if (organizationId !== undefined) {
           conditions.push(`"organizationId" = $${paramIndex++}`);
           queryParams.push(organizationId);
@@ -513,6 +552,19 @@ export class DatasetsPG extends DatasetsStorage {
         if (candidateId !== undefined) {
           conditions.push(`"candidateId" = $${paramIndex++}`);
           queryParams.push(candidateId);
+        }
+        if (targetType !== undefined) {
+          conditions.push(`"targetType" = $${paramIndex++}`);
+          queryParams.push(targetType);
+        }
+        if (targetIds !== undefined && targetIds.length > 0) {
+          // jsonb ?| text[] — true if any of the strings exists as a top-level element.
+          conditions.push(`"targetIds" ?| $${paramIndex++}::text[]`);
+          queryParams.push(targetIds);
+        }
+        if (name !== undefined && name.length > 0) {
+          conditions.push(`"name" ILIKE $${paramIndex++}`);
+          queryParams.push(`%${name}%`);
         }
       }
 
@@ -588,11 +640,12 @@ export class DatasetsPG extends DatasetsStorage {
         parentProjectId = (row.projectId as string | null) ?? null;
 
         await t.none(
-          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,NULL,false,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","externalId","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,$6,NULL,false,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
           [
             id,
             args.datasetId,
             newVersion,
+            args.externalId ?? null,
             parentOrganizationId,
             parentProjectId,
             JSON.stringify(args.input),
@@ -708,11 +761,12 @@ export class DatasetsPG extends DatasetsStorage {
         // 3. Insert new row with merged fields, preserving original createdAt;
         //    tenancy is re-inherited from parent dataset (Option B)
         await t.none(
-          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,NULL,false,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","externalId","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,$6,NULL,false,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
           [
             args.id,
             args.datasetId,
             newVersion,
+            existing.externalId ?? null,
             parentOrganizationId,
             parentProjectId,
             JSON.stringify(mergedInput),
@@ -763,7 +817,7 @@ export class DatasetsPG extends DatasetsStorage {
     }
   }
 
-  protected async _doDeleteItem({ id, datasetId }: { id: string; datasetId: string }): Promise<void> {
+  protected async _doDeleteItem({ id, datasetId }: DeleteDatasetItemInput): Promise<void> {
     try {
       const existing = await this.getItemById({ id });
       if (!existing) return; // no-op if not found
@@ -805,11 +859,12 @@ export class DatasetsPG extends DatasetsStorage {
         // 3. Insert tombstone (isDeleted=true, validTo=NULL — tombstone is the "current" terminal version);
         //    tenancy re-inherited from parent dataset
         await t.none(
-          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,NULL,true,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","externalId","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,$6,NULL,true,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
           [
             id,
             datasetId,
             newVersion,
+            existing.externalId ?? null,
             parentOrganizationId,
             parentProjectId,
             JSON.stringify(existing.input),
@@ -847,92 +902,97 @@ export class DatasetsPG extends DatasetsStorage {
 
   protected async _doBatchInsertItems(input: BatchInsertItemsInput): Promise<DatasetItem[]> {
     try {
-      const dataset = await this.getDatasetById({ id: input.datasetId });
-      if (!dataset) {
-        throw new MastraError({
-          id: createStorageErrorId('PG', 'BULK_ADD_ITEMS', 'DATASET_NOT_FOUND'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { datasetId: input.datasetId },
-        });
-      }
-
+      if (input.items.length === 0) return [];
       const datasetsTable = getTableName({ indexName: TABLE_DATASETS, schemaName: getSchemaName(this.#schema) });
       const itemsTable = getTableName({ indexName: TABLE_DATASET_ITEMS, schemaName: getSchemaName(this.#schema) });
       const versionsTable = getTableName({
         indexName: TABLE_DATASET_VERSIONS,
         schemaName: getSchemaName(this.#schema),
       });
-
-      const now = new Date();
-      const nowIso = now.toISOString();
-      const versionId = crypto.randomUUID();
-
-      // Pre-generate IDs
-      const itemsWithIds = input.items.map(itemInput => ({ id: crypto.randomUUID(), input: itemInput }));
-
-      // Tenancy inherited from parent dataset (Option B)
-      const parentOrganizationId = dataset.organizationId ?? null;
-      const parentProjectId = dataset.projectId ?? null;
-
-      let newVersion: number;
+      let results: DatasetItem[] = [];
 
       await this.#db.client.tx(async t => {
-        // 1. Single version bump
-        const row = await t.one(
-          `UPDATE ${datasetsTable} SET "version" = "version" + 1 WHERE "id" = $1 RETURNING "version"`,
+        const dataset = await t.oneOrNone(
+          `SELECT "version", "organizationId", "projectId" FROM ${datasetsTable} WHERE "id" = $1 FOR UPDATE`,
           [input.datasetId],
         );
-        newVersion = row.version as number;
+        if (!dataset)
+          throw new MastraError({
+            id: createStorageErrorId('PG', 'BULK_ADD_ITEMS', 'DATASET_NOT_FOUND'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { datasetId: input.datasetId },
+          });
 
-        // 2. N item inserts
-        for (const { id, input: itemInput } of itemsWithIds) {
-          await t.none(
-            `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,NULL,false,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
-            [
+        const externalIds = [...new Set(input.items.flatMap(item => (item.externalId ? [item.externalId] : [])))];
+        const historyRows = externalIds.length
+          ? await t.manyOrNone(
+              `SELECT * FROM ${itemsTable} WHERE "datasetId" = $1 AND "externalId" = ANY($2::text[]) ORDER BY "datasetVersion"`,
+              [input.datasetId, externalIds],
+            )
+          : [];
+        const plan = this.planDatasetItemBatch(
+          input.items,
+          historyRows.map(row => this.transformItemRowFull(row)),
+          () => crypto.randomUUID(),
+        );
+        const resolved = new Map<string, DatasetItem>(
+          [...plan.existingCurrentItems].map(([id, row]) => [id, this.datasetItemFromRow(row)]),
+        );
+        if (plan.inserts.length > 0) {
+          const newVersion = Number(dataset.version) + 1;
+          const now = new Date();
+          const nowIso = now.toISOString();
+          await t.none(`UPDATE ${datasetsTable} SET "version" = $2 WHERE "id" = $1`, [input.datasetId, newVersion]);
+          for (const { id, item } of plan.inserts) {
+            await t.none(
+              `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","externalId","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,$6,NULL,false,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+              [
+                id,
+                input.datasetId,
+                newVersion,
+                item.externalId ?? null,
+                dataset.organizationId ?? null,
+                dataset.projectId ?? null,
+                JSON.stringify(item.input),
+                jsonbArg(item.groundTruth),
+                jsonbArg(item.expectedTrajectory),
+                jsonbArg(item.toolMocks),
+                jsonbArg(item.requestContext),
+                jsonbArg(item.metadata),
+                jsonbArg(item.source),
+                nowIso,
+                nowIso,
+                nowIso,
+                nowIso,
+              ],
+            );
+            resolved.set(id, {
               id,
-              input.datasetId,
-              newVersion,
-              parentOrganizationId,
-              parentProjectId,
-              JSON.stringify(itemInput.input),
-              jsonbArg(itemInput.groundTruth),
-              jsonbArg(itemInput.expectedTrajectory),
-              jsonbArg(itemInput.toolMocks),
-              jsonbArg(itemInput.requestContext),
-              jsonbArg(itemInput.metadata),
-              jsonbArg(itemInput.source),
-              nowIso,
-              nowIso,
-              nowIso,
-              nowIso,
-            ],
+              datasetId: input.datasetId,
+              datasetVersion: newVersion,
+              externalId: item.externalId ?? null,
+              organizationId: dataset.organizationId ?? null,
+              projectId: dataset.projectId ?? null,
+              input: item.input,
+              groundTruth: item.groundTruth,
+              expectedTrajectory: item.expectedTrajectory,
+              toolMocks: item.toolMocks,
+              requestContext: item.requestContext,
+              metadata: item.metadata,
+              source: item.source,
+              createdAt: now,
+              updatedAt: now,
+            });
+          }
+          await t.none(
+            `INSERT INTO ${versionsTable} ("id","datasetId","version","createdAt","createdAtZ") VALUES ($1,$2,$3,$4,$5)`,
+            [crypto.randomUUID(), input.datasetId, newVersion, nowIso, nowIso],
           );
         }
-
-        // 3. Single dataset_version row
-        await t.none(
-          `INSERT INTO ${versionsTable} ("id","datasetId","version","createdAt","createdAtZ") VALUES ($1,$2,$3,$4,$5)`,
-          [versionId, input.datasetId, newVersion, nowIso, nowIso],
-        );
+        results = plan.resolvedIds.map(id => resolved.get(id)!);
       });
-
-      return itemsWithIds.map(({ id, input: itemInput }) => ({
-        id,
-        datasetId: input.datasetId,
-        datasetVersion: newVersion!,
-        organizationId: parentOrganizationId,
-        projectId: parentProjectId,
-        input: itemInput.input,
-        groundTruth: itemInput.groundTruth,
-        expectedTrajectory: itemInput.expectedTrajectory,
-        toolMocks: itemInput.toolMocks,
-        requestContext: itemInput.requestContext,
-        metadata: itemInput.metadata,
-        source: itemInput.source,
-        createdAt: now,
-        updatedAt: now,
-      }));
+      return results;
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -997,11 +1057,12 @@ export class DatasetsPG extends DatasetsStorage {
             [newVersion, item.id],
           );
           await t.none(
-            `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,NULL,true,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+            `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","externalId","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,$6,NULL,true,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
             [
               item.id,
               input.datasetId,
               newVersion,
+              item.externalId ?? null,
               parentOrganizationId,
               parentProjectId,
               JSON.stringify(item.input),

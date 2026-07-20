@@ -10,8 +10,6 @@ packages:
   - "@mastra/upstash"
 ---
 
-import YouTube from "@site/src/components/YouTube-player";
-
 # Working Memory
 
 While [message history](/docs/memory/message-history) and [semantic recall](./semantic-recall) help agents remember conversations, working memory allows them to maintain persistent information about users across interactions.
@@ -21,6 +19,12 @@ Think of it as the agent's active thoughts or scratchpad – the key information
 This is useful for maintaining ongoing state that's always relevant and should always be available to the agent.
 
 If you use [Observational Memory](/docs/memory/observational-memory), `observationalMemory.observation.manageWorkingMemory` lets OM update working memory for the agent.
+
+:::tip[📹 Watch]
+
+Watch [Mastra working memory](https://www.youtube.com/watch?v=UMy_JHLf1n8\&pp=ygUVbWFzdHJhIHdvcmtpbmcgbWVtb3J5) to see how agents keep persistent user context available across interactions.
+
+:::
 
 Working memory can persist at two different scopes:
 
@@ -55,9 +59,7 @@ const agent = new Agent({
 
 ## How it works
 
-Working memory is a block of Markdown text that the agent is able to update over time to store continuously relevant information:
-
-<YouTube id="UMy_JHLf1n8" />
+Working memory is a block of Markdown text that the agent is able to update over time to store continuously relevant information.
 
 ## Memory persistence scopes
 
@@ -420,11 +422,11 @@ const response = await agent.generate('What do you know about me?', {
 
 ## Opt in to state signals (experimental)
 
-By default, working memory reaches the model as part of the system message. You can opt into delivering it as a [state signal](/docs/agents/signals) instead by setting `useStateSignals: true`:
+By default, working memory reaches the model as part of the system message. You can opt into delivering it as a [state signal](/docs/long-running-agents/signals) instead by setting `useStateSignals: true`:
 
 ```typescript
 const memory = new Memory({
-  storage: new LibSQLStore({ url: 'file:./mastra.db' }),
+  storage: new LibSQLStore({ id: 'mastra-storage', url: 'file:./mastra.db' }),
   options: {
     workingMemory: {
       enabled: true,

@@ -21,7 +21,7 @@ export const DataListRowStatic = forwardRef<HTMLDivElement, DataListRowStaticPro
         ref={ref}
         className={cn(
           isWrapped
-            ? 'grid grid-cols-subgrid gap-8 px-5 transition-colors duration-200 rounded-lg'
+            ? 'grid grid-cols-subgrid gap-8 rounded-lg px-5 transition-colors duration-200'
             : dataListRowStaticStyles,
           !isWrapped && flushLeft && 'ml-0!',
           !isWrapped && flushRight && 'mr-0!',

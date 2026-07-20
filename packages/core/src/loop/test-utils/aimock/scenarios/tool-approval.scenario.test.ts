@@ -62,8 +62,7 @@ describe('AIMock loop scenario: tool approval suspend/resume', () => {
     // original tool call id.
     const turn2Messages = requests[1]?.body?.messages ?? [];
     const toolMessage = turn2Messages.find(message => (message as { role?: string }).role === 'tool') as
-      | { tool_call_id?: string }
-      | undefined;
+      { tool_call_id?: string } | undefined;
     expect(toolMessage?.tool_call_id).toBe('call_lookup_alpha');
   });
 

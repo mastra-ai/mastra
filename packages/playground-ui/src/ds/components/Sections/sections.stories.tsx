@@ -16,12 +16,12 @@ type Story = StoryObj<typeof Sections>;
 
 export const Default: Story = {
   render: () => (
-    <Sections className="w-[500px]">
+    <Sections className="w-125">
       <Section>
         <Section.Header>
           <Section.Heading>Section One</Section.Heading>
         </Section.Header>
-        <div className="p-4 rounded-md border border-border1 bg-surface2">
+        <div className="rounded-md border border-border1 bg-surface2 p-4">
           <p className="text-sm text-neutral5">First section content</p>
         </div>
       </Section>
@@ -29,7 +29,7 @@ export const Default: Story = {
         <Section.Header>
           <Section.Heading>Section Two</Section.Heading>
         </Section.Header>
-        <div className="p-4 rounded-md border border-border1 bg-surface2">
+        <div className="rounded-md border border-border1 bg-surface2 p-4">
           <p className="text-sm text-neutral5">Second section content</p>
         </div>
       </Section>
@@ -37,7 +37,7 @@ export const Default: Story = {
         <Section.Header>
           <Section.Heading>Section Three</Section.Heading>
         </Section.Header>
-        <div className="p-4 rounded-md border border-border1 bg-surface2">
+        <div className="rounded-md border border-border1 bg-surface2 p-4">
           <p className="text-sm text-neutral5">Third section content</p>
         </div>
       </Section>
@@ -47,7 +47,7 @@ export const Default: Story = {
 
 export const SettingsPage: Story = {
   render: () => (
-    <Sections className="w-[600px]">
+    <Sections className="w-150">
       <Section>
         <Section.Header>
           <Section.Heading>Profile</Section.Heading>
@@ -55,7 +55,7 @@ export const SettingsPage: Story = {
             Edit
           </Button>
         </Section.Header>
-        <div className="space-y-3 p-4 rounded-md border border-border1 bg-surface2">
+        <div className="space-y-3 rounded-md border border-border1 bg-surface2 p-4">
           <div className="flex justify-between">
             <span className="text-sm text-neutral3">Name</span>
             <span className="text-sm text-neutral6">John Doe</span>
@@ -70,7 +70,7 @@ export const SettingsPage: Story = {
         <Section.Header>
           <Section.Heading>Notifications</Section.Heading>
         </Section.Header>
-        <div className="space-y-3 p-4 rounded-md border border-border1 bg-surface2">
+        <div className="space-y-3 rounded-md border border-border1 bg-surface2 p-4">
           <div className="flex justify-between">
             <span className="text-sm text-neutral3">Email notifications</span>
             <span className="text-sm text-neutral6">Enabled</span>
@@ -85,7 +85,7 @@ export const SettingsPage: Story = {
         <Section.Header>
           <Section.Heading>Danger Zone</Section.Heading>
         </Section.Header>
-        <div className="p-4 rounded-md border border-red-900 bg-red-900/10">
+        <div className="rounded-md border border-red-900 bg-red-900/10 p-4">
           <p className="text-sm text-red-400">Irreversible actions that affect your account</p>
         </div>
       </Section>
@@ -95,7 +95,7 @@ export const SettingsPage: Story = {
 
 export const DocumentationSections: Story = {
   render: () => (
-    <Sections className="w-[600px]">
+    <Sections className="w-150">
       <Section>
         <Section.Header>
           <Section.Heading>Overview</Section.Heading>
@@ -106,7 +106,7 @@ export const DocumentationSections: Story = {
         <Section.Header>
           <Section.Heading>Installation</Section.Heading>
         </Section.Header>
-        <pre className="p-4 rounded-md bg-surface2 text-sm font-mono text-neutral5 overflow-x-auto">
+        <pre className="overflow-x-auto rounded-md bg-surface2 p-4 font-mono text-sm text-neutral5">
           npm install @mastra/core
         </pre>
       </Section>
@@ -114,7 +114,7 @@ export const DocumentationSections: Story = {
         <Section.Header>
           <Section.Heading>Usage</Section.Heading>
         </Section.Header>
-        <pre className="p-4 rounded-md bg-surface2 text-sm font-mono text-neutral5 overflow-x-auto">
+        <pre className="overflow-x-auto rounded-md bg-surface2 p-4 font-mono text-sm text-neutral5">
           {`import { Mastra } from '@mastra/core';
 
 const mastra = new Mastra({

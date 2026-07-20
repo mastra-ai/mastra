@@ -346,8 +346,7 @@ test.describe('Viewer Role', () => {
       await page.reload();
 
       // Member should see tool execution panel
-      const locationInput = page.getByLabel(/location/i).or(page.locator('input[name="location"]'));
-      await expect(locationInput.first()).toBeVisible();
+      await expect(page.locator('[name="location"]')).toBeVisible();
     });
   });
 

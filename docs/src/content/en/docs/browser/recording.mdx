@@ -32,7 +32,7 @@ Recording tools are disabled by default. Enable them only for agents that need t
 
 ## Enable recording
 
-Pass `recording.outputDir` to `AgentBrowser` or `StagehandBrowser`. The browser provider adds the `browser_record` and `browser_record_caption` tools to the agent's toolset.
+Pass a `recording` object to `AgentBrowser` or `StagehandBrowser`. The only required field is `outputDir`. You can also set `maxDurationMs`, `maxWidth`, and `maxHeight` as defaults for every recording started by this browser.
 
 The following example enables recording for `AgentBrowser`:
 
@@ -44,6 +44,9 @@ export const browser = new AgentBrowser({
   headless: false,
   recording: {
     outputDir: join(process.cwd(), 'browser-recordings'),
+    maxDurationMs: 60_000,
+    maxWidth: 1280,
+    maxHeight: 720,
   },
 })
 ```
@@ -58,9 +61,14 @@ export const browser = new StagehandBrowser({
   headless: false,
   recording: {
     outputDir: join(process.cwd(), 'browser-recordings'),
+    maxDurationMs: 60_000,
+    maxWidth: 1280,
+    maxHeight: 720,
   },
 })
 ```
+
+The agent can still override these defaults per-recording by passing `maxDurationMs`, `maxWidth`, or `maxHeight` to the `browser_record` tool at start time.
 
 ## Recording tools
 
@@ -104,7 +112,7 @@ When the user asks for a recording:
 
 ## Output format and limits
 
-Recordings are saved as Motion-JPEG AVI files. This format is encoded in JavaScript and does not require `ffmpeg` or native dependencies.
+Recordings are saved as Motion-JPEG AVI files. This format is encoded in JavaScript and doesn't require `ffmpeg` or native dependencies.
 
 Default limits:
 

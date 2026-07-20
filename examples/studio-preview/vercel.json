@@ -1,5 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "installCommand": "pnpm install --frozen-lockfile --ignore-workspace",
-  "buildCommand": "pnpm build"
+  "buildCommand": "MASTRA_AGENT_SIGNALS=false pnpm build"
 }

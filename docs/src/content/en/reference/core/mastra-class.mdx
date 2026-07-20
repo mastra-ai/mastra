@@ -52,7 +52,7 @@ export const mastra = new Mastra({
 })
 ```
 
-`notifications.dispatch.enabled` registers an internal workflow with the default cron `*/1 * * * *`. The dispatcher reads due notification records from storage, groups summaries by `agentId`, `resourceId`, and `threadId`, and emits signals through the agent thread runtime. It isn't a user-facing entrypoint.
+`notifications.dispatch.enabled` allows an internal dispatcher workflow to run with the default cron `*/1 * * * *`. The dispatcher reads due notification records from storage, groups summaries by `agentId`, `resourceId`, and `threadId`, and emits signals through the agent thread runtime. It isn't a user-facing entrypoint. The dispatch schedule (and the workflow scheduler backing it) activates lazily on the first deferred or summarized notification, so apps that never defer notifications don't run a scheduler at all.
 
 ## Constructor parameters
 
@@ -71,7 +71,7 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
     name: 'tools',
     type: 'Record<string, ToolApi>',
     description:
-      'Custom tools to register. Structured as a key-value pair, with keys being the tool name and values being the tool function.',
+      'Tool instances to register. Keys are registration keys used by [`getTool()`](/reference/core/getTool), and values are tool instances. Use [`getToolById()`](/reference/core/getToolById) for intrinsic ID lookup and [`listTools()`](/reference/core/listTools) to read the registry.',
     isOptional: true,
     defaultValue: '{}',
   },

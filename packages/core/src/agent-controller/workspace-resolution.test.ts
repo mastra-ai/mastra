@@ -284,11 +284,11 @@ describe('AgentController createSession — workspace isolation', () => {
       workspace: wsB,
     });
 
-    expect(sessionA).toBeDefined();
-    expect(sessionB).toBeDefined();
+    expect(sessionA.getWorkspace()).toBe(wsA);
+    expect(sessionB.getWorkspace()).toBe(wsB);
+    expect(sessionA.getWorkspace()).not.toBe(sessionB.getWorkspace());
     expect(initSpyA).toHaveBeenCalled();
     expect(initSpyB).toHaveBeenCalled();
-    expect(wsA).not.toBe(wsB);
   });
 
   it('one session workspace override does not leak into another session', async () => {

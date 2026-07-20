@@ -134,4 +134,4 @@ Vectorize
 WebSocket
 WhatsApp
 (?i)WorkOS
-Zod
+(?i)Zod

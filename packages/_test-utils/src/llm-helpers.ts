@@ -78,12 +78,8 @@ export function getModelRecordingName(model: MastraModelConfig): string {
  */
 export function isV5PlusModel(model: MastraModelConfig): boolean {
   if (typeof model === 'string') return true;
-  if (
-    typeof model === 'object' &&
-    'specificationVersion' in model &&
-    (model.specificationVersion === 'v2' || model.specificationVersion === 'v3')
-  ) {
-    return true;
+  if (typeof model === 'object' && 'specificationVersion' in model && typeof model.specificationVersion === 'string') {
+    return model.specificationVersion !== 'v1';
   }
   return false;
 }
