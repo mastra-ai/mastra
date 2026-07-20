@@ -18,7 +18,7 @@ import { useWorkItemsQuery } from '../../../../shared/hooks/useWorkItems';
 import { useWorkspaceActivity } from '../../../../shared/hooks/useWorkspaceActivity';
 import { deriveProjectPath, useWorkspacesQuery } from '../../../../shared/hooks/useWorkspaces';
 import { AGENT_CONTROLLER_ID } from '../chat/services/constants';
-import { useActiveProjectContext } from '../workspaces';
+import { isGithubFactory, useActiveFactoryContext } from '../workspaces';
 import { FactoryPageShell } from './components/FactoryPageShell';
 import type { QueueHealthSelection } from './components/QueueHealthChart';
 import { QueueHealthChart, formatAgeSeconds } from './components/QueueHealthChart';
@@ -39,7 +39,7 @@ export function OverviewPage() {
       title="Overview"
       description="The factory at a glance: how much work is in each stage, how old it is, and what's actively running."
     >
-      {project => <OverviewContent githubProjectId={project.githubProjectId} />}
+      {project => <OverviewContent githubProjectId={project.binding.githubProjectId} />}
     </FactoryPageShell>
   );
 }
@@ -92,16 +92,17 @@ function OverviewContent({ githubProjectId }: { githubProjectId: string }) {
 /** Set of worktree paths with an agent run in flight (the sidebar dot source). */
 function useActivePaths(): ReadonlySet<string> {
   const { baseUrl } = useApiConfig();
-  const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
-  const workspaces = useWorkspacesQuery(activeProject);
+  const { activeFactory, resourceId, sessionEnabled } = useActiveFactoryContext();
+  const workspaces = useWorkspacesQuery(activeFactory);
   const worktrees = workspaces.data?.worktrees ?? [];
+  const projectPath = deriveProjectPath(activeFactory) || undefined;
   const runningByPath = useWorkspaceActivity({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    projectPath: deriveProjectPath(activeProject) || undefined,
+    projectPath,
     worktreePaths: worktrees.map(worktree => worktree.worktreePath),
     baseUrl,
-    enabled: sessionEnabled && activeProject?.source === 'github',
+    enabled: sessionEnabled && Boolean(activeFactory && isGithubFactory(activeFactory) && projectPath),
   });
   return useMemo(() => new Set(Object.keys(runningByPath).filter(path => runningByPath[path])), [runningByPath]);
 }

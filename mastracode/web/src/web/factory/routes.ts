@@ -168,11 +168,11 @@ export function buildFactoryRoutes(storage?: GithubStorage): ApiRoute[] {
     }),
 
     // ── Per-project queue-health age-threshold config (seconds) ─────────────
-    registerApiRoute('/web/factory/projects/:id/health/thresholds', {
+    registerApiRoute('/web/factory/repositories/:id/health/thresholds', {
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
-        const resolved = await resolveProject(loose(c), storage);
+        const resolved = await resolveGithubRepository(loose(c), storage);
         if ('response' in resolved) return resolved.response;
         const store = getFactoryStore();
         await store.ensureReady('queue-health');

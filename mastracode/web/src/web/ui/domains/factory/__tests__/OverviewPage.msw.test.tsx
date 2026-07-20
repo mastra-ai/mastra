@@ -16,7 +16,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/web-ui/render';
-import type { GithubStatus, Project } from '../../workspaces';
+import type { GithubStatus, Factory } from '../../workspaces';
 import { createAppRoutes } from '../../../router';
 import type { WorkItem } from '../services/workItems';
 
@@ -35,25 +35,30 @@ const HOUR_S = 3600;
 // (the aggregation ages against `new Date()` at render time).
 const ago = (seconds: number) => new Date(Date.now() - seconds * 1000).toISOString();
 
-const githubProject: Project = {
+const githubProject: Factory = {
   id: 'project-gh',
   name: 'Mastra',
-  source: 'github',
-  githubProjectId: GITHUB_PROJECT_ID,
-  sandboxWorkdir: '/sandbox/mastra',
   resourceId: RESOURCE_ID,
-  gitBranch: 'main',
-  worktrees: [{ branch: 'feat/overview', worktreePath: WORKTREE, baseBranch: 'main' }],
-  selectedWorktreePath: WORKTREE,
   createdAt: 1,
+  binding: {
+    kind: 'github',
+    githubProjectId: GITHUB_PROJECT_ID,
+    gitBranch: 'main',
+    sandboxWorkdir: '/sandbox/mastra',
+    selectedWorktreePath: WORKTREE,
+    worktrees: [{ branch: 'feat/overview', worktreePath: WORKTREE, baseBranch: 'main' }],
+  },
 };
 
-const localProject: Project = {
+const localProject: Factory = {
   id: 'project-local',
   name: 'Local',
-  path: '/projects/local',
   resourceId: RESOURCE_ID,
   createdAt: 1,
+  binding: {
+    kind: 'local',
+    path: '/projects/local',
+  },
 };
 
 const connectedStatus: GithubStatus = {
@@ -150,18 +155,18 @@ function useOverviewHandlers({ workItems, activityThreads = [], thresholds }: Ov
     http.get(`${SESSION}/threads*`, () => HttpResponse.json({ threads: activityThreads })),
     http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () => HttpResponse.json({ messages: [] })),
     http.get(`${SESSION}/stream`, () => emptySse()),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${GITHUB_PROJECT_ID}/work-items`, () =>
+    http.get(`${TEST_BASE_URL}/web/factory/repositories/${GITHUB_PROJECT_ID}/work-items`, () =>
       HttpResponse.json({ workItems }),
     ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${GITHUB_PROJECT_ID}/health/thresholds`, () =>
+    http.get(`${TEST_BASE_URL}/web/factory/repositories/${GITHUB_PROJECT_ID}/health/thresholds`, () =>
       HttpResponse.json({ thresholds: thresholds ?? [14400, 86400, 259200] }),
     ),
   );
 }
 
-function renderAt(initialEntry: string, project: Project = githubProject) {
-  localStorage.setItem('mastracode-projects', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-project', project.id);
+function renderAt(initialEntry: string, project: Factory = githubProject) {
+  localStorage.setItem('mastracode-factories', JSON.stringify([project]));
+  localStorage.setItem('mastracode-active-factory', project.id);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [initialEntry] });
   renderWithProviders(<RouterProvider router={router} />, client);
@@ -241,7 +246,7 @@ describe('Factory Overview page', () => {
     useOverviewHandlers({ workItems: [] });
     renderAt('/factory/overview', localProject);
 
-    expect(await screen.findByText(/only available for GitHub projects/)).toBeInTheDocument();
+    expect(await screen.findByText(/require a Factory connected to GitHub/)).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Queue health' })).not.toBeInTheDocument();
   });
 });
