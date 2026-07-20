@@ -45,6 +45,7 @@ import { createStateSigner } from './state-signing.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import {
   assembleWebApiRoutes,
+  buildIntegrationContext,
   resolveFactoryReady,
   resolveGithubReady,
   resolveIntakeReady,
@@ -473,7 +474,34 @@ export class MastraFactory {
     });
 
     this.#prepared = prepared;
-    return prepared.mastraArgs;
+
+    // Integration lifecycle workers (e.g. polling an upstream without
+    // webhooks): collected from READY integrations only, folded into the
+    // constructor args so `new Mastra(...)` merges them with the default
+    // workers and `finalize()`'s `startWorkers()` starts them alongside the
+    // built-ins. Never passed for the disabled/not-ready case — a worker for
+    // an unavailable integration must not run.
+    const integrationWorkers = readyIntegrations
+      .filter(({ integration, ready }) => ready && integration.workers)
+      .flatMap(({ integration }) =>
+        integration.workers!(
+          buildIntegrationContext(
+            {
+              controller: prepared.base.controller,
+              publicOrigin,
+              stateSigner,
+              integrationStorage,
+              sourceControlStorage,
+            },
+            integration.id,
+          ),
+        ),
+      );
+
+    return {
+      ...prepared.mastraArgs,
+      ...(integrationWorkers.length > 0 ? { workers: integrationWorkers } : {}),
+    };
   }
 
   /**
