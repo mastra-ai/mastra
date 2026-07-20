@@ -1634,10 +1634,13 @@ describe('MCPServer', () => {
         await client.connect(transport);
 
         const progressUpdates: Array<{ progress: number; total?: number }> = [];
-        const result = await client.callTool({ name: 'progressTool', arguments: {} }, undefined, {
-          onprogress: notification =>
-            progressUpdates.push({ progress: notification.progress, total: notification.total }),
-        });
+        const result = await client.callTool(
+          { name: 'progressTool', arguments: {} },
+          {
+            onprogress: notification =>
+              progressUpdates.push({ progress: notification.progress, total: notification.total }),
+          },
+        );
 
         // The client received the request-scoped progress notifications
         expect(progressUpdates).toEqual([

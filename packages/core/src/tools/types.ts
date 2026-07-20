@@ -237,10 +237,19 @@ export interface WorkflowToolExecutionContext<TSuspend, TResume> {
 /** Log levels for MCP `notifications/message`, ordered per RFC 5424. */
 export type MCPLoggingLevel = 'debug' | 'info' | 'notice' | 'warning' | 'error' | 'critical' | 'alert' | 'emergency';
 
+export type MCPServerContext = ServerContext & {
+  signal: ServerContext['mcpReq']['signal'];
+  requestId: ServerContext['mcpReq']['id'];
+  authInfo?: NonNullable<ServerContext['http']>['authInfo'];
+  sendNotification: ServerContext['mcpReq']['notify'];
+  sendRequest: ServerContext['mcpReq']['send'];
+  _meta?: ServerContext['mcpReq']['_meta'];
+};
+
 // MCP tool execution context - properties specific when tools are executed via Model Context Protocol
 export interface MCPToolExecutionContext {
   /** MCP protocol context passed by the server */
-  extra: ServerContext;
+  extra: MCPServerContext;
   /** Elicitation handler for interactive user input during tool execution */
   elicitation: {
     sendRequest: (request: ElicitRequest['params']) => Promise<ElicitResult>;

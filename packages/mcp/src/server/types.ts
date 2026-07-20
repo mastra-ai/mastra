@@ -1,3 +1,4 @@
+import type { MCPServerContext } from '@mastra/core/tools';
 import type { McpUiResourceMeta } from '@modelcontextprotocol/ext-apps';
 import type {
   RequestOptions,
@@ -7,7 +8,6 @@ import type {
   PromptMessage,
   Resource,
   ResourceTemplateType,
-  ServerContext,
 } from '@modelcontextprotocol/server';
 
 /**
@@ -117,7 +117,7 @@ export type ElicitationActions = {
 /**
  * Extra context passed to MCP request handlers.
  */
-export type MCPRequestHandlerExtra = ServerContext;
+export type MCPRequestHandlerExtra = MCPServerContext;
 
 /**
  * Re-exported MCP SDK types for resource handling.

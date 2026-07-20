@@ -1122,10 +1122,9 @@ describe('MastraMCPClient - Elicitation Tests', () => {
       },
     );
 
-    testServer.mcpServer.tool(
+    testServer.mcpServer.registerTool(
       'workflowNeedingOptionalInput',
-      'Only elicits when the client advertised elicitation support',
-      {},
+      { description: 'Only elicits when the client advertised elicitation support' },
       async (): Promise<CallToolResult> => {
         if (!testServer.mcpServer.server.getClientCapabilities()?.elicitation) {
           return {

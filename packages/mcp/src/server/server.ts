@@ -30,6 +30,7 @@ import type {
   BlobResourceContents,
   Resource,
   ServerCapabilities,
+  ServerContext,
   CallToolResult,
   ElicitResult,
   ElicitRequest,
@@ -48,7 +49,28 @@ import { broadcastNotification } from './notificationBroadcast';
 import { ServerPromptActions } from './promptActions';
 import { ServerResourceActions } from './resourceActions';
 import { ServerToolActions } from './toolActions';
-import type { MCPServerPrompts, MCPServerResources, ElicitationActions, MastraPrompt, AppResources } from './types';
+import type {
+  MCPServerPrompts,
+  MCPServerResources,
+  MCPRequestHandlerExtra,
+  ElicitationActions,
+  MastraPrompt,
+  AppResources,
+} from './types';
+
+const toMCPRequestHandlerExtra = (ctx: ServerContext): MCPRequestHandlerExtra => {
+  if (!ctx.mcpReq) return ctx as MCPRequestHandlerExtra;
+
+  return {
+    ...ctx,
+    signal: ctx.mcpReq.signal,
+    requestId: ctx.mcpReq.id,
+    authInfo: ctx.http?.authInfo,
+    sendNotification: ctx.mcpReq.notify,
+    sendRequest: ctx.mcpReq.send,
+    _meta: ctx.mcpReq._meta,
+  };
+};
 
 // RFC 5424 syslog severity ordering used by the MCP logging utility.
 // Higher numbers are more severe; messages below a client's minimum level are dropped.
@@ -761,7 +783,7 @@ export class MCPServer extends MCPServerBase {
   private registerHandlersOnServer(serverInstance: Server) {
     // List tools handler
     serverInstance.setRequestHandler('tools/list', async (_request, ctx) => {
-      const proxiedContext = await this.createProxiedRequestContext(ctx);
+      const proxiedContext = await this.createProxiedRequestContext(toMCPRequestHandlerExtra(ctx));
       const tools = await this.getAuthorizedConvertedToolEntries(proxiedContext);
       return {
         tools: tools.map(([, tool]) => {
@@ -799,6 +821,7 @@ export class MCPServer extends MCPServerBase {
     // Call tool handler
     serverInstance.setRequestHandler('tools/call', async (request, ctx) => {
       const startTime = Date.now();
+      const extra = toMCPRequestHandlerExtra(ctx);
       try {
         const tool = this.convertedTools[request.params.name];
         if (!tool) {
@@ -851,7 +874,7 @@ export class MCPServer extends MCPServerBase {
           },
         };
 
-        const proxiedContext = await this.createProxiedRequestContext(ctx);
+        const proxiedContext = await this.createProxiedRequestContext(extra);
 
         // Session-aware log emission: sends notifications/message to the calling
         // client, honoring the minimum level it set via logging/setLevel.
@@ -861,7 +884,7 @@ export class MCPServer extends MCPServerBase {
           data?: Record<string, unknown>,
         ): Promise<void> => {
           if (!this.shouldSendLog(serverInstance, level)) return;
-          await ctx.mcpReq.notify({
+          await extra.sendNotification({
             method: 'notifications/message',
             params: {
               level,
@@ -873,7 +896,7 @@ export class MCPServer extends MCPServerBase {
 
         // Session-aware progress emission: sends notifications/progress with the
         // progressToken the caller provided. No-op when no token was sent, per spec.
-        const progressToken = ctx.mcpReq._meta?.progressToken;
+        const progressToken = extra._meta?.progressToken;
         const sessionProgress = async (params: {
           progress: number;
           total?: number;
@@ -885,7 +908,7 @@ export class MCPServer extends MCPServerBase {
             });
             return;
           }
-          await ctx.mcpReq.notify({
+          await extra.sendNotification({
             method: 'notifications/progress',
             params: {
               progressToken,
@@ -901,7 +924,7 @@ export class MCPServer extends MCPServerBase {
           // Pass MCP-specific context through the mcp property
           mcp: {
             elicitation: sessionElicitation,
-            extra: ctx,
+            extra,
             log: sessionLog,
             progress: sessionProgress,
           },
@@ -1040,7 +1063,7 @@ export class MCPServer extends MCPServerBase {
         // per caller (e.g. via `extra.authInfo`), so caching would leak one caller's
         // resource index to the next. See https://github.com/mastra-ai/mastra/issues/17609
         try {
-          const resources = await capturedResourceOptions.listResources!({ extra: ctx });
+          const resources = await capturedResourceOptions.listResources!({ extra: toMCPRequestHandlerExtra(ctx) });
           this.logger.debug('Fetched resources', { count: resources.length });
           return { resources };
         } catch (error) {
@@ -1059,7 +1082,7 @@ export class MCPServer extends MCPServerBase {
 
         // Resolve the resource list for the current caller's `extra` on every request
         // rather than from a shared cache, so URI resolution respects per-caller auth.
-        const resources = await capturedResourceOptions.listResources?.({ extra: ctx });
+        const resources = await capturedResourceOptions.listResources?.({ extra: toMCPRequestHandlerExtra(ctx) });
         if (!resources) throw new Error('Failed to load resources');
         const resource = resources.find(r => r.uri === uri);
 
@@ -1069,7 +1092,10 @@ export class MCPServer extends MCPServerBase {
         }
 
         try {
-          const resourcesOrResourceContent = await capturedResourceOptions.getResourceContent({ uri, extra: ctx });
+          const resourcesOrResourceContent = await capturedResourceOptions.getResourceContent({
+            uri,
+            extra: toMCPRequestHandlerExtra(ctx),
+          });
           const resourcesContent = Array.isArray(resourcesOrResourceContent)
             ? resourcesOrResourceContent
             : [resourcesOrResourceContent];
@@ -1120,7 +1146,7 @@ export class MCPServer extends MCPServerBase {
         // per caller (e.g. via `extra.authInfo`), so caching would leak across callers.
         // See https://github.com/mastra-ai/mastra/issues/17609
         try {
-          const templates = await capturedResourceOptions.resourceTemplates!({ extra: ctx });
+          const templates = await capturedResourceOptions.resourceTemplates!({ extra: toMCPRequestHandlerExtra(ctx) });
           this.logger.debug('Fetched resource templates', { count: templates.length });
           return { resourceTemplates: templates };
         } catch (error) {
@@ -1168,7 +1194,7 @@ export class MCPServer extends MCPServerBase {
           };
         } else {
           try {
-            const prompts = await capturedPromptOptions.listPrompts({ extra: ctx });
+            const prompts = await capturedPromptOptions.listPrompts({ extra: toMCPRequestHandlerExtra(ctx) });
             for (const prompt of prompts) {
               PromptSchema.parse(prompt);
             }
@@ -1195,7 +1221,7 @@ export class MCPServer extends MCPServerBase {
           const startTime = Date.now();
           const { name, arguments: args } = request.params;
           if (!this.definedPrompts) {
-            const prompts = await this.promptOptions?.listPrompts?.({ extra: ctx });
+            const prompts = await this.promptOptions?.listPrompts?.({ extra: toMCPRequestHandlerExtra(ctx) });
             if (!prompts) throw new Error('Failed to load prompts');
             this.definedPrompts = prompts;
           }
@@ -1217,7 +1243,7 @@ export class MCPServer extends MCPServerBase {
                 name,
                 version: prompt.version,
                 args,
-                extra: ctx,
+                extra: toMCPRequestHandlerExtra(ctx),
               });
             }
             const duration = Date.now() - startTime;
@@ -2433,6 +2459,10 @@ export class MCPServer extends MCPServerBase {
       Object.entries(extraRecord).forEach(([key, value]) => {
         proxiedContext.set(key, value);
       });
+      const http = extraRecord.http;
+      if (http && typeof http === 'object' && 'authInfo' in http) {
+        proxiedContext.set('authInfo', http.authInfo);
+      }
     }
     await this.resolveMappedFGAUser(proxiedContext, extraRecord);
     return proxiedContext;
