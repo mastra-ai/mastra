@@ -13,7 +13,6 @@ import {
 } from '../workspaces';
 import { ChatHeader } from './components/ChatHeader';
 import { ChatMessageList } from './components/ChatMessageList';
-import { ChatOverlays } from './components/ChatOverlays';
 import { ComposerPanel } from './components/ComposerPanel';
 import { ChatMessageBoundary, ChatSessionBoundary } from './context/ChatSessionProvider';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
@@ -68,7 +67,6 @@ export function ThreadPage() {
               onOpenLocal={() => overlays.open('factories')}
             />
           )}
-          <ChatOverlays />
         </ChatSessionBoundary>
       }
     />

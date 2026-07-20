@@ -7,6 +7,7 @@ import { deriveProjectPath } from '../../../../../shared/hooks/useWorkspaces';
 import { useOverlays } from '../../../lib/overlays';
 import { GithubIcon } from '../../../ui/icons';
 import { useActiveFactoryContext } from '../context/ActiveFactoryProvider';
+import { isGithubAvailable } from '../deriveFactoryOnboardingOpen';
 import { isGithubFactory } from '../services/factories';
 
 /** Inline factory selection with dedicated actions for adding local and GitHub factories. */
@@ -14,7 +15,7 @@ export function FactorySwitcher() {
   const { factories, activeFactory, selectFactory } = useActiveFactoryContext();
   const overlays = useOverlays();
   const githubStatus = useGithubStatusQuery().data;
-  const githubEnabled = !!githubStatus && (githubStatus.enabled || !!githubStatus.authRequired);
+  const githubEnabled = isGithubAvailable(githubStatus);
 
   return (
     <DropdownMenu>
