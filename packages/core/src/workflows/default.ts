@@ -265,6 +265,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       actor?: ActorSignal;
       outputWriter?: OutputWriter;
       stepSpan?: Span<SpanType.WORKFLOW_STEP>;
+      operationId?: string;
       perStep?: boolean;
     },
   ): Promise<StepResult<any, any, any, any> | null> {
