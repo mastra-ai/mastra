@@ -265,6 +265,170 @@ Searches for similar vectors with optional metadata filtering.
 ]}
 />
 
+### `createSearchIndex()`
+
+Provisions an Atlas Search (BM25/full-text) index on the collection backing an index. This enables full-text search via `textQuery()` and hybrid search via `hybridQuery()`.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the Mastra index whose collection will have the search index',
+  },
+  {
+    name: 'fields',
+    type: 'string[]',
+    isOptional: true,
+    description: 'Field names to index for full-text search. Omit for dynamic mapping (all string fields).',
+  },
+  {
+    name: 'searchIndexName',
+    type: 'string',
+    isOptional: true,
+    defaultValue: '${collectionName}_search_index',
+    description: 'Name for the Atlas Search index. Defaults to `${collectionName}_search_index`.',
+  },
+]}
+/>
+
+```typescript
+await store.createSearchIndex({
+  indexName: 'precedents',
+  fields: ['note', 'description'],
+})
+```
+
+### `textQuery()`
+
+Runs a full-text (BM25) search against an Atlas Search index. The search index must be created with `createSearchIndex()` first.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the Mastra index to search',
+  },
+  {
+    name: 'query',
+    type: 'string',
+    description: 'Full-text search query string',
+  },
+  {
+    name: 'paths',
+    type: 'string[]',
+    description: 'Field paths to search in (e.g., ["note", "description"])',
+  },
+  {
+    name: 'topK',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '10',
+    description: 'Number of results to return',
+  },
+  {
+    name: 'filter',
+    type: 'Record<string, any>',
+    isOptional: true,
+    description: 'Metadata filters (applies to the `metadata` field)',
+  },
+  {
+    name: 'metadataMode',
+    type: "'field' | 'document'",
+    isOptional: true,
+    defaultValue: 'field',
+    description:
+      "`'field'` (default) projects the managed `metadata`/`document` fields. `'document'` returns the full source document as `metadata`.",
+  },
+]}
+/>
+
+```typescript
+const results = await store.textQuery({
+  indexName: 'precedents',
+  query: 'shell company offshore',
+  paths: ['note'],
+  topK: 10,
+})
+```
+
+### `hybridQuery()`
+
+Runs a hybrid search that fuses vector similarity and full-text results using MongoDB's server-side `$rankFusion` (requires MongoDB >= 8.1). The search index must be created with `createSearchIndex()` first.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the Mastra index to search',
+  },
+  {
+    name: 'queryVector',
+    type: 'number[]',
+    description: 'Query vector for similarity search',
+  },
+  {
+    name: 'query',
+    type: 'string',
+    description: 'Full-text search query string',
+  },
+  {
+    name: 'paths',
+    type: 'string[]',
+    description: 'Field paths to search in for full-text (e.g., ["note", "description"])',
+  },
+  {
+    name: 'topK',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '10',
+    description: 'Number of results to return',
+  },
+  {
+    name: 'filter',
+    type: 'Record<string, any>',
+    isOptional: true,
+    description: 'Metadata filters (applies to both vector and text branches)',
+  },
+  {
+    name: 'weights',
+    type: '{ vector?: number; text?: number }',
+    isOptional: true,
+    description: 'Relative weights for vector vs. text results in fusion (default: 1:1)',
+  },
+  {
+    name: 'numCandidates',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '20 * topK (capped at 10000)',
+    description: 'Number of candidates for the vector search branch',
+  },
+  {
+    name: 'metadataMode',
+    type: "'field' | 'document'",
+    isOptional: true,
+    defaultValue: 'field',
+    description:
+      "`'field'` (default) projects the managed `metadata`/`document` fields. `'document'` returns the full source document as `metadata`.",
+  },
+]}
+/>
+
+```typescript
+const results = await store.hybridQuery({
+  indexName: 'precedents',
+  queryVector: embedding,
+  query: 'shell company offshore',
+  paths: ['note'],
+  topK: 10,
+  weights: { vector: 1, text: 1.5 }, // Favor text matches
+})
+```
+
+**Note:** `hybridQuery()` requires MongoDB >= 8.1 for the `$rankFusion` stage. If you're running an older version, use `query()` and `textQuery()` separately and merge the results client-side.
+
 ### `describeIndex()`
 
 Returns information about the index (collection).
