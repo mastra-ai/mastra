@@ -99,7 +99,7 @@ function makeStubAgent(runMs: number, runtime: AgentThreadStreamRuntime, pubsub:
   return agent as Agent;
 }
 
-async function collectConvertedRun(subscription: any) {
+async function collectRun(subscription: any, convert: boolean) {
   const parts: unknown[] = [];
   const iterator = subscription.stream[Symbol.asyncIterator]();
   while (true) {
@@ -107,12 +107,14 @@ async function collectConvertedRun(subscription: any) {
     if (next.done) throw new Error('subscription ended before a terminal part');
     const part = next.value as any;
     parts.push(
-      convertMastraChunkToAISDKBase({
-        chunk: part,
-        normalizeWarnings: warnings => warnings ?? [],
-        normalizeUsage: usage => usage,
-        normalizeFinishReason: reason => reason,
-      }),
+      convert
+        ? convertMastraChunkToAISDKBase({
+            chunk: part,
+            normalizeWarnings: warnings => warnings ?? [],
+            normalizeUsage: usage => usage,
+            normalizeFinishReason: reason => reason,
+          })
+        : part,
     );
     if (part.type === 'finish' || part.type === 'error' || part.type === 'abort') return parts;
   }
@@ -213,12 +215,19 @@ async function main() {
       return;
     }
 
-    if (cmd.cmd === 'collect-default') {
+    if (cmd.cmd === 'collect-default' || cmd.cmd === 'collect-fresh') {
+      const fresh = cmd.cmd === 'collect-fresh';
+      const subscription = fresh
+        ? await runtime.subscribeToThread(agent as any, { resourceId: RESOURCE_ID, threadId: THREAD_ID }, pubsub)
+        : defaultSubscription;
+      if (fresh) emit({ type: 'fresh-subscription-created' });
       try {
-        const parts = await collectConvertedRun(defaultSubscription);
-        emit({ type: 'subscription-result', parts });
+        const parts = await collectRun(subscription, cmd.mode === 'converted');
+        emit({ type: 'subscription-result', source: fresh ? 'fresh' : 'default', parts });
       } catch (err) {
         emit({ type: 'command-error', cmd: cmd.cmd, error: String(err) });
+      } finally {
+        if (fresh) subscription.unsubscribe();
       }
       return;
     }

@@ -1387,20 +1387,32 @@ export class AgentThreadStreamRuntime {
       };
     };
 
+    const localStreamIds = new Set<string>();
+    const replayedStreamIds = new Set<string>();
     const onEvent: EventCallback = event => {
       const data = event.data as AgentThreadStreamRuntimeEvent | undefined;
       if (!data) return;
       if (data.type === 'run-registered') {
         state.activeThreadRunIds.set(key, data.runId);
         state.activeThreadStreamIds.set(key, data.streamId);
-        const record =
-          state.threadRunsByStreamId.get(data.streamId) ?? createRemoteRun(data.runId, data.streamId, data.streamSeq);
+        const localRecord = state.threadRunsByStreamId.get(data.streamId);
+        if (localRecord) {
+          localStreamIds.add(data.streamId);
+        } else {
+          replayedStreamIds.add(data.streamId);
+        }
+        const record = localRecord ?? createRemoteRun(data.runId, data.streamId, data.streamSeq);
         enqueueRun(record);
         wake();
         return;
       }
       if (data.type === 'stream-part') {
-        if (data.sourceId === this.#id) return;
+        if (
+          data.sourceId === this.#id &&
+          (localStreamIds.has(data.streamId) || !replayedStreamIds.has(data.streamId))
+        ) {
+          return;
+        }
         let remoteRun = remoteRuns.get(data.streamId);
         if (!remoteRun) {
           // A subscriber can attach after another runtime already broadcast run-registered.
@@ -1496,6 +1508,7 @@ export class AgentThreadStreamRuntime {
     const currentRunId = activeRunId();
     const currentRecord = currentRunId ? state.threadRunsById.get(currentRunId) : undefined;
     if (currentRecord) {
+      localStreamIds.add(currentRecord.streamId);
       enqueueRun(currentRecord);
     }
 

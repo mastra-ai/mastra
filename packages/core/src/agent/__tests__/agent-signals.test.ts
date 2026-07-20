@@ -93,6 +93,44 @@ class AsyncCallbackPubSub extends PubSub {
   }
 }
 
+class RetainedAsyncCallbackPubSub extends PubSub {
+  #subscribers = new Map<string, Set<EventCallback>>();
+  #history = new Map<string, any[]>();
+  #pending = new Set<Promise<void>>();
+  #index = 0;
+
+  async publish(topic: string, event: any): Promise<void> {
+    const envelope = { ...event, id: `retained-${this.#index}`, createdAt: new Date(), index: this.#index++ };
+    const history = this.#history.get(topic) ?? [];
+    history.push(envelope);
+    this.#history.set(topic, history);
+    const subscribers = [...(this.#subscribers.get(topic) ?? [])];
+    const pending = new Promise<void>(resolve => {
+      setTimeout(() => {
+        for (const subscriber of subscribers) subscriber(envelope);
+        resolve();
+      }, 0);
+    });
+    this.#pending.add(pending);
+    pending.finally(() => this.#pending.delete(pending));
+  }
+
+  async subscribe(topic: string, cb: EventCallback): Promise<void> {
+    const subscribers = this.#subscribers.get(topic) ?? new Set<EventCallback>();
+    subscribers.add(cb);
+    this.#subscribers.set(topic, subscribers);
+    for (const event of this.#history.get(topic) ?? []) cb(event);
+  }
+
+  async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
+    this.#subscribers.get(topic)?.delete(cb);
+  }
+
+  async flush(): Promise<void> {
+    await Promise.all([...this.#pending]);
+  }
+}
+
 async function readNextRun(iterator: AsyncIterator<any>) {
   const nextRun = await readNextRunWithParts(iterator);
   if (nextRun.done) return nextRun;
@@ -839,6 +877,75 @@ describe('Agent signals', () => {
     } finally {
       firstSubscription.unsubscribe();
       secondSubscription.unsubscribe();
+    }
+  });
+
+  it('replays completed same-runtime runs without duplicating live local parts', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new RetainedAsyncCallbackPubSub();
+    const agent = { id: 'retained-replay-agent' } as Agent<any, any, any, any>;
+    const threadId = 'retained-replay-thread';
+    const resourceId = 'retained-replay-user';
+
+    const registerRun = (runId: string, text: string) => {
+      let finish!: () => void;
+      const finished = new Promise<void>(resolve => {
+        finish = resolve;
+      });
+      const parts = [
+        { type: 'start', runId },
+        { type: 'text-delta', runId, payload: { id: 'text-1', text } },
+        { type: 'finish', runId, payload: { finishReason: 'stop' } },
+      ];
+      const fullStream = new ReadableStream({
+        start(controller) {
+          setTimeout(() => {
+            for (const part of parts) controller.enqueue(part);
+            controller.close();
+            finish();
+          }, 10);
+        },
+      });
+      runtime.registerRun(
+        agent,
+        { runId, status: 'running', fullStream, _waitUntilFinished: () => finished } as any,
+        { memory: { thread: threadId, resource: resourceId } } as any,
+        pubsub,
+      );
+      return parts;
+    };
+
+    const liveSubscription = await runtime.subscribeToThread(agent, { threadId, resourceId }, pubsub);
+    const expected = registerRun('retained-run-1', 'first');
+    const liveRun = await withTimeout(
+      readNextRunWithParts(liveSubscription.stream[Symbol.asyncIterator]()),
+      'Timed out waiting for live local run',
+    );
+    expect(liveRun.value.parts).toEqual(expected);
+    liveSubscription.unsubscribe();
+
+    await pubsub.flush();
+    await nextTick();
+    await pubsub.flush();
+
+    const replaySubscription = await runtime.subscribeToThread(agent, { threadId, resourceId }, pubsub);
+    const replayIterator = replaySubscription.stream[Symbol.asyncIterator]();
+    try {
+      const replayedRun = await withTimeout(
+        readNextRunWithParts(replayIterator),
+        'Timed out waiting for completed same-runtime replay',
+      );
+      expect(replayedRun.value.parts).toEqual(expected);
+
+      const nextRunPromise = readNextRunWithParts(replayIterator);
+      const nextExpected = registerRun('retained-run-2', 'second');
+      const nextRun = await withTimeout(nextRunPromise, 'Timed out waiting for run after replay');
+      expect(nextRun.value.parts).toEqual(nextExpected);
+    } finally {
+      replaySubscription.unsubscribe();
+      await pubsub.flush();
+      await nextTick();
+      await pubsub.flush();
     }
   });
 
