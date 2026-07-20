@@ -137,6 +137,8 @@ class ControlledLeasePubSub extends RetainedAsyncCallbackPubSub implements Lease
   publishedData: any[] = [];
   ownerReadDelayMs = 0;
   ownerReadFailures = 0;
+  transferLeaseWait: Promise<void> | undefined;
+  onTransferLease: (() => void) | undefined;
   unsubscribeCount = 0;
 
   override async publish(topic: string, event: any): Promise<void> {
@@ -169,6 +171,8 @@ class ControlledLeasePubSub extends RetainedAsyncCallbackPubSub implements Lease
   }
 
   async transferLease(key: string, fromOwner: string, toOwner: string): Promise<boolean> {
+    this.onTransferLease?.();
+    await this.transferLeaseWait;
     if (this.owners.get(key) !== fromOwner) return false;
     this.owners.set(key, toOwner);
     return true;
@@ -2957,6 +2961,148 @@ describe('Agent signals', () => {
     await livePubSub.flush();
     await waitForCondition(() => liveSubscription.activeRunId() === 'live-run');
     liveSubscription.unsubscribe();
+  });
+
+  it('discards local pre-run copies when a drained run loses its reserved lease', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const runtime = new AgentThreadStreamRuntime();
+    const resourceId = 'drained-reservation-resource';
+    const threadId = 'drained-reservation-thread';
+    const key = `${resourceId}\u0000${threadId}`;
+    const oldRunId = 'drained-reservation-old-run';
+    let finishOldRun!: () => void;
+    const oldRunFinished = new Promise<void>(resolve => {
+      finishOldRun = resolve;
+    });
+    let signalTransferStarted!: () => void;
+    const transferStarted = new Promise<void>(resolve => {
+      signalTransferStarted = resolve;
+    });
+    let releaseTransfer!: () => void;
+    pubsub.transferLeaseWait = new Promise<void>(resolve => {
+      releaseTransfer = resolve;
+    });
+    pubsub.onTransferLease = signalTransferStarted;
+    pubsub.owners.set(key, oldRunId);
+
+    const agent = { id: 'drained-reservation-agent' } as Agent<any, any, any, any>;
+    agent.stream = vi.fn(async (_signal, options) => ({ runId: options.runId })) as any;
+    runtime.registerRun(
+      agent,
+      {
+        runId: oldRunId,
+        status: 'running',
+        fullStream: (async function* () {})(),
+        _waitUntilFinished: () => oldRunFinished,
+      } as any,
+      { runId: oldRunId, memory: { resource: resourceId, thread: threadId } } as any,
+      pubsub,
+    );
+    runtime.sendSignal(
+      agent,
+      { type: 'user-message', contents: 'start drained run' },
+      { resourceId, threadId },
+      pubsub,
+    );
+
+    finishOldRun();
+    await transferStarted;
+    const reservedRunId = runtime.getActiveThreadRunId({ resourceId, threadId }, pubsub)!;
+    const followUp = runtime.sendSignal(
+      agent,
+      { type: 'user-message', contents: 'attach during transfer' },
+      { resourceId, threadId },
+      pubsub,
+    );
+    await expect(followUp.accepted).resolves.toMatchObject({ action: 'deliver', runId: reservedRunId });
+
+    const winnerRunId = 'drained-reservation-winner';
+    pubsub.owners.set(key, winnerRunId);
+    releaseTransfer();
+    await waitForCondition(() => runtime.getActiveThreadRunId({ resourceId, threadId }, pubsub) === undefined);
+
+    const recoveryRunId = 'drained-reservation-recovery';
+    let finishRecovery!: () => void;
+    const recoveryFinished = new Promise<void>(resolve => {
+      finishRecovery = resolve;
+    });
+    runtime.registerRun(
+      agent,
+      {
+        runId: recoveryRunId,
+        status: 'running',
+        fullStream: (async function* () {})(),
+        _waitUntilFinished: () => recoveryFinished,
+      } as any,
+      { runId: recoveryRunId, memory: { resource: resourceId, thread: threadId } } as any,
+      pubsub,
+    );
+    expect(runtime.drainPendingSignals(recoveryRunId, pubsub, 'pre-run')).toEqual([]);
+    expect(agent.stream).not.toHaveBeenCalled();
+    finishRecovery();
+    await pubsub.releaseLease(key, winnerRunId);
+  });
+
+  it('keeps follow-ups attached while a continuation reserves its lease', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const runtime = new AgentThreadStreamRuntime();
+    const resourceId = 'continuation-reservation-resource';
+    const threadId = 'continuation-reservation-thread';
+    const key = `${resourceId}\u0000${threadId}`;
+    const oldRunId = 'continuation-reservation-old-run';
+    let finishOldRun!: () => void;
+    const oldRunFinished = new Promise<void>(resolve => {
+      finishOldRun = resolve;
+    });
+    let signalTransferStarted!: () => void;
+    const transferStarted = new Promise<void>(resolve => {
+      signalTransferStarted = resolve;
+    });
+    let releaseTransfer!: () => void;
+    pubsub.transferLeaseWait = new Promise<void>(resolve => {
+      releaseTransfer = resolve;
+    });
+    pubsub.onTransferLease = signalTransferStarted;
+    pubsub.owners.set(key, oldRunId);
+
+    const agent = {
+      id: 'continuation-reservation-agent',
+      stream: vi.fn(async (_messages, options) => ({ runId: options.runId })),
+    } as unknown as Agent<any, any, any, any>;
+    runtime.registerRun(
+      agent,
+      {
+        runId: oldRunId,
+        status: 'running',
+        fullStream: (async function* () {})(),
+        _waitUntilFinished: () => oldRunFinished,
+      } as any,
+      { runId: oldRunId, memory: { resource: resourceId, thread: threadId } } as any,
+      pubsub,
+    );
+    const continuation = runtime.continueWithMessages(
+      agent,
+      [] as any,
+      { resourceId, threadId, streamOptions: { memory: { resource: resourceId, thread: threadId } } as any },
+      pubsub,
+    );
+
+    finishOldRun();
+    await transferStarted;
+    const followUp = runtime.sendSignal(
+      agent,
+      { type: 'user-message', contents: 'attach to continuation' },
+      { resourceId, threadId },
+      pubsub,
+    );
+    await expect(followUp.accepted).resolves.toMatchObject({ action: 'deliver', runId: continuation.runId });
+    expect(runtime.drainPendingSignals(continuation.runId, pubsub, 'pre-run')).toEqual([
+      expect.objectContaining({ contents: 'attach to continuation' }),
+    ]);
+
+    releaseTransfer();
+    await waitForCondition(() => vi.mocked(agent.stream).mock.calls.length === 1);
+    await pubsub.releaseLease(key, continuation.runId);
   });
 
   it('orders delayed lease validation and ignores stale stream terminal events', async () => {

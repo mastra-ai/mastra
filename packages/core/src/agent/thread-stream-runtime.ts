@@ -988,11 +988,16 @@ export class AgentThreadStreamRuntime {
       // instead of starting a competing run here.
       const nextRunId = randomUUID();
       state.activeThreadRunIds.set(key, nextRunId);
+      state.threadKeysByRunId.set(nextRunId, key);
       const owns = await this.#acquireOrTransferThreadLease(pubsub, key, nextRunId, previousRun.runId);
       if (!owns.acquired) {
         if (state.activeThreadRunIds.get(key) === nextRunId) {
           state.activeThreadRunIds.delete(key);
         }
+        state.threadKeysByRunId.delete(nextRunId);
+        // Early follow-ups were already published as retained signal-enqueued
+        // events, so only discard this runtime's local pre-run copies.
+        state.preRunSignalsByThread.delete(key);
         // Put the signal back at the head so a later drain (or the winner) runs
         // it, and forward it to the current lease owner.
         const restored = state.pendingSignalsByThread.get(key) ?? [];
@@ -1068,11 +1073,14 @@ export class AgentThreadStreamRuntime {
     // new lease owner take over rather than starting a competing run here.
     if (fromRunId) {
       state.activeThreadRunIds.set(key, pending.runId);
+      state.threadKeysByRunId.set(pending.runId, key);
       const owns = await this.#acquireOrTransferThreadLease(pubsub, key, pending.runId, fromRunId);
       if (!owns.acquired) {
         if (state.activeThreadRunIds.get(key) === pending.runId) {
           state.activeThreadRunIds.delete(key);
         }
+        state.threadKeysByRunId.delete(pending.runId);
+        state.preRunSignalsByThread.delete(key);
         const restored = state.pendingContinuationsByThread.get(key) ?? [];
         state.pendingContinuationsByThread.set(key, [pending, ...restored]);
         return false;
@@ -1197,6 +1205,7 @@ export class AgentThreadStreamRuntime {
         state.activeThreadRunIds.delete(key);
       }
       state.threadKeysByRunId.delete(pendingIdle.runId);
+      state.preRunSignalsByThread.delete(key);
       if (owns.owner) {
         await this.#publishAndWait(pubsub, key, {
           type: 'signal-enqueued',
@@ -2076,6 +2085,7 @@ export class AgentThreadStreamRuntime {
           state.activeThreadRunIds.delete(reservedKey);
         }
         state.threadKeysByRunId.delete(reservedRunId);
+        state.preRunSignalsByThread.delete(reservedKey);
 
         // Forward the user signal to the winning runId so the message is not dropped.
         // Await the publish so that callers using `accepted` resolution as their
