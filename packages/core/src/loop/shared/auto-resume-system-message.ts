@@ -88,7 +88,9 @@ export function buildAutoResumeSystemMessageSuffix(
   suspendedTools: ReadonlyArray<Record<string, unknown>>,
 ): string | null {
   if (suspendedTools.length === 0) return null;
-  return `\n\nAnalyse the suspended tools: ${JSON.stringify(suspendedTools)}, using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.
+  // The model must resume with `runId`; keep the bookkeeping-only `parentRunId` out of the prompt.
+  const promptFacingTools = suspendedTools.map(({ parentRunId: _parentRunId, ...rest }) => rest);
+  return `\n\nAnalyse the suspended tools: ${JSON.stringify(promptFacingTools)}, using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.
                       resumeData can not be an empty object nor null/undefined.
                       When you find that and call that tool, add the resumeData to the tool call arguments/input.
                       Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.
