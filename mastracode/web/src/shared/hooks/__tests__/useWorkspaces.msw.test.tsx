@@ -4,7 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../e2e/web-ui/msw-server';
 import { renderHookWithProviders, waitForMutationsIdle, TEST_BASE_URL } from '../../../../e2e/web-ui/render';
-import type { ServerFactory } from '../../../web/ui/domains/workspaces/services/factories';
+import { queryKeys } from '../../api/keys';
+import type { Factory, ServerFactory } from '../../../web/ui/domains/workspaces/services/factories';
 import {
   isServerFactory,
   loadFactories,
@@ -139,10 +140,14 @@ describe('workspaces query hooks', () => {
     await act(async () => {
       await result.current.selectWorkspace.mutateAsync('/sandbox/mastra-worktrees/feat-api');
     });
-    await waitForMutationsIdle(client);
 
     expect(storedSelectedWorktreePath()).toBe('/sandbox/mastra-worktrees/feat-api');
+    const cached = client.getQueryData<Factory[]>(queryKeys.factories())?.[0];
+    expect(cached && isServerFactory(cached) ? selectedRepository(cached)?.selectedWorktreePath : undefined).toBe(
+      '/sandbox/mastra-worktrees/feat-api',
+    );
     await waitFor(() => expect(result.current.workspaces.data?.selected?.branch).toBe('feat-api'));
+    await waitForMutationsIdle(client);
   });
 
   it('creates a workspace, upserts it, selects it, and refreshes consumers', async () => {

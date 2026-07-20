@@ -50,17 +50,25 @@ export function deriveProjectPath(factory: Factory | null | undefined): string {
   return factory.binding.path;
 }
 
-function invalidateWorkspaceQueries(
+async function invalidateWorkspaceQueries(
   queryClient: ReturnType<typeof useQueryClient>,
   factory: Factory,
   scope?: AgentControllerThreadsScope,
 ) {
-  const projectPath = deriveProjectPath(latestFactory(factory));
-  void queryClient.invalidateQueries({ queryKey: queryKeys.workspaces(factory.id) });
-  void queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
-  void queryClient.invalidateQueries({
-    queryKey: queryKeys.agentControllerThreads(scope?.agentControllerId, scope?.resourceId, projectPath),
-  });
+  const current = latestFactory(factory);
+  const cached = queryClient.getQueryData<Factory[]>(queryKeys.factories());
+  queryClient.setQueryData<Factory[]>(
+    queryKeys.factories(),
+    cached?.map(candidate => (candidate.id === current.id ? current : candidate)) ?? loadFactories(),
+  );
+  const projectPath = deriveProjectPath(current);
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: queryKeys.workspaces(factory.id) }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.factories() }),
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.agentControllerThreads(scope?.agentControllerId, scope?.resourceId, projectPath),
+    }),
+  ]);
 }
 
 function workspacesData(factory: Factory): WorkspacesData {

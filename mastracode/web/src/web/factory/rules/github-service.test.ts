@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import type { GithubIntegration } from '../../github/integration.js';
 import { seedFactoryStorageForTests } from '../../storage/test-utils.js';
 import { builtInFactoryRules, defaultFactoryRules } from './defaults.js';
+import { FactoryDecisionDispatcher } from './dispatcher.js';
 import { FactoryGithubEventService } from './github-service.js';
+import { FactoryStartCoordinator } from './start-coordinator.js';
+import { FactoryTransitionService } from './transition-service.js';
 
 async function setup(permission: string | undefined) {
   const seeded = await seedFactoryStorageForTests();
@@ -100,6 +103,106 @@ describe('FactoryGithubEventService', () => {
     expect(decisions).toHaveLength(1);
     expect(decisions[0]?.actor).toMatchObject({ type: 'github', login: 'maintainer', trusted: true });
     expect(decisions[0]?.decision).toMatchObject({ type: 'upsertLinkedWorkItem', source: 'github-issue' });
+  });
+
+  it('moves a trusted issue to Triage, persists its session, and starts the investigation agent', async () => {
+    const { github, workItems, project } = await setup('write');
+    const rules = builtInFactoryRules();
+    const transitionService = new FactoryTransitionService({ storage: workItems, rules });
+    const service = new FactoryGithubEventService({ github, storage: workItems, rules });
+    const deliveredSignals: Array<{ id: string; contents: string; threadId: string }> = [];
+    const sessions = new Map<string, ReturnType<typeof makeSession>>();
+
+    function makeSession(scope: string) {
+      let threadId: string | undefined;
+      const session = {
+        thread: {
+          list: vi.fn(async () => []),
+          create: vi.fn(async () => {
+            threadId = 'thread-issue-42';
+            return { id: threadId };
+          }),
+          switch: vi.fn(async ({ threadId: next }: { threadId: string }) => {
+            threadId = next;
+          }),
+          setSetting: vi.fn(async () => {}),
+          requireId: vi.fn(() => {
+            if (!threadId) throw new Error('Thread was not persisted before binding creation.');
+            return threadId;
+          }),
+          listActiveMessages: vi.fn(async () => deliveredSignals.map(({ id }) => ({ id }))),
+        },
+        getWorkspace: () => ({
+          skills: {
+            maybeRefresh: vi.fn(async () => {}),
+            get: vi.fn(async (name: string) => ({ name, instructions: 'Investigate the issue.' })),
+          },
+        }),
+        sendSignal: vi.fn((input: { id: string; contents: string }) => {
+          if (!threadId) throw new Error('Signal delivered before thread persistence.');
+          deliveredSignals.push({ ...input, threadId });
+          return { accepted: Promise.resolve({ accepted: true }) };
+        }),
+        sendMessage: vi.fn(async () => {}),
+        sendNotificationSignal: vi.fn(async () => ({ persisted: Promise.resolve(), accepted: Promise.resolve() })),
+      };
+      sessions.set(scope, session);
+      return session;
+    }
+
+    const controller = {
+      createSession: vi.fn(async ({ scope }: { scope: string }) => makeSession(scope)),
+      getSessionByResource: vi.fn(async (_resourceId: string, scope: string) => sessions.get(scope)),
+    };
+    const coordinator = new FactoryStartCoordinator(controller as never, workItems, transitionService);
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage: workItems,
+      ownerId: 'worker-1',
+      prepareBinding: async ({ record, item, role }) => {
+        await coordinator.prepare({
+          orgId: record.orgId,
+          userId: 'user-1',
+          githubProjectId: record.githubProjectId,
+          resourceId: project.id,
+          projectPath: '/workspace/factory-issue-42',
+          branch: 'factory/issue-42',
+          threadTitle: `Issue: ${item.title}`,
+          kickoffKey: record.idempotencyKey,
+          kickoffMessage: null,
+          destinationStage: 'triage',
+          workItem: { id: item.id, role, input: item },
+        });
+      },
+    });
+
+    await service.ingest(issueOpened('delivery-full-flow'));
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
+
+    const [item] = await workItems.list('org-1', project.id);
+    expect(item).toMatchObject({
+      sourceKey: 'github-issue:42',
+      stages: ['triage'],
+      sessions: {
+        triage: {
+          projectPath: '/workspace/factory-issue-42',
+          branch: 'factory/issue-42',
+          threadId: 'thread-issue-42',
+        },
+      },
+    });
+    expect(deliveredSignals).toEqual([
+      expect.objectContaining({
+        threadId: 'thread-issue-42',
+        contents: expect.stringContaining('<skill name="understand-issue">'),
+      }),
+    ]);
+    expect((await workItems.listDeferredDecisions('org-1', project.id)).map(decision => decision.status)).toEqual([
+      'succeeded',
+      'succeeded',
+    ]);
   });
 
   it('prefers canonical board identities over legacy GitHub rows during ingress', async () => {
