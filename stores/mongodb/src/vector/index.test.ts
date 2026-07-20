@@ -492,6 +492,10 @@ describe('MongoDBVector filterFields (#18587)', () => {
       // Collection already exists so createIndex skips db.createCollection.
       (v as any).db = { listCollections: () => ({ hasNext: async () => true }) };
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex });
+      // createIndex now persists to the durable registry collection; stub the registry
+      // helpers so these mocked, unconnected instances don't hit a real MongoDB.
+      vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null);
+      vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
       return createSearchIndex;
     };
     const filterPathsOf = (createSearchIndex: ReturnType<typeof vi.fn>) =>
@@ -531,6 +535,8 @@ describe('MongoDBVector filterFields (#18587)', () => {
         .mockResolvedValueOnce(undefined); // full-text index creation
       (v as any).db = { listCollections: () => ({ hasNext: async () => true }) };
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex });
+      vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null);
+      vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
 
       await v.createIndex({ indexName: 'idx', dimension: 4, filterFields: ['category'] });
 
@@ -548,6 +554,8 @@ describe('MongoDBVector filterFields (#18587)', () => {
       const createSearchIndex = vi.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(indexExists);
       (v as any).db = { listCollections: () => ({ hasNext: async () => true }) };
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex });
+      vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null);
+      vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
 
       await expect(
         v.createIndex({ indexName: 'idx', dimension: 4, filterFields: ['category'] }),
@@ -874,9 +882,13 @@ describe('MongoDBVector filterFields (#18587)', () => {
       await searchVector.disconnect();
     });
 
-    it('createSearchIndex provisions an Atlas Search index on the collection', async () => {
+    it('createSearchIndex with fields provisions a DISTINCT field-mapped Atlas Search index', async () => {
       await searchVector.createSearchIndex({ indexName: idxName, fields: ['note'] });
-      // Wait for the search index to be created
+      // With `fields` (and no explicit searchIndexName), the field-mapped index is created
+      // under a DISTINCT name so it does not collide with (and get no-op'd by) the dynamic
+      // `${searchCol}_search_index` auto-created by createIndex. textQuery/hybridQuery then
+      // resolve this persisted name.
+      const fieldIndexName = `${searchCol}_search_fields_index`;
       const col = searchVector['db'].collection(searchCol);
       const maxWait = 60000;
       const pollInterval = 1000;
@@ -885,7 +897,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
 
       while (Date.now() - startTime < maxWait) {
         const idxs = await col.listSearchIndexes().toArray();
-        const searchIndex = idxs.find((i: any) => i.name === `${searchCol}_search_index`);
+        const searchIndex = idxs.find((i: any) => i.name === fieldIndexName);
         if (searchIndex && searchIndex.status === 'READY') {
           indexCreated = true;
           break;
@@ -956,6 +968,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
       const drop = vi.fn().mockResolvedValue(undefined);
       const dropSearchIndex = vi.fn().mockResolvedValue(undefined);
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ drop, dropSearchIndex });
+      const deleteRegistryEntry = vi.spyOn(v as any, 'deleteRegistryEntry').mockResolvedValue(undefined);
       // BYO index whose collectionName matches its indexName — name equality cannot
       // distinguish it from a managed index, so the registry flag must govern.
       (v as any).indexTargets.set('docs', { collectionName: 'docs', searchIndexName: 'docs_vec', isByo: true });
@@ -964,6 +977,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
 
       expect(dropSearchIndex).toHaveBeenCalledWith('docs_vec');
       expect(drop).not.toHaveBeenCalled();
+      expect(deleteRegistryEntry).toHaveBeenCalledWith('docs');
     });
 
     it('drops the collection for a managed index (no registered target)', async () => {
@@ -971,11 +985,215 @@ describe('MongoDBVector filterFields (#18587)', () => {
       const drop = vi.fn().mockResolvedValue(undefined);
       const dropSearchIndex = vi.fn().mockResolvedValue(undefined);
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ drop, dropSearchIndex });
+      // No in-memory target and no durable registry entry → resolves to the managed default.
+      vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null);
+      vi.spyOn(v as any, 'deleteRegistryEntry').mockResolvedValue(undefined);
 
       await v.deleteIndex({ indexName: 'managed_idx' });
 
       expect(drop).toHaveBeenCalledTimes(1);
       expect(dropSearchIndex).not.toHaveBeenCalled();
     });
+
+    it('resolves a BYO target from the durable registry when the in-memory map is empty (restart durability)', async () => {
+      const v = makeVector();
+      const drop = vi.fn().mockResolvedValue(undefined);
+      const dropSearchIndex = vi.fn().mockResolvedValue(undefined);
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ drop, dropSearchIndex });
+      const deleteRegistryEntry = vi.spyOn(v as any, 'deleteRegistryEntry').mockResolvedValue(undefined);
+      // Simulate a fresh process: nothing in the in-memory map, but the durable registry
+      // still records this index as BYO. resolveIndexTarget must hydrate from it so
+      // deleteIndex does NOT drop the caller's operational collection.
+      vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue({
+        _id: 'precedents',
+        indexName: 'precedents',
+        collectionName: 'transactions',
+        searchIndexName: 'txn_vec_idx',
+        isByo: true,
+      });
+
+      await v.deleteIndex({ indexName: 'precedents' });
+
+      expect(dropSearchIndex).toHaveBeenCalledWith('txn_vec_idx');
+      expect(drop).not.toHaveBeenCalled();
+      expect(deleteRegistryEntry).toHaveBeenCalledWith('precedents');
+    });
+  });
+});
+
+// ─── Durability: BYO target survives a process restart (registry-backed) ─────────────
+// Self-contained live suite: owns its connected instances and cleans up its scratch
+// collection. Proves the CRITICAL fix — a BYO index created by one MongoDBVector instance
+// is correctly classified as BYO by a SECOND fresh instance (no shared in-memory Map), so
+// deleteIndex drops ONLY the search index and preserves the caller's operational collection.
+describe('MongoDBVector BYO durability across instances', () => {
+  const opsCol = 'durable_ops_txns';
+  const idxName = 'durable_precedents';
+  const searchIdx = 'durable_txn_vec_idx';
+
+  let creator: MongoDBVector;
+
+  beforeAll(async () => {
+    creator = new MongoDBVector({ uri, dbName, id: 'mongodb-durable-creator' });
+    await creator.connect();
+    await waitForAtlasSearchReady(creator);
+    const col = creator['db'].collection(opsCol);
+    await col.deleteMany({});
+    await col.insertMany([
+      { _id: 'a', embedding: [1, 0, 0, 0], amount: 100, lane: 'clean' },
+      { _id: 'b', embedding: [0, 1, 0, 0], amount: 5000, lane: 'fraud' },
+    ]);
+    await creator.createIndex({ indexName: idxName, dimension: 4, collectionName: opsCol, searchIndexName: searchIdx });
+    await creator.waitForIndexReady({ indexName: idxName, timeoutMs: 60000 });
+  }, 500000);
+
+  afterAll(async () => {
+    await creator['db']
+      .collection(opsCol)
+      .drop()
+      .catch(() => {});
+    // Clean up the registry entry in case a test path left one behind.
+    await creator['db']
+      .collection('__mastra_vector_indexes__')
+      .deleteOne({ _id: idxName as any })
+      .catch(() => {});
+    await creator.disconnect();
+  });
+
+  it('a fresh instance deleteIndex drops only the search index; the BYO collection + docs SURVIVE', async () => {
+    const col = creator['db'].collection(opsCol);
+    expect(await col.countDocuments()).toBe(2);
+
+    // Second, fully independent instance — its in-memory indexTargets Map is empty, so it
+    // MUST hydrate isByo/collectionName from the durable registry written by `creator`.
+    const fresh = new MongoDBVector({ uri, dbName, id: 'mongodb-durable-fresh' });
+    await fresh.connect();
+    try {
+      await fresh.deleteIndex({ indexName: idxName });
+    } finally {
+      await fresh.disconnect();
+    }
+
+    // The operational collection and all documents must be intact.
+    expect(await col.countDocuments()).toBe(2);
+    const docs = await col.find().toArray();
+    expect(docs.some((d: any) => d._id === 'a' && d.amount === 100)).toBe(true);
+    expect(docs.some((d: any) => d._id === 'b' && d.amount === 5000)).toBe(true);
+
+    // Only the search index is dropped (async) — poll until gone.
+    const start = Date.now();
+    let gone = false;
+    while (Date.now() - start < 30000) {
+      const idxs = await col.listSearchIndexes().toArray();
+      if (!idxs.some((i: any) => i.name === searchIdx)) {
+        gone = true;
+        break;
+      }
+      await new Promise(r => setTimeout(r, 500));
+    }
+    expect(gone).toBe(true);
+  });
+});
+
+// ─── listIndexes returns LOGICAL index names ─────────────────────────────────────────
+describe('MongoDBVector listIndexes logical names', () => {
+  const opsCol = 'listidx_ops';
+  const byoIdx = 'listidx_precedents';
+  const byoSearchIdx = 'listidx_vec_idx';
+  const managedIdx = 'listidx_managed';
+
+  let store: MongoDBVector;
+
+  beforeAll(async () => {
+    store = new MongoDBVector({ uri, dbName, id: 'mongodb-listidx' });
+    await store.connect();
+    await waitForAtlasSearchReady(store);
+    const col = store['db'].collection(opsCol);
+    await col.deleteMany({});
+    await col.insertOne({ _id: 'a', embedding: [1, 0, 0, 0], lane: 'clean' });
+    await store.createIndex({
+      indexName: byoIdx,
+      dimension: 4,
+      collectionName: opsCol,
+      searchIndexName: byoSearchIdx,
+    });
+    await store.waitForIndexReady({ indexName: byoIdx, timeoutMs: 60000 });
+    await createIndexAndWait(store, managedIdx, 4, 'cosine');
+  }, 500000);
+
+  afterAll(async () => {
+    await store.deleteIndex({ indexName: managedIdx }).catch(() => {});
+    await store.deleteIndex({ indexName: byoIdx }).catch(() => {});
+    await store['db']
+      .collection(opsCol)
+      .drop()
+      .catch(() => {});
+    await store.disconnect();
+  });
+
+  it('lists the LOGICAL index name for BYO (not the physical collection), and the managed index', async () => {
+    const names = await store.listIndexes();
+    // BYO index appears under its logical name, NOT its physical collection name.
+    expect(names).toContain(byoIdx);
+    expect(names).not.toContain(opsCol);
+    // Managed index appears (registry-backed).
+    expect(names).toContain(managedIdx);
+    // The registry collection itself is never listed.
+    expect(names).not.toContain('__mastra_vector_indexes__');
+  });
+});
+
+// ─── metadataMode: 'document' returns a clean source doc (no synthetic score pollution) ──
+describe('MongoDBVector document-mode clean projection', () => {
+  const opsCol = 'docmode_ops';
+  const idxName = 'docmode_idx';
+  const searchIdx = 'docmode_vec_idx';
+
+  let store: MongoDBVector;
+
+  beforeAll(async () => {
+    store = new MongoDBVector({ uri, dbName, id: 'mongodb-docmode' });
+    await store.connect();
+    await waitForAtlasSearchReady(store);
+    const col = store['db'].collection(opsCol);
+    await col.deleteMany({});
+    // Note: a real source field literally named `score` must be preserved, NOT clobbered
+    // by the synthetic relevance score.
+    await col.insertMany([
+      { _id: 'a', embedding: [1, 0, 0, 0], amount: 100, score: 42 },
+      { _id: 'b', embedding: [0, 1, 0, 0], amount: 5000, score: 99 },
+    ]);
+    await store.createIndex({ indexName: idxName, dimension: 4, collectionName: opsCol, searchIndexName: searchIdx });
+    await store.waitForIndexReady({ indexName: idxName, timeoutMs: 60000 });
+  }, 500000);
+
+  afterAll(async () => {
+    await store.deleteIndex({ indexName: idxName }).catch(() => {});
+    await store['db']
+      .collection(opsCol)
+      .drop()
+      .catch(() => {});
+    await store.disconnect();
+  });
+
+  it('metadata is the clean source doc: preserves a real `score` field and is not the synthetic relevance score', async () => {
+    const runQuery = () =>
+      store.query({ indexName: idxName, queryVector: [0, 1, 0, 0], topK: 1, metadataMode: 'document' });
+    await waitForSync(store, idxName, async () => {
+      const r = await runQuery();
+      return r.length === 1 && r[0].id === 'b';
+    });
+
+    const res = await runQuery();
+    expect(res).toHaveLength(1);
+    const hit = res[0];
+    // Top-level relevance score is populated by the search stage.
+    expect(typeof hit.score).toBe('number');
+    // metadata carries the CLEAN source doc: the real `score:99` field survives and was not
+    // overwritten by the synthetic relevance score.
+    expect(hit.metadata?.score).toBe(99);
+    expect(hit.metadata?.amount).toBe(5000);
+    // And the synthetic relevance score did not leak in equal to metadata.score.
+    expect(hit.metadata?.score).not.toBe(hit.score);
   });
 });
