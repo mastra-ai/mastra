@@ -65,36 +65,36 @@ export function ThemeDetailPanel({
       variant="floating"
     >
       <DrawerContent>
-        <DrawerHeader className="border-b border-border1">
+        <DrawerHeader className="border-border1 border-b">
           <DrawerTitle>{title}</DrawerTitle>
           <DrawerDescription className="sr-only">Details for {title}</DrawerDescription>
         </DrawerHeader>
         <DrawerBody className="grid content-start gap-6 overflow-y-auto p-6">
-          {detailQuery.isPending && <p className="text-sm text-neutral3">Loading theme details…</p>}
+          {detailQuery.isPending && <p className="text-neutral3 text-sm">Loading theme details…</p>}
           {detailQuery.isError && <p className="text-sm text-red-500">Unable to load theme details.</p>}
           {detailQuery.data && !detailQuery.data.theme && (
             <section>
-              <h2 className="text-sm font-semibold text-neutral6">Not present in this snapshot</h2>
-              <p className="mt-2 text-sm text-neutral3">This theme has no data in the selected snapshot.</p>
+              <h2 className="text-neutral6 text-sm font-semibold">Not present in this snapshot</h2>
+              <p className="text-neutral3 mt-2 text-sm">This theme has no data in the selected snapshot.</p>
             </section>
           )}
           {detailQuery.data?.theme && (
             <>
               <section aria-labelledby="theme-summary-heading">
-                <h2 id="theme-summary-heading" className="font-mono text-xs tracking-wider text-neutral3 uppercase">
+                <h2 id="theme-summary-heading" className="text-neutral3 font-mono text-xs tracking-wider uppercase">
                   Summary
                 </h2>
-                <p className="mt-3 text-sm text-neutral5">
+                <p className="text-neutral5 mt-3 text-sm">
                   {detailQuery.data.theme.description ?? 'No description available.'}
                 </p>
                 <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
                   <div>
                     <dt className="text-neutral3">Traces</dt>
-                    <dd className="mt-1 font-mono text-neutral5">{detailQuery.data.theme.traceCount}</dd>
+                    <dd className="text-neutral5 mt-1 font-mono">{detailQuery.data.theme.traceCount}</dd>
                   </div>
                   <div>
                     <dt className="text-neutral3">Stage share</dt>
-                    <dd className="mt-1 font-mono text-neutral5">
+                    <dd className="text-neutral5 mt-1 font-mono">
                       {Math.round(detailQuery.data.theme.coverage * 100)}%
                     </dd>
                   </div>
@@ -102,21 +102,21 @@ export function ThemeDetailPanel({
               </section>
 
               <section aria-labelledby="theme-examples-heading">
-                <h2 id="theme-examples-heading" className="font-mono text-xs tracking-wider text-neutral3 uppercase">
+                <h2 id="theme-examples-heading" className="text-neutral3 font-mono text-xs tracking-wider uppercase">
                   Examples
                 </h2>
-                {examplesQuery.isPending && <p className="mt-3 text-sm text-neutral3">Loading examples…</p>}
+                {examplesQuery.isPending && <p className="text-neutral3 mt-3 text-sm">Loading examples…</p>}
                 {examplesQuery.isError && <p className="mt-3 text-sm text-red-500">Unable to load examples.</p>}
                 {examplesQuery.data && (
                   <>
                     {examplesQuery.data.examples.length === 0 ? (
-                      <p className="mt-3 text-sm text-neutral3">No examples in this snapshot.</p>
+                      <p className="text-neutral3 mt-3 text-sm">No examples in this snapshot.</p>
                     ) : (
                       <ul className="mt-3 space-y-3">
                         {examplesQuery.data.examples.map(example => (
                           <li
                             key={example.traceId}
-                            className="rounded-md border border-border1 bg-surface3 p-3 text-sm text-neutral5"
+                            className="border-border1 bg-surface3 text-neutral5 rounded-md border p-3 text-sm"
                           >
                             {example.signalText}
                           </li>
@@ -139,17 +139,17 @@ export function ThemeDetailPanel({
 
               {snapshotTotal > 1 && (
                 <section aria-labelledby="theme-history-heading">
-                  <h2 id="theme-history-heading" className="font-mono text-xs tracking-wider text-neutral3 uppercase">
+                  <h2 id="theme-history-heading" className="text-neutral3 font-mono text-xs tracking-wider uppercase">
                     History
                   </h2>
-                  {historyQuery.isPending && <p className="mt-3 text-sm text-neutral3">Loading history…</p>}
+                  {historyQuery.isPending && <p className="text-neutral3 mt-3 text-sm">Loading history…</p>}
                   {historyQuery.isError && <p className="mt-3 text-sm text-red-500">Unable to load history.</p>}
                   {historyQuery.data && (
                     <ol className="mt-3 space-y-3">
                       {historyQuery.data.points.map(point => (
-                        <li key={point.snapshotId} className="border-l border-border2 pl-3 text-sm">
-                          <p className="font-medium text-neutral5 capitalize">{point.state}</p>
-                          <p className="mt-1 font-mono text-xs text-neutral3">
+                        <li key={point.snapshotId} className="border-border2 border-l pl-3 text-sm">
+                          <p className="text-neutral5 font-medium capitalize">{point.state}</p>
+                          <p className="text-neutral3 mt-1 font-mono text-xs">
                             {point.traceCount} traces · {Math.round(point.coverage * 100)}%
                           </p>
                         </li>

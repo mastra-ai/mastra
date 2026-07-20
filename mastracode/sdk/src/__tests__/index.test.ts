@@ -870,7 +870,8 @@ describe('createMastraCode', () => {
     await createMastraCode({ inputProcessors: [customProcessor] });
 
     const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as
-      { inputProcessors?: Array<{ id?: string }> } | undefined;
+      | { inputProcessors?: Array<{ id?: string }> }
+      | undefined;
     const processors = agentConfig?.inputProcessors ?? [];
     expect(processors[0]).toBe(customProcessor);
     expect(processors.map(processor => processor.id)).toEqual([

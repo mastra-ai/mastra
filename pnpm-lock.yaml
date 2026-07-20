@@ -244,6 +244,12 @@ importers:
       path-to-regexp:
         specifier: ^8.4.2
         version: 8.4.2
+      prettier:
+        specifier: 3.9.5
+        version: 3.9.5
+      prettier-plugin-tailwindcss:
+        specifier: ^0.7.2
+        version: 0.7.2(prettier@3.9.5)
       semver:
         specifier: ^7.7.4
         version: 7.8.5
@@ -1742,7 +1748,7 @@ importers:
         specifier: ^26.1.0
         version: 26.1.0(bufferutil@4.1.0)
       oxfmt:
-        specifier: 'catalog:'
+        specifier: 0.59.0
         version: 0.59.0
       postcss:
         specifier: ^8.5.8

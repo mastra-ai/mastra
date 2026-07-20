@@ -110,7 +110,7 @@ function AuditContent({ factoryProjectId }: { factoryProjectId: string | undefin
         <EmptyState
           className="min-h-0 flex-1"
           as="h2"
-          iconSlot={<ScrollText className="size-5 text-icon3" aria-hidden />}
+          iconSlot={<ScrollText className="text-icon3 size-5" aria-hidden />}
           titleSlot={hasActionFilter ? 'No matching audit events' : 'No audit events yet'}
           descriptionSlot={
             hasActionFilter

@@ -45,7 +45,7 @@ function SettingsSubsection({
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-1">
         <div className="flex items-center justify-between gap-3">
-          <Txt variant="ui-md" className="font-medium text-icon6">
+          <Txt variant="ui-md" className="text-icon6 font-medium">
             {title}
           </Txt>
           {action}
@@ -56,7 +56,7 @@ function SettingsSubsection({
           </Txt>
         )}
       </div>
-      <div className="rounded-lg border border-border1 p-4">{children}</div>
+      <div className="border-border1 rounded-lg border p-4">{children}</div>
     </div>
   );
 }
@@ -118,7 +118,7 @@ export function SettingsPanel() {
           <div className="flex flex-col gap-8">
             <SettingsSubsection title="Defaults">
               {/* Rows bring their own py-3; -my-3 keeps the card's effective padding even on all sides. */}
-              <div className="-my-3 divide-y divide-border1/40">
+              <div className="divide-border1/40 -my-3 divide-y">
                 <FactoryDefaultModelSection models={models} />
                 <ModelSettings
                   settings={settings}

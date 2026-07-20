@@ -237,7 +237,7 @@ function SankeyNode({
       <g
         aria-describedby={description ? tooltipId : undefined}
         aria-label={`${accessibleLabel}: ${value} ${numericValue === 1 ? 'trace' : 'traces'} (${percentage}%)`}
-        className="outline-hidden focus-visible:[&>rect]:stroke-neutral6 focus-visible:[&>rect]:stroke-2"
+        className="focus-visible:[&>rect]:stroke-neutral6 outline-hidden focus-visible:[&>rect]:stroke-2"
         onClick={clickable ? onSelect : undefined}
         onKeyDown={clickable ? handleKeyDown : undefined}
         role={clickable ? 'button' : undefined}
@@ -287,7 +287,7 @@ function SankeyNode({
         ? createPortal(
             <div
               aria-label={`${visibleDisplayLabel}: ${description}`}
-              className="pointer-events-none fixed z-50 rounded-md border border-border1 bg-surface5 p-2 text-xs leading-4 text-neutral6 shadow-elevated"
+              className="border-border1 bg-surface5 text-neutral6 shadow-elevated pointer-events-none fixed z-50 rounded-md border p-2 text-xs leading-4"
               id={tooltipId}
               role="tooltip"
               style={{
@@ -299,7 +299,7 @@ function SankeyNode({
               }}
             >
               <div className="font-medium">{visibleDisplayLabel}</div>
-              <div className="whitespace-pre-wrap text-neutral4">{description}</div>
+              <div className="text-neutral4 whitespace-pre-wrap">{description}</div>
             </div>,
             document.body,
           )

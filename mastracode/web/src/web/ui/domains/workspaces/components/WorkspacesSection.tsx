@@ -139,7 +139,7 @@ export function WorkspacesSection() {
               <DialogTitle>Delete workspace?</DialogTitle>
             </DialogHeader>
             <div className="flex flex-col gap-4 px-5 pb-4">
-              <Txt as="p" variant="ui-sm" className="m-0 text-icon4">
+              <Txt as="p" variant="ui-sm" className="text-icon4 m-0">
                 This deletes the <span className="text-icon6">{confirmDelete.branch}</span> checkout, its uncommitted
                 changes, and every thread in this workspace. This can’t be undone.
               </Txt>
@@ -191,7 +191,7 @@ function WorkspaceGroup({
   return (
     <section className="flex flex-col gap-2" aria-label={title}>
       <div className="flex items-center px-1">
-        <Txt as="span" variant="ui-xs" className="text-icon3 uppercase tracking-wide">
+        <Txt as="span" variant="ui-xs" className="text-icon3 tracking-wide uppercase">
           {title}
         </Txt>
       </div>

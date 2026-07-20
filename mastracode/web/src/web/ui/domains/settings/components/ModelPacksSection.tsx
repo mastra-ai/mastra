@@ -35,13 +35,13 @@ interface ModelAssignmentProps {
 
 function ModelAssignment({ description, icon: Icon, label, model }: ModelAssignmentProps) {
   return (
-    <span className="flex min-w-0 max-w-full items-center gap-0.5">
+    <span className="flex max-w-full min-w-0 items-center gap-0.5">
       <Tooltip>
         <TooltipTrigger
           render={
             <span
               aria-label={`${label}: ${description}`}
-              className="inline-flex size-5 shrink-0 items-center justify-center rounded-md outline-hidden focus-visible:ring-2 focus-visible:ring-accent1"
+              className="focus-visible:ring-accent1 inline-flex size-5 shrink-0 items-center justify-center rounded-md outline-hidden focus-visible:ring-2"
               tabIndex={0}
             >
               <Icon aria-hidden size={12} className="text-icon3" />
@@ -52,7 +52,7 @@ function ModelAssignment({ description, icon: Icon, label, model }: ModelAssignm
           {label}: {description}
         </TooltipContent>
       </Tooltip>
-      <Txt as="span" variant="ui-xs" className="truncate text-icon3">
+      <Txt as="span" variant="ui-xs" className="text-icon3 truncate">
         {model || '—'}
       </Txt>
     </span>
@@ -145,7 +145,7 @@ export function ModelPacksSection({
       )}
 
       {draft && (
-        <div className="flex flex-col gap-3 rounded-lg border border-border1 p-3">
+        <div className="border-border1 flex flex-col gap-3 rounded-lg border p-3">
           <label className="flex flex-col gap-1">
             <Txt as="span" variant="ui-sm" className="text-icon5">
               Name
@@ -200,7 +200,7 @@ export function ModelPacksSection({
               <div className="flex min-w-0 flex-col gap-0.5">
                 <div className="flex items-center gap-2">
                   {p.active && <Check size={13} className="text-accent1 shrink-0" />}
-                  <Txt as="span" variant="ui-md" className="truncate text-icon6">
+                  <Txt as="span" variant="ui-md" className="text-icon6 truncate">
                     {p.name}
                   </Txt>
                   {p.custom && <Badge size="sm">Custom</Badge>}

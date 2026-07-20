@@ -68,7 +68,7 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
   return (
     <section className="flex min-h-0 flex-1 flex-col gap-2" aria-labelledby="rule-decisions-heading">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <Txt as="h2" variant="ui-sm" className="m-0 text-icon6" id="rule-decisions-heading">
+        <Txt as="h2" variant="ui-sm" className="text-icon6 m-0" id="rule-decisions-heading">
           Rule decisions
         </Txt>
         <ButtonsGroup spacing="close" role="group" aria-label="Rule decision filter">
@@ -96,7 +96,7 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
         <EmptyState
           className="min-h-0 flex-1"
           as="h3"
-          iconSlot={<ListFilter className="size-5 text-icon3" aria-hidden />}
+          iconSlot={<ListFilter className="text-icon3 size-5" aria-hidden />}
           titleSlot={hasDecisionFilter ? 'No matching rule effects' : 'No rule effects yet'}
           descriptionSlot={
             hasDecisionFilter
@@ -117,7 +117,7 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
             <ul className="m-0 flex list-none flex-col p-0" aria-label="Rule decisions">
               {decisions.map((decision, index) => (
                 <Fragment key={decision.id}>
-                  {index > 0 ? <li role="separator" aria-hidden className="mx-3 my-px h-px bg-border1" /> : null}
+                  {index > 0 ? <li role="separator" aria-hidden className="bg-border1 mx-3 my-px h-px" /> : null}
                   <DecisionRow
                     decision={decision}
                     retrying={retryDecision.isPending && retryDecision.variables === decision.id}
@@ -164,7 +164,7 @@ function DecisionRow({
   ];
 
   return (
-    <li className="rounded-lg px-3 py-2 transition-colors hover:bg-neutral6/5">
+    <li className="hover:bg-neutral6/5 rounded-lg px-3 py-2 transition-colors">
       <div className="flex items-start gap-3">
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <div className="flex items-center gap-2">
@@ -181,7 +181,7 @@ function DecisionRow({
               {decision.status}
             </span>
           </div>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-ui-xs leading-ui-xs text-icon3">
+          <div className="text-ui-xs leading-ui-xs text-icon3 flex flex-wrap items-center gap-x-3 gap-y-0.5">
             {metrics.map(({ icon: MetricIcon, label, value }) => (
               <span key={label} className="inline-flex items-center gap-1" title={`${label} ${value}`}>
                 <MetricIcon className="size-3 shrink-0" aria-hidden />
@@ -190,7 +190,7 @@ function DecisionRow({
             ))}
           </div>
           {decision.lastError ? (
-            <Txt as="span" variant="ui-xs" className="break-words text-icon3">
+            <Txt as="span" variant="ui-xs" className="text-icon3 break-words">
               {decision.lastError}
             </Txt>
           ) : null}

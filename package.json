@@ -16,6 +16,8 @@
     "npm-run-all2": "^9.0.2",
     "oxfmt": "catalog:",
     "path-to-regexp": "^8.4.2",
+    "prettier": "3.9.5",
+    "prettier-plugin-tailwindcss": "^0.7.2",
     "semver": "^7.7.4",
     "tsc-files": "^1.1.4",
     "tsx": "catalog:",
