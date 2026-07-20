@@ -592,6 +592,10 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         });
       }
     } catch (error: any) {
+      // Preserve already-classified errors (e.g. the USER-category CONFLICT retarget guard and
+      // the BYO INVALID_ARGS collection-missing error thrown above) with their id/category
+      // intact, instead of re-wrapping them as a generic THIRD_PARTY CREATE_INDEX/FAILED.
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createVectorErrorId('MONGODB', 'CREATE_INDEX', 'FAILED'),

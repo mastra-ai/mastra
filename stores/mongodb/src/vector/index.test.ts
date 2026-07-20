@@ -592,9 +592,21 @@ describe('MongoDBVector filterFields (#18587)', () => {
         isByo: true,
       });
 
-      await expect(v.createIndex({ indexName: 'idx', dimension: 4, collectionName: 'new_col' })).rejects.toThrow(
-        /already registered against collection "old_col"/,
-      );
+      // Capture the thrown error so we can assert its CLASSIFICATION survives, not just its
+      // message: the catch in createIndex must re-throw the pre-classified MastraError as-is
+      // rather than re-wrapping it as a generic THIRD_PARTY CREATE_INDEX/FAILED.
+      let caught: any;
+      try {
+        await v.createIndex({ indexName: 'idx', dimension: 4, collectionName: 'new_col' });
+      } catch (e) {
+        caught = e;
+      }
+      expect(caught).toBeDefined();
+      expect(caught.message).toMatch(/already registered against collection "old_col"/);
+      // USER category and the CONFLICT id must be preserved for callers/telemetry.
+      expect(caught.category).toBe('USER');
+      expect(caught.id).toMatch(/CONFLICT/);
+      expect(caught.id).not.toMatch(/FAILED/);
       // The conflicting call must not have provisioned any index.
       expect(createSearchIndex).not.toHaveBeenCalled();
     });
