@@ -295,8 +295,10 @@ class MyFGAProvider implements IFGAProvider {
 
 The actor signal is trusted input, so construct it server-side:
 
+- Treat `actor` as a per-call signal. Durable workflows forward it when a run starts, but don't restore the initial actor on resume. Pass it explicitly on every trusted resume, or resolve a fresh actor through agent `defaultOptions`. Without a current actor, user authorization applies and a missing user fails closed.
 - Mastra strips `actor` from execution options handled by its built-in agent HTTP routes. Set it in server-side code, for example a scheduled job or a workflow, never from client input.
 - Establish tenant scope server-side. Built-in agent HTTP routes ignore a client-supplied `organizationId` in the request context, and the trusted-actor path requires an `organizationId` to be set.
+- Durable resume keeps its existing request-context recovery and merge behavior. This doesn't make a persisted actor trusted for a later workflow segment.
 - The tenant-scope check confirms that a trusted `organizationId` exists. It doesn't verify that `actor.agentId` belongs to that organization. When that relationship matters, verify it in `requireActor` using authoritative provider data.
 - Treat `actor.permissions` as a claim, not a grant. A provider that enforces least privilege resolves the agent's authoritative permissions from a trusted source, for example a manifest or your FGA backend keyed by `agentId`, rather than trusting the inline values.
 - Once a provider implements `requireActor`, errors from that method stop execution. Mastra doesn't fall back to organization-only authorization.

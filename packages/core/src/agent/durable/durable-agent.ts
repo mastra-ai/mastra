@@ -168,6 +168,10 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   abortSignal?: AbortSignal;
 }
 
+type DurableAgentResumeOptions<OUTPUT = undefined> = DurableAgentStreamOptions<OUTPUT> & {
+  toolCallId?: string;
+};
+
 /**
  * Result from DurableAgent.stream()
  */
@@ -623,6 +627,11 @@ export class DurableAgent<
       (defaultOptions ?? {}) as Record<string, unknown>,
       (options ?? {}) as Record<string, unknown>,
     ) as DurableAgentStreamOptions<TOutput>;
+    // Actor is a per-call trust signal, so an explicit value replaces the
+    // default actor as a whole rather than inheriting any of its fields.
+    if (options?.actor !== undefined) {
+      resolvedOptions.actor = options.actor;
+    }
     if ((options as any)?.[CLOSE_ON_SUSPEND] === true) {
       Object.defineProperty(resolvedOptions, CLOSE_ON_SUSPEND, { value: true, enumerable: true });
     }
@@ -935,6 +944,7 @@ export class DurableAgent<
     const result = await run.start({
       inputData: workflowInput,
       requestContext,
+      actor: workflowInput.options?.actor,
       ...createObservabilityContext({ currentSpan: entry?.agentSpan }),
     });
     if (result?.status === 'failed') {
@@ -1232,7 +1242,7 @@ export class DurableAgent<
   async resume(
     runId: string,
     resumeData: unknown,
-    options?: DurableAgentStreamOptions<TOutput>,
+    options?: DurableAgentResumeOptions<TOutput>,
   ): Promise<DurableAgentStreamResult<TOutput>> {
     let entry = this.#runRegistry.get(runId);
     if (!entry) {
@@ -1297,7 +1307,6 @@ export class DurableAgent<
         runId,
         requestContext: options?.requestContext ?? snapshotRequestContext,
         memory,
-        actor: options?.actor ?? workflowInput.options?.actor,
       });
       entry = this.#runRegistry.get(runId);
     }
@@ -1320,8 +1329,7 @@ export class DurableAgent<
         options?.requestContext ??
         (entry.requestContext as DurableAgentStreamOptions<TOutput>['requestContext'] | undefined),
       memory: registeredMemory ?? options?.memory,
-      actor: options?.actor ?? (entry.actor as DurableAgentStreamOptions<TOutput>['actor'] | undefined),
-    })) as DurableAgentStreamOptions<TOutput>;
+    })) as DurableAgentResumeOptions<TOutput>;
 
     // Delegate to the idle-loop wrapper when `untilIdle` is set. Strip
     // `untilIdle` before passing to the wrapper so the inner agent.resume()
@@ -1333,7 +1341,7 @@ export class DurableAgent<
         id: this.id,
         getDefaultOptions: () => ({}),
         getMemory: (args?: any) => this.getMemory(args),
-        resume: (innerRunId: string, innerResumeData: unknown, innerOptions?: DurableAgentStreamOptions<TOutput>) =>
+        resume: (innerRunId: string, innerResumeData: unknown, innerOptions?: DurableAgentResumeOptions<TOutput>) =>
           this.resume(innerRunId, innerResumeData, innerOptions),
         stream: (innerMessages: MessageListInput, innerOptions?: DurableAgentStreamOptions<TOutput>) =>
           this.stream(innerMessages, innerOptions),
@@ -1824,7 +1832,6 @@ export class DurableAgent<
       memory,
       saveQueueManager,
       requestContext,
-      actor: workflowInput.options?.actor,
       agentSpan: recoverAgentSpan,
       abortController,
       abortSignal: abortController.signal,

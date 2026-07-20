@@ -10,6 +10,6 @@ Fixed fine-grained authorization (FGA) checks for `DurableAgent` execution and t
 
 Behavior change: with an FGA provider configured, durable runs that were previously allowed through are now checked and can be denied.
 
-**Durable tool approvals preserve authorization context**
+**Durable resumes reauthorize each call**
 
-Durable approval and decline methods now forward the trusted request context and selected tool-call ID into resume authorization and workflow resume.
+Durable approval and decline methods now forward the trusted request context and selected tool-call ID into resume authorization and workflow resume. The actor is resolved for each call and forwarded to both agent authorization and tool execution. An explicit resume actor replaces the initial actor, while a newly resolved default actor can still apply. If neither exists, the resume uses normal user authorization and fails closed when no user is available.

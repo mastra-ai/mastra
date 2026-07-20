@@ -656,7 +656,6 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       : undefined,
     workspace,
     requestContext,
-    actor: execOptions?.actor,
     inputProcessors,
     llmRequestInputProcessors,
     outputProcessors,
