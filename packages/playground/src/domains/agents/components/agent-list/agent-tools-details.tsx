@@ -48,7 +48,7 @@ export function AgentToolsDetails({ agentName, tools }: AgentToolsDetailsProps) 
         className="w-80 max-w-[calc(100vw-2rem)]"
       >
         <div className="grid gap-3">
-          <CardTitle id={titleId}>Tools for {agentName}</CardTitle>
+          <CardTitle id={titleId}>Tools</CardTitle>
           <ul
             aria-label={`Configured tools for ${agentName}`}
             className="grid max-h-64 gap-3 overflow-y-auto"

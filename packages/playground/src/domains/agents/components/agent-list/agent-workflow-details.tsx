@@ -48,7 +48,7 @@ export function AgentWorkflowDetails({ agentName, workflows }: AgentWorkflowDeta
         className="w-80 max-w-[calc(100vw-2rem)]"
       >
         <div className="grid gap-3">
-          <CardTitle id={titleId}>Workflows for {agentName}</CardTitle>
+          <CardTitle id={titleId}>Workflows</CardTitle>
           <ul
             aria-label={`Configured workflows for ${agentName}`}
             className="grid max-h-64 gap-3 overflow-y-auto"

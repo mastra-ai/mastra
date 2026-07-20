@@ -48,7 +48,7 @@ export function AgentSubagentDetails({ agentName, agents }: AgentSubagentDetails
         className="w-80 max-w-[calc(100vw-2rem)]"
       >
         <div className="grid gap-3">
-          <CardTitle id={titleId}>Agents for {agentName}</CardTitle>
+          <CardTitle id={titleId}>Agents</CardTitle>
           <ul
             aria-label={`Configured agents for ${agentName}`}
             className="grid max-h-64 gap-2 overflow-y-auto"

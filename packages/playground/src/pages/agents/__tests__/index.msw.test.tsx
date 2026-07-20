@@ -127,7 +127,7 @@ describe('Agents page', () => {
 
       fireEvent.mouseEnter(providerButton);
 
-      const modelDetails = await screen.findByRole('dialog', { name: 'Model details' });
+      const modelDetails = await screen.findByRole('dialog', { name: 'Model' });
       expect(within(modelDetails).getByText('openai')).not.toBeNull();
       expect(within(modelDetails).getByText('gpt-4o-mini')).not.toBeNull();
     });
@@ -143,7 +143,7 @@ describe('Agents page', () => {
 
       fireEvent.mouseEnter(toolsButton);
 
-      const toolsDetails = await screen.findByRole('dialog', { name: 'Tools for Research Agent' });
+      const toolsDetails = await screen.findByRole('dialog', { name: 'Tools' });
       expect(within(toolsDetails).getByText('search')).not.toBeNull();
       expect(within(toolsDetails).getByText('Search the web')).not.toBeNull();
     });
@@ -158,7 +158,7 @@ describe('Agents page', () => {
 
       fireEvent.mouseEnter(workflowsButton);
 
-      const workflowsDetails = await screen.findByRole('dialog', { name: 'Workflows for Research Agent' });
+      const workflowsDetails = await screen.findByRole('dialog', { name: 'Workflows' });
       expect(within(workflowsDetails).getByText('Research workflow')).not.toBeNull();
       expect(within(workflowsDetails).getByText('Summarize the collected research')).not.toBeNull();
       expect(within(workflowsDetails).queryByText('No description provided.')).toBeNull();
@@ -174,7 +174,7 @@ describe('Agents page', () => {
 
       fireEvent.mouseEnter(agentsButton);
 
-      const agentsDetails = await screen.findByRole('dialog', { name: 'Agents for Research Agent' });
+      const agentsDetails = await screen.findByRole('dialog', { name: 'Agents' });
       expect(within(agentsDetails).getByText('Analysis Agent')).not.toBeNull();
     });
 
@@ -263,7 +263,7 @@ describe('Agents page', () => {
 
       fireEvent.mouseEnter(providerButton);
 
-      const modelDetails = await screen.findByRole('dialog', { name: 'Model details' });
+      const modelDetails = await screen.findByRole('dialog', { name: 'Model' });
       expect(within(modelDetails).getByText('gpt-4o-mini')).not.toBeNull();
     });
 
@@ -278,7 +278,7 @@ describe('Agents page', () => {
 
       fireEvent.mouseEnter(toolsButton);
 
-      const toolsDetails = await screen.findByRole('dialog', { name: 'Tools for Research Agent' });
+      const toolsDetails = await screen.findByRole('dialog', { name: 'Tools' });
       expect(within(toolsDetails).getByText('Search the web')).not.toBeNull();
     });
 
@@ -303,7 +303,7 @@ describe('Agents page', () => {
 
       fireEvent.mouseEnter(workflowsButton);
 
-      const workflowsDetails = await screen.findByRole('dialog', { name: 'Workflows for Research Agent' });
+      const workflowsDetails = await screen.findByRole('dialog', { name: 'Workflows' });
       expect(within(workflowsDetails).getByText('Research workflow')).not.toBeNull();
     });
 
@@ -318,7 +318,7 @@ describe('Agents page', () => {
 
       fireEvent.mouseEnter(agentsButton);
 
-      const agentsDetails = await screen.findByRole('dialog', { name: 'Agents for Research Agent' });
+      const agentsDetails = await screen.findByRole('dialog', { name: 'Agents' });
       expect(within(agentsDetails).getByText('Analysis Agent')).not.toBeNull();
     });
   });

@@ -1,5 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { CardDescription, CardTitle } from '@mastra/playground-ui/components/Card';
+import { CardTitle } from '@mastra/playground-ui/components/Card';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
 import { TextAndIcon } from '@mastra/playground-ui/components/Text';
 import { useId } from 'react';
@@ -43,22 +43,16 @@ export function AgentProviderDetails({ agentName, provider, modelId }: AgentProv
         className="w-72 max-w-[calc(100vw-2rem)]"
       >
         <div className="grid gap-3">
-          <CardTitle id={titleId}>Model details</CardTitle>
-          <div className="grid gap-1">
-            <CardDescription>Provider</CardDescription>
-            <TextAndIcon className="text-ui-sm text-neutral5">
-              <span aria-hidden="true">
-                <ProviderLogo providerId={provider} className="dark:invert" />
-              </span>
-              <span className="min-w-0 overflow-wrap-anywhere">{provider}</span>
-            </TextAndIcon>
-          </div>
-          <div className="grid gap-1">
-            <CardDescription>Model</CardDescription>
-            <span className="min-w-0 overflow-wrap-anywhere text-ui-sm text-neutral5">
-              {modelId || 'No model configured'}
+          <CardTitle id={titleId}>Model</CardTitle>
+          <TextAndIcon className="text-ui-sm text-neutral5">
+            <span aria-hidden="true">
+              <ProviderLogo providerId={provider} className="dark:invert" />
             </span>
-          </div>
+            <span className="min-w-0 overflow-wrap-anywhere">{provider}</span>
+          </TextAndIcon>
+          <span className="min-w-0 overflow-wrap-anywhere text-ui-sm text-neutral5">
+            {modelId || 'No model configured'}
+          </span>
         </div>
       </HoverCardContent>
     </HoverCard>
