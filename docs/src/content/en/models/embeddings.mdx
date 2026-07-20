@@ -81,6 +81,7 @@ const customModel = voyageEmbedding({
   model: "voyage-3.5",
   inputType: "query", // or 'document'
   outputDimension: 512, // 256, 512, 1024, or 2048
+  baseUrl: "https://ai.mongodb.com/v1", // Optional: custom endpoint (e.g. MongoDB-hosted Voyage)
 });
 
 const { embeddings: customEmbeddings } = await customModel.doEmbed({
