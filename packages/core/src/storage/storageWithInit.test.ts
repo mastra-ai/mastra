@@ -281,5 +281,43 @@ describe('augmentWithInit', () => {
       expect(init).toHaveBeenCalledTimes(2);
       expect(listMessages).toHaveBeenCalledTimes(3);
     });
+
+    it('does not float a rejection from the internal cache when init fails and the caller handles its call', async () => {
+      const unhandled: unknown[] = [];
+      const on = (r: unknown) => unhandled.push(r);
+      process.on('unhandledRejection', on);
+      try {
+        const inner = {
+          init: vi.fn().mockRejectedValue(new Error('boom')),
+          listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0, hasMore: false }),
+        } as unknown as MastraStorage;
+        const store = augmentWithInit(inner);
+        // Caller handles its own call (awaits + expects rejection) — the realistic pattern.
+        await expect(store.listMessages({ threadId: 't' })).rejects.toThrow('boom');
+        await new Promise(resolve => setTimeout(resolve, 50));
+      } finally {
+        process.off('unhandledRejection', on);
+      }
+      expect(unhandled).toEqual([]);
+    });
+
+    it('fires no background init (and floats nothing) when a store is constructed but never called', async () => {
+      const unhandled: unknown[] = [];
+      const on = (r: unknown) => unhandled.push(r);
+      process.on('unhandledRejection', on);
+      const inner = {
+        init: vi.fn().mockRejectedValue(new Error('boom')),
+        listMessages: vi.fn(),
+      } as unknown as MastraStorage;
+      try {
+        augmentWithInit(inner); // construct only — lazy init must not fire on its own
+        await new Promise(resolve => setTimeout(resolve, 50));
+      } finally {
+        process.off('unhandledRejection', on);
+      }
+      expect(unhandled).toEqual([]);
+      // init is lazy: never called because no storage method was invoked.
+      expect(inner.init).not.toHaveBeenCalled();
+    });
   });
 });
