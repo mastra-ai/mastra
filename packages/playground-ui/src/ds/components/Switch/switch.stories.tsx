@@ -20,12 +20,13 @@ const visibilityIcons: SwitchIconProps = {
   uncheckedIcon: <GlobeIcon />,
 };
 
-const withIconSource = `import { Switch } from '@mastra/playground-ui';
+const withIconSource = `import { Switch } from '@mastra/playground-ui/components/Switch';
 import { ZapIcon } from 'lucide-react';
 
 <Switch aria-label="Enable boost" icon={<ZapIcon />} />;`;
 
-const withStateIconsSource = `import { Label, Switch } from '@mastra/playground-ui';
+const withStateIconsSource = `import { Label } from '@mastra/playground-ui/components/Label';
+import { Switch } from '@mastra/playground-ui/components/Switch';
 import { GlobeIcon, LockKeyhole } from 'lucide-react';
 import { useState } from 'react';
 
@@ -53,7 +54,7 @@ function RepositoryVisibilitySwitch() {
 function SurfaceFrame({ className, label, children }: { className: string; label: string; children: ReactNode }) {
   return (
     <div className={`rounded-2xl border border-border1/70 p-5 ${className}`}>
-      <p className="mb-4 text-ui-xs uppercase tracking-wide text-neutral3">{label}</p>
+      <p className="mb-4 text-ui-xs tracking-wide text-neutral3 uppercase">{label}</p>
       {children}
     </div>
   );
@@ -85,7 +86,7 @@ function RepositoryVisibilitySwitch() {
       <div className="flex items-center justify-between gap-4">
         <Label htmlFor="repository-visibility-icons">Repository visibility</Label>
         <span className="inline-flex items-center gap-2">
-          <span className="text-ui-sm font-medium text-neutral7">{isPrivate ? 'Private' : 'Public'}</span>
+          <span className="text-neutral7 text-ui-sm font-medium">{isPrivate ? 'Private' : 'Public'}</span>
           <Switch
             id="repository-visibility-icons"
             checked={isPrivate}
@@ -183,7 +184,7 @@ export const AllStates: Story = {
     layout: 'centered',
   },
   render: () => (
-    <div className="grid min-w-[27rem] gap-4 rounded-lg bg-surface2 p-4">
+    <div className="min-w-108 grid gap-4 rounded-lg bg-surface2 p-4">
       <div className="grid grid-cols-[9rem_repeat(3,minmax(0,1fr))] items-center gap-x-5 gap-y-3 text-ui-sm text-neutral3">
         <span />
         <span>Default</span>
@@ -197,7 +198,7 @@ export const AllStates: Story = {
           aria-label="focused on"
           checked
           onCheckedChange={() => {}}
-          className="outline outline-1 outline-offset-2 outline-neutral5/55"
+          className="outline-1 outline-offset-2 outline-neutral5/55 outline-solid"
         />
 
         <span className="text-neutral5">Disabled</span>
@@ -208,7 +209,7 @@ export const AllStates: Story = {
           checked
           disabled
           onCheckedChange={() => {}}
-          className="outline outline-1 outline-offset-2 outline-neutral5/35"
+          className="outline-1 outline-offset-2 outline-neutral5/35 outline-solid"
         />
       </div>
     </div>
@@ -241,7 +242,7 @@ export const WithLabel: Story = {
 
 export const SettingsList: Story = {
   render: () => (
-    <div className="flex flex-col gap-4 w-dropdown-max-height">
+    <div className="flex w-dropdown-max-height flex-col gap-4">
       <div className="flex items-center justify-between">
         <Label htmlFor="email">Email notifications</Label>
         <Switch id="email" defaultChecked />
@@ -260,7 +261,7 @@ export const SettingsList: Story = {
 
 export const WithDescription: Story = {
   render: () => (
-    <div className="flex items-start justify-between gap-4 w-[350px]">
+    <div className="flex w-[350px] items-start justify-between gap-4">
       <div className="flex flex-col gap-1">
         <Label htmlFor="dark-mode">Dark mode</Label>
         <span className="text-xs text-neutral3">Switch to a darker color scheme</span>

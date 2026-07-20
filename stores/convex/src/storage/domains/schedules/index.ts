@@ -1,5 +1,3 @@
-import crypto from 'node:crypto';
-
 import type {
   Schedule,
   ScheduleFilter,
@@ -9,7 +7,12 @@ import type {
   ScheduleTriggerListOptions,
   ScheduleUpdate,
 } from '@mastra/core/storage';
-import { SchedulesStorage, TABLE_SCHEDULES, TABLE_SCHEDULE_TRIGGERS } from '@mastra/core/storage';
+import {
+  normalizeScheduleTarget,
+  SchedulesStorage,
+  TABLE_SCHEDULES,
+  TABLE_SCHEDULE_TRIGGERS,
+} from '@mastra/core/storage';
 
 import { ConvexDB, resolveConvexConfig } from '../../db';
 import type { ConvexDomainConfig } from '../../db';
@@ -96,7 +99,7 @@ function recordToSchedule(record: ScheduleRecord): Schedule {
 
   const schedule: Schedule = {
     id: String(record.id),
-    target,
+    target: normalizeScheduleTarget(target),
     cron: String(record.cron),
     status: String(record.status) as ScheduleStatus,
     nextFireAt: Number(record.next_fire_at),

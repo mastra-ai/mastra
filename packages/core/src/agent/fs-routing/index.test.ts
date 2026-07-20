@@ -1,4 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
+import { createScorer } from '../../evals';
+import type { MastraScorer } from '../../evals';
 import { MockMemory } from '../../memory/mock';
 import { RequestContext } from '../../request-context';
 import { createSkill } from '../../skills';
@@ -6,8 +8,8 @@ import type { InlineSkill } from '../../skills/types';
 import { createTool } from '../../tools';
 import { Workspace, LocalFilesystem } from '../../workspace';
 import { Agent } from '../agent';
-import { assembleAgentFromFsEntry, agentConfig } from './index';
-import type { FsAgentToolEntry } from './index';
+import { assembleAgentFromFsEntry, agentConfig, MAX_FS_SUBAGENT_DEPTH } from './index';
+import type { FsAgentToolEntry, FsAgentEntry } from './index';
 
 function makeTool(id: string): FsAgentToolEntry {
   return {
@@ -18,6 +20,10 @@ function makeTool(id: string): FsAgentToolEntry {
       execute: async () => ({ ok: true }),
     }),
   };
+}
+
+function makeScorer(id: string): MastraScorer<any, any, any, any> {
+  return createScorer({ id, name: id, description: `scorer ${id}` }).generateScore(() => 1);
 }
 
 function makeSkill(name: string): InlineSkill {
@@ -477,7 +483,7 @@ describe('assembleAgentFromFsEntry', () => {
       expect(onWarn).toHaveBeenCalledWith(expect.stringContaining('subagents'));
     });
 
-    it('ignores a nested subagents/ inside a subagent (one level only)', async () => {
+    it('assembles nested subagents recursively', async () => {
       const parent = assembleAgentFromFsEntry({
         name: 'supervisor',
         config: { model: 'openai/gpt-4o' },
@@ -485,7 +491,7 @@ describe('assembleAgentFromFsEntry', () => {
         subagents: [
           {
             ...childEntry('researcher', 'Researches topics.'),
-            subagents: [childEntry('grandchild', 'Should be ignored.')],
+            subagents: [childEntry('grandchild', 'Summarizes findings.')],
           },
         ],
       });
@@ -493,7 +499,44 @@ describe('assembleAgentFromFsEntry', () => {
       const agents = await parent.listAgents();
       expect(Object.keys(agents)).toEqual(['researcher']);
       const researcher = await (agents.researcher as Agent).listAgents();
-      expect(Object.keys(researcher)).toEqual([]);
+      expect(Object.keys(researcher)).toEqual(['grandchild']);
+      const grandchild = await (researcher.grandchild as Agent).listAgents();
+      expect(Object.keys(grandchild)).toEqual([]);
+    });
+
+    it(`warns and ignores subagents nested deeper than MAX_FS_SUBAGENT_DEPTH (${MAX_FS_SUBAGENT_DEPTH})`, async () => {
+      const onWarn = vi.fn();
+
+      // Build a chain one level deeper than the cap: depth 1..MAX+1.
+      let entry: FsAgentEntry = childEntry(`level${MAX_FS_SUBAGENT_DEPTH + 1}`, 'Too deep.');
+      for (let depth = MAX_FS_SUBAGENT_DEPTH; depth >= 1; depth--) {
+        entry = { ...childEntry(`level${depth}`, `Level ${depth}.`), subagents: [entry] };
+      }
+
+      const parent = assembleAgentFromFsEntry(
+        {
+          name: 'supervisor',
+          config: { model: 'openai/gpt-4o' },
+          instructionsMd: 'hi',
+          subagents: [entry],
+        },
+        { onWarn },
+      );
+
+      // Walk down the chain: every level up to the cap is present.
+      let current = parent;
+      for (let depth = 1; depth <= MAX_FS_SUBAGENT_DEPTH; depth++) {
+        const agents = await current.listAgents();
+        expect(Object.keys(agents)).toEqual([`level${depth}`]);
+        current = agents[`level${depth}`] as Agent;
+      }
+
+      // The level past the cap was dropped with a warning.
+      const deepest = await current.listAgents();
+      expect(Object.keys(deepest)).toEqual([]);
+      expect(onWarn).toHaveBeenCalledWith(
+        expect.stringContaining(`nest ${MAX_FS_SUBAGENT_DEPTH} levels below a top-level agent`),
+      );
     });
   });
 
@@ -556,6 +599,96 @@ describe('assembleAgentFromFsEntry', () => {
 
       expect(agent.hasOwnMemory()).toBe(false);
       expect(await agent.getMemory()).toBeUndefined();
+    });
+  });
+
+  describe('scorers', () => {
+    it('wires discovered scorers keyed by filename slug into the agent', async () => {
+      const agent = assembleAgentFromFsEntry({
+        name: 'weather',
+        config: { model: 'openai/gpt-4o' },
+        instructionsMd: 'hi',
+        scorers: [
+          { key: 'relevance', scorer: makeScorer('relevance') },
+          { key: 'accuracy', scorer: makeScorer('accuracy') },
+        ],
+      });
+
+      const scorers = await agent.listScorers();
+      expect(Object.keys(scorers).sort()).toEqual(['accuracy', 'relevance']);
+      expect(scorers.relevance.scorer.id).toBe('relevance');
+    });
+
+    it('accepts a { scorer, sampling } entry as the discovered default export', async () => {
+      const agent = assembleAgentFromFsEntry({
+        name: 'weather',
+        config: { model: 'openai/gpt-4o' },
+        instructionsMd: 'hi',
+        scorers: [
+          { key: 'relevance', scorer: { scorer: makeScorer('relevance'), sampling: { type: 'ratio', rate: 0.5 } } },
+        ],
+      });
+
+      const scorers = await agent.listScorers();
+      expect(scorers.relevance.scorer.id).toBe('relevance');
+      expect(scorers.relevance.sampling).toEqual({ type: 'ratio', rate: 0.5 });
+    });
+
+    it('config.scorers wins on key collision with a warning', async () => {
+      const onWarn = vi.fn();
+      const fromConfig = makeScorer('relevance');
+      const agent = assembleAgentFromFsEntry(
+        {
+          name: 'weather',
+          config: { model: 'openai/gpt-4o', scorers: { relevance: { scorer: fromConfig } } },
+          instructionsMd: 'hi',
+          scorers: [{ key: 'relevance', scorer: makeScorer('relevance') }],
+        },
+        { onWarn },
+      );
+
+      const scorers = await agent.listScorers();
+      expect(scorers.relevance.scorer).toBe(fromConfig);
+      expect(onWarn).toHaveBeenCalledWith(expect.stringContaining('config.scorers wins'));
+    });
+
+    it('a dynamic (function) config.scorers wins wholesale and discovered scorers are ignored', async () => {
+      const onWarn = vi.fn();
+      const dynamicScorer = makeScorer('dynamic');
+      const agent = assembleAgentFromFsEntry(
+        {
+          name: 'weather',
+          config: {
+            model: 'openai/gpt-4o',
+            scorers: () => ({ dynamic: { scorer: dynamicScorer } }),
+          },
+          instructionsMd: 'hi',
+          scorers: [{ key: 'relevance', scorer: makeScorer('relevance') }],
+        },
+        { onWarn },
+      );
+
+      const scorers = await agent.listScorers();
+      expect(Object.keys(scorers)).toEqual(['dynamic']);
+      expect(onWarn).toHaveBeenCalledWith(expect.stringContaining('config.scorers is a function'));
+    });
+
+    it('warns and ignores scorers/ when config.ts exports a new Agent()', () => {
+      const onWarn = vi.fn();
+      const coded = new Agent({
+        id: 'support',
+        name: 'support',
+        instructions: 'Code-defined.',
+        model: 'openai/gpt-4o',
+      });
+
+      const result = assembleAgentFromFsEntry(
+        { name: 'support', config: coded, scorers: [{ key: 'relevance', scorer: makeScorer('relevance') }] },
+        { onWarn },
+      );
+
+      expect(result).toBe(coded);
+      expect(onWarn).toHaveBeenCalledWith(expect.stringContaining('scorers/ are ignored'));
     });
   });
 });

@@ -1,0 +1,109 @@
+---
+title: "Environments | Mastra platform"
+description: Run the same Mastra project across production, staging, and preview environments with isolated URLs, environment variables, regions, and databases.
+---
+
+# Environments
+
+Every platform project contains one or more environments. An environment is an isolated deployment target with its own URL, its own environment variables, its own deploy history, and optionally its own [hosted database](/docs/mastra-platform/database). Use environments to run `production`, `staging`, and preview versions of the same codebase inside a single project.
+
+Your first [`mastra deploy`](/docs/mastra-platform/deploy) creates the `production` environment. Create more with the CLI or by deploying to a name that doesn't exist yet.
+
+## Create an environment
+
+Create an environment explicitly:
+
+```bash
+mastra env create staging
+```
+
+Or let a deploy create it, which prompts for confirmation:
+
+```bash
+mastra deploy --env staging
+```
+
+`mastra env create` defaults to the `staging` type. Pass `--type` to set `staging` or `preview` explicitly, and `--region` to choose where the environment runs:
+
+```bash
+mastra env create eu-preview --type preview --region eu
+```
+
+Each project has a single `production` environment, created by your first deploy. The region is fixed at creation. Databases attached to an environment are placed near the environment's region automatically, and observability data is routed to the ingest region for the matching residency zone. See [Regions](/docs/mastra-platform/regions) for the supported regions, database placement, and observability co-location. The number of environments per project depends on your plan.
+
+## List environments
+
+```bash
+mastra env list
+```
+
+The output shows each environment's name, region, active deploy status, and the managed environment variables injected by attached databases. Pass `--json` for machine-readable output in CI.
+
+All `mastra env` commands resolve their project from `MASTRA_PROJECT_ID`, the `--project` flag, or the `.mastra-project.json` file written by your first deploy, in that order. Run them from your project directory and you never need to name the project.
+
+## Environment variables
+
+An environment resolves its variables from three scopes:
+
+- **Managed variables**: Injected by attached [hosted databases](/docs/mastra-platform/database) (for example `TURSO_DATABASE_URL`). The platform defines these, and you can't edit them.
+- **Environment-scoped variables**: Stored on one environment through the dashboard. Use these for values that differ between environments, like API keys for staging and production services.
+- **Project-scoped variables**: Stored on the project and shared by all environments.
+
+Environment-scoped and project-scoped variables together are the stored variables described on the [Deploy](/docs/mastra-platform/deploy#environment-variables) page.
+
+Variables are applied when a deploy starts. To apply changed variables to a running service without a full redeploy:
+
+```bash
+mastra env restart staging
+```
+
+To see the full set an environment's deploys actually run with — environment-scoped and project-scoped values merged, with managed variables listed by name — pull them into a local env file:
+
+```bash
+mastra env vars pull staging --output .env.staging
+```
+
+Managed variable values are injected at deploy time and never written to the file; they appear as name-only comments.
+
+:::note
+Environment variables don't override managed database variables. To point an environment at a different database, attach an [environment-scoped database](/docs/mastra-platform/database#attach-with-the-cli) instead.
+:::
+
+## Deploy history
+
+List deploys across all environments, or filter to one:
+
+```bash
+mastra env deploys
+mastra env deploys staging
+```
+
+Each row shows the deploy status, environment, timestamp, and which deploy is currently active. A deploy transitions through **queued → uploading → building → deploying → running**, and the platform reports **running** only when the new version is serving traffic.
+
+## Isolate an environment's data
+
+Hosted databases are scoped to a single environment by default, so production and staging each read and write their own database:
+
+```bash
+mastra env db create production --kind turso --name my-project-production-db
+mastra env db create staging --kind turso --name my-project-staging-db
+```
+
+If you'd rather share one database across every environment, attach it with `--shared` instead: `mastra env db create --kind turso --shared`.
+
+An environment can only use one database per provider. If the project already has a shared (`--shared`) database of the same provider, attaching an environment-scoped one is rejected with a variable name conflict — delete the shared database with `mastra env db delete` first. Deleting a database destroys it with the provider along with all of its data, so export anything you need to keep. See [Hosted databases](/docs/mastra-platform/database) for the full scoping model.
+
+## Delete an environment
+
+```bash
+mastra env delete staging
+```
+
+The CLI asks for confirmation before deleting. Deleting an environment removes its deploys and stored variables.
+
+## Related
+
+- [Deploy](/docs/mastra-platform/deploy)
+- [Regions](/docs/mastra-platform/regions)
+- [Hosted databases](/docs/mastra-platform/database)
+- [`mastra env` CLI reference](/reference/cli/mastra#mastra-env)

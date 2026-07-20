@@ -1,5 +1,5 @@
 import type { ConnectionOptions } from 'node:tls';
-import type { CreateIndexOptions } from '@mastra/core/storage';
+import type { CreateIndexOptions, RetentionConfig } from '@mastra/core/storage';
 import type { ClientConfig, Pool, PoolConfig } from 'pg';
 
 /**
@@ -57,6 +57,13 @@ export interface PostgresBaseConfig {
    * ```
    */
   indexes?: CreateIndexOptions[];
+  /**
+   * Opt-in, table-granular, age-based retention policies. Declare per-table
+   * `maxAge` per domain (e.g. `{ memory: { messages: { maxAge: '30d' } } }`);
+   * unset tables are kept forever. Wire `storage.prune()` to your own cron to
+   * apply them. See {@link RetentionConfig}.
+   */
+  retention?: RetentionConfig;
 }
 
 /**
@@ -115,10 +122,7 @@ export interface PoolInstanceConfig extends PostgresBaseConfig {
  * - Cloud SQL connector config: `{ id, stream, ... }` (via pg.ClientConfig)
  */
 export type PostgresStoreConfig =
-  | PoolInstanceConfig
-  | ConnectionStringConfig
-  | HostConfig
-  | (PostgresBaseConfig & ClientConfig);
+  PoolInstanceConfig | ConnectionStringConfig | HostConfig | (PostgresBaseConfig & ClientConfig);
 
 /**
  * PostgreSQL configuration for PgVector (uses pg with ConnectionOptions)

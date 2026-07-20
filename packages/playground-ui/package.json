@@ -1,11 +1,8 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "38.0.1-alpha.0",
+  "version": "42.0.0-alpha.7",
   "description": "Mastra Playground components",
-  "main": "dist/index.umd.js",
-  "module": "dist/index.es.js",
-  "types": "dist/index.d.ts",
   "sideEffects": [
     "**/*.css"
   ],
@@ -15,13 +12,7 @@
     "CHANGELOG.md"
   ],
   "exports": {
-    ".": {
-      "import": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.es.js"
-      }
-    },
-    "./style.css": "./dist/index.css",
+    "./style.css": "./dist/style.css",
     "./theme.css": "./theme.css",
     "./tokens": {
       "import": {
@@ -31,16 +22,6 @@
       "require": {
         "types": "./dist/tokens.d.ts",
         "default": "./dist/tokens.cjs.js"
-      }
-    },
-    "./utils": {
-      "import": {
-        "types": "./dist/utils.d.ts",
-        "default": "./dist/utils.es.js"
-      },
-      "require": {
-        "types": "./dist/utils.d.ts",
-        "default": "./dist/utils.cjs.js"
       }
     },
     "./utils/*": {
@@ -147,21 +128,21 @@
     "@codemirror/lang-javascript": "^6.2.5",
     "@codemirror/lang-json": "^6.0.2",
     "@codemirror/lang-markdown": "^6.5.0",
-    "@codemirror/language": "^6.12.3",
+    "@codemirror/language": "^6.12.4",
     "@codemirror/legacy-modes": "^6.5.3",
     "@codemirror/merge": "^6.12.2",
-    "@codemirror/search": "^6.7.0",
-    "@codemirror/state": "^6.6.0",
-    "@codemirror/view": "^6.43.1",
+    "@codemirror/search": "^6.7.1",
+    "@codemirror/state": "^6.7.1",
+    "@codemirror/view": "^6.43.6",
     "@hello-pangea/dnd": "^18.0.1",
     "@lezer/highlight": "^1.2.3",
     "@radix-ui/react-visually-hidden": "^1.2.4",
     "@tanstack/react-virtual": "^3.13.22",
-    "@uiw/codemirror-theme-dracula": "^4.25.10",
-    "@uiw/react-codemirror": "^4.25.10",
+    "@uiw/codemirror-theme-dracula": "^4.25.11",
+    "@uiw/react-codemirror": "^4.25.11",
     "cmdk": "^1.1.1",
     "date-fns": "catalog:",
-    "prettier": "^3.8.3",
+    "prettier": "^3.9.5",
     "react-day-picker": "^8.10.1",
     "react-markdown": "^9.1.0",
     "react-resizable-panels": "^4.7.3",
@@ -199,7 +180,7 @@
     "@tanstack/react-query": "^5.90.21",
     "@testing-library/react": "^16.3.2",
     "@types/json-schema": "^7.0.15",
-    "@types/node": "22.19.21",
+    "@types/node": "22.20.1",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.2.0",
@@ -207,8 +188,9 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "eslint-plugin-react-hooks": "^7.1.1",
-    "eslint-plugin-react-refresh": "^0.5.2",
-    "eslint-plugin-storybook": "^10.4.2",
+    "eslint-plugin-react-refresh": "^0.5.3",
+    "eslint-plugin-storybook": "^10.5.0",
+    "eslint-plugin-tailwindcss": "^4.1.0",
     "jsdom": "^26.1.0",
     "msw": "^2.12.11",
     "react": "catalog:",

@@ -16,6 +16,69 @@ interface ArchitectureOptions {
   libc?: string[];
 }
 
+const PNPM_CONFIG_KEYS_TO_COPY = new Set([
+  'allowBuilds',
+  'onlyBuiltDependencies',
+  'ignoredBuiltDependencies',
+  'neverBuiltDependencies',
+  'minimumReleaseAge',
+  'minimumReleaseAgeExclude',
+  'trustPolicy',
+  'trustPolicyExclude',
+  'trustPolicyIgnoreAfter',
+  'supportedArchitectures',
+]);
+
+function getTopLevelYamlKey(line: string) {
+  const match = /^(?!\s)([\w-]+):/.exec(line);
+  return match?.[1];
+}
+
+export function copyPnpmWorkspaceSettings(source: string, options: ArchitectureOptions = {}) {
+  const hasArchitecture = Boolean(options.os?.length || options.cpu?.length || options.libc?.length);
+  const lines = source.split(/\r?\n/);
+  const blocks: string[] = [];
+
+  for (let index = 0; index < lines.length;) {
+    const key = getTopLevelYamlKey(lines[index] ?? '');
+    if (!key) {
+      index += 1;
+      continue;
+    }
+
+    const start = index;
+    index += 1;
+    while (index < lines.length && !getTopLevelYamlKey(lines[index] ?? '')) {
+      index += 1;
+    }
+
+    if (!PNPM_CONFIG_KEYS_TO_COPY.has(key) || (key === 'supportedArchitectures' && hasArchitecture)) {
+      continue;
+    }
+
+    const block = lines.slice(start, index).join('\n').trimEnd();
+    if (block) {
+      blocks.push(block);
+    }
+  }
+
+  if (hasArchitecture) {
+    const architectureBlock = ['supportedArchitectures:'];
+    if (options.os?.length) {
+      architectureBlock.push(`  os: ${JSON.stringify(options.os)}`);
+    }
+    if (options.cpu?.length) {
+      architectureBlock.push(`  cpu: ${JSON.stringify(options.cpu)}`);
+    }
+    if (options.libc?.length) {
+      architectureBlock.push(`  libc: ${JSON.stringify(options.libc)}`);
+    }
+    blocks.push(architectureBlock.join('\n'));
+  }
+
+  return ["packages:\n  - '.'", ...blocks].join('\n\n') + '\n';
+}
+
 export class Deps extends MastraBase {
   private packageManager: PackageManager;
   private rootDir: string;
@@ -90,38 +153,31 @@ export class Deps extends MastraBase {
     });
   }
 
-  private async writePnpmConfig(dir: string, options: ArchitectureOptions) {
+  private findPnpmWorkspaceFile(dir: string): string | null {
     const workspaceYamlPath = path.join(dir, 'pnpm-workspace.yaml');
-
-    const lines: string[] = [
-      'packages:',
-      "  - '.'",
-      'allowBuilds:',
-      '  bcrypt: true',
-      '  esbuild: true',
-      '  sharp: true',
-      '  protobufjs: true',
-      '  workerd: true',
-      '  bufferutil: true',
-      '  utf-8-validate: true',
-      'minimumReleaseAge: 0',
-    ];
-    if (options.os?.length || options.cpu?.length || options.libc?.length) {
-      lines.push('');
-      lines.push('supportedArchitectures:');
-      if (options.os?.length) {
-        lines.push(`  os: ${JSON.stringify(options.os)}`);
-      }
-      if (options.cpu?.length) {
-        lines.push(`  cpu: ${JSON.stringify(options.cpu)}`);
-      }
-      if (options.libc?.length) {
-        lines.push(`  libc: ${JSON.stringify(options.libc)}`);
-      }
+    if (fs.existsSync(workspaceYamlPath)) {
+      return workspaceYamlPath;
     }
-    lines.push('');
 
-    await fsPromises.writeFile(workspaceYamlPath, lines.join('\n'), 'utf-8');
+    const parentDir = path.resolve(dir, '..');
+    if (parentDir !== dir) {
+      return this.findPnpmWorkspaceFile(parentDir);
+    }
+
+    return null;
+  }
+
+  private async writePnpmConfig(dir: string, options: ArchitectureOptions = {}) {
+    const sourceWorkspaceYamlPath = this.findPnpmWorkspaceFile(this.rootDir);
+    const sourceWorkspaceYaml = sourceWorkspaceYamlPath
+      ? await fsPromises.readFile(sourceWorkspaceYamlPath, 'utf-8')
+      : '';
+
+    await fsPromises.writeFile(
+      path.join(dir, 'pnpm-workspace.yaml'),
+      copyPnpmWorkspaceSettings(sourceWorkspaceYaml, options),
+      'utf-8',
+    );
   }
 
   private async writeYarnConfig(dir: string, options: ArchitectureOptions) {
@@ -181,9 +237,7 @@ export class Deps extends MastraBase {
 
     switch (pm) {
       case 'pnpm':
-        if (architecture) {
-          await this.writePnpmConfig(dir, architecture);
-        }
+        await this.writePnpmConfig(dir, architecture);
         break;
       case 'yarn':
         // similar to --ignore-workspace but for yarn

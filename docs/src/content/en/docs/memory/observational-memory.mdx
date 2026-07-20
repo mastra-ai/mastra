@@ -14,13 +14,14 @@ Observational Memory (OM) is Mastra's memory system for long-context agentic mem
 
 ## Quickstart
 
-Enable `observationalMemory` in the memory options when creating your agent:
+Ensure you have `@mastra/memory` installed in your project. Set `observationalMemory: true` in your Memory config to enable Observational Memory.
 
 ```typescript title="src/mastra/agents/agent.ts"
 import { Memory } from '@mastra/memory'
 import { Agent } from '@mastra/core/agent'
 
 export const agent = new Agent({
+  id: 'my-agent',
   name: 'my-agent',
   instructions: 'You are a helpful assistant.',
   model: '__GATEWAY_OPENAI_MODEL_MINI__',
@@ -33,7 +34,56 @@ export const agent = new Agent({
 })
 ```
 
-That's it. The agent now has humanlike long-term memory that persists across conversations. Setting `observationalMemory: true` uses `google/gemini-2.5-flash` by default. Config objects also use this model unless you set a different one. To use a different model, pass it in the config object:
+<Inject>
+  **For AI agents:** Using Observational Memory requires a storage provider! You either need to set it on the Mastra instance at `src/mastra/index.ts` or pass it to the Agent constructor.
+
+  The following script creates a local LibSQL database, enables Observational Memory, and uses one resource and thread across two agent calls:
+
+  ```typescript title="src/observational-memory.ts"
+  import { Agent } from '@mastra/core/agent'
+  import { LibSQLStore } from '@mastra/libsql'
+  import { Memory } from '@mastra/memory'
+
+  const memory = new Memory({
+    storage: new LibSQLStore({
+      id: 'memory-storage',
+      url: 'file:./memory.db',
+    }),
+    options: {
+      observationalMemory: {
+        model: '__GATEWAY_OPENAI_MODEL_MINI__',
+      },
+    },
+  })
+
+  const agent = new Agent({
+    id: 'memory-agent',
+    name: 'Memory Agent',
+    instructions: 'You are a helpful assistant.',
+    model: '__GATEWAY_OPENAI_MODEL_MINI__',
+    memory,
+  })
+
+  const memoryOptions = {
+    resource: 'user-123',
+    thread: 'conversation-123',
+  }
+
+  const firstResponse = await agent.generate('Remember that my favorite color is blue.', {
+    memory: memoryOptions,
+  })
+  console.log(firstResponse.text)
+
+  const secondResponse = await agent.generate('What is my favorite color?', {
+    memory: memoryOptions,
+  })
+  console.log(secondResponse.text)
+  ```
+
+  The `resource` identifies the user or entity, while the `thread` identifies the conversation. Reuse both values to continue the same conversation. Observational Memory processes the stored history as it grows and replaces older messages with observations when its activation conditions are met.
+</Inject>
+
+The agent now has humanlike long-term memory that persists across conversations. Setting `observationalMemory: true` uses `__GATEWAY_GOOGLE_MODEL_FLASH__` by default. To use a different model, pass it in the config object:
 
 ```typescript
 const memory = new Memory({
@@ -57,7 +107,7 @@ For an AI SDK example, see [Using Mastra Memory](/guides/build-your-ui/ai-sdk-ui
 
 :::note
 
-OM currently only supports `@mastra/pg`, `@mastra/libsql`, and `@mastra/mongodb` storage adapters.
+OM currently only supports `@mastra/pg`, `@mastra/libsql`, `@mastra/mongodb`, and `@mastra/convex` storage adapters.
 It uses background agents for managing memory. When no model is set, the default model is `google/gemini-2.5-flash`.
 
 :::
@@ -73,6 +123,7 @@ import { Memory } from '@mastra/memory'
 import { Agent } from '@mastra/core/agent'
 
 export const agent = new Agent({
+  id: 'my-agent',
   name: 'my-agent',
   instructions: 'You are a helpful assistant.',
   model: '__GATEWAY_OPENAI_MODEL_MINI__',
@@ -212,6 +263,7 @@ const memory = new Memory({
 })
 
 export const agent = new Agent({
+  id: 'assistant',
   name: 'assistant',
   instructions: 'You are a helpful assistant.',
   model: '__GATEWAY_OPENAI_MODEL_MINI__',
@@ -228,7 +280,7 @@ new Extractor({
 })
 ```
 
-By default, OM shows the last extracted value to the extractor on later runs. Set `includePreviousExtraction: false` when the Observer should not see the previous value.
+By default, OM shows the last extracted value to the extractor on later runs. Set `includePreviousExtraction: false` when the Observer shouldn't see the previous value.
 
 ```typescript title="src/mastra/agents/agent.ts"
 new Extractor({
@@ -247,6 +299,34 @@ new Extractor({
     memory ? 'Extract workspace facts for this memory instance.' : 'Extract workspace facts.',
 })
 ```
+
+#### Read extracted values from a stream
+
+Extractor results are emitted when OM completes an observation or reflection. Read both completion data parts from the stream:
+
+```typescript title="src/mastra/run.ts"
+const stream = await agent.stream('Remember that I prefer dark mode.')
+
+for await (const chunk of stream.fullStream) {
+  if (chunk.type === 'data-om-observation-end' || chunk.type === 'data-om-buffering-end') {
+    const { operationType, extractedValues = {}, extractionFailures = [] } = chunk.data
+
+    for (const [slug, value] of Object.entries(extractedValues)) {
+      console.log(`${operationType} extractor ${slug}:`, value)
+    }
+
+    for (const failure of extractionFailures) {
+      console.error(`Extractor ${failure.slug} failed:`, failure.error)
+    }
+  }
+}
+```
+
+`extractedValues` uses each extractor's slug as its key. Both result fields are optional, and a failed extractor doesn't remove values from successful extractors.
+
+`data-om-observation-end` reports a synchronous completion. `data-om-buffering-end` reports completed background work. Its extractor metadata is persisted immediately, but the buffered content remains inactive until activation. Check `operationType` to determine whether the completed work was an observation or reflection.
+
+See the [`data-om-observation-end`](/reference/memory/observational-memory#data-om-observation-end) and [`data-om-buffering-end`](/reference/memory/observational-memory#data-om-buffering-end) reference tables for the complete payloads.
 
 ### Working memory updates
 
@@ -274,7 +354,7 @@ const memory = new Memory({
 
 This setting adds `WorkingMemoryExtractor`, defaults `workingMemory.agentManaged` to `false`, and defaults `workingMemory.useStateSignals` to `true`. Set `workingMemory.agentManaged: true` if the main agent should still receive working memory tool and instruction injection.
 
-Use `onExtracted` to normalize or react to custom extracted values before they are persisted:
+Use `onExtracted` to normalize or react to custom extracted values before they're persisted:
 
 ```typescript title="src/mastra/agents/agent.ts"
 new Extractor({
@@ -291,12 +371,13 @@ new Extractor({
 })
 ```
 
-Extractor failures are reported in OM markers and do not block other successful extractor values. See [the API reference](/reference/memory/observational-memory#extractor-api) for the full `Extractor` shape.
+Extractor failures are reported in OM markers and don't block other successful extractor values. See [the API reference](/reference/memory/observational-memory#extractor-api) for the full `Extractor` shape.
 
 If your Observer model is text-only or its API rejects multimodal input, set `observation.observeAttachments` to `false` to drop attachments before they reach the Observer. The readable placeholders (`[Image #1: ...]`, `[File #1: ...]`) are kept in the transcript so the Observer can still reason about what was shared without receiving the binary payload. The same filter applies to tool results that contain image or file parts:
 
 ```typescript
 new Agent({
+  id: 'assistant',
   name: 'assistant',
   instructions: 'You are a helpful assistant.',
   model: '__GATEWAY_OPENAI_MODEL_MINI__',
@@ -735,3 +816,4 @@ In practical terms, OM replaces both working memory and message history, and has
 - [Message History](/docs/memory/message-history)
 - [Memory Processors](/docs/memory/memory-processors)
 - [Mastra Code](https://code.mastra.ai/): A coding agent using Observational Memory
+- 📹 [Mastra processors and Observational Memory workshop](https://www.youtube.com/watch?v=4Vpp7xQYvl0)

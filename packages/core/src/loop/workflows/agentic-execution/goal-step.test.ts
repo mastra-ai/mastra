@@ -47,8 +47,11 @@ async function runGoalStep(
     throwingScorer?: boolean;
     throwMessage?: string;
     throwingToolsResolver?: string;
+    undefinedJudgeResolver?: boolean;
     dbMessages?: any[];
     useMemory?: boolean;
+    scorer?: any;
+    stepResult?: any;
   },
 ) {
   const store = createStore(record);
@@ -102,7 +105,7 @@ async function runGoalStep(
   // isContinued must start false: a truthy value trips the "mid-tool-loop
   // continuation" gate and the step returns before scoring. The goal gate is
   // what sets it back to true to force another iteration.
-  const stepResult: any = { isContinued: false };
+  const stepResult: any = opts?.stepResult ?? { isContinued: false };
   const inputData: any = {
     messageId: 'response-1',
     output: { text: 'I did X', toolCalls: [], toolResults: [] },
@@ -122,8 +125,11 @@ async function runGoalStep(
 
   const step = createGoalStep({
     goal: {
-      judge: createMockModel({ objectGenerationMode: 'json', mockText: { decision, reason: `r:${decision}` } }) as any,
+      judge: opts?.undefinedJudgeResolver
+        ? () => undefined
+        : (createMockModel({ objectGenerationMode: 'json', mockText: { decision, reason: `r:${decision}` } }) as any),
       ...(opts?.throwingScorer ? { scorer: throwingScorer } : {}),
+      ...(opts?.scorer ? { scorer: opts.scorer } : {}),
       // A `goal.tools` resolver that throws exercises a resolution-time judge
       // failure (before scoring) — the default scorer resolves tools eagerly.
       ...(opts?.throwingToolsResolver
@@ -150,7 +156,7 @@ async function runGoalStep(
     agentName: 'Agent',
   } as any);
 
-  await (step as any).execute({ inputData });
+  const executionResult = await (step as any).execute({ inputData });
 
   // The goal step emits a pending chunk (loading indicator) followed by the
   // final result chunk. Pick the result chunk (non-pending) for assertions.
@@ -166,6 +172,7 @@ async function runGoalStep(
     messages,
     dataParts,
     inputData,
+    executionResult,
   };
 }
 
@@ -180,11 +187,11 @@ describe('goal step waiting semantics', () => {
         dbMessages: [
           {
             role: 'user',
-            content: [{ type: 'text', text: 'Please continue after answering this.' }],
+            content: { format: 2, parts: [{ type: 'text', text: 'Please continue after answering this.' }] },
           },
           {
             role: 'assistant',
-            content: [{ type: 'text', text: 'Answered the user and kept working.' }],
+            content: { format: 2, parts: [{ type: 'text', text: 'Answered the user and kept working.' }] },
           },
         ],
       });
@@ -264,6 +271,19 @@ describe('goal step waiting semantics', () => {
     expect(chunk.payload.results.some((r: any) => r.score === GOAL_SCORE_WAITING)).toBe(true);
   });
 
+  it('falls back to the objective judge when a dynamic judge resolver returns undefined', async () => {
+    const fallbackJudge = createMockModel({
+      objectGenerationMode: 'json',
+      mockText: { decision: 'done', reason: 'fallback judge resolved' },
+    });
+    const { record, chunk } = await runGoalStep('done', makeRecord({ judgeModelId: fallbackJudge as any }), {
+      undefinedJudgeResolver: true,
+    });
+
+    expect(record.status).toBe('done');
+    expect(chunk.payload.reason).toBe('fallback judge resolved');
+  });
+
   it('marks the objective done and stops the loop on a done decision', async () => {
     const { record, stepResult, chunk } = await runGoalStep('done', makeRecord());
 
@@ -279,6 +299,26 @@ describe('goal step waiting semantics', () => {
     expect(stepResult.isContinued).toBe(true);
     expect(chunk.payload.passed).toBe(false);
     expect(chunk.payload.status).toBe('active');
+  });
+
+  it('preserves a terminal primary-agent error without judging or emitting goal progress', async () => {
+    const initialRecord = makeRecord({ id: 'goal-error', runsUsed: 4 });
+    const terminalStepResult = { reason: 'error', isContinued: false };
+    const scorerRun = vi.fn().mockResolvedValue({ score: 0, reason: 'keep working' });
+
+    const result = await runGoalStep('continue', initialRecord, {
+      scorer: { id: 'goal-scorer', name: 'Goal (LLM)', run: scorerRun },
+      stepResult: terminalStepResult,
+    });
+
+    expect(scorerRun).not.toHaveBeenCalled();
+    expect(result.goalChunks).toEqual([]);
+    expect(result.messages).toEqual([]);
+    expect(result.dataParts).toEqual([]);
+    expect(result.record).toEqual(initialRecord);
+    expect(result.stepResult).toBe(terminalStepResult);
+    expect(result.stepResult).toEqual({ reason: 'error', isContinued: false });
+    expect(result.executionResult).toBe(result.inputData);
   });
 
   it('persists waiting feedback as a goal-judge signal, not assistant-authored transcript text', async () => {

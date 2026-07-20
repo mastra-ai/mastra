@@ -108,6 +108,18 @@ export const agent = new Agent({
 })
 ```
 
+## Model strings
+
+For the simplest setup, pass `model` as a string in `provider/model` format. Separate the provider and model name with a slash. Mastra reads the matching provider credentials from the environment, so this format doesn't require a provider package or import.
+
+Popular provider strings and credentials:
+
+- **OpenAI**: `__GATEWAY_OPENAI_MODEL__` uses `OPENAI_API_KEY`.
+- **Anthropic**: `__GATEWAY_ANTHROPIC_MODEL_SONNET__` uses `ANTHROPIC_API_KEY`.
+- **Google**: `__GATEWAY_GOOGLE_MODEL__` uses `GOOGLE_API_KEY` or `GOOGLE_GENERATIVE_AI_API_KEY`.
+
+See [models](/models) for supported model IDs and [environment variables](/models/environment-variables) for the complete provider list.
+
 ## Thread signals
 
 Use Agent signals to send real-time input and context into a memory thread. Message APIs are for user-authored input. `sendSignal()` is the lower-level API for system-generated context.
@@ -306,7 +318,7 @@ agent.sendMessage('Continue with the next step.', {
 })
 ```
 
-Returns `{ accepted: Promise<SendAgentSignalAccepted>, signal: CreatedAgentSignal, persisted?: Promise<void> }`. `accepted` resolves at decision-time, once Mastra decides what to do with the message: `{ action: 'wake', runId, output }` when this process runs the agent (it started or won the lease to start the run), `{ action: 'deliver', runId }` when the message is forwarded onto an existing run (including when this process loses a cross-process wake race), or `{ action: 'persist' }` / `{ action: 'discard' }` when nothing ran. `runId` is the authoritative id of the run that handled the message and is present only on `wake` and `deliver`; for `persist`/`discard` use `result.signal.id` to correlate the stored message. `accepted` resolves for routing — a generation error on a `wake` run surfaces through `output.consumeStream()` — and rejects only when the message could not be routed or started at all (e.g. a misconfigured agent). `persisted` is only present for `persist` behavior and resolves when Mastra finishes writing the message to memory. On the `wake` action, `output` is the agent stream for in-process consumption.
+Returns `{ accepted: Promise<SendAgentSignalAccepted>, signal: CreatedAgentSignal, persisted?: Promise<void> }`. `accepted` resolves at decision-time, once Mastra decides what to do with the message: `{ action: 'wake', runId, output }` when this process runs the agent (it started or won the lease to start the run), `{ action: 'deliver', runId }` when the message is forwarded onto an existing run (including when this process loses a cross-process wake race), or `{ action: 'persist' }` / `{ action: 'discard' }` when nothing ran. `runId` is the authoritative id of the run that handled the message and is present only on `wake` and `deliver`; for `persist`/`discard` use `result.signal.id` to correlate the stored message. `accepted` resolves for routing — a generation error on a `wake` run surfaces through `output.consumeStream()` — and rejects only when the message couldn't be routed or started at all (e.g. a misconfigured agent). `persisted` is only present for `persist` behavior and resolves when Mastra finishes writing the message to memory. On the `wake` action, `output` is the agent stream for in-process consumption.
 
 ### `queueMessage(message, options)`
 
@@ -426,7 +438,7 @@ Sends a signal to an active run or memory thread.
 ]}
 />
 
-Returns `{ accepted: Promise<SendAgentSignalAccepted>, signal: CreatedAgentSignal, persisted?: Promise<void> }`. `accepted` resolves at decision-time, once Mastra decides what to do with the signal: `{ action: 'wake', runId, output }` when this process runs the agent (it started or won the lease to start the run), `{ action: 'deliver', runId }` when the signal is forwarded onto an existing run (including when this process loses a cross-process wake race), or `{ action: 'persist' }` / `{ action: 'discard' }` when nothing ran. `action` mirrors the winning `behavior` from `ifActive`/`ifIdle`. `runId` is the authoritative id of the run that handled the signal and is present only on `wake` and `deliver`; for `persist`/`discard` use `result.signal.id` to correlate the stored signal. `accepted` resolves for routing — a generation error on a `wake` run surfaces through `output.consumeStream()` — and rejects only when the signal could not be routed or started at all (e.g. a misconfigured agent). `persisted` is only present for `persist` behavior and resolves when Mastra finishes writing the signal to memory. On the `wake` action, `output` is the agent stream for in-process consumption.
+Returns `{ accepted: Promise<SendAgentSignalAccepted>, signal: CreatedAgentSignal, persisted?: Promise<void> }`. `accepted` resolves at decision-time, once Mastra decides what to do with the signal: `{ action: 'wake', runId, output }` when this process runs the agent (it started or won the lease to start the run), `{ action: 'deliver', runId }` when the signal is forwarded onto an existing run (including when this process loses a cross-process wake race), or `{ action: 'persist' }` / `{ action: 'discard' }` when nothing ran. `action` mirrors the winning `behavior` from `ifActive`/`ifIdle`. `runId` is the authoritative id of the run that handled the signal and is present only on `wake` and `deliver`; for `persist`/`discard` use `result.signal.id` to correlate the stored signal. `accepted` resolves for routing — a generation error on a `wake` run surfaces through `output.consumeStream()` — and rejects only when the signal couldn't be routed or started at all (e.g. a misconfigured agent). `persisted` is only present for `persist` behavior and resolves when Mastra finishes writing the signal to memory. On the `wake` action, `output` is the agent stream for in-process consumption.
 
 In serverless handlers, await `accepted` and pass the `wake` output to your platform's `waitUntil` equivalent so the winning process can drain the stream after the HTTP response returns.
 
@@ -668,7 +680,7 @@ const result = await agent.sendNotificationSignal(
 
 Returns `{ record: NotificationRecord, decision: NotificationDeliveryDecision, runId?: string, signal?: CreatedAgentSignal, persisted?: Promise<void>, accepted?: Promise<SendAgentSignalAccepted> }`. `record` is the stored inbox record. `decision` is the delivery-policy result. `signal` and `runId` are present when ingress emits a signal immediately, including the immediate summary emitted for active high-priority notifications. `persisted` is present when the emitted signal is persisted without waking an idle thread. `accepted` is present when a signal is emitted and resolves at decision-time, once Mastra decides what to do with it: `{ action: 'wake', runId, output }` when this process runs the agent (it started or won the lease to start the run), `{ action: 'deliver', runId }` when the signal is forwarded onto an existing run, or `{ action: 'persist' }` / `{ action: 'discard' }` when nothing ran. `runId` on the accepted result is present only on `wake` and `deliver`. On the `wake` action, `output` is the agent stream for in-process consumption.
 
-Default delivery is priority-aware. `urgent` notifications deliver immediately. `high` notifications deliver immediately when the thread is idle; when the thread is active, Mastra emits a summary immediately and keeps `deliverAt` for later full delivery when the thread is idle. `medium` notifications deliver immediately when idle and batch into summaries when active. `low` notifications batch into summaries in both active and idle threads; idle low-priority summaries reach subscribers without waking the model loop. For the full flow, visit [Signals](/docs/agents/signals#notification-signals).
+Default delivery is priority-aware. `urgent` notifications deliver immediately. `high` notifications deliver immediately when the thread is idle; when the thread is active, Mastra emits a summary immediately and keeps `deliverAt` for later full delivery when the thread is idle. `medium` notifications deliver immediately when idle and batch into summaries when active. `low` notifications batch into summaries in both active and idle threads; idle low-priority summaries reach subscribers without waking the model loop. For the full flow, visit [Signals](/docs/long-running-agents/signals#notification-signals).
 
 Configure `notifications.deliveryPolicy` on the agent when some notifications should wait for a different dispatch window or summary rollup:
 
@@ -762,14 +774,14 @@ Returns an `AgentThreadSubscription` object with these members:
   {
     name: 'id',
     type: 'string',
-    isOptional: true,
-    description: 'Unique identifier for the agent. Defaults to `name` if not provided.',
+    isOptional: false,
+    description: 'Unique identifier for the agent.',
   },
   {
     name: 'name',
     type: 'string',
     isOptional: false,
-    description: 'Display name for the agent. Used as the identifier if `id` is not provided.',
+    description: 'Display name for the agent.',
   },
   {
     name: 'description',
@@ -796,7 +808,8 @@ SystemMessage types: string | string[] | CoreSystemMessage | CoreSystemMessage[]
     name: 'model',
     type: 'MastraLanguageModel | ({ requestContext: RequestContext }) => MastraLanguageModel | Promise<MastraLanguageModel>',
     isOptional: false,
-    description: 'The language model used by the agent. Can be provided statically or resolved at runtime.',
+    description:
+      'The language model used by the agent. Pass a model router string in `provider/model` format, a model configuration or provider instance, or a function that resolves the model at runtime. See [Model strings](#model-strings) for common providers and environment variables.',
   },
   {
     name: 'agents',
@@ -806,9 +819,10 @@ SystemMessage types: string | string[] | CoreSystemMessage | CoreSystemMessage[]
   },
   {
     name: 'tools',
-    type: 'ToolsInput | ({ requestContext: RequestContext }) => ToolsInput | Promise<ToolsInput>',
+    type: 'ToolsInput | ({ requestContext: RequestContext, mastra?: Mastra }) => ToolsInput | Promise<ToolsInput>',
     isOptional: true,
-    description: 'Tools that the agent can access. Can be provided statically or resolved dynamically.',
+    description:
+      'Tools that the agent can access. Can be provided statically or resolved dynamically from the request context and associated Mastra instance when available.',
   },
   {
     name: 'hooks',
@@ -950,6 +964,34 @@ SystemMessage types: string | string[] | CoreSystemMessage | CoreSystemMessage[]
 ]}
 />
 
+## `generate()` memory options
+
+Pass `memory` when you call `agent.generate()` to choose which conversation thread the run should read from and write to. The common shape is `memory: { resource: string, thread: string }`, where `resource` identifies the owner and `thread` identifies the conversation. See [Threads and resources](/docs/memory/message-history#threads-and-resources) for the concept model.
+
+```typescript title="src/mastra/run.ts"
+const response = await agent.generate('What did we decide about retries?', {
+  memory: {
+    resource: 'user-123',
+    thread: 'support-thread-456',
+  },
+})
+```
+
+Use a thread object when you need to create or update thread metadata during the call:
+
+```typescript title="src/mastra/run.ts"
+const response = await agent.generate('Continue the support conversation.', {
+  memory: {
+    resource: 'user-123',
+    thread: {
+      id: 'support-thread-456',
+      title: 'Billing support',
+      metadata: { category: 'billing' },
+    },
+  },
+})
+```
+
 ## Tool hooks
 
 Use `hooks` to run logic around every tool call the agent makes, including assigned tools, memory tools, toolsets, client tools, and workspace tools.
@@ -958,6 +1000,7 @@ Use `hooks` to run logic around every tool call the agent makes, including assig
 import { Agent } from '@mastra/core/agent'
 
 export const agent = new Agent({
+  id: 'support-agent',
   name: 'support-agent',
   instructions: 'Help users with their questions.',
   model: '__GATEWAY_OPENAI_MODEL__',

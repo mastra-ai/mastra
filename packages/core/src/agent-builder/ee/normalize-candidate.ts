@@ -3,13 +3,7 @@ import type { MastraModelConfig } from '../../llm/model/shared.types.js';
 import type { StorageConditionalField, StorageConditionalVariant, StorageModelConfig } from '../../storage/types.js';
 
 export type ModelCandidateOrigin =
-  | 'static'
-  | 'conditional-variant'
-  | 'conditional-default'
-  | 'runtime'
-  | 'list'
-  | 'sdk-instance'
-  | 'openai-compatible';
+  'static' | 'conditional-variant' | 'conditional-default' | 'runtime' | 'list' | 'sdk-instance' | 'openai-compatible';
 
 /**
  * A single normalized provider/model candidate extracted from one of the many

@@ -60,6 +60,7 @@ import type {
   WorkflowStreamEvent,
   WorkflowEngineType,
   WorkflowRunStatus,
+  WorkflowRunState,
   StepParams,
   ToolStep,
   DefaultEngineType,
@@ -645,8 +646,7 @@ function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
   agentOrToolOptions?: Record<string, unknown>,
 ): Step<string, any, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType> {
   const toolOpts = agentOrToolOptions as
-    | { retries?: number; scorers?: DynamicArgument<MastraScorers>; metadata?: StepMetadata }
-    | undefined;
+    { retries?: number; scorers?: DynamicArgument<MastraScorers>; metadata?: StepMetadata } | undefined;
   if (!params.inputSchema || !params.outputSchema) {
     throw new Error('Tool must have input and output schemas defined');
   }
@@ -671,6 +671,7 @@ function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
       workflowId,
       state,
       setState,
+      abortSignal,
       ...obsFields
     }) => {
       const observabilityContext = resolveObservabilityContext(obsFields);
@@ -684,6 +685,7 @@ function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
         mastra,
         requestContext,
         ...observabilityContext,
+        abortSignal,
         workflow: {
           runId,
           workflowId,
@@ -1270,8 +1272,7 @@ function createStepFromProcessor<TProcessorId extends string>(
               // across processOutputStream and processOutputResult calls
               const mutableState = processorState;
               let processorSpan = mutableState[spanKey] as
-                | ReturnType<NonNullable<typeof parentSpan>['createChildSpan']>
-                | undefined;
+                ReturnType<NonNullable<typeof parentSpan>['createChildSpan']> | undefined;
 
               if (!processorSpan && parentSpan) {
                 // First chunk - create span for this processor
@@ -1545,6 +1546,7 @@ export function createWorkflow<
     options: {
       validateInputs: params.options?.validateInputs ?? true,
       shouldPersistSnapshot: params.options?.shouldPersistSnapshot ?? (() => true),
+      pruneSnapshot: params.options?.pruneSnapshot,
       tracingPolicy: params.options?.tracingPolicy,
       onFinish: params.options?.onFinish,
       onError: params.options?.onError,
@@ -1661,9 +1663,13 @@ export class EventedWorkflow<
       stepResults: {},
     });
 
-    const existingRun = await this.getWorkflowRunById(runIdToUse, {
-      withNestedWorkflows: false,
-    });
+    // A freshly-minted run for a workflow that never persists a snapshot cannot have
+    // a stored row, so this existence read would be a guaranteed miss. Skipping it
+    // avoids a storage round trip on every createRun for transient workflows (#19015).
+    const existingRun =
+      shouldPersistSnapshot || options?.runId
+        ? await this.getWorkflowRunById(runIdToUse, { withNestedWorkflows: false })
+        : undefined;
 
     // Check if run exists in persistent storage (not just in-memory)
     const existsInStorage = existingRun && !existingRun.isFromInMemory;
@@ -1674,25 +1680,28 @@ export class EventedWorkflow<
     }
 
     if (!existsInStorage && shouldPersistSnapshot) {
+      const initialSnapshot: WorkflowRunState = {
+        runId: runIdToUse,
+        status: 'pending',
+        value: {},
+        context: {} as WorkflowRunState['context'],
+        activePaths: [],
+        serializedStepGraph: this.serializedStepGraph,
+        activeStepsPath: {},
+        suspendedPaths: {},
+        resumeLabels: {},
+        waitingPaths: {},
+        result: undefined,
+        error: undefined,
+        timestamp: Date.now(),
+      };
       await workflowsStore?.persistWorkflowSnapshot({
         workflowName: this.id,
         runId: runIdToUse,
         resourceId: options?.resourceId,
-        snapshot: {
-          runId: runIdToUse,
-          status: 'pending',
-          value: {},
-          context: {},
-          activePaths: [],
-          serializedStepGraph: this.serializedStepGraph,
-          activeStepsPath: {},
-          suspendedPaths: {},
-          resumeLabels: {},
-          waitingPaths: {},
-          result: undefined,
-          error: undefined,
-          timestamp: Date.now(),
-        },
+        snapshot: this.options?.pruneSnapshot
+          ? this.options.pruneSnapshot({ snapshot: initialSnapshot, workflowStatus: 'pending' })
+          : initialSnapshot,
       });
     }
 
@@ -1790,24 +1799,27 @@ export class EventedRun<
     // Always persist the initial run record regardless of shouldPersistSnapshot.
     // The evented engine relies on this record for parallel branch result
     // aggregation (aggregateBranchResults reads stepResults via storage).
+    const initialRunSnapshot: WorkflowRunState = {
+      runId: this.runId,
+      serializedStepGraph: this.serializedStepGraph,
+      status: 'running',
+      value: {},
+      context: inputDataToUse != null ? ({ input: inputDataToUse } as any) : ({} as any),
+      requestContext: requestContext.toJSON(),
+      activePaths: [],
+      activeStepsPath: {},
+      suspendedPaths: {},
+      resumeLabels: {},
+      waitingPaths: {},
+      timestamp: Date.now(),
+    };
     await workflowsStore?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
       resourceId: this.resourceId,
-      snapshot: {
-        runId: this.runId,
-        serializedStepGraph: this.serializedStepGraph,
-        status: 'running',
-        value: {},
-        context: inputDataToUse != null ? ({ input: inputDataToUse } as any) : ({} as any),
-        requestContext: requestContext.toJSON(),
-        activePaths: [],
-        activeStepsPath: {},
-        suspendedPaths: {},
-        resumeLabels: {},
-        waitingPaths: {},
-        timestamp: Date.now(),
-      },
+      snapshot: this.executionEngine.options?.pruneSnapshot
+        ? this.executionEngine.options.pruneSnapshot({ snapshot: initialRunSnapshot, workflowStatus: 'running' })
+        : initialRunSnapshot,
     });
 
     if (!this.mastra?.pubsub) {
@@ -1909,24 +1921,27 @@ export class EventedRun<
     // Always persist the initial run record regardless of shouldPersistSnapshot.
     // The evented engine relies on this record for parallel branch result
     // aggregation (aggregateBranchResults reads stepResults via storage).
+    const initialRunSnapshot: WorkflowRunState = {
+      runId: this.runId,
+      serializedStepGraph: this.serializedStepGraph,
+      status: 'running',
+      value: {},
+      context: inputDataToUse != null ? ({ input: inputDataToUse } as any) : ({} as any),
+      requestContext: requestContext.toJSON(),
+      activePaths: [],
+      activeStepsPath: {},
+      suspendedPaths: {},
+      resumeLabels: {},
+      waitingPaths: {},
+      timestamp: Date.now(),
+    };
     await workflowsStore?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
       resourceId: this.resourceId,
-      snapshot: {
-        runId: this.runId,
-        serializedStepGraph: this.serializedStepGraph,
-        status: 'running',
-        value: {},
-        context: inputDataToUse != null ? ({ input: inputDataToUse } as any) : ({} as any),
-        requestContext: requestContext.toJSON(),
-        activePaths: [],
-        activeStepsPath: {},
-        suspendedPaths: {},
-        resumeLabels: {},
-        waitingPaths: {},
-        timestamp: Date.now(),
-      },
+      snapshot: this.executionEngine.options?.pruneSnapshot
+        ? this.executionEngine.options.pruneSnapshot({ snapshot: initialRunSnapshot, workflowStatus: 'running' })
+        : initialRunSnapshot,
     });
 
     if (!this.mastra?.pubsub) {

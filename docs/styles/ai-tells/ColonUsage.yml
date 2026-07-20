@@ -1,0 +1,18 @@
+---
+extends: existence
+message: "AI punctuation: '%s'. Lowercase the word after the colon unless it is a proper noun."
+level: error
+nonword: true
+# Replaces Google.Colons, which checks heading text too and flags the title
+# half of "Appendix A: Glossary". Headings are exempt here; everywhere else
+# a capitalized word after a colon is the "Label: Sentence" construction.
+# The lookbehind (from Google's rule) skips a colon preceded by another
+# colon-joined run, so "10:30: Meeting" stays clean. The token also skips
+# acronyms and the pronoun "I", which stay capitalized in any position.
+# Known limitation: Vale strips markup before matching, so a run-in bold
+# label ("**Note:** Like this.") flags too. Disable the rule where that
+# convention is established.
+scope:
+  - '~heading'
+tokens:
+  - "(?<!:[^ ]+?):\\s(?!I\\b)[A-Z][a-z]*\\b"

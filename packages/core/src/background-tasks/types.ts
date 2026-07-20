@@ -9,13 +9,7 @@ import type {
 } from '../stream/types';
 
 export type BackgroundTaskStatus =
-  | 'pending'
-  | 'running'
-  | 'suspended'
-  | 'completed'
-  | 'failed'
-  | 'cancelled'
-  | 'timed_out';
+  'pending' | 'running' | 'suspended' | 'completed' | 'failed' | 'cancelled' | 'timed_out';
 
 export interface BackgroundTask {
   id: string;
@@ -398,6 +392,8 @@ export interface CheckIfSuspendedPayload {
   toolName: string;
 }
 
+export type CheckIfRunningPayload = CheckIfSuspendedPayload;
+
 /**
  * A handle returned by `createBackgroundTask()`.
  * Encapsulates a single background task with its per-stream hooks.
@@ -409,8 +405,12 @@ export interface BackgroundTaskHandle {
   dispatch(): Promise<EnqueueResult>;
   /** Check if the task is suspended */
   checkIfSuspended(args: CheckIfSuspendedPayload): Promise<boolean>;
+  /** Check if the task is running */
+  checkIfRunning(args: CheckIfRunningPayload): Promise<boolean>;
   /** Resume the task */
   resume(resumeData?: unknown): Promise<BackgroundTask>;
+  /** Restarts a task */
+  restart(): Promise<BackgroundTask>;
   /** Cancel this task */
   cancel(): Promise<void>;
   /** Wait for this task to complete */

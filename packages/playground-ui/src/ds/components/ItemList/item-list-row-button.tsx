@@ -30,7 +30,7 @@ export function ItemListRowButton({
     <button
       onClick={handleClick}
       className={cn(
-        'grid w-full px-4 gap-4 text-left items-center rounded-lg',
+        'grid w-full items-center gap-4 rounded-lg px-4 text-left',
         transitions.colors,
         focusRing.visible,
         {

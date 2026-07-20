@@ -7,8 +7,6 @@ packages:
   - "@mastra/client-js"
 ---
 
-import { VideoPlayer } from "@site/src/components/video-player";
-
 # Editor overview
 
 The editor is a CMS-style system that separates agent configuration from code. Subject-matter experts, prompt engineers, and product teams can iterate on agents directly while developers keep the codebase stable.
@@ -46,20 +44,12 @@ import { Mastra } from '@mastra/core'
 import { MastraEditor } from '@mastra/editor'
 
 export const mastra = new Mastra({
-  agents: {
-    /* your existing agents */
-  },
+  agents: {/* your existing agents */},
   editor: new MastraEditor(),
 })
 ```
 
-Once registered, you can manage agents through [Studio](/docs/studio/overview) or programmatically through the server API and Client SDK.
-
-:::note
-
-See the [MastraEditor reference](/reference/editor/mastra-editor) for all configuration options.
-
-:::
+Once registered, you can manage agents through [Studio](/docs/studio/overview) or programmatically through the server API and Client SDK. See the [MastraEditor reference](/reference/editor/mastra-editor) for all configuration options.
 
 ## Code and database sources
 
@@ -79,9 +69,7 @@ import { Mastra } from '@mastra/core'
 import { MastraEditor } from '@mastra/editor'
 
 export const mastra = new Mastra({
-  agents: {
-    /* your existing agents */
-  },
+  agents: {/* your existing agents */},
   editor: new MastraEditor({
     source: 'code',
   }),
@@ -97,8 +85,6 @@ The code source uses the Git history of each per-agent JSON file as its version 
 This means versions and rollbacks are managed through Git rather than through draft and publish actions.
 
 ## Studio
-
-<VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1775596827/editor-overview_obqupx.mp4" />
 
 Go to the **Agents** tab in Studio and select an agent to edit. Select the **Editor** tab. You'll be taken to the editor interface, where you can modify the agent's instructions, tools, and variables.
 
@@ -168,13 +154,7 @@ Because stored agents are data, you can build automation loops that tune agents 
 - Re-run the experiment against the draft and compare scores to the baseline.
 - Promote the draft to the published version when the scores improve.
 
-This turns agent tuning into a closed feedback loop. One agent owns the production configuration, another agent iterates on it, and every change is versioned so you can roll back if a round of automated edits makes things worse. Combine this with [version targeting](#version-targeting-and-experimentation) to keep production traffic on the published version while the draft is being tested.
-
-:::note
-
-See the [MastraEditor reference](/reference/editor/mastra-editor) for the full namespace API.
-
-:::
+This turns agent tuning into a closed feedback loop. One agent owns the production configuration, another agent iterates on it, and every change is versioned so you can roll back if a round of automated edits makes things worse. Combine this with [version targeting](#version-targeting-and-experimentation) to keep production traffic on the published version while the draft is being tested. See the [MastraEditor reference](/reference/editor/mastra-editor) for the full namespace API.
 
 ## What can be overridden
 
@@ -195,6 +175,7 @@ Use the `editor` field on a code-defined agent to control which fields the edito
 import { Agent } from '@mastra/core/agent'
 
 export const supportAgent = new Agent({
+  id: 'support-agent',
   name: 'support-agent',
   model: '__GATEWAY_OPENAI_MODEL__',
   editor: { instructions: true, tools: { description: true } },

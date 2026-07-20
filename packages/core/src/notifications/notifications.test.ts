@@ -2,7 +2,12 @@ import { describe, expect, it, vi } from 'vitest';
 import { Mastra } from '../mastra';
 import { MastraCompositeStore } from '../storage/base';
 import { InMemoryNotificationsStorage } from './storage';
-import { createNotificationDispatchWorkflow, parseNotificationDispatchNow } from './workflow';
+import {
+  buildNotificationDispatchSchedule,
+  createNotificationDispatchWorkflow,
+  NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID,
+  parseNotificationDispatchNow,
+} from './workflow';
 import {
   createNotificationInboxTool,
   createNotificationSignal,
@@ -700,14 +705,10 @@ describe('notification inbox', () => {
       const workflow = (mastra as any).getWorkflow('__mastra_notification_dispatcher');
       expect(workflow.id).toBe('__mastra_notification_dispatcher');
       expect(mastra.listWorkflows()).not.toHaveProperty('__mastra_notification_dispatcher');
-      expect(workflow.getScheduleConfigs()).toMatchObject([
-        {
-          id: 'dispatch',
-          cron: '*/1 * * * *',
-          inputData: { limit: 100 },
-          metadata: { internal: true, feature: 'notifications' },
-        },
-      ]);
+      // The dispatcher must not declare a schedule — its schedule row is
+      // created lazily on the first deferred notification so idle apps never
+      // start the scheduler (see #18864).
+      expect(workflow.getScheduleConfigs()).toEqual([]);
     } finally {
       await mastra.stopWorkers();
     }
@@ -734,47 +735,33 @@ describe('notification inbox', () => {
     }
   });
 
-  it('uses notification dispatch workflow config when provided', async () => {
-    const notifications = new InMemoryNotificationsStorage();
-    const storage = new MastraCompositeStore({
-      id: 'notification-workflow-config-storage',
-      domains: { notifications },
-    });
-    const mastra = new Mastra({
-      storage,
-      logger: false,
-      notifications: { dispatch: { cron: '*/5 * * * *', batchSize: 25 } },
-    });
+  it('builds the dispatcher schedule row from the dispatch config', () => {
+    const schedule = buildNotificationDispatchSchedule({ cron: '*/5 * * * *', batchSize: 25 });
 
-    try {
-      const workflow = (mastra as any).getWorkflow('__mastra_notification_dispatcher');
-      expect(workflow.getScheduleConfigs()).toMatchObject([
-        {
-          id: 'dispatch',
-          cron: '*/5 * * * *',
-          inputData: { limit: 25 },
-          metadata: { internal: true, feature: 'notifications' },
-        },
-      ]);
-    } finally {
-      await mastra.stopWorkers();
-    }
+    expect(schedule).toMatchObject({
+      id: NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID,
+      cron: '*/5 * * * *',
+      status: 'active',
+      target: {
+        type: 'workflow',
+        workflowId: '__mastra_notification_dispatcher',
+        inputData: { limit: 25 },
+      },
+      metadata: { internal: true, feature: 'notifications' },
+    });
+    expect(schedule.nextFireAt).toBeGreaterThan(Date.now());
+    // Not `wf_`-prefixed: declarative orphan-cleanup must leave it alone.
+    expect(schedule.id.startsWith('wf_')).toBe(false);
   });
 
   it('rejects invalid notification dispatch workflow times', () => {
     expect(() => parseNotificationDispatchNow('not-a-date')).toThrow('Invalid notification dispatch time: not-a-date');
   });
 
-  it('creates a scheduled notification dispatch workflow', () => {
-    const workflow = createNotificationDispatchWorkflow({ cron: '*/5 * * * *', batchSize: 25 });
+  it('creates an unscheduled notification dispatch workflow', () => {
+    const workflow = createNotificationDispatchWorkflow({ batchSize: 25 });
 
     expect(workflow.id).toBe('__mastra_notification_dispatcher');
-    expect((workflow as any).getScheduleConfigs()).toMatchObject([
-      {
-        id: 'dispatch',
-        cron: '*/5 * * * *',
-        inputData: { limit: 25 },
-      },
-    ]);
+    expect((workflow as any).getScheduleConfigs()).toEqual([]);
   });
 });

@@ -70,6 +70,7 @@ export class ComposioToolProvider extends BaseToolProvider {
     super({
       allowedToolkits: config.allowedToolkits,
       allowedTools: config.allowedTools,
+      defaultScope: config.defaultScope,
     });
     this.apiKey = config.apiKey;
   }
@@ -178,7 +179,14 @@ export class ComposioToolProvider extends BaseToolProvider {
       // into the API call. Mutating `params.connectedAccountId` routes
       // the call to a specific account.
       beforeExecute: ({ params }: { params: { connectedAccountId?: string; userId?: string } }) => {
-        params.connectedAccountId = opts.connectionId;
+        // Under `caller-supplied` scope the user bucket (`internalUserId`,
+        // resolved from the host app's resourceId) already scopes the call to
+        // the right tenant. Pinning a specific `connectedAccountId` would defeat
+        // Composio's per-user-bucket auto-resolve, so we let Composio pick the
+        // connected account within the bucket instead of forcing one.
+        if (opts.scope !== 'caller-supplied') {
+          params.connectedAccountId = opts.connectionId;
+        }
         return params;
       },
     };
@@ -230,12 +238,13 @@ export class ComposioToolProvider extends BaseToolProvider {
     // for authorize we treat it as the Composio `userId` so the new connected
     // account lands under the same bucket as the agent's resolved identity.
     const internalUserId = opts.connectionId || DEFAULT_INTERNAL_USER_ID;
-    // `allowMultiple: true` — we explicitly support N connected accounts per
-    // (user, auth config) and disambiguate at runtime via per-connection labels.
+
     // `config` carries provider-specific user-supplied fields (e.g. Confluence
-    // subdomain) collected by the picker via `listConnectionFields`. Composio
-    // expects a discriminated `{ authScheme, val }` shape; we cast through
-    // `unknown` because our generic interface keeps it Record-shaped.
+    // subdomain) collected by the picker via `listConnectionFields`. When it is
+    // present we must use `connectedAccounts.initiate`, which accepts a
+    // discriminated `{ authScheme, val }` config for programmatic account
+    // creation. Composio's non-deprecated `connectedAccounts.link` (hosted
+    // Connect Link) has no `config` parameter, so it cannot carry these fields.
     const initiateConfig =
       opts.config && Object.keys(opts.config).length > 0 && authScheme
         ? ({ authScheme, val: opts.config } as unknown as Parameters<
@@ -246,13 +255,21 @@ export class ComposioToolProvider extends BaseToolProvider {
               : never
             : never)
         : undefined;
-    const request = await composio.connectedAccounts.initiate(internalUserId, authConfigId, {
-      allowMultiple: true,
-      ...(initiateConfig ? { config: initiateConfig } : {}),
-    });
+
+    // Prefer `link` for the Composio-managed OAuth redirect flow: `initiate`
+    // is deprecated for managed OAuth. `link` allows multiple connected
+    // accounts per (user, auth config) by default, so we no longer pass
+    // `allowMultiple`. Fall back to `initiate` only when custom `config` fields
+    // are supplied, since `link` cannot forward them.
+    const request = initiateConfig
+      ? await composio.connectedAccounts.initiate(internalUserId, authConfigId, {
+          allowMultiple: true,
+          config: initiateConfig,
+        })
+      : await composio.connectedAccounts.link(internalUserId, authConfigId);
 
     if (!request.redirectUrl) {
-      throw new Error(`[composio] initiate did not return a redirectUrl for toolkit "${opts.toolkit}"`);
+      throw new Error(`[composio] authorize did not return a redirectUrl for toolkit "${opts.toolkit}"`);
     }
 
     return { url: request.redirectUrl, authId: request.id };

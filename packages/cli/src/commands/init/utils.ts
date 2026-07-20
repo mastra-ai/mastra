@@ -57,6 +57,7 @@ export async function promptForObservability(
         { value: 'no', label: 'No' },
       ],
       initialValue: 'yes',
+      showInstructions: false,
     });
 
     if (p.isCancel(choice)) return {};
@@ -559,7 +560,10 @@ export const mastra = new Mastra({
     id: 'composite-storage',
     default: new LibSQLStore({
       id: "mastra-storage",
-      url: "file:./mastra.db",
+      // Uses a hosted database when deployed (mastra env db create --kind turso),
+      // and a local file during development.
+      url: process.env.TURSO_DATABASE_URL ?? "file:./mastra.db",
+      authToken: process.env.TURSO_AUTH_TOKEN,
     }),
     domains: {
       observability: await new DuckDBStore().getStore('observability'),
@@ -792,8 +796,9 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
         skip?.llmProvider
           ? undefined
           : p.select({
-              message: 'Select a default provider:',
+              message: 'Select a default model provider:',
               options: LLM_PROVIDERS,
+              showInstructions: false,
             }),
       llmApiKey: async ({ results: { llmProvider } }) => {
         if (skip?.llmApiKey) return undefined;
@@ -806,6 +811,7 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
             { value: 'enter', label: 'Enter API key' },
           ],
           initialValue: 'skip',
+          showInstructions: false,
         });
 
         if (keyChoice === 'enter') {
@@ -828,12 +834,13 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
         if (skip?.skills && skip?.mcpServer) return { skills: undefined, mcpServer: undefined };
 
         const choice = await p.select({
-          message: `Configure Mastra tooling for agents?`,
+          message: `Select tooling for your coding assistant:`,
           options: [
             { value: 'skills', label: 'Skills', hint: 'recommended' },
             { value: 'mcp', label: 'MCP Docs Server' },
           ],
           initialValue: 'skills',
+          showInstructions: false,
         });
 
         if (p.isCancel(choice)) {
@@ -884,7 +891,7 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
 
           // Show popular agents first with "Show all" option
           const initialSelection = await p.select({
-            message: `Select your agent:`,
+            message: `Select your coding assistant:`,
             options: [...POPULAR_AGENTS, { value: '__show_all__', label: '+ Show all agents' }],
             initialValue: 'universal',
           });
@@ -898,7 +905,7 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
           // If user selected "Show all", show full list
           if (initialSelection === '__show_all__') {
             const followUpSelection = await p.select({
-              message: `Select your agent:`,
+              message: `Select your coding assistant:`,
               options: ALL_AGENTS,
             });
 
@@ -920,7 +927,7 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
         // If MCP selected, show editor sub-selection
         if (choice === 'mcp') {
           const editor = await p.select({
-            message: `Which editor?`,
+            message: `Select your coding assistant:`,
             options: [
               {
                 value: 'cursor',

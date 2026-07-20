@@ -18,12 +18,14 @@ export type {
 export { agentControllerMessageText } from './resources/agent-controller';
 export type {
   AgentControllerInfo,
-  AgentControllerMessage,
-  AgentControllerMessageContent,
+  MastraDBMessage,
+  MastraMessageContentV2,
+  MastraMessagePart,
   AgentControllerEvent,
   KnownAgentControllerEvent,
   OtherAgentControllerEvent,
   CreateAgentControllerSessionResponse,
+  AgentControllerRequestOptions,
   SubscribeAgentControllerSessionOptions,
   AgentControllerSubscription,
   AgentControllerSessionState,

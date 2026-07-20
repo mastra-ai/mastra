@@ -11,8 +11,8 @@
  * startSpan() chain to establish proper parent-child relationships.
  *
  * Key behaviors tested:
- * 1. Root spans get _rootSpanId = own _spanId (no parentSpanIds passed)
- * 2. Child spans get correct _rootSpanId and _spanParents via startSpan() chain
+ * 1. Root spans get a W3C trace ID as _rootSpanId (no parentSpanIds passed)
+ * 2. Child spans inherit _rootSpanId and get _spanParents via startSpan() chain
  * 3. External context spans properly nest under external parent
  */
 
@@ -90,11 +90,12 @@ describe('Braintrust SDK - Direct startSpan() behavior', () => {
     });
   });
 
-  it('logger.startSpan() without parentSpanIds auto-sets rootSpanId to itself', () => {
+  it('logger.startSpan() without parentSpanIds creates a W3C rootSpanId', () => {
     const rootSpan = logger.startSpan({ name: 'root', type: 'task' });
     const root = getSpanInternals(rootSpan);
 
-    expect(root.rootSpanId).toBe(root.spanId);
+    expect(root.rootSpanId).toMatch(/^[0-9a-f]{32}$/);
+    expect(root.rootSpanId).not.toBe(root.spanId);
     expect(root.spanParents).toBeUndefined();
 
     rootSpan.end();
@@ -109,10 +110,10 @@ describe('Braintrust SDK - Direct startSpan() behavior', () => {
     const child = getSpanInternals(childSpan);
     const grandchild = getSpanInternals(grandchildSpan);
 
-    // All share the same rootSpanId
-    expect(root.rootSpanId).toBe(root.spanId);
-    expect(child.rootSpanId).toBe(root.spanId);
-    expect(grandchild.rootSpanId).toBe(root.spanId);
+    // All share the same W3C trace ID as rootSpanId
+    expect(root.rootSpanId).toMatch(/^[0-9a-f]{32}$/);
+    expect(child.rootSpanId).toBe(root.rootSpanId);
+    expect(grandchild.rootSpanId).toBe(root.rootSpanId);
 
     // Each has correct immediate parent
     expect(root.spanParents).toBeUndefined();
@@ -150,7 +151,7 @@ describe('BraintrustExporter - Non-External Case', () => {
     await exporter.shutdown();
   });
 
-  it('root span processed by exporter has correct rootSpanId = spanId', async () => {
+  it('root span processed by exporter has a W3C rootSpanId', async () => {
     const mastraRoot = createMastraSpan({
       id: 'mastra-root-1',
       name: 'agent-run',
@@ -173,8 +174,8 @@ describe('BraintrustExporter - Non-External Case', () => {
 
     const internals = getSpanInternals(spanData!.span);
 
-    // Root span should have rootSpanId = its own spanId
-    expect(internals.rootSpanId).toBe(internals.spanId);
+    expect(internals.rootSpanId).toMatch(/^[0-9a-f]{32}$/);
+    expect(internals.rootSpanId).not.toBe(internals.spanId);
     expect(internals.spanParents).toBeUndefined();
   });
 
@@ -232,10 +233,10 @@ describe('BraintrustExporter - Non-External Case', () => {
     const llm = getSpanInternals(llmBt);
     const tool = getSpanInternals(toolBt);
 
-    // All should share the same rootSpanId (the root's spanId)
-    expect(root.rootSpanId).toBe(root.spanId);
-    expect(llm.rootSpanId).toBe(root.spanId);
-    expect(tool.rootSpanId).toBe(root.spanId);
+    // All should share the same W3C trace ID as rootSpanId
+    expect(root.rootSpanId).toMatch(/^[0-9a-f]{32}$/);
+    expect(llm.rootSpanId).toBe(root.rootSpanId);
+    expect(tool.rootSpanId).toBe(root.rootSpanId);
 
     // Each should have correct immediate parent
     expect(root.spanParents).toBeUndefined();
@@ -288,11 +289,11 @@ describe('BraintrustExporter - Non-External Case', () => {
     const l3 = getSpanInternals(traceData.getSpan({ spanId: 'l3' })!.span);
     const l4 = getSpanInternals(traceData.getSpan({ spanId: 'l4' })!.span);
 
-    // All share rootSpanId
-    expect(l1.rootSpanId).toBe(l1.spanId);
-    expect(l2.rootSpanId).toBe(l1.spanId);
-    expect(l3.rootSpanId).toBe(l1.spanId);
-    expect(l4.rootSpanId).toBe(l1.spanId);
+    // All share the same W3C trace ID as rootSpanId
+    expect(l1.rootSpanId).toMatch(/^[0-9a-f]{32}$/);
+    expect(l2.rootSpanId).toBe(l1.rootSpanId);
+    expect(l3.rootSpanId).toBe(l1.rootSpanId);
+    expect(l4.rootSpanId).toBe(l1.rootSpanId);
 
     // Correct parent chain
     expect(l1.spanParents).toBeUndefined();
@@ -364,9 +365,9 @@ describe('BraintrustExporter - External Case', () => {
     const root = getSpanInternals(rootBtData!.span);
     const child = getSpanInternals(childBtData!.span);
 
-    // Both should have external span as their root
-    expect(root.rootSpanId).toBe(externalInternals.spanId);
-    expect(child.rootSpanId).toBe(externalInternals.spanId);
+    // Both should inherit the external span's W3C trace ID
+    expect(root.rootSpanId).toBe(externalInternals.rootSpanId);
+    expect(child.rootSpanId).toBe(externalInternals.rootSpanId);
 
     // Mastra root's parent should be external span
     expect(root.spanParents).toEqual([externalInternals.spanId]);

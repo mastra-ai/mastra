@@ -278,6 +278,9 @@ export const createMastraProject = async ({
         'pnpm-workspace.yaml',
         `packages:
   - '.'
+minimumReleaseAgeExclude:
+  - mastra
+  - "@mastra/*"
 allowBuilds:
   esbuild: true
   sharp: true

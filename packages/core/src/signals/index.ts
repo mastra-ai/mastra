@@ -30,3 +30,9 @@ export { assignTaskIds } from '../tools/builtin/task-tools';
 // state-signal lane. Auto-registered when an agent is configured with `goal`.
 // The implementation lives with the goal built-in under `agent/goal`.
 export { GoalSignalProvider } from '../agent/goal';
+
+// Signal factories and the canonical DB-message <-> signal reconstruction helpers.
+// Consumers that read persisted `role: 'signal'` `MastraDBMessage` rows use
+// `mastraDBMessageToSignal` to recover the original signal (type, tagName, contents,
+// attributes, metadata) instead of parsing `content.metadata.signal` by hand.
+export { createSignal, mastraDBMessageToSignal, isCreatedAgentSignal, type CreatedAgentSignal } from '../agent/signals';

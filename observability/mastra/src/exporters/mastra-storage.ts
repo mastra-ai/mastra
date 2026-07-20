@@ -65,6 +65,13 @@ function resolveTracingStorageStrategy(
 
 type Resolve = (value: void | PromiseLike<void>) => void;
 
+type FlushResult = {
+  failed: boolean;
+  retryAttempt?: number;
+};
+
+const FLUSH_SUCCEEDED: FlushResult = { failed: false };
+
 /**
  * Storage-backed exporter. Buffers observability events and flushes them in
  * batches to the configured ObservabilityStorage backend with retry support.
@@ -190,17 +197,46 @@ export class MastraStorageExporter extends BaseExporter {
   /**
    * Schedules a flush using setTimeout
    */
-  private scheduleFlush(): void {
+  private scheduleFlush(delayMs = this.#config.maxBatchWaitMs!): void {
     if (this.#flushTimer) {
       clearTimeout(this.#flushTimer);
     }
     this.#flushTimer = setTimeout(() => {
+      this.#flushTimer = undefined;
       this.flushBuffer().catch(error => {
         this.logger.error('Scheduled flush failed', {
           error: error instanceof Error ? error.message : String(error),
         });
       });
-    }, this.#config.maxBatchWaitMs);
+    }, delayMs);
+  }
+
+  private retryDelay(retryAttempt: number): number {
+    return this.#config.retryDelayMs! * 2 ** (retryAttempt - 1);
+  }
+
+  private retryAttempt(events: BufferedEvent[]): number | undefined {
+    return events.reduce<number | undefined>((earliestAttempt, event) => {
+      if (event.retryCount > this.#config.maxRetries!) return earliestAttempt;
+      return earliestAttempt === undefined ? event.retryCount : Math.min(earliestAttempt, event.retryCount);
+    }, undefined);
+  }
+
+  private logStorageFailure(
+    signal: ObservabilityDropSignal,
+    events: BufferedEvent[],
+    retryAttempt: number | undefined,
+    error: unknown,
+  ): void {
+    this.logger.warn('Failed to persist observability events', {
+      signal,
+      eventCount: events.length,
+      retryAttempt:
+        retryAttempt ?? events.reduce((latestAttempt, event) => Math.max(latestAttempt, event.retryCount), 0),
+      maxRetries: this.#config.maxRetries,
+      ...(retryAttempt === undefined ? {} : { nextRetryDelayMs: this.retryDelay(retryAttempt) }),
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 
   /**
@@ -263,15 +299,16 @@ export class MastraStorageExporter extends BaseExporter {
     signal: ObservabilityDropSignal,
     events: T[],
     storageCall: (events: T[]) => Promise<void>,
-  ): Promise<void> {
-    if (events.length === 0) return;
+  ): Promise<FlushResult> {
+    if (events.length === 0) return FLUSH_SUCCEEDED;
     if (this.#unsupportedSignals.has(signal)) {
       this.emitDrop(signal, 'unsupported-storage', events.length);
-      return;
+      return { failed: true };
     }
 
     try {
       await storageCall(events);
+      return FLUSH_SUCCEEDED;
     } catch (error) {
       if (
         error instanceof MastraError &&
@@ -281,10 +318,14 @@ export class MastraStorageExporter extends BaseExporter {
         this.logger.warn(error.message);
         this.#unsupportedSignals.add(signal);
         this.emitDrop(signal, 'unsupported-storage', events.length, error);
-      } else {
-        const dropped = this.#eventBuffer.reAddCreates(events);
-        this.emitDrop(signal, 'retry-exhausted', dropped.length, error);
+        return { failed: true };
       }
+
+      const dropped = this.#eventBuffer.reAddCreates(events);
+      const retryAttempt = this.retryAttempt(events);
+      this.logStorageFailure(signal, events, retryAttempt, error);
+      this.emitDrop(signal, 'retry-exhausted', dropped.length, error);
+      return { failed: true, retryAttempt };
     }
   }
 
@@ -296,12 +337,12 @@ export class MastraStorageExporter extends BaseExporter {
     events: (TracingEvent & RetryCount)[],
     deferredUpdates: BufferedEvent[],
     isEnd: boolean,
-  ): Promise<void> {
+  ): Promise<FlushResult> {
     const deferredCountAtEntry = deferredUpdates.length;
-    if (events.length === 0) return;
+    if (events.length === 0) return FLUSH_SUCCEEDED;
     if (this.#unsupportedSignals.has('tracing')) {
       this.emitDrop('tracing', 'unsupported-storage', events.length);
-      return;
+      return { failed: true };
     }
 
     const partials: UpdateSpanPartial[] = [];
@@ -318,13 +359,14 @@ export class MastraStorageExporter extends BaseExporter {
       }
     }
 
-    if (partials.length === 0) return;
+    if (partials.length === 0) return FLUSH_SUCCEEDED;
 
     try {
       await this.#observabilityStorage!.batchUpdateSpans({ records: partials });
       if (isEnd) {
         this.#eventBuffer.endFinishedSpans({ records: partials });
       }
+      return FLUSH_SUCCEEDED;
     } catch (error) {
       if (
         error instanceof MastraError &&
@@ -335,18 +377,22 @@ export class MastraStorageExporter extends BaseExporter {
         this.#unsupportedSignals.add('tracing');
         deferredUpdates.length = 0;
         this.emitDrop('tracing', 'unsupported-storage', events.length + deferredCountAtEntry, error);
-      } else {
-        // `events` includes both partials-bound and newly-deferred entries, so
-        // re-adding it would double-add the newly-deferred ones if they stayed
-        // in deferredUpdates. Splice off only what this call appended — entries
-        // from a prior flushSpanUpdates call must survive.
-        const newlyDeferred = deferredUpdates.length - deferredCountAtEntry;
-        if (newlyDeferred > 0) {
-          deferredUpdates.splice(deferredUpdates.length - newlyDeferred, newlyDeferred);
-        }
-        const dropped = this.#eventBuffer.reAddUpdates(events);
-        this.emitDrop('tracing', 'retry-exhausted', dropped.length, error);
+        return { failed: true };
       }
+
+      // `events` includes both partials-bound and newly-deferred entries, so
+      // re-adding it would double-add the newly-deferred ones if they stayed
+      // in deferredUpdates. Splice off only what this call appended — entries
+      // from a prior flushSpanUpdates call must survive.
+      const newlyDeferred = deferredUpdates.length - deferredCountAtEntry;
+      if (newlyDeferred > 0) {
+        deferredUpdates.splice(deferredUpdates.length - newlyDeferred, newlyDeferred);
+      }
+      const dropped = this.#eventBuffer.reAddUpdates(events);
+      const retryAttempt = this.retryAttempt(events);
+      this.logStorageFailure('tracing', events, retryAttempt, error);
+      this.emitDrop('tracing', 'retry-exhausted', dropped.length, error);
+      return { failed: true, retryAttempt };
     }
   }
 
@@ -427,7 +473,7 @@ export class MastraStorageExporter extends BaseExporter {
     }
 
     // Flush all creates in parallel — signals are independent
-    await Promise.all([
+    const flushResults = await Promise.all([
       this.flushCreates('feedback', createFeedbackEvents, events =>
         this.#observabilityStorage!.batchCreateFeedback({ feedbacks: events.map(f => buildFeedbackRecord(f)) }),
       ),
@@ -450,27 +496,39 @@ export class MastraStorageExporter extends BaseExporter {
     // Flush span updates and ends — check span existence, defer if not yet created
     const deferredUpdates: BufferedEvent[] = [];
 
-    await this.flushSpanUpdates(updateSpanEvents, deferredUpdates, false);
-    await this.flushSpanUpdates(endSpanEvents, deferredUpdates, true);
+    flushResults.push(await this.flushSpanUpdates(updateSpanEvents, deferredUpdates, false));
+    flushResults.push(await this.flushSpanUpdates(endSpanEvents, deferredUpdates, true));
 
+    let deferredDropCount = 0;
     if (deferredUpdates.length > 0) {
       if (this.#unsupportedSignals.has('tracing')) {
-        this.emitDrop('tracing', 'unsupported-storage', deferredUpdates.length);
+        deferredDropCount = deferredUpdates.length;
+        this.emitDrop('tracing', 'unsupported-storage', deferredDropCount);
         deferredUpdates.length = 0;
       } else {
         const dropped = this.#eventBuffer.reAddUpdates(deferredUpdates);
-        this.emitDrop('tracing', 'retry-exhausted', dropped.length);
+        deferredDropCount = dropped.length;
+        this.emitDrop('tracing', 'retry-exhausted', deferredDropCount);
       }
     }
 
-    const elapsed = Date.now() - startTime;
-    this.logger.debug('Batch flushed', {
-      strategy: this.#resolvedStrategy,
-      batchSize,
-      durationMs: elapsed,
-      deferredUpdates: deferredUpdates.length > 0 ? deferredUpdates.length : undefined,
-    });
-    return; // Success
+    const retryAttempt = flushResults.reduce<number | undefined>((earliestAttempt, result) => {
+      if (result.retryAttempt === undefined) return earliestAttempt;
+      return earliestAttempt === undefined ? result.retryAttempt : Math.min(earliestAttempt, result.retryAttempt);
+    }, undefined);
+    if (retryAttempt !== undefined) {
+      this.scheduleFlush(this.retryDelay(retryAttempt));
+    }
+
+    if (!flushResults.some(result => result.failed) && deferredDropCount === 0) {
+      const elapsed = Date.now() - startTime;
+      this.logger.debug('Batch flushed', {
+        strategy: this.#resolvedStrategy,
+        batchSize,
+        durationMs: elapsed,
+        deferredUpdates: deferredUpdates.length > 0 ? deferredUpdates.length : undefined,
+      });
+    }
   }
 
   async _exportTracingEvent(event: TracingEvent): Promise<void> {
@@ -563,6 +621,11 @@ export class MastraStorageExporter extends BaseExporter {
 
     // Flush any remaining events
     await this.flush();
+
+    if (this.#flushTimer) {
+      clearTimeout(this.#flushTimer);
+      this.#flushTimer = undefined;
+    }
 
     this.logger.info('MastraStorageExporter shutdown complete');
   }

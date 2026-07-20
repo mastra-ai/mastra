@@ -40,11 +40,7 @@ export function toAISDKFinishReason(reason: MastraFinishReason): FinishReason {
 }
 
 export type OutputChunkType<OUTPUT = undefined> =
-  | TextStreamPart<ToolSet>
-  | ObjectStreamPart<Partial<OUTPUT>>
-  | ToolApprovalRequest
-  | DataChunkType
-  | undefined;
+  TextStreamPart<ToolSet> | ObjectStreamPart<Partial<OUTPUT>> | ToolApprovalRequest | DataChunkType | undefined;
 
 export type ToolAgentChunkType = { type: 'tool-agent'; toolCallId: string; payload: any };
 export type ToolWorkflowChunkType = { type: 'tool-workflow'; toolCallId: string; payload: any };
@@ -61,12 +57,7 @@ type ConvertMastraChunkToAISDKOptions<OUTPUT> = {
 
 type ToolPayloadTransformTarget = 'display' | 'transcript';
 type ToolPayloadTransformPhase =
-  | 'input-delta'
-  | 'input-available'
-  | 'output-available'
-  | 'error'
-  | 'approval'
-  | 'suspend';
+  'input-delta' | 'input-available' | 'output-available' | 'error' | 'approval' | 'suspend';
 
 type TransformedToolPayloadState = {
   transformed?: unknown;
@@ -110,6 +101,31 @@ function hasTransformedToolPayload(
   return Boolean(transform && Object.prototype.hasOwnProperty.call(transform, 'transformed'));
 }
 
+function convertBackgroundTaskChunkToDataChunk(chunk: ChunkType): DataChunkType | undefined {
+  if (!chunk.type?.startsWith('background-task-') || !('payload' in chunk)) {
+    return undefined;
+  }
+
+  const payload = chunk.payload as Record<string, unknown>;
+  const type = `data-${chunk.type}` as const;
+  const id =
+    typeof payload.taskId === 'string'
+      ? payload.taskId
+      : typeof payload.toolCallId === 'string'
+        ? payload.toolCallId
+        : undefined;
+
+  return {
+    type,
+    ...(id !== undefined ? { id } : {}),
+    data: {
+      ...payload,
+      state: type,
+      runId: typeof chunk.runId === 'string' ? chunk.runId : payload.runId,
+    },
+  } satisfies DataChunkType;
+}
+
 export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
   chunk,
   mode = 'stream',
@@ -132,13 +148,14 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
         // Preserve messageId from the payload so it can be sent to useChat
         ...(chunk.payload?.messageId ? { messageId: chunk.payload.messageId } : {}),
       };
-    case 'step-start':
-      const { messageId: _messageId, ...rest } = chunk.payload;
+    case 'step-start': {
+      const { messageId: _messageId, ...rest } = chunk.payload ?? {};
       return {
         type: 'start-step',
         request: rest.request,
         warnings: normalizeWarnings(rest.warnings),
       };
+    }
     case 'raw':
       return {
         type: 'raw',
@@ -384,6 +401,9 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
         },
       };
     default:
+      if (chunk.type?.startsWith('background-task-')) {
+        return convertBackgroundTaskChunkToDataChunk(chunk as ChunkType);
+      }
       if (chunk.type && 'payload' in chunk && chunk.payload) {
         return {
           type: chunk.type as string,
@@ -794,6 +814,13 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
     }
 
     default: {
+      if (typeof partType === 'string' && partType.startsWith('background-task-')) {
+        const backgroundTaskChunk = convertBackgroundTaskChunkToDataChunk(part as unknown as ChunkType);
+        if (!backgroundTaskChunk) return;
+        const { type, data, id } = backgroundTaskChunk;
+        return { type, data, ...(id !== undefined && { id }) } as InferUIMessageChunk<UI_MESSAGE>;
+      }
+
       // return the chunk as is if it's not a known type
       if (isDataChunkType(part)) {
         if (!('data' in part)) {

@@ -6,6 +6,7 @@ import { z } from 'zod/v4';
 import { MODEL_TOKENS } from '../../../../../../docs/src/plugins/remark-model-tokens/models';
 import { MessageList } from '../../../agent/message-list';
 import { SpanType } from '../../../observability';
+import { StreamErrorRetryProcessor } from '../../../processors';
 import { ProviderHistoryCompat } from '../../../processors/provider-history-compat';
 import { RequestContext } from '../../../request-context';
 import { ToolStream } from '../../../tools/stream';
@@ -1742,6 +1743,164 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     expect(firstModelStream).toHaveBeenCalledTimes(1);
   });
 
+  it('does not signal a processor retry when aborted during the retry delay', async () => {
+    const abortController = new AbortController();
+    const onAbort = vi.fn();
+    const doStream = vi.fn(async () => {
+      throw new APICallError({
+        message: 'provider unavailable',
+        url: 'https://provider.example.com/v1/messages',
+        requestBodyValues: {},
+        statusCode: 503,
+        isRetryable: true,
+      });
+    });
+    const processor = new StreamErrorRetryProcessor({
+      maxRetries: 1,
+      delayMs: () => {
+        setTimeout(() => abortController.abort(), 0);
+        return 60_000;
+      },
+    });
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      maxProcessorRetries: 1,
+      errorProcessors: [processor],
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: 'test-model',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream,
+          } as any,
+        },
+      ],
+      tools: {},
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+        threadId: 'thread-123',
+        resourceId: 'resource-456',
+      },
+      options: {
+        abortSignal: abortController.signal,
+        onAbort,
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<{}>);
+
+    const result = await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+
+    expect(doStream).toHaveBeenCalledTimes(1);
+    expect(onAbort).toHaveBeenCalledOnce();
+    expect(result.stepResult).toMatchObject({ reason: 'tripwire', isContinued: false });
+  });
+
+  it('emits a processor_run span when an error processor handles an API error', async () => {
+    const processorSpan = {
+      id: 'processor-span',
+      type: SpanType.PROCESSOR_RUN,
+      end: vi.fn(),
+      error: vi.fn(),
+      update: vi.fn(),
+    };
+    const agentRunSpan = {
+      id: 'agent-span',
+      type: SpanType.AGENT_RUN,
+      createChildSpan: vi.fn(() => processorSpan),
+      findParent: vi.fn(),
+    };
+
+    const failingStream = vi.fn(async () => {
+      throw new APICallError({
+        message: 'model rejected the request',
+        url: 'https://primary.example.com/v1/messages',
+        requestBodyValues: {},
+        statusCode: 400,
+        isRetryable: false,
+      });
+    });
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      maxProcessorRetries: 1,
+      errorProcessors: [
+        {
+          id: 'observe-api-error',
+          processAPIError: vi.fn(async () => ({ retry: false })),
+        },
+      ],
+      models: [
+        {
+          id: 'primary-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: 'primary-model',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream: failingStream,
+          } as any,
+        },
+      ],
+      tools: {},
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<{}>);
+
+    const executeParams = createExecuteParams(createIterationInput());
+    executeParams.tracingContext = { currentSpan: agentRunSpan } as any;
+
+    await llmExecutionStep.execute(executeParams);
+
+    // The error-processor run must show up in observability exports; without a
+    // tracingContext the runner falls back to a no-op context and silently
+    // skips the span.
+    expect(agentRunSpan.createChildSpan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: SpanType.PROCESSOR_RUN,
+        name: 'request error processor: observe-api-error',
+      }),
+    );
+  });
+
   it('re-stamps MODEL_GENERATION span attributes when a fallback model takes over', async () => {
     const primaryStream = vi.fn(async () => {
       throw new APICallError({
@@ -2087,5 +2246,357 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     expect(assistantMessage?.content.metadata?.modelId).toBe(configuredModelId);
     expect(assistantMessage?.content.metadata?.modelId).not.toBe(apiResponseModelId);
     expect(assistantMessage?.content.metadata?.provider).toBe('openai');
+  });
+});
+
+describe('PROVIDER_TOOL_CALL observability spans', () => {
+  let controller: ReadableStreamDefaultController;
+  let messageList: MessageList;
+  let bail: Mock;
+
+  const createIterationInput = (): IterationData => ({
+    messageId: 'msg-0',
+    messages: {
+      all: messageList.get.all.aiV5.model(),
+      user: messageList.get.input.aiV5.model(),
+      nonUser: messageList.get.response.aiV5.model(),
+    },
+    output: {
+      usage: testUsage,
+      steps: [],
+    },
+    metadata: {},
+    stepResult: {
+      reason: 'stop',
+      warnings: [],
+      isContinued: true,
+    },
+  });
+
+  const createExecuteParams = (
+    inputData: IterationData,
+  ): ExecuteFunctionParams<{}, IterationData, any, any, any, any> => ({
+    runId: 'test-run',
+    workflowId: 'test-workflow',
+    mastra: {} as any,
+    requestContext: new RequestContext(),
+    state: {},
+    setState: vi.fn(),
+    retryCount: 1,
+    tracingContext: {} as any,
+    getInitData: vi.fn(),
+    getStepResult: vi.fn(),
+    suspend: vi.fn(),
+    bail,
+    abort: vi.fn(),
+    engine: 'default' as any,
+    abortSignal: new AbortController().signal,
+    writer: new ToolStream({
+      prefix: 'tool',
+      callId: 'call-1',
+      name: 'web_search',
+      runId: 'test-run',
+    }),
+    validateSchemas: false,
+    inputData,
+    [PUBSUB_SYMBOL]: {} as any,
+    [STREAM_FORMAT_SYMBOL]: undefined,
+  });
+
+  beforeEach(() => {
+    controller = {
+      enqueue: vi.fn(),
+      desiredSize: 1,
+      close: vi.fn(),
+      error: vi.fn(),
+    } as unknown as ReadableStreamDefaultController;
+
+    messageList = new MessageList();
+    messageList.add({ role: 'user', content: 'Search the web for AI news' }, 'input');
+
+    bail = vi.fn(data => data);
+  });
+
+  it('creates a PROVIDER_TOOL_CALL span for provider-executed tools and closes it on tool-result', async () => {
+    const providerToolSpan = {
+      id: 'server-span-1',
+      type: SpanType.PROVIDER_TOOL_CALL,
+      end: vi.fn(),
+    };
+    const agentRunSpan = {
+      id: 'agent-span',
+      type: SpanType.AGENT_RUN,
+      createChildSpan: vi.fn(() => providerToolSpan),
+      findParent: vi.fn(),
+    };
+
+    const tools = {
+      web_search: {
+        type: 'provider' as const,
+        id: 'anthropic.web_search',
+        args: {},
+      },
+    };
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'anthropic',
+            modelId: 'claude-sonnet-4-20250514',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream: vi.fn(async () => ({
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'response-metadata',
+                  id: 'resp-1',
+                  modelId: 'claude-sonnet-4-20250514',
+                  timestamp: new Date(0),
+                },
+                {
+                  type: 'tool-call',
+                  toolCallId: 'srvtoolu_123',
+                  toolName: 'web_search',
+                  input: '{"query":"AI news"}',
+                },
+                {
+                  type: 'tool-result',
+                  toolCallId: 'srvtoolu_123',
+                  toolName: 'web_search',
+                  result: { answer: 'Latest AI news results' },
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: testUsage,
+                },
+              ]),
+              request: {},
+              response: { headers: undefined },
+              warnings: [],
+            })),
+          } as any,
+        },
+      ],
+      tools,
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<typeof tools>);
+
+    const executeParams = createExecuteParams(createIterationInput());
+    executeParams.tracingContext = { currentSpan: agentRunSpan } as any;
+
+    await llmExecutionStep.execute(executeParams);
+
+    // Verify span was created with correct attributes
+    expect(agentRunSpan.createChildSpan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: SpanType.PROVIDER_TOOL_CALL,
+        name: "provider_tool: 'web_search'",
+        entityType: 'tool',
+        entityId: 'web_search',
+        entityName: 'web_search',
+        attributes: expect.objectContaining({
+          toolType: 'provider-tool',
+          toolCallId: 'srvtoolu_123',
+        }),
+      }),
+    );
+
+    // Verify span was ended with the result
+    expect(providerToolSpan.end).toHaveBeenCalledWith({
+      output: { answer: 'Latest AI news results' },
+      attributes: { success: true },
+    });
+  });
+
+  it('does not create a PROVIDER_TOOL_CALL span when tracingContext is absent', async () => {
+    const tools = {
+      web_search: {
+        type: 'provider' as const,
+        id: 'anthropic.web_search',
+        args: {},
+      },
+    };
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'anthropic',
+            modelId: 'claude-sonnet-4-20250514',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream: vi.fn(async () => ({
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'response-metadata',
+                  id: 'resp-1',
+                  modelId: 'claude-sonnet-4-20250514',
+                  timestamp: new Date(0),
+                },
+                {
+                  type: 'tool-call',
+                  toolCallId: 'srvtoolu_456',
+                  toolName: 'web_search',
+                  input: '{"query":"test"}',
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: testUsage,
+                },
+              ]),
+              request: {},
+              response: { headers: undefined },
+              warnings: [],
+            })),
+          } as any,
+        },
+      ],
+      tools,
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<typeof tools>);
+
+    const executeParams = createExecuteParams(createIterationInput());
+    // No tracingContext — should not crash
+
+    // Should complete without throwing
+    const result = await llmExecutionStep.execute(executeParams);
+    expect(result).toBeDefined();
+  });
+
+  it('does not create a PROVIDER_TOOL_CALL span for non-provider-executed tools', async () => {
+    const agentRunSpan = {
+      id: 'agent-span',
+      type: SpanType.AGENT_RUN,
+      createChildSpan: vi.fn(),
+      findParent: vi.fn(),
+    };
+
+    const tools = {
+      myTool: {
+        id: 'myTool',
+        description: 'A regular tool',
+        inputSchema: z.object({ input: z.string() }),
+        execute: vi.fn(),
+      },
+    };
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: 'mock-model',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream: vi.fn(async () => ({
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'response-metadata',
+                  id: 'resp-1',
+                  modelId: 'mock-model',
+                  timestamp: new Date(0),
+                },
+                {
+                  type: 'tool-call',
+                  toolCallId: 'call-1',
+                  toolName: 'myTool',
+                  input: '{"input":"hello"}',
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: testUsage,
+                },
+              ]),
+              request: {},
+              response: { headers: undefined },
+              warnings: [],
+            })),
+          } as any,
+        },
+      ],
+      tools,
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<typeof tools>);
+
+    const executeParams = createExecuteParams(createIterationInput());
+    executeParams.tracingContext = { currentSpan: agentRunSpan } as any;
+
+    await llmExecutionStep.execute(executeParams);
+
+    // createChildSpan should NOT have been called with PROVIDER_TOOL_CALL
+    const serverToolCalls = (agentRunSpan.createChildSpan as Mock).mock.calls.filter(
+      ([opts]: any[]) => opts.type === SpanType.PROVIDER_TOOL_CALL,
+    );
+    expect(serverToolCalls).toHaveLength(0);
   });
 });

@@ -1,5 +1,5 @@
 ---
-title: "Reference: createVectorQueryTool() | Tools & MCP"
+title: "Reference: createVectorQueryTool() | Tools and MCP"
 description: Documentation for the Vector Query Tool in Mastra, which facilitates semantic search over vector stores with filtering and reranking capabilities.
 packages:
   - "@mastra/core"
@@ -460,6 +460,28 @@ The `databaseConfig` parameter allows you to leverage unique features and optimi
     - **where**: Filter by metadata fields
     - **whereDocument**: Filter by document content
     - **Use Cases**: Advanced filtering, content-based search
+  </TabItem>
+
+  <TabItem value="turbopuffer" label="Turbopuffer">
+    ### Turbopuffer Configuration
+
+    ```typescript
+    const turbopufferQueryTool = createVectorQueryTool({
+      vectorStoreName: 'turbopuffer',
+      indexName: 'docs',
+      model: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
+      databaseConfig: {
+        turbopuffer: {
+          consistency: 'eventual', // Lower latency, recently written data may not be visible yet
+        },
+      },
+    })
+    ```
+
+    **Turbopuffer Features:**
+
+    - **consistency**: Choose between `strong` (default, read-your-writes) and `eventual` (lower latency)
+    - **Use Cases**: Latency-sensitive queries where slightly stale data is acceptable
   </TabItem>
 
   <TabItem value="multiple-configs" label="Multiple Configs">

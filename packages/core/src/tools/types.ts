@@ -129,13 +129,7 @@ export interface ToolHooks<
 export type ToolPayloadTransformTarget = 'display' | 'transcript';
 
 export type ToolPayloadTransformPhase =
-  | 'input-delta'
-  | 'input-available'
-  | 'output-available'
-  | 'error'
-  | 'approval'
-  | 'suspend'
-  | 'resume';
+  'input-delta' | 'input-available' | 'output-available' | 'error' | 'approval' | 'suspend' | 'resume';
 
 export type ToolPayloadTransformContext<TInput = unknown, TOutput = unknown, TError = unknown> = {
   target: ToolPayloadTransformTarget;
@@ -242,6 +236,9 @@ export interface WorkflowToolExecutionContext<TSuspend, TResume> {
   resumeData?: TResume;
 }
 
+/** Log levels for MCP `notifications/message`, ordered per RFC 5424. */
+export type MCPLoggingLevel = 'debug' | 'info' | 'notice' | 'warning' | 'error' | 'critical' | 'alert' | 'emergency';
+
 // MCP tool execution context - properties specific when tools are executed via Model Context Protocol
 export interface MCPToolExecutionContext {
   /** MCP protocol context passed by the server */
@@ -250,6 +247,16 @@ export interface MCPToolExecutionContext {
   elicitation: {
     sendRequest: (request: ElicitRequest['params']) => Promise<ElicitResult>;
   };
+  /**
+   * Sends a `notifications/message` log notification to the calling client.
+   * Messages below the client's minimum level (set via `logging/setLevel`) are dropped.
+   */
+  log?: (level: MCPLoggingLevel, message: string, data?: Record<string, unknown>) => Promise<void>;
+  /**
+   * Sends a `notifications/progress` notification to the calling client.
+   * No-op if the caller did not request progress tracking (no progressToken in `_meta`).
+   */
+  progress?: (params: { progress: number; total?: number; message?: string }) => Promise<void>;
 }
 
 /**
@@ -574,6 +581,29 @@ export interface ToolExecutionContext<
    */
   observe: ToolObserve;
 }
+
+/**
+ * Context received by a tool's `execute` callback. The runtime always provides
+ * `requestContext` (an empty one is created if the caller passed none), so it
+ * is non-optional here — like `observe`. No null-checking needed.
+ */
+export type ToolExecuteContext<TContext, TRequestContext extends Record<string, any> | unknown = unknown> = Omit<
+  TContext,
+  'requestContext'
+> & {
+  requestContext: RequestContext<TRequestContext>;
+};
+
+/** The `execute` callback signature used by `createTool` and `new Tool(...)`. */
+export type ToolExecuteFunction<
+  TSchemaIn,
+  TSchemaOut,
+  TContext,
+  TRequestContext extends Record<string, any> | unknown = unknown,
+> = (
+  inputData: TSchemaIn,
+  context: ToolExecuteContext<TContext, TRequestContext>,
+) => Promise<TSchemaOut | ValidationError | void>;
 
 export interface ToolAction<
   TSchemaIn,

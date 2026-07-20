@@ -1036,31 +1036,25 @@ describe('Supervisor Pattern - Tool approval propagation', () => {
       toolCallId: approvalToolCallId,
     });
 
-    let toolDeclinedMessage = '';
-
     for await (const _chunk of resumeStream.fullStream) {
-      // consume
-      if (_chunk.type === 'tool-output') {
-        const output = _chunk.payload.output;
-        if (output.type === 'tool-result' && output.payload.toolName === 'find-user-tool-decline') {
-          toolDeclinedMessage = output.payload.result;
-        }
-      }
+      // consume — output-denied calls emit no tool-result chunk for the sub-agent's declined tool
     }
 
     const toolResults = await resumeStream.toolResults;
 
     // Verify tool was NOT executed
     expect(mockFindUser).not.toHaveBeenCalled();
-
-    // Verify we got tool results from the sub-agent delegation
+    // The supervisor still gets a tool-result for the agent delegation itself,
+    // even though the sub-agent's tool was output-denied.
     expect(toolResults.length).toBeGreaterThan(0);
 
-    // The supervisor's tool result for the agent delegation should contain the sub-agent's response
+    // The delegation result must still carry the sub-agent's declined outcome — not just exist.
+    // A regression that dropped the denied path would leave the sub-agent unable to report back,
+    // so assert the supervisor-facing result surfaces the decline.
     const subAgentResult = toolResults.find(tr => tr.payload?.toolName === 'agent-approvalDeclineSubAgent');
     expect(subAgentResult).toBeDefined();
     expect(subAgentResult?.payload?.result).toBeDefined();
-    expect(toolDeclinedMessage).toBe('Tool call was not approved by the user');
+    expect(JSON.stringify(subAgentResult?.payload?.result)).toMatch(/declin/i);
   });
 });
 
@@ -4313,5 +4307,145 @@ describe('Supervisor Pattern - AbortSignal forwarding', () => {
 
     controller.abort();
     expect(capturedSignal!.aborted).toBe(true);
+  });
+});
+
+describe('Delegation maxSteps cap', () => {
+  // Supervisor model that delegates once and includes maxSteps in the tool-call input,
+  // simulating the LLM filling the optional maxSteps delegation arg.
+  function makeSupervisorModelWithMaxSteps(agentKey: string, prompt: string, maxSteps: number) {
+    let callCount = 0;
+    return new MockLanguageModelV2({
+      doGenerate: async () => {
+        callCount++;
+        if (callCount === 1) {
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'tool-calls' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            text: '',
+            content: [
+              {
+                type: 'tool-call' as const,
+                toolCallId: 'call-1',
+                toolName: `agent-${agentKey}`,
+                input: JSON.stringify({ prompt, maxSteps }),
+              },
+            ],
+            warnings: [],
+          };
+        }
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          text: 'Done',
+          content: [{ type: 'text' as const, text: 'Done' }],
+          warnings: [],
+        };
+      },
+    });
+  }
+
+  // Sub-agent with a fixed text response and its own configured step budget
+  function makeCappedSubAgent(id: string, maxSteps: number) {
+    return new Agent({
+      id,
+      name: id,
+      description: `Sub-agent: ${id}`,
+      instructions: 'You are a helpful sub-agent.',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          text: 'child response',
+          content: [{ type: 'text', text: 'child response' }],
+          warnings: [],
+        }),
+      }),
+      defaultOptions: { maxSteps },
+    });
+  }
+
+  it('caps the LLM-provided maxSteps at the sub-agent defaultOptions.maxSteps', async () => {
+    const cappedSubAgent = makeCappedSubAgent('capped-child', 4);
+    const generateSpy = vi.spyOn(cappedSubAgent, 'generate');
+
+    const supervisor = new Agent({
+      id: 'cap-supervisor',
+      name: 'cap-supervisor',
+      instructions: 'You orchestrate sub-agents.',
+      model: makeSupervisorModelWithMaxSteps('cappedChild', 'do work', 10),
+      agents: { cappedChild: cappedSubAgent },
+      memory: new MockMemory(),
+    });
+
+    await supervisor.generate('go', { maxSteps: 5 });
+
+    expect(generateSpy).toHaveBeenCalledTimes(1);
+    expect(generateSpy.mock.calls[0]?.[1]?.maxSteps).toBe(4);
+  });
+
+  it('keeps the LLM-provided maxSteps when it is below the sub-agent default', async () => {
+    const cappedSubAgent = makeCappedSubAgent('reduce-child', 10);
+    const generateSpy = vi.spyOn(cappedSubAgent, 'generate');
+
+    const supervisor = new Agent({
+      id: 'reduce-supervisor',
+      name: 'reduce-supervisor',
+      instructions: 'You orchestrate sub-agents.',
+      model: makeSupervisorModelWithMaxSteps('reduceChild', 'do work', 3),
+      agents: { reduceChild: cappedSubAgent },
+      memory: new MockMemory(),
+    });
+
+    await supervisor.generate('go', { maxSteps: 5 });
+
+    expect(generateSpy).toHaveBeenCalledTimes(1);
+    expect(generateSpy.mock.calls[0]?.[1]?.maxSteps).toBe(3);
+  });
+
+  it('passes the LLM-provided maxSteps through when the sub-agent has no default', async () => {
+    const subAgent = makeSubAgent('uncapped-child', 'child response');
+    const generateSpy = vi.spyOn(subAgent, 'generate');
+
+    const supervisor = new Agent({
+      id: 'uncapped-supervisor',
+      name: 'uncapped-supervisor',
+      instructions: 'You orchestrate sub-agents.',
+      model: makeSupervisorModelWithMaxSteps('uncappedChild', 'do work', 10),
+      agents: { uncappedChild: subAgent },
+      memory: new MockMemory(),
+    });
+
+    await supervisor.generate('go', { maxSteps: 5 });
+
+    expect(generateSpy).toHaveBeenCalledTimes(1);
+    expect(generateSpy.mock.calls[0]?.[1]?.maxSteps).toBe(10);
+  });
+
+  it('lets onDelegationStart modifiedMaxSteps bypass the cap', async () => {
+    const cappedSubAgent = makeCappedSubAgent('hook-child', 4);
+    const generateSpy = vi.spyOn(cappedSubAgent, 'generate');
+
+    const supervisor = new Agent({
+      id: 'hook-supervisor',
+      name: 'hook-supervisor',
+      instructions: 'You orchestrate sub-agents.',
+      model: makeSupervisorModelWithMaxSteps('hookChild', 'do work', 10),
+      agents: { hookChild: cappedSubAgent },
+      memory: new MockMemory(),
+    });
+
+    await supervisor.generate('go', {
+      maxSteps: 5,
+      delegation: {
+        onDelegationStart: () => ({ proceed: true, modifiedMaxSteps: 12 }),
+      },
+    });
+
+    expect(generateSpy).toHaveBeenCalledTimes(1);
+    expect(generateSpy.mock.calls[0]?.[1]?.maxSteps).toBe(12);
   });
 });

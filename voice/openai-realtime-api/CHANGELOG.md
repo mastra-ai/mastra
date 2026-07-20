@@ -1,5 +1,55 @@
 # @mastra/voice-openai-realtime
 
+## 0.13.4
+
+### Patch Changes
+
+- Updated dependencies [[`bc1121a`](https://github.com/mastra-ai/mastra/commit/bc1121a7bb98f7cd73e82e3a7913a667a9fa9911), [`171c3a2`](https://github.com/mastra-ai/mastra/commit/171c3a23f36199ad1354166fb515b22b57f310c2), [`6789ab4`](https://github.com/mastra-ai/mastra/commit/6789ab4191ddcd32a932898b360b191e80cee1a9)]:
+  - @mastra/schema-compat@1.3.4
+
+## 0.13.4-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`171c3a2`](https://github.com/mastra-ai/mastra/commit/171c3a23f36199ad1354166fb515b22b57f310c2)]:
+  - @mastra/schema-compat@1.3.4-alpha.2
+
+## 0.13.4-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`bc1121a`](https://github.com/mastra-ai/mastra/commit/bc1121a7bb98f7cd73e82e3a7913a667a9fa9911)]:
+  - @mastra/schema-compat@1.3.4-alpha.1
+
+## 0.13.4-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`6789ab4`](https://github.com/mastra-ai/mastra/commit/6789ab4191ddcd32a932898b360b191e80cee1a9)]:
+  - @mastra/schema-compat@1.3.4-alpha.0
+
+## 0.13.3
+
+### Patch Changes
+
+- Updated the ws dependency to ^8.21.0 to pull in fixes for an uninitialized memory disclosure (GHSA-58qx-3vcg-4xpx) and a memory exhaustion denial-of-service (GHSA-96hv-2xvq-fx4p) in the WebSocket server. ([#18789](https://github.com/mastra-ai/mastra/pull/18789))
+
+- Updated dependencies [[`1042cb4`](https://github.com/mastra-ai/mastra/commit/1042cb4da227c0a1315a6362262be3058866c5f8)]:
+  - @mastra/schema-compat@1.3.3
+
+## 0.13.3-alpha.1
+
+### Patch Changes
+
+- Updated the ws dependency to ^8.21.0 to pull in fixes for an uninitialized memory disclosure (GHSA-58qx-3vcg-4xpx) and a memory exhaustion denial-of-service (GHSA-96hv-2xvq-fx4p) in the WebSocket server. ([#18789](https://github.com/mastra-ai/mastra/pull/18789))
+
+## 0.13.3-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`1042cb4`](https://github.com/mastra-ai/mastra/commit/1042cb4da227c0a1315a6362262be3058866c5f8)]:
+  - @mastra/schema-compat@1.3.3-alpha.0
+
 ## 0.13.2
 
 ### Patch Changes

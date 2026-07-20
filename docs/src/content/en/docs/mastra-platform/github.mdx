@@ -11,13 +11,13 @@ import StepItem from "@site/src/components/StepItem";
 The GitHub integration links a Mastra platform project to a GitHub repository. When you push changes to your repository Studio and Server will automatically be deployed.
 
 :::note
-The integration only works with repositories hosted on GitHub.com. Self-hosted GitHub Enterprise instances are not currently supported.
+The integration only works with repositories hosted on GitHub.com. Self-hosted GitHub Enterprise instances aren't currently supported.
 :::
 
 After a repository is linked, the platform:
 
 - Builds and deploys Studio and Server on every push to the configured branches.
-- Provisions managed databases and the Mastra gateway API key for projects created from a template.
+- Provisions managed databases and the Gateway API key for projects created from a template.
 - Surfaces commit, branch, and pull request context on each deploy.
 - Reports build status back to GitHub as check runs and to the project dashboard with live status badges and inline logs.
 
@@ -85,7 +85,7 @@ Templates are the fastest way to get started. The platform creates a new reposit
   </StepItem>
 
   <StepItem>
-    Add any template-specific environment variables (for example, AI provider API keys). The platform seeds `MASTRA_GATEWAY_API_KEY` and `MASTRA_PLATFORM_ACCESS_TOKEN` automatically so that template code that talks to the Mastra gateway works on the first deploy.
+    Add any template-specific environment variables (for example, AI provider API keys). The platform seeds `MASTRA_GATEWAY_API_KEY` and `MASTRA_PLATFORM_ACCESS_TOKEN` automatically so that template code that talks to the Gateway works on the first deploy.
   </StepItem>
 
   <StepItem>
