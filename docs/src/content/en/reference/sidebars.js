@@ -312,6 +312,7 @@ const sidebars = {
             { type: 'doc', id: 'evals/completeness', label: 'Completeness' },
             { type: 'doc', id: 'evals/content-similarity', label: 'Content Similarity Scorer' },
             { type: 'doc', id: 'evals/context-precision', label: 'Context Precision Scorer' },
+            { type: 'doc', id: 'evals/context-recall', label: 'Context Recall Scorer' },
             { type: 'doc', id: 'evals/context-relevance', label: 'Context Relevance Scorer' },
             { type: 'doc', id: 'evals/faithfulness', label: 'Faithfulness' },
             { type: 'doc', id: 'evals/hallucination', label: 'Hallucination' },
