@@ -1,5 +1,55 @@
 # @mastra/core
 
+## 1.52.0-alpha.8
+
+### Minor Changes
+
+- Added a FactoryStorage contract that owns application storage domains, initializes them with the shared backend, and reports per-domain readiness and initialization errors. ([#19681](https://github.com/mastra-ai/mastra/pull/19681))
+
+  ```ts
+  import { FactoryStorageDomain } from '@mastra/core/storage';
+  import { LibSQLFactoryStorage } from '@mastra/libsql';
+
+  class TasksStorage extends FactoryStorageDomain {
+    constructor() {
+      super('tasks');
+    }
+
+    async init() {
+      await this.ensureCollections([{ name: 'tasks', columns: { id: { type: 'uuid-pk' } } }]);
+    }
+
+    async dangerouslyClearAll() {
+      await this.ops.deleteMany('tasks', {});
+    }
+  }
+
+  const storage = new LibSQLFactoryStorage({ url: 'file:mastra.db' });
+  storage.registerDomain(new TasksStorage());
+  await storage.init();
+  ```
+
+### Patch Changes
+
+- Fixed Babel 8 compatibility for build-time transforms. ([#19393](https://github.com/mastra-ai/mastra/pull/19393))
+
+- Fixed `requestContext` typing inside a tool's `execute` callback. It is now non-optional, matching runtime behavior: Mastra always provides a `RequestContext` (creating an empty one when the caller passed none), and when `requestContextSchema` is defined the context is validated before `execute` runs — on failure the tool returns a validation error and `execute` is never called. No more null-checks, throws, or tool factories needed to satisfy the compiler. ([#19680](https://github.com/mastra-ai/mastra/pull/19680))
+
+  ```typescript
+  const tool = createTool({
+    id: 'fetch-doc',
+    requestContextSchema: z.object({ documentId: z.string(), userId: z.string() }),
+    execute: async (input, context) => {
+      // Before: context.requestContext was RequestContext<...> | undefined,
+      // forcing ?. / ! / throw even though the runtime guarantees it exists
+      // After: typed as RequestContext<{ documentId: string; userId: string }>
+      const documentId = context.requestContext.get('documentId'); // string
+    },
+  });
+  ```
+
+  Callers of `tool.execute(...)` are unaffected — passing a context remains optional there. Fixes [#19480](https://github.com/mastra-ai/mastra/issues/19480)
+
 ## 1.52.0-alpha.7
 
 ### Patch Changes
