@@ -61,6 +61,51 @@ export function upsertMastraDir({ dir = process.cwd() }: { dir?: string }) {
   }
 }
 
+/**
+ * Whether a package can be imported at its root (`import x from 'pkg'`).
+ *
+ * A package that declares an `exports` map with only subpath entries — a common
+ * convention for internal workspace utilities — has no root entry, and asking a
+ * resolver for `'.'` throws rather than falling back to `main`.
+ *
+ * Follows Node's rule for disambiguating the two shapes an `exports` object can take:
+ * keys starting with `.` make it a subpath map, anything else makes it a conditions
+ * map that applies to the root.
+ */
+export function hasRootExport(pkgJson: { exports?: unknown; main?: unknown } | null | undefined): boolean {
+  if (!pkgJson) {
+    return false;
+  }
+
+  const { exports } = pkgJson;
+
+  // No exports map at all: root resolves via `main`/`index.js`.
+  if (exports === null || exports === undefined) {
+    return true;
+  }
+
+  // `"exports": "./index.js"` or an array of fallbacks both define the root.
+  if (typeof exports === 'string' || Array.isArray(exports)) {
+    return true;
+  }
+
+  if (typeof exports !== 'object') {
+    return true;
+  }
+
+  const keys = Object.keys(exports as Record<string, unknown>);
+  if (keys.length === 0) {
+    return false;
+  }
+
+  // A conditions map (`{ "import": ..., "require": ... }`) applies to the root.
+  if (!keys.some(key => key.startsWith('.'))) {
+    return true;
+  }
+
+  return keys.includes('.');
+}
+
 export function isDependencyPartOfPackage(dep: string, packageName: string) {
   if (dep === packageName) {
     return true;

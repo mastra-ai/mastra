@@ -10,6 +10,7 @@ import {
   findNativePackageModule,
   normalizeStudioBase,
   detectRuntime,
+  hasRootExport,
   injectStudioHtmlConfig,
   escapeStudioHtmlValue,
 } from './utils';
@@ -696,5 +697,45 @@ describe('escapeStudioHtmlValue', () => {
   it('leaves benign values byte-identical', () => {
     expect(escapeStudioHtmlValue('org-123')).toBe('org-123');
     expect(escapeStudioHtmlValue('https://observability.example.com')).toBe('https://observability.example.com');
+  });
+});
+
+describe('hasRootExport', () => {
+  it('treats a package without an exports map as root-importable', () => {
+    expect(hasRootExport({})).toBe(true);
+    expect(hasRootExport({ main: 'src/index.ts' })).toBe(true);
+    expect(hasRootExport({ exports: undefined })).toBe(true);
+    expect(hasRootExport({ exports: null })).toBe(true);
+  });
+
+  it('treats string and array exports as defining the root', () => {
+    expect(hasRootExport({ exports: './src/index.ts' })).toBe(true);
+    expect(hasRootExport({ exports: ['./src/index.ts', './src/index.js'] })).toBe(true);
+  });
+
+  it('treats a conditions-only map as applying to the root', () => {
+    expect(hasRootExport({ exports: { import: './esm.js', require: './cjs.js' } })).toBe(true);
+    expect(hasRootExport({ exports: { types: './index.d.ts', default: './index.js' } })).toBe(true);
+  });
+
+  it('detects a subpath map with an explicit root entry', () => {
+    expect(hasRootExport({ exports: { '.': './src/index.ts', './sub/*': './src/*.ts' } })).toBe(true);
+  });
+
+  it('rejects a subpath-only map', () => {
+    expect(hasRootExport({ exports: { './sub/*': './src/*.ts' } })).toBe(false);
+    expect(hasRootExport({ exports: { './a': './a.ts', './b': './b.ts' } })).toBe(false);
+    // A `main` alongside a subpath-only map does not resurrect the root: an exports
+    // map, once present, fully replaces `main` for resolution.
+    expect(hasRootExport({ main: 'src/index.ts', exports: { './sub/*': './src/*.ts' } })).toBe(false);
+  });
+
+  it('rejects an empty exports map', () => {
+    expect(hasRootExport({ exports: {} })).toBe(false);
+  });
+
+  it('rejects a missing package manifest', () => {
+    expect(hasRootExport(null)).toBe(false);
+    expect(hasRootExport(undefined)).toBe(false);
   });
 });

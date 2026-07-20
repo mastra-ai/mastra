@@ -221,7 +221,19 @@ async function getInputPlugins(
             }
 
             const pkgName = pkgJson.name || '';
-            let resolvedPath: string | undefined = resolve.exports(pkgJson, id.replace(pkgName, '.'))?.[0];
+            let resolvedPath: string | undefined;
+            try {
+              resolvedPath = resolve.exports(pkgJson, id.replace(pkgName, '.'))?.[0];
+            } catch {
+              /**
+               * `resolve.exports` throws (rather than returning undefined) when the package
+               * declares an `exports` map that has no matching entry — including the `"."`
+               * root of a subpath-only map. Swallowing it here is what makes the `main`
+               * fallback below reachable at all. Note `unsafe: true` is not an escape hatch:
+               * the throw is unconditional, that option only skips condition defaults.
+               */
+              resolvedPath = undefined;
+            }
             if (!resolvedPath) {
               resolvedPath = pkgJson!.main ?? 'index.js';
             }

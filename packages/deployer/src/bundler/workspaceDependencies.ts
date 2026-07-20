@@ -11,6 +11,9 @@ export type WorkspacePackageInfo = {
   location: string;
   dependencies: Record<string, string> | undefined;
   version: string | undefined;
+  /** Raw `exports` field, used to tell whether the package can be imported at its root. */
+  exports?: unknown;
+  main?: unknown;
 };
 
 type TransitiveDependencyResult = {
@@ -54,6 +57,8 @@ export async function getWorkspaceInformation({
         location: workspace.location,
         dependencies: workspace.package.dependencies,
         version: workspace.package.version,
+        exports: (workspace.package as { exports?: unknown }).exports,
+        main: (workspace.package as { main?: unknown }).main,
       },
     ]) ?? [],
   );

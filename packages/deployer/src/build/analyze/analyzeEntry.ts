@@ -12,7 +12,7 @@ import { protocolExternalResolver } from '../plugins/protocol-external-resolver'
 import { removeDeployer } from '../plugins/remove-deployer';
 import { tsConfigPaths } from '../plugins/tsconfig-paths';
 import type { DependencyMetadata } from '../types';
-import { getPackageName, isBareModuleSpecifier, slash } from '../utils';
+import { getPackageName, hasRootExport, isBareModuleSpecifier, slash } from '../utils';
 import { DEPS_TO_IGNORE } from './constants';
 
 /**
@@ -155,6 +155,19 @@ async function captureDependenciesToOptimize(
       for (const [innerDep, _innerDepVersion] of Object.entries(workspaceInfo.dependencies)) {
         const innerWorkspaceInfo = workspaceMap.get(innerDep);
         if (!innerWorkspaceInfo) {
+          continue;
+        }
+
+        /**
+         * Packages that only declare subpath exports have no root to import. Registering a
+         * root-level `export *` for them makes the resolver ask for the `"."` specifier,
+         * which throws. The subpaths that are actually imported were already captured
+         * per-specifier from the entry analysis, so skipping the root loses nothing.
+         */
+        if (!hasRootExport(innerWorkspaceInfo)) {
+          logger.debug(
+            `Skipping root export of workspace package "${innerDep}" (imported by "${pkgName}"): it declares subpath exports only.`,
+          );
           continue;
         }
 

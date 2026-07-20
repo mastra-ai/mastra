@@ -360,6 +360,103 @@ describe('analyzeEntry', () => {
     expect(analyzeCache.size).toBe(1);
   });
 
+  it('should not register a root export for transitive workspace packages that only declare subpath exports', async () => {
+    const root = join(import.meta.dirname, '__fixtures__', 'nested-workspace');
+    const entryFilePath = join(root, 'apps', 'mastra', 'src', 'shared-transitive.ts');
+    vi.spyOn(process, 'cwd').mockReturnValue(join(root, 'apps', 'mastra'));
+
+    const workspaceMap = new Map<string, WorkspacePackageInfo>([
+      [
+        '@internal/a',
+        {
+          location: `${root}/packages/a`,
+          dependencies: {
+            '@internal/shared': '1.0.0',
+          },
+          version: '1.0.0',
+        },
+      ],
+      [
+        '@internal/b',
+        {
+          location: `${root}/packages/b`,
+          dependencies: {
+            '@internal/shared': '1.0.0',
+          },
+          version: '1.0.0',
+        },
+      ],
+      [
+        '@internal/shared',
+        {
+          location: `${root}/packages/shared`,
+          dependencies: {},
+          version: '1.0.0',
+          // Only subpath entries, no "." — asking a resolver for the root here throws.
+          exports: {
+            './sub/*': './src/*.ts',
+          },
+        },
+      ],
+    ]);
+
+    const result = await analyzeEntry({ entry: entryFilePath, isVirtualFile: false }, '', {
+      shouldCheckTransitiveDependencies: true,
+      logger: noopLogger,
+      sourcemapEnabled: false,
+      workspaceMap,
+      projectRoot: root,
+    });
+
+    // The packages actually imported at their root are still registered...
+    expect(result.dependencies.get('@internal/a')?.exports).toEqual(['a']);
+    expect(result.dependencies.get('@internal/b')?.exports).toEqual(['b']);
+    // ...but the subpath-only package gets no root entry, so nothing asks for its ".".
+    expect(result.dependencies.has('@internal/shared')).toBe(false);
+    expect(result.dependencies.size).toBe(2);
+  });
+
+  it('should still register transitive workspace packages whose exports map has a root entry', async () => {
+    const root = join(import.meta.dirname, '__fixtures__', 'nested-workspace');
+    const entryFilePath = join(root, 'apps', 'mastra', 'src', 'shared-transitive.ts');
+    vi.spyOn(process, 'cwd').mockReturnValue(join(root, 'apps', 'mastra'));
+
+    const workspaceMap = new Map<string, WorkspacePackageInfo>([
+      [
+        '@internal/a',
+        {
+          location: `${root}/packages/a`,
+          dependencies: {
+            '@internal/shared': '1.0.0',
+          },
+          version: '1.0.0',
+        },
+      ],
+      [
+        '@internal/shared',
+        {
+          location: `${root}/packages/shared`,
+          dependencies: {},
+          version: '1.0.0',
+          exports: {
+            '.': './src/index.ts',
+            './sub/*': './src/*.ts',
+          },
+        },
+      ],
+    ]);
+
+    const result = await analyzeEntry({ entry: entryFilePath, isVirtualFile: false }, '', {
+      shouldCheckTransitiveDependencies: true,
+      logger: noopLogger,
+      sourcemapEnabled: false,
+      workspaceMap,
+      projectRoot: root,
+    });
+
+    expect(result.dependencies.get('@internal/shared')?.exports).toEqual(['*']);
+  });
+
   it('should not cache virtual file entries', async () => {
     const entryCode = `
       import { Mastra } from '@mastra/core/mastra';
