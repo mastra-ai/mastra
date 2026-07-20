@@ -116,13 +116,13 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
       .map(([name, tool]) => {
         try {
           // Check if this is a provider tool BEFORE calling toolFn
-          // V6 provider tools (like openaiV6.tools.webSearch()) have type='function' but
+          // Newer provider tools (like openaiV6.tools.webSearch()) have type='function' but
           // contain an 'id' property with format '<provider>.<tool_name>'
           if (isProviderDefinedTool(tool)) {
             // V5 SDK factories set a hardcoded `.name` (e.g. "web_search"
-            // for anthropic.web_search_20250305). V6 factories don't, so
-            // we fall back to the user-provided key. Either way, the V6
-            // provider's bidirectional toolNameMapping will map correctly.
+            // for anthropic.web_search_20250305). Newer factories don't, so
+            // we fall back to the user-provided key. Either way, the provider's
+            // bidirectional toolNameMapping will map correctly.
             const toolName = (tool as any).name ?? name;
             return {
               type: providerToolType,
