@@ -155,6 +155,12 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    */
   private indexTargets: Map<string, IndexTarget> = new Map();
   /**
+   * Memoized result of the one-time `$rankFusion` support probe (a `buildInfo` round trip).
+   * Cached on the instance after the first `hybridQuery` so subsequent calls skip the admin
+   * command; `version` is retained for the unsupported-version error message.
+   */
+  private rankFusionSupport?: { ok: boolean; version: string };
+  /**
    * Name of the mastra-owned collection that durably records the logical-index → target
    * mapping (`_id: <indexName>`). Kept separate from caller data so a BYO operational
    * collection is never polluted with mastra bookkeeping. Excluded from `listIndexes`.
@@ -240,10 +246,28 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     };
   }
 
-  /** Resolve the full-text (BM25) search index name for an index, honoring a persisted override. */
+  /**
+   * Resolve the full-text (BM25) search index name for an index, honoring a persisted override.
+   *
+   * A managed index always has a companion dynamic full-text index (auto-created by
+   * createIndex), so its name defaults to `${collectionName}_search_index`. A bring-your-own
+   * index does NOT get an auto-created full-text index; until the caller opts in via
+   * createSearchIndex there is no text index to target, so textQuery/hybridQuery fail clearly
+   * here instead of querying a non-existent Atlas index.
+   */
   private async resolveTextSearchIndexName(indexName: string): Promise<string> {
     const target = await this.resolveIndexTarget(indexName);
-    return target.textSearchIndexName ?? `${target.collectionName}_search_index`;
+    if (target.textSearchIndexName) return target.textSearchIndexName;
+    if (target.isByo) {
+      throw new MastraError({
+        id: createVectorErrorId('MONGODB', 'TEXT_QUERY', 'NO_TEXT_INDEX'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+        text: `No full-text search index exists for bring-your-own index "${indexName}". Call createSearchIndex({ indexName: "${indexName}" }) to enable textQuery/hybridQuery, or pass an explicit searchIndexName.`,
+      });
+    }
+    return `${target.collectionName}_search_index`;
   }
 
   /** Read a logical-index target from the durable registry collection, if present. */
@@ -274,23 +298,30 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * upgrade (see the $rankFusion docs), so we require >= 8.1 for a supported, stable path.
    */
   private async assertRankFusionSupported(): Promise<void> {
-    const info = (await this.db.admin().buildInfo()) as { version?: string };
-    const [maj = 0, min = 0] = (info.version ?? '0.0').split('.').map(Number);
-    const ok = maj > 8 || (maj === 8 && min >= 1);
-    if (!ok) {
+    // Probe the server version once and memoize: the support result cannot change for a live
+    // connection, so subsequent hybridQuery calls skip the buildInfo admin round trip.
+    if (!this.rankFusionSupport) {
+      const info = (await this.db.admin().buildInfo()) as { version?: string };
+      const version = info.version ?? 'unknown';
+      const [maj = 0, min = 0] = (info.version ?? '0.0').split('.').map(Number);
+      const ok = maj > 8 || (maj === 8 && min >= 1);
+      this.rankFusionSupport = { ok, version };
+    }
+    if (!this.rankFusionSupport.ok) {
       throw new MastraError({
         id: createVectorErrorId('MONGODB', 'HYBRID_QUERY', 'UNSUPPORTED'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
-        text: `hybridQuery uses $rankFusion, which requires MongoDB >= 8.1 (found ${info.version ?? 'unknown'}). On 8.0.x it needs a MongoDB support case; upgrade to >= 8.1, or run query() and textQuery() separately and fuse client-side.`,
+        text: `hybridQuery uses $rankFusion, which requires MongoDB >= 8.1 (found ${this.rankFusionSupport.version}). On 8.0.x it needs a MongoDB support case; upgrade to >= 8.1, or run query() and textQuery() separately and fuse client-side.`,
       });
     }
   }
 
   /**
-   * Builds the `$project` stage for query results based on metadata mode and whether to
-   * include vectors. Shared across query, textQuery, and hybridQuery to keep projection
-   * logic DRY.
+   * Builds the projection pipeline stage(s) for query results based on metadata mode and
+   * whether to include vectors. Shared across query, textQuery, and hybridQuery to keep
+   * projection logic DRY. Returns an array of stages because `metadataMode: 'document'` may
+   * append a `$unset` to strip the embedding from `metadata`.
    *
    * The relevance score is computed here via `$meta: <scoreMeta>` INSIDE the projection
    * rather than by a preceding `$set { score }` stage. This is deliberate: in
@@ -301,6 +332,14 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * and a real `score` field survives, while the top-level result still carries the synthetic
    * relevance score.
    *
+   * **Embedding in document mode:** `metadata: '$$ROOT'` copies the full source document,
+   * which includes the (large) embedding field — payload bloat callers rarely want. So when
+   * `includeVector` is false, a trailing `$unset` drops the embedding path from `metadata`.
+   * `$unset` accepts a dot path, so a nested `embeddingFieldName` (e.g. `text.contentEmbedding`)
+   * is handled. When `includeVector` is true, the embedding is retained in `metadata` AND
+   * exposed via the top-level `vector` field. Field mode's `metadata` is the managed
+   * subdocument, which never contains the embedding, so no `$unset` is needed there.
+   *
    * @param scoreMeta - metadata field holding the relevance score for the search stage in use
    *   (`vectorSearchScore` for $vectorSearch, `searchScore` for $search, `score` for $rankFusion).
    */
@@ -308,17 +347,29 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     metadataMode: 'field' | 'document',
     includeVector: boolean,
     scoreMeta: 'vectorSearchScore' | 'searchScore' | 'score',
-  ): Document {
+  ): Document[] {
     const score = { $meta: scoreMeta };
-    return metadataMode === 'document'
-      ? { _id: 1, score, metadata: '$$ROOT', ...(includeVector && { vector: `$${this.embeddingFieldName}` }) }
-      : {
+    if (metadataMode === 'document') {
+      const project: Document = {
+        _id: 1,
+        score,
+        metadata: '$$ROOT',
+        ...(includeVector && { vector: `$${this.embeddingFieldName}` }),
+      };
+      if (includeVector) return [{ $project: project }];
+      return [{ $project: project }, { $unset: `${this.metadataFieldName}.${this.embeddingFieldName}` }];
+    }
+    return [
+      {
+        $project: {
           _id: 1,
           score,
           metadata: `$${this.metadataFieldName}`,
           document: `$${this.documentFieldName}`,
           ...(includeVector && { vector: `$${this.embeddingFieldName}` }),
-        };
+        },
+      },
+    ];
   }
 
   // Public methods
@@ -421,6 +472,21 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       const indexNameInternal = targetSearchIndex;
       const defaultTextSearchIndex = `${targetCollection}_search_index`;
 
+      // Guard against a conflicting retarget: if this logical index already points at a
+      // DIFFERENT physical collection, refuse rather than silently orphan the old collection's
+      // search index (and its registry-less data). Idempotent re-createIndex against the same
+      // collection is allowed (refreshes the entry).
+      const existingEntry = await this.readRegistryEntry(indexName);
+      if (existingEntry && existingEntry.collectionName !== targetCollection) {
+        throw new MastraError({
+          id: createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName },
+          text: `Index "${indexName}" is already registered against collection "${existingEntry.collectionName}", but this createIndex call resolves to "${targetCollection}". Call deleteIndex({ indexName: "${indexName}" }) first to retarget it.`,
+        });
+      }
+
       // Persist the logical-index → target mapping BEFORE provisioning any search
       // index. The registry entry is the durable record that classifies this index
       // as bring-your-own; if provisioning fails after this point, a later
@@ -428,10 +494,17 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       // collection (dropping only the search index). Persisting AFTER provisioning
       // would leave a window where a created search index has no registry entry, so
       // deleteIndex would misclassify a BYO index as managed and drop the collection.
-      // Preserve any custom textSearchIndexName already recorded by a prior
-      // createSearchIndex call; only set the default when none exists yet.
-      const existingEntry = await this.readRegistryEntry(indexName);
-      const textSearchIndexName = existingEntry?.textSearchIndexName ?? defaultTextSearchIndex;
+      //
+      // Text-search-index name policy:
+      //   - Managed (!isByo): auto-provision the companion dynamic full-text index, so default
+      //     its name here (preserving any prior custom name from createSearchIndex).
+      //   - BYO (isByo): do NOT auto-create a (billable) full-text index. Leave
+      //     textSearchIndexName UNSET until the caller opts in via createSearchIndex, so
+      //     textQuery/hybridQuery fail clearly instead of querying a non-existent index. A
+      //     custom name from a prior createSearchIndex is still preserved.
+      const textSearchIndexName = isByo
+        ? existingEntry?.textSearchIndexName
+        : (existingEntry?.textSearchIndexName ?? defaultTextSearchIndex);
       await this.writeRegistryEntry(indexName, {
         collectionName: targetCollection,
         searchIndexName: targetSearchIndex,
@@ -498,17 +571,22 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         this.declaredFilterPaths.set(indexName, new Set([this.documentFieldName, ...declaredMetadataPaths]));
       }
 
-      // Companion full-text index (dynamic mapping). The registry entry above
-      // already records its name, so BYO safety does not depend on this succeeding.
-      await this.createSearchIndexIgnoringExisting(collection, {
-        definition: {
-          mappings: {
-            dynamic: true,
+      // Companion full-text index (dynamic mapping). Only auto-created for MANAGED
+      // collections (back-compat). For a bring-your-own operational collection we do NOT
+      // provision a billable full-text index implicitly — the caller opts in explicitly via
+      // createSearchIndex. The registry entry above records its name (managed only), so BYO
+      // safety does not depend on this succeeding.
+      if (!isByo) {
+        await this.createSearchIndexIgnoringExisting(collection, {
+          definition: {
+            mappings: {
+              dynamic: true,
+            },
           },
-        },
-        name: defaultTextSearchIndex,
-        type: 'search',
-      });
+          name: defaultTextSearchIndex,
+          type: 'search',
+        });
+      }
     } catch (error: any) {
       throw new MastraError(
         {
@@ -620,12 +698,14 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         { $limit: Math.min(10000, topK) },
         // Score is projected via $meta inside buildProjection (not a preceding $set) so it
         // never pollutes `metadata: '$$ROOT'` in document mode.
-        { $project: this.buildProjection(metadataMode, false, 'searchScore') },
+        ...this.buildProjection(metadataMode, false, 'searchScore'),
       ];
       const rows = await collection.aggregate(pipeline).toArray();
       return rows.map((r: any) => ({
         id: r._id,
-        score: r.score,
+        // Guard the score consistently with hybridQuery: a missing/non-numeric $meta score
+        // becomes 0 rather than undefined.
+        score: typeof r.score === 'number' ? r.score : 0,
         metadata: r.metadata,
         document: r.document,
       }));
@@ -731,7 +811,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         // (NOT `searchScore`, which is the text-branch score and is absent on vector-only hits).
         // Score is projected via $meta inside buildProjection (not a preceding $set) so it
         // never pollutes `metadata: '$$ROOT'` in document mode.
-        { $project: this.buildProjection(metadataMode, false, 'score') },
+        ...this.buildProjection(metadataMode, false, 'score'),
       ];
       const rows = await collection.aggregate(pipeline).toArray();
       return rows.map((r: any) => ({
@@ -962,9 +1042,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         {
           $vectorSearch: vectorSearch,
         },
-        {
-          $project: this.buildProjection(metadataMode, includeVector, 'vectorSearchScore'),
-        },
+        ...this.buildProjection(metadataMode, includeVector, 'vectorSearchScore'),
       ];
 
       const results = await collection.aggregate(pipeline).toArray();
@@ -1118,12 +1196,25 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     // names: a BYO index may reuse its indexName as the collectionName, so name equality
     // cannot distinguish managed from BYO. Managed indexes drop the collection; BYO indexes
     // drop only the search index so the caller's operational collection/data is preserved.
-    const { collectionName, searchIndexName, isByo } = await this.resolveIndexTarget(indexName);
+    const { collectionName, searchIndexName, isByo, textSearchIndexName } = await this.resolveIndexTarget(indexName);
     const collection = await this.getCollection(collectionName, false);
     try {
       if (collection) {
         if (isByo) {
+          // BYO: drop the vector search index, and the companion full-text index if one was
+          // provisioned (via createSearchIndex — it is not auto-created for BYO). Dropping only
+          // the vector index would leak the persisted text index onto the caller's operational
+          // collection with no record of it. Best-effort on the text index: ignore "not found"
+          // so a manually-removed index does not fail the whole deleteIndex.
           await collection.dropSearchIndex(searchIndexName);
+          if (textSearchIndexName) {
+            try {
+              await collection.dropSearchIndex(textSearchIndexName);
+            } catch (err: any) {
+              const code = err?.codeName ?? err?.code;
+              if (code !== 'IndexNotFound' && code !== 'SearchIndexNotFound' && code !== 27) throw err;
+            }
+          }
         } else {
           await collection.drop();
           this.collections.delete(collectionName);

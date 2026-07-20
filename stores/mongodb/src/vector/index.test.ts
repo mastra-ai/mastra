@@ -548,6 +548,77 @@ describe('MongoDBVector filterFields (#18587)', () => {
       expect((v as any).declaredFilterPaths.has('idx')).toBe(false);
     });
 
+    it('does NOT auto-create a full-text index for a BYO collection (opt-in) (#round3-fix3)', async () => {
+      const v = makeVector();
+      const createSearchIndex = stubCreateIndex(v);
+
+      // BYO: collectionName provided. Only the vector index should be created — no companion
+      // `${collection}_search_index`.
+      await v.createIndex({ indexName: 'idx', dimension: 4, collectionName: 'ops_col' });
+
+      expect(createSearchIndex).toHaveBeenCalledTimes(1);
+      expect(createSearchIndex.mock.calls[0][0].type).toBe('vectorSearch');
+      // Registry entry must leave textSearchIndexName UNSET until createSearchIndex opts in.
+      const writeRegistryEntry = (v as any).writeRegistryEntry as ReturnType<typeof vi.spyOn>;
+      const persisted = writeRegistryEntry.mock.calls[0][1];
+      expect(persisted.isByo).toBe(true);
+      expect(persisted.textSearchIndexName).toBeUndefined();
+    });
+
+    it('DOES auto-create the companion full-text index for a MANAGED collection (back-compat) (#round3-fix3)', async () => {
+      const v = makeVector();
+      const createSearchIndex = stubCreateIndex(v);
+
+      // Managed: no collectionName. Vector index + companion dynamic full-text index.
+      await v.createIndex({ indexName: 'idx', dimension: 4 });
+
+      expect(createSearchIndex).toHaveBeenCalledTimes(2);
+      expect(createSearchIndex.mock.calls[1][0].name).toBe('idx_search_index');
+      expect(createSearchIndex.mock.calls[1][0].type).toBe('search');
+    });
+
+    it('throws a USER MastraError when retargeting an index to a different collection (#round3-fix4)', async () => {
+      const v = makeVector();
+      const createSearchIndex = vi.fn().mockResolvedValue(undefined);
+      (v as any).db = { listCollections: () => ({ hasNext: async () => true }) };
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex });
+      vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
+      // An entry already exists pointing at a DIFFERENT collection.
+      vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue({
+        _id: 'idx',
+        indexName: 'idx',
+        collectionName: 'old_col',
+        searchIndexName: 'idx_vector_index',
+        isByo: true,
+      });
+
+      await expect(v.createIndex({ indexName: 'idx', dimension: 4, collectionName: 'new_col' })).rejects.toThrow(
+        /already registered against collection "old_col"/,
+      );
+      // The conflicting call must not have provisioned any index.
+      expect(createSearchIndex).not.toHaveBeenCalled();
+    });
+
+    it('allows idempotent re-createIndex against the SAME collection (#round3-fix4)', async () => {
+      const v = makeVector();
+      const createSearchIndex = vi.fn().mockResolvedValue(undefined);
+      (v as any).db = { listCollections: () => ({ hasNext: async () => true }) };
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex });
+      vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
+      // Existing entry points at the SAME collection this call resolves to.
+      vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue({
+        _id: 'idx',
+        indexName: 'idx',
+        collectionName: 'same_col',
+        searchIndexName: 'idx_vector_index',
+        isByo: true,
+      });
+
+      await expect(
+        v.createIndex({ indexName: 'idx', dimension: 4, collectionName: 'same_col' }),
+      ).resolves.toBeUndefined();
+    });
+
     it('tolerates the full-text index already existing', async () => {
       const v = makeVector();
       const indexExists = Object.assign(new Error('index already exists'), { codeName: 'IndexAlreadyExists' });
@@ -602,6 +673,46 @@ describe('MongoDBVector filterFields (#18587)', () => {
       expect(can({ 'metadata.category': { $regex: 'x' } })).toBe(false);
       expect(can({ 'metadata.category': { $exists: true } })).toBe(false);
       expect(can({ 'metadata.category': { $size: 2 } })).toBe(false);
+    });
+  });
+
+  describe('buildProjection document-mode embedding exclusion (#round3-fix2)', () => {
+    it('appends a $unset to strip the embedding from metadata in document mode by default', () => {
+      const v = makeVector();
+      const stages = (v as any).buildProjection('document', false, 'vectorSearchScore');
+      // [ {$project: {metadata:'$$ROOT', ...}}, {$unset: 'metadata.embedding'} ]
+      expect(stages).toHaveLength(2);
+      expect(stages[0].$project.metadata).toBe('$$ROOT');
+      expect(stages[0].$project.vector).toBeUndefined();
+      expect(stages[1]).toEqual({ $unset: 'metadata.embedding' });
+    });
+
+    it('keeps the embedding in metadata AND exposes vector when includeVector is true', () => {
+      const v = makeVector();
+      const stages = (v as any).buildProjection('document', true, 'vectorSearchScore');
+      // No $unset: embedding stays inside metadata; a top-level `vector` is also projected.
+      expect(stages).toHaveLength(1);
+      expect(stages[0].$project.metadata).toBe('$$ROOT');
+      expect(stages[0].$project.vector).toBe('$embedding');
+    });
+
+    it('honors a dot-path embeddingFieldName in the $unset', () => {
+      const v = new MongoDBVector({
+        id: 'test',
+        uri: 'mongodb://localhost:27017',
+        dbName: 'test_db',
+        embeddingFieldPath: 'text.contentEmbedding',
+      });
+      const stages = (v as any).buildProjection('document', false, 'vectorSearchScore');
+      expect(stages[1]).toEqual({ $unset: 'metadata.text.contentEmbedding' });
+    });
+
+    it('field mode never $unsets (managed metadata subdocument has no embedding)', () => {
+      const v = makeVector();
+      const stages = (v as any).buildProjection('field', false, 'vectorSearchScore');
+      expect(stages).toHaveLength(1);
+      expect(stages[0].$project.metadata).toBe('$metadata');
+      expect(stages[0].$project.document).toBe('$document');
     });
   });
 
@@ -857,6 +968,12 @@ describe('MongoDBVector filterFields (#18587)', () => {
     beforeAll(async () => {
       searchVector = new MongoDBVector({ uri, dbName, id: 'mongodb-search-test' });
       await searchVector.connect();
+      // Clear any stale registry entry from a previous run: createIndex preserves an existing
+      // textSearchIndexName (by design), which would defeat the opt-in assertion below.
+      await searchVector['db']
+        .collection('__mastra_vector_indexes__')
+        .deleteOne({ _id: idxName as any })
+        .catch(() => {});
       const col = searchVector['db'].collection(searchCol);
       await col.deleteMany({});
       // Non-collinear vectors: avoid ties under cosine similarity
@@ -879,15 +996,33 @@ describe('MongoDBVector filterFields (#18587)', () => {
         .collection(searchCol)
         .drop()
         .catch(() => {});
+      await searchVector['db']
+        .collection('__mastra_vector_indexes__')
+        .deleteOne({ _id: idxName as any })
+        .catch(() => {});
       await searchVector.disconnect();
+    });
+
+    it('createIndex on a BYO collection does NOT auto-create a dynamic full-text index (opt-in) (#round3-fix3)', async () => {
+      // For a BYO collection, createIndex provisions ONLY the vector index. The billable
+      // dynamic `${searchCol}_search_index` must NOT appear until the caller opts in via
+      // createSearchIndex. This test runs first (before the createSearchIndex test below).
+      const col = searchVector['db'].collection(searchCol);
+      const idxs = await col.listSearchIndexes().toArray();
+      expect(idxs.some((i: any) => i.name === searchIdx)).toBe(true); // vector index present
+      expect(idxs.some((i: any) => i.name === `${searchCol}_search_index`)).toBe(false); // no auto text index
+      // textQuery without an opted-in text index errors clearly instead of hitting a missing index.
+      await expect(
+        searchVector.textQuery({ indexName: idxName, query: 'shell company', paths: ['note'], topK: 5 }),
+      ).rejects.toThrow(/createSearchIndex|full-text search index/i);
     });
 
     it('createSearchIndex with fields provisions a DISTINCT field-mapped Atlas Search index', async () => {
       await searchVector.createSearchIndex({ indexName: idxName, fields: ['note'] });
       // With `fields` (and no explicit searchIndexName), the field-mapped index is created
-      // under a DISTINCT name so it does not collide with (and get no-op'd by) the dynamic
-      // `${searchCol}_search_index` auto-created by createIndex. textQuery/hybridQuery then
-      // resolve this persisted name.
+      // under a DISTINCT name (`${searchCol}_search_fields_index`). For a BYO collection there
+      // is no auto-created dynamic index to collide with; textQuery/hybridQuery resolve this
+      // persisted name.
       const fieldIndexName = `${searchCol}_search_fields_index`;
       const col = searchVector['db'].collection(searchCol);
       const maxWait = 60000;
@@ -978,6 +1113,65 @@ describe('MongoDBVector filterFields (#18587)', () => {
       expect(dropSearchIndex).toHaveBeenCalledWith('docs_vec');
       expect(drop).not.toHaveBeenCalled();
       expect(deleteRegistryEntry).toHaveBeenCalledWith('docs');
+    });
+
+    it('also drops the companion text search index for a BYO index when present (#round3-fix1)', async () => {
+      const v = makeVector();
+      const drop = vi.fn().mockResolvedValue(undefined);
+      const dropSearchIndex = vi.fn().mockResolvedValue(undefined);
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ drop, dropSearchIndex });
+      vi.spyOn(v as any, 'deleteRegistryEntry').mockResolvedValue(undefined);
+      // BYO index that has opted into a full-text index via createSearchIndex.
+      (v as any).indexTargets.set('docs', {
+        collectionName: 'ops',
+        searchIndexName: 'docs_vec',
+        isByo: true,
+        textSearchIndexName: 'ops_search_index',
+      });
+
+      await v.deleteIndex({ indexName: 'docs' });
+
+      // Both the vector index AND the persisted text index are dropped; the collection is not.
+      expect(dropSearchIndex).toHaveBeenCalledWith('docs_vec');
+      expect(dropSearchIndex).toHaveBeenCalledWith('ops_search_index');
+      expect(drop).not.toHaveBeenCalled();
+    });
+
+    it('does not attempt to drop a text index for a BYO index that never opted in (#round3-fix1)', async () => {
+      const v = makeVector();
+      const drop = vi.fn().mockResolvedValue(undefined);
+      const dropSearchIndex = vi.fn().mockResolvedValue(undefined);
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ drop, dropSearchIndex });
+      vi.spyOn(v as any, 'deleteRegistryEntry').mockResolvedValue(undefined);
+      // BYO index with no text index provisioned (textSearchIndexName unset).
+      (v as any).indexTargets.set('docs', { collectionName: 'ops', searchIndexName: 'docs_vec', isByo: true });
+
+      await v.deleteIndex({ indexName: 'docs' });
+
+      // Only the vector index is dropped — no phantom text-index drop.
+      expect(dropSearchIndex).toHaveBeenCalledTimes(1);
+      expect(dropSearchIndex).toHaveBeenCalledWith('docs_vec');
+    });
+
+    it('ignores "index not found" when dropping the companion text index (#round3-fix1)', async () => {
+      const v = makeVector();
+      const drop = vi.fn().mockResolvedValue(undefined);
+      const notFound = Object.assign(new Error('index not found'), { codeName: 'IndexNotFound' });
+      const dropSearchIndex = vi
+        .fn()
+        .mockResolvedValueOnce(undefined) // vector index drops fine
+        .mockRejectedValueOnce(notFound); // text index already gone
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ drop, dropSearchIndex });
+      vi.spyOn(v as any, 'deleteRegistryEntry').mockResolvedValue(undefined);
+      (v as any).indexTargets.set('docs', {
+        collectionName: 'ops',
+        searchIndexName: 'docs_vec',
+        isByo: true,
+        textSearchIndexName: 'ops_search_index',
+      });
+
+      await expect(v.deleteIndex({ indexName: 'docs' })).resolves.toBeUndefined();
+      expect(dropSearchIndex).toHaveBeenCalledTimes(2);
     });
 
     it('drops the collection for a managed index (no registered target)', async () => {
@@ -1195,5 +1389,47 @@ describe('MongoDBVector document-mode clean projection', () => {
     expect(hit.metadata?.amount).toBe(5000);
     // And the synthetic relevance score did not leak in equal to metadata.score.
     expect(hit.metadata?.score).not.toBe(hit.score);
+  });
+
+  it('document mode omits the embedding from metadata by default, but retains other source fields (#round3-fix2)', async () => {
+    const runQuery = () =>
+      store.query({ indexName: idxName, queryVector: [0, 1, 0, 0], topK: 1, metadataMode: 'document' });
+    await waitForSync(store, idxName, async () => {
+      const r = await runQuery();
+      return r.length === 1 && r[0].id === 'b';
+    });
+
+    const res = await runQuery();
+    const hit = res[0];
+    // The large embedding field is stripped from metadata by default (payload bloat fix)...
+    expect(hit.metadata?.embedding).toBeUndefined();
+    // ...but the rest of the source document is preserved.
+    expect(hit.metadata?.amount).toBe(5000);
+    expect(hit.metadata?.score).toBe(99);
+    // And no top-level vector is returned unless requested.
+    expect(hit.vector).toBeUndefined();
+  });
+
+  it('document mode includes the embedding in metadata AND exposes vector when includeVector is true (#round3-fix2)', async () => {
+    const runQuery = () =>
+      store.query({
+        indexName: idxName,
+        queryVector: [0, 1, 0, 0],
+        topK: 1,
+        metadataMode: 'document',
+        includeVector: true,
+      });
+    await waitForSync(store, idxName, async () => {
+      const r = await runQuery();
+      return r.length === 1 && r[0].id === 'b';
+    });
+
+    const res = await runQuery();
+    const hit = res[0];
+    // With includeVector, the embedding is retained inside metadata...
+    expect(hit.metadata?.embedding).toEqual([0, 1, 0, 0]);
+    // ...and also exposed at the top level via `vector`.
+    expect(hit.vector).toEqual([0, 1, 0, 0]);
+    expect(hit.metadata?.amount).toBe(5000);
   });
 });
