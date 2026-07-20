@@ -12,7 +12,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 The `createContextRecallScorer()` function creates a scorer that evaluates how well retrieved context covers the claims in a ground-truth reference answer. It measures retrieval completeness by checking what fraction of the ground truth's claims are attributable to the retrieved context.
 
-This scorer requires a ground-truth reference answer, making it suitable for labeled datasets in CI or test environments.
+This scorer requires a ground-truth reference answer, making it suitable for labeled datasets in CI or test environments. When `groundTruth` is not provided in the run, the scorer returns a score of 0 rather than throwing an error.
 
 ## RAG retrieval evaluation
 
@@ -69,7 +69,7 @@ Use when running evaluations against curated test sets:
 ]}
 />
 
-**Note**: Either `context` or `contextExtractor` must be provided. If both are provided, `contextExtractor` takes precedence.
+**Note**: Either `context` or `contextExtractor` must be provided. When both are provided, `contextExtractor` is used only if the run input and output are agent-shaped (`MastraDBMessage[]`); otherwise the scorer falls back to `context`.
 
 ## `.run()` returns
 
@@ -111,6 +111,8 @@ Where:
 ```
 
 ### Score interpretation
+
+These ranges assume the default `scale` of 1. When using a custom scale, multiply accordingly.
 
 - **0.9-1.0**: Excellent recall — context covers nearly all ground-truth claims
 - **0.7-0.8**: Good recall — most claims are covered, minor gaps

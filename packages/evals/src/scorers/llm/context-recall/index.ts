@@ -104,13 +104,13 @@ export function createContextRecallScorer({
         return 0;
       }
 
-      const verdicts = results.analyzeStepResult?.verdicts || [];
-      const totalClaims = verdicts.length;
+      const totalClaims = results.preprocessStepResult?.claims?.length ?? 0;
 
       if (totalClaims === 0) {
         return 0;
       }
 
+      const verdicts = results.analyzeStepResult?.verdicts || [];
       const attributedClaims = verdicts.filter(v => v.verdict.toLowerCase().trim() === 'yes').length;
       const score = (attributedClaims / totalClaims) * (options.scale || 1);
 
