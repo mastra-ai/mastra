@@ -35,11 +35,10 @@ export function useAddFactoryMutation() {
 }
 
 export function useRemoveFactoryMutation() {
+  const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
-      removeFactory(id);
-    },
+    mutationFn: (id: string) => removeFactory(baseUrl, id),
     onSuccess: () => {
       queryClient.setQueryData(queryKeys.factories(), loadFactories());
       invalidateFactories(queryClient);

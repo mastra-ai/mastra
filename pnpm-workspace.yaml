@@ -205,8 +205,8 @@ overrides:
   launch-editor@<2.14.1: 2.14.1
   mdast-util-to-hast@>=13.0.0 <13.2.1: 13.2.1
   websocket-driver@<0.7.5: 0.7.5
-  '@babel/core@>=7.0.0 <7.29.6': 7.29.7
-  '@babel/plugin-transform-modules-systemjs@>=7.12.0 <7.29.4': 7.29.7
+  '@babel/core@>=7.0.0 <7.29.6': 8.0.1
+  '@babel/plugin-transform-modules-systemjs@>=7.12.0 <7.29.4': 8.0.1
   dompurify@>=3.0.0 <3.4.11: 3.4.11
   '@tootallnate/once@<3.0.1': ^3.0.1
   '@codemirror/lang-jinja': ^6.0.1
