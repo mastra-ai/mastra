@@ -4,9 +4,26 @@ import { fileURLToPath } from 'node:url';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig, loadEnv } from 'vite';
-import type { Plugin } from 'vite';
+import type { Plugin, UserConfig } from 'vite';
 
 const here = dirname(fileURLToPath(import.meta.url));
+
+const DEFAULT_DEV_SERVER_PORT = 4120;
+const DEFAULT_DEV_UI_PORT = 5173;
+
+type DevEnvironment = Record<string, string | undefined>;
+type DevPortVariable = 'MASTRACODE_DEV_SERVER_PORT' | 'MASTRACODE_DEV_UI_PORT';
+
+function getDevPort(name: DevPortVariable, fallback: number, env: DevEnvironment): number {
+  const configuredPort = env[name]?.trim();
+  const port = Number(configuredPort || fallback);
+
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+    throw new Error(`${name} must be an integer between 1 and 65535`);
+  }
+
+  return port;
+}
 
 /**
  * Dev-only injection of `window.__MASTRACODE_CONFIG__` into index.html, from
@@ -38,8 +55,8 @@ function runtimeConfigPlugin(mode: string): Plugin {
  * Vite config for the MastraCode web UI.
  *
  * In dev, `pnpm web:dev` runs `mastra dev` (the API server from
- * `src/mastra/index.ts` on :4111) and Vite (:5173) side by side; API paths are
- * proxied to that server so the browser uses same-origin requests in dev.
+ * `src/mastra/index.ts` on :4120 by default) and Vite (:5173) side by side;
+ * API paths are proxied to that server so the browser uses same-origin requests.
  *
  * The production build outputs the static SPA to `src/mastra/public/ui`.
  * `mastra build` copies the `public/` dir next to the Mastra entry into
@@ -48,44 +65,52 @@ function runtimeConfigPlugin(mode: string): Plugin {
  * Hosting the SPA separately (static host / CDN, cross-origin via
  * MASTRACODE_ALLOWED_ORIGINS) remains possible.
  */
-export default defineConfig(({ mode }) => ({
-  root: resolve(here, 'ui'),
-  plugins: [react(), tailwindcss(), runtimeConfigPlugin(mode)],
-  resolve: {
-    // Monorepo packages arrive via `link:` and would otherwise resolve their
-    // own react copy from the monorepo store — force a single copy from here.
-    dedupe: ['react', 'react-dom', '@tanstack/react-query'],
-  },
-  build: {
-    outDir: resolve(here, '../mastra/public/ui'),
-    emptyOutDir: true,
-  },
-  server: {
-    port: 5173,
-    proxy: {
-      '/api': {
-        target: 'http://localhost:4111',
-        changeOrigin: true,
-      },
-      // Web surface routes (fs/config/github) live under `/web/*` on the API
-      // server after the `/api/web` → `/web` path migration. Proxy them so the
-      // dev UI (:5173) can reach them on :4111.
-      '/web': {
-        target: 'http://localhost:4111',
-        changeOrigin: true,
-      },
-      // Optional WorkOS auth routes live on the API server too; proxy them so
-      // the dev UI (:5173) can reach login/callback/logout/me on :4111.
-      //
-      // Match only the `/auth/<route>` paths — NOT a bare `/auth` prefix.
-      // A plain `'/auth'` key prefix-matches Vite module requests like
-      // `/auth.ts` (the client auth module) and wrongly proxies them to the
-      // API server, which 401s / ECONNREFUSEs. The trailing-slash regex keeps
-      // module imports on Vite while still forwarding real auth routes.
-      '^/auth/': {
-        target: 'http://localhost:4111',
-        changeOrigin: true,
+export function createViteConfig(mode: string, env: DevEnvironment = process.env): UserConfig {
+  const devServerPort = getDevPort('MASTRACODE_DEV_SERVER_PORT', DEFAULT_DEV_SERVER_PORT, env);
+  const devUiPort = getDevPort('MASTRACODE_DEV_UI_PORT', DEFAULT_DEV_UI_PORT, env);
+  const devServerTarget = `http://localhost:${devServerPort}`;
+  return {
+    root: resolve(here, 'ui'),
+    plugins: [react(), tailwindcss(), runtimeConfigPlugin(mode)],
+    resolve: {
+      // Monorepo packages arrive via `link:` and would otherwise resolve their
+      // own react copy from the monorepo store — force a single copy from here.
+      dedupe: ['react', 'react-dom', '@tanstack/react-query'],
+    },
+    build: {
+      outDir: resolve(here, '../mastra/public/ui'),
+      emptyOutDir: true,
+    },
+    server: {
+      port: devUiPort,
+      strictPort: true,
+      proxy: {
+        '/api': {
+          target: devServerTarget,
+          changeOrigin: true,
+        },
+        // Web surface routes (fs/config/github) live under `/web/*` on the API
+        // server after the `/api/web` → `/web` path migration. Proxy them so the
+        // dev UI can reach the API server.
+        '/web': {
+          target: devServerTarget,
+          changeOrigin: true,
+        },
+        // Optional WorkOS auth routes live on the API server too; proxy them so
+        // the dev UI can reach login/callback/logout/me.
+        //
+        // Match only the `/auth/<route>` paths — NOT a bare `/auth` prefix.
+        // A plain `'/auth'` key prefix-matches Vite module requests like
+        // `/auth.ts` (the client auth module) and wrongly proxies them to the
+        // API server, which 401s / ECONNREFUSEs. The trailing-slash regex keeps
+        // module imports on Vite while still forwarding real auth routes.
+        '^/auth/': {
+          target: devServerTarget,
+          changeOrigin: true,
+        },
       },
     },
-  },
-}));
+  };
+}
+
+export default defineConfig(({ mode }) => createViteConfig(mode));
