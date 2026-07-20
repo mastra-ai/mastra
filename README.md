@@ -78,6 +78,10 @@ Visit our [official documentation](https://mastra.ai/docs).
 
 Learn how to make your agent a Mastra expert by following the [Build with AI guide](https://mastra.ai/docs/getting-started/build-with-ai).
 
+## Mastra Code
+
+Mastra Code is here.
+
 ## Contributing
 
 Looking to contribute? All types of help are appreciated, from coding to testing and feature specification. Read [CONTRIBUTING.md](./CONTRIBUTING.md) for more details on how to get involved.
