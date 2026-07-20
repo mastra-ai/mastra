@@ -25,7 +25,11 @@ const MAX_ERROR_LENGTH = 512;
 const MAX_BACKOFF_MS = 60_000;
 
 interface DispatcherSession extends SkillSession {
-  thread: { switch(input: { threadId: string }): Promise<unknown> };
+  thread: {
+    switch(input: { threadId: string }): Promise<unknown>;
+    listActiveMessages(): Promise<Array<{ id: string }>>;
+  };
+  sendSignal(input: { id: string; type: 'user'; tagName: 'user'; contents: string }): { accepted: Promise<unknown> };
 }
 
 type FactoryController = Pick<AgentController<MastraCodeState>, 'getSessionByResource'>;
@@ -230,22 +234,17 @@ export class FactoryDecisionDispatcher {
           name: decision.skillName,
           arguments: decision.arguments,
         });
-        await this.#switchThread(resolved.session, binding);
-        await awaitNotification(
-          await resolved.session.sendNotificationSignal(
-            {
-              source: 'factory',
-              kind: 'rule-skill-invocation',
-              summary: resolved.message,
-              priority: 'high',
-              payload: { message: resolved.message, skillName: resolved.skillName },
-              sourceId: record.id,
-              dedupeKey: record.idempotencyKey,
-            },
-            { ifActive: { behavior: 'deliver' }, ifIdle: { behavior: 'wake' } },
-          ),
-          true,
-        );
+        const session = resolved.session as DispatcherSession;
+        await this.#switchThread(session, binding);
+        const delivered = await session.thread.listActiveMessages();
+        if (delivered.some(message => message.id === record.id)) return;
+        const result = session.sendSignal({
+          id: record.id,
+          type: 'user',
+          tagName: 'user',
+          contents: resolved.message,
+        });
+        await result.accepted;
         return;
       }
       case 'sendMessage': {
@@ -379,8 +378,13 @@ export class FactoryDecisionDispatcher {
     role: string,
   ): Promise<FactoryRunBindingRecord> {
     const binding = await this.#findBinding(record, role);
-    if (binding) return binding;
-    if (!this.#prepareBinding) throw new Error(`No active Factory binding for role ${role}.`);
+    if (binding) {
+      const session = await this.#controller.getSessionByResource(binding.resourceId, binding.projectPath);
+      if (session) return binding;
+    }
+    if (!this.#prepareBinding) {
+      throw new Error(binding ? 'Bound Factory session not found.' : `No active Factory binding for role ${role}.`);
+    }
     const item = await this.#requireItem(record);
     await this.#prepareBinding({ record, item, role });
     return this.#requireBinding(record, role);

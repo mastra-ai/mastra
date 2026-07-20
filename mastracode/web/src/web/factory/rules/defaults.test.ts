@@ -115,6 +115,7 @@ describe('defaultFactoryRules', () => {
       type: 'invokeSkill',
       role: 'triage',
       skillName: 'understand-issue',
+      arguments: 'GitHub issue (https://github.test/acme/repo/issues/42)',
     });
   });
 
@@ -130,6 +131,7 @@ describe('defaultFactoryRules', () => {
       type: 'invokeSkill',
       role: 'review',
       skillName: 'understand-pr',
+      arguments: 'GitHub pull request (https://github.test/acme/repo/issues/42)',
     });
   });
 

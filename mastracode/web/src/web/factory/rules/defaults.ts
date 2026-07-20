@@ -26,6 +26,7 @@ function invokeIssueInvestigation(context: FactoryStageRuleContext) {
     idempotencyKey: `${context.ingress.id}:understand-issue`,
     role: 'triage',
     skillName: 'understand-issue',
+    arguments: context.item.url ? `GitHub issue (${context.item.url})` : context.item.title,
   } as const;
 }
 
@@ -39,6 +40,7 @@ function reviewPullRequest(context: FactoryStageRuleContext) {
     idempotencyKey: `${context.ingress.id}:understand-pr`,
     role: 'review',
     skillName: 'understand-pr',
+    arguments: context.item.url ? `GitHub pull request (${context.item.url})` : context.item.title,
   } as const;
 }
 
