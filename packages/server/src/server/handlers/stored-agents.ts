@@ -926,6 +926,9 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
         }
       }
 
+      // Publication remains opt-in so Classic Studio can save drafts without moving the active version,
+      // while Agent Builder can preserve immediate runtime updates by sending autoPublish: true.
+      // This flag is a bridge until version creation and publication move to dedicated APIs.
       if (autoVersionResult.versionCreated && autoPublish) {
         const { versions } = await agentsStore.listVersions({ agentId: storedAgentId, perPage: 1 });
         const latestVersion = versions[0];
