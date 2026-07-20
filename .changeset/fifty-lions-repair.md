@@ -1,5 +1,5 @@
 ---
-'mastra-factory': patch
+'create-factory': patch
 ---
 
 Hardened the scaffolding flow based on review feedback:

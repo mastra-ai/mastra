@@ -2,7 +2,7 @@
 
 An open source, agent-powered software delivery environment built on [Mastra](https://mastra.ai). Connect GitHub and Linear, pull issues into an intake board, hand them to coding agents, and ship pull requests — from a web app you own and can deploy anywhere.
 
-Created with [`npx mastra-factory`](https://www.npmjs.com/package/mastra-factory).
+Created with [`npm create factory`](https://www.npmjs.com/package/create-factory).
 
 ## Quick start
 

@@ -307,7 +307,7 @@ function writeEnvExample() {
     .trimStart();
   const header = [
     '# Mastra Software Factory environment.',
-    '# Copied to .env by `npx mastra-factory`; every value is optional —',
+    '# Copied to .env by `npm create factory`; every value is optional —',
     '# features light up as their variables are set (see README.md).',
     '# Validation source of truth: .env.schema (varlock).',
     '',

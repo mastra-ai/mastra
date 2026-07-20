@@ -11,7 +11,7 @@ const rootDir = join(__dirname, '..', '..');
 const cliRoot = join(rootDir, 'mastracode', 'mastra-factory');
 
 /**
- * Validates the artifacts users receive from `npx mastra-factory`
+ * Validates the artifacts users receive from `npm create factory`
  * against the monorepo's local package set (served by the E2E registry):
  * generate the template from mastracode/web, scaffold with the CLI's
  * --default path, then typecheck, build, boot, and probe the scaffold.

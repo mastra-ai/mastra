@@ -1,9 +1,9 @@
-# mastra-factory
+# create-factory
 
 Scaffolding CLI for the **Mastra Software Factory** — an open-source, agent-powered software delivery environment built on [Mastra](https://mastra.ai).
 
 ```bash
-npx mastra-factory
+npm create factory
 ```
 
 The CLI is intentionally minimal: it asks for a project name, clones the [softwarefactory-template](https://github.com/mastra-ai/softwarefactory-template), installs dependencies, and initializes git. That's it — run `npm run dev` and finish setup (model providers, integrations, database) from the web UI on first load. An "auth with the Mastra platform" step is planned as a follow-up.
@@ -11,7 +11,7 @@ The CLI is intentionally minimal: it asks for a project name, clones the [softwa
 ## Flags
 
 ```text
-npx mastra-factory [project-name] -- [options]
+npm create factory [project-name] -- [options]
 
     --default              Non-interactive: default name
     --template-ref <ref>   Pin a template repo tag/branch

@@ -1,11 +1,11 @@
 {
-  "name": "mastra-factory",
-  "version": "0.0.1",
-  "description": "Create a Mastra Software Factory project: an agent-powered software delivery environment built on Mastra. Run `npx mastra-factory` to scaffold and get started.",
+  "name": "create-factory",
+  "version": "0.0.2",
+  "description": "Create a Mastra Software Factory project: an agent-powered software delivery environment built on Mastra. Run `npm create factory` to scaffold and get started.",
   "type": "module",
   "license": "Apache-2.0",
   "bin": {
-    "mastra-factory": "./bin/cli.mjs"
+    "create-factory": "./bin/cli.mjs"
   },
   "files": [
     "bin",
