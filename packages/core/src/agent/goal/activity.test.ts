@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
+import type { IMastraLogger } from '../../logger';
 import { Mastra } from '../../mastra';
 import type { GoalObjectiveRecord, ThreadStateStorage } from '../../storage/domains/thread-state/base';
 import { InMemoryStore } from '../../storage/mock';
@@ -21,9 +22,22 @@ function objective(overrides: Partial<GoalObjectiveRecord> = {}): GoalObjectiveR
   };
 }
 
-async function setup(record: GoalObjectiveRecord = objective()) {
+function createLogger() {
+  return {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    trackException: vi.fn(),
+    getTransports: vi.fn().mockReturnValue(new Map()),
+    listLogs: vi.fn().mockResolvedValue({ logs: [], total: 0, page: 1, perPage: 10, hasMore: false }),
+    listLogsByRunId: vi.fn().mockResolvedValue({ logs: [], total: 0, page: 1, perPage: 10, hasMore: false }),
+  } satisfies IMastraLogger;
+}
+
+async function setup(record: GoalObjectiveRecord = objective(), logger: IMastraLogger | false = false) {
   const storage = new InMemoryStore();
-  const mastra = new Mastra({ storage, logger: false });
+  const mastra = new Mastra({ storage, logger });
   const store: ThreadStateStorage | undefined = await storage.getStore('threadState');
   const threadId = `thread-${crypto.randomUUID()}`;
   await store!.setState({ threadId, type: GOAL_STATE_TYPE, value: record });
@@ -126,6 +140,51 @@ describe('goal activity tracking', () => {
     await stopGoalActivity({ agentId, runId: 'replaced-run', now: () => 1_000 });
 
     expect(await readDuration(store, threadId)).toBe(50);
+  });
+
+  it('logs and ignores failures while reading the objective at activity start', async () => {
+    const logger = createLogger();
+    const { mastra, store, threadId } = await setup(objective(), logger);
+    const error = new Error('objective read failed');
+    vi.spyOn(store, 'getState').mockRejectedValueOnce(error);
+
+    await expect(beginGoalActivity({ mastra, agentId, threadId, runId: 'failed-start' })).resolves.toBeUndefined();
+
+    expect(logger.debug).toHaveBeenCalledWith('Failed to begin goal activity tracking', {
+      error,
+      agentId,
+      threadId,
+      runId: 'failed-start',
+    });
+  });
+
+  it('logs and ignores failures while checkpointing activity', async () => {
+    const logger = createLogger();
+    const { mastra, store, threadId } = await setup(objective({ activeDurationMs: 0 }), logger);
+    const error = new Error('write failed');
+
+    await beginGoalActivity({ mastra, agentId, threadId, runId: 'failed-checkpoint', now: () => 0 });
+    vi.spyOn(store, 'setState').mockRejectedValueOnce(error);
+
+    await expect(stopGoalActivity({ agentId, runId: 'failed-checkpoint', now: () => 100 })).resolves.toBeUndefined();
+
+    expect(logger.debug).toHaveBeenCalledWith('Failed to persist goal activity duration', {
+      error,
+      agentId,
+      threadId,
+      runId: 'failed-checkpoint',
+    });
+  });
+
+  it('does not fail activity handling when the logger throws', async () => {
+    const logger = createLogger();
+    logger.debug.mockImplementation(() => {
+      throw new Error('logger failed');
+    });
+    const { mastra, store, threadId } = await setup(objective(), logger);
+    vi.spyOn(store, 'getState').mockRejectedValueOnce(new Error('objective read failed'));
+
+    await expect(beginGoalActivity({ mastra, agentId, threadId, runId: 'failed-logger' })).resolves.toBeUndefined();
   });
 
   it('does not start activity for a paused objective', async () => {

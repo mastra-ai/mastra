@@ -4,6 +4,7 @@ import { readObjective, resolveGoalStore, writeObjective } from './objective';
 import type { ResolvedGoalStore } from './objective';
 
 interface ActiveGoalSegment {
+  mastra: MastraUnion | undefined;
   agentId: string;
   threadId: string;
   objectiveId: string;
@@ -33,6 +34,14 @@ function segmentKey(agentId: string, runId: string): string {
 
 function normalizeDuration(value: number | undefined): number {
   return value !== undefined && Number.isFinite(value) && value >= 0 ? value : 0;
+}
+
+function debugFailure(mastra: MastraUnion | undefined, message: string, context: Record<string, unknown>): void {
+  try {
+    mastra?.getLogger()?.debug(message, context);
+  } catch {
+    // Logging must not turn best-effort timing persistence into an agent failure.
+  }
 }
 
 function enqueueThreadWrite(store: ResolvedGoalStore, threadId: string, write: () => Promise<void>): Promise<void> {
@@ -70,7 +79,8 @@ export async function beginGoalActivity({
   try {
     store = await resolveGoalStore(mastra);
     objective = await readObjective(store, threadId);
-  } catch {
+  } catch (error) {
+    debugFailure(mastra, 'Failed to begin goal activity tracking', { error, agentId, threadId, runId });
     return;
   }
   if (!store || objective?.status !== 'active') return;
@@ -80,7 +90,7 @@ export async function beginGoalActivity({
     objectiveId,
     durationMs: normalizeDuration(objective.activeDurationMs),
   });
-  activeSegments.set(key, { agentId, threadId, objectiveId, startedAt: now(), store });
+  activeSegments.set(key, { mastra, agentId, threadId, objectiveId, startedAt: now(), store });
 }
 
 /**
@@ -117,8 +127,13 @@ export async function stopGoalActivity({
         durationMs: activeDurationMs,
       });
     });
-  } catch {
-    // Timing persistence must not fail the agent run.
+  } catch (error) {
+    debugFailure(segment.mastra, 'Failed to persist goal activity duration', {
+      error,
+      agentId: segment.agentId,
+      threadId: segment.threadId,
+      runId,
+    });
   }
 }
 
