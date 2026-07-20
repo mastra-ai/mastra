@@ -14,7 +14,7 @@ import { ToastProvider } from './ui';
 
 // The web app talks to the Mastra server same-origin (`baseUrl=""`): in prod
 // the server serves this build itself, and in dev Vite proxies `/api` + `/auth`
-// to :4111. The served index.html also carries `window.__MASTRACODE_CONFIG__`
+// to the configured API server. The served index.html also carries `window.__MASTRACODE_CONFIG__`
 // (injected by the server in prod, by the Vite plugin in dev) so the UI knows
 // whether auth is enabled without probing `/auth/me`. A future React Native
 // entry mounts the same providers with its own absolute base URL and fetch

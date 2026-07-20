@@ -2,7 +2,7 @@
  * Same-origin SPA serving for production.
  *
  * In dev the SPA is served by Vite (:5173) which proxies API paths to the
- * server (:4111) — this module is effectively idle there. In production the
+ * configured server (on :4120 by default) — this module is effectively idle there. In production the
  * built SPA (vite output) is served by the API server itself at `/`, so the
  * app is a single origin and no CORS / separate static host is required.
  *

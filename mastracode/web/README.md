@@ -20,8 +20,19 @@ pnpm install
 pnpm web:dev
 ```
 
-- API server (`mastra dev`) on **:4111**, env loaded/validated by varlock from `.env` against `.env.schema` (package root).
-- Vite SPA on **:5173**, proxying `/api`, `/web`, and `/auth/` to the API server.
+- API server (`mastra dev`) on **:4120** by default, env loaded/validated by varlock from `.env` against `.env.schema` (package root).
+- Vite SPA on **:5173**, proxying `/api`, `/web`, and `/auth/` to the configured API server. It fails fast when the port is occupied so OAuth callbacks cannot silently reach the wrong app.
+
+Run concurrent development sessions with an explicit port pair:
+
+```bash
+MASTRACODE_DEV_SERVER_PORT=4121 \
+MASTRACODE_DEV_UI_PORT=5174 \
+MASTRACODE_PUBLIC_URL=http://localhost:5174 \
+pnpm web:dev
+```
+
+When WorkOS auth is enabled, add the alternate `<MASTRACODE_PUBLIC_URL>/auth/callback` to the allowed redirect URIs.
 
 For the GitHub/sandbox features, start the app database first: `pnpm web:dev:github` (Postgres via docker compose on :54329).
 

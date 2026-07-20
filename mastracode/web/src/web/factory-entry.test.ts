@@ -76,6 +76,7 @@ beforeEach(() => {
 
 afterEach(() => {
   __resetRuntimeConfigForTests();
+  vi.unstubAllEnvs();
 });
 
 describe('MastraFactory.prepare', () => {
@@ -198,6 +199,19 @@ describe('MastraFactory.prepare', () => {
       storage,
       publicUrl: 'https://factory.acme.com',
       allowedOrigins: ['https://app.acme.com'],
+    } satisfies WebAuthAdapterInitContext);
+  });
+
+  it('derives the default public URL from the bound server port', async () => {
+    vi.stubEnv('PORT', '4121');
+    const auth = fakeAdapter();
+
+    await prepareFactory({ auth });
+
+    expect(auth.init).toHaveBeenCalledExactlyOnceWith({
+      storage: undefined,
+      publicUrl: 'http://localhost:4121',
+      allowedOrigins: [],
     } satisfies WebAuthAdapterInitContext);
   });
 
