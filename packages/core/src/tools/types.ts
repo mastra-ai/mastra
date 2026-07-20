@@ -588,6 +588,29 @@ export interface ToolExecutionContext<
   observe: ToolObserve;
 }
 
+/**
+ * Context received by a tool's `execute` callback. The runtime always provides
+ * `requestContext` (an empty one is created if the caller passed none), so it
+ * is non-optional here — like `observe`. No null-checking needed.
+ */
+export type ToolExecuteContext<TContext, TRequestContext extends Record<string, any> | unknown = unknown> = Omit<
+  TContext,
+  'requestContext'
+> & {
+  requestContext: RequestContext<TRequestContext>;
+};
+
+/** The `execute` callback signature used by `createTool` and `new Tool(...)`. */
+export type ToolExecuteFunction<
+  TSchemaIn,
+  TSchemaOut,
+  TContext,
+  TRequestContext extends Record<string, any> | unknown = unknown,
+> = (
+  inputData: TSchemaIn,
+  context: ToolExecuteContext<TContext, TRequestContext>,
+) => Promise<TSchemaOut | ValidationError | void>;
+
 export interface ToolAction<
   TSchemaIn,
   TSchemaOut,
