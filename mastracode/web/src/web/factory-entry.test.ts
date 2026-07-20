@@ -116,6 +116,7 @@ describe('MastraFactory.prepare', () => {
       'audit',
       'work-items',
       'model-credentials',
+      'queue-health',
       'integrations',
       'source-control',
     ]);
