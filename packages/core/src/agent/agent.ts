@@ -7230,9 +7230,10 @@ export class Agent<
       runId,
       routingAgent: this,
       routingAgentOptions: {
+        model: mergedOptions?.model,
         modelSettings: mergedOptions?.modelSettings,
         memory: mergedOptions?.memory,
-      } as unknown as AgentExecutionOptions<OUTPUT>,
+      },
       generateId: context => this.#mastra?.generateId(context) || randomUUID(),
       maxIterations: mergedOptions?.maxSteps || 1,
       messages,
@@ -7305,6 +7306,7 @@ export class Agent<
       runId,
       routingAgent: this,
       routingAgentOptions: {
+        model: mergedOptions?.model,
         modelSettings: mergedOptions?.modelSettings,
         memory: mergedOptions?.memory,
       },

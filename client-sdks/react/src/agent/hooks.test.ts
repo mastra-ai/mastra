@@ -199,6 +199,46 @@ describe('useChat forwards clientTools', () => {
     expect(streamMock).toHaveBeenCalledTimes(1);
   });
 
+  it('retains the model override for stream approval', async () => {
+    const { result } = renderHook(() => useChat({ agentId: 'test-agent' }), { wrapper });
+
+    await act(async () => {
+      await result.current.sendMessage({
+        mode: 'stream',
+        message: 'hi',
+        model: 'google/gemini-2.5-flash',
+      });
+      await result.current.approveToolCall('tool-call-approval-1');
+    });
+
+    expect(streamMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ model: 'google/gemini-2.5-flash' }),
+    );
+    expect(approveToolCallMock).toHaveBeenCalledWith(expect.objectContaining({ model: 'google/gemini-2.5-flash' }));
+  });
+
+  it('retains the model override for network approval', async () => {
+    const { result } = renderHook(() => useChat({ agentId: 'test-agent' }), { wrapper });
+
+    await act(async () => {
+      await result.current.sendMessage({
+        mode: 'network',
+        message: 'hi',
+        model: 'google/gemini-2.5-flash',
+      });
+      await result.current.approveNetworkToolCall('tool', 'run-net-1');
+    });
+
+    expect(networkMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ model: 'google/gemini-2.5-flash' }),
+    );
+    expect(approveNetworkToolCallMock).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'google/gemini-2.5-flash' }),
+    );
+  });
+
   it('marks subscription streams idle while waiting for tool approval', async () => {
     nextSubscribeChunks = [
       {
