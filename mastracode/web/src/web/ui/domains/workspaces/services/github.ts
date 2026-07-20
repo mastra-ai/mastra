@@ -11,7 +11,7 @@
  * still reaches the Mastra server — same pattern as the shared API client.
  */
 
-import type { Project } from './projects';
+import type { GithubConnectedRepositoryPayload } from './factories';
 
 export interface GithubInstallation {
   installationId: number;
@@ -115,30 +115,15 @@ export async function listGithubRepos(baseUrl: string, query?: string): Promise<
 }
 
 /**
- * Create a project from a repo. The server persists a `source_control_projects`
- * row (no sandbox, no clone yet) and returns a `Project` payload of `source: github`.
+ * Create a connected GitHub repository binding. The server persists a
+ * `github_projects` row (no sandbox, no clone yet) and returns a temporary
+ * repository DTO. The browser wraps it into a Factory with its own UUID.
  */
-export async function listGithubProjects(baseUrl: string): Promise<Project[]> {
-  const res = await fetch(`${baseUrl}/web/github/projects`, {
-    credentials: 'include',
-    headers: { Accept: 'application/json' },
-  });
-  if (res.status === 404) return [];
-  if (!res.ok) throw new Error(`Failed to list projects (${res.status})`);
-  return (await res.json()) as Project[];
-}
-
-export async function deleteGithubProject(baseUrl: string, projectId: string): Promise<void> {
-  const res = await fetch(`${baseUrl}/web/github/projects/${encodeURIComponent(projectId)}`, {
-    method: 'DELETE',
-    credentials: 'include',
-    headers: { Accept: 'application/json' },
-  });
-  if (!res.ok) throw new Error(`Failed to delete project (${res.status})`);
-}
-
-export async function createProjectFromRepo(baseUrl: string, repo: GithubRepo): Promise<Project> {
-  const res = await fetch(`${baseUrl}/web/github/projects`, {
+export async function createConnectedRepository(
+  baseUrl: string,
+  repo: GithubRepo,
+): Promise<GithubConnectedRepositoryPayload> {
+  const res = await fetch(`${baseUrl}/web/github/repositories`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'content-type': 'application/json' },
@@ -149,9 +134,9 @@ export async function createProjectFromRepo(baseUrl: string, repo: GithubRepo): 
       defaultBranch: repo.defaultBranch,
     }),
   });
-  if (!res.ok) throw new Error(`Failed to create project (${res.status})`);
-  const body = (await res.json()) as { project: Project };
-  return body.project;
+  if (!res.ok) throw new Error(`Failed to create connected repository (${res.status})`);
+  const body = (await res.json()) as { repository: GithubConnectedRepositoryPayload };
+  return body.repository;
 }
 
 export interface MaterializeResult {
@@ -180,7 +165,7 @@ export async function ensureRepoMaterialized(
   githubProjectId: string,
   onProgress?: (event: PrepareProgress) => void,
 ): Promise<MaterializeResult> {
-  const res = await fetch(`${baseUrl}/web/github/projects/${encodeURIComponent(githubProjectId)}/ensure`, {
+  const res = await fetch(`${baseUrl}/web/github/repositories/${encodeURIComponent(githubProjectId)}/ensure`, {
     method: 'POST',
     credentials: 'include',
     headers: { Accept: 'text/event-stream' },
@@ -208,7 +193,7 @@ export async function ensureRepoMaterialized(
       result = JSON.parse(data) as MaterializeResult;
     } else if (event === 'error') {
       const body = JSON.parse(data) as { error?: string; message?: string };
-      failure = new Error(body.message ?? 'Failed to prepare project') as Error & { code?: string };
+      failure = new Error(body.message ?? 'Failed to prepare repository') as Error & { code?: string };
       failure.code = body.error;
     }
   });
@@ -221,7 +206,7 @@ export async function ensureRepoMaterialized(
 /** Build an Error carrying the server's error code from a non-OK JSON response. */
 async function ensureError(res: Response): Promise<Error & { code?: string }> {
   let code = `http_${res.status}`;
-  let message = `Failed to prepare project (${res.status})`;
+  let message = `Failed to prepare repository (${res.status})`;
   try {
     const body = (await res.json()) as { error?: string; message?: string };
     if (body.error) code = body.error;
@@ -283,13 +268,13 @@ export interface GitOpError extends Error {
  * surfacing `error`/`message` codes on failure (and `authRequired` for 401) so
  * callers can react without re-implementing the parsing dance each time.
  */
-async function postProjectGitOp<T>(
+async function postRepositoryGitOp<T>(
   baseUrl: string,
   githubProjectId: string,
   action: string,
   payload: unknown,
 ): Promise<T> {
-  const res = await fetch(`${baseUrl}/web/github/projects/${encodeURIComponent(githubProjectId)}/${action}`, {
+  const res = await fetch(`${baseUrl}/web/github/repositories/${encodeURIComponent(githubProjectId)}/${action}`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'content-type': 'application/json', Accept: 'application/json' },
@@ -333,7 +318,7 @@ export async function createWorktree(
   branch: string,
   baseBranch?: string,
 ): Promise<WorktreeResult> {
-  return postProjectGitOp<WorktreeResult>(baseUrl, githubProjectId, 'worktree', { branch, baseBranch });
+  return postRepositoryGitOp<WorktreeResult>(baseUrl, githubProjectId, 'worktree', { branch, baseBranch });
 }
 
 export interface DeleteWorktreeResult {
@@ -352,7 +337,7 @@ export async function deleteWorktree(
   githubProjectId: string,
   branch: string,
 ): Promise<DeleteWorktreeResult> {
-  return postProjectGitOp<DeleteWorktreeResult>(baseUrl, githubProjectId, 'worktree/delete', { branch });
+  return postRepositoryGitOp<DeleteWorktreeResult>(baseUrl, githubProjectId, 'worktree/delete', { branch });
 }
 
 export interface CommitResult {
@@ -370,7 +355,7 @@ export async function commitChanges(
   message: string,
   worktreePath?: string,
 ): Promise<CommitResult> {
-  return postProjectGitOp<CommitResult>(baseUrl, githubProjectId, 'commit', { message, worktreePath });
+  return postRepositoryGitOp<CommitResult>(baseUrl, githubProjectId, 'commit', { message, worktreePath });
 }
 
 export interface PushResult {
@@ -385,7 +370,7 @@ export async function pushBranch(
   branch: string,
   worktreePath?: string,
 ): Promise<PushResult> {
-  return postProjectGitOp<PushResult>(baseUrl, githubProjectId, 'push', { branch, worktreePath });
+  return postRepositoryGitOp<PushResult>(baseUrl, githubProjectId, 'push', { branch, worktreePath });
 }
 
 export interface PullRequestResult {
@@ -406,11 +391,11 @@ export async function openPullRequest(
     threadId?: string;
   },
 ): Promise<PullRequestResult> {
-  return postProjectGitOp<PullRequestResult>(baseUrl, githubProjectId, 'pr', args);
+  return postRepositoryGitOp<PullRequestResult>(baseUrl, githubProjectId, 'pr', args);
 }
 
-/** Per-project settings persisted on the server. */
-export interface ProjectSettings {
+/** Per-repository settings persisted on the server. */
+export interface RepositorySettings {
   /**
    * Shell command run inside every freshly created worktree before any agent
    * execution (e.g. `pnpm i && pnpm build`). `null` when no setup step is
@@ -419,21 +404,21 @@ export interface ProjectSettings {
   setupCommand: string | null;
 }
 
-/** Read a project's settings (currently just the worktree setup command). */
-export async function fetchProjectSettings(baseUrl: string, githubProjectId: string): Promise<ProjectSettings> {
-  const res = await fetch(`${baseUrl}/web/github/projects/${encodeURIComponent(githubProjectId)}/settings`, {
+/** Read a repository's settings (currently just the worktree setup command). */
+export async function fetchRepositorySettings(baseUrl: string, githubProjectId: string): Promise<RepositorySettings> {
+  const res = await fetch(`${baseUrl}/web/github/repositories/${encodeURIComponent(githubProjectId)}/settings`, {
     headers: { Accept: 'application/json' },
     credentials: 'include',
   });
-  if (!res.ok) throw new Error(`Failed to load project settings (${res.status})`);
-  return (await res.json()) as ProjectSettings;
+  if (!res.ok) throw new Error(`Failed to load repository settings (${res.status})`);
+  return (await res.json()) as RepositorySettings;
 }
 
-/** Persist a project's setup command. Pass `null` (or blank) to clear it. */
-export async function saveProjectSettings(
+/** Persist a repository's setup command. Pass `null` (or blank) to clear it. */
+export async function saveRepositorySettings(
   baseUrl: string,
   githubProjectId: string,
-  settings: ProjectSettings,
-): Promise<ProjectSettings> {
-  return postProjectGitOp<ProjectSettings>(baseUrl, githubProjectId, 'settings', settings);
+  settings: RepositorySettings,
+): Promise<RepositorySettings> {
+  return postRepositoryGitOp<RepositorySettings>(baseUrl, githubProjectId, 'settings', settings);
 }

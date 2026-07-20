@@ -453,11 +453,16 @@ export class MastraCodeGateway extends MastraModelGateway {
     }
 
     if (args.providerId === 'moonshotai') {
-      if (!process.env.MOONSHOT_AI_API_KEY) {
-        throw new Error(`Need MOONSHOT_AI_API_KEY`);
+      // Prefer the gateway-resolved key (stored credentials), then the canonical
+      // registry env var. Keep the legacy typo name as a fallback for anyone who
+      // set it because of the previous error message.
+      const apiKey =
+        args.apiKey?.trim() || process.env.MOONSHOT_API_KEY?.trim() || process.env.MOONSHOT_AI_API_KEY?.trim();
+      if (!apiKey) {
+        throw new Error('Need MOONSHOT_API_KEY');
       }
       return createAnthropic({
-        apiKey: process.env.MOONSHOT_AI_API_KEY,
+        apiKey,
         baseURL: 'https://api.moonshot.ai/anthropic/v1',
         name: 'moonshotai.anthropicv1',
         headers: args.headers,

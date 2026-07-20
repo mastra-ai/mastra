@@ -336,7 +336,7 @@ describe('S7 — cross-user teardown isolation (route level)', () => {
 
   it("user 2's teardown never touches user 1's sandbox binding", async () => {
     const app = buildApp('u2');
-    const res = await app.request('/web/github/projects/p1/sandbox', { method: 'DELETE' });
+    const res = await app.request('/web/github/repositories/p1/sandbox', { method: 'DELETE' });
 
     // u2 has no provisioned binding → idempotent no-op success.
     expect(res.status).toBe(200);
@@ -353,7 +353,7 @@ describe('S7 — cross-user teardown isolation (route level)', () => {
   it('user 1 can tear down their own sandbox', async () => {
     __resetLiveSandboxCount(1); // u1 has one live sandbox
     const app = buildApp('u1');
-    const res = await app.request('/web/github/projects/p1/sandbox', { method: 'DELETE' });
+    const res = await app.request('/web/github/repositories/p1/sandbox', { method: 'DELETE' });
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ tornDown: true });

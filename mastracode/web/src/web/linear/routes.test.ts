@@ -70,7 +70,7 @@ const stateSigner: import('../state-signing').StateSigner = {
 };
 
 const getIntakeConfig = vi.fn(async () => ({
-  github: { enabled: true, projectIds: null as string[] | null },
+  github: { enabled: true, repositoryIds: null as string[] | null },
   linear: { enabled: true, projectIds: null as string[] | null },
 }));
 vi.mock('../intake/store', () => ({
@@ -142,7 +142,7 @@ beforeEach(async () => {
   cookieUser = null;
   getIntakeConfig.mockClear();
   getIntakeConfig.mockResolvedValue({
-    github: { enabled: true, projectIds: null },
+    github: { enabled: true, repositoryIds: null },
     linear: { enabled: true, projectIds: ['proj-1'] },
   });
   listActiveLinearIssues.mockClear();
@@ -299,7 +299,7 @@ describe('issues route', () => {
   it('applies the intake config project selection', async () => {
     await connect();
     getIntakeConfig.mockResolvedValueOnce({
-      github: { enabled: true, projectIds: null },
+      github: { enabled: true, repositoryIds: null },
       linear: { enabled: true, projectIds: ['proj-1'] },
     });
     await buildApp({ workosId: 'u1' }).request('/web/linear/issues');
@@ -309,7 +309,7 @@ describe('issues route', () => {
   it('returns an empty page without calling Linear when no projects are selected', async () => {
     await connect();
     getIntakeConfig.mockResolvedValueOnce({
-      github: { enabled: true, projectIds: null },
+      github: { enabled: true, repositoryIds: null },
       linear: { enabled: true, projectIds: null },
     });
     const res = await buildApp({ workosId: 'u1' }).request('/web/linear/issues');
@@ -320,7 +320,7 @@ describe('issues route', () => {
   it('404s when Linear intake is disabled in settings', async () => {
     await connect();
     getIntakeConfig.mockResolvedValueOnce({
-      github: { enabled: true, projectIds: null },
+      github: { enabled: true, repositoryIds: null },
       linear: { enabled: false, projectIds: null },
     });
     const res = await buildApp({ workosId: 'u1' }).request('/web/linear/issues');

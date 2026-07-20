@@ -357,12 +357,12 @@ describe('same repo connected by two orgs stays isolated', () => {
     const appA = buildApp({ workosId: 'a1', organizationId: 'orgA' });
     const appB = buildApp({ workosId: 'b1', organizationId: 'orgB' });
 
-    const resA = await postJson(appA, '/web/github/projects', { repoFullName: 'octo/hello', installationId: 7 });
-    const resB = await postJson(appB, '/web/github/projects', { repoFullName: 'octo/hello', installationId: 7 });
+    const resA = await postJson(appA, '/web/github/repositories', { repoFullName: 'octo/hello', installationId: 7 });
+    const resB = await postJson(appB, '/web/github/repositories', { repoFullName: 'octo/hello', installationId: 7 });
     expect(resA.status).toBe(200);
     expect(resB.status).toBe(200);
-    const projA = (await resA.json()).project.id as string;
-    const projB = (await resB.json()).project.id as string;
+    const projA = (await resA.json()).repository.id as string;
+    const projB = (await resB.json()).repository.id as string;
 
     // The (org_id, repo_id) unique target means two orgs → two distinct rows.
     expect(projA).not.toBe(projB);
@@ -371,9 +371,9 @@ describe('same repo connected by two orgs stays isolated', () => {
     expect(tables.projects.find(p => p.id === projB)?.orgId).toBe('orgB');
 
     // Org A cannot ensure / worktree / push against Org B's project id.
-    expect((await postJson(appA, `/web/github/projects/${projB}/ensure`, {})).status).toBe(404);
-    expect((await postJson(appA, `/web/github/projects/${projB}/worktree`, { branch: 'feat/x' })).status).toBe(404);
-    expect((await postJson(appA, `/web/github/projects/${projB}/push`, { branch: 'feat/x' })).status).toBe(404);
+    expect((await postJson(appA, `/web/github/repositories/${projB}/ensure`, {})).status).toBe(404);
+    expect((await postJson(appA, `/web/github/repositories/${projB}/worktree`, { branch: 'feat/x' })).status).toBe(404);
+    expect((await postJson(appA, `/web/github/repositories/${projB}/push`, { branch: 'feat/x' })).status).toBe(404);
   });
 });
 
@@ -403,8 +403,8 @@ describe('two users in one org each get their own sandbox + worktree', () => {
     const user2 = buildApp({ workosId: 'a2', organizationId: 'orgA' });
 
     // Both users open (ensure) the same org-owned project.
-    expect((await postJson(user1, '/web/github/projects/p1/ensure', {})).status).toBe(200);
-    expect((await postJson(user2, '/web/github/projects/p1/ensure', {})).status).toBe(200);
+    expect((await postJson(user1, '/web/github/repositories/p1/ensure', {})).status).toBe(200);
+    expect((await postJson(user2, '/web/github/repositories/p1/ensure', {})).status).toBe(200);
 
     // Each got their own per-(project,user) sandbox binding row.
     expect(tables.sandboxes).toHaveLength(2);
@@ -412,14 +412,14 @@ describe('two users in one org each get their own sandbox + worktree', () => {
     expect(tables.sandboxes.filter(s => s.projectId === 'p1' && s.userId === 'a2')).toHaveLength(1);
 
     // User 1 creates a worktree; it is owned by user 1 only.
-    const wt = await postJson(user1, '/web/github/projects/p1/worktree', { branch: 'feat/x' });
+    const wt = await postJson(user1, '/web/github/repositories/p1/worktree', { branch: 'feat/x' });
     expect(wt.status).toBe(200);
     const wtPath = (await wt.json()).worktreePath as string;
     expect(tables.worktrees).toHaveLength(1);
     expect(tables.worktrees[0]).toMatchObject({ userId: 'a1', orgId: 'orgA', projectId: 'p1' });
 
     // User 2 cannot commit against user 1's worktree path (scoped to (p,user)).
-    const crossCommit = await postJson(user2, '/web/github/projects/p1/commit', {
+    const crossCommit = await postJson(user2, '/web/github/repositories/p1/commit', {
       message: 'sneaky',
       worktreePath: wtPath,
     });
@@ -427,7 +427,7 @@ describe('two users in one org each get their own sandbox + worktree', () => {
     expect((await crossCommit.json()).error).toBe('Invalid worktreePath');
 
     // User 1 can commit against their own worktree path.
-    const ownCommit = await postJson(user1, '/web/github/projects/p1/commit', {
+    const ownCommit = await postJson(user1, '/web/github/repositories/p1/commit', {
       message: 'wip',
       worktreePath: wtPath,
     });
@@ -479,7 +479,7 @@ describe('cross-user worktree paths are rejected', () => {
     const user2 = buildApp({ workosId: 'a2', organizationId: 'orgA' });
 
     // User 2 supplies user 1's worktree path → rejected (path not owned).
-    const res = await postJson(user2, '/web/github/projects/p1/push', {
+    const res = await postJson(user2, '/web/github/repositories/p1/push', {
       branch: 'feat/x',
       worktreePath: '/workspace/hello/../worktrees/a1/feat/x',
     });
@@ -488,7 +488,7 @@ describe('cross-user worktree paths are rejected', () => {
     expect(pushBranch).not.toHaveBeenCalled();
 
     // User 2 with their own worktree path succeeds.
-    const ok = await postJson(user2, '/web/github/projects/p1/push', {
+    const ok = await postJson(user2, '/web/github/repositories/p1/push', {
       branch: 'feat/x',
       worktreePath: '/workspace/hello/../worktrees/a2/feat/x',
     });
@@ -523,7 +523,7 @@ describe('install flow binds the installation to the org', () => {
     const status = await user2.request('/web/github/status');
     expect((await status.json()).connected).toBe(true);
 
-    const proj = await postJson(user2, '/web/github/projects', {
+    const proj = await postJson(user2, '/web/github/repositories', {
       repoFullName: 'octo/hello',
       installationId: 7,
     });

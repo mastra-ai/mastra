@@ -1102,7 +1102,7 @@ function createStepFromProcessor<TProcessorId extends string>(
   };
 }
 
-export function init(inngest: Inngest) {
+export function init<TRequestContext = unknown>(inngest: Inngest) {
   return {
     createTool,
     createWorkflow<
@@ -1119,11 +1119,17 @@ export function init(inngest: Inngest) {
         any,
         InngestEngineType
       >[],
-    >(params: InngestWorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>) {
-      return new InngestWorkflow<InngestEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TInput>(
-        params,
-        inngest,
-      );
+    >(params: InngestWorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps, TRequestContext>) {
+      return new InngestWorkflow<
+        InngestEngineType,
+        TSteps,
+        TWorkflowId,
+        TState,
+        TInput,
+        TOutput,
+        TInput,
+        TRequestContext
+      >(params, inngest);
     },
     createStep,
     cloneStep<TStepId extends string>(

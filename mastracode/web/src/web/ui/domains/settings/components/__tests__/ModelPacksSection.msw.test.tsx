@@ -76,7 +76,7 @@ describe('ModelPacksSection', () => {
       renderWithProviders(<ModelPacksSection models={models} />);
 
       expect(await screen.findByText('Builtin Pack')).toBeInTheDocument();
-      expect(screen.getByText(/Open a project to activate/)).toBeInTheDocument();
+      expect(screen.getByText(/Open a factory to activate/)).toBeInTheDocument();
       // No resourceId means the request is unscoped.
       expect(queryString).toBe('');
 

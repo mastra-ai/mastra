@@ -205,11 +205,8 @@ function parseStringList(value: unknown): string[] {
   return value.filter((item): item is string => typeof item === 'string' && item.length > 0);
 }
 
-/**
- * Shape returned to the SPA for a GitHub-backed project, matching the front-end
- * `Project` model (`source: 'github'`).
- */
-function toProjectPayload(row: SourceControlProject) {
+/** Shape returned when the SPA creates a connected GitHub repository. */
+function toConnectedRepositoryPayload(row: SourceControlProject) {
   return {
     id: row.id,
     name: row.repositorySlug,
@@ -520,7 +517,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
 
   // ── Create a project from a repo (no sandbox, no clone yet) ──────────────
   routes.push(
-    registerApiRoute('/web/github/projects', {
+    registerApiRoute('/web/github/repositories', {
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
@@ -555,7 +552,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         );
       },
     }),
-    registerApiRoute('/web/github/projects', {
+    registerApiRoute('/web/github/repositories', {
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
@@ -605,13 +602,13 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
           sandboxWorkdir,
         });
 
-        return c.json({ project: toProjectPayload(row) });
+        return c.json({ repository: toConnectedRepositoryPayload(row) });
       },
     }),
   );
 
   routes.push(
-    registerApiRoute('/web/github/projects/:id', {
+    registerApiRoute('/web/github/repositories/:id', {
       method: 'DELETE',
       requiresAuth: false,
       handler: async c => {
@@ -641,7 +638,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
 
   // ── Materialize a project into the caller's per-user sandbox ─────────────
   routes.push(
-    registerApiRoute('/web/github/projects/:id/ensure', {
+    registerApiRoute('/web/github/repositories/:id/ensure', {
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
@@ -695,7 +692,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
 
   // ── List a project's open GitHub issues ──────────────────────────────────
   routes.push(
-    registerApiRoute('/web/github/projects/:id/issues', {
+    registerApiRoute('/web/github/repositories/:id/issues', {
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
@@ -725,7 +722,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
 
   // ── Manually run issue triage using the same run seam as webhooks ──
   routes.push(
-    registerApiRoute('/web/github/projects/:id/issues/:number/triage', {
+    registerApiRoute('/web/github/repositories/:id/issues/:number/triage', {
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
@@ -791,7 +788,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
 
   // ── List a project's open (non-draft) pull requests ─────────────────────
   routes.push(
-    registerApiRoute('/web/github/projects/:id/prs', {
+    registerApiRoute('/web/github/repositories/:id/prs', {
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
@@ -818,7 +815,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
 
   // ── Read per-project settings ────────────────────────────────────────────
   routes.push(
-    registerApiRoute('/web/github/projects/:id/settings', {
+    registerApiRoute('/web/github/repositories/:id/settings', {
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
@@ -831,7 +828,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
 
   // ── Update per-project settings ──────────────────────────────────────────
   routes.push(
-    registerApiRoute('/web/github/projects/:id/settings', {
+    registerApiRoute('/web/github/repositories/:id/settings', {
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
@@ -1072,7 +1069,7 @@ async function loadOwnedProject(
 function buildProjectGitRoutes(github: GithubIntegration): ApiRoute[] {
   return [
     // ── Create / reuse a worktree + feature branch ──────────────────────────
-    registerApiRoute('/web/github/projects/:id/worktree', {
+    registerApiRoute('/web/github/repositories/:id/worktree', {
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
@@ -1157,7 +1154,7 @@ function buildProjectGitRoutes(github: GithubIntegration): ApiRoute[] {
     }),
 
     // ── Delete a worktree + its local feature branch ────────────────────────
-    registerApiRoute('/web/github/projects/:id/worktree/delete', {
+    registerApiRoute('/web/github/repositories/:id/worktree/delete', {
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
@@ -1207,7 +1204,7 @@ function buildProjectGitRoutes(github: GithubIntegration): ApiRoute[] {
     }),
 
     // ── Stage all + commit inside a worktree ────────────────────────────────
-    registerApiRoute('/web/github/projects/:id/commit', {
+    registerApiRoute('/web/github/repositories/:id/commit', {
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
@@ -1261,7 +1258,7 @@ function buildProjectGitRoutes(github: GithubIntegration): ApiRoute[] {
     }),
 
     // ── Push a branch back to GitHub ────────────────────────────────────────
-    registerApiRoute('/web/github/projects/:id/push', {
+    registerApiRoute('/web/github/repositories/:id/push', {
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
@@ -1310,7 +1307,7 @@ function buildProjectGitRoutes(github: GithubIntegration): ApiRoute[] {
     }),
 
     // ── Open a pull request via the gh CLI ──────────────────────────────────
-    registerApiRoute('/web/github/projects/:id/pr', {
+    registerApiRoute('/web/github/repositories/:id/pr', {
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
@@ -1415,7 +1412,7 @@ function buildProjectGitRoutes(github: GithubIntegration): ApiRoute[] {
     // Per-user teardown only: drops the caller's `(project, user)` sandbox
     // binding and stops the VM, freeing a slot in the per-replica budget. Project
     // deletion at the org level is out of scope (org admin model is later).
-    registerApiRoute('/web/github/projects/:id/sandbox', {
+    registerApiRoute('/web/github/repositories/:id/sandbox', {
       method: 'DELETE',
       requiresAuth: false,
       handler: async c => {

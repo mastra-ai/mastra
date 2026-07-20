@@ -105,34 +105,34 @@ beforeEach(async () => {
   portalFailure = undefined;
 });
 
-// ── GET /web/factory/projects/:id/audit ─────────────────────────────────
-describe('GET /web/factory/projects/:id/audit', () => {
+// ── GET /web/factory/repositories/:id/audit ─────────────────────────────────
+describe('GET /web/factory/repositories/:id/audit', () => {
   it('401s when unauthenticated', async () => {
-    const res = await buildApp(null).request(`/web/factory/projects/${PROJECT_ID}/audit`);
+    const res = await buildApp(null).request(`/web/factory/repositories/${PROJECT_ID}/audit`);
     expect(res.status).toBe(401);
     expect(listCalls).toHaveLength(0);
   });
 
   it('403s for personal (no-org) accounts', async () => {
-    const res = await buildApp({ workosId: 'u1' }).request(`/web/factory/projects/${PROJECT_ID}/audit`);
+    const res = await buildApp({ workosId: 'u1' }).request(`/web/factory/repositories/${PROJECT_ID}/audit`);
     expect(res.status).toBe(403);
   });
 
   it("404s when the project isn't in the caller's org", async () => {
     await seedProject({ orgId: 'other-org' });
-    const res = await buildApp(orgUser).request(`/web/factory/projects/${PROJECT_ID}/audit`);
+    const res = await buildApp(orgUser).request(`/web/factory/repositories/${PROJECT_ID}/audit`);
     expect(res.status).toBe(404);
     expect(listCalls).toHaveLength(0);
   });
 
   it('503s when GitHub storage is unavailable', async () => {
-    const res = await buildApp(orgUser, null).request(`/web/factory/projects/${PROJECT_ID}/audit`);
+    const res = await buildApp(orgUser, null).request(`/web/factory/repositories/${PROJECT_ID}/audit`);
     expect(res.status).toBe(503);
     expect(listCalls).toHaveLength(0);
   });
 
   it('404s on a non-uuid project id', async () => {
-    const res = await buildApp(orgUser).request('/web/factory/projects/not-a-uuid/audit');
+    const res = await buildApp(orgUser).request('/web/factory/repositories/not-a-uuid/audit');
     expect(res.status).toBe(404);
   });
 
@@ -142,7 +142,7 @@ describe('GET /web/factory/projects/:id/audit', () => {
       events: [{ id: 'e1', action: 'factory.work_item.created' }],
       nextCursor: '2026-07-15T00:00:00.000Z_e1',
     };
-    const res = await buildApp(orgUser).request(`/web/factory/projects/${PROJECT_ID}/audit`);
+    const res = await buildApp(orgUser).request(`/web/factory/repositories/${PROJECT_ID}/audit`);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual(listResult);
     expect(listCalls).toEqual([
@@ -165,7 +165,7 @@ describe('GET /web/factory/projects/:id/audit', () => {
       before: '2026-07-15T00:00:00.000Z_e9',
       limit: '25',
     });
-    const res = await buildApp(orgUser).request(`/web/factory/projects/${PROJECT_ID}/audit?${query}`);
+    const res = await buildApp(orgUser).request(`/web/factory/repositories/${PROJECT_ID}/audit?${query}`);
     expect(res.status).toBe(200);
     expect(listCalls).toEqual([
       {
@@ -181,7 +181,7 @@ describe('GET /web/factory/projects/:id/audit', () => {
 
   it('ignores an unparseable limit', async () => {
     await seedProject();
-    await buildApp(orgUser).request(`/web/factory/projects/${PROJECT_ID}/audit?limit=lots`);
+    await buildApp(orgUser).request(`/web/factory/repositories/${PROJECT_ID}/audit?limit=lots`);
     expect(listCalls[0]?.limit).toBeUndefined();
   });
 });

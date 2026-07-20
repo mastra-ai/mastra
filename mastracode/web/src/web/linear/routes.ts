@@ -234,7 +234,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
 
         const connection = await loadConnection(resolved.tenant.orgId);
         if (!connection) {
-          return c.json({ error: 'linear_not_connected', message: 'Connect Linear to list projects.' }, 409);
+          return c.json({ error: 'linear_not_connected', message: 'Connect Linear to list Linear projects.' }, 409);
         }
 
         try {
