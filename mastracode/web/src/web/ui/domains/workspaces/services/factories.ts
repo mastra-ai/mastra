@@ -14,7 +14,7 @@
  * remains the SDK/TUI session tag for the execution workspace path.
  */
 
-import type { MaterializeResult } from './github';
+import { deleteConnectedRepository, listConnectedRepositories } from './github';
 
 const STORAGE_KEY = 'mastracode-factories';
 const ACTIVE_KEY = 'mastracode-active-factory';
@@ -63,7 +63,7 @@ export interface LocalFactoryBinding {
 export interface GithubFactoryBinding {
   kind: 'github';
   /**
-   * Server-side GitHub repository row id from `github_projects`. This is the
+   * Server-side GitHub repository row id from `source_control_projects`. This is the
    * provider-specific repository binding identity — not the browser Factory id.
    */
   githubProjectId: string;
@@ -113,7 +113,8 @@ export interface LocalFactory extends FactoryBase {
 }
 
 /**
- * GitHub factories may omit `resourceId` until materialization succeeds on open.
+ * GitHub factories receive `resourceId` from their persisted source-control row.
+ * Legacy cached entries may omit it until the next backend hydration.
  * `Factory.id` is always a browser UUID distinct from `binding.githubProjectId`.
  */
 export interface GithubFactory extends FactoryBase {
@@ -123,12 +124,17 @@ export interface GithubFactory extends FactoryBase {
 
 export type Factory = LocalFactory | GithubFactory;
 
-/** Transport DTO returned by `POST /web/github/repositories`. */
+/** Transport DTO returned by the connected-repository routes. */
 export interface GithubConnectedRepositoryPayload {
   id: string;
   name: string;
   source: 'github';
   githubProjectId: string;
+  resourceId?: string;
+  gitBranch?: string;
+  sandboxId?: string;
+  sandboxWorkdir?: string;
+  worktrees?: Worktree[];
   createdAt?: number;
 }
 
@@ -245,11 +251,51 @@ export function saveFactories(factories: Factory[]): void {
 }
 
 /**
- * Load factories. Local factories always carry resourceId at creation time;
- * GitHub factories resolve resourceId on materialization, not list load.
+ * Load local factories from the browser and hydrate GitHub factories from the
+ * source-control backend. Browser-only identity, thread bindings, and the
+ * selected worktree are retained only while their backend rows still exist.
  */
-export async function loadFactoriesWithResolvedIds(_baseUrl: string): Promise<Factory[]> {
-  return loadFactories();
+export async function loadFactoriesWithResolvedIds(baseUrl: string): Promise<Factory[]> {
+  const cachedFactories = loadFactories();
+  const localFactories = cachedFactories.filter(isLocalFactory);
+  const cachedGithubFactories = new Map(
+    cachedFactories.filter(isGithubFactory).map(factory => [factory.binding.githubProjectId, factory]),
+  );
+  const repositories = await listConnectedRepositories(baseUrl);
+  const githubFactories = repositories.map(repository => {
+    const cached = cachedGithubFactories.get(repository.githubProjectId);
+    const backendWorktrees = (repository.worktrees ?? []).filter(
+      worktree => worktree.worktreePath !== repository.sandboxWorkdir,
+    );
+    const cachedWorktrees = new Map(cached?.binding.worktrees.map(worktree => [worktree.branch, worktree]));
+    const selectedWorktreePath = backendWorktrees.some(
+      worktree => worktree.worktreePath === cached?.binding.selectedWorktreePath,
+    )
+      ? cached?.binding.selectedWorktreePath
+      : undefined;
+
+    return {
+      id: cached?.id ?? crypto.randomUUID(),
+      name: repository.name,
+      resourceId: repository.resourceId,
+      createdAt: repository.createdAt ?? cached?.createdAt ?? Date.now(),
+      binding: {
+        kind: 'github' as const,
+        githubProjectId: repository.githubProjectId,
+        gitBranch: repository.gitBranch,
+        sandboxId: repository.sandboxId,
+        sandboxWorkdir: repository.sandboxWorkdir,
+        selectedWorktreePath,
+        worktrees: backendWorktrees.map(worktree => ({
+          ...worktree,
+          threadId: cachedWorktrees.get(worktree.branch)?.threadId,
+        })),
+      },
+    } satisfies GithubFactory;
+  });
+  const factories = [...localFactories, ...githubFactories];
+  saveFactories(factories);
+  return factories;
 }
 
 /**
@@ -279,11 +325,12 @@ export async function addLocalFactory(baseUrl: string, name: string, path: strin
 
 /**
  * Persist a factory created from a GitHub repo. The server already created the
- * `github_projects` row and returns a temporary DTO whose `id`/`githubProjectId`
+ * `source_control_projects` row and returns a temporary DTO whose `id`/`githubProjectId`
  * are the repository UUID. The browser always generates a new Factory.id and
  * copies the repository UUID only onto `binding.githubProjectId`. Reconnecting
  * the same repository returns the existing Factory without replacing its browser
- * ID. The `resourceId` is filled in later, on open, by `ensureRepoMaterialized`.
+ * ID. The `resourceId` comes from the persisted source-control row; connecting
+ * the repository does not provision a sandbox or clone it.
  */
 export function addGithubFactory(payload: GithubConnectedRepositoryPayload): GithubFactory {
   const factories = loadFactories();
@@ -296,10 +343,14 @@ export function addGithubFactory(payload: GithubConnectedRepositoryPayload): Git
   const stored: GithubFactory = {
     id: crypto.randomUUID(),
     name: payload.name,
+    resourceId: payload.resourceId,
     binding: {
       kind: 'github',
       githubProjectId: payload.githubProjectId,
-      worktrees: [],
+      gitBranch: payload.gitBranch,
+      sandboxId: payload.sandboxId,
+      sandboxWorkdir: payload.sandboxWorkdir,
+      worktrees: payload.worktrees ?? [],
     },
     createdAt: payload.createdAt ?? Date.now(),
   };
@@ -308,33 +359,10 @@ export function addGithubFactory(payload: GithubConnectedRepositoryPayload): Git
   return stored;
 }
 
-/**
- * Replace a stored factory in place (by id) and persist. Used to record the
- * server-resolved `resourceId` for a GitHub factory once it's materialized.
- */
+/** Replace a stored factory in place (by id) and persist. */
 export function updateFactory(factory: Factory): void {
   const factories = loadFactories().map(item => (item.id === factory.id ? factory : item));
   saveFactories(factories);
-}
-
-/**
- * Merge a server `MaterializeResult` (from the `/ensure` route) into a stored
- * GitHub factory and persist it: records the session `resourceId` plus the
- * sandbox binding. The repo-root checkout is not a workspace, so no worktree
- * is seeded — workspaces only exist once created explicitly.
- */
-export function applyMaterializeResult(factory: GithubFactory, result: MaterializeResult): GithubFactory {
-  const updated: GithubFactory = {
-    ...factory,
-    resourceId: result.resourceId,
-    binding: {
-      ...factory.binding,
-      sandboxId: result.sandboxId,
-      sandboxWorkdir: result.sandboxWorkdir,
-    },
-  };
-  updateFactory(updated);
-  return updated;
 }
 
 /**
@@ -451,7 +479,11 @@ export function selectWorktree(factory: Factory, worktreePath: string): Factory 
   return updated;
 }
 
-export function removeFactory(id: string): void {
+export async function removeFactory(baseUrl: string, id: string): Promise<void> {
+  const existing = loadFactories().find(factory => factory.id === id);
+  if (existing && isGithubFactory(existing)) {
+    await deleteConnectedRepository(baseUrl, existing.binding.githubProjectId);
+  }
   const factories = loadFactories().filter(factory => factory.id !== id);
   saveFactories(factories);
   if (loadActiveFactoryId() === id) clearActiveFactoryId();

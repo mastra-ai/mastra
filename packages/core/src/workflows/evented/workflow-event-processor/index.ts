@@ -289,8 +289,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     runId: string,
   ): { traceId?: string; spanId?: string; parentSpanId?: string } | undefined {
     const span = this.resolveRunTracingContext(runId)?.currentSpan as
-      | { id?: string; traceId?: string; getParentSpanId?: () => string | undefined }
-      | undefined;
+      { id?: string; traceId?: string; getParentSpanId?: () => string | undefined } | undefined;
     if (!span) return undefined;
     return { traceId: span.traceId, spanId: span.id, parentSpanId: span.getParentSpanId?.() };
   }

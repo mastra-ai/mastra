@@ -201,11 +201,9 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
       }) {
         const tool = ((
           readScoped(scopeCtx, STEP_TOOLS_KEY, 'stepTools') as
-            | Record<string, { toModelOutput?: (output: unknown) => unknown }>
-            | undefined
+            Record<string, { toModelOutput?: (output: unknown) => unknown }> | undefined
         )?.[toolCall.toolName] ?? rest.tools?.[toolCall.toolName]) as
-          | { toModelOutput?: (output: unknown) => unknown }
-          | undefined;
+          { toModelOutput?: (output: unknown) => unknown } | undefined;
         let modelOutput: unknown;
         if (tool?.toModelOutput && toolCall.result != null) {
           const parentSpan = observabilityContext?.tracingContext?.currentSpan;
@@ -385,8 +383,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                 ? await getProviderMetadataWithModelOutput(toolCall)
                 : undefined;
               const chunkProviderMetadata = (providerMetadata ?? toolCall.providerMetadata) as
-                | ProviderMetadata
-                | undefined;
+                ProviderMetadata | undefined;
 
               const chunk = await transformToolChunk(
                 {
