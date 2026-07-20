@@ -1043,10 +1043,19 @@ export class PgDB extends MastraBase {
     } catch (error) {
       // Another process may have added the same constraint concurrently
       // (TOCTOU between the EXISTS check and the ALTER TABLE). Treat the
-      // resulting duplicate-relation / duplicate-object error as success.
+      // resulting duplicate-relation / duplicate-object error as success,
+      // but only after confirming the PRIMARY KEY is actually present.
+      // isDuplicateRelationError can also match on unrelated name collisions
+      // (e.g. a stale index with the same name), so the post-check prevents
+      // silently swallowing errors when the constraint is still missing.
       if (isDuplicateRelationError(error)) {
-        this.logger?.debug?.(`PRIMARY KEY constraint ${constraintName} was created by another process`);
-        return;
+        const confirmed = await this.spansPrimaryKeyExists();
+        if (confirmed) {
+          this.logger?.debug?.(
+            `PRIMARY KEY constraint ${constraintName} was created by another process`,
+          );
+          return;
+        }
       }
       throw new MastraError(
         {
