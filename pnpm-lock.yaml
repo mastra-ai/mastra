@@ -38,7 +38,7 @@ overrides:
   typescript: ^6.0.3
   '@types/node': 22.19.15
   cookie: '>=1.1.1 <2'
-  tmp: '>=0.2.6'
+  tmp: '>=0.2.7'
   jsondiffpatch: '>=0.7.3'
   ssri: '>=6.0.2'
   jws: ^4.0.1
@@ -160,7 +160,7 @@ overrides:
   safe-regex-test: npm:@socketregistry/safe-regex-test@^1
   safer-buffer: npm:@socketregistry/safer-buffer@^1
   set-function-length: npm:@socketregistry/set-function-length@^1
-  shell-quote: npm:shell-quote@^1
+  shell-quote: npm:shell-quote@^1.10.0
   side-channel: npm:@socketregistry/side-channel@^1
   string.prototype.matchall: npm:@socketregistry/string.prototype.matchall@^1
   string.prototype.repeat: npm:@socketregistry/string.prototype.repeat@^1
@@ -3942,7 +3942,7 @@ importers:
         specifier: ^6.1.7
         version: 6.1.7
       shell-quote:
-        specifier: npm:shell-quote@^1
+        specifier: npm:shell-quote@^1.10.0
         version: 1.10.0
       strip-json-comments:
         specifier: ^5.0.3
