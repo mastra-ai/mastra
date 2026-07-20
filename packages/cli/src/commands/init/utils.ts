@@ -673,7 +673,7 @@ export const writeAPIKey = async ({ provider, apiKey }: { provider: LLMProvider;
   const envFileName = apiKey ? '.env' : '.env.example';
 
   const key = await getAPIKey(provider);
-  await fs.appendFile(envFileName, `${key}=${apiKey ? apiKey : 'your-api-key'}\n`, 'utf-8');
+  await fs.appendFile(envFileName, `${key}=${apiKey || 'your-api-key'}\n`, 'utf-8');
 };
 
 /**
