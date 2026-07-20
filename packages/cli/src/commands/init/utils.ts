@@ -1,12 +1,9 @@
-import child_process from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import util from 'node:util';
 import * as p from '@clack/prompts';
 import type { ModelRouterModelId } from '@mastra/core/llm';
 import fsExtra from 'fs-extra/esm';
 import color from 'picocolors';
-import shellQuote from 'shell-quote';
 import yoctoSpinner from 'yocto-spinner';
 
 import { DepsService } from '../../services/service.deps';
@@ -19,8 +16,6 @@ import {
   antigravityGlobalMCPConfigPath,
 } from './mcp-docs-server-install';
 import type { Editor } from './mcp-docs-server-install';
-
-const exec = util.promisify(child_process.exec);
 
 export const LLMProvider = ['openai', 'anthropic', 'groq', 'google', 'cerebras', 'mistral'] as const;
 export const COMPONENTS = ['agents', 'workflows', 'tools', 'scorers'] as const;
@@ -678,9 +673,7 @@ export const writeAPIKey = async ({ provider, apiKey }: { provider: LLMProvider;
   const envFileName = apiKey ? '.env' : '.env.example';
 
   const key = await getAPIKey(provider);
-  const escapedKey = shellQuote.quote([key]);
-  const escapedApiKey = shellQuote.quote([apiKey ? apiKey : 'your-api-key']);
-  await exec(`echo ${escapedKey}=${escapedApiKey} >> ${envFileName}`);
+  await fs.appendFile(envFileName, `${key}=${apiKey ? apiKey : 'your-api-key'}\n`, 'utf-8');
 };
 
 /**

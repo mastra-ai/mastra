@@ -28,7 +28,8 @@ vi.mock('../auth/orgs.js', () => ({
   resolveCurrentOrg: vi.fn(),
 }));
 
-const { getAPIKey, promptForObservability, writeObservabilityEnv, writeIndexFile } = await import('./utils');
+const { getAPIKey, promptForObservability, writeAPIKey, writeObservabilityEnv, writeIndexFile } =
+  await import('./utils');
 const prompts = await import('@clack/prompts');
 const { getToken, loadCredentials } = await import('../auth/credentials.js');
 const { resolveCurrentOrg } = await import('../auth/orgs.js');
@@ -200,6 +201,45 @@ describe('writeIndexFile', () => {
     expect(contents).toContain('url: process.env.TURSO_DATABASE_URL ?? "file:./mastra.db"');
     expect(contents).toContain('authToken: process.env.TURSO_AUTH_TOKEN');
     expect(contents).not.toContain('url: "file:./mastra.db"');
+  });
+});
+
+describe('writeAPIKey', () => {
+  const cwd = '/mock-project';
+
+  beforeEach(() => {
+    vol.reset();
+    fs.mkdirSync(cwd, { recursive: true });
+    vi.spyOn(process, 'cwd').mockReturnValue(cwd);
+  });
+
+  test.each([
+    ['sk-proj-abc123', 'plain key'],
+    ['sk-proj-a+b/c=d', 'key containing ='],
+    ['AIzaSyBx9K2mQ==', 'base64 padded key'],
+    ['sk-proj-a"b&c|d', 'key containing shell metacharacters'],
+  ])('writes %s verbatim (%s)', async apiKey => {
+    await writeAPIKey({ provider: 'openai', apiKey });
+
+    const contents = fs.readFileSync(`${cwd}/.env`, 'utf-8') as string;
+    expect(contents).toBe(`OPENAI_API_KEY=${apiKey}\n`);
+  });
+
+  test('writes a placeholder to .env.example when no key is given', async () => {
+    await writeAPIKey({ provider: 'anthropic' });
+
+    expect(fs.existsSync(`${cwd}/.env`)).toBe(false);
+    const contents = fs.readFileSync(`${cwd}/.env.example`, 'utf-8') as string;
+    expect(contents).toBe('ANTHROPIC_API_KEY=your-api-key\n');
+  });
+
+  test('appends without disturbing existing entries', async () => {
+    fs.writeFileSync(`${cwd}/.env`, 'EXISTING=1\n');
+
+    await writeAPIKey({ provider: 'openai', apiKey: 'sk-proj-abc123' });
+
+    const contents = fs.readFileSync(`${cwd}/.env`, 'utf-8') as string;
+    expect(contents).toBe('EXISTING=1\nOPENAI_API_KEY=sk-proj-abc123\n');
   });
 });
 
