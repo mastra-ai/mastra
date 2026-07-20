@@ -267,7 +267,12 @@ Searches for similar vectors with optional metadata filtering.
 
 ### `createSearchIndex()`
 
-Provisions an Atlas Search (BM25/full-text) index on the collection backing an index. This enables full-text search via `textQuery()` and hybrid search via `hybridQuery()`.
+Provisions an Atlas Search (BM25/full-text) index on the collection backing an index and records it as the text-search index that `textQuery()` and `hybridQuery()` will target.
+
+**Relationship with the auto-created dynamic index:** `createIndex()` already provisions a _dynamic_ full-text index named `${collectionName}_search_index` (covering all string fields). `createSearchIndex()` is therefore only needed when you want a **field-restricted** mapping or a **custom index name**:
+
+- When `fields` is provided **without** an explicit `searchIndexName`, the field-mapped index is created under a **distinct** default name (`${collectionName}_search_fields_index`) so it does not collide with — and get silently ignored by — the auto-created dynamic index. This distinct index is persisted as the text-search index, so `textQuery()`/`hybridQuery()` use the restricted mapping automatically.
+- When `searchIndexName` is provided, that exact name is used and persisted. `textQuery()`/`hybridQuery()` resolve the persisted name automatically; you can also override the name per call via their `searchIndexName` / `textSearchIndexName` parameters.
 
 <PropertiesTable
   content={[
@@ -286,8 +291,9 @@ Provisions an Atlas Search (BM25/full-text) index on the collection backing an i
     name: 'searchIndexName',
     type: 'string',
     isOptional: true,
-    defaultValue: '${collectionName}_search_index',
-    description: 'Name for the Atlas Search index. Defaults to `${collectionName}_search_index`.',
+    defaultValue: '${collectionName}_search_index (or ${collectionName}_search_fields_index when `fields` is given)',
+    description:
+      'Name for the Atlas Search index. When `fields` is provided and this is omitted, a distinct default name is used so the field mapping is not shadowed by the auto-created dynamic index.',
   },
 ]}
 />
@@ -301,7 +307,9 @@ await store.createSearchIndex({
 
 ### `textQuery()`
 
-Runs a full-text (BM25) search against an Atlas Search index. The search index must be created with `createSearchIndex()` first.
+Runs a full-text (BM25) search against an Atlas Search index. By default it targets the text-search index recorded for this index (set by `createSearchIndex()`, or the dynamic `${collectionName}_search_index` auto-created by `createIndex()`). Pass `searchIndexName` to target a specific index for this call.
+
+**Note:** metadata filters here (like `hybridQuery()`) are applied via a `$match` stage. For the vector branch of `hybridQuery()`, filters on fields not declared via `filterFields` at index creation are transparently materialised as candidate `_id`s (the same fallback `query()` uses), so undeclared-field filters do not error.
 
 <PropertiesTable
   content={[
@@ -340,6 +348,13 @@ Runs a full-text (BM25) search against an Atlas Search index. The search index m
     defaultValue: 'field',
     description:
       "`'field'` (default) projects the managed `metadata`/`document` fields. `'document'` returns the full source document as `metadata`.",
+  },
+  {
+    name: 'searchIndexName',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Override the resolved full-text search index name for this call. Defaults to the index persisted by `createSearchIndex()` / `createIndex()`.',
   },
 ]}
 />
@@ -413,6 +428,13 @@ Runs a hybrid search that fuses vector similarity and full-text results using Mo
     description:
       "`'field'` (default) projects the managed `metadata`/`document` fields. `'document'` returns the full source document as `metadata`.",
   },
+  {
+    name: 'textSearchIndexName',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Override the resolved full-text search index name for this call. Defaults to the index persisted by `createSearchIndex()` / `createIndex()`.',
+  },
 ]}
 />
 
@@ -455,21 +477,26 @@ interface IndexStats {
 
 ### `deleteIndex()`
 
-Deletes a collection and all its data.
+Deletes a vector index. Behavior depends on how the index was created:
+
+- **Managed index** (created without `collectionName`): drops the entire collection and all its data.
+- **Bring-your-own index** (created with `collectionName`): drops only the Atlas vectorSearch index. The caller's operational collection and its documents are **preserved** — this store never drops a collection it did not create.
+
+The BYO classification is recorded durably when the index is created, so it is applied correctly even by a different process (e.g. an index created by a setup job and later deleted by a long-lived service). Always pass the **logical index name** (the `indexName` used at `createIndex`), not the physical collection name.
 
 <PropertiesTable
   content={[
   {
     name: 'indexName',
     type: 'string',
-    description: 'Name of the collection to delete',
+    description: 'Logical name of the index to delete',
   },
 ]}
 />
 
 ### `listIndexes()`
 
-Lists all vector collections in the MongoDB database.
+Lists the **logical** Mastra index names (the `indexName` values passed to `createIndex`), not physical collection names. For a bring-your-own index whose data lives in an operational collection, the logical index name is returned — never the physical collection name — so the value can be passed straight back into `deleteIndex()` / `describeIndex()`. Managed indexes created before durable metadata was introduced are still discovered via their `${name}_vector_index` search index. The internal registry collection is never listed.
 
 Returns: `Promise<string[]>`
 
