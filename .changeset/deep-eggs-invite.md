@@ -1,8 +1,5 @@
 ---
 '@mastra/voyageai': minor
-'@mastra/deployer': patch
-'@mastra/core': patch
-'@mastra/mcp': patch
 ---
 
 Fixed VoyageAI multimodal embeddings sending text as bare strings (the API rejected the payload) and added a `baseUrl` option so you can point the embedder, reranker, and contextualized models at a provider-hosted Voyage endpoint.
