@@ -2328,6 +2328,39 @@ export class Mastra<
         this.addWorkflow(workflow, workflow.id);
       }
 
+      // Register configured processor workflows from the agent
+      // Use .then() to handle async resolution without blocking the constructor
+      // This excludes memory-derived processors to avoid triggering memory factory functions
+      underlyingAgent
+        .getConfiguredProcessorWorkflows()
+        .then(processorWorkflows => {
+          for (const workflow of processorWorkflows) {
+            this.addWorkflow(workflow, workflow.id);
+          }
+        })
+        .catch(err => {
+          this.#logger?.debug(`Failed to register processor workflows for durable agent ${agentKey}:`, err);
+        });
+
+      // Register agent workspace in the workspaces registry for direct lookup.
+      // Dynamic workspace functions may return undefined without request context — that's fine,
+      // the if (workspace) guard below will skip registration and they'll register lazily later.
+      if (underlyingAgent.hasOwnWorkspace?.()) {
+        Promise.resolve(underlyingAgent.getWorkspace?.())
+          .then(workspace => {
+            if (workspace) {
+              this.addWorkspace(workspace, undefined, {
+                source: 'agent',
+                agentId: durableAgent.id ?? agentKey,
+                agentName: durableAgent.name,
+              });
+            }
+          })
+          .catch(err => {
+            this.#logger?.debug(`Failed to register workspace for durable agent ${agentKey}:`, err);
+          });
+      }
+
       // Register scorers from the underlying agent so durable runs can resolve
       // them via mastra.getScorer()/getScorerById() at workflow time.
       underlyingAgent
@@ -2346,7 +2379,7 @@ export class Mastra<
       // Use agentKey (derived from durableAgent.id) rather than underlyingAgent.id
       // because the dispatch side uses the durable wrapper's identity.
       if (this.#backgroundTaskManager) {
-        const durableAgentId = agentKey;
+        const durableAgentId = durableAgent.id ?? agentKey;
         Promise.resolve(underlyingAgent.listTools())
           .then(agentTools => {
             for (const [toolKey, tool] of Object.entries(agentTools || {})) {
@@ -2364,6 +2397,22 @@ export class Mastra<
               err,
             );
           });
+      }
+
+      // Set up AgentChannels for manual adapter configurations
+      const agentChannelsInstance = underlyingAgent.getChannels();
+      if (agentChannelsInstance) {
+        agentChannelsInstance.__setLogger(this.#logger);
+        const channelRoutes = agentChannelsInstance.getWebhookRoutes();
+        if (channelRoutes.length > 0) {
+          this.#server = {
+            ...this.#server,
+            apiRoutes: [...(this.#server?.apiRoutes ?? []), ...channelRoutes],
+          };
+        }
+        agentChannelsInstance.initialize(this).catch(err => {
+          this.#logger?.error(`Failed to initialize channels for durable agent ${agentKey}:`, err);
+        });
       }
 
       return;
