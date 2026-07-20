@@ -20,4 +20,16 @@ describe('copyPnpmWorkspaceSettings', () => {
 
     expect(output).toBe(`packages:\n  - '.'\n\nsupportedArchitectures:\n  os: [\"darwin\"]\n  cpu: [\"arm64\"]\n`);
   });
+
+  it('writes workspace dependency overrides for pnpm installs', () => {
+    const output = copyPnpmWorkspaceSettings('', {
+      pnpmOverrides: {
+        '@inner/transitive-c': 'file:./workspace-module/inner-transitive-c-1.0.0.tgz',
+      },
+    });
+
+    expect(output).toBe(
+      `packages:\n  - '.'\n\noverrides:\n  \"@inner/transitive-c\": \"file:./workspace-module/inner-transitive-c-1.0.0.tgz\"\n`,
+    );
+  });
 });
