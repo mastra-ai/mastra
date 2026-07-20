@@ -1,8 +1,5 @@
 ---
 '@mastra/mongodb': minor
-'@mastra/deployer': patch
-'@mastra/core': patch
-'@mastra/mcp': patch
 ---
 
 MongoDBVector can now index an existing (operational) collection instead of a managed one. Pass `collectionName` (and optionally `searchIndexName`) to `createIndex`, and query with `metadataMode: 'document'` to get the full source document back as metadata.
