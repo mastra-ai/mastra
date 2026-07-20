@@ -1,8 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Target } from 'lucide-react';
 
+import { useChatRuntime } from '../context/useChatRuntime';
 import { useChatSessionContext } from '../context/useChatSessionContext';
-import { useChatTranscript } from '../context/useChatTranscript';
 import {
   useClearAgentControllerGoalMutation,
   usePauseAgentControllerGoalMutation,
@@ -19,7 +19,7 @@ const goalBar = 'flex shrink-0 items-center gap-2.5 border-b border-border1 bg-a
  */
 export function GoalPanel() {
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
-  const { transcript } = useChatTranscript();
+  const { goal } = useChatRuntime();
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
@@ -30,7 +30,6 @@ export function GoalPanel() {
   const pauseGoalMutation = usePauseAgentControllerGoalMutation(hookArgs);
   const resumeGoalMutation = useResumeAgentControllerGoalMutation(hookArgs);
   const clearGoalMutation = useClearAgentControllerGoalMutation(hookArgs);
-  const goal = transcript.goal;
 
   if (!sessionEnabled || !goal) return null;
 

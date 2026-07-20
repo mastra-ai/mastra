@@ -20,7 +20,7 @@ export function StatusLine() {
   const { threadId } = useParams<{ threadId: string }>();
   const { activeProject } = useActiveProjectContext();
   const { baseUrl, resourceId, projectPath } = useChatSessionContext();
-  const { transcript, busy } = useChatTranscript();
+  const { messages, notifications, busy } = useChatTranscript();
 
   return (
     <div
@@ -41,7 +41,8 @@ export function StatusLine() {
         projectPath={projectPath}
         githubProjectId={activeProject?.githubProjectId}
         threadId={threadId}
-        transcriptEntries={transcript.entries}
+        messages={messages}
+        notifications={notifications}
         busy={busy}
       />
     </div>

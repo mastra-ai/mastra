@@ -42,12 +42,11 @@ export function NewPage() {
 
 function NewPageContent({ activeProject }: { activeProject: Project }) {
   useGlobalShortcuts();
-  const { transcript } = useChatTranscript();
+  const { notices } = useChatTranscript();
   const location = useLocation();
   const locationState = location.state as { routeErrorNotice?: string } | null;
   const routeErrorNotice = locationState?.routeErrorNotice ?? null;
-  const noticeEntries = transcript.entries.filter(entry => entry.kind === 'notice');
-  const hasNotices = Boolean(routeErrorNotice) || noticeEntries.length > 0;
+  const hasNotices = Boolean(routeErrorNotice) || notices.length > 0;
 
   return (
     <div className="grid min-h-0 flex-1 place-items-center overflow-y-auto px-4 py-10 md:px-6">
@@ -56,7 +55,7 @@ function NewPageContent({ activeProject }: { activeProject: Project }) {
         {hasNotices && (
           <div className="flex w-full flex-col gap-4">
             {routeErrorNotice && <Notice variant="destructive">{routeErrorNotice}</Notice>}
-            <TranscriptEntries entries={noticeEntries} onApprove={() => undefined} onRespond={() => undefined} />
+            <TranscriptEntries notices={notices} onApprove={() => undefined} onRespond={() => undefined} />
           </div>
         )}
       </div>

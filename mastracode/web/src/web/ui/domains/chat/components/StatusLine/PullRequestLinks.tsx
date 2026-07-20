@@ -1,8 +1,9 @@
+import type { MastraDBMessage } from '@mastra/client-js';
 import { useQuery } from '@tanstack/react-query';
 import { CircleDot, CircleX, GitMerge } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 
-import type { TranscriptState } from '../../services/transcript';
+import type { NotificationEntry } from '../../services/chatState';
 
 interface PullRequestSubscription {
   id: string;
@@ -34,7 +35,8 @@ interface PullRequestLinksProps {
   projectPath: string | undefined;
   githubProjectId: unknown;
   threadId: string | undefined;
-  transcriptEntries: TranscriptState['entries'];
+  messages: MastraDBMessage[];
+  notifications: NotificationEntry[];
   busy: boolean;
 }
 
@@ -45,22 +47,23 @@ export function PullRequestLinks({
   projectPath,
   githubProjectId,
   threadId,
-  transcriptEntries,
+  messages,
+  notifications,
   busy,
 }: PullRequestLinksProps) {
   const wasBusy = useRef(busy);
-  const notificationIds = transcriptEntries
-    .flatMap(entry => {
-      if (entry.kind === 'notification') return [entry.notificationId];
-      if (entry.kind !== 'message') return [];
-      const content = entry.message.content.metadata?.harnessContent;
+  const notificationIds = [
+    ...notifications.map(entry => entry.notificationId),
+    ...messages.flatMap(message => {
+      const content = message.content.metadata?.harnessContent;
       if (!Array.isArray(content)) return [];
       return content.flatMap(part =>
         typeof part === 'object' && part !== null && 'type' in part && part.type === 'notification'
           ? ['notificationId' in part ? part.notificationId : undefined]
           : [],
       );
-    })
+    }),
+  ]
     .filter(id => typeof id === 'string')
     .join(':');
   const enabled = typeof githubProjectId === 'string' && Boolean(threadId);

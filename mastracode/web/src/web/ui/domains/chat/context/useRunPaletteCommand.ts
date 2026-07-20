@@ -18,6 +18,7 @@ import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { useChatModels } from './useChatModels';
 import { useChatModes } from './useChatModes';
 import { useChatPermissions } from './useChatPermissions';
+import { useChatRuntime } from './useChatRuntime';
 import { useChatSessionContext } from './useChatSessionContext';
 import { useChatTranscript } from './useChatTranscript';
 
@@ -26,7 +27,8 @@ const TOOL_CATEGORIES: ToolCategory[] = ['read', 'edit', 'execute', 'mcp', 'othe
 export function useRunPaletteCommand(setComposerCommandName: Dispatch<SetStateAction<string | undefined>>) {
   const { activeProject } = useActiveProjectContext();
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
-  const { transcript, busy, localUser, pushNotice } = useChatTranscript();
+  const { busy, localUser, pushNotice, threadId } = useChatTranscript();
+  const runtime = useChatRuntime();
   const { activeModeId } = useChatModes();
   const { activeModelId, setModel } = useChatModels();
 
@@ -76,7 +78,7 @@ export function useRunPaletteCommand(setComposerCommandName: Dispatch<SetStateAc
         pushNotice('YOLO mode: all tool categories set to auto-allow');
         return;
       case 'cost': {
-        const u = transcript.usage;
+        const u = runtime.usage;
         pushNotice(
           !u?.totalTokens
             ? 'No token usage recorded yet.'
@@ -90,7 +92,7 @@ export function useRunPaletteCommand(setComposerCommandName: Dispatch<SetStateAc
         );
         return;
       case 'om':
-        pushNotice(`Observational memory phase: ${transcript.omPhase ?? 'idle'}`);
+        pushNotice(`Observational memory phase: ${runtime.omPhase ?? 'idle'}`);
         return;
       case 'settings':
         pushNotice(
@@ -99,7 +101,7 @@ export function useRunPaletteCommand(setComposerCommandName: Dispatch<SetStateAc
             `Path: ${activeProject?.path ?? '(default workspace)'}`,
             `Mode: ${activeModeId ?? '—'}`,
             `Model: ${activeModelId ?? '—'}`,
-            `Thread: ${transcript.threadId ?? '—'}`,
+            `Thread: ${threadId ?? '—'}`,
             `Running: ${busy}`,
           ].join('\n'),
         );

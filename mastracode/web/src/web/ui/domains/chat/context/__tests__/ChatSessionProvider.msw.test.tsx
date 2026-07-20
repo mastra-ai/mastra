@@ -170,12 +170,11 @@ function useAgentControllerHandlers(
 
 function Probe() {
   const { status, threadId } = useChatConnection();
-  const { transcript, busy, showWorkingIndicator, localUser } = useChatTranscript();
+  const { messages, busy, showWorkingIndicator, localUser, threadId: transcriptThreadId } = useChatTranscript();
   const { usage, followUpCount, omPhase, goal } = useChatRuntime();
   const { selectProject } = useActiveProjectContext();
-  const messageText = transcript.entries
-    .filter(entry => entry.kind === 'message')
-    .flatMap(entry => entry.message.content.parts)
+  const messageText = messages
+    .flatMap(message => message.content.parts)
     .filter(part => part.type === 'text')
     .map(part => part.text)
     .join('\n');
@@ -184,8 +183,8 @@ function Probe() {
     <div>
       <span data-testid="status">{status}</span>
       <span data-testid="thread-id">{threadId ?? '(none)'}</span>
-      <span data-testid="transcript-thread-id">{transcript.threadId ?? '(none)'}</span>
-      <span data-testid="entries-count">{transcript.entries.length}</span>
+      <span data-testid="transcript-thread-id">{transcriptThreadId ?? '(none)'}</span>
+      <span data-testid="entries-count">{messages.length}</span>
       <span data-testid="message-text">{messageText}</span>
       <span data-testid="busy">{busy ? 'yes' : 'no'}</span>
       <span data-testid="working">{showWorkingIndicator ? 'yes' : 'no'}</span>
@@ -244,11 +243,10 @@ function PermissionsProbe() {
 }
 
 function TranscriptProbe() {
-  const { transcript } = useChatTranscript();
+  const { messages } = useChatTranscript();
   const { threadId } = useChatConnection();
-  const messageText = transcript.entries
-    .filter(entry => entry.kind === 'message')
-    .flatMap(entry => entry.message.content.parts)
+  const messageText = messages
+    .flatMap(message => message.content.parts)
     .filter(part => part.type === 'text')
     .map(part => part.text)
     .join('\n');
@@ -256,7 +254,7 @@ function TranscriptProbe() {
   return (
     <div>
       <span data-testid="focused-thread-id">{threadId ?? '(none)'}</span>
-      <span data-testid="focused-entries-count">{transcript.entries.length}</span>
+      <span data-testid="focused-entries-count">{messages.length}</span>
       <span data-testid="focused-message-text">{messageText}</span>
     </div>
   );

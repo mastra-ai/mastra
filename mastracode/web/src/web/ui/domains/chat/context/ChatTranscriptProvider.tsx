@@ -1,11 +1,7 @@
 import type { MastraDBMessage } from '@mastra/client-js';
 import type { ReactNode } from 'react';
-import { useReducer } from 'react';
 
 import { useAgentControllerTranscript } from '../hooks/useAgentControllerTranscript';
-import { initialChatRuntime, runtimeReducer } from '../services/runtime';
-import type { ChatRuntimeState } from '../services/runtime';
-import type { TranscriptState } from '../services/transcript';
 import { ChatConnectionProvider } from './ChatConnectionProvider';
 import { ChatRuntimeContext } from './ChatRuntimeContext';
 import { ChatTranscriptContext } from './ChatTranscriptContext';
@@ -21,73 +17,52 @@ export function ChatTranscriptProvider({
   threadId?: string;
   initialMessages?: MastraDBMessage[];
 }) {
-  const transcriptApi = useAgentControllerTranscript({ initialThreadId: threadId, initialMessages });
-  const [runtime, dispatchRuntime] = useReducer(runtimeReducer, initialChatRuntime);
-  const onEvent = (event: Parameters<typeof transcriptApi.onEvent>[0]) => {
-    transcriptApi.onEvent(event);
-    dispatchRuntime(event);
-  };
-
+  const chatApi = useAgentControllerTranscript({ initialThreadId: threadId, initialMessages });
   return (
-    <ChatConnectionProvider onEvent={onEvent}>
-      <ChatRuntimeValueProvider runtime={runtime}>
-        <ChatTranscriptValueProvider threadId={threadId} transcriptApi={transcriptApi}>
+    <ChatConnectionProvider onEvent={chatApi.onEvent}>
+      <ChatRuntimeContext.Provider value={chatApi.runtime}>
+        <ChatTranscriptValueProvider threadId={threadId} chatApi={chatApi}>
           {children}
         </ChatTranscriptValueProvider>
-      </ChatRuntimeValueProvider>
+      </ChatRuntimeContext.Provider>
     </ChatConnectionProvider>
-  );
-}
-
-function ChatRuntimeValueProvider({ children, runtime }: { children: ReactNode; runtime: ChatRuntimeState }) {
-  const { state } = useChatConnection();
-  return (
-    <ChatRuntimeContext.Provider
-      value={{
-        usage: runtime.usage ?? state?.tokenUsage,
-        followUpCount: runtime.followUpCount,
-        omProgress: runtime.omProgress ?? state?.omProgress,
-        omPhase: runtime.omPhase,
-        goal: runtime.goal,
-        tokensPerSec: runtime.tokensPerSec,
-      }}
-    >
-      {children}
-    </ChatRuntimeContext.Provider>
   );
 }
 
 function ChatTranscriptValueProvider({
   children,
   threadId,
-  transcriptApi,
+  chatApi,
 }: {
   children: ReactNode;
   threadId?: string;
-  transcriptApi: ReturnType<typeof useAgentControllerTranscript>;
+  chatApi: ReturnType<typeof useAgentControllerTranscript>;
 }) {
   const connection = useChatConnection();
-  const { transcript, reset, localUser, resolvePrompt, clearPending, pushNotice } = transcriptApi;
-
-  const effectiveTranscript: TranscriptState = {
-    ...transcript,
-    threadId: transcript.threadId ?? threadId ?? connection.createdThreadId,
-    omProgress: transcript.omProgress ?? connection.state?.omProgress,
-    usage: transcript.usage ?? connection.state?.tokenUsage,
-  };
-  const busy = connection.state?.running === true || effectiveTranscript.pending;
-  const lastEntry = effectiveTranscript.entries.at(-1);
-  const showWorkingIndicator = busy && !(lastEntry?.kind === 'message' && lastEntry.streaming);
-  const transcriptValue: ChatTranscriptApi = {
-    transcript: effectiveTranscript,
+  const { messageState, surface, reset, localUser, resolvePrompt, clearPending, pushNotice } = chatApi;
+  const effectiveThreadId = messageState.threadId ?? threadId ?? connection.createdThreadId;
+  const busy = connection.state?.running === true || surface.pending;
+  const lastMessage = messageState.messages.at(-1);
+  const lastMessageIsStreamingAssistant =
+    lastMessage?.role === 'assistant' && connection.state?.running === true;
+  const value: ChatTranscriptApi = {
+    messages: messageState.messages,
+    prompts: surface.prompts,
+    notices: surface.notices,
+    notifications: surface.notifications,
+    notificationSummaries: surface.notificationSummaries,
+    subagents: surface.subagents,
+    tasks: surface.tasks,
+    pending: surface.pending,
+    threadId: effectiveThreadId,
+    workspaceReady: surface.workspaceReady,
     busy,
-    showWorkingIndicator,
+    showWorkingIndicator: busy && !lastMessageIsStreamingAssistant,
     localUser,
     reset,
     resolvePrompt,
     clearPending,
     pushNotice,
   };
-
-  return <ChatTranscriptContext.Provider value={transcriptValue}>{children}</ChatTranscriptContext.Provider>;
+  return <ChatTranscriptContext.Provider value={value}>{children}</ChatTranscriptContext.Provider>;
 }

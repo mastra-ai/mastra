@@ -101,10 +101,10 @@ function useAgentControllerHandlers({ running = false }: { running?: boolean } =
 }
 
 function NoticeProbe() {
-  const { transcript } = useChatTranscript();
+  const { notices } = useChatTranscript();
   return (
     <output aria-label="Notices">
-      {transcript.entries.map(entry => (entry.kind === 'notice' ? <div key={entry.id}>{entry.text}</div> : null))}
+      {notices.map(entry => <div key={entry.id}>{entry.text}</div>)}
     </output>
   );
 }

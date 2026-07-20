@@ -144,6 +144,49 @@ describe('ChatMessageList', () => {
     await waitFor(() => expect(screen.getByText('Hello from the agent')).toBeInTheDocument());
   });
 
+  it('given live task events and a task tool invocation, then the transcript does not render an inline task card', async () => {
+    seedProject();
+    useAgentControllerHandlers([
+      {
+        type: 'task_updated',
+        tasks: [{ id: 'one', content: 'Dock task list', activeForm: 'Docking task list', status: 'in_progress' }],
+      },
+      {
+        type: 'message_update',
+        message: {
+          id: 'assistant-task-tool',
+          role: 'assistant',
+          createdAt: new Date(),
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: 'Task state updated.' },
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'task-call-1',
+                  toolName: 'task_write',
+                  args: {},
+                  result: {
+                    tasks: [
+                      { id: 'one', content: 'Dock task list', activeForm: 'Docking task list', status: 'in_progress' },
+                    ],
+                  },
+                },
+              },
+            ],
+          },
+        },
+      },
+    ]);
+    renderMessageList();
+
+    await waitFor(() => expect(screen.getByText('Task state updated.')).toBeInTheDocument());
+    expect(screen.queryByRole('group', { name: 'Tool: task_write' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Docking task list')).not.toBeInTheDocument();
+  });
+
   it('given a streamed notification signal, then it renders the notification provenance in the transcript', async () => {
     seedProject();
     useAgentControllerHandlers([
