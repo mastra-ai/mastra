@@ -108,8 +108,7 @@ export interface WorkItemPriorState {
 
 /** Discriminated result of `upsert`: fresh insert vs source-key reuse. */
 export type UpsertWorkItemResult =
-  | { created: true; item: WorkItemRow }
-  | { created: false; item: WorkItemRow; previous: WorkItemPriorState };
+  { created: true; item: WorkItemRow } | { created: false; item: WorkItemRow; previous: WorkItemPriorState };
 
 /**
  * Diff `oldStages` → `newStages` and return the updated history: exited stages
@@ -304,11 +303,10 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     where: Record<string, string>,
     patch: UpdateWorkItemInput,
     userId: string,
-    now: Date,
   ): Promise<{ item: WorkItemRow; previous: WorkItemPriorState } | null> {
     let previous: WorkItemPriorState | undefined;
     const updated = await this.#db.updateAtomic<WorkItemDbRow>('work_items', where, row => {
-      const computed = computeWorkItemPatch(toRow(row), patch, userId, now);
+      const computed = computeWorkItemPatch(toRow(row), patch, userId, new Date());
       previous = computed.previous;
       return patchColumns(computed.changes);
     });
@@ -338,7 +336,6 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         { org_id: orgId, github_project_id: githubProjectId, source_key: input.sourceKey },
         input,
         userId,
-        now,
       );
       return updated ? { created: false, item: updated.item, previous: updated.previous } : null;
     };
@@ -385,7 +382,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     userId: string,
     patch: UpdateWorkItemInput,
   ): Promise<{ item: WorkItemRow; previous: WorkItemPriorState } | null> {
-    return this.#applyUpdateAtomic({ id, org_id: orgId }, patch, userId, new Date());
+    return this.#applyUpdateAtomic({ id, org_id: orgId }, patch, userId);
   }
 
   /** Delete an org's work item. Returns the row actually deleted, or `null` when it doesn't exist in the org. */

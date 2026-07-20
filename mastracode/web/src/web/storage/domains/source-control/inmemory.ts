@@ -50,17 +50,27 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
   };
 
   readonly projects = {
+    list: async (orgId: string): Promise<SourceControlProject[]> =>
+      this.projectsRows.filter(row => row.orgId === orgId),
     getOrg: async (orgId: string, projectId: string): Promise<SourceControlProject | null> =>
       this.projectsRows.find(row => row.orgId === orgId && row.id === projectId) ?? null,
     getById: async (projectId: string): Promise<SourceControlProject | null> =>
       this.projectsRows.find(row => row.id === projectId) ?? null,
     findByRepository: async (
+      orgId: string,
       installationExternalId: string,
       repositorySlug: string,
     ): Promise<SourceControlProject | null> =>
       this.projectsRows.find(
-        row => row.installationExternalId === installationExternalId && row.repositorySlug === repositorySlug,
+        row =>
+          row.orgId === orgId &&
+          row.installationExternalId === installationExternalId &&
+          row.repositorySlug === repositorySlug,
       ) ?? null,
+    listByRepository: async (installationExternalId: string, repositorySlug: string): Promise<SourceControlProject[]> =>
+      this.projectsRows.filter(
+        row => row.installationExternalId === installationExternalId && row.repositorySlug === repositorySlug,
+      ),
     upsert: async (input: UpsertSourceControlProjectInput): Promise<SourceControlProject> => {
       const existing = this.projectsRows.find(
         row => row.orgId === input.orgId && row.repositoryExternalId === input.repositoryExternalId,
@@ -84,21 +94,47 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       const row = this.projectsRows.find(project => project.id === projectId);
       if (row) row.setupCommand = setupCommand;
     },
+    delete: async (orgId: string, projectId: string): Promise<void> => {
+      const project = this.projectsRows.find(row => row.orgId === orgId && row.id === projectId);
+      if (!project) return;
+      const projects = this.projectsRows.filter(row => row.id !== projectId);
+      const sandboxes = this.sandboxesRows.filter(row => row.projectId !== projectId);
+      const worktrees = this.worktreesRows.filter(row => row.projectId !== projectId);
+      this.projectsRows.splice(0, this.projectsRows.length, ...projects);
+      this.sandboxesRows.splice(0, this.sandboxesRows.length, ...sandboxes);
+      this.worktreesRows.splice(0, this.worktreesRows.length, ...worktrees);
+    },
   };
 
   readonly sandboxes = {
+    list: async (projectId: string): Promise<SourceControlProjectSandbox[]> =>
+      this.sandboxesRows.filter(row => row.projectId === projectId),
+    get: async (projectId: string, userId: string): Promise<SourceControlProjectSandbox | null> =>
+      this.sandboxesRows.find(row => row.projectId === projectId && row.userId === userId) ?? null,
     getOrCreate: async (
       project: { id: string; sandboxWorkdir: string },
       userId: string,
     ): Promise<SourceControlProjectSandbox> => {
+      const persistedProject = this.projectsRows.find(row => row.id === project.id);
+      if (!persistedProject) throw new Error(`Source-control project not found: ${project.id}`);
+      const sandboxWorkdir = persistedProject.sandboxWorkdir;
       const existing = this.sandboxesRows.find(row => row.projectId === project.id && row.userId === userId);
-      if (existing) return existing;
+      if (existing) {
+        if (existing.sandboxWorkdir !== sandboxWorkdir) {
+          Object.assign(existing, {
+            sandboxId: null,
+            sandboxWorkdir,
+            materializedAt: null,
+          });
+        }
+        return existing;
+      }
       const created: SourceControlProjectSandbox = {
         id: randomUUID(),
         projectId: project.id,
         userId,
         sandboxId: null,
-        sandboxWorkdir: project.sandboxWorkdir,
+        sandboxWorkdir,
         materializedAt: null,
         createdAt: new Date(),
       };
@@ -122,6 +158,8 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
   };
 
   readonly worktrees = {
+    list: async (projectId: string, userId: string): Promise<SourceControlWorktree[]> =>
+      this.worktreesRows.filter(row => row.projectId === projectId && row.userId === userId),
     upsert: async (input: UpsertSourceControlWorktreeInput): Promise<void> => {
       const existing = this.worktreesRows.find(
         row => row.projectId === input.projectId && row.userId === input.userId && row.branch === input.branch,

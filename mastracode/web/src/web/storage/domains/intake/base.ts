@@ -3,8 +3,18 @@
  * page.
  *
  * Stored per `(org, user)` — each user picks their own intake sources within
- * the org's connected integrations. GitHub uses connected repository ids;
- * Linear keeps provider-native project ids.
+ * the org's connected integrations:
+ *  - GitHub: which connected repositories contribute issues.
+ *  - Linear: which Linear projects contribute issues.
+ *
+ * Id lists of `null` mean "nothing selected" — the source syncs nothing until
+ * the user explicitly picks entries. An `enabled` flag of `false` hides the
+ * source entirely regardless of selection.
+ *
+ * GitHub uses `repositoryIds` (connected repository UUIDs). Linear keeps
+ * `projectIds` because Linear Project is the external provider concept. A
+ * prerelease row still carrying `github.projectIds` is treated as missing
+ * config and returns the defaults — no migration or key translation.
  */
 
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
@@ -29,31 +39,35 @@ export const DEFAULT_INTAKE_CONFIG: IntakeConfig = {
   linear: { enabled: true, projectIds: null },
 };
 
+/** Bounded list of non-empty ids, or `null` for "nothing selected". */
 function sanitizeIdList(value: unknown): string[] | null | undefined {
   if (value === null) return null;
   if (!Array.isArray(value) || value.length > 200) return undefined;
-  const ids = value.filter((v): v is string => typeof v === 'string' && v.length > 0 && v.length <= 128);
+  const ids = value.filter(
+    (entry): entry is string => typeof entry === 'string' && entry.length > 0 && entry.length <= 128,
+  );
   return ids.length === value.length ? ids : undefined;
 }
 
-/** Validate an untrusted route body or stored JSON object. */
+/** Validate untrusted JSON into an `IntakeConfig`, rejecting the prerelease GitHub key. */
 export function parseIntakeConfig(body: unknown): IntakeConfig | null {
   if (typeof body !== 'object' || body === null) return null;
   const { github, linear } = body as { github?: unknown; linear?: unknown };
-  if (typeof github !== 'object' || github === null || typeof linear !== 'object' || linear === null) return null;
+  if (typeof github !== 'object' || github === null) return null;
+  if (typeof linear !== 'object' || linear === null) return null;
 
   const githubSection = github as { enabled?: unknown; repositoryIds?: unknown; projectIds?: unknown };
   const linearSection = linear as { enabled?: unknown; projectIds?: unknown };
   if (typeof githubSection.enabled !== 'boolean' || typeof linearSection.enabled !== 'boolean') return null;
   if (Object.prototype.hasOwnProperty.call(githubSection, 'projectIds')) return null;
 
-  const githubRepositoryIds = sanitizeIdList(githubSection.repositoryIds ?? null);
-  const linearProjectIds = sanitizeIdList(linearSection.projectIds ?? null);
-  if (githubRepositoryIds === undefined || linearProjectIds === undefined) return null;
+  const repositoryIds = sanitizeIdList(githubSection.repositoryIds ?? null);
+  const projectIds = sanitizeIdList(linearSection.projectIds ?? null);
+  if (repositoryIds === undefined || projectIds === undefined) return null;
 
   return {
-    github: { enabled: githubSection.enabled, repositoryIds: githubRepositoryIds },
-    linear: { enabled: linearSection.enabled, projectIds: linearProjectIds },
+    github: { enabled: githubSection.enabled, repositoryIds },
+    linear: { enabled: linearSection.enabled, projectIds },
   };
 }
 
@@ -70,7 +84,10 @@ export const INTAKE_SETTINGS_SCHEMA: CollectionSchema = {
   uniqueIndexes: [{ name: 'intake_settings_org_user_unique', columns: ['org_id', 'user_id'] }],
 };
 
-/** Intake settings storage implemented against the generic FactoryStorageOps surface. */
+/**
+ * Intake settings storage, written once against the generic
+ * `FactoryStorageOps` surface — works on any `FactoryStorage` backend.
+ */
 export class IntakeStorage extends FactoryStorageDomain {
   constructor() {
     super('intake');
@@ -88,6 +105,7 @@ export class IntakeStorage extends FactoryStorageDomain {
     return this.ops;
   }
 
+  /** Read the caller's intake config, falling back to {@link DEFAULT_INTAKE_CONFIG}. */
   async getConfig(orgId: string, userId: string): Promise<IntakeConfig> {
     const row = await this.#db.findOne<{ config: unknown }>('intake_settings', {
       org_id: orgId,
@@ -96,16 +114,20 @@ export class IntakeStorage extends FactoryStorageDomain {
     return structuredClone(parseIntakeConfig(row?.config) ?? DEFAULT_INTAKE_CONFIG);
   }
 
+  /** Upsert the caller's intake config (`created_at` is preserved on update). */
   async saveConfig(orgId: string, userId: string, config: IntakeConfig): Promise<void> {
-    const now = new Date();
     const where = { org_id: orgId, user_id: userId };
-    const updated = await this.#db.updateMany('intake_settings', where, { config, updated_at: now });
-    if (updated > 0) return;
+    const updateExisting = () =>
+      this.#db.updateAtomic('intake_settings', where, () => ({ config, updated_at: new Date() }));
+    if (await updateExisting()) return;
+
+    const now = new Date();
     try {
       await this.#db.insertOne('intake_settings', { ...where, config, created_at: now, updated_at: now });
     } catch (error) {
       if (!(error instanceof UniqueViolationError)) throw error;
-      await this.#db.updateMany('intake_settings', where, { config, updated_at: now });
+      // Lost the insert race — update the winning row under the backend's serialized write primitive.
+      if (!(await updateExisting())) throw error;
     }
   }
 }

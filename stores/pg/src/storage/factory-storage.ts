@@ -63,6 +63,29 @@ function primaryKeyOf(schema: CollectionSchema): string {
   return pks[0]![0];
 }
 
+function assertUpsertConflict(schema: CollectionSchema, conflictKeys: string[], row: Record<string, unknown>): void {
+  const keys = new Set(conflictKeys);
+  if (keys.size !== conflictKeys.length || conflictKeys.some(key => row[key] === undefined)) {
+    throw new Error(
+      `PgFactoryStorage: upsert conflict keys for '${schema.name}' must be unique and present in the row`,
+    );
+  }
+
+  const primaryKey = primaryKeyOf(schema);
+  const candidates = [{ columns: [primaryKey] }, ...(schema.uniqueIndexes ?? [])];
+  const matches = candidates.some(candidate => {
+    if (candidate.columns.length !== keys.size || candidate.columns.some(column => !keys.has(column))) return false;
+    if ('whereNotNull' in candidate && candidate.whereNotNull && row[candidate.whereNotNull] == null) return false;
+    if ('whereNull' in candidate && candidate.whereNull && row[candidate.whereNull] != null) return false;
+    return true;
+  });
+  if (!matches) {
+    throw new Error(
+      `PgFactoryStorage: upsert conflict keys [${conflictKeys.join(', ')}] do not match an applicable primary key or unique index on '${schema.name}'`,
+    );
+  }
+}
+
 function serializeDefault(value: string | number | boolean): string {
   if (typeof value === 'string') return `'${value.replace(/'/g, "''")}'`;
   return String(value);
@@ -170,8 +193,14 @@ class PgFactoryStorageOps implements FactoryStorageOps {
           clauses.push('FALSE');
           continue;
         }
-        clauses.push(`"${column}" IN (${condition.in.map(() => `$${index++}`).join(', ')})`);
-        args.push(...condition.in.map(value => this.#serialize(spec, value)));
+        const nonNull = condition.in.filter(value => value !== null);
+        const includesNull = nonNull.length !== condition.in.length;
+        const inClause =
+          nonNull.length > 0 ? `"${column}" IN (${nonNull.map(() => `$${index++}`).join(', ')})` : undefined;
+        clauses.push(
+          inClause && includesNull ? `(${inClause} OR "${column}" IS NULL)` : (inClause ?? `"${column}" IS NULL`),
+        );
+        args.push(...nonNull.map(value => this.#serialize(spec, value)));
       } else if (condition === null) {
         clauses.push(`"${column}" IS NULL`);
       } else {
@@ -306,9 +335,8 @@ class PgFactoryStorageOps implements FactoryStorageOps {
   ): Promise<T> {
     const schema = this.#schema(collection);
     const pk = primaryKeyOf(schema);
-    const keyWhere = Object.fromEntries(
-      conflictKeys.map(key => [key, (row[key] ?? null) as CollectionValue]),
-    ) as CollectionWhere;
+    assertUpsertConflict(schema, conflictKeys, row);
+    const keyWhere = Object.fromEntries(conflictKeys.map(key => [key, row[key] as CollectionValue])) as CollectionWhere;
 
     let lastError: unknown;
     for (let attempt = 0; attempt < 2; attempt++) {

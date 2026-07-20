@@ -212,15 +212,18 @@ describe('parseIntakeConfig', () => {
 
 describe('GET /web/intake/config with prerelease storage rows', () => {
   it('returns defaults when a stored row still uses github.projectIds', async () => {
-    // Seed through the in-memory raw path so the typed save path cannot rewrite it.
-    (seed.intake as { seedRawConfig: (orgId: string, userId: string, raw: unknown) => void }).seedRawConfig(
-      'org1',
-      'u1',
-      {
+    // Seed through the backend ops path so the typed save path cannot rewrite it.
+    const now = new Date();
+    await seed.storage.ops.insertOne('intake_settings', {
+      org_id: 'org1',
+      user_id: 'u1',
+      config: {
         github: { enabled: false, projectIds: ['old-gp'] },
         linear: { enabled: true, projectIds: ['lp-legacy'] },
       },
-    );
+      created_at: now,
+      updated_at: now,
+    });
     const res = await buildApp(orgUser).request('/web/intake/config');
     const json = await res.json();
     expect(json).toEqual({ config: DEFAULT_INTAKE_CONFIG });

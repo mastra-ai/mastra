@@ -146,7 +146,7 @@ describe('buildLinearAgentTools — exposure gating', () => {
   });
 
   it('exposes nothing when the org has not connected Linear', async () => {
-    seedFactory();
+    seedProject();
     const tools = await buildLinearAgentTools({ linear: linearStub, requestContext: requestContextFor(PROJECT_ID) });
     expect(tools).toEqual({});
   });
@@ -189,7 +189,7 @@ describe('buildLinearAgentTools — exposure gating', () => {
   });
 
   it('sees a fresh connection immediately after cache invalidation', async () => {
-    seedFactory();
+    seedProject();
     expect(await buildLinearAgentTools({ linear: linearStub, requestContext: requestContextFor(PROJECT_ID) })).toEqual(
       {},
     );

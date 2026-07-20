@@ -31,7 +31,7 @@ describe('IntakeStorage', () => {
   it('round-trips saved config per (org, user)', async () => {
     const storage = await makeStorage();
     const config = {
-      github: { enabled: true, projectIds: ['p1'] },
+      github: { enabled: true, repositoryIds: ['p1'] },
       linear: { enabled: false, projectIds: null },
     };
 
@@ -49,8 +49,8 @@ describe('IntakeStorage', () => {
 
   it('converges concurrent first saves onto one row', async () => {
     const storage = await makeStorage();
-    const a = { github: { enabled: true, projectIds: ['a'] }, linear: { enabled: true, projectIds: null } };
-    const b = { github: { enabled: true, projectIds: ['b'] }, linear: { enabled: true, projectIds: null } };
+    const a = { github: { enabled: true, repositoryIds: ['a'] }, linear: { enabled: true, projectIds: null } };
+    const b = { github: { enabled: true, repositoryIds: ['b'] }, linear: { enabled: true, projectIds: null } };
 
     await Promise.all([storage.saveConfig('org1', 'user1', a), storage.saveConfig('org1', 'user1', b)]);
 

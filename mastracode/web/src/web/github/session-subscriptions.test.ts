@@ -101,14 +101,14 @@ describe('parseCreatedPullRequest', () => {
 });
 
 describe('GitHub subscription entry points', () => {
-  it('does not expose tools without authenticated GitHub repository context', () => {
+  it('does not expose tools without authenticated GitHub-project context', () => {
     const requestContext = new RequestContext();
     requestContext.set('controller', { getState: () => ({ githubProjectId: 'project-1' }) });
 
     expect(createGithubSubscriptionTools(requestContext, githubStub)).toEqual({});
   });
 
-  it('silently skips auto-subscription outside GitHub repository sessions', async () => {
+  it('silently skips auto-subscription outside GitHub-project sessions', async () => {
     const requestContext = new RequestContext();
     requestContext.set('controller', {
       resourceId: 'resource-1',
@@ -131,7 +131,7 @@ describe('GitHub subscription entry points', () => {
     expect(mocks.subscribe).not.toHaveBeenCalled();
   });
 
-  it('subscribes the exact scoped session after verifying the active repository PR', async () => {
+  it('subscribes the exact scoped session after verifying the active-project PR', async () => {
     const requestContext = authenticatedRequestContext('/worktrees/a');
 
     await subscribeCurrentSessionToPullRequest(requestContext, 123, 'auto-gh-pr-create', githubStub);

@@ -230,6 +230,10 @@ const integrations: FactoryIntegration[] = [github, linear].filter(i => i !== un
 // storage resolution uses, running the FULL app surface (auth, intake,
 // audit, work-items, integrations) — no features silently off.
 const appDatabaseUrl = process.env.APP_DATABASE_URL;
+const localDevelopmentMode = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
+if (!appDatabaseUrl && !localDevelopmentMode) {
+  throw new Error('APP_DATABASE_URL is required outside local development and tests.');
+}
 const storage = appDatabaseUrl
   ? new PgFactoryStorage({
       id: 'mastra-code-storage',
@@ -249,8 +253,8 @@ export const factory = new MastraFactory({
   auth,
   sandbox: {
     machine: sandbox,
-    // Checkout base inside sandboxes (nested `owner/name` per repo). Unset →
-    // the machine's own workingDirectory (local) or `/workspace` (cloud).
+    // Remote checkout base (nested `owner/name` per repo). LocalSandbox ignores
+    // this in-sandbox path and uses its host workingDirectory instead.
     workdir: process.env.MASTRACODE_SANDBOX_WORKDIR,
     // Per-replica cap on concurrently provisioned sandboxes. Unset → unlimited.
     maxSandboxes: positiveInt(process.env.MASTRACODE_MAX_SANDBOXES),

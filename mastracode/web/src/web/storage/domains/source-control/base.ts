@@ -52,6 +52,10 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
     ],
     indexes: [
       {
+        name: 'source_control_projects_org_repository_lookup',
+        columns: ['integration_id', 'org_id', 'installation_external_id', 'repository_slug'],
+      },
+      {
         name: 'source_control_projects_repository_lookup',
         columns: ['integration_id', 'installation_external_id', 'repository_slug'],
       },
@@ -186,13 +190,22 @@ export interface SourceControlStorageHandle {
     delete(orgId: string, externalId: string): Promise<void>;
   };
   readonly projects: {
+    list(orgId: string): Promise<SourceControlProject[]>;
     getOrg(orgId: string, projectId: string): Promise<SourceControlProject | null>;
     getById(projectId: string): Promise<SourceControlProject | null>;
-    findByRepository(installationExternalId: string, repositorySlug: string): Promise<SourceControlProject | null>;
+    findByRepository(
+      orgId: string,
+      installationExternalId: string,
+      repositorySlug: string,
+    ): Promise<SourceControlProject | null>;
+    listByRepository(installationExternalId: string, repositorySlug: string): Promise<SourceControlProject[]>;
     upsert(input: UpsertSourceControlProjectInput): Promise<SourceControlProject>;
     setSetupCommand(projectId: string, setupCommand: string | null): Promise<void>;
+    delete(orgId: string, projectId: string): Promise<void>;
   };
   readonly sandboxes: {
+    list(projectId: string): Promise<SourceControlProjectSandbox[]>;
+    get(projectId: string, userId: string): Promise<SourceControlProjectSandbox | null>;
     getOrCreate(project: { id: string; sandboxWorkdir: string }, userId: string): Promise<SourceControlProjectSandbox>;
     getById(id: string): Promise<SourceControlProjectSandbox | null>;
     setSandboxId(id: string, sandboxId: string): Promise<void>;
@@ -200,6 +213,7 @@ export interface SourceControlStorageHandle {
     markMaterialized(id: string): Promise<void>;
   };
   readonly worktrees: {
+    list(projectId: string, userId: string): Promise<SourceControlWorktree[]>;
     upsert(input: UpsertSourceControlWorktreeInput): Promise<void>;
     get(projectId: string, userId: string, branch: string): Promise<SourceControlWorktree | null>;
     findByPath(projectId: string, userId: string, worktreePath: string): Promise<SourceControlWorktree | null>;
@@ -399,6 +413,13 @@ export class SourceControlStorage extends FactoryStorageDomain {
         },
       },
       projects: {
+        list: async orgId =>
+          (
+            await db().findMany<ProjectDbRow>(PROJECTS, {
+              integration_id: integrationId,
+              org_id: orgId,
+            })
+          ).map(toProject),
         getOrg: async (orgId, projectId) => {
           const row = await db().findOne<ProjectDbRow>(PROJECTS, {
             id: projectId,
@@ -408,14 +429,23 @@ export class SourceControlStorage extends FactoryStorageDomain {
           return row ? toProject(row) : null;
         },
         getById: getProject,
-        findByRepository: async (installationExternalId, repositorySlug) => {
+        findByRepository: async (orgId, installationExternalId, repositorySlug) => {
           const row = await db().findOne<ProjectDbRow>(PROJECTS, {
             integration_id: integrationId,
+            org_id: orgId,
             installation_external_id: installationExternalId,
             repository_slug: repositorySlug,
           });
           return row ? toProject(row) : null;
         },
+        listByRepository: async (installationExternalId, repositorySlug) =>
+          (
+            await db().findMany<ProjectDbRow>(PROJECTS, {
+              integration_id: integrationId,
+              installation_external_id: installationExternalId,
+              repository_slug: repositorySlug,
+            })
+          ).map(toProject),
         upsert: async input => {
           const row = await db().upsertOne<ProjectDbRow>(
             PROJECTS,
@@ -444,19 +474,55 @@ export class SourceControlStorage extends FactoryStorageDomain {
             { setup_command: setupCommand },
           );
         },
+        delete: async (orgId, projectId) => {
+          const project = await db().findOne<ProjectDbRow>(PROJECTS, {
+            id: projectId,
+            integration_id: integrationId,
+            org_id: orgId,
+          });
+          if (!project) return;
+          await db().deleteMany(WORKTREES, { project_id: projectId });
+          await db().deleteMany(SANDBOXES, { project_id: projectId });
+          await db().deleteMany(PROJECTS, { id: projectId, integration_id: integrationId, org_id: orgId });
+        },
       },
       sandboxes: {
+        list: async projectId => {
+          if (!(await getProject(projectId))) return [];
+          return (await db().findMany<SandboxDbRow>(SANDBOXES, { project_id: projectId })).map(toSandbox);
+        },
+        get: async (projectId, userId) => {
+          if (!(await getProject(projectId))) return null;
+          const row = await db().findOne<SandboxDbRow>(SANDBOXES, { project_id: projectId, user_id: userId });
+          return row ? toSandbox(row) : null;
+        },
         getOrCreate: async (project, userId) => {
-          await requireProject(project.id);
+          const persistedProject = await requireProject(project.id);
+          const sandboxWorkdir = persistedProject.sandboxWorkdir;
           const where = { project_id: project.id, user_id: userId };
           const existing = await db().findOne<SandboxDbRow>(SANDBOXES, where);
-          if (existing) return toSandbox(existing);
+          if (existing) {
+            if (existing.sandbox_workdir !== sandboxWorkdir) {
+              await db().updateMany(SANDBOXES, where, {
+                sandbox_id: null,
+                sandbox_workdir: sandboxWorkdir,
+                materialized_at: null,
+              });
+              return toSandbox({
+                ...existing,
+                sandbox_id: null,
+                sandbox_workdir: sandboxWorkdir,
+                materialized_at: null,
+              });
+            }
+            return toSandbox(existing);
+          }
           try {
             return toSandbox(
               await db().insertOne<SandboxDbRow>(SANDBOXES, {
                 ...where,
                 sandbox_id: null,
-                sandbox_workdir: project.sandboxWorkdir,
+                sandbox_workdir: sandboxWorkdir,
                 materialized_at: null,
                 created_at: new Date(),
               }),
@@ -483,6 +549,15 @@ export class SourceControlStorage extends FactoryStorageDomain {
         },
       },
       worktrees: {
+        list: async (projectId, userId) => {
+          if (!(await getProject(projectId))) return [];
+          return (
+            await db().findMany<WorktreeDbRow>(WORKTREES, {
+              project_id: projectId,
+              user_id: userId,
+            })
+          ).map(toWorktree);
+        },
         upsert: async input => {
           const project = await requireProject(input.projectId);
           if (project.orgId !== input.orgId) throw new Error('Source-control project not found for this organization.');

@@ -133,9 +133,10 @@ export interface MastraFactorySandboxConfig {
    */
   machine: WorkspaceSandbox;
   /**
-   * In-sandbox base directory repos check out under (nested `owner/name` per
-   * repo). Default: the machine's own `workingDirectory` when it exposes one
-   * (core `LocalSandbox` does), else `/workspace`.
+   * Base directory repos check out under (nested `owner/name` per repo).
+   * Remote sandboxes use this override or default to `/workspace`. A
+   * `LocalSandbox` always uses its host `workingDirectory`, because an
+   * in-sandbox path such as `/workspace` is not a host filesystem mount.
    */
   workdir?: string;
   /**
@@ -156,6 +157,12 @@ const CONTROLLER_ID = 'code';
 function templateWorkingDirectory(sandbox: WorkspaceSandbox): string | undefined {
   const wd = (sandbox as { workingDirectory?: unknown }).workingDirectory;
   return typeof wd === 'string' && wd.length > 0 ? wd : undefined;
+}
+
+function sandboxWorkdirBase(sandbox: WorkspaceSandbox, configuredWorkdir?: string): string {
+  const templateWorkdir = templateWorkingDirectory(sandbox);
+  const workdir = sandbox.provider === 'local' ? templateWorkdir : (configuredWorkdir ?? templateWorkdir);
+  return (workdir ?? '/workspace').replace(/\/+$/, '');
 }
 
 export class MastraFactory {
@@ -267,10 +274,7 @@ export class MastraFactory {
       sandbox: machine
         ? {
             machine,
-            workdirBase: (sandboxConfig?.workdir ?? templateWorkingDirectory(machine) ?? '/workspace').replace(
-              /\/+$/,
-              '',
-            ),
+            workdirBase: sandboxWorkdirBase(machine, sandboxConfig?.workdir),
             maxSandboxes: sandboxConfig?.maxSandboxes,
           }
         : undefined,
@@ -286,10 +290,12 @@ export class MastraFactory {
     // registered app domains initialize fail-soft inside FactoryStorage.
     await storage.init();
 
-    // Per-tenant model credentials: once the credentials domain is up, model
-    // resolution goes through the caller's own store and the SDK stops
-    // mirroring stored API keys into process.env.
-    registerTenantCredentialResolver();
+    // Authenticated requests may resolve tenant credentials, so auth makes the
+    // credentials domain a hard dependency even though other app domains remain
+    // fail-soft. Auth-less mode keeps the SDK's environment-backed fallback when
+    // the domain is unavailable.
+    if (auth) await storage.ensureDomainReady('model-credentials');
+    if (storage.isDomainReady('model-credentials')) registerTenantCredentialResolver();
 
     // GitHub App + cloud-sandbox readiness, resolved BEFORE constructing the
     // Mastra args so the github routes are simply omitted from `apiRoutes`
@@ -317,7 +323,10 @@ export class MastraFactory {
     const readyIntegrations = integrations.map(integration => ({
       integration,
       ready: integrationReady.get(integration.id) ?? false,
-      ensureReady: () => storage.ensureDomainReady(integration.id === 'github' ? 'source-control' : 'integrations'),
+      ensureReady: async () => {
+        await storage.ensureDomainReady('integrations');
+        if (integration.id === 'github') await storage.ensureDomainReady('source-control');
+      },
     }));
 
     // Boot assertion: an active integration that signs OAuth `state` needs a

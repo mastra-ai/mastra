@@ -455,6 +455,7 @@ describe('S1: full write-back journey through the real route handlers', () => {
       repositoryExternalId: '99',
       defaultBranch: 'main',
       sandboxProvider: 'railway',
+      sandboxWorkdir: '/workspace/hello',
       setupCommand: null,
       providerMetadata: {},
       createdAt: new Date(),
@@ -473,7 +474,7 @@ describe('S1: full write-back journey through the real route handlers', () => {
       title: 'My PR',
     });
 
-    expect(response.status).toBe(200);
+    expect(response.status, await response.clone().text()).toBe(200);
     expect(subscribeToPullRequest).not.toHaveBeenCalled();
   });
 });

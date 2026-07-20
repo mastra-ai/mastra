@@ -156,17 +156,31 @@ describe('MastraFactory.prepare', () => {
     expect(getSeededSandbox()?.workdirBase).toBe('/workspace');
   });
 
-  it('honors an explicit workdir override and passes maxSandboxes through', async () => {
+  it("keeps LocalSandbox checkouts under its host root even when workdir is '/workspace'", async () => {
     await prepareFactory({
       storage: fakeStorage(),
       sandbox: {
         machine: new LocalSandbox({ workingDirectory: '/tmp/mc-factory-test' }),
-        workdir: '/custom/base/',
+        workdir: '/workspace',
         maxSandboxes: 5,
       },
     });
-    expect(getSeededSandbox()?.workdirBase).toBe('/custom/base');
+    expect(getSeededSandbox()?.workdirBase).toBe('/tmp/mc-factory-test');
     expect(getSeededSandbox()?.maxSandboxes).toBe(5);
+  });
+
+  it('honors an explicit workdir override for remote sandboxes', async () => {
+    const remote = {
+      id: 'sb-3',
+      name: 'Remote',
+      provider: 'railway',
+      clone: () => remote,
+    } as unknown as WorkspaceSandbox;
+    await prepareFactory({
+      storage: fakeStorage(),
+      sandbox: { machine: remote, workdir: '/custom/base/' },
+    });
+    expect(getSeededSandbox()?.workdirBase).toBe('/custom/base');
   });
 
   it("forwards the backend's Mastra store and the vector instance to the SDK mount", async () => {

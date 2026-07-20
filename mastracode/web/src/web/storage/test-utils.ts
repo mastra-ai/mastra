@@ -6,6 +6,7 @@
  */
 
 import { LibSQLFactoryStorage } from '@mastra/libsql';
+import { onTestFinished } from 'vitest';
 
 import { seedRuntimeConfig } from '../runtime-config';
 import { AuditStorage } from './domains/audit/base';
@@ -27,8 +28,8 @@ export interface FactoryStorageTestSeed {
 
 /**
  * Seed runtime config with a fresh libsql `:memory:` database. Call in
- * `beforeEach` (state is per-instance) and pair with
- * `__resetRuntimeConfigForTests()` in cleanup.
+ * `beforeEach` (state is per-instance). The backend closes automatically when
+ * the current test finishes; callers should still reset runtime config.
  */
 export async function seedFactoryStorageForTests(): Promise<FactoryStorageTestSeed> {
   const storage = new LibSQLFactoryStorage({ id: 'factory-test', url: ':memory:' });
@@ -39,6 +40,7 @@ export async function seedFactoryStorageForTests(): Promise<FactoryStorageTestSe
   const integrations = storage.registerDomain(new IntegrationStorage());
   const sourceControl = storage.registerDomain(new SourceControlStorage());
   await storage.init();
+  onTestFinished(() => storage.close());
   seedRuntimeConfig({ storage });
   return { storage, intake, audit, workItems, credentials, integrations, sourceControl };
 }
