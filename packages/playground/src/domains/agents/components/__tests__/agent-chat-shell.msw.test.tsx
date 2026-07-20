@@ -1,7 +1,7 @@
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import React from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -86,9 +86,36 @@ function renderShell(onOM = vi.fn(), onMessages = vi.fn()) {
   return { onOM, onMessages };
 }
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  delete window.MASTRA_STUDIO_BASE_PATH;
+});
 
 describe('AgentChatShell', () => {
+  describe('when the Studio uses a nested base path', () => {
+    it('copies a shareable session URL within the base path', async () => {
+      window.MASTRA_STUDIO_BASE_PATH = '/studio/v1';
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      const originalClipboard = navigator.clipboard;
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+
+      try {
+        renderShell();
+        const shareButton = await screen.findByTestId('agent-entity-header-share');
+        await act(async () => {
+          fireEvent.click(shareButton);
+          await Promise.resolve();
+        });
+
+        await waitFor(() =>
+          expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/studio/v1/agents/agent-1/session`),
+        );
+      } finally {
+        Object.defineProperty(navigator, 'clipboard', { configurable: true, value: originalClipboard });
+      }
+    });
+  });
+
   it('renders the header without the (removed) memory launcher', async () => {
     renderShell();
 
@@ -104,7 +131,9 @@ describe('AgentChatShell', () => {
     await screen.findByTestId('agent-entity-header-share');
 
     // OM/messages fetching moved into the left memory card; the shell must not fire them.
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
     expect(onOM).not.toHaveBeenCalled();
     expect(onMessages).not.toHaveBeenCalled();
     expect(screen.queryByRole('checkbox', { name: 'Close memory panel' })).toBeNull();

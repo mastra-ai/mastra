@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { useSSOLogin } from '../hooks';
 import type { LoginConfig, SSOConfig } from '../types';
+import { withStudioBasePath } from '@/lib/studio-base-path';
 
 export type LoginButtonProps = {
   config: LoginConfig;
@@ -66,7 +67,7 @@ export function LoginButton({ config, redirectUri, className, loginUrl = '/login
 
   // For credentials login - redirect to login page
   const handleCredentialsLogin = () => {
-    const url = new URL(loginUrl, window.location.origin);
+    const url = new URL(withStudioBasePath(loginUrl), window.location.origin);
     if (redirectUri) {
       url.searchParams.set('redirect', redirectUri);
     }

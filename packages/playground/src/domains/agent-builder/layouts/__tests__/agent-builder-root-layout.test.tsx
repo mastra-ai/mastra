@@ -1,17 +1,13 @@
 import type { BuilderSettingsResponse } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { AgentBuilderRootLayout } from '../agent-builder-root-layout';
 import type { AuthCapabilities } from '@/domains/auth/types';
 import { server } from '@/test/msw-server';
-
-vi.mock('@/lib/link', () => ({
-  Link: ({ children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => <a {...props}>{children}</a>,
-}));
 
 const BASE_URL = 'http://localhost:4111';
 
@@ -31,6 +27,12 @@ const authenticatedCapabilities = {
 const authDisabledCapabilities = {
   enabled: false,
   login: { type: 'credentials' as const },
+} satisfies AuthCapabilities;
+
+const authenticatedWithoutBuilderAccess = {
+  ...authenticatedCapabilities,
+  capabilities: { ...authenticatedCapabilities.capabilities, rbac: true },
+  access: { roles: [], permissions: [] },
 } satisfies AuthCapabilities;
 
 const builderFullySetUp: BuilderSettingsResponse = {
@@ -57,7 +59,7 @@ function builderHandler(settings: BuilderSettingsResponse | { error: true }) {
   });
 }
 
-function renderAgentBuilderRoute(initialEntry: string) {
+function renderAgentBuilderRoute(initialEntry: string, basename?: string) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -70,6 +72,10 @@ function renderAgentBuilderRoute(initialEntry: string) {
       {
         path: '/login',
         element: <div>Login page</div>,
+      },
+      {
+        path: '/agents',
+        element: <div>Agents page</div>,
       },
       {
         path: '/agent-builder',
@@ -88,6 +94,7 @@ function renderAgentBuilderRoute(initialEntry: string) {
     ],
     {
       initialEntries: [initialEntry],
+      basename,
     },
   );
 
@@ -118,6 +125,18 @@ describe('AgentBuilderRootLayout', () => {
 
     expect(router.state.location.search).toBe('?redirect=%2Fagent-builder%2Fagents%2Fcreate%3Fdraft%3D1%23details');
     expect(await screen.findByText('Login page')).toBeTruthy();
+  });
+
+  describe('when an authenticated user without Agent Builder access uses a nested Studio base path', () => {
+    it('navigates back to the Studio agents page within the base path', async () => {
+      server.use(authHandler(authenticatedWithoutBuilderAccess));
+
+      const router = renderAgentBuilderRoute('/studio/agent-builder/agents', '/studio');
+      fireEvent.click(await screen.findByRole('link', { name: 'Back to Studio' }));
+
+      await waitFor(() => expect(router.state.location.pathname).toBe('/studio/agents'));
+      expect(await screen.findByText('Agents page')).toBeTruthy();
+    });
   });
 
   it('renders agent-builder children for authenticated users with access', async () => {
