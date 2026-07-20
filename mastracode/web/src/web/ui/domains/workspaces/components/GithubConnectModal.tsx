@@ -14,6 +14,8 @@ interface GithubConnectModalProps {
   status: GithubStatus;
   onFactoryCreated: (factory: Factory) => void;
   onClose: () => void;
+  /** Optional escape hatch to the local folder picker. */
+  onOpenLocal?: () => void;
 }
 
 /**
@@ -25,7 +27,7 @@ interface GithubConnectModalProps {
  *
  * No clone happens here — the repo is materialized into its sandbox on open.
  */
-export function GithubConnectModal({ status, onFactoryCreated, onClose }: GithubConnectModalProps) {
+export function GithubConnectModal({ status, onFactoryCreated, onClose, onOpenLocal }: GithubConnectModalProps) {
   const { baseUrl } = useApiConfig();
   const connected = status.connected;
   const [query, setQuery] = useState('');
@@ -148,6 +150,18 @@ export function GithubConnectModal({ status, onFactoryCreated, onClose }: Github
               </button>
             </div>
           </>
+        )}
+
+        {onOpenLocal && (
+          <div className="mt-4 border-t border-border1 pt-3">
+            <button
+              type="button"
+              className="text-ui-sm text-icon3 underline-offset-2 hover:text-icon6 hover:underline"
+              onClick={onOpenLocal}
+            >
+              Use a local folder instead
+            </button>
+          </div>
         )}
       </div>
     </div>

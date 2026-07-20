@@ -63,7 +63,10 @@ export function ThreadPage() {
           {activeFactory ? (
             <ThreadPageMain />
           ) : (
-            <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />
+            <EmptyFactoryState
+              onConnectGithub={() => overlays.open('github')}
+              onOpenLocal={() => overlays.open('factories')}
+            />
           )}
           <ChatOverlays />
         </ChatSessionBoundary>

@@ -31,7 +31,10 @@ export function NewPage() {
           {activeFactory ? (
             <NewPageContent activeFactory={activeFactory} />
           ) : (
-            <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />
+            <EmptyFactoryState
+              onConnectGithub={() => overlays.open('github')}
+              onOpenLocal={() => overlays.open('factories')}
+            />
           )}
           <ChatOverlays />
         </ChatSessionBoundary>

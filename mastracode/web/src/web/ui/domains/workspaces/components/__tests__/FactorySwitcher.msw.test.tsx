@@ -7,9 +7,11 @@
  */
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { renderWithProviders } from '../../../../../../../e2e/web-ui/render';
+import { server } from '../../../../../../../e2e/web-ui/msw-server';
+import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import { OverlaysProvider, useOverlays } from '../../../../lib/overlays';
 import { ActiveFactoryProvider } from '../../context/ActiveFactoryProvider';
 import type { Factory } from '../../services/factories';
@@ -90,5 +92,21 @@ describe('FactorySwitcher', () => {
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Create factory from local folder' }));
 
     expect(screen.getByTestId('projects-open')).toHaveTextContent('yes');
+  });
+
+  it('when GitHub is enabled, lists Create/connect factory from GitHub above local', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({ enabled: true, connected: false, installations: [] }),
+      ),
+    );
+    seedFactory();
+    renderSwitcher();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Select factory' }));
+
+    const githubItem = await screen.findByRole('menuitem', { name: 'Create/connect factory from GitHub' });
+    const localItem = screen.getByRole('menuitem', { name: 'Create factory from local folder' });
+    expect(githubItem.compareDocumentPosition(localItem) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

@@ -1,6 +1,6 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
@@ -41,11 +41,23 @@ function renderOverlays() {
   );
 }
 
+function stubGithubStatus(body: Record<string, unknown>, options?: { neverResolve?: boolean }) {
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/github/status`, async () => {
+      if (options?.neverResolve) {
+        await delay('infinite');
+      }
+      return HttpResponse.json(body);
+    }),
+  );
+}
+
 beforeEach(useOverlayControllerHandlers);
 afterEach(() => localStorage.clear());
 
 describe('ChatOverlays', () => {
   it('given a project, when contextual overlays are opened, then it mounts settings, shortcuts, and projects', async () => {
+    stubGithubStatus({ enabled: false, connected: false, installations: [] });
     localStorage.setItem('mastracode-factories', JSON.stringify([project]));
     localStorage.setItem('mastracode-active-factory', project.id);
     const user = userEvent.setup();
@@ -61,12 +73,42 @@ describe('ChatOverlays', () => {
     expect(await screen.findByRole('dialog', { name: 'Create factory' })).toBeInTheDocument();
   });
 
-  it('forces first-run factory setup after backend hydration confirms there are no factories', async () => {
+  it('first-run with GitHub available opens Connect GitHub, not the local factory dialog', async () => {
+    stubGithubStatus({ enabled: true, connected: false, installations: [] });
     renderOverlays();
+
+    expect(await screen.findByRole('dialog', { name: 'Connect GitHub' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Create factory' })).not.toBeInTheDocument();
+  });
+
+  it('first-run with authRequired opens Connect GitHub', async () => {
+    stubGithubStatus({ enabled: false, connected: false, installations: [], authRequired: true });
+    renderOverlays();
+
+    expect(await screen.findByRole('dialog', { name: 'Connect GitHub' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Create factory' })).not.toBeInTheDocument();
+  });
+
+  it('first-run with GitHub disabled opens the local factory dialog after hydration', async () => {
+    stubGithubStatus({ enabled: false, connected: false, installations: [] });
+    renderOverlays();
+
     expect(await screen.findByRole('dialog', { name: 'Create factory' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Connect GitHub' })).not.toBeInTheDocument();
+  });
+
+  it('first-run while GitHub status is pending mounts neither forced dialog', async () => {
+    stubGithubStatus({ enabled: true, connected: false, installations: [] }, { neverResolve: true });
+    renderOverlays();
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Connect GitHub' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('dialog', { name: 'Create factory' })).not.toBeInTheDocument();
+    });
   });
 
   it('hydrates a source-control repository before deciding whether to show first-run setup', async () => {
+    stubGithubStatus({ enabled: true, connected: false, installations: [] });
     server.use(
       http.get(`${TEST_BASE_URL}/web/github/repositories`, () =>
         HttpResponse.json([
@@ -89,5 +131,17 @@ describe('ChatOverlays', () => {
 
     await waitFor(() => expect(localStorage.getItem('mastracode-factories')).toContain('github-project-1'));
     expect(screen.queryByRole('dialog', { name: 'Create factory' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Connect GitHub' })).not.toBeInTheDocument();
+  });
+
+  it('escape hatch from first-run GitHub opens the local factory dialog', async () => {
+    stubGithubStatus({ enabled: true, connected: false, installations: [] });
+    renderOverlays();
+
+    expect(await screen.findByRole('dialog', { name: 'Connect GitHub' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Use a local folder instead' }));
+
+    expect(await screen.findByRole('dialog', { name: 'Create factory' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Connect GitHub' })).not.toBeInTheDocument();
   });
 });

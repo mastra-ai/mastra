@@ -49,7 +49,10 @@ export function FactoryPageShell({ title, description, children }: FactoryPageSh
           </Notice>
         )
       ) : (
-        <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />
+        <EmptyFactoryState
+          onConnectGithub={() => overlays.open('github')}
+          onOpenLocal={() => overlays.open('factories')}
+        />
       )}
     </PageLayout>
   );

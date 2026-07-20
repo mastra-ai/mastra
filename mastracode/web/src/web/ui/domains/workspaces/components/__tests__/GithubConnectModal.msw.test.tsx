@@ -51,6 +51,7 @@ function renderModal(
   onFactoryCreated = vi.fn<(project: Factory) => void>(),
   client?: Parameters<typeof renderWithProviders>[1],
   status: GithubStatus = connectedStatus,
+  onOpenLocal?: () => void,
 ) {
   return {
     onFactoryCreated,
@@ -59,6 +60,7 @@ function renderModal(
         status,
         onFactoryCreated,
         onClose: vi.fn(),
+        onOpenLocal,
       }),
       client,
     ),
@@ -242,5 +244,13 @@ describe('GithubConnectModal', () => {
 
     expect(await screen.findByText(/installation may not have access/i)).toBeInTheDocument();
     expect(screen.getByText(/github.com\/settings\/installations/i)).toBeInTheDocument();
+  });
+
+  it('invokes onOpenLocal when Use a local folder instead is clicked', async () => {
+    const onOpenLocal = vi.fn();
+    renderModal(undefined, undefined, connectedStatus, onOpenLocal);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Use a local folder instead' }));
+    expect(onOpenLocal).toHaveBeenCalledTimes(1);
   });
 });

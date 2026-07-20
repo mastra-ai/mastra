@@ -44,16 +44,16 @@ export function FactorySwitcher() {
           </DropdownMenu.Item>
         ))}
         {factories.length > 0 && <DropdownMenu.Separator />}
-        <DropdownMenu.Item onSelect={() => overlays.open('factories')}>
-          <FolderOpen />
-          <span>Create factory from local folder</span>
-        </DropdownMenu.Item>
         {githubEnabled && (
           <DropdownMenu.Item onSelect={() => overlays.open('github')}>
             <GithubIcon />
             <span>Create/connect factory from GitHub</span>
           </DropdownMenu.Item>
         )}
+        <DropdownMenu.Item onSelect={() => overlays.open('factories')}>
+          <FolderOpen />
+          <span>Create factory from local folder</span>
+        </DropdownMenu.Item>
       </DropdownMenu.Content>
     </DropdownMenu>
   );
