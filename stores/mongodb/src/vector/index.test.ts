@@ -730,4 +730,32 @@ describe('MongoDBVector filterFields (#18587)', () => {
       expect(aggregate.mock.calls[1][0][0].$vectorSearch.filter).toEqual({ _id: { $in: ['a'] } });
     });
   });
+
+  describe('bring-your-own collection', () => {
+    const opsCol = 'ops_txns';
+    const idxName = 'txn_precedent';
+    const searchIdx = 'txn_vec_idx';
+
+    beforeAll(async () => {
+      const col = vectorDB['db'].collection(opsCol);
+      await col.insertMany([
+        { _id: 'a', embedding: [0.1, 0.1, 0.1, 0.1], amount: 100, lane: 'clean' },
+        { _id: 'b', embedding: [0.9, 0.9, 0.9, 0.9], amount: 5000, lane: 'fraud' },
+      ]);
+      await vectorDB.createIndex({
+        indexName: idxName,
+        dimension: 4,
+        collectionName: opsCol,
+        searchIndexName: searchIdx,
+      });
+      await vectorDB.waitForIndexReady({ indexName: idxName, timeoutMs: 60000 });
+    });
+
+    it('creates the vector index on the operational collection, not a managed one', async () => {
+      const idxs = await vectorDB['db'].collection(opsCol).listSearchIndexes().toArray();
+      expect(idxs.some((i: any) => i.name === searchIdx)).toBe(true);
+      const managedExists = await vectorDB['db'].listCollections({ name: idxName }).hasNext();
+      expect(managedExists).toBe(false);
+    });
+  });
 });

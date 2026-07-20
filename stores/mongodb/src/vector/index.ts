@@ -35,6 +35,12 @@ export interface MongoDBQueryVectorParams extends QueryVectorParams<MongoDBVecto
    * See: https://www.mongodb.com/docs/atlas/atlas-vector-search/vector-search-stage/
    */
   numCandidates?: number;
+  /**
+   * `'field'` (default) projects the managed `metadata`/`document` fields.
+   * `'document'` returns the full source document as `metadata` — use for
+   * bring-your-own operational collections whose documents have their own shape.
+   */
+  metadataMode?: 'field' | 'document';
 }
 
 export interface MongoDBCreateIndexParams extends CreateIndexParams {
@@ -49,6 +55,17 @@ export interface MongoDBCreateIndexParams extends CreateIndexParams {
    * @see https://www.mongodb.com/docs/atlas/atlas-vector-search/vector-search-type/
    */
   filterFields?: string[];
+  /**
+   * Store the vectors on an existing (operational) collection instead of a
+   * managed collection named after the index. Defaults to `indexName`.
+   * The collection is never created or dropped by this store when set.
+   */
+  collectionName?: string;
+  /**
+   * Name for the Atlas vectorSearch index created on the collection.
+   * Defaults to `${indexName}_vector_index`.
+   */
+  searchIndexName?: string;
 }
 
 export interface MongoDBVectorConfig {
@@ -97,6 +114,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * `_id` is excluded because it is materialised separately by the fallback path.
    */
   private declaredFilterPaths: Map<string, Set<string>> = new Map();
+  /** Per-index target: where the data lives and what the Atlas index is called. */
+  private indexTargets: Map<string, { collectionName: string; searchIndexName: string }> = new Map();
   /**
    * MongoDB query operators supported inside `$vectorSearch.filter`. Intentionally
    * conservative: filters using any operator outside this set fall back to the
@@ -139,6 +158,16 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     this.db = this.client.db(dbName);
     this.collections = new Map();
     this.embeddingFieldName = embeddingFieldPath ?? 'embedding';
+  }
+
+  /** Resolve the collection + vector-index names for an index, honoring BYO overrides. */
+  private resolveIndexTarget(indexName: string): { collectionName: string; searchIndexName: string } {
+    return (
+      this.indexTargets.get(indexName) ?? {
+        collectionName: indexName,
+        searchIndexName: `${indexName}_vector_index`,
+      }
+    );
   }
 
   // Public methods
@@ -188,6 +217,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     dimension,
     metric = 'cosine',
     filterFields,
+    collectionName,
+    searchIndexName,
   }: MongoDBCreateIndexParams): Promise<void> {
     let mongoMetric;
     try {
@@ -215,16 +246,28 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       );
     }
 
+    const targetCollection = collectionName ?? indexName;
+    const targetSearchIndex = searchIndexName ?? `${indexName}_vector_index`;
+    const isByo = collectionName !== undefined;
+
     let collection;
     try {
       // Check if collection exists
-      const collectionExists = await this.db.listCollections({ name: indexName }).hasNext();
+      const collectionExists = await this.db.listCollections({ name: targetCollection }).hasNext();
       if (!collectionExists) {
-        await this.db.createCollection(indexName);
+        if (isByo) {
+          throw new MastraError({
+            id: createVectorErrorId('MONGODB', 'CREATE_INDEX', 'INVALID_ARGS'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            text: `collectionName "${targetCollection}" does not exist. Create and populate the collection before indexing it.`,
+          });
+        }
+        await this.db.createCollection(targetCollection);
       }
-      collection = await this.getCollection(indexName);
+      collection = await this.getCollection(targetCollection);
 
-      const indexNameInternal = `${indexName}_vector_index`;
+      const indexNameInternal = targetSearchIndex;
 
       const embeddingField = this.embeddingFieldName;
       const numDimensions = dimension;
@@ -275,6 +318,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       // getDeclaredFilterPaths().
       if (vectorIndexCreated) {
         this.declaredFilterPaths.set(indexName, new Set([this.documentFieldName, ...declaredMetadataPaths]));
+        this.indexTargets.set(indexName, { collectionName: targetCollection, searchIndexName: targetSearchIndex });
       }
 
       await this.createSearchIndexIgnoringExisting(collection, {
@@ -283,7 +327,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
             dynamic: true,
           },
         },
-        name: `${indexName}_search_index`,
+        name: `${targetCollection}_search_index`,
         type: 'search',
       });
     } catch (error: any) {
