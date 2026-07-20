@@ -15,7 +15,8 @@ import { emitAudit } from '../audit/audit';
 import { ensureWebAuthUser, webAuthTenant } from '../auth';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base';
 import { clampMetricsWindow, computeFactoryMetrics } from './metrics';
-import { getFactoryStore } from '../runtime-config';
+import { getFactoryStorage } from '../runtime-config';
+import { getQueueHealthStorage } from '../storage/domains';
 import type { WorkItemRow } from '../storage/domains/work-items/base';
 import { thresholdsOrDefault } from '../storage/domains/queue-health/base';
 import type { WorkItemPriorState } from './store';
@@ -174,9 +175,9 @@ export function buildFactoryRoutes(storage?: SourceControlStorageHandle): ApiRou
       handler: async c => {
         const resolved = await resolveGithubRepository(loose(c), storage);
         if ('response' in resolved) return resolved.response;
-        const store = getFactoryStore();
-        await store.ensureReady('queue-health');
-        const stored = await store.queueHealth.getConfig(resolved.orgId, resolved.projectId);
+        const factoryStorage = getFactoryStorage();
+        await factoryStorage.ensureDomainReady('queue-health');
+        const stored = await getQueueHealthStorage().getConfig(resolved.orgId, resolved.projectId);
         // Validate at the read choke point: `getConfig` round-trips a stored
         // JSONB row, and only `saveConfig` validates on write — a corrupted or
         // hand-edited row (empty / non-ascending) would otherwise flow to the

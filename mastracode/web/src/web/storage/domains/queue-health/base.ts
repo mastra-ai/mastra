@@ -11,7 +11,8 @@
  * are representable for fast automated flows.
  */
 
-import type { FactoryStorageContext, FactoryStorageDomain } from '../../domain';
+import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
+import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
 
 export interface QueueHealthConfig {
   /** Ordered-ascending age boundaries in seconds, e.g. `[14400, 86400, 259200]`. */
@@ -40,34 +41,90 @@ export function assertValidThresholds(config: QueueHealthConfig): void {
   }
 }
 
+/** Validate untrusted JSON into a `QueueHealthConfig`, or `null` when invalid. */
+export function parseQueueHealthConfig(body: unknown): QueueHealthConfig | null {
+  if (typeof body !== 'object' || body === null) return null;
+  const config = body as { thresholdsSeconds?: unknown };
+  if (!Array.isArray(config.thresholdsSeconds)) return null;
+  try {
+    assertValidThresholds(config as QueueHealthConfig);
+  } catch {
+    return null;
+  }
+  return { thresholdsSeconds: [...(config as QueueHealthConfig).thresholdsSeconds] };
+}
+
 /**
  * Return `config.thresholdsSeconds` when valid, else the default. Validation
  * lives at the `saveConfig` write boundary, but `getConfig` round-trips a
- * stored JSONB row — a corrupted or hand-edited row (empty / non-ascending)
+ * stored JSON row — a corrupted or hand-edited row (empty / non-ascending)
  * would otherwise reach the chart and invert bucket colors, so the read route
  * re-validates and falls back.
  */
 export function thresholdsOrDefault(config: QueueHealthConfig): number[] {
-  try {
-    assertValidThresholds(config);
-    return config.thresholdsSeconds;
-  } catch {
-    return DEFAULT_QUEUE_HEALTH_CONFIG.thresholdsSeconds;
-  }
+  return parseQueueHealthConfig(config)?.thresholdsSeconds ?? DEFAULT_QUEUE_HEALTH_CONFIG.thresholdsSeconds;
 }
 
-/**
- * Abstract queue-health settings storage. Backends own their DDL in `init()`;
- * query methods are the typed surface the health threshold route consumes.
- */
-export abstract class QueueHealthStorage implements FactoryStorageDomain {
-  readonly name = 'queue-health';
+export const QUEUE_HEALTH_SETTINGS_SCHEMA: CollectionSchema = {
+  name: 'queue_health_settings',
+  columns: {
+    id: { type: 'uuid-pk' },
+    org_id: { type: 'text' },
+    github_project_id: { type: 'text' },
+    config: { type: 'json' },
+    created_at: { type: 'timestamp' },
+    updated_at: { type: 'timestamp' },
+  },
+  uniqueIndexes: [
+    { name: 'queue_health_settings_org_project_unique', columns: ['org_id', 'github_project_id'] },
+  ],
+};
 
-  abstract init(ctx: FactoryStorageContext): Promise<void>;
+/**
+ * Queue-health settings storage, written once against the generic
+ * `FactoryStorageOps` surface — works on any `FactoryStorage` backend.
+ */
+export class QueueHealthStorage extends FactoryStorageDomain {
+  constructor() {
+    super('queue-health');
+  }
+
+  async init(): Promise<void> {
+    await this.ensureCollections([QUEUE_HEALTH_SETTINGS_SCHEMA]);
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.ops.deleteMany('queue_health_settings', {});
+  }
+
+  get #db(): FactoryStorageOps {
+    return this.ops;
+  }
 
   /** Read the project's queue-health config, falling back to {@link DEFAULT_QUEUE_HEALTH_CONFIG}. */
-  abstract getConfig(orgId: string, githubProjectId: string): Promise<QueueHealthConfig>;
+  async getConfig(orgId: string, githubProjectId: string): Promise<QueueHealthConfig> {
+    const row = await this.#db.findOne<{ config: unknown }>('queue_health_settings', {
+      org_id: orgId,
+      github_project_id: githubProjectId,
+    });
+    return structuredClone(parseQueueHealthConfig(row?.config) ?? DEFAULT_QUEUE_HEALTH_CONFIG);
+  }
 
-  /** Upsert the project's queue-health config. */
-  abstract saveConfig(orgId: string, githubProjectId: string, config: QueueHealthConfig): Promise<void>;
+  /** Upsert the project's queue-health config (`created_at` is preserved on update). */
+  async saveConfig(orgId: string, githubProjectId: string, config: QueueHealthConfig): Promise<void> {
+    assertValidThresholds(config);
+    const where = { org_id: orgId, github_project_id: githubProjectId };
+    const updateExisting = () =>
+      this.#db.updateAtomic('queue_health_settings', where, () => ({ config, updated_at: new Date() }));
+    if (await updateExisting()) return;
+
+    const now = new Date();
+    try {
+      await this.#db.insertOne('queue_health_settings', { ...where, config, created_at: now, updated_at: now });
+    } catch (error) {
+      if (!(error instanceof UniqueViolationError)) throw error;
+      // Lost the insert race — update the winning row under the backend's serialized write primitive.
+      if (!(await updateExisting())) throw error;
+    }
+  }
 }

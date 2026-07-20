@@ -387,8 +387,7 @@ describe('GET /web/factory/repositories/:id/health/thresholds', () => {
       (await json('GET', `/web/factory/repositories/${PROJECT_ID}/health/thresholds`, undefined, null)).status,
     ).toBe(401);
 
-    githubStorage.projects = [];
-    seedFactory('other-org');
+    await seedProject('other-org');
     expect((await json('GET', `/web/factory/repositories/${PROJECT_ID}/health/thresholds`)).status).toBe(404);
   });
 
