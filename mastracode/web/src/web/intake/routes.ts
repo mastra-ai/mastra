@@ -69,7 +69,7 @@ export function buildIntakeRoutes(): ApiRoute[] {
           action: 'factory.intake.config_updated',
           targets: [{ type: 'intake_config', id: tenant.orgId }],
           metadata: {
-            github: { enabled: config.github.enabled, projects: config.github.projectIds?.length ?? null },
+            github: { enabled: config.github.enabled, repositories: config.github.repositoryIds?.length ?? null },
             linear: { enabled: config.linear.enabled, projects: config.linear.projectIds?.length ?? null },
           },
         });

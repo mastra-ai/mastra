@@ -115,7 +115,6 @@ describe('DirectoryBrowser', () => {
       expect(onPick).toHaveBeenCalledWith('/projects', 'projects');
     });
   });
-
   describe('when listing fails', () => {
     it('shows an error', async () => {
       server.use(http.get(FS_URL, () => HttpResponse.json({ error: 'nope' }, { status: 500 })));

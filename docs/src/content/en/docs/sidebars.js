@@ -388,6 +388,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'browser/firecrawl',
+              label: 'Firecrawl',
+            },
+            {
+              type: 'doc',
               id: 'browser/recording',
               label: 'Recording',
               customProps: {
@@ -1024,6 +1029,14 @@ const sidebars = {
           type: 'doc',
           id: 'mastra-platform/environments',
           label: 'Environments',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/regions',
+          label: 'Regions',
           customProps: {
             tags: ['new'],
           },

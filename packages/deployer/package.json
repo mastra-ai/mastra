@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer",
-  "version": "1.52.0-alpha.5",
+  "version": "1.52.0-alpha.7",
   "description": "",
   "type": "module",
   "files": [
@@ -125,7 +125,7 @@
   },
   "devDependencies": {
     "@hono/node-server": "^1.19.14",
-    "@hono/standard-validator": "^0.2.2",
+    "@hono/standard-validator": "^0.3.0",
     "@hono/swagger-ui": "^0.5.3",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",

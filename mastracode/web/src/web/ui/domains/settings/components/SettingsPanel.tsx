@@ -17,13 +17,13 @@ import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { CustomProvidersSection } from './CustomProvidersSection';
 import { IntakeSection } from './IntakeSection';
 import { ModelPacksSection } from './ModelPacksSection';
-import { ProjectSetupSection } from './ProjectSetupSection';
-import { ProjectsSection } from './ProjectsSection';
+import { FactorySetupSection } from './FactorySetupSection';
+import { FactoriesSection } from './FactoriesSection';
 import { OMSection } from './OMSection';
 import { ProvidersSection } from './ProvidersSection';
 import { BehaviorTab, GeneralTab, ModelTab } from './SettingsPanel.parts';
 
-type Tab = 'general' | 'projects' | 'model' | 'packs' | 'memory' | 'behavior' | 'providers' | 'custom-providers';
+type Tab = 'general' | 'factories' | 'model' | 'packs' | 'memory' | 'behavior' | 'providers' | 'custom-providers';
 
 interface SettingsPanelProps {
   onClose: () => void;
@@ -31,7 +31,7 @@ interface SettingsPanelProps {
 
 const TABS: { id: Tab; label: string; icon: LucideIcon }[] = [
   { id: 'general', label: 'General', icon: Palette },
-  { id: 'projects', label: 'Projects', icon: FolderKanban },
+  { id: 'factories', label: 'Factories', icon: FolderKanban },
   { id: 'model', label: 'Model', icon: Search },
   { id: 'packs', label: 'Packs', icon: Layers },
   { id: 'memory', label: 'Memory', icon: Brain },
@@ -91,11 +91,11 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
           <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-5">
             <TabContent value="general">
               <GeneralTab theme={theme} onThemeChange={setTheme} />
-              <ProjectSetupSection />
+              <FactorySetupSection />
               <IntakeSection />
             </TabContent>
-            <TabContent value="projects">
-              <ProjectsSection />
+            <TabContent value="factories">
+              <FactoriesSection />
             </TabContent>
             <TabContent value="model">
               <ModelTab settings={settings} onBehaviorChange={onBehaviorChange} />

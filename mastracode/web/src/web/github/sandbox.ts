@@ -1,5 +1,5 @@
 /**
- * Repo materialization for GitHub-backed projects.
+ * Repo materialization for GitHub-backed repositories.
  *
  * A GitHub repo is never cloned onto the server host. Instead each project gets
  * its own isolated sandbox (provisioned by the fleet in `../sandbox/fleet`) and
