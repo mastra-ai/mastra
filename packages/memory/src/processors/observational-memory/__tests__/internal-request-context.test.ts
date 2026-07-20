@@ -291,7 +291,16 @@ describe('schema-backed extraction does not leak the temporary observer identity
       },
     });
 
-    await reflector.call('existing observations', undefined, undefined, undefined, undefined, undefined, 0, parentRequestContext);
+    await reflector.call(
+      'existing observations',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      0,
+      parentRequestContext,
+    );
 
     expect(extractionRequestContext).toBeDefined();
     expect(extractionRequestContext).not.toBe(parentRequestContext);
