@@ -1347,6 +1347,57 @@ describe('MongoDBVector filterFields (#18587)', () => {
       expect(vectorSearch.numCandidates).toBe(40);
     });
 
+    // FIX (round5-1): a large topK (topK*4 > 10000) must not make the branch limit exceed the
+    // 10000-capped numCandidates. Cap perBranch at 10000 so numCandidates >= limit still holds.
+    it('round5: hybridQuery caps the branch limit at 10000 for large topK (topK:3000)', async () => {
+      const v = makeVector();
+      const makeCursor = (docs: any[]) => ({ toArray: async () => docs });
+      const aggregate = vi.fn().mockReturnValue(makeCursor([]));
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ aggregate });
+      vi.spyOn(v as any, 'assertRankFusionSupported').mockResolvedValue(undefined);
+      vi.spyOn(v as any, 'resolveIndexTarget').mockResolvedValue({
+        collectionName: 'c',
+        searchIndexName: 'c_vec',
+        isByo: false,
+        textSearchIndexName: 'c_search',
+      });
+
+      await v.hybridQuery({ indexName: 'idx', queryVector: [0.1, 0.2], query: 'q', paths: ['note'], topK: 3000 });
+
+      const vectorSearch = aggregate.mock.calls[0][0][0].$rankFusion.input.pipelines.vector[0].$vectorSearch;
+      // topK*4 = 12000 would exceed the 10000 numCandidates cap; both are clamped to 10000.
+      expect(vectorSearch.limit).toBe(10000);
+      expect(vectorSearch.numCandidates).toBe(10000);
+      expect(vectorSearch.numCandidates).toBeGreaterThanOrEqual(vectorSearch.limit);
+    });
+
+    // FIX (round5-2): recreating createSearchIndex for the SAME logical index with different
+    // fields must actually change the mapping. createSearchIndex is a no-op on IndexAlreadyExists,
+    // so the code must updateSearchIndex in place when the index already exists.
+    it('round5: createSearchIndex updates the mapping in place when the index already exists', async () => {
+      const v = makeVector();
+      // First create succeeds; second call hits IndexAlreadyExists (returns false internally).
+      const createSearchIndex = vi.fn().mockRejectedValue({ codeName: 'IndexAlreadyExists' });
+      const updateSearchIndex = vi.fn().mockResolvedValue(undefined);
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex, updateSearchIndex });
+      vi.spyOn(v as any, 'resolveIndexTarget').mockResolvedValue({
+        collectionName: 'ops',
+        searchIndexName: 'ops_vec',
+        isByo: true,
+      });
+      vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
+
+      await v.createSearchIndex({ indexName: 'idx', fields: ['note', 'title'] });
+
+      // Since the index already existed, the mapping is updated in place (not silently skipped).
+      const expectedName = 'ops_idx_search_fields_index';
+      expect(updateSearchIndex).toHaveBeenCalledTimes(1);
+      expect(updateSearchIndex.mock.calls[0][0]).toBe(expectedName);
+      const def = updateSearchIndex.mock.calls[0][1];
+      expect(def.mappings.dynamic).toBe(false);
+      expect(Object.keys(def.mappings.fields).sort()).toEqual(['note', 'title']);
+    });
+
     // FIX 7: document-mode filters operate on ROOT fields (no metadata. prefix); field mode
     // keeps prefixing for back-compat.
     it('FIX7: transformMetadataFilter does NOT prefix bare fields in document mode', () => {

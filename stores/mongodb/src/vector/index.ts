@@ -685,7 +685,14 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
             },
           }
         : { mappings: { dynamic: true } };
-      await this.createSearchIndexIgnoringExisting(collection, { definition, name, type: 'search' });
+      const created = await this.createSearchIndexIgnoringExisting(collection, { definition, name, type: 'search' });
+      // If the index already existed, its definition is NOT updated by createSearchIndex
+      // (IndexAlreadyExists is a no-op). Recreating the same logical index with a different
+      // `fields` mapping must actually change the mapping, so update it in place. (Idempotent:
+      // updating to the identical definition is a cheap no-op server-side.)
+      if (!created) {
+        await collection.updateSearchIndex(name, definition);
+      }
       // Persist a COMPLETE target (FIX 1): merge the resolved collectionName/searchIndexName/isByo
       // with the new textSearchIndexName so the registry entry is never left partial.
       await this.writeRegistryEntry(indexName, {
@@ -799,7 +806,10 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       const collection = await this.getCollection(collectionName, true);
       const metadataFilter = this.transformMetadataFilter(this.transformFilter(filter), metadataMode);
       const hasMetadataFilter = Object.keys(metadataFilter).length > 0;
-      const perBranch = Math.max(topK * 4, 20);
+      // The branch limit is also capped at 10000: $vectorSearch requires numCandidates >= limit,
+      // and numCandidates is itself capped at 10000, so perBranch must not exceed it or a large
+      // topK (> 2500, where topK*4 > 10000) would make numCandidates < limit and error.
+      const perBranch = Math.min(10000, Math.max(topK * 4, 20));
       // numCandidates must be >= the branch limit (perBranch), or $vectorSearch errors
       // server-side. Floor at perBranch (not topK), keep the 10000 cap. (FIX 3)
       const candidates = Math.min(10000, Math.max(perBranch, numCandidates ?? topK * 20));
