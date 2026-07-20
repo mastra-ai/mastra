@@ -202,4 +202,4 @@ tokens:
 
   # "the X, not the Y" — tagline gloss after a colon
   # "Implicit positioning: the reference shelf, not the opinion column."
-  - ": the [^,]+, not the [^.]+"
+  - ': the [^,]+, not the [^.]+'
