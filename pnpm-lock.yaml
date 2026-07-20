@@ -1401,9 +1401,6 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@types/babel__core':
-        specifier: ^7.20.5
-        version: 7.20.5
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -4295,9 +4292,6 @@ importers:
       '@openrouter/ai-sdk-provider-v6':
         specifier: npm:@openrouter/ai-sdk-provider@2.10.0
         version: '@openrouter/ai-sdk-provider@2.10.0(zod@4.4.3)'
-      '@types/babel__core':
-        specifier: ^7.20.5
-        version: 7.20.5
       '@types/json-schema':
         specifier: ^7.0.15
         version: 7.0.15
@@ -4461,9 +4455,6 @@ importers:
       '@sindresorhus/slugify':
         specifier: ^2.2.1
         version: 2.2.1
-      '@types/babel__traverse':
-        specifier: ^7.28.0
-        version: 7.28.0
       empathic:
         specifier: ^2.0.0
         version: 2.0.0
@@ -4534,9 +4525,6 @@ importers:
       '@mastra/mcp':
         specifier: workspace:^
         version: link:../mcp
-      '@types/babel__core':
-        specifier: ^7.20.5
-        version: 7.20.5
       '@types/fs-extra':
         specifier: ^11.0.4
         version: 11.0.4
@@ -8613,9 +8601,6 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@types/babel__generator':
-        specifier: ^7.6.8
-        version: 7.27.0
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15

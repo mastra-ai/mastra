@@ -927,7 +927,6 @@
     "@openrouter/ai-sdk-provider": "^0.7.5",
     "@openrouter/ai-sdk-provider-v5": "npm:@openrouter/ai-sdk-provider@1.5.4",
     "@openrouter/ai-sdk-provider-v6": "npm:@openrouter/ai-sdk-provider@2.10.0",
-    "@types/babel__core": "^7.20.5",
     "@types/json-schema": "^7.0.15",
     "@types/node": "22.20.1",
     "@types/picomatch": "4.0.2",
