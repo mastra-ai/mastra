@@ -12,6 +12,8 @@ export type SankeyProps = {
   onColumnOrderChange?: (columnOrder: Array<string>) => void;
   visibleColumnIds?: Array<string>;
   onVisibleColumnIdsChange?: (columnIds: Array<string>) => void;
+  getRecordWeight?: (record: SankeyChartRecord) => number;
+  getColumnHue?: (column: SankeyChartColumn) => number;
 };
 
 export type SankeyControlColumn = SankeyChartColumn & {
@@ -41,6 +43,8 @@ export function Sankey({
   onColumnOrderChange,
   visibleColumnIds,
   onVisibleColumnIdsChange,
+  getRecordWeight,
+  getColumnHue,
 }: SankeyProps) {
   const columnIds = columns.map(column => column.id);
   const [internalOrder, setInternalOrder] = useState(columnIds);
@@ -48,8 +52,14 @@ export function Sankey({
   const orderedColumns = orderColumns(columns, columnOrder ?? internalOrder);
   const visibleIds = new Set(visibleColumnIds ?? internalVisibleIds);
   const enabledColumns = orderedColumns.filter(column => visibleIds.has(column.id));
-  const graph = buildSankeyChartGraph(data, enabledColumns);
-  const hueMap = buildSankeyHueMap(graph.nodes.map(node => String(node.value)));
+  const graph = buildSankeyChartGraph(data, enabledColumns, getRecordWeight);
+  const defaultHueMap = buildSankeyHueMap(graph.nodes.map(node => String(node.value)));
+  const hueMap = Object.fromEntries(
+    graph.nodes.map(node => [
+      String(node.value),
+      getColumnHue?.(node.column) ?? defaultHueMap[String(node.value)] ?? 0,
+    ]),
+  );
 
   const setVisibleColumns = (nextIds: Array<string>) => {
     if (visibleColumnIds === undefined) setInternalVisibleIds(nextIds);

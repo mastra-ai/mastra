@@ -6,11 +6,12 @@ import { useApiConfig } from '../../../../../shared/api/config';
 import { useWebAuth } from '../../../../../shared/hooks/useWebAuth';
 import { SkeletonRows } from '../../../ui';
 import { userSessionResourceId } from '../../auth/services/auth';
-import { useActiveProjectContext } from '../../workspaces/context/ActiveProjectProvider';
-import { findUserSessionByThreadId } from '../../workspaces/services/projects';
+import { useActiveFactoryContext } from '../../workspaces/context/ActiveFactoryProvider';
+import { findUserSessionByThreadId, isGithubFactory } from '../../workspaces/services/factories';
 import { deriveProjectPath } from '../../../../../shared/hooks/useWorkspaces';
 import { useAgentControllerThreadMessages } from '../../../../../shared/hooks/useAgentControllerThreadMessages';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
+import { ChatCommandsProvider } from './ChatCommandsProvider';
 import { ChatModelsProvider } from './ChatModelsProvider';
 import { ChatModesProvider } from './ChatModesProvider';
 import { ChatPermissionsProvider } from './ChatPermissionsProvider';
@@ -36,12 +37,13 @@ export function ChatSessionConfigProvider({
   threadId?: string;
   userScoped?: boolean;
 }) {
-  const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
+  const { activeFactory, resourceId, sessionEnabled } = useActiveFactoryContext();
   const auth = useWebAuth();
   const { baseUrl } = useApiConfig();
-  const projectPath = deriveProjectPath(activeProject);
+  const projectPath = deriveProjectPath(activeFactory);
   const userSession = userScoped && threadId ? findUserSessionByThreadId(threadId) : undefined;
-  const projectSessionEnabled = sessionEnabled && (activeProject?.source !== 'github' || Boolean(projectPath));
+  const githubFactory = activeFactory && isGithubFactory(activeFactory) ? activeFactory : undefined;
+  const projectSessionEnabled = sessionEnabled && (!githubFactory || Boolean(projectPath));
   const value = userScoped
     ? {
         resourceId: userSessionResourceId(auth.data),
@@ -55,8 +57,12 @@ export function ChatSessionConfigProvider({
         resourceId,
         sessionEnabled: projectSessionEnabled,
         projectPath,
+        // Session state consumed server-side: GitHub PR auto-subscription,
+        // the subscribe tools, and agent git-action auditing all gate on
+        // `githubProjectId` being present in session state.
+        projectState: githubFactory ? { githubProjectId: githubFactory.binding.githubProjectId } : undefined,
         baseUrl,
-        kind: activeProject?.source === 'github' ? ('factory' as const) : ('user' as const),
+        kind: githubFactory ? ('factory' as const) : ('user' as const),
         threadBasePath: '/threads' as const,
       };
 
@@ -97,15 +103,15 @@ export function ChatSessionBoundary({
 
   return (
     <ChatTranscriptProvider
-      key={`${resourceId}:${threadId ?? 'draft'}`}
+      key={`${resourceId}:${threadId ?? 'draft'}:${messagesQuery.isPending ? 'loading' : 'ready'}`}
       threadId={threadId}
       initialMessages={messagesQuery.data}
     >
       <ChatModesProvider>
         <ChatModelsProvider>
-          <ChatPermissionsProvider>
+          <ChatCommandsProvider>
             <ChatThreadMessagesContext.Provider value={messages}>{children}</ChatThreadMessagesContext.Provider>
-          </ChatPermissionsProvider>
+          </ChatCommandsProvider>
         </ChatModelsProvider>
       </ChatModesProvider>
     </ChatTranscriptProvider>

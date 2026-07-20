@@ -1,9 +1,9 @@
 /**
  * BDD coverage for the app-used git-operation mutation hooks (worktree/push).
  *
- * Drives the real `postProjectGitOp`-backed services + React Query mutations;
+ * Drives the real `postRepositoryGitOp`-backed services + React Query mutations;
  * only the network is mocked (MSW). Handlers assert the request bodies so the
- * wire contract with `/web/github/projects/:id/*` stays pinned.
+ * wire contract with `/web/github/repositories/:id/*` stays pinned.
  */
 import { act } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -16,7 +16,7 @@ import { useCreateWorktreeMutation, usePushBranchMutation } from '../useGithubGi
 
 const ORIGIN = TEST_BASE_URL;
 const PROJECT = 'ghp_1';
-const PROJECT_URL = `${ORIGIN}/web/github/projects/${PROJECT}`;
+const PROJECT_URL = `${ORIGIN}/web/github/repositories/${PROJECT}`;
 
 describe('git operation mutation hooks', () => {
   it('given a branch and base, when creating a worktree, then it posts them and resolves the worktree result', async () => {

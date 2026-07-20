@@ -1,9 +1,16 @@
-import { useParams } from 'react-router';
+import { useState } from 'react';
+import { useLocation, useParams } from 'react-router';
 
 import { useOverlays } from '../../lib/overlays';
 import { Sidebar } from '../../Sidebar';
 import { ChatLayout } from '../../ui';
-import { EmptyProjectState, useActiveProjectContext } from '../workspaces';
+import { renderedPaths, WorkspaceViewerPanel } from '../workspace-viewer';
+import {
+  activeWorkspacePath,
+  EmptyFactoryState,
+  findUserSessionByThreadId,
+  useActiveFactoryContext,
+} from '../workspaces';
 import { ChatHeader } from './components/ChatHeader';
 import { ChatMessageList } from './components/ChatMessageList';
 import { ChatOverlays } from './components/ChatOverlays';
@@ -11,24 +18,53 @@ import { ComposerPanel } from './components/ComposerPanel';
 import { ChatMessageBoundary, ChatSessionBoundary } from './context/ChatSessionProvider';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 import { useRouteThreadSync } from '../../../../shared/hooks/useRouteThreadSync';
+import { useThreadPageKickoffs } from './hooks/useThreadPageKickoffs';
 
-const threadComposerContainerClass = 'w-full px-3 md:px-5';
+const threadComposerContainerClass = 'w-full p-3 md:p-5';
 const threadComposerInnerClass = 'mx-auto w-full max-w-[80ch]';
 
 export function ThreadPage() {
   const overlays = useOverlays();
-  const { activeProject } = useActiveProjectContext();
+  const { activeFactory } = useActiveFactoryContext();
   const { threadId } = useParams();
+  const location = useLocation();
+  const [workspaceViewerExpanded, setWorkspaceViewerExpanded] = useState(false);
+  const [workspaceViewerVisible, setWorkspaceViewerVisible] = useState(true);
+  const userSessionMatch = threadId ? findUserSessionByThreadId(threadId) : undefined;
+  const activeUserSessionMatch =
+    userSessionMatch && activeFactory?.id === userSessionMatch.factory.id ? userSessionMatch : undefined;
+  const isUserThreadRoute = location.pathname.startsWith('/user/threads/');
+  const workspaceFactory = isUserThreadRoute ? activeUserSessionMatch?.factory : activeFactory;
+  const workspacePath = workspaceFactory
+    ? activeWorkspacePath(workspaceFactory, activeUserSessionMatch?.worktree)
+    : undefined;
 
   return (
     <ChatLayout
       sidebar={<Sidebar />}
       header={<ChatHeader />}
-      sidebarOpen={overlays.isOpen('sidebar')}
-      onSidebarClose={() => overlays.close('sidebar')}
+      rightPanelExpanded={workspaceViewerExpanded}
+      rightPanelAvailable={Boolean(workspacePath)}
+      onRightPanelOpen={() => setWorkspaceViewerVisible(true)}
+      rightPanel={
+        workspacePath && workspaceViewerVisible ? (
+          <WorkspaceViewerPanel
+            workspacePath={workspacePath}
+            renderedPaths={renderedPaths}
+            title="Workspace files"
+            context={workspaceFactory?.name}
+            onExpandedChange={setWorkspaceViewerExpanded}
+            onCollapse={() => setWorkspaceViewerVisible(false)}
+          />
+        ) : undefined
+      }
       main={
         <ChatSessionBoundary threadId={threadId}>
-          {activeProject ? <ThreadPageMain /> : <EmptyProjectState onOpenProjects={() => overlays.open('projects')} />}
+          {activeFactory ? (
+            <ThreadPageMain />
+          ) : (
+            <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />
+          )}
           <ChatOverlays />
         </ChatSessionBoundary>
       }
@@ -61,6 +97,7 @@ function ThreadComposer() {
 
 function ThreadPageContent() {
   useRouteThreadSync();
+  useThreadPageKickoffs();
 
   return <ChatMessageList />;
 }
