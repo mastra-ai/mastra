@@ -1,7 +1,7 @@
 /**
  * BDD coverage for Settings › General › Worktree setup.
  *
- * Drives the real ProjectSetupSection through the fetch/save services and
+ * Drives the real FactorySetupSection through the fetch/save services and
  * React Query; only the network is mocked (MSW). Projects come from
  * localStorage, matching how the workspaces domain stores them.
  */
@@ -13,34 +13,37 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import { ToastProvider } from '../../../../ui';
-import type { ProjectSettings } from '../../../workspaces/services/github';
-import { ProjectSetupSection } from '../ProjectSetupSection';
+import type { RepositorySettings } from '../../../workspaces/services/github';
+import { FactorySetupSection } from '../FactorySetupSection';
 
-const SETTINGS_URL = `${TEST_BASE_URL}/web/github/projects/ghp-1/settings`;
+const SETTINGS_URL = `${TEST_BASE_URL}/web/github/repositories/ghp-1/settings`;
 const FIELD = 'Setup command for mastra';
 
 function seedGithubProject() {
   localStorage.setItem(
-    'mastracode-projects',
+    'mastracode-factories',
     JSON.stringify([
       {
         id: 'project-gh',
         name: 'mastra',
-        source: 'github',
-        githubProjectId: 'ghp-1',
         resourceId: 'resource-gh',
         createdAt: 1,
+        binding: {
+          kind: 'github',
+          githubProjectId: 'ghp-1',
+          worktrees: [],
+        },
       },
     ]),
   );
 }
 
-function useSettingsHandlers(initial: ProjectSettings = { setupCommand: null }) {
-  const saved: ProjectSettings[] = [];
+function useSettingsHandlers(initial: RepositorySettings = { setupCommand: null }) {
+  const saved: RepositorySettings[] = [];
   server.use(
     http.get(SETTINGS_URL, () => HttpResponse.json(initial)),
     http.post(SETTINGS_URL, async ({ request }) => {
-      const next = (await request.json()) as ProjectSettings;
+      const next = (await request.json()) as RepositorySettings;
       saved.push(next);
       return HttpResponse.json(next);
     }),
@@ -51,7 +54,7 @@ function useSettingsHandlers(initial: ProjectSettings = { setupCommand: null }) 
 function renderSection() {
   return renderWithProviders(
     <ToastProvider>
-      <ProjectSetupSection />
+      <FactorySetupSection />
     </ToastProvider>,
   );
 }
@@ -60,7 +63,7 @@ afterEach(() => {
   localStorage.clear();
 });
 
-describe('ProjectSetupSection', () => {
+describe('FactorySetupSection', () => {
   it('given no github projects, when rendered, then the section is hidden', () => {
     renderSection();
     expect(screen.queryByText('Worktree setup')).not.toBeInTheDocument();

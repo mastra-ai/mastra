@@ -38,7 +38,7 @@ overrides:
   typescript: ^6.0.3
   '@types/node': 22.19.15
   cookie: '>=1.1.1 <2'
-  tmp: '>=0.2.6'
+  tmp: '>=0.2.7'
   jsondiffpatch: '>=0.7.3'
   ssri: '>=6.0.2'
   jws: ^4.0.1
@@ -160,7 +160,7 @@ overrides:
   safe-regex-test: npm:@socketregistry/safe-regex-test@^1
   safer-buffer: npm:@socketregistry/safer-buffer@^1
   set-function-length: npm:@socketregistry/set-function-length@^1
-  shell-quote: npm:shell-quote@^1
+  shell-quote: npm:shell-quote@^1.10.0
   side-channel: npm:@socketregistry/side-channel@^1
   string.prototype.matchall: npm:@socketregistry/string.prototype.matchall@^1
   string.prototype.repeat: npm:@socketregistry/string.prototype.repeat@^1
@@ -3942,7 +3942,7 @@ importers:
         specifier: ^6.1.7
         version: 6.1.7
       shell-quote:
-        specifier: npm:shell-quote@^1
+        specifier: npm:shell-quote@^1.10.0
         version: 1.10.0
       strip-json-comments:
         specifier: ^5.0.3
@@ -4511,8 +4511,8 @@ importers:
         specifier: ^1.19.14
         version: 1.19.14(hono@4.12.30)
       '@hono/standard-validator':
-        specifier: ^0.2.2
-        version: 0.2.2(@standard-schema/spec@1.1.0)(hono@4.12.30)
+        specifier: ^0.3.0
+        version: 0.3.0(@standard-schema/spec@1.1.0)(hono@4.12.30)
       '@hono/swagger-ui':
         specifier: ^0.5.3
         version: 0.5.3(hono@4.12.30)
@@ -4557,7 +4557,7 @@ importers:
         version: 2.1.0
       hono-openapi:
         specifier: ^1.3.1
-        version: 1.3.1(@hono/standard-validator@0.2.2(@standard-schema/spec@1.1.0)(hono@4.12.30))(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.1(typescript@6.0.3)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod-to-json-schema@3.25.1(zod@4.4.3))(zod@4.4.3))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.1(typescript@6.0.3)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod-to-json-schema@3.25.1(zod@4.4.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(arktype@2.2.0)(openapi-types@12.1.3)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@types/json-schema@7.0.15)(hono@4.12.30)(openapi-types@12.1.3)
+        version: 1.3.1(@hono/standard-validator@0.3.0(@standard-schema/spec@1.1.0)(hono@4.12.30))(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.1(typescript@6.0.3)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod-to-json-schema@3.25.1(zod@4.4.3))(zod@4.4.3))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.1(typescript@6.0.3)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod-to-json-schema@3.25.1(zod@4.4.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(arktype@2.2.0)(openapi-types@12.1.3)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@types/json-schema@7.0.15)(hono@4.12.30)(openapi-types@12.1.3)
       stacktrace-parser:
         specifier: ^0.1.11
         version: 0.1.11
@@ -13722,6 +13722,12 @@ packages:
     peerDependencies:
       '@standard-schema/spec': ^1.0.0
       hono: '>=3.9.0'
+
+  '@hono/standard-validator@0.3.0':
+    resolution: {integrity: sha512-tHLKEjKXDcHImj0XTFWW4Hr0ev+1G5GxnBZrGdpg/7NLy9s9meFPTSCOkw++ZzZKom3FjrMw2e0nFQpPPvwUVQ==}
+    peerDependencies:
+      '@standard-schema/spec': ^1.0.0
+      hono: '>=4.11.2'
 
   '@hono/swagger-ui@0.5.3':
     resolution: {integrity: sha512-Hn90DOOJ62ICJQplQvCDVpi9Jcn6EhtRaiffyJIS53wA5RmRLtMCDQGVc0bor8vQD7JIwpkweWjs+3cycp+IvA==}
@@ -36185,6 +36191,12 @@ snapshots:
     dependencies:
       '@standard-schema/spec': 1.1.0
       hono: 4.12.30
+    optional: true
+
+  '@hono/standard-validator@0.3.0(@standard-schema/spec@1.1.0)(hono@4.12.30)':
+    dependencies:
+      '@standard-schema/spec': 1.1.0
+      hono: 4.12.30
 
   '@hono/swagger-ui@0.5.3(hono@4.12.30)':
     dependencies:
@@ -47369,6 +47381,16 @@ snapshots:
       openapi-types: 12.1.3
     optionalDependencies:
       '@hono/standard-validator': 0.2.2(@standard-schema/spec@1.1.0)(hono@4.12.30)
+      hono: 4.12.30
+
+  hono-openapi@1.3.1(@hono/standard-validator@0.3.0(@standard-schema/spec@1.1.0)(hono@4.12.30))(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.1(typescript@6.0.3)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod-to-json-schema@3.25.1(zod@4.4.3))(zod@4.4.3))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.1(typescript@6.0.3)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod-to-json-schema@3.25.1(zod@4.4.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(arktype@2.2.0)(openapi-types@12.1.3)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@types/json-schema@7.0.15)(hono@4.12.30)(openapi-types@12.1.3):
+    dependencies:
+      '@standard-community/standard-json': 0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.1(typescript@6.0.3)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod-to-json-schema@3.25.1(zod@4.4.3))(zod@4.4.3)
+      '@standard-community/standard-openapi': 0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.1(typescript@6.0.3)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod-to-json-schema@3.25.1(zod@4.4.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(arktype@2.2.0)(openapi-types@12.1.3)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3)
+      '@types/json-schema': 7.0.15
+      openapi-types: 12.1.3
+    optionalDependencies:
+      '@hono/standard-validator': 0.3.0(@standard-schema/spec@1.1.0)(hono@4.12.30)
       hono: 4.12.30
 
   hono@4.12.30: {}

@@ -109,7 +109,7 @@ function createLinearGetIssueTool(linear: LinearIntegration, orgId: string) {
     execute: async ({ issue }: { issue: string }) => {
       const connection = await loadLinearConnection(orgId, linear);
       if (!connection) {
-        return { error: 'Linear is not connected for this project. Connect Linear in Settings to fetch issues.' };
+        return { error: 'Linear is not connected for this repository. Connect Linear in Settings to fetch issues.' };
       }
       try {
         const accessToken = await getFreshLinearAccessToken(linear, connection);
@@ -140,7 +140,7 @@ function createLinearCommentTool(linear: LinearIntegration, orgId: string) {
     execute: async ({ issue, body }: { issue: string; body: string }) => {
       const connection = await loadLinearConnection(orgId, linear);
       if (!connection) {
-        return { error: 'Linear is not connected for this project. Connect Linear in Settings to post comments.' };
+        return { error: 'Linear is not connected for this repository. Connect Linear in Settings to post comments.' };
       }
       if (!canPostLinearComments(connection)) {
         return {
