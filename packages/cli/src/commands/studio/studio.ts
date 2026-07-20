@@ -108,6 +108,7 @@ export const createServer = (builtStudioPath: string, options: StudioOptions, re
   const organizationId = process.env.MASTRA_ORGANIZATION_ID || '';
   const platformProjectId = process.env.MASTRA_PLATFORM_PROJECT_ID || '';
   const platformObservabilityEndpoint = process.env.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT || '';
+  const platformAgentLearningEndpoint = process.env.MASTRA_PLATFORM_AGENT_LEARNING_ENDPOINT || '';
 
   let html = readFileSync(indexHtmlPath, 'utf8')
     .replaceAll('%%MASTRA_STUDIO_BASE_PATH%%', basePath)
@@ -130,6 +131,9 @@ export const createServer = (builtStudioPath: string, options: StudioOptions, re
     .replaceAll('%%MASTRA_PLATFORM_PROJECT_ID%%', () => escapeStudioHtmlValue(platformProjectId))
     .replaceAll('%%MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT%%', () =>
       escapeStudioHtmlValue(platformObservabilityEndpoint),
+    )
+    .replaceAll('%%MASTRA_PLATFORM_AGENT_LEARNING_ENDPOINT%%', () =>
+      escapeStudioHtmlValue(platformAgentLearningEndpoint),
     );
 
   // Pre-compress the HTML shell since it's served for every non-asset request

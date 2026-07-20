@@ -133,6 +133,7 @@ declare global {
     MASTRA_SIGNALS_UI?: string;
     MASTRA_ORGANIZATION_ID?: string;
     MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT?: string;
+    MASTRA_PLATFORM_AGENT_LEARNING_ENDPOINT?: string;
   }
 }
 

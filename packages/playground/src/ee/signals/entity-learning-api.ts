@@ -2,15 +2,17 @@ import type { ThemeEntitiesResponse, ThemeFlowResponse, ThemeSnapshotsResponse, 
 
 interface EntityLearningConfig {
   baseUrl: string;
+  organizationId?: string;
   projectId?: string;
 }
 
 export function getEntityLearningConfig(): EntityLearningConfig | undefined {
-  const endpoint = window.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT || window.MASTRA_CLOUD_API_ENDPOINT;
+  const endpoint = window.MASTRA_PLATFORM_AGENT_LEARNING_ENDPOINT;
   if (!endpoint) return undefined;
 
   return {
     baseUrl: new URL(endpoint, window.location.origin).origin,
+    organizationId: window.MASTRA_ORGANIZATION_ID,
     projectId: window.MASTRA_PLATFORM_PROJECT_ID,
   };
 }
@@ -56,6 +58,7 @@ function themeQuery(entityType: string, signalNames: TraceSignalName[]) {
 
 async function learningJson<T>(config: EntityLearningConfig, path: string): Promise<T> {
   const headers = new Headers();
+  if (config.organizationId) headers.set('X-Mastra-Organization-Id', config.organizationId);
   if (config.projectId) headers.set('X-Mastra-Project-Id', config.projectId);
 
   const response = await fetch(`${config.baseUrl}${path}`, {

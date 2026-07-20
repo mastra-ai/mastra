@@ -14,7 +14,7 @@ import {
 } from './fixtures/theme-flow';
 import { server } from '@/test/msw-server';
 
-const BASE_URL = 'http://localhost:3100';
+const BASE_URL = 'http://localhost:3210';
 const PROJECT_ID = 'project-1';
 
 function renderSignalsPage() {
@@ -29,13 +29,13 @@ function renderSignalsPage() {
 }
 
 beforeEach(() => {
-  window.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT = BASE_URL;
+  window.MASTRA_PLATFORM_AGENT_LEARNING_ENDPOINT = BASE_URL;
   window.MASTRA_PLATFORM_PROJECT_ID = PROJECT_ID;
 });
 
 afterEach(() => {
   cleanup();
-  window.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT = undefined;
+  window.MASTRA_PLATFORM_AGENT_LEARNING_ENDPOINT = undefined;
   window.MASTRA_PLATFORM_PROJECT_ID = undefined;
 });
 

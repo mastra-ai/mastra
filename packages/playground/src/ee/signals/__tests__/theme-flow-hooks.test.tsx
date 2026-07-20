@@ -9,7 +9,8 @@ import { useThemeFlow, useThemeSnapshots } from '../hooks';
 import { themeFlowResponse, themeSnapshotsResponse } from './fixtures/theme-flow';
 import { server } from '@/test/msw-server';
 
-const BASE_URL = 'http://localhost:3100';
+const BASE_URL = 'http://localhost:3210';
+const ORGANIZATION_ID = 'org-1';
 const PROJECT_ID = 'project-1';
 
 function TestQueryProvider({ children }: { children: ReactNode }) {
@@ -18,12 +19,14 @@ function TestQueryProvider({ children }: { children: ReactNode }) {
 }
 
 beforeEach(() => {
-  window.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT = BASE_URL;
+  window.MASTRA_PLATFORM_AGENT_LEARNING_ENDPOINT = BASE_URL;
+  window.MASTRA_ORGANIZATION_ID = ORGANIZATION_ID;
   window.MASTRA_PLATFORM_PROJECT_ID = PROJECT_ID;
 });
 
 afterEach(() => {
-  window.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT = undefined;
+  window.MASTRA_PLATFORM_AGENT_LEARNING_ENDPOINT = undefined;
+  window.MASTRA_ORGANIZATION_ID = undefined;
   window.MASTRA_PLATFORM_PROJECT_ID = undefined;
 });
 
@@ -33,6 +36,7 @@ describe('Agent Learning theme flow hooks', () => {
       server.use(
         http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, ({ request }) => {
           const url = new URL(request.url);
+          expect(request.headers.get('X-Mastra-Organization-Id')).toBe(ORGANIZATION_ID);
           expect(request.headers.get('X-Mastra-Project-Id')).toBe(PROJECT_ID);
           expect(url.searchParams.get('entityType')).toBe('agent');
           expect(url.searchParams.get('signalNames')).toBe('goal,outcome');
