@@ -744,9 +744,12 @@ describe('MongoDBVector filterFields (#18587)', () => {
       await byoVector.connect();
       const col = byoVector['db'].collection(opsCol);
       await col.deleteMany({});
+      // Non-collinear vectors: under cosine similarity, collinear vectors (e.g. all-0.1 vs
+      // all-0.9) score identically, so 'a' and 'b' must point in different directions for the
+      // query to rank 'b' unambiguously first.
       await col.insertMany([
-        { _id: 'a', embedding: [0.1, 0.1, 0.1, 0.1], amount: 100, lane: 'clean' },
-        { _id: 'b', embedding: [0.9, 0.9, 0.9, 0.9], amount: 5000, lane: 'fraud' },
+        { _id: 'a', embedding: [1, 0, 0, 0], amount: 100, lane: 'clean' },
+        { _id: 'b', embedding: [0, 1, 0, 0], amount: 5000, lane: 'fraud' },
       ]);
       await byoVector.createIndex({
         indexName: idxName,
@@ -777,7 +780,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
       // $vectorSearch becomes queryable slightly after the index reports READY, so poll
       // until the just-inserted docs are indexed and 'b' (the exact-match vector) ranks first.
       const queryDocMode = () =>
-        byoVector.query({ indexName: idxName, queryVector: [0.9, 0.9, 0.9, 0.9], topK: 1, metadataMode: 'document' });
+        byoVector.query({ indexName: idxName, queryVector: [0, 1, 0, 0], topK: 1, metadataMode: 'document' });
       await waitForSync(byoVector, idxName, async () => {
         const r = await queryDocMode();
         return r.length === 1 && r[0].id === 'b';
