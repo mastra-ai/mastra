@@ -38,7 +38,7 @@ const WORKFLOW_STATUS_TO_PERSIST = ['suspended', 'pending', 'paused', 'waiting']
  *
  * Uses the standard (default) execution engine so the workflow runs entirely
  * in-process on whatever host calls `run.start()`. This is critical for
- * distributed deployments (Option E) where the background-task worker must
+ * distributed deployments where the background-task worker must
  * execute tools locally — routing through the evented pipeline would send
  * step execution to the orchestration worker / API, which don't have the
  * internal workflow or task contexts registered.

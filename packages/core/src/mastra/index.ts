@@ -2343,8 +2343,10 @@ export class Mastra<
 
       // Register durable-agent-owned tools with the background task manager.
       // Namespaced as `agentId:toolName` to avoid cross-agent collisions.
+      // Use agentKey (derived from durableAgent.id) rather than underlyingAgent.id
+      // because the dispatch side uses the durable wrapper's identity.
       if (this.#backgroundTaskManager) {
-        const durableAgentId = underlyingAgent.id ?? agentKey;
+        const durableAgentId = agentKey;
         Promise.resolve(underlyingAgent.listTools())
           .then(agentTools => {
             for (const [toolKey, tool] of Object.entries(agentTools || {})) {
