@@ -1136,6 +1136,8 @@ describe('projects', () => {
     const json = await res.json();
     expect(json.repository.source).toBe('github');
     expect(json.repository.name).toBe('octo/hello');
+    expect(json.repository.resourceId).toBe(json.repository.githubProjectId);
+    expect(json.repository.gitBranch).toBe('main');
     expect(tables.projects).toHaveLength(1);
   });
 

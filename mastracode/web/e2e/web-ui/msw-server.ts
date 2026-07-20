@@ -15,12 +15,43 @@ import { setupServer } from 'msw/node';
  */
 export const server = setupServer(
   http.get('*/auth/me', () => HttpResponse.json(null, { status: 404 })),
-  http.get('*/web/github/projects', () => {
-    const raw = globalThis.localStorage?.getItem('mastracode-projects');
+  http.get('*/web/github/repositories', () => {
+    const raw = globalThis.localStorage?.getItem('mastracode-factories');
     if (!raw) return HttpResponse.json([]);
     try {
-      const projects = JSON.parse(raw) as Array<{ source?: string }>;
-      return HttpResponse.json(projects.filter(project => project.source === 'github'));
+      const factories = JSON.parse(raw) as Array<{
+        name?: string;
+        resourceId?: string;
+        createdAt?: number;
+        binding?: {
+          kind?: string;
+          githubProjectId?: string;
+          gitBranch?: string;
+          sandboxId?: string;
+          sandboxWorkdir?: string;
+          worktrees?: unknown[];
+        };
+      }>;
+      return HttpResponse.json(
+        factories.flatMap(factory => {
+          const binding = factory.binding;
+          if (binding?.kind !== 'github' || !binding.githubProjectId || !factory.name) return [];
+          return [
+            {
+              id: binding.githubProjectId,
+              name: factory.name,
+              source: 'github',
+              githubProjectId: binding.githubProjectId,
+              resourceId: factory.resourceId,
+              gitBranch: binding.gitBranch,
+              sandboxId: binding.sandboxId,
+              sandboxWorkdir: binding.sandboxWorkdir,
+              worktrees: binding.worktrees ?? [],
+              createdAt: factory.createdAt,
+            },
+          ];
+        }),
+      );
     } catch {
       return HttpResponse.json([]);
     }

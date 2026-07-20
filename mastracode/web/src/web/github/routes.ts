@@ -212,6 +212,8 @@ function toConnectedRepositoryPayload(row: SourceControlProject) {
     name: row.repositorySlug,
     source: 'github' as const,
     githubProjectId: row.id,
+    resourceId: row.id,
+    gitBranch: row.defaultBranch,
   };
 }
 
@@ -540,6 +542,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
                 sandboxId: sandbox?.sandboxId ?? undefined,
                 sandboxWorkdir: sandbox?.sandboxWorkdir ?? project.sandboxWorkdir,
                 resourceId: project.id,
+                gitBranch: project.defaultBranch,
                 worktrees: worktrees.map(worktree => ({
                   branch: worktree.branch,
                   baseBranch: worktree.baseBranch,
