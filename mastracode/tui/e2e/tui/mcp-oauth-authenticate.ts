@@ -1,9 +1,24 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { z } from 'zod/v3';
 import { createGlobalPatchScope } from './global-patches.js';
 import { startMcpOAuthFixtureServer } from './mcp-oauth-fixture.js';
 import type { McE2eInProcessApp, McE2eScenario, McE2eTerminal } from './types.js';
+
+/** Grab a currently-free port so the pinned `callbackPort` never collides in CI. */
+async function findFreePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const probe = createServer();
+    probe.once('error', reject);
+    probe.listen(0, '127.0.0.1', () => {
+      const { port } = probe.address() as { port: number };
+      probe.close(() => resolve(port));
+    });
+  });
+}
+
+let pinnedCallbackPort: number;
 
 function extractAuthorizationUrl(terminal: McE2eTerminal): string {
   const view = terminal.serialize().view;
@@ -41,9 +56,21 @@ export const mcpOauthAuthenticateScenario = {
       },
     });
 
+    // Exercise the `callbackPort` shorthand end-to-end: the client must
+    // synthesize `http://localhost:<port>/callback`, bind its loopback
+    // callback server on that exact port, and complete the flow through it.
+    pinnedCallbackPort = await findFreePort();
     writeFileSync(
       join(projectDir, '.mastracode', 'mcp.json'),
-      JSON.stringify({ mcpServers: { oauth_server: { url: fixtureServer.url } } }, null, 2),
+      JSON.stringify(
+        {
+          mcpServers: {
+            oauth_server: { url: fixtureServer.url, oauth: { callbackPort: pinnedCallbackPort } },
+          },
+        },
+        null,
+        2,
+      ),
     );
 
     try {
@@ -107,6 +134,17 @@ export const mcpOauthAuthenticateScenario = {
     // Act as the browser: follow the authorize redirect back to the loopback
     // callback server started by the client's OAuth flow.
     const authorizationUrl = extractAuthorizationUrl(terminal);
+
+    // The authorize request must carry the redirect URL synthesized from the
+    // pinned `callbackPort` — proving the shorthand flows TUI config → manager
+    // → provider → authorization request, not just through unit-level parsing.
+    const redirectUri = new URL(authorizationUrl).searchParams.get('redirect_uri');
+    if (redirectUri !== `http://localhost:${pinnedCallbackPort}/callback`) {
+      throw new Error(
+        `expected redirect_uri http://localhost:${pinnedCallbackPort}/callback from callbackPort shorthand, got: ${redirectUri}`,
+      );
+    }
+
     const callbackResponse = await fetch(authorizationUrl, { redirect: 'follow' });
     if (!callbackResponse.ok) {
       throw new Error(`OAuth callback failed: HTTP ${callbackResponse.status}`);

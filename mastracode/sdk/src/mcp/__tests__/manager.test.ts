@@ -193,6 +193,53 @@ describe('createMcpManager', () => {
       );
     });
 
+    it('honors oauth.callbackPort for programmatically registered servers that bypass config parsing', async () => {
+      // extraServers skip validateConfig/parseOAuthConfig entirely, so the
+      // manager itself must resolve the callbackPort shorthand — otherwise a
+      // compiling `{ callbackPort }` config would silently authenticate
+      // against the default redirect URL.
+      setupConfig({ mcpServers: {} });
+
+      MockedMCPClient.mockImplementation(function (this: any) {
+        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({ toolsets: { slack: {} }, errors: {} });
+        this.disconnect = vi.fn().mockResolvedValue(undefined);
+      } as any);
+
+      const manager = createMcpManager('/tmp/test', undefined, {
+        slack: {
+          url: 'https://mcp.slack.com/mcp',
+          oauth: { clientId: 'slack-client-id', callbackPort: 3118 },
+        },
+      });
+      await manager.init();
+
+      expect(MockedMCPOAuthClientProvider).toHaveBeenCalledWith(
+        expect.objectContaining({
+          redirectUrl: 'http://localhost:3118/callback',
+          clientMetadata: expect.objectContaining({
+            redirect_uris: ['http://localhost:3118/callback'],
+          }),
+        }),
+      );
+
+      // callbackPort must also feed the token-storage fingerprint: the same
+      // server without callbackPort resolves a different redirect URL and must
+      // not collide with (and thus reuse/overwrite) the pinned-port tokens.
+      const managerWithoutPort = createMcpManager('/tmp/test', undefined, {
+        slack: {
+          url: 'https://mcp.slack.com/mcp',
+          oauth: { clientId: 'slack-client-id' },
+        },
+      });
+      await managerWithoutPort.init();
+
+      const pinnedStoragePath = MockedMCPOAuthClientProvider.mock.calls[0]?.[0]?.storage?.filePath;
+      const defaultStoragePath = MockedMCPOAuthClientProvider.mock.calls[1]?.[0]?.storage?.filePath;
+      expect(pinnedStoragePath).toEqual(expect.stringMatching(/mcp-oauth\/[a-f0-9]{16}\.json$/));
+      expect(defaultStoragePath).toEqual(expect.stringMatching(/mcp-oauth\/[a-f0-9]{16}\.json$/));
+      expect(pinnedStoragePath).not.toBe(defaultStoragePath);
+    });
+
     it('uses separate OAuth token storage for the same server name in different projects', async () => {
       const dataDir = await fs.mkdtemp(join(tmpdir(), 'mc-oauth-test-'));
       const prevDataDir = process.env.MASTRA_APP_DATA_DIR;

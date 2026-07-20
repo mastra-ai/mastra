@@ -17,17 +17,22 @@ needs-auth state.
 The server manager gains `authenticateServer(name)` and
 `cancelServerAuthentication(name)`, `McpServerStatus` gains an optional
 `needsAuth` flag, and the OAuth `redirectUrl` in MCP server config is now
-optional (it defaults to a stable loopback URL).
+optional (it defaults to a stable loopback URL). The config also accepts
+`callbackPort` as a shorthand that synthesizes
+`http://localhost:<callbackPort>/callback` — the Claude Code / Codex
+convention — so configs written for those clients (like Slack's official MCP
+plugin config) work verbatim. `callbackPort` and `redirectUrl` are mutually
+exclusive.
 
 ```ts
-const server = manager.getServerStatuses().find(s => s.name === 'supabase')
+const server = manager.getServerStatuses().find(s => s.name === 'supabase');
 if (server?.needsAuth) {
   // Opens the consent page in the browser, completes the OAuth flow, and
   // resolves with the reconnected server status.
   const status = await manager.authenticateServer('supabase', {
     onAuthorizationUrl: url => openInBrowser(url),
-  })
-  console.log(status.connected)
+  });
+  console.log(status.connected);
 
   // Abort an abandoned browser flow and return the server to needs-auth:
   // await manager.cancelServerAuthentication('supabase')

@@ -15,6 +15,7 @@ import {
   getProjectMcpPath,
   getGlobalMcpPath,
   getClaudeSettingsPath,
+  resolveOAuthRedirectUrl,
 } from './config.js';
 import type {
   McpConfig,
@@ -141,7 +142,7 @@ function getOAuthStoragePath(projectDir: string, name: string, cfg: McpHttpServe
     projectDir,
     name,
     url: cfg.url,
-    redirectUrl: cfg.oauth?.redirectUrl ?? DEFAULT_OAUTH_REDIRECT_URL,
+    redirectUrl: resolveOAuthRedirectUrl(cfg.oauth),
     clientId: cfg.oauth?.clientId,
     scopes: cfg.oauth?.scopes ?? [],
   });
@@ -251,8 +252,10 @@ export function createMcpManager(
     if (!oauth) return undefined;
 
     // redirectUrl is optional in the user-supplied config; resolve the stable
-    // default here so provider metadata always carries a concrete URL.
-    const redirectUrl = oauth.redirectUrl ?? DEFAULT_OAUTH_REDIRECT_URL;
+    // default (or the `callbackPort` shorthand, for programmatically registered
+    // servers that bypass config parsing) so provider metadata always carries
+    // a concrete URL.
+    const redirectUrl = resolveOAuthRedirectUrl(oauth);
 
     return new MCPOAuthClientProvider({
       redirectUrl,

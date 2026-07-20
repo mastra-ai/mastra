@@ -35,6 +35,14 @@ export interface McpHttpServerConfig {
 export interface McpHttpOAuthConfig {
   /** Redirect URL for OAuth callbacks. Defaults to DEFAULT_OAUTH_REDIRECT_URL when omitted. */
   redirectUrl?: string;
+  /**
+   * Shorthand for a loopback redirect URL: synthesizes
+   * `http://localhost:<callbackPort>/callback`, matching the convention
+   * Claude Code and Codex use. Config files reject entries that set both
+   * `callbackPort` and `redirectUrl`; for programmatically registered
+   * servers, `callbackPort` takes precedence over `redirectUrl`.
+   */
+  callbackPort?: number;
   /** Human-readable OAuth client name */
   clientName?: string;
   /** Optional scopes requested during OAuth */

@@ -37,6 +37,23 @@ function isLoopbackHostname(hostname: string): boolean {
   return hostname === 'localhost' || hostname === '[::1]' || hostname === '::1' || LOOPBACK_IPV4.test(hostname);
 }
 
+/**
+ * Resolve the effective OAuth redirect URL for a server config.
+ *
+ * `callbackPort` (the Claude Code / Codex convention) takes precedence and
+ * synthesizes `http://localhost:<port>/callback`. Config-file entries are
+ * normalized by `parseOAuthConfig` (which also enforces that `callbackPort`
+ * and `redirectUrl` are mutually exclusive), but programmatically registered
+ * servers bypass the parser, so every consumer of the redirect URL must
+ * resolve it through this helper rather than reading `redirectUrl` directly.
+ */
+export function resolveOAuthRedirectUrl(oauth: McpHttpOAuthConfig | undefined): string {
+  if (oauth?.callbackPort !== undefined) {
+    return `http://localhost:${oauth.callbackPort}/callback`;
+  }
+  return oauth?.redirectUrl ?? DEFAULT_OAUTH_REDIRECT_URL;
+}
+
 export function loadMcpConfig(projectDir: string, configDirName = DEFAULT_CONFIG_DIR): McpConfig {
   const claudeConfig = loadClaudeSettings(projectDir);
   const globalConfig = loadSingleConfig(getGlobalMcpPath(configDirName));
@@ -225,7 +242,29 @@ function parseOAuthConfig(raw: unknown): { config?: McpHttpOAuthConfig; reason?:
   if (obj.redirectUrl !== undefined && typeof obj.redirectUrl !== 'string') {
     return { reason: 'Invalid OAuth config: "redirectUrl" must be a string' };
   }
-  const rawRedirectUrl = obj.redirectUrl ?? DEFAULT_OAUTH_REDIRECT_URL;
+  // `callbackPort` is a shorthand for a loopback redirect URL. It synthesizes
+  // `http://localhost:<port>/callback` — the convention Claude Code and Codex
+  // emit — so those clients' config (e.g. Slack's official MCP plugin config)
+  // can be pasted verbatim. `redirectUrl` stays as the full-control escape
+  // hatch (any loopback host/path). The two are mutually exclusive to avoid
+  // an ambiguous redirect.
+  let callbackPortRedirectUrl: string | undefined;
+  if (obj.callbackPort !== undefined) {
+    if (obj.redirectUrl !== undefined) {
+      return { reason: 'Invalid OAuth config: set either "redirectUrl" or "callbackPort", not both' };
+    }
+    if (
+      typeof obj.callbackPort !== 'number' ||
+      !Number.isInteger(obj.callbackPort) ||
+      obj.callbackPort < 1 ||
+      obj.callbackPort > 65535
+    ) {
+      return { reason: 'Invalid OAuth config: "callbackPort" must be an integer between 1 and 65535' };
+    }
+    callbackPortRedirectUrl = resolveOAuthRedirectUrl({ callbackPort: obj.callbackPort });
+  }
+
+  const rawRedirectUrl = callbackPortRedirectUrl ?? obj.redirectUrl ?? DEFAULT_OAUTH_REDIRECT_URL;
   try {
     const redirectUrl = new URL(rawRedirectUrl);
     const isLoopback = isLoopbackHostname(redirectUrl.hostname);
@@ -233,7 +272,7 @@ function parseOAuthConfig(raw: unknown): { config?: McpHttpOAuthConfig; reason?:
       return { reason: 'Invalid OAuth redirectUrl: must use HTTPS unless it is a loopback HTTP URL' };
     }
   } catch {
-    return { reason: `Invalid OAuth redirectUrl: "${obj.redirectUrl}"` };
+    return { reason: `Invalid OAuth redirectUrl: "${rawRedirectUrl}"` };
   }
 
   if (obj.scopes !== undefined && (!Array.isArray(obj.scopes) || obj.scopes.some(scope => typeof scope !== 'string'))) {
