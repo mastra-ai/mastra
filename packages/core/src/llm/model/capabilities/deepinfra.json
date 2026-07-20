@@ -19,7 +19,6 @@
     "moonshotai/Kimi-K2.7-Code"
   ],
   "temperature": [
-    "MiniMaxAI/MiniMax-M2.5",
     "MiniMaxAI/MiniMax-M2.7",
     "MiniMaxAI/MiniMax-M3",
     "Qwen/Qwen3-32B",
@@ -44,7 +43,6 @@
     "google/gemma-4-31B-it",
     "moonshotai/Kimi-K2.5",
     "moonshotai/Kimi-K2.6",
-    "nvidia/Llama-3.3-Nemotron-Super-49B-v1.5",
     "nvidia/Nemotron-3-Nano-30B-A3B",
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b",
@@ -82,7 +80,6 @@
     "moonshotai/Kimi-K2.5",
     "moonshotai/Kimi-K2.6",
     "moonshotai/Kimi-K2.7-Code",
-    "nvidia/Llama-3.3-Nemotron-Super-49B-v1.5",
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b",
     "zai-org/GLM-4.6",

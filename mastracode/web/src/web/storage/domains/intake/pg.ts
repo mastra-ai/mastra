@@ -2,12 +2,15 @@
  * Postgres intake settings storage, bound to the shared pool from the
  * `PostgresStore` injected into `MastraFactory`. `init()` owns the idempotent
  * DDL (formerly `INTAKE_MIGRATION_SQL` + `ensureIntakeDbReady()`).
+ *
+ * Stored JSON is always re-validated through {@link parseIntakeConfig} so a
+ * prerelease row with `github.projectIds` never surfaces as a typed config.
  */
 
 import type pg from 'pg';
 
 import type { FactoryStorageContext } from '../../domain';
-import { DEFAULT_INTAKE_CONFIG, IntakeStorage } from './base';
+import { DEFAULT_INTAKE_CONFIG, IntakeStorage, parseIntakeConfig } from './base';
 import type { IntakeConfig } from './base';
 
 export const INTAKE_DDL = `
@@ -36,11 +39,14 @@ export class IntakeStoragePG extends IntakeStorage {
   }
 
   async getConfig(orgId: string, userId: string): Promise<IntakeConfig> {
-    const { rows } = await this.#db.query<{ config: IntakeConfig }>(
+    const { rows } = await this.#db.query<{ config: unknown }>(
       'SELECT config FROM intake_settings WHERE org_id = $1 AND user_id = $2',
       [orgId, userId],
     );
-    return structuredClone(rows[0]?.config ?? DEFAULT_INTAKE_CONFIG);
+    const raw = rows[0]?.config;
+    if (raw === undefined) return structuredClone(DEFAULT_INTAKE_CONFIG);
+    const parsed = parseIntakeConfig(raw);
+    return structuredClone(parsed ?? DEFAULT_INTAKE_CONFIG);
   }
 
   async saveConfig(orgId: string, userId: string, config: IntakeConfig): Promise<void> {

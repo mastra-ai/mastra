@@ -2,7 +2,7 @@ import { Button, buttonVariants } from '@mastra/playground-ui/components/Button'
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { CircleDot, EllipsisVertical, GitPullRequest, MessageSquare, Plus } from 'lucide-react';
+import { CircleDot, EllipsisVertical, ExternalLink, GitPullRequest, Plus } from 'lucide-react';
 import type { ComponentType, DragEvent } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -12,7 +12,7 @@ import { useSelectWorkspaceMutation, useWorkspacesQuery } from '../../../../shar
 import { relativeTime } from '../../../../shared/lib/date';
 import { SkeletonRows } from '../../ui';
 import { AGENT_CONTROLLER_ID } from '../chat/services/constants';
-import type { Project } from '../workspaces/services/projects';
+import type { GithubFactory } from '../workspaces/services/factories';
 import { FactoryItemActions } from './components/FactoryItemActions';
 import { FactoryPageShell } from './components/FactoryPageShell';
 import { LoadMoreSentinel } from './components/LoadMoreSentinel';
@@ -339,6 +339,25 @@ function itemRunSpec(item: WorkItem): ItemRunSpec | null {
   return null;
 }
 
+/**
+ * Branch + thread title for a card's session. Prefers the run spec (shared
+ * with agent runs so the title click and a later run converge on one
+ * worktree); manual/metadata-poor cards fall back to an id-derived branch so
+ * every card's title can open a session.
+ */
+function itemSessionSpec(item: WorkItem): { branch: string; threadTitle: string } {
+  const spec = itemRunSpec(item);
+  if (spec) return { branch: spec.branch, threadTitle: spec.threadTitle };
+  return { branch: `factory/item-${item.id}`, threadTitle: item.title };
+}
+
+/** Aria label for the icon-only external link next to a card title. */
+function externalLinkLabel(source: WorkItemSource): string {
+  if (source === 'linear-issue') return 'Open in Linear';
+  if (source === 'manual') return 'Open link';
+  return 'Open in GitHub';
+}
+
 // ── Drag & drop (native HTML5; the card menus are the accessible fallback) ──
 
 const CARD_MIME = 'application/x-factory-card';
@@ -368,7 +387,7 @@ function readDragPayload(event: DragEvent): DragPayload | null {
 // ── Page ────────────────────────────────────────────────────────────────────
 
 /**
- * Factory › Board: an org-wide kanban over the project's work items. The
+ * Factory › Board: an org-wide kanban over the repository's work items. The
  * Intake column merges persisted `intake` cards with live GitHub/Linear
  * candidates (issues and PRs that have no record yet — records are
  * materialized only when someone acts on them). Everything enters through
@@ -379,13 +398,13 @@ function readDragPayload(event: DragEvent): DragPayload | null {
 export function BoardPage() {
   return (
     <FactoryPageShell title="Board" description="Issues and pull requests across intake, work, review, and done.">
-      {project => <Board project={project} />}
+      {factory => <Board factory={factory} />}
     </FactoryPageShell>
   );
 }
 
-function Board({ project }: { project: Project & { githubProjectId: string } }) {
-  const githubProjectId = project.githubProjectId;
+function Board({ factory }: { factory: GithubFactory }) {
+  const githubProjectId = factory.binding.githubProjectId;
   const items = useWorkItemsQuery(githubProjectId);
   const configQuery = useIntakeConfigQuery();
   const linearStatusQuery = useLinearStatusQuery();
@@ -395,7 +414,7 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
   // in Intake and only move once the Factory acts on them.
   const config = configQuery.data;
   const githubEnabled = config?.github.enabled ?? true;
-  const githubSelected = config ? (config.github.projectIds?.includes(githubProjectId) ?? false) : true;
+  const githubSelected = config ? (config.github.repositoryIds?.includes(githubProjectId) ?? false) : true;
   const linearFeature = linearStatusQuery.data?.enabled ?? false;
   const linearConnected = Boolean(linearFeature && linearStatusQuery.data?.connected);
   const linearReady =
@@ -409,7 +428,7 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
     'github-prs' as const,
     ...(linearReady ? (['linear'] as const) : []),
   ];
-  const newIssueUrl = config && githubIntakeActive ? githubNewIssueUrl(project.name) : undefined;
+  const newIssueUrl = config && githubIntakeActive ? githubNewIssueUrl(factory.name) : undefined;
   const [intakeSource, setIntakeSource] = useState<IntakeSource>('github');
   const showIntakeSourceSwitch = availableIntakeSources.length > 1;
   const activeIntakeSource: IntakeSource | null = availableIntakeSources.includes(intakeSource)
@@ -425,18 +444,18 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
   const upsert = useUpsertWorkItemMutation(githubProjectId);
   const update = useUpdateWorkItemMutation(githubProjectId);
   const remove = useDeleteWorkItemMutation(githubProjectId);
-  const { start, enabled: runEnabled } = useStartFactoryRun();
-  const triage = useStartIssueTriageMutation(githubProjectId);
+  const { start, pendingRuns, enabled: runEnabled } = useStartFactoryRun();
+  const { triage, pendingIssueNumbers } = useStartIssueTriageMutation(githubProjectId);
   const navigate = useNavigate();
   const boardContainerRef = useRef<HTMLDivElement>(null);
   const laneRefs = useRef(new Map<BoardStageId, HTMLElement>());
-  const autoPositionedProjectRef = useRef<string | undefined>(undefined);
-  const userPositionedProjectRef = useRef<string | undefined>(undefined);
+  const autoPositionedFactoryRef = useRef<string | undefined>(undefined);
+  const userPositionedFactoryRef = useRef<string | undefined>(undefined);
 
   // Worktrees that still exist. A card's session ref whose worktree was
   // deleted is stale: its thread is gone (worktree deletion cascades onto its
   // threads), so it neither renders a Thread link nor blocks re-running.
-  const workspaces = useWorkspacesQuery(project);
+  const workspaces = useWorkspacesQuery(factory);
   const liveWorktreePaths = useMemo(
     () => new Set((workspaces.data?.worktrees ?? []).map(worktree => worktree.worktreePath)),
     [workspaces.data],
@@ -445,9 +464,9 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
   // Threads are scoped per worktree, so opening a card's thread first makes
   // its worktree the active workspace — otherwise the thread page can't
   // resolve the thread in the active scope and bounces away.
-  const selectWorkspace = useSelectWorkspaceMutation(project, {
+  const selectWorkspace = useSelectWorkspaceMutation(factory, {
     agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId: project.resourceId,
+    resourceId: factory.resourceId,
   });
   const openThread = async (session: WorkItemSessionRef) => {
     await selectWorkspace.mutateAsync(session.projectPath);
@@ -481,9 +500,9 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
     (activeIntakeSource === 'linear' && linearIssues.isPending);
 
   useEffect(() => {
-    if (boardDataPending || autoPositionedProjectRef.current === project.id) return;
-    autoPositionedProjectRef.current = project.id;
-    if (userPositionedProjectRef.current === project.id) return;
+    if (boardDataPending || autoPositionedFactoryRef.current === factory.id) return;
+    autoPositionedFactoryRef.current = factory.id;
+    if (userPositionedFactoryRef.current === factory.id) return;
 
     const firstPopulatedStage = BOARD_STAGES.find(
       stage =>
@@ -494,7 +513,7 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
     const lane = firstPopulatedStage ? laneRefs.current.get(firstPopulatedStage.id) : undefined;
     if (!container || !lane) return;
     container.scrollTo?.({ left: Math.max(0, lane.offsetLeft - container.offsetLeft), behavior: 'auto' });
-  }, [boardDataPending, candidates, project.id, workItems]);
+  }, [boardDataPending, candidates, factory.id, workItems]);
 
   const moveItem = (id: string, fromStage: string | null, toStage: string) => {
     const item = workItems.find(i => i.id === id);
@@ -538,14 +557,14 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
         className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-2"
         aria-label="Board columns"
         onPointerDown={() => {
-          userPositionedProjectRef.current = project.id;
+          userPositionedFactoryRef.current = factory.id;
         }}
         onWheel={() => {
-          userPositionedProjectRef.current = project.id;
+          userPositionedFactoryRef.current = factory.id;
         }}
         onScroll={() => {
           // Ignore the scroll event emitted by our own initial scrollTo call.
-          if (autoPositionedProjectRef.current !== project.id) userPositionedProjectRef.current = project.id;
+          if (autoPositionedFactoryRef.current !== factory.id) userPositionedFactoryRef.current = factory.id;
         }}
       >
         {BOARD_STAGES.map(stage => (
@@ -602,9 +621,33 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
                   item={item}
                   columnStage={stage.id}
                   liveWorktreePaths={liveWorktreePaths}
-                  runDisabled={!runEnabled || start.isPending}
-                  runStarting={start.isPending}
+                  // Until the worktree listing settles, liveness is unknown and
+                  // every session ref looks stale — the title would render as a
+                  // create button and a click would mint a replacement session
+                  // for a perfectly live thread. Hold run/create actions until
+                  // liveness is known.
+                  runDisabled={!runEnabled || !workspaces.isSuccess}
+                  pendingRunRoles={new Set(pendingRuns.filter(run => run.id === item.id).map(run => run.role))}
                   onOpenThread={session => void openThread(session)}
+                  onCreateSession={spec =>
+                    start.mutate({
+                      branch: spec.branch,
+                      threadTitle: spec.threadTitle,
+                      workItem: {
+                        id: item.id,
+                        // File only the neutral chat role. The title is a
+                        // create button only when every existing role ref is
+                        // stale (worktree gone); repointing those roles here
+                        // would make them look live again and hide the card's
+                        // run actions even though no run happened.
+                        role: 'chat',
+                        stages: item.stages,
+                        source: item.source,
+                        sourceKey: item.sourceKey,
+                        title: item.title,
+                      },
+                    })
+                  }
                   onStartRun={(spec, action) =>
                     start.mutate({
                       branch: spec.branch,
@@ -632,11 +675,11 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
                 <CandidateCard
                   key={candidate.sourceKey}
                   candidate={candidate}
-                  starting={
-                    (start.isPending && start.variables?.branch === candidate.branch) ||
-                    (triage.isPending && triage.variables?.number === candidate.issue?.number)
+                  pendingRunRoles={
+                    new Set(pendingRuns.filter(run => run.sourceKey === candidate.sourceKey).map(run => run.role))
                   }
-                  disabled={!runEnabled || start.isPending || triage.isPending}
+                  triageStarting={candidate.issue !== undefined && pendingIssueNumbers.includes(candidate.issue.number)}
+                  disabled={!runEnabled}
                   onRun={(action, prompt) =>
                     start.mutate({
                       branch: candidate.branch,
@@ -649,6 +692,21 @@ function Board({ project }: { project: Project & { githubProjectId: string } }) 
                       workItem: {
                         role: action.role,
                         stages: [action.stage],
+                        source: candidate.source,
+                        sourceKey: candidate.sourceKey,
+                        title: candidate.title,
+                        url: candidate.url,
+                        metadata: candidate.metadata,
+                      },
+                    })
+                  }
+                  onOpenSession={() =>
+                    start.mutate({
+                      branch: candidate.branch,
+                      threadTitle: candidate.threadTitle,
+                      workItem: {
+                        role: 'chat',
+                        stages: [candidate.column],
                         source: candidate.source,
                         sourceKey: candidate.sourceKey,
                         title: candidate.title,
@@ -747,8 +805,8 @@ const SOURCE_ICONS: Record<
 
 /**
  * The card's single conversation. A work item keeps one threadId for its whole
- * lifecycle — every run reuses the worktree's thread — so the card renders
- * exactly one "Thread" link. Items filed while session scoping was broken may
+ * lifecycle — every run reuses the worktree's thread — so the card title links
+ * to exactly one thread. Items filed while session scoping was broken may
  * still carry divergent role refs; the last-filed ref wins (runs converge them
  * back onto one thread the next time they file).
  */
@@ -762,8 +820,9 @@ function WorkItemCard({
   columnStage,
   liveWorktreePaths,
   runDisabled,
-  runStarting,
+  pendingRunRoles,
   onOpenThread,
+  onCreateSession,
   onStartRun,
   onMove,
   onRemove,
@@ -773,8 +832,10 @@ function WorkItemCard({
   /** Worktrees that still exist; session refs outside this set are stale. */
   liveWorktreePaths: ReadonlySet<string>;
   runDisabled: boolean;
-  runStarting: boolean;
+  pendingRunRoles: ReadonlySet<string>;
   onOpenThread: (session: WorkItemSessionRef) => void;
+  /** Title click when the card has no live session: open an empty session (no run). */
+  onCreateSession: (spec: { branch: string; threadTitle: string }) => void;
   onStartRun: (spec: ItemRunSpec, action: RunAction) => void;
   onMove: (toStage: string) => void;
   onRemove: () => void;
@@ -801,17 +862,38 @@ function WorkItemCard({
     >
       <div className="flex items-start gap-2">
         <Icon size={14} className={`mt-0.5 shrink-0 ${iconClassName}`} aria-hidden />
-        {item.url ? (
+        {threadSession !== null ? (
           <a
-            href={item.url}
-            target="_blank"
-            rel="noreferrer"
+            href={`/threads/${threadSession.threadId}`}
+            onClick={event => {
+              event.preventDefault();
+              onOpenThread(threadSession);
+            }}
             className="min-w-0 flex-1 truncate text-ui-sm text-icon6 no-underline hover:underline"
           >
             {item.title}
           </a>
         ) : (
-          <span className="min-w-0 flex-1 truncate text-ui-sm text-icon6">{item.title}</span>
+          <button
+            type="button"
+            disabled={runDisabled}
+            aria-busy={pendingRunRoles.size > 0 || undefined}
+            onClick={() => onCreateSession(itemSessionSpec(item))}
+            className="min-w-0 flex-1 truncate text-left text-ui-sm text-icon6 hover:underline disabled:opacity-60"
+          >
+            {item.title}
+          </button>
+        )}
+        {item.url !== null && (
+          <a
+            href={item.url}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={externalLinkLabel(item.source)}
+            className="mt-0.5 shrink-0 text-icon3 hover:text-icon5"
+          >
+            <ExternalLink size={12} aria-hidden />
+          </a>
         )}
         <DropdownMenu>
           <DropdownMenu.Trigger
@@ -823,15 +905,18 @@ function WorkItemCard({
           />
           <DropdownMenu.Content align="end" className="min-w-44">
             {runSpec !== null &&
-              runActions.map(action => (
-                <DropdownMenu.Item
-                  key={action.label}
-                  disabled={runDisabled}
-                  onClick={() => onStartRun(runSpec, action)}
-                >
-                  {runStarting ? 'Starting…' : action.label}
-                </DropdownMenu.Item>
-              ))}
+              runActions.map(action => {
+                const starting = pendingRunRoles.has(action.role);
+                return (
+                  <DropdownMenu.Item
+                    key={action.label}
+                    disabled={runDisabled || starting}
+                    onClick={() => onStartRun(runSpec, action)}
+                  >
+                    {starting ? 'Starting…' : action.label}
+                  </DropdownMenu.Item>
+                );
+              })}
             {BOARD_STAGES.filter(stage => stage.id !== columnStage).map(stage => (
               <DropdownMenu.Item key={stage.id} onClick={() => onMove(stage.id)}>
                 {stage.id === 'done' ? 'Mark done' : `Move to ${stage.label}`}
@@ -841,26 +926,13 @@ function WorkItemCard({
           </DropdownMenu.Content>
         </DropdownMenu>
       </div>
-      {(otherStages.length > 0 || threadSession !== null) && (
+      {otherStages.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
           {otherStages.map(stage => (
             <span key={stage} className="rounded-full bg-surface5 px-1.5 py-0.5 text-ui-xs text-icon4">
               {stageLabel(stage)}
             </span>
           ))}
-          {threadSession !== null && (
-            <a
-              href={`/threads/${threadSession.threadId}`}
-              onClick={event => {
-                event.preventDefault();
-                onOpenThread(threadSession);
-              }}
-              className="flex items-center gap-1 text-ui-xs text-icon3 no-underline hover:text-icon5"
-            >
-              <MessageSquare size={11} aria-hidden />
-              Thread
-            </a>
-          )}
         </div>
       )}
     </article>
@@ -869,17 +941,22 @@ function WorkItemCard({
 
 function CandidateCard({
   candidate,
-  starting,
+  pendingRunRoles,
+  triageStarting,
   disabled,
   onRun,
+  onOpenSession,
   onFile,
   onTriage,
 }: {
   candidate: BoardCandidate;
-  starting: boolean;
+  pendingRunRoles: ReadonlySet<string>;
+  triageStarting: boolean;
   disabled: boolean;
   /** Start a run; `prompt` undefined = the action's default prompt. */
   onRun: (action: RunAction, prompt?: string) => void;
+  /** Title click: materialize the card + open an empty session (no run). */
+  onOpenSession: () => void;
   /** File the candidate onto the board without starting a run. */
   onFile: () => void;
   /** Run first-contact issue triage without leaving the board. */
@@ -910,22 +987,47 @@ function CandidateCard({
     >
       <div className="flex items-start gap-2">
         <Icon size={14} className={`mt-0.5 shrink-0 ${candidate.iconClassName}`} aria-hidden />
-        <a href={candidate.url} target="_blank" rel="noreferrer" className="min-w-0 flex-1 no-underline">
-          <span className="block truncate text-ui-sm text-icon6">{candidate.title}</span>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <button
+            type="button"
+            disabled={disabled}
+            aria-busy={pendingRunRoles.has(defaultAction.role) || undefined}
+            onClick={onOpenSession}
+            className="truncate text-left text-ui-sm text-icon6 hover:underline disabled:opacity-60"
+          >
+            {candidate.title}
+          </button>
           <span className="block truncate text-ui-xs text-icon3">{candidate.meta}</span>
+        </div>
+        <a
+          href={candidate.url}
+          target="_blank"
+          rel="noreferrer"
+          aria-label={externalLinkLabel(candidate.source)}
+          className="mt-0.5 shrink-0 text-icon3 hover:text-icon5"
+        >
+          <ExternalLink size={12} aria-hidden />
         </a>
       </div>
       <FactoryItemActions
         actionLabel={defaultAction.label}
         itemLabel={candidate.title}
-        starting={starting}
+        starting={pendingRunRoles.has(defaultAction.role)}
         disabled={disabled}
         onAction={() => onRun(defaultAction)}
-        extraActions={otherActions.map(action => ({ label: action.label, onAction: () => onRun(action) }))}
+        extraActions={otherActions.map(action => ({
+          label: action.label,
+          starting: pendingRunRoles.has(action.role),
+          onAction: () => onRun(action),
+        }))}
         onRunPrompt={prompt => onRun(defaultAction, prompt)}
         menuExtras={
           <>
-            {showTriage && <DropdownMenu.Item onClick={onTriage}>Triage issue</DropdownMenu.Item>}
+            {showTriage && (
+              <DropdownMenu.Item disabled={triageStarting} onClick={onTriage}>
+                {triageStarting ? 'Starting…' : 'Triage issue'}
+              </DropdownMenu.Item>
+            )}
             <DropdownMenu.Item onClick={onFile}>Add to board</DropdownMenu.Item>
           </>
         }
