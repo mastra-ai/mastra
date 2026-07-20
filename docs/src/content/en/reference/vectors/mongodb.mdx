@@ -260,7 +260,7 @@ Searches for similar vectors with optional metadata filtering.
     isOptional: true,
     defaultValue: 'field',
     description:
-      "`'field'` (default) projects the managed `metadata`/`document` fields. `'document'` returns the full source document as `metadata` — use for bring-your-own operational collections whose documents have their own shape. The embedding field is omitted from `metadata` by default (to avoid payload bloat); set `includeVector: true` to retain it in `metadata` and also expose it as a top-level `vector`.",
+      "`'field'` (default) projects the managed `metadata`/`document` fields, and `filter` fields are matched against the `metadata` subdocument. `'document'` returns the full source document as `metadata` — use for bring-your-own operational collections whose documents have their own shape — and `filter` fields are matched against the **root** document (no `metadata.` prefix). The embedding field is omitted from `metadata` by default (to avoid payload bloat); set `includeVector: true` to retain it in `metadata` and also expose it as a top-level `vector`.",
   },
 ]}
 />
@@ -296,9 +296,18 @@ Naming:
     name: 'searchIndexName',
     type: 'string',
     isOptional: true,
-    defaultValue: '${collectionName}_search_index (or ${collectionName}_search_fields_index when `fields` is given)',
+    defaultValue:
+      '${collectionName}_search_index (or ${collectionName}_${indexName}_search_fields_index when `fields` is given)',
     description:
-      'Name for the Atlas Search index. When `fields` is provided and this is omitted, a distinct default name is used so the field mapping is not shadowed by the auto-created dynamic index.',
+      'Name for the Atlas Search index. When `fields` is provided and this is omitted, a distinct default name that is unique per logical index is used, so the field mapping is not shadowed by the auto-created dynamic index and two logical indexes on the same collection do not collide.',
+  },
+  {
+    name: 'waitUntilReady',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description:
+      'When true, block until the provisioned full-text index reports READY before resolving. Defaults to false to avoid surprising latency; call `waitForSearchIndexReady()` explicitly if you prefer to await separately.',
   },
 ]}
 />
@@ -308,6 +317,47 @@ await store.createSearchIndex({
   indexName: 'precedents',
   fields: ['note', 'description'],
 })
+```
+
+> **Note:** The field-mapped index name includes the logical `indexName`, so two logical indexes on the same collection get distinct text indexes. Recreating the _same_ logical index with different `fields` still requires dropping the existing index first (`IndexAlreadyExists`).
+
+### `waitForSearchIndexReady()`
+
+Waits for the full-text (BM25) search index of an index to become READY. `waitForIndexReady()` polls only the vectorSearch index; `createSearchIndex()` returns while the Atlas Search full-text index is still building, so an immediate `textQuery()`/`hybridQuery()` can intermittently fail. Call this (or pass `waitUntilReady: true` to `createSearchIndex()`) to block until the resolved text index reports READY.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Logical name of the index whose text index to wait for',
+  },
+  {
+    name: 'searchIndexName',
+    type: 'string',
+    isOptional: true,
+    description: 'Override the resolved text-search index name',
+  },
+  {
+    name: 'timeoutMs',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '60000',
+    description: 'Maximum time to wait in milliseconds',
+  },
+  {
+    name: 'checkIntervalMs',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '2000',
+    description: 'Interval between status checks in milliseconds',
+  },
+]}
+/>
+
+```typescript
+await store.createSearchIndex({ indexName: 'precedents', fields: ['note'] })
+await store.waitForSearchIndexReady({ indexName: 'precedents' })
 ```
 
 ### `textQuery()`
@@ -679,7 +729,9 @@ await store.createSearchIndex({ indexName: 'precedents', fields: ['note'] })
 - The collection is never created or dropped when using `collectionName`
 - Use `metadataMode: 'document'` when querying to retrieve the full source document as `metadata`
 - In `'document'` mode the embedding is omitted from `metadata` by default; pass `includeVector: true` to retain it (and also expose it as a top-level `vector`)
-- Full-text and hybrid search on a BYO collection are **opt-in**: no full-text index is auto-created, so call `createSearchIndex()` before `textQuery()`/`hybridQuery()`
+- **Filtering in `'document'` mode operates on root document fields**, not a nested `metadata.` subdocument. `filter: { lane: 'fraud' }` matches the top-level `lane` field of your operational documents (in the default `'field'` mode, bare fields are rewritten to `metadata.<field>` for managed collections). Both the pushdown and `$match` fallback paths honor this.
+- **Native `ObjectId` `_id`s are supported.** Operational collections commonly key on `ObjectId`; query results coerce `_id` to a string (the `QueryResult.id` contract), and `deleteVector()`/`updateVector()`/`deleteVectors()` accept that string and match the underlying `ObjectId` document. Managed collections (string `_id`s) are unaffected.
+- Full-text and hybrid search on a BYO collection are **opt-in**: no full-text index is auto-created, so call `createSearchIndex()` before `textQuery()`/`hybridQuery()`. The full-text index builds asynchronously — call `waitForSearchIndexReady()` (or pass `waitUntilReady: true`) before an immediate text/hybrid query.
 - `deleteIndex()` on a BYO index drops the vector index (and the text index if one was created) but **preserves** the collection and its documents
 
 ## Best practices
