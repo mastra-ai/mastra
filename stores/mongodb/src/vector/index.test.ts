@@ -839,4 +839,35 @@ describe('MongoDBVector filterFields (#18587)', () => {
       expect(indexGone).toBe(true);
     });
   });
+
+  describe('deleteIndex BYO classification (unit)', () => {
+    const makeVector = () => new MongoDBVector({ id: 'test', uri: 'mongodb://localhost:27017', dbName: 'test_db' });
+
+    it('drops only the search index for a BYO index even when collectionName === indexName', async () => {
+      const v = makeVector();
+      const drop = vi.fn().mockResolvedValue(undefined);
+      const dropSearchIndex = vi.fn().mockResolvedValue(undefined);
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ drop, dropSearchIndex });
+      // BYO index whose collectionName matches its indexName — name equality cannot
+      // distinguish it from a managed index, so the registry flag must govern.
+      (v as any).indexTargets.set('docs', { collectionName: 'docs', searchIndexName: 'docs_vec', isByo: true });
+
+      await v.deleteIndex({ indexName: 'docs' });
+
+      expect(dropSearchIndex).toHaveBeenCalledWith('docs_vec');
+      expect(drop).not.toHaveBeenCalled();
+    });
+
+    it('drops the collection for a managed index (no registered target)', async () => {
+      const v = makeVector();
+      const drop = vi.fn().mockResolvedValue(undefined);
+      const dropSearchIndex = vi.fn().mockResolvedValue(undefined);
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ drop, dropSearchIndex });
+
+      await v.deleteIndex({ indexName: 'managed_idx' });
+
+      expect(drop).toHaveBeenCalledTimes(1);
+      expect(dropSearchIndex).not.toHaveBeenCalled();
+    });
+  });
 });
