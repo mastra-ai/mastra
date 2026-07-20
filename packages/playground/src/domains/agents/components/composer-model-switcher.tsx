@@ -1,7 +1,7 @@
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Lock, TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
-import { usePlaygroundModel } from '../context/playground-model-context';
+import { usePlaygroundModelOptional } from '../context/playground-model-context';
 import { useBuilderModelPolicy } from '@/domains/agent-builder';
 import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-agent-builder-allowed-models';
 import { LLMProviders, LLMModels, useLLMProviders, cleanProviderId, findProviderById } from '@/domains/llm';
@@ -16,12 +16,15 @@ const COMPOSER_TRIGGER_CLASS = [
 ].join(' ');
 
 export const ComposerModelSwitcher = () => {
-  const { provider: selectedProvider, model: selectedModel, setProvider, setModel } = usePlaygroundModel();
+  const selection = usePlaygroundModelOptional();
   const { data: dataProviders, isLoading: providersLoading } = useLLMProviders();
   const policy = useBuilderModelPolicy();
 
   const [modelOpen, setModelOpen] = useState(false);
 
+  if (providersLoading || !selection) return null;
+
+  const { provider: selectedProvider, model: selectedModel, setProvider, setModel } = selection;
   const providers = dataProviders?.providers || [];
 
   const currentModelProvider = cleanProviderId(selectedProvider);
@@ -30,7 +33,6 @@ export const ComposerModelSwitcher = () => {
   const resolvedProvider = findProviderById(providers, currentModelProvider);
   const fullProviderId = resolvedProvider?.id || currentModelProvider;
 
-  // Auto-save when model changes
   const handleModelSelect = (modelId: string) => {
     if (modelId && fullProviderId) setModel(fullProviderId, modelId);
   };
@@ -44,10 +46,6 @@ export const ComposerModelSwitcher = () => {
       setModelOpen(true);
     }
   };
-
-  if (providersLoading) {
-    return null;
-  }
 
   // Admin locked the picker — surface a non-interactive chip instead.
   if (policy.active && policy.pickerVisible === false) {
@@ -97,14 +95,15 @@ export const ComposerModelSwitcher = () => {
 };
 
 export const ComposerModelWarning = () => {
-  const { provider, model } = usePlaygroundModel();
+  const selection = usePlaygroundModelOptional();
   const { data: dataProviders, isLoading: providersLoading } = useLLMProviders();
   const policy = useBuilderModelPolicy();
   const { models: allowedModels } = useAgentBuilderAllowedModels();
 
-  if (providersLoading) return null;
+  if (providersLoading || !selection) return null;
 
   const providers = dataProviders?.providers || [];
+  const { provider, model } = selection;
   const currentModelProvider = cleanProviderId(provider);
   const currentProvider = findProviderById(providers, currentModelProvider);
   const selectedModel = model;
