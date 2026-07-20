@@ -31,8 +31,8 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@langfuse/client": "^5.4.1",
-    "@langfuse/otel": "^5.4.1",
+    "@langfuse/client": "^5.9.1",
+    "@langfuse/otel": "^5.9.1",
     "@mastra/observability": "workspace:*",
     "@mastra/otel-exporter": "workspace:*"
   },
