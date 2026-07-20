@@ -219,7 +219,7 @@ describe('writeObservabilityEnv', () => {
 
     const contents = fs.readFileSync(`${cwd}/.env`, 'utf-8') as string;
     expect(contents).toContain('EXISTING=1');
-    expect(contents).toContain('# Mastra Observability');
+    expect(contents).toContain('# Mastra platform');
     expect(contents).toContain('MASTRA_PLATFORM_ACCESS_TOKEN=');
     expect(contents).not.toMatch(/MASTRA_PLATFORM_ACCESS_TOKEN=\S/);
   });
@@ -257,5 +257,47 @@ describe('writeObservabilityEnv', () => {
     const contents = fs.readFileSync(`${cwd}/.env`, 'utf-8') as string;
     expect(contents).toContain('MASTRA_PLATFORM_ACCESS_TOKEN=');
     expect(contents).toContain('MASTRA_PROJECT_ID=');
+  });
+
+  test('writes to an explicit project path and preserves provider credentials', async () => {
+    const projectPath = '/published-project';
+    fs.mkdirSync(projectPath, { recursive: true });
+    fs.writeFileSync(`${projectPath}/.env`, 'ANTHROPIC_API_KEY=provider-secret\n');
+
+    await writeObservabilityEnv({ projectPath, token: 'platform-secret', projectId: 'project-id' });
+
+    expect(fs.existsSync(`${cwd}/.env`)).toBe(false);
+    expect(fs.readFileSync(`${projectPath}/.env`, 'utf8')).toContain('ANTHROPIC_API_KEY=provider-secret');
+    expect(fs.readFileSync(`${projectPath}/.env`, 'utf8')).toContain('MASTRA_PLATFORM_ACCESS_TOKEN=platform-secret');
+  });
+
+  test('updates existing Mastra platform values without duplicating assignments', async () => {
+    fs.writeFileSync(
+      `${cwd}/.env`,
+      [
+        'OPENAI_API_KEY=provider-secret',
+        'MASTRA_PLATFORM_ACCESS_TOKEN=old-token',
+        'MASTRA_PLATFORM_ACCESS_TOKEN=duplicate-token',
+        'MASTRA_PROJECT_ID=old-project',
+        '',
+      ].join('\n'),
+    );
+
+    await writeObservabilityEnv({ token: 'new-token', projectId: 'new-project' });
+
+    const contents = fs.readFileSync(`${cwd}/.env`, 'utf8') as string;
+    expect(contents).toContain('OPENAI_API_KEY=provider-secret');
+    expect(contents.match(/^MASTRA_PLATFORM_ACCESS_TOKEN=/gm)).toHaveLength(1);
+    expect(contents).toContain('MASTRA_PLATFORM_ACCESS_TOKEN=new-token');
+    expect(contents.match(/^MASTRA_PROJECT_ID=/gm)).toHaveLength(1);
+    expect(contents).toContain('MASTRA_PROJECT_ID=new-project');
+  });
+
+  test.runIf(process.platform !== 'win32')('sets .env permissions to 0600', async () => {
+    fs.writeFileSync(`${cwd}/.env`, 'EXISTING=1\n', { mode: 0o644 });
+
+    await writeObservabilityEnv();
+
+    expect(fs.statSync(`${cwd}/.env`).mode & 0o777).toBe(0o600);
   });
 });

@@ -25,7 +25,7 @@ Provide both the project name and provider to create the project without prompts
 npx create-mastra@latest my-mastra-project --llm anthropic
 ```
 
-Omit `--llm` to select the provider and optionally enter its API key interactively.
+Omit `--llm` to select the provider and optionally enter its API key interactively. The interactive setup also offers to connect your project to the Mastra platform. If enabled, the command opens the browser authentication flow, creates a platform project with the same name as the local project, and writes `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` to `.env`.
 
 ### Template
 

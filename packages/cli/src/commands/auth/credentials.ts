@@ -177,7 +177,8 @@ function callbackPage({ success }: { success: boolean }): string {
 </html>`;
 }
 
-export async function login(): Promise<Credentials> {
+export async function login(signal?: AbortSignal): Promise<Credentials> {
+  signal?.throwIfAborted();
   console.info('\nLogging in to Mastra...\n');
 
   const server = createServer();
@@ -211,12 +212,27 @@ export async function login(): Promise<Credentials> {
     user: Credentials['user'];
     organizationId: string;
   }>((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      server.close(() => {
-        reject(new Error('Login timed out (60s)'));
-      });
+    let settled = false;
+    const finish = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      signal?.removeEventListener('abort', handleAbort);
+      server.close(callback);
       server.closeAllConnections();
+    };
+    const handleAbort = () => {
+      finish(() => reject(signal?.reason instanceof Error ? signal.reason : new Error('Login cancelled')));
+    };
+    const timeout = setTimeout(() => {
+      finish(() => reject(new Error('Login timed out (60s)')));
     }, 60000);
+
+    signal?.addEventListener('abort', handleAbort, { once: true });
+    if (signal?.aborted) {
+      handleAbort();
+      return;
+    }
 
     server.on('request', (req, res) => {
       const url = new URL(req.url!, `http://localhost:${port}`);
@@ -239,11 +255,7 @@ export async function login(): Promise<Credentials> {
         res.writeHead(200, { 'Content-Type': 'text/html', Connection: 'close' });
         res.end(callbackPage({ success: true }));
 
-        clearTimeout(timeout);
-        server.close(() => {
-          resolve({ token, refreshToken, user, organizationId: orgId });
-        });
-        server.closeAllConnections();
+        finish(() => resolve({ token, refreshToken, user, organizationId: orgId }));
       }
     });
   });
@@ -264,31 +276,36 @@ function isInteractive(): boolean {
   return Boolean(process.stdin.isTTY && process.stdout.isTTY) && !process.env.CI;
 }
 
-export async function getToken(): Promise<string> {
+export async function getToken(signal?: AbortSignal): Promise<string> {
+  signal?.throwIfAborted();
+
   // CI/CD headless path
   const envToken = process.env.MASTRA_API_TOKEN;
   if (envToken) return envToken;
 
   const creds = await loadCredentials();
+  signal?.throwIfAborted();
   if (!creds) {
     if (!isInteractive()) {
       throw new Error('Not logged in. Run `mastra auth login` interactively or set MASTRA_API_TOKEN.');
     }
-    const newCreds = await login();
+    const newCreds = await login(signal);
     return newCreds.token;
   }
 
   // Try a quick verify to see if the token is still valid.
   if (await verifyToken(creds.token)) return creds.token;
+  signal?.throwIfAborted();
 
   // Token might be expired — attempt refresh
   const refreshed = await tryRefreshToken(creds);
   if (refreshed) return refreshed;
+  signal?.throwIfAborted();
 
   if (!isInteractive()) {
     throw new Error('Session expired. Run `mastra auth login` interactively or set MASTRA_API_TOKEN.');
   }
-  const newCreds = await login();
+  const newCreds = await login(signal);
   return newCreds.token;
 }
 

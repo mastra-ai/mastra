@@ -7,7 +7,11 @@ import { getAnalytics } from '../../analytics/index';
 import { cloneTemplate, installDependencies } from '../../utils/clone-template';
 import { findTemplateByName, loadTemplates, selectTemplate } from '../../utils/template-utils';
 import type { Template } from '../../utils/template-utils';
+import { getToken } from '../auth/credentials.js';
+import { OrgSelectionCancelledError, resolveCurrentOrg } from '../auth/orgs.js';
+import { provisionObservabilityProject } from '../init/observability-provision';
 import { installMastraSkills } from '../init/skills-install';
+import { writeObservabilityEnv } from '../init/utils.js';
 import { getPackageManager, gitInit, isGitInitialized } from '../utils.js';
 import { detectCodingAgentSkills } from './coding-agents';
 import {
@@ -86,6 +90,11 @@ export interface CreateOptions {
   resolveVersionTag?: () => Promise<string | undefined>;
 }
 
+type PlatformSetupResult =
+  | { status: 'ready'; token: string; org: { orgId: string; orgName: string } }
+  | { status: 'cancelled' }
+  | { status: 'failed'; error: unknown };
+
 function cancelCreate(): never {
   p.cancel('Operation cancelled');
   throw new CreateCancelledError();
@@ -147,6 +156,25 @@ async function promptForProvider(): Promise<CreateLLMProvider> {
       showInstructions: false,
     }),
   );
+}
+
+async function promptForObservabilityOptIn(): Promise<boolean> {
+  const choice = await p.select({
+    message: `Connect this project to the Mastra platform? View traces and deploy when you're ready`,
+    options: [
+      { value: 'yes', label: 'Yes' },
+      { value: 'no', label: 'No' },
+    ],
+    initialValue: 'yes',
+    showInstructions: false,
+  });
+
+  if (p.isCancel(choice)) {
+    p.log.info('Skipping Mastra platform setup.');
+    return false;
+  }
+
+  return choice === 'yes';
 }
 
 async function promptForApiKey(provider: CreateLLMProvider): Promise<string | undefined> {
@@ -214,9 +242,14 @@ export const create = async (args: CreateOptions): Promise<void> => {
     throw new Error(`A file or directory named "${projectName}" already exists. Please choose a different name.`);
   }
 
+  const analytics = args.analytics ?? getAnalytics();
   let llmProvider = options.llmProvider;
   let llmApiKey = options.llmApiKey;
   let providerSelectionMethod: 'cli_args' | 'interactive' | undefined;
+  let observabilityEnabled = false;
+  let platformSetupActive = false;
+  let platformSetupController: AbortController | undefined;
+  let platformSetupPromise: Promise<PlatformSetupResult> | undefined;
 
   if (mode === 'managed') {
     const providerProvidedByCli = llmProvider !== undefined;
@@ -230,10 +263,45 @@ export const create = async (args: CreateOptions): Promise<void> => {
     if (llmApiKey === undefined && !providerProvidedByCli) {
       llmApiKey = await promptForApiKey(llmProvider);
     }
+
+    const offerObservability = options.projectName === undefined || options.llmProvider === undefined;
+    if (offerObservability) {
+      observabilityEnabled = await promptForObservabilityOptIn();
+      analytics?.trackEvent('cli_observability_selected', {
+        command: 'create',
+        enabled: observabilityEnabled,
+        answer: observabilityEnabled ? 'yes' : 'no',
+        selection_method: 'interactive',
+      });
+      if (observabilityEnabled) {
+        platformSetupController = new AbortController();
+        platformSetupActive = true;
+        const cancelPlatformSetup = () => platformSetupController?.abort();
+        process.on('SIGINT', cancelPlatformSetup);
+        platformSetupPromise = (async (): Promise<PlatformSetupResult> => {
+          try {
+            const token = await getToken(platformSetupController!.signal);
+            const org = await resolveCurrentOrg(token, {
+              forcePrompt: true,
+              exitOnCancel: false,
+              signal: platformSetupController!.signal,
+            });
+            return { status: 'ready', token, org };
+          } catch (error) {
+            if (platformSetupController!.signal.aborted || error instanceof OrgSelectionCancelledError) {
+              return { status: 'cancelled' };
+            }
+            return { status: 'failed', error };
+          } finally {
+            platformSetupActive = false;
+            process.removeListener('SIGINT', cancelPlatformSetup);
+          }
+        })();
+      }
+    }
   }
 
   const selectedTemplate = mode === 'empty' ? undefined : await resolveTemplate(mode, options.template);
-  const analytics = args.analytics ?? getAnalytics();
   analytics?.trackEvent('cli_create_mode_selected', {
     mode,
     template_slug: mode === 'template' ? selectedTemplate?.slug : undefined,
@@ -259,8 +327,13 @@ export const create = async (args: CreateOptions): Promise<void> => {
   const materializationController = new AbortController();
   let interruptionSignal: 'SIGINT' | 'SIGTERM' | undefined;
   const interrupt = (signal: 'SIGINT' | 'SIGTERM') => {
+    if (signal === 'SIGINT' && platformSetupActive) {
+      platformSetupController?.abort();
+      return;
+    }
     interruptionSignal ??= signal;
     materializationController.abort();
+    platformSetupController?.abort();
   };
   const handleSigint = () => interrupt('SIGINT');
   const handleSigterm = () => interrupt('SIGTERM');
@@ -288,6 +361,7 @@ export const create = async (args: CreateOptions): Promise<void> => {
         targetDir: staging.rootPath,
         branch,
         signal: materializationController.signal,
+        ...(observabilityEnabled ? { silent: true } : {}),
       });
 
       if (isManaged) {
@@ -304,14 +378,23 @@ export const create = async (args: CreateOptions): Promise<void> => {
       }
     }
 
-    await installDependencies(staging.projectPath, packageManager, options.timeout, materializationController.signal);
+    if (observabilityEnabled) {
+      await installDependencies(
+        staging.projectPath,
+        packageManager,
+        options.timeout,
+        materializationController.signal,
+        true,
+      );
+    } else {
+      await installDependencies(staging.projectPath, packageManager, options.timeout, materializationController.signal);
+    }
     materializationController.signal.throwIfAborted();
     await publishStagedProject({ projectPath: staging.projectPath, targetPath, projectName });
   } catch (error) {
     materializationError = error;
+    platformSetupController?.abort();
   } finally {
-    process.removeListener('SIGINT', handleSigint);
-    process.removeListener('SIGTERM', handleSigterm);
     if (process.cwd() !== invocationCwd) {
       process.chdir(invocationCwd);
     }
@@ -324,9 +407,18 @@ export const create = async (args: CreateOptions): Promise<void> => {
     }
   }
 
+  const platformSetup = await platformSetupPromise;
+  process.removeListener('SIGINT', handleSigint);
+  process.removeListener('SIGTERM', handleSigterm);
+
   if (interruptionSignal === 'SIGINT') cancelCreate();
   if (interruptionSignal === 'SIGTERM') throw new Error('Operation terminated by SIGTERM');
   if (materializationError) throw materializationError;
+  if (platformSetup?.status === 'cancelled') {
+    p.log.info('Skipping Mastra platform setup.');
+  } else if (observabilityEnabled) {
+    p.log.success('Template cloned and dependencies installed while Mastra platform setup was in progress.');
+  }
 
   const postSetup = await runPostCreateSetup({
     projectPath: targetPath,
@@ -343,11 +435,50 @@ export const create = async (args: CreateOptions): Promise<void> => {
   if (postSetup.hasFailure) p.log.warn(setupSummary);
   else p.log.success(setupSummary);
 
+  let observabilitySummary: string | undefined;
+  let platformEnvWritten = false;
+  let platformError = platformSetup?.status === 'failed' ? platformSetup.error : undefined;
+  if (platformSetup?.status === 'ready') {
+    try {
+      const result = await provisionObservabilityProject({
+        defaultProjectName: projectName,
+        mode: 'create',
+        token: platformSetup.token,
+        org: platformSetup.org,
+      });
+      await writeObservabilityEnv({
+        projectPath: targetPath,
+        token: result.token,
+        projectId: result.projectId,
+        endpoint: result.tracesEndpoint,
+      });
+      platformEnvWritten = true;
+      observabilitySummary = `${color.green('Mastra platform enabled.')}\n\nProject: ${color.cyan(result.projectName)} (${result.orgName})\nWrote ${color.cyan('MASTRA_PLATFORM_ACCESS_TOKEN')} and ${color.cyan('MASTRA_PROJECT_ID')} to ${color.cyan('.env')}.`;
+    } catch (error) {
+      platformError = error;
+    }
+  }
+
+  if (platformError !== undefined) {
+    const message = platformError instanceof Error ? platformError.message : 'Unknown error';
+    try {
+      await writeObservabilityEnv({ projectPath: targetPath });
+      platformEnvWritten = true;
+    } catch {}
+    const placeholderSummary = platformEnvWritten
+      ? `Empty ${color.cyan('MASTRA_PLATFORM_ACCESS_TOKEN')} and ${color.cyan('MASTRA_PROJECT_ID')} placeholders were added to your ${color.cyan('.env')} file.\n\n`
+      : '';
+    observabilitySummary = `${color.yellow('Could not connect this project to Mastra platform automatically:')} ${message}\n\n${placeholderSummary}1. Visit ${color.cyan('https://projects.mastra.ai')} to create a project and an access token.\n2. Paste the token into ${color.cyan('MASTRA_PLATFORM_ACCESS_TOKEN')} and the project id into ${color.cyan('MASTRA_PROJECT_ID')}.`;
+  }
+
   if (mode === 'managed') {
+    const apiKeySummary = llmApiKey
+      ? `Your ${selectedApiKeyEnv} value was written to ${color.cyan('.env')}.`
+      : platformEnvWritten
+        ? `Set ${selectedApiKeyEnv} in ${color.cyan('.env')} before starting.`
+        : `Copy ${color.cyan('.env.example')} to ${color.cyan('.env')} and set ${selectedApiKeyEnv} before starting.`;
     p.note(
-      llmApiKey
-        ? `${color.green('Success!')}\n\nYour ${selectedApiKeyEnv} value was written to ${color.cyan('.env')}.`
-        : `${color.green('Success!')}\n\nCopy ${color.cyan('.env.example')} to ${color.cyan('.env')} and set ${selectedApiKeyEnv} before starting.`,
+      `${color.green('Success!')}\n\n${apiKeySummary}${observabilitySummary ? `\n\n${observabilitySummary}` : ''}`,
     );
   } else if (mode === 'template') {
     p.note(`${color.green('Success!')}\n\nAdd any required environment variables in your ${color.cyan('.env')} file.`);
