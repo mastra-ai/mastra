@@ -1182,7 +1182,15 @@ export class DurableAgent<
           from: ChunkFrom.AGENT,
           payload: { id: workflowInput.agentId, messageId },
         });
-        await beginGoalActivity({ mastra: this.#mastra, agentId: workflowInput.agentId, threadId, runId });
+        if (this.__getGoalConfig()) {
+          await beginGoalActivity({
+            mastra: this.#mastra,
+            agentId: workflowInput.agentId,
+            threadId,
+            runId,
+            requestContext: globalRunRegistry.get(runId)?.requestContext,
+          });
+        }
         try {
           return await this.executeWorkflow(runId, workflowInput);
         } finally {
@@ -1527,12 +1535,15 @@ export class DurableAgent<
         }
 
         const run = await workflow.createRun({ runId, pubsub: this.pubsub });
-        await beginGoalActivity({
-          mastra: this.#mastra,
-          agentId: this.id,
-          threadId: memoryInfo?.threadId,
-          runId,
-        });
+        if (this.__getGoalConfig()) {
+          await beginGoalActivity({
+            mastra: this.#mastra,
+            agentId: this.id,
+            threadId: memoryInfo?.threadId,
+            runId,
+            requestContext,
+          });
+        }
         let result;
         try {
           result = await run.resume({
@@ -2207,7 +2218,15 @@ export class DurableAgent<
           from: ChunkFrom.AGENT,
           payload: { id: workflowInput.agentId, messageId },
         });
-        await beginGoalActivity({ mastra: this.#mastra, agentId: workflowInput.agentId, threadId, runId });
+        if (this.__getGoalConfig()) {
+          await beginGoalActivity({
+            mastra: this.#mastra,
+            agentId: workflowInput.agentId,
+            threadId,
+            runId,
+            requestContext: globalRunRegistry.get(runId)?.requestContext,
+          });
+        }
         try {
           return await this.executeWorkflow(runId, workflowInput);
         } finally {

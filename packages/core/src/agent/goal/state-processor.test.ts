@@ -1,10 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
 import type { GoalObjectiveRecord } from '../../storage/domains/thread-state/base';
 import { InMemoryStore } from '../../storage/mock';
 
+import { beginGoalActivity, stopGoalActivity } from './activity';
 import { GOAL_REQUEST_CONTEXT_KEY, GOAL_STATE_TYPE } from './objective';
 import { GoalStateProcessor } from './state-processor';
 
@@ -29,7 +30,7 @@ async function createProcessor(stored?: GoalObjectiveRecord) {
   if (stored) await store!.setState({ threadId: THREAD_ID, type: GOAL_STATE_TYPE, value: stored });
   const processor = new GoalStateProcessor();
   processor.__registerMastra(mastra as any);
-  return { processor, storage };
+  return { mastra, processor, storage, store: store! };
 }
 
 function snapshotSignal(record: GoalObjectiveRecord) {
@@ -40,8 +41,9 @@ function createArgs(options: {
   carried?: GoalObjectiveRecord | null;
   lastSnapshot?: GoalObjectiveRecord;
   hasSnapshot?: boolean;
+  requestContext?: RequestContext;
 }) {
-  const requestContext = new RequestContext();
+  const requestContext = options.requestContext ?? new RequestContext();
   if (options.carried !== undefined) {
     requestContext.set(GOAL_REQUEST_CONTEXT_KEY, options.carried === null ? undefined : options.carried);
   }
@@ -138,5 +140,64 @@ describe('GoalStateProcessor', () => {
     // No prior objective in the last snapshot (already retracted) — nothing to do.
     const result = await processor.computeStateSignal(createArgs({ hasSnapshot: true }));
     expect(result).toBeUndefined();
+  });
+
+  it('reuses the objective resolved by activity tracking', async () => {
+    const { mastra, processor, store } = await createProcessor(objective());
+    const requestContext = new RequestContext();
+    const getState = vi.spyOn(store, 'getState');
+
+    await beginGoalActivity({
+      mastra,
+      agentId: 'goal-agent',
+      threadId: THREAD_ID,
+      runId: 'cached-objective-run',
+      requestContext,
+    });
+    const result = await processor.computeStateSignal(createArgs({ hasSnapshot: false, requestContext }));
+
+    expect(result?.contents).toContain('Ship the feature');
+    expect(getState).toHaveBeenCalledTimes(1);
+
+    await processor.computeStateSignal(createArgs({ hasSnapshot: false, requestContext }));
+    expect(getState).toHaveBeenCalledTimes(2);
+    await stopGoalActivity({ agentId: 'goal-agent', runId: 'cached-objective-run' });
+  });
+
+  it('prefers a within-turn objective write over the activity cache', async () => {
+    const { mastra, processor } = await createProcessor(objective({ objective: 'Stored objective' }));
+    const requestContext = new RequestContext();
+
+    await beginGoalActivity({
+      mastra,
+      agentId: 'goal-agent',
+      threadId: THREAD_ID,
+      runId: 'cached-stale-run',
+      requestContext,
+    });
+    requestContext.set(GOAL_REQUEST_CONTEXT_KEY, objective({ objective: 'New within-turn objective' }));
+    const result = await processor.computeStateSignal(createArgs({ hasSnapshot: false, requestContext }));
+
+    expect(result?.contents).toContain('New within-turn objective');
+    expect(result?.contents).not.toContain('Stored objective');
+    await stopGoalActivity({ agentId: 'goal-agent', runId: 'cached-stale-run' });
+  });
+
+  it('reuses a cached missing objective without reading storage again', async () => {
+    const { mastra, processor, store } = await createProcessor();
+    const requestContext = new RequestContext();
+    const getState = vi.spyOn(store, 'getState');
+
+    await beginGoalActivity({
+      mastra,
+      agentId: 'goal-agent',
+      threadId: THREAD_ID,
+      runId: 'cached-empty-run',
+      requestContext,
+    });
+    const result = await processor.computeStateSignal(createArgs({ hasSnapshot: false, requestContext }));
+
+    expect(result).toBeUndefined();
+    expect(getState).toHaveBeenCalledTimes(1);
   });
 });

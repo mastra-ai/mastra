@@ -1,6 +1,7 @@
 import type { Mastra } from '../../mastra';
 import type { ComputeStateSignalArgs, ComputeStateSignalResult } from '../../processors/index';
 import type { GoalObjectiveRecord } from '../../storage/domains/thread-state/base';
+import { takeCachedGoalObjective } from './activity-cache';
 import { getObjectiveFromRequestContext, GOAL_STATE_ID, GOAL_STATE_TYPE, resolveGoalStore } from './objective';
 
 // =============================================================================
@@ -74,11 +75,14 @@ export class GoalStateProcessor {
     // Current objective for this turn: the within-turn write a `setObjective`
     // surfaced on the shared RequestContext this step, else the durable store.
     const carried = getObjectiveFromRequestContext(args.requestContext);
+    const cached = takeCachedGoalObjective(args.requestContext, args.threadId);
     let current: GoalObjectiveRecord | undefined;
     if (carried === null) {
       current = undefined; // explicitly cleared this step
     } else if (carried !== undefined) {
       current = carried;
+    } else if (cached) {
+      current = cached.objective ?? undefined;
     } else {
       const store = await this.resolveStore();
       current = store

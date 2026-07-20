@@ -119,6 +119,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
           model: mockModel,
           tools: { findUserTool },
           memory: new MockMemory(),
+          goal: {},
           defaultOptions: {
             autoResumeSuspendedTools: true,
           },
@@ -409,6 +410,7 @@ describe('goal activity at tool approval', () => {
       instructions: 'Use the tool.',
       model,
       tools: { approvalTool: tool },
+      goal: {},
     });
     const mastra = new Mastra({ agents: { rawAgent }, storage, logger: false });
     const agent = mastra.getAgent('rawAgent');

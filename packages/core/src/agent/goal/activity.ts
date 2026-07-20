@@ -1,5 +1,7 @@
 import type { MastraUnion } from '../../action';
+import type { RequestContext } from '../../request-context';
 import type { GoalObjectiveRecord } from '../../storage/domains/thread-state/base';
+import { cacheGoalObjective, clearCachedGoalObjective } from './activity-cache';
 import { readObjective, resolveGoalStore, writeObjective } from './objective';
 import type { ResolvedGoalStore } from './objective';
 
@@ -17,6 +19,7 @@ interface GoalActivityTarget {
   agentId: string;
   threadId: string | undefined;
   runId: string;
+  requestContext?: RequestContext;
   now?: () => number;
 }
 
@@ -67,6 +70,7 @@ export async function beginGoalActivity({
   agentId,
   threadId,
   runId,
+  requestContext,
   now = Date.now,
 }: GoalActivityTarget): Promise<void> {
   if (!threadId) return;
@@ -74,11 +78,13 @@ export async function beginGoalActivity({
   const key = segmentKey(agentId, runId);
   if (activeSegments.has(key)) return;
 
+  clearCachedGoalObjective(requestContext);
   let store: ResolvedGoalStore | undefined;
   let objective: GoalObjectiveRecord | undefined;
   try {
     store = await resolveGoalStore(mastra);
     objective = await readObjective(store, threadId);
+    cacheGoalObjective(requestContext, threadId, objective);
   } catch (error) {
     debugFailure(mastra, 'Failed to begin goal activity tracking', { error, agentId, threadId, runId });
     return;

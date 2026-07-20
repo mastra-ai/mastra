@@ -293,13 +293,16 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           requestContext.delete('__mastra_requireToolApproval');
         }
 
-        await beginGoalActivity({
-          mastra: rest.mastra,
-          agentId,
-          threadId: _internal?.threadId,
-          runId,
-          now: _internal?.now,
-        });
+        if (rest.goal) {
+          await beginGoalActivity({
+            mastra: rest.mastra,
+            agentId,
+            threadId: _internal?.threadId,
+            runId,
+            requestContext,
+            now: _internal?.now,
+          });
+        }
 
         const executionResult = resumeContext
           ? await run.resume({

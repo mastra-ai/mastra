@@ -4,7 +4,12 @@ import { describe, expect, it, vi } from 'vitest';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import { InMemoryStore } from '../../storage/mock';
-import { DEFAULT_GOAL_JUDGE_PROMPT, DEFAULT_GOAL_MAX_RUNS, resolveEffectiveGoalSettings } from '../goal';
+import {
+  DEFAULT_GOAL_JUDGE_PROMPT,
+  DEFAULT_GOAL_MAX_RUNS,
+  GOAL_STATE_TYPE,
+  resolveEffectiveGoalSettings,
+} from '../goal';
 import { Agent } from '../index';
 import type { GoalConfig } from '../types';
 
@@ -202,7 +207,7 @@ describe('Agent objective methods', () => {
   );
 
   it('checkpoints active duration when a raw Agent stream completes', async () => {
-    const agent = makeAgent(undefined, singleStepModel('Finished.', 20));
+    const agent = makeAgent({}, singleStepModel('Finished.', 20));
     await agent.setObjective('Finish the task', { threadId: THREAD, resourceId: RESOURCE });
 
     const stream = await agent.stream('go', {
@@ -214,6 +219,31 @@ describe('Agent objective methods', () => {
     }
 
     expect((await agent.getObjective({ threadId: THREAD }))?.activeDurationMs).toBeGreaterThan(0);
+  });
+
+  it('does not read goal state when the agent has no goal configuration', async () => {
+    const storage = new InMemoryStore();
+    const agent = new Agent({
+      id: 'ordinary-agent',
+      name: 'ordinary-agent',
+      instructions: 'Answer once.',
+      model: singleStepModel('Finished.'),
+      memory: new MockMemory(),
+    });
+    new Mastra({ agents: { 'ordinary-agent': agent }, storage, logger: false });
+    const threadState = await storage.getStore('threadState');
+    const getState = vi.spyOn(threadState!, 'getState');
+
+    const stream = await agent.stream('go', {
+      memory: { resource: RESOURCE, thread: { id: THREAD } },
+      maxSteps: 1,
+    });
+    for await (const _chunk of stream.fullStream) {
+      // Drain the stream through its terminal lifecycle boundary.
+    }
+
+    const goalReads = getState.mock.calls.filter(([options]) => options.type === GOAL_STATE_TYPE);
+    expect(goalReads).toHaveLength(0);
   });
 
   it('no-ops without storage', async () => {
