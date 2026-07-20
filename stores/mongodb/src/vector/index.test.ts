@@ -1410,6 +1410,23 @@ describe('MongoDBVector filterFields (#18587)', () => {
       expect(Object.keys(def.mappings.fields).sort()).toEqual(['note', 'title']);
     });
 
+    // Live end-to-end validation showed $rankFusion runs on real Atlas 8.0.x, so the guard admits
+    // >= 8.0 (was >= 8.1) and rejects only clearly-unsupported older servers.
+    it('round6: assertRankFusionSupported admits MongoDB 8.0.x and rejects 7.x', async () => {
+      const okCases = ['8.0.27', '8.0.0', '8.1.0', '9.0.0'];
+      for (const version of okCases) {
+        const v = makeVector();
+        (v as any).db = { admin: () => ({ buildInfo: async () => ({ version }) }) };
+        await expect((v as any).assertRankFusionSupported()).resolves.toBeUndefined();
+      }
+      const badCases = ['7.0.14', '6.0.0'];
+      for (const version of badCases) {
+        const v = makeVector();
+        (v as any).db = { admin: () => ({ buildInfo: async () => ({ version }) }) };
+        await expect((v as any).assertRankFusionSupported()).rejects.toThrow(/requires MongoDB >= 8\.0/);
+      }
+    });
+
     // FIX 7: document-mode filters operate on ROOT fields (no metadata. prefix); field mode
     // keeps prefixing for back-compat.
     it('FIX7: transformMetadataFilter does NOT prefix bare fields in document mode', () => {

@@ -297,9 +297,11 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
   }
 
   /**
-   * $rankFusion is generally available in MongoDB >= 8.1. It technically exists in 8.0.x, but
-   * only behind a MongoDB support case and with the caveat that queries may need to pause on
-   * upgrade (see the $rankFusion docs), so we require >= 8.1 for a supported, stable path.
+   * $rankFusion is available in MongoDB >= 8.0. It is generally available from 8.1; on 8.0.x it
+   * may require a MongoDB support case to enable (see the $rankFusion docs), but where enabled —
+   * e.g. Atlas 8.0.x clusters — it runs. We therefore gate at >= 8.0 (rejecting only clearly
+   * unsupported older servers) and let the server be the final authority: if $rankFusion is not
+   * actually enabled on an 8.0.x deployment, the query itself surfaces the server error.
    */
   private async assertRankFusionSupported(): Promise<void> {
     // Probe the server version once and memoize: the support result cannot change for a live
@@ -308,7 +310,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       const info = (await this.db.admin().buildInfo()) as { version?: string };
       const version = info.version ?? 'unknown';
       const [maj = 0, min = 0] = (info.version ?? '0.0').split('.').map(Number);
-      const ok = maj > 8 || (maj === 8 && min >= 1);
+      const ok = maj > 8 || (maj === 8 && min >= 0);
       this.rankFusionSupport = { ok, version };
     }
     if (!this.rankFusionSupport.ok) {
@@ -316,7 +318,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         id: createVectorErrorId('MONGODB', 'HYBRID_QUERY', 'UNSUPPORTED'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
-        text: `hybridQuery uses $rankFusion, which requires MongoDB >= 8.1 (found ${this.rankFusionSupport.version}). On 8.0.x it needs a MongoDB support case; upgrade to >= 8.1, or run query() and textQuery() separately and fuse client-side.`,
+        text: `hybridQuery uses $rankFusion, which requires MongoDB >= 8.0 (found ${this.rankFusionSupport.version}). On 8.0.x it may need a MongoDB support case to enable; upgrade to >= 8.1, or run query() and textQuery() separately and fuse client-side.`,
       });
     }
   }
