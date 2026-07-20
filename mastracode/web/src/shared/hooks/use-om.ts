@@ -6,7 +6,7 @@ import type { OMResponse, UpdateOMResponse } from '../api/types';
 
 /**
  * Observational Memory config (mirrors the TUI `/om` command). Everything is
- * session-scoped: the GET route requires the active project's `resourceId`, so
+ * session-scoped: the GET route requires the active factory's `resourceId`, so
  * the query is gated by `enabled` and stays idle until a project is open. The
  * cache is keyed by `resourceId` so switching projects yields a distinct entry.
  *

@@ -320,7 +320,7 @@ export async function listArtifacts(root: string, workspacePath: string): Promis
   };
 }
 
-export interface ResolvedProject {
+export interface ResolvedCodebase {
   /**
    * The resourceId the TUI would use for this path — derived identically so a
    * project opened in the terminal and in the web app resolve to the SAME
@@ -340,7 +340,7 @@ export interface ResolvedProject {
  * shared continuity point — start in the TUI, continue on the web, same path
  * → same resourceId → same session.
  */
-export function resolveProject(projectPath: string): ResolvedProject {
+export function resolveCodebase(projectPath: string): ResolvedCodebase {
   const info = detectProject(projectPath);
   const override = getResourceIdOverride(info.rootPath);
   return {
@@ -355,7 +355,7 @@ export function resolveProject(projectPath: string): ResolvedProject {
 /**
  * Build the web filesystem routes as Mastra `apiRoutes`:
  *   - `GET /web/fs/list?path=...`        — browse directories (confined to root)
- *   - `GET /web/project/resolve?path=...` — TUI-compatible project resourceId
+ *   - `GET /web/codebase/resolve?path=...` — TUI-compatible codebase resourceId
  */
 export function buildFsRoutes(options: { root?: string } = {}): ApiRoute[] {
   const root = resolveFsRoot(options.root);
@@ -438,7 +438,7 @@ export function buildFsRoutes(options: { root?: string } = {}): ApiRoute[] {
         }
       },
     }),
-    registerApiRoute('/web/project/resolve', {
+    registerApiRoute('/web/codebase/resolve', {
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
@@ -451,7 +451,7 @@ export function buildFsRoutes(options: { root?: string } = {}): ApiRoute[] {
         const confined = await realPathWithinRoot(isAbsolute(path) ? resolve(path) : resolve(root, path), root);
         if (!confined) return c.json({ error: 'Path is outside the browsable root' }, 403);
         try {
-          return c.json(resolveProject(confined));
+          return c.json(resolveCodebase(confined));
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           return c.json({ error: message }, 500);

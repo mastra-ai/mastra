@@ -6,7 +6,7 @@
  * React Query hook (shared cache key with the rest of the UI), redirecting
  * unauthenticated sessions to `/signin` when web auth is enabled. `SignInGate`
  * mirrors the guard: signed-in (or auth-disabled) visitors are sent back to
- * `/` so the app can choose the active project's board or draft composer.
+ * `/` so the app can choose the active factory's board or draft composer.
  */
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
@@ -17,8 +17,9 @@ import { safeReturnTo, SignInPage, useWebAuth } from './domains/auth';
 import Chat from './domains/chat/Chat';
 import { NewPage } from './domains/chat/NewPage';
 import { ThreadPage } from './domains/chat/ThreadPage';
-import { useActiveProject } from '../../shared/hooks/useActiveProject';
+import { useActiveFactory } from '../../shared/hooks/useActiveFactory';
 import { useWorkItemsQuery } from '../../shared/hooks/useWorkItems';
+import { isGithubFactory } from './domains/workspaces/services/factories';
 import { AuditPage } from './domains/factory/AuditPage';
 import { BoardPage } from './domains/factory/BoardPage';
 import { MetricsPage } from './domains/factory/MetricsPage';
@@ -70,8 +71,9 @@ function SignInGate() {
 }
 
 function RootLanding() {
-  const { activeProject } = useActiveProject();
-  const githubProjectId = activeProject?.source === 'github' ? activeProject.githubProjectId : undefined;
+  const { activeFactory } = useActiveFactory();
+  const githubProjectId =
+    activeFactory && isGithubFactory(activeFactory) ? activeFactory.binding.githubProjectId : undefined;
   const workItems = useWorkItemsQuery(githubProjectId);
 
   if (githubProjectId && workItems.isPending) return <AuthPendingSkeleton label="Loading Factory board" />;

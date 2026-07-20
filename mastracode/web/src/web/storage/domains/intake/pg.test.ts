@@ -36,7 +36,7 @@ describe('IntakeStoragePG', () => {
   });
 
   it('returns the defaults when no row exists and the stored config otherwise', async () => {
-    const stored = { github: { enabled: false, projectIds: ['gp-1'] }, linear: { enabled: true, projectIds: null } };
+    const stored = { github: { enabled: false, repositoryIds: ['gp-1'] }, linear: { enabled: true, projectIds: null } };
     let hasRow = false;
     const { ctx } = fakePool(text => {
       if (text.startsWith('SELECT config')) return { rows: hasRow ? [{ config: stored }] : [] };
@@ -46,7 +46,7 @@ describe('IntakeStoragePG', () => {
     await domain.init(ctx);
 
     expect(await domain.getConfig('org1', 'u1')).toEqual({
-      github: { enabled: true, projectIds: null },
+      github: { enabled: true, repositoryIds: null },
       linear: { enabled: true, projectIds: null },
     });
     hasRow = true;
@@ -57,11 +57,33 @@ describe('IntakeStoragePG', () => {
     const { queries, ctx } = fakePool();
     const domain = new IntakeStoragePG();
     await domain.init(ctx);
-    const config = { github: { enabled: true, projectIds: null }, linear: { enabled: false, projectIds: ['lp-1'] } };
+    const config = { github: { enabled: true, repositoryIds: null }, linear: { enabled: false, projectIds: ['lp-1'] } };
     await domain.saveConfig('org1', 'u1', config);
 
     const upsert = queries.at(-1)!;
     expect(sqlOf(upsert)).toContain('ON CONFLICT (org_id, user_id)');
     expect(upsert.values).toEqual(['org1', 'u1', JSON.stringify(config)]);
+  });
+
+  it('returns defaults for malformed JSON and prerelease github.projectIds rows', async () => {
+    const cases: unknown[] = [
+      { github: { enabled: true, projectIds: ['old-1'] }, linear: { enabled: true, projectIds: null } },
+      { not: 'intake' },
+      null,
+    ];
+    for (const stored of cases) {
+      const { ctx } = fakePool(text => {
+        if (text.startsWith('SELECT config')) return { rows: [{ config: stored }] };
+        return undefined;
+      });
+      const domain = new IntakeStoragePG();
+      await domain.init(ctx);
+      const config = await domain.getConfig('org1', 'u1');
+      expect(config).toEqual({
+        github: { enabled: true, repositoryIds: null },
+        linear: { enabled: true, projectIds: null },
+      });
+      expect(config.github).not.toHaveProperty('projectIds');
+    }
   });
 });

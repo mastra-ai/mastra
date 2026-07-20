@@ -238,7 +238,7 @@ export class MastraFactory {
     if (machine && typeof machine.clone !== 'function') {
       throw new Error(
         `MastraFactory: the configured sandbox machine (provider '${machine.provider}') does not implement clone(). ` +
-          `GitHub-backed projects each get their own sandbox cloned from the configured machine. ` +
+          `GitHub-backed repositories each get their own sandbox cloned from the configured machine. ` +
           `Pass a machine that implements clone() — e.g. RailwaySandbox (@mastra/railway) or ` +
           `LocalSandbox (@mastra/core/workspace) — or omit 'sandbox' to disable sandboxes.`,
       );

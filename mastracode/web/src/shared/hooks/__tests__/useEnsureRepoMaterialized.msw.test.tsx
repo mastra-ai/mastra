@@ -15,7 +15,7 @@ import type { MaterializeResult, PrepareProgress } from '../../../web/ui/domains
 import { useEnsureRepoMaterializedMutation } from '../useEnsureRepoMaterialized';
 
 const ORIGIN = TEST_BASE_URL;
-const ENSURE_URL = `${ORIGIN}/web/github/projects/ghp_1/ensure`;
+const ENSURE_URL = `${ORIGIN}/web/github/repositories/ghp_1/ensure`;
 
 const materialized: MaterializeResult = {
   resourceId: 'resource-1',
