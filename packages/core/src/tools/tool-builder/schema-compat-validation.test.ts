@@ -31,6 +31,7 @@ function buildCoreTool(
 
 describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
   it('createTool execute path skips author-schema re-validation after CoreToolBuilder compat validation', async () => {
+    // createTool wraps execute with author-schema validation; CoreToolBuilder must use executeWithPrevalidatedInput.
     const execute = vi.fn(async ({ text }: { text: string }) => ({ success: true, text }));
     const shortTextTool = createTool({
       id: 'short-text-tool',
@@ -169,6 +170,7 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
   });
 
   it('should use schema-compat transformed schema for BOTH LLM parameters AND validation', async () => {
+    // Create a tool with string min constraint
     const inputSchema = z.object({
       message: z.string().min(10).describe('A message with minimum 10 characters'),
     });
@@ -183,6 +185,7 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
       },
     };
 
+    // Create a model config that requires schema transformation (Claude 3.5 Haiku strips min/max from strings)
     const modelConfig = haikuModelConfig;
 
     const coreTool = new CoreToolBuilder({
@@ -194,8 +197,15 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
       },
     }).build();
 
+    // ASSERTION 1: The parameters sent to the LLM should be transformed
+    // (Claude 3.5 Haiku compatibility layer removes min/max constraints from strings)
     const anthropicLayer = new AnthropicSchemaCompatLayer(modelConfig as any);
-    const messageField = inputSchema.shape.message as z.ZodString;
+
+    // The original schema has a min constraint
+    const originalSchema = inputSchema;
+    const messageField = originalSchema.shape.message as z.ZodString;
+    // Zod v4 uses class instances for checks instead of plain objects
+    // Check by looking for the MinLength check class
     const hasMinCheck =
       messageField._def.checks?.some(
         (check: any) =>
@@ -203,14 +213,23 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
       ) ?? false;
     expect(hasMinCheck).toBe(true);
 
-    const transformedMessageField = (anthropicLayer.processZodType(inputSchema) as any).shape.message as z.ZodString;
+    // The transformed schema should NOT have the min constraint (for Claude 3.5 Haiku)
+    // This is what the LLM sees
+    const transformedSchema = anthropicLayer.processZodType(originalSchema);
+    const transformedMessageField = (transformedSchema as any).shape.message as z.ZodString;
+
+    // Zod v4 uses class instances for checks instead of plain objects
     const hasMinCheckAfterTransform =
       transformedMessageField._def.checks?.some(
         (check: any) => check.constructor?.name === '$ZodCheckMinLength' || check.kind === 'min',
       ) ?? false;
     expect(hasMinCheckAfterTransform).toBe(false);
 
-    const shortMessage = 'Hi there';
+    // ASSERTION 2: Validation must use the same transformed schema the LLM saw
+
+    // Simulate what happens when the LLM calls the tool with a short string (< 10 chars)
+    // The LLM was told there's no minimum, so it might send a short string
+    const shortMessage = 'Hi there'; // Only 8 characters, less than the original min of 10
 
     const executeResult = await coreTool.execute?.(
       { message: shortMessage },
@@ -227,6 +246,7 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
   });
 
   it('should validate against transformed schema for number constraints with Anthropic', async () => {
+    // Create a tool with number constraints
     const inputSchema2 = z.object({
       age: z.number().min(18).max(100).describe('Age between 18 and 100'),
     });
@@ -258,6 +278,9 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
     });
 
     const coreTool = builder.build();
+
+    // Anthropic's schema compat layer transforms number constraints
+    // The LLM receives a schema without strict min/max enforcement
 
     const executeResult = await coreTool.execute?.(
       { age: 25 },
@@ -304,7 +327,10 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
     });
 
     const coreTool = builder.build();
-    const shortText = 'Short text';
+
+    // The LLM receives a schema WITHOUT the min(20) constraint
+    // So it might send a string with only 10 characters
+    const shortText = 'Short text'; // Only 10 characters
 
     const executeResult = await coreTool.execute?.(
       { text: shortText },
@@ -323,7 +349,9 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
   });
 
   it('should handle OpenAI o3 reasoning model converting optional to nullable (working memory bug)', async () => {
-    // o3 sends null for optional fields after compat converts .optional() to .nullable().
+    // This reproduces the exact bug reported by the user with updateWorkingMemory tool
+    // OpenAI o3 converts .optional() to .nullable(), then sends null, but validation
+    // was checking against the original schema which expects string | undefined
     const inputSchema5 = z.object({
       newMemory: z.string().describe('New memory to add'),
       searchString: z.string().optional().describe('Optional search string'),
@@ -358,11 +386,13 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
 
     const coreTool = builder.build();
 
+    // OpenAI o3 converts .optional() to .nullable() via OpenAIReasoningSchemaCompatLayer
+    // So the LLM sends null instead of undefined for optional fields
     const newMemoryValue = '#User\n- First Name: Randy\n- Last Name: Lynn';
     const executeResult = await coreTool.execute?.(
       {
         newMemory: newMemoryValue,
-        searchString: null,
+        searchString: null, // LLM sends null because schema was converted to nullable
         updateReason: 'append-new-memory',
       },
       {
@@ -372,6 +402,7 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
       },
     );
 
+    // Compat validation coerces null back to undefined for optional fields
     expect(executeResult).not.toHaveProperty('error');
     expect(executeResult).toEqual({
       success: true,
@@ -424,14 +455,18 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
 
     const coreTool = builder.build();
 
+    // Ensure the parameters we send to the LLM are not empty objects
     const params = coreTool.parameters as any;
     const props = params.properties || {};
 
     expect(Object.keys(props)).toEqual(['category', 'price', 'label']);
     const requiredFields = params?.required || [];
-    // Zod v4: .optional().transform() loses optional info in JSON Schema export.
+    // Zod v4: .optional().transform() chains lose optional info during JSON Schema conversion
+    // The transform wrapper becomes the outer type, so 'label' appears as required
+    // This is a known limitation in Zod v4's toJSONSchema() implementation
     expect(requiredFields).toEqual(['price', 'label']);
 
+    // Ensure the enum/type details survive schema compat
     const categoryProp = props.category;
     const priceProp = props.price;
     const labelProp = props.label;
@@ -445,7 +480,11 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
     expect(priceProp.minimum).toBe(1);
 
     expect(labelProp).toBeDefined();
+    // Zod v4: transforms may not preserve type information in JSON Schema
+    // The label field with .trim().optional().transform() loses type info
+    // and only preserves the description
 
+    // Execution should accept valid enum and numeric inputs and apply transform
     const executeResult = await coreTool.execute?.(
       { category: 'book', price: 25, label: '  BLUE ' },
       {
