@@ -6,6 +6,7 @@ import { watch } from 'rollup';
 import { getWorkspaceInformation } from '../bundler/workspaceDependencies';
 import { analyzeBundle } from './analyze';
 import { getInputOptions as getBundlerInputOptions } from './bundler';
+import { normalizeExternals } from './externals';
 import { aliasHono } from './plugins/hono-alias';
 import { nodeModulesExtensionResolver } from './plugins/node-modules-extension-resolver';
 import { tsConfigPaths } from './plugins/tsconfig-paths';
@@ -61,7 +62,13 @@ export async function getInputOptions(
     },
     platform,
     env,
-    { sourcemap, isDev: true, workspaceRoot, projectRoot, externalsPreset: bundlerOptions?.externals === true },
+    {
+      sourcemap,
+      isDev: true,
+      workspaceRoot,
+      projectRoot,
+      externalsPreset: normalizeExternals(bundlerOptions?.externals).preset === 'all',
+    },
   );
 
   if (Array.isArray(inputOptions.plugins)) {

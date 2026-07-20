@@ -638,7 +638,7 @@ const mastra = new Mastra({
 
 ### bundler.externals
 
-**Type:** `boolean | string[]`\
+**Type:** `boolean | string[] | { preset?: 'all' | 'none'; include?: string[]; exclude?: string[] }`\
 **Default:** `true`
 
 When `mastra build` is run, Mastra bundles your project into the `.mastra/output` directory. This option controls which packages are excluded from the bundle (marked as "external") and installed separately through a package manager. This is useful when the internal Mastra bundler ([Rollup](https://rollupjs.org/configuration-options/#external)) has trouble bundling certain packages.
@@ -650,6 +650,7 @@ Here's an overview of what the different values mean:
 - `true`: All dependencies listed in your project's `package.json` are marked as external
 - `false`: No dependencies are marked as external; everything is bundled together
 - `string[]`: An array of package names to mark as external, the rest will be bundled together
+- `object`: Combines a preset with per-package overrides
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -660,6 +661,54 @@ export const mastra = new Mastra({
   },
 })
 ```
+
+#### Composing presets and overrides
+
+The boolean and array forms are all-or-nothing. Use the object form when you need both behaviors at once, such as a project that must externalize everything because of a native `.node` addon but still has one package that needs to be bundled.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'preset',
+    type: "'all' | 'none'",
+    isOptional: true,
+    description:
+      "Which dependencies to externalize before overrides are applied. `'all'` externalizes every non-workspace dependency, `'none'` bundles everything. Defaults to `'none'`.",
+  },
+  {
+    name: 'include',
+    type: 'string[]',
+    isOptional: true,
+    description:
+      'Package names to always mark as external, in addition to the preset. Use this for packages that static analysis cannot detect, such as dynamically imported drivers.',
+  },
+  {
+    name: 'exclude',
+    type: 'string[]',
+    isOptional: true,
+    description:
+      "Package names to bundle even when the preset would mark them as external. Cannot override Mastra's built-in runtime externals or anything named in `include`.",
+  },
+]}
+/>
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
+export const mastra = new Mastra({
+  bundler: {
+    externals: {
+      preset: 'all',
+      // Ships a broken ESM entry, so bundle it instead of installing it.
+      exclude: ['broken-package'],
+      // Imported dynamically at runtime, so the analyzer cannot see it.
+      include: ['pg-native'],
+    },
+  },
+})
+```
+
+`exclude` only overrides what `preset` would externalize. It never removes Mastra's own runtime externals, and `include` takes precedence when a package appears in both lists.
 
 ### bundler.sourcemap
 
