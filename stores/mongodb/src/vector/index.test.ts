@@ -1,5 +1,5 @@
 import { createVectorTestSuite } from '@internal/storage-test-utils';
-import { MongoClient } from 'mongodb';
+import { MongoClient, ObjectId } from 'mongodb';
 import { vi, describe, it, expect, beforeAll, afterAll, test } from 'vitest';
 import { MongoDBVector } from './';
 
@@ -1019,11 +1019,11 @@ describe('MongoDBVector filterFields (#18587)', () => {
 
     it('createSearchIndex with fields provisions a DISTINCT field-mapped Atlas Search index', async () => {
       await searchVector.createSearchIndex({ indexName: idxName, fields: ['note'] });
-      // With `fields` (and no explicit searchIndexName), the field-mapped index is created
-      // under a DISTINCT name (`${searchCol}_search_fields_index`). For a BYO collection there
-      // is no auto-created dynamic index to collide with; textQuery/hybridQuery resolve this
-      // persisted name.
-      const fieldIndexName = `${searchCol}_search_fields_index`;
+      // With `fields` (and no explicit searchIndexName), the field-mapped index is created under a
+      // DISTINCT name that is unique per LOGICAL index (`${searchCol}_${idxName}_search_fields_index`,
+      // FIX 6) so two logical indexes on one collection don't collide. textQuery/hybridQuery
+      // resolve this persisted name.
+      const fieldIndexName = `${searchCol}_${idxName}_search_fields_index`;
       const col = searchVector['db'].collection(searchCol);
       const maxWait = 60000;
       const pollInterval = 1000;
@@ -1211,6 +1211,236 @@ describe('MongoDBVector filterFields (#18587)', () => {
       expect(dropSearchIndex).toHaveBeenCalledWith('txn_vec_idx');
       expect(drop).not.toHaveBeenCalled();
       expect(deleteRegistryEntry).toHaveBeenCalledWith('precedents');
+    });
+  });
+
+  // ─── Round 4 external-review fixes (unit) ────────────────────────────────────────────
+  describe('round4 fixes (unit)', () => {
+    const makeVector = () => new MongoDBVector({ id: 'test', uri: 'mongodb://localhost:27017', dbName: 'test_db' });
+
+    // FIX 1: createSearchIndex must persist a COMPLETE target, and resolveIndexTarget must
+    // defensively hydrate missing collectionName/searchIndexName from the managed default.
+    it('FIX1: createSearchIndex persists a COMPLETE registry target (never partial)', async () => {
+      const v = makeVector();
+      const createSearchIndex = vi.fn().mockResolvedValue(undefined);
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex });
+      // Managed index with a full in-memory target (as createIndex would have set).
+      (v as any).indexTargets.set('idx', {
+        collectionName: 'idx',
+        searchIndexName: 'idx_vector_index',
+        isByo: false,
+      });
+      const writeRegistryEntry = vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
+
+      await v.createSearchIndex({ indexName: 'idx', fields: ['note'] });
+
+      const persisted = writeRegistryEntry.mock.calls[0][1];
+      // The persisted doc must carry collectionName + searchIndexName + isByo, NOT just
+      // textSearchIndexName (which would strand a later resolveIndexTarget with undefined fields).
+      expect(persisted.collectionName).toBe('idx');
+      expect(persisted.searchIndexName).toBe('idx_vector_index');
+      expect(persisted.isByo).toBe(false);
+      expect(persisted.textSearchIndexName).toBeDefined();
+    });
+
+    it('FIX1: resolveIndexTarget falls back to managed defaults for a partial registry entry', async () => {
+      const v = makeVector();
+      // A partial/legacy entry that only recorded a textSearchIndexName (the pre-fix bug shape).
+      vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue({
+        _id: 'legacy',
+        indexName: 'legacy',
+        textSearchIndexName: 'legacy_search_index',
+      });
+
+      const target = await (v as any).resolveIndexTarget('legacy');
+      // Must NOT return undefined — hydrate the managed defaults so downstream ops work.
+      expect(target.collectionName).toBe('legacy');
+      expect(target.searchIndexName).toBe('legacy_vector_index');
+      expect(target.isByo).toBe(false);
+      expect(target.textSearchIndexName).toBe('legacy_search_index');
+    });
+
+    // FIX 6: field-mapped default name includes the logical indexName so two logical indexes
+    // on the same collection get distinct text indexes.
+    it('FIX6: field-mapped search index name is unique per logical index', async () => {
+      const v = makeVector();
+      const createSearchIndex = vi.fn().mockResolvedValue(undefined);
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex });
+      vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
+      const target = { collectionName: 'shared_col', searchIndexName: 'a_vec', isByo: true };
+      (v as any).indexTargets.set('logical_a', { ...target });
+      (v as any).indexTargets.set('logical_b', { ...target, searchIndexName: 'b_vec' });
+
+      await v.createSearchIndex({ indexName: 'logical_a', fields: ['note'] });
+      await v.createSearchIndex({ indexName: 'logical_b', fields: ['note'] });
+
+      expect(createSearchIndex.mock.calls[0][0].name).toBe('shared_col_logical_a_search_fields_index');
+      expect(createSearchIndex.mock.calls[1][0].name).toBe('shared_col_logical_b_search_fields_index');
+      expect(createSearchIndex.mock.calls[0][0].name).not.toBe(createSearchIndex.mock.calls[1][0].name);
+    });
+
+    // FIX 4: deleteIndex is retry-safe — a stranded registry entry whose physical index is
+    // already gone must still be cleared (and listIndexes stops showing it).
+    it('FIX4: deleteIndex clears a stranded registry entry when the physical index is already gone', async () => {
+      const v = makeVector();
+      const notFound = Object.assign(new Error('index not found'), { codeName: 'IndexNotFound' });
+      const drop = vi.fn().mockResolvedValue(undefined);
+      const dropSearchIndex = vi.fn().mockRejectedValue(notFound); // physical index already gone
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ drop, dropSearchIndex });
+      const deleteRegistryEntry = vi.spyOn(v as any, 'deleteRegistryEntry').mockResolvedValue(undefined);
+      vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue({
+        _id: 'stranded',
+        indexName: 'stranded',
+        collectionName: 'ops',
+        searchIndexName: 'stranded_vec',
+        isByo: true,
+      });
+
+      // Must NOT throw despite the physical drop failing with "not found".
+      await expect(v.deleteIndex({ indexName: 'stranded' })).resolves.toBeUndefined();
+      // The stranded registry entry is still cleared so listIndexes stops showing it.
+      expect(deleteRegistryEntry).toHaveBeenCalledWith('stranded');
+    });
+
+    it('FIX4: deleteIndex on a managed index whose collection is already dropped still clears the registry', async () => {
+      const v = makeVector();
+      const nsNotFound = Object.assign(new Error('ns not found'), { codeName: 'NamespaceNotFound' });
+      const drop = vi.fn().mockRejectedValue(nsNotFound);
+      const dropSearchIndex = vi.fn().mockResolvedValue(undefined);
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ drop, dropSearchIndex });
+      const deleteRegistryEntry = vi.spyOn(v as any, 'deleteRegistryEntry').mockResolvedValue(undefined);
+      vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null); // managed default
+
+      await expect(v.deleteIndex({ indexName: 'managed_gone' })).resolves.toBeUndefined();
+      expect(deleteRegistryEntry).toHaveBeenCalledWith('managed_gone');
+    });
+
+    // FIX 3: hybridQuery must floor numCandidates at the branch limit (perBranch), not topK,
+    // so numCandidates < limit never reaches the server.
+    it('FIX3: hybridQuery floors numCandidates at the branch limit (topK:10, numCandidates:10)', async () => {
+      const v = makeVector();
+      const makeCursor = (docs: any[]) => ({ toArray: async () => docs });
+      const aggregate = vi.fn().mockReturnValue(makeCursor([]));
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ aggregate });
+      vi.spyOn(v as any, 'assertRankFusionSupported').mockResolvedValue(undefined);
+      vi.spyOn(v as any, 'resolveIndexTarget').mockResolvedValue({
+        collectionName: 'c',
+        searchIndexName: 'c_vec',
+        isByo: false,
+        textSearchIndexName: 'c_search',
+      });
+
+      await v.hybridQuery({
+        indexName: 'idx',
+        queryVector: [0.1, 0.2],
+        query: 'q',
+        paths: ['note'],
+        topK: 10,
+        numCandidates: 10,
+      });
+
+      const rankFusion = aggregate.mock.calls[0][0][0].$rankFusion;
+      const vectorSearch = rankFusion.input.pipelines.vector[0].$vectorSearch;
+      // perBranch = max(topK*4, 20) = 40; candidates must be floored at 40 (>= limit 40).
+      expect(vectorSearch.limit).toBe(40);
+      expect(vectorSearch.numCandidates).toBeGreaterThanOrEqual(vectorSearch.limit);
+      expect(vectorSearch.numCandidates).toBe(40);
+    });
+
+    // FIX 7: document-mode filters operate on ROOT fields (no metadata. prefix); field mode
+    // keeps prefixing for back-compat.
+    it('FIX7: transformMetadataFilter does NOT prefix bare fields in document mode', () => {
+      const v = makeVector();
+      expect((v as any).transformMetadataFilter({ lane: 'fraud' }, 'document')).toEqual({ lane: 'fraud' });
+      expect((v as any).transformMetadataFilter({ $and: [{ amount: { $gt: 100 } }] }, 'document')).toEqual({
+        $and: [{ amount: { $gt: 100 } }],
+      });
+      // Field (managed) mode still prefixes for back-compat.
+      expect((v as any).transformMetadataFilter({ lane: 'fraud' }, 'field')).toEqual({ 'metadata.lane': 'fraud' });
+      // Default (no arg) is field mode.
+      expect((v as any).transformMetadataFilter({ lane: 'fraud' })).toEqual({ 'metadata.lane': 'fraud' });
+    });
+
+    it('FIX7: query threads document metadataMode into the root-field filter', async () => {
+      const v = makeVector();
+      const makeCursor = (docs: any[]) => ({
+        toArray: async () => docs,
+        map: (cb: (d: any) => any) => ({ toArray: async () => docs.map(cb) }),
+      });
+      const aggregate = vi.fn().mockReturnValue(makeCursor([{ _id: 'b' }]));
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ aggregate });
+      // No fields declared → fallback materialisation path, which reveals the $match filter.
+      vi.spyOn(v as any, 'getDeclaredFilterPaths').mockResolvedValue(new Set());
+
+      await v.query({
+        indexName: 'idx',
+        queryVector: [0.1, 0.2],
+        filter: { lane: 'fraud' },
+        metadataMode: 'document',
+      });
+
+      // The $match uses the ROOT field, not metadata.lane.
+      expect(aggregate.mock.calls[0][0]).toEqual([{ $match: { lane: 'fraud' } }, { $project: { _id: 1 } }]);
+    });
+
+    // FIX 2: idToString + buildIdMatch behavior.
+    it('FIX2: idToString coerces ObjectId to its hex string', () => {
+      const v = makeVector();
+      const oid = new ObjectId('507f1f77bcf86cd799439011');
+      expect((v as any).idToString(oid)).toBe('507f1f77bcf86cd799439011');
+      expect((v as any).idToString('plain-string')).toBe('plain-string');
+    });
+
+    it('FIX2: buildIdMatch matches both string and ObjectId for a 24-hex id, string-only otherwise', () => {
+      const v = makeVector();
+      const hex = '507f1f77bcf86cd799439011';
+      const match = (v as any).buildIdMatch(hex);
+      expect(match.$in).toBeDefined();
+      expect(match.$in[0]).toBe(hex);
+      expect(match.$in[1]).toBeInstanceOf(ObjectId);
+      // A non-hex (managed UUID/string) id matches as-is, preserving managed string behavior.
+      expect((v as any).buildIdMatch('managed-uuid-123')).toBe('managed-uuid-123');
+    });
+
+    // FIX 5: text-index readiness waiter polls listSearchIndexes for the resolved text index
+    // status === READY.
+    it('FIX5: waitForSearchIndexReady resolves once the text index reports READY', async () => {
+      const v = makeVector();
+      vi.spyOn(v as any, 'resolveIndexTarget').mockResolvedValue({
+        collectionName: 'c',
+        searchIndexName: 'c_vec',
+        isByo: true,
+        textSearchIndexName: 'c_text_idx',
+      });
+      let status = 'BUILDING';
+      const listSearchIndexes = vi.fn(() => ({ toArray: async () => [{ name: 'c_text_idx', status }] }));
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ listSearchIndexes });
+
+      // Flip to READY on the second poll.
+      setTimeout(() => {
+        status = 'READY';
+      }, 10);
+
+      await expect(
+        v.waitForSearchIndexReady({ indexName: 'idx', timeoutMs: 5000, checkIntervalMs: 5 }),
+      ).resolves.toBeUndefined();
+      expect(listSearchIndexes).toHaveBeenCalled();
+    });
+
+    it('FIX5: waitForSearchIndexReady throws when the text index never becomes ready', async () => {
+      const v = makeVector();
+      vi.spyOn(v as any, 'resolveIndexTarget').mockResolvedValue({
+        collectionName: 'c',
+        searchIndexName: 'c_vec',
+        isByo: false,
+        textSearchIndexName: 'c_text_idx',
+      });
+      const listSearchIndexes = vi.fn(() => ({ toArray: async () => [{ name: 'c_text_idx', status: 'BUILDING' }] }));
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ listSearchIndexes });
+
+      await expect(v.waitForSearchIndexReady({ indexName: 'idx', timeoutMs: 30, checkIntervalMs: 5 })).rejects.toThrow(
+        /did not become ready/,
+      );
     });
   });
 });
@@ -1431,5 +1661,124 @@ describe('MongoDBVector document-mode clean projection', () => {
     // ...and also exposed at the top level via `vector`.
     expect(hit.vector).toEqual([0, 1, 0, 0]);
     expect(hit.metadata?.amount).toBe(5000);
+  });
+});
+
+// ─── FIX 2: BYO collections with native ObjectId _ids (string-id contract) ───────────────
+// Self-contained live suite: owns its connected instance + scratch collection + registry entry.
+describe('MongoDBVector BYO ObjectId _ids (round4-fix2)', () => {
+  const opsCol = 'objectid_ops_txns';
+  const idxName = 'objectid_precedents';
+  const searchIdx = 'objectid_vec_idx';
+
+  let store: MongoDBVector;
+  const oidA = new ObjectId();
+  const oidB = new ObjectId();
+
+  beforeAll(async () => {
+    store = new MongoDBVector({ uri, dbName, id: 'mongodb-objectid' });
+    await store.connect();
+    await waitForAtlasSearchReady(store);
+    const col = store['db'].collection(opsCol);
+    await col.deleteMany({});
+    // Seed with native ObjectId _ids (typical of a BYO operational collection).
+    await col.insertMany([
+      { _id: oidA, embedding: [1, 0, 0, 0], amount: 100, lane: 'clean' },
+      { _id: oidB, embedding: [0, 1, 0, 0], amount: 5000, lane: 'fraud' },
+    ] as any);
+    await store.createIndex({ indexName: idxName, dimension: 4, collectionName: opsCol, searchIndexName: searchIdx });
+    await store.waitForIndexReady({ indexName: idxName, timeoutMs: 60000 });
+  }, 500000);
+
+  afterAll(async () => {
+    await store['db']
+      .collection(opsCol)
+      .drop()
+      .catch(() => {});
+    await store['db']
+      .collection('__mastra_vector_indexes__')
+      .deleteOne({ _id: idxName as any })
+      .catch(() => {});
+    await store.disconnect();
+  });
+
+  it('query returns ObjectId _ids coerced to string', async () => {
+    const runQuery = () =>
+      store.query({ indexName: idxName, queryVector: [0, 1, 0, 0], topK: 1, metadataMode: 'document' });
+    await waitForSync(store, idxName, async () => {
+      const r = await runQuery();
+      return r.length === 1 && r[0].id === oidB.toString();
+    });
+
+    const res = await runQuery();
+    expect(res).toHaveLength(1);
+    expect(typeof res[0].id).toBe('string');
+    expect(res[0].id).toBe(oidB.toString());
+  });
+
+  it('deleteVector by the string id actually removes the ObjectId-keyed doc', async () => {
+    const col = store['db'].collection(opsCol);
+    expect(await col.countDocuments({ _id: oidA } as any)).toBe(1);
+
+    await store.deleteVector({ indexName: idxName, id: oidA.toString() });
+
+    expect(await col.countDocuments({ _id: oidA } as any)).toBe(0);
+    // The other doc is untouched.
+    expect(await col.countDocuments({ _id: oidB } as any)).toBe(1);
+  });
+
+  it('updateVector by the string id updates the ObjectId-keyed doc', async () => {
+    await store.updateVector({
+      indexName: idxName,
+      id: oidB.toString(),
+      update: { metadata: { lane: 'flagged' } },
+    });
+    const col = store['db'].collection(opsCol);
+    const doc = await col.findOne({ _id: oidB } as any);
+    expect(doc?.metadata?.lane).toBe('flagged');
+  });
+});
+
+// ─── FIX 8: describeIndex counts only documents with the embedding field ─────────────────
+describe('MongoDBVector describeIndex embedded-only count (round4-fix8)', () => {
+  const opsCol = 'count_ops_txns';
+  const idxName = 'count_precedents';
+  const searchIdx = 'count_vec_idx';
+
+  let store: MongoDBVector;
+
+  beforeAll(async () => {
+    store = new MongoDBVector({ uri, dbName, id: 'mongodb-count' });
+    await store.connect();
+    await waitForAtlasSearchReady(store);
+    const col = store['db'].collection(opsCol);
+    await col.deleteMany({});
+    // Two embedded docs and one NON-embedded operational doc (no embedding field).
+    await col.insertMany([
+      { _id: 'e1', embedding: [1, 0, 0, 0], amount: 100 },
+      { _id: 'e2', embedding: [0, 1, 0, 0], amount: 200 },
+      { _id: 'no-embed', amount: 300 },
+    ] as any);
+    await store.createIndex({ indexName: idxName, dimension: 4, collectionName: opsCol, searchIndexName: searchIdx });
+    await store.waitForIndexReady({ indexName: idxName, timeoutMs: 60000 });
+  }, 500000);
+
+  afterAll(async () => {
+    await store['db']
+      .collection(opsCol)
+      .drop()
+      .catch(() => {});
+    await store['db']
+      .collection('__mastra_vector_indexes__')
+      .deleteOne({ _id: idxName as any })
+      .catch(() => {});
+    await store.disconnect();
+  });
+
+  it('count excludes documents without the embedding field', async () => {
+    const stats = await store.describeIndex({ indexName: idxName });
+    // 3 docs in the collection, but only 2 carry an embedding.
+    expect(stats.count).toBe(2);
+    expect(stats.dimension).toBe(4);
   });
 });

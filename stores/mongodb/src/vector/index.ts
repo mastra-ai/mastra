@@ -14,7 +14,7 @@ import type {
   UpdateVectorParams,
   DeleteVectorsParams,
 } from '@mastra/core/vector';
-import { MongoClient } from 'mongodb';
+import { MongoClient, ObjectId } from 'mongodb';
 import type { MongoClientOptions, Document, Db, Collection } from 'mongodb';
 import packageJson from '../../package.json';
 
@@ -229,10 +229,14 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
 
     const persisted = await this.readRegistryEntry(indexName);
     if (persisted) {
+      // Defensive: a registry entry may be missing collectionName/searchIndexName if it was ever
+      // written partially (e.g. a pre-registry managed index, or a legacy partial upsert). Fall
+      // back to the managed defaults for any missing field rather than returning undefined, which
+      // would break every downstream op (query/describeIndex/deleteIndex) with a null collection.
       const target: IndexTarget = {
-        collectionName: persisted.collectionName,
-        searchIndexName: persisted.searchIndexName,
-        isByo: persisted.isByo,
+        collectionName: persisted.collectionName ?? indexName,
+        searchIndexName: persisted.searchIndexName ?? `${indexName}_vector_index`,
+        isByo: persisted.isByo ?? false,
         textSearchIndexName: persisted.textSearchIndexName,
       };
       this.indexTargets.set(indexName, target);
@@ -620,6 +624,20 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
   }
 
   /**
+   * Drop an Atlas Search index, treating "index not found" as a no-op so deleteIndex is
+   * retry-safe: an index a prior (interrupted) delete already removed does not fail the retry
+   * that still needs to clear the registry entry.
+   */
+  private async dropSearchIndexIgnoringMissing(collection: Collection<MongoDBDocument>, name: string): Promise<void> {
+    try {
+      await collection.dropSearchIndex(name);
+    } catch (err: any) {
+      const code = err?.codeName ?? err?.code;
+      if (code !== 'IndexNotFound' && code !== 'SearchIndexNotFound' && code !== 27) throw err;
+    }
+  }
+
+  /**
    * Provision an Atlas Search (BM25/full-text) index on the index's collection and record
    * it as the text-search index that `textQuery`/`hybridQuery` will target.
    *
@@ -634,13 +652,29 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * persisted as the text-search index, so `textQuery`/`hybridQuery` use the restricted
    * mapping instead of the dynamic one. Pass `searchIndexName` to override the name explicitly.
    */
-  async createSearchIndex(params: { indexName: string; fields?: string[]; searchIndexName?: string }): Promise<void> {
-    const { indexName, fields, searchIndexName } = params;
-    const { collectionName } = await this.resolveIndexTarget(indexName);
-    // A field-mapped index must not collide with the auto-created dynamic index of the same
-    // default name (which would no-op the field mapping), so give it a distinct default name.
+  async createSearchIndex(params: {
+    indexName: string;
+    fields?: string[];
+    searchIndexName?: string;
+    /**
+     * When true, block until the provisioned full-text index reports READY (via
+     * {@link waitForSearchIndexReady}) before resolving. Defaults to false to avoid surprising
+     * latency; call {@link waitForSearchIndexReady} explicitly if you prefer to await separately.
+     */
+    waitUntilReady?: boolean;
+  }): Promise<void> {
+    const { indexName, fields, searchIndexName, waitUntilReady = false } = params;
+    // Resolve the FULL current target first (FIX 1): we must never persist a partial
+    // {indexName, textSearchIndexName}-only registry doc, which would make a later
+    // resolveIndexTarget see a truthy entry with undefined collectionName/searchIndexName.
+    const target = await this.resolveIndexTarget(indexName);
+    const { collectionName } = target;
+    // A field-mapped index must not collide with the auto-created dynamic index (which would
+    // no-op the field mapping), and two logical indexes on the SAME collection must not collide
+    // with each other (FIX 6), so the default name includes the logical indexName.
     const name =
-      searchIndexName ?? (fields?.length ? `${collectionName}_search_fields_index` : `${collectionName}_search_index`);
+      searchIndexName ??
+      (fields?.length ? `${collectionName}_${indexName}_search_fields_index` : `${collectionName}_search_index`);
     try {
       const collection = await this.getCollection(collectionName);
       const definition = fields?.length
@@ -652,11 +686,18 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           }
         : { mappings: { dynamic: true } };
       await this.createSearchIndexIgnoringExisting(collection, { definition, name, type: 'search' });
-      // Persist as the text-search index so textQuery/hybridQuery reach this (possibly custom
-      // or field-restricted) index instead of the hardcoded `${collectionName}_search_index`.
-      await this.writeRegistryEntry(indexName, { textSearchIndexName: name });
-      const cached = this.indexTargets.get(indexName);
-      if (cached) this.indexTargets.set(indexName, { ...cached, textSearchIndexName: name });
+      // Persist a COMPLETE target (FIX 1): merge the resolved collectionName/searchIndexName/isByo
+      // with the new textSearchIndexName so the registry entry is never left partial.
+      await this.writeRegistryEntry(indexName, {
+        collectionName: target.collectionName,
+        searchIndexName: target.searchIndexName,
+        isByo: target.isByo,
+        textSearchIndexName: name,
+      });
+      this.indexTargets.set(indexName, { ...target, textSearchIndexName: name });
+      if (waitUntilReady) {
+        await this.waitForSearchIndexReady({ indexName });
+      }
     } catch (error: any) {
       throw new MastraError(
         {
@@ -691,7 +732,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     const textIndex = searchIndexName ?? (await this.resolveTextSearchIndexName(indexName));
     try {
       const collection = await this.getCollection(collectionName, true);
-      const metadataFilter = this.transformMetadataFilter(this.transformFilter(filter));
+      const metadataFilter = this.transformMetadataFilter(this.transformFilter(filter), metadataMode);
       const pipeline: Document[] = [
         { $search: { index: textIndex, text: { query, path: paths } } },
         ...(Object.keys(metadataFilter).length ? [{ $match: metadataFilter }] : []),
@@ -702,7 +743,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       ];
       const rows = await collection.aggregate(pipeline).toArray();
       return rows.map((r: any) => ({
-        id: r._id,
+        // Coerce _id to string (BYO collections may key on ObjectId) to honor the id contract.
+        id: this.idToString(r._id),
         // Guard the score consistently with hybridQuery: a missing/non-numeric $meta score
         // becomes 0 rather than undefined.
         score: typeof r.score === 'number' ? r.score : 0,
@@ -755,10 +797,12 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     const textIndex = textSearchIndexName ?? (await this.resolveTextSearchIndexName(indexName));
     try {
       const collection = await this.getCollection(collectionName, true);
-      const metadataFilter = this.transformMetadataFilter(this.transformFilter(filter));
+      const metadataFilter = this.transformMetadataFilter(this.transformFilter(filter), metadataMode);
       const hasMetadataFilter = Object.keys(metadataFilter).length > 0;
       const perBranch = Math.max(topK * 4, 20);
-      const candidates = Math.min(10000, Math.max(topK, numCandidates ?? topK * 20));
+      // numCandidates must be >= the branch limit (perBranch), or $vectorSearch errors
+      // server-side. Floor at perBranch (not topK), keep the 10000 cap. (FIX 3)
+      const candidates = Math.min(10000, Math.max(perBranch, numCandidates ?? topK * 20));
 
       const vectorSearch: Document = {
         index: searchIndexName,
@@ -815,7 +859,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       ];
       const rows = await collection.aggregate(pipeline).toArray();
       return rows.map((r: any) => ({
-        id: r._id,
+        id: this.idToString(r._id),
         score: typeof r.score === 'number' ? r.score : 0,
         metadata: r.metadata,
         document: r.document,
@@ -860,6 +904,46 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       await new Promise(resolve => setTimeout(resolve, checkIntervalMs));
     }
     throw new Error(`Index "${indexNameInternal}" did not become ready within timeout`);
+  }
+
+  /**
+   * Waits for the full-text (BM25) search index of an index to become READY.
+   *
+   * `waitForIndexReady` polls only the vectorSearch index. `createSearchIndex` returns while the
+   * Atlas Search full-text index is still BUILDING, so an immediate textQuery/hybridQuery can
+   * intermittently fail. Call this (or pass `waitUntilReady: true` to `createSearchIndex`) to
+   * block until the resolved text index reports READY.
+   *
+   * @param indexName - The logical Mastra index whose text index to wait on.
+   * @param searchIndexName - Override the resolved text-search index name.
+   * @param timeoutMs - Maximum time to wait (default: 60000).
+   * @param checkIntervalMs - Poll interval (default: 2000).
+   */
+  async waitForSearchIndexReady({
+    indexName,
+    searchIndexName,
+    timeoutMs = 60000,
+    checkIntervalMs = 2000,
+  }: {
+    indexName: string;
+    searchIndexName?: string;
+    timeoutMs?: number;
+    checkIntervalMs?: number;
+  }): Promise<void> {
+    const { collectionName } = await this.resolveIndexTarget(indexName);
+    const textIndex = searchIndexName ?? (await this.resolveTextSearchIndexName(indexName));
+    const collection = await this.getCollection(collectionName, true);
+
+    const startTime = Date.now();
+    while (Date.now() - startTime < timeoutMs) {
+      const indexInfo: any[] = await (collection as any).listSearchIndexes().toArray();
+      const indexData = indexInfo.find((idx: any) => idx.name === textIndex);
+      if (indexData?.status === 'READY') {
+        return;
+      }
+      await new Promise(resolve => setTimeout(resolve, checkIntervalMs));
+    }
+    throw new Error(`Full-text search index "${textIndex}" did not become ready within timeout`);
   }
 
   /**
@@ -983,8 +1067,9 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       const collection = await this.getCollection(collectionName, true);
       const indexNameInternal = searchIndexName;
 
-      // Metadata filter: translate then add 'metadata.' prefix to user-facing field names.
-      const metadataFilter = this.transformMetadataFilter(this.transformFilter(filter));
+      // Metadata filter: translate, then (field mode only) add the 'metadata.' prefix to
+      // user-facing field names. In document mode (BYO), fields are matched at the root. (FIX 7)
+      const metadataFilter = this.transformMetadataFilter(this.transformFilter(filter), metadataMode);
       const hasMetadataFilter = Object.keys(metadataFilter).length > 0;
 
       const vectorSearch: Document = {
@@ -1048,7 +1133,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       const results = await collection.aggregate(pipeline).toArray();
 
       return results.map((result: any) => ({
-        id: result._id,
+        id: this.idToString(result._id),
         score: result.score,
         metadata: result.metadata,
         vector: includeVector ? result.vector : undefined,
@@ -1142,7 +1227,13 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       const { collectionName, searchIndexName } = await this.resolveIndexTarget(indexName);
       const collection = await this.getCollection(collectionName, true);
 
-      const count = await collection.countDocuments({ _id: { $ne: '__index_metadata__' as any } });
+      // Count only documents that actually carry the embedding field (respecting a dot-path
+      // embeddingFieldName). On a BYO operational collection this excludes documents that have
+      // not been embedded, and it also excludes the legacy `__index_metadata__` sentinel. (FIX 8)
+      const count = await collection.countDocuments({
+        [this.embeddingFieldName]: { $exists: true },
+        _id: { $ne: '__index_metadata__' as any },
+      });
 
       const indexNameInternal = searchIndexName;
       const indexInfo: any[] = await (collection as any).listSearchIndexes().toArray();
@@ -1204,24 +1295,29 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           // BYO: drop the vector search index, and the companion full-text index if one was
           // provisioned (via createSearchIndex — it is not auto-created for BYO). Dropping only
           // the vector index would leak the persisted text index onto the caller's operational
-          // collection with no record of it. Best-effort on the text index: ignore "not found"
-          // so a manually-removed index does not fail the whole deleteIndex.
-          await collection.dropSearchIndex(searchIndexName);
+          // collection with no record of it. Retry-safe (FIX 4): treat "index not found" on
+          // EITHER drop as success — if a prior deleteIndex already removed the physical index
+          // and then failed before clearing the registry, a retry must still clear the entry.
+          await this.dropSearchIndexIgnoringMissing(collection, searchIndexName);
           if (textSearchIndexName) {
-            try {
-              await collection.dropSearchIndex(textSearchIndexName);
-            } catch (err: any) {
-              const code = err?.codeName ?? err?.code;
-              if (code !== 'IndexNotFound' && code !== 'SearchIndexNotFound' && code !== 27) throw err;
-            }
+            await this.dropSearchIndexIgnoringMissing(collection, textSearchIndexName);
           }
         } else {
-          await collection.drop();
+          // Retry-safe (FIX 4): a managed collection already dropped by a prior (partially
+          // failed) deleteIndex must not block the retry from clearing the registry entry.
+          try {
+            await collection.drop();
+          } catch (err: any) {
+            const code = err?.codeName ?? err?.code;
+            if (code !== 'NamespaceNotFound' && code !== 26) throw err;
+          }
           this.collections.delete(collectionName);
         }
         this.declaredFilterPaths.delete(indexName);
         this.indexTargets.delete(indexName);
-        // Remove the durable registry entry so a fresh process no longer resolves this index.
+        // Remove the durable registry entry LAST so a fresh process no longer resolves this
+        // index. Because the physical drop above is idempotent, a retry after an interrupted
+        // delete still reaches this line and stops the stranded entry from being listed.
         await this.deleteRegistryEntry(indexName);
       } else {
         throw new Error(`Index (Collection) "${indexName}" does not exist`);
@@ -1307,8 +1403,9 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
 
       // Type narrowing: check if updating by id or by filter
       if ('id' in params && params.id) {
-        // Update by ID
-        await collection.findOneAndUpdate({ _id: params.id }, { $set: updateDoc });
+        // Update by ID. Match both the raw string and (when valid) the ObjectId form so this
+        // works on managed (string _id) and BYO (ObjectId _id) collections alike.
+        await collection.findOneAndUpdate({ _id: this.buildIdMatch(params.id) as any }, { $set: updateDoc });
       } else if ('filter' in params && params.filter) {
         // Update by filter
         const filter = params.filter;
@@ -1378,7 +1475,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     try {
       const { collectionName } = await this.resolveIndexTarget(indexName);
       const collection = await this.getCollection(collectionName, true);
-      await collection.deleteOne({ _id: id });
+      // Match both string and ObjectId _id forms (managed vs BYO collections).
+      await collection.deleteOne({ _id: this.buildIdMatch(id) as any });
     } catch (error: any) {
       throw new MastraError(
         {
@@ -1433,7 +1531,16 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           });
         }
 
-        await collection.deleteMany({ _id: { $in: ids } });
+        // Include both string and ObjectId forms so managed (string _id) and BYO (ObjectId _id)
+        // collections are both matched.
+        const idMatches: any[] = [];
+        for (const id of ids) {
+          idMatches.push(id);
+          if (typeof id === 'string' && ObjectId.isValid(id) && /^[0-9a-fA-F]{24}$/.test(id)) {
+            idMatches.push(new ObjectId(id));
+          }
+        }
+        await collection.deleteMany({ _id: { $in: idMatches } });
       } else {
         // Delete by filter
         // Safety check: Don't allow empty filters to prevent accidental deletion of all vectors
@@ -1624,6 +1731,27 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     return true;
   }
 
+  /**
+   * Coerce a MongoDB `_id` (string for managed collections, ObjectId for many bring-your-own
+   * operational collections) to the string contract of `QueryResult.id`.
+   */
+  private idToString(id: any): string {
+    return id?.toString?.() ?? String(id);
+  }
+
+  /**
+   * Build an `_id` match that works for both string-keyed (managed) and ObjectId-keyed (BYO)
+   * collections. Managed collections store string `_id`s; BYO operational collections commonly
+   * use native ObjectId `_id`s. The incoming `id` is always a string (the QueryResult contract),
+   * so match it as-is AND, when it is a valid 24-hex ObjectId, also as `new ObjectId(id)`.
+   */
+  private buildIdMatch(id: string): any {
+    if (typeof id === 'string' && ObjectId.isValid(id) && /^[0-9a-fA-F]{24}$/.test(id)) {
+      return { $in: [id, new ObjectId(id)] };
+    }
+    return id;
+  }
+
   private transformFilter(filter?: MongoDBVectorFilter) {
     const translator = new MongoDBFilterTranslator();
     if (!filter) return {};
@@ -1638,12 +1766,34 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * @param filter - The filter object to transform
    * @returns Transformed filter with metadata fields properly prefixed
    */
-  private transformMetadataFilter(filter: any): any {
+  private transformMetadataFilter(filter: any, metadataMode: 'field' | 'document' = 'field'): any {
     if (!filter || typeof filter !== 'object') return filter;
 
     // Handle arrays (shouldn't happen at top level, but be defensive)
     if (Array.isArray(filter)) {
-      return filter.map(item => this.transformMetadataFilter(item));
+      return filter.map(item => this.transformMetadataFilter(item, metadataMode));
+    }
+
+    // Document mode (BYO): the source document's operational fields live at the ROOT (e.g.
+    // `amount`, `lane`), not under a managed `metadata` subdocument, so bare fields must NOT be
+    // rewritten to `metadata.<field>` — that would never match. An explicit `metadata.` prefix
+    // from the caller is still respected. Only field (managed) mode does the prefixing. (FIX 7)
+    if (metadataMode === 'document') {
+      const transformed: any = {};
+      for (const [key, value] of Object.entries(filter)) {
+        if (key.startsWith('$')) {
+          if (Array.isArray(value)) {
+            transformed[key] = value.map(item => this.transformMetadataFilter(item, metadataMode));
+          } else if (typeof value === 'object' && value !== null) {
+            transformed[key] = this.transformMetadataFilter(value, metadataMode);
+          } else {
+            transformed[key] = value;
+          }
+        } else {
+          transformed[key] = value;
+        }
+      }
+      return transformed;
     }
 
     const transformed: any = {};
@@ -1653,9 +1803,9 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       if (key.startsWith('$')) {
         // For logical operators like $and, $or, recursively transform their contents
         if (Array.isArray(value)) {
-          transformed[key] = value.map(item => this.transformMetadataFilter(item));
+          transformed[key] = value.map(item => this.transformMetadataFilter(item, metadataMode));
         } else if (typeof value === 'object' && value !== null) {
-          transformed[key] = this.transformMetadataFilter(value);
+          transformed[key] = this.transformMetadataFilter(value, metadataMode);
         } else {
           transformed[key] = value;
         }
