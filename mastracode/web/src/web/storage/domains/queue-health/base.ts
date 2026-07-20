@@ -75,9 +75,7 @@ export const QUEUE_HEALTH_SETTINGS_SCHEMA: CollectionSchema = {
     created_at: { type: 'timestamp' },
     updated_at: { type: 'timestamp' },
   },
-  uniqueIndexes: [
-    { name: 'queue_health_settings_org_project_unique', columns: ['org_id', 'github_project_id'] },
-  ],
+  uniqueIndexes: [{ name: 'queue_health_settings_org_project_unique', columns: ['org_id', 'github_project_id'] }],
 };
 
 /**
