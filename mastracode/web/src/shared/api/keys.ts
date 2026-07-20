@@ -2,20 +2,20 @@
  * Stable, scoped React Query keys for the settings API.
  *
  * Resource-scoped lists (model packs, OM) include the `resourceId` so switching
- * projects yields a distinct cache entry instead of leaking another project's
+ * factories yields a distinct cache entry instead of leaking another factory's
  * data. Keeping every key in one place makes invalidation in the mutation hooks
  * unambiguous.
  */
 export const queryKeys = {
   webAuth: () => ['web-auth'] as const,
-  projects: () => ['projects'] as const,
+  factories: () => ['factories'] as const,
   githubStatus: () => ['github', 'status'] as const,
   githubRepos: (query: string | undefined) => ['github', 'repos', query ?? null] as const,
   githubIssues: (githubProjectId: string | undefined, label?: string) =>
     ['github', 'issues', githubProjectId ?? null, label ?? null] as const,
   githubPulls: (githubProjectId: string | undefined) => ['github', 'prs', githubProjectId ?? null] as const,
-  githubProjectSettings: (githubProjectId: string | undefined) =>
-    ['github', 'project-settings', githubProjectId ?? null] as const,
+  githubRepositorySettings: (githubProjectId: string | undefined) =>
+    ['github', 'repository-settings', githubProjectId ?? null] as const,
   linearStatus: () => ['linear', 'status'] as const,
   linearProjects: () => ['linear', 'projects'] as const,
   linearIssues: () => ['linear', 'issues'] as const,
@@ -26,8 +26,8 @@ export const queryKeys = {
   factoryAudit: (githubProjectId: string | undefined, group: string) =>
     ['factory', 'audit', githubProjectId ?? null, group] as const,
   factoryAuditPortal: () => ['factory', 'audit-portal'] as const,
-  workspaces: (projectId: string | undefined) => ['workspaces', projectId ?? null] as const,
-  userSessions: (projectId: string | undefined) => ['user-sessions', projectId ?? null] as const,
+  workspaces: (factoryId: string | undefined) => ['workspaces', factoryId ?? null] as const,
+  userSessions: (factoryId: string | undefined) => ['user-sessions', factoryId ?? null] as const,
   providers: () => ['providers'] as const,
   customProviders: () => ['custom-providers'] as const,
   modelPacks: (resourceId: string | undefined) => ['model-packs', resourceId ?? null] as const,
