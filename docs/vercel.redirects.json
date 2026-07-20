@@ -161,6 +161,11 @@
       "permanent": true
     },
     {
+      "source": "/models/providers/neon",
+      "destination": "/models/gateways/neon",
+      "permanent": true
+    },
+    {
       "source": "/docs/frameworks/web-frameworks/astro",
       "destination": "/guides/getting-started/astro",
       "permanent": true
