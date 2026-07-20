@@ -1,4 +1,4 @@
-import babel from '@babel/core';
+import * as babel from '@babel/core';
 import type { NodePath, types } from '@babel/core';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type { Config as MastraConfig } from '@mastra/core/mastra';
@@ -7,7 +7,7 @@ export function removeAllOptionsFromMastraExcept(
   result: { hasCustomConfig: boolean },
   option: keyof MastraConfig,
   logger?: IMastraLogger,
-) {
+): babel.PluginObject {
   const t = babel.types;
 
   return {
@@ -109,5 +109,5 @@ export function removeAllOptionsFromMastraExcept(
         },
       },
     },
-  } as babel.PluginObj;
+  } satisfies babel.PluginObject;
 }

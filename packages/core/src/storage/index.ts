@@ -1,4 +1,5 @@
 export * from './base';
+export * from './factory-storage';
 export * from './retention';
 export * from './types';
 export * from './constants';

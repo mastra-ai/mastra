@@ -12,7 +12,7 @@
  */
 
 import { isWebAuthEnabled } from '../auth';
-import { getSeededGithubIntegration, getSeededStateSigner } from '../runtime-config';
+import { getSeededGithubIntegration, getSeededStateSigner, getSeededStorage } from '../runtime-config';
 import { getSandboxProvider, isSandboxEnabled } from '../sandbox/fleet';
 
 /**
@@ -64,7 +64,7 @@ export function getGithubFeatureDiagnostics(): GithubFeatureDiagnostics {
   return {
     githubAppConfigured: github !== undefined,
     webAuthEnabled: isWebAuthEnabled(),
-    appDbConfigured: github?.storageDomain !== undefined,
+    appDbConfigured: getSeededStorage() !== undefined,
     stateSecretConfigured: getSeededStateSigner()?.stable ?? false,
     sandboxEnabled: isSandboxEnabled(),
     sandboxProvider: getSandboxProvider(),

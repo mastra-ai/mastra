@@ -8,11 +8,12 @@
  */
 
 import type { LinearIntegration, LinearTokenSet } from './integration';
-import type { LinearConnectionRow } from './storage/base';
+import { getLinearConnection, updateLinearTokens } from './storage';
+import type { LinearConnectionRow } from './storage';
 
 /** Load the org's Linear connection, or `null` when not connected. */
-export function loadLinearConnection(orgId: string, linear: LinearIntegration): Promise<LinearConnectionRow | null> {
-  return linear.storageDomain.getConnection(orgId);
+export function loadLinearConnection(orgId: string): Promise<LinearConnectionRow | null> {
+  return getLinearConnection(orgId);
 }
 
 /** Refresh this many ms before the recorded expiry to absorb clock skew. */
@@ -33,8 +34,13 @@ export class LinearReauthRequiredError extends Error {
 }
 
 /** Persist a rotated token set on the org's connection row. */
-export function persistLinearTokens(orgId: string, tokens: LinearTokenSet, linear: LinearIntegration): Promise<void> {
-  return linear.storageDomain.updateTokens(orgId, tokens);
+export function persistLinearTokens(orgId: string, tokens: LinearTokenSet): Promise<void> {
+  return updateLinearTokens(orgId, {
+    accessToken: tokens.accessToken,
+    refreshToken: tokens.refreshToken,
+    expiresAt: tokens.expiresAt,
+    scope: tokens.scope,
+  });
 }
 
 /**
@@ -71,7 +77,7 @@ export async function getFreshLinearAccessToken(
   // The caller may hold a stale row: another request could have refreshed and
   // rotated the refresh token since this row was loaded. Reload before
   // refreshing so we don't burn the rotated token and force a false reauth.
-  const latest = await loadLinearConnection(connection.orgId, linear);
+  const latest = await loadLinearConnection(connection.orgId);
   if (!latest) throw new LinearReauthRequiredError();
 
   const concurrent = inflightRefreshes.get(connection.orgId);
@@ -85,7 +91,7 @@ export async function getFreshLinearAccessToken(
   const refresh = (async () => {
     try {
       const tokens = await linear.refreshAccessToken(refreshToken);
-      await persistLinearTokens(connection.orgId, tokens, linear);
+      await persistLinearTokens(connection.orgId, tokens);
       return tokens.accessToken;
     } catch (err) {
       const status = (err as { status?: number }).status;
