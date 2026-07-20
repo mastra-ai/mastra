@@ -26,7 +26,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@libsql/kysely-libsql": "^0.4.1",
+    "@mastra/auth-better-auth": "link:../../auth/better-auth",
     "@mastra/auth-workos": "link:../../auth/workos",
     "@mastra/client-js": "link:../../client-sdks/client-js",
     "@mastra/code-sdk": "link:../sdk",
@@ -41,7 +41,6 @@
     "@octokit/auth-app": "^8.0.0",
     "@octokit/rest": "^22.0.1",
     "@tanstack/react-query": "^5.90.21",
-    "better-auth": "^1.6.23",
     "date-fns": "^4.4.0",
     "drizzle-orm": "^0.45.0",
     "hono": "^4.12.8",
