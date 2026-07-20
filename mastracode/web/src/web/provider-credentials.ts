@@ -17,7 +17,8 @@
 import type { Context } from 'hono';
 
 import { ensureWebAuthUser, isWebAuthEnabled, webAuthTenant } from './auth.js';
-import { getFactoryStore, isRuntimeConfigSeeded } from './runtime-config.js';
+import { getFactoryStorage, isRuntimeConfigSeeded } from './runtime-config.js';
+import { getModelCredentialsStorage } from './storage/domains.js';
 import type { CredentialRecord, LoginSessionKind, ModelCredentialsStorage } from './storage/domains/credentials/base';
 
 /**
@@ -52,18 +53,18 @@ export type CredentialContext =
  */
 export async function getTenantCredentialsStorage(): Promise<ModelCredentialsStorage | undefined> {
   if (!isRuntimeConfigSeeded()) return undefined;
-  let store: ReturnType<typeof getFactoryStore>;
+  let storage: ReturnType<typeof getFactoryStorage>;
   try {
-    store = getFactoryStore();
+    storage = getFactoryStorage();
   } catch {
     return undefined;
   }
   try {
-    await store.ensureReady('model-credentials');
+    await storage.ensureDomainReady('model-credentials');
   } catch {
     return undefined;
   }
-  return store.credentials;
+  return getModelCredentialsStorage();
 }
 
 /**

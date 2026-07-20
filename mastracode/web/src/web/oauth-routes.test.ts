@@ -40,8 +40,8 @@ import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import type { WebAuthAdapter } from './auth-adapter';
 import { buildOAuthRoutes } from './oauth-routes';
 import { __resetRuntimeConfigForTests, seedRuntimeConfig } from './runtime-config';
-import { seedInMemoryFactoryStoreForTests } from './storage/test-utils';
-import type { InMemoryFactoryStoreSeed } from './storage/test-utils';
+import { seedFactoryStorageForTests } from './storage/test-utils';
+import type { FactoryStorageTestSeed } from './storage/test-utils';
 import { mountApiRoutes } from './test-utils';
 
 // ── Test harness ─────────────────────────────────────────────────────────
@@ -54,7 +54,7 @@ function makeAuthStorage() {
 }
 
 let authStorage: ReturnType<typeof makeAuthStorage>;
-let seed: InMemoryFactoryStoreSeed;
+let seed: FactoryStorageTestSeed;
 
 function buildApp(user: { workosId: string; organizationId?: string } | null) {
   const app = new Hono();
@@ -81,7 +81,7 @@ const ANTHROPIC_CREDS = { refresh: 'r-1', access: 'a-1', expires: Date.now() + 3
 const CODEX_CREDS = { refresh: 'r-2', access: 'a-2', expires: Date.now() + 3_600_000 };
 
 beforeEach(async () => {
-  seed = await seedInMemoryFactoryStoreForTests();
+  seed = await seedFactoryStorageForTests();
   authStorage = makeAuthStorage();
   startAnthropicLogin.mockResolvedValue({ url: 'https://claude.ai/oauth/authorize?state=s', verifier: 'v-1' });
   completeAnthropicLogin.mockResolvedValue(ANTHROPIC_CREDS);
@@ -331,7 +331,7 @@ describe('gating', () => {
 
   it('401s unauthenticated requests when an auth adapter is active', async () => {
     seedRuntimeConfig({
-      factoryStore: seed.factoryStore,
+      storage: seed.storage,
       authAdapter: { kind: 'test', authenticate: async () => null } as unknown as WebAuthAdapter,
     });
     const res = await post(buildApp(null), '/web/config/providers/anthropic/oauth/start');

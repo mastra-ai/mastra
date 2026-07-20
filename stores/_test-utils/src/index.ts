@@ -1,4 +1,5 @@
 export * from './factory';
+export * from './factory-storage-contract';
 export * from './domains/observability-vnext';
 export * from './vector-factory';
 export * from './config-validation';

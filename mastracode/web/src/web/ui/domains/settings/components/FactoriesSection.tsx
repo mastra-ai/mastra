@@ -21,7 +21,7 @@ export function FactoriesSection() {
         <Txt variant="ui-lg" className="font-medium">
           Factories
         </Txt>
-        <Txt variant="ui-sm">Remove factories from this browser. Connected GitHub repositories stay in the org.</Txt>
+        <Txt variant="ui-sm">Remove local factories or disconnect GitHub repositories from the organization.</Txt>
       </div>
 
       {removeMutation.isError && (

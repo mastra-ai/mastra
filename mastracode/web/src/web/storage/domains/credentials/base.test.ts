@@ -1,12 +1,14 @@
 /**
- * Unit tests for the in-memory model-credentials domain: tenancy isolation,
- * user > org resolution precedence, refresh serialization (the stand-in for
- * the pg FOR UPDATE re-check), and login-session TTL cleanup on read.
+ * Model-credentials domain over a real backend (libsql `:memory:`): tenancy
+ * isolation, user > org resolution precedence, refresh serialization (the
+ * cross-backend stand-in for the pg FOR UPDATE re-check), and login-session
+ * TTL cleanup on read.
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { LibSQLFactoryStorage } from '@mastra/libsql';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
-import { ModelCredentialsStorageInMemory } from './inmemory';
+import { ModelCredentialsStorage } from './base';
 
 const oauth = (tag: string, expires: number) => ({
   type: 'oauth' as const,
@@ -15,9 +17,17 @@ const oauth = (tag: string, expires: number) => ({
   expires,
 });
 
-describe('ModelCredentialsStorageInMemory', () => {
+async function makeStore(): Promise<ModelCredentialsStorage> {
+  const backend = new LibSQLFactoryStorage({ id: 'credentials-test', url: ':memory:' });
+  const domain = backend.registerDomain(new ModelCredentialsStorage());
+  await backend.init();
+  onTestFinished(() => backend.close());
+  return domain;
+}
+
+describe('ModelCredentialsStorage', () => {
   it('isolates user rows per user and per org', async () => {
-    const store = new ModelCredentialsStorageInMemory();
+    const store = await makeStore();
     await store.setCredential({ orgId: 'org1', userId: 'alice' }, 'anthropic', oauth('a', Date.now() + 60_000));
 
     expect(await store.getCredential({ orgId: 'org1', userId: 'alice' }, 'anthropic')).toMatchObject({
@@ -29,7 +39,7 @@ describe('ModelCredentialsStorageInMemory', () => {
   });
 
   it('rejects org-scoped OAuth credentials without a user tenant', async () => {
-    const store = new ModelCredentialsStorageInMemory();
+    const store = await makeStore();
 
     await expect(
       store.setCredential({ orgId: 'org1' }, 'anthropic', oauth('org', Date.now() + 60_000)),
@@ -38,7 +48,7 @@ describe('ModelCredentialsStorageInMemory', () => {
   });
 
   it('resolves user > org and lists both scopes for a member', async () => {
-    const store = new ModelCredentialsStorageInMemory();
+    const store = await makeStore();
     await store.setCredential({ orgId: 'org1' }, 'openai', { type: 'api_key', key: 'sk-org' });
     await store.setCredential({ orgId: 'org1', userId: 'alice' }, 'openai', { type: 'api_key', key: 'sk-alice' });
 
@@ -60,7 +70,7 @@ describe('ModelCredentialsStorageInMemory', () => {
   });
 
   it('removes only the addressed scope', async () => {
-    const store = new ModelCredentialsStorageInMemory();
+    const store = await makeStore();
     await store.setCredential({ orgId: 'org1' }, 'openai', { type: 'api_key', key: 'sk-org' });
     await store.setCredential({ orgId: 'org1', userId: 'alice' }, 'openai', { type: 'api_key', key: 'sk-alice' });
 
@@ -70,7 +80,7 @@ describe('ModelCredentialsStorageInMemory', () => {
   });
 
   it('refreshOAuth returns undefined without an OAuth row', async () => {
-    const store = new ModelCredentialsStorageInMemory();
+    const store = await makeStore();
     expect(await store.refreshOAuth({ orgId: 'org1', userId: 'alice' }, 'anthropic', async c => c)).toBeUndefined();
 
     await store.setCredential({ orgId: 'org1', userId: 'alice' }, 'openai', { type: 'api_key', key: 'sk' });
@@ -78,7 +88,7 @@ describe('ModelCredentialsStorageInMemory', () => {
   });
 
   it('serializes concurrent refreshes: the loser sees the winner result and skips its own refresh', async () => {
-    const store = new ModelCredentialsStorageInMemory();
+    const store = await makeStore();
     const tenant = { orgId: 'org1', userId: 'alice' };
     await store.setCredential(tenant, 'anthropic', oauth('old', Date.now() - 1000));
 
@@ -102,7 +112,7 @@ describe('ModelCredentialsStorageInMemory', () => {
   });
 
   it('expires login sessions on read and honors touch updates', async () => {
-    const store = new ModelCredentialsStorageInMemory();
+    const store = await makeStore();
     await store.createLoginSession({
       sessionId: 's-1',
       orgId: 'org1',
