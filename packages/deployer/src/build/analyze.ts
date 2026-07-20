@@ -396,7 +396,7 @@ export async function analyzeBundle(
   await babel.transformAsync(mastraConfig, {
     filename: mastraEntry,
     presets: [import.meta.resolve('@babel/preset-typescript')],
-    plugins: [checkConfigExport(mastraConfigResult)],
+    plugins: [() => checkConfigExport(mastraConfigResult)],
   });
 
   if (!mastraConfigResult.hasValidConfig) {
@@ -443,7 +443,7 @@ export async function analyzeBundle(
     // Detect pino transports in the bundled output
     babel.transformSync(analyzeResult.output.code, {
       filename: 'pino-detection.js',
-      plugins: [detectPinoTransports(detectedPinoTransports)],
+      plugins: [() => detectPinoTransports(detectedPinoTransports)],
       configFile: false,
       babelrc: false,
       code: false,
