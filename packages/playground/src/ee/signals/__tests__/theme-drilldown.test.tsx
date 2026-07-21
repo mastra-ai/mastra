@@ -570,8 +570,12 @@ describe('SankeySignals drill-in', () => {
       if (!sliderInput) throw new Error('Snapshot slider input was not rendered');
 
       fireEvent.change(sliderInput, { target: { value: '0' } });
-      await screen.findByTitle('Drill-in is unavailable for snapshots with more than 2,000 traces.');
+      expect(
+        await screen.findByText(/This drill-in is unavailable for snapshots with more than 2,000 traces/),
+      ).not.toBeNull();
 
+      expect(screen.queryByLabelText('Signal distributions')).toBeNull();
+      expect(screen.queryByLabelText('Signal theme flow')).toBeNull();
       expect(requestedSnapshotIds).not.toContain('older-opaque-snapshot-cursor');
     });
   });

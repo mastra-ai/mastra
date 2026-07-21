@@ -39,7 +39,7 @@ export const twoDrilldownThemeSnapshotsResponse = {
 } satisfies ThemeSnapshotsResponse;
 
 export const drilldownThemeFlowResponse = {
-  snapshot,
+  snapshot: { ...snapshot, snapshotId: 'opaque-flow-response-cursor' },
   stages: [
     {
       signalName: 'goal',
