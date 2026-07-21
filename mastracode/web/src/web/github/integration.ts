@@ -28,9 +28,20 @@ import { Octokit } from '@octokit/rest';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 
-import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../factory-integration.js';
+import type {
+  FactoryIntegration,
+  IntakeIntegrationCapability,
+  IntegrationContext,
+  IntegrationTools,
+  SourceControlIntegrationCapability,
+} from '../factory-integration.js';
+import { runGithubIssueTriage } from './issue-triage.js';
 import { buildGithubRoutes } from './routes.js';
-import { createGithubSubscriptionTools } from './session-subscriptions.js';
+import {
+  createGithubSubscriptionTools,
+  parseCreatedPullRequest,
+  subscribeCurrentSessionToPullRequest,
+} from './session-subscriptions.js';
 import type { GithubSubscriptionStorage } from './subscriptions.js';
 
 /**
@@ -143,6 +154,127 @@ export class GithubIntegration implements FactoryIntegration {
    */
   readonly requiresStableStateSigner = true;
 
+  readonly intake: IntakeIntegrationCapability = {
+    listSources: async ({ orgId }) => {
+      const installations = await this.sourceControlStorage.installations.list({ orgId });
+      const repositories = await Promise.all(
+        installations.map(installation =>
+          this.sourceControlStorage.repositories.list({ orgId, installationId: installation.id }),
+        ),
+      );
+      return repositories.flat().map(repository => ({
+        id: repository.id,
+        name: repository.slug,
+        type: 'repository',
+        metadata: { defaultBranch: repository.defaultBranch },
+      }));
+    },
+    listItems: async ({ orgId, sourceIds, cursor }) => {
+      const page = cursor ? Number.parseInt(cursor, 10) : 1;
+      const requestedPage = Number.isSafeInteger(page) && page > 0 ? page : 1;
+      const pages = await Promise.all(
+        sourceIds.map(async sourceId => {
+          const repository = await this.sourceControlStorage.repositories.get({ orgId, id: sourceId });
+          if (!repository) return { items: [], hasNextPage: false };
+          const installation = await this.sourceControlStorage.installations.get({
+            orgId,
+            id: repository.installationId,
+          });
+          if (!installation) return { items: [], hasNextPage: false };
+          const installationId = Number.parseInt(installation.externalId, 10);
+          if (!Number.isSafeInteger(installationId)) return { items: [], hasNextPage: false };
+          const [issues, pullRequests] = await Promise.all([
+            this.listRepoOpenIssues(installationId, repository.slug, requestedPage),
+            this.listRepoOpenPullRequests(installationId, repository.slug, requestedPage),
+          ]);
+          return {
+            items: [
+              ...issues.issues.map(issue => ({
+                source: { type: 'issue', externalId: `${repository.externalId}:${issue.number}`, url: issue.url },
+                sourceId: repository.id,
+                title: issue.title,
+                status: 'open',
+                labels: issue.labels,
+                createdAt: issue.createdAt,
+                updatedAt: issue.updatedAt,
+                metadata: { repository: repository.slug, number: issue.number, author: issue.author },
+              })),
+              ...pullRequests.pullRequests.map(pullRequest => ({
+                source: {
+                  type: 'pull-request',
+                  externalId: `${repository.externalId}:${pullRequest.number}`,
+                  url: pullRequest.url,
+                },
+                sourceId: repository.id,
+                title: pullRequest.title,
+                status: 'open',
+                createdAt: pullRequest.createdAt,
+                updatedAt: pullRequest.updatedAt,
+                metadata: {
+                  repository: repository.slug,
+                  number: pullRequest.number,
+                  author: pullRequest.author,
+                  baseBranch: pullRequest.baseBranch,
+                  headBranch: pullRequest.headBranch,
+                },
+              })),
+            ],
+            hasNextPage: issues.nextPage !== null || pullRequests.nextPage !== null,
+          };
+        }),
+      );
+      return {
+        items: pages.flatMap(result => result.items),
+        nextCursor: pages.some(result => result.hasNextPage) ? String(requestedPage + 1) : null,
+      };
+    },
+  };
+
+  readonly sourceControl: SourceControlIntegrationCapability = {
+    initialize: ({ storage }) => {
+      this.#sourceControlStorage = storage;
+    },
+    registerInstallation: ({ orgId, userId, installation }) =>
+      this.sourceControlStorage.installations.upsert({
+        orgId,
+        connectedByUserId: userId,
+        externalId: installation.externalId,
+        accountName: installation.accountName,
+        accountType: installation.accountType,
+        providerMetadata: installation.metadata,
+      }),
+    registerRepositories: ({ orgId, installationId, repositories }) =>
+      Promise.all(
+        repositories.map(repository =>
+          this.sourceControlStorage.repositories.upsert({
+            orgId,
+            input: {
+              installationId,
+              externalId: repository.externalId,
+              slug: repository.slug,
+              defaultBranch: repository.defaultBranch,
+              providerMetadata: repository.metadata,
+            },
+          }),
+        ),
+      ),
+    getRepositoryAccess: async ({ orgId, repositoryId }) => {
+      const repository = await this.sourceControlStorage.repositories.get({ orgId, id: repositoryId });
+      if (!repository) throw new Error('Source-control repository not found.');
+      const installation = await this.sourceControlStorage.installations.get({
+        orgId,
+        id: repository.installationId,
+      });
+      if (!installation) throw new Error('Source-control installation not found.');
+      const installationId = Number.parseInt(installation.externalId, 10);
+      if (!Number.isSafeInteger(installationId)) throw new Error('GitHub installation id is invalid.');
+      return {
+        cloneUrl: `https://github.com/${repository.slug}.git`,
+        authorization: { scheme: 'bearer', token: await this.mintInstallationToken(installationId) },
+      };
+    },
+  };
+
   readonly #appId: string;
   readonly #privateKey: string;
   readonly #clientId: string;
@@ -150,6 +282,7 @@ export class GithubIntegration implements FactoryIntegration {
   readonly #slug: string;
   readonly #webhookSecret: string | undefined;
   #storage: IntegrationContext['storage'] | undefined;
+  #sourceControlStorage: IntegrationContext['storage']['sourceControl'] | undefined;
 
   constructor(config: GithubIntegrationConfig) {
     const missing = REQUIRED_FIELDS.filter(field => !config[field]);
@@ -179,8 +312,9 @@ export class GithubIntegration implements FactoryIntegration {
   }
 
   get sourceControlStorage(): IntegrationContext['storage']['sourceControl'] {
-    if (!this.#storage) throw new Error('GithubIntegration storage has not been initialized.');
-    return this.#storage.sourceControl;
+    const storage = this.#sourceControlStorage ?? this.#storage?.sourceControl;
+    if (!storage) throw new Error('GithubIntegration source-control storage has not been initialized.');
+    return storage;
   }
 
   get integrationStorage(): GithubSubscriptionStorage {
@@ -465,7 +599,10 @@ export class GithubIntegration implements FactoryIntegration {
       stateSigner: ctx.stateSigner,
       baseUrl: ctx.baseUrl,
       controller: ctx.controller,
-      runIssueTriage: ctx.hooks?.runIssueTriage,
+      runIssueTriage: ctx.controller
+        ? input => runGithubIssueTriage({ controller: ctx.controller!, input })
+        : undefined,
+      emitAudit: ctx.hooks?.emitAudit,
     });
   }
 
@@ -473,8 +610,17 @@ export class GithubIntegration implements FactoryIntegration {
    * Session-scoped agent tools: PR subscribe/unsubscribe for sessions bound
    * to a GitHub-backed project. Empty for sessions outside a GitHub project.
    */
-  sessionTools(requestContext: RequestContext): IntegrationTools {
+  sessionTools({ requestContext }: { requestContext: RequestContext }): IntegrationTools {
     return createGithubSubscriptionTools(requestContext, this);
+  }
+
+  async postToolObserver({
+    toolContext,
+    requestContext,
+  }: Parameters<NonNullable<FactoryIntegration['postToolObserver']>>[0]): Promise<void> {
+    const pullRequestUrl = parseCreatedPullRequest(toolContext);
+    if (!pullRequestUrl || !requestContext) return;
+    await subscribeCurrentSessionToPullRequest(requestContext, pullRequestUrl, 'auto-gh-pr-create', this);
   }
 
   /** Non-secret config snapshot for system diagnostics/startup logs. */

@@ -187,7 +187,7 @@ describe('DirectoryBrowser', () => {
     });
   });
 
-  describe('when "Use this folder" is clicked', () => {
+  describe('when "Create Factory" is clicked', () => {
     it('picks the current listing path', async () => {
       server.use(
         http.get(FS_URL, ({ request }) => HttpResponse.json(listingFor(new URL(request.url).searchParams.get('path')))),
@@ -198,7 +198,7 @@ describe('DirectoryBrowser', () => {
       renderWithProviders(<DirectoryBrowser onPick={onPick} onCancel={vi.fn()} />);
 
       await screen.findByText('alpha');
-      await user.click(screen.getByRole('button', { name: 'Use this folder' }));
+      await user.click(screen.getByRole('button', { name: 'Create Factory' }));
 
       expect(onPick).toHaveBeenCalledWith('/projects', 'projects');
     });

@@ -16,8 +16,9 @@ import { SkeletonRows } from '../../../ui/SkeletonRows';
  * (confined to the server's configured root). The user drills into folders and
  * picks one — yielding a real absolute path with no typing.
  *
- * This is a *body* component with no backdrop of its own. The factory setup
- * screen embeds it directly in the application content.
+ * This is a *body* component with no backdrop of its own: it's embedded inside
+ * a host modal (see FactoriesModal) so Factory selection is a first-class,
+ * centered flow rather than a sidebar popover.
  */
 
 interface DirectoryBrowserProps {
@@ -244,6 +245,22 @@ export function DirectoryBrowser({ onPick, onCancel, busy = false, error: pickEr
           {pickError}
         </Txt>
       )}
+
+      <div className="flex items-center justify-end gap-3">
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={!listing || busy}
+            onClick={() => listing && onPick(listing.path, basename(listing.path))}
+          >
+            {busy ? 'Creating…' : 'Create Factory'}
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

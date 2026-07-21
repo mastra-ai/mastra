@@ -84,24 +84,36 @@ const nextProject: Factory = {
   },
 };
 
+const githubRepository = {
+  projectRepositoryId: 'project-repository-id',
+  slug: 'mastra-ai/mastracode-github-test',
+  worktrees: [],
+};
+
 const githubProject: Factory = {
   id: 'github-project-test',
   name: 'MastraCode GitHub Test',
   resourceId: RESOURCE_ID,
   createdAt: 3,
   binding: {
-    kind: 'github',
-    githubProjectId: 'github-project-id',
-    worktrees: [],
+    kind: 'factory',
+    factoryProjectId: 'factory-project-id',
+    repositories: [githubRepository],
   },
 };
 
 const githubProjectWithWorktree: Factory = {
   ...githubProject,
   binding: {
-    ...githubProject.binding,
-    worktrees: [{ branch: 'feature/test', baseBranch: 'main', worktreePath: '/tmp/mastracode-github-test' }],
-    selectedWorktreePath: '/tmp/mastracode-github-test',
+    kind: 'factory',
+    factoryProjectId: 'factory-project-id',
+    repositories: [
+      {
+        ...githubRepository,
+        worktrees: [{ branch: 'feature/test', baseBranch: 'main', worktreePath: '/tmp/mastracode-github-test' }],
+        selectedWorktreePath: '/tmp/mastracode-github-test',
+      },
+    ],
   },
 };
 
@@ -689,7 +701,7 @@ describe('ChatSessionProvider', () => {
       await waitFor(() => expect(requests).toContain('create'));
     });
 
-    it('binds a GitHub project session with the githubProjectId in session state', async () => {
+    it('binds a GitHub Factory session with Factory project and repository identities', async () => {
       const requests: string[] = [];
       seedFactory([githubProjectWithWorktree], githubProjectWithWorktree);
       useAgentControllerHandlers([], requests);
@@ -698,7 +710,7 @@ describe('ChatSessionProvider', () => {
 
       await waitFor(() =>
         expect(requests).toContain(
-          'setState:{"state":{"projectPath":"/tmp/mastracode-github-test","githubProjectId":"github-project-id"}}',
+          'setState:{"state":{"projectPath":"/tmp/mastracode-github-test","factoryProjectId":"factory-project-id","projectRepositoryId":"project-repository-id"}}',
         ),
       );
     });
