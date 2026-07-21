@@ -5,8 +5,12 @@ import { isLeaseProvider, NoopLeaseProvider, type LeaseProvider, type PubSub } f
 import { MastraWorker, type WorkerDeps } from '@mastra/core/worker';
 import type { IntegrationStorageHandle } from '@mastra/factory/storage/domains/integrations/base';
 
-import { PlatformApiClient, PlatformApiError } from '../../platform/api-client.js';
-import { dispatchGithubWebhook, type GithubWebhookDispatchDependencies, type ParsedGithubWebhook } from '../webhook.js';
+import {
+  dispatchGithubWebhook,
+  type GithubWebhookDispatchDependencies,
+  type ParsedGithubWebhook,
+} from '../../github/webhook.js';
+import { PlatformApiClient, PlatformApiError } from '../api-client.js';
 
 const API_PREFIX = '/v1/server/github-app';
 const DEFAULT_POLL_INTERVAL_MS = 5_000;

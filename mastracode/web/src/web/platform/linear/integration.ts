@@ -6,11 +6,11 @@ import type { IntegrationConnection } from '@mastra/factory/capabilities/connect
 import type { Intake, IntakeIssue, IntakeIssueDetail } from '@mastra/factory/capabilities/intake';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '@mastra/factory/integrations/base';
 
-import { PlatformApiClient, PlatformApiError, type PlatformApiClientConfig } from '../../platform/api-client.js';
-import { buildLinearAgentTools } from '../agent-tools.js';
-import type { LinearIntegration } from '../integration.js';
-import { buildLinearRoutes } from '../routes.js';
-import type { LinearConnectionData, LinearStorageHandle } from '../storage.js';
+import { buildLinearAgentTools } from '../../linear/agent-tools.js';
+import type { LinearIntegration } from '../../linear/integration.js';
+import { buildLinearRoutes } from '../../linear/routes.js';
+import type { LinearConnectionData, LinearStorageHandle } from '../../linear/storage.js';
+import { PlatformApiClient, PlatformApiError, type PlatformApiClientConfig } from '../api-client.js';
 
 type PageInfo = { hasNextPage: boolean; endCursor: string | null };
 type LinearUser = {
