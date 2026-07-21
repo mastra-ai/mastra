@@ -34,6 +34,12 @@ async function pickOption(user: ReturnType<typeof userEvent.setup>, trigger: HTM
   await waitFor(() => expect(screen.queryByRole('option', { name })).not.toBeInTheDocument());
 }
 
+async function rowFor(packName: string): Promise<HTMLLIElement> {
+  const row = (await screen.findByText(packName)).closest('li');
+  if (!(row instanceof HTMLLIElement)) throw new Error(`Model pack row not found for ${packName}`);
+  return row;
+}
+
 const builtinPack: ModelPackInfo = {
   id: 'builtin',
   name: 'Builtin Pack',
@@ -90,7 +96,7 @@ describe('ModelPacksSection', () => {
       // No resourceId means the request is unscoped.
       expect(queryString).toBe('');
 
-      const row = screen.getByText('Builtin Pack').closest('[role="listitem"]') as HTMLElement;
+      const row = await rowFor('Builtin Pack');
       expect(within(row).getByRole('button', { name: 'Activate' })).toBeDisabled();
     });
   });
@@ -111,7 +117,7 @@ describe('ModelPacksSection', () => {
       const user = userEvent.setup();
       renderWithProviders(<ModelPacksSection resourceId={RESOURCE_ID} scope="/tmp/worktree" models={models} />);
 
-      const row = (await screen.findByText('Builtin Pack')).closest('[role="listitem"]') as HTMLElement;
+      const row = await rowFor('Builtin Pack');
       await user.click(within(row).getByRole('button', { name: 'Activate' }));
 
       // The session registers under (resourceId, scope), so activation must
@@ -179,7 +185,7 @@ describe('ModelPacksSection', () => {
       const user = userEvent.setup();
       renderWithProviders(<ModelPacksSection resourceId={RESOURCE_ID} models={models} />);
 
-      const row = (await screen.findByText('My Pack')).closest('[role="listitem"]') as HTMLElement;
+      const row = await rowFor('My Pack');
       await user.click(within(row).getByRole('button', { name: 'Remove' }));
 
       await waitFor(() => expect(removed).toBe(true));

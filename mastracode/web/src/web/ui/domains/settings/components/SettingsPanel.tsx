@@ -1,5 +1,6 @@
 import type { AgentControllerSessionSettings } from '@mastra/client-js';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -7,7 +8,7 @@ import { Brain, GitBranch, Key, Palette, Search, Server, SlidersHorizontal } fro
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 
-import { useToast } from '../../../ui';
+import { useToast } from '../../../ui/toast';
 
 import { useChatPermissions } from '../../chat/context/useChatPermissions';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
@@ -42,11 +43,9 @@ const TABS: { id: Tab; label: string; icon: LucideIcon }[] = [
 ];
 
 /**
- * Preferences modal. A two-pane layout (nav rail + one scrollable content pane)
- * keeps long sections — the model catalog and the provider list — reachable
- * without nested scroll fighting. Mirrors the TUI `/settings` surface: theme,
- * density, model, thinking level, auto-approve, notifications, smart editing,
- * and provider/API-key management.
+ * Preferences modal. A two-pane layout keeps each settings section reachable
+ * in one scrolling content pane; dense provider results use a bounded,
+ * virtualized list within that pane.
  */
 export function SettingsPanel({ onClose }: SettingsPanelProps) {
   const [tab, setTab] = useState<Tab>('general');
@@ -94,7 +93,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
             ))}
           </TabList>
 
-          <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-5">
+          <ScrollArea className="min-h-0 flex-1" viewPortClassName="px-5 pb-5">
             <TabContent value="general">
               <GeneralTab theme={theme} onThemeChange={setTheme} />
               <FactorySetupSection />
@@ -131,7 +130,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
             <TabContent value="custom-providers">
               <CustomProvidersSection />
             </TabContent>
-          </div>
+          </ScrollArea>
         </Tabs>
       </DialogContent>
     </Dialog>
