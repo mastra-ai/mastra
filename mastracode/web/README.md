@@ -59,28 +59,39 @@ pnpm web:ui:test  # UI MSW tests (e2e/web-ui)
 
 ## Factories, bindings, and repositories
 
-In the Web UI a **Factory** is the top-level product entity the user creates and selects. Each Factory has a browser-owned identity (`Factory.id`) and a single **binding**:
+In the Web UI, a **Factory** is the top-level product entity that a user creates and selects. Each Factory has one binding:
 
-- **Local folder** — path on the host machine; sessions use the resolved `resourceId` from `GET /web/codebase/resolve`.
-- **Connected GitHub repository** — org-owned row in `github_projects`, identified by `githubProjectId` / `github_project_id` at the persistence boundary.
+- **Local folder**: A path on the host machine. Sessions use the `resourceId` resolved by `GET /web/codebase/resolve`.
+- **Server Factory**: A persisted Factory project identified by `factoryProjectId`. It can contain one or more connected repositories. Repository-specific operations use each repository's `projectRepositoryId`.
 
-Board, metrics, audit, sandboxes, worktrees, and PR subscriptions stay **repository-scoped** via `githubProjectId`. A Factory is not a multi-repository aggregate, and there is no server-side `factories` table yet. GitHub-backed Factories can use the Factory Board; local Factories are still Factories, but Board/metrics/audit require a GitHub connection.
+Factory work items belong to the Factory project. Sandboxes, worktrees, GitHub issue and pull request feeds, and pull request subscriptions belong to a connected repository. Private HTTP routes reflect that split. Work items use `/web/factory/projects/:factoryProjectId/*`, while GitHub provider operations use `/web/github/projects/:projectRepositoryId/*`.
 
-Session continuity with the TUI intentionally keeps the SDK names `projectPath` and `detectProject`. Those refer to the execution workspace path / codebase detection protocol, not the product Factory entity. Private HTTP routes use precise nouns: `/web/codebase/resolve`, `/web/github/repositories/*`, `/web/factory/repositories/:id/*`.
+Session continuity with the terminal user interface (TUI) keeps the Software Development Kit (SDK) names `projectPath` and `detectProject`. These names refer to the execution workspace path and codebase detection protocol, not the Factory product entity.
 
-Intake source config is asymmetric by provider: GitHub selections are `repositoryIds` (connected repository UUIDs); Linear selections remain `projectIds` because Linear Project is an external provider concept.
+Intake source config is asymmetric by provider. GitHub selections use `repositoryIds`, which contain connected repository UUIDs. Linear selections use `projectIds` because a Linear Project is an external provider concept.
 
-Browser state uses `mastracode-factories` / `mastracode-active-factory` only. Prerelease `mastracode-projects` keys are not read.
+Browser state uses `mastracode-factories` and `mastracode-active-factory`. Prerelease `mastracode-projects` keys aren't read.
+
+## Work and Review workflows
+
+Server-backed Factories split repository work across two boards:
+
+- **Work** (`/factory/work`): Shows manual work items, GitHub issues, and Linear issues. Its stages are **Intake**, **Triage**, **Planning**, **Building**, **Review**, and **Done**.
+- **Review** (`/factory/review`): Shows GitHub pull requests only. Its stages are **Intake**, **Reviewing**, and **Done**.
+
+Open GitHub issues appear as **Work** intake candidates. Open pull requests appear as **Review** intake candidates. Adding a candidate to a board creates or updates its persisted Factory work item. The source type determines which board owns that item, so a GitHub issue can't appear on **Review** and a pull request can't appear on **Work**.
+
+When a Factory pull request branch matches a related work session branch, the Review item stores the Work item as its parent. The Work card links to the Review session, and the Review card links back to the Work session. The same reciprocal links appear in the session header. Links to a thread are shown only while its referenced worktree still exists; the related board item remains available after worktree deletion.
 
 ## Workspace skill invocation
 
 The private Web API can activate a user-invocable skill on an existing scoped AgentController session with `POST /web/agent-controller/:controllerId/skills/invoke`. The Web Factory packages workflow skills such as `understand-issue` and `understand-pr` as ordinary, read-only `SKILL.md` files and adds them only to workspaces created by `MastraFactory`; the shared SDK and TUI workspace resolver do not load them. The route resolves every ID through the session workspace, uses the same `<skill name="…">` activation envelope as `/skill/<name>` in the TUI, and returns an error without dispatching when the skill is missing. Authenticated requests may target only the caller's personal session or a Factory worktree owned by that organization user.
 
-## Factory Overview
+## Factory metrics
 
-For GitHub projects with a connected repo, the sidebar Factory section leads with an **Overview** tab (`/factory/overview`, above Board) — the factory's at-a-glance landing page. Its centerpiece is the **Queue Health Chart**: one horizontal bar per stage (intake → triage → planning → execute → review), segmented by task age (green / amber / orange / red, proportional to count) with a diagonal-stripe overlay on the portion where agent work is actively running. Clicking a segment filters a drill-down task list below the chart. Age comes from each item's open `stageHistory` entry (falling back to `createdAt`); the active signal reuses the same `useWorkspaceActivity` worktree-activity poll that drives the sidebar dots. Aggregation runs client-side via the pure `computeQueueHealth()` (`src/web/ui/domains/factory/queue-health.ts`).
+The **Metrics** page at `/factory/metrics` shows queue health for the active Factory. The Queue Health Chart contains one horizontal bar per Work stage. Each bar is segmented by item age and overlays diagonal stripes where agent work is active. Selecting a segment filters the item list below the chart. Age comes from the open `stageHistory` entry and falls back to `createdAt`. The pure `computeQueueHealth()` function in `src/web/ui/domains/factory/queue-health.ts` performs the client-side aggregation.
 
-The age thresholds are server-side, per-project config (seconds), served by `GET /web/factory/repositories/:id/health/thresholds` and stored in the `queue-health` factory storage domain (`queue_health_settings` table) keyed by `(org_id, github_project_id)`. Defaults are `[14400, 86400, 259200]` (4h / 24h / 72h); `saveConfig` rejects a non-ascending or empty `thresholdsSeconds`. Thresholds live in seconds so fast-moving automated flows can represent sub-minute buckets.
+Queue age thresholds are server-side Factory project config in seconds. `GET /web/factory/projects/:factoryProjectId/health/thresholds` reads them from the `queue-health` storage domain. The `queue_health_settings` table keys records by `(org_id, factory_project_id)`. Defaults are `[14400, 86400, 259200]` (4h, 24h, and 72h). `saveConfig` rejects empty or non-ascending `thresholdsSeconds` values.
 
 ## GitHub pull request notifications
 
