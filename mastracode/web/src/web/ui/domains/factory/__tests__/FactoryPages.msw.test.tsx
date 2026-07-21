@@ -581,8 +581,8 @@ describe('Factory Work and Review intake candidates', () => {
         makeWorkItem({
           id: '00000000-0000-4000-8000-000000000042',
           title: 'Add factory pages',
-          source: 'github-issue',
-          sourceKey: 'github-issue:42',
+          source: 'github-pr',
+          sourceKey: 'github-pr:34',
           stages: ['review'],
         }),
       ],
@@ -615,8 +615,8 @@ describe('Factory Work and Review intake candidates', () => {
         makeWorkItem({
           id: '00000000-0000-4000-8000-000000000042',
           title: 'Add factory pages',
-          source: 'github-issue',
-          sourceKey: 'github-issue:42',
+          source: 'github-pr',
+          sourceKey: 'github-pr:34',
           stages: ['review'],
         }),
       ],
@@ -902,14 +902,23 @@ describe('Factory Board — persisted cards', () => {
       ...githubProject,
       binding: {
         ...githubProject.binding,
-        worktrees: [
-          ...githubProject.binding.worktrees,
+        repositories: [
           {
-            branch: 'factory/issue-12',
-            worktreePath: '/sandbox/mastra/worktrees/factory-issue-12',
-            baseBranch: 'main',
+            ...githubRepository,
+            worktrees: [
+              ...githubRepository.worktrees,
+              {
+                branch: 'factory/issue-12',
+                worktreePath: '/sandbox/mastra/worktrees/factory-issue-12',
+                baseBranch: 'main',
+              },
+              {
+                branch: 'factory/pr-34',
+                worktreePath: '/sandbox/mastra/worktrees/factory-pr-34',
+                baseBranch: 'main',
+              },
+            ],
           },
-          { branch: 'factory/pr-34', worktreePath: '/sandbox/mastra/worktrees/factory-pr-34', baseBranch: 'main' },
         ],
       },
     });
@@ -1065,9 +1074,7 @@ describe('Factory Board — persisted cards', () => {
       await waitFor(() => expect(router.state.location.pathname).toBe(`/threads/${destinationThreadId}`));
       const stored = JSON.parse(localStorage.getItem('mastracode-factories') ?? '[]') as Factory[];
       expect(
-        stored[0]?.binding.kind === 'factory'
-          ? stored[0].binding.repositories[0]?.selectedWorktreePath
-          : undefined,
+        stored[0]?.binding.kind === 'factory' ? stored[0].binding.repositories[0]?.selectedWorktreePath : undefined,
       ).toBe(destinationWorktreePath);
     },
   );
@@ -1077,10 +1084,16 @@ describe('Factory Board — persisted cards', () => {
       ...projectWithIssueWorktree,
       binding: {
         ...projectWithIssueWorktree.binding,
-        selectedWorktreePath: reviewWorktreePath,
-        worktrees: [
-          ...projectWithIssueWorktree.binding.worktrees,
-          { branch: 'factory/pr-34', worktreePath: reviewWorktreePath, baseBranch: 'main' },
+        repositories: [
+          {
+            ...githubRepository,
+            selectedWorktreePath: reviewWorktreePath,
+            worktrees: [
+              ...githubRepository.worktrees,
+              { branch: 'factory/issue-12', worktreePath: issueWorktreePath, baseBranch: 'main' },
+              { branch: 'factory/pr-34', worktreePath: reviewWorktreePath, baseBranch: 'main' },
+            ],
+          },
         ],
       },
     };
@@ -1112,8 +1125,13 @@ describe('Factory Board — persisted cards', () => {
       ...githubProject,
       binding: {
         ...githubProject.binding,
-        selectedWorktreePath: reviewWorktreePath,
-        worktrees: [{ branch: 'factory/pr-34', worktreePath: reviewWorktreePath, baseBranch: 'main' }],
+        repositories: [
+          {
+            ...githubRepository,
+            selectedWorktreePath: reviewWorktreePath,
+            worktrees: [{ branch: 'factory/pr-34', worktreePath: reviewWorktreePath, baseBranch: 'main' }],
+          },
+        ],
       },
     };
     useBoardHandlers({ workItems: relatedWorkItems });

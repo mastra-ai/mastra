@@ -99,7 +99,6 @@ const relatedWorkItems: WorkItem[] = [
     orgId: 'org-1',
     createdBy: 'user-1',
     githubProjectId: GITHUB_PROJECT_ID,
-    revision: 1,
     source: 'github-issue',
     sourceKey: 'github-issue:24',
     parentWorkItemId: null,
@@ -124,7 +123,6 @@ const relatedWorkItems: WorkItem[] = [
     orgId: 'org-1',
     createdBy: 'user-1',
     githubProjectId: GITHUB_PROJECT_ID,
-    revision: 1,
     source: 'github-pr',
     sourceKey: 'github-pr:25',
     parentWorkItemId: 'work-issue-24',
@@ -226,9 +224,43 @@ function rowContainer(name: string): HTMLElement {
 }
 
 describe('WorkspacesSection', () => {
-  it('lists Factory-backed worktrees, hides unmatched worktrees and user sessions, and marks the selected one active', async () => {
-    seedActiveFactory(githubProject);
+  it('keeps unmatched Factory sessions while hiding repository roots and user sessions', async () => {
+    seedActiveFactory({
+      ...githubProject,
+      binding: {
+        ...githubProject.binding,
+        repositories: githubProject.binding.repositories.map((repository, index) =>
+          index === 0
+            ? {
+                ...repository,
+                worktrees: [
+                  ...repository.worktrees,
+                  {
+                    branch: 'factory/issue-99',
+                    worktreePath: '/sandbox/mastra-worktrees/factory-issue-99',
+                    baseBranch: 'main',
+                  },
+                ],
+              }
+            : repository,
+        ),
+      },
+    });
     useAgentControllerHandlers(relatedWorkItems);
+    server.use(
+      http.get(`${API}/sessions/:resourceId/threads`, () =>
+        HttpResponse.json({
+          threads: [
+            {
+              id: 'thread-unmatched',
+              title: 'Unmatched Factory session',
+              tags: { projectPath: '/sandbox/mastra-worktrees/feat-unmatched' },
+              state: 'idle',
+            },
+          ],
+        }),
+      ),
+    );
 
     renderSection();
 
@@ -236,8 +268,9 @@ describe('WorkspacesSection', () => {
     expect(screen.getByText('Review Sessions')).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: 'feat-api' })).toHaveAttribute('aria-current', 'true');
     expect(await screen.findByRole('button', { name: 'feat-ui' })).not.toHaveAttribute('aria-current');
+    expect(screen.getByRole('button', { name: 'factory/issue-99' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Unmatched Factory session' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'main' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'feat-unmatched' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'user/alice-notes' })).not.toBeInTheDocument();
   });
 
@@ -257,7 +290,7 @@ describe('WorkspacesSection', () => {
     expect(within(reviewGroup).queryByText('Work item: Issue #24')).not.toBeInTheDocument();
   });
 
-  it('shows only the five most recently updated sessions in each Factory section', async () => {
+  it('keeps selected and running sessions visible ahead of the five-session recency limit', async () => {
     const worktrees = ['work', 'review'].flatMap(kind =>
       Array.from({ length: 6 }, (_, index) => ({
         branch: `${kind}-${index}`,
@@ -271,8 +304,7 @@ describe('WorkspacesSection', () => {
         id: `item-${index}`,
         orgId: 'org-1',
         createdBy: 'user-1',
-        githubProjectId: GITHUB_PROJECT_ID,
-        revision: 1,
+            githubProjectId: GITHUB_PROJECT_ID,
         source: review ? 'github-pr' : 'github-issue',
         sourceKey: `${review ? 'github-pr' : 'github-issue'}:${index}`,
         parentWorkItemId: null,
@@ -302,12 +334,26 @@ describe('WorkspacesSection', () => {
           {
             ...githubProject.binding.repositories[0],
             worktrees,
-            selectedWorktreePath: '/sandbox/mastra-worktrees/review-5',
+            selectedWorktreePath: '/sandbox/mastra-worktrees/work-0',
           },
         ],
       },
     });
     useAgentControllerHandlers(items);
+    server.use(
+      http.get(`${API}/sessions/:resourceId/threads`, () =>
+        HttpResponse.json({
+          threads: [
+            {
+              id: 'thread-running-old-session',
+              title: 'Running old session',
+              tags: { projectPath: '/sandbox/mastra-worktrees/work-1' },
+              state: 'active',
+            },
+          ],
+        }),
+      ),
+    );
 
     renderSection();
 
@@ -315,8 +361,9 @@ describe('WorkspacesSection', () => {
     const reviewGroup = screen.getByRole('region', { name: 'Review Sessions' });
     await within(reviewGroup).findByRole('button', { name: 'review-5' });
     await waitFor(() => {
-      expect(within(workGroup).getAllByRole('button', { name: /^work-/ })).toHaveLength(5);
-      expect(within(workGroup).queryByRole('button', { name: 'work-0' })).not.toBeInTheDocument();
+      expect(within(workGroup).getByRole('button', { name: 'work-0' })).toHaveAttribute('aria-current', 'true');
+      expect(within(workGroup).getByRole('button', { name: 'Running old session' })).toBeInTheDocument();
+      expect(within(workGroup).queryByRole('button', { name: 'work-2' })).not.toBeInTheDocument();
       expect(within(reviewGroup).getAllByRole('button', { name: /^review-/ })).toHaveLength(5);
       expect(within(reviewGroup).queryByRole('button', { name: 'review-0' })).not.toBeInTheDocument();
     });
@@ -535,14 +582,20 @@ describe('WorkspacesSection', () => {
       http.get(`${API}/sessions/:resourceId/threads`, () =>
         HttpResponse.json({
           threads: [
-            { id: 'thread-latest', title: 'Latest', resourceId: 'resource-gh', updatedAt: '2026-06-09T00:00:00.000Z' },
+            {
+              id: 'thread-latest',
+              title: 'Latest',
+              resourceId: 'resource-gh',
+              updatedAt: '2026-06-09T00:00:00.000Z',
+              tags: { projectPath: '/sandbox/mastra-worktrees/feat-api' },
+            },
           ],
         }),
       ),
     );
     renderSection('/factory/board');
 
-    const activeSession = await screen.findByRole('button', { name: 'feat-api' });
+    const activeSession = await screen.findByRole('button', { name: 'Latest' });
     expect(activeSession).toHaveAttribute('aria-current', 'true');
     await userEvent.click(activeSession);
 
@@ -564,18 +617,25 @@ describe('WorkspacesSection', () => {
               title: 'Real work',
               resourceId: 'resource-gh',
               updatedAt: '2026-06-01T00:00:00.000Z',
+              tags: { projectPath: '/sandbox/mastra-worktrees/feat-ui' },
             },
             // …and a newer untitled thread seeded by session creation, whose
             // updatedAt sorts first. The row must still open the conversation
             // it is labeled after.
-            { id: 'thread-seeded', title: '', resourceId: 'resource-gh', updatedAt: '2026-06-09T00:00:00.000Z' },
+            {
+              id: 'thread-seeded',
+              title: '',
+              resourceId: 'resource-gh',
+              updatedAt: '2026-06-09T00:00:00.000Z',
+              tags: { projectPath: '/sandbox/mastra-worktrees/feat-ui' },
+            },
           ],
         }),
       ),
     );
     renderSection('/factory/board');
 
-    await userEvent.click(await screen.findByRole('button', { name: 'feat-ui' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Real work' }));
 
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-convo'));
   });
@@ -583,11 +643,26 @@ describe('WorkspacesSection', () => {
   it('opens the already-selected workspace’s thread when its row is clicked from another page', async () => {
     seedActiveFactory(githubProject);
     useAgentControllerHandlers();
+    server.use(
+      http.get(`${API}/sessions/:resourceId/threads`, () =>
+        HttpResponse.json({
+          threads: [
+            {
+              id: 'thread-generic',
+              title: 'Selected session',
+              resourceId: 'resource-gh',
+              updatedAt: '2026-06-09T00:00:00.000Z',
+              tags: { projectPath: '/sandbox/mastra-worktrees/feat-api' },
+            },
+          ],
+        }),
+      ),
+    );
     renderSection('/factory/board');
 
     // feat-api is the selected workspace; its row must still lead to its
     // conversation when the user is elsewhere (board, /new, …).
-    const row = await screen.findByRole('button', { name: 'feat-api' });
+    const row = await screen.findByRole('button', { name: 'Selected session' });
     expect(row).toHaveAttribute('aria-current', 'true');
     await userEvent.click(row);
 
@@ -612,8 +687,8 @@ describe('WorkspacesSection', () => {
     renderSection();
 
     await screen.findByRole('button', { name: 'feat-ui' });
-    // One actions menu per factory worktree (feat-ui, feat-api).
-    expect(screen.getAllByRole('button', { name: 'Workspace actions' })).toHaveLength(2);
+    // One actions menu per Factory session, including unmatched worktrees.
+    expect(screen.getAllByRole('button', { name: 'Workspace actions' })).toHaveLength(3);
   });
 
   it('deletes a worktree after confirmation, cascading its threads', async () => {

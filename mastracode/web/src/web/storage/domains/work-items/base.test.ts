@@ -27,6 +27,14 @@ async function makeStorage(): Promise<WorkItemsStorage> {
   return domain;
 }
 
+function deferred() {
+  let resolve = () => {};
+  const promise = new Promise<void>(done => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 describe('WorkItemsStorage', () => {
   it('deduplicates external sources within a Factory project, not across projects', async () => {
     const storage = await makeStorage();
@@ -145,6 +153,85 @@ describe('WorkItemsStorage', () => {
 
     const items = await storage.list({ orgId: 'org1', factoryProjectId: 'p1' });
     expect(items.find(item => item.id === child.item.id)?.parentWorkItemId).toBeNull();
+  });
+
+  it('serializes child creation with parent deletion when distributed locking is unavailable', async () => {
+    const backend = new LibSQLFactoryStorage({ id: 'work-items-create-delete-lock-test', url: ':memory:' });
+    const storage = backend.registerDomain(new WorkItemsStorage());
+    await backend.init();
+    const parent = await storage.upsert({ orgId: 'org1', userId: 'u', factoryProjectId: 'p1', input });
+    const childInsertReached = deferred();
+    const releaseChildInsert = deferred();
+    const originalInsertOne = backend.ops.insertOne.bind(backend.ops);
+    vi.spyOn(backend.ops, 'insertOne').mockImplementation(async (collection, record) => {
+      if (collection === 'work_items' && record.parent_work_item_id === parent.item.id) {
+        childInsertReached.resolve();
+        await releaseChildInsert.promise;
+      }
+      return originalInsertOne(collection, record);
+    });
+
+    const childPromise = storage.upsert({
+      orgId: 'org1',
+      userId: 'u',
+      factoryProjectId: 'p1',
+      input: {
+        ...input,
+        externalSource: { integrationId: 'github', type: 'pull-request', externalId: '42' },
+        parentWorkItemId: parent.item.id,
+      },
+    });
+    await childInsertReached.promise;
+    const deleteMany = vi.spyOn(backend.ops, 'deleteMany');
+    const deletion = storage.delete({ orgId: 'org1', id: parent.item.id });
+    await new Promise<void>(resolve => setTimeout(resolve, 0));
+
+    expect(deleteMany).not.toHaveBeenCalled();
+    releaseChildInsert.resolve();
+    const [child] = await Promise.all([childPromise, deletion]);
+    expect((await storage.get({ orgId: 'org1', id: child.item.id }))?.parentWorkItemId).toBeNull();
+  });
+
+  it('serializes reparenting with parent deletion when distributed locking is unavailable', async () => {
+    const backend = new LibSQLFactoryStorage({ id: 'work-items-reparent-delete-lock-test', url: ':memory:' });
+    const storage = backend.registerDomain(new WorkItemsStorage());
+    await backend.init();
+    const parent = await storage.upsert({ orgId: 'org1', userId: 'u', factoryProjectId: 'p1', input });
+    const child = await storage.upsert({
+      orgId: 'org1',
+      userId: 'u',
+      factoryProjectId: 'p1',
+      input: {
+        ...input,
+        externalSource: { integrationId: 'github', type: 'pull-request', externalId: '42' },
+      },
+    });
+    const childUpdateReached = deferred();
+    const releaseChildUpdate = deferred();
+    const originalUpdateAtomic = backend.ops.updateAtomic.bind(backend.ops);
+    vi.spyOn(backend.ops, 'updateAtomic').mockImplementation(async (collection, where, updater) => {
+      if (collection === 'work_items' && where.id === child.item.id) {
+        childUpdateReached.resolve();
+        await releaseChildUpdate.promise;
+      }
+      return originalUpdateAtomic(collection, where, updater);
+    });
+
+    const reparenting = storage.update({
+      orgId: 'org1',
+      id: child.item.id,
+      userId: 'u',
+      patch: { parentWorkItemId: parent.item.id },
+    });
+    await childUpdateReached.promise;
+    const deleteMany = vi.spyOn(backend.ops, 'deleteMany');
+    const deletion = storage.delete({ orgId: 'org1', id: parent.item.id });
+    await new Promise<void>(resolve => setTimeout(resolve, 0));
+
+    expect(deleteMany).not.toHaveBeenCalled();
+    releaseChildUpdate.resolve();
+    await Promise.all([reparenting, deletion]);
+    expect((await storage.get({ orgId: 'org1', id: child.item.id }))?.parentWorkItemId).toBeNull();
   });
 
   it('serializes relationship writes and deletion on the project lock', async () => {

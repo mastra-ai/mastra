@@ -76,32 +76,52 @@ export function WorkspacesSection() {
 
   const selectedPath = workspaces.data?.selected?.worktreePath;
   const pending = selectWorkspace.isPending || deleteWorkspace.isPending;
+  const rootWorktreePaths = new Set(
+    activeFactory.binding.repositories.flatMap(repository =>
+      repository.sandboxWorkdir ? [repository.sandboxWorkdir] : [],
+    ),
+  );
   const allWorkItems = workItems.data ?? [];
   const workItemByPath = new Map(
     allWorkItems.flatMap(item =>
-      Object.values(item.sessions).map(sessionRef => [sessionRef.projectPath, item] as const),
+      Object.values(item.sessions ?? {}).map(sessionRef => [sessionRef.projectPath, item] as const),
     ),
   );
   const rows = worktrees.flatMap(worktree => {
     const item = workItemByPath.get(worktree.worktreePath);
-    if (!item) return [];
+    const active = worktree.worktreePath === selectedPath;
+    const running = runningByPath[worktree.worktreePath] === true;
+    const factorySession = !rootWorktreePaths.has(worktree.worktreePath) && !worktree.branch.startsWith('user/');
+    if (!item && !active && !running && (!factorySession || !workItems.isFetched)) return [];
     return [
       {
         worktree,
         label: titleByPath[worktree.worktreePath],
-        active: worktree.worktreePath === selectedPath,
-        running: runningByPath[worktree.worktreePath] === true,
+        active,
+        running,
         attention: attentionByPath[worktree.worktreePath] === true,
-        review: item.source === 'github-pr',
-        updatedAt: item.updatedAt,
+        review: item?.source === 'github-pr' || (!item && worktree.branch.startsWith('factory/pr-')),
+        updatedAt: item?.updatedAt ?? '',
       },
     ];
   });
-  const latestRows = (review: boolean) =>
-    rows
-      .filter(row => row.review === review)
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-      .slice(0, 5);
+  const latestRows = (review: boolean) => {
+    const sorted = [...rows.filter(row => row.review === review)].sort((a, b) =>
+      b.updatedAt.localeCompare(a.updatedAt),
+    );
+    const visible = sorted.slice(0, 5);
+    for (const pinned of sorted.slice(5).filter(row => row.active || row.running || row.attention)) {
+      let replaceIndex = visible.length - 1;
+      while (
+        replaceIndex >= 0 &&
+        (visible[replaceIndex]?.active || visible[replaceIndex]?.running || visible[replaceIndex]?.attention)
+      ) {
+        replaceIndex -= 1;
+      }
+      if (replaceIndex >= 0) visible[replaceIndex] = pinned;
+    }
+    return visible.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  };
   const workRows = latestRows(false);
   const reviewRows = latestRows(true);
 

@@ -309,7 +309,7 @@ describe('Sidebar', () => {
   });
 
   describe('when a GitHub factory is active', () => {
-    it('expands factory Sessions as a navigation item without showing the repo root', async () => {
+    it('lists Factory sessions directly without showing the repository root', async () => {
       seedFactory(githubProject);
       useAuthHandler();
       useGithubStatusHandler();
@@ -317,19 +317,12 @@ describe('Sidebar', () => {
       renderSidebar();
 
       const factory = await screen.findByRole('navigation', { name: 'Factory' });
-      const sessions = within(factory).getByRole('button', { name: 'Sessions' });
-      expect(sessions).toHaveAttribute('aria-expanded', 'false');
-      expect(within(factory).queryByRole('button', { name: 'feat-ui' })).not.toBeInTheDocument();
-
-      await userEvent.click(sessions);
-
-      expect(sessions).toHaveAttribute('aria-expanded', 'true');
-      // Only feature worktrees are sessions: the repo-root checkout is not one.
-      expect(within(factory).getByRole('button', { name: 'feat-ui' })).toBeInTheDocument();
+      const workSessions = within(factory).getByRole('region', { name: 'Work Sessions' });
+      expect(within(workSessions).getByRole('button', { name: 'feat-ui' })).toBeInTheDocument();
       expect(within(factory).queryByRole('button', { name: 'main' })).not.toBeInTheDocument();
     });
 
-    it('explains how factory Sessions are created when none exist', async () => {
+    it('explains how Work and Review sessions are created when none exist', async () => {
       seedFactory({
         ...githubProject,
         binding: {
@@ -344,9 +337,8 @@ describe('Sidebar', () => {
       renderSidebar();
 
       const factory = await screen.findByRole('navigation', { name: 'Factory' });
-      await userEvent.click(within(factory).getByRole('button', { name: 'Sessions' }));
-
-      expect(within(factory).getByText('Sessions appear when work starts from the Factory board.')).toBeInTheDocument();
+      expect(within(factory).getByText('Work sessions appear when work starts.')).toBeInTheDocument();
+      expect(within(factory).getByText('Review sessions appear when a PR review starts.')).toBeInTheDocument();
     });
 
     it('renders the User Sessions section and no thread list', async () => {
@@ -359,7 +351,6 @@ describe('Sidebar', () => {
       expect(await screen.findByRole('region', { name: 'User sessions' })).toBeInTheDocument();
       // Each worktree holds a single conversation, so GitHub projects have no
       // thread list — neither nested nor flat.
-      await userEvent.click(screen.getByRole('button', { name: 'Sessions' }));
       await screen.findByRole('button', { name: 'feat-ui' });
       expect(screen.queryByText('First thread')).not.toBeInTheDocument();
     });

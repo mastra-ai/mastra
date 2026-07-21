@@ -253,6 +253,22 @@ function applyUpdate({
   };
 }
 
+const projectRelationLocks = new Map<string, Promise<unknown>>();
+
+function withInProcessProjectLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const previous = projectRelationLocks.get(key) ?? Promise.resolve();
+  const result = previous.then(fn, fn);
+  const tail = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  projectRelationLocks.set(key, tail);
+  void tail.then(() => {
+    if (projectRelationLocks.get(key) === tail) projectRelationLocks.delete(key);
+  });
+  return result;
+}
+
 export class WorkItemsStorage extends FactoryStorageDomain {
   constructor() {
     super('work-items');
@@ -271,8 +287,10 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   async #withProjectRelationLock<T>(orgId: string, factoryProjectId: string, fn: () => Promise<T>): Promise<T> {
-    if (!this.storage.withDistributedLock) return fn();
-    return this.storage.withDistributedLock(`work-items:${orgId}:${factoryProjectId}`, fn);
+    const key = `work-items:${orgId}:${factoryProjectId}`;
+    return withInProcessProjectLock(key, () =>
+      this.storage.withDistributedLock ? this.storage.withDistributedLock(key, fn) : fn(),
+    );
   }
 
   async list({ orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }): Promise<WorkItemRow[]> {
@@ -323,11 +341,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           previous = priorState(current);
           const patch = input.parentWorkItemId === null ? { ...input, parentWorkItemId: undefined } : input;
           if (patch.parentWorkItemId !== undefined) {
-            validateParentRelation(
-              await this.list({ orgId, factoryProjectId }),
-              current.id,
-              patch.parentWorkItemId,
-            );
+            validateParentRelation(await this.list({ orgId, factoryProjectId }), current.id, patch.parentWorkItemId);
           }
           return {
             external_source: input.externalSource ?? null,
@@ -344,11 +358,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     const now = new Date();
     const stages = input.stages ?? ['intake'];
     try {
-      validateParentRelation(
-        await this.list({ orgId, factoryProjectId }),
-        undefined,
-        input.parentWorkItemId ?? null,
-      );
+      validateParentRelation(await this.list({ orgId, factoryProjectId }), undefined, input.parentWorkItemId ?? null);
       const row = await this.#db.insertOne<WorkItemDbRow>('work_items', {
         org_id: orgId,
         factory_project_id: factoryProjectId,
