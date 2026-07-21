@@ -185,7 +185,9 @@ describe('create-mastra published binaries', () => {
           try {
             process.kill(-server.pid, 'SIGTERM');
           } catch (error) {
-            if ((error as { code?: string }).code !== 'ESRCH') throw error;
+            if ((error as { code?: string }).code !== 'ESRCH') {
+              console.warn('Failed to terminate the Mastra dev process:', error);
+            }
           }
         }
       }
@@ -198,7 +200,9 @@ describe('create-mastra published binaries', () => {
           try {
             process.kill(-server.pid, 'SIGKILL');
           } catch (error) {
-            if ((error as { code?: string }).code !== 'ESRCH') throw error;
+            if ((error as { code?: string }).code !== 'ESRCH') {
+              console.warn('Failed to kill the Mastra dev process:', error);
+            }
           }
         }
         await serverExit;

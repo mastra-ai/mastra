@@ -88,12 +88,13 @@ function openBrowser(url: string) {
   }
 }
 
-export async function verifyToken(token: string): Promise<boolean> {
+export async function verifyToken(token: string, signal?: AbortSignal): Promise<boolean> {
   // Use plain fetch — NOT authenticatedFetch — to avoid its 401 interceptor
   // triggering a redundant refresh cycle.
   try {
     const res = await fetch(`${MASTRA_PLATFORM_API_URL}/v1/auth/verify`, {
       headers: { Authorization: `Bearer ${token}` },
+      signal,
     });
     return res.ok;
   } catch {
@@ -101,7 +102,7 @@ export async function verifyToken(token: string): Promise<boolean> {
   }
 }
 
-export async function tryRefreshToken(creds: Credentials): Promise<string | null> {
+export async function tryRefreshToken(creds: Credentials, signal?: AbortSignal): Promise<string | null> {
   if (!creds.refreshToken) return null;
 
   try {
@@ -112,6 +113,7 @@ export async function tryRefreshToken(creds: Credentials): Promise<string | null
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refreshToken: creds.refreshToken }),
+      signal,
     });
     if (!res.ok) return null;
 
@@ -295,11 +297,11 @@ export async function getToken(signal?: AbortSignal): Promise<string> {
   }
 
   // Try a quick verify to see if the token is still valid.
-  if (await verifyToken(creds.token)) return creds.token;
+  if (await verifyToken(creds.token, signal)) return creds.token;
   signal?.throwIfAborted();
 
   // Token might be expired — attempt refresh
-  const refreshed = await tryRefreshToken(creds);
+  const refreshed = await tryRefreshToken(creds, signal);
   if (refreshed) return refreshed;
   signal?.throwIfAborted();
 

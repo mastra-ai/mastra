@@ -673,7 +673,12 @@ export const writeAPIKey = async ({ provider, apiKey }: { provider: LLMProvider;
   const envFileName = apiKey ? '.env' : '.env.example';
 
   const key = await getAPIKey(provider);
-  await fs.appendFile(envFileName, `${key}=${apiKey || 'your-api-key'}\n`, 'utf-8');
+  await fs.appendFile(
+    envFileName,
+    `${key}=${apiKey || 'your-api-key'}\n`,
+    apiKey ? { encoding: 'utf8', mode: 0o600 } : 'utf8',
+  );
+  if (apiKey && process.platform !== 'win32') await fs.chmod(envFileName, 0o600);
 };
 
 /**

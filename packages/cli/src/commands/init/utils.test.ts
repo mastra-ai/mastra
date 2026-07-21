@@ -241,6 +241,16 @@ describe('writeAPIKey', () => {
     const contents = fs.readFileSync(`${cwd}/.env`, 'utf-8') as string;
     expect(contents).toBe('EXISTING=1\nOPENAI_API_KEY=sk-proj-abc123\n');
   });
+
+  test('restricts permissions on an existing .env file', async () => {
+    fs.writeFileSync(`${cwd}/.env`, 'EXISTING=1\n', { mode: 0o644 });
+
+    await writeAPIKey({ provider: 'openai', apiKey: 'sk-proj-abc123' });
+
+    if (process.platform !== 'win32') {
+      expect(fs.statSync(`${cwd}/.env`).mode & 0o777).toBe(0o600);
+    }
+  });
 });
 
 describe('writeObservabilityEnv', () => {

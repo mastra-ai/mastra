@@ -18,6 +18,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   delete process.env.MASTRA_API_TOKEN;
   delete process.env.MASTRA_ORG_ID;
 });
@@ -41,6 +42,44 @@ describe('getToken', () => {
     const token = await getToken();
 
     expect(token).toBe('from-env');
+  });
+});
+
+describe('token requests', () => {
+  it('passes the abort signal when verifying a token', async () => {
+    const controller = new AbortController();
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { verifyToken } = await import('./credentials.js');
+
+    await expect(verifyToken('token', controller.signal)).resolves.toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith('http://localhost:9999/v1/auth/verify', {
+      headers: { Authorization: 'Bearer token' },
+      signal: controller.signal,
+    });
+  });
+
+  it('passes the abort signal when refreshing a token', async () => {
+    const controller = new AbortController();
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { tryRefreshToken } = await import('./credentials.js');
+    const credentials = {
+      token: 'expired-token',
+      refreshToken: 'refresh-token',
+      user: { id: 'u1', email: 'e@e.com', firstName: 'A', lastName: 'B' },
+      organizationId: 'org-1',
+    };
+
+    await expect(tryRefreshToken(credentials, controller.signal)).resolves.toBeNull();
+    expect(fetchMock).toHaveBeenCalledWith('http://localhost:9999/v1/auth/refresh-token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: 'refresh-token' }),
+      signal: controller.signal,
+    });
   });
 });
 

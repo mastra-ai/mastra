@@ -63,11 +63,16 @@ async function getRegistryPublishedVersions(registry: string, publishedTag: stri
 export default async function setup({ provide }: TestProject) {
   const publishedRegistry = await startPublishedRegistryFromEnv();
   if (publishedRegistry) {
-    const registryUrl = publishedRegistry.registry.toString();
-    provide('tag', publishedRegistry.tag);
-    provide('registry', registryUrl);
-    provide('publishedVersions', await getRegistryPublishedVersions(registryUrl, publishedRegistry.tag));
-    return async () => stopRegistry(publishedRegistry.registry);
+    try {
+      const registryUrl = publishedRegistry.registry.toString();
+      provide('tag', publishedRegistry.tag);
+      provide('registry', registryUrl);
+      provide('publishedVersions', await getRegistryPublishedVersions(registryUrl, publishedRegistry.tag));
+      return async () => stopRegistry(publishedRegistry.registry);
+    } catch (error) {
+      await stopRegistry(publishedRegistry.registry);
+      throw error;
+    }
   }
 
   const { glob } = await import('tinyglobby');
