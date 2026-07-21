@@ -434,6 +434,9 @@ export function createExperimentsTests({
           comment: null,
         });
         expect(cleared.comment).toBeNull();
+
+        const clearedRefetched = await experimentsStorage.getExperimentResultById({ id: created.id });
+        expect(clearedRefetched!.comment).toBeNull();
       });
 
       it('getExperimentResultById returns result or null', async () => {
