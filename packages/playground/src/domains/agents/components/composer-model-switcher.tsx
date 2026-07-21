@@ -1,9 +1,7 @@
-import type { UpdateModelParams } from '@mastra/client-js';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Lock, TriangleAlert } from 'lucide-react';
-import { useState, useEffect } from 'react';
-import { useAgent } from '../hooks/use-agent';
-import { useUpdateAgentModel } from '../hooks/use-agents';
+import { useState } from 'react';
+import { usePlaygroundModelOptional } from '../context/playground-model-context';
 import { useBuilderModelPolicy } from '@/domains/agent-builder';
 import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-agent-builder-allowed-models';
 import { LLMProviders, LLMModels, useLLMProviders, cleanProviderId, findProviderById } from '@/domains/llm';
@@ -17,30 +15,17 @@ const COMPOSER_TRIGGER_CLASS = [
   'transition-colors duration-normal',
 ].join(' ');
 
-export interface ComposerModelSwitcherProps {
-  agentId: string;
-}
-
-export const ComposerModelSwitcher = ({ agentId }: ComposerModelSwitcherProps) => {
-  const { data: agent } = useAgent(agentId);
-  const { mutateAsync: updateModel } = useUpdateAgentModel(agentId);
+export const ComposerModelSwitcher = () => {
+  const selection = usePlaygroundModelOptional();
   const { data: dataProviders, isLoading: providersLoading } = useLLMProviders();
   const policy = useBuilderModelPolicy();
 
-  const defaultProvider = agent?.provider || '';
-  const defaultModel = agent?.modelId || '';
-
-  const [selectedModel, setSelectedModel] = useState(defaultModel);
-  const [selectedProvider, setSelectedProvider] = useState(defaultProvider);
   const [modelOpen, setModelOpen] = useState(false);
 
-  const providers = dataProviders?.providers || [];
+  if (providersLoading || !selection) return null;
 
-  // Update local state when agent data changes
-  useEffect(() => {
-    setSelectedModel(defaultModel);
-    setSelectedProvider(defaultProvider);
-  }, [defaultModel, defaultProvider]);
+  const { provider: selectedProvider, model: selectedModel, setProvider, setModel } = selection;
+  const providers = dataProviders?.providers || [];
 
   const currentModelProvider = cleanProviderId(selectedProvider);
 
@@ -48,37 +33,19 @@ export const ComposerModelSwitcher = ({ agentId }: ComposerModelSwitcherProps) =
   const resolvedProvider = findProviderById(providers, currentModelProvider);
   const fullProviderId = resolvedProvider?.id || currentModelProvider;
 
-  // Auto-save when model changes
-  const handleModelSelect = async (modelId: string) => {
-    setSelectedModel(modelId);
-
-    if (modelId && fullProviderId) {
-      try {
-        await updateModel({
-          provider: fullProviderId as UpdateModelParams['provider'],
-          modelId,
-        });
-      } catch (error) {
-        console.error('Failed to update model:', error);
-      }
-    }
+  const handleModelSelect = (modelId: string) => {
+    if (modelId && fullProviderId) setModel(fullProviderId, modelId);
   };
 
   // Handle provider selection
   const handleProviderSelect = (providerId: string) => {
     const cleanedId = cleanProviderId(providerId);
-    setSelectedProvider(cleanedId);
-
     // Only clear model selection and open model combobox when switching to a different provider
     if (cleanedId !== currentModelProvider) {
-      setSelectedModel('');
+      setProvider(cleanedId);
       setModelOpen(true);
     }
   };
-
-  if (providersLoading) {
-    return null;
-  }
 
   // Admin locked the picker — surface a non-interactive chip instead.
   if (policy.active && policy.pickerVisible === false) {
@@ -127,18 +94,19 @@ export const ComposerModelSwitcher = ({ agentId }: ComposerModelSwitcherProps) =
   );
 };
 
-export const ComposerModelWarning = ({ agentId }: ComposerModelSwitcherProps) => {
-  const { data: agent } = useAgent(agentId);
+export const ComposerModelWarning = () => {
+  const selection = usePlaygroundModelOptional();
   const { data: dataProviders, isLoading: providersLoading } = useLLMProviders();
   const policy = useBuilderModelPolicy();
   const { models: allowedModels } = useAgentBuilderAllowedModels();
 
-  if (providersLoading || !agent) return null;
+  if (providersLoading || !selection) return null;
 
   const providers = dataProviders?.providers || [];
-  const currentModelProvider = cleanProviderId(agent.provider || '');
+  const { provider, model } = selection;
+  const currentModelProvider = cleanProviderId(provider);
   const currentProvider = findProviderById(providers, currentModelProvider);
-  const selectedModel = agent.modelId || '';
+  const selectedModel = model;
 
   const stale =
     Boolean(currentModelProvider && selectedModel) &&
@@ -166,7 +134,7 @@ export const ComposerModelWarning = ({ agentId }: ComposerModelSwitcherProps) =>
           <TriangleAlert className="w-3 h-3 shrink-0 mt-0.5" />
           <span className="min-w-0 break-words">
             <code className="px-1 py-0.5 bg-accent6Dark rounded text-accent6 break-all">
-              {agent.provider}/{selectedModel}
+              {provider}/{selectedModel}
             </code>{' '}
             is no longer allowed by admin policy. Pick a different model.
           </span>

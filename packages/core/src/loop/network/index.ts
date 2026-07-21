@@ -1,7 +1,6 @@
 import { parsePartialJson } from '@internal/ai-sdk-v5';
 import { z } from 'zod/v4';
 import type { Mastra } from '../..';
-import type { AgentExecutionOptions } from '../../agent';
 import type { MultiPrimitiveExecutionOptions, NetworkOptions } from '../../agent/agent.types';
 import { Agent, tryGenerateWithJsonFallback } from '../../agent/index';
 import { MessageList } from '../../agent/message-list';
@@ -171,6 +170,7 @@ export async function getRoutingAgent({
   agent,
   routingConfig,
   memoryConfig,
+  model,
 }: {
   agent: Agent;
   requestContext: RequestContext;
@@ -178,12 +178,13 @@ export async function getRoutingAgent({
     additionalInstructions?: string;
   };
   memoryConfig?: any;
+  model?: MultiPrimitiveExecutionOptions['model'];
 }) {
   const instructionsToUse = await agent.getInstructions({ requestContext: requestContext });
   const agentsToUse = await agent.listAgents({ requestContext: requestContext });
   const workflowsToUse = await agent.listWorkflows({ requestContext: requestContext });
   const toolsToUse = await agent.listTools({ requestContext: requestContext });
-  const model = await agent.getModel({ requestContext: requestContext });
+  const resolvedModel = await agent.getModel({ requestContext, modelConfig: model });
   const memoryToUse = await agent.getMemory({ requestContext: requestContext });
   assertNetworkSupportsMemory(memoryToUse, memoryConfig);
   const clientToolsToUse = (await agent.getDefaultOptions({ requestContext: requestContext }))?.clientTools;
@@ -250,7 +251,7 @@ export async function getRoutingAgent({
     id: 'routing-agent',
     name: 'Routing Agent',
     instructions,
-    model: model,
+    model: resolvedModel,
     memory: memoryToUse,
     inputProcessors: configuredInputProcessors,
     outputProcessors: configuredOutputProcessors,
@@ -533,7 +534,7 @@ export async function createNetworkLoop({
   requestContext: RequestContext;
   runId: string;
   agent: Agent;
-  routingAgentOptions?: Pick<MultiPrimitiveExecutionOptions, 'modelSettings'>;
+  routingAgentOptions?: Pick<MultiPrimitiveExecutionOptions, 'model' | 'modelSettings'>;
   routingAgentMemoryConfig?: any;
   generateId: NetworkIdGenerator;
   routing?: {
@@ -649,6 +650,7 @@ export async function createNetworkLoop({
         agent,
         routingConfig: routing,
         memoryConfig: routingAgentMemoryConfig,
+        model: routingAgentOptions?.model,
       });
 
       // Increment iteration counter. Must use nullish coalescing (??) not ternary (?)
@@ -2100,7 +2102,8 @@ export async function networkLoop<OUTPUT = undefined>({
   requestContext: RequestContext;
   runId: string;
   routingAgent: Agent<any, any, any, any>;
-  routingAgentOptions?: AgentExecutionOptions<OUTPUT>;
+  routingAgentOptions?: Pick<NetworkOptions<OUTPUT>, 'memory' | 'model' | 'modelSettings'> &
+    Partial<ObservabilityContext>;
   generateId: NetworkIdGenerator;
   maxIterations: number;
   threadId?: string;
@@ -2195,7 +2198,10 @@ export async function networkLoop<OUTPUT = undefined>({
           const firstSuspendedTool = suspendedToolsArr[0]; //only one primitive/tool gets suspended at a time, so there'll only be one item
           if (firstSuspendedTool.resumeSchema) {
             try {
-              const llm = (await routingAgent.getLLM({ requestContext })) as MastraLLMVNext;
+              const llm = (await routingAgent.getLLM({
+                requestContext,
+                model: routingAgentOptions?.model,
+              })) as MastraLLMVNext;
               const systemInstructions = `
             You are an assistant used to resume a suspended tool call.
             Your job is to construct the resumeData for the tool call using the messages available to you and the schema passed.
@@ -2346,6 +2352,7 @@ export async function networkLoop<OUTPUT = undefined>({
             agent: routingAgent,
             routingConfig: routing,
             memoryConfig: routingAgentMemoryOptions?.options,
+            model: routingAgentOptions?.model,
           });
 
           // Use structured output generation if schema is provided
@@ -2395,6 +2402,7 @@ export async function networkLoop<OUTPUT = undefined>({
           agent: routingAgent,
           routingConfig: routing,
           memoryConfig: routingAgentMemoryOptions?.options,
+          model: routingAgentOptions?.model,
         });
         // Use the default LLM completion check
         const defaultResult = await runDefaultCompletionCheck(
