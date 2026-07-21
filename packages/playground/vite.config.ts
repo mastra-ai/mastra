@@ -245,7 +245,6 @@ export default defineConfig(({ mode }) => {
     // Use environment variable for the target port, fallback to 4111
     const targetPort = process.env.PORT || '4111';
     const targetHost = process.env.HOST || 'localhost';
-    const agentLearningTarget = process.env.MASTRA_PLATFORM_AGENT_LEARNING_ENDPOINT;
 
     if (commonConfig.plugins) {
       commonConfig.plugins.push(studioStandalonePlugin(targetPort, targetHost));
@@ -256,18 +255,6 @@ export default defineConfig(({ mode }) => {
       server: {
         ...commonConfig.server,
         proxy: {
-          ...(agentLearningTarget
-            ? {
-                '/api/learning': {
-                  target: agentLearningTarget,
-                  changeOrigin: true,
-                  headers: {
-                    'X-Mastra-Organization-Id': process.env.MASTRA_ORGANIZATION_ID || '',
-                    'X-Mastra-Project-Id': process.env.MASTRA_PLATFORM_PROJECT_ID || '',
-                  },
-                },
-              }
-            : {}),
           '/api': {
             target: `http://${targetHost}:${targetPort}`,
             changeOrigin: true,
