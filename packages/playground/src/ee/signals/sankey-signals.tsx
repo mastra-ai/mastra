@@ -1,14 +1,17 @@
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Card, CardContent, CardFooter, CardHeader } from '@mastra/playground-ui/components/Card';
 import { nodeColor, Sankey, SankeyChart } from '@mastra/playground-ui/components/SankeyChart';
 import type { SankeyChartColumn, SankeyChartRecord } from '@mastra/playground-ui/components/SankeyChart';
+import { Slider } from '@mastra/playground-ui/components/Slider';
 import { getSignalHue, SignalsOverviewPage as SignalsEmptyState } from '@mastra/playground-ui/ee/signals';
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink, Pause, Play } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useThemeFlow } from './hooks/use-theme-flow';
 import { useThemeSnapshots } from './hooks/use-theme-snapshots';
 import { buildSignalGraphSummary, getSignalRecordNodeId, getSignalRecordNodeLabel } from './sankey-signals-data';
 import type { SignalGraphNodeSummary, SignalGraphStageSummary } from './sankey-signals-data';
-import type { TraceSignalName } from './types';
+import type { ThemeSnapshot, TraceSignalName } from './types';
 import { Link } from '@/lib/link';
 
 const SIGNAL_ORDER: TraceSignalName[] = ['goal', 'outcome', 'behavior', 'sentiment'];
@@ -27,6 +30,71 @@ function formatSignalName(signalName: TraceSignalName) {
 
 function traceLabel(count: number) {
   return `${count} ${count === 1 ? 'trace' : 'traces'}`;
+}
+
+function formatSnapshotWindow(startedAt: string, endedAt: string) {
+  const start = new Date(startedAt);
+  const end = new Date(endedAt);
+  const monthDay = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+  const day = new Intl.DateTimeFormat('en-US', { day: 'numeric', timeZone: 'UTC' });
+  const year = new Intl.DateTimeFormat('en-US', { year: 'numeric', timeZone: 'UTC' });
+  const sameYear = start.getUTCFullYear() === end.getUTCFullYear();
+  const sameMonth = sameYear && start.getUTCMonth() === end.getUTCMonth();
+
+  if (sameMonth) return `${monthDay.format(start)}–${day.format(end)}, ${year.format(end)}`;
+  if (sameYear) return `${monthDay.format(start)}–${monthDay.format(end)}, ${year.format(end)}`;
+  return `${monthDay.format(start)}, ${year.format(start)}–${monthDay.format(end)}, ${year.format(end)}`;
+}
+
+function SnapshotTimeline({
+  snapshots,
+  selectedIndex,
+  isPlaying,
+  onPlayingChange,
+  onSnapshotChange,
+}: {
+  snapshots: ThemeSnapshot[];
+  selectedIndex: number;
+  isPlaying: boolean;
+  onPlayingChange: (isPlaying: boolean) => void;
+  onSnapshotChange: (index: number) => void;
+}) {
+  const snapshot = snapshots[selectedIndex];
+
+  if (!snapshot) return null;
+
+  return (
+    <section
+      aria-label="Snapshot timeline"
+      className="flex items-center gap-3 rounded-lg border border-border1 bg-surface2 px-4 py-3"
+    >
+      <Button
+        aria-label={isPlaying ? 'Pause snapshots' : 'Play snapshots'}
+        disabled={snapshots.length < 2}
+        onClick={() => onPlayingChange(!isPlaying)}
+        size="sm"
+        type="button"
+        variant="outline"
+      >
+        {isPlaying ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
+        {isPlaying ? 'Pause' : 'Play'}
+      </Button>
+      <Slider
+        aria-label="Snapshot"
+        className="min-w-32 flex-1"
+        disabled={snapshots.length < 2}
+        max={Math.max(snapshots.length - 1, 1)}
+        min={0}
+        onValueChange={value => onSnapshotChange(value[0] ?? 0)}
+        step={1}
+        value={[selectedIndex]}
+      />
+      <p className="min-w-72 text-right font-mono text-xs tabular-nums text-neutral4">
+        Snapshot {snapshot.ordinal}/{snapshot.total} · {formatSnapshotWindow(snapshot.startedAt, snapshot.endedAt)} ·{' '}
+        {traceLabel(snapshot.traceCount)}
+      </p>
+    </section>
+  );
 }
 
 function SignalDistribution({
@@ -127,10 +195,10 @@ function FlowCard({
 }) {
   const chartColumns = columns.map(column => {
     const stage = stages.find(currentStage => currentStage.signalName === column.id);
-    const clusterCount = stage?.nodes.length ?? 0;
+    const themeCount = stage?.nodes.length ?? 0;
     return {
       ...column,
-      label: `${column.label.toUpperCase()} ${clusterCount} ${clusterCount === 1 ? 'cluster' : 'clusters'}`,
+      label: `${column.label.toUpperCase()} ${themeCount} ${themeCount === 1 ? 'theme' : 'themes'}`,
     };
   });
 
@@ -158,15 +226,15 @@ function FlowCard({
           className="flex shrink-0 items-center gap-4 text-xs text-neutral3"
           data-alignment="right"
         >
-          {SIGNAL_ORDER.map(signalName => (
-            <li key={signalName} className="flex items-center gap-1.5">
+          {stages.map(stage => (
+            <li key={stage.signalName} className="flex items-center gap-1.5">
               <span
                 aria-hidden="true"
                 className="size-2 rounded-[2px]"
                 data-testid="signal-legend-swatch"
-                style={{ backgroundColor: nodeColor(getSignalHue(signalName)) }}
+                style={{ backgroundColor: nodeColor(getSignalHue(stage.signalName)) }}
               />
-              {formatSignalName(signalName)}
+              {formatSignalName(stage.signalName)}
             </li>
           ))}
         </ul>
@@ -177,7 +245,26 @@ function FlowCard({
 
 export function SankeySignals({ entityId, entityType = 'agent', signalNames, height }: SankeySignalsProps) {
   const snapshotsQuery = useThemeSnapshots(entityId, entityType, signalNames);
-  const snapshot = snapshotsQuery.data?.snapshots[0];
+  const snapshots = useMemo(
+    () => [...(snapshotsQuery.data?.snapshots ?? [])].sort((left, right) => left.ordinal - right.ordinal),
+    [snapshotsQuery.data?.snapshots],
+  );
+  const [selectedSnapshotId, setSelectedSnapshotId] = useState<string>();
+  const [isPlaying, setIsPlaying] = useState(false);
+  const matchedSnapshotIndex = snapshots.findIndex(snapshot => snapshot.snapshotId === selectedSnapshotId);
+  const selectedSnapshotIndex = matchedSnapshotIndex >= 0 ? matchedSnapshotIndex : snapshots.length - 1;
+  const snapshot = snapshots[selectedSnapshotIndex];
+  const selectSnapshot = useCallback(
+    (index: number) => setSelectedSnapshotId(snapshots[index]?.snapshotId),
+    [snapshots],
+  );
+
+  useEffect(() => {
+    if (!isPlaying || snapshots.length < 2) return;
+    const timer = window.setInterval(() => selectSnapshot((selectedSnapshotIndex + 1) % snapshots.length), 900);
+    return () => window.clearInterval(timer);
+  }, [isPlaying, selectSnapshot, selectedSnapshotIndex, snapshots.length]);
+
   const flowQuery = useThemeFlow(entityId, entityType, signalNames, snapshot?.snapshotId);
 
   if (snapshotsQuery.isPending || (snapshot && flowQuery.isPending)) {
@@ -204,7 +291,12 @@ export function SankeySignals({ entityId, entityType = 'agent', signalNames, hei
   }
 
   const graphSummary = buildSignalGraphSummary(flow);
-  const clusterCount = graphSummary.stages.reduce((total, stage) => total + stage.nodes.length, 0);
+  const stages = graphSummary.stages.map(stage => ({
+    ...stage,
+    traceCount:
+      flow.stages.find(flowStage => flowStage.signalName === stage.signalName)?.traceCount ?? stage.traceCount,
+  }));
+  const themeCount = stages.reduce((total, stage) => total + stage.nodes.length, 0);
 
   return (
     <main className="space-y-7 p-6">
@@ -221,10 +313,10 @@ export function SankeySignals({ entityId, entityType = 'agent', signalNames, hei
           </p>
           <ul aria-label="Signal analysis metrics" className="mt-5 flex flex-wrap gap-2">
             <li className="rounded-md border border-border1 bg-surface2 px-3 py-1.5 text-xs text-neutral4">
-              {traceLabel(graphSummary.analyzedTraceCount)} analyzed
+              {traceLabel(flow.snapshot.traceCount)} analyzed
             </li>
             <li className="rounded-md border border-border1 bg-surface2 px-3 py-1.5 text-xs text-neutral4">
-              {clusterCount} clusters
+              {themeCount} themes
             </li>
             <li className="rounded-md border border-border1 bg-surface2 px-3 py-1.5 text-xs text-neutral4">
               {flow.stages.length} signal types
@@ -241,15 +333,17 @@ export function SankeySignals({ entityId, entityType = 'agent', signalNames, hei
           <ExternalLink aria-hidden="true" className="size-3.5" />
         </a>
       </header>
+      <SnapshotTimeline
+        snapshots={snapshots}
+        selectedIndex={selectedSnapshotIndex}
+        isPlaying={isPlaying}
+        onPlayingChange={setIsPlaying}
+        onSnapshotChange={selectSnapshot}
+      />
       <div className="overflow-x-auto" data-scroll-container="horizontal" data-testid="signals-analysis-scroll">
         <div className="min-w-[920px] space-y-4" data-min-width="920" data-testid="signals-analysis-canvas">
-          <FlowCard
-            columns={graphSummary.columns}
-            records={graphSummary.records}
-            stages={graphSummary.stages}
-            height={height}
-          />
-          <SignalDistributions stages={graphSummary.stages} />
+          <FlowCard columns={graphSummary.columns} records={graphSummary.records} stages={stages} height={height} />
+          <SignalDistributions stages={stages} />
         </div>
       </div>
     </main>

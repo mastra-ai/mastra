@@ -16,6 +16,21 @@ export const populatedThemeEntitiesResponse: ThemeEntitiesResponse = {
   ],
 };
 
+export const multiAgentThemeEntitiesResponse: ThemeEntitiesResponse = {
+  entities: [
+    ...populatedThemeEntitiesResponse.entities,
+    {
+      entityId: 'triage-agent',
+      entityType: 'agent',
+      availableSignals: ['goal'],
+      latestWindow: {
+        startedAt: '2026-07-01T00:00:00.000Z',
+        endedAt: '2026-07-08T00:00:00.000Z',
+      },
+    },
+  ],
+};
+
 export const themeSnapshotsResponse: ThemeSnapshotsResponse = {
   snapshots: [
     {
@@ -27,6 +42,21 @@ export const themeSnapshotsResponse: ThemeSnapshotsResponse = {
       traceCount: 50,
       availableSignals: ['goal', 'outcome'],
     },
+  ],
+};
+
+export const multiThemeSnapshotsResponse: ThemeSnapshotsResponse = {
+  snapshots: [
+    {
+      snapshotId: 'snapshot-3',
+      ordinal: 3,
+      total: 4,
+      startedAt: '2026-06-24T00:00:00.000Z',
+      endedAt: '2026-07-01T00:00:00.000Z',
+      traceCount: 40,
+      availableSignals: ['goal', 'outcome'],
+    },
+    ...themeSnapshotsResponse.snapshots,
   ],
 };
 

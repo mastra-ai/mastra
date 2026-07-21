@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import SignalsOverviewPage from '..';
 import {
   emptyThemeEntitiesResponse,
+  multiAgentThemeEntitiesResponse,
   populatedThemeEntitiesResponse,
   themeFlowResponse,
   themeSnapshotsResponse,
@@ -96,6 +97,43 @@ describe('Signals page', () => {
       renderSignalsPage();
 
       expect(await screen.findByRole('region', { name: 'Signal theme flow' })).not.toBeNull();
+    });
+  });
+
+  describe('when multiple agents have different signal coverage', () => {
+    beforeEach(() => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(multiAgentThemeEntitiesResponse)),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(themeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
+          HttpResponse.json(themeFlowResponse),
+        ),
+      );
+    });
+
+    it('lists every agent in the always-visible selector', async () => {
+      renderSignalsPage();
+
+      const selector = await screen.findByRole('combobox', { name: 'Agent' });
+      fireEvent.click(selector);
+
+      expect(await screen.findByRole('option', { name: 'support-agent' })).not.toBeNull();
+      expect(screen.getByRole('option', { name: 'triage-agent' })).not.toBeNull();
+    });
+
+    it('explains why the selected agent cannot render a flow', async () => {
+      renderSignalsPage();
+
+      fireEvent.click(await screen.findByRole('combobox', { name: 'Agent' }));
+      const triageAgent = await screen.findByRole('option', { name: 'triage-agent' });
+      fireEvent.pointerDown(triageAgent, { pointerType: 'mouse' });
+      fireEvent.click(triageAgent, { detail: 1 });
+
+      expect(await screen.findByText('Not enough signal data yet')).not.toBeNull();
+      expect(screen.getByText('Available signals: Goal')).not.toBeNull();
+      expect(screen.getByRole('combobox', { name: 'Agent' })).not.toBeNull();
     });
   });
 

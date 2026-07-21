@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { buildSankeyChartGraph } from '@mastra/playground-ui/components/SankeyChart';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -13,6 +13,7 @@ import {
   emptyThemeSnapshotsResponse,
   fourStageThemeFlowResponse,
   inconsistentTraceCountThemeFlowResponse,
+  multiThemeSnapshotsResponse,
   singleStageThemeFlowResponse,
   themeFlowResponse,
   themeSnapshotsResponse,
@@ -60,6 +61,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -175,18 +177,16 @@ describe('SankeySignals', () => {
       const metrics = await screen.findByRole('list', { name: 'Signal analysis metrics' });
       expect(within(metrics).getAllByRole('listitem')).toHaveLength(3);
       expect(within(metrics).getByText('50 traces analyzed')).not.toBeNull();
-      expect(within(metrics).getByText('9 clusters')).not.toBeNull();
+      expect(within(metrics).getByText('9 themes')).not.toBeNull();
       expect(within(metrics).getByText('4 signal types')).not.toBeNull();
     });
 
-    it('omits date, period, agent, and processing controls', async () => {
+    it('shows the selected snapshot context and timeline controls', async () => {
       renderSankeySignals();
 
-      await screen.findByRole('region', { name: 'Signal theme flow' });
-      expect(screen.queryByText('Jul 1–8, 2026')).toBeNull();
-      expect(screen.queryByText(/Snapshot 4 of 4/)).toBeNull();
-      expect(screen.queryByText(/All agents/)).toBeNull();
-      expect(screen.queryByRole('status', { name: 'Signal processing status' })).toBeNull();
+      expect(await screen.findByText('Snapshot 4/4 · Jul 1–8, 2026 · 50 traces')).not.toBeNull();
+      expect(screen.getByRole('group', { name: 'Snapshot' })).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Play snapshots' })).not.toBeNull();
     });
 
     it('delegates the signal column headings to the Sankey chart', async () => {
@@ -245,6 +245,52 @@ describe('SankeySignals', () => {
     });
   });
 
+  describe('when multiple snapshots are available', () => {
+    beforeEach(() => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(multiThemeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, ({ request }) => {
+          const snapshotId = new URL(request.url).searchParams.get('snapshotId');
+          const snapshot = multiThemeSnapshotsResponse.snapshots.find(item => item.snapshotId === snapshotId);
+          return HttpResponse.json({ ...fourStageThemeFlowResponse, snapshot: snapshot! });
+        }),
+      );
+    });
+
+    it('selects the latest ordinal and labels it without parsing its cursor', async () => {
+      renderSankeySignals();
+
+      expect(await screen.findByText('Snapshot 4/4 · Jul 1–8, 2026 · 50 traces')).not.toBeNull();
+      expect(screen.getByRole('group', { name: 'Snapshot' })).not.toBeNull();
+    });
+
+    it('scrubs to an earlier snapshot', async () => {
+      const { container } = renderSankeySignals();
+
+      await screen.findByRole('group', { name: 'Snapshot' });
+      const sliderInput = container.querySelector('input[type="range"]');
+      if (!sliderInput) throw new Error('Snapshot slider input was not rendered');
+      fireEvent.change(sliderInput, { target: { value: '0' } });
+
+      expect(await screen.findByText('Snapshot 3/4 · Jun 24–Jul 1, 2026 · 40 traces')).not.toBeNull();
+    });
+
+    it('plays forward through snapshots', async () => {
+      renderSankeySignals();
+      await screen.findByText('Snapshot 4/4 · Jul 1–8, 2026 · 50 traces');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Play snapshots' }));
+      expect(screen.getByRole('button', { name: 'Pause snapshots' })).not.toBeNull();
+
+      expect(
+        await screen.findByText('Snapshot 3/4 · Jun 24–Jul 1, 2026 · 40 traces', undefined, { timeout: 2000 }),
+      ).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Pause snapshots' })).not.toBeNull();
+    });
+  });
+
   describe('when API count metadata disagrees with the weighted graph', () => {
     beforeEach(() => {
       server.use(
@@ -257,21 +303,22 @@ describe('SankeySignals', () => {
       );
     });
 
-    it('uses the entry-stage graph total in the header badge', async () => {
+    it('uses the authoritative snapshot total in the header badge', async () => {
       renderSankeySignals();
 
       const metrics = await screen.findByRole('list', { name: 'Signal analysis metrics' });
-      expect(within(metrics).getByText('50 traces analyzed')).not.toBeNull();
-      expect(within(metrics).queryByText('80 traces analyzed')).toBeNull();
+      expect(within(metrics).getByText('80 traces analyzed')).not.toBeNull();
+      expect(within(metrics).queryByText('50 traces analyzed')).toBeNull();
     });
 
-    it('uses graph-derived totals for every distribution', async () => {
+    it('uses authoritative stage totals for every distribution', async () => {
       renderSankeySignals();
 
       const distributions = await screen.findByRole('region', { name: 'Signal distributions' });
-      for (const signalName of ['Goal', 'Outcome', 'Behavior', 'Sentiment']) {
+      const expectedTotals = { Goal: 70, Outcome: 80, Behavior: 90, Sentiment: 100 };
+      for (const [signalName, traceCount] of Object.entries(expectedTotals)) {
         const distribution = within(distributions).getByRole('article', { name: `${signalName} distribution` });
-        expect(within(distribution).getByText('50 traces')).not.toBeNull();
+        expect(within(distribution).getByText(`${traceCount} traces`)).not.toBeNull();
       }
     });
 
@@ -337,7 +384,7 @@ describe('SankeySignals', () => {
   });
 
   describe('when a theme snapshot has weighted links', () => {
-    it('renders the flow with the signal and theme labels', async () => {
+    beforeEach(() => {
       server.use(
         http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
           HttpResponse.json(themeSnapshotsResponse),
@@ -346,10 +393,23 @@ describe('SankeySignals', () => {
           HttpResponse.json(themeFlowResponse),
         ),
       );
+    });
 
+    it('renders the flow with the signal and theme labels', async () => {
       renderSankeySignals();
 
       expect(await screen.findByRole('region', { name: 'Signal theme flow' })).not.toBeNull();
+    });
+
+    it('limits the legend to stages returned by the flow', async () => {
+      renderSankeySignals();
+
+      const legend = await screen.findByRole('list', { name: 'Signal stage legend' });
+      expect(
+        within(legend)
+          .getAllByRole('listitem')
+          .map(item => item.textContent),
+      ).toEqual(['Goal', 'Outcome']);
     });
 
     it('preserves the API-defined signal order', () => {
