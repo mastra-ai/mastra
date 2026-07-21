@@ -17,8 +17,8 @@ function isActiveWorkspaceThread(thread: AgentControllerThreadInfo, projectPath:
 interface WorkspaceActivityOptions {
   agentControllerId: string;
   resourceId: string;
-  /** The active worktree's path — the session scope the listing is read through. */
-  projectPath: string | undefined;
+  /** Session scope for the listing read — the active worktree's project path. */
+  scope: string | undefined;
   worktreePaths: string[];
   baseUrl?: string;
   enabled: boolean;
@@ -33,7 +33,7 @@ interface WorkspaceActivityOptions {
 function useWorkspaceThreadsQuery({
   agentControllerId,
   resourceId,
-  projectPath,
+  scope,
   baseUrl,
   enabled,
 }: Omit<WorkspaceActivityOptions, 'worktreePaths'>): AgentControllerThreadInfo[] {
@@ -46,7 +46,7 @@ function useWorkspaceThreadsQuery({
       const { session } = createAgentControllerClient({
         agentControllerId,
         resourceId,
-        scope: projectPath,
+        scope,
         baseUrl,
       });
       return requireAgentControllerSession(session).listThreads();

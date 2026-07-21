@@ -1,7 +1,7 @@
 export { DirectoryBrowser } from './components/DirectoryPicker';
 export { EmptyFactoryState } from './components/EmptyFactoryState';
-export { GithubConnectModal } from './components/GithubConnectModal';
-export { FactoriesModal } from './components/FactoriesModal';
+export { ConnectRepositoriesPanel } from './components/ConnectRepositoriesPanel';
+export { FactoriesPanel } from './components/FactoriesPanel';
 export { FactorySwitcher } from './components/FactorySwitcher';
 export { UserSessionsSection } from './components/UserSessionsSection';
 export { WorkspacesSection } from './components/WorkspacesSection';

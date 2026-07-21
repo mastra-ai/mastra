@@ -1,67 +1,41 @@
-import type { ThemeEntitiesResponse, ThemeFlowResponse, ThemeSnapshotsResponse, TraceSignalName } from './types';
+import type { ThemeEntitiesResponse, ThemeFlowResponse, ThemeSnapshotsResponse } from './types';
 
-interface EntityLearningConfig {
-  baseUrl: string;
-  projectId?: string;
-}
-
-export function getEntityLearningConfig(): EntityLearningConfig | undefined {
-  const endpoint = window.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT || window.MASTRA_CLOUD_API_ENDPOINT;
-  if (!endpoint) return undefined;
-
-  return {
-    baseUrl: new URL(endpoint, window.location.origin).origin,
-    projectId: window.MASTRA_PLATFORM_PROJECT_ID,
-  };
-}
-
-export function fetchThemeEntities(config: EntityLearningConfig, entityType: string) {
+export function fetchThemeEntities(entityType: string) {
   const query = new URLSearchParams({ entityType });
-  return learningJson<ThemeEntitiesResponse>(config, `/api/learning/entities?${query}`);
+  return learningJson<ThemeEntitiesResponse>(`/api/learning/entities?${query}`);
 }
 
-export function fetchThemeSnapshots(
-  config: EntityLearningConfig,
-  entityId: string,
-  entityType: string,
-  signalNames: TraceSignalName[],
-) {
-  const query = themeQuery(entityType, signalNames);
-  query.set('limit', '50');
+export function fetchThemeSnapshots(entityId: string, entityType: string, signalNames: string[], limit = 50) {
+  const query = new URLSearchParams({
+    entityType,
+    signalNames: signalNames.join(','),
+    limit: String(limit),
+  });
   return learningJson<ThemeSnapshotsResponse>(
-    config,
     `/api/learning/entities/${encodeURIComponent(entityId)}/theme-snapshots?${query}`,
   );
 }
 
 export function fetchThemeFlow(
-  config: EntityLearningConfig,
   entityId: string,
   entityType: string,
-  signalNames: TraceSignalName[],
+  signalNames: string[],
   snapshotId: string,
+  themeLimitPerStage = 8,
 ) {
-  const query = themeQuery(entityType, signalNames);
-  query.set('snapshotId', snapshotId);
-  query.set('themeLimitPerStage', '8');
-  return learningJson<ThemeFlowResponse>(
-    config,
-    `/api/learning/entities/${encodeURIComponent(entityId)}/theme-flow?${query}`,
-  );
-}
-
-function themeQuery(entityType: string, signalNames: TraceSignalName[]) {
-  return new URLSearchParams({ entityType, signalNames: signalNames.join(',') });
-}
-
-async function learningJson<T>(config: EntityLearningConfig, path: string): Promise<T> {
-  const headers = new Headers();
-  if (config.projectId) headers.set('X-Mastra-Project-Id', config.projectId);
-
-  const response = await fetch(`${config.baseUrl}${path}`, {
-    credentials: 'include',
-    headers,
+  const query = new URLSearchParams({
+    entityType,
+    signalNames: signalNames.join(','),
+    snapshotId,
+    themeLimitPerStage: String(themeLimitPerStage),
   });
-  if (!response.ok) throw new Error(`Agent Learning request failed (${response.status})`);
-  return response.json();
+  return learningJson<ThemeFlowResponse>(`/api/learning/entities/${encodeURIComponent(entityId)}/theme-flow?${query}`);
+}
+
+async function learningJson<T>(path: string): Promise<T> {
+  const response = await fetch(path, { credentials: 'include' });
+  if (!response.ok) {
+    throw new Error(`Agent Learning request failed (${response.status})`);
+  }
+  return response.json() as Promise<T>;
 }

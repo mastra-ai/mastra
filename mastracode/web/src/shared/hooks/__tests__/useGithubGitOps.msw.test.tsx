@@ -3,7 +3,7 @@
  *
  * Drives the real `postRepositoryGitOp`-backed services + React Query mutations;
  * only the network is mocked (MSW). Handlers assert the request bodies so the
- * wire contract with `/web/github/repositories/:id/*` stays pinned.
+ * wire contract with `/web/github/projects/:id/*` stays pinned.
  */
 import { act } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -16,7 +16,7 @@ import { useCreateWorktreeMutation, usePushBranchMutation } from '../useGithubGi
 
 const ORIGIN = TEST_BASE_URL;
 const PROJECT = 'ghp_1';
-const PROJECT_URL = `${ORIGIN}/web/github/repositories/${PROJECT}`;
+const PROJECT_URL = `${ORIGIN}/web/github/projects/${PROJECT}`;
 
 describe('git operation mutation hooks', () => {
   it('given a branch and base, when creating a worktree, then it posts them and resolves the worktree result', async () => {
@@ -37,7 +37,11 @@ describe('git operation mutation hooks', () => {
 
     let resolved: WorktreeResult | undefined;
     await act(async () => {
-      resolved = await result.current.mutateAsync({ githubProjectId: PROJECT, branch: 'feat-x', baseBranch: 'main' });
+      resolved = await result.current.mutateAsync({
+        projectRepositoryId: PROJECT,
+        branch: 'feat-x',
+        baseBranch: 'main',
+      });
     });
     await waitForMutationsIdle(client);
 
@@ -57,7 +61,7 @@ describe('git operation mutation hooks', () => {
 
     let resolved: PushResult | undefined;
     await act(async () => {
-      resolved = await result.current.mutateAsync({ githubProjectId: PROJECT, branch: 'feat-x' });
+      resolved = await result.current.mutateAsync({ projectRepositoryId: PROJECT, branch: 'feat-x' });
     });
     await waitForMutationsIdle(client);
 
@@ -74,7 +78,9 @@ describe('git operation mutation hooks', () => {
     const { result, client } = renderHookWithProviders(() => useCreateWorktreeMutation());
 
     await act(async () => {
-      await expect(result.current.mutateAsync({ githubProjectId: PROJECT, branch: 'bad ref' })).rejects.toMatchObject({
+      await expect(
+        result.current.mutateAsync({ projectRepositoryId: PROJECT, branch: 'bad ref' }),
+      ).rejects.toMatchObject({
         message: 'Invalid branch',
         code: 'invalid_branch',
         status: 400,
@@ -93,7 +99,9 @@ describe('git operation mutation hooks', () => {
     const { result, client } = renderHookWithProviders(() => usePushBranchMutation());
 
     await act(async () => {
-      await expect(result.current.mutateAsync({ githubProjectId: PROJECT, branch: 'feat-x' })).rejects.toMatchObject({
+      await expect(
+        result.current.mutateAsync({ projectRepositoryId: PROJECT, branch: 'feat-x' }),
+      ).rejects.toMatchObject({
         status: 401,
         authRequired: true,
       });

@@ -6,10 +6,9 @@ import { useOverlays } from '../../lib/overlays';
 import { Sidebar } from '../../Sidebar';
 import { ChatLayout, FolderIcon } from '../../ui';
 import type { Factory } from '../workspaces';
-import { EmptyFactoryState, useActiveFactoryContext } from '../workspaces';
+import { EmptyFactoryState, isLocalFactory, selectedRepository, useActiveFactoryContext } from '../workspaces';
 import { deriveProjectPath } from '../../../../shared/hooks/useWorkspaces';
 import { ChatHeader } from './components/ChatHeader';
-import { ChatOverlays } from './components/ChatOverlays';
 import { ComposerPanel } from './components/ComposerPanel';
 import { TranscriptEntries } from './components/Transcript';
 import { ChatSessionBoundary } from './context/ChatSessionProvider';
@@ -22,18 +21,17 @@ export function NewPage() {
   const overlays = useOverlays();
   const { activeFactory } = useActiveFactoryContext();
 
+  if (!activeFactory) {
+    return <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />;
+  }
+
   return (
     <ChatLayout
       sidebar={<Sidebar />}
       header={<ChatHeader />}
       main={
         <ChatSessionBoundary>
-          {activeFactory ? (
-            <NewPageContent activeFactory={activeFactory} />
-          ) : (
-            <EmptyFactoryState onOpenFactories={() => overlays.open('factories')} />
-          )}
-          <ChatOverlays />
+          <NewPageContent activeFactory={activeFactory} />
         </ChatSessionBoundary>
       }
     />
@@ -90,16 +88,19 @@ function BrandLockup() {
 }
 
 function FactoryContext({ activeFactory }: { activeFactory: Factory }) {
-  // GitHub factories have no local `path`; show the sandbox worktree path instead.
+  // Server factories have no local `path`; show the sandbox worktree path instead.
   const projectPath = deriveProjectPath(activeFactory);
+  const gitBranch = isLocalFactory(activeFactory)
+    ? activeFactory.binding.gitBranch
+    : selectedRepository(activeFactory)?.gitBranch;
   return (
     <p className="m-0 flex max-w-full items-center justify-center gap-1.5 text-ui-sm text-icon3">
       <FolderIcon size={13} className="shrink-0 text-icon2" />
       <span className="shrink-0 font-medium">{activeFactory.name}</span>
-      {activeFactory.binding.gitBranch && (
+      {gitBranch && (
         <>
           <span className="shrink-0 text-icon2">·</span>
-          <span className="shrink-0">{activeFactory.binding.gitBranch}</span>
+          <span className="shrink-0">{gitBranch}</span>
         </>
       )}
       {projectPath && (

@@ -17,7 +17,7 @@ describe('GitHub signal subscription store', () => {
     baseInput = {
       orgId: 'org-a',
       installationExternalId: '17',
-      projectId: 'project-a',
+      projectRepositoryId: 'project-a',
       repositoryExternalId: '99',
       repositorySlug: 'octo/hello',
       changeRequestId: '42',
@@ -40,7 +40,7 @@ describe('GitHub signal subscription store', () => {
     const created = await subscribeToPullRequest(baseInput, storage);
 
     expect(created.data).toMatchObject({
-      projectId: 'project-a',
+      projectRepositoryId: 'project-a',
       repositorySlug: 'octo/hello',
       changeRequestId: '42',
     });

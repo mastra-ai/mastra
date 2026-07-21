@@ -58,7 +58,7 @@
     "@types/node": "22.20.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "ai": "^5.0.210",
+    "ai": "^5.0.216",
     "eslint": "^10.7.0",
     "get-port": "^7.1.0",
     "hono": "^4.12.8",

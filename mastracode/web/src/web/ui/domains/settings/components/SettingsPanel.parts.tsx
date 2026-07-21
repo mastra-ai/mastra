@@ -35,12 +35,12 @@ const NOTIFICATION_MODES: { value: NotificationMode; label: string }[] = [
   { value: 'both', label: 'Both' },
 ];
 
-interface GeneralTabProps {
+interface GeneralSettingsProps {
   theme: Theme;
   onThemeChange: (theme: Theme) => void;
 }
 
-export function GeneralTab({ theme, onThemeChange }: GeneralTabProps) {
+export function GeneralSettings({ theme, onThemeChange }: GeneralSettingsProps) {
   const [doneSound, setDoneSound] = useState<DoneSound>(() => loadDoneSound());
   const changeDoneSound = (next: DoneSound) => {
     setDoneSound(next);
@@ -74,12 +74,12 @@ export function GeneralTab({ theme, onThemeChange }: GeneralTabProps) {
   );
 }
 
-interface ModelTabProps {
+interface ModelSettingsProps {
   settings: AgentControllerSessionSettings | null;
   onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => void;
 }
 
-export function ModelTab({ settings, onBehaviorChange }: ModelTabProps) {
+export function ModelSettings({ settings, onBehaviorChange }: ModelSettingsProps) {
   return (
     <>
       <FieldRow label="Thinking level" hint="Extended-reasoning budget for the agent">
@@ -95,7 +95,7 @@ export function ModelTab({ settings, onBehaviorChange }: ModelTabProps) {
   );
 }
 
-interface BehaviorTabProps {
+interface BehaviorSettingsProps {
   settings: AgentControllerSessionSettings | null;
   onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => void;
   permissions: PermissionRules | null;
@@ -103,13 +103,13 @@ interface BehaviorTabProps {
   setPermissionForCategory: (category: ToolCategory, policy: PermissionPolicy) => Promise<void>;
 }
 
-export function BehaviorTab({
+export function BehaviorSettings({
   settings,
   onBehaviorChange,
   permissions,
   pendingPermissionCategory,
   setPermissionForCategory,
-}: BehaviorTabProps) {
+}: BehaviorSettingsProps) {
   return (
     <>
       <FieldRow label="Auto-approve tools" hint="Run tool calls without asking (YOLO)">
@@ -163,7 +163,7 @@ function PermissionsSection({
   permissions,
   pendingPermissionCategory,
   setPermissionForCategory,
-}: Pick<BehaviorTabProps, 'permissions' | 'pendingPermissionCategory' | 'setPermissionForCategory'>) {
+}: Pick<BehaviorSettingsProps, 'permissions' | 'pendingPermissionCategory' | 'setPermissionForCategory'>) {
   const update = async (category: ToolCategory, policy: PermissionPolicy) => {
     await setPermissionForCategory(category, policy);
   };

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/nestjs",
-  "version": "0.2.8-alpha.9",
+  "version": "0.2.8-alpha.10",
   "description": "Mastra NestJS adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -45,7 +45,7 @@
     "@nestjs/testing": "^11.1.26",
     "@types/express": "^5.0.6",
     "@types/node": "^20.19.43",
-    "@ai-sdk/openai": "^2.0.111",
+    "@ai-sdk/openai": "^2.0.114",
     "cors": "^2.8.5",
     "@types/cors": "^2.8.19",
     "eslint": "^10.7.0",
