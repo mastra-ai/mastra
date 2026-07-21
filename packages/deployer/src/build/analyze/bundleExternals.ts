@@ -221,12 +221,21 @@ async function getInputPlugins(
             }
 
             const pkgName = pkgJson.name || '';
-            let resolvedPath: string | undefined = resolve.exports(pkgJson, id.replace(pkgName, '.'))?.[0];
-            if (!resolvedPath) {
-              resolvedPath = pkgJson!.main ?? 'index.js';
-            }
+            const requestedSpecifier = id.replace(pkgName, '.');
 
-            const resolved = await this.resolve(path.posix.join(packageRootPath, resolvedPath!), importer, options);
+            let resolvedPath: string | undefined;
+            try {
+              // `resolve.exports` THROWS (it does not return undefined) when the package
+              // declares an `exports` map with no entry matching `requestedSpecifier` - e.g.
+              // a workspace package that only declares subpath exports has no "." entry.
+              // Fall through to the main/index fallback below in that case.
+              resolvedPath = resolve.exports(pkgJson, requestedSpecifier)?.[0];
+            } catch {
+              resolvedPath = undefined;
+            }
+            const entryPath = resolvedPath ?? (typeof pkgJson.main === 'string' ? pkgJson.main : 'index.js');
+
+            const resolved = await this.resolve(path.posix.join(packageRootPath, entryPath), importer, options);
             return resolved;
           },
         } satisfies Plugin)
