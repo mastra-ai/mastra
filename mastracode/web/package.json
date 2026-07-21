@@ -26,6 +26,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
+    "@fontsource-variable/mona-sans": "5.3.0",
     "@mastra/auth-better-auth": "link:../../auth/better-auth",
     "@mastra/auth-workos": "link:../../auth/workos",
     "@mastra/client-js": "link:../../client-sdks/client-js",
