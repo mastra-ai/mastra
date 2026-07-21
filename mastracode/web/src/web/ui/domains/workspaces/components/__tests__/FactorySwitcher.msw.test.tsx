@@ -82,12 +82,12 @@ describe('FactorySwitcher', () => {
     expect(screen.getByTestId('projects-open')).toHaveTextContent('no');
   });
 
-  it('when Create factory from local folder is selected, then the factories overlay opens', async () => {
+  it('when Create Factory is selected, then the factories overlay opens', async () => {
     seedFactory();
     renderSwitcher();
 
     await userEvent.click(screen.getByRole('button', { name: 'Select factory' }));
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Create factory from local folder' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Create Factory' }));
 
     expect(screen.getByTestId('projects-open')).toHaveTextContent('yes');
   });

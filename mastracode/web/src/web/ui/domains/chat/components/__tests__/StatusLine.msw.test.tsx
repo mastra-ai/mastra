@@ -38,12 +38,18 @@ function seedFactory(source: 'local' | 'github' = 'local') {
           resourceId: RESOURCE_ID,
           createdAt: 1,
           binding: {
-            kind: 'github',
-            githubProjectId: 'github-project-test',
-            gitBranch: 'main',
-            sandboxWorkdir: '/tmp/mastracode-test',
-            selectedWorktreePath: '/tmp/mastracode-test-worktree',
-            worktrees: [{ branch: 'feature', worktreePath: '/tmp/mastracode-test-worktree', baseBranch: 'main' }],
+            kind: 'factory',
+            factoryProjectId: 'fp-test',
+            repositories: [
+              {
+                projectRepositoryId: 'pr-test',
+                slug: 'octo/hello',
+                gitBranch: 'main',
+                sandboxWorkdir: '/tmp/mastracode-test',
+                selectedWorktreePath: '/tmp/mastracode-test-worktree',
+                worktrees: [{ branch: 'feature', worktreePath: '/tmp/mastracode-test-worktree', baseBranch: 'main' }],
+              },
+            ],
           },
         }
       : {

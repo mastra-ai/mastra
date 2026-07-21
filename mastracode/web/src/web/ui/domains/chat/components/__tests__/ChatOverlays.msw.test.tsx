@@ -45,7 +45,7 @@ beforeEach(useOverlayControllerHandlers);
 afterEach(() => localStorage.clear());
 
 describe('ChatOverlays', () => {
-  it('given a project, when contextual overlays are opened, then it mounts settings, shortcuts, and projects', async () => {
+  it('given a project, when contextual overlays are opened, then it mounts settings and shortcuts', async () => {
     localStorage.setItem('mastracode-factories', JSON.stringify([project]));
     localStorage.setItem('mastracode-active-factory', project.id);
     const user = userEvent.setup();
@@ -58,36 +58,41 @@ describe('ChatOverlays', () => {
     expect(await screen.findByRole('dialog', { name: 'Keyboard shortcuts' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Close' }));
     await user.click(screen.getByRole('button', { name: 'Factories' }));
-    expect(await screen.findByRole('dialog', { name: 'Create factory' })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: 'Create Factory' })).toBeInTheDocument();
   });
 
   it('forces first-run factory setup after backend hydration confirms there are no factories', async () => {
     renderOverlays();
-    expect(await screen.findByRole('dialog', { name: 'Create factory' })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: 'Create Factory' })).toBeInTheDocument();
   });
 
   it('hydrates a source-control repository before deciding whether to show first-run setup', async () => {
     server.use(
-      http.get(`${TEST_BASE_URL}/web/github/repositories`, () =>
-        HttpResponse.json([
-          {
-            id: 'github-project-1',
-            name: 'mastra',
-            source: 'github',
-            githubProjectId: 'github-project-1',
-            resourceId: 'github-project-1',
-            gitBranch: 'main',
-            sandboxWorkdir: '/workspace/acme/mastra',
-            worktrees: [],
-            createdAt: 1,
-          },
-        ]),
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+        HttpResponse.json({ projects: [{ id: 'fp-1', name: 'mastra' }] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
+        HttpResponse.json({
+          connections: [
+            {
+              id: 'conn-1',
+              repositories: [
+                {
+                  id: 'github-project-1',
+                  branch: 'main',
+                  sandboxWorkdir: '/workspace/acme/mastra',
+                  repository: { slug: 'mastra', defaultBranch: 'main' },
+                },
+              ],
+            },
+          ],
+        }),
       ),
     );
 
     renderOverlays();
 
     await waitFor(() => expect(localStorage.getItem('mastracode-factories')).toContain('github-project-1'));
-    expect(screen.queryByRole('dialog', { name: 'Create factory' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Create Factory' })).not.toBeInTheDocument();
   });
 });

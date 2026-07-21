@@ -110,4 +110,16 @@ describe('LinearIntegration capability surface', () => {
       }),
     ).rejects.toThrow('Linear capabilities require an OAuth connection.');
   });
+
+  it('provides intake without claiming source-control support', () => {
+    const linear = integration();
+
+    expect(linear.id).toBe('linear');
+    expect(linear.intake).toBeDefined();
+    expect('sourceControl' in linear).toBe(false);
+  });
+
+  it('throws listing every missing required field', () => {
+    expect(() => new LinearIntegration({ clientId: '', clientSecret: '' })).toThrow(/clientId, clientSecret/);
+  });
 });

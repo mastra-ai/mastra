@@ -125,6 +125,8 @@ function useAgentControllerHandlers(): CapturedRequests {
     }),
     http.get(`${SESSION}/threads`, () => HttpResponse.json({ threads: [] })),
     http.get(`${SESSION}/stream`, () => sse()),
+    // The Model tab hosts the packs section now, so opening it loads the catalog.
+    http.get(`${TEST_BASE_URL}/web/config/model-packs`, () => HttpResponse.json({ packs: [], activePackId: null })),
   );
 
   return captured;
@@ -195,26 +197,26 @@ describe('SettingsPanel', () => {
     });
   });
 
-  describe('when managing factories', () => {
+  describe('when managing source control', () => {
     it('removes the active factory and reconciles the factory selection', async () => {
       const user = userEvent.setup();
       renderSettingsPanel();
 
-      await user.click(screen.getByRole('tab', { name: 'Factories' }));
+      await user.click(screen.getByRole('tab', { name: 'Source Control' }));
       expect(screen.getByText('/tmp/settings-panel')).toBeInTheDocument();
 
       await user.click(screen.getByRole('button', { name: 'Remove Settings Panel Project' }));
 
       await waitFor(() => expect(localStorage.getItem('mastracode-active-factory')).toBeNull());
-      await user.click(screen.getByRole('tab', { name: 'Factories' }));
-      await screen.findByText('No configured factories.');
+      await user.click(screen.getByRole('tab', { name: 'Source Control' }));
+      await screen.findByText('Select a factory to manage its source control.');
       expect(JSON.parse(localStorage.getItem('mastracode-factories') ?? '[]')).toEqual([]);
     });
 
     it('keeps the factory visible and reports storage failures', async () => {
       const user = userEvent.setup();
       renderSettingsPanel();
-      await user.click(screen.getByRole('tab', { name: 'Factories' }));
+      await user.click(screen.getByRole('tab', { name: 'Source Control' }));
       const storageError = new Error('Factory storage is unavailable');
       const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementationOnce(() => {
         throw storageError;
@@ -223,7 +225,7 @@ describe('SettingsPanel', () => {
       await user.click(screen.getByRole('button', { name: 'Remove Settings Panel Project' }));
 
       expect(await screen.findByText(storageError.message)).toBeInTheDocument();
-      expect(screen.getByText('Settings Panel Project')).toBeInTheDocument();
+      expect(screen.getByText('/tmp/settings-panel')).toBeInTheDocument();
       setItem.mockRestore();
     });
   });
@@ -238,6 +240,19 @@ describe('SettingsPanel', () => {
 
       await waitFor(() => expect(captured.stateUpdates).toContainEqual({ thinkingLevel: 'high' }));
     });
+
+    it('hosts model packs inside the Model tab instead of a separate Packs tab', async () => {
+      const user = userEvent.setup();
+      renderSettingsPanel();
+
+      expect(screen.queryByRole('tab', { name: 'Packs' })).not.toBeInTheDocument();
+      await user.click(screen.getByRole('tab', { name: /model/i }));
+
+      expect(await screen.findByText('Model packs')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /New pack/ })).toBeInTheDocument();
+      // A local factory has no server-side project, so no default-model picker.
+      expect(screen.queryByLabelText('Factory default model')).not.toBeInTheDocument();
+    });
   });
 
   describe('when changing behavior preferences', () => {
@@ -246,7 +261,8 @@ describe('SettingsPanel', () => {
       const captured = renderSettingsPanel();
 
       await user.click(screen.getByRole('tab', { name: /behavior/i }));
-      await user.click(screen.getByRole('button', { name: 'System' }));
+      const notifications = await screen.findByRole('group', { name: 'Notifications' });
+      await user.click(within(notifications).getByRole('button', { name: 'System' }));
       const readPermission = await screen.findByRole('group', { name: 'Read permission' });
       await user.click(within(readPermission).getByRole('button', { name: 'Allow' }));
 

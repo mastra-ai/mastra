@@ -1,5 +1,43 @@
 import type { IntegrationConnection } from './connection.js';
 
+export interface IntakeSource {
+  id: string;
+  name: string;
+  type: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface IntakeItem {
+  source: {
+    type: string;
+    externalId: string;
+    url?: string;
+  };
+  sourceId: string;
+  title: string;
+  status?: string;
+  labels?: string[];
+  assignee?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface IntakeItemPage {
+  items: IntakeItem[];
+  nextCursor: string | null;
+}
+
+export interface ListIntakeSourcesInput {
+  orgId: string;
+  userId: string;
+}
+
+export interface ListIntakeItemsInput extends ListIntakeSourcesInput {
+  sourceIds: string[];
+  cursor?: string;
+}
+
 /** Provider-neutral issue returned by every Intake integration. */
 export interface IntakeIssue {
   id: string;
@@ -60,6 +98,8 @@ export interface CreatedIntakeComment {
 
 /** Fixed issue-oriented contract implemented by GitHub, Linear, and future sources. */
 export interface Intake {
+  listSources(input: ListIntakeSourcesInput): Promise<IntakeSource[]>;
+  listItems(input: ListIntakeItemsInput): Promise<IntakeItemPage>;
   listIssues(input: ListIntakeIssuesInput): Promise<IntakeIssuePage>;
   getIssue(input: GetIntakeIssueInput): Promise<IntakeIssueDetail | null>;
   createComment(input: CreateIntakeCommentInput): Promise<CreatedIntakeComment | null>;

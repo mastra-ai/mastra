@@ -22,7 +22,7 @@ const fetchLinearWorkspace = vi.fn(async () => ({ name: 'Acme', urlKey: 'acme' }
 const listLinearProjects = vi.fn(async () => [
   { id: 'proj-1', name: 'Q3 Roadmap', state: 'started', teams: [{ id: 'team-1', key: 'ENG', name: 'Engineering' }] },
 ]);
-const listActiveLinearIssues = vi.fn(async (_token: string, _after?: string, _projectIds?: string[]) => ({
+const listActiveLinearIssues = vi.fn(async (_token: string, _after?: string, _sourceIds?: string[]) => ({
   issues: [
     {
       id: 'issue-1',
@@ -78,6 +78,8 @@ const linearStub = {
       };
     },
   },
+  listActiveIssues: (token: string, after?: string, sourceIds?: string[]) =>
+    listActiveLinearIssues(token, after, sourceIds),
 } as unknown as import('./integration').LinearIntegration;
 
 // Deterministic state signer injected the same way the factory does it.
@@ -93,8 +95,8 @@ const stateSigner: import('../state-signing').StateSigner = {
 };
 
 const getIntakeConfig = vi.fn(async () => ({
-  github: { enabled: true, repositoryIds: null as string[] | null },
-  linear: { enabled: true, projectIds: null as string[] | null },
+  github: { enabled: true, sourceIds: null as string[] | null },
+  linear: { enabled: true, sourceIds: null as string[] | null },
 }));
 vi.mock('../intake/store', () => ({
   getIntakeConfig: (...args: any[]) => getIntakeConfig(...(args as [])),
@@ -165,8 +167,8 @@ beforeEach(async () => {
   cookieUser = null;
   getIntakeConfig.mockClear();
   getIntakeConfig.mockResolvedValue({
-    github: { enabled: true, repositoryIds: null },
-    linear: { enabled: true, projectIds: ['proj-1'] },
+    github: { enabled: true, sourceIds: null },
+    linear: { enabled: true, sourceIds: ['proj-1'] },
   });
   listActiveLinearIssues.mockClear();
   listLinearProjects.mockClear();
@@ -322,8 +324,8 @@ describe('issues route', () => {
   it('applies the intake config project selection', async () => {
     await connect();
     getIntakeConfig.mockResolvedValueOnce({
-      github: { enabled: true, repositoryIds: null },
-      linear: { enabled: true, projectIds: ['proj-1'] },
+      github: { enabled: true, sourceIds: null },
+      linear: { enabled: true, sourceIds: ['proj-1'] },
     });
     await buildApp({ workosId: 'u1' }).request('/web/linear/issues');
     expect(listActiveLinearIssues).toHaveBeenCalledWith('linear-token', undefined, ['proj-1']);
@@ -332,8 +334,8 @@ describe('issues route', () => {
   it('returns an empty page without calling Linear when no projects are selected', async () => {
     await connect();
     getIntakeConfig.mockResolvedValueOnce({
-      github: { enabled: true, repositoryIds: null },
-      linear: { enabled: true, projectIds: null },
+      github: { enabled: true, sourceIds: null },
+      linear: { enabled: true, sourceIds: null },
     });
     const res = await buildApp({ workosId: 'u1' }).request('/web/linear/issues');
     expect(await res.json()).toEqual({ issues: [], nextCursor: null });
@@ -343,8 +345,8 @@ describe('issues route', () => {
   it('404s when Linear intake is disabled in settings', async () => {
     await connect();
     getIntakeConfig.mockResolvedValueOnce({
-      github: { enabled: true, repositoryIds: null },
-      linear: { enabled: false, projectIds: null },
+      github: { enabled: true, sourceIds: null },
+      linear: { enabled: false, sourceIds: null },
     });
     const res = await buildApp({ workosId: 'u1' }).request('/web/linear/issues');
     expect(res.status).toBe(404);
