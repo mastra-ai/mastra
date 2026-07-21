@@ -81,44 +81,6 @@ export async function listRepositoryIssues(
   return getRepositoryResource<GithubIssuePage>(baseUrl, githubProjectId, 'issues', page, { label });
 }
 
-export interface StartIssueTriageResult {
-  ok: true;
-  threadId?: string;
-}
-
-/** Start issue triage through the same server-side run seam used by GitHub webhooks. */
-export async function startRepositoryIssueTriage(
-  baseUrl: string,
-  githubProjectId: string,
-  issue: GithubIssue,
-): Promise<StartIssueTriageResult> {
-  const res = await fetch(
-    `${baseUrl}/web/github/repositories/${encodeURIComponent(githubProjectId)}/issues/${issue.number}/triage`,
-    {
-      method: 'POST',
-      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ title: issue.title, url: issue.url, labels: issue.labels }),
-    },
-  );
-  let body: { error?: string; message?: string; ok?: unknown; threadId?: unknown } | undefined;
-  try {
-    body = (await res.json()) as { error?: string; message?: string; ok?: unknown; threadId?: unknown };
-  } catch {
-    if (res.ok) throw new Error('Invalid triage response');
-  }
-  if (!res.ok) {
-    let message = `Request failed (${res.status})`;
-    if (body?.message) message = body.message;
-    else if (body?.error) message = body.error;
-    throw new Error(message);
-  }
-  if (body?.ok !== true) {
-    throw new Error('Invalid triage response');
-  }
-  return { ok: true, threadId: typeof body.threadId === 'string' ? body.threadId : undefined };
-}
-
 /** List one page of a connected repository's open pull requests (drafts excluded server-side). */
 export async function listRepositoryPullRequests(
   baseUrl: string,

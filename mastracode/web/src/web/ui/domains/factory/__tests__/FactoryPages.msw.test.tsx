@@ -231,14 +231,12 @@ interface BoardState {
   posts: CreateWorkItemInput[];
   patches: Array<{ id: string } & UpdateWorkItemInput>;
   deletes: string[];
-  triageRequests: Array<{ number: number; body: unknown }>;
   issueRequests: Array<string | null>;
 }
 
 interface BoardHandlerOptions {
   workItems?: WorkItem[];
   issues?: GithubIssue[];
-  triageIssues?: GithubIssue[];
   pullRequests?: GithubPullRequest[];
   linearIssues?: LinearIssue[];
 }
@@ -254,25 +252,14 @@ function useBoardHandlers(options: BoardHandlerOptions = {}): BoardState {
     posts: [],
     patches: [],
     deletes: [],
-    triageRequests: [],
     issueRequests: [],
   };
   server.use(
     http.get(`${TEST_BASE_URL}/web/github/repositories/${GITHUB_PROJECT_ID}/issues`, ({ request }) => {
       const label = new URL(request.url).searchParams.get('label');
       state.issueRequests.push(label);
-      return HttpResponse.json({
-        issues: label === 'auto-triaged' ? (options.triageIssues ?? []) : (options.issues ?? []),
-        nextPage: null,
-      });
+      return HttpResponse.json({ issues: options.issues ?? [], nextPage: null });
     }),
-    http.post(
-      `${TEST_BASE_URL}/web/github/repositories/${GITHUB_PROJECT_ID}/issues/:number/triage`,
-      async ({ request, params }) => {
-        state.triageRequests.push({ number: Number(params.number), body: await request.json() });
-        return HttpResponse.json({ ok: true, threadId: 'thread-triage' }, { status: 202 });
-      },
-    ),
     http.get(`${TEST_BASE_URL}/web/github/repositories/${GITHUB_PROJECT_ID}/prs`, () =>
       HttpResponse.json({ pullRequests: options.pullRequests ?? [], nextPage: null }),
     ),
@@ -450,7 +437,8 @@ describe('Factory Board — Intake candidates', () => {
     renderAt('/factory/board');
 
     expect(await screen.findByRole('heading', { name: 'Board' })).toBeInTheDocument();
-    await waitFor(() => expect(state.issueRequests).toEqual(expect.arrayContaining([null, 'auto-triaged'])));
+    await waitFor(() => expect(state.issueRequests).toContain(null));
+    expect(state.issueRequests).not.toContain('auto-triaged');
     const intake = await screen.findByTestId('board-column-intake');
     expect(await within(intake).findByText('Fix flaky test')).toBeInTheDocument();
     expect(within(intake).getByText('Improve docs')).toBeInTheDocument();
@@ -589,22 +577,9 @@ describe('Factory Board — Intake candidates', () => {
     }
   });
 
-  it('given an untriaged issue candidate, when Triage issue is chosen, then the server triage run starts and the Board stays open', async () => {
+  it('given an untriaged issue candidate, when Triage issue is chosen, then a shared Factory run starts, files a Triage work item, sends the triage prompt, and opens the thread', async () => {
     const state = useBoardHandlers({ issues });
-    let resolveTriage!: () => void;
-    const triageStarted = new Promise<void>(resolve => {
-      resolveTriage = resolve;
-    });
-    server.use(
-      http.post(
-        `${TEST_BASE_URL}/web/github/repositories/${GITHUB_PROJECT_ID}/issues/:number/triage`,
-        async ({ request, params }) => {
-          state.triageRequests.push({ number: Number(params.number), body: await request.json() });
-          await triageStarted;
-          return HttpResponse.json({ ok: true, threadId: 'thread-triage' }, { status: 202 });
-        },
-      ),
-    );
+    const captured = useFactoryRunHandlers('factory-issue-12');
     const { router } = renderAt('/factory/board');
 
     const intake = await screen.findByTestId('board-column-intake');
@@ -612,57 +587,60 @@ describe('Factory Board — Intake candidates', () => {
     await userEvent.click(within(card).getByRole('button', { name: 'More actions for Fix flaky test' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Triage issue' }));
 
-    await waitFor(() => expect(state.triageRequests).toHaveLength(1));
-    expect(within(card).getByRole('button', { name: 'Investigate Fix flaky test' })).toBeEnabled();
-    await userEvent.click(within(card).getByRole('button', { name: 'More actions for Fix flaky test' }));
-    expect(await screen.findByRole('menuitem', { name: 'Starting…' })).toHaveAttribute('aria-disabled', 'true');
-    expect(state.triageRequests).toEqual([
-      {
-        number: 12,
-        body: {
-          title: 'Fix flaky test',
-          url: 'https://github.com/mastra-ai/mastra/issues/12',
-          labels: ['bug'],
+    await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
+    expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
+    expect(captured.threadTitles).toEqual(['Issue #12: Fix flaky test']);
+    await waitFor(() => expect(captured.messages).toHaveLength(1));
+    expect(captured.messages[0]?.message).toContain('Use the triage-issue skill to triage this GitHub issue.');
+    expect(captured.messages[0]?.message).toContain('https://github.com/mastra-ai/mastra/issues/12');
+    expect(captured.messages[0]?.message).toContain('Apply the auto-triaged label after successful triage.');
+    await waitFor(() => expect(state.posts).toHaveLength(1));
+    expect(state.posts[0]).toMatchObject({
+      source: 'github-issue',
+      sourceKey: 'github-issue:12',
+      title: 'Fix flaky test',
+      stages: ['triage'],
+      sessions: {
+        triage: {
+          branch: 'factory/issue-12',
+          projectPath: '/sandbox/mastra/worktrees/factory-issue-12',
+          threadId: 'thread-factory',
         },
       },
-    ]);
-    const unfilteredRequestsBeforeResolve = state.issueRequests.filter(label => label === null).length;
-    const autoTriagedRequestsBeforeResolve = state.issueRequests.filter(label => label === 'auto-triaged').length;
-    resolveTriage();
-    await waitFor(() => expect(router.state.location.pathname).toBe('/factory/board'));
-    await waitFor(() => {
-      expect(state.issueRequests.filter(label => label === null).length).toBeGreaterThan(
-        unfilteredRequestsBeforeResolve,
-      );
-      expect(state.issueRequests.filter(label => label === 'auto-triaged').length).toBeGreaterThan(
-        autoTriagedRequestsBeforeResolve,
-      );
     });
+    expect(state.issueRequests).not.toContain('auto-triaged');
   });
 
-  it('given an auto-triaged issue candidate, when the Board renders, then it appears in Triage with Investigate and no label chips', async () => {
-    const state = useBoardHandlers({ triageIssues: [{ ...issues[0]!, labels: ['bug', 'auto-triaged'] }] });
+  it('given an auto-triaged GitHub issue exists only in the live issue feed, when the Board renders, then it is not synthesized as a Triage card', async () => {
+    const state = useBoardHandlers({ issues: [{ ...issues[0]!, labels: ['bug', 'auto-triaged'] }] });
     renderAt('/factory/board');
 
-    await waitFor(() => expect(state.issueRequests).toContain('auto-triaged'));
-    const triageColumn = await screen.findByTestId('board-column-triage');
-    const card = await within(triageColumn).findByRole('article', { name: 'Fix flaky test' });
-    expect(within(card).getByRole('button', { name: 'Investigate Fix flaky test' })).toBeInTheDocument();
-    expect(within(card).queryByText('auto-triaged')).not.toBeInTheDocument();
-    expect(within(card).queryByText('bug')).not.toBeInTheDocument();
+    await screen.findByTestId('board-column-intake');
+    expect(state.issueRequests).toEqual([null]);
+    expect(within(column('triage')).queryByText('Fix flaky test')).not.toBeInTheDocument();
     expect(within(column('intake')).queryByText('Fix flaky test')).not.toBeInTheDocument();
   });
 
-  it('given an auto-triaged issue needing approval, when the Board renders, then it appears in Triage with Prepare approval and no label chips', async () => {
+  it('given a persisted triage issue, when the Board renders, then Triage shows the persisted card without relying on live auto-triaged labels', async () => {
     const state = useBoardHandlers({
-      triageIssues: [{ ...issues[0]!, labels: ['bug', 'auto-triaged', 'needs-approval'] }],
+      workItems: [
+        makeWorkItem({
+          id: 'wi-triage',
+          title: 'Fix flaky test',
+          source: 'github-issue',
+          sourceKey: 'github-issue:12',
+          url: 'https://github.com/mastra-ai/mastra/issues/12',
+          stages: ['triage'],
+          metadata: { number: 12, author: 'ada', labels: ['bug', 'auto-triaged', 'needs-approval'] },
+        }),
+      ],
     });
     renderAt('/factory/board');
 
-    await waitFor(() => expect(state.issueRequests).toContain('auto-triaged'));
-    const triageColumn = await screen.findByTestId('board-column-triage');
-    const card = await within(triageColumn).findByRole('article', { name: 'Fix flaky test' });
-    expect(within(card).getByRole('button', { name: 'Prepare approval Fix flaky test' })).toBeInTheDocument();
+    await screen.findByTestId('board-column-triage');
+    expect(state.issueRequests).toEqual([null]);
+    const card = await within(column('triage')).findByRole('article', { name: 'Fix flaky test' });
+    expect(card).toBeInTheDocument();
     expect(within(card).queryByText('needs-approval')).not.toBeInTheDocument();
     expect(within(card).queryByText('auto-triaged')).not.toBeInTheDocument();
     expect(within(column('intake')).queryByText('Fix flaky test')).not.toBeInTheDocument();
@@ -735,7 +713,6 @@ describe('Factory Board — Intake candidates', () => {
   it('given a work item exists for an issue, when the Board renders, then candidates from both issue feeds are deduped by source key', async () => {
     useBoardHandlers({
       issues,
-      triageIssues: [{ ...issues[0]!, labels: ['auto-triaged'] }],
       workItems: [
         makeWorkItem({
           id: 'wi-1',
