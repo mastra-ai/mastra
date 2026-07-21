@@ -296,6 +296,51 @@ describe('MastraCode message rendering', () => {
     });
   });
 
+  it('given hidden task tools beside one visible tool, when history renders, then no empty bulk control appears', async () => {
+    seedProject();
+    useAgentControllerHandlers({
+      messages: [
+        dbMessage('assistant-task-tools', 'assistant', [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'task-write',
+              toolName: 'task_write',
+              args: { tasks: [] },
+              result: 'Tasks updated',
+            },
+          },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'visible-tool',
+              toolName: 'view',
+              args: { path: 'README.md' },
+              result: 'readme contents',
+            },
+          },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'task-check',
+              toolName: 'task_check',
+              args: {},
+              result: 'All tasks completed',
+            },
+          },
+        ]),
+      ],
+    });
+
+    renderChat();
+
+    expect(await screen.findByRole('group', { name: 'Tool: view' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /expand all/i })).not.toBeInTheDocument();
+  });
+
   it('composes consecutive tool cards into a single bordered container', async () => {
     seedProject();
     useAgentControllerHandlers({

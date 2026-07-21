@@ -36,6 +36,12 @@ export interface ToolFactoryProps {
   fallback: () => ReactNode;
 }
 
+const hiddenTranscriptTools = new Set(['task_write', 'task_update', 'task_complete', 'task_check']);
+
+export function isTranscriptToolVisible(toolName: string) {
+  return !hiddenTranscriptTools.has(toolName);
+}
+
 function record(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -114,9 +120,7 @@ function ToolFactoryComponent({
     );
   }
 
-  if (toolName === 'task_write' || toolName === 'task_update' || toolName === 'task_complete' || toolName === 'task_check') {
-    return null;
-  }
+  if (!isTranscriptToolVisible(toolName)) return null;
 
   if (toolName === 'submit_plan') {
     const plan = planData(input);

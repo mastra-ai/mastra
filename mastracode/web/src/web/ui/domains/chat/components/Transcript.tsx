@@ -37,7 +37,7 @@ import {
 } from '../../../../../shared/hooks/useAgentControllerRunMutations';
 import { stripSerializedAnsi } from '../services/ansi';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { ToolFactory } from './ToolFactory';
+import { isTranscriptToolVisible, ToolFactory } from './ToolFactory';
 
 function ToolIcon({ name, size = 14, className }: { name: string; size?: number; className?: string }) {
   const n = name.toLowerCase();
@@ -764,7 +764,14 @@ function MessageBubble({
 }) {
   // null = no group override; true/false = expand/collapse all in this bubble.
   const [allExpanded, setAllExpanded] = useState<boolean | undefined>(undefined);
-  const parts = entry.message.content.parts ?? [];
+  const messageParts = entry.message.content.parts ?? [];
+  const parts = messageParts.filter(
+    part => part.type !== 'tool-invocation' || isTranscriptToolVisible(part.toolInvocation.toolName),
+  );
+  const message =
+    parts.length === messageParts.length
+      ? entry.message
+      : { ...entry.message, content: { ...entry.message.content, parts } };
   const toolCount = parts.reduce((n, part) => (part.type === 'tool-invocation' ? n + 1 : n), 0);
   const hasRenderablePart = parts.some(
     part =>
@@ -889,7 +896,7 @@ function MessageBubble({
           ),
         )}
         {hasRenderablePart && entry.message.role !== 'signal' && (
-          <MessageFactory message={entry.message} roles={roles} {...renderers} fallback={() => null} />
+          <MessageFactory message={message} roles={roles} {...renderers} fallback={() => null} />
         )}
       </div>
     );
@@ -901,7 +908,7 @@ function MessageBubble({
   if (status?.text.trim()) return <StatusMetadataCard status={status} />;
   if (entry.message.role === 'assistant' && !hasRenderablePart) return null;
 
-  return <MessageFactory message={entry.message} roles={roles} {...renderers} fallback={() => null} />;
+  return <MessageFactory message={message} roles={roles} {...renderers} fallback={() => null} />;
 }
 
 function FileAttachment({ part }: { part: FilePart }) {
