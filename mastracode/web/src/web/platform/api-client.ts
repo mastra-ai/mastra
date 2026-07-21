@@ -5,12 +5,16 @@ export interface PlatformApiClientConfig {
 }
 
 export function platformApiClientConfigFromEnv(): PlatformApiClientConfig {
-  const baseUrl = process.env.MASTRA_PLATFORM_BASE_URL?.trim() || 'https://platform.mastra.ai';
+  const sharedApiUrl = process.env.MASTRA_SHARED_API_URL?.trim() || 'https://platform.mastra.ai/v1';
   const accessToken = process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim();
   if (!accessToken) {
     throw new Error('Platform integration: missing required environment variable MASTRA_PLATFORM_ACCESS_TOKEN.');
   }
-  return { baseUrl, accessToken };
+  return { baseUrl: normalizeSharedApiUrl(sharedApiUrl), accessToken };
+}
+
+function normalizeSharedApiUrl(sharedApiUrl: string): string {
+  return sharedApiUrl.replace(/\/+$/, '').replace(/\/v1$/, '');
 }
 
 export class PlatformApiError extends Error {
