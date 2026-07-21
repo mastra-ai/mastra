@@ -103,6 +103,26 @@ describe('SankeyChart', () => {
     expect(screen.queryByText('Select at least two columns with data to display a flow')).toBeNull();
   });
 
+  describe('when the caller separates node identity from its display label', () => {
+    it('renders equal labels as distinct nodes', async () => {
+      render(
+        <Sankey
+          data={[
+            { channel: 'channel-one', channelLabel: 'Shared channel', region: 'eu', regionLabel: 'Europe' },
+            { channel: 'channel-two', channelLabel: 'Shared channel', region: 'us', regionLabel: 'United States' },
+          ]}
+          columns={columns.slice(0, 2)}
+          getRecordNodeId={(record, column) => String(record[column.id])}
+          getRecordNodeLabel={(record, column) => String(record[`${column.id}Label`])}
+        >
+          <SankeyChart />
+        </Sankey>,
+      );
+
+      expect(await screen.findAllByText('Shared channel')).toHaveLength(2);
+    });
+  });
+
   it('labels each chart column above its nodes', async () => {
     const { container } = render(<Example />);
 

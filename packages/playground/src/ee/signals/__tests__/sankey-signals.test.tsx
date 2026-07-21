@@ -7,8 +7,9 @@ import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SankeySignals } from '../sankey-signals';
-import { themeFlowToSankeyData } from '../sankey-signals-data';
+import { getSignalRecordNodeId, getSignalRecordNodeLabel, themeFlowToSankeyData } from '../sankey-signals-data';
 import {
+  duplicateLabelThemeFlowResponse,
   emptyThemeSnapshotsResponse,
   fourStageThemeFlowResponse,
   inconsistentTraceCountThemeFlowResponse,
@@ -313,6 +314,28 @@ describe('SankeySignals', () => {
     });
   });
 
+  describe('when themes in one signal stage share a display label', () => {
+    beforeEach(() => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(themeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
+          HttpResponse.json(duplicateLabelThemeFlowResponse),
+        ),
+      );
+    });
+
+    it('renders each API node with its own trace count', async () => {
+      renderSankeySignals();
+
+      const chart = await screen.findByRole('region', { name: 'Signal theme flow' });
+      expect(within(chart).getAllByText('Shared theme label')).toHaveLength(2);
+      expect(within(chart).getByText('20 (40%)')).not.toBeNull();
+      expect(within(chart).getByText('30 (60%)')).not.toBeNull();
+    });
+  });
+
   describe('when a theme snapshot has weighted links', () => {
     it('renders the flow with the signal and theme labels', async () => {
       server.use(
@@ -340,9 +363,9 @@ describe('SankeySignals', () => {
 
     it('preserves the API-defined theme labels', () => {
       const { columns, records } = themeFlowToSankeyData(themeFlowResponse);
-      const graph = buildSankeyChartGraph(records, columns);
+      const graph = buildSankeyChartGraph(records, columns, undefined, getSignalRecordNodeId, getSignalRecordNodeLabel);
 
-      expect(graph.nodes.map(node => node.name)).toEqual(['Resolve support request', 'Request resolved']);
+      expect(graph.nodes.map(node => node.label)).toEqual(['Resolve support request', 'Request resolved']);
     });
 
     it('preserves each API link as one chart record', () => {
@@ -353,7 +376,13 @@ describe('SankeySignals', () => {
 
     it('preserves the API link weight in the playground-ui chart graph', () => {
       const { columns, records } = themeFlowToSankeyData(themeFlowResponse);
-      const graph = buildSankeyChartGraph(records, columns, record => Number(record.traceCount));
+      const graph = buildSankeyChartGraph(
+        records,
+        columns,
+        record => Number(record.traceCount),
+        getSignalRecordNodeId,
+        getSignalRecordNodeLabel,
+      );
 
       expect(graph.links[0]?.value).toBe(3);
     });

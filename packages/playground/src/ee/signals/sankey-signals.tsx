@@ -6,7 +6,7 @@ import { ExternalLink } from 'lucide-react';
 
 import { useThemeFlow } from './hooks/use-theme-flow';
 import { useThemeSnapshots } from './hooks/use-theme-snapshots';
-import { buildSignalGraphSummary } from './sankey-signals-data';
+import { buildSignalGraphSummary, getSignalRecordNodeId, getSignalRecordNodeLabel } from './sankey-signals-data';
 import type { SignalGraphNodeSummary, SignalGraphStageSummary } from './sankey-signals-data';
 import type { TraceSignalName } from './types';
 import { Link } from '@/lib/link';
@@ -141,6 +141,8 @@ function FlowCard({
           data={records}
           columns={chartColumns}
           getColumnHue={column => getSignalHue(column.id)}
+          getRecordNodeId={getSignalRecordNodeId}
+          getRecordNodeLabel={getSignalRecordNodeLabel}
           getRecordWeight={record => Number(record.traceCount)}
         >
           <SankeyChart height={height ?? 680} margin={{ top: 64, right: 160, bottom: 48, left: 160 }} />

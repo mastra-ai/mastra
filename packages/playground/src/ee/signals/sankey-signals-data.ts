@@ -16,6 +16,14 @@ export interface SignalGraphStageSummary {
   nodes: SignalGraphNodeSummary[];
 }
 
+export function getSignalRecordNodeId(record: SankeyChartRecord, column: SankeyChartColumn) {
+  return String(record[column.id]);
+}
+
+export function getSignalRecordNodeLabel(record: SankeyChartRecord, column: SankeyChartColumn) {
+  return String(record[`${column.id}Label`]);
+}
+
 export function themeFlowToSankeyData(flow: ThemeFlowResponse): {
   columns: SankeyChartColumn[];
   records: SankeyChartRecord[];
@@ -37,8 +45,10 @@ export function themeFlowToSankeyData(flow: ThemeFlowResponse): {
     if (!source || !target) continue;
 
     records.push({
-      [source.signalName]: source.node.label,
-      [target.signalName]: target.node.label,
+      [source.signalName]: source.node.nodeId,
+      [`${source.signalName}Label`]: source.node.label,
+      [target.signalName]: target.node.nodeId,
+      [`${target.signalName}Label`]: target.node.label,
       traceCount: link.traceCount,
     });
   }
@@ -53,7 +63,13 @@ export function buildSignalGraphSummary(flow: ThemeFlowResponse): {
   stages: SignalGraphStageSummary[];
 } {
   const { columns, records } = themeFlowToSankeyData(flow);
-  const graph = buildSankeyChartGraph(records, columns, record => Number(record.traceCount));
+  const graph = buildSankeyChartGraph(
+    records,
+    columns,
+    record => Number(record.traceCount),
+    getSignalRecordNodeId,
+    getSignalRecordNodeLabel,
+  );
   const nodeWeights = getSankeyChartNodeWeights(graph);
   const firstColumnId = columns[0]?.id;
   const analyzedTraceCount = graph.nodes.reduce(
@@ -67,13 +83,13 @@ export function buildSignalGraphSummary(flow: ThemeFlowResponse): {
     );
     const seenNodeIds = new Set<string>();
     const nodes = stage.nodes.flatMap(node => {
-      const graphNode = graphNodes.get(node.label);
+      const graphNode = graphNodes.get(node.nodeId);
       if (!graphNode || seenNodeIds.has(graphNode.id)) return [];
       seenNodeIds.add(graphNode.id);
       const traceCount = nodeWeights.get(graphNode.id) ?? 0;
       return [
         {
-          nodeId: graphNode.id,
+          nodeId: node.nodeId,
           label: node.label,
           traceCount,
           stageShare: analyzedTraceCount > 0 ? traceCount / analyzedTraceCount : 0,

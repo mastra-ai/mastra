@@ -1,4 +1,4 @@
-import type { ThemeEntitiesResponse, ThemeFlowResponse, ThemeSnapshotsResponse } from '@mastra/client-js';
+import type { ThemeEntitiesResponse, ThemeFlowResponse, ThemeNode, ThemeSnapshotsResponse } from '@mastra/client-js';
 
 export const emptyThemeEntitiesResponse: ThemeEntitiesResponse = { entities: [] };
 
@@ -77,8 +77,12 @@ export const themeFlowResponse: ThemeFlowResponse = {
 
 export const fourStageThemeFlowResponse: ThemeFlowResponse = {
   snapshot: {
-    ...themeSnapshotsResponse.snapshots[0],
-    availableSignals: ['goal', 'outcome', 'behavior', 'sentiment'],
+    snapshotId: 'snapshot-4',
+    ordinal: 4,
+    total: 4,
+    startedAt: '2026-07-01T00:00:00.000Z',
+    endedAt: '2026-07-08T00:00:00.000Z',
+    traceCount: 50,
   },
   stages: [
     {
@@ -280,6 +284,15 @@ export const fourStageThemeFlowResponse: ThemeFlowResponse = {
   ],
 };
 
+const metadataOnlyGoalNode: ThemeNode = {
+  nodeId: 'goal-disconnected',
+  kind: 'theme',
+  themeId: 'theme-goal-disconnected',
+  label: 'Metadata only goal',
+  traceCount: 99,
+  stageShare: 0.99,
+};
+
 export const inconsistentTraceCountThemeFlowResponse: ThemeFlowResponse = {
   ...fourStageThemeFlowResponse,
   snapshot: {
@@ -295,20 +308,67 @@ export const inconsistentTraceCountThemeFlowResponse: ThemeFlowResponse = {
         traceCount: node.traceCount + 20 + nodeIndex,
         stageShare: 0.9 - nodeIndex * 0.1,
       })),
-      ...(stage.signalName === 'goal'
-        ? [
-            {
-              nodeId: 'goal-disconnected',
-              kind: 'theme',
-              themeId: 'theme-goal-disconnected',
-              label: 'Metadata only goal',
-              traceCount: 99,
-              stageShare: 0.99,
-            },
-          ]
-        : []),
+      ...(stage.signalName === 'goal' ? [metadataOnlyGoalNode] : []),
     ],
   })),
+};
+
+export const duplicateLabelThemeFlowResponse: ThemeFlowResponse = {
+  snapshot: themeFlowResponse.snapshot,
+  stages: [
+    {
+      signalName: 'goal',
+      traceCount: 50,
+      nodes: [
+        {
+          nodeId: 'goal-theme-one',
+          kind: 'theme',
+          themeId: 'theme-one',
+          label: 'Shared theme label',
+          traceCount: 20,
+          stageShare: 0.4,
+        },
+        {
+          nodeId: 'goal-theme-two',
+          kind: 'theme',
+          themeId: 'theme-two',
+          label: 'Shared theme label',
+          traceCount: 30,
+          stageShare: 0.6,
+        },
+      ],
+    },
+    {
+      signalName: 'outcome',
+      traceCount: 50,
+      nodes: [
+        {
+          nodeId: 'outcome-theme',
+          kind: 'theme',
+          themeId: 'outcome-theme',
+          label: 'Resolved outcome',
+          traceCount: 50,
+          stageShare: 1,
+        },
+      ],
+    },
+  ],
+  links: [
+    {
+      sourceNodeId: 'goal-theme-one',
+      targetNodeId: 'outcome-theme',
+      traceCount: 20,
+      sourceShare: 1,
+      targetShare: 0.4,
+    },
+    {
+      sourceNodeId: 'goal-theme-two',
+      targetNodeId: 'outcome-theme',
+      traceCount: 30,
+      sourceShare: 1,
+      targetShare: 0.6,
+    },
+  ],
 };
 
 export const singleStageThemeFlowResponse: ThemeFlowResponse = {

@@ -60,6 +60,7 @@ export function SankeyChart({
                     {...props}
                     hueMap={hueMap}
                     columnLabel={node?.column.label}
+                    label={node?.label}
                     total={total}
                     showColumnLabel={showColumnLabel}
                     onHoverChange={setHoveredSourceName}
@@ -113,6 +114,7 @@ type SankeyLinkRendererProps = {
 type SankeyNodeProps = SankeyNodeRendererProps & {
   hueMap: Record<string, number>;
   columnLabel?: string;
+  label?: string;
   total: number;
   showColumnLabel: boolean;
   onHoverChange: (sourceName: string | undefined) => void;
@@ -126,11 +128,13 @@ function SankeyNode({
   payload,
   hueMap,
   columnLabel,
+  label,
   total,
   showColumnLabel,
   onHoverChange,
 }: SankeyNodeProps) {
   const name = typeof payload.name === 'string' || typeof payload.name === 'number' ? String(payload.name) : '';
+  const displayLabel = label ?? name;
   const numericValue = typeof payload.value === 'number' ? payload.value : Number(payload.value);
   const value = Number.isFinite(numericValue) ? String(numericValue) : '';
   const percentage = total > 0 && Number.isFinite(numericValue) ? Math.round((numericValue / total) * 100) : 0;
@@ -154,7 +158,7 @@ function SankeyNode({
         fontSize={11}
         fontFamily="var(--font-mono)"
       >
-        {name}
+        {displayLabel}
       </text>
       <text x={labelX} y={y - 8} textAnchor="middle" fill={Colors.neutral3} fontSize={9.5}>
         {value} ({percentage}%)

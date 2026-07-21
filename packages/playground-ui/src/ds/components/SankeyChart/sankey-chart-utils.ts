@@ -8,6 +8,7 @@ export type SankeyChartColumn = {
 export type SankeyChartNode = {
   id: string;
   name: string;
+  label: string;
   column: SankeyChartColumn;
   value: string | number;
 };
@@ -78,6 +79,8 @@ export function buildSankeyChartGraph(
   data: Array<SankeyChartRecord>,
   columns: Array<SankeyChartColumn>,
   getRecordWeight: (record: SankeyChartRecord) => number = () => 1,
+  getRecordNodeId?: (record: SankeyChartRecord, column: SankeyChartColumn) => string,
+  getRecordNodeLabel?: (record: SankeyChartRecord, column: SankeyChartColumn) => string,
 ): SankeyChartGraph {
   if (columns.length < 2 || data.length === 0) return EMPTY_GRAPH;
 
@@ -85,13 +88,17 @@ export function buildSankeyChartGraph(
   const nodeIndexes = new Map<string, number>();
   const linksById = new Map<string, SankeyChartLink>();
 
-  const getNode = (column: SankeyChartColumn, value: string | number): { node: SankeyChartNode; index: number } => {
+  const getNode = (
+    column: SankeyChartColumn,
+    value: string | number,
+    label: string,
+  ): { node: SankeyChartNode; index: number } => {
     const id = createNodeId(column.id, value);
     const existingIndex = nodeIndexes.get(id);
     const existingNode = existingIndex === undefined ? undefined : nodes[existingIndex];
     if (existingIndex !== undefined && existingNode) return { node: existingNode, index: existingIndex };
 
-    const node: SankeyChartNode = { id, name: String(value), column, value };
+    const node: SankeyChartNode = { id, name: String(value), label, column, value };
     const index = nodes.length;
     nodes.push(node);
     nodeIndexes.set(id, index);
@@ -107,12 +114,22 @@ export function buildSankeyChartGraph(
       const weight = getRecordWeight(record);
       if (!Number.isFinite(weight) || weight < 0) continue;
 
-      const sourceValue = getSankeyChartValue(record[sourceColumn.id]);
-      const targetValue = getSankeyChartValue(record[targetColumn.id]);
+      const sourceRecordValue = getSankeyChartValue(record[sourceColumn.id]);
+      const targetRecordValue = getSankeyChartValue(record[targetColumn.id]);
+      if (sourceRecordValue === undefined || targetRecordValue === undefined) continue;
+
+      const sourceValue = getRecordNodeId
+        ? getSankeyChartValue(getRecordNodeId(record, sourceColumn))
+        : sourceRecordValue;
+      const targetValue = getRecordNodeId
+        ? getSankeyChartValue(getRecordNodeId(record, targetColumn))
+        : targetRecordValue;
       if (sourceValue === undefined || targetValue === undefined) continue;
 
-      const source = getNode(sourceColumn, sourceValue);
-      const target = getNode(targetColumn, targetValue);
+      const sourceLabel = getRecordNodeLabel?.(record, sourceColumn) ?? String(sourceValue);
+      const targetLabel = getRecordNodeLabel?.(record, targetColumn) ?? String(targetValue);
+      const source = getNode(sourceColumn, sourceValue, sourceLabel);
+      const target = getNode(targetColumn, targetValue, targetLabel);
       const id = `${source.node.id}->${target.node.id}`;
       const existingLink = linksById.get(id);
 

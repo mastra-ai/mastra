@@ -113,6 +113,35 @@ describe('SankeyChart utilities', () => {
     });
   });
 
+  describe('when records have equal display labels with distinct identities', () => {
+    it('creates distinct nodes with their own weights', () => {
+      const data = [
+        { source: 'source-1', sourceLabel: 'Shared', model: 'model-1', modelLabel: 'Model', count: 2 },
+        { source: 'source-2', sourceLabel: 'Shared', model: 'model-1', modelLabel: 'Model', count: 3 },
+      ];
+      const getNodeId = (record: Record<string, unknown>, column: { id: string }) => String(record[column.id]);
+      const getNodeLabel = (record: Record<string, unknown>, column: { id: string }) =>
+        String(record[`${column.id}Label`]);
+
+      const graph = buildSankeyChartGraph(
+        data,
+        columns.slice(0, 2),
+        record => Number(record.count),
+        getNodeId,
+        getNodeLabel,
+      );
+      const sourceNodes = graph.nodes.filter(node => node.column.id === 'source');
+      const weights = getSankeyChartNodeWeights(graph);
+
+      expect(sourceNodes.map(node => ({ label: node.label, value: node.value, weight: weights.get(node.id) }))).toEqual(
+        [
+          { label: 'Shared', value: 'source-1', weight: 2 },
+          { label: 'Shared', value: 'source-2', weight: 3 },
+        ],
+      );
+    });
+  });
+
   describe('when values cannot form a flow', () => {
     it('ignores blank, non-finite, and non-primitive dimension values', () => {
       const data = [
