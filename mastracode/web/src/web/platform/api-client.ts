@@ -1,0 +1,93 @@
+export interface PlatformApiClientConfig {
+  baseUrl: string;
+  accessToken: string;
+  fetchImpl?: typeof fetch;
+}
+
+export class PlatformApiError extends Error {
+  readonly status: number;
+  readonly retryAfterSeconds: number | null;
+
+  constructor(message: string, status: number, retryAfterSeconds: number | null = null) {
+    super(message);
+    this.name = 'PlatformApiError';
+    this.status = status;
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
+
+export class PlatformApiClient {
+  readonly #baseUrl: string;
+  readonly #accessToken: string;
+  readonly #fetch: typeof fetch;
+
+  constructor(config: PlatformApiClientConfig) {
+    const missing = ['baseUrl', 'accessToken'].filter(field => !config[field as keyof PlatformApiClientConfig]);
+    if (missing.length > 0) {
+      throw new Error(`Platform integration: missing required config field(s): ${missing.join(', ')}.`);
+    }
+    this.#baseUrl = config.baseUrl.replace(/\/+$/, '');
+    this.#accessToken = config.accessToken;
+    this.#fetch = config.fetchImpl ?? globalThis.fetch;
+  }
+
+  async request<T>(method: string, path: string, body?: unknown, options?: { signal?: AbortSignal }): Promise<T> {
+    const headers: Record<string, string> = {
+      accept: 'application/json',
+      authorization: `Bearer ${this.#accessToken}`,
+    };
+    const timeoutSignal = AbortSignal.timeout(15_000);
+    const init: RequestInit = {
+      method,
+      headers,
+      signal: options?.signal ? AbortSignal.any([options.signal, timeoutSignal]) : timeoutSignal,
+    };
+    if (body !== undefined) {
+      headers['content-type'] = 'application/json';
+      init.body = JSON.stringify(body);
+    }
+
+    let response: Response;
+    try {
+      response = await this.#fetch(`${this.#baseUrl}${path}`, init);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes(this.#accessToken)) {
+        const redacted = new Error(redact(error.message, this.#accessToken));
+        redacted.name = error.name;
+        throw redacted;
+      }
+      throw error;
+    }
+    if (!response.ok) {
+      throw new PlatformApiError(
+        redact(await extractError(response), this.#accessToken),
+        response.status,
+        parseRetryAfter(response.headers.get('retry-after')),
+      );
+    }
+    if (response.status === 204) return undefined as T;
+    return (await response.json()) as T;
+  }
+}
+
+async function extractError(response: Response): Promise<string> {
+  try {
+    const data = (await response.clone().json()) as Record<string, unknown>;
+    for (const field of ['detail', 'error', 'title']) {
+      if (typeof data[field] === 'string' && data[field]) return data[field];
+    }
+  } catch {
+    // Fall through to the status-based message.
+  }
+  return `Platform API request failed (${response.status})`;
+}
+
+function redact(message: string, accessToken: string): string {
+  return message.split(accessToken).join('[REDACTED]');
+}
+
+function parseRetryAfter(value: string | null): number | null {
+  if (!value) return null;
+  const seconds = Number.parseInt(value, 10);
+  return Number.isSafeInteger(seconds) && seconds >= 0 ? seconds : null;
+}
