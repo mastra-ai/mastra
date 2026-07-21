@@ -105,7 +105,7 @@ describe('FactoryGithubEventService', () => {
     expect(decisions[0]?.decision).toMatchObject({ type: 'upsertLinkedWorkItem', source: 'github-issue' });
   });
 
-  it('moves a trusted issue to Triage, persists its session, and starts the investigation agent', async () => {
+  it('moves a trusted issue to Triage and rematerializes it after deletion', async () => {
     const { github, sourceControl, integrationStorage, workItems, project } = await setup('write');
     const rules = builtInFactoryRules();
     const transitionService = new FactoryTransitionService({ storage: workItems, rules });
@@ -215,6 +215,24 @@ describe('FactoryGithubEventService', () => {
       'succeeded',
       'succeeded',
     ]);
+
+    await workItems.delete({ orgId: 'org-1', id: item!.id });
+    await expect(service.ingest(issueOpened('delivery-full-flow'))).resolves.toEqual({ status: 'replayed' });
+    expect((await workItems.listDeferredDecisions('org-1', project.id)).map(decision => decision.status)).toEqual([
+      'retry',
+      'succeeded',
+    ]);
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:02Z'));
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:03Z'));
+
+    const [rematerialized] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
+    expect(rematerialized).toMatchObject({
+      externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:42' },
+      stages: ['triage'],
+    });
+    expect(rematerialized?.id).not.toBe(item?.id);
+    expect(deliveredSignals).toHaveLength(2);
   });
 
   it('prefers canonical board identities over legacy GitHub rows during ingress', async () => {

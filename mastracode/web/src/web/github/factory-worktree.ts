@@ -1,7 +1,7 @@
 import { reattachSandbox } from '../sandbox/fleet.js';
 import type { GithubIntegration } from './integration.js';
 import { withProjectLock } from './project-lock.js';
-import { ensureWorktree, MaterializeError, runWorktreeSetup } from './sandbox.js';
+import { ensureProjectSandbox, ensureWorktree, materializeRepo, runWorktreeSetup } from './sandbox.js';
 
 export async function ensureFactoryRuleWorktree(args: {
   github: GithubIntegration;
@@ -43,17 +43,27 @@ export async function ensureFactoryRuleWorktree(args: {
   if (!installation) throw new Error('Factory GitHub installation not found.');
 
   const userId = connection.createdByUserId;
-  const sandboxRow = await args.github.sourceControlStorage.sandboxes.getOrCreate({
-    projectRepository: resolved.projectRepository,
-    userId,
-  });
-  if (!sandboxRow.sandboxId) {
-    throw new MaterializeError('Project sandbox is not provisioned. Open the project first.', 'clone-failed');
-  }
-
   return withProjectLock(`${resolved.projectRepository.id}:${userId}`, async () => {
-    const sandbox = await reattachSandbox(sandboxRow.sandboxId!);
+    let sandboxRow = await args.github.sourceControlStorage.sandboxes.getOrCreate({
+      projectRepository: resolved.projectRepository,
+      userId,
+    });
     const token = await args.github.mintInstallationToken(Number(installation.externalId));
+    let sandbox;
+    if (!sandboxRow.sandboxId || !sandboxRow.materializedAt) {
+      sandbox = await ensureProjectSandbox(sandboxRow, args.github.sourceControlStorage.sandboxes);
+      sandboxRow = (await args.github.sourceControlStorage.sandboxes.getById({ id: sandboxRow.id })) ?? sandboxRow;
+      await materializeRepo(
+        sandboxRow,
+        { repoFullName: repository.slug, defaultBranch: repository.defaultBranch },
+        sandbox,
+        token,
+        args.github.sourceControlStorage.sandboxes,
+      );
+    } else {
+      sandbox = await reattachSandbox(sandboxRow.sandboxId);
+    }
+
     const result = await ensureWorktree(sandbox, sandboxRow.sandboxWorkdir, {
       branch: args.branch,
       baseBranch: resolved.projectRepository.branch ?? repository.defaultBranch,

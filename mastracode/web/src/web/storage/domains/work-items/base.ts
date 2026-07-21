@@ -1025,7 +1025,53 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           factory_project_id: input.factoryProjectId,
           identity: input.ingress.identity,
         });
-        if (prior) return { status: 'replayed' as const, result: prior.result as Record<string, unknown> };
+        if (prior) {
+          const result = prior.result as Record<string, unknown>;
+          const decisions = Array.isArray(result.decisions) ? result.decisions : [];
+          const evaluation = await ops.findOne<GovernanceDbRow>('factory_rule_evaluations', { ingress_id: prior.id });
+          for (const decision of decisions) {
+            if (
+              !evaluation ||
+              !decision ||
+              typeof decision !== 'object' ||
+              (decision as Record<string, unknown>).type !== 'upsertLinkedWorkItem' ||
+              typeof (decision as Record<string, unknown>).sourceKey !== 'string' ||
+              typeof (decision as Record<string, unknown>).idempotencyKey !== 'string'
+            ) {
+              continue;
+            }
+            const materialization = decision as Record<string, unknown> & { sourceKey: string; idempotencyKey: string };
+            const item = await ops.findOne<WorkItemDbRow>('work_items', {
+              org_id: input.orgId,
+              factory_project_id: input.factoryProjectId,
+              source_key: materialization.sourceKey,
+            });
+            if (item) continue;
+            await ops.updateAtomic<GovernanceDbRow>(
+              'factory_deferred_decisions',
+              {
+                org_id: input.orgId,
+                factory_project_id: input.factoryProjectId,
+                evaluation_id: evaluation.id,
+                idempotency_key: materialization.idempotencyKey,
+              },
+              current =>
+                current.status === 'succeeded'
+                  ? {
+                      status: 'retry',
+                      attempts: 0,
+                      available_at: input.now,
+                      lease_owner: null,
+                      lease_expires_at: null,
+                      last_error: null,
+                      completed_at: null,
+                      updated_at: input.now,
+                    }
+                  : null,
+            );
+          }
+          return { status: 'replayed' as const, result };
+        }
         const itemRow = input.workItemId
           ? await ops.findOne<WorkItemDbRow>('work_items', {
               id: input.workItemId,

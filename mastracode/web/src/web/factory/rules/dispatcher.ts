@@ -333,7 +333,7 @@ export class FactoryDecisionDispatcher {
         stage: 'intake',
         expectedRevision,
         actor: deferredActor(record),
-        ingress: { type: 'rule', identity: `decision:${record.idempotencyKey}:initial-entry` },
+        ingress: { type: 'rule', identity: `decision:${record.idempotencyKey}:${result.item.id}:initial-entry` },
         cause: 'linked_item_materialized',
         causalChain,
         initialEntry: true,
@@ -354,7 +354,7 @@ export class FactoryDecisionDispatcher {
       stage: decision.stage,
       expectedRevision,
       actor: { type: 'system', id: 'factory-rule-dispatcher' },
-      ingress: { type: 'rule', identity: `decision:${record.idempotencyKey}:destination` },
+      ingress: { type: 'rule', identity: `decision:${record.idempotencyKey}:${result.item.id}:destination` },
       cause: materializedByDecision ? 'linked_item_materialized' : 'linked_item_reconciled',
       causalChain,
     });
