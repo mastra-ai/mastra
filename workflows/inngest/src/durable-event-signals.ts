@@ -13,17 +13,17 @@ import type { RequestContext } from '@mastra/core/request-context';
  * and #19426/actor). Route any such signal through the helpers below from both
  * call sites so a future addition can't go out of sync the same way.
  */
-export interface DurableTriggerSignals {
-  requestContext?: RequestContext | Record<string, unknown>;
+export interface DurableTriggerSignals<TRequestContext = unknown> {
+  requestContext?: RequestContext<TRequestContext> | Record<string, unknown>;
   actor?: ActorSignal;
 }
 
-export function serializeRequestContext(
-  requestContext?: RequestContext | Record<string, unknown>,
+export function serializeRequestContext<TRequestContext = unknown>(
+  requestContext?: RequestContext<TRequestContext> | Record<string, unknown>,
 ): Record<string, unknown> {
   if (!requestContext) return {};
-  if (typeof (requestContext as RequestContext).entries === 'function') {
-    return Object.fromEntries((requestContext as RequestContext).entries());
+  if (typeof (requestContext as RequestContext<TRequestContext>).entries === 'function') {
+    return Object.fromEntries((requestContext as RequestContext<TRequestContext>).entries());
   }
   return requestContext as Record<string, unknown>;
 }
@@ -32,7 +32,9 @@ export function serializeRequestContext(
  * Build the `requestContext`/`actor` fields for an event that starts a new
  * durable run (or time-travels into one).
  */
-export function buildDurableTriggerFields(signals: DurableTriggerSignals): {
+export function buildDurableTriggerFields<TRequestContext = unknown>(
+  signals: DurableTriggerSignals<TRequestContext>,
+): {
   requestContext: Record<string, unknown>;
   actor: ActorSignal | undefined;
 } {
@@ -54,9 +56,9 @@ export function buildDurableTriggerFields(signals: DurableTriggerSignals): {
  * trust signal that must be re-supplied by the caller on every resume, not a
  * membership-bypass signal we persist into durable storage.
  */
-export function buildDurableResumeFields(signals: {
+export function buildDurableResumeFields<TRequestContext = unknown>(signals: {
   persistedRequestContext?: Record<string, unknown>;
-  requestContext?: RequestContext | Record<string, unknown>;
+  requestContext?: RequestContext<TRequestContext> | Record<string, unknown>;
   actor?: ActorSignal;
 }): {
   requestContext: Record<string, unknown>;

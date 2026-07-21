@@ -14,6 +14,12 @@ describe('serializeRequestContext', () => {
     expect(serializeRequestContext(requestContext)).toEqual({ userId: 'user-1' });
   });
 
+  it('serializes a typed RequestContext', () => {
+    const requestContext = new RequestContext<{ organizationId: string }>();
+    requestContext.set('organizationId', 'org-1');
+    expect(serializeRequestContext(requestContext)).toEqual({ organizationId: 'org-1' });
+  });
+
   it('passes through an already-serialized plain object unchanged', () => {
     expect(serializeRequestContext({ userId: 'user-1' })).toEqual({ userId: 'user-1' });
   });
