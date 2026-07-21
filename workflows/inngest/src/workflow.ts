@@ -264,7 +264,14 @@ export class InngestWorkflow<
       {
         id: `workflow.${this.id}.cron`,
         retries: 0,
-        cancelOn: [{ event: `cancel.workflow.${this.id}` }],
+        cancelOn: [
+          {
+            event: `cancel.workflow.${this.id}`,
+            // Scope cancel to one run. Unscoped cancel.workflow.* cancels every
+            // concurrent run of this function (Inngest match is per-function).
+            if: 'async.data.runId == event.data.runId',
+          },
+        ],
         triggers: { cron: this.cronConfig?.cron ?? '' },
         ...this.flowControlConfig,
       },
@@ -294,7 +301,14 @@ export class InngestWorkflow<
       {
         id: `workflow.${this.id}`,
         retries: 0,
-        cancelOn: [{ event: `cancel.workflow.${this.id}` }],
+        cancelOn: [
+          {
+            event: `cancel.workflow.${this.id}`,
+            // Scope cancel to one run. Unscoped cancel.workflow.* cancels every
+            // concurrent run of this function (Inngest match is per-function).
+            if: 'async.data.runId == event.data.runId',
+          },
+        ],
         triggers: { event: `workflow.${this.id}` },
         // Spread flow control configuration
         ...this.flowControlConfig,
