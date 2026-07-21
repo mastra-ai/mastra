@@ -8,6 +8,7 @@ function integration(): LinearIntegration {
 
 const issue: LinearIssue = {
   id: 'issue-1',
+  projectId: 'project-1',
   identifier: 'ENG-42',
   title: 'Fix intake',
   url: 'https://linear.app/acme/issue/ENG-42',
