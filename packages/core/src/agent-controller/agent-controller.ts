@@ -282,7 +282,7 @@ export class AgentController<TState = {}> {
       setState: updates => void session.state.set(updates as Partial<TState>),
       setSetting: ({ key, value }) => session.thread.setSetting({ key, value }),
     });
-    session.thread.connect(this.createThreadDataStore(), session as Session);
+    session.thread.connect(this.createThreadDataStore(session), session as Session);
     session.setMachinery({
       getAgent: () => this.getCurrentAgent(session),
       subscribeToThread: ({ resourceId, threadId }) =>
@@ -658,22 +658,6 @@ export class AgentController<TState = {}> {
     return this.#externalMastra?.getStorage() ?? this.config.storage;
   }
 
-  private async resolveConfiguredMemory(): Promise<MastraMemory | undefined> {
-    const configuredMemory = this.config.memory;
-    if (!configuredMemory) return undefined;
-
-    const memory =
-      typeof configuredMemory === 'function'
-        ? await configuredMemory({ requestContext: new RequestContext(), mastra: this.getMastra() })
-        : configuredMemory;
-
-    if (!memory) {
-      throw new Error('Dynamic memory factory returned empty value');
-    }
-
-    return memory;
-  }
-
   /**
    * Sets or updates the harness-level browser and propagates it to mode agents.
    */
@@ -793,10 +777,11 @@ export class AgentController<TState = {}> {
 
   /**
    * The shared-host storage gateway the Session's thread domain reads/writes
-   * through. The Session owns the thread-domain logic; this adapter just maps
-   * raw storage rows to AgentController types — it does not call back into Session.
+   * through. The Session owns the thread-domain logic; this adapter maps raw
+   * storage rows to AgentController types and uses the active session only when
+   * resolving configured memory for a clone.
    */
-  private createThreadDataStore(): ThreadDataStore {
+  private createThreadDataStore(session: Session<TState>): ThreadDataStore {
     return {
       listThreads: ({ resourceId, includeForkedSubagents, metadata }) =>
         this.queryThreads({ resourceId, includeForkedSubagents, metadata }),
@@ -810,7 +795,7 @@ export class AgentController<TState = {}> {
       saveThread: ({ thread }) => this.persistThreadRow(thread),
       deleteThread: ({ threadId }) => this.deleteThreadRow(threadId),
       cloneThread: ({ sourceThreadId, resourceId, title, metadata }) =>
-        this.cloneThreadRow({ sourceThreadId, resourceId, title, metadata }),
+        this.cloneThreadRow({ session, sourceThreadId, resourceId, title, metadata }),
       acquireLock: threadId => this.config.threadLock?.acquire(threadId) ?? Promise.resolve(),
       releaseLock: threadId => this.config.threadLock?.release(threadId) ?? Promise.resolve(),
       getModeIds: () => this.config.modes.map(m => m.id),
@@ -842,18 +827,24 @@ export class AgentController<TState = {}> {
 
   /** Clone a thread (and messages) via the host's memory (gateway primitive for the Session thread domain). */
   private async cloneThreadRow({
+    session,
     sourceThreadId,
     resourceId,
     title,
     metadata,
   }: {
+    session: Session<TState>;
     sourceThreadId: string;
     resourceId: string;
     title?: string;
     metadata?: Record<string, unknown>;
   }): Promise<AgentControllerThread> {
     const storage = this.#resolveStorage();
-    const memory = storage ? await storage.getStore('memory') : await this.resolveConfiguredMemory();
+    const memory = this.config.memory
+      ? await this.resolveMemory(session)
+      : storage
+        ? await storage.getStore('memory')
+        : undefined;
     if (!memory) {
       throw new Error(
         storage ? 'Storage does not have a memory domain configured' : 'Memory is not configured on this Harness',
