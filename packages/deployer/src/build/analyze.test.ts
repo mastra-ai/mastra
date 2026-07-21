@@ -416,3 +416,116 @@ describe('npm alias dependencies', () => {
     });
   }, 15000);
 });
+
+describe('externals array excludes packages from the validation pass (issue #18626)', () => {
+  // Builds a workspace whose entry imports a bundled workspace package, which in turn
+  // imports `throws-on-load` — a transitive dependency that throws a TypeError as soon as
+  // it is evaluated. This mirrors an old CommonJS module that touches an API removed in a
+  // newer Node version (e.g. `buffer.SlowBuffer` on Node 26): the bundler keeps the
+  // dependency external, but the post-bundle validation pass dynamically imports each
+  // bundled chunk and used to execute the real module even after the user externalized it.
+  async function setupThrowingTransitiveDep(prefix: string) {
+    await mkdir(tempRoot, { recursive: true });
+    const tempDir = await mkdtemp(join(tempRoot, prefix));
+    tempDirs.push(tempDir);
+
+    const appDir = join(tempDir, 'apps', 'app');
+    const workspacePackageDir = join(tempDir, 'packages', 'workspace-package');
+    const throwingPackageDir = join(workspacePackageDir, 'node_modules', 'throws-on-load');
+    const entryFile = join(appDir, 'index.ts');
+    const outputDir = join(appDir, '.mastra', '.build');
+
+    await mkdir(outputDir, { recursive: true });
+    await mkdir(join(appDir, 'node_modules', '@internal'), { recursive: true });
+    await mkdir(throwingPackageDir, { recursive: true });
+    await mkdir(join(workspacePackageDir, 'src'), { recursive: true });
+
+    await writeFile(join(tempDir, 'package.json'), JSON.stringify({ name: 'test-workspace', version: '1.0.0' }));
+    await writeFile(join(tempDir, 'pnpm-workspace.yaml'), `packages:\n  - apps/*\n  - packages/*\n`);
+    await writeFile(join(appDir, 'package.json'), JSON.stringify({ name: 'app', version: '1.0.0', type: 'module' }));
+    await writeFile(
+      join(workspacePackageDir, 'package.json'),
+      JSON.stringify({
+        name: '@internal/workspace-package',
+        version: '1.0.0',
+        type: 'module',
+        main: './src/index.js',
+        dependencies: { 'throws-on-load': '1.0.0' },
+      }),
+    );
+    // Throws a TypeError at module-evaluation time (like requiring a removed Node API).
+    await writeFile(
+      join(throwingPackageDir, 'package.json'),
+      JSON.stringify({ name: 'throws-on-load', version: '1.0.0', type: 'module', main: './index.js' }),
+    );
+    await writeFile(
+      join(throwingPackageDir, 'index.js'),
+      `const removedApi = undefined;\nexport const value = removedApi.prototype;\n`,
+    );
+    await writeFile(
+      join(workspacePackageDir, 'src', 'index.js'),
+      `import { value } from 'throws-on-load';\nexport const workspaceValue = value;\n`,
+    );
+    await symlink(workspacePackageDir, join(appDir, 'node_modules', '@internal', 'workspace-package'));
+    await writeFile(
+      entryFile,
+      `import { workspaceValue } from '@internal/workspace-package';\nexport const value = workspaceValue;\n`,
+    );
+
+    return { entryFile, outputDir, projectRoot: appDir, tempDir };
+  }
+
+  it('fails to build when the throwing transitive dependency is not externalized', async () => {
+    const { entryFile, outputDir, projectRoot, tempDir } = await setupThrowingTransitiveDep(
+      'mastra-externals-throw-repro-',
+    );
+
+    const originalCwd = process.cwd();
+    process.chdir(tempDir);
+    try {
+      await expect(
+        analyzeBundle(
+          [entryFile],
+          entryFile,
+          {
+            outputDir,
+            projectRoot,
+            platform: 'node',
+            bundlerOptions: { externals: [], enableSourcemap: false },
+          },
+          noopLogger,
+        ),
+      ).rejects.toThrow(/throws-on-load/);
+    } finally {
+      process.chdir(originalCwd);
+    }
+  }, 20000);
+
+  it('does not execute a package listed in bundler.externals during validation', async () => {
+    const { entryFile, outputDir, projectRoot, tempDir } = await setupThrowingTransitiveDep(
+      'mastra-externals-throw-fixed-',
+    );
+
+    const originalCwd = process.cwd();
+    process.chdir(tempDir);
+    try {
+      // Listing the throwing dependency in `bundler.externals` keeps it out of the bundle
+      // AND stubs it during validation, so the build completes instead of crashing.
+      await expect(
+        analyzeBundle(
+          [entryFile],
+          entryFile,
+          {
+            outputDir,
+            projectRoot,
+            platform: 'node',
+            bundlerOptions: { externals: ['throws-on-load'], enableSourcemap: false },
+          },
+          noopLogger,
+        ),
+      ).resolves.toBeDefined();
+    } finally {
+      process.chdir(originalCwd);
+    }
+  }, 20000);
+});

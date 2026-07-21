@@ -286,6 +286,7 @@ async function validateOutput(
     projectRoot,
     workspaceMap,
     depsVersionInfo,
+    userExternals,
   }: {
     output: (OutputChunk | OutputAsset)[];
     reverseVirtualReferenceMap: Map<string, string>;
@@ -294,6 +295,7 @@ async function validateOutput(
     projectRoot: string;
     workspaceMap: Map<string, WorkspacePackageInfo>;
     depsVersionInfo: Map<string, ExternalDependencyInfo>;
+    userExternals: string[];
   },
   logger: IMastraLogger,
 ) {
@@ -355,7 +357,12 @@ async function validateOutput(
       moduleResolveMapLocation: join(outputDir, 'module-resolve-map.json'),
       logger,
       workspaceMap,
-      stubbedExternals: [...GLOBAL_EXTERNALS, ...DEPS_TO_IGNORE],
+      // Stub user-declared externals too, not just GLOBAL_EXTERNALS. These packages are
+      // externalized during bundling but installed at runtime, so their real modules must not
+      // be executed during validation — otherwise a dependency that throws at load time (e.g.
+      // an old CommonJS module touching an API removed in newer Node) fails the build even
+      // though the user already listed it in `bundler.externals`. See issue #18626.
+      stubbedExternals: [...GLOBAL_EXTERNALS, ...DEPS_TO_IGNORE, ...userExternals],
     });
   }
 
@@ -585,6 +592,7 @@ export async function analyzeBundle(
       projectRoot: workspaceRoot || projectRoot,
       workspaceMap,
       depsVersionInfo,
+      userExternals,
     },
     logger,
   );
