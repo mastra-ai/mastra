@@ -1,13 +1,14 @@
 /**
  * BDD coverage for the propless `FactorySwitcher` (`domains/workspaces/components`).
  *
- * The switcher reads the active factory from `useActiveFactoryContext` and
- * drives the factories modal through `useOverlays` — no props. Opening the
- * factories overlay also closes the sidebar drawer (mobile behavior).
+ * The switcher reads the active Factory from context and opens the in-layout
+ * creation surface through `useOverlays`. Opening it also closes the mobile
+ * sidebar drawer.
  */
+import { MainSidebarProvider, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { renderWithProviders } from '../../../../../../../e2e/web-ui/render';
 import { OverlaysProvider, useOverlays } from '../../../../lib/overlays';
@@ -28,6 +29,7 @@ const PROJECT: Factory = {
 
 afterEach(() => {
   localStorage.clear();
+  vi.restoreAllMocks();
 });
 
 function seedFactory(project: Factory = PROJECT) {
@@ -35,25 +37,28 @@ function seedFactory(project: Factory = PROJECT) {
   localStorage.setItem('mastracode-active-factory', project.id);
 }
 
-function OverlayProbe() {
+function StateProbe() {
   const overlays = useOverlays();
+  const { openMobile, setOpenMobile } = useMainSidebar();
   return (
     <div>
-      <span data-testid="projects-open">{overlays.isOpen('factories') ? 'yes' : 'no'}</span>
-      <span data-testid="sidebar-open">{overlays.isOpen('sidebar') ? 'yes' : 'no'}</span>
-      <button onClick={() => overlays.open('sidebar')}>open sidebar</button>
+      <output data-testid="factories-open">{overlays.isOpen('factories') ? 'yes' : 'no'}</output>
+      <output data-testid="sidebar-open">{openMobile ? 'yes' : 'no'}</output>
+      <button onClick={() => setOpenMobile(true)}>Open mobile sidebar</button>
     </div>
   );
 }
 
 function renderSwitcher() {
   return renderWithProviders(
-    <ActiveFactoryProvider>
-      <OverlaysProvider>
-        <FactorySwitcher />
-        <OverlayProbe />
-      </OverlaysProvider>
-    </ActiveFactoryProvider>,
+    <MainSidebarProvider storageKey="factory-switcher-test" mobileBreakpoint={768}>
+      <ActiveFactoryProvider>
+        <OverlaysProvider>
+          <FactorySwitcher />
+          <StateProbe />
+        </OverlaysProvider>
+      </ActiveFactoryProvider>
+    </MainSidebarProvider>,
   );
 }
 
@@ -79,16 +84,30 @@ describe('FactorySwitcher', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Select factory' }));
 
     expect(await screen.findByRole('menuitem', { name: /MastraCode Test/ })).toBeInTheDocument();
-    expect(screen.getByTestId('projects-open')).toHaveTextContent('no');
+    expect(screen.getByTestId('factories-open')).toHaveTextContent('no');
   });
 
-  it('when Create Factory is selected, then the factories overlay opens', async () => {
+  it('when Create Factory is selected on mobile, then the layout view opens and the sidebar closes', async () => {
+    vi.spyOn(window, 'matchMedia').mockImplementation(query => ({
+      matches: true,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
     seedFactory();
     renderSwitcher();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Open mobile sidebar' }));
+    expect(screen.getByTestId('sidebar-open')).toHaveTextContent('yes');
 
     await userEvent.click(screen.getByRole('button', { name: 'Select factory' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Create Factory' }));
 
-    expect(screen.getByTestId('projects-open')).toHaveTextContent('yes');
+    expect(screen.getByTestId('factories-open')).toHaveTextContent('yes');
+    expect(screen.getByTestId('sidebar-open')).toHaveTextContent('no');
   });
 });

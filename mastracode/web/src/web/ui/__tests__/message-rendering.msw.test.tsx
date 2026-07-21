@@ -443,7 +443,7 @@ describe('MastraCode message rendering', () => {
 
   it('keeps the running conversation and stream subscription alive while Settings is open', async () => {
     const user = userEvent.setup();
-    seedFactory();
+    seedProject();
     const stream = delayedSse({
       type: 'message_update',
       message: dbMessage('assistant-settings-stream', 'assistant', [
@@ -476,6 +476,90 @@ describe('MastraCode message rendering', () => {
     expect(screen.getByRole('button', { name: 'Abort' })).toBeInTheDocument();
     await waitFor(() => expect(settingsTrigger).toHaveFocus());
     expect(streamRequests).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the running conversation mounted while Create Factory is open in the layout', async () => {
+    const user = userEvent.setup();
+    seedProject();
+    const stream = delayedSse({
+      type: 'message_update',
+      message: dbMessage('assistant-factory-stream', 'assistant', [
+        { type: 'text', text: 'Streaming while factory creation is open' },
+      ]),
+    });
+    const streamRequests = vi.fn();
+    useAgentControllerHandlers();
+    server.use(
+      http.get(SESSION, () => HttpResponse.json({ ...sessionState(), running: true })),
+      http.get(`${SESSION}/stream`, () => {
+        streamRequests();
+        return stream.response();
+      }),
+    );
+
+    renderChat();
+
+    expect(await screen.findByRole('button', { name: 'Abort' })).toBeInTheDocument();
+    await waitFor(() => expect(streamRequests).toHaveBeenCalledTimes(1));
+
+    const factorySwitcher = screen.getByRole('button', { name: 'Select factory' });
+    await user.click(factorySwitcher);
+    await user.click(await screen.findByRole('menuitem', { name: 'Create Factory' }));
+
+    const factorySurface = await screen.findByRole('region', { name: 'Create Factory' });
+    expect(factorySurface.closest('main')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Create Factory' })).not.toBeInTheDocument();
+
+    await stream.emit();
+    await user.click(screen.getByRole('button', { name: 'Close factory creation' }));
+
+    expect(await screen.findByText('Streaming while factory creation is open')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Abort' })).toBeInTheDocument();
+    await waitFor(() => expect(factorySwitcher).toHaveFocus());
+    expect(streamRequests).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows required first-run Factory creation in the layout after empty backend hydration', async () => {
+    useAgentControllerHandlers();
+    server.use(http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [] })));
+
+    renderChat();
+
+    const factorySurface = await screen.findByRole('region', { name: 'Create Factory' });
+    expect(factorySurface.closest('main')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Close factory creation' })).not.toBeInTheDocument();
+  });
+
+  it('does not show first-run Factory creation after a remote Factory hydrates', async () => {
+    useAgentControllerHandlers();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+        HttpResponse.json({ projects: [{ id: 'fp-1', name: 'mastra' }] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
+        HttpResponse.json({
+          connections: [
+            {
+              id: 'conn-1',
+              repositories: [
+                {
+                  id: 'github-project-1',
+                  branch: 'main',
+                  sandboxWorkdir: '/workspace/acme/mastra',
+                  repository: { slug: 'mastra', defaultBranch: 'main' },
+                },
+              ],
+            },
+          ],
+        }),
+      ),
+    );
+
+    renderChat();
+
+    await waitFor(() => expect(localStorage.getItem('mastracode-factories')).toContain('github-project-1'));
+    expect(screen.queryByRole('region', { name: 'Create Factory' })).not.toBeInTheDocument();
   });
 
   it('renders tool lifecycle events inline before a later message update re-emits the tool part', async () => {
