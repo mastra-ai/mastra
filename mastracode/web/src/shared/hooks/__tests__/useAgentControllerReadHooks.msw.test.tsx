@@ -1,4 +1,4 @@
-import { waitFor } from '@testing-library/react';
+import { act, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -78,5 +78,40 @@ describe('agent-controller read hooks', () => {
     await new Promise(resolve => setTimeout(resolve, 20));
 
     expect(onReadMessages).toHaveBeenCalledTimes(1);
+  });
+
+  it('grows the fetch window on loadMore and stops when the top is reached', async () => {
+    // Thread has 3 messages total. The endpoint honors ?limit= by returning the
+    // newest N (oldest-first), which is how the real server behaves.
+    const all = [
+      { id: 'm1', role: 'assistant', content: 'one' },
+      { id: 'm2', role: 'assistant', content: 'two' },
+      { id: 'm3', role: 'assistant', content: 'three' },
+    ];
+    const seenLimits: number[] = [];
+
+    server.use(
+      http.get(`${sessionUrl}/threads/thread-one/messages`, ({ request }) => {
+        const limit = Number(new URL(request.url).searchParams.get('limit'));
+        seenLimits.push(limit);
+        return HttpResponse.json({ messages: all.slice(Math.max(0, all.length - limit)) });
+      }),
+    );
+
+    const { result } = renderHookWithProviders(() =>
+      useAgentControllerThreadMessages({ ...hookArgs, threadId: 'thread-one', initialLimit: 2, pageSize: 2 }),
+    );
+
+    // First window: newest 2 of 3 -> a full page, so more history may exist.
+    await waitFor(() => expect(result.current.data?.map(m => m.id)).toEqual(['m2', 'm3']));
+    expect(result.current.hasMore).toBe(true);
+    expect(seenLimits).toEqual([2]);
+
+    // Grow the window: fetch newest 4 -> only 3 exist -> short page -> top reached.
+    act(() => result.current.loadMore());
+
+    await waitFor(() => expect(result.current.data?.map(m => m.id)).toEqual(['m1', 'm2', 'm3']));
+    expect(result.current.hasMore).toBe(false);
+    expect(seenLimits).toEqual([2, 4]);
   });
 });
