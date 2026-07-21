@@ -5,7 +5,7 @@ import color from 'picocolors';
 import { x } from 'tinyexec';
 import type { Analytics } from './analytics';
 import { cloneTemplate, renameProject } from './utils/clone';
-import { getPackageManager } from './utils/pm';
+import { getPackageManager, getInstallArgs } from './utils/pm';
 
 export interface CreateArgs {
   projectName?: string;
@@ -52,7 +52,7 @@ export async function create(args: CreateArgs): Promise<void> {
   const installSpinner = p.spinner();
   installSpinner.start(`Installing dependencies...`);
   try {
-    await x(packageManager, ['install'], {
+    await x(packageManager, getInstallArgs(packageManager), {
       nodeOptions: {
         cwd: projectPath,
       }

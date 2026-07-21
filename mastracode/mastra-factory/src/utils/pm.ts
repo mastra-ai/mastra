@@ -34,3 +34,14 @@ export function getPackageManager(): PackageManager {
 
   return 'npm'; // Default fallback
 }
+
+export function getInstallArgs(packageManager: PackageManager): string[] {
+  switch (packageManager) {
+    case 'npm':
+      return ['install', '--prefer-offline', '--no-audit', '--no-fund']
+    case 'pnpm':
+      return ['install', '--prefer-offline']
+    default:
+      return ['install']
+  }
+}
