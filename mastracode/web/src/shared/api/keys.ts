@@ -28,7 +28,9 @@ export const queryKeys = {
     ['github', 'repository-settings', githubProjectId ?? null] as const,
   linearStatus: () => ['linear', 'status'] as const,
   linearProjects: () => ['linear', 'projects'] as const,
-  linearIssues: () => ['linear', 'issues'] as const,
+  linearIssuesAll: () => ['linear', 'issues'] as const,
+  linearIssues: (githubProjectId: string | undefined) =>
+    [...queryKeys.linearIssuesAll(), githubProjectId ?? null] as const,
   intakeConfig: () => ['intake', 'config'] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
   factoryMetrics: (githubProjectId: string | undefined, days: number) =>

@@ -12,6 +12,7 @@ import { getGithubFeatureDiagnostics } from './github/config.js';
 import { getLinearFeatureDiagnostics } from './linear/config.js';
 import { buildFactoryRoutes } from './factory/routes.js';
 import { FactoryGithubEventService } from './factory/rules/github-service.js';
+import { FactoryLinearIssueService } from './factory/rules/linear-service.js';
 import type { FactoryBindingPreparationInput } from './factory/rules/dispatcher.js';
 import { FactoryStartCoordinator } from './factory/rules/start-coordinator.js';
 import { FactoryTransitionService } from './factory/rules/transition-service.js';
@@ -21,6 +22,7 @@ import type { GithubIntegration } from './github/integration.js';
 import { buildIntakeRoutes } from './intake/routes.js';
 import { buildOAuthRoutes } from './oauth-routes.js';
 import { getFactoryStorage, getSeededFactoryRules } from './runtime-config.js';
+import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import { registerSandboxReattach } from './sandbox-reattach-registration.js';
 import { buildSkillRoutes } from './skills/routes.js';
@@ -106,7 +108,11 @@ function guardIntegrationRoutes({
 export function factoryRuleBranch(item: FactoryBindingPreparationInput['item']): string {
   const metadata = item.metadata ?? {};
   const issueNumber = metadata.githubIssueNumber ?? metadata.number;
-  if (item.externalSource?.integrationId === 'github' && item.externalSource.type === 'issue' && typeof issueNumber === 'number') {
+  if (
+    item.externalSource?.integrationId === 'github' &&
+    item.externalSource.type === 'issue' &&
+    typeof issueNumber === 'number'
+  ) {
     return `factory/issue-${issueNumber}`;
   }
   const pullRequestNumber = metadata.githubPullRequestNumber ?? metadata.number;
@@ -242,6 +248,7 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
   const emitAudit: AuditEmitter['emit'] = args => deps.audit.emit(args);
   const registrations = deps.integrations ?? [];
   const githubRegistration = registrations.find(({ integration }) => integration.id === 'github');
+  const linearRegistration = registrations.find(({ integration }) => integration.id === 'linear');
   const githubStorage = githubRegistration ? deps.sourceControlStorage.forIntegration('github') : undefined;
   const githubIntegration = githubRegistration?.integration as GithubIntegration | undefined;
   const workItems = deps.factoryReady ? getFactoryStorage().getDomain<WorkItemsStorage>('work-items') : undefined;
@@ -251,6 +258,14 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
           github: githubIntegration,
           sourceControl: githubStorage,
           integrationStorage: deps.integrationStorage.forIntegration('github'),
+          storage: workItems,
+          rules: getSeededFactoryRules()!,
+        })
+      : undefined;
+  const linearIssueService =
+    linearRegistration && workItems
+      ? new FactoryLinearIssueService({
+          projects: getFactoryStorage().getDomain<FactoryProjectsStorage>('projects'),
           storage: workItems,
           rules: getSeededFactoryRules()!,
         })
@@ -293,6 +308,9 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
             }
           : {}),
       };
+    }
+    if (integration.id === 'linear' && linearIssueService) {
+      context.hooks = { ...context.hooks, ingestLinearIssues: input => linearIssueService.ingest(input) };
     }
     return guardIntegrationRoutes({ ...registration, routes: integration.routes(context) });
   });

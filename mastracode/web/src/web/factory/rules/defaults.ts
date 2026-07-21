@@ -5,6 +5,9 @@ import type {
   FactoryGithubRuleLeaf,
   FactoryGithubEventName,
   FactoryGithubRuleContext,
+  FactoryLinearEventName,
+  FactoryLinearRuleContext,
+  FactoryLinearRuleLeaf,
   FactoryRules,
   FactoryRulesOverrides,
   FactoryRuleSource,
@@ -32,6 +35,19 @@ function invokeIssueInvestigation(context: FactoryStageRuleContext) {
 
 function investigateTriagedIssue(context: FactoryStageRuleContext) {
   return invokeIssueInvestigation(context);
+}
+
+function investigateTriagedLinearIssue(context: FactoryStageRuleContext) {
+  const identifier = context.item.sourceKey?.startsWith('linear:')
+    ? context.item.sourceKey.slice('linear:'.length)
+    : context.item.title;
+  return {
+    type: 'invokeSkill',
+    idempotencyKey: `${context.ingress.id}:understand-linear-issue`,
+    role: 'triage',
+    skillName: 'understand-issue',
+    arguments: `Linear issue ${identifier}${context.item.url ? ` (${context.item.url})` : ''}`,
+  } as const;
 }
 
 function reviewPullRequest(context: FactoryStageRuleContext) {
@@ -120,8 +136,36 @@ function pullRequestMerged(context: FactoryGithubRuleContext) {
   } as const;
 }
 
+function linearIssueObserved(context: FactoryLinearRuleContext) {
+  if (context.item) return;
+  return {
+    type: 'upsertLinkedWorkItem',
+    idempotencyKey: `${context.ingress.id}:issue-triage`,
+    board: 'work',
+    source: 'linear-issue',
+    sourceKey: `linear:${context.issue.identifier}`,
+    title: `${context.issue.identifier}: ${context.issue.title}`,
+    url: context.issue.url,
+    stage: 'triage',
+    metadata: {
+      linearIssueId: context.issue.id,
+      linearIssueIdentifier: context.issue.identifier,
+      linearState: context.issue.state,
+      linearStateType: context.issue.stateType,
+      linearPriority: context.issue.priorityLabel,
+      linearAssignee: context.issue.assignee,
+      linearTeam: context.issue.team,
+    },
+  } as const;
+}
+
 const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
-  work: { triage: { issue: { onEnter: investigateTriagedIssue } } },
+  work: {
+    triage: {
+      issue: { onEnter: investigateTriagedIssue },
+      linearIssue: { onEnter: investigateTriagedLinearIssue },
+    },
+  },
   review: { review: { pullRequest: { onEnter: reviewPullRequest } } },
   tools: { submit_plan: { onResult: advanceApprovedPlan } },
   github: {
@@ -129,6 +173,7 @@ const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
     pullRequestOpened: { onEvent: pullRequestOpened },
     pullRequestMerged: { onEvent: pullRequestMerged },
   },
+  linear: { issueObserved: { onEvent: linearIssueObserved } },
 };
 
 function mergeBoardRules(
@@ -193,6 +238,23 @@ function mergeGithubRules(
   return result;
 }
 
+function mergeLinearRules(
+  base: FactoryRulesOverrides['linear'],
+  overrides: FactoryRulesOverrides['linear'],
+): NonNullable<FactoryRulesOverrides['linear']> {
+  const result: Partial<Record<FactoryLinearEventName, FactoryLinearRuleLeaf>> = {};
+  const events = new Set([...Object.keys(base ?? {}), ...Object.keys(overrides ?? {})]) as Set<FactoryLinearEventName>;
+  for (const event of events) {
+    const baseLeaf = base?.[event];
+    const overrideLeaf = overrides?.[event];
+    result[event] = {
+      ...(baseLeaf?.onEvent ? { onEvent: baseLeaf.onEvent } : {}),
+      ...(overrideLeaf && 'onEvent' in overrideLeaf ? { onEvent: overrideLeaf.onEvent } : {}),
+    };
+  }
+  return result;
+}
+
 export function mergeFactoryRuleOverrides(
   base: FactoryRulesOverrides,
   overrides: FactoryRulesOverrides = {},
@@ -202,6 +264,7 @@ export function mergeFactoryRuleOverrides(
     review: mergeBoardRules(base.review, overrides.review),
     tools: mergeToolRules(base.tools, overrides.tools),
     github: mergeGithubRules(base.github, overrides.github),
+    linear: mergeLinearRules(base.linear, overrides.linear),
   };
 }
 

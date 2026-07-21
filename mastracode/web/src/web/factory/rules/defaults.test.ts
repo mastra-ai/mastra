@@ -3,6 +3,7 @@ import { defaultFactoryRules, mergeFactoryRuleOverrides } from './defaults.js';
 import type {
   FactoryBoardRuleLeaf,
   FactoryGithubRuleContext,
+  FactoryLinearRuleContext,
   FactoryRulesOverrides,
   FactoryStageRuleContext,
   FactoryToolResultRuleContext,
@@ -85,6 +86,29 @@ function githubContext(event: FactoryGithubRuleContext['event']): FactoryGithubR
   };
 }
 
+function linearContext(): FactoryLinearRuleContext {
+  return {
+    ...base,
+    actor: { type: 'human', id: 'user-1' },
+    ingress: { type: 'linear', id: 'linear:issue-1:2026-07-02T00:00:00Z' },
+    event: 'issueObserved',
+    issue: {
+      id: 'issue-1',
+      identifier: 'ENG-42',
+      title: 'Fix intake sync',
+      url: 'https://linear.app/acme/issue/ENG-42',
+      state: 'Todo',
+      stateType: 'unstarted',
+      priorityLabel: 'High',
+      assignee: 'ada',
+      team: 'ENG',
+      labels: ['bug'],
+      createdAt: '2026-07-01T00:00:00Z',
+      updatedAt: '2026-07-02T00:00:00Z',
+    },
+  };
+}
+
 describe('defaultFactoryRules', () => {
   it('requires an explicit deployment version', () => {
     expect(() => defaultFactoryRules({ version: '' })).toThrow(/version is required/i);
@@ -101,6 +125,64 @@ describe('defaultFactoryRules', () => {
     expect(rules.github.issueOpened?.onEvent).toBeTypeOf('function');
     expect(rules.github.pullRequestOpened?.onEvent).toBeTypeOf('function');
     expect(rules.github.pullRequestMerged?.onEvent).toBeTypeOf('function');
+    expect(rules.linear.issueObserved?.onEvent).toBeTypeOf('function');
+    expect(rules.work.triage?.linearIssue?.onEnter).toBeTypeOf('function');
+  });
+
+  it('materializes observed Linear issues directly in Triage', async () => {
+    const rule = defaultFactoryRules({ version: 'deployment-7' }).linear.issueObserved?.onEvent;
+
+    expect(await rule?.(linearContext())).toMatchObject({
+      type: 'upsertLinkedWorkItem',
+      source: 'linear-issue',
+      sourceKey: 'linear:ENG-42',
+      title: 'ENG-42: Fix intake sync',
+      stage: 'triage',
+      metadata: { linearIssueId: 'issue-1', linearIssueIdentifier: 'ENG-42' },
+    });
+  });
+
+  it('does not move an existing Linear issue backward when polling observes an update', async () => {
+    const rule = defaultFactoryRules({ version: 'deployment-7' }).linear.issueObserved?.onEvent;
+
+    expect(
+      await rule?.({
+        ...linearContext(),
+        item: {
+          ...item,
+          source: 'linear-issue',
+          sourceKey: 'linear:ENG-42',
+          stages: ['execute'],
+        },
+        board: 'work',
+        itemRevision: 4,
+      }),
+    ).toBeUndefined();
+  });
+
+  it('starts Linear investigation when a human moves an issue into Triage', async () => {
+    const rule = defaultFactoryRules({ version: 'deployment-7' }).work.triage?.linearIssue?.onEnter;
+    const context = {
+      ...stageContext({ type: 'human', id: 'user-1' }, 'work'),
+      item: {
+        ...item,
+        source: 'linear-issue',
+        sourceKey: 'linear:ENG-42',
+        title: 'ENG-42: Fix intake sync',
+        url: 'https://linear.app/acme/issue/ENG-42',
+      },
+      source: 'linearIssue',
+      stage: 'triage',
+      fromStage: 'intake',
+      toStage: 'triage',
+    } as FactoryStageRuleContext;
+
+    expect(await rule?.(context)).toMatchObject({
+      type: 'invokeSkill',
+      role: 'triage',
+      skillName: 'understand-issue',
+      arguments: 'Linear issue ENG-42 (https://linear.app/acme/issue/ENG-42)',
+    });
   });
 
   it('starts the same investigation when a human moves an issue into Triage', async () => {
@@ -215,6 +297,7 @@ describe('defaultFactoryRules', () => {
     const reviewEnter = vi.fn(() => undefined);
     const toolResult = vi.fn(() => undefined);
     const githubEvent = vi.fn(() => undefined);
+    const linearEvent = vi.fn(() => undefined);
     const rules = defaultFactoryRules({
       version: 'deployment-8',
       overrides: {
@@ -222,6 +305,7 @@ describe('defaultFactoryRules', () => {
         review: { intake: { pullRequest: { onEnter: reviewEnter } } },
         tools: { submit_plan: { onResult: toolResult } },
         github: { pullRequestMerged: { onEvent: githubEvent } },
+        linear: { issueObserved: { onEvent: linearEvent } },
       },
     });
 
@@ -231,6 +315,7 @@ describe('defaultFactoryRules', () => {
     expect(rules.tools.submit_plan?.onResult).toBe(toolResult);
     expect(rules.github.pullRequestMerged?.onEvent).toBe(githubEvent);
     expect(rules.github.issueOpened?.onEvent).toBeTypeOf('function');
+    expect(rules.linear.issueObserved?.onEvent).toBe(linearEvent);
   });
 
   it('merges defaults and overrides at each exact handler leaf', () => {

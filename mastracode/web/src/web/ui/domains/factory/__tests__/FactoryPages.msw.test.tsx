@@ -186,14 +186,13 @@ function useAppHandlers(githubStatus: GithubStatus, options: AppHandlerOptions =
     http.get(`${TEST_BASE_URL}/auth/me`, () => new Response(null, { status: 404 })),
     http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(githubStatus)),
     http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions: [] })),
-    http.get(`${TEST_BASE_URL}/web/github/repositories/${GITHUB_PROJECT_ID}/worktrees`, () => {
+    http.get(`${TEST_BASE_URL}/web/github/projects/${PROJECT_REPOSITORY_ID}/worktrees`, () => {
       options.onWorktreesRequest?.();
       const factory = loadFactories().find(
-        candidate => candidate.binding.kind === 'github' && candidate.binding.githubProjectId === GITHUB_PROJECT_ID,
+        candidate => candidate.binding.kind === 'factory' && candidate.binding.factoryProjectId === FACTORY_PROJECT_ID,
       );
-      return HttpResponse.json({
-        worktrees: options.worktrees ?? (factory?.binding.kind === 'github' ? factory.binding.worktrees : []),
-      });
+      const repository = factory?.binding.kind === 'factory' ? factory.binding.repositories[0] : undefined;
+      return HttpResponse.json({ worktrees: options.worktrees ?? repository?.worktrees ?? [] });
     }),
     http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
       HttpResponse.json({ config: options.intakeConfig ?? defaultIntakeConfig }),
@@ -264,6 +263,7 @@ interface BoardState {
   deletes: string[];
   triageRequests: Array<{ number: number; body: unknown }>;
   issueRequests: Array<string | null>;
+  linearProjectRequests: Array<string | null>;
   decisionRetries: string[];
 }
 
@@ -290,6 +290,7 @@ function useBoardHandlers(options: BoardHandlerOptions = {}): BoardState {
     deletes: [],
     triageRequests: [],
     issueRequests: [],
+    linearProjectRequests: [],
     decisionRetries: [],
   };
   server.use(
@@ -311,9 +312,10 @@ function useBoardHandlers(options: BoardHandlerOptions = {}): BoardState {
     http.get(`${TEST_BASE_URL}/web/github/projects/${PROJECT_REPOSITORY_ID}/prs`, () =>
       HttpResponse.json({ pullRequests: options.pullRequests ?? [], nextPage: null }),
     ),
-    http.get(`${TEST_BASE_URL}/web/linear/issues`, () =>
-      HttpResponse.json({ issues: options.linearIssues ?? [], nextCursor: null }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/linear/issues`, ({ request }) => {
+      state.linearProjectRequests.push(new URL(request.url).searchParams.get('factoryProjectId'));
+      return HttpResponse.json({ issues: options.linearIssues ?? [], nextCursor: null });
+    }),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_PROJECT_ID}/work-items`, () =>
       HttpResponse.json({ workItems: state.items }),
     ),
@@ -875,8 +877,8 @@ describe('Factory Work and Review intake candidates', () => {
     expect(within(column('intake')).queryByText('Fix intake sync')).not.toBeInTheDocument();
   });
 
-  it('given Linear is connected and selected, when the Linear feed is picked, then Linear issues appear as candidates', async () => {
-    useBoardHandlers({ linearIssues });
+  it('given Linear is connected and selected, when the Linear feed is picked, then the active Factory project is ingested', async () => {
+    const state = useBoardHandlers({ linearIssues });
     renderAt('/factory/work', githubProject, connectedStatus, { linearStatus: linearConnectedStatus });
 
     const intake = await screen.findByTestId('board-column-intake');
@@ -884,6 +886,7 @@ describe('Factory Work and Review intake candidates', () => {
     await userEvent.click(within(sources).getByRole('button', { name: 'Linear' }));
     expect(await within(intake).findByText('Fix intake sync')).toBeInTheDocument();
     expect(within(intake).getByText(/ENG-42/)).toBeInTheDocument();
+    expect(state.linearProjectRequests).toContain(FACTORY_PROJECT_ID);
   });
 
   it('given the Linear feature is disabled, when the Board renders, then no Linear candidates or Linear feed pill appear', async () => {
@@ -1187,7 +1190,7 @@ describe('Factory Board — persisted cards', () => {
         }),
       ],
     });
-    const worktrees: NonNullable<Project['worktrees']> = [];
+    const worktrees: Worktree[] = [];
     const { router } = renderAt('/factory/work', githubProject, connectedStatus, { worktrees });
 
     const card = within(await screen.findByTestId('board-column-triage')).getByTestId('work-item-card');
@@ -1231,7 +1234,7 @@ describe('Factory Board — persisted cards', () => {
     await waitFor(() => {
       expect(worktreesRequested).toBe(true);
       const stored = loadFactories()[0];
-      expect(stored?.binding.kind === 'github' ? stored.binding.worktrees : undefined).toEqual([]);
+      expect(stored?.binding.kind === 'factory' ? stored.binding.repositories[0]?.worktrees : undefined).toEqual([]);
     });
     const card = within(await screen.findByTestId('board-column-triage')).getByTestId('work-item-card');
     expect(within(card).queryByRole('link', { name: /Stale local investigation/ })).not.toBeInTheDocument();

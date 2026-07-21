@@ -545,7 +545,7 @@ function BoardContent({
   const issues = useProjectIssuesQuery(activeIntakeSource === 'github' ? projectRepositoryId : undefined);
   const triageIssues = useProjectIssuesQuery(!review ? projectRepositoryId : undefined, AUTO_TRIAGED_LABEL);
   const pulls = useProjectPullRequestsQuery(activeIntakeSource === 'github-prs' ? projectRepositoryId : undefined);
-  const linearIssues = useLinearIssuesQuery(activeIntakeSource === 'linear');
+  const linearIssues = useLinearIssuesQuery(activeIntakeSource === 'linear' ? factoryProjectId : undefined);
 
   const upsert = useUpsertWorkItemMutation(factoryProjectId);
   const transition = useTransitionWorkItemMutation(factoryProjectId);
