@@ -571,6 +571,47 @@ describe('MastraCode message rendering', () => {
       expect(within(card).getByRole('button', { name: 'Postgres' })).toBeInTheDocument();
       expect(within(card).getByRole('button', { name: 'SQLite' })).toBeInTheDocument();
     });
+
+    it('does not render a provisional free-text input before the suspension payload arrives', async () => {
+      seedProject();
+      const stream = delayedSse({
+        type: 'tool_suspended',
+        toolCallId: 'ask-delayed',
+        toolName: 'ask_user',
+        args: {},
+        suspendPayload: { question: 'Which database?', options: [{ label: 'Postgres' }, { label: 'SQLite' }] },
+      });
+      useAgentControllerHandlers({
+        messages: [
+          dbMessage('assistant-ask-delayed', 'assistant', [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'ask-delayed',
+                toolName: 'ask_user',
+                args: { question: 'Which database?' },
+              },
+            },
+          ]),
+        ],
+      });
+      server.use(http.get(`${SESSION}/stream`, () => stream.response()));
+
+      renderChat();
+
+      await screen.findByRole('button', { name: 'Select factory' });
+      await new Promise(resolve => setTimeout(resolve, 100));
+      expect(screen.queryByPlaceholderText('Type your answer...')).not.toBeInTheDocument();
+      expect(screen.queryByRole('group', { name: 'Question from the agent' })).not.toBeInTheDocument();
+
+      await stream.emit();
+
+      const card = await screen.findByRole('group', { name: 'Question from the agent' });
+      expect(within(card).getByRole('radio', { name: 'Postgres' })).toBeInTheDocument();
+      expect(within(card).getByRole('radio', { name: 'SQLite' })).toBeInTheDocument();
+      expect(within(card).queryByRole('textbox')).not.toBeInTheDocument();
+    });
   });
 
   describe('when a subagent is delegated work', () => {

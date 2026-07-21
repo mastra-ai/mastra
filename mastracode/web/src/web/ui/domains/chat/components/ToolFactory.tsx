@@ -44,7 +44,7 @@ export function isTranscriptToolVisible(toolName: string) {
 
 function record(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
+    ? Object.fromEntries(Object.entries(value))
     : undefined;
 }
 
@@ -104,14 +104,16 @@ function ToolFactoryComponent({
   fallback,
 }: ToolFactoryProps) {
   if (toolName === 'ask_user') {
-    const payload = askUserPayload(input) ?? { question: 'Question from the agent' };
+    const payload = askUserPayload(input);
+    if (status === 'running' && (!payload || !onRespond)) return null;
+
     const resultContent = status !== 'running' ? askUserResultContent(output) : undefined;
     const result = resultContent ? { content: resultContent, isError: status === 'error' } : undefined;
     return (
       <AskUser
         role="group"
         aria-label="Question from the agent"
-        payload={payload}
+        payload={payload ?? { question: 'Question from the agent' }}
         {...(result ? { result } : {})}
         isSubmitting={isSubmitting}
         onSubmit={answer => onRespond?.(answer)}

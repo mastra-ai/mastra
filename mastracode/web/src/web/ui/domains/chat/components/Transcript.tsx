@@ -864,6 +864,7 @@ function MessageBubble({
       const runtime = entry.runtimeTools?.[part.toolInvocation.toolCallId];
       const tool = toolFromInvocationPart(part, runtime);
       const suspension = suspensions.get(tool.toolCallId);
+      if (tool.toolName === 'ask_user' && tool.status === 'running' && !suspension) return null;
       const groupPosition = toolGroupPositions.get(tool.toolCallId);
       return (
         <ToolFactory
@@ -872,12 +873,8 @@ function MessageBubble({
           input={suspension?.suspendPayload ?? tool.args}
           output={tool.result}
           status={suspension ? 'running' : tool.status}
-          onRespond={
-            suspension ? response => onRespond(tool.toolCallId, response, suspension.id) : undefined
-          }
-          fallback={() => (
-            <ToolCard tool={tool} forceExpanded={allExpanded} groupPosition={groupPosition} />
-          )}
+          onRespond={suspension ? response => onRespond(tool.toolCallId, response, suspension.id) : undefined}
+          fallback={() => <ToolCard tool={tool} forceExpanded={allExpanded} groupPosition={groupPosition} />}
         />
       );
     },
