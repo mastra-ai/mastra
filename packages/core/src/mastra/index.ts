@@ -676,6 +676,14 @@ export class Mastra<
   #workflows: TWorkflows;
   #harnesses: Record<string, Harness<any>> = {};
   #hiddenWorkflowKeys = new Set<string>();
+  /**
+   * Tracks how each registered workflow got here. `'code'` = registered via
+   * the constructor `workflows` map or a subsequent `addWorkflow()` call.
+   * `'stored'` = registered via `addStoredWorkflow()` (either at boot from
+   * persisted definitions or at runtime via the HTTP/SDK surface). Keyed by
+   * the same registry key as `#workflows`, and cleaned up in `removeWorkflow`.
+   */
+  #workflowOrigin = new Map<string, 'code' | 'stored'>();
   #observability: ObservabilityEntrypoint;
   #observabilityExplicit = false;
   #onScorerHook?: ReturnType<typeof createOnScorerHook>;
@@ -4328,6 +4336,7 @@ export class Mastra<
     if (workflows[keyOrId]) {
       delete workflows[keyOrId];
       this.#hiddenWorkflowKeys.delete(keyOrId);
+      this.#workflowOrigin.delete(keyOrId);
       return true;
     }
 
@@ -4336,10 +4345,29 @@ export class Mastra<
     if (key) {
       delete workflows[key];
       this.#hiddenWorkflowKeys.delete(key);
+      this.#workflowOrigin.delete(key);
       return true;
     }
 
     return false;
+  }
+
+  /**
+   * Returns how a workflow was registered — `'code'` for statically declared
+   * or `addWorkflow()`-added workflows, `'stored'` for anything added via
+   * `addStoredWorkflow()` (either at boot or through the HTTP/SDK surface).
+   * Returns `undefined` if no workflow is registered under that key/id.
+   *
+   * Used by the HTTP layer to surface a visual distinction (e.g. a "Stored"
+   * badge in Studio) between authored-in-code and dynamically added workflows.
+   */
+  public getWorkflowOrigin(keyOrId: string): 'code' | 'stored' | undefined {
+    if (this.#workflowOrigin.has(keyOrId)) {
+      return this.#workflowOrigin.get(keyOrId);
+    }
+    const workflows = this.#workflows as Record<string, AnyWorkflow>;
+    const key = Object.keys(workflows).find(k => workflows[k]?.id === keyOrId);
+    return key ? this.#workflowOrigin.get(key) : undefined;
   }
 
   /**
@@ -4390,6 +4418,12 @@ export class Mastra<
       workflow.commit();
     }
     workflows[workflowKey] = workflow;
+
+    // Default to 'code' origin. `addStoredWorkflow` pre-stamps 'stored' before
+    // delegating here, so don't clobber an existing entry.
+    if (!this.#workflowOrigin.has(workflowKey)) {
+      this.#workflowOrigin.set(workflowKey, 'code');
+    }
 
     this.registerStaticWorkflowScorers(workflow);
 
@@ -4449,6 +4483,9 @@ export class Mastra<
     // existing live registration so re-saves surface immediately instead of
     // being silently no-op'd by addWorkflow's first-write-wins guard.
     this.removeWorkflow(def.id);
+    // Pre-stamp origin as 'stored' so `addWorkflow`'s default-to-'code' guard
+    // doesn't overwrite it. Registry key === def.id for stored workflows.
+    this.#workflowOrigin.set(def.id, 'stored');
     this.addWorkflow(workflow as AnyWorkflow, def.id);
 
     const store = await this.#storage?.getStore('workflowDefinitions');

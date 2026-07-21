@@ -9318,6 +9318,7 @@ export type GetWorkflows_Response = {
     stateSchema?: string | undefined;
     options?: {} | undefined;
     isProcessorWorkflow?: boolean | undefined;
+    origin?: ('code' | 'stored') | undefined;
   };
 };
 
@@ -9411,6 +9412,7 @@ export type GetWorkflowsWorkflowId_Response = {
   stateSchema?: string | undefined;
   options?: {} | undefined;
   isProcessorWorkflow?: boolean | undefined;
+  origin?: ('code' | 'stored') | undefined;
 };
 
 export type GetWorkflowsWorkflowId_Request = Simplify<
@@ -79932,6 +79934,58 @@ export interface GetStoredWorkflows_RouteContract {
 // ============================================================================
 // Route: POST /stored/workflows
 // ============================================================================
+type PostStoredWorkflows_Body_Auxiliary_26 =
+  | {
+      op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
+      left:
+        | {
+            path: string;
+          }
+        | {
+            literal: string | number | boolean | null;
+          };
+      right:
+        | {
+            path: string;
+          }
+        | {
+            literal: string | number | boolean | null;
+          };
+    }
+  | {
+      op: 'in' | 'notIn';
+      value:
+        | {
+            path: string;
+          }
+        | {
+            literal: string | number | boolean | null;
+          };
+      set: (string | number | boolean | null)[];
+    }
+  | {
+      op: 'exists' | 'notExists';
+      path: string;
+    }
+  | {
+      op: 'truthy' | 'falsy';
+      value:
+        | {
+            path: string;
+          }
+        | {
+            literal: string | number | boolean | null;
+          };
+    }
+  | {
+      op: 'and' | 'or';
+      args: PostStoredWorkflows_Body_Auxiliary_26[];
+    }
+  | {
+      op: 'not';
+      arg: PostStoredWorkflows_Body_Auxiliary_26;
+    };
+
 export type PostStoredWorkflows_Body = {
   /** Workflow id — kebab-case, descriptive */
   id: string;
@@ -79947,8 +80001,220 @@ export type PostStoredWorkflows_Body = {
   outputSchema: any;
   stateSchema?: any | undefined;
   requestContextSchema?: any | undefined;
-  /** Static workflow graph — SerializedStepFlowEntry[] with all refs as ids */
-  graph: any[];
+  /** Static workflow graph — ordered array of serialized step entries with all refs as ids. */
+  graph: (
+    | {
+        type: 'agent';
+        id: string;
+        agentId: string;
+        outputSchema?: any | undefined;
+        options?:
+          | {
+              retries?: number | undefined;
+              metadata?:
+                | {
+                    [key: string]: any;
+                  }
+                | undefined;
+            }
+          | undefined;
+      }
+    | {
+        type: 'tool';
+        id: string;
+        toolId: string;
+        options?:
+          | {
+              retries?: number | undefined;
+              metadata?:
+                | {
+                    [key: string]: any;
+                  }
+                | undefined;
+            }
+          | undefined;
+      }
+    | {
+        type: 'mapping';
+        id: string;
+        mapConfig: string;
+      }
+    | {
+        type: 'parallel';
+        steps: (
+          | {
+              type: 'agent';
+              id: string;
+              agentId: string;
+              outputSchema?: any | undefined;
+              options?:
+                | {
+                    retries?: number | undefined;
+                    metadata?:
+                      | {
+                          [key: string]: any;
+                        }
+                      | undefined;
+                  }
+                | undefined;
+            }
+          | {
+              type: 'tool';
+              id: string;
+              toolId: string;
+              options?:
+                | {
+                    retries?: number | undefined;
+                    metadata?:
+                      | {
+                          [key: string]: any;
+                        }
+                      | undefined;
+                  }
+                | undefined;
+            }
+          | {
+              type: 'mapping';
+              id: string;
+              mapConfig: string;
+            }
+        )[];
+      }
+    | {
+        type: 'foreach';
+        step:
+          | {
+              type: 'agent';
+              id: string;
+              agentId: string;
+              outputSchema?: any | undefined;
+              options?:
+                | {
+                    retries?: number | undefined;
+                    metadata?:
+                      | {
+                          [key: string]: any;
+                        }
+                      | undefined;
+                  }
+                | undefined;
+            }
+          | {
+              type: 'tool';
+              id: string;
+              toolId: string;
+              options?:
+                | {
+                    retries?: number | undefined;
+                    metadata?:
+                      | {
+                          [key: string]: any;
+                        }
+                      | undefined;
+                  }
+                | undefined;
+            };
+        opts?:
+          | {
+              concurrency: number;
+            }
+          | undefined;
+      }
+    | {
+        type: 'sleep';
+        id: string;
+        duration: number;
+      }
+    | {
+        type: 'sleepUntil';
+        id: string;
+        date: string;
+      }
+    | {
+        type: 'conditional';
+        steps: (
+          | {
+              type: 'agent';
+              id: string;
+              agentId: string;
+              outputSchema?: any | undefined;
+              options?:
+                | {
+                    retries?: number | undefined;
+                    metadata?:
+                      | {
+                          [key: string]: any;
+                        }
+                      | undefined;
+                  }
+                | undefined;
+            }
+          | {
+              type: 'tool';
+              id: string;
+              toolId: string;
+              options?:
+                | {
+                    retries?: number | undefined;
+                    metadata?:
+                      | {
+                          [key: string]: any;
+                        }
+                      | undefined;
+                  }
+                | undefined;
+            }
+          | {
+              type: 'mapping';
+              id: string;
+              mapConfig: string;
+            }
+        )[];
+        predicates: PostStoredWorkflows_Body_Auxiliary_26[];
+      }
+    | {
+        type: 'loop';
+        step:
+          | {
+              type: 'agent';
+              id: string;
+              agentId: string;
+              outputSchema?: any | undefined;
+              options?:
+                | {
+                    retries?: number | undefined;
+                    metadata?:
+                      | {
+                          [key: string]: any;
+                        }
+                      | undefined;
+                  }
+                | undefined;
+            }
+          | {
+              type: 'tool';
+              id: string;
+              toolId: string;
+              options?:
+                | {
+                    retries?: number | undefined;
+                    metadata?:
+                      | {
+                          [key: string]: any;
+                        }
+                      | undefined;
+                  }
+                | undefined;
+            }
+          | {
+              type: 'mapping';
+              id: string;
+              mapConfig: string;
+            };
+        loopType: 'dowhile' | 'dountil';
+        predicate: PostStoredWorkflows_Body_Auxiliary_26;
+      }
+  )[];
 };
 
 export type PostStoredWorkflows_Response = {
@@ -89325,6 +89591,7 @@ export type GetAgentBuilder_Response = {
     stateSchema?: string | undefined;
     options?: {} | undefined;
     isProcessorWorkflow?: boolean | undefined;
+    origin?: ('code' | 'stored') | undefined;
   };
 };
 
@@ -89414,6 +89681,7 @@ export type GetAgentBuilderActionId_Response = {
   stateSchema?: string | undefined;
   options?: {} | undefined;
   isProcessorWorkflow?: boolean | undefined;
+  origin?: ('code' | 'stored') | undefined;
 };
 
 export type GetAgentBuilderActionId_Request = Simplify<

@@ -108,7 +108,7 @@ export const LIST_WORKFLOWS_ROUTE = createRoute({
       const workflows = mastra.listWorkflows({ serialized: false });
       const isPartial = partial === 'true';
       const _workflows = Object.entries(workflows).reduce<Record<string, WorkflowInfo>>((acc, [key, workflow]) => {
-        acc[key] = getWorkflowInfo(workflow as any, isPartial);
+        acc[key] = getWorkflowInfo(workflow as any, isPartial, mastra.getWorkflowOrigin?.(key));
         return acc;
       }, {});
 
@@ -157,7 +157,7 @@ export const GET_WORKFLOW_BY_ID_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Workflow ID is required' });
       }
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
-      return getWorkflowInfo(workflow);
+      return getWorkflowInfo(workflow, false, mastra.getWorkflowOrigin?.(workflowId));
     } catch (error) {
       return handleError(error, 'Error getting workflow');
     }

@@ -526,6 +526,15 @@ export type WorkflowInfo = {
   stepCount?: number;
   /** Whether this workflow is a processor workflow (auto-generated from agent processors) */
   isProcessorWorkflow?: boolean;
+  /**
+   * How this workflow got into the live registry. `'code'` for statically
+   * authored / `addWorkflow()`-added workflows, `'stored'` for anything
+   * hydrated or added via `addStoredWorkflow()` (HTTP or SDK).
+   *
+   * Optional so external consumers of `WorkflowInfo` don't break; the server
+   * populates it via `mastra.getWorkflowOrigin(key)` at response-build time.
+   */
+  origin?: 'code' | 'stored';
 };
 
 export type DefaultEngineType = {};
