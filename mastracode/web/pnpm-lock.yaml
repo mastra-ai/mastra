@@ -41,6 +41,9 @@ importers:
       '@mastra/pg':
         specifier: link:../../stores/pg
         version: link:../../stores/pg
+      '@mastra/platform-workspace':
+        specifier: link:../../workspaces/platform-workspace
+        version: link:../../workspaces/platform-workspace
       '@mastra/playground-ui':
         specifier: link:../../packages/playground-ui
         version: link:../../packages/playground-ui
