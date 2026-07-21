@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Link } from '../../lib/link';
 import { useThemeEntities } from './hooks';
 import { SankeySignals } from './sankey-signals';
+import { SignalsErrorState } from './signals-error-state';
 import { SignalsLoadingSkeleton } from './signals-loading-skeleton';
 import type { ThemeLearningEntity, TraceSignalName } from './types';
 
@@ -24,7 +25,7 @@ function AgentSelector({
   onEntityChange: (entityId: string) => void;
 }) {
   return (
-    <div className="flex items-center gap-3 px-6 pt-6">
+    <div className="flex items-center gap-3 px-4 pt-4 lg:px-6 lg:pt-6">
       <label className="text-xs font-medium text-neutral4" htmlFor="signals-agent-selector">
         Agent
       </label>
@@ -53,7 +54,7 @@ export function SignalsOverviewPage() {
   }
 
   if (entitiesQuery.isError) {
-    return <p>Unable to load signal entities.</p>;
+    return <SignalsErrorState message="Unable to load signal entities." onRetry={() => void entitiesQuery.refetch()} />;
   }
 
   const entities = entitiesQuery.data?.entities ?? [];
@@ -72,7 +73,7 @@ export function SignalsOverviewPage() {
         <SankeySignals key={entity.entityId} entityId={entity.entityId} entityType="agent" signalNames={signalNames} />
       ) : (
         <section
-          className="m-6 rounded-lg border border-border1 bg-surface2 p-6"
+          className="m-4 rounded-lg border border-border1 bg-surface2 p-6 lg:m-6"
           aria-labelledby="signals-data-heading"
         >
           <h1 className="text-lg font-semibold text-neutral6" id="signals-data-heading">

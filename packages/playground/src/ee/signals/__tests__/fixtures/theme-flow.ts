@@ -45,6 +45,20 @@ export const themeSnapshotsResponse: ThemeSnapshotsResponse = {
   ],
 };
 
+export const sameDayThemeSnapshotsResponse: ThemeSnapshotsResponse = {
+  snapshots: [
+    {
+      snapshotId: 'snapshot-same-day',
+      ordinal: 4,
+      total: 4,
+      startedAt: '2026-07-15T08:00:00.000Z',
+      endedAt: '2026-07-15T09:00:00.000Z',
+      traceCount: 50,
+      availableSignals: ['goal', 'outcome'],
+    },
+  ],
+};
+
 export const multiThemeSnapshotsResponse: ThemeSnapshotsResponse = {
   snapshots: [
     {

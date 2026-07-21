@@ -24,6 +24,7 @@ export function SankeyChart({
   const { graph, enabledColumns, hueMap } = useSankeyRenderContext();
   const [hoveredSourceName, setHoveredSourceName] = useState<string>();
   const firstColumnId = enabledColumns[0]?.id;
+  const lastColumnId = enabledColumns.at(-1)?.id;
   const total = graph.links.reduce(
     (sum, link) => (link.sourceNode.column.id === firstColumnId ? sum + link.value : sum),
     0,
@@ -63,6 +64,8 @@ export function SankeyChart({
                     label={node?.label}
                     total={total}
                     showColumnLabel={showColumnLabel}
+                    isFirstColumn={node?.column.id === firstColumnId}
+                    isLastColumn={node?.column.id === lastColumnId}
                     onHoverChange={setHoveredSourceName}
                   />
                 );
@@ -117,6 +120,8 @@ type SankeyNodeProps = SankeyNodeRendererProps & {
   label?: string;
   total: number;
   showColumnLabel: boolean;
+  isFirstColumn: boolean;
+  isLastColumn: boolean;
   onHoverChange: (sourceName: string | undefined) => void;
 };
 
@@ -131,19 +136,32 @@ function SankeyNode({
   label,
   total,
   showColumnLabel,
+  isFirstColumn,
+  isLastColumn,
   onHoverChange,
 }: SankeyNodeProps) {
   const name = typeof payload.name === 'string' || typeof payload.name === 'number' ? String(payload.name) : '';
   const displayLabel = label ?? name;
+  const visibleLabel = truncateNodeLabel(displayLabel);
   const numericValue = typeof payload.value === 'number' ? payload.value : Number(payload.value);
   const value = Number.isFinite(numericValue) ? String(numericValue) : '';
   const percentage = total > 0 && Number.isFinite(numericValue) ? Math.round((numericValue / total) * 100) : 0;
-  const labelX = x + width / 2;
+  const isTruncated = visibleLabel !== displayLabel;
+  const textAnchor = isTruncated && isFirstColumn ? 'start' : isTruncated && isLastColumn ? 'end' : 'middle';
+  const labelX = isTruncated && isFirstColumn ? x : isTruncated && isLastColumn ? x + width : x + width / 2;
   const columnLabelX = x + width / 2;
   const hue = hueMap[name] ?? 0;
 
   return (
-    <g onMouseEnter={() => onHoverChange(name)} onMouseLeave={() => onHoverChange(undefined)}>
+    <g
+      aria-label={`${displayLabel}: ${value} ${numericValue === 1 ? 'trace' : 'traces'} (${percentage}%)`}
+      onFocus={() => onHoverChange(name)}
+      onBlur={() => onHoverChange(undefined)}
+      onMouseEnter={() => onHoverChange(name)}
+      onMouseLeave={() => onHoverChange(undefined)}
+      tabIndex={0}
+    >
+      <title>{displayLabel}</title>
       {showColumnLabel && columnLabel ? (
         <text x={columnLabelX} y={18} textAnchor="middle" fill={nodeColor(hue)} fontSize={12} fontWeight={600}>
           {columnLabel}
@@ -153,18 +171,24 @@ function SankeyNode({
       <text
         x={labelX}
         y={y - 24}
-        textAnchor="middle"
+        textAnchor={textAnchor}
         fill={Colors.neutral5}
         fontSize={11}
         fontFamily="var(--font-mono)"
       >
-        {displayLabel}
+        {visibleLabel}
       </text>
-      <text x={labelX} y={y - 8} textAnchor="middle" fill={Colors.neutral3} fontSize={9.5}>
+      <text x={labelX} y={y - 8} textAnchor={textAnchor} fill={Colors.neutral3} fontSize={9.5}>
         {value} ({percentage}%)
       </text>
     </g>
   );
+}
+
+function truncateNodeLabel(label: string) {
+  const maximumLength = 23;
+  if (label.length <= maximumLength) return label;
+  return `${label.slice(0, maximumLength - 1).trimEnd()}…`;
 }
 
 type SankeyLinkProps = SankeyLinkRendererProps & {

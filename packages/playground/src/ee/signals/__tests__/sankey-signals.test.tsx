@@ -14,6 +14,7 @@ import {
   fourStageThemeFlowResponse,
   inconsistentTraceCountThemeFlowResponse,
   multiThemeSnapshotsResponse,
+  sameDayThemeSnapshotsResponse,
   singleStageThemeFlowResponse,
   themeFlowResponse,
   themeSnapshotsResponse,
@@ -96,6 +97,32 @@ describe('SankeySignals', () => {
       renderSankeySignals();
 
       expect(await screen.findByRole('status', { name: 'Loading signal analysis' })).not.toBeNull();
+      expect(screen.getByTestId('signals-loading-skeleton')).not.toBeNull();
+    });
+  });
+
+  describe('when the flow request fails once', () => {
+    it('retries the failed request and renders the analysis', async () => {
+      let attempts = 0;
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(themeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () => {
+          attempts += 1;
+          return attempts === 1
+            ? HttpResponse.json({ error: 'Flow unavailable' }, { status: 500 })
+            : HttpResponse.json(themeFlowResponse);
+        }),
+      );
+
+      renderSankeySignals();
+
+      expect(await screen.findByText('Unable to load signal flow.')).not.toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+      expect(await screen.findByRole('region', { name: 'Signal theme flow' })).not.toBeNull();
+      expect(attempts).toBe(2);
     });
   });
 
@@ -160,15 +187,13 @@ describe('SankeySignals', () => {
       );
     });
 
-    it('renders the reference page identity and detached documentation action', async () => {
+    it('renders the page identity without duplicating the shell documentation action', async () => {
       renderSankeySignals();
 
       expect(await screen.findByText('SIGNALS')).not.toBeNull();
       expect(screen.getByRole('heading', { name: 'Understand what drives every agent interaction' })).not.toBeNull();
       expect(screen.getByText(/Signals group recurring patterns across traces/)).not.toBeNull();
-      expect(screen.getByRole('link', { name: 'Signals documentation' }).getAttribute('href')).toBe(
-        'https://mastra.ai/en/docs/observability/tracing/overview',
-      );
+      expect(screen.queryByRole('link', { name: 'Signals documentation' })).toBeNull();
     });
 
     it('shows exactly three metrics derived from the loaded flow', async () => {
@@ -213,6 +238,15 @@ describe('SankeySignals', () => {
       ).toEqual(['Goal', 'Outcome', 'Behavior', 'Sentiment']);
     });
 
+    it('renders signal distributions before the flow chart', async () => {
+      renderSankeySignals();
+
+      const distributions = await screen.findByRole('region', { name: 'Signal distributions' });
+      const flow = screen.getByRole('region', { name: 'Signal theme flow' });
+
+      expect(distributions.compareDocumentPosition(flow) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    });
+
     it('summarizes each signal with one stacked bar and compact theme rows', async () => {
       renderSankeySignals();
 
@@ -235,13 +269,29 @@ describe('SankeySignals', () => {
       expect(within(sentiment).getByText('29 · 58%')).not.toBeNull();
     });
 
-    it('scopes horizontal overflow to the analytical region', async () => {
+    it('does not force the analysis into a separate horizontal scroll region', async () => {
       renderSankeySignals();
 
-      const analysis = await screen.findByTestId('signals-analysis-scroll');
-      expect(analysis.getAttribute('data-scroll-container')).toBe('horizontal');
-      expect(within(analysis).getByTestId('signals-analysis-canvas').getAttribute('data-min-width')).toBe('920');
-      expect(screen.getByTestId('signals-page-header').closest('[data-scroll-container]')).toBeNull();
+      await screen.findByTestId('signals-page-header');
+      expect(screen.queryByTestId('signals-analysis-scroll')).toBeNull();
+      expect(screen.queryByTestId('signals-analysis-canvas')).toBeNull();
+    });
+  });
+
+  describe('when a snapshot starts and ends on the same day', () => {
+    it('shows the calendar date once', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(sameDayThemeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
+          HttpResponse.json({ ...themeFlowResponse, snapshot: sameDayThemeSnapshotsResponse.snapshots[0] }),
+        ),
+      );
+
+      renderSankeySignals();
+
+      expect(await screen.findByText('Snapshot 4/4 · Jul 15, 2026 · 50 traces')).not.toBeNull();
     });
   });
 
@@ -377,7 +427,7 @@ describe('SankeySignals', () => {
       renderSankeySignals();
 
       const chart = await screen.findByRole('region', { name: 'Signal theme flow' });
-      expect(within(chart).getAllByText('Shared theme label')).toHaveLength(2);
+      expect(within(chart).getAllByText('Shared theme label', { selector: 'text' })).toHaveLength(2);
       expect(within(chart).getByText('20 (40%)')).not.toBeNull();
       expect(within(chart).getByText('30 (60%)')).not.toBeNull();
     });

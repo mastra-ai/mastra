@@ -6,6 +6,7 @@ import type { ThemeFlowResponse, ThemeNode, TraceSignalName } from './types';
 export interface SignalGraphNodeSummary {
   nodeId: string;
   label: string;
+  description?: string;
   traceCount: number;
   stageShare: number;
 }
@@ -91,6 +92,7 @@ export function buildSignalGraphSummary(flow: ThemeFlowResponse): {
         {
           nodeId: node.nodeId,
           label: node.label,
+          description: node.description,
           traceCount,
           stageShare: analyzedTraceCount > 0 ? traceCount / analyzedTraceCount : 0,
         },

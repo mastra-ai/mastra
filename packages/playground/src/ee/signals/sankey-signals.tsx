@@ -4,18 +4,17 @@ import { nodeColor, Sankey, SankeyChart } from '@mastra/playground-ui/components
 import type { SankeyChartColumn, SankeyChartRecord } from '@mastra/playground-ui/components/SankeyChart';
 import { Slider } from '@mastra/playground-ui/components/Slider';
 import { getSignalHue, SignalsOverviewPage as SignalsEmptyState } from '@mastra/playground-ui/ee/signals';
-import { ExternalLink, Pause, Play } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Pause, Play } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 import { useThemeFlow } from './hooks/use-theme-flow';
 import { useThemeSnapshots } from './hooks/use-theme-snapshots';
 import { buildSignalGraphSummary, getSignalRecordNodeId, getSignalRecordNodeLabel } from './sankey-signals-data';
 import type { SignalGraphNodeSummary, SignalGraphStageSummary } from './sankey-signals-data';
+import { SignalsErrorState } from './signals-error-state';
+import { SignalsLoadingSkeleton } from './signals-loading-skeleton';
 import type { ThemeSnapshot, TraceSignalName } from './types';
 import { Link } from '@/lib/link';
-
-const SIGNAL_ORDER: TraceSignalName[] = ['goal', 'outcome', 'behavior', 'sentiment'];
-const SIGNAL_DOCS_URL = 'https://mastra.ai/en/docs/observability/tracing/overview';
 
 export interface SankeySignalsProps {
   entityId: string;
@@ -40,7 +39,9 @@ function formatSnapshotWindow(startedAt: string, endedAt: string) {
   const year = new Intl.DateTimeFormat('en-US', { year: 'numeric', timeZone: 'UTC' });
   const sameYear = start.getUTCFullYear() === end.getUTCFullYear();
   const sameMonth = sameYear && start.getUTCMonth() === end.getUTCMonth();
+  const sameDay = sameMonth && start.getUTCDate() === end.getUTCDate();
 
+  if (sameDay) return `${monthDay.format(start)}, ${year.format(start)}`;
   if (sameMonth) return `${monthDay.format(start)}–${day.format(end)}, ${year.format(end)}`;
   if (sameYear) return `${monthDay.format(start)}–${monthDay.format(end)}, ${year.format(end)}`;
   return `${monthDay.format(start)}, ${year.format(start)}–${monthDay.format(end)}, ${year.format(end)}`;
@@ -66,7 +67,7 @@ function SnapshotTimeline({
   return (
     <section
       aria-label="Snapshot timeline"
-      className="flex items-center gap-3 rounded-lg border border-border1 bg-surface2 px-4 py-3"
+      className="flex flex-wrap items-center gap-3 rounded-lg border border-border1 bg-surface2 px-3 py-2.5 sm:px-4"
     >
       <Button
         aria-label={isPlaying ? 'Pause snapshots' : 'Play snapshots'}
@@ -89,7 +90,7 @@ function SnapshotTimeline({
         step={1}
         value={[selectedIndex]}
       />
-      <p className="min-w-72 text-right font-mono text-xs tabular-nums text-neutral4">
+      <p className="w-full text-left font-mono text-xs tabular-nums text-neutral4 md:w-auto md:min-w-72 md:text-right">
         Snapshot {snapshot.ordinal}/{snapshot.total} · {formatSnapshotWindow(snapshot.startedAt, snapshot.endedAt)} ·{' '}
         {traceLabel(snapshot.traceCount)}
       </p>
@@ -139,7 +140,13 @@ function SignalDistribution({
         <ul className="space-y-2.5">
           {nodes.length > 0 ? (
             nodes.map((node, index) => (
-              <li key={node.nodeId} className="flex min-w-0 items-center justify-between gap-3 text-xs">
+              <li
+                key={node.nodeId}
+                aria-label={node.description ? `${node.label}. ${node.description}` : node.label}
+                className="flex min-w-0 items-center justify-between gap-3 rounded-xs text-xs focus-visible:outline-2 focus-visible:outline-offset-2"
+                tabIndex={0}
+                title={node.description ? `${node.label}\n${node.description}` : node.label}
+              >
                 <span className="flex min-w-0 items-center gap-2 text-neutral5">
                   <span
                     aria-hidden="true"
@@ -166,18 +173,15 @@ function SignalDistribution({
 
 function SignalDistributions({ stages }: { stages: SignalGraphStageSummary[] }) {
   return (
-    <section aria-label="Signal distributions" className="grid grid-cols-4 gap-3">
-      {SIGNAL_ORDER.map(signalName => {
-        const stage = stages.find(currentStage => currentStage.signalName === signalName);
-        return (
-          <SignalDistribution
-            key={signalName}
-            signalName={signalName}
-            traceCount={stage?.traceCount ?? 0}
-            nodes={stage?.nodes ?? []}
-          />
-        );
-      })}
+    <section aria-label="Signal distributions" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {stages.map(stage => (
+        <SignalDistribution
+          key={stage.signalName}
+          signalName={stage.signalName}
+          traceCount={stage.traceCount}
+          nodes={stage.nodes}
+        />
+      ))}
     </section>
   );
 }
@@ -203,8 +207,8 @@ function FlowCard({
   });
 
   return (
-    <Card aria-label="Signal theme flow" as="section" className="overflow-hidden" elevation="elevated">
-      <CardContent className="px-0 py-4">
+    <Card aria-label="Signal theme flow" as="section" className="min-w-0 overflow-hidden" elevation="elevated">
+      <CardContent className="px-0 py-2 sm:py-3">
         <Sankey
           data={records}
           columns={chartColumns}
@@ -213,17 +217,20 @@ function FlowCard({
           getRecordNodeLabel={getSignalRecordNodeLabel}
           getRecordWeight={record => Number(record.traceCount)}
         >
-          <SankeyChart height={height ?? 680} margin={{ top: 64, right: 160, bottom: 48, left: 160 }} />
+          <SankeyChart
+            height={height ?? 'clamp(340px, 42vw, 460px)'}
+            margin={{ top: 64, right: 32, bottom: 24, left: 32 }}
+          />
         </Sankey>
       </CardContent>
-      <CardFooter className="flex justify-between gap-6 border-t border-border1 bg-surface2 px-4 py-3">
+      <CardFooter className="flex flex-wrap justify-between gap-3 border-t border-border1 bg-surface2 px-4 py-3">
         <div className="flex flex-wrap items-center gap-x-5 gap-y-1 font-mono text-[10px] tracking-wider text-neutral3">
           <span>RIBBON WIDTH = TRACE COUNT</span>
           <span>HOVER OR FOCUS TO ISOLATE FLOW</span>
         </div>
         <ul
           aria-label="Signal stage legend"
-          className="flex shrink-0 items-center gap-4 text-xs text-neutral3"
+          className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-neutral3"
           data-alignment="right"
         >
           {stages.map(stage => (
@@ -245,42 +252,35 @@ function FlowCard({
 
 export function SankeySignals({ entityId, entityType = 'agent', signalNames, height }: SankeySignalsProps) {
   const snapshotsQuery = useThemeSnapshots(entityId, entityType, signalNames);
-  const snapshots = useMemo(
-    () => [...(snapshotsQuery.data?.snapshots ?? [])].sort((left, right) => left.ordinal - right.ordinal),
-    [snapshotsQuery.data?.snapshots],
-  );
+  const snapshots = [...(snapshotsQuery.data?.snapshots ?? [])].sort((left, right) => left.ordinal - right.ordinal);
   const [selectedSnapshotId, setSelectedSnapshotId] = useState<string>();
   const [isPlaying, setIsPlaying] = useState(false);
   const matchedSnapshotIndex = snapshots.findIndex(snapshot => snapshot.snapshotId === selectedSnapshotId);
   const selectedSnapshotIndex = matchedSnapshotIndex >= 0 ? matchedSnapshotIndex : snapshots.length - 1;
   const snapshot = snapshots[selectedSnapshotIndex];
-  const selectSnapshot = useCallback(
-    (index: number) => setSelectedSnapshotId(snapshots[index]?.snapshotId),
-    [snapshots],
-  );
+  const selectSnapshot = (index: number) => setSelectedSnapshotId(snapshots[index]?.snapshotId);
+
+  const nextSnapshotId = snapshots[(selectedSnapshotIndex + 1) % snapshots.length]?.snapshotId;
 
   useEffect(() => {
     if (!isPlaying || snapshots.length < 2) return;
-    const timer = window.setInterval(() => selectSnapshot((selectedSnapshotIndex + 1) % snapshots.length), 900);
+    const timer = window.setInterval(() => setSelectedSnapshotId(nextSnapshotId), 900);
     return () => window.clearInterval(timer);
-  }, [isPlaying, selectSnapshot, selectedSnapshotIndex, snapshots.length]);
+  }, [isPlaying, nextSnapshotId, snapshots.length]);
 
   const flowQuery = useThemeFlow(entityId, entityType, signalNames, snapshot?.snapshotId);
 
   if (snapshotsQuery.isPending || (snapshot && flowQuery.isPending)) {
-    return (
-      <section
-        aria-label="Loading signal analysis"
-        className="flex h-[640px] items-center justify-center"
-        role="status"
-      >
-        <div className="size-8 animate-spin rounded-full border-2 border-border1 border-t-accent1" />
-      </section>
-    );
+    return <SignalsLoadingSkeleton />;
   }
 
   if (snapshotsQuery.isError || flowQuery.isError) {
-    return <div className="p-6 text-sm text-red-500">Unable to load signal flow.</div>;
+    return (
+      <SignalsErrorState
+        message="Unable to load signal flow."
+        onRetry={() => void Promise.all([snapshotsQuery.refetch(), flowQuery.refetch()])}
+      />
+    );
   }
 
   const flow = flowQuery.data;
@@ -299,39 +299,30 @@ export function SankeySignals({ entityId, entityType = 'agent', signalNames, hei
   const themeCount = stages.reduce((total, stage) => total + stage.nodes.length, 0);
 
   return (
-    <main className="space-y-7 p-6">
-      <header className="flex items-start justify-between gap-8" data-testid="signals-page-header">
-        <div className="max-w-2xl">
-          <div className="flex items-center gap-2 font-mono text-xs font-semibold tracking-widest text-neutral4">
-            <span aria-hidden="true" className="size-2 rounded-full bg-accent1" />
-            SIGNALS
-          </div>
-          <h1 className="mt-3 text-2xl font-semibold text-neutral6">Understand what drives every agent interaction</h1>
-          <p className="mt-2 text-sm leading-6 text-neutral3">
-            Signals group recurring patterns across traces so you can see how goals, outcomes, behaviors, and sentiment
-            connect.
-          </p>
-          <ul aria-label="Signal analysis metrics" className="mt-5 flex flex-wrap gap-2">
-            <li className="rounded-md border border-border1 bg-surface2 px-3 py-1.5 text-xs text-neutral4">
-              {traceLabel(flow.snapshot.traceCount)} analyzed
-            </li>
-            <li className="rounded-md border border-border1 bg-surface2 px-3 py-1.5 text-xs text-neutral4">
-              {themeCount} themes
-            </li>
-            <li className="rounded-md border border-border1 bg-surface2 px-3 py-1.5 text-xs text-neutral4">
-              {flow.stages.length} signal types
-            </li>
-          </ul>
+    <main className="min-w-0 space-y-5 p-4 lg:p-6">
+      <header className="max-w-3xl" data-testid="signals-page-header">
+        <div className="flex items-center gap-2 font-mono text-xs font-semibold tracking-widest text-neutral4">
+          <span aria-hidden="true" className="size-2 rounded-full bg-accent1" />
+          SIGNALS
         </div>
-        <a
-          className="flex shrink-0 items-center gap-1.5 text-xs text-neutral4 transition-colors hover:text-neutral6 focus-visible:outline-2 focus-visible:outline-offset-2"
-          href={SIGNAL_DOCS_URL}
-          rel="noreferrer"
-          target="_blank"
-        >
-          Signals documentation
-          <ExternalLink aria-hidden="true" className="size-3.5" />
-        </a>
+        <h1 className="mt-2 text-xl font-semibold text-neutral6 sm:text-2xl">
+          Understand what drives every agent interaction
+        </h1>
+        <p className="mt-1.5 text-sm leading-5 text-neutral3">
+          Signals group recurring patterns across traces so you can see how goals, outcomes, behaviors, and sentiment
+          connect.
+        </p>
+        <ul aria-label="Signal analysis metrics" className="mt-3 flex flex-wrap gap-2">
+          <li className="rounded-md border border-border1 bg-surface2 px-3 py-1.5 text-xs text-neutral4">
+            {traceLabel(flow.snapshot.traceCount)} analyzed
+          </li>
+          <li className="rounded-md border border-border1 bg-surface2 px-3 py-1.5 text-xs text-neutral4">
+            {themeCount} themes
+          </li>
+          <li className="rounded-md border border-border1 bg-surface2 px-3 py-1.5 text-xs text-neutral4">
+            {flow.stages.length} signal types
+          </li>
+        </ul>
       </header>
       <SnapshotTimeline
         snapshots={snapshots}
@@ -340,12 +331,8 @@ export function SankeySignals({ entityId, entityType = 'agent', signalNames, hei
         onPlayingChange={setIsPlaying}
         onSnapshotChange={selectSnapshot}
       />
-      <div className="overflow-x-auto" data-scroll-container="horizontal" data-testid="signals-analysis-scroll">
-        <div className="min-w-[920px] space-y-4" data-min-width="920" data-testid="signals-analysis-canvas">
-          <FlowCard columns={graphSummary.columns} records={graphSummary.records} stages={stages} height={height} />
-          <SignalDistributions stages={stages} />
-        </div>
-      </div>
+      <SignalDistributions stages={stages} />
+      <FlowCard columns={graphSummary.columns} records={graphSummary.records} stages={stages} height={height} />
     </main>
   );
 }

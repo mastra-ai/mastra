@@ -105,7 +105,7 @@ describe('SankeyChart', () => {
 
   describe('when the caller separates node identity from its display label', () => {
     it('renders equal labels as distinct nodes', async () => {
-      render(
+      const { container } = render(
         <Sankey
           data={[
             { channel: 'channel-one', channelLabel: 'Shared channel', region: 'eu', regionLabel: 'Europe' },
@@ -119,14 +119,37 @@ describe('SankeyChart', () => {
         </Sankey>,
       );
 
-      expect(await screen.findAllByText('Shared channel')).toHaveLength(2);
+      await screen.findAllByText('Shared channel');
+      expect(
+        [...container.querySelectorAll('svg text')].filter(node => node.textContent === 'Shared channel'),
+      ).toHaveLength(2);
+    });
+  });
+
+  describe('when a node has a long display label', () => {
+    it('truncates the visible text and preserves the full accessible label', async () => {
+      const longLabel = 'Adding a transcript to a workspace with a very descriptive name';
+      const { container } = render(
+        <Sankey
+          data={[{ channel: 'channel-one', channelLabel: longLabel, region: 'eu', regionLabel: 'Europe' }]}
+          columns={columns.slice(0, 2)}
+          getRecordNodeId={(record, column) => String(record[column.id])}
+          getRecordNodeLabel={(record, column) => String(record[`${column.id}Label`])}
+        >
+          <SankeyChart />
+        </Sankey>,
+      );
+
+      await screen.findByText('Adding a transcript to…');
+      expect([...container.querySelectorAll('svg title')].map(title => title.textContent)).toContain(longLabel);
+      expect(screen.getByLabelText(`${longLabel}: 1 trace (100%)`)).not.toBeNull();
     });
   });
 
   it('labels each chart column above its nodes', async () => {
     const { container } = render(<Example />);
 
-    await screen.findByText('Search');
+    await screen.findByText('Search', { selector: 'text' });
     const chartLabels = [...container.querySelectorAll('svg text')].map(element => element.textContent);
 
     expect(chartLabels).toEqual(expect.arrayContaining(['Channel', 'Region', 'Outcome']));
@@ -179,7 +202,7 @@ describe('SankeyChart', () => {
         </Sankey>,
       );
 
-      await screen.findByText('Search');
+      await screen.findByText('Search', { selector: 'text' });
 
       expect(container.querySelector('svg rect[rx="3"]')?.getAttribute('x')).toBe('24');
     });
@@ -254,7 +277,7 @@ describe('SankeyChart', () => {
   it('keeps every connected ribbon bright while hovering a node label', async () => {
     render(<Example onCurveClick={() => {}} />);
     const curves = await screen.findAllByRole('button', { name: 'Select Sankey curve' });
-    const searchLabel = screen.getByText('Search');
+    const searchLabel = screen.getByText('Search', { selector: 'text' });
 
     fireEvent.mouseEnter(searchLabel);
 

@@ -62,6 +62,34 @@ describe('Signals page', () => {
     });
   });
 
+  describe('when the entities request fails once', () => {
+    it('retries the failed request and renders the page', async () => {
+      let attempts = 0;
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities`, () => {
+          attempts += 1;
+          return attempts === 1
+            ? HttpResponse.json({ error: 'Unable to load entities' }, { status: 500 })
+            : HttpResponse.json(populatedThemeEntitiesResponse);
+        }),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(themeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
+          HttpResponse.json(themeFlowResponse),
+        ),
+      );
+
+      renderSignalsPage();
+
+      expect(await screen.findByText('Unable to load signal entities.')).not.toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+      expect(await screen.findByRole('combobox', { name: 'Agent' })).not.toBeNull();
+      expect(attempts).toBe(2);
+    });
+  });
+
   describe('when no Agent Learning entities exist', () => {
     it('shows that the analysis is waiting for traces', async () => {
       server.use(http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(emptyThemeEntitiesResponse)));
