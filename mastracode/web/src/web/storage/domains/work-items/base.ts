@@ -1093,18 +1093,14 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   async advanceToolResultCursor(cursor: FactoryToolResultCursorRecord): Promise<void> {
     const current = await this.getToolResultCursor(cursor.orgId, cursor.factoryProjectId, cursor.bindingId);
     if (current && current.lastMessageCreatedAt > cursor.lastMessageCreatedAt) return;
-    await this.#db.upsertOne<GovernanceDbRow>(
-      'factory_tool_result_cursors',
-      ['binding_id'],
-      {
-        binding_id: cursor.bindingId,
-        org_id: cursor.orgId,
-        factory_project_id: cursor.factoryProjectId,
-        last_message_id: cursor.lastMessageId,
-        last_message_created_at: cursor.lastMessageCreatedAt,
-        updated_at: cursor.updatedAt,
-      },
-    );
+    await this.#db.upsertOne<GovernanceDbRow>('factory_tool_result_cursors', ['binding_id'], {
+      binding_id: cursor.bindingId,
+      org_id: cursor.orgId,
+      factory_project_id: cursor.factoryProjectId,
+      last_message_id: cursor.lastMessageId,
+      last_message_created_at: cursor.lastMessageCreatedAt,
+      updated_at: cursor.updatedAt,
+    });
   }
 
   async listDeferredDecisions(orgId: string, factoryProjectId: string): Promise<FactoryDeferredDecisionRecord[]> {

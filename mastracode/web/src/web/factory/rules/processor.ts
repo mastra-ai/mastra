@@ -8,11 +8,7 @@ import type {
 } from '@mastra/core/processors';
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent/message-list';
 
-import type {
-  FactoryRunBindingRecord,
-  WorkItemsStorage,
-  WorkItemRow,
-} from '../../storage/domains/work-items/base.js';
+import type { FactoryRunBindingRecord, WorkItemsStorage, WorkItemRow } from '../../storage/domains/work-items/base.js';
 import { getFactorySessionCoordinates } from './binding-context.js';
 import { resolveFactoryToolRule } from './resolve.js';
 import {
@@ -250,7 +246,10 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
 
     const item = await this.options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
     if (!item || item.stages.length !== 1 || !FACTORY_RULE_STAGES.includes(item.stages[0] as never)) return;
-    const allItems = await this.options.storage.list({ orgId: binding.orgId, factoryProjectId: binding.factoryProjectId });
+    const allItems = await this.options.storage.list({
+      orgId: binding.orgId,
+      factoryProjectId: binding.factoryProjectId,
+    });
     const linked = allItems
       .filter(candidate => candidate.parentWorkItemId === item.id || item.parentWorkItemId === candidate.id)
       .slice(0, MAX_LINKED_ITEMS);

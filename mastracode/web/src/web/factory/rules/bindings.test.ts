@@ -9,13 +9,15 @@ async function prepareBinding(storage: WorkItemsStorage) {
   return storage.prepareRunStart({
     orgId: 'org-1',
     userId: 'user-1',
-    githubProjectId: PROJECT_ID,
+    factoryProjectId: PROJECT_ID,
     workItem: {
       input: {
-        source: 'github-issue',
-        sourceKey: 'github-issue:1',
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github-issue:1',
+        },
         title: 'Issue',
-        url: null,
         stages: ['intake'],
         sessions: {},
         metadata: {},
@@ -35,7 +37,7 @@ describe('Factory run binding authority', () => {
     const prepared = await prepareBinding(storage);
     const exact = {
       orgId: 'org-1',
-      githubProjectId: PROJECT_ID,
+      factoryProjectId: PROJECT_ID,
       threadId: 'thread-1',
       resourceId: 'resource-1',
       projectPath: '/worktree',
@@ -44,7 +46,7 @@ describe('Factory run binding authority', () => {
     await expect(storage.findActiveRunBinding(exact)).resolves.toMatchObject({ id: prepared.binding.id });
     for (const mismatch of [
       { orgId: 'other-org' },
-      { githubProjectId: '22222222-2222-4222-8222-222222222222' },
+      { factoryProjectId: '22222222-2222-4222-8222-222222222222' },
       { threadId: 'other-thread' },
       { resourceId: 'other-resource' },
       { projectPath: '/other-worktree' },
@@ -58,7 +60,7 @@ describe('Factory run binding authority', () => {
     const prepared = await prepareBinding(storage);
     const exact = {
       orgId: 'org-1',
-      githubProjectId: PROJECT_ID,
+      factoryProjectId: PROJECT_ID,
       threadId: 'thread-1',
       resourceId: 'resource-1',
       projectPath: '/worktree',
@@ -67,7 +69,7 @@ describe('Factory run binding authority', () => {
     await expect(
       storage.revokeRunBinding({
         orgId: 'other-org',
-        githubProjectId: PROJECT_ID,
+        factoryProjectId: PROJECT_ID,
         bindingId: prepared.binding.id,
         revokedAt: new Date(),
       }),
@@ -78,7 +80,7 @@ describe('Factory run binding authority', () => {
     await expect(
       storage.revokeRunBinding({
         orgId: 'org-1',
-        githubProjectId: PROJECT_ID,
+        factoryProjectId: PROJECT_ID,
         bindingId: prepared.binding.id,
         revokedAt,
       }),
