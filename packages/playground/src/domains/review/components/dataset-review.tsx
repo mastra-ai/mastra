@@ -215,6 +215,14 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
   const commentItem = useCallback(
     (itemId: string, comment: string) => {
       const item = items.find(i => i.id === itemId);
+      if (item?.experimentId && item?.datasetId) {
+        updateExperimentResult.mutate({
+          datasetId: item.datasetId,
+          experimentId: item.experimentId,
+          resultId: item.id,
+          comment,
+        });
+      }
       if (item?.traceId) {
         client
           .createFeedback({
@@ -233,7 +241,7 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
       }
       setLocalItems(prev => (prev ?? []).map(i => (i.id === itemId ? { ...i, comment } : i)));
     },
-    [items, client],
+    [items, client, updateExperimentResult],
   );
 
   const removeItem = useCallback(

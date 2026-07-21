@@ -1,0 +1,12 @@
+---
+'@mastra/client-js': patch
+'@mastra/server': patch
+'@mastra/mongodb': patch
+'@mastra/spanner': patch
+'@mastra/core': patch
+'@mastra/libsql': patch
+'@mastra/mysql': patch
+'@mastra/pg': patch
+---
+
+Added comment support to the experiment result API. The PATCH experiment result endpoint and the client updateDatasetExperimentResult method now accept and return a comment field, so review comments persist server-side instead of being lost on reload (https://github.com/mastra-ai/mastra/issues/19857).

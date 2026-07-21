@@ -99,6 +99,7 @@ function transformExperimentResultRow(row: Record<string, unknown>): ExperimentR
     traceId: (row.traceId as string | null) ?? null,
     status: (row.status as ExperimentResultStatus | null) ?? null,
     tags: Array.isArray(row.tags) ? row.tags : (parseJsonField(row.tags) ?? null),
+    comment: (row.comment as string | null) ?? null,
     toolMockReport: (parseJsonField(row.toolMockReport) as ExperimentResult['toolMockReport']) ?? null,
     createdAt: toDate(row.createdAt),
   };
@@ -569,6 +570,7 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
 
     if (input.status !== undefined) updateFields.status = input.status;
     if (input.tags !== undefined) updateFields.tags = input.tags;
+    if (input.comment !== undefined) updateFields.comment = input.comment;
 
     if (Object.keys(updateFields).length === 0) {
       const existing = await this.getExperimentResultById({ id: input.id });
