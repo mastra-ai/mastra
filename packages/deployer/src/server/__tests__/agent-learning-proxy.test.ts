@@ -4,6 +4,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHonoServer } from '../index';
 
 const fetchMock = vi.fn<typeof fetch>();
+const originalEnvironment = {
+  accessToken: process.env.MASTRA_PLATFORM_ACCESS_TOKEN,
+  projectId: process.env.MASTRA_PROJECT_ID,
+  endpoint: process.env.MASTRA_PLATFORM_AGENT_LEARNING_ENDPOINT,
+};
+
+function restoreEnvironment(name: string, value: string | undefined) {
+  if (value === undefined) delete process.env[name];
+  else process.env[name] = value;
+}
 
 function createMastra() {
   return new Mastra({ logger: false });
@@ -18,9 +28,9 @@ describe('Agent Learning development proxy', () => {
   });
 
   afterEach(() => {
-    delete process.env.MASTRA_PLATFORM_ACCESS_TOKEN;
-    delete process.env.MASTRA_PROJECT_ID;
-    delete process.env.MASTRA_PLATFORM_AGENT_LEARNING_ENDPOINT;
+    restoreEnvironment('MASTRA_PLATFORM_ACCESS_TOKEN', originalEnvironment.accessToken);
+    restoreEnvironment('MASTRA_PROJECT_ID', originalEnvironment.projectId);
+    restoreEnvironment('MASTRA_PLATFORM_AGENT_LEARNING_ENDPOINT', originalEnvironment.endpoint);
     vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
