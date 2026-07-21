@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import type { CreateLLMProvider } from './command';
 import { adaptDefaultTemplate, MANAGED_PROVIDER_CONFIGS } from './provider-adapter';
+import { PNPM_WORKSPACE } from './utils';
 
 const templatePath = fileURLToPath(new URL('../../../../../templates/template-agent-harness', import.meta.url));
 const temporaryDirectories: string[] = [];
@@ -152,6 +153,19 @@ describe('adaptDefaultTemplate', () => {
       }
     });
   }
+
+  it('writes pnpm build-policy configuration for managed projects', async () => {
+    const projectPath = await createFixture();
+
+    await adaptFixture({
+      projectPath,
+      packageManager: 'pnpm',
+      provider: 'openai',
+      versionTag: 'latest',
+    });
+
+    expect(await fs.readFile(path.join(projectPath, 'pnpm-workspace.yaml'), 'utf8')).toBe(PNPM_WORKSPACE);
+  });
 
   it('preserves template-owned OpenAI versions, models, tools, and unrelated environment variables', async () => {
     const projectPath = await createFixture();

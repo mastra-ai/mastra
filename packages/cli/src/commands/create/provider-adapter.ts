@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import type { PackageManager } from '../../utils/package-manager';
 import type { CreateLLMProvider } from './command';
+import { PNPM_WORKSPACE } from './utils';
 
 export interface ManagedProviderConfig {
   displayName: string;
@@ -337,6 +338,9 @@ export async function adaptDefaultTemplate({
     nextEnv === undefined ? fs.rm(envPath, { force: true }) : fs.writeFile(envPath, nextEnv, 'utf8'),
   ];
   if (nextReadme !== undefined) writes.push(fs.writeFile(readmePath, nextReadme, 'utf8'));
+  if (packageManager === 'pnpm') {
+    writes.push(fs.writeFile(path.join(projectPath, 'pnpm-workspace.yaml'), PNPM_WORKSPACE, 'utf8'));
+  }
   await Promise.all(writes);
   if (nextEnv !== undefined && process.platform !== 'win32') await fs.chmod(envPath, 0o600);
 
