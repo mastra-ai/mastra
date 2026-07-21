@@ -181,7 +181,12 @@ export function WorkspacesSection() {
       const created = await chatSession.createThread();
       // A fresh thread has no messages; seed the cache to skip the skeleton.
       queryClient.setQueryData(
-        queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, created.id, INITIAL_THREAD_MESSAGE_LIMIT),
+        queryKeys.agentControllerThreadMessages(
+          AGENT_CONTROLLER_ID,
+          resourceId,
+          created.id,
+          INITIAL_THREAD_MESSAGE_LIMIT,
+        ),
         [],
       );
       void queryClient.invalidateQueries({ queryKey: threadsKey });

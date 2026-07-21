@@ -147,12 +147,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       },
     };
     queryClient.setQueryData(
-      queryKeys.agentControllerThreadMessages(
-        AGENT_CONTROLLER_ID,
-        resourceId,
-        threadId,
-        INITIAL_THREAD_MESSAGE_LIMIT,
-      ),
+      queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, threadId, INITIAL_THREAD_MESSAGE_LIMIT),
       [message],
     );
   };
