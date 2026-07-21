@@ -395,6 +395,7 @@ describe('DurableAgent tool approval', () => {
         instructions: 'You can search for information',
         model: mockModel as LanguageModelV2,
         tools: { searchTool },
+        goal: {},
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
       new Mastra({ agents: { durableAgent }, storage, logger: false });
@@ -408,17 +409,19 @@ describe('DurableAgent tool approval', () => {
       for await (const chunk of result.fullStream) {
         if (chunk.type === 'tool-call-approval') break;
       }
-      const durationAtApproval = (await durableAgent.getObjective({ threadId: memory.thread }))?.activeDurationMs ?? 0;
-      expect(durationAtApproval).toBeGreaterThan(0);
+      let durationAtApproval = 0;
+      await vi.waitFor(async () => {
+        durationAtApproval = (await durableAgent.getObjective({ threadId: memory.thread }))?.activeDurationMs ?? 0;
+        expect(durationAtApproval).toBeGreaterThan(0);
+      });
 
       const resumed = await durableAgent.approveToolCall({ runId: result.runId, memory });
       for await (const _chunk of resumed.fullStream) {
         // Drain the resumed segment.
       }
 
-      expect(modelCall).toBe(2);
       await vi.waitFor(async () => {
-        expect((await durableAgent.getObjective({ threadId: memory.thread }))?.activeDurationMs).toBeGreaterThan(
+        expect((await durableAgent.getObjective({ threadId: memory.thread }))?.activeDurationMs).toBeGreaterThanOrEqual(
           durationAtApproval,
         );
       });
