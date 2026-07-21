@@ -110,7 +110,11 @@ describe('LinearIntegration.fetchIssueContext', () => {
     vi.stubGlobal('fetch', fetchMock);
     const linear = integration();
 
-    await expect(linear.fetchIssueContext('access-token', 'ENG-42')).rejects.toBeInstanceOf(LinearProviderRequestError);
+    const networkError = await linear.fetchIssueContext('access-token', 'ENG-42').catch(error => error);
+    expect(networkError).toBeInstanceOf(LinearProviderRequestError);
+    expect(networkError).toHaveProperty('message', 'Linear API request failed.');
+    expect(networkError.message).not.toContain('network token must not leak');
+
     const httpError = await linear.fetchIssueContext('access-token', 'ENG-42').catch(error => error);
     expect(httpError).toBeInstanceOf(LinearProviderRequestError);
     expect(httpError).toMatchObject({ status: 503 });
