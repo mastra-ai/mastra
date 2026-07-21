@@ -123,13 +123,7 @@ export function parseUpdateWorkItem(body: unknown): UpdateWorkItemInput | null {
   if (!isRecord(body)) return null;
   const { title, stages, sessions, metadata } = body;
   const hasParentWorkItemId = 'parentWorkItemId' in body;
-  if (
-    title === undefined &&
-    stages === undefined &&
-    sessions === undefined &&
-    metadata === undefined &&
-    !hasParentWorkItemId
-  )
+  if (title === undefined && stages === undefined && sessions === undefined && metadata === undefined && !hasParentWorkItemId)
     return null;
   const parentWorkItemId = hasParentWorkItemId ? parseParentWorkItemId(body.parentWorkItemId) : undefined;
   if (hasParentWorkItemId && parentWorkItemId === undefined) return null;

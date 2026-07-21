@@ -1489,7 +1489,7 @@ describe.skip('PineconeVector Integration Tests', () => {
 // Metadata filtering and advanced operations tests
 describe.skip('Pinecone Metadata Filtering', () => {
   const pineconeVector = new PineconeVector({
-    apiKey: PINECONE_API_KEY || 'skipped-test-api-key',
+    apiKey: PINECONE_API_KEY,
     id: 'pinecone-metadata-test',
   });
 
