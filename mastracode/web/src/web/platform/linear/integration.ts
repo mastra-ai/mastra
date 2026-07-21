@@ -5,11 +5,12 @@ import type { FactoryProjectsStorage } from '@mastra/factory/storage/domains/pro
 import type { IntegrationConnection } from '@mastra/factory/capabilities/connection';
 import type { Intake, IntakeIssue, IntakeIssueDetail } from '@mastra/factory/capabilities/intake';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '@mastra/factory/integrations/base';
+import type { RouteAuth } from '@mastra/factory/routes/route';
 
-import { buildLinearAgentTools } from '../../linear/agent-tools.js';
-import type { LinearIntegration } from '../../linear/integration.js';
-import { buildLinearRoutes } from '../../linear/routes.js';
-import type { LinearConnectionData, LinearStorageHandle } from '../../linear/storage.js';
+import { buildLinearAgentTools } from '@mastra/factory/integrations/linear/agent-tools';
+import type { LinearConnectionCheck, LinearIntegration } from '@mastra/factory/integrations/linear/integration';
+import { buildLinearRoutes } from '@mastra/factory/integrations/linear/routes';
+import type { LinearConnectionData, LinearStorageHandle } from '@mastra/factory/integrations/linear/storage';
 import { PlatformApiClient, PlatformApiError, platformApiClientConfigFromEnv } from '../api-client.js';
 
 type PageInfo = { hasNextPage: boolean; endCursor: string | null };
@@ -73,6 +74,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
   readonly #endpointHost: string;
   readonly #accessToken: string;
   #projects: FactoryProjectsStorage | undefined;
+  #auth: RouteAuth | undefined;
 
   readonly intake: Intake = {
     listSources: async () => {
@@ -185,12 +187,31 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     return this.#projects;
   }
 
-  initialize({ projects }: { projects: FactoryProjectsStorage }): void {
+  initialize({ projects, auth }: { projects: FactoryProjectsStorage; auth?: RouteAuth }): void {
     this.#projects = projects;
+    this.#auth = auth;
+  }
+
+  get authEnabled(): boolean {
+    return this.#auth?.enabled() ?? false;
+  }
+
+  async resolveOrgId(resourceId: string): Promise<string | null> {
+    try {
+      const project = await this.projects.getById({ id: resourceId });
+      return project?.orgId ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  async checkConnection(_orgId: string): Promise<LinearConnectionCheck> {
+    return { connected: true, canComment: true, checkedAt: Date.now() };
   }
 
   routes(ctx: IntegrationContext): ApiRoute[] {
     return buildLinearRoutes({
+      auth: ctx.auth,
       linear: this as unknown as LinearIntegration,
       stateSigner: ctx.stateSigner,
       baseUrl: ctx.baseUrl,

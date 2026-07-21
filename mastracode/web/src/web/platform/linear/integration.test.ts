@@ -22,6 +22,15 @@ const sourceId = (workspaceId: string, projectId: string) =>
 const project1SourceId = sourceId('workspace-1', 'project-1');
 const project2SourceId = sourceId('workspace-2', 'project-2');
 
+function fakeAuth(tenant: { orgId?: string; userId: string } | undefined = { orgId: 'org-1', userId: 'user-1' }) {
+  return {
+    enabled: () => true,
+    ensureUser: vi.fn(async () => ({ workosId: tenant?.userId ?? 'user-1', organizationId: tenant?.orgId })),
+    tenant: () => tenant,
+    isOrganizationAdmin: vi.fn(async () => true),
+  };
+}
+
 const project = {
   id: 'project-1',
   name: 'Platform',
@@ -273,6 +282,7 @@ describe('PlatformLinearIntegration', () => {
       stateSigner: { stable: true } as never,
     });
     const context = {
+      auth: fakeAuth(),
       storage: {
         generic: seed.integrations.forIntegration('linear'),
         sourceControl: seed.sourceControl.forIntegration('linear'),
@@ -281,7 +291,11 @@ describe('PlatformLinearIntegration', () => {
       },
       stateSigner: {},
     } as unknown as IntegrationContext;
-    integration.initialize?.({ storage: context.storage.generic, projects: context.storage.projects });
+    integration.initialize?.({
+      storage: context.storage.generic,
+      projects: context.storage.projects,
+      auth: context.auth,
+    });
     const routes = integration.routes(context);
     const requestContext = new RequestContext();
     requestContext.set('controller', { resourceId: projectRecord.id });
